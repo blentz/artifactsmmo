@@ -9,7 +9,6 @@ Covers:
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
@@ -396,19 +395,6 @@ def _forged_plate_gd() -> GameData:
     gd._bank_location = (3, 0)
     gd._taskmaster_location = (1, 1)
     return gd
-
-
-def test_gather_materials_heuristic_is_forced_grind_cost():
-    """A GatherMaterials goal whose target_item is a craft-only, skill-gated,
-    unowned craftable returns the forced LevelSkill.cost; 0 otherwise."""
-    gd = _forged_plate_gd()  # forged_plate: craft-only, gearcrafting 20
-    goal = GatherMaterialsGoal(target_item="forged_plate",
-                               needed={"forged_plate": 1})
-    under = make_state(skills={"gearcrafting": 12})
-    assert goal.heuristic(under, gd) == \
-        LevelSkill(skill="gearcrafting", target_level=20).cost(under, gd)
-    met = make_state(skills={"gearcrafting": 20})
-    assert goal.heuristic(met, gd) == 0.0
 
 
 def test_gather_materials_heuristic_zero_for_finished_target_form():

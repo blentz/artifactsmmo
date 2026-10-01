@@ -552,57 +552,6 @@ class _ZeroHeuristicUpgradeGoal(UpgradeEquipmentGoal):
         return 0.0
 
 
-def test_upgrade_equipment_heuristic_is_forced_grind_cost():
-    """Pinned to a craft-only, skill-gated, unowned target, the heuristic is the
-    LevelSkill.cost of the forced grind; 0 once satisfied/owned/skill-met."""
-    gd = _fire_bow_gd()  # helper below: fire_bow craft-only, weaponcrafting 10
-    goal = UpgradeEquipmentGoal(committed_target=("fire_bow", "weapon_slot"))
-    under = make_state(level=13, skills={"weaponcrafting": 7})
-    expected = LevelSkill(skill="weaponcrafting", target_level=10).cost(under, gd)
-    assert goal.heuristic(under, gd) == expected
-    assert expected > 0
-    met = make_state(level=13, skills={"weaponcrafting": 10})
-    assert goal.heuristic(met, gd) == 0.0
-    owned = make_state(level=13, skills={"weaponcrafting": 7},
-                       inventory={"fire_bow": 1})
-    assert goal.heuristic(owned, gd) == 0.0
-
-
-def test_upgrade_equipment_heuristic_collapses_the_skill_gate_search():
-    """BEHAVIORAL proof (the BUG B collapse): with the mats in hand and the
-    skill unmet, the planner finds [LevelSkill, Craft, Equip] and creates far
-    fewer nodes than the SAME state/actions/goal searched with the heuristic
-    forced to 0 (Dijkstra). The bank-stocked WithdrawItemAction decoy in
-    `_fire_bow_actions` survives `relevant_actions` and is genuinely cheaper
-    (cost 5.0) than the forced LevelSkill grind (cost 150.0), so a h=0 search
-    exhausts it (repeatedly, while the 10-deep bank stock lasts) before ever
-    popping the grind edge; the admissible heuristic (h = the forced-grind
-    cost) ranks the grind edge first instead."""
-    gd = _fire_bow_gd()
-    goal = UpgradeEquipmentGoal(committed_target=("fire_bow", "weapon_slot"))
-    state = make_state(level=13, skills={"weaponcrafting": 7},
-                       inventory={"spruce_plank": 6, "red_slimeball": 2},
-                       bank_items={"spruce_plank": 10})
-    actions = _fire_bow_actions(gd)  # LevelSkill, Craft, Equip, + cheap decoys
-    expected_plan = [
-        "LevelSkill(weaponcrafting->10)", "Craft(fire_bow×1)",
-        "Equip(fire_bow->weapon_slot)",
-    ]
-
-    planner = GOAPPlanner()
-    plan = planner.plan(state, goal, actions, gd, budget_seconds=10.0)
-    assert [repr(a) for a in plan] == expected_plan, plan
-    nodes_with = planner.last_stats.nodes_created
-
-    zero_goal = _ZeroHeuristicUpgradeGoal(committed_target=("fire_bow", "weapon_slot"))
-    zero_planner = GOAPPlanner()
-    zero_plan = zero_planner.plan(state, zero_goal, actions, gd, budget_seconds=10.0)
-    assert [repr(a) for a in zero_plan] == expected_plan, zero_plan
-    nodes_without = zero_planner.last_stats.nodes_created
-
-    assert nodes_with < nodes_without, (nodes_with, nodes_without)
-
-
 class TestUpgradeEquipmentGoalToolBias:
     """A craftable upgrade whose stats bonus an active gathering skill must
     outrank generic gear and bump value() above FarmItems (35)."""

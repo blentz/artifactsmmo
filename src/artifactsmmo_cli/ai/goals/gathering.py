@@ -7,7 +7,6 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
@@ -17,10 +16,9 @@ from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
 from artifactsmmo_cli.ai.currency_buy_batch import currency_buy_batch_pure
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
-from artifactsmmo_cli.ai.forced_craft_grind import forced_craft_grind
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, select_gather_source
-from artifactsmmo_cli.ai.gather_skill_gate import openable_gather_grinds, skill_open
+from artifactsmmo_cli.ai.gather_skill_gate import skill_open
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
@@ -158,43 +156,6 @@ class GatherMaterialsGoal(Goal):
         fraction_remaining = 1.0 - total_effective / total_needed
         return max(1.0, 40.0 * fraction_remaining)
 
-    def heuristic(self, state: WorldState, game_data: GameData) -> float:
-        """Same admissible+consistent skill-grind term as
-        `UpgradeEquipmentGoal.heuristic`, keyed on this goal's OWN
-        `_target_item` (rather than an upgrade-selection lookup): a
-        GatherMaterials search toward a craft-only, skill-gated material
-        takes the forced `LevelSkill` edge first instead of exhausting the
-        cheap gather/withdraw frontier first (BUG B). 0 when satisfied,
-        owned, skill-met, or the target has a non-craft route — see
-        `forced_craft_grind`'s admissibility guard.
-
-        INVARIANT: the forced-grind term is admissible ONLY when obtaining
-        `_target_item` is what `is_satisfied` requires — i.e. `_target_item
-        in self._needed` (the raw-material/rung form). In the FINISHED-target
-        form (`_target_item` not a key of `_needed`, e.g.
-        GatherMaterials(iron_sword, {iron_ore: 6})), `is_satisfied` is met by
-        the NEEDED MATERIALS alone — crafting/obtaining the target is not
-        required to satisfy this goal, so the target's craft-skill grind is
-        not a landmark and h must stay 0. Counting it there over-estimates
-        (h > true remaining), breaking admissibility.
-
-        NOTE (latent footgun): `LevelSkill` is built below with no
-        `xp_curve`, so `cost` always takes the no-curve `gap*PER_LEVEL_COST`
-        fallback — matching the factory's edge cost today. If a future change
-        populates observed curves on the factory's LevelSkill but not here,
-        this equality (and hence admissibility) could break.
-        """
-        if self.is_satisfied(state):
-            return 0.0
-        if self._target_item not in self._needed:
-            return 0.0
-        needed = self._needed[self._target_item]
-        grind = forced_craft_grind(self._target_item, needed, state, game_data)
-        if grind is None:
-            return 0.0
-        skill, level = grind
-        return LevelSkill(skill=skill, target_level=level).cost(state, game_data)
-
     def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:
         """Restrict planning to gather/smelt/deposit/withdraw — excludes
         combat and unrelated gathers. Withdraw is included so a material
@@ -304,35 +265,10 @@ class GatherMaterialsGoal(Goal):
         # item-keyed gather_skill directly. Byte-equal over the whole bundle.
         needed_skills: set[str] = set(requirement_gather_skills(graph, self._needed))
 
-        # LevelSkill admission scope: a skill-grind action only serves THIS goal
-        # when a closure craftable is gated behind that exact (skill, level) and
-        # the character is under it. Without this scope the unconditional
-        # `skill_grind` tag admission fanned EVERY emitted LevelSkill (one per
-        # craft level in the whole recipe table) into every GatherMaterials
-        # search — a pure gold-buy closure (l30 lifesteal_rune) has no craftable
-        # yet inherited ~15 useless LevelSkill branches, enlarging the search
-        # enough to time out under load (test_slot_scenario_search_is_bounded
-        # [l30_rune_fill], activation regression 2026-07-12). Mirrors the
-        # OptimizeLoadout `needed_skills` scoping just above.
-        gated_skill_levels: set[tuple[str, int]] = set()
-        for code in set(craftable_mats) | set(self._needed):
-            stats = game_data.item_stats(code)
-            if (stats is not None and stats.crafting_skill
-                    and game_data.crafting_recipe(code) is not None
-                    and state.skills.get(stats.crafting_skill, 1)
-                    < stats.crafting_level):
-                gated_skill_levels.add((stats.crafting_skill, stats.crafting_level))
-
-        # Gather-skill-gate openings (P3b completion): a closure material whose
-        # ONLY gather source is skill-locked (iron_ore ← iron_rocks, mining 10)
-        # is unreachable by gathering alone. Admit a LevelSkill(skill->level)
-        # that opens it plus the locked gather itself (the gather's own
-        # is_applicable enforces the raised skill mid-search, so it fires only
-        # after LevelSkill). Shared with UpgradeEquipmentGoal — see
-        # ai/gather_skill_gate.py for why this is a function and not a comment.
-        openable_locked_gathers, gather_grind_levels = openable_gather_grinds(
-            actions, state, game_data, chain, covered)
-        gated_skill_levels |= gather_grind_levels
+        # No skill-grind admission (Phase 2d-b2): the `LevelSkill` macro left
+        # the action pool, so a skill-gated closure is the one walk's (its gates
+        # open as sub-grinds); the search no longer admits the macro or the
+        # locked gathers it used to unlock mid-plan.
 
         # Bid/self-craft mutual exclusion (bid_vs_craft.py's documented "open_orders
         # suppression at the call site"): an item with a standing GE BUY bid is
@@ -380,8 +316,7 @@ class GatherMaterialsGoal(Goal):
             elif (isinstance(action, GatherAction) and gather_serves_closure(
                     action.resource_code, action.drop_item_override,
                     game_data.resource_drops, chain)
-                    and (skill_open(action.resource_code, state, game_data)
-                         or action.resource_code in openable_locked_gathers)):
+                    and skill_open(action.resource_code, state, game_data)):
                 # Split out of the shared disjunct below so the admitted gather
                 # can be SIZED to its drop's outstanding closure deficit — one
                 # edge per material at the full deficit, so the branching factor
@@ -407,9 +342,6 @@ class GatherMaterialsGoal(Goal):
                 (isinstance(action, RecycleAction) and action.code in recycle_sources)
                 or "recovery" in action.tags
                 or "deposit" in action.tags
-                or ("skill_grind" in action.tags
-                    and (getattr(action, "skill", ""),
-                         getattr(action, "target_level", 0)) in gated_skill_levels)
                 or (isinstance(action, WithdrawItemAction) and action.code in withdrawable)
                 or (isinstance(action, OptimizeLoadoutAction)
                     and action.target_skill in needed_skills)

@@ -7,15 +7,12 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS, EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.equipment.slot_occupancy import may_displace
-from artifactsmmo_cli.ai.forced_craft_grind import forced_craft_grind
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.gather_skill_gate import openable_gather_grinds
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.upgrade_selection import (
     UpgradeCandidate,
@@ -200,30 +197,6 @@ class UpgradeEquipmentGoal(Goal):
             return _UPGRADE_EQUIPMENT_RELEVANT_TOOL
         return _UPGRADE_EQUIPMENT_BASE
 
-    def heuristic(self, state: WorldState, game_data: GameData) -> float:
-        """Admissible+consistent: the cost of the FORCED craft-skill grind the
-        target requires. `forced_craft_grind` counts it only when crafting is
-        unavoidable, so h never over-estimates; `LevelSkill.cost` is the exact
-        edge cost the plan pays, so taking the grind drops h by exactly that
-        (consistency). 0 when satisfied, owned, skill-met, or the target has a
-        non-craft route — see the design's admissibility guard.
-
-        NOTE (latent footgun): `LevelSkill` below is built with no `xp_curve`,
-        so `cost` takes the no-curve fallback, matching the factory's edge
-        cost today — if a future change populates observed curves on the
-        factory's LevelSkill but not here, admissibility could break."""
-        if self.is_satisfied(state):
-            return 0.0
-        target = self.find_upgrade_target(state, game_data)
-        if target is None:
-            return 0.0
-        target_item, _slot = target
-        grind = forced_craft_grind(target_item, 1, state, game_data)
-        if grind is None:
-            return 0.0
-        skill, level = grind
-        return LevelSkill(skill=skill, target_level=level).cost(state, game_data)
-
     def _upgrade_is_relevant_tool(self, upgrade: tuple[str, str],
                                    state: WorldState, game_data: GameData) -> bool:
         """True if the upgrade improves a tool for a skill the current task needs."""
@@ -394,45 +367,12 @@ class UpgradeEquipmentGoal(Goal):
         for code, qty in (state.bank_items or {}).items():
             owned[code] = owned.get(code, 0) + qty
         covered = fully_covered_materials(target_item, 1, game_data.crafting_recipes, owned)
-        # LevelSkill admission scope (P3a): a skill-grind action only serves THIS
-        # goal when a closure craftable (the target or a craftable intermediate)
-        # is gated behind that exact (skill, level) and the character is under it
-        # — the gear-unlock grind. An UNCONDITIONAL skill_grind admission fans
-        # EVERY emitted LevelSkill (one per craft level in the whole recipe
-        # table) into every search, timing out under load (the P2 ff4401ac
-        # regression), and would also break the slot-lock by admitting grinds
-        # unrelated to the target.
-        gated_skill_levels: set[tuple[str, int]] = set()
-        for code in in_closure_crafts:
-            stats = game_data.item_stats(code)
-            if (stats is not None and stats.crafting_skill
-                    and game_data.crafting_recipe(code) is not None
-                    and state.skills.get(stats.crafting_skill, 1)
-                    < stats.crafting_level):
-                gated_skill_levels.add((stats.crafting_skill, stats.crafting_level))
-        # GATHER-skill gate, same treatment as the craft-skill gate above. P3b
-        # added this to GatherMaterialsGoal and never reached here, while the
-        # comment above went on claiming parity — an equippable whose material
-        # is behind a locked gather (iron_ore ← iron_rocks, mining 10) was
-        # therefore unplannable from this goal. Shared, not mirrored: see
-        # ai/gather_skill_gate.py.
-        # Only the skill levels are needed here: unlike GatherMaterialsGoal, the
-        # GatherAction arm below admits every closure gather regardless of its
-        # skill gate, so the locked gather is already in the pool and just needs
-        # its LevelSkill to become reachable.
-        _openable_gathers, gather_grind_levels = openable_gather_grinds(
-            actions, state, game_data, chain, covered)
-        gated_skill_levels |= gather_grind_levels
+        # No skill-grind admission (Phase 2d-b2): the `LevelSkill` macro left
+        # the action pool; a skill-gated upgrade is the one walk's
+        # (`craft_plan_gen._decompose_upgrade`, gates opened as sub-grinds).
         result: list[Action] = []
         for action in actions:
             if "recovery" in action.tags or "deposit" in action.tags:
-                result.append(action)
-            elif ("skill_grind" in action.tags
-                    and (getattr(action, "skill", ""),
-                         getattr(action, "target_level", 0)) in gated_skill_levels):
-                # Gear-unlock grind (P3a): admit a LevelSkill only for the
-                # target's own gated (skill, level) — duck-typed so the goal need
-                # not import LevelSkill. Scoped to keep the slot-lock intact.
                 result.append(action)
             elif isinstance(action, UnequipAction):
                 continue

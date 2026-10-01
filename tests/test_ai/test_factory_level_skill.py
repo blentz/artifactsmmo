@@ -1,5 +1,4 @@
-"""build_actions emits one LevelSkill per distinct in-skill craft level so A*
-and the directed generator can satisfy any gated CraftAction's skill gate."""
+"""build_actions no longer emits the LevelSkill macro (Phase 2d-b2)."""
 
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
@@ -31,13 +30,12 @@ def _gd() -> GameData:
     return gd
 
 
-def test_build_actions_emits_one_level_skill_per_distinct_level() -> None:
+def test_build_actions_emits_no_level_skill() -> None:
+    """Phase 2d-b2: the macro left the action pool. A skill gate is the one
+    walk's, opened as a sub-grind (`craft_plan_gen._walk_plan`)."""
     gd = _gd()
     state = scenario_state(ScenarioCharacter(name="t", level=5), gd)
     objective = CharacterObjective.from_game_data(gd)
     actions = build_actions(gd, state, objective, bank_accessible=True,
                             task_exchange_min_coins=0)
-    level_skills = {(a.skill, a.target_level) for a in actions
-                    if isinstance(a, LevelSkill)}
-    assert level_skills == {("gearcrafting", 5), ("gearcrafting", 1),
-                            ("mining", 5)}
+    assert not any(isinstance(a, LevelSkill) for a in actions)

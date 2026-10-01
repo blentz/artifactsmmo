@@ -2,7 +2,7 @@
 
 > GENERATED — do not hand-edit. Regenerate with `uv run python scripts/gen_open_rung.py`.
 >
-> Obligation O1 (wave-3 resolution design §3.5): every `ReachSkillLevel(S, C+1)` reachable across the scenario set has an open, XP-positive rung, or the graph emits a named wall. The verdict column is `LevelSkill(S, C+1).is_applicable` — the one predicate `ReachSkillGoal`'s only action offers — cross-read against the catalogue evidence beside it.
+> Obligation O1 (wave-3 resolution design §3.5): every `ReachSkillLevel(S, C+1)` reachable across the scenario set has an open, XP-positive rung, or the graph emits a named wall. The verdict column is `skill_is_grindable(S, C+1)` — the predicate `ReachSkillGoal`'s decomposition opens on — cross-read against the catalogue evidence beside it.
 >
 > `routed` is what `decisions/root.resolve_root` would actually send this character to grind (root + alternatives). A closed cell that is routed is `o1_silent_stall`, the residual the obligation exists for.
 >

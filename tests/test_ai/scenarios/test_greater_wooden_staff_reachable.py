@@ -43,18 +43,19 @@ under budget, so it is reported rather than asserted.
 import json
 from pathlib import Path
 
-import pytest
-
 from artifactsmmo_cli.ai import obtain_item_routing
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.min_plan_length import min_plan_length
-from artifactsmmo_cli.ai.planner import GOAPPlanner, PlanStats
+from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
@@ -101,6 +102,15 @@ def _bank_covered_state() -> WorldState:
     return _traced_state({"spruce_plank": 16, "blue_slimeball": 98})
 
 
+def _state_kwargs(state: WorldState) -> dict:
+    """`_traced_state`'s arguments back out of a state, to vary one field."""
+    return dict(character=state.character, level=state.level, xp=state.xp, max_xp=state.max_xp,
+                hp=state.hp, max_hp=state.max_hp, gold=state.gold, x=state.x, y=state.y,
+                skills=dict(state.skills), inventory=dict(state.inventory),
+                inventory_max=state.inventory_max, inventory_slots_max=state.inventory_slots_max,
+                bank_items=dict(state.bank_items or {}))
+
+
 def _state_without_banked_planks() -> WorldState:
     """The same character with the planks gone: the 6 planks must now come from
     60 `spruce_wood`, which is the chain the epic exists to make reachable."""
@@ -118,16 +128,15 @@ def _build_actions(state: WorldState, gd: GameData) -> list[Action]:
                          bank_accessible=True, task_exchange_min_coins=0)
 
 
-@pytest.fixture(scope="module")
-def traced_run() -> tuple[list[Action], PlanStats]:
-    """One planner run over the traced bank-covered state, shared by the three
-    assertions that read it (the search costs a couple of seconds)."""
+_CTX = SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
+                        initial_xp=0, task_exchange_min_coins=0, combat_monster=None)
+
+
+def _decomposed(state: WorldState) -> list[Action]:
+    """The plan the arbiter's producer gives (Phase 2d-b1: a committed upgrade
+    decomposes; the search no longer has the LevelSkill macro to grind with)."""
     gd = _game_data()
-    state = _bank_covered_state()
-    planner = GOAPPlanner()
-    plan = planner.plan(state, _goal(), _build_actions(state, gd), gd, None,
-                        budget_seconds=BUDGET_SECONDS)
-    return plan, planner.last_stats
+    return decompose(_goal(), state, gd, _build_actions(state, gd), _CTX) or []
 
 
 def test_staff_goal_is_admitted_by_is_plannable() -> None:
@@ -137,30 +146,32 @@ def test_staff_goal_is_admitted_by_is_plannable() -> None:
     assert _goal().is_plannable(_bank_covered_state(), gd) is True
 
 
-def test_staff_plans_from_r2d2s_traced_state(
-    traced_run: tuple[list[Action], PlanStats],
-) -> None:
-    """Live trace: 0 plans in 702 rank-1 cycles, `timed_out` on every one."""
-    plan, stats = traced_run
-    assert plan, (
-        "no plan; live trace: nodes 3873, depth 8, timed_out, plan_len 0")
-    assert not stats.timed_out, stats
-    assert not stats.node_capped, stats
-    assert stats.max_depth_reached <= _goal().max_depth, stats
+def test_staff_plans_from_r2d2s_traced_state() -> None:
+    """Live trace: 0 plans in 702 rank-1 cycles, `timed_out` on every one. The
+    staff needs weaponcrafting 10 against the traced 9, so the plan is that
+    sub-grind's cycle, ending in the weaponcrafting craft that earns."""
+    plan = _decomposed(_bank_covered_state())
+    assert plan, "no plan; live trace: nodes 3873, depth 8, timed_out, plan_len 0"
+    last = plan[-1]
+    assert isinstance(last, CraftAction)
+    stats = _game_data().item_stats(last.code)
+    assert stats is not None and stats.crafting_skill == "weaponcrafting", [str(a) for a in plan]
 
 
-def test_staff_plan_uses_the_banked_materials(
-    traced_run: tuple[list[Action], PlanStats],
-) -> None:
+def test_staff_plan_uses_the_banked_materials() -> None:
     """The materials were never missing. A plan that re-gathers 60 `spruce_wood`
-    with 16 planks in the bank is the banked-regather bug, not a fix — so the
-    withdraw must be present AND no gather may appear at all."""
-    plan, _stats = traced_run
-    assert any(isinstance(a, WithdrawItemAction) and a.code == "spruce_plank"
-               for a in plan), [str(a) for a in plan]
-    assert not [a for a in plan if isinstance(a, GatherAction)], (
-        "re-gathered raw wood past 16 banked spruce_plank",
-        [str(a) for a in plan])
+    with 16 planks in the bank is the banked-regather bug, not a fix: no plan
+    gathers spruce, and once the skill is met the plan withdraws the planks and
+    crafts and equips the staff without a single gather."""
+    assert not [a for a in _decomposed(_bank_covered_state())
+                if isinstance(a, GatherAction) and a.resource_code == "spruce_tree"]
+    skilled = _bank_covered_state()
+    skilled = make_state(**{**_state_kwargs(skilled), "skills": {**_TRACED_SKILLS, "weaponcrafting": 10}})
+    plan = _decomposed(skilled)
+    assert any(isinstance(a, WithdrawItemAction) and a.code == "spruce_plank" for a in plan), \
+        [str(a) for a in plan]
+    assert not [a for a in plan if isinstance(a, GatherAction)], [str(a) for a in plan]
+    assert repr(plan[-1]) == f"Equip({TARGET}->{SLOT})"
 
 
 def test_from_scratch_plank_chain_is_admitted() -> None:

@@ -3563,9 +3563,8 @@ ROOT_DECISION_MUTATIONS = [
      "                          and stats.type_ == \"utility\"}\n"),
     ("root: the orphan rule drops the open-rung conjunct, so a skill with no"
      " XP-positive rung is routed anyway (the o1_silent_stall residual)",
-     "        and level_skill.LevelSkill(\n"
-     "            skill=skill, target_level=state.skills.get(skill, 1) + 1\n"
-     "        ).is_applicable(state, game_data)]\n",
+     "        and _skill_grindable.skill_is_grindable(\n"
+     "            skill, state.skills.get(skill, 1) + 1, state, game_data)]\n",
      "        ]\n"),
     ("root: the orphan order runs from the LEAST-behind skill",
      "    orphans.sort(key=lambda skill: (state.skills.get(skill, 1) - state.level,\n",

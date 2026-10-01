@@ -4,14 +4,11 @@ retires the SKILL_PREREQUISITE workaround. Drives GOAPPlanner directly (not the
 arbiter), so the is_plannable under-skill fast-fail — still present in P1 — does
 not intercept; P2 removes that fast-fail so the live arbiter reaches this path."""
 
-from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 
@@ -62,51 +59,6 @@ def _gd_gated_gather() -> GameData:
     return gd
 
 
-def test_relevant_actions_admits_gated_gather_and_its_level_skill() -> None:
-    """A resource whose sole gather source is skill-locked (deep_rocks, mining
-    10) must admit BOTH the LevelSkill(mining->10) that opens it AND the locked
-    Gather itself — the gather-skill-gate analogue of the craft-skill-gate
-    admission. Regression: P3b retired the prereq-graph resource ReachSkillLevel
-    node, but the GatherMaterials LevelSkill admission only covered CRAFT gates,
-    so an under-mining iron_ore closure produced an empty plan (livelock)."""
-    gd = _gd_gated_gather()
-    ls_mining10 = LevelSkill(skill="mining", target_level=10)
-    state = scenario_state(
-        ScenarioCharacter(name="t", level=12, skills={"mining": 1}), gd)
-    objective = CharacterObjective.from_game_data(gd)
-    actions = build_actions(gd, state, objective, bank_accessible=True,
-                            task_exchange_min_coins=0)
-    actions.append(ls_mining10)
-    goal = GatherMaterialsGoal(target_item="deep_ore", needed={"deep_ore": 1})
-
-    admitted = goal.relevant_actions(actions, state, gd)
-    assert ls_mining10 in admitted, "LevelSkill(mining->10) must be admitted"
-    assert any(isinstance(a, GatherAction) and a.resource_code == "deep_rocks"
-               for a in admitted), "skill-locked deep_rocks gather must be admitted"
-
-
-def test_planner_sequences_level_skill_before_gated_gather() -> None:
-    """The GOAP search must plan LevelSkill(mining->10) then Gather(deep_rocks)
-    for an under-mining ore closure — non-empty plan, level-up first."""
-    gd = _gd_gated_gather()
-    state = scenario_state(
-        ScenarioCharacter(name="t", level=12, skills={"mining": 1}), gd)
-    objective = CharacterObjective.from_game_data(gd)
-    actions = build_actions(gd, state, objective, bank_accessible=True,
-                            task_exchange_min_coins=0)
-    actions.append(LevelSkill(skill="mining", target_level=10))
-    goal = GatherMaterialsGoal(target_item="deep_ore", needed={"deep_ore": 1})
-
-    plan = GOAPPlanner().plan(state, goal, actions, gd, budget_seconds=10.0)
-
-    reprs = [repr(a) for a in plan]
-    assert plan, f"expected a non-empty plan, got {reprs}"
-    level_idx = next(i for i, a in enumerate(plan) if isinstance(a, LevelSkill))
-    gather_idx = next(i for i, a in enumerate(plan)
-                      if isinstance(a, GatherAction) and a.resource_code == "deep_rocks")
-    assert level_idx < gather_idx, f"LevelSkill must precede Gather: {reprs}"
-
-
 def test_open_source_displaces_locked_no_forced_grind() -> None:
     """When a drop has BOTH an open source and a skill-locked one, admit only the
     open source — never force a grind for a workable material (the fishing-40
@@ -151,61 +103,6 @@ def test_gather_gate_above_ceiling_stays_excluded() -> None:
                    for a in admitted), "above-ceiling gather has no route — excluded"
 
 
-def test_planner_sequences_level_skill_before_gated_craft() -> None:
-    gd = _gd()
-    state = scenario_state(
-        ScenarioCharacter(name="t", level=5,
-                          skills={"gearcrafting": 1, "mining": 1}), gd)
-    objective = CharacterObjective.from_game_data(gd)
-    actions = build_actions(gd, state, objective, bank_accessible=True,
-                            task_exchange_min_coins=0)
-    actions.append(LevelSkill(skill="gearcrafting", target_level=5))
-    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
-
-    plan = GOAPPlanner().plan(state, goal, actions, gd, budget_seconds=10.0)
-
-    reprs = [repr(a) for a in plan]
-    craft_idx = next(i for i, a in enumerate(plan)
-                     if isinstance(a, CraftAction) and a.code == "widget")
-    level_idx = next(i for i, a in enumerate(plan)
-                     if isinstance(a, LevelSkill))
-    assert level_idx < craft_idx, f"LevelSkill must precede Craft(widget): {reprs}"
-
-
-def test_relevant_actions_scopes_level_skill_to_gated_closure() -> None:
-    """A LevelSkill enters a GatherMaterials search ONLY when a closure craftable
-    is gated behind that exact (skill, level) and the char is under it. Without
-    this scope the unconditional skill_grind tag admission fanned EVERY emitted
-    LevelSkill into every search — a non-craftable acquisition (the l30 gold-buy
-    rune shape) inherited useless grind branches and timed out under load
-    (activation regression 2026-07-12)."""
-    gd = _gd()
-    ls_gear5 = LevelSkill(skill="gearcrafting", target_level=5)
-    ls_mining9 = LevelSkill(skill="mining", target_level=9)  # irrelevant grind
-    actions = [ls_gear5, ls_mining9]
-
-    # under-skill widget craft (gearcrafting 1 < 5): admits the gearcrafting-5
-    # grind, excludes the irrelevant mining grind.
-    under = scenario_state(
-        ScenarioCharacter(name="t", level=5, skills={"gearcrafting": 1}), gd)
-    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
-    admitted = goal.relevant_actions(actions, under, gd)
-    assert ls_gear5 in admitted
-    assert ls_mining9 not in admitted
-
-    # at-skill widget craft (gearcrafting 5, not gated): NO LevelSkill admitted.
-    at = scenario_state(
-        ScenarioCharacter(name="t", level=5, skills={"gearcrafting": 5}), gd)
-    assert not [a for a in goal.relevant_actions(actions, at, gd)
-                if isinstance(a, LevelSkill)]
-
-    # non-craftable closure (gear_ore is a raw leaf, no craftable to gate):
-    # zero LevelSkill — the l30 gold-buy-rune shape that regressed.
-    leaf_goal = GatherMaterialsGoal(target_item="gear_ore", needed={"gear_ore": 1})
-    assert not [a for a in leaf_goal.relevant_actions(actions, under, gd)
-                if isinstance(a, LevelSkill)]
-
-
 def _gd_gated_gather_equippable() -> GameData:
     """An EQUIPPABLE whose sole material is behind a gather-skill gate.
 
@@ -233,30 +130,3 @@ def _gd_gated_gather_equippable() -> GameData:
     return gd
 
 
-def test_upgrade_equipment_admits_gather_gate_level_skill() -> None:
-    """UpgradeEquipmentGoal must admit the LevelSkill that opens a gather-skill
-    gate on one of its materials.
-
-    Regression (defect F2): P3b added the gather-skill-gate admission to
-    GatherMaterialsGoal only. UpgradeEquipmentGoal built `gated_skill_levels`
-    from crafting_skill/crafting_level alone while its comment claimed to mirror
-    GatherMaterialsGoal, so an equippable gated behind a locked gather could
-    never have its grind admitted from this goal. Both now share
-    ai.gather_skill_gate.openable_gather_grinds.
-    """
-    gd = _gd_gated_gather_equippable()
-    ls_mining10 = LevelSkill(skill="mining", target_level=10)
-    state = scenario_state(
-        ScenarioCharacter(name="t", level=12, skills={"mining": 1,
-                                                      "gearcrafting": 5}), gd)
-    objective = CharacterObjective.from_game_data(gd)
-    actions = build_actions(gd, state, objective, bank_accessible=True,
-                            task_exchange_min_coins=0)
-    actions.append(ls_mining10)
-    goal = UpgradeEquipmentGoal(committed_target=("deep_helmet", "helmet"))
-
-    admitted = goal.relevant_actions(actions, state, gd)
-
-    assert ls_mining10 in admitted, (
-        "LevelSkill(mining->10) must be admitted: deep_ore's only source is "
-        "gated at mining 10 and the character is at mining 1")

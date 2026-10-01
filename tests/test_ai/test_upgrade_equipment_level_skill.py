@@ -10,16 +10,11 @@ had no planner-native route. This mirrors the P2 fix for `GatherMaterialsGoal`
 LevelSkill (only the target's own gated (skill, level), never every grind).
 """
 
-from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
-from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 
 
 def _gd() -> GameData:
@@ -65,57 +60,6 @@ def test_is_plannable_true_when_under_gear_crafting_skill() -> None:
     state = _under_skill_state(gd)
     goal = UpgradeEquipmentGoal(committed_target=("gear_shield", "shield_slot"))
     assert goal.is_plannable(state, gd) is True
-
-
-def test_planner_sequences_level_skill_before_gear_craft() -> None:
-    """With a LevelSkill(gearcrafting, 5) in the action set, the planner
-    sequences the grind before Craft(gear_shield) and equips the target — the
-    gear-unlock grind now routes through LevelSkill."""
-    gd = _gd()
-    state = _under_skill_state(gd)
-    objective = CharacterObjective.from_game_data(gd)
-    actions = build_actions(gd, state, objective, bank_accessible=True,
-                            task_exchange_min_coins=0)
-    actions.append(LevelSkill(skill="gearcrafting", target_level=5))
-    goal = UpgradeEquipmentGoal(committed_target=("gear_shield", "shield_slot"))
-
-    plan = GOAPPlanner().plan(state, goal, actions, gd, budget_seconds=10.0)
-
-    reprs = [repr(a) for a in plan]
-    craft_idx = next(i for i, a in enumerate(plan)
-                     if isinstance(a, CraftAction) and a.code == "gear_shield")
-    level_idx = next(i for i, a in enumerate(plan)
-                     if isinstance(a, LevelSkill))
-    assert level_idx < craft_idx, f"LevelSkill must precede Craft(gear_shield): {reprs}"
-    assert any(isinstance(a, EquipAction) and a.code == "gear_shield"
-               and a.slot == "shield_slot" for a in plan), reprs
-
-
-def test_relevant_actions_scopes_level_skill_to_target_gated_skill() -> None:
-    """A LevelSkill enters the search ONLY when the target's own closure
-    craftable is gated behind that exact (skill, level) and the char is under
-    it. An unconditional admission fans ~15 grind actions into every search and
-    times out under load (the P2 ff4401ac regression) — the mining-9 grind (no
-    closure craftable gated on it) must be excluded."""
-    gd = _gd()
-    ls_gear5 = LevelSkill(skill="gearcrafting", target_level=5)
-    ls_mining9 = LevelSkill(skill="mining", target_level=9)  # irrelevant grind
-    actions = [ls_gear5, ls_mining9]
-    goal = UpgradeEquipmentGoal(committed_target=("gear_shield", "shield_slot"))
-
-    # under-skill (gearcrafting 1 < 5): admits the gearcrafting grind, not mining.
-    under = _under_skill_state(gd)
-    admitted = goal.relevant_actions(actions, under, gd)
-    assert ls_gear5 in admitted
-    assert ls_mining9 not in admitted
-
-    # at-skill (gearcrafting 5, not gated): NO LevelSkill admitted.
-    at = scenario_state(
-        ScenarioCharacter(name="t", level=5,
-                          skills={"gearcrafting": 5, "mining": 1},
-                          inventory={"gear_ore": 2}), gd)
-    assert not [a for a in goal.relevant_actions(actions, at, gd)
-                if isinstance(a, LevelSkill)]
 
 
 def test_relevant_actions_admits_the_ge_fill_for_the_goals_own_target() -> None:

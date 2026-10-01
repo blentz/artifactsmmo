@@ -11,11 +11,12 @@ cannot say why" must be impossible.
 
 WHAT "AN OPEN RUNG" MEANS, AND WHY IT IS NOT A SECOND MODEL
 -----------------------------------------------------------
-`ReachSkillGoal` admits exactly one action — the `"skill_grind"`-tagged
-`LevelSkill` (`goals/reach_skill.relevant_actions`) — so "the goal is
-plannable from here" IS `LevelSkill(S, C+1).is_applicable(state, game_data)`,
+`ReachSkillGoal` is served by its grind's decomposition
+(`craft_plan_gen._decompose_grind`, Phase 2d), which opens only when the skill
+has a rung — so "the goal is plannable from here" IS
+`skill_is_grindable(S, C+1, state, game_data)`,
 and that is the predicate this census calls. Nothing is reimplemented: the
-census asks production the same question the planner asks. `is_applicable`
+census asks production the same question the planner asks. The predicate
 is satisfied by either arm —
 
 * a CRAFTABLE rung: `skill_grind_target.has_grind_target` — an in-skill recipe
@@ -115,12 +116,12 @@ import dataclasses
 from dataclasses import dataclass
 from enum import Enum
 
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -133,7 +134,7 @@ class OpenRungGap(Enum):
     named walls, two must-be-zero residuals."""
 
     OPEN_RUNG = "open_rung"
-    """PASS: `LevelSkill(S, C+1)` is applicable, so `ReachSkillGoal` has at
+    """PASS: `skill_is_grindable(S, C+1)` holds, so `ReachSkillGoal` has at
     least one XP-positive rung to plan through."""
 
     WALL_LADDER_TOPPED = "wall_ladder_topped"
@@ -207,7 +208,7 @@ a scenario or two without flapping, far too tight for a collapsed sweep."""
 @dataclass(frozen=True)
 class RungInventory:
     """What the catalogue offers `skill` at level `level`, decomposed along the
-    exact conjuncts `LevelSkill.is_applicable` reduces to.
+    exact conjuncts `skill_is_grindable` reduces to.
 
     Every field is a COUNT or a code, never a verdict: `classify_gap` is the
     only place a verdict is formed, so the evidence and the judgement stay
@@ -376,8 +377,7 @@ def run_census(game_data: GameData) -> list[RungResult]:
         routed = routed_skills(state, game_data)
         for skill in SKILL_NAMES:
             level = state.skills[skill]
-            open_rung = LevelSkill(skill=skill, target_level=level + 1
-                                   ).is_applicable(state, game_data)
+            open_rung = skill_is_grindable(skill, level + 1, state, game_data)
             inventory = rung_inventory(skill, state, game_data)
             results.append(RungResult(
                 scenario=name, skill=skill, level=level, target=level + 1,
@@ -442,8 +442,8 @@ def render_matrix(results: list[RungResult]) -> str:
         "> Obligation O1 (wave-3 resolution design §3.5): every "
         "`ReachSkillLevel(S, C+1)` reachable across the scenario set has an "
         "open, XP-positive rung, or the graph emits a named wall. The verdict "
-        "column is `LevelSkill(S, C+1).is_applicable` — the one predicate "
-        "`ReachSkillGoal`'s only action offers — cross-read against the "
+        "column is `skill_is_grindable(S, C+1)` — the predicate "
+        "`ReachSkillGoal`'s decomposition opens on — cross-read against the "
         "catalogue evidence beside it.",
         ">",
         "> `routed` is what `decisions/root.resolve_root` would actually send "

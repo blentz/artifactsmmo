@@ -46,9 +46,9 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.decisions.root import _gear_nameable_skills, _orphan_skill_roots
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
@@ -57,6 +57,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
+from artifactsmmo_cli.audit.grind_cycle_census import earned_skill
 from artifactsmmo_cli.audit.open_rung_completeness import census_state, routed_skills
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
@@ -195,17 +196,17 @@ def test_the_alchemy_root_plans_a_levelskill(
         bundle_game_data: GameData, state: WorldState) -> None:
     """The root reaches an ACTION, which is what "routable" has to mean:
     `ReachSkillLevel(alchemy, C+1)` -> `objective_step_goal`'s skill arm ->
-    a `LevelSkill` plan on the live action factory."""
+    the grind's committed plan from the arbiter's producer (`decompose`, Phase
+    2d), ending in the leg that earns alchemy."""
     root = ReachSkillLevel(skill=SKILL, level=state.skills[SKILL] + 1)
     goal = objective_step_goal(root, state, bundle_game_data,
                                NO_PROFILE_CONTEXT, root=root, history=None)
     assert repr(goal) == f"ReachSkill({SKILL}->{state.skills[SKILL] + 1})"
     player = GamePlayer(character=CELL, history=None)
     player.seed_offline(state, bundle_game_data)
-    plan = GOAPPlanner().plan(state, goal, list(player._build_actions()),
-                              bundle_game_data, history=None,
-                              budget_seconds=PLAN_BUDGET_SECONDS)
-    assert plan and repr(plan[0]).startswith(f"LevelSkill({SKILL}->")
+    plan = decompose(goal, state, bundle_game_data, list(player._build_actions()),
+                     NO_PROFILE_CONTEXT)
+    assert plan and earned_skill(plan[-1], bundle_game_data) == SKILL, plan
 
 
 # --- flipping the dimension -------------------------------------------------

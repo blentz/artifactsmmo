@@ -59,7 +59,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from fractions import Fraction
 
-# MODULE import, same idiom as `level_skill` and `_route` above, and for the
+# MODULE import, same idiom as `_skill_grindable` and `_route` below, and for the
 # same reason but the OTHER direction: `gather_demand` imports
 # `tiers.meta_goal` and `tiers.skill_grind_target`, both of which run
 # `ai/tiers/__init__` -> `strategy` -> `progression_tree` -> THIS module. So an
@@ -71,21 +71,21 @@ from fractions import Fraction
 from artifactsmmo_cli.ai import craft_demand as _craft_demand
 from artifactsmmo_cli.ai import gather_demand as _gather_demand
 
-# `level_skill` is imported as a MODULE, not as `from ... import LevelSkill`,
-# and that is load-bearing rather than stylistic. `actions/level_skill.py`
+# `skill_grindable` is imported as a MODULE, not as `from ... import
+# skill_is_grindable`, and that is load-bearing rather than stylistic. It
 # imports `ai.tiers.skill_grind_target`, which runs `ai/tiers/__init__.py` ->
-# `strategy` -> `progression_tree` -> THIS module: so whenever `level_skill` is
-# the first of the two to be imported (it is, via `ai/actions/factory.py` from
-# `ai/player.py`, and in `audit/open_rung_completeness`), root.py executes while
-# `level_skill` is only half built and a NAME import raises ImportError.
-# Binding the module object defers the attribute lookup to CALL time, by which
-# point both halves are complete. Exactly the idiom `tiers/strategy.py:13` and
-# `tiers/progression_tree.py:37` already use on each other, for this reason.
-from artifactsmmo_cli.ai.actions import level_skill
+# `strategy` -> `progression_tree` -> THIS module: so whenever it is the first
+# of the two to be imported, root.py executes while it is only half built and a
+# NAME import raises ImportError. Binding the module object defers the
+# attribute lookup to CALL time, by which point both halves are complete.
+# Exactly the idiom `tiers/strategy.py:13` and `tiers/progression_tree.py:37`
+# already use on each other, for this reason. (It used to be `level_skill`,
+# whose `LevelSkill.is_applicable` wrapped this same predicate.)
+from artifactsmmo_cli.ai import skill_grindable as _skill_grindable
 from artifactsmmo_cli.ai.combat_deficit import deficit_upgrade_target
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
 
-# MODULE import, same idiom as `level_skill` above and for the same reason:
+# MODULE import, same idiom as `_skill_grindable` above and for the same reason:
 # `route` imports `tiers.meta_goal`, which runs `tiers/__init__` ->
 # `strategy` -> `progression_tree` -> THIS module, so whichever of the two
 # is reached first executes while the other is half built. A NAME import
@@ -408,7 +408,7 @@ def _gear_nameable_skills(game_data: GameData) -> frozenset[str]:
     the orphan rule refusing it on a nameability claim no code path could
     honour. The O1 census's routed count moves 194 -> 236 of 336 cells and 7 of
     8 skills -> 8 of 8 with this fix; residuals stay 0 because the rule's other
-    conjunct is `LevelSkill(S, C+1).is_applicable`, the census's own predicate.
+    conjunct is `skill_is_grindable(S, C+1)`, the census's own predicate.
 
     Measured on the committed bundle after the fix: gearcrafting,
     weaponcrafting and jewelrycrafting — exactly the three skills whose output
@@ -448,7 +448,7 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
       him, an open rung two fights deep — grinding cooking instead for two days
       at 0 character XP. Note the MIRRORED polarity against the third conjunct:
       demand ADMITS a gathering skill and SUPPRESSES a gear-nameable one.
-    * "an open, XP-positive rung" is `LevelSkill(S, C+1).is_applicable` — the
+    * "an open, XP-positive rung" is `skill_is_grindable(S, C+1)` — the
       SAME predicate `ReachSkillGoal`'s only action offers and the same one the
       O1 census (`audit/open_rung_completeness`) verdicts a cell on. A skill
       with no open rung gets NO root: emitting one would be the census's
@@ -527,9 +527,8 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
     candidates = [
         skill for skill in SKILL_NAMES
         if (skill not in nameable or skill not in craft_named)
-        and level_skill.LevelSkill(
-            skill=skill, target_level=state.skills.get(skill, 1) + 1
-        ).is_applicable(state, game_data)]
+        and _skill_grindable.skill_is_grindable(
+            skill, state.skills.get(skill, 1) + 1, state, game_data)]
     # PASS 2 — the candidates SEED demand too, not just the gear siblings and
     # the trunk. `resolve_root` calls this with `offered` = [root, *ordered],
     # which by construction cannot contain an orphan root, so a one-pass demand

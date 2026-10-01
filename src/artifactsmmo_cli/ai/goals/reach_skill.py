@@ -1,12 +1,9 @@
-"""ReachSkillGoal: reach `target_level` in one skill via the planner-native
-LevelSkill action.
+"""ReachSkillGoal: reach `target_level` in one skill.
 
-A THIN goal (P3a Task 2): where the retired LevelSkillGoal drove an in-search
-craft/gather grind, this goal simply admits the `LevelSkill(skill, target_level)`
-action — whose optimistic `apply` sets the skill to `target_level` in the
-simulated plan — and lets the planner sequence it. The PURSUE_TASK skill-grind
-branch of the strategy driver constructs this instead of LevelSkillGoal, which
-P3b retires.
+Served by decomposition (`craft_plan_gen._decompose_grind`, Phase 2d-a): one
+grind cycle's committed legs, ending in the leg that earns the skill's XP. It
+admits no actions to the search (Phase 2d-b2): the `LevelSkill` macro it used
+to admit left the action pool, and a grind is not a search problem.
 """
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -22,7 +19,7 @@ PRIORITY_WHEN_FIRING = 55.0
 
 
 class ReachSkillGoal(Goal):
-    """Reach `target_level` in `skill_name` by aiming the LevelSkill action."""
+    """Reach `target_level` in `skill_name` (served by its grind's decomposition)."""
 
     def __init__(self, skill_name: str, target_level: int) -> None:
         self._skill_name = skill_name
@@ -51,13 +48,10 @@ class ReachSkillGoal(Goal):
     def relevant_actions(
         self, actions: list[Action], state: WorldState, game_data: GameData
     ) -> list[Action]:
-        """The `"skill_grind"`-tagged actions (LevelSkill) whose skill matches
-        this goal's target. Duck-typed (no LevelSkill import): this goal targets
-        exactly ONE skill, so a plain skill-name match suffices — no (skill,level)
-        gating set is needed."""
-        return [action for action in actions
-                if "skill_grind" in action.tags
-                and getattr(action, "skill", None) == self._skill_name]
+        """None: the grind is decomposition's (module docstring). When it
+        declines, the search has nothing to try and gives up at once instead
+        of exploring the whole pool."""
+        return []
 
     @property
     def max_depth(self) -> int:

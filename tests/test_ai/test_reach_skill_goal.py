@@ -57,26 +57,13 @@ class TestValue:
 
 
 class TestRelevantActions:
-    def test_admits_only_matching_skill_grind(self):
+    def test_admits_nothing_to_the_search(self):
+        """Phase 2d-b2: the grind is decomposition's; the LevelSkill macro this
+        goal used to admit left the action pool."""
         goal = ReachSkillGoal("alchemy", 5)
         gd = _gd_with_alchemy_resource()
-        actions = [LevelSkill(skill="alchemy", target_level=5),
-                   LevelSkill(skill="mining", target_level=3)]
-        admitted = goal.relevant_actions(actions, make_state(skills={"alchemy": 1}), gd)
-        assert admitted == [actions[0]]
-
-    def test_excludes_untagged_actions(self):
-        goal = ReachSkillGoal("alchemy", 5)
-        gd = _gd_with_alchemy_resource()
-
-        class _Untagged:
-            tags = frozenset()
-            skill = "alchemy"
-
-        untagged = _Untagged()
-        actions = [LevelSkill(skill="alchemy", target_level=5), untagged]
-        admitted = goal.relevant_actions(actions, make_state(skills={"alchemy": 1}), gd)
-        assert untagged not in admitted
+        actions = [LevelSkill(skill="alchemy", target_level=5)]
+        assert goal.relevant_actions(actions, make_state(skills={"alchemy": 1}), gd) == []
 
 
 class TestDesiredStateAndDepth:
@@ -103,14 +90,12 @@ class TestSerialize:
 
 
 class TestPlannerIntegration:
-    def test_planner_yields_single_level_skill(self):
+    def test_the_search_finds_nothing_to_grind_with(self):
+        """When decomposition declines, the search gives up at once rather than
+        exploring a pool it has no admitted action from."""
         gd = _gd_with_alchemy_resource()
         state = scenario_state(
             ScenarioCharacter(name="t", level=5, skills={"alchemy": 1}), gd)
         goal = ReachSkillGoal("alchemy", 5)
-        actions = [LevelSkill(skill="alchemy", target_level=5),
-                   LevelSkill(skill="mining", target_level=3)]
-
-        plan = GOAPPlanner().plan(state, goal, actions, gd, budget_seconds=10.0)
-
-        assert [repr(a) for a in plan] == ["LevelSkill(alchemy->5)"]
+        assert GOAPPlanner().plan(state, goal, [LevelSkill(skill="alchemy", target_level=5)], gd,
+                                  budget_seconds=10.0) == []

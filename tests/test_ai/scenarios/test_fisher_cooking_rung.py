@@ -41,7 +41,9 @@ import dataclasses
 import pytest
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.decisions.root import _gear_nameable_skills
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -56,6 +58,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.audit.grind_cycle_census import earned_skill
 from artifactsmmo_cli.audit.open_rung_completeness import census_state, routed_skills
 
 CELL = "l24_fisher_cooking_rung"
@@ -86,8 +89,7 @@ def _gather_plan(state: WorldState, game_data: GameData,
     player.seed_offline(state, game_data)
     actions = list(player._build_actions())
     goal = GatherMaterialsGoal(target_item=code, needed={code: quantity})
-    return GOAPPlanner().plan(state, goal, actions, game_data, history=None,
-                              budget_seconds=PLAN_BUDGET_SECONDS)
+    return decompose(goal, state, game_data, actions, NO_PROFILE_CONTEXT) or []
 
 
 @pytest.fixture
@@ -150,10 +152,10 @@ def test_the_role_is_what_makes_the_gather_plannable(
     """Proof it bites, and it reaches an ACTION.
 
     The fisher gathers the trout in one step. Take the role away — fishing back
-    to the floor, everything else identical, the SAME cooking rung and the SAME
-    descent — and `GatherAction.is_applicable`'s skill gate refuses, so the
-    planner has to buy the level first. The plan gains an edge the fisher's
-    does not need, which is the fishing dimension answering."""
+    to the floor, everything else identical, the SAME cooking rung — and the
+    trout's skill gate is shut, so the plan is the fishing grind that opens it
+    (a sub-task, Phase 2d: its cycle ends in a lower fishing gather), which is
+    the fishing dimension answering."""
     fisher_plan = _gather_plan(state, bundle_game_data, RAW, 1)
     assert [repr(a) for a in fisher_plan] == ["Gather(trout_spot×1)"]
 
@@ -163,8 +165,9 @@ def test_the_role_is_what_makes_the_gather_plannable(
     other = scenario_state(landlubber, bundle_game_data)
     assert skill_grind_target(SKILL, other, bundle_game_data) == RUNG
     other_plan = _gather_plan(other, bundle_game_data, RAW, 1)
-    assert [repr(a) for a in other_plan] == [
-        f"LevelSkill({GATHER_SKILL}->{RAW_GATHER_LEVEL})", "Gather(trout_spot×1)"]
+    assert other_plan and isinstance(other_plan[-1], GatherAction)
+    gate = bundle_game_data.resource_skill_level(other_plan[-1].resource_code)
+    assert gate is not None and gate[0] == GATHER_SKILL and gate[1] < RAW_GATHER_LEVEL, other_plan
 
 
 # --- the design correction --------------------------------------------------
@@ -274,20 +277,19 @@ def test_the_fishers_cooking_root_plans_a_cooking_grind(
     """The root reaches an ACTION, which is what "routable" has to mean.
 
     `ReachSkillLevel(cooking, C+1)` -> `ReachSkillGoal` (the
-    `strategy_driver.objective_step_goal` skill arm) -> a `LevelSkill` plan on
-    the live action factory. Nothing here re-enters the root walk: the descent
-    from the cooking rung into its fishing-gated input happens inside the
-    planner, as `test_the_role_is_what_makes_the_gather_plannable` shows."""
+    `strategy_driver.objective_step_goal` skill arm) -> the grind's committed
+    plan from the arbiter's producer (`decompose`, Phase 2d), ending in a leg
+    that earns: the cooking craft, or the fishing gather of a sub-grind its
+    rung's input needs."""
     root = ReachSkillLevel(skill=SKILL, level=state.skills[SKILL] + 1)
     goal = objective_step_goal(root, state, bundle_game_data,
                                NO_PROFILE_CONTEXT, root=root, history=None)
     assert repr(goal) == f"ReachSkill({SKILL}->{state.skills[SKILL] + 1})"
     player = GamePlayer(character=CELL, history=None)
     player.seed_offline(state, bundle_game_data)
-    plan = GOAPPlanner().plan(state, goal, list(player._build_actions()),
-                              bundle_game_data, history=None,
-                              budget_seconds=PLAN_BUDGET_SECONDS)
-    assert plan and repr(plan[0]).startswith(f"LevelSkill({SKILL}->")
+    plan = decompose(goal, state, bundle_game_data, list(player._build_actions()),
+                     NO_PROFILE_CONTEXT)
+    assert plan and earned_skill(plan[-1], bundle_game_data) in (SKILL, GATHER_SKILL), plan
 
 
 # ---------------------------------------------------------------------------
