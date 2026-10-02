@@ -608,8 +608,10 @@ class TestStrategyArbiterIntegration:
         assert isinstance(plan[0], GatherAction)
         assert isinstance(plan[-1], CraftAction) and plan[-1].code == "copper_ring"
 
-    def test_monster_drop_goal_invokes_planner(self):
-        """A feather_coat goal (monster-drop leaf) must invoke the planner (A*)."""
+    def test_a_declined_monster_drop_goal_does_not_search(self):
+        """A feather_coat goal whose only feather source is a fight the pool
+        lacks: decomposition declines it, and since Phase 2e that decline is the
+        answer — the planner (A*) is not invoked."""
         gd = _gd_monster_drop()
         state = make_state(inventory={}, bank_items={},
                            skills={"gearcrafting": 5})
@@ -630,9 +632,9 @@ class TestStrategyArbiterIntegration:
 
         spy = _SpyPlanner()
         arbiter = StrategyArbiter(spy, history=None)
-        arbiter._plans(goal, state, gd, actions, _ctx())
+        assert arbiter._plans(goal, state, gd, actions, _ctx()) == []
 
-        assert _SpyPlanner.calls == 1, "Planner must be invoked for monster-drop goal"
+        assert _SpyPlanner.calls == 0, "a final decline must not search"
 
     def test_banked_target_still_generates(self) -> None:
         """Banked TARGET → the walk WITHDRAWS it and makes only the rest.

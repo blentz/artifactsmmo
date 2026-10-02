@@ -78,3 +78,10 @@ class TestSerialize:
                      "target_level": 5}
 
 
+
+
+def test_the_grind_offers_the_search_nothing():
+    """A grind is decomposition's; a declined one is final (Phase 2e), and a
+    search that is asked anyway has no action to try."""
+    goal = ReachSkillGoal("mining", 5)
+    assert goal.relevant_actions([object()], make_state(), GameData()) == []

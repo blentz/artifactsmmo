@@ -3127,6 +3127,19 @@ BAG_OVERFLOW_DECLINE_MUTATIONS = [
      "    if peak_qty > state.inventory_max or peak_slots > state.inventory_slots_max:",
      "    if False:"),
 ]
+# Phase 2e: a decline of a served goal is final. Killed by
+# tests/test_ai/test_decision_events.py.
+SEARCH_HANDOFF_MUTATIONS = [
+    ("craft_plan_gen: every decline falls back to the search again",
+     "    return not declined or any(reason.startswith(SEARCH_HANDOFFS) for reason in declined)",
+     "    return True"),
+    ("craft_plan_gen: a goal shape the walk does not serve never searches",
+     "    return not declined or any(reason.startswith(SEARCH_HANDOFFS) for reason in declined)",
+     "    return any(reason.startswith(SEARCH_HANDOFFS) for reason in declined)"),
+    ("craft_plan_gen: the GE venue no longer hands off",
+     'SEARCH_HANDOFFS = ("upgrade:uncommitted", "upgrade:ge_venue:")',
+     'SEARCH_HANDOFFS = ("upgrade:uncommitted",)'),
+]
 # Killed by tests/test_ai/test_decompose_potions.py (a drop-only ingredient
 # has no route under the ladder's policy; under the walk's default it is a fight).
 POTION_DECOMPOSE_POLICY_MUTATIONS = [
@@ -8676,6 +8689,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, GRIND_PREP_MUTATIONS,
               "tests/test_ai/test_grind_heal_prep.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, SEARCH_HANDOFF_MUTATIONS,
+              "tests/test_ai/test_decision_events.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, POTION_DECOMPOSE_POLICY_MUTATIONS,
               "tests/test_ai/test_decompose_potions.py", survivors)
     run_group(RECYCLE_YIELD_SRC, RECYCLE_YIELD_MUTATIONS,

@@ -100,18 +100,30 @@ class TestArbiter:
             arbiter._plans(self._goal(True), make_state(), GameData(), [], MagicMock())
         assert arbiter.events.drain() == [(Mechanism.FAST_PATH, "G", "plan_len=2")]
 
-    def test_a_decline_is_noted_with_its_reason_before_the_search(self) -> None:
-        """Phase 2c-2.0: a decline was silent (the arbiter just searched). Its
-        named reason is noted, then the search it falls back to."""
+    def test_a_decline_is_noted_and_is_the_goals_answer(self) -> None:
+        """Phase 2c-2.0 named the decline; Phase 2e makes it final: the reason
+        is noted and no search follows."""
         arbiter = self._arbiter()
 
         def declines(goal, state, game_data, actions, ctx, declined):
             declined.append("no_source:feather")
 
         with patch("artifactsmmo_cli.ai.strategy_driver.decompose", side_effect=declines):
+            plan = arbiter._plans(self._goal(True), make_state(), GameData(), [], MagicMock())
+        assert plan == []
+        assert arbiter.events.drain() == [(Mechanism.DECOMPOSE_DECLINE, "G", "no_source:feather")]
+
+    def test_a_handoff_decline_is_noted_before_the_search(self) -> None:
+        """`upgrade:ge_venue` hands the goal to the search on purpose."""
+        arbiter = self._arbiter()
+
+        def declines(goal, state, game_data, actions, ctx, declined):
+            declined.append("upgrade:ge_venue:iron_boots")
+
+        with patch("artifactsmmo_cli.ai.strategy_driver.decompose", side_effect=declines):
             arbiter._plans(self._goal(True), make_state(), GameData(), [], MagicMock())
         [decline, (search, _subject, _detail)] = arbiter.events.drain()
-        assert decline == (Mechanism.DECOMPOSE_DECLINE, "G", "no_source:feather")
+        assert decline == (Mechanism.DECOMPOSE_DECLINE, "G", "upgrade:ge_venue:iron_boots")
         assert search is Mechanism.SEARCH
 
     def test_a_mark_is_noted_and_a_clear_only_when_something_was_marked(self) -> None:

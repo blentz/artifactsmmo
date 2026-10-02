@@ -173,15 +173,16 @@ def test_deleting_the_gather_arm_turns_the_gather_cell_red(
     gathers copper_ore, the model no longer names GATHER. PLAN PARITY fails with
     it now: the old descent gathered via `game_data.gatherable_drop_items`, a
     second authority beside the model, so it kept gathering; the one walk
-    (Phase 2c-2b) reads only the model, so without the arm there is no plan."""
+    (Phase 2c-2b) reads only the model, so without the arm there is no plan.
+
+    Since Phase 2e the walk's decline is the goal's answer (no A* fallback), so
+    the arbiter never selects the gather goal at all and the cell's own premise
+    guard fires: the deletion is caught one step earlier, as a cell that cannot
+    reach the material it names."""
     monkeypatch.setattr(ObtainModel, "_gather", lambda *a, **k: [])
 
-    r = _result(bundle_game_data, ParitySourceKind.GATHER)
-    assert not r.passed
-    assert r.pool_subset_model is False
-    assert r.plan_parity is False
-    assert r.model_kinds == ()
-    assert r.pool_applicable_kinds == ("gather",)
+    with pytest.raises(ValueError, match="the arbiter ran Wait, not GatherMaterials"):
+        _result(bundle_game_data, ParitySourceKind.GATHER)
 
 
 # ---------------------------------------------------------------------------

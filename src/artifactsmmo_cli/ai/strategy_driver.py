@@ -23,7 +23,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
 )
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess, drain_snapshot
 from artifactsmmo_cli.ai.consumable_supply import best_held_heal
-from artifactsmmo_cli.ai.craft_plan_gen import decompose
+from artifactsmmo_cli.ai.craft_plan_gen import decompose, hands_off_to_search
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
 from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog, search_detail
@@ -893,10 +893,11 @@ class StrategyArbiter:
             })
             return []
         # Fast path: an obtain-shaped goal (GatherMaterials, a potion batch,
-        # a skill grind's legs) is served by the one walk
-        # (`craft_plan_gen.decompose`) and skips A*
-        # entirely. It declines only an infeasible goal or a step no action
-        # serves, and names why (DECOMPOSE_DECLINE); then the search runs.
+        # a skill grind's legs, a committed upgrade) is served by the one walk
+        # (`craft_plan_gen.decompose`) and skips A* entirely. A decline names
+        # why (DECOMPOSE_DECLINE) and is the goal's answer (Phase 2e); only a
+        # shape the walk does not serve, or a deliberate handoff
+        # (`SEARCH_HANDOFFS`), runs the search.
         declined: list[str] = []
         gen = decompose(goal, state, game_data, actions, ctx, declined)
         for reason in declined:
@@ -914,6 +915,18 @@ class StrategyArbiter:
                 "elapsed_ms": _elapsed_ms(),
             })
             return gen
+        if not hands_off_to_search(declined):
+            self._last_timed_out = False
+            self.goals_tried.append({
+                "goal": repr(goal),
+                "nodes": 0,
+                "depth": 0,
+                "timed_out": False,
+                "plan_len": 0,
+                "priority": priority,
+                "elapsed_ms": _elapsed_ms(),
+            })
+            return []
         plan = self._planner.plan(state, goal, actions, game_data, self._history,
                                   budget_seconds=budget_seconds)
         stats = self._planner.last_stats

@@ -1,6 +1,7 @@
 import dataclasses
 import json
 from dataclasses import dataclass
+from unittest.mock import patch
 
 import pytest
 
@@ -2099,7 +2100,11 @@ def test_worth_gate_breaks_sticky_pursue_task(tmp_path):
         arbiter = StrategyArbiter(_TrivialPlanner(), history=store)
         # Simulate prior sticky commitment to PursueTask.
         arbiter._committed_repr = repr(sd.map_means(sd.MeansKind.PURSUE_TASK, gd, ctx, state))
-        goal, _plan, _tried = arbiter.select(decision, state, gd, [], ctx, objective=obj)
+        # Planning is not under test (hence `_TrivialPlanner`); since Phase 2e a
+        # committed upgrade is the walk's, so the walk is stubbed the same way.
+        with patch.object(sd, "decompose", side_effect=lambda goal, *_a, **_k:
+                          [WaitAction()] if isinstance(goal, UpgradeEquipmentGoal) else None):
+            goal, _plan, _tried = arbiter.select(decision, state, gd, [], ctx, objective=obj)
     finally:
         store.close()
     assert isinstance(goal, UpgradeEquipmentGoal)

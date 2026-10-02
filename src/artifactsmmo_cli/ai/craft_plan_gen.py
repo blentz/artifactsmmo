@@ -74,6 +74,22 @@ def _decline(declined: list[str] | None, reason: str) -> list[Action] | None:
     return None
 
 
+SEARCH_HANDOFFS = ("upgrade:uncommitted", "upgrade:ge_venue:")
+"""Declines that hand a goal to the A* search ON PURPOSE (Phase 2e): the
+search picks among uncommitted upgrades, and buying an upgrade off the GE
+book against making it is a price question the walk does not answer (D-E).
+Every other decline of a goal this producer serves is final."""
+
+
+def hands_off_to_search(declined: list[str]) -> bool:
+    """Whether a `decompose` that returned None leaves the goal to the search:
+    yes when it named no decline (a goal shape it does not serve) or a
+    `SEARCH_HANDOFFS` one; no for any other decline, which is the goal's
+    answer (Phase 2e: the fallback fired 0 useful times in 15 h live and on 0 of
+    599 craft-census cells)."""
+    return not declined or any(reason.startswith(SEARCH_HANDOFFS) for reason in declined)
+
+
 def decompose(goal: Goal, state: WorldState, game_data: GameData,
               actions: list[Action], ctx: SelectionContext,
               declined: list[str] | None = None, *,
