@@ -30,6 +30,7 @@ re-validates `is_applicable` on the plan head every cycle before running it, and
 """
 
 import dataclasses
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 
@@ -51,6 +52,7 @@ from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
+from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
 from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY, heal_prep_goal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
@@ -182,7 +184,7 @@ def _decompose_upgrade(goal: UpgradeEquipmentGoal, state: WorldState, game_data:
         # which prices both, keeps that choice.
         return _decline(declined, f"upgrade:ge_venue:{item}")
     legs = _walk_plan(GatherMaterialsGoal(item, {item: 1}), state, game_data, actions, ctx,
-                      declined, subtasks, frozenset())
+                      declined, subtasks, frozenset(), grey_exempt=frozenset({item}))
     if legs is None:
         return None
     landed = state
@@ -234,7 +236,8 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
                actions: list[Action], ctx: SelectionContext,
                declined: list[str] | None, subtasks: bool,
                grinding: frozenset[str],
-               policy: Policy = DECOMPOSE_POLICY) -> list[Action] | None:
+               policy: Policy = DECOMPOSE_POLICY,
+               grey_exempt: frozenset[str] = frozenset()) -> list[Action] | None:
     """The goal's plan from THE ONE WALK (Phase 2c-2b of
     docs/PLAN_decision_architecture_redesign.md): the legs `ObtainModel.walk`
     extracts under `DECOMPOSE_POLICY`, each as a concrete action.
@@ -272,12 +275,26 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
             verdicts[key] = skill_is_grindable(gate.subject, gate.level, state, game_data)
         return verdicts[key]
 
+    grey_verdicts: dict[str, bool] = {}
+
+    def grey_ok(item: str) -> bool:
+        """Whether a zero-xp dropper may serve `item` (the 2026-07-06 grey-farm
+        directive, as the search's admission applied it): a skill grind farms
+        greys by design (`GRIND_ALLOWS_GREY`), an upgrade's own target is its
+        own consumer (`grey_exempt`), and anything else only when the
+        directive licenses the drop (`grey_farm_allowed`)."""
+        if goal.skill_grind or item in grey_exempt:
+            return True
+        if item not in grey_verdicts:
+            grey_verdicts[item] = grey_farm_allowed(item, state, game_data)
+        return grey_verdicts[item]
+
     relevant = admit_region_edges(goal.relevant_actions(actions, state, game_data),
                                   actions, state, game_data)
     for item, needed in goal.needed.items():
         qty = _bag_target(item, needed, goal.exclude_recycle, state)
         answer = ObtainModel(state, game_data, ctx, datetime.now(UTC)).walk(
-            item, qty, policy, goal.exclude_recycle, openable, frozenset(goal.needed))
+            item, qty, policy, goal.exclude_recycle, openable, frozenset(goal.needed), grey_ok)
         if not answer.feasible:
             graph = answer.graph
             dead = sorted(code for code, routes in graph.routes.items()
@@ -298,7 +315,7 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
                 legs.extend(sub)
                 break
             action = _action_for(leg, answer.graph, relevant, actions, state, game_data,
-                                 ctx.bank_accessible)
+                                 ctx.bank_accessible, grey_ok)
             if action is None:
                 if legs:
                     break
@@ -326,7 +343,8 @@ def _bag_target(item: str, needed: int, produce: frozenset[str], state: WorldSta
 
 
 def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool: list[Action],
-                state: WorldState, game_data: GameData, bank_accessible: bool) -> Action | None:
+                state: WorldState, game_data: GameData, bank_accessible: bool,
+                grey_ok: Callable[[str], bool]) -> Action | None:
     """The concrete action a walk step names, sized to it: the goal's own
     sized actions first, then the whole pool, and a withdraw built at the bank
     tile when neither has one. None for a route no action serves yet (GE fill,
@@ -363,7 +381,7 @@ def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool:
         # The goal's own actions come last so their fight (possibly the
         # synthesized drop_farm variant the static pool lacks) wins per monster.
         fight = select_drop_fight(step.item, [*pool, *relevant], state, game_data,
-                                  allow_grey=DECOMPOSE_POLICY.allow_grey)
+                                  allow_grey=grey_ok(step.item))
         return None if fight is None else dataclasses.replace(fight, drop_target=(step.item, step.amount))
     return None
 

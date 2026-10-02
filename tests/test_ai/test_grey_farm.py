@@ -12,13 +12,14 @@ when the next tier is close, grind the skill instead of farming greys.
 import dataclasses
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.grey_farm import (
     GREY_FARM_NEXT_TIER_MARGIN,
     grey_farm_allowed,
 )
-from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -234,12 +235,16 @@ class TestGatherEmitsDropFarmFights:
         drop-farm fight when the next tier is far — the live Robby stage-1
         stall (feathers only servable from bank stock)."""
         gd = _gd(alchemy_next_tier_level=20)
-        state = make_state(level=12, skills={"alchemy": 5},
-                           inventory={}, bank_items={})
+        # This file's `make_state` sizes the bag's slots to its contents (0 here);
+        # the walk declines a plan the bag cannot hold, so give it room.
+        state = dataclasses.replace(
+            make_state(level=12, skills={"alchemy": 5}, inventory={}, bank_items={}),
+            inventory_max=100, inventory_slots_max=20)
         goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
         actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))]
-        plan = GOAPPlanner().plan(state, goal, actions, gd, budget_seconds=10.0)
-        assert [repr(a) for a in plan] == ["Fight(chicken)", "Fight(chicken)"]
+        plan = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
+        assert plan is not None and [repr(a) for a in plan] == ["Fight(chicken)"]
+        assert plan[0].drop_target == ("feather", 2)
 
     def test_grey_dropper_not_emitted_when_next_tier_close(self) -> None:
         gd = _gd(alchemy_next_tier_level=20)
@@ -264,13 +269,43 @@ class TestGatherEmitsDropFarmFights:
         acquisition edge at all and the grind raised "produced no leg" every
         cycle."""
         gd = _gd(alchemy_next_tier_level=20)
-        state = make_state(level=12, skills={"alchemy": 19},
-                           inventory={}, bank_items={})
+        # This file's `make_state` sizes the bag's slots to its contents (0 here);
+        # the walk declines a plan the bag cannot hold, so give it room.
+        state = dataclasses.replace(
+            make_state(level=12, skills={"alchemy": 19}, inventory={}, bank_items={}),
+            inventory_max=100, inventory_slots_max=20)
+        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))]
+        plain = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
+        assert decompose(plain, state, gd, actions, NO_PROFILE_CONTEXT) is None, \
+            "vacuous: the directive does not suppress the plain gather"
         goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2},
                                    skill_grind=True)
-        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))]
-        plan = GOAPPlanner().plan(state, goal, actions, gd, budget_seconds=10.0)
-        assert [repr(a) for a in plan] == ["Fight(chicken)", "Fight(chicken)"]
+        plan = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
+        assert plan is not None and [repr(a) for a in plan] == ["Fight(chicken)"]
+        assert plan[0].drop_target == ("feather", 2)
+
+    def test_a_suppressed_grey_loses_to_a_dropper_that_pays(self) -> None:
+        """Feather drops off the grey L1 chicken (closer) and a L12 hawk. With
+        the directive suppressing the grey (alchemy 19, next tier close), the
+        walk's drop leg fights the hawk: the fight selection obeys the same
+        per-item verdict the walk's routes do."""
+        gd = _gd(alchemy_next_tier_level=20)
+        gd._monster_locations["hawk"] = (3, 0)
+        gd._monster_level["hawk"] = 12
+        gd._monster_hp["hawk"] = 60
+        gd._monster_attack["hawk"] = {"air": 4}
+        gd._monster_drops["hawk"] = [("feather", 10, 1, 1)]
+        fill_monster_stat_defaults(gd)
+        state = dataclasses.replace(
+            make_state(level=12, skills={"alchemy": 19}, inventory={}, bank_items={}),
+            inventory_max=100, inventory_slots_max=20)
+        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
+        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)})),
+                   FightAction(monster_code="hawk", locations=frozenset({(3, 0)}))]
+        assert gd.xp_per_kill("chicken", 12) == 0 < gd.xp_per_kill("hawk", 12), \
+            "vacuous: the chicken is not grey, or the hawk pays nothing"
+        plan = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
+        assert plan is not None and [repr(a) for a in plan] == ["Fight(hawk)"]
 
     def test_skill_grind_exemption_does_not_change_the_policy(self) -> None:
         """The 2026-07-06 directive is routed AROUND, never weakened: the

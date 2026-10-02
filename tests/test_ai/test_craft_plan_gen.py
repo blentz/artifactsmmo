@@ -1780,7 +1780,7 @@ class TestWalkPlanEdges:
         graph = WalkGraph({}, {"gold": ()}, {"gold": (sell,)})
         step = Act("gold", 0, 5, 1)
         assert craft_plan_gen._action_for(step, graph, [], [], make_state(), _gd_copper_ring(),
-                                          True) is None
+                                          True, lambda _item: False) is None
 
 
 class TestACommittedUpgradeDecomposes:

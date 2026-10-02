@@ -122,8 +122,8 @@ fight or gather for it and the planner reaches it through a transition
 (`Transition(->underground)`, then `Gather(gold_rocks)`)."""
 
 
-DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False)
-"""The walk's readiness: LEGACY (what the executor can serve now) with two
+DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False, allow_grey=False)
+"""The walk's readiness: LEGACY (what the executor can serve now) with three
 switches.
 
 - Every resource that drops an item is offered (D-B), ranked by the proved
@@ -135,4 +135,11 @@ switches.
   its price against the time a fight or gather costs is a COST question the
   model cannot answer yet (the cost view); fills stay the venue choice goal
   emission makes beside an NPC buy (`choose_buy_venue`). The old descent never
-  used them either: its "ge_fill" step fell through the mapping into a fight."""
+  used them either: its "ge_fill" step fell through the mapping into a fight.
+- No grey dropper by default: the 2026-07-06 grey-farm directive ("grind the
+  skill and craft the better item instead of farming greys for a soon-obsolete
+  one") is applied per item by the walk's caller (`craft_plan_gen._walk_plan`'s
+  `grey_ok`: a skill grind, a drop `grey_farm_allowed` licenses, an upgrade's
+  own target), as the search's admission applied it. LEGACY allowed every grey
+  dropper, so the walk fought a grey sheep for an ordinary wool demand (live
+  from 2c-2b until 2026-10-02)."""

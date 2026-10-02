@@ -26,6 +26,7 @@ memoised per item for its lifetime. Pure: no I/O.
 """
 
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 
 from artifactsmmo_cli.ai import accumulation_sell
@@ -125,7 +126,8 @@ class ObtainModel:
     def walk_graph(self, item: str, policy: Policy,
                    produce: frozenset[str] = frozenset(),
                    openable: Callable[[Gate], bool] = lambda _gate: False,
-                   keep: frozenset[str] = frozenset()) -> WalkGraph:
+                   keep: frozenset[str] = frozenset(),
+                   grey_ok: Callable[[str], bool] = lambda _item: False) -> WalkGraph:
         """`item`'s closure as the one walk's graph (Phase 2c-2b).
 
         On hand is the bag (the inventory, with gold as the pocket). Every ready
@@ -151,7 +153,12 @@ class ObtainModel:
         grind can raise). A route `policy` offers whose every unmet enforced
         gate is openable joins the walk AFTER the ready routes, carrying those
         gates: the walk then opens them first, as a sub-task, and only when
-        nothing ready serves (Phase 2c-2c)."""
+        nothing ready serves (Phase 2c-2c).
+
+        `grey_ok` names items whose ZERO-XP droppers count even though `policy`
+        refuses grey (`allow_grey=False`): the walk applies the grey-farm
+        directive per item, as the search's admission did (a skill grind, a
+        drop the directive allows, an upgrade's own target)."""
         bag: dict[str, int] = dict(self._state.inventory)
         bag[GOLD_CODE] = self._state.gold
         bank = self._state.bank_items or {}
@@ -164,13 +171,15 @@ class ObtainModel:
                 continue
             walk: list[WalkRoute[str]] = []
             behind: list[Route] = []
-            ready = self.ready(code, policy)
+            item_policy = (replace(policy, allow_grey=True)
+                           if not policy.allow_grey and grey_ok(code) else policy)
+            ready = self.ready(code, item_policy)
             gated: list[tuple[Route, tuple[Gate, ...]]] = []
             for route in self.routes(code):
-                if not policy.admits(route) or route in ready:
+                if not item_policy.admits(route) or route in ready:
                     continue
                 unmet = tuple(gate for gate in route.gates
-                              if policy.enforces(gate, route) and not gate.satisfied)
+                              if item_policy.enforces(gate, route) and not gate.satisfied)
                 if unmet and all(openable(gate) for gate in unmet):
                     gated.append((route, unmet))
             candidates = [(route, ()) for route in self._ranked_gathers(code, ready)] + gated
@@ -217,10 +226,11 @@ class ObtainModel:
     def walk(self, item: str, qty: int, policy: Policy,
              produce: frozenset[str] = frozenset(),
              openable: Callable[[Gate], bool] = lambda _gate: False,
-             keep: frozenset[str] = frozenset()) -> WalkAnswer:
+             keep: frozenset[str] = frozenset(),
+             grey_ok: Callable[[str], bool] = lambda _item: False) -> WalkAnswer:
         """The one walk over `item`'s closure: can `qty` be had, and the next
         step toward it (`decompose_core`)."""
-        graph = self.walk_graph(item, policy, produce, openable, keep)
+        graph = self.walk_graph(item, policy, produce, openable, keep, grey_ok)
         return WalkAnswer(can_obtain(item, qty, graph.on_hand, graph.routes),
                           next_step(item, qty, graph.on_hand, graph.routes), graph,
                           tuple(plan_legs(item, qty, graph.on_hand, graph.routes)))

@@ -59,7 +59,6 @@ BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
 SCENARIO = "l21_grey_material_grind"
 SKILL = "jewelrycrafting"
-BUDGET = 10.0
 
 
 @pytest.fixture(scope="module")
@@ -136,11 +135,10 @@ def test_real_planner_finds_a_plan_for_wool(player: GamePlayer,
     goal = GatherMaterialsGoal(target_item="wool", needed={"wool": 2},
                                skill_grind=True,
                                exclude_recycle=frozenset({"iron_ring"}))
-    plan = player.planner.plan(state, goal, player._build_actions(),
-                               game_data, budget_seconds=BUDGET)
+    plan = decompose(goal, state, game_data, player._build_actions(), player._last_ctx)
     assert plan, "no plan for the grind's wool demand — the livelock is back"
-    assert [repr(a) for a in plan] == ["Fight(sheep)", "Fight(sheep)"]
-    assert all(a.drop_farm for a in plan if isinstance(a, FightAction))
+    assert [repr(a) for a in plan] == ["Fight(sheep)"]
+    assert plan[0].drop_farm and plan[0].drop_target == ("wool", 2)
 
 
 def test_full_grind_cycle_produces_a_leg(player: GamePlayer,
@@ -163,11 +161,15 @@ def test_ordinary_gather_still_obeys_the_suppression(player: GamePlayer,
                                                      state: WorldState) -> None:
     """The 2026-07-06 directive is routed around, not deleted: the SAME item,
     the SAME state, without the skill-grind flag, still finds no grey fight —
-    the policy verdict itself is untouched."""
+    the policy verdict itself is untouched. The walk obeys it as the search's
+    admission did (2026-10-02: before, it fought the grey sheep for an
+    ordinary wool demand)."""
     assert grey_farm_allowed("wool", state, game_data) is False
     goal = GatherMaterialsGoal(target_item="wool", needed={"wool": 2})
     relevant = goal.relevant_actions(player._build_actions(), state, game_data)
     assert not [a for a in relevant
                 if isinstance(a, FightAction) and a.monster_code == "sheep"]
-    assert not player.planner.plan(state, goal, player._build_actions(),
-                                   game_data, budget_seconds=BUDGET)
+    declined: list[str] = []
+    assert decompose(goal, state, game_data, player._build_actions(), player._last_ctx,
+                     declined) is None
+    assert declined and declined[0].startswith("infeasible:wool"), declined

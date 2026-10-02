@@ -3140,6 +3140,37 @@ SEARCH_HANDOFF_MUTATIONS = [
      'SEARCH_HANDOFFS = ("upgrade:uncommitted", "upgrade:ge_venue:")',
      'SEARCH_HANDOFFS = ("upgrade:uncommitted",)'),
 ]
+# The walk applies the 2026-07-06 grey-farm directive per item (Phase 2e-2).
+# Killed by tests/test_ai/test_grey_farm.py.
+WALK_GREY_MUTATIONS = [
+    ("craft_plan_gen: a skill grind obeys the grey directive",
+     "        if goal.skill_grind or item in grey_exempt:",
+     "        if item in grey_exempt:"),
+    ("craft_plan_gen: the directive never licenses a grey drop",
+     "            grey_verdicts[item] = grey_farm_allowed(item, state, game_data)",
+     "            grey_verdicts[item] = False"),
+    ("craft_plan_gen: the drop leg fights any grey dropper",
+     "                                  allow_grey=grey_ok(step.item))",
+     "                                  allow_grey=True)"),
+]
+# Killed by tests/test_ai/scenarios/test_slot_coverage.py (the l35 wooden_club
+# upgrade drops only off a grey ogre).
+UPGRADE_GREY_EXEMPT_MUTATIONS = [
+    ("craft_plan_gen: an upgrade's own target obeys the grey directive",
+     "                      declined, subtasks, frozenset(), grey_exempt=frozenset({item}))",
+     "                      declined, subtasks, frozenset())"),
+]
+# Killed by tests/test_ai/scenarios/test_grind_grey_material.py.
+WALK_GREY_POLICY_MUTATIONS = [
+    ("policy: the walk allows every grey dropper again",
+     "DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False, allow_grey=False)",
+     "DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False)"),
+]
+WALK_GRAPH_GREY_MUTATIONS = [
+    ("obtain_model: grey_ok is ignored",
+     "                           if not policy.allow_grey and grey_ok(code) else policy)",
+     "                           if False else policy)"),
+]
 # Killed by tests/test_ai/test_decompose_potions.py (a drop-only ingredient
 # has no route under the ladder's policy; under the walk's default it is a fight).
 POTION_DECOMPOSE_POLICY_MUTATIONS = [
@@ -8689,6 +8720,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, GRIND_PREP_MUTATIONS,
               "tests/test_ai/test_grind_heal_prep.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, WALK_GREY_MUTATIONS,
+              "tests/test_ai/test_grey_farm.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, UPGRADE_GREY_EXEMPT_MUTATIONS,
+              "tests/test_ai/scenarios/test_slot_coverage.py", survivors)
+    run_group(OBTAIN_MODEL_POLICY_SRC, WALK_GREY_POLICY_MUTATIONS,
+              "tests/test_ai/scenarios/test_grind_grey_material.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, WALK_GRAPH_GREY_MUTATIONS,
+              "tests/test_ai/test_grey_farm.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, SEARCH_HANDOFF_MUTATIONS,
               "tests/test_ai/test_decision_events.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, POTION_DECOMPOSE_POLICY_MUTATIONS,
