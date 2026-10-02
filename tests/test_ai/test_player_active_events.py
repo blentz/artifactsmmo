@@ -160,10 +160,11 @@ class TestFetchWorldStateActiveEvents:
         assert state.active_events == {"gemstone_merchant": expiry}
 
     def test_the_learned_recycle_totals_reach_game_data(self):
-        """Recycle yields are learned fleet-wide; each world fetch refreshes
-        them onto the planner's GameData (`ai/recycle_yield`)."""
+        """Recycle totals and craft yields are learned fleet-wide; each world
+        fetch refreshes them onto the planner's GameData."""
         history = MagicMock()
         history.fleet_recycle_totals.return_value = {"copper_helmet": 2}
+        history.fleet_craft_yields.return_value = {"copper_bar": 1}
         player = GamePlayer(character="hero", history=history)
         player.state = None
         player.game_data = GameData()
@@ -175,6 +176,7 @@ class TestFetchWorldStateActiveEvents:
                 with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_page):
                     player._fetch_world_state(MagicMock())
         assert dict(player.game_data.recycle_totals) == {"copper_helmet": 2}
+        assert dict(player.game_data.learned_craft_yields) == {"copper_bar": 1}
 
     def test_active_events_empty_when_no_events(self):
         """_fetch_world_state yields empty active_events when API returns nothing."""

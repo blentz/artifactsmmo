@@ -1963,3 +1963,30 @@ class TestFleetRecycleTotals:
             self._recycle(store, "Recycle(copper_helmet×1)", drops)
         assert store.fleet_recycle_totals() == {"copper_helmet": 2}
         store.close()
+
+
+class TestFleetCraftYields:
+    """`fleet_craft_yields`: units one craft run produces, per item, measured
+    over every character's successful crafts."""
+
+    def _craft(self, store, repr_, drops, outcome="ok", character="testchar"):
+        store.record_cycle(Cycle(
+            ts="2026-10-01T00:00:00+00:00", session_id="x", cycle_index=0,
+            character=character, outcome=outcome, action_class="CraftAction",
+            action_repr=repr_, drops_json=None if drops is None else json.dumps(drops)))
+
+    def test_the_per_run_yield_is_read_off_the_fleets_crafts(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        self._craft(store, "Craft(potion×3)", {"potion": 6})
+        self._craft(store, "Craft(potion×1)", {"potion": 2}, character="Lor")
+        self._craft(store, "Craft(potion×1)", {"potion": 8})  # a re-batched craft
+        self._craft(store, "Craft(bar×2)", {"bar": 2, "slag": 1})
+        # Ignored: a failed craft, no record, an uneven or empty result, not a craft.
+        self._craft(store, "Craft(ring×1)", {"ring": 1}, outcome="error:HTTP_478")
+        self._craft(store, "Craft(axe×1)", None)
+        self._craft(store, "Craft(axe×2)", {"axe": 3})
+        self._craft(store, "Craft(axe×1)", {"ore": 1})
+        self._craft(store, "CraftAll()", {"axe": 2})
+        assert store.fleet_craft_yields() == {"potion": 2, "bar": 1}
+        store.close()

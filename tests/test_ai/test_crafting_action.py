@@ -76,6 +76,19 @@ class TestCraftActionExecuteRecordsYield:
         assert store.observed_craft_yield("copper_dagger") == (2, 15)
         store.close()
 
+    def test_execute_records_the_yield_and_xp_of_ONE_run(self, tmp_path):
+        """A batch of 25 runs produced 50 and paid 375 xp: the table holds a
+        yield (2) and one craft's xp (15), not the batch totals it used to."""
+        store = LearningStore(db_path=str(tmp_path / "l.db"), character="testchar")
+        action = CraftAction(code="copper_dagger", quantity=25, workshop_location=(3, 0),
+                             history=store)
+        api_result = _make_craft_api_result(make_char_schema(), item_code="copper_dagger",
+                                            produced=50, xp=375)
+        with patch("artifactsmmo_cli.ai.actions.crafting.action_crafting", return_value=api_result):
+            action.execute(make_state(x=3, y=0), MagicMock())
+        assert store.observed_craft_yield("copper_dagger") == (2, 15)
+        store.close()
+
     def test_execute_sums_quantity_for_crafted_code(self, tmp_path):
         """Only drops matching self.code contribute to produced quantity."""
         store = LearningStore(db_path=str(tmp_path / "l.db"), character="testchar")

@@ -86,6 +86,9 @@ def grind_action_prefix(skill: str) -> str:
     return f"LevelSkill({skill}->"
 
 
+_CRAFT_REPR = re.compile(r"Craft\((\w+)×(\d+)\)")
+"""`CraftAction.__repr__`: `Craft(<code>×<runs>)`."""
+
 _RECYCLE_REPR = re.compile(r"Recycle\((\w+)×(\d+)\)")
 """`RecycleAction.__repr__`: `Recycle(<code>×<quantity>)`."""
 
@@ -853,6 +856,31 @@ class LearningStore:
         gear and level are baked into them.
         """
         return self._grind_rate(skill, window, character=None)
+
+    def fleet_craft_yields(self) -> dict[str, int]:
+        """item_code -> units one craft run produces, MEASURED over every
+        character's successful crafts (the crafted item's bag gain in
+        `drops_json`, divided by the runs `Craft(<code>×<runs>)` asked for).
+
+        Most common per-run value per item: the yield is a fact about the item,
+        and the ratio is skewed only by crafts the old executor re-batched
+        (measured 2026-10-01: the mode equals the API's CraftSchema.quantity on
+        all 63 items crafted). An item never crafted has no entry."""
+        with SqlSession(self._engine) as s:
+            rows = list(s.exec(
+                select(Cycle.action_repr, Cycle.drops_json)
+                .where(col(Cycle.action_class) == "CraftAction")
+                .where(col(Cycle.outcome) == "ok")))
+        seen: dict[str, Counter[int]] = {}
+        for action_repr, drops_json in rows:
+            match = _CRAFT_REPR.fullmatch(action_repr or "")
+            if match is None or not drops_json:
+                continue
+            code, runs = match.group(1), int(match.group(2))
+            produced = json.loads(drops_json).get(code, 0)
+            if produced > 0 and produced % runs == 0:
+                seen.setdefault(code, Counter())[produced // runs] += 1
+        return {code: yields.most_common(1)[0][0] for code, yields in seen.items()}
 
     def fleet_recycle_totals(self) -> dict[str, int]:
         """item_code -> units one recycled copy returns, MEASURED over every

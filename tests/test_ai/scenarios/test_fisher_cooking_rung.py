@@ -37,6 +37,7 @@ the trout spot when the role is taken away.
 """
 
 import dataclasses
+import math
 
 import pytest
 
@@ -74,12 +75,13 @@ clear, and the number the flip below turns into a fishing sub-grind."""
 PLAN_BUDGET_SECONDS = 2.0
 """Measured 0.003 s for both halves of the flip."""
 
-RESTORE_PLAN_BUDGET_SECONDS = 5.0
-"""The wounded cook's RestoreHP search. Measured 1.05 s standalone (22,233 nodes
-created, 1,297 explored, depth 6) since `UseConsumableAction.apply` heals
-`hp_restore` instead of to full (2026-10-01): cook-then-eat now needs several
-rounds and a closing Rest, so the search really combines them. 2.0 s ran out
-under xdist load."""
+RESTORE_PLAN_NODES = 60_000
+"""The wounded cook's RestoreHP search, bounded by WORK, not wall clock. It
+creates 22,233 nodes (1.05 s idle) since `UseConsumableAction.apply` heals
+`hp_restore` instead of to full (2026-10-01): cook-then-eat needs several rounds
+and a closing Rest. A 2 s and then a 5 s budget both ran out under xdist plus
+coverage; node counts are deterministic, so this bound (~2.7x the measured
+search) can fail only on a real blow-up."""
 
 
 def _state(game_data: GameData) -> WorldState:
@@ -338,9 +340,12 @@ def _wounded(game_data: GameData) -> WorldState:
 def _restore_plan(state: WorldState, game_data: GameData) -> list:
     player = GamePlayer(character=COOK_CELL, history=None)
     player.seed_offline(state, game_data)
-    return GOAPPlanner().plan(state, RestoreHPGoal(), list(player._build_actions()),
-                              game_data, history=None,
-                              budget_seconds=RESTORE_PLAN_BUDGET_SECONDS)
+    planner = GOAPPlanner()
+    plan = planner.plan(state, RestoreHPGoal(), list(player._build_actions()),
+                        game_data, history=None,
+                        budget_seconds=math.inf, max_nodes=RESTORE_PLAN_NODES)
+    assert not planner.last_stats.node_capped, planner.last_stats
+    return plan
 
 
 def test_restore_hp_may_cook(bundle_game_data: GameData) -> None:

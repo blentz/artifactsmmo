@@ -9,6 +9,10 @@ class RecipeCatalog:
 
     crafting_recipes: dict[str, dict[str, int]] = field(default_factory=dict)
     craft_yields: dict[str, int] = field(default_factory=dict)
+    learned_craft_yields: dict[str, int] = field(default_factory=dict)
+    """item_code -> units one craft run produces, LEARNED from the server's own
+    results (`LearningStore.fleet_craft_yields`; a bundle captures them). Where
+    present it overrides the API prior in `craft_yields`."""
     recycle_totals: dict[str, int] = field(default_factory=dict)
     """item_code -> units one recycled copy returns, LEARNED from the server's
     own results (`LearningStore.fleet_recycle_totals`; a bundle captures them).

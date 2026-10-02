@@ -162,6 +162,7 @@ GEAR_VALUE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value_cor
 GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
 RECYCLE_YIELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recycle_yield.py"
 USE_CONSUMABLE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "consumable.py"
+CRAFT_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "crafting.py"
 LEARNING_STORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "store.py"
 LOCATION_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 PROGRESSION_RESERVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression_reserve_core.py"
@@ -3052,8 +3053,9 @@ FLEET_RECYCLE_TOTALS_MUTATIONS = [
      "        return {code: totals.most_common(1)[0][0] for code, totals in seen.items()}",
      "        return {code: max(totals) for code, totals in seen.items()}"),
     ("store: a failed recycle counts",
+     '                .where(col(Cycle.action_class) == "RecycleAction")\n'
      '                .where(col(Cycle.outcome) == "ok")))',
-     "                ))"),
+     '                .where(col(Cycle.action_class) == "RecycleAction")))'),
 ]
 # Killed by tests/test_ai/test_actions_tier2.py (TestRecycleAction).
 RECYCLE_ACTION_LEARNED_MUTATIONS = [
@@ -3063,6 +3065,39 @@ RECYCLE_ACTION_LEARNED_MUTATIONS = [
     ("recycle: apply mints a zero share",
      "            if per_unit > 0:",
      "            if True:"),
+]
+# Learned craft yields. Killed by tests/test_ai/test_recycle_yield.py.
+GAME_DATA_LEARNED_CRAFT_YIELD_MUTATIONS = [
+    ("game_data: a learned craft yield is ignored",
+     "        if code in learned:\n            return learned[code]\n",
+     ""),
+    ("game_data: an equal learned map clears the memos too",
+     "        if learned == self.recipes_catalog.learned_craft_yields:\n            return\n",
+     ""),
+    ("game_data: a changed learned map keeps a stale requirement graph",
+     "        self.recipes_catalog.learned_craft_yields = learned\n"
+     "        if self._recipe_cost_memo is not None:\n"
+     "            self._recipe_cost_memo.clear()\n"
+     "        if self._requirement_graph_memo is not None:\n"
+     "            self._requirement_graph_memo.clear()\n",
+     "        self.recipes_catalog.learned_craft_yields = learned\n"),
+]
+# Killed by tests/test_ai/test_learning_store.py (TestFleetCraftYields).
+FLEET_CRAFT_YIELDS_MUTATIONS = [
+    ("store: an uneven craft counts",
+     "            if produced > 0 and produced % runs == 0:",
+     "            if produced > 0:"),
+    ("store: a craft's yield is the batch total",
+     "                seen.setdefault(code, Counter())[produced // runs] += 1",
+     "                seen.setdefault(code, Counter())[produced] += 1"),
+]
+# Killed by tests/test_ai/test_crafting_action.py.
+CRAFT_RECORD_PER_RUN_MUTATIONS = [
+    ("crafting: the table records the batch total again",
+     "            self.history.record_craft_yield(self.code, produced // self.quantity,\n"
+     "                                            details.xp // self.quantity,",
+     "            self.history.record_craft_yield(self.code, produced,\n"
+     "                                            details.xp,"),
 ]
 # Killed by tests/test_ai/test_actions.py (TestUseConsumableAction).
 USE_CONSUMABLE_HEAL_MUTATIONS = [
@@ -8651,6 +8686,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_learning_store.py", survivors)
     run_group(RECYCLE_ACTION_SRC, RECYCLE_ACTION_LEARNED_MUTATIONS,
               "tests/test_ai/test_actions_tier2.py", survivors)
+    run_group(GAME_DATA_PARSE_SRC, GAME_DATA_LEARNED_CRAFT_YIELD_MUTATIONS,
+              "tests/test_ai/test_recycle_yield.py", survivors)
+    run_group(LEARNING_STORE_SRC, FLEET_CRAFT_YIELDS_MUTATIONS,
+              "tests/test_ai/test_learning_store.py", survivors)
+    run_group(CRAFT_ACTION_SRC, CRAFT_RECORD_PER_RUN_MUTATIONS,
+              "tests/test_ai/test_crafting_action.py", survivors)
     run_group(USE_CONSUMABLE_SRC, USE_CONSUMABLE_HEAL_MUTATIONS,
               "tests/test_ai/test_actions.py", survivors)
     run_group(BAG_PEAK_SRC, BAG_PEAK_MUTATIONS,

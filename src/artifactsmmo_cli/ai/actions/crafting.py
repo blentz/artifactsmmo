@@ -133,7 +133,11 @@ class CraftAction(Action):
             # character would misattribute every craft that levels the skill.
             skill_level = (None if self.craft_skill is None
                            else state.skills.get(self.craft_skill))
-            self.history.record_craft_yield(self.code, produced, details.xp,
+            # PER RUN: the table holds a yield and the xp of one craft. It held
+            # the batch totals until 2026-10-01 (`Craft(cooked_shrimp×50)`
+            # recorded a "yield" of 50).
+            self.history.record_craft_yield(self.code, produced // self.quantity,
+                                            details.xp // self.quantity,
                                             skill_level=skill_level)
         return WorldState.from_character_schema(
             result.data.character,

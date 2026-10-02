@@ -1188,8 +1188,33 @@ class GameData:
         return self.recipes_catalog.crafting_recipes
 
     def craft_yield(self, code: str) -> int:
-        """Items produced per craft run of `code` (CraftSchema.quantity); 1 by default."""
+        """Items produced per craft run of `code`: the learned yield when the
+        fleet has crafted it (`learned_craft_yields`), else the API's
+        CraftSchema.quantity, 1 by default."""
+        learned = self.recipes_catalog.learned_craft_yields
+        if code in learned:
+            return learned[code]
         return self.recipes_catalog.craft_yields.get(code, 1)
+
+    @property
+    def learned_craft_yields(self) -> Mapping[str, int]:
+        """item_code -> units one craft run produces, learned per item."""
+        return self.recipes_catalog.learned_craft_yields
+
+    @learned_craft_yields.setter
+    def learned_craft_yields(self, value: Mapping[str, int]) -> None:
+        """An in-place change to the yields the derived memos read: clear them
+        (`requirement_graph_memo`'s size fingerprint cannot see a changed
+        value), but only when the map really changed, so a per-cycle refresh
+        does not rebuild the graph every cycle."""
+        learned = dict(value)
+        if learned == self.recipes_catalog.learned_craft_yields:
+            return
+        self.recipes_catalog.learned_craft_yields = learned
+        if self._recipe_cost_memo is not None:
+            self._recipe_cost_memo.clear()
+        if self._requirement_graph_memo is not None:
+            self._requirement_graph_memo.clear()
 
     @property
     def recycle_totals(self) -> Mapping[str, int]:
@@ -1212,13 +1237,14 @@ class GameData:
 
     @property
     def craft_yields(self) -> Mapping[str, int]:
-        """item_code -> craft output quantity (prior map from CraftSchema.quantity).
-
-        Empty for today's all-quantity-1 data; populated from API v8 recipes
-        where CraftSchema.quantity > 1. Read-only view; callers must not mutate.
-        Mirrors ``crafting_recipes``.
-        """
-        return self._craft_yields
+        """item_code -> units one craft run produces: the API prior
+        (CraftSchema.quantity, recorded where it is above 1) overridden by the
+        learned yield wherever the fleet has crafted the item, the same answer
+        `craft_yield` gives. Read-only view; callers must not mutate."""
+        learned = self.recipes_catalog.learned_craft_yields
+        if not learned:
+            return self._craft_yields
+        return {**self._craft_yields, **learned}
 
     @cached_property
     def reserved_targets_memo(self) -> dict[tuple[object, ...], dict[str, int]]:
@@ -1640,9 +1666,10 @@ class GameData:
         key already documents: absent means nothing is known to be complete."""
         data = cls()
         data._build_from_objs(cls._hydrate_bundle(raw), completed_achievements)
-        # Learned, not static: the fleet's observed per-unit recycle totals at
-        # capture time (`LearningStore.fleet_recycle_totals`).
+        # Learned, not static: the fleet's observed per-unit recycle totals and
+        # per-run craft yields at capture time (`LearningStore`).
         data.recycle_totals = {code: int(total) for code, total in raw["recycle_totals"].items()}
+        data.learned_craft_yields = {code: int(qty) for code, qty in raw["craft_yields"].items()}
         if with_ge_orders:
             orders = [GEOrderSchema.from_dict(d) for d in raw["ge_orders"]["orders"]]
             # The capture holds both halves of the book in one list, so the side
