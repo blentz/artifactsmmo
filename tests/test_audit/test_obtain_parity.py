@@ -85,7 +85,7 @@ def test_gather_cell_both_producers_gather(bundle_game_data: GameData) -> None:
     assert r.passed
     assert r.model_kinds == ("gather",)
     assert r.pool_applicable_kinds == ("gather",)
-    assert r.descent_kinds == r.astar_kinds == ("gather",)
+    assert r.descent_kinds == ("gather",)
 
 
 def test_craft_cell_both_producers_gather_then_craft(bundle_game_data: GameData) -> None:
@@ -96,7 +96,7 @@ def test_craft_cell_both_producers_gather_then_craft(bundle_game_data: GameData)
     # applicable pool — POOL⊆MODEL holds trivially and MODEL⊆POOL holds on
     # existence.
     assert r.pool_applicable_kinds == ()
-    assert r.descent_kinds == r.astar_kinds == ("craft", "gather")
+    assert r.descent_kinds == ("craft", "gather")
 
 
 def test_withdraw_carveout_cell_both_withdraw_the_banked_input(
@@ -115,7 +115,7 @@ def test_withdraw_carveout_cell_both_withdraw_the_banked_input(
                for a in plan)
     r = run_cell(cell, bundle_game_data)
     assert r.passed
-    assert r.descent_kinds == r.astar_kinds == ("craft",)
+    assert r.descent_kinds == ("craft",)
 
 
 def test_recycle_cell_both_producers_recycle(bundle_game_data: GameData) -> None:
@@ -123,21 +123,21 @@ def test_recycle_cell_both_producers_recycle(bundle_game_data: GameData) -> None
     assert r.passed
     assert set(r.model_kinds) == {"craft", "recycle"}
     assert "recycle" in r.pool_applicable_kinds
-    assert r.descent_kinds == r.astar_kinds == ("recycle",)
+    assert r.descent_kinds == ("recycle",)
 
 
 def test_buy_cell_both_producers_buy(bundle_game_data: GameData) -> None:
     r = _result(bundle_game_data, ParitySourceKind.BUY)
     assert r.passed
     assert r.model_kinds == ("buy",)
-    assert r.descent_kinds == r.astar_kinds == ("buy",)
+    assert r.descent_kinds == ("buy",)
 
 
 def test_drop_cell_both_producers_hunt(bundle_game_data: GameData) -> None:
     r = _result(bundle_game_data, ParitySourceKind.DROP)
     assert r.passed
     assert r.model_kinds == ("drop",)
-    assert r.descent_kinds == r.astar_kinds == ("drop",)
+    assert r.descent_kinds == ("drop",)
 
 
 # ---------------------------------------------------------------------------
@@ -147,10 +147,9 @@ def test_drop_cell_both_producers_hunt(bundle_game_data: GameData) -> None:
 def test_deleting_the_recycle_arm_turns_the_recycle_cell_red(
         bundle_game_data: GameData, monkeypatch: pytest.MonkeyPatch) -> None:
     """THE required falsifiability proof (Task 7 brief). Delete the RECYCLE arm
-    from the shared obtain model and the RECYCLE cell goes RED — on BOTH POOL⊆MODEL
-    (the licensed pool still recycles, the model no longer names it) AND PLAN
-    PARITY (the descent, robbed of the recycle source, RE-ROUTES to craft+gather
-    while A* still recycles). That craft+gather-vs-recycle split IS the
+    from the shared obtain model and the RECYCLE cell goes RED on POOL⊆MODEL (the
+    licensed pool still recycles, the model no longer names it) while the walk,
+    robbed of the recycle source, RE-ROUTES to craft+gather. That split IS the
     seven-inert-commits divergence this census exists to catch, and RECYCLE
     surviving the deletion PROVES the WITHDRAW carveout does not swallow it."""
     monkeypatch.setattr(ObtainModel, "_recycle", lambda *a, **k: [])
@@ -159,10 +158,8 @@ def test_deleting_the_recycle_arm_turns_the_recycle_cell_red(
     assert not r.passed
     assert r.gap == ParityGapClass.OBTAIN_PARITY_BUG.value
     assert r.pool_subset_model is False
-    assert r.plan_parity is False
     assert r.model_kinds == ("craft",)
     assert "recycle" in r.pool_applicable_kinds
-    assert "recycle" in r.astar_kinds
     assert "recycle" not in r.descent_kinds
 
 
@@ -209,16 +206,15 @@ def test_a_conclusive_disagreement_is_the_same_residual(
 
 def test_a_timed_out_search_fails_the_verdict_before_any_check(
         bundle_game_data: GameData) -> None:
-    """An inconclusive search proves nothing: a cell that "passed" because A*
-    timed out (and so planned no divergence) would be pure laundering."""
-    assert parity_cell_verdict(True, True, True, planner_failed=True) is False
+    """An inconclusive selection proves nothing: a cell that "passed" because
+    the arbiter timed out would be pure laundering."""
+    assert parity_cell_verdict(True, True, planner_failed=True) is False
 
 
-def test_verdict_needs_all_three_checks(bundle_game_data: GameData) -> None:
-    assert parity_cell_verdict(True, True, True, planner_failed=False) is True
-    assert parity_cell_verdict(False, True, True, planner_failed=False) is False
-    assert parity_cell_verdict(True, False, True, planner_failed=False) is False
-    assert parity_cell_verdict(True, True, False, planner_failed=False) is False
+def test_verdict_needs_both_agreements(bundle_game_data: GameData) -> None:
+    assert parity_cell_verdict(True, True, planner_failed=False) is True
+    assert parity_cell_verdict(False, True, planner_failed=False) is False
+    assert parity_cell_verdict(True, False, planner_failed=False) is False
 
 
 # ---------------------------------------------------------------------------
@@ -366,13 +362,13 @@ def test_reproduction_faithful_guard() -> None:
 
 def test_obtainable_guard() -> None:
     gather = GatherAction(resource_code="copper_rocks")
-    # At least one producer serves -> ok. A timed-out both-empty -> ok (the
-    # timeout is the story, classified elsewhere).
-    _assert_obtainable("gather", "copper_ore", [gather], [], planner_failed=False)
-    _assert_obtainable("gather", "copper_ore", [], [], planner_failed=True)
-    # A CONCLUSIVE both-empty is a vacuous cell (the bundle changed under it).
-    with pytest.raises(ValueError, match="neither producer can serve"):
-        _assert_obtainable("gather", "copper_ore", [], [], planner_failed=False)
+    # The walk serves -> ok. A timed-out empty walk -> ok (the timeout is the
+    # story, classified elsewhere).
+    _assert_obtainable("gather", "copper_ore", [gather], planner_failed=False)
+    _assert_obtainable("gather", "copper_ore", [], planner_failed=True)
+    # A CONCLUSIVE empty walk is a vacuous cell (the bundle changed under it).
+    with pytest.raises(ValueError, match="the walk cannot serve"):
+        _assert_obtainable("gather", "copper_ore", [], planner_failed=False)
 
 
 # ---------------------------------------------------------------------------
@@ -383,15 +379,15 @@ def test_render_matrix_shows_pass_and_bug_rows() -> None:
     passed = ParityResult(
         kind="gather", material="copper_ore", needed=5,
         model_kinds=("gather",), pool_applicable_kinds=("gather",),
-        descent_kinds=("gather",), astar_kinds=("gather",),
-        pool_subset_model=True, model_subset_pool=True, plan_parity=True,
+        descent_kinds=("gather",),
+        pool_subset_model=True, model_subset_pool=True,
         planner_failed=False, goal="GatherMaterials(copper_ore, {copper_ore:5})",
         passed=True, gap=None)
     bug = ParityResult(
         kind="recycle", material="ash_plank", needed=4,
         model_kinds=(), pool_applicable_kinds=("recycle",),
-        descent_kinds=(), astar_kinds=("recycle",),
-        pool_subset_model=False, model_subset_pool=True, plan_parity=False,
+        descent_kinds=(),
+        pool_subset_model=False, model_subset_pool=True,
         planner_failed=False, goal="GatherMaterials(ash_plank, {ash_plank:4})",
         passed=False, gap=ParityGapClass.OBTAIN_PARITY_BUG.value)
     text = render_matrix([passed, bug])

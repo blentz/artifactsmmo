@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
@@ -30,6 +31,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -1081,8 +1083,7 @@ class TestGatherMaterialsGoal:
             WithdrawItemAction(code="ash_wood", quantity=8, bank_location=bank),
             WithdrawItemAction(code="ash_wood", quantity=48, bank_location=bank),
         ]
-        plan = GOAPPlanner().plan(state, goal, actions, gd, history=None,
-                                  budget_seconds=10.0)
+        plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
         assert plan, "planner found no plan"
         # The FIRST acquisition action must withdraw banked ash_wood, not gather.
         first_acq = next(
@@ -1173,8 +1174,7 @@ class TestGatherMaterialsGoal:
             CraftAction(code="feather_coat", quantity=1, workshop_location=(3, 1)),
             WithdrawItemAction(code="feather", quantity=5, bank_location=bank),
         ]
-        plan = GOAPPlanner().plan(state, goal, actions, gd, history=None,
-                                  budget_seconds=10.0)
+        plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
         assert plan, "planner found no plan for bank-stocked feather_coat"
         reprs = [repr(a) for a in plan]
         assert any("Withdraw" in r and "feather" in r for r in reprs), reprs

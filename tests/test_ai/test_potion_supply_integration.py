@@ -22,9 +22,11 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.boost_selection import best_boost_potion, project_equip
 from artifactsmmo_cli.ai.combat import combat_margin
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext, active_guards
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -107,7 +109,7 @@ def test_understocked_producible_fires_guard_maps_goal_and_plans_craft_and_equip
         FightAction(monster_code="mob", locations=frozenset({(7, 7)})),
         MoveAction(x=0, y=0),
     ]
-    plan = goal.relevant_actions(catalog, state, gd)
+    plan = decompose(goal, state, gd, catalog, NO_PROFILE_CONTEXT) or []
     assert any(isinstance(a, CraftAction) and a.code == _POTION for a in plan)
     assert any(isinstance(a, EquipAction) and a.slot == "utility1_slot" for a in plan)
     # The potion-supply goal never routes through combat.
@@ -121,9 +123,11 @@ def test_no_alchemy_potion_leaves_guard_quiet_so_grind_proceeds():
 
     # Guard stays quiet -> the grind is not preempted.
     assert GuardKind.CRAFT_POTIONS not in active_guards(state, gd, None, ctx)
-    # And the goal itself has no target, so it would contribute no actions.
-    assert CraftPotionsGoal().relevant_actions(
-        [MoveAction(x=0, y=0)], state, gd) == []
+    # And the goal itself has no batch, so the walk declines it.
+    declined: list[str] = []
+    assert decompose(CraftPotionsGoal(game_data=gd, state=state), state, gd,
+                     [MoveAction(x=0, y=0)], NO_PROFILE_CONTEXT, declined) is None
+    assert declined == ["potion:no_batch"]
 
 
 def test_robby_scenario_stocked_small_does_not_force_enhanced_grind() -> None:

@@ -542,7 +542,7 @@ class CharacterObjective:
         every other mention of its name in `src/` is prose, this docstring
         included. The utility slots are actually served by the potion-supply
         path, which picks a slot with `utility_slot.utility_slot_for` and emits
-        an `EquipAction` from `craft_ladder.py:140`.
+        an `EquipAction` from `CraftPotionsGoal.batch_equip`.
 
         That sentence is phrased to be MACHINE-CHECKED: the reachability-claims
         census resolves a claim's subject by containment, so the sentence above

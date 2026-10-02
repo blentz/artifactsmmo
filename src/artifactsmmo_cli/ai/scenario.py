@@ -1766,7 +1766,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # hard-coded string "utility1_slot", so the equip DISPLACED the 40-potion
     # heal stack that is the arm's own precondition while utility2_slot sat
     # empty, and the guard re-fired on the heal arm immediately after.
-    # `craft_ladder` now asks `utility_slot.utility_slot_for`, which prefers a
+    # The potion batch's equip (now `CraftPotionsGoal.batch_equip`) asks
+    # `utility_slot.utility_slot_for`, which prefers a
     # FREE slot: the boost lands in utility2_slot, the heal stack survives at
     # 40, and the guard goes silent. The cell keeps utility2_slot EMPTY on
     # purpose — that emptiness is what the free-slot rule is measured against.

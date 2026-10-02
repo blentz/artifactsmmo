@@ -51,8 +51,8 @@ ERROR_CODE_ORDER_NOT_FOUND = 404
 # Game API error code 434 ("This offer does not contain that many items") on a
 # Grand Exchange fill: the PARTIAL twin of 404 above. The order still stands —
 # other accounts have merely drained it below the quantity our index recorded.
-# Every build site gates the ask on that cached quantity (`craft_ladder`'s
-# `order[2] < qty`, and the same test in goals/gathering and goals/progression)
+# Every build site gates the ask on that cached quantity (the `order[2] < qty`
+# test in goals/gathering and goals/progression)
 # and none of them clamps it, so a 434 can only mean the cached number is
 # wrong. Because the order id stays valid the 404 hook never fires, and the
 # stale quantity ages for the whole run.

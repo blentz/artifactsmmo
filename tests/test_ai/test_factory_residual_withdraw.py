@@ -15,10 +15,11 @@ ladders), making "net 0 ⇒ extractable" true.
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 
@@ -88,7 +89,7 @@ class TestTraceRegression:
         # The prune precondition really holds: net 0 ⇒ the gather is dropped.
         relevant = goal.relevant_actions(actions, state, gd)
         assert not any(isinstance(a, GatherAction) for a in relevant)
-        plan = GOAPPlanner().plan(state, goal, actions, gd, None, budget_seconds=20.0)
+        plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
         assert plan, "net-0 bank coverage must yield a withdraw/craft plan, not no_plan"
 
     def test_upgrade_equipment_prune_covered_by_same_fix(self):
@@ -111,7 +112,7 @@ class TestTraceRegression:
         # The residual withdraws survive the closure-locked prune.
         assert any(a.quantity == 1 for a in _withdraws(relevant, "copper_ore"))
         assert any(a.quantity == 1 for a in _withdraws(relevant, "copper_bar"))
-        plan = GOAPPlanner().plan(state, goal, actions, gd, None, budget_seconds=20.0)
+        plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
         assert plan, "net-0 bank coverage must yield a withdraw/craft/equip plan"
 
 

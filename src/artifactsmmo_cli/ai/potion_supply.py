@@ -129,7 +129,7 @@ POTION_POLICY = Policy(all_gather_routes=True, gather_skill_gate=True, craft_ski
                        event_vendors=False, spawn_known=True, allow_grey=True,
                        vendor_routes=True, ge_routes=False, task_rewards=False,
                        fight_gold=False, drop_routes=False)
-"""What the potion supply ladder (`craft_utility_ladder`) can serve, as an
+"""What the potion supply (the walk under this policy, Phase 2e) can serve, as an
 obtain-model policy: the recipe's crafts, every gatherer of an ingredient (the
 gather must be performable: skill and spawn), permanent vendors paid from the
 pocket, and what the bag and bank already hold. NO drops: the ladder emits no

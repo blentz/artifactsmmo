@@ -23,13 +23,15 @@ still be admitted by leaf-counting while genuinely unplannable — see
 this task's report documents rather than hides.
 """
 
+import dataclasses
+
 from artifactsmmo_cli.ai.actions.factory import build_actions
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.search_bounds import NO_CLOCK, SEARCH_NODE_BUDGET
 
 
 def _gd_boots() -> GameData:
@@ -85,12 +87,11 @@ def test_is_plannable_admits_from_scratch_copper_boots():
     objective = CharacterObjective.from_game_data(gd)
     actions = build_actions(gd, state, objective, bank_accessible=True,
                             task_exchange_min_coins=0)
-    planner = GOAPPlanner()
-    plan = planner.plan(state, goal, actions, gd, None,
-                        budget_seconds=NO_CLOCK, max_nodes=SEARCH_NODE_BUDGET)
+    # Since Phase 2e a committed upgrade is the walk's: the verdict is backed
+    # by the walk's plan (a roomy bag, so `bag_overflow` cannot stand in).
+    roomy = dataclasses.replace(state, inventory_max=200)
+    plan = decompose(goal, roomy, gd, actions, NO_PROFILE_CONTEXT)
     assert plan, "is_plannable's True verdict must be backed by a real plan"
-    assert not planner.last_stats.timed_out, (
-        "must be a real search, not a budget artifact")
 
 
 def test_plannable_when_materials_in_inventory():
@@ -241,12 +242,11 @@ def test_is_plannable_admits_from_scratch_feather_coat():
     objective = CharacterObjective.from_game_data(gd)
     actions = build_actions(gd, state, objective, bank_accessible=True,
                             task_exchange_min_coins=0)
-    planner = GOAPPlanner()
-    plan = planner.plan(state, goal, actions, gd, None,
-                        budget_seconds=NO_CLOCK, max_nodes=SEARCH_NODE_BUDGET)
+    # Since Phase 2e a committed upgrade is the walk's: the verdict is backed
+    # by the walk's plan (a roomy bag, so `bag_overflow` cannot stand in).
+    roomy = dataclasses.replace(state, inventory_max=200)
+    plan = decompose(goal, roomy, gd, actions, NO_PROFILE_CONTEXT)
     assert plan, "is_plannable's True verdict must be backed by a real plan"
-    assert not planner.last_stats.timed_out, (
-        "must be a real search, not a budget artifact")
 
 
 def test_is_plannable_admits_short_chain():

@@ -57,9 +57,10 @@ from pathlib import Path
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -157,7 +158,7 @@ def test_planner_picks_the_cheaper_craft_route_over_the_winnable_drop() -> None:
     state = _state()
     goal = GatherMaterialsGoal(target_item="enchanted_potion", needed={"enchanted_potion": 1})
     actions = _actions()
-    plan = GOAPPlanner().plan(state, goal, actions, gd)
+    plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
     reprs = [repr(a) for a in plan]
     assert reprs == [
         "Withdraw(enchanted_mushroom×1)", "Withdraw(salmon×1)", "Craft(enchanted_potion×1)",
@@ -185,8 +186,8 @@ def test_fight_route_would_still_lose_even_without_the_loadout_penalty() -> None
     )
     fight = FightAction(monster_code="dryad", locations=frozenset({(0, 0)}))
     assert fight.cost(state, gd) == 10.0, "fixture drifted: this test needs the zero-penalty case"
-    plan = GOAPPlanner().plan(state, goal := GatherMaterialsGoal(
-        target_item="enchanted_potion", needed={"enchanted_potion": 1}), _actions(), gd)
+    goal = GatherMaterialsGoal(target_item="enchanted_potion", needed={"enchanted_potion": 1})
+    plan = decompose(goal, state, gd, list(_actions()), NO_PROFILE_CONTEXT) or []
     assert [repr(a) for a in plan] == [
         "Withdraw(enchanted_mushroom×1)", "Withdraw(salmon×1)", "Craft(enchanted_potion×1)",
     ], (plan, goal)

@@ -20,12 +20,13 @@ import dataclasses
 from pathlib import Path
 
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -260,8 +261,7 @@ def _gather_materials_plan(sc, needed: dict[str, int]):
     player.seed_offline(state, gd)
     actions = list(player._build_actions())
     goal = GatherMaterialsGoal(target_item="feather", needed=needed)
-    plan = GOAPPlanner().plan(state, goal, actions, gd, history=None,
-                               budget_seconds=10.0)
+    plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
     return state, gd, actions, goal, plan
 
 

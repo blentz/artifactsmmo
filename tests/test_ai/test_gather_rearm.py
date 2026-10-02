@@ -15,7 +15,7 @@ from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.craft_plan_gen import _with_rearm, decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_craft_plan_gen import _ctx
 
@@ -74,7 +74,7 @@ def test_planner_equips_tool_before_gathering() -> None:
                        equipment={"weapon_slot": "copper_dagger"},
                        skills={"mining": 12})
     actions = goal.relevant_actions(_actions(), state, gd)
-    plan = GOAPPlanner().plan(state, goal, actions, gd)
+    plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
     kinds = [type(a).__name__ for a in plan]
     assert kinds[0] == "OptimizeLoadoutAction", kinds
     assert "GatherAction" in kinds

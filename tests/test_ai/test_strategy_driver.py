@@ -50,6 +50,7 @@ from artifactsmmo_cli.ai.obtain_item_routing import (
     _recipe_has_combat_drop_input,
 )
 from artifactsmmo_cli.ai.planner import GOAPPlanner, PlanStats
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import (
     LEVEL_LOOKAHEAD,
     StrategyArbiter,
@@ -1952,11 +1953,11 @@ def test_objective_step_equippable_dead_ends_admit_the_root_cheaply():
     assert goal.is_plannable(state, gd) is False, (
         "is_plannable itself is untouched by this task; it must still read "
         "False here")
-    planner = GOAPPlanner()
-    plan = planner.plan(state, goal, [], gd, None, budget_seconds=2.0)
-    assert plan == []
-    assert not planner.last_stats.timed_out, (
-        "zero relevant actions must fail FAST, not run out a bounded budget")
+    # Since Phase 2e a committed upgrade is the walk's; with no action to map
+    # its legs onto it declines at once, a named answer rather than a search.
+    declined: list[str] = []
+    assert sd.decompose(goal, state, gd, [], NO_PROFILE_CONTEXT, declined) is None
+    assert declined and not sd.hands_off_to_search(declined), declined
 
 
 def test_objective_step_equippable_upgrades_when_materials_in_hand():

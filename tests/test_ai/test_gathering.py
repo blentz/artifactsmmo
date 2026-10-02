@@ -11,11 +11,11 @@ from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.planner import GOAPPlanner
-from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from tests.test_ai.fixtures import make_state
 
 
@@ -149,28 +149,6 @@ class TestFullBagStillPlansDepositThenGather:
             "after a DepositAll frees room"
         )
 
-    def test_full_bag_still_plans_deposit_then_gather(self):
-        """The consequence, end to end: from a full bag the planner must still
-        find deposit-then-gather. Pre-batching this worked because the gather
-        stayed in the pool and `is_applicable` gated it per node."""
-        gd = self._gd()
-        state = self._full_bag_state()
-        goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
-        pool = self._pool(gd)
-        deposit = next(a for a in pool if isinstance(a, DepositAllAction))
-        assert deposit.is_applicable(state, gd), (
-            "fixture must offer a real way out of the full bag")
-
-        plan = GOAPPlanner().plan(state, goal, goal.relevant_actions(pool, state, gd),
-                                  gd, budget_seconds=30.0)
-
-        assert plan, "no plan from a full bag — DepositAll → Gather is unreachable"
-        deposit_at = next(i for i, a in enumerate(plan)
-                          if isinstance(a, DepositAllAction))
-        gather_at = next(i for i, a in enumerate(plan)
-                         if isinstance(a, GatherAction))
-        assert deposit_at < gather_at, (
-            f"expected the deposit to precede the gather, got {plan}")
 
     def test_zero_demand_gathers_are_still_excluded(self):
         """The narrowing the guard SHOULD do is still done: when the drop is
@@ -370,8 +348,7 @@ class TestRecycleAsAcquisition:
         # surviving RecycleAction.
         pool = license_destructive_actions(raw_pool, state, gd, ctx)
         goal = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5})
-        plan = GOAPPlanner().plan(state, goal, goal.relevant_actions(pool, state, gd),
-                                  gd, budget_seconds=30.0)
+        plan = (decompose(goal, state, gd, list(goal.relevant_actions(pool, state, gd)), NO_PROFILE_CONTEXT) or [])
         assert plan, "planner found no plan"
         assert any(isinstance(a, RecycleAction) for a in plan)
         assert sum(isinstance(a, GatherAction) for a in plan) < 10

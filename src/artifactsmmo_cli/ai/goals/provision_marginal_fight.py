@@ -43,7 +43,7 @@ class ProvisionMarginalFightGoal(Goal):
         # The slot comes from the ONE producer (`utility_slot_for`), not from a
         # second hard-coded "utility1_slot" here. `is_satisfied` above means
         # this goal only ever plans with BOTH slots empty, so the answer is
-        # always slot 1 today — but it is now the same answer craft_ladder gets,
+        # always slot 1 today — but it is now the same answer the potion batch gets,
         # and it stays right if the satisfaction rule ever narrows.
         return [EquipAction(code=self._heal_code,
                             slot=utility_slot_for(self._heal_code, state),

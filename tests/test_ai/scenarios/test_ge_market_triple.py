@@ -31,7 +31,6 @@ behaviour and what cell 5 institutionalises.
 """
 
 import json
-import time
 from pathlib import Path
 
 import pytest
@@ -68,12 +67,11 @@ LEG_TARGET = "iron_legs_armor"
 """Cell 5's rung: `{iron_bar: 5, cowhide: 3}`, also depth-2 drop-fed, and the
 item Robby stalled on live."""
 
-PLAN_BUDGET_SECONDS = 2.0
-"""A ceiling, not a measurement. Hydrating the order book took the 30-scenario
-`plan_from_state` sweep from 3.3 s to 48.5 s and pinned three scenarios to the
-15 s planner budget, so a GE cell that drifts into the tail is a real risk. The
-three cells here measure 0.03-0.06 s; this bound fails long before a cell
-starts testing the timeout instead of the dimension."""
+PLAN_NODE_BUDGET = 1_000
+"""A ceiling on each cell's search work. Hydrating the order book once pinned
+three scenarios to the planner's budget wall, so a GE cell drifting into the
+tail is a real risk; the cells measure 0-3 nodes, so this fails long before a
+cell starts testing the timeout instead of the dimension."""
 
 
 @pytest.fixture(scope="module")
@@ -234,16 +232,17 @@ def _plan(name: str, game_data: GameData):
 
 def test_every_ge_cell_plans_well_inside_the_budget(quiet: GameData,
                                                     busy: GameData) -> None:
-    """Measured 0.03-0.06 s each when this landed. The design measured that a
-    populated book can take a scenario to the 15 s planner budget wall, so the
-    cost is asserted rather than assumed."""
+    """The design measured that a populated book can take a scenario to the
+    planner's budget wall, so the cost is asserted rather than assumed — as
+    WORK, not wall clock (a clock bound flaked under a loaded suite, 2026-10-02):
+    no search times out and the cell's searches stay under `PLAN_NODE_BUDGET`.
+    Measured 0, 0 and 3 nodes (the walk serves all three since Phase 2e)."""
     for name in TRIPLE:
-        game_data = _market(name, quiet, busy)
-        started = time.monotonic()
-        report = _plan(name, game_data)
-        elapsed = time.monotonic() - started
+        report = _plan(name, _market(name, quiet, busy))
         assert report.selected_goal is not None
-        assert elapsed < PLAN_BUDGET_SECONDS, f"{name} planned in {elapsed:.2f}s"
+        assert not any(t["timed_out"] for t in report.goals_tried), report.goals_tried
+        nodes = sum(int(t["nodes"]) for t in report.goals_tried)
+        assert nodes <= PLAN_NODE_BUDGET, f"{name} searched {nodes} nodes"
 
 
 def test_the_bundle_carries_the_book_these_cells_need() -> None:

@@ -54,7 +54,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.min_plan_length import min_plan_length
-from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -63,10 +63,6 @@ from tests.test_ai.fixtures import make_state
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 """The REAL 321-recipe catalog, same loader every other scenario uses. A
 hand-rolled recipe subset would prove nothing about the live failure."""
-
-BUDGET_SECONDS = 15.0
-"""The production per-goal search budget (`strategy_driver._SEARCH_BUDGET_SECONDS`
-after Task 11/12). The test must pass under what the bot actually gets."""
 
 TARGET = "greater_wooden_staff"
 SLOT = "weapon_slot"
@@ -219,11 +215,9 @@ def test_from_scratch_routes_to_the_achievable_step_not_the_equippable():
     assert goal._target_item == "spruce_wood"
     assert goal.needed == {"spruce_wood": 10}
 
-    planner = GOAPPlanner()
-    plan = planner.plan(state, goal, _build_actions(state, gd), gd, None,
-                        budget_seconds=BUDGET_SECONDS)
+    # Since Phase 2e the routed goal is the walk's.
+    plan = decompose(goal, state, gd, _build_actions(state, gd), NO_PROFILE_CONTEXT)
     assert plan, "the routed goal must actually plan, not merely look small"
-    assert not planner.last_stats.timed_out, planner.last_stats
 
 
 def test_banked_materials_still_route_to_the_craft():

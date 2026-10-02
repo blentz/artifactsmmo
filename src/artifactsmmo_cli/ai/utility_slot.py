@@ -2,7 +2,7 @@
 
 The two utility slots are the only equipment slots that carry a QUANTITY, and
 the only ones a craft ladder ever targets.  `utility_slot_for` is the SOLE
-producer of the answer "which of the two" — `craft_ladder.craft_utility_ladder`
+producer of the answer "which of the two" — `CraftPotionsGoal.batch_equip`
 and `ProvisionMarginalFightGoal` both ASK it rather than each hard-coding
 `"utility1_slot"`, which is what they did until 2026-08-25 and which made the
 CRAFT_POTIONS boost-stock arm equip its boost over the heal stack whose

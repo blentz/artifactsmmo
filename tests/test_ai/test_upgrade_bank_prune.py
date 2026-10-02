@@ -15,9 +15,10 @@ from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 
 
@@ -139,7 +140,7 @@ def test_planner_uses_bank_short_plan():
     goal = UpgradeEquipmentGoal(
         initial_equipment={"weapon_slot": None}, committed_target=("tin_blade", "weapon_slot"))
     state = make_state(equipment={"weapon_slot": None}, bank_items={"tin_ore": 50}, inventory_max=120)
-    plan = GOAPPlanner().plan(state, goal, _shallow_actions(gd), gd)
+    plan = (decompose(goal, state, gd, list(_shallow_actions(gd)), NO_PROFILE_CONTEXT) or [])
     reprs = [repr(a) for a in plan]
     assert reprs, "expected a plan"
     assert any(isinstance(a, WithdrawItemAction) and a.code == "tin_ore" for a in plan)
@@ -154,7 +155,7 @@ def test_planner_admissible_gather_path_when_no_bank():
     goal = UpgradeEquipmentGoal(
         initial_equipment={"weapon_slot": None}, committed_target=("tin_blade", "weapon_slot"))
     state = make_state(equipment={"weapon_slot": None}, bank_items={}, inventory_max=120)
-    plan = GOAPPlanner().plan(state, goal, _shallow_actions(gd), gd)
+    plan = (decompose(goal, state, gd, list(_shallow_actions(gd)), NO_PROFILE_CONTEXT) or [])
     assert plan, "expected a reachable gather-based plan"
     assert any(isinstance(a, GatherAction) for a in plan)
     assert repr(plan[-1]) == "Equip(tin_blade->weapon_slot)"
@@ -231,7 +232,7 @@ def test_planner_crafts_gear_from_banked_monster_drop():
         CraftAction(code="feather_coat", quantity=1, workshop_location=(3, 1)),
         EquipAction(code="feather_coat", slot="body_armor_slot"),
     ]
-    plan = GOAPPlanner().plan(state, goal, actions, gd)
+    plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
     assert plan, "expected withdraw->craft->equip plan for bank-stocked feather_coat"
     assert any(isinstance(a, WithdrawItemAction) and a.code == "feather" for a in plan)
     assert repr(plan[-1]) == "Equip(feather_coat->body_armor_slot)"

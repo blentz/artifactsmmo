@@ -1,18 +1,17 @@
 """Planner-level plannability tests for CraftPotionsGoal.
 
-Every other CraftPotionsGoal test asserts on the goal's own helpers
-(`_target_potion`, `is_satisfied`, `relevant_actions`) in isolation. None of them
-ever ran the REAL planner over the goal, and that is exactly how a goal that can
-never be satisfied shipped: live traces showed the CRAFT_POTIONS guard firing on
-442 cycles and the goal returning plan_len=0 on 285/285 planner selections
-(nodes 54-65, depth 15, no timeout, no node cap — a genuinely exhausted search).
+Every other CraftPotionsGoal test asserts on the goal's own helpers in
+isolation. None of them ever ran the REAL producer over the goal, and that is
+how a goal that could never be satisfied shipped: live traces showed the
+CRAFT_POTIONS guard firing on 442 cycles and the goal returning plan_len=0 on
+285/285 selections. The A*-era causes were a frozen action set (relevant_actions
+evaluated once, at the seed state) and a max_depth below the batch the goal's
+own ladder sized.
 
-The defect both cases below pin is one shape: `GOAPPlanner.plan` evaluates
-`goal.relevant_actions(...)` ONCE, against the SEED state, so the admitted action
-set covers exactly one craft target sized to one batch — while `is_satisfied`
-delegated to `_active_craft`, which re-targets as soon as the seed target's
-deficit closes. A goal test that can demand something the frozen action set never
-provides has no reachable satisfying state, so A* exhausts the space every time.
+Since Phase 2e the goal is the walk's (`craft_plan_gen._decompose_potions`, a
+decline is final), so these cases now pin that the WALK plans each shape: the
+control, a craftable boost beside the heal, a deficit larger than one gather
+batch, and a 3-unit recipe whose batch is 17 legs deep.
 """
 
 import pytest
@@ -20,9 +19,10 @@ import pytest
 from artifactsmmo_cli.ai import unlock_boost as _unlock_boost_module
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
-from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -127,7 +127,7 @@ def test_goal_is_plannable_without_a_craftable_boost():
     goal = CraftPotionsGoal(game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
-    plan = GOAPPlanner().plan(state, goal, _actions(gd), gd)
+    plan = (decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or [])
 
     assert plan, "control: the heal-only goal must be plannable"
 
@@ -145,10 +145,8 @@ def test_goal_stays_plannable_once_a_boost_becomes_craftable():
     goal = CraftPotionsGoal(game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
-    planner = GOAPPlanner()
-    plan = planner.plan(state, goal, _actions(gd), gd)
+    plan = decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or []
 
-    assert not planner.last_stats.timed_out, "must be a real exhaustion, not a budget artifact"
     assert plan, (
         "goal must stay plannable when a boost is craftable; the frozen "
         "action set and the goal test have to agree on ONE target"
@@ -169,10 +167,8 @@ def test_goal_is_plannable_when_the_deficit_exceeds_one_gather_batch():
     goal = CraftPotionsGoal(game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
-    planner = GOAPPlanner()
-    plan = planner.plan(state, goal, _actions(gd), gd)
+    plan = decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or []
 
-    assert not planner.last_stats.timed_out, "must be a real exhaustion, not a budget artifact"
     assert plan, "a deficit larger than one gather batch must still yield a batch plan"
 
 
@@ -196,11 +192,6 @@ def test_goal_provisions_depth_for_the_batch_its_own_ladder_sized():
     goal = CraftPotionsGoal(game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
-    planner = GOAPPlanner()
-    plan = planner.plan(state, goal, _actions(gd), gd)
+    plan = decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or []
 
-    assert not planner.last_stats.timed_out, "must be a real exhaustion, not a budget artifact"
-    assert plan, (
-        f"a {goal.max_depth}-deep budget must cover the sized batch; "
-        f"got no plan after {planner.last_stats.nodes_explored} nodes"
-    )
+    assert len(plan) >= 2, "the sized batch must be planned whole"

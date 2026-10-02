@@ -166,6 +166,7 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.plan_report import PlanReport
@@ -893,7 +894,7 @@ def test_l35_boots_drop_farm_fights_grey_dropper() -> None:
     assert fights and all(a.drop_farm for a in fights), relevant
     assert any(repr(a) == "Equip(wooden_club->weapon_slot)" for a in relevant), \
         relevant
-    plan = player.planner.plan(state, goal, actions, gd, budget_seconds=10.0)
+    plan = decompose(goal, state, gd, actions, player._last_ctx) or []
     assert [repr(a) for a in plan] == \
         ["Fight(ogre)", "Equip(wooden_club->weapon_slot)"], plan
 

@@ -54,8 +54,7 @@ class Policy:
     the pocket holds or a sale raises, as `obtain_sources` and near-term
     attainability ask).
     `drop_routes`: a DROP route is offered (True) or not (False, for a caller
-    whose emission cannot fight: the potion supply ladder, `craft_utility_ladder`,
-    emits no FightAction)."""
+    whose emission cannot fight: the potion supply emits no FightAction)."""
 
     all_gather_routes: bool
     gather_skill_gate: bool

@@ -15,9 +15,10 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 
 
@@ -322,8 +323,7 @@ class TestDropFightCompanionSwap:
         gd = _weapon_gd()
         state = _suboptimal_weapon_state()
         actions = [FightAction(monster_code="spider", locations=frozenset({(1, 0)}))]
-        plan = GOAPPlanner().plan(state, _boots_goal(), actions, gd,
-                                   history=None, budget_seconds=10.0)
+        plan = (decompose(_boots_goal(), state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
         reprs = [repr(a) for a in plan]
         assert reprs, "UpgradeEquipment(old_boots) planned empty even with the companion swap"
         assert "OptimizeLoadout(spider)" in reprs, reprs
@@ -343,8 +343,7 @@ class TestDropFightCompanionSwap:
         fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}))
         swap = OptimizeLoadoutAction(target_monster_code="spider", game_data=gd)
         assert swap.is_applicable(state, gd) is False
-        plan = GOAPPlanner().plan(state, _boots_goal(), [fight], gd,
-                                   history=None, budget_seconds=10.0)
+        plan = (decompose(_boots_goal(), state, gd, list([fight]), NO_PROFILE_CONTEXT) or [])
         plan_reprs = [repr(a) for a in plan]
         assert plan_reprs, "UpgradeEquipment(old_boots) planned empty from the optimal-loadout baseline"
         assert "Fight(spider)" in plan_reprs, plan_reprs

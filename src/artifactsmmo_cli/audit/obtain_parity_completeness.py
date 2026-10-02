@@ -32,8 +32,10 @@ THE THREE CHECKS. For a grid of (material, world-state) cells, one per
     concrete action of that kind in the pool (existence, not applicability — a
     CRAFT source is real even before its inputs are gathered, so its
     `CraftAction` is inapplicable at t=0).
-  * PLAN PARITY — for a goal both producers can serve, the descent's plan and
-    A*'s plan must use the SAME SET of source KINDS.
+  * (retired) PLAN PARITY compared the descent's plan with A*'s. Since Phase
+    2e the arbiter never searches a goal the walk serves (a decline is final),
+    so there is one producer and nothing to compare; the walk must still SERVE
+    every cell (`_assert_obtainable`).
 
 THE WITHDRAW CARVEOUT (historical; a follow-up now that the one walk landed).
 The OLD descent did not consume WITHDRAW sources (it withdrew recipe inputs
@@ -46,14 +48,13 @@ checks (pool kinds, model kinds, and both plans). THE CARVEOUT IS NARROW —
 WITHDRAW ONLY. Every other kind (RECYCLE/BUY/DROP/GATHER/CRAFT) is compared in
 full, so the carveout cannot swallow a real RECYCLE/BUY/DROP divergence; the
 `test_parity_falsifiable_recycle` test PROVES this by deleting the RECYCLE arm
-and watching the RECYCLE cell go RED on BOTH POOL⊆MODEL and PLAN PARITY.
+and watching the RECYCLE cell go RED on POOL⊆MODEL.
 
 A PLANNER TIMEOUT IS A BUG, NEVER AN EXPLAINED GAP (`classify_gap`'s
 `planner_failed` arm, which fires BEFORE every other arm). In the inventory
 census a gap class silently ABSORBED a 49,569-node planner timeout and produced a
-GREEN grid that was LYING. Here the A* plan-parity search is exactly where a node
-explosion would surface, so a timeout rides out with the plans and
-`classify_gap` turns it into the residual unconditionally.
+GREEN grid that was LYING. A timeout of the arbiter's own selection rides out
+with the plans and `classify_gap` turns it into the residual unconditionally.
 
 THE SEAM IS `StrategyArbiter.select` — production's own selector, and the ONLY
 seam at which this census means anything. The destruction LICENCE
@@ -96,13 +97,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
-
-PARITY_AUDIT_BUDGET_SECONDS = 10.0
-"""Per-cell A* budget — the arbiter's cheap first-pass value, so a cell plans
-exactly as the live bot's first pass does. The cells are shallow by design (the
-deep-chain node explosion is the CRAFT census's job); a cell that needed more
-than the live first pass would prove nothing about the live bot, so a timeout
-here is `classify_gap`'s residual, never an explained gap."""
 
 CENSUS_LEVEL = 10
 """Character level for every cell. Above the tier-1 catalog the cells' recipes
@@ -234,10 +228,8 @@ class ParityResult:
     model_kinds: tuple[str, ...]
     pool_applicable_kinds: tuple[str, ...]
     descent_kinds: tuple[str, ...]
-    astar_kinds: tuple[str, ...]
     pool_subset_model: bool
     model_subset_pool: bool
-    plan_parity: bool
     planner_failed: bool
     goal: str
     passed: bool
@@ -530,19 +522,6 @@ def descent_plan(goal: GatherMaterialsGoal, licensed: list[Action],
     return decompose(goal, state, game_data, licensed, ctx) or []
 
 
-def astar_plan(goal: Goal, licensed: list[Action], state: WorldState,
-               game_data: GameData) -> tuple[list[Action], bool]:
-    """The A* search's plan for `goal` — production's second producer, the
-    fallback `StrategyArbiter._plans` runs when the descent declines. Returns the
-    plan and whether the search was INCONCLUSIVE (timeout / node cap —
-    `PlanStats.timed_out`, also set on a node cap). A capped search has learned
-    NOTHING; the flag rides out so `classify_gap` turns it into the residual."""
-    planner = GOAPPlanner()
-    plan = planner.plan(state, goal, licensed, game_data, None,
-                        budget_seconds=PARITY_AUDIT_BUDGET_SECONDS)
-    return plan, planner.last_stats.timed_out
-
-
 def _assert_reproduction_faithful(kind: str, descent: list[Action],
                                   arbiter_plan: list[Action]) -> None:
     """The descent recomputed on `_drive`'s reproduced licensed pool MUST equal
@@ -561,36 +540,34 @@ def _assert_reproduction_faithful(kind: str, descent: list[Action],
 
 
 def _assert_obtainable(kind: str, material: str, descent: list[Action],
-                       astar: list[Action], planner_failed: bool) -> None:
-    """The non-vacuity premise, enforced against the PRODUCERS (not the model,
-    which the falsifiability test mutates): a cell whose material NEITHER producer
-    can serve — with the search CONCLUSIVE — is vacuous, since every census cell
-    is designed to be obtainable. A both-empty result under a conclusive search
-    means the bundle changed under the census, not a parity bug."""
-    if not planner_failed and not descent and not astar:
+                       planner_failed: bool) -> None:
+    """The non-vacuity premise, enforced against the PRODUCER (not the model,
+    which the falsifiability test mutates): a cell whose material the walk
+    cannot serve — with the selection CONCLUSIVE — is vacuous, since every census
+    cell is designed to be obtainable. An empty walk means the bundle changed
+    under the census, not a parity bug."""
+    if not planner_failed and not descent:
         raise ValueError(
-            f"{kind}: neither producer can serve {material!r} — the cell is vacuous "
+            f"{kind}: the walk cannot serve {material!r} — the cell is vacuous "
             f"(it is designed to be obtainable; the bundle changed under the census)")
 
 
 def plan_kinds(plan: list[Action]) -> frozenset[SourceKind]:
     """The set of source kinds a plan's legs realize, WITHDRAW carved out and
-    scaffolding legs (kind None) dropped — the unit PLAN PARITY compares."""
+    scaffolding legs (kind None) dropped — reported beside the model's kinds."""
     return _kinds_without_withdraw(
         {kind for action in plan
          if (kind := action_source_kind(action)) is not None})
 
 
 def parity_cell_verdict(pool_subset_model: bool, model_subset_pool: bool,
-                        plan_parity: bool, planner_failed: bool) -> bool:
-    """The cell's verdict. A planner that ran out of budget FAILS the cell before
-    any check is read: an inconclusive search proves nothing, and a cell that
-    "passed" because A* timed out (and so planned no divergence) would be the
-    purest form of the laundering this census exists to prevent. Otherwise all
-    three parity checks must hold."""
+                        planner_failed: bool) -> bool:
+    """The cell's verdict. A selection that ran out of budget FAILS the cell
+    before any check is read: an inconclusive run proves nothing. Otherwise
+    both agreements (pool and model) must hold."""
     if planner_failed:
         return False
-    return pool_subset_model and model_subset_pool and plan_parity
+    return pool_subset_model and model_subset_pool
 
 
 class ParityGapClass(Enum):
@@ -598,9 +575,7 @@ class ParityGapClass(Enum):
     disagreement is NEVER an explained gap.
 
     Unlike its sibling censuses this enum has no world-limit arms: POOL⊆MODEL and
-    MODEL⊆POOL are pure structural agreements about the shared model, and PLAN
-    PARITY (with the WITHDRAW carveout applied) admits no legitimate producer
-    disagreement — the whole epic exists to make the two producers agree. So the
+    MODEL⊆POOL are pure structural agreements about the shared model. So the
     only class is the actionable residual, and it must reach 0."""
 
     OBTAIN_PARITY_BUG = "obtain_parity_bug"
@@ -608,7 +583,7 @@ class ParityGapClass(Enum):
     what is obtainable — the divergence bug this census exists to catch. A planner
     TIMEOUT lands here unconditionally: "the search ran out of budget" is a fact
     about the PLANNER, and a gap class that can wear it is a gap class that can
-    hide the node explosion the plan-parity search risks."""
+    hide a node explosion."""
 
 
 def classify_gap(cell: ParityCell, state: WorldState, game_data: GameData,
@@ -646,11 +621,10 @@ def run_cell(cell: ParityCell, game_data: GameData) -> ParityResult:
     assert isinstance(goal, GatherMaterialsGoal)
 
     descent = descent_plan(goal, drive.licensed, drive.ctx, state, game_data)
-    astar, astar_failed = astar_plan(goal, drive.licensed, state, game_data)
-    planner_failed = drive.arbiter_failed or astar_failed
+    planner_failed = drive.arbiter_failed
 
     _assert_reproduction_faithful(cell.kind.value, descent, drive.arbiter_plan)
-    _assert_obtainable(cell.kind.value, cell.material, descent, astar, planner_failed)
+    _assert_obtainable(cell.kind.value, cell.material, descent, planner_failed)
 
     model = model_kinds(cell.material, state, game_data, drive.ctx)
     pool_app = pool_kinds(cell.material, goal, drive.licensed, state, game_data,
@@ -658,13 +632,10 @@ def run_cell(cell: ParityCell, game_data: GameData) -> ParityResult:
     pool_exist = pool_kinds(cell.material, goal, drive.licensed, state, game_data,
                             applicable_only=False)
     descent_kinds = plan_kinds(descent)
-    astar_kinds = plan_kinds(astar)
 
     pool_subset_model = pool_app <= model
     model_subset_pool = model <= pool_exist
-    plan_parity = descent_kinds == astar_kinds
-    passed = parity_cell_verdict(pool_subset_model, model_subset_pool,
-                                 plan_parity, planner_failed)
+    passed = parity_cell_verdict(pool_subset_model, model_subset_pool, planner_failed)
     gap = (None if passed
            else classify_gap(cell, state, game_data, planner_failed).value)
     return ParityResult(
@@ -674,10 +645,8 @@ def run_cell(cell: ParityCell, game_data: GameData) -> ParityResult:
         model_kinds=tuple(sorted(k.value for k in model)),
         pool_applicable_kinds=tuple(sorted(k.value for k in pool_app)),
         descent_kinds=tuple(sorted(k.value for k in descent_kinds)),
-        astar_kinds=tuple(sorted(k.value for k in astar_kinds)),
         pool_subset_model=pool_subset_model,
         model_subset_pool=model_subset_pool,
-        plan_parity=plan_parity,
         planner_failed=planner_failed,
         goal=repr(goal),
         passed=passed,
@@ -709,16 +678,15 @@ def render_matrix(results: list[ParityResult]) -> str:
         "`uv run python scripts/gen_obtain_parity.py`.",
         ">",
         "> Census drives the REAL `StrategyArbiter.select` seam over the committed "
-        "bundle, then compares the two plan producers (O(closure) descent and A*) "
-        "and the shared obtain model. WITHDRAW is carved out of every comparison "
-        "(the descent serves it via recipe-input withdraw, not a map leg); every "
+        "bundle, then compares the action pool with the shared obtain model and "
+        "reports the walk's plan. WITHDRAW is carved out of every comparison; every "
         "other kind is compared in full.",
         "",
         summary_line(results),
         "",
-        "| Cell | Material | needed | model | pool(applicable) | descent | A* "
-        "| P⊆M | M⊆P | parity | Verdict | Goal |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| Cell | Material | needed | model | pool(applicable) | walk "
+        "| P⊆M | M⊆P | Verdict | Goal |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
         verdict = "PASS" if r.passed else f"**{r.gap}**"
@@ -729,7 +697,7 @@ def render_matrix(results: list[ParityResult]) -> str:
         lines.append(
             f"| {r.kind} | {r.material} | {r.needed} | {fmt(r.model_kinds)} "
             f"| {fmt(r.pool_applicable_kinds)} | {fmt(r.descent_kinds)} "
-            f"| {fmt(r.astar_kinds)} | {r.pool_subset_model} | {r.model_subset_pool} "
-            f"| {r.plan_parity} | {verdict} | `{r.goal}` |")
+            f"| {r.pool_subset_model} | {r.model_subset_pool} "
+            f"| {verdict} | `{r.goal}` |")
     lines.append("")
     return "\n".join(lines) + "\n"

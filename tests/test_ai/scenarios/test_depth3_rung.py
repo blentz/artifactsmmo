@@ -21,7 +21,6 @@ test nothing.
 """
 
 import dataclasses
-import time
 from pathlib import Path
 
 import pytest
@@ -66,10 +65,11 @@ DEPTH_3_RECIPES = frozenset({
 `test_this_is_the_only_scenario_standing_on_a_depth_three_rung` can say what it
 is ranging over instead of recomputing a depth function beside production."""
 
-PLAN_BUDGET_SECONDS = 2.0
-"""Measured 0.07 s. A depth-3 chain is exactly the shape the design warned
-could land in the planner's tail, so the cost is asserted rather than hoped for
-— a cell that times out tests the timeout, not the dimension."""
+PLAN_NODE_BUDGET = 1_000
+"""A depth-3 chain is exactly the shape the design warned could land in the
+planner's tail, so the cost is asserted rather than hoped for — as WORK, not wall
+clock (a 2 s clock bound flaked under a loaded suite, 2026-10-02). Measured 0
+nodes: the walk serves it."""
 
 
 def _state(name: str, game_data: GameData) -> WorldState:
@@ -190,9 +190,9 @@ def test_the_cell_plans_the_bottom_of_the_chain_inside_the_budget(
     three-deep closure, and the plan is the gather that starts it."""
     player = GamePlayer(character=CELL, history=None)
     player.seed_offline(state, bundle_game_data)
-    started = time.monotonic()
     report = player.plan_from_state()
-    elapsed = time.monotonic() - started
     assert repr(report.selected_goal) == f"GatherMaterials({LEAF}, {{{LEAF}:4}})"
     assert report.plan and "Gather(ash_tree" in repr(report.plan[0])
-    assert elapsed < PLAN_BUDGET_SECONDS, f"{CELL} planned in {elapsed:.2f}s"
+    assert not any(t["timed_out"] for t in report.goals_tried), report.goals_tried
+    nodes = sum(int(t["nodes"]) for t in report.goals_tried)
+    assert nodes <= PLAN_NODE_BUDGET, f"{CELL} searched {nodes} nodes"
