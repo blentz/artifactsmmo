@@ -33,9 +33,11 @@ plans in 2-3 nodes, so the escalation was unreachable in practice and the cheap
 
 15s is generous for a healthy search now that gather edges carry a quantity —
 the searches that were spending 10s to reach 3873 nodes and no plan were
-enumerating a singleton-gather chain that no longer exists. A goal that still
-cannot be planned costs 15s once per DoomedMemo re-probe window instead of every
-cycle, because any no-plan — TIMEOUT INCLUDED — now marks the goal doomed.
+enumerating a singleton-gather chain that no longer exists. The goals the
+search still serves are local and bounded (rest, deposit, cancel, bag
+management) plus two deliberate upgrade handoffs; the obtain and grind goals are
+answered by decomposition in milliseconds, so no no-plan is remembered between
+cycles (Phase 3-1).
 
 THE SEARCH IS NOT I/O-BOUND UNDER `--learn`. This paragraph used to claim it was
 ("each node issues LearningStore SQLite queries, at roughly 7.5s") and that claim
@@ -164,7 +166,7 @@ class PlanStats:
     node_capped: bool = False
     """True when the search stopped at _MAX_SEARCH_NODES (memory bound).
     Always sets timed_out too: a capped search is inconclusive, not proof of
-    unreachability, so it must ride the same doomed-memo-exempt semantics."""
+    unreachability."""
 
 
 class GOAPPlanner:

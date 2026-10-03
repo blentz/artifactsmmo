@@ -354,7 +354,6 @@ def drive_selector(cell: ShedCell, state: WorldState,
     actions = build_actions(game_data, state, objective,
                             bank_accessible=True, task_exchange_min_coins=0)
     arbiter = StrategyArbiter(GOAPPlanner(), None)
-    arbiter.set_cycle(0)
     step = ReachCharLevel(level=CENSUS_STEP_LEVEL)
     decision = StrategyDecision(interrupt=None, chosen_root=step,
                                 chosen_step=step)

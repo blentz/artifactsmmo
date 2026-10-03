@@ -48,22 +48,6 @@ def _plan_once_mocks(player, state):
     ]
 
 
-def test_plan_once_seeds_doomed_memo_for_diagnostics():
-    """plan_once(doomed=[...]) marks those goal reprs in the arbiter's in-memory memo
-    BEFORE selecting, so an offline plan reproduces a live doomed-memo suppression
-    (e.g. a combat goal stuck doomed) that the fresh CLI otherwise never carries.
-    The injection is echoed on the report so the printed plan is honest about it."""
-    player = GamePlayer(character="hero")
-    state = make_state()
-    with contextlib.ExitStack() as stack:
-        for cm in _plan_once_mocks(player, state):
-            stack.enter_context(cm)
-        report = player.plan_once(doomed=["GatherMaterials(copper_ore)"])
-    assert report.simulated_doomed == ("GatherMaterials(copper_ore)",)
-    assert player._arbiter._memo.is_doomed(
-        "GatherMaterials(copper_ore)", state, player._cycle_counter)
-
-
 def test_plan_once_seeds_committed_for_diagnostics():
     """plan_once(committed=REPR) seeds the arbiter's sticky commitment before select,
     reproducing a live committed-goal hold; the injection is echoed on the report."""
@@ -192,14 +176,13 @@ def test_plan_command_prints_report(capsys):
 
 
 def test_plan_command_passes_and_prints_simulated_state(capsys):
-    """`--doom` / `--committed` thread into plan_once and the report echoes them; the
+    """`--committed` threads into plan_once and the report echoes them; the
     printed report shows a SIMULATED section so the offline plan is honest about the
     injected in-memory arbiter state."""
     report = PlanReport(
         decision=StrategyDecision(interrupt=None, chosen_root=None, chosen_step=None,
                                   ranking=[]),
         selected_goal=None, plan=[], goals_tried=[],
-        simulated_doomed=("GrindCharacterXP(green_slime)",),
         simulated_committed="ReachSkill(jewelrycrafting->20)")
     with patch.object(plan_cmd, "check_mutation_lock",
                       return_value=MagicMock(state="clear")):
@@ -212,14 +195,12 @@ def test_plan_command_passes_and_prints_simulated_state(capsys):
                 with patch.object(plan_cmd, "GamePlayer", return_value=player):
                     plan_cmd.plan(character="hero", learn=False, learn_db=None,
                                   refresh_game_data=False,
-                                  doom=["GrindCharacterXP(green_slime)"],
                                   committed="ReachSkill(jewelrycrafting->20)")
     assert player.plan_once.call_args.kwargs == {
-        "doomed": ["GrindCharacterXP(green_slime)"],
         "committed": "ReachSkill(jewelrycrafting->20)"}
     out = capsys.readouterr().out
     assert "SIMULATED" in out
-    assert "GrindCharacterXP(green_slime)" in out
+    assert "ReachSkill(jewelrycrafting->20)" in out
     assert "ReachSkill(jewelrycrafting->20)" in out
 
 

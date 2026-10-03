@@ -15,7 +15,6 @@ from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.arbiter_select import Candidate, _precedes, select_pure
-from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.cancel_orders import CancelOrdersGoal
@@ -287,7 +286,6 @@ def test_select_fallback_equip_not_shadowed_by_dead_upgrade_goal():
         fallback_roots=[ObtainItem("copper_legs_armor", 1)],
     )
     arbiter = StrategyArbiter(planner, history=None)
-    arbiter.set_cycle(0)
     goal, plan, goals_tried = arbiter.select(decision, state, gd, actions, _ctx())
     assert isinstance(goal, EquipOwnedGoal), (goal, goals_tried)
     assert plan and any(isinstance(a, EquipAction)
@@ -1091,7 +1089,6 @@ def test_fallback_serves_when_top_step_yields_no_goal():
         fallback_steps=[ObtainItem("wooden_shield", 1)],
         fallback_roots=[ObtainItem("wooden_shield", 1)])
     arbiter = StrategyArbiter(planner, history=None)
-    arbiter.set_cycle(0)
     goal, _plan, _gt = arbiter.select(decision, state, gd, actions, _ctx())
     assert goal is not None, "a fallback must still serve the cycle"
 
@@ -1110,7 +1107,6 @@ def test_select_returns_top_step_goal_when_it_yields_a_goal():
         chosen_step=ObtainItem("wooden_shield", 1),
         fallback_steps=[], fallback_roots=[])
     arbiter = StrategyArbiter(planner, history=None)
-    arbiter.set_cycle(0)
     goal, _plan, _gt = arbiter.select(decision, state, gd, actions, _ctx())
     assert isinstance(goal, EquipOwnedGoal)
 
@@ -1141,7 +1137,6 @@ def test_select_prefers_equip_owned_gear_over_fallback_upgrade():
 
 def arbiter_select_with(planner, decision, state, gd):
     arbiter = StrategyArbiter(planner, history=None)
-    arbiter.set_cycle(0)
     return arbiter.select(decision, state, gd, [], _ctx())
 
 
@@ -1881,7 +1876,7 @@ class TestPursueTaskEndToEnd:
 
 
 # ---------------------------------------------------------------------------
-# Task 4: _plans forwards budget; arbiter owns a DoomedMemo
+# Task 4: _plans forwards budget
 # ---------------------------------------------------------------------------
 
 def test_plans_forwards_budget_to_planner():
@@ -1900,11 +1895,6 @@ def test_plans_forwards_budget_to_planner():
     arbiter._plans(AcceptTaskGoal(), make_state(task_code=None, task_total=0), _gd(),
                    [AcceptTaskAction(taskmaster_location=(2, 1))], _ctx(), budget_seconds=1.0)
     assert captured["budget"] == 1.0
-
-
-def test_arbiter_has_doomed_memo():
-    arbiter = StrategyArbiter(GOAPPlanner(), history=None)
-    assert isinstance(arbiter._memo, DoomedMemo)
 
 
 def _gd_boots_chain():
@@ -2634,7 +2624,6 @@ def _unplannable_objective_arbiter(plannable):
     """An arbiter whose walk attempts GrindCharacterXP(chicken) (the objective
     step under ReachCharLevel) FIRST and AcceptTask second."""
     arbiter = StrategyArbiter(_ScriptedArbiterPlanner(plannable), history=None)
-    arbiter.set_cycle(0)
     return arbiter
 
 
@@ -2703,7 +2692,6 @@ def test_under_a_commitment_the_event_names_the_COMMITTED_objective():
     assert repr(goal0) == "AcceptTask" and arbiter._committed_repr == "AcceptTask"
 
     # Cycle 1: the COMMITTED goal stops planning; the ranked-first grind starts.
-    arbiter.set_cycle(1)
     arbiter._planner.plannable = {"GrindCharacterXP(chicken)"}
     goal1, _plan1, tried = _select_with(arbiter)
     assert [t["goal"] for t in tried] == ["AcceptTask", "GrindCharacterXP(chicken)"], \
@@ -2724,7 +2712,6 @@ def test_event_is_cleared_on_the_next_healthy_cycle():
     arbiter = _unplannable_objective_arbiter(plannable=set())
     _select_with(arbiter)
     assert arbiter.objective_unplannable is not None
-    arbiter.set_cycle(1)
     arbiter._planner.plannable = {"AcceptTask", "GrindCharacterXP(chicken)"}
     _select_with(arbiter)
     assert arbiter.objective_unplannable is None

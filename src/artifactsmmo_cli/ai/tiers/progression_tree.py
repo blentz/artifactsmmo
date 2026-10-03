@@ -163,8 +163,8 @@ def _servable_promotion(
     servable pair and promote it to chosen. Demoted pairs (the original
     chosen, then any skipped fallbacks) stay in the fallback lists after the
     promoted one — original priority order minus the promotion. All
-    unservable: keep the original choice (the arbiter's doomed-memo handles
-    it, as today)."""
+    unservable: keep the original choice (the arbiter asks it, and declines
+    it, every cycle)."""
     if step_servable(chosen_root, chosen_step):
         return chosen_root, chosen_step, fallback_roots, fallback_steps
     idx = next(

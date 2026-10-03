@@ -108,7 +108,6 @@ def test_equip_owned_goal_selected_over_grind():
     ctx = _ctx()
 
     arbiter = StrategyArbiter(planner, history=None)
-    arbiter.set_cycle(0)
     decision = _FakeDecision(chosen_step=ReachCharLevel(11))
     goal, plan, goals_tried = arbiter.select(
         decision, _state({"novice_guide": 1}), gd, actions, ctx)
@@ -124,7 +123,6 @@ def test_equip_owned_goal_selected_over_grind():
     # Sanity control: without the owned artifact, grind wins instead — the
     # candidate that flips the outcome is the equip, not some other quirk.
     control_arbiter = StrategyArbiter(planner, history=None)
-    control_arbiter.set_cycle(0)
     control_goal, control_plan, _ = control_arbiter.select(
         _FakeDecision(chosen_step=ReachCharLevel(11)), _state({}), gd, actions, ctx)
     assert isinstance(control_goal, GrindCharacterXPGoal), (control_goal, control_plan)

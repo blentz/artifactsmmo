@@ -12,9 +12,9 @@ CODE FACTS mirrored:
   * mark: a re-mark under the SAME signature increments the failure count
     (escalating the window); a new signature resets it to 1.     [doomed_memo.mark]
 
-This COMPLEMENTS `TieredSelection.memo_skip_sound`, which proves the two-pass walk
-is sound GIVEN an abstract `skip` predicate. Here we prove the CONCRETE `skip`
-predicate's arithmetic: the window grows geometrically per consecutive failure, is
+The memo now serves only the player's rejected-action TTL (`_rejected_actions`;
+the arbiter's goal memo and the `TieredSelection` model of its two-pass walk were
+retired by Phase 3-1). Here we prove the window's arithmetic: the window grows geometrically per consecutive failure, is
 capped at `maxRetry`, and a signature change OR window expiry always re-enables the
 probe — so a goal is retried geometrically less often but NEVER skipped forever.
 

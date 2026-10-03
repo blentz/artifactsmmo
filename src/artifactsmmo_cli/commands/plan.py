@@ -31,12 +31,9 @@ def _print_report(player: GamePlayer, report: PlanReport) -> None:
     s = player.state
     d = report.decision
     print("=" * 70)
-    if report.simulated_doomed or report.simulated_committed is not None:
+    if report.simulated_committed is not None:
         print("SIMULATED in-memory arbiter state (diagnostic injection):")
-        if report.simulated_doomed:
-            print(f"  doomed-memo: {list(report.simulated_doomed)}")
-        if report.simulated_committed is not None:
-            print(f"  committed (sticky): {report.simulated_committed}")
+        print(f"  committed (sticky): {report.simulated_committed}")
         print("-" * 70)
     if s is not None:
         print(f"state: level={s.level} xp={s.xp}/{s.max_xp} hp={s.hp}/{s.max_hp} "
@@ -92,10 +89,6 @@ def plan(
     learn_db: str | None = typer.Option(None, "--learn-db", help="Learning DB path"),
     refresh_game_data: bool = typer.Option(
         False, "--refresh-game-data", help="Re-fetch static game data from the API"),
-    doom: list[str] = typer.Option(
-        [], "--doom", help="Seed the arbiter's doomed-memo with this goal repr "
-        "(repeatable) to reproduce a live in-memory suppression offline, "
-        "e.g. --doom 'GrindCharacterXP(green_slime)'"),
     committed: str | None = typer.Option(
         None, "--committed", help="Seed the arbiter's sticky commitment with this "
         "goal repr to reproduce a live committed-goal hold"),
@@ -112,12 +105,11 @@ def plan(
     if lock.state == "active":
         print(f"mutation run in progress (pid {lock.pid}) — src/ has live mutants; retry later")
         raise typer.Exit(code=2)
-    # `doom`/`committed`/`bundle` are Typer Option-backed parameters; a direct
+    # `committed`/`bundle` are Typer Option-backed parameters; a direct
     # (non-Click) call that omits one — as tests/test_ai/test_plan_command.py
     # does — leaves the raw `typer.models.OptionInfo` sentinel in place rather
     # than its declared default, so every use below is isinstance-guarded
-    # rather than trusting the parameter to already be `None`/a plain list.
-    doomed = doom if isinstance(doom, list) else []
+    # rather than trusting the parameter to already be `None`.
     committed_goal = committed if isinstance(committed, str) else None
     if isinstance(scenario, str):
         if scenario not in SCENARIOS:
@@ -141,7 +133,7 @@ def plan(
             scenario_state(SCENARIOS[scenario], scenario_game_data),
             scenario_game_data)
         print(f"scenario: {scenario} — {SCENARIOS[scenario].description}")
-        report = player.plan_from_state(doomed=doomed, committed=committed_goal)
+        report = player.plan_from_state(committed=committed_goal)
         _print_report(player, report)
         return
     config = Config.from_token_file()
@@ -156,7 +148,7 @@ def plan(
             game_data_ttl_minutes=config.game_data_ttl_minutes,
             refresh_game_data=refresh_game_data,
         )
-        report = player.plan_once(doomed=doomed, committed=committed_goal)
+        report = player.plan_once(committed=committed_goal)
         _print_report(player, report)
     finally:
         store.end_session(exit_reason="normal")

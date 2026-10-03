@@ -104,7 +104,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | TaskFeasibility | tasks, crafting | reachability, safety |
 | TaskReservation | tasks, crafting, items | safety |
 | TaskTradeReadyPriority | tasks | safety, totality |
-| TieredSelection | core, planner | totality, dominance |
 | UpgradeSelection | items, characters | dominance |
 | WinnableCascade | combat, monsters | dominance, totality |
 | WithdrawSetExpansion | crafting, items | totality, safety |

@@ -1,8 +1,8 @@
-"""The state dimensions that unlock new plannability for the discretionary/skill
-goals the doomed-memo governs. A skill/craft goal that is width-unfindable at a
-given character + skill level stays unfindable until one of those levels changes;
-inventory churns every gather and is deliberately excluded (the memo's K-cycle
-re-probe covers material-driven changes). See
+"""The state dimensions `DoomedMemo` keys its window on: character level and skill
+levels. The memo now serves only the player's rejected-action TTL (the arbiter's
+goal memo was retired by Phase 3-1). Inventory churns every gather and is
+deliberately excluded (the memo's K-cycle re-probe covers material-driven
+changes). See
 docs/superpowers/specs/2026-06-06-tiered-budget-gear-prioritization-design.md.
 """
 

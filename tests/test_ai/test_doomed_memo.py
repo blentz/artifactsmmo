@@ -30,14 +30,6 @@ def test_retry_on_signature_change():
     assert memo.is_doomed("G", leveled, cycle=1) is False
 
 
-def test_clear_removes_entry():
-    memo = DoomedMemo(retry_after_cycles=20)
-    s = make_state()
-    memo.mark("G", s, cycle=0)
-    memo.clear("G")
-    assert memo.is_doomed("G", s, cycle=1) is False
-
-
 def test_ttl_doubles_on_consecutive_failure_same_signature():
     """Second consecutive no-plan under the same signature doubles the
     re-probe window: 20 -> 40."""
@@ -60,19 +52,6 @@ def test_ttl_keeps_doubling_then_caps():
         assert memo.is_doomed("G", s, cycle=cycle + expected_ttl - 1) is True
         assert memo.is_doomed("G", s, cycle=cycle + expected_ttl) is False
         cycle += expected_ttl
-
-
-def test_ttl_resets_after_clear():
-    """A successful plan (clear) resets the escalation: the next failure
-    starts back at the base window."""
-    memo = DoomedMemo(retry_after_cycles=20)
-    s = make_state(level=4, skills={"weaponcrafting": 2})
-    memo.mark("G", s, cycle=0)
-    memo.mark("G", s, cycle=20)  # escalated to 40
-    memo.clear("G")              # planned successfully
-    memo.mark("G", s, cycle=70)
-    assert memo.is_doomed("G", s, cycle=89) is True   # base 20 again
-    assert memo.is_doomed("G", s, cycle=90) is False
 
 
 def test_ttl_resets_on_signature_change():

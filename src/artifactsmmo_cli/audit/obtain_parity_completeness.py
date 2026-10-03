@@ -470,7 +470,6 @@ def _drive(cell: ParityCell, state: WorldState, game_data: GameData) -> _Drive:
     actions = build_actions(game_data, state, objective,
                             bank_accessible=True, task_exchange_min_coins=0)
     arbiter = StrategyArbiter(GOAPPlanner(), None)
-    arbiter.set_cycle(0)
     goal, arbiter_plan, tried = arbiter.select(
         census_decision(cell), state, game_data, actions, ctx)
     step_profile = _step_protection_profile(goal, state, game_data)

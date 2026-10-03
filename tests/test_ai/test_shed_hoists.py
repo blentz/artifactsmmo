@@ -87,7 +87,6 @@ def _drive(gd: GameData, state: WorldState) -> tuple[Goal | None, list]:
     actions = build_actions(gd, state, objective, bank_accessible=True,
                             task_exchange_min_coins=0)
     arbiter = StrategyArbiter(GOAPPlanner(), None)
-    arbiter.set_cycle(0)
     step = ReachCharLevel(level=12)
     decision = StrategyDecision(interrupt=None, chosen_root=step,
                                 chosen_step=step)

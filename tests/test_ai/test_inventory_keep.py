@@ -635,7 +635,6 @@ def test_goal_materials_is_LIVE_end_to_end_through_the_arbiter():
     step = ObtainItem("ash_plank", 1)
     decision = StrategyDecision(interrupt=None, chosen_root=step, chosen_step=step)
     arbiter = _CtxSpyArbiter(planner)
-    arbiter.set_cycle(0)
     arbiter.select(decision, state, gd, [], _ctx())
 
     step_goal = arbiter.seen_step_goal
@@ -916,7 +915,6 @@ def test_means_predicates_fire_on_the_BOUND_step_profile():
     step = ObtainItem("ash_plank", 40)
     decision = StrategyDecision(interrupt=None, chosen_root=step, chosen_step=step)
     arbiter = _CtxSpyArbiter(GOAPPlanner())
-    arbiter.set_cycle(0)
     arbiter.select(decision, state, gd, [], _ctx())
 
     ctx = arbiter.seen_ctx

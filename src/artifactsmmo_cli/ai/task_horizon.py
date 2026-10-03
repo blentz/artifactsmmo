@@ -34,10 +34,8 @@ So the verdict is a HORIZON READING, not a sentence:
                             sit INERT while the character does other work.
 
 OUT OF REACH IS NEVER PERMANENT, AND NOTHING HAD TO BE BUILT FOR THAT. The verdict is
-recomputed from live state every cycle — it is strictly fresher than the
-`DoomedMemo` re-probe the rest of the bot uses for "unfindable at this level"
-(`plannability_signature` is `(character level, sorted skill levels)`, so a level-up
-invalidates it). "Re-check at least at each level-up" is therefore satisfied by
+recomputed from live state every cycle, as every goal's answer has been since
+Phase 3-1 retired the arbiter's doomed-memo. "Re-check at least at each level-up" is therefore satisfied by
 construction, with no memo entry, no expiry and no state to get stuck in.
 
 WHY A ONE-LEVEL BOUND AND NOT TWO. It is what makes the question decidable at all.

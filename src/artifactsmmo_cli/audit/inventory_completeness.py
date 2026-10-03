@@ -695,7 +695,6 @@ def plan_inventory(cell: InventoryCell, state: WorldState,
     actions = build_actions(game_data, state, objective,
                             bank_accessible=True, task_exchange_min_coins=0)
     arbiter = StrategyArbiter(GOAPPlanner(), None)
-    arbiter.set_cycle(0)
     _goal, plan, tried = arbiter.select(
         census_decision(cell.reason, game_data), state, game_data, actions, ctx)
     return plan, any(bool(attempt.get("timed_out")) for attempt in tried)

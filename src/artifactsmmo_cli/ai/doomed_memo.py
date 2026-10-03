@@ -1,14 +1,14 @@
-"""Remembers goals that timed out (no plan) so the arbiter skips re-planning them
-until their plannability signature changes or a re-probe window elapses. This is
-the steady-state half of the tiered-budget fix: width-unfindable goals are tried
-once, then skipped, instead of burning the budget every cycle.
+"""Remembers actions the server categorically refused, so the planner leaves
+them out until the character's plannability signature changes or a re-probe
+window elapses. Its one user is `GamePlayer._rejected_actions`; the arbiter's
+goal memo it once also served was retired by Phase 3-1 (every goal is asked
+every cycle), and server refusals become model facts in Phase 6.
 
-The re-probe window ESCALATES: each consecutive failure of the same goal under
-the same signature doubles the TTL (base 20 → 40 → 80, capped at 160 cycles), so
-a goal that keeps timing out on every re-probe is retried geometrically less
-often instead of re-burning a full planning budget every fixed K cycles. The
-counter resets when the goal plans successfully (`clear`) or when its
-plannability signature changes (new levels = genuinely new plannability)."""
+The re-probe window ESCALATES: each consecutive refusal of the same key under
+the same signature doubles the TTL (base 20 → 40 → 80, capped at 160 cycles),
+so a key the server keeps refusing is retried geometrically less often. The
+counter resets when the signature changes (new levels = genuinely new
+applicability)."""
 
 from artifactsmmo_cli.ai.plannability_signature import Signature, plannability_signature
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -34,15 +34,6 @@ class DoomedMemo:
         prev = self._entries.get(goal_repr)
         failures = prev[2] + 1 if prev is not None and prev[0] == sig else 1
         self._entries[goal_repr] = (sig, cycle, failures)
-
-    def is_marked(self, goal_repr: str) -> bool:
-        """True while any entry exists for `goal_repr`, doomed or not (telemetry:
-        a clear only means something when there was a mark to clear)."""
-        return goal_repr in self._entries
-
-    def clear(self, goal_repr: str) -> None:
-        """Forget a goal (called when it plans successfully)."""
-        self._entries.pop(goal_repr, None)
 
     def _ttl(self, failures: int) -> int:
         """Re-probe window for the Nth consecutive failure: doubles each time,

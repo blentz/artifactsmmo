@@ -103,7 +103,6 @@ def _select(bank_item_count: int):
         BuyBankExpansionAction(bank_location=(4, 0), accessible=True),
     ]
     arbiter = StrategyArbiter(planner, history=None)
-    arbiter.set_cycle(0)
     return arbiter.select(
         _FakeDecision(chosen_step=ReachCharLevel(11)),
         _state(bank_item_count), gd, actions, _ctx())

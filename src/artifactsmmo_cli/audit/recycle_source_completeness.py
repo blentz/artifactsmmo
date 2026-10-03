@@ -486,7 +486,6 @@ def plan_recycle_source(cell: RecycleSourceCell, state: WorldState,
     actions = build_actions(game_data, state, objective,
                             bank_accessible=True, task_exchange_min_coins=0)
     arbiter = StrategyArbiter(GOAPPlanner(), None)
-    arbiter.set_cycle(0)
     goal, plan, tried = arbiter.select(
         census_decision(cell), state, game_data, actions, ctx)
     failed = any(bool(attempt.get("timed_out")) for attempt in tried)

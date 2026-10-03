@@ -45,32 +45,6 @@ SUPPLY_DEMAND_GAIN = 1.0
 class SupplyBankGoal(Goal):
     """Bank `quantity` of `item_code` for the siblings that asked for it."""
 
-    # Exempt from the doomed-memo (Goal.memo_exempt): this goal's plannability
-    # and satisfaction both hinge on dimensions the memo's (char level, skill
-    # levels) signature cannot see. `is_satisfied` reads bank CONTENTS
-    # directly, and the memo key is `repr(goal)` — `SupplyBank({item_code}x
-    # {quantity})` — which does NOT include `demand`, so two constructions for
-    # the SAME item/quantity but DIFFERENT (rising) sibling demand collide on
-    # one memo entry. A transient no-plan (e.g. the gather/craft chain briefly
-    # unreachable — missing ingredient, cooldown, bank full) would then be
-    # memoized as doomed under the unchanged (level, skills) signature and
-    # suppress this means for up to 160 cycles, even after a sibling's demand
-    # spikes or the blocking material lands in the bank from ANOTHER
-    # character's cycle — neither of which bumps the signature. This is the
-    # same class of problem GrindCharacterXPGoal solved (HP/inventory churn
-    # invisible to the signature); see Goal.memo_exempt.
-    #
-    # RECONSIDERED (final review, Finding 1): kept True. The review's objection
-    # was not to the exemption itself but to what an unsuppressible goal COST —
-    # an unscoped Dijkstra over the full ~1800-action pool every cycle the goal
-    # was reached. That cost is now removed at its source by `relevant_actions`
-    # (closure-scoped) and `is_plannable` (depth-reachability), not by letting a
-    # stale doomed verdict silence the fleet's only supply producer for up to
-    # 160 cycles. Both original justifications are unchanged and still hold, so
-    # dropping the exemption would trade a bounded CPU cost for a correctness
-    # regression.
-    memo_exempt = True
-
     def __init__(self, item_code: str, quantity: int, demand: int) -> None:
         self._item_code = item_code
         self._quantity = quantity
@@ -229,8 +203,8 @@ class SupplyBankGoal(Goal):
         MINUS any withdraw of the target itself.
 
         Without this the goal planned against the whole ~1800-action pool with
-        no heuristic — an unscoped Dijkstra, and (being `memo_exempt`) one that
-        no doomed-memo could ever suppress. See `_production_goal` for why the
+        no heuristic — an unscoped Dijkstra, run on every cycle the goal was
+        reached. See `_production_goal` for why the
         scoping is delegated rather than copied, and `_production_state` for
         why the bank is asked the question minus the target's own copies.
 

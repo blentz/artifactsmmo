@@ -16,11 +16,11 @@ from enum import StrEnum
 class Mechanism(StrEnum):
     """One compensating mechanism. The event's `subject` is named per member."""
 
-    # Planning used as a feasibility test (subject: goal repr).
-    DOOMED_SKIP = "doomed_skip"
-    DOOMED_MARK = "doomed_mark"
-    DOOMED_CLEAR = "doomed_clear"
-    NOT_PLANNABLE = "not_plannable"
+    # Planning used as a feasibility test: `doomed_skip`, `doomed_mark`,
+    # `doomed_clear` and `not_plannable` were retired by Phase 3-1 (every
+    # candidate is asked every cycle; a walk-served goal's answer is its named
+    # DECOMPOSE_DECLINE). Their values stay in `decision_events` history and
+    # must not be reused.
     # Which producer answered a planning request (subject: goal repr;
     # detail: nodes_created/explored/timed_out/node_capped/plan_len).
     FAST_PATH = "fast_path"

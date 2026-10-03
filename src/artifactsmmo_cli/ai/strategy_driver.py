@@ -30,7 +30,6 @@ from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog, search_deta
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.decisions.obtain_item import obtain_item_decision
 from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
-from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.equipment.bank_tool_fills import bank_tool_fills
 from artifactsmmo_cli.ai.equipment.empty_slot_fills import empty_slot_rank_fills
 from artifactsmmo_cli.ai.event_plan_window import plan_fits_event_window
@@ -753,14 +752,6 @@ class StrategyArbiter:
         # other way. Matched by OBJECT IDENTITY against the candidate list, not
         # by repr, because one repr can appear in two bands.
         self.last_selected_guard: str | None = None
-        self._memo = DoomedMemo()
-        self._cycle = 0
-        # Whether the most recent `_plans` call ended in a budget TIMEOUT (vs an
-        # EXHAUSTIVE search or a definitive is_plannable=False / WaitGoal result).
-        # Telemetry only: `_record_attempt` marks the memo on ANY no-plan, so
-        # nothing branches on this flag any more — it rides `goals_tried` into
-        # the trace so a reader can tell a dead end from a search blow-up.
-        self._last_timed_out: bool = False
         # Monotonic instant this cycle's cooldown expires — the window the whole
         # walk may search inside, set by the player once per cycle. None on any
         # cycle with no cooldown to spend (first cycle, an error cycle), which
@@ -774,10 +765,6 @@ class StrategyArbiter:
     def set_event_log(self, events: DecisionEventLog) -> None:
         """Share the player's per-cycle decision-event buffer."""
         self.events = events
-
-    def set_cycle(self, cycle: int) -> None:
-        """Player calls this each cycle so the memo's re-probe window advances."""
-        self._cycle = cycle
 
     def set_planning_deadline(self, deadline_monotonic: float | None) -> None:
         """Player calls this each cycle with the cooldown's expiry instant.
@@ -793,11 +780,9 @@ class StrategyArbiter:
 
         A per-cycle deadline (rather than a per-call budget) is what keeps the
         walk from overrunning the cooldown N times over for N candidates. The
-        floor is not a convenience: `_record_attempt` marks ANY no-plan doomed,
-        so an attempt squeezed into the tail of a 3s cooldown would shelve a
-        goal for a whole re-probe window on evidence no weaker search ever had
-        to produce before. Flooring at the default means no candidate is ever
-        judged on less search than it used to get.
+        floor means no candidate is ever judged on less search than the
+        planner's default: an attempt squeezed into the tail of a 3s cooldown
+        would otherwise report a no-plan the default budget would have found.
 
         None (no deadline) leaves `planner.plan` on its own default."""
         if self._planning_deadline is None:
@@ -841,7 +826,6 @@ class StrategyArbiter:
         priority = goal.priority(state, game_data, self._history)
         if isinstance(goal, WaitGoal):
             wait_plan: list[Action] = [WaitAction()]
-            self._last_timed_out = False
             self.goals_tried.append({
                 "goal": repr(goal),
                 "nodes": 0,
@@ -852,46 +836,6 @@ class StrategyArbiter:
                 "elapsed_ms": _elapsed_ms(),
             })
             return wait_plan
-        # Pre-plan reachability gate: a goal whose minimum plan is longer than
-        # its max_depth can never be planned (the planner never returns a plan
-        # longer than max_depth — formal/Formal/PlannerDepthBound), so skip it
-        # instead of burning `planner._SEARCH_BUDGET_SECONDS` (named, never a
-        # literal — this comment said "90s" through a 300s era and a 15s one).
-        #
-        # NOT "provably sound", and the word was removed rather than softened:
-        # the gate consumes `min_plan_length`, whose docstring RETRACTS the
-        # citation it used to carry ("that theorem has never existed",
-        # min_plan_length.py:5-7). Treat it as an A*-budget heuristic.
-        #
-        # STALE EXAMPLE, LEFT AS A HISTORICAL MARKER (corrected 2026-08-13,
-        # whole-branch review): this comment used to end "This is what stops
-        # UpgradeEquipment(copper_boots) — 80 gathers vs max_depth 32 — from
-        # stalling the first cycle." That is now FALSE in both numbers. Task 3
-        # swapped the mint term to `min_gather_steps`, so copper_boots costs 4,
-        # not 80, and `test_upgrade_reachability_gate.py
-        # ::test_is_plannable_admits_from_scratch_copper_boots` asserts exactly
-        # the opposite of the old claim. The identical example was corrected in
-        # `goals/progression.py:223` and this copy was missed — the same
-        # cross-file duplication this branch keeps being bitten by.
-        #
-        # The honest statement: over all 321 real recipes the maximum
-        # `min_plan_length` is 15 against a threshold of 32, ZERO exceeding, so
-        # this branch is LIVE-DEAD on today's data. See `progression.py`'s
-        # `max_depth` docstring for the full account.
-        if not goal.is_plannable(state, game_data, self._history):
-            # A proven-unplannable goal is a CONCLUSIVE no-plan, not a timeout.
-            self._last_timed_out = False
-            self.events.note(Mechanism.NOT_PLANNABLE, repr(goal))
-            self.goals_tried.append({
-                "goal": repr(goal),
-                "nodes": 0,
-                "depth": 0,
-                "timed_out": False,
-                "plan_len": 0,
-                "priority": priority,
-                "elapsed_ms": _elapsed_ms(),
-            })
-            return []
         # Fast path: an obtain-shaped goal (GatherMaterials, a potion batch,
         # a skill grind's legs, a committed upgrade) is served by the one walk
         # (`craft_plan_gen.decompose`) and skips A* entirely. A decline names
@@ -903,7 +847,6 @@ class StrategyArbiter:
         for reason in declined:
             self.events.note(Mechanism.DECOMPOSE_DECLINE, repr(goal), reason)
         if gen is not None:
-            self._last_timed_out = False
             self.events.note(Mechanism.FAST_PATH, repr(goal), f"plan_len={len(gen)}")
             self.goals_tried.append({
                 "goal": repr(goal),
@@ -916,7 +859,6 @@ class StrategyArbiter:
             })
             return gen
         if not hands_off_to_search(declined):
-            self._last_timed_out = False
             self.goals_tried.append({
                 "goal": repr(goal),
                 "nodes": 0,
@@ -930,7 +872,6 @@ class StrategyArbiter:
         plan = self._planner.plan(state, goal, actions, game_data, self._history,
                                   budget_seconds=budget_seconds)
         stats = self._planner.last_stats
-        self._last_timed_out = stats.timed_out
         self.events.note(Mechanism.SEARCH, repr(goal), search_detail(stats, len(plan)))
         # P2: a plan that depends on event-ONLY content is worthless if the window
         # shuts before it finishes. Dropped rather than returned, so the candidate
@@ -951,39 +892,6 @@ class StrategyArbiter:
             "priority": priority,
             "elapsed_ms": _elapsed_ms(),
         })
-        return plan
-
-    def _record_attempt(self, goal: Goal, plan: list[Action], timed_out: bool,
-                        state: WorldState, guard_reprs: set[str]) -> list[Action]:
-        """Update the doomed-memo from one planning attempt and return `plan`.
-
-        - A found plan (or a memo-bypassing goal) CLEARS any prior doomed mark.
-        - Any no-plan result MARKS the goal doomed, TIMEOUT INCLUDED.
-
-        The timeout carve-out is deleted. It existed to keep a cheap-budget
-        timeout available for a full-budget escalation that, in a fleet with an
-        always-plannable fallback grind, was never reached: `select_pure` takes
-        the first candidate that plans, `GrindCharacterXP` plans in 2 nodes, so
-        `chosen` was never None and the escalation pass never ran. The carve-out
-        therefore only ever meant "never mark", and the same 3873-node search
-        re-ran on 955 consecutive cycles (live traces 2026-08-12).
-
-        `timed_out` is kept in the signature because it is the ONE fact a caller
-        cannot re-derive here, and dropping it from the parameter list would
-        invite re-introducing the carve-out later; it now only documents the
-        attempt (the trace carries it via `goals_tried`).
-
-        `guard_reprs` is the memo-bypass set: guards plus `Goal.memo_exempt`
-        goals, whose plannability flips on state the memo's signature cannot
-        track."""
-        r = repr(goal)
-        if r in guard_reprs or plan:
-            if self._memo.is_marked(r):
-                self.events.note(Mechanism.DOOMED_CLEAR, r)
-            self._memo.clear(r)
-        else:
-            self._memo.mark(r, state, self._cycle)
-            self.events.note(Mechanism.DOOMED_MARK, r, "timed_out" if timed_out else "")
         return plan
 
     def select(
@@ -1599,34 +1507,19 @@ class StrategyArbiter:
             r = repr(goal)
             return r != "TaskCancel" and r in _effective_suppressed
 
-        # memo_bypass = guard candidates PLUS memo-exempt goals. Guards are
-        # safety/gear-critical, few, and rarely time out; memo-exempt goals have a
-        # plannability that flips on fast-churning HP/inventory the memo's
-        # (level, skills) signature cannot track, so a transient no-plan must not
-        # skip or mark them (`Goal.memo_exempt`). Both sets bypass the memo alone —
-        # there is no longer a second budget for either to earn.
-        memo_bypass = ({c.repr_ for c in candidates if not c.is_means}
-                       | {c.repr_ for c in candidates if c.goal.memo_exempt})
         non_wait = [c for c in candidates if not isinstance(c.goal, WaitGoal)]
 
-        def _skip(goal: Goal) -> bool:
-            # Memo never skips guards or memo-exempt goals.
-            skipped = repr(goal) not in memo_bypass and self._memo.is_doomed(
-                repr(goal), state, self._cycle)
-            if skipped:
-                self.events.note(Mechanism.DOOMED_SKIP, repr(goal))
-            return skipped
-
         def try_plan(goal: Goal) -> list[Action]:
-            if _skip(goal):
-                return []
-            # The cooldown window, floored at the one budget
+            # Every candidate is asked every cycle. A walk-served goal's answer
+            # is decomposition's plan or its named decline, read from live
+            # state in milliseconds, so there is nothing to remember: a blocked
+            # goal is eligible again exactly when the state that blocked it
+            # changes (Phase 3-1; the doomed-memo that aged no-plans over a
+            # 20-160-cycle window is gone). The cooldown window, floored at the one budget
             # (`planner._SEARCH_BUDGET_SECONDS`) — None when there is no
             # cooldown to spend. See `_cycle_budget_seconds`.
-            plan = self._plans(goal, state, game_data, actions, ctx,
+            return self._plans(goal, state, game_data, actions, ctx,
                                self._cycle_budget_seconds())
-            return self._record_attempt(goal, plan, self._last_timed_out, state,
-                                        memo_bypass)
 
         def satisfied(goal: Goal) -> bool:
             return goal.is_satisfied(state)
@@ -1666,9 +1559,8 @@ class StrategyArbiter:
         # KEPT after the two-pass walk was deleted, because a goal can still be
         # probed twice in one cycle: when nothing plans AND the worth gate
         # suppressed something, `_arbitrate` re-runs the walk without the gate,
-        # and a MEMO-BYPASSING candidate (guard or `memo_exempt`) is not skipped
-        # the second time, so it plans again and appends a second record. Only
-        # memo-marked candidates are skipped on the re-run.
+        # and every candidate is asked again on the re-run, appending a second
+        # record.
         #
         # dict insertion order keeps the FIRST-SEEN position of each goal while
         # the VALUE is the last attempt — `select`'s `objective_unplannable`

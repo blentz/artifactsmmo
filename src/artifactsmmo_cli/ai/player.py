@@ -1101,8 +1101,7 @@ class GamePlayer:
         seed_documented_blockers(self._blockers, game_data, state)
         self._actions_since_full_refresh = BANK_REFRESH_FORCE_SENTINEL
 
-    def plan_once(self, doomed: list[str] | None = None,
-                  committed: str | None = None) -> PlanReport:
+    def plan_once(self, committed: str | None = None) -> PlanReport:
         """Sense the world via the API, then compute one planning cycle —
         the `plan <char>` CLI command. Acquisition only; the planning logic
         lives in `plan_from_state` (shared with the offline scenario
@@ -1110,10 +1109,9 @@ class GamePlayer:
         client = ClientManager().client
         self._initialize(client)
         self._maybe_periodic_refresh(client)
-        return self.plan_from_state(doomed=doomed, committed=committed)
+        return self.plan_from_state(committed=committed)
 
-    def plan_from_state(self, doomed: list[str] | None = None,
-                         committed: str | None = None) -> PlanReport:
+    def plan_from_state(self, committed: str | None = None) -> PlanReport:
         """Compute ONE planning cycle WITHOUT executing — the `plan` CLI command.
         Mirrors run()'s per-cycle decide+select (same refresh, gear-latch, combat
         target, servable filter, crafting-target keep-set) so the printed plan is
@@ -1138,7 +1136,6 @@ class GamePlayer:
         combat_monster = self._winnable_farm_target()
         self._regear_edge.update(prev, state, self._last_outcome, game_data)
         self._prev_level = state.level
-        self._arbiter.set_cycle(self._cycle_counter)
         ctx = self._selection_context(combat_monster)
         self._last_ctx = ctx
         # `history` and the search cache are wired here — NOT just in
@@ -1158,14 +1155,9 @@ class GamePlayer:
         crafting_target = self._record_decision_targets(decision)
         self.state = state = replace(state, crafting_target=crafting_target)
         actions = self._build_actions()
-        # Diagnostic injection (the `plan --doom/--committed` flags): seed the
-        # in-memory arbiter state the live bot accumulates but the fresh CLI lacks —
-        # a doomed-memo entry or a sticky commitment — so a live divergence (e.g. a
-        # combat goal stuck doomed -> skill-grind detour) reproduces offline. Seeded
-        # on the SAME `state` select() sees, so the plannability signature matches.
-        sim_doomed = tuple(doomed or ())
-        for goal_repr in sim_doomed:
-            self._arbiter._memo.mark(goal_repr, state, self._cycle_counter)
+        # Diagnostic injection (the `plan --committed` flag): seed the sticky
+        # commitment the live bot accumulates but the fresh CLI lacks, so a live
+        # committed-goal hold reproduces offline.
         if committed is not None:
             self._arbiter._committed_repr = committed
         selected_goal, plan, goals_tried = self._arbiter.select(
@@ -1197,7 +1189,6 @@ class GamePlayer:
         return PlanReport(decision=decision, selected_goal=selected_goal,
                           plan=list(plan), goals_tried=goals_tried,
                           drop_inputs=drop_inputs,
-                          simulated_doomed=sim_doomed,
                           simulated_committed=committed)
 
     def run(self) -> None:
@@ -1249,7 +1240,6 @@ class GamePlayer:
                 # learning DB — zero API calls, so this costs nothing from the
                 # per-IP rate budget that actually binds this bot.
                 self._update_coordination(state, game_data)
-                self._arbiter.set_cycle(self._cycle_counter)
                 # The cooldown is not yet slept out at this point — it is the
                 # window the search below runs inside.
                 self._arbiter.set_planning_deadline(self._planning_deadline())
@@ -1717,8 +1707,7 @@ class GamePlayer:
                 # FOUR goals. So 485 now ALSO falls through to the categorical
                 # poisoning below (see ai/action_rejection.py), which removes
                 # the impossible step from the search instead of the cycle from
-                # the log. The two mechanisms cooperate: poisoning is what makes
-                # the resulting dead end visible to the goal-level doomed memo.
+                # the log.
                 print(f"[{self._now()}] Item already equipped (HTTP 485) — refreshing state")
                 outcome = "error:already_equipped"
             else:
@@ -3415,9 +3404,8 @@ class GamePlayer:
         that — and it costs NOTHING to read, because `goals_tried` is already
         the record of a search the arbiter performed anyway. SUPPLY_BANK sits in
         `COLLECT_REWARD_ORDER` above the objective step, so it is attempted
-        before the step goal on every cycle it fires; and being `memo_exempt` it
-        is never skipped by the doomed memo, so a record here is always a real
-        search.
+        before the step goal on every cycle it fires, and every candidate is
+        asked every cycle, so a record here is always a real search.
 
         A cycle where the goal was NOT attempted (a guard preempted selection,
         the cached plan was reused, or the demand is BOTH below

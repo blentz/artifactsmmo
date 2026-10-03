@@ -213,14 +213,14 @@ fast-fail — was RETIRED in the LevelSkill epic P2: the planner now admits a
 and must NOT be pruned. Its Lean set, Oracle arm, diff test, and mutation group
 were deleted.)
 
-- `DoomedMemo.lean` — the exponential-backoff no-plan memo
-  (`src/artifactsmmo_cli/ai/doomed_memo.py` + `plannability_signature.py`). Proves
+- `DoomedMemo.lean` — the exponential-backoff memo, now serving only the
+  player's rejected-action TTL (`src/artifactsmmo_cli/ai/doomed_memo.py` +
+  `plannability_signature.py`; the arbiter's goal memo was retired by Phase 3-1). Proves
   `ttl_base`, `ttl_le_max` (cap), `window_doubles` (geometric ×2 per failure),
   `ttl_monotone`, `isDoomed_sig_change` (new plannability ⇒ re-probe),
   `isDoomed_window`, `isDoomed_expires` (LIVENESS: window elapses ⇒ never a
-  permanent skip), `escalation_grows_window`. Complements
-  `TieredSelection.memo_skip_sound` (which assumed an abstract `skip`; this proves
-  the concrete backoff arithmetic that DECIDES `skip`).
+  permanent skip), `escalation_grows_window`. (`TieredSelection`, which modelled the
+  arbiter's two-pass walk over an abstract `skip`, was retired with the goal memo.)
 Kernel-checked (axioms = {propext, Quot.sound}), rostered in `Manifest.lean`,
 statement-pinned in `Contracts.lean`. LANDED since: `formal/diff/test_doomed_memo_diff.py`,
 `mutate.py`'s `DOOMED_MEMO_MUTATIONS` run-group, `Audit.lean` `#print axioms` for all

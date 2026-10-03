@@ -821,6 +821,9 @@ Infeasibility is the walk's answer, re-asked from live state every cycle (it cos
 
 - **3-0 Dead trunk (built 2026-10-03).** `band_combat_target` enforced `FightAction`'s level ceiling but not its `xp_per_kill > 0` floor, so a winnable band of greys was a target the executor refuses. Fixed: the band admits only XP-paying monsters. Live probe after the fix: Lor, HAL and R2D2 get no farm target (every winnable monster near them is grey: the gear wall), so `GrindCharacterXP` is no longer emitted to fail; C3P0 falls through to the windowed picker's spider (L20, 25 XP, applicable).
 
+- **3-0 pushed @66d7f351.**
+- **3-1 Arbiter (built 2026-10-03).** `StrategyArbiter._plans` no longer consults `is_plannable`; the arbiter's DoomedMemo (`_record_attempt`, `memo_bypass`, `set_cycle`), `Goal.memo_exempt`, the `plan --doom` seed and the `doomed_*` / `not_plannable` mechanisms are deleted. Every candidate is asked every cycle. `TieredSelection.lean` (the two-pass walk over an abstract memo `skip`) and its Manifest/Contracts/Audit pins are retired with the `_record_attempt` mutation group. The `DoomedMemo` class stays for `player._rejected_actions` (Phase 6). `is_plannable` stays only for `_step_servable` until 3-2. Live `plan HAL` after the change selects `GatherMaterials(hard_leather×5)` → Withdraw ×1, Fight(cow), NpcBuy ×4: the goal the currency gate refused.
+
 **Exit:** `doomed_skip`, `doomed_mark`, `not_plannable` and `servable_promotion` are 0 (the mechanisms are gone); each blocked gear target shows its named blocker in the plan pane.
 
 ## Risks and open questions

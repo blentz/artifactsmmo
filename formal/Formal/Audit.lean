@@ -807,10 +807,6 @@ open Formal.PriorityBand
 #print axioms Formal.PlannerDepthBound.plan_length_le_max_depth
 #print axioms Formal.PlannerDepthBound.reachable_not_satisfying_when_lb_exceeds_depth
 #print axioms Formal.PlannerDepthBound.copper_boots_unreachable_under_upgrade_depth
-#print axioms Formal.TieredSelection.cheap_winner_is_first_cheaply_plannable
-#print axioms Formal.TieredSelection.escalation_iff_no_cheap
-#print axioms Formal.TieredSelection.wait_only_when_no_full
-#print axioms Formal.TieredSelection.memo_skip_sound
 #print axioms Formal.RegearEdge.set_on_levelup
 #print axioms Formal.RegearEdge.set_on_loss
 #print axioms Formal.RegearEdge.clear_iff_no_upgrade

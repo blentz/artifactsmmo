@@ -3497,22 +3497,6 @@ DECISION_MUTATIONS = [
 ]
 
 
-# Killed by tests/test_ai/test_strategy_driver_tiered.py (the doomed-memo marking
-# policy: ANY no-plan marks, timeout included — the feather_coat re-explosion fix
-# and its 2026-08-13 recurrence, the 955-cycle staff search).
-STRATEGY_DRIVER_MUTATIONS = [
-    # THE Task-11 defect, reinstated: exempt timeouts from marking. It was
-    # written as `mark_on_timeout=False` on a cheap pass whose escalation was
-    # unreachable, so it meant "never mark" and the same exploding search re-ran
-    # every cycle for 31 hours. Killed by test_timeout_is_memoized_too.
-    ("strategy_driver: restore the timeout carve-out (a timed-out goal is never marked)",
-     "        else:\n            self._memo.mark(r, state, self._cycle)",
-     "        elif not timed_out:\n            self._memo.mark(r, state, self._cycle)"),
-    ("strategy_driver: clear requires BOTH guard and plan (drops plan-clears)",
-     "        if r in guard_reprs or plan:",
-     "        if r in guard_reprs and plan:"),
-]
-
 # Killed by tests/test_ai/test_decisions_obtain_item.py
 # (test_a_skill_gated_root_raises_the_skill_by_one): the Task-5/PF-2 fix.
 # `CanICraftCurrentTier`'s "no" branch used to return GatherMaterials for the
@@ -8786,8 +8770,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_doomed_memo_diff.py", survivors)
     run_group(DECISION_SRC, DECISION_MUTATIONS,
               "tests/test_ai/test_decision.py", survivors)
-    run_group(STRATEGY_DRIVER_SRC, STRATEGY_DRIVER_MUTATIONS,
-              "tests/test_ai/test_strategy_driver_tiered.py", survivors)
     run_group(OBTAIN_ITEM_DECISION_SRC, OBTAIN_ITEM_DECISION_MUTATIONS,
               "tests/test_ai/test_decisions_obtain_item.py", survivors)
     run_group(ROOT_DECISION_SRC, ROOT_DECISION_MUTATIONS,

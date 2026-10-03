@@ -28,9 +28,9 @@ def _stats(**kw: object) -> PlanStats:
 
 def test_the_log_drains_one_cycle_at_a_time() -> None:
     log = DecisionEventLog()
-    log.note(Mechanism.DOOMED_SKIP, "g")
+    log.note(Mechanism.WAIT_FALLBACK, "g")
     log.note(Mechanism.SEARCH, "h", "d")
-    assert log.drain() == [(Mechanism.DOOMED_SKIP, "g", ""), (Mechanism.SEARCH, "h", "d")]
+    assert log.drain() == [(Mechanism.WAIT_FALLBACK, "g", ""), (Mechanism.SEARCH, "h", "d")]
     assert log.drain() == []
 
 
@@ -81,10 +81,16 @@ class TestArbiter:
         goal.__repr__ = lambda self: "G"  # type: ignore[method-assign,assignment]
         return goal
 
-    def test_a_goal_proven_unplannable_is_noted_without_a_search(self) -> None:
+    def test_the_arbiter_does_not_consult_is_plannable(self) -> None:
+        """Phase 3-1: the pre-plan gate is gone. A goal whose `is_plannable`
+        says no is still asked (here it reaches the search), so a walk-served
+        goal's answer is always the walk's own, with its named reason."""
         arbiter = self._arbiter()
-        arbiter._plans(self._goal(False), make_state(), GameData(), [], MagicMock())
-        assert arbiter.events.drain() == [(Mechanism.NOT_PLANNABLE, "G", "")]
+        goal = self._goal(False)
+        arbiter._plans(goal, make_state(), GameData(), [], MagicMock())
+        goal.is_plannable.assert_not_called()
+        [(mechanism, subject, _detail)] = arbiter.events.drain()
+        assert (mechanism, subject) == (Mechanism.SEARCH, "G")
 
     def test_every_a_star_search_is_noted_with_its_created_nodes(self) -> None:
         arbiter = self._arbiter()
@@ -125,15 +131,6 @@ class TestArbiter:
         [decline, (search, _subject, _detail)] = arbiter.events.drain()
         assert decline == (Mechanism.DECOMPOSE_DECLINE, "G", "upgrade:ge_venue:iron_boots")
         assert search is Mechanism.SEARCH
-
-    def test_a_mark_is_noted_and_a_clear_only_when_something_was_marked(self) -> None:
-        arbiter = self._arbiter()
-        goal, state = self._goal(True), make_state()
-        arbiter._record_attempt(goal, [MagicMock()], False, state, set())  # nothing to clear
-        arbiter._record_attempt(goal, [], True, state, set())
-        arbiter._record_attempt(goal, [MagicMock()], False, state, set())
-        assert arbiter.events.drain() == [
-            (Mechanism.DOOMED_MARK, "G", "timed_out"), (Mechanism.DOOMED_CLEAR, "G", "")]
 
 
 class TestPlayer:
