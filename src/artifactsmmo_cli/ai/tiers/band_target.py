@@ -11,8 +11,9 @@ characters were grinding 4 to 10 levels below themselves (2026-08-23).
 No explicit level floor appears here, and none is wanted. The band IS the floor:
 a tier's monsters sit between that rung and the next, so a target far below the
 character cannot be drawn in the first place. A character whose LEVEL has
-outrun its TIER — Robby at 30 with T20 uncleared — correctly keeps fighting the
-tier it is stuck on; its constraint is gear, not target selection.
+outrun its TIER — Robby at 30 with T20 uncleared — keeps fighting the tier it
+is stuck on while that tier still pays XP; once every monster in it is grey the
+answer is None, because its constraint is gear, not target selection.
 
 A CEILING is also required, and it is not this module's to invent: it is
 `FightAction`'s own `state.level + FIGHT_LEVEL_GAP_CEILING` structural gate
@@ -32,9 +33,17 @@ So the two gates MUST agree: a monster this function offers has to be one
 `FightAction` will actually accept, which means importing the executor's own
 constant rather than re-deriving or copying its value.
 
-None is returned in three cases: the ladder is fully cleared, the tier's band
-holds no monster winnable by stats, or every stat-winnable monster in the band
-sits above the executor's level ceiling — a gear wall either way. A consumer
+The FLOOR is the same agreement from below. `FightAction` refuses an XP fight
+against a monster that pays no XP (`xp_per_kill > 0`), so a band whose
+winnable monsters are all grey is as unfightable as one above the ceiling.
+Live 2026-10-03: four of five characters (L29-31 against T15/T20) were handed
+pig, spider or skeleton at 0 XP, and `GrindCharacterXP` failed at one node on
+561 of 561 searches in three hours.
+
+None is returned in four cases: the ladder is fully cleared, the tier's band
+holds no monster winnable by stats, every stat-winnable monster in the band
+sits above the executor's level ceiling, or every one pays no XP — a gear wall
+in every case but the first. A consumer
 needing to distinguish them (e.g. to report different user messages) must add
 the distinction rather than guessing from None. Do not change the signature
 speculatively.
@@ -60,11 +69,13 @@ def band_combat_target(state: WorldState, game_data: GameData,
     depend on incidental damage. A character resting to full is always an
     option, so "is this tier's band winnable" must not flip with transient HP.
 
-    A candidate must clear TWO independent gates: `is_winnable` (a stat
-    prediction) AND `FightAction`'s own `state.level + FIGHT_LEVEL_GAP_CEILING`
-    structural ceiling (the executor's suicide guard, blind to gear strength).
-    A monster that passes the first but fails the second is stat-winnable and
-    still never gets fought — see the module docstring.
+    A candidate must clear `is_winnable` (a stat prediction) AND both of
+    `FightAction`'s structural level gates: the `state.level +
+    FIGHT_LEVEL_GAP_CEILING` ceiling (the executor's suicide guard, blind to
+    gear strength) and the `xp_per_kill > 0` floor (an XP fight is refused
+    against a grey). A monster that passes the first but fails either of the
+    others is stat-winnable and still never gets fought — see the module
+    docstring.
     """
     tier = next_uncleared_tier(state, game_data, history)
     if tier is None:
@@ -73,6 +84,7 @@ def band_combat_target(state: WorldState, game_data: GameData,
     level_ceiling = state.level + FIGHT_LEVEL_GAP_CEILING
     winnable = [code for code in normal_band(game_data, tier)
                 if game_data.monster_levels[code] <= level_ceiling
+                and game_data.xp_per_kill(code, state.level) > 0
                 and is_winnable(rested, game_data, code, history)]
     if not winnable:
         return None

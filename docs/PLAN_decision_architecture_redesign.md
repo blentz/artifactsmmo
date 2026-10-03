@@ -780,6 +780,49 @@ The route-driven producer (`craft_plan_gen`, the "fast path") produced ZERO plan
 - **Grey-farm directive in the walk (2026-10-02, user: enforce it).** The 2026-07-06 directive ("grind the skill and craft the better item instead of farming greys for a soon-obsolete one") was applied only by the search's admission (`GatherMaterialsGoal.relevant_actions` → `select_drop_fight(allow_grey=skill_grind or grey_farm_allowed(item))`). The walk ran under LEGACY's `allow_grey=True`, so since 2c-2b an ordinary `GatherMaterials(wool)` at L21 fought the grey sheep. Built: `DECOMPOSE_POLICY` refuses grey; `ObtainModel.walk_graph`/`walk` take a per-item `grey_ok`, under which that item's routes use the policy with `allow_grey=True`; `_walk_plan`'s `grey_ok` is the search's old rule (a skill grind, a drop `grey_farm_allowed` licenses, and an upgrade's own target via `grey_exempt`); the DROP leg's `select_drop_fight` gets the same verdict (a suppressed grey loses to a dropper that pays). Restart + witness needed: watch grey `drop_farm` fights on non-grind goals (should fall), declined obtain goals, and the grind (exempt, unchanged).
   - **Witness (restart 13:45Z 2026-10-03, with 2e-2; 3 h against the 3 h before).** Cycles/h 527 → 521; skill XP/h 8,855 → 8,481 (ReachSkill 8,795 → 8,413); character XP/h 0/0 (the whole fleet grinds skills); timeouts 0/0; errors 3 → 9. **The grey rule did not fire live:** no fight in either window served a non-grind goal, so the change is unexercised by the fleet's current roots (offline it moves one craft-census cell, cooked_chicken@12/1). The 6 new errors are R2D2 losing 6 of 12 `Fight(skeleton)` in a gearcrafting grind it rotated into (grinds are exempt; skeleton has been its dropper since 2026-08-22): a winnability-prediction residual, not grey selection. RestoreHP searches 20 → 33, max nodes 9,470 → 2,068. `bag_overflow` declines 22 → 29 (Lor 6 → 11).
 
+## Phase 3 — goal choice reads the walk's answer (design, 2026-10-03)
+
+### Measured (3 h to 2026-10-03 16:50Z, build 75e01ee1; 1,580 cycles)
+
+| mechanism | events | per cycle |
+|---|---|---|
+| `doomed_skip` | 3,386 | 2.14 |
+| `servable_promotion` | 640 | 0.41 (every replan) |
+| `aged_pick` | 638 | 0.40 |
+| `doomed_mark` | 95 | — |
+| `not_plannable` | 61 | — |
+| `worth_gate_bypass` | 0 | 0 |
+
+- **Every doom is a walk-served goal.** `doomed_mark` subjects: GatherMaterials 56, ReachSkill 29, UpgradeEquipment 5. `doomed_skip`: GatherMaterials 2,337, ReachSkill 707, UpgradeEquipment 299. No A*-served goal is ever doomed.
+- **The promotion churn is the same few roots every cycle.** The root walk heads with a gear target whose step cannot be served (`backpack`, `lost_world_map`, `lich_race_trophy`, `lich_race_medal`, `astralyte_crystal`, `jasper_crystal`); `_servable_promotion` demotes it to `ReachCharLevel` (Lor, R2D2, C3P0, Robby) or to `lich_race_medal` (HAL), 640 of 640 replans.
+- **`is_plannable` hides the walk's named reason.** It runs first in `StrategyArbiter._plans` (the comment calling it "LIVE-DEAD" is false: `GatherMaterialsGoal.is_plannable` is the currency-leaf check, `analyze_currency_leaves(...).blocked`). Probe on live Lor and HAL, the same goals through `decompose`:
+
+  | goal | `is_plannable` | `decompose` (3–22 ms) |
+  |---|---|---|
+  | backpack ×1, lost_world_map ×1 | False | `infeasible:no_route` (event vendor: `VENDOR_PERMANENT`/`VENDOR_TRADEABLE` unmet) |
+  | astralyte_crystal ×1, jasper_crystal ×1 | False | `infeasible:no_route` (`VENDOR_LOCATED` unmet) |
+  | lich_race_trophy ×1, lich_race_medal ×5 | False | `bag_overflow:qty=1021/158` / `521/158` |
+  | skull_staff ×1 | True | `bag_overflow:qty=186/158` |
+  | **hard_leather ×5 (HAL)** | **False** | **plan: Withdraw ×1, Fight(cow), NpcBuy ×4** |
+
+  The last row is a live defect of the two-model kind (F1): the currency analysis counts cowhide as an unaffordable currency leaf, the walk farms it, and the arbiter dooms a goal it could serve.
+- **A bare `ObtainModel.feasible` is not the walk's answer.** It passes no `grey_ok`, so it calls hard_leather ×2 infeasible (cow is grey for HAL) while `decompose` applies `grey_farm_allowed`. Phase 3 reads `decompose`'s own answer, never a second call shape.
+- **The char-level trunk never fights (separate defect, found here).** `GrindCharacterXP` was searched 561 times in the window and all 561 failed at 1 node: for Lor, `Fight(pig)` and `OptimizeLoadout(pig)` are both inapplicable. It is `memo_exempt`, so it re-fails every cycle, unnamed.
+
+### Design
+
+Infeasibility is the walk's answer, re-asked from live state every cycle (it costs milliseconds), so nothing is remembered and nothing ages. A blocked goal is eligible again exactly when the state that blocked it changes.
+
+- **3-1 Arbiter.** Delete the `is_plannable` gate (all four overrides). A walk-served goal's answer is `decompose`'s plan or its named decline; it bypasses DoomedMemo entirely (no skip, no mark). Every decline reaches `decision_events`. DoomedMemo then marks nothing live and is deleted, with `memo_exempt` / `memo_bypass` and the `--doom` CLI seed.
+- **3-2 Root walk.** `WhichSlotIsFurthestBehind` asks each slot target's step the same question once per cycle (the `dead_target_slots` pattern) and demotes a target whose step declines, carrying the decline as the row's blocker. The head is then the first target the walk can serve. `_step_servable` and `_servable_promotion` are deleted; `promoted_from` goes with them.
+- **3-3 Telemetry.** `objective_unplannable` carries the decline reason instead of a bare `plan_len=0`.
+
+**User decisions (2026-10-03):** delete DoomedMemo entirely (A* handoffs re-search under their node budget); fix the dead trunk BEFORE 3-1; leave the worth gate for Phase 4 (it ranks by value, it is not a feasibility test).
+
+- **3-0 Dead trunk (built 2026-10-03).** `band_combat_target` enforced `FightAction`'s level ceiling but not its `xp_per_kill > 0` floor, so a winnable band of greys was a target the executor refuses. Fixed: the band admits only XP-paying monsters. Live probe after the fix: Lor, HAL and R2D2 get no farm target (every winnable monster near them is grey: the gear wall), so `GrindCharacterXP` is no longer emitted to fail; C3P0 falls through to the windowed picker's spider (L20, 25 XP, applicable).
+
+**Exit:** `doomed_skip`, `doomed_mark`, `not_plannable` and `servable_promotion` are 0 (the mechanisms are gone); each blocked gear target shows its named blocker in the plan pane.
+
 ## Risks and open questions
 
 - **Formal surface:** many Lean models and diff harnesses pin components slated

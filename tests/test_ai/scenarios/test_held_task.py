@@ -253,8 +253,8 @@ def test_the_task_triple_flips_the_regear_edge(gd: GameData) -> None:
     exists, the cascade found nothing else worth fighting, and a combat deficit
     exists. The first is identical across the triple (asserted here so a
     failure cannot be blamed on it) and the second is supplied explicitly —
-    see `test_no_offline_scenario_can_starve_the_winnable_cascade` for why it
-    has to be. So the latch's answer moves with the deficit, i.e. with the
+    see `test_the_triple_starves_the_winnable_cascade`: the measured cascade
+    is None for all three cells. So the latch's answer moves with the deficit, i.e. with the
     task, which is exactly the claim cell 2 makes.
 
     THE OPEN CELL FLIPPED ON 2026-08-25, and it is the point of the one-level
@@ -298,31 +298,28 @@ def test_the_task_triple_flips_the_regear_edge(gd: GameData) -> None:
         assert _arm(name, winnable_alternative=True) is False
 
 
-def test_the_triple_cannot_starve_the_winnable_cascade(gd: GameData) -> None:
-    """Why the test above passes `winnable_alternative` instead of measuring it.
+def test_the_triple_starves_the_winnable_cascade(gd: GameData) -> None:
+    """The triple's cascade finds nothing to fight: the measured fact behind
+    the sibling test's `winnable_alternative=False` rows.
 
-    `RegearEdge`'s standing arm needs the cascade to find NOTHING worth fighting,
-    and for THESE THREE cells it always finds something: `_path_aligned_monster`
-    returns a winnable low-level slime for each of them, so `winnable_alternative`
-    is True and the standing arm cannot fire from the triple alone.
-
-    THE SCOPE OF THAT CLAIM WAS WRONG AND IS NOW MEASURED. This test used to be
-    called `test_no_offline_scenario_can_starve_the_winnable_cascade` and its
-    docstring generalised to "every derived-stats character measured" — but it
-    only ever asserted over `TRIPLE`, three of forty-two. Swept over all of them
-    (2026-08-25), **11 of 42 scenarios DO starve the cascade**: `l1_fresh`,
-    `l3_low_hp`, `l8_overstocked`, `l10_gearcrafting_gap_combat_blocked`,
-    `l15_midband`, `l20_band_entry`, `l30_band_entry`, `l40_band_entry`,
-    `l48_capstone_approach`, `l48_band_adequate`, `l48_raid_active`. None of them
-    holds a task, which is the real and much narrower reason the standing arm was
-    unreachable — and giving one a task is all it took to reach it. That witness
-    is `test_a_starved_cascade_witnesses_the_standing_arm_end_to_end` below."""
+    REVERSED 2026-10-03. This test was `..._cannot_starve_...` and asserted a
+    non-None farm target for all three cells: `_path_aligned_monster` returned
+    a winnable low-level slime. At L32 every slime pays 0 XP, and `FightAction`
+    refuses an XP fight that pays nothing, so that target was one the executor
+    never fights (live, the same shape failed `GrindCharacterXP` 561 of 561
+    times in three hours). `band_combat_target` now enforces the executor's
+    XP floor, so the cascade returns None for all three cells: an honest gear
+    wall, and the input the standing arm reads."""
     for name in TRIPLE:
+        state = _state(name, gd)
+        assert all(gd.xp_per_kill(slime, state.level) == 0
+                   for slime in ("green_slime", "blue_slime", "red_slime", "yellow_slime"))
         player = GamePlayer(character=name, history=None)
-        player.seed_offline(_state(name, gd), gd)
-        assert player._winnable_farm_target() is not None
+        player.seed_offline(state, gd)
+        assert player._winnable_farm_target() is None
         player.plan_from_state()
         assert player._last_ctx is not None
+        assert player._last_ctx.combat_monster is None
         assert player._last_ctx.regear_level_up is False
 
 
@@ -423,10 +420,12 @@ def test_the_open_task_is_cancelled_end_to_end_with_a_coin(gd: GameData) -> None
 #
 # It does not have to. The arm needs three things at once: a craftable upgrade,
 # a held monsters task whose fight is lost, and NO winnable alternative. Eleven
-# of the forty-two scenarios starve the cascade (see
-# `test_the_triple_cannot_starve_the_winnable_cascade`); none of them holds a
-# task. Giving one a task closes the last conjunct and the arm becomes reachable
-# from `plan_from_state` — the same entry point production uses.
+# of the forty-two scenarios starved the cascade when this was written
+# (2026-08-25), none of them holding a task; since the cascade's XP floor
+# (2026-10-03) the held-task triple starves it too (see
+# `test_the_triple_starves_the_winnable_cascade`). Giving a starved cell a task
+# closes the last conjunct and the arm becomes reachable from `plan_from_state`
+# — the same entry point production uses.
 
 STARVED = "l48_capstone_approach"
 STARVED_GEAR = "corrupted_ogre"

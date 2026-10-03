@@ -117,6 +117,23 @@ def test_no_winnable_monster_in_the_band_yields_none(monkeypatch):
     assert band_combat_target(make_state(level=30), _gd(), None) is None
 
 
+def test_a_band_that_pays_no_xp_yields_none(monkeypatch):
+    """`FightAction` refuses a monster that pays no XP (its `xp_per_kill > 0`
+    floor), so a winnable band of greys is no target. Live 2026-10-03: Lor at
+    L31 against T20 would get spider (L20, 0 XP) and `GrindCharacterXP`
+    failed at one node on 561 of 561 searches. At L30 spider still pays, so
+    the floor is the only thing that changes the answer."""
+    def fake_is_winnable(s: object, g: object, c: str, h: object) -> bool:
+        return c != "ogre"
+    monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
+    monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
+    gd = _gd()
+    assert gd.xp_per_kill("spider", 30) > 0
+    assert gd.xp_per_kill("spider", 31) == 0
+    assert band_combat_target(make_state(level=30), gd, None) == "spider"
+    assert band_combat_target(make_state(level=31), gd, None) is None
+
+
 def test_a_finished_ladder_yields_none(monkeypatch):
     """Every rung cleared: there is no next uncleared tier to draw from."""
     def fake_is_winnable(s: object, g: object, c: str, h: object) -> bool:
