@@ -1158,3 +1158,32 @@ def test_the_idle_fraction_boundary_is_inclusive() -> None:
                    idle_zeros=at, idle_samples=ROLE_IDLE_WINDOW).release == "logger"
     assert _decide("logger", ROLE_MIN_HOLD_CYCLES, leases, demand,
                    idle_zeros=at - 1, idle_samples=ROLE_IDLE_WINDOW).keep == "logger"
+
+
+def test_a_role_that_serves_an_asymmetric_ask_wins_the_claim() -> None:
+    """An asymmetric ask is one no sibling of a different role could fill
+    (`CoordinationStore.sibling_demand_asymmetric`). `_pick_supply_target`
+    already ranks such an ask above every symmetric one inside the held role,
+    and the claim must agree or the ask is never reached: live in the
+    supply-link scenario (2026-10-03), a jewelrycrafting-10 sibling claimed
+    `logger` for a symmetric `ash_wood x1` over `jeweler` for the asymmetric
+    `life_amulet x1`, because affinity broke the demand tie."""
+    demand = {"logger": 1, "jeweler": 1}
+    skills = {"woodcutting": 20, "jewelrycrafting": 10}
+    assert _decide(None, 0, {}, demand, skill_levels=skills).claim == "logger"
+    assert _decide(None, 0, {}, demand, skill_levels=skills,
+                   asymmetric_roles=frozenset({"jeweler"})).claim == "jeweler"
+
+
+def test_a_holder_without_an_asymmetric_ask_releases_for_a_rival_that_has_one() -> None:
+    """The held side of the same rule: past the minimum hold, a role that serves
+    no asymmetric ask is released when a claimable rival serves one, whatever
+    the demand margin, so the next claim can take it."""
+    demand = {"logger": 5, "jeweler": 1}
+    held = _held(logger=(_ME,))
+    assert _decide("logger", ROLE_MIN_HOLD_CYCLES, held, demand).keep == "logger"
+    released = _decide("logger", ROLE_MIN_HOLD_CYCLES, held, demand,
+                       asymmetric_roles=frozenset({"jeweler"}))
+    assert released.release == "logger"
+    assert _decide("jeweler", ROLE_MIN_HOLD_CYCLES, _held(jeweler=(_ME,)), demand,
+                   asymmetric_roles=frozenset({"jeweler"})).keep == "jeweler"

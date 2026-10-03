@@ -3576,6 +3576,15 @@ class GamePlayer:
         # held `miner` against iron demand that gates at mining 10).
         by_role = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG,
                                  level_of_item, state.skills)
+        # The roles through which this character could serve an ASYMMETRIC ask:
+        # the same aggregate over those requests alone. They win the claim, as
+        # `_pick_supply_target` ranks those requests first (`decide_role`).
+        asymmetric_roles = frozenset(
+            name for name, qty in demand_by_role(
+                {code: qty for code, qty in item_demand.items()
+                 if code in self._asymmetric_demand},
+                skill_of_item, ROLE_CATALOG, level_of_item, state.skills).items()
+            if qty > 0)
         # Extend or break the zero-demand RUN before deciding, so the count
         # passed in includes this cycle's observation. `decide_role` releases on
         # idle only once the run reaches ROLE_IDLE_DWELL_CYCLES: a sibling that
@@ -3602,7 +3611,8 @@ class GamePlayer:
                                idle_samples=len(self._role_idle_window),
                                unservable_released=frozenset(self._role_unservable_released),
                                unservable_cycles=self._role_unservable_cycles,
-                               skill_levels=state.skills)
+                               skill_levels=state.skills,
+                               asymmetric_roles=asymmetric_roles)
         if decision.release is not None:
             self._coordination.release(decision.release)
             # `decide_role`'s docstring: the caller adds a role on EVERY

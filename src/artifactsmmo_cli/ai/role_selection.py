@@ -356,8 +356,15 @@ def _best_role(live_leases: Mapping[str, frozenset[str]],
                character: str, catalog: tuple[Role, ...],
                idle_released: frozenset[str],
                unservable_released: frozenset[str],
-               skill_levels: Mapping[str, int]) -> str | None:
+               skill_levels: Mapping[str, int],
+               asymmetric_roles: frozenset[str] = frozenset()) -> str | None:
     """The best role for this character to serve, or None if it may serve none.
+
+    A role in `asymmetric_roles` (it can serve an ask no sibling of a different
+    role could fill) outranks every role that cannot, whatever the score: the
+    same order `GamePlayer._pick_supply_target` ranks requests in, applied one
+    step earlier, so the claim cannot strand an ask the role pick would have
+    put first.
 
     Not "best FREE role" any more — no role is ever taken. Every catalog entry
     is a candidate on every cycle; what used to be a hard skip for a role a
@@ -400,14 +407,14 @@ def _best_role(live_leases: Mapping[str, frozenset[str]],
     # so the lowest real score is (0 + 1) x (1 + 0) = 1. A separate
     # `best is None` guard would be a second, unobservable test of the same
     # condition.
-    best_score = Fraction(-1)
+    best_key = (False, Fraction(-1))
     for role in catalog:
         if not _claimable(role.name, demand_by_role, idle_released, unservable_released):
             continue
         share = _effective_demand(demand_by_role, role.name, live_leases, character)
-        score = (share + 1) * (1 + affinity[role.name])
-        if score > best_score:
-            best, best_score = role.name, score
+        key = (role.name in asymmetric_roles, (share + 1) * (1 + affinity[role.name]))
+        if key > best_key:
+            best, best_key = role.name, key
     return best
 
 
@@ -420,7 +427,8 @@ def decide_role(current: str | None, held_cycles: int,
                 idle_samples: int = 0,
                 unservable_released: frozenset[str] = frozenset(),
                 unservable_cycles: int = 0,
-                skill_levels: Mapping[str, int] = NO_SKILL_LEVELS) -> RoleDecision:
+                skill_levels: Mapping[str, int] = NO_SKILL_LEVELS,
+                asymmetric_roles: frozenset[str] = frozenset()) -> RoleDecision:
     """Decide whether to keep, claim, or release a role this cycle.
 
     `idle_zeros` / `idle_samples`: of the last `ROLE_IDLE_WINDOW` observations
@@ -492,10 +500,16 @@ def decide_role(current: str | None, held_cycles: int,
     `skill_levels`: this character's skill -> level map (the caller's
     `state.skills`). Used ONLY to bias the claim (see `_best_role`); the
     hold/release rules stay demand-driven, because skill fit is a statement
-    about what this character could produce, not about what the fleet needs."""
+    about what this character could produce, not about what the fleet needs.
+    `asymmetric_roles`: the roles through which THIS character could serve an
+    asymmetric ask (one no sibling of a different role could fill; the caller
+    derives it with `demand_by_role` over the asymmetric requests alone). Such
+    a role wins the claim outright (`_best_role`), and past the minimum hold a
+    held role outside the set is released for a claimable rival inside it."""
     if current is None:
         best = _best_role(live_leases, demand_by_role, character, catalog,
-                          idle_released, unservable_released, skill_levels)
+                          idle_released, unservable_released, skill_levels,
+                          asymmetric_roles)
         if best is None:
             return RoleDecision(reason="no claimable role")
         return RoleDecision(claim=best,
@@ -524,6 +538,7 @@ def decide_role(current: str | None, held_cycles: int,
     # finds no eligible rival at all can neither clear the margin nor read as
     # somewhere to go.
     rival_best = Fraction(-1)
+    rival_asymmetric = False
     for role in catalog:
         if role.name == current:
             continue
@@ -532,6 +547,12 @@ def decide_role(current: str | None, held_cycles: int,
         rival_best = max(
             rival_best,
             _effective_demand(demand_by_role, role.name, live_leases, character))
+        rival_asymmetric = rival_asymmetric or role.name in asymmetric_roles
+    if rival_asymmetric and current not in asymmetric_roles:
+        # A claimable rival serves an ask only its role can fill, and the held
+        # role serves none: no demand margin outweighs that (`_best_role`).
+        return RoleDecision(release=current,
+                            reason="a rival role serves an asymmetric ask")
 
     # RAW, not split. "Is anyone asking for this role's output at all" is a
     # property of the board, not of how many characters serve it, and splitting
@@ -584,6 +605,11 @@ def decide_role(current: str | None, held_cycles: int,
     # counts only OTHER holders, so a role we hold alone reads at full strength
     # and one we share reads at our real share.
     own_share = _effective_demand(demand_by_role, current, live_leases, character)
+    if current in asymmetric_roles and not rival_asymmetric:
+        # The held role serves an asymmetric ask and no rival does: a symmetric
+        # rival cannot win it back by margin, or the next claim (`_best_role`)
+        # would re-take this role and the two would churn.
+        return RoleDecision(keep=current, reason="serves an asymmetric ask")
     if rival_best >= own_share * ROLE_SWITCH_MARGIN:
         return RoleDecision(release=current,
                             reason=f"outranked {rival_best} vs {own_share}")
