@@ -1271,44 +1271,9 @@ class _SpyPlanner:
         return []
 
 
-def test_plans_skips_unplannable_goal_without_searching():
-    """A goal whose is_plannable() is False is never handed to the planner: the
-    arbiter records a skipped attempt and returns [] without the 90s search.
-
-    Was UpgradeEquipment(copper_boots) (80 raw copper_ore through ONE recipe
-    leaf, so unplannable under the pre-Task-3 raw-UNIT mint term). Task 3
-    (planner-gather-batching) switched the mint term to `min_gather_steps`,
-    which counts DISTINCT raw leaves still unmet, not units — copper_boots now
-    has bound `min_gather_steps=1 + min_crafts=2 + equip=1 = 4 <= 32`, so it is
-    genuinely plannable (see `test_upgrade_reachability_gate.py
-    ::test_is_plannable_admits_from_scratch_copper_boots`, which drives the
-    real planner and confirms a real plan exists) and can no longer witness
-    this test's own claim.
-
-    The witness now is a WIDE-SHALLOW recipe: Ruling 13 of this branch's
-    `progress.md` names exactly this shape as the one where leaf-counting can
-    still correctly TIGHTEN admission — 35 distinct one-off raw materials, no
-    further recipe depth, so `min_gather_steps` counts all 35 (unlike a deep
-    single-leaf chain, there is no owned/bank credit to fold them away):
-    `min_gather_steps=35 + min_crafts=1 + equip=1 = 37 > 32`."""
-    gd = GameData()
-    gd._crafting_recipes = {"many_mats_item": {f"raw_{i}": 1 for i in range(35)}}
-    gd._item_stats = {"many_mats_item": ItemStats(code="many_mats_item", level=1,
-                                                  type_="boots", crafting_skill="gearcrafting",
-                                                  crafting_level=1)}
-    spy = _SpyPlanner()
-    arbiter = StrategyArbiter(spy, history=None)
-    goal = UpgradeEquipmentGoal(committed_target=("many_mats_item", "boots_slot"))
-    state = make_state(inventory={}, bank_items={})
-    assert goal.is_plannable(state, gd) is False
-    plan = arbiter._plans(goal, state, gd, [], _ctx())
-    assert plan == []
-    assert spy.calls == 0, "unplannable goal must NOT invoke the planner"
-    assert arbiter.goals_tried[-1]["plan_len"] == 0
-
-
-def test_plans_runs_planner_for_plannable_goal():
-    """A goal with default is_plannable() True is handed to the planner."""
+def test_plans_runs_planner_for_a_shape_the_walk_does_not_serve():
+    """A goal decomposition does not serve (no decline named) is handed to the
+    planner."""
     spy = _SpyPlanner()
     arbiter = StrategyArbiter(spy, history=None)
     goal = AcceptTaskGoal()
@@ -1922,9 +1887,9 @@ def test_objective_step_equippable_dead_ends_admit_the_root_cheaply():
     `None` is not an `ObtainItem`, so `_equippable_goal` returns the
     `UpgradeEquipment` root rather than routing anywhere.
 
-    `is_plannable` is still False here (min_gather_steps=37 > max_depth 32 —
-    unchanged; `is_plannable` itself was not touched by this task) — this
-    test instead pins that admitting the goal anyway is CHEAP: with zero
+    (Phase 3-2 deleted `is_plannable`, which read False here on
+    min_gather_steps=37 > max_depth 32.) This test pins that admitting the
+    goal anyway is CHEAP: with zero
     actions available for any `raw_i` the planner fails immediately, not
     after an explosive search. That is the same "bounded cost, not a
     soundness break" trade-off `_equippable_goal`'s docstring already
@@ -1940,9 +1905,6 @@ def test_objective_step_equippable_dead_ends_admit_the_root_cheaply():
     state = make_state(level=4, inventory={})
     goal = objective_step_goal(ObtainItem("many_mats_item", 1), state, gd, _ctx())
     assert isinstance(goal, UpgradeEquipmentGoal)
-    assert goal.is_plannable(state, gd) is False, (
-        "is_plannable itself is untouched by this task; it must still read "
-        "False here")
     # Since Phase 2e a committed upgrade is the walk's; with no action to map
     # its legs onto it declines at once, a named answer rather than a search.
     declined: list[str] = []
@@ -2281,11 +2243,8 @@ def test_deep_gear_routes_to_incremental_gather_not_empty_upgrade():
     GatherMaterials step (incremental progress), not the over-deep
     UpgradeEquipment.
 
-    Recipe: many_mats_coat needs 35 distinct raw materials, one each.
-    UpgradeEquipmentGoal.is_plannable returns False by depth-reject ALONE (no
-    extra guard needed: `min_gather_steps=35 + min_crafts=1 + equip=1 = 37 >
-    32`). The router must reach branch-3 (gather_step_target ->
-    GatherMaterialsGoal)."""
+    Recipe: many_mats_coat needs 35 distinct raw materials, one each. The router
+    must reach branch-3 (gather_step_target -> GatherMaterialsGoal)."""
     gd = _gd_many_mats_coat()
     state = make_state(
         skills={"gearcrafting": 5},
@@ -2295,13 +2254,6 @@ def test_deep_gear_routes_to_incremental_gather_not_empty_upgrade():
     )
     step = ObtainItem("raw_0", 1)
     root = ObtainItem("many_mats_coat", 1, slot="body_armor_slot")
-    # Confirm WHY it routes: depth-reject (≫ max_depth 32), not a fixture artifact.
-    upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment,
-                                   committed_target=("many_mats_coat", "body_armor_slot"))
-    assert upgrade.is_plannable(state, gd) is False, (
-        "is_plannable must be False (min_plan_length ≫ max_depth 32) "
-        "so the depth-reject — not any extra guard — drives the route"
-    )
     goal = objective_step_goal(step, state, gd, _ctx(), root=root)
     assert goal is not None
     assert type(goal).__name__ == "GatherMaterialsGoal"

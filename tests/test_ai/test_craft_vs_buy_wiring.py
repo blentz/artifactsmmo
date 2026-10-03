@@ -279,90 +279,7 @@ def _satchel_gd() -> GameData:
     return gd
 
 
-def test_is_plannable_false_when_currency_buy_leaf_unaffordable() -> None:
-    """C4 Task 5: affordability fast-fail.
-
-    satchel requires jasper_crystal (tasks_coin buy, 8 per crystal).
-    With 0 tasks_coin on hand the goal is unplannable — no plan can acquire
-    jasper_crystal because NpcBuy is inapplicable and GatherMaterials has no
-    action that earns tasks_coin. currency_afford_plannable_pure must drive
-    this decision.
-    """
-    gd = _satchel_gd()
-    goal = GatherMaterialsGoal(target_item="satchel", needed={"satchel": 1})
-    state = make_state(skills={"gearcrafting": 5}, inventory={}, bank_items={}, x=0, y=0)
-    assert goal.is_plannable(state, gd) is False
-
-
-def test_is_plannable_true_when_currency_buy_leaf_affordable_inventory() -> None:
-    """C4 Task 5: affordability fast-fail clears when tasks_coin in inventory >= price*qty."""
-    gd = _satchel_gd()
-    goal = GatherMaterialsGoal(target_item="satchel", needed={"satchel": 1})
-    # 8 tasks_coin in inventory exactly covers price(8) * qty(1)
-    state = make_state(skills={"gearcrafting": 5}, inventory={"tasks_coin": 8}, bank_items={}, x=0, y=0)
-    assert goal.is_plannable(state, gd) is True
-
-
-def test_is_plannable_true_when_currency_buy_leaf_affordable_bank() -> None:
-    """C4 Task 5: tasks_coin in bank also counts toward affordability."""
-    gd = _satchel_gd()
-    goal = GatherMaterialsGoal(target_item="satchel", needed={"satchel": 1})
-    state = make_state(skills={"gearcrafting": 5}, inventory={}, bank_items={"tasks_coin": 8}, x=0, y=0)
-    assert goal.is_plannable(state, gd) is True
-
-
-def test_is_plannable_true_for_under_skill_craft_goal() -> None:
-    """LevelSkill epic P2: the under-skill craft goal is NO LONGER fast-failed.
-
-    feather_coat: gearcrafting level 5, player skill = 2. The former skill-gate
-    fast-fail pruned this; it is retired now that the planner admits a LevelSkill
-    action and can sequence grind->craft. The currency arm does not fire (no
-    currency-buy leaves in this closure), so is_plannable is True.
-    """
-    gd = GameData()
-    gd._crafting_recipes = {}
-    gd._item_stats = {
-        "feather_coat": ItemStats(
-            code="feather_coat", level=5, type_="body_armor",
-            crafting_skill="gearcrafting", crafting_level=5,
-        ),
-    }
-    goal = GatherMaterialsGoal(target_item="feather_coat", needed={"feather_coat": 1})
-    state = make_state(skills={"gearcrafting": 2}, inventory={}, bank_items={}, x=0, y=0)
-    assert goal.is_plannable(state, gd) is True
-
-
-def test_is_plannable_not_pruned_when_leaf_is_craftable() -> None:
-    """_currency_leaves_affordable: craftable leaf is skipped (not a currency-buy leaf)."""
-    gd = GameData()
-    # widget needs cog x1; cog is CRAFTABLE (iron_ore x2) → not a currency-buy leaf
-    gd._crafting_recipes = {"widget": {"cog": 1}, "cog": {"iron_ore": 2}}
-    gd._item_stats = {
-        "widget": ItemStats(code="widget", level=1, type_="weapon",
-                            crafting_skill="weaponcrafting", crafting_level=1),
-    }
-    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
-    state = make_state(skills={"weaponcrafting": 5}, inventory={}, bank_items={}, x=0, y=0)
-    # No currency at all — but cog is craftable so no currency-buy pruning
-    assert goal.is_plannable(state, gd) is True
-
-
-def test_is_plannable_not_pruned_when_leaf_is_resource_drop() -> None:
-    """_currency_leaves_affordable: resource-drop leaf is skipped."""
-    gd = GameData()
-    # widget needs copper_ore x1; copper_ore IS a resource drop (copper_rock drops it)
-    gd._crafting_recipes = {"widget": {"copper_ore": 1}}
-    gd._item_stats = {
-        "widget": ItemStats(code="widget", level=1, type_="weapon",
-                            crafting_skill="weaponcrafting", crafting_level=1),
-    }
-    gd._resource_drops = {"copper_rock": "copper_ore"}
-    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
-    state = make_state(skills={"weaponcrafting": 5}, inventory={}, bank_items={}, x=0, y=0)
-    assert goal.is_plannable(state, gd) is True
-
-
-def test_is_plannable_not_pruned_when_leaf_is_secondary_resource_drop() -> None:
+def test_a_secondary_resource_drop_leaf_is_not_a_currency_block() -> None:
     """A leaf gatherable ONLY via a SECONDARY drop (`resource_drops_full` — a
     gem/algae dropped at a low rate, absent from the primary `resource_drops`
     map) is still gatherable, so it is NOT a currency-buy leaf even when a
@@ -393,44 +310,6 @@ def test_is_plannable_not_pruned_when_leaf_is_secondary_resource_drop() -> None:
                        bank_items={}, x=0, y=0)
     result = analyze_currency_leaves({"widget": 1}, state, gd)
     assert result.blocked is False, "gatherable-via-secondary-drop leaf must NOT block"
-    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
-    assert goal.is_plannable(state, gd) is True
-
-
-def test_is_plannable_not_pruned_when_leaf_is_monster_drop() -> None:
-    """_currency_leaves_affordable: monster-drop leaf is skipped."""
-    from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-    gd = GameData()
-    # widget needs feather x1; feather is a monster drop (chicken drops it)
-    gd._crafting_recipes = {"widget": {"feather": 1}}
-    gd._item_stats = {
-        "widget": ItemStats(code="widget", level=1, type_="weapon",
-                            crafting_skill="weaponcrafting", crafting_level=1),
-    }
-    gd._monster_level = {"chicken": 1}
-    gd._monster_hp = {"chicken": 10}
-    fill_monster_stat_defaults(gd)
-    gd._monster_drops = {"chicken": [("feather", 50, 1, 1)]}
-    gd._monster_locations = {"chicken": (1, 1)}
-    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
-    state = make_state(skills={"weaponcrafting": 5}, inventory={}, bank_items={}, x=0, y=0)
-    assert goal.is_plannable(state, gd) is True
-
-
-def test_is_plannable_not_pruned_when_leaf_has_no_npc_seller() -> None:
-    """_currency_leaves_affordable: leaf with no NPC sellers is skipped (no purchases)."""
-    gd = GameData()
-    # widget needs mystery_item x1; mystery_item: no recipe, no drop, no sellers
-    gd._crafting_recipes = {"widget": {"mystery_item": 1}}
-    gd._item_stats = {
-        "widget": ItemStats(code="widget", level=1, type_="weapon",
-                            crafting_skill="weaponcrafting", crafting_level=1),
-    }
-    gd._npc_stock = {}
-    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
-    state = make_state(skills={"weaponcrafting": 5}, inventory={}, bank_items={}, x=0, y=0)
-    # mystery_item has no sellers → no currency-buy leaf → no affordability pruning
-    assert goal.is_plannable(state, gd) is True
 
 
 def test_relevant_actions_emits_npcbuy_for_deep_closure_currency_buy_leaf() -> None:
@@ -666,18 +545,6 @@ def test_gold_leaf_deficit_sizing_respects_reserve_invariant() -> None:
     assert result.gold_deficit == 400, result.gold_deficit
     assert pocket + bank - 500 == _GOLD_VENDOR_RESERVE, (
         "post-buy total gold must land exactly at the reserve floor")
-
-
-def test_is_plannable_true_when_gold_leaf_affordable_from_pocket() -> None:
-    """The GAP-3 dead end, at the goal seam: with pocket gold covering the
-    gold-priced leaf AND its reserve floor (Task 3: 500 + 100), GatherMaterials
-    Goal.is_plannable must admit (the l30 tripwire's 0-node prune came exactly
-    from this gate)."""
-    gd = _gold_vendor_gd()
-    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
-    state = make_state(skills={"weaponcrafting": 5}, gold=500 + _GOLD_VENDOR_RESERVE,
-                       inventory={}, bank_items={}, x=0, y=0)
-    assert goal.is_plannable(state, gd) is True
 
 
 def test_relevant_actions_ferries_gold_deficit_via_withdraw() -> None:
@@ -1113,11 +980,6 @@ def test_funding_vendor_picked_by_fewest_cycles_not_raw_price() -> None:
         f"got {result.funding_target}"
     )
 
-    # Cross-check: GatherMaterialsGoal.is_plannable should also return False
-    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
-    assert goal.is_plannable(state, gd) is False, (
-        "Goal with only event-vendor currency-buy leaf must be unplannable"
-    )
 
 
 def test_relevant_actions_skips_event_vendor_for_closure_leaf() -> None:

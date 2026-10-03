@@ -268,7 +268,7 @@ class TestArbiterSelection:
         live_kwargs = spy.call_args.kwargs
 
         assert set(diagnostic_kwargs) == set(live_kwargs)
-        assert set(live_kwargs) == {"step_servable", "ctx", "history"}
+        assert set(live_kwargs) == {"step_decline", "ctx", "history"}
 
     def test_crafting_target_set_when_chosen_step_is_obtain_item(self):
         """Cycle must write state.crafting_target from the strategy's chosen_step."""

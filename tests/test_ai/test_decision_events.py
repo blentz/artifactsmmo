@@ -74,27 +74,15 @@ class TestArbiter:
         planner.last_stats = _stats(nodes_created=9, nodes_explored=3, timed_out=True)
         return StrategyArbiter(planner, history=None)
 
-    def _goal(self, plannable: bool) -> MagicMock:
+    def _goal(self) -> MagicMock:
         goal = MagicMock(spec=Goal)
-        goal.is_plannable.return_value = plannable
         goal.priority.return_value = 0.0
         goal.__repr__ = lambda self: "G"  # type: ignore[method-assign,assignment]
         return goal
 
-    def test_the_arbiter_does_not_consult_is_plannable(self) -> None:
-        """Phase 3-1: the pre-plan gate is gone. A goal whose `is_plannable`
-        says no is still asked (here it reaches the search), so a walk-served
-        goal's answer is always the walk's own, with its named reason."""
-        arbiter = self._arbiter()
-        goal = self._goal(False)
-        arbiter._plans(goal, make_state(), GameData(), [], MagicMock())
-        goal.is_plannable.assert_not_called()
-        [(mechanism, subject, _detail)] = arbiter.events.drain()
-        assert (mechanism, subject) == (Mechanism.SEARCH, "G")
-
     def test_every_a_star_search_is_noted_with_its_created_nodes(self) -> None:
         arbiter = self._arbiter()
-        arbiter._plans(self._goal(True), make_state(), GameData(), [], MagicMock())
+        arbiter._plans(self._goal(), make_state(), GameData(), [], MagicMock())
         [(mechanism, subject, detail)] = arbiter.events.drain()
         assert (mechanism, subject) == (Mechanism.SEARCH, "G")
         assert detail.startswith("nodes_created=9 explored=3") and "timed_out=True" in detail
@@ -103,7 +91,7 @@ class TestArbiter:
         arbiter = self._arbiter()
         with patch("artifactsmmo_cli.ai.strategy_driver.decompose",
                    return_value=[MagicMock(), MagicMock()]):
-            arbiter._plans(self._goal(True), make_state(), GameData(), [], MagicMock())
+            arbiter._plans(self._goal(), make_state(), GameData(), [], MagicMock())
         assert arbiter.events.drain() == [(Mechanism.FAST_PATH, "G", "plan_len=2")]
 
     def test_a_decline_is_noted_and_is_the_goals_answer(self) -> None:
@@ -115,7 +103,7 @@ class TestArbiter:
             declined.append("no_source:feather")
 
         with patch("artifactsmmo_cli.ai.strategy_driver.decompose", side_effect=declines):
-            plan = arbiter._plans(self._goal(True), make_state(), GameData(), [], MagicMock())
+            plan = arbiter._plans(self._goal(), make_state(), GameData(), [], MagicMock())
         assert plan == []
         assert arbiter.events.drain() == [(Mechanism.DECOMPOSE_DECLINE, "G", "no_source:feather")]
 
@@ -127,25 +115,25 @@ class TestArbiter:
             declined.append("upgrade:ge_venue:iron_boots")
 
         with patch("artifactsmmo_cli.ai.strategy_driver.decompose", side_effect=declines):
-            arbiter._plans(self._goal(True), make_state(), GameData(), [], MagicMock())
+            arbiter._plans(self._goal(), make_state(), GameData(), [], MagicMock())
         [decline, (search, _subject, _detail)] = arbiter.events.drain()
         assert decline == (Mechanism.DECOMPOSE_DECLINE, "G", "upgrade:ge_venue:iron_boots")
         assert search is Mechanism.SEARCH
 
 
 class TestPlayer:
-    def test_decide_notes_promotion_and_aged_pick(self) -> None:
+    def test_decide_notes_each_root_decline_and_the_aged_pick(self) -> None:
         player = GamePlayer(character="hero")
         player._strategy = MagicMock()
-        decision = MagicMock(chosen_root="Root(b)", chosen_step=None, promoted_from="Root(a)",
-                             aged_pick=True)
+        decision = MagicMock(chosen_root="Root(b)", chosen_step=None,
+                             declined=(("Root(a)", "no_route:x"),), aged_pick=True)
         player._strategy.decide.return_value = decision
         with (patch.object(player._arbiter, "select", return_value=(None, [], [])),
               patch.object(player, "_record_decision_targets", return_value=None),
               patch.object(player, "_selection_context", return_value=MagicMock())):
             player._decide_band(make_state(), GameData(), [], None)
         assert player._events.drain() == [
-            (Mechanism.SERVABLE_PROMOTION, "'Root(b)'", "from='Root(a)'"),
+            (Mechanism.ROOT_DECLINE, "Root(a)", "no_route:x"),
             (Mechanism.AGED_PICK, "'Root(b)'", "")]
 
     def test_stuck_recovery_notes_every_suppression_it_sets(self) -> None:

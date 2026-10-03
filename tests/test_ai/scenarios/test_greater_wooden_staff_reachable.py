@@ -28,8 +28,9 @@ halves and the epic's fix only touches one of them:
    `is_plannable` refused admission before A* ever ran (the "65 against 32"
    figure in the task brief is the empty-bank variant of the same count).
    Post-branch the mint term counts batched gather STEPS, the score is 4, and
-   the goal is admitted. That admission flip is the assertion in this file
-   that fails on the pre-branch tree.
+   the goal was admitted. Phase 3-2 deleted the admission gate itself (every
+   goal's answer is the walk's own), so the admission tests went with it; the
+   routing tests below are what this state still pins.
 
 RESIDUAL, deliberately not asserted here (see the task-10 report): from state
 2 a plan does now exist and the real planner does find it — `LevelSkill ->
@@ -53,7 +54,6 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.min_plan_length import min_plan_length
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -135,13 +135,6 @@ def _decomposed(state: WorldState) -> list[Action]:
     return decompose(_goal(), state, gd, _build_actions(state, gd), _CTX) or []
 
 
-def test_staff_goal_is_admitted_by_is_plannable() -> None:
-    """The reachability gate must admit the goal — a False here means A* never
-    runs and the objective is silently abandoned every cycle."""
-    gd = _game_data()
-    assert _goal().is_plannable(_bank_covered_state(), gd) is True
-
-
 def test_staff_plans_from_r2d2s_traced_state() -> None:
     """Live trace: 0 plans in 702 rank-1 cycles, `timed_out` on every one. The
     staff needs weaponcrafting 10 against the traced 9, so the plan is that
@@ -168,28 +161,6 @@ def test_staff_plan_uses_the_banked_materials() -> None:
         [str(a) for a in plan]
     assert not [a for a in plan if isinstance(a, GatherAction)], [str(a) for a in plan]
     assert repr(plan[-1]) == f"Equip({TARGET}->{SLOT})"
-
-
-def test_from_scratch_plank_chain_is_admitted() -> None:
-    """THE DISCRIMINATOR. Without the planks banked the target needs 60
-    `spruce_wood` through one recipe leaf. The pre-branch mint term counted raw
-    UNITS, scoring the chain at 63 against `max_depth` 32, so `is_plannable`
-    returned False and the goal was dropped without a search. Batched gathers
-    make one gather serve the whole leaf, so the score is 4 and the goal is
-    admitted. Both halves are asserted (the score AND the verdict) so a change
-    that flips the verdict for an unrelated reason cannot pass quietly."""
-    gd = _game_data()
-    state = _state_without_banked_planks()
-    owned = dict(state.inventory)
-    for code, qty in (state.bank_items or {}).items():
-        owned[code] = owned.get(code, 0) + qty
-    assert owned.get("spruce_plank", 0) == 0
-    # Bound the score in a local so a failure prints the two integers, not the
-    # whole 321-recipe GameData repr.
-    scored = min_plan_length(TARGET, 1, gd.crafting_recipes, owned,
-                             gd.max_gather_yield, equip=True)
-    assert scored <= _goal().max_depth, (scored, _goal().max_depth)
-    assert _goal().is_plannable(state, gd) is True
 
 
 def test_from_scratch_routes_to_the_achievable_step_not_the_equippable():

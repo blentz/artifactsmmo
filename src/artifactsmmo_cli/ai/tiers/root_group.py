@@ -21,22 +21,13 @@ make the census measure the wrong population:
   arbiter ladder (`active_guards` -> `_build_candidates` -> `select_pure`), so
   the guard fact comes from `StrategyArbiter.last_selected_guard`, which is the
   arbiter reporting what it actually chose.
-* `chosen_root` ALONE. Servability promotion can walk the tree's own pick to
-  the trunk sitting at fallback index 0 (live 2026-07-27: 9 of 15 cycles logged
-  `ReachCharLevel` when the tree had chosen GEAR every time), and this census
-  exists precisely to measure whether the trunk-first ordering costs anything.
-  Counting a promoted cycle as the trunk winning states the opposite of what
-  happened, so the classifier groups on the walk's OWN pick — `promoted_from`
-  when promotion displaced it, `chosen_root` otherwise. That also repairs the
-  `blocked_target` pairing for free: `decide_tree` publishes `blocked_target`
-  from the same `RootResolution` that produced `promoted_from`, so the gate and
-  the root it gates are once again the same walk's.
-
-The root that actually EXECUTED stays recorded separately, in
-`cycles.root_repr`, so "the walk chose the trunk" (`root_group='trunk'`) and
-"the walk chose gear and promotion moved it to the trunk"
-(`root_group='gear'`, `root_repr='ReachCharLevel(...)'`) are distinguishable in
-the store.
+`chosen_root` is the walk's OWN pick. Until Phase 3-2 servability promotion
+could move it afterwards (live 2026-07-27: 9 of 15 cycles logged
+`ReachCharLevel` when the walk had chosen GEAR), and this classifier grouped on
+the displaced pick instead. The walk now lets only a servable gear target head
+it, so no promotion follows and `chosen_root` is the pick to group on;
+`blocked_target` comes from the same `RootResolution`, so the gate and the root
+it gates are the same walk's.
 """
 
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ReachCharLevel, ReachSkillLevel
@@ -47,8 +38,7 @@ label produced outside it would be counted nowhere."""
 
 
 def root_group_of(guard: str | None, chosen_root: MetaGoal | None,
-                  blocked_target: str | None,
-                  promoted_from: MetaGoal | None) -> str:
+                  blocked_target: str | None) -> str:
     """The group that produced this cycle's root, or `guard`/`none`.
 
     `guard` is the repr of the guard-band goal the arbiter SELECTED this cycle
@@ -57,19 +47,13 @@ def root_group_of(guard: str | None, chosen_root: MetaGoal | None,
     because a selected guard preempts the walk — a root may have been resolved
     and then not run, and attributing the cycle to that root would credit the
     walk with a choice the guard overrode.
-
-    `promoted_from` is the tree's own pick when servability promotion displaced
-    it, None otherwise. The rule "group the walk's own pick" lives HERE rather
-    than at the call site so there is one implementation of it; see the module
-    docstring for why the final `chosen_root` is the wrong thing to group on.
     """
     if guard is not None:
         return "guard"
-    walk_root = promoted_from if promoted_from is not None else chosen_root
-    if walk_root is None:
+    if chosen_root is None:
         return "none"
-    if isinstance(walk_root, ReachCharLevel):
+    if isinstance(chosen_root, ReachCharLevel):
         return "trunk"
-    if isinstance(walk_root, ReachSkillLevel):
+    if isinstance(chosen_root, ReachSkillLevel):
         return "skill_gate" if blocked_target is not None else "orphan_skill"
     return "gear"

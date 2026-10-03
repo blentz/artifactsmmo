@@ -674,41 +674,6 @@ class GatherMaterialsGoal(Goal):
             for mat, qty in self._needed.items()
         )
 
-    def _currency_leaves_affordable(self, state: WorldState, game_data: GameData) -> bool:
-        """Return False if any currency-buy leaf in the recipe closure is
-        unaffordable — killing the search early (currency_afford_plannable_pure
-        proved sound: an unaffordable NpcBuy is inapplicable, and
-        GatherMaterials.relevant_actions emits no action that earns the currency,
-        so no plan can acquire the leaf).
-
-        Mirrors the closure build in relevant_actions exactly: iterate
-        self._needed.items(), accumulate closure_demand per item into one shared
-        `chain` dict. A leaf is a currency-buy leaf when:
-          - no crafting recipe (recipe is None), AND
-          - not a resource drop, AND
-          - no monster drops it, AND
-          - at least one NPC sells it (npc_purchases non-empty).
-
-        For each such leaf, affordability = any vendor offers it at a currency
-        price the character can cover (inv + bank >= price * closure_qty). Uses
-        the cheapest-first ordering from npc_purchases and accepts the first
-        affordable vendor. If no vendor is affordable, the leaf prunes the goal.
-        """
-        return not analyze_currency_leaves(self._needed, state, game_data).blocked
-
-    def is_plannable(self, state: WorldState, game_data: GameData,
-                     history: LearningStore | None = None) -> bool:
-        """Fast-fail only when a currency-buy leaf in the recipe closure is
-        unaffordable (C4 Task 5): no plan can acquire a jasper_crystal-style
-        leaf without the requisite currency, so pruning discards nothing
-        reachable.
-
-        Under-skill craft goals are NOT pruned here (LevelSkill epic P2): the
-        planner admits LevelSkill into the GatherMaterials action set, so an
-        under-skill target is now reachable via a grind->craft sequence. The
-        former crafting-skill fast-fail (which pruned such goals) is retired."""
-        return self._currency_leaves_affordable(state, game_data)
-
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"inventory": self._needed}
 

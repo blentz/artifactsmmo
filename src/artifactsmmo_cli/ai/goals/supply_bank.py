@@ -25,7 +25,6 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.min_plan_length import min_plan_length
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -77,9 +76,7 @@ class SupplyBankGoal(Goal):
         `max(100, ...)` floor are `GatherMaterialsGoal.max_depth`'s construction
         unchanged — the same "obtain N units of X" question, where a deep chain
         costs many actions per unit and the planner's time/node budget is meant
-        to be the real cutoff. `is_plannable` below keeps that generosity honest
-        by refusing the search outright when even this depth cannot hold the
-        chain."""
+        to be the real cutoff."""
         return max(100, self._demand * 100)
 
     def value(self, state: WorldState, game_data: GameData,
@@ -157,45 +154,6 @@ class SupplyBankGoal(Goal):
         closure walk, and the action set it would return is never used."""
         return GatherMaterialsGoal(target_item=self._item_code,
                                    needed={self._item_code: max(1, self._deficit(state))})
-
-    def is_plannable(self, state: WorldState, game_data: GameData,
-                     history: LearningStore | None = None) -> bool:
-        """Refuse the search when it provably cannot succeed.
-
-        Two independent bounds, both sound (they fail ONLY when no plan of
-        length <= `max_depth` can exist, per `Goal.is_plannable`'s contract):
-
-        1. The delegate's own currency-leaf gate — a recipe leaf that can only
-           be BOUGHT, in a currency the character cannot cover, has no
-           acquisition edge in the admitted action set, so no plan reaches it.
-        2. Depth reachability, the bound `UpgradeEquipmentGoal.is_plannable`
-           uses: obtaining `deficit` units from raw materials is estimated at
-           `min_plan_length` actions, and the planner never returns a plan
-           longer than `max_depth` (that half IS proved —
-           `Formal.PlannerDepthBound.plan_length_le_max_depth`).
-           `min_plan_length` itself is an A*-budget HEURISTIC: the citation
-           that used to stand here, NOT-PROVED: `Formal.PlanModel.min_plan_length_le_plan`,
-           names a theorem that never existed (corrected 2026-08-13; see the
-           PROOF STATUS paragraph in `ai/min_plan_length.py`).
-
-        `equip=False` and no `+1` for the deposit leg, deliberately: the real
-        plan must also pay at least one deposit, so this estimate is LOOSER than
-        the truth. Loose can only over-admit (waste a search), never over-prune
-        (discard a reachable plan) — and this docstring claims nothing beyond
-        `min_plan_length` itself, which is a heuristic, so the looseness is the
-        whole of the safety argument here rather than a proof's corollary."""
-        if self.is_satisfied(state):
-            return True
-        produce = self._production_state(state)
-        if not self._production_goal(state).is_plannable(produce, game_data, history):
-            return False
-        owned: dict[str, int] = dict(state.inventory)
-        for code, qty in (produce.bank_items or {}).items():
-            owned[code] = owned.get(code, 0) + qty
-        return min_plan_length(
-            self._item_code, self._deficit(state), game_data.crafting_recipes,
-            owned, game_data.max_gather_yield, equip=False,
-        ) <= self.max_depth
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:

@@ -62,6 +62,7 @@ from artifactsmmo_cli.ai.constants import (
     GE_ORDER_REFRESH_INTERVAL_SECONDS,
     STUCK_DETECTOR_WINDOW,
 )
+from artifactsmmo_cli.ai.craft_plan_gen import decompose, hands_off_to_search
 from artifactsmmo_cli.ai.currency_turnin import TurnIn, fleet_total_pure, turn_in_ready_pure
 from artifactsmmo_cli.ai.cycle_snapshot import (
     CycleSnapshot,
@@ -154,6 +155,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 from artifactsmmo_cli.ai.tiers.progression_tree import has_structural_upgrade
 from artifactsmmo_cli.ai.tiers.progression_tree_core import INTERLEAVE_RUN
 from artifactsmmo_cli.ai.tiers.root_group import root_group_of
+from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -341,12 +343,6 @@ class GamePlayer:
         # shadow — its decision is traced each cycle but does not drive the bot.
         self._objective: CharacterObjective | None = None
         self._strategy: StrategyEngine | None = None
-        # Per-cycle servable-filter diagnostic (2026-06-20): whether the committed
-        # chosen_root's step is plannable now. Emitted in the trace so a live run can
-        # confirm the filter demotes unservable top roots (feather_coat) instead of
-        # committing to them while char-grinding. See _step_servable and the
-        # progression tree's _servable_promotion.
-        self._last_servability_diag: dict[str, object] = {}
         # Learned minimum tasks_coin worth attempting a taskmaster exchange. The
         # API does not expose the per-exchange cost as data, so we discover it
         # from HTTP 478 ("missing items") failures: raise the bound past any coin
@@ -631,27 +627,14 @@ class GamePlayer:
         `plan_from_state` seam (no plan-cache concept — one decide() per CLI
         invocation) calls this directly after its own `decide()`.
 
-        A root DISPLACED by servability promotion is charged too. Aging exists
-        to rotate attention, and the displaced root consumed the decision — it
-        won the head pick — while producing no work. Charging only the promoted
-        root creates a feedback loop where the unservable winner never ages and
-        therefore wins FOREVER: live 2026-07-27, `lich_race_trophy` took the
-        head pick in 16 of 18 cycles and never once appeared in the ledger,
-        while `life_ring` (the promoted root actually being pursued) absorbed
-        all 19 focus units and decayed. The interleave was neutralized —
-        promotion alone kept the bot on target.
-
-        Both are charged, not one or the other: the promoted root is the work
-        genuinely done this cycle (it must still age, or it never rotates), and
-        the displaced pick must age out of a head position it cannot use."""
+        Only the chosen root is charged. A root DISPLACED by servability
+        promotion used to be charged too, so an unservable head pick would age
+        out of a position it could not use (live 2026-07-27, `lich_race_trophy`
+        won 16 of 18 head picks and never entered the ledger). Since Phase 3-2
+        an unservable target cannot head the walk at all, so there is no
+        displaced pick to charge."""
         self._charge_focus(self._gear_root_key(decision.chosen_root),
                            decision.aged_pick)
-        displaced = getattr(decision, "promoted_from", None)
-        if displaced is not None:
-            # `_gear_root_key` returns None for the xp trunk, so a decision
-            # promoted PAST the trunk charges nothing extra — only gear roots
-            # occupy the ledger.
-            self._charge_focus(self._gear_root_key(displaced), decision.aged_pick)
 
     def _charge_focus(self, key: "tuple[str, str] | None", aged_pick: bool) -> None:
         """One cycle of focus (and, when the pick was interleaved, one d'Hondt
@@ -817,7 +800,7 @@ class GamePlayer:
         combat_monster = ctx_combat_monster
         ctx = self._selection_context(combat_monster)
         self._last_ctx = ctx
-        servable_pred = self._step_servable(state, game_data, ctx)
+        step_decline = self._step_decline(state, game_data, ctx, actions)
         self._notify_planning(True)
         # The search cache spans the WHOLE decision, not just the planner search
         # inside it: the unified objective runs one `cheapest_path_to_level` walk
@@ -830,7 +813,7 @@ class GamePlayer:
               else nullcontext()):
             decision = self._strategy.decide(
                 state, game_data,
-                step_servable=servable_pred,
+                step_decline=step_decline,
                 ctx=ctx,
                 history=self.history,
             )
@@ -839,29 +822,10 @@ class GamePlayer:
         # on every decide() call would undercount a root pursued across a
         # multi-cycle cached plan (Fix 2, arbiter anti-starvation epic).
         self._last_decision = decision
-        cr, cs = decision.chosen_root, decision.chosen_step
-        promoted_from = getattr(decision, "promoted_from", None)
-        if promoted_from is not None:
-            self._events.note(Mechanism.SERVABLE_PROMOTION, repr(cr), f"from={promoted_from!r}")
+        for root_repr, reason in decision.declined:
+            self._events.note(Mechanism.ROOT_DECLINE, root_repr, reason)
         if decision.aged_pick:
-            self._events.note(Mechanism.AGED_PICK, repr(cr))
-        self._last_servability_diag = {
-            # NOTE this verdict is computed on the FINAL root, i.e. AFTER any
-            # servability promotion — so on a promoted cycle it is necessarily
-            # True and says nothing about the root the tree actually wanted.
-            # Read it together with `promoted_from`.
-            "chosen_root_servable": bool(
-                cr is not None and cs is not None and servable_pred(cr, cs)),
-            "chosen_root": repr(cr) if cr is not None else None,
-            # The tree's own pick when promotion displaced it, else None. Without
-            # this, a promoted cycle is indistinguishable from a cycle the tree
-            # decided outright (live 2026-07-27: 9 of 15 cycles read as "the tree
-            # chose XP" when every one of them was a gear pick that lost its
-            # step). `promoted` is redundant with `promoted_from is not None` but
-            # makes the common trace query a field lookup, not a null test.
-            "promoted": promoted_from is not None,
-            "promoted_from": repr(promoted_from) if promoted_from is not None else None,
-        }
+            self._events.note(Mechanism.AGED_PICK, repr(decision.chosen_root))
         crafting_target = self._record_decision_targets(decision)
         self.state = state = replace(state, crafting_target=crafting_target)
         selected_goal, plan, goals_tried = self._arbiter.select(
@@ -1138,6 +1102,10 @@ class GamePlayer:
         self._prev_level = state.level
         ctx = self._selection_context(combat_monster)
         self._last_ctx = ctx
+        # Built BEFORE the decision, as `run()` builds it before `_decide_band`:
+        # the root walk asks each gear target's step against this pool
+        # (`_step_decline`), and the arbiter selects over the same one.
+        actions = self._build_actions()
         # `history` and the search cache are wired here — NOT just in
         # `_decide_band` — because the whole point of this site is to SHOW what
         # production would decide, and a decide site that silently omits an
@@ -1147,14 +1115,13 @@ class GamePlayer:
               else nullcontext()):
             decision = self._strategy.decide(
                 state, game_data,
-                step_servable=self._step_servable(state, game_data, ctx),
+                step_decline=self._step_decline(state, game_data, ctx, actions),
                 ctx=ctx,
                 history=self.history)
         self._bump_focus(decision)
         self._last_decision = decision
         crafting_target = self._record_decision_targets(decision)
         self.state = state = replace(state, crafting_target=crafting_target)
-        actions = self._build_actions()
         # Diagnostic injection (the `plan --committed` flag): seed the sticky
         # commitment the live bot accumulates but the fresh CLI lacks, so a live
         # committed-goal hold reproduces offline.
@@ -2417,7 +2384,10 @@ class GamePlayer:
             "outcome": outcome,
             "recovery": recovery,
             "suppressed_goals": list(self._suppressed_goals.keys()),
-            "servability": self._last_servability_diag,
+            # The gear targets the root walk passed over this cycle, each with
+            # the named reason its step cannot be served (Phase 3-2).
+            "declined": (dict(self._last_decision.declined)
+                         if self._last_decision is not None else {}),
             # Phase B3: fired guard/means kinds as selection saw them (see
             # StrategyArbiter.last_fires) — consumed by the trace lockstep.
             "fires": dict(self._arbiter.last_fires),
@@ -3059,22 +3029,37 @@ class GamePlayer:
             pick_winnable=pick,
         ))
 
-    def _step_servable(
-        self, state: WorldState, game_data: GameData, ctx: SelectionContext
-    ) -> Callable[[MetaGoal, MetaGoal], bool]:
-        """Build the per-root plannability predicate decide() uses to demote roots
-        whose actionable step can't be served this cycle. A root is servable when its
-        step routes to a goal (objective_step_goal) that is plannable now — the same
-        objective_step_goal the arbiter will resolve, so decide()'s servability matches
-        what select() can actually serve. Closes the feather_coat mismatch: a body
-        armor whose woodcutting-gated step yields an unplannable GatherMaterials is
-        demoted below the plannable ReachCharLevel grind."""
-        def servable(root: MetaGoal, step: MetaGoal) -> bool:
+    def _step_decline(
+        self, state: WorldState, game_data: GameData, ctx: SelectionContext,
+        actions: list[Action],
+    ) -> Callable[[MetaGoal], str | None]:
+        """The cycle's answer for a root's step, for the root walk
+        (`decisions.root.StepDecline`, Phase 3-2): why the step cannot be served
+        this cycle, or None.
+
+        The SAME question the arbiter asks of the same goal: the step's goal is
+        `objective_step_goal`'s, and its answer is `decompose`'s plan or named
+        decline over this cycle's action pool. A step that maps to no goal
+        cannot be served (`no_step_goal`). A decline that hands the goal to the
+        search on purpose (`hands_off_to_search`), or a goal shape the walk does
+        not serve (no decline named), is None: only the search can say, and the
+        arbiter will ask it. This replaced `_step_servable`'s `is_plannable`,
+        a second model that refused goals the walk serves (live 2026-10-03:
+        HAL's `GatherMaterials(hard_leather x5)`, which the walk plans as
+        withdraw, fight cow, buy)."""
+        def decline(root: MetaGoal) -> str | None:
+            step = actionable_step(root, state, game_data, ctx) or root
             goal = objective_step_goal(step, state, game_data, ctx,
-                                       root=root,
-                                       history=self.history)
-            return goal is not None and goal.is_plannable(state, game_data, self.history)
-        return servable
+                                       root=root, history=self.history)
+            if goal is None:
+                return "no_step_goal"
+            declined: list[str] = []
+            if decompose(goal, state, game_data, actions, ctx, declined) is not None:
+                return None
+            if not declined or hands_off_to_search(declined):
+                return None
+            return declined[0]
+        return decline
 
     def _maybe_retry_bank(self) -> None:
         """Periodically retry bank access after an achievement gate failure
@@ -4165,20 +4150,13 @@ class GamePlayer:
             # DepositInventory, DiscardOverstock, CraftRelief, RecycleSurplus
             # and GEAR_REVIEW alike, ~15% of C3P0's recent rows. The arbiter is
             # where a guard actually wins, so it is what is asked.
-            #
-            # `promoted_from` rides along for the same reason: it is the tree's
-            # OWN pick when servability promotion displaced it, and this census
-            # measures what the walk chose, not what promotion left running.
             root_group=root_group_of(
                 self._arbiter.last_selected_guard,
                 self._last_decision.chosen_root if self._last_decision is not None else None,
                 self._last_decision.blocked_target if self._last_decision is not None else None,
-                self._last_decision.promoted_from if self._last_decision is not None else None,
             ),
-            # The root that actually EXECUTED, promotion included — deliberately
-            # NOT the pick `root_group` classifies. The pair is what makes a
-            # promoted-to-trunk cycle (`gear` + a `ReachCharLevel` repr) legible
-            # as promotion rather than as the trunk winning on its own.
+            # The walk's root. Since Phase 3-2 it is also the pick `root_group`
+            # classifies (no promotion moves it afterwards).
             root_repr=(repr(self._last_decision.chosen_root)
                        if self._last_decision is not None
                        and self._last_decision.chosen_root is not None else None),

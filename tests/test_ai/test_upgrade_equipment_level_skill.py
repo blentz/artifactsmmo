@@ -52,14 +52,6 @@ def _under_skill_state(gd: GameData):
                           inventory={"gear_ore": 2}), gd)
 
 
-def test_is_plannable_true_when_under_gear_crafting_skill() -> None:
-    """The under-skill craftable equippable is admitted: the LevelSkill action
-    makes the gated final craft reachable, so is_plannable must no longer prune
-    it at the crafting-skill gate."""
-    gd = _gd()
-    state = _under_skill_state(gd)
-    goal = UpgradeEquipmentGoal(committed_target=("gear_shield", "shield_slot"))
-    assert goal.is_plannable(state, gd) is True
 
 
 def test_relevant_actions_admits_the_ge_fill_for_the_goals_own_target() -> None:

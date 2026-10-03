@@ -119,7 +119,6 @@ def test_planner_produces_a_plan_for_a_realistic_demand() -> None:
     state = _state(gd, bank={})
     goal = SupplyBankGoal(item_code=_ORE, quantity=20, demand=20)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
-    assert goal.is_plannable(state, gd) is True
 
     planner = GOAPPlanner()
     plan = planner.plan(state, goal, _actions(gd, state), gd)
@@ -214,15 +213,12 @@ def test_banked_inputs_count_toward_the_depth_bound() -> None:
     inferred) — the credit still counts, it just no longer flips a True/False
     boundary in this single-raw-leaf fixture."""
     gd = _deep_chain_gd()
-    goal = SupplyBankGoal(item_code="deep_widget", quantity=1, demand=1)
     recipes = gd.crafting_recipes
 
     assert min_plan_length("deep_widget", 1, recipes, {}, gd.max_gather_yield,
                            equip=False) == 3
     assert min_plan_length("deep_widget", 1, recipes, {"mid_part": 11},
                            gd.max_gather_yield, equip=False) == 1
-    assert goal.is_plannable(_state(gd, bank={}), gd) is True
-    assert goal.is_plannable(_state(gd, bank={"mid_part": 11}), gd) is True
 
 
 def test_relevant_actions_scopes_the_search_to_the_closure_plus_deposit() -> None:
@@ -264,81 +260,30 @@ def test_relevant_actions_on_a_satisfied_goal_still_returns_a_usable_set() -> No
     assert any(isinstance(a, DepositAllAction) for a in admitted)
 
 
-def test_reachable_depth_is_admitted_and_the_real_planner_confirms_it() -> None:
-    """`is_plannable` admits `deep_widget` from an empty bank — a case this
-    file used to name `test_unreachable_depth_is_refused_before_the_search`
-    and assert `is_plannable(...) is False` on the theory that 121 raw ore
-    gathers (11 x 11) plus 12 crafts must exceed the 100-action depth floor.
-
-    Task 3 (planner-gather-batching) replaced that raw-UNIT mint term with
-    `min_gather_steps`, which counts DISTINCT raw leaves still unmet, not
-    units. `deep_chain_gd`'s closure has exactly one raw leaf (`supply_ore`),
-    so the bound is `min_gather_steps=1 + min_crafts=2 = 3` regardless of how
-    many units that one leaf must supply — comfortably under 100. That is not
-    a mechanical rebaseline: I drove the REAL `GOAPPlanner` over the REAL
-    `build_actions` pool for this exact scenario (bank={}) and it found an
-    8-action plan in 18,761 explored (93,142 created) nodes with no timeout, so
-    `is_plannable`'s new verdict matches what the planner can actually do, not
-    just what the formula claims. That search is bounded HERE by nodes, not by
-    the clock — see `search_bounds.py`.
-
-    This does NOT mean the depth gate is universally sound again — a chain
-    with a raw footprint large enough that even BATCHED crafting is bounded
-    by inventory space (`craft_batch_size_pure`) at more than one recipe
-    tier can still time out the real planner while `is_plannable` reports
-    True (see `test_strategy_driver.py`'s `steel_boots` cases, a genuine
-    residual this task's report documents and does not paper over here)."""
+def test_a_deep_chain_from_an_empty_bank_plans() -> None:
+    """`deep_widget` from an empty bank: 121 raw ore (11 x 11) and 12 crafts,
+    which the old raw-UNIT depth bound called unreachable. Batched gathers make
+    it an 8-action plan (18,761 explored nodes, measured), so the REAL planner
+    over the REAL pool must find it, bounded HERE by nodes, not by the clock
+    (`search_bounds.py`). Phase 3-2 deleted the `is_plannable` gate this test
+    also used to pin."""
     gd = _deep_chain_gd()
     goal = SupplyBankGoal(item_code="deep_widget", quantity=1, demand=1)
     state = _state(gd, bank={})
 
-    assert goal.is_plannable(state, gd) is True
-
     planner = GOAPPlanner()
     plan = planner.plan(state, goal, _actions(gd, state), gd, None,
                         budget_seconds=NO_CLOCK, max_nodes=SEARCH_NODE_BUDGET)
-    assert plan, "is_plannable's True verdict must be backed by a real plan"
+    assert plan, "the deep chain must plan from an empty bank"
     assert not planner.last_stats.timed_out, (
         "must be a real search, not a budget artifact")
 
 
-def test_a_satisfied_goal_is_plannable() -> None:
-    """Satisfied short-circuit: nothing to search for, and the arbiter must not
-    read "unplannable" as "broken"."""
-    gd = _gd()
-    goal = SupplyBankGoal(item_code=_ORE, quantity=5, demand=5)
-
-    assert goal.is_plannable(_state(gd, bank={_ORE: 5}), gd) is True
-
-
-def test_an_already_banked_unaffordable_item_is_still_plannable() -> None:
-    """The satisfied short-circuit is load-bearing, not decorative.
-
-    The demand is already met from the bank, but the item is NPC-only and the
-    character cannot afford another copy — so the delegated currency-leaf gate
-    says "no plan can acquire this". Without the short-circuit that verdict
-    would be reported for a goal that needs no plan at all."""
-    gd = _gd()
-    gd._item_stats["rare_rune"] = ItemStats(code="rare_rune", level=20, type_="rune")
-    gd._npc_stock = {"rune_vendor": {"rare_rune": 20000}}
-    gd._npc_buy_currency = {"rune_vendor": {"rare_rune": "gold"}}
-    gd._npc_locations = {"rune_vendor": (8, 13)}
-    state = _state(gd, bank={"rare_rune": 2})
-    goal = SupplyBankGoal(item_code="rare_rune", quantity=2, demand=2)
-    assert goal.is_satisfied(state) is True
-    assert goal._production_goal(state).is_plannable(
-        goal._production_state(state), gd) is False, (
-        "fixture must make the delegate refuse, or this proves nothing")
-
-    assert goal.is_plannable(state, gd) is True
-
-
-def test_an_unaffordable_buy_only_target_is_refused_before_the_search() -> None:
-    """The delegated currency-leaf gate, on a goal that IS unsatisfied.
-
-    A buy-only supply target the character cannot pay for has no acquisition
-    edge in the admitted action set, so no plan can reach it — and the depth
-    bound cannot see that (a single unbought unit is one action long)."""
+def test_an_unaffordable_buy_only_target_finds_no_plan_at_once() -> None:
+    """A buy-only supply target the character cannot pay for has no acquisition
+    edge in the admitted action set, so no plan can reach it. Phase 3-2 deleted
+    the `is_plannable` currency gate that refused it before the search; the
+    search itself must now say so, and cheaply."""
     gd = _gd()
     gd._item_stats["rare_rune"] = ItemStats(code="rare_rune", level=20, type_="rune")
     gd._npc_stock = {"rune_vendor": {"rare_rune": 20000}}
@@ -348,7 +293,12 @@ def test_an_unaffordable_buy_only_target_is_refused_before_the_search() -> None:
     goal = SupplyBankGoal(item_code="rare_rune", quantity=2, demand=2)
     assert goal.is_satisfied(state) is False
 
-    assert goal.is_plannable(state, gd) is False
+    planner = GOAPPlanner()
+    plan = planner.plan(state, goal, _actions(gd, state), gd, None,
+                        budget_seconds=NO_CLOCK, max_nodes=SEARCH_NODE_BUDGET)
+    assert plan == []
+    assert not planner.last_stats.node_capped
+    assert planner.last_stats.nodes_explored < 50, planner.last_stats
 
 
 def test_max_depth_tracks_demand_not_the_bank_inflated_quantity() -> None:

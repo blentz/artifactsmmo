@@ -509,7 +509,9 @@ def test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work(
 
     This is the freeze the latch caused, stated as an outcome instead of a flag.
     The control is the SAME character with no task at all: a task the horizon
-    cannot reach must not change what it does, and a task gear closes must.
+    cannot reach must not change what it does, and a task gear closes must fire
+    the fight arm, which diverts the character only when that gear's step can be
+    served this cycle (Phase 3-2).
 
     `HORIZON_LEVEL_UP` lands with the out-of-reach row deliberately, and the
     reason is in `regear_edge.py`: the standing arm's other conjunct is
@@ -524,9 +526,19 @@ def test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work(
         assert repr(report.selected_goal) == control_goal
         assert repr(report.plan[0]) == control_first
 
-    # ...and the closable row is the one that DOES divert the character.
+    # ...and the closable row is the one whose fight arm FIRES. Until Phase 3-2
+    # it diverted the character: the walk resolved the gear's skill gate,
+    # `ReachSkillLevel(weaponcrafting, 43)`, and the arbiter fell through to
+    # gathering 11 mithril bars for a weapon that gate keeps it from crafting.
+    # The walk now asks that step first; it declines (no recipe grinds
+    # weaponcrafting from here), so the arm names the blocker and the walk
+    # continues to the character's own work.
     _, _, gear = _starved_run(STARVED_GEAR, gd)
-    assert repr(gear.selected_goal) != control_goal
+    assert "WhichSlotClosesTheFight" in gear.decision.ranking[0].category
+    assert gear.decision.declined == (
+        ("ReachSkillLevel(skill='weaponcrafting', level=43)",
+         "no_grind_rung:weaponcrafting"),)
+    assert repr(gear.selected_goal) == control_goal
 
 
 # ---------------------------------------------------------------------------

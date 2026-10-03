@@ -885,42 +885,9 @@ class TestGatherMaterialsGoal:
         state = make_state(inventory={"copper_ore": 4}, bank_items={"copper_ore": 6})
         assert goal.is_satisfied(state) is True
 
-    def test_plannable_when_target_craft_skill_met(self):
-        gd = make_game_data()
-        gd._item_stats["feather_coat"] = ItemStats(
-            code="feather_coat", level=5, type_="body_armor",
-            crafting_skill="gearcrafting", crafting_level=5)
-        goal = GatherMaterialsGoal(target_item="feather_coat", needed={"feather_coat": 1})
-        state = make_state(skills={"gearcrafting": 5, "mining": 1, "woodcutting": 1,
-                                   "fishing": 1, "weaponcrafting": 1, "jewelrycrafting": 1,
-                                   "cooking": 1, "alchemy": 1})
-        assert goal.is_plannable(state, gd) is True
 
-    def test_plannable_when_gated_target_already_owned(self):
-        """Owned at full quantity → no craft needed → plannable (equip/withdraw)."""
-        gd = make_game_data()
-        gd._item_stats["feather_coat"] = ItemStats(
-            code="feather_coat", level=5, type_="body_armor",
-            crafting_skill="gearcrafting", crafting_level=5)
-        goal = GatherMaterialsGoal(target_item="feather_coat", needed={"feather_coat": 1})
-        state = make_state(inventory={"feather_coat": 1})
-        assert goal.is_plannable(state, gd) is True
 
-    def test_materials_only_goal_plannable_despite_skill_gate(self):
-        """Finished target not among needed: gathering inputs never performs
-        the gated final craft — must stay plannable."""
-        gd = make_game_data()
-        gd._item_stats["fishing_net"] = ItemStats(
-            code="fishing_net", level=1, type_="weapon",
-            crafting_skill="weaponcrafting", crafting_level=5)
-        goal = GatherMaterialsGoal(target_item="fishing_net", needed={"ash_plank": 6})
-        state = make_state(inventory={})
-        assert goal.is_plannable(state, gd) is True
 
-    def test_plannable_for_uncraftable_raw_target(self):
-        goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
-        state = make_state(inventory={})
-        assert goal.is_plannable(state, make_game_data()) is True
 
     def test_desired_state_returns_needed(self):
         needed = {"copper_ore": 6}

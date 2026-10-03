@@ -23,7 +23,6 @@ from artifactsmmo_cli.ai.goals.upgrade_selection import (
 )
 from artifactsmmo_cli.ai.intermediate_batch import size_closure_gather, size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.min_plan_length import min_plan_length
 from artifactsmmo_cli.ai.recipe_closure import gather_serves_closure
 from artifactsmmo_cli.ai.requirement_projections import (
     demand_set,
@@ -237,78 +236,6 @@ class UpgradeEquipmentGoal(Goal):
             return {}
         code, slot = upgrade
         return {"equipment": {slot: code}}
-
-    def is_plannable(self, state: WorldState, game_data: GameData,
-                     history: LearningStore | None = None) -> bool:
-        """Skip when the target needs more gather actions than max_depth.
-
-        is_satisfied requires the target item EQUIPPED, which means crafting it
-        first; obtaining it from raw materials needs `min_plan_length` actions
-        (gather steps + crafts + equip). The planner never returns a plan
-        longer than `max_depth` (formal/Formal/PlannerDepthBound.lean:
-        plan_length_le_max_depth), so when `min_plan_length > max_depth` no plan
-        can exist — running the 90s A* is pure waste.
-
-        STALE EXAMPLE, LEFT AS A HISTORICAL MARKER (corrected 2026-08-13,
-        planner-gather-batching Task 3 review): this docstring used to say
-        "copper_boots from scratch = 80 gathers >> max_depth 32: the Robby
-        first-cycle stall" as a live example of this branch firing. As of
-        Task 3's mint-term swap (`min_gather_steps`, not raw units),
-        `copper_boots` no longer exceeds `max_depth` — see
-        `test_upgrade_reachability_gate.py
-        ::test_is_plannable_admits_from_scratch_copper_boots`, which asserts
-        the OPPOSITE of the old example and drives the real planner to prove
-        it. Worse: computed over all 321 real recipes in
-        `formal/sim/game_data_snapshot.json`, the MAXIMUM `min_plan_length`
-        is 15 (`greater_topaz_amulet`/`greater_sapphire_amulet`/
-        `greater_ruby_amulet`/`greater_emerald_amulet`, all tied), and ZERO
-        exceed `max_depth` 32. This branch is LIVE-DEAD on today's data — see
-        the residual entry in `max_depth`'s docstring above for the full
-        account, the reachable 3-tier `steel_boots` counter-shape, and why
-        the tests exercising this branch now need a synthetic (35-material)
-        fixture that no real recipe approaches.
-
-        UPDATED 2026-08-14 (stop-at-the-achievable-step, Task 1): this branch
-        being dead no longer has routing consequences. `strategy_driver.
-        _gather_goal_for_unreachable_equippable` used to be its downstream
-        fallback when routing read this depth branch's False; that link is
-        gone — `_equippable_goal` and `objective_step_goal`'s branch-3 now
-        ask `actionable_step` directly, so the fallback fires on whether the
-        deepest achievable node differs from the goal, not on whether this
-        gate rejects. This method is unaffected by that change and stays a
-        waste-avoidance filter over `min_plan_length` for whichever callers
-        still consult it directly (e.g. `strategy_driver.StrategyArbiter.
-        _plans`'s pre-plan reachability check).
-
-        When the target (or its materials) is already in hand/bank the count
-        drops and the short craft+equip plan IS reachable, so the goal stays
-        plannable and GatherMaterials does the accumulating across cycles —
-        this half of the mechanism remains real, just currently unreachable
-        via the depth branch on real data.
-
-        Under-skill craft targets are NOT pruned here (LevelSkill epic P3a): the
-        former crafting-skill fast-fail (which returned False while the character
-        was below the recipe's crafting_level — the pre-LevelSkill CPU guard
-        against the arbiter planning a gated final craft to exhaustion) is
-        retired. `relevant_actions` now admits a SCOPED LevelSkill for the
-        target's own gated (skill, level), so an under-skill equippable is
-        reachable via a grind->craft->equip sequence — the same fix P2 applied to
-        GatherMaterialsGoal. Only the depth-reachability bound remains."""
-        if self.is_satisfied(state):
-            return True
-        target = self.find_upgrade_target(state, game_data)
-        if target is None:
-            return True
-        item, _slot = target
-        owned: dict[str, int] = dict(state.inventory)
-        for code, qty in (state.bank_items or {}).items():
-            owned[code] = owned.get(code, 0) + qty
-        if owned.get(item, 0) > 0:
-            return True
-        return min_plan_length(
-            item, 1, game_data.crafting_recipes, owned,
-            game_data.max_gather_yield, equip=True,
-        ) <= self.max_depth
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:

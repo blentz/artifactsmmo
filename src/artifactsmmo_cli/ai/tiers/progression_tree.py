@@ -5,7 +5,7 @@ Phase 4b: THE decision engine — `StrategyEngine.decide` delegates here.
 The Phase-4b cutover swapped the decision procedure, not the data sources: it
 kept consuming the same helpers the flat ranking had. That is no longer true of
 the RANKING helpers — wave 3a's resolution walk stopped calling them and wave 3b
-deleted them (see the WAVE 3b note below `_servable_promotion`). What still
+deleted them (see the WAVE 3b note above `_resolution_rows`). What still
 holds, and is why the cutover was safe, is the CANDIDATE side: the builder
 below and `pursuit_value` are the same ones the flat ranking read, so the walk
 ranks the same facts about the same world.
@@ -26,7 +26,6 @@ actionable_step. Module-style access on both sides keeps either import
 order sound (nothing is dereferenced until after both modules finish
 executing)."""
 
-from collections.abc import Callable
 from fractions import Fraction
 
 # MODULE import, not `from ... import RootResolution, resolve_root`, and for
@@ -42,7 +41,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import strategy
-from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
+from artifactsmmo_cli.ai.tiers.meta_goal import StepDecline, no_decline
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree_core import GearCandidate
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
@@ -151,34 +150,6 @@ def has_structural_upgrade(state: WorldState, game_data: GameData,
 # non-ranking consumers at `tiers/taskmaster_choice.py` and `tiers/means_worth.py`.
 
 
-def _servable_promotion(
-    chosen_root: MetaGoal, chosen_step: MetaGoal,
-    fallback_roots: list[MetaGoal], fallback_steps: list[MetaGoal],
-    step_servable: Callable[[MetaGoal, MetaGoal], bool],
-) -> tuple[MetaGoal, MetaGoal, list[MetaGoal], list[MetaGoal]]:
-    """Servability demotion (the legacy decide()'s `step_servable` role,
-    surviving the flip — dropping it risks the plannability livelocks the
-    filter exists to prevent, e.g. feather_coat 2026-06-20): when the chosen
-    (root, step) is unservable, walk the fallback pairs IN ORDER to the first
-    servable pair and promote it to chosen. Demoted pairs (the original
-    chosen, then any skipped fallbacks) stay in the fallback lists after the
-    promoted one — original priority order minus the promotion. All
-    unservable: keep the original choice (the arbiter asks it, and declines
-    it, every cycle)."""
-    if step_servable(chosen_root, chosen_step):
-        return chosen_root, chosen_step, fallback_roots, fallback_steps
-    idx = next(
-        (i for i, pair in enumerate(zip(fallback_roots, fallback_steps, strict=True))
-         if step_servable(*pair)),
-        None)
-    if idx is None:
-        return chosen_root, chosen_step, fallback_roots, fallback_steps
-    promoted_root, promoted_step = fallback_roots[idx], fallback_steps[idx]
-    demoted_roots = [chosen_root, *fallback_roots[:idx], *fallback_roots[idx + 1:]]
-    demoted_steps = [chosen_step, *fallback_steps[:idx], *fallback_steps[idx + 1:]]
-    return promoted_root, promoted_step, demoted_roots, demoted_steps
-
-
 def _resolution_rows(state: WorldState, game_data: GameData,
                      resolution: "_root.RootResolution",
                      ctx: SelectionContext) -> "list[strategy.RootScore]":
@@ -216,7 +187,7 @@ def _resolution_rows(state: WorldState, game_data: GameData,
 
 def decide_tree(state: WorldState, game_data: GameData,
                 objective: CharacterObjective,
-                step_servable: Callable[[MetaGoal, MetaGoal], bool] | None = None,
+                step_decline: StepDecline = no_decline,
                 ctx: SelectionContext = NO_PROFILE_CONTEXT,
                 history: LearningStore | None = None,
                 ) -> "strategy.StrategyDecision":
@@ -244,17 +215,21 @@ def decide_tree(state: WorldState, game_data: GameData,
 
     What SURVIVES, and must:
 
-    * `step_servable` and `_servable_promotion` — the plannability demotion.
-      Verbatim: it is a pure function over four lists and knows nothing about
-      scoring. Dropping it reinstates the feather_coat livelock (2026-06-20).
+    * `step_decline` — the cycle's answer for a root's step, handed to the walk
+      so a gear target whose step cannot be served never heads it (Phase 3-2).
+      It replaced `step_servable` + `_servable_promotion`, which promoted past
+      an unservable pick AFTER the walk, on `is_plannable`'s verdict (a second
+      model that refused goals the walk serves). The feather_coat livelock
+      (2026-06-20) it guarded against is closed the same way: the woodcutting-
+      gated step declines, so the target cannot head the walk.
     * `fallback_roots` / `fallback_steps` — NOT display (spec §2.1).
       `objective_step_goal` still returns None for a resolved root, and
       `_resolve_step_goal` walks past that. The walk re-derives the pairs from
       `RootResolution.alternatives`, trunk last (2026-07-27: a trunk at index 0
       swallowed the whole gear branch).
-    * `promoted_from` — the tree's own pick when promotion displaced it.
     """
-    resolution = _root.resolve_root(state, game_data, objective, ctx, history)
+    resolution = _root.resolve_root(state, game_data, objective, ctx, history,
+                                    step_decline)
     chosen_root = resolution.root
     chosen_step = (
         (strategy.actionable_step(chosen_root, state, game_data, ctx)
@@ -263,13 +238,6 @@ def decide_tree(state: WorldState, game_data: GameData,
     fallback_roots = list(resolution.alternatives)
     fallback_steps = [strategy.actionable_step(alt, state, game_data, ctx) or alt
                       for alt in resolution.alternatives]
-
-    tree_pick_root = chosen_root
-    if (step_servable is not None and chosen_root is not None
-            and chosen_step is not None):
-        chosen_root, chosen_step, fallback_roots, fallback_steps = _servable_promotion(
-            chosen_root, chosen_step, fallback_roots, fallback_steps, step_servable)
-    promoted_from = tree_pick_root if chosen_root is not tree_pick_root else None
 
     # interrupt is trace-shape compatibility only: RestoreHP preemption lives
     # in the engine-independent arbiter guard ladder.
@@ -285,11 +253,7 @@ def decide_tree(state: WorldState, game_data: GameData,
         # `focus_aging_pick`'s fast-path guard, carrying its own drift warning
         # and two mutation anchors; a single producer cannot drift from itself.
         aged_pick=resolution.aged,
-        promoted_from=promoted_from,
-        # PUBLISHED EVEN WHEN PROMOTION MOVED THE ROOT: the demand is a fact
-        # about what this character cannot make, not about what it happens to
-        # be doing this cycle, and a sibling's craft is just as useful either
-        # way.
+        declined=resolution.declined,
         blocked_target=resolution.blocked_target,
     )
 

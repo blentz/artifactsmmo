@@ -1,6 +1,7 @@
 """Tier-2 meta-goal nodes: concrete progression conditions for the
 prerequisite graph. Frozen + hashable so P3 traversal can use visited-sets."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -122,6 +123,22 @@ ITEM_FOCUS_SLOT = "<item>"
 """Focus-ledger slot sentinel for a slot-less `ObtainItem` — the material-gated
 head (`ObtainItem(code=blocker, quantity=n)`, no slot) and the recipe-input
 steps. Sibling of `SKILL_FOCUS_SLOT`."""
+
+
+StepDecline = Callable[[MetaGoal], str | None]
+"""The root walk's answer for a root's step (Phase 3-2): the named reason the
+step cannot be served this cycle (decomposition's final decline, or no step goal
+at all), or None when it can be served or only the search can say. The player
+builds it over the cycle's action pool (`GamePlayer._step_decline`); it is the
+same question the arbiter asks of the same goal. Defined beside `MetaGoal`
+because both the walk (`decisions.root`) and `StrategyEngine.decide` take it,
+and every other home is an import cycle through `tiers/__init__`."""
+
+
+def no_decline(_root: MetaGoal) -> str | None:
+    """No answer: the walk treats every target as servable. For callers that
+    have no action pool (offline censuses, unit tests of the graph itself)."""
+    return None
 
 
 def contender_focus_key(node: "ObtainItem | ReachSkillLevel") -> tuple[str, str]:

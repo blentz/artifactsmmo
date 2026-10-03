@@ -428,15 +428,7 @@ class TestPerScenarioPins:
 # tests/test_ai/test_progression_tree_core.py; it is deleted in wave 3b.
 
 
-# --- step_servable demotion (Phase-4b Task-1: THE FLIP) ---------------------
-#
-# The legacy decide()'s servable filter must survive the cutover: an
-# unservable chosen (root, step) falls through the fallback pairs IN ORDER to
-# the first servable pair; demoted pairs stay in the fallback lists after the
-# promoted one; all-unservable keeps the original choice (the arbiter's
-# doomed-memo handles it, as today).
-
-class TestServabilityDemotion:
+class TestStepDeclineInTheWalk:
     """l10_weapon_upgrade pins (see TestPerScenarioPins): chosen =
     ReachSkillLevel(jewelrycrafting, 2); alternatives = [
     ReachSkillLevel(gearcrafting, 2), ObtainItem(blue_slimeball, 2),
@@ -454,7 +446,12 @@ class TestServabilityDemotion:
     FIX-ROUND 1 re-derivation: with real combat stats this scenario's board is
     FOUR alternatives behind the head instead of one, so the in-order walk
     tests below have real room to discriminate — the previous two-candidate
-    board could not tell "takes the next servable pair" from "takes the last"."""
+    board could not tell "takes the next servable pair" from "takes the last".
+
+    PHASE 3-2: the walk itself asks each gear target's step (`step_decline`)
+    and lets only a served one head it; a declined target is named and offered
+    after the served siblings. This replaced promoting past an unservable head
+    after the walk (`_servable_promotion`, deleted with `step_servable`)."""
 
     SKILL_JEWEL = ReachSkillLevel(skill="jewelrycrafting", level=2)
     SKILL_GEAR = ReachSkillLevel(skill="gearcrafting", level=2)
@@ -485,115 +482,55 @@ class TestServabilityDemotion:
     item, so weaponcrafting has no other route and is offered one — appended
     behind the trunk, changing no chosen root and no existing order."""
 
-    def _decide_with(self, servable):
+    def _decide_with(self, decline):
         gd = _bundle()
         state = scenario_state(SCENARIOS["l10_weapon_upgrade"], gd)
         return decide_tree(state, gd, CharacterObjective.from_game_data(gd),
-                           step_servable=servable)
+                           step_decline=decline)
 
-    def test_servable_chosen_is_untouched(self):
-        d = self._decide_with(lambda root, step: True)
-        assert d.chosen_root == self.SKILL_JEWEL
-        assert d.fallback_roots == [self.SKILL_GEAR, self.SLIME, self.SHIELD,
-                                    self.TRUNK, *self.ORPHANS]
-
-    def test_unservable_chosen_promotes_the_next_gear_candidate_not_the_trunk(self):
-        """THE 2026-07-27 REGRESSION. One unservable gear step must not
-        abandon the gear branch: the promotion takes the next servable
-        candidate, and the trunk stays behind it."""
-        d = self._decide_with(lambda root, step: root != self.SKILL_JEWEL)
-        assert d.chosen_root == self.SKILL_GEAR
-        assert d.chosen_root != self.TRUNK
-        # The demoted pair survives in the fallbacks, ahead of the rest —
-        # original priority order minus the promotion.
-        assert d.fallback_roots == [self.SKILL_JEWEL, self.SLIME, self.SHIELD,
-                                    self.TRUNK, *self.ORPHANS]
-        assert d.fallback_steps[0] == self.SKILL_JEWEL
-
-    def test_walk_skips_unservable_fallbacks_in_order(self):
-        """IN ORDER, and with four alternatives it is now a real claim: two are
-        unservable, so the walk must land on the THIRD — not on the last, and
-        not on the trunk."""
-        blocked = (self.SKILL_JEWEL, self.SKILL_GEAR)
-        d = self._decide_with(lambda root, step: root not in blocked)
-        assert d.chosen_root == self.SLIME
-        assert d.fallback_roots == [self.SKILL_JEWEL, self.SKILL_GEAR,
-                                    self.SHIELD, self.TRUNK, *self.ORPHANS]
-
-    def test_every_gear_pair_unservable_still_reaches_the_trunk(self):
-        """The trunk stays in the list, just last: a FULLY blocked gear branch
-        must still yield to XP rather than deadlock on an unservable pick.
-        Yielding the branch is the last resort, not the first.
-
-        FIX-ROUND 2: the STEP is asserted against the trunk's OWN paired step,
-        taken from the unpromoted decision, not against `self.TRUNK`. The loose
-        form was the very thing an earlier docstring here argued against — with
-        `chosen_root` also TRUNK, "a walk that promoted the root while keeping
-        some other root's step would pass". Reading the pair out of the
-        no-promotion decision keeps the discrimination without hard-coding a
-        step value that moves with the fixture."""
-        unpromoted = self._decide_with(lambda root, step: True)
-        trunk_at = unpromoted.fallback_roots.index(self.TRUNK)
-        trunk_step = unpromoted.fallback_steps[trunk_at]
-        gear = (self.SKILL_JEWEL, self.SKILL_GEAR, self.SLIME, self.SHIELD)
-        d = self._decide_with(lambda root, step: root not in gear)
-        assert d.chosen_root == self.TRUNK
-        assert d.chosen_step == trunk_step
-        # …and the pair really is discriminating: the promoted step is NOT the
-        # step any other root would have contributed.
-        assert trunk_step not in unpromoted.fallback_steps[:trunk_at]
-        assert trunk_step != unpromoted.chosen_step
-
-    def test_promotion_records_the_root_the_tree_actually_picked(self):
-        """The trace could not tell "the tree chose this" from "promotion landed
-        here": the servability verdict is computed on the FINAL root, so a
-        promoted root always logs as servable. Live 2026-07-27, 9 of 15 cycles
-        logged `ReachCharLevel, servable: true` and read as the tree choosing XP
-        when every one was a displaced gear pick."""
-        d = self._decide_with(lambda root, step: root != self.SKILL_JEWEL)
-        assert d.chosen_root == self.SKILL_GEAR
-        assert d.promoted_from == self.SKILL_JEWEL
-
-    def test_no_promotion_records_nothing(self):
-        d = self._decide_with(lambda root, step: True)
-        assert d.chosen_root == self.SKILL_JEWEL
-        assert d.promoted_from is None
-
-    def test_all_unservable_records_no_promotion(self):
-        """Nothing was displaced — the original choice is kept — so the field
-        must stay None rather than pointing at the root that IS chosen."""
-        d = self._decide_with(lambda root, step: False)
-        assert d.chosen_root == self.SKILL_JEWEL
-        assert d.promoted_from is None
-
-    def test_all_unservable_keeps_original_choice(self):
-        d = self._decide_with(lambda root, step: False)
-        assert d.chosen_root == self.SKILL_JEWEL
-        assert d.fallback_roots == [self.SKILL_GEAR, self.SLIME, self.SHIELD,
-                                    self.TRUNK, *self.ORPHANS]
-
-    def test_default_none_predicate_is_untouched(self):
+    def test_default_no_decline_is_untouched(self):
         gd = _bundle()
         state = scenario_state(SCENARIOS["l10_weapon_upgrade"], gd)
         d = decide_tree(state, gd, CharacterObjective.from_game_data(gd))
         assert d.chosen_root == self.SKILL_JEWEL
         assert d.fallback_roots == [self.SKILL_GEAR, self.SLIME, self.SHIELD,
                                     self.TRUNK, *self.ORPHANS]
+        assert d.declined == ()
 
-    def test_predicate_sees_root_step_pairs(self):
-        seen: list[tuple[object, object]] = []
+    def test_a_declined_head_lets_the_next_gear_target_head(self):
+        """The trunk-last property, now inside the walk: one declined gear
+        target hands the head to the next GEAR target, never to the trunk, and
+        is offered after the served siblings with its reason."""
+        d = self._decide_with(lambda root: "blocked" if root == self.SKILL_JEWEL else None)
+        assert d.chosen_root == self.SKILL_GEAR
+        assert d.fallback_roots == [self.SLIME, self.SHIELD, self.SKILL_JEWEL,
+                                    self.TRUNK, *self.ORPHANS]
+        assert d.declined == ((repr(self.SKILL_JEWEL), "blocked"),)
 
-        def spy(root, step):
-            seen.append((root, step))
-            return False
+    def test_declined_targets_keep_their_own_order_behind_the_served(self):
+        declined = {self.SKILL_JEWEL, self.SLIME}
+        d = self._decide_with(lambda root: "blocked" if root in declined else None)
+        assert d.chosen_root == self.SKILL_GEAR
+        assert d.fallback_roots == [self.SHIELD, self.SKILL_JEWEL, self.SLIME,
+                                    self.TRUNK, *self.ORPHANS]
+
+    def test_every_gear_target_declined_leaves_the_gear_arm(self):
+        gear = {self.SKILL_JEWEL, self.SKILL_GEAR, self.SLIME, self.SHIELD}
+        d = self._decide_with(lambda root: "blocked" if root in gear else None)
+        assert d.chosen_root not in gear
+        assert {root for root, _reason in d.declined} == {repr(g) for g in gear}
+        assert d.fallback_roots[:4] == [self.SKILL_JEWEL, self.SKILL_GEAR,
+                                        self.SLIME, self.SHIELD]
+
+    def test_the_walk_asks_each_gear_target(self):
+        seen: list[object] = []
+
+        def spy(root):
+            seen.append(root)
+            return None
 
         self._decide_with(spy)
-        # Walk order: chosen pair first, then fallbacks in order.
-        assert seen[0] == (self.SKILL_JEWEL, self.SKILL_JEWEL)
-        assert [r for r, _ in seen[1:]] == [self.SKILL_GEAR, self.SLIME,
-                                            self.SHIELD, self.TRUNK,
-                                            *self.ORPHANS]
-        assert dict(seen)[self.SHIELD] == self.SHIELD_STEP
+        assert set(seen) == {self.SKILL_JEWEL, self.SKILL_GEAR, self.SLIME, self.SHIELD}
 
 
 # --- Synthetic-GameData unit tests (coverage of branches the 6 scenarios

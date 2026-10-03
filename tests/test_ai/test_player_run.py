@@ -795,6 +795,7 @@ def test_run_derives_crafting_target_from_fallback_obtain_item():
         # Same reasoning: the real decision always carries it, and the
         # decision-events log reads it straight.
         aged_pick = False
+        declined = ()
 
         def to_trace(self):
             return {}

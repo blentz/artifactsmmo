@@ -10,7 +10,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.root_group import ROOT_GROUPS
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision, StrategyEngine
@@ -218,25 +218,6 @@ def test_write_site_records_the_chosen_roots_group(tmp_path: Path) -> None:
         rows = _record(store, decision)
         assert len(rows) == 1
         assert rows[0].root_group == "trunk"
-        assert rows[0].root_repr == repr(ReachCharLevel(level=10))
-    finally:
-        store.close()
-
-
-def test_write_site_groups_a_promoted_pick_by_the_walks_own_root(tmp_path: Path) -> None:
-    """Servability promotion can walk the tree's gear pick to the trunk. The
-    write site must record `gear` (what the walk chose) while `root_repr` keeps
-    the trunk that actually ran — the pair is what makes the promotion legible
-    afterwards, and counting it as `trunk` would state the opposite."""
-    store = LearningStore(str(tmp_path / "promoted.db"), character="hero")
-    try:
-        store.start_session()
-        decision = StrategyDecision(
-            interrupt=None, chosen_root=ReachCharLevel(level=10), chosen_step=None,
-            promoted_from=ObtainItem(code="copper_boots"))
-        rows = _record(store, decision)
-        assert len(rows) == 1
-        assert rows[0].root_group == "gear"
         assert rows[0].root_repr == repr(ReachCharLevel(level=10))
     finally:
         store.close()

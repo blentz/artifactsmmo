@@ -33,7 +33,11 @@ class Mechanism(StrEnum):
     # Selection-order compensations (subject: goal repr).
     WORTH_GATE_BYPASS = "worth_gate_bypass"
     WAIT_FALLBACK = "wait_fallback"
-    SERVABLE_PROMOTION = "servable_promotion"
+    # `servable_promotion` was retired by Phase 3-2: the root walk no longer
+    # promotes past an unservable pick, it never picks one. What it names
+    # instead (subject: the declined root's repr; detail: the reason its step
+    # cannot be served this cycle):
+    ROOT_DECLINE = "root_decline"
     # Stability between cycles (subject: goal/root repr).
     COMMITMENT_CHANGE = "commitment_change"
     GUARD_PREEMPT = "guard_preempt"

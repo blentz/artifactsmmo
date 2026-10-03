@@ -593,9 +593,16 @@ def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
     # trunk — already the arbiter's selection, as the comment above records —
     # is now the ROOT as well, which is asserted directly here instead of by
     # membership in the fallbacks. The satchel claim below is untouched.
-    assert report.decision.chosen_root == ReachCharLevel(level=20)
-    assert report.decision.promoted_from == ObtainItem(
-        code="backpack", quantity=1, slot="bag_slot")
+    #
+    # PHASE 3-2: the bag slot's `backpack` (event-vendor only) cannot be
+    # served, so the walk passes it over with that reason rather than picking
+    # it and having promotion move the root afterwards. With no servable gear
+    # target the walk takes its own combat arm, whose trunk is the next rung
+    # above (15), not the alternatives' milestone (20) promotion used to land on.
+    assert report.decision.chosen_root == ReachCharLevel(level=15)
+    assert report.decision.declined == (
+        ("ObtainItem(code='backpack', quantity=1, slot='bag_slot')",
+         "infeasible:backpack:no_route:backpack"),)
     assert not any(r.code == "satchel" for r in report.decision.fallback_roots
                    if isinstance(r, ObtainItem)), report.decision.fallback_roots
     # The grind target moved with the re-converged loadout (2026-08-04): at the

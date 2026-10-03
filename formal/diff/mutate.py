@@ -3510,10 +3510,12 @@ DECISION_MUTATIONS = [
 # the empty-slot rung rule and the slot tiebreak. Killed by
 # tests/test_ai/test_decisions_root.py.
 ROOT_DECISION_MUTATIONS = [
+    # Re-anchored 2026-10-03 (Phase 3-2): the pivot reads the SERVED targets,
+    # and a comment now sits between the test and its return.
     ("root: IsMyGearBehindMyTier's emptiness test is inverted -- a character"
      " WITH gear targets is sent to the combat question",
-     "        if not targets:\n            return IsThereACombatTarget(self.walk)\n",
-     "        if targets:\n            return IsThereACombatTarget(self.walk)\n"),
+     "        if not served:\n",
+     "        if served:\n"),
     # Re-anchored 2026-08-23 (fix-round 1): the head is chosen by `_aged_head`
     # now, and the siblings are whatever is left, so the LEAST-behind mutant
     # edits the fast path's return rather than a slice.
@@ -3650,8 +3652,8 @@ ROOT_DECISION_MUTATIONS = [
      "            return ReachCharLevel(level=tier_of_level(game_data, state.level))\n"),
     # `RootResolution.alternatives` construction. Both conjuncts are load
     # bearing and each gets its own mutant: without `alt != root` the chosen
-    # root reappears as its own alternative (so `_servable_promotion` retries
-    # the pair it just rejected); without the membership test a slot repeated
+    # root reappears as its own alternative (so the arbiter retries the pair
+    # it just tried); without the membership test a slot repeated
     # in the sibling list is offered twice.
     ("root: alternatives keep the chosen root, so it is offered as its own"
      " alternative",
@@ -4594,27 +4596,34 @@ SYNERGY_CORE_MUTATIONS = [
      "    return sum(top, Fraction(0))"),
 ]
 
-# decide_tree's GEAR-branch fallback ORDER (progression_tree.py). Its own group:
-# the mutant is unit-killed by tests/test_ai/test_progression_tree.py, not by
-# the synergy-assembly suite the other impure-tree group runs.
-FALLBACK_ORDER_MUTATIONS = [
-    # WAVE 3a DELETED TWO MUTANTS FROM THIS GROUP — "xp trunk back to fallback
-    # index 0" and "xp trunk dropped from the gear-branch fallbacks entirely".
-    # Both anchored `decide_tree`'s hand-assembled `[*extra_roots, trunk,
-    # *demoted_roots]` lists, which no longer exist: the fallback pairs come
-    # from `RootResolution.alternatives`, and the trunk-last ORDER is now a
-    # property of `resolve_root`, which appends it after every sibling. The
-    # 2026-07-27 ruling those two mutants protected is protected instead by
-    # `root: alternatives keep the chosen root...` in ROOT_DECISION_MUTATIONS
-    # and by test_progression_tree.py's TestServabilityDemotion, which asserts
-    # the trunk-last fallback list directly.
-    # Promotion silently rewrites history: `promoted_from` always None, so a
-    # displaced pick again reads as the tree's own decision. This is the
-    # diagnostic that made the trunk-at-index-0 defect invisible for as long as
-    # it existed — it is anchored so it cannot quietly go back to lying.
-    ("tree: promotion no longer records the displaced pick",
-     "    promoted_from = tree_pick_root if chosen_root is not tree_pick_root else None",
-     "    promoted_from = None"),
+# The root walk's step-decline filter (Phase 3-2, `decisions/root.py`): a gear
+# target whose step cannot be served never heads the walk, is named, and is
+# offered after the served siblings. Unit-killed by
+# tests/test_ai/test_progression_tree.py's TestStepDeclineInTheWalk, which runs
+# the real walk on `l10_weapon_upgrade`. Replaced FALLBACK_ORDER_MUTATIONS,
+# whose one mutant anchored `promoted_from` in the deleted promotion.
+STEP_DECLINE_MUTATIONS = [
+    ("root: a declined gear target may still head the walk",
+     "                  if self.walk.serves(slot, target, state, game_data, ctx, history)}",
+     "                  if self.walk.serves(slot, target, state, game_data, ctx, history) or True}"),
+    ("root: declined gear targets are dropped from the alternatives",
+     "        for slot, target in (*walk.sibling_targets, *walk.declined_targets)\n",
+     "        for slot, target in walk.sibling_targets\n"),
+    ("root: declined targets go ahead of the served siblings",
+     "        for slot, target in (*walk.sibling_targets, *walk.declined_targets)\n",
+     "        for slot, target in (*walk.declined_targets, *walk.sibling_targets)\n"),
+    ("root: the decline's reason is not recorded",
+     "        self.declined[repr(root)] = reason\n",
+     "        pass\n"),
+]
+
+# The fight arm's half of the same filter. Killed by
+# tests/test_ai/scenarios/test_held_task.py (the closable row's weaponcrafting
+# gate declines, so the arm must fall through rather than divert).
+STEP_DECLINE_FIGHT_ARM_MUTATIONS = [
+    ("root: the fight arm heads with a declined target",
+     "        if not self.walk.serves(slot, gear, state, game_data, ctx, history):\n",
+     "        if False:\n"),
 ]
 
 # WAVE 3a DELETED `BRANCH_OBJECTIVE_ROOT_MUTATIONS` (four mutants over the
@@ -4714,18 +4723,10 @@ PASSIVE_CURRENCY_HELPER_MUTATIONS = [
 # GamePlayer's gear-focus aging ledger. Unit-killed by
 # tests/test_ai/test_player_focus_ledger.py.
 FOCUS_CHARGE_MUTATIONS = [
-    # Stop charging the DISPLACED pick — the shape that shipped, measured live
-    # 2026-07-27: an unservable root that wins the head pick never ages, so it
-    # wins EVERY cycle (lich_race_trophy took 16 of 18 head picks and never
-    # entered the ledger) while the promoted root it displaced absorbs all the
-    # focus and decays. The anti-starvation interleave goes inert; only
-    # servability promotion keeps the bot on target.
-    ("focus ledger: displaced pick no longer ages (unservable root wins forever)",
-     '        displaced = getattr(decision, "promoted_from", None)',
-     "        displaced = None"),
     # Stop charging the COMMITTED root: the root actually being pursued never
     # ages, so nothing ever rotates away from it — the starvation the ledger
-    # exists to prevent. Both charges are load-bearing, in opposite directions.
+    # exists to prevent. (The displaced-pick charge and its mutant went with
+    # servability promotion, Phase 3-2.)
     ("focus ledger: committed root no longer ages",
      "        self._charge_focus(self._gear_root_key(decision.chosen_root),\n"
      "                           decision.aged_pick)",
@@ -8879,8 +8880,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_progression_tree_core.py", survivors)
     run_group(SYNERGY_CORE_SRC, SYNERGY_CORE_MUTATIONS,
               "tests/test_ai/test_synergy_core.py", survivors)
-    run_group(PROGRESSION_TREE_IMPURE_SRC, FALLBACK_ORDER_MUTATIONS,
+    run_group(ROOT_DECISION_SRC, STEP_DECLINE_MUTATIONS,
               "tests/test_ai/test_progression_tree.py", survivors)
+    run_group(ROOT_DECISION_SRC, STEP_DECLINE_FIGHT_ARM_MUTATIONS,
+              "tests/test_ai/scenarios/test_held_task.py", survivors)
     # Equip-loop closure (2026-08-04): four unit-killed groups, each on its own
     # run_group so a survivor names the exact authority that stopped deferring.
     run_group(SLOT_OCCUPANCY_SRC, SLOT_OCCUPANCY_MUTATIONS,

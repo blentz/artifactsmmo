@@ -2,10 +2,11 @@
 
 Regression guard for the original 641K-node burn: when a satchel recipe
 requires jasper_crystal (a tasks_coin-bought NPC leaf) and the character
-holds 0 tasks_coin, is_plannable must return False immediately (the
-affordability fast-fail prunes the search). When the character holds >= 8
-tasks_coin, is_plannable returns True and relevant_actions emits an
-NpcBuyAction for jasper_crystal.
+holds 0 tasks_coin, the walk must name the currency as a blocker (Phase 3-2
+deleted the `is_plannable` fast-fail that pruned this search; the walk's own
+decline is the answer now). When the character holds >= 8 tasks_coin the
+currency is no blocker, and relevant_actions emits an NpcBuyAction for
+jasper_crystal.
 
 Satchel recipe (simplified for testing):
   satchel = {cowhide: 5, jasper_crystal: 1}
@@ -15,9 +16,11 @@ Satchel recipe (simplified for testing):
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.item_catalog import ItemStats
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -92,7 +95,7 @@ def _make_satchel_game_data() -> GameData:
     fill_monster_stat_defaults(gd)
 
     # Bank and gearcrafting workshop locations (needed by factory internals
-    # but not required for is_plannable / relevant_actions calls).
+    # but not required for the walk / relevant_actions calls).
     gd._bank_location = (0, 1)
     gd._workshop_locations["gearcrafting"] = (3, 0)
     gd._taskmaster_location = (0, 2)
@@ -134,36 +137,32 @@ def _state_8coins():
 # Tests
 # ---------------------------------------------------------------------------
 
-def test_satchel_unaffordable_is_not_plannable():
-    """Regression guard for the 641K-node burn (C4 original bug).
-
-    When the character holds 0 tasks_coin (jasper_crystal costs 8),
-    GatherMaterialsGoal(satchel).is_plannable must return False.
-    The affordability fast-fail (currency_afford_plannable_pure) detects
-    that NpcBuy(jasper_crystal) is inapplicable and prunes immediately.
-    No GOAP search should be attempted.
-    """
-    gd = _make_satchel_game_data()
-    state = _state_0coins()
-    goal = GatherMaterialsGoal(SATCHEL, {SATCHEL: 1})
-    assert goal.is_plannable(state, gd) is False
+def _blockers(state) -> list[str]:
+    """The walk's named decline for the satchel from `state`."""
+    declined: list[str] = []
+    fight_cow = FightAction(monster_code=COW, locations=frozenset([COW_LOC]))
+    assert decompose(GatherMaterialsGoal(SATCHEL, {SATCHEL: 1}), state,
+                     _make_satchel_game_data(), [fight_cow], NO_PROFILE_CONTEXT,
+                     declined) is None
+    return declined
 
 
-def test_satchel_affordable_is_plannable_and_emits_npc_buy():
-    """When the character holds >= 8 tasks_coin, the satchel is plannable
-    and relevant_actions emits an NpcBuyAction for jasper_crystal.
+def test_satchel_unaffordable_names_the_currency():
+    """Regression guard for the 641K-node burn (C4 original bug): with 0
+    tasks_coin (jasper_crystal costs 8) the walk names the currency as a
+    blocker; with 8 it does not. (Both decline on cowhide: this fixture's cow is
+    not a walk route, which keeps the currency the only variable.)"""
+    assert _blockers(_state_0coins()) == ["infeasible:satchel:no_route:cowhide,tasks_coin"]
+    assert _blockers(_state_8coins()) == ["infeasible:satchel:no_route:cowhide"]
 
-    Two assertions:
-    1. is_plannable returns True (affordability gate passes, skill gate passes).
-    2. relevant_actions emits NpcBuyAction(item_code='jasper_crystal') so the
-       planner can chain Fight(cow)×N -> NpcBuy(jasper_crystal) -> Craft(satchel).
-    """
+
+def test_satchel_affordable_emits_npc_buy():
+    """When the character holds >= 8 tasks_coin, relevant_actions emits
+    NpcBuyAction(item_code='jasper_crystal') so the chain Fight(cow)×N ->
+    NpcBuy(jasper_crystal) -> Craft(satchel) has its buy leg."""
     gd = _make_satchel_game_data()
     state = _state_8coins()
     goal = GatherMaterialsGoal(SATCHEL, {SATCHEL: 1})
-
-    # Assertion 1: plannable when affordable
-    assert goal.is_plannable(state, gd) is True
 
     # Build a minimal action list (FightAction for cow; relevant_actions
     # will EMIT the NpcBuyAction based on the recipe closure).
@@ -172,7 +171,7 @@ def test_satchel_affordable_is_plannable_and_emits_npc_buy():
 
     kept = goal.relevant_actions(actions, state, gd)
 
-    # Assertion 2: NpcBuyAction for jasper_crystal is emitted
+    # NpcBuyAction for jasper_crystal is emitted
     npc_buys = [a for a in kept if isinstance(a, NpcBuyAction) and a.item_code == JASPER]
     assert npc_buys, (
         f"expected NpcBuyAction(item_code={JASPER!r}) in relevant_actions output; "

@@ -126,6 +126,7 @@ def _canned_report() -> PlanReport:
         chosen_step=ObtainItem("feather", 2),
         ranking=[RootScore("ObtainItem(feather_coat)", "gear",
                            Fraction(5, 2), "ObtainItem(feather)")],
+        declined=(("ObtainItem(backpack)", "infeasible:backpack:no_route:backpack"),),
     )
     return PlanReport(
         decision=decision,
@@ -173,6 +174,8 @@ def test_plan_command_prints_report(capsys):
     assert "resolution (top 8)" in out
     assert "cycles to 50" not in out
     assert "  gear  ObtainItem(feather_coat)  ->  step=ObtainItem(feather)" in out
+    # Phase 3-2: the walk's named declines are printed with their reason.
+    assert "  ObtainItem(backpack): infeasible:backpack:no_route:backpack" in out
 
 
 def test_plan_command_passes_and_prints_simulated_state(capsys):

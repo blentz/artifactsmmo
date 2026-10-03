@@ -79,6 +79,10 @@ def _print_report(player: GamePlayer, report: PlanReport) -> None:
           "alternatives:")
     for rs in d.ranking[:8]:
         print(f"  {root_detail(rs)}  {rs.root_repr}  ->  step={rs.step_repr}")
+    if d.declined:
+        print("declined by the walk (the step cannot be served this cycle):")
+        for root_repr, reason in d.declined:
+            print(f"  {root_repr}: {reason}")
     print("=" * 70)
 
 

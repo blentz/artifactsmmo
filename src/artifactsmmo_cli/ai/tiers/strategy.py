@@ -2,7 +2,6 @@
 actionable subgoal. `decide` delegates to `progression_tree.decide_tree`
 (Phase 4b THE FLIP); the flat scalar ranking pipeline is deleted."""
 
-from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from fractions import Fraction
@@ -18,6 +17,8 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
+    StepDecline,
+    no_decline,
 )
 from artifactsmmo_cli.ai.tiers.objective import (
     ATTAINABILITY_ALLOWS_GREY,
@@ -264,15 +265,11 @@ class StrategyDecision:
     # longer pollute the schedule. Defaulted False: fast-path / non-gear / XP
     # decisions consume no seat, and every non-tree constructor is unaffected.
     aged_pick: bool = False
-    # The root the TREE picked, when servability promotion then displaced it;
-    # None when the tree's own pick survived. Diagnostic only — no decision
-    # reads it — but the distinction is not recoverable afterwards: the
-    # servability diagnostic is computed on the FINAL decision, so a promoted
-    # root logs as servable and the promotion is invisible. Live 2026-07-27:
-    # 9 of 15 cycles logged `chosen_root: ReachCharLevel, servable: true` and
-    # read as the tree choosing XP, when the tree had chosen GEAR every time
-    # and promotion walked to the trunk sitting at fallback index 0.
-    promoted_from: MetaGoal | None = None
+    # `(root repr, reason)` for each gear target the walk passed over because
+    # its step cannot be served this cycle (`RootResolution.declined`). The
+    # named blockers; they replace the promoted-from root servability promotion
+    # used to report (Phase 3-2).
+    declined: tuple[tuple[str, str], ...] = ()
 
     def to_trace(self) -> dict[str, object]:
         return {
@@ -290,7 +287,7 @@ class StrategyEngine:
     objective: CharacterObjective
 
     def decide(self, state: WorldState, game_data: GameData,
-               step_servable: Callable[[MetaGoal, MetaGoal], bool] | None = None,
+               step_decline: StepDecline = no_decline,
                ctx: SelectionContext = NO_PROFILE_CONTEXT,
                history: LearningStore | None = None,
                ) -> StrategyDecision:
@@ -302,8 +299,9 @@ class StrategyEngine:
         `history`). See `progression_tree.decide_tree` for why each one has no
         reader left.
 
-        `step_servable` keeps the plannability demotion alive (see
-        `progression_tree._servable_promotion`). `ctx` is the caller's
+        `step_decline` is the cycle's answer for a root's step
+        (`decisions.root.StepDecline`): a gear target whose step it declines
+        cannot head the walk. `ctx` is the caller's
         per-cycle `SelectionContext` (see `GamePlayer._decide_band` /
         `plan_from_state`), forwarded to every `actionable_step` call so the
         descent stops at a node with any ready `ai/obtain_sources` route
@@ -319,4 +317,4 @@ class StrategyEngine:
         the same way every other `Decision` in the codebase does."""
         return progression_tree.decide_tree(
             state, game_data, self.objective,
-            step_servable=step_servable, ctx=ctx, history=history)
+            step_decline=step_decline, ctx=ctx, history=history)

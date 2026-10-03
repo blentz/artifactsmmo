@@ -101,8 +101,10 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
+    StepDecline,
     contender_focus_key,
     focus_key_str,
+    no_decline,
 )
 from artifactsmmo_cli.ai.tiers.objective import (
     CharacterObjective,
@@ -131,8 +133,8 @@ class RootResolution:
     groups, none of them scored against each other. It exists because
     `objective_step_goal` can still return None for a
     resolved root (`ReachCharLevel` with no combat target, the long-haul
-    items-task defer) and because `_servable_promotion` still needs somewhere
-    to walk. Deleting it regresses three named live traces — see
+    items-task defer) and the arbiter walks it when the chosen step does not
+    plan. Deleting it regresses three named live traces — see
     `strategy_driver._resolve_step_goal` and `progression_tree`'s
     fallback-order comment.
 
@@ -155,6 +157,11 @@ class RootResolution:
     `ReachSkillLevel` — see `RootWalk.blocked_target`. `decide_tree` copies it
     onto `StrategyDecision.blocked_target`, and the player publishes it as
     demand so a sibling holding the skill can make it."""
+
+    declined: tuple[tuple[str, str], ...] = ()
+    """`(root repr, reason)` for every gear target the walk passed over because
+    its step cannot be served this cycle — see `RootWalk.declined`. The named
+    blocker the plan pane shows instead of a bare demotion."""
 
 
 @dataclass
@@ -193,12 +200,37 @@ class RootWalk:
       it replaces: `decide_tree` used to re-derive the same verdict as a
       clause-for-clause MIRROR of `focus_aging_pick`'s fast-path guard, and
       that duplicate carried its own drift warning and two mutation anchors.
+
+    * `step_decline` / `declined` — the walk asks each gear target's step
+      whether it can be served (`StepDecline`) and lets only a served one head
+      the resolution (Phase 3-2: goal choice reads the walk's answer, which
+      replaced promoting past an unservable pick after the fact). A declined
+      target is recorded with its reason and stays an alternative, after the
+      served ones (`declined_targets`), so it is visible and re-asked every
+      cycle: it heads the walk again exactly when its blocker clears.
     """
 
     trail: list[str] = field(default_factory=list)
     sibling_targets: list[tuple[str, GearTarget]] = field(default_factory=list)
     aged: bool = False
     blocked_target: str | None = None
+    step_decline: StepDecline = no_decline
+    declined: dict[str, str] = field(default_factory=dict)
+    declined_targets: list[tuple[str, GearTarget]] = field(default_factory=list)
+
+    def serves(self, slot: str, target: GearTarget, state: WorldState,
+               game_data: GameData, ctx: SelectionContext,
+               history: LearningStore | None) -> bool:
+        """Can this target's step be served this cycle? Records the reason when
+        it cannot. The root is converted on a throwaway walk, as everywhere a
+        target is converted outside the main visit."""
+        root = IsThisTargetBlocked(slot, target, RootWalk()).resolve(
+            state, game_data, ctx, history)
+        reason = self.step_decline(root)
+        if reason is None:
+            return True
+        self.declined[repr(root)] = reason
+        return False
 
 
 def _target_rung(game_data: GameData, code: str) -> int:
@@ -698,8 +730,12 @@ class WhichSlotClosesTheFight(Decision[MetaGoal]):
         # Reuses `IsThisTargetBlocked` rather than mapping the code to a goal
         # itself: that node is the one place that reads a `GearTarget`'s four
         # shapes, and a second reader is a second chance to read them wrong.
-        return IsThisTargetBlocked(
-            slot, self.objective.classify_target(code, state), self.walk)
+        gear = self.objective.classify_target(code, state)
+        if not self.walk.serves(slot, gear, state, game_data, ctx, history):
+            # The fight's best acquisition cannot be served this cycle (named
+            # in `walk.declined`): the same fall-through as naming nothing.
+            return IsMyGearBehindMyTier(self.objective, self.walk)
+        return IsThisTargetBlocked(slot, gear, self.walk)
 
 
 class IsMyGearBehindMyTier(Decision[MetaGoal]):
@@ -722,9 +758,18 @@ class IsMyGearBehindMyTier(Decision[MetaGoal]):
                 ) -> "Decision[MetaGoal] | MetaGoal | None":
         self.walk.trail.append(self.name)
         targets = self.objective.gear_targets_with_blockers(state, history)
-        if not targets:
+        served = {slot: target for slot, target in targets.items()
+                  if self.walk.serves(slot, target, state, game_data, ctx, history)}
+        declined = {slot: target for slot, target in targets.items() if slot not in served}
+        dead = dead_target_slots(declined, state, game_data)
+        self.walk.declined_targets = sorted(
+            declined.items(), key=lambda item: _slot_order(item, state, game_data, dead))
+        if not served:
+            # Every target the sheet wants is blocked this cycle, each with its
+            # named reason: the gear arm has nothing to offer, so the walk asks
+            # the combat/tier arm, as it does when the sheet wants nothing.
             return IsThereACombatTarget(self.walk)
-        return WhichSlotIsFurthestBehind(targets, self.walk)
+        return WhichSlotIsFurthestBehind(served, self.walk)
 
 
 class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
@@ -1007,9 +1052,14 @@ class CanIClearMyTier(Decision[MetaGoal]):
 
 def resolve_root(state: WorldState, game_data: GameData,
                  objective: CharacterObjective, ctx: SelectionContext,
-                 history: LearningStore | None) -> RootResolution:
-    """Walk the tier graph from `IsAFightBlockingMe` to a root MetaGoal."""
-    walk = RootWalk()
+                 history: LearningStore | None,
+                 step_decline: StepDecline = no_decline) -> RootResolution:
+    """Walk the tier graph from `IsAFightBlockingMe` to a root MetaGoal.
+
+    `step_decline` is the cycle's answer for a root's step (`StepDecline`); a
+    gear target whose step it declines cannot head the walk and is offered
+    after the served siblings, with its reason in `RootResolution.declined`."""
+    walk = RootWalk(step_decline=step_decline)
     # Locally annotated, not inlined into the call: mypy 1.18.1 infers
     # `Leaf = Never` for a bare `Decision[X]` argument to `resolve_node` and
     # reports arg-type. Same fix as the `strategy_driver.py` call site.
@@ -1022,7 +1072,7 @@ def resolve_root(state: WorldState, game_data: GameData,
         # not append to the trail.
         IsThisTargetBlocked(slot, target, RootWalk()).resolve(
             state, game_data, ctx, history)
-        for slot, target in walk.sibling_targets
+        for slot, target in (*walk.sibling_targets, *walk.declined_targets)
     ]
     ordered.append(ReachCharLevel(level=milestone_pure(state.level)))
     # THE RESTORED SEAM: the orphan skill roots, after the gear siblings and
@@ -1056,4 +1106,5 @@ def resolve_root(state: WorldState, game_data: GameData,
             alternatives.append(alt)
     return RootResolution(root=root, alternatives=tuple(alternatives),
                           trail=tuple(walk.trail), aged=walk.aged,
-                          blocked_target=walk.blocked_target)
+                          blocked_target=walk.blocked_target,
+                          declined=tuple(walk.declined.items()))

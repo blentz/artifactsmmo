@@ -15,11 +15,10 @@ WHAT EACH LABEL COUNTS (see `ai/tiers/root_group.py` for the rule itself):
   guard that fired AND won `select_pure`, not one that merely fired. About 15%
   of C3P0's recent rows are these, and before the fix they would have carried
   the group of whatever root the walk resolved and then never ran.
-* every other label is the branch of the walk's OWN pick, before servability
-  promotion. A promoted-to-trunk cycle counts as `gear`, not `trunk` —
-  otherwise this census, whose whole question is whether the trunk-first
-  ordering costs anything, would report the trunk winning cycles the tree gave
-  to gear.
+* every other label is the branch of the walk's OWN pick. Before Phase 3-2,
+  servability promotion could move that pick afterwards and a promoted-to-trunk
+  cycle counted as `gear`; since then the walk never picks an unservable gear
+  target, so its pick is the root that ran.
 
 The string label `"none"` is a MIXED bucket: `root_group_of` returns it when
 `chosen_root is None`, which happens both when the walk found no root AND when

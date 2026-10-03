@@ -150,23 +150,23 @@ def test_decide_delegates_to_the_progression_tree():
     assert eng.decide(state, gd) == decide_tree(state, gd, obj)
 
 
-def test_decide_forwards_step_servable_and_it_changes_the_answer():
-    """`step_servable` passes through to `decide_tree` — and the predicate
-    chosen here REJECTS every `ObtainItem` pair, so the delegate cannot agree
-    with the engine by accident: the two sides must both take the promotion.
+def test_decide_forwards_step_decline_and_it_changes_the_answer():
+    """`step_decline` passes through to `decide_tree` — and the answer chosen
+    here DECLINES every `ObtainItem` root, so the delegate cannot agree with the
+    engine by accident: both sides must leave the gear arm.
 
     Anti-vacuity is the second assert. Without it a delegate that silently
-    dropped `step_servable` would still satisfy the equality (both sides would
+    dropped `step_decline` would still satisfy the equality (both sides would
     drop it identically), which is exactly the shape of pass-through test this
     epic has been shipping."""
     gd = _gd()
     obj = CharacterObjective.from_game_data(gd)
     eng = StrategyEngine(objective=obj)
     state = make_state(level=5, skills={"mining": 3})
-    servable = lambda root, step: not isinstance(root, ObtainItem)  # noqa: E731
-    assert eng.decide(state, gd, step_servable=servable) \
-        == decide_tree(state, gd, obj, step_servable=servable)
-    assert eng.decide(state, gd, step_servable=servable) != eng.decide(state, gd)
+    decline = lambda root: "blocked" if isinstance(root, ObtainItem) else None  # noqa: E731
+    assert eng.decide(state, gd, step_decline=decline) \
+        == decide_tree(state, gd, obj, step_decline=decline)
+    assert eng.decide(state, gd, step_decline=decline) != eng.decide(state, gd)
 
 
 class _HistorySpyObjective(CharacterObjective):
@@ -220,7 +220,7 @@ def test_unmet_closure_size_dedups_shared_prereq():
     assert unmet_closure_size(ObtainItem("X"), make_state(), gd) == 4  # X,A,B,C once each
 
 
-def test_a_self_blocked_root_is_reported_then_demoted_by_servability():
+def test_a_self_blocked_root_is_reported_then_passed_over_when_declined():
     """WAVE 3a moved this. It used to assert that a root with no actionable
     step was FILTERED OUT of the ranking — a property of the scored candidate
     pass, which no longer exists. The graph does not filter: `IsThisTargetBlocked`'s
@@ -229,9 +229,9 @@ def test_a_self_blocked_root_is_reported_then_demoted_by_servability():
     rather than hidden behind a silently shorter list.
 
     What still has to hold is the guarantee the old filter was buying — the bot
-    must not commit to a root it cannot serve — and post-flip that guarantee is
-    `step_servable`. Both halves are asserted, because the first alone would
-    read as an accepted regression.
+    must not commit to a root it cannot serve — and since Phase 3-2 that
+    guarantee is the walk's own `step_decline`. Both halves are asserted,
+    because the first alone would read as an accepted regression.
     """
     gd = GameData()
     gd._monster_level = {"chicken": 1}
@@ -249,9 +249,12 @@ def test_a_self_blocked_root_is_reported_then_demoted_by_servability():
 
     served = eng.decide(
         make_state(level=5), gd,
-        step_servable=lambda root, step: root != blocked)
-    assert served.chosen_root == ReachCharLevel(level=10)
-    assert served.promoted_from == blocked
+        step_decline=lambda root: "no_route" if root == blocked else None)
+    # No served gear target and no combat target: the walk's own answer is the
+    # wall (None), and the trunk stays on offer behind the named decline.
+    assert served.chosen_root is None
+    assert served.fallback_roots == [blocked, ReachCharLevel(level=10)]
+    assert served.declined == ((repr(blocked), "no_route"),)
 
 
 def test_root_cost_is_levels_remaining_for_char_level():

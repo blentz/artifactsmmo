@@ -50,20 +50,6 @@ class Goal(ABC):
         optimality (formal/Formal/PlannerAdmissibility.lean)."""
         return 0.0
 
-    def is_plannable(self, state: WorldState, game_data: GameData,
-                     history: LearningStore | None = None) -> bool:
-        """Cheap pre-plan reachability gate.
-
-        Return False when the planner provably cannot satisfy this goal from
-        `state` within its own `max_depth`, so the arbiter skips the A* search
-        (10s cheap pass / up to 300s escalation budget) instead of exhausting
-        the budget confirming impossibility.
-        Default True; override only with a SOUND condition — i.e. one that fails
-        ONLY when no plan of length ≤ max_depth can exist (see
-        formal/Formal/PlannerDepthBound.lean). Default True is always safe.
-        """
-        return True
-
     @property
     def max_depth(self) -> int:
         """Maximum plan depth the planner will explore for this goal. Override for long-horizon goals."""

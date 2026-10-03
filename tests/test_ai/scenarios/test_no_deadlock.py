@@ -167,11 +167,14 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     # climb to the ROOT instead of carrying it as a fallback behind a root that
     # could never plan. The climb is therefore asserted on `chosen_root` now —
     # a STRONGER claim than the old membership test, not a weaker one — and the
-    # slot it was promoted over is pinned so the promotion itself stays visible.
+    # slot it was preferred over is pinned with its named decline.
     assert report.decision.chosen_root == ReachSkillLevel(
         skill="gearcrafting", level=6)
-    assert report.decision.promoted_from == ObtainItem(
-        code="backpack", quantity=1, slot="bag_slot")
+    # PHASE 3-2: the walk passes the unservable backpack over itself, naming
+    # why, instead of promotion moving the root afterwards.
+    assert report.decision.declined == (
+        ("ObtainItem(code='backpack', quantity=1, slot='bag_slot')",
+         "infeasible:backpack:no_route:backpack"),)
 
 
 def test_l10_gearcrafting_gap_search_bounded() -> None:
@@ -380,8 +383,11 @@ def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:
     # An EQUALITY on chosen_root, as before — only the value moved.
     assert report.decision.chosen_root == ReachSkillLevel(
         skill="gearcrafting", level=6)
-    assert report.decision.promoted_from == ObtainItem(
-        code="backpack", quantity=1, slot="bag_slot")
+    # PHASE 3-2: the walk passes the unservable backpack over itself, naming
+    # why, instead of promotion moving the root afterwards.
+    assert report.decision.declined == (
+        ("ObtainItem(code='backpack', quantity=1, slot='bag_slot')",
+         "infeasible:backpack:no_route:backpack"),)
     goal = repr(report.selected_goal)
     assert "GrindCharacterXP" not in goal, goal  # the criterion-1 guarantee
     assert goal == "ReachSkill(gearcrafting->6)", goal
