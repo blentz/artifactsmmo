@@ -40,7 +40,8 @@ def build_debug_log_line(snap: CycleSnapshot) -> str:
     ]
     if snap.goals_tried:
         attempts = "  ".join(
-            f"{g.goal}(n={g.nodes} d={g.depth} len={g.plan_len}{' TIMEOUT' if g.timed_out else ''})"
+            f"{g.goal}(n={g.nodes} d={g.depth} len={g.plan_len}{' TIMEOUT' if g.timed_out else ''}"
+            f"{f' declined={g.declined}' if g.declined else ''})"
             for g in snap.goals_tried
         )
         lines.append(f"  [dim]goals[/dim] {attempts}")

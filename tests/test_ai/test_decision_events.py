@@ -106,6 +106,15 @@ class TestArbiter:
             plan = arbiter._plans(self._goal(), make_state(), GameData(), [], MagicMock())
         assert plan == []
         assert arbiter.events.drain() == [(Mechanism.DECOMPOSE_DECLINE, "G", "no_source:feather")]
+        # Phase 3-3: the attempt record names why, so a no-plan is never bare.
+        assert arbiter.goals_tried[-1]["declined"] == "no_source:feather"
+
+    def test_a_planned_goal_names_no_decline(self) -> None:
+        arbiter = self._arbiter()
+        with patch("artifactsmmo_cli.ai.strategy_driver.decompose",
+                   return_value=[MagicMock()]):
+            arbiter._plans(self._goal(), make_state(), GameData(), [], MagicMock())
+        assert arbiter.goals_tried[-1]["declined"] is None
 
     def test_a_handoff_decline_is_noted_before_the_search(self) -> None:
         """`upgrade:ge_venue` hands the goal to the search on purpose."""
@@ -119,6 +128,7 @@ class TestArbiter:
         [decline, (search, _subject, _detail)] = arbiter.events.drain()
         assert decline == (Mechanism.DECOMPOSE_DECLINE, "G", "upgrade:ge_venue:iron_boots")
         assert search is Mechanism.SEARCH
+        assert arbiter.goals_tried[-1]["declined"] == "upgrade:ge_venue:iron_boots"
 
 
 class TestPlayer:

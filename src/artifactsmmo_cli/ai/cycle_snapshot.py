@@ -30,6 +30,8 @@ class GoalAttempt(BaseModel):
     depth: int = 0
     timed_out: bool = False
     plan_len: int = 0
+    declined: str | None = None
+    """The walk's named reason when it declined this goal (Phase 3-3), else None."""
 
 
 class ObjectiveUnplannable(BaseModel):
@@ -51,6 +53,9 @@ class ObjectiveUnplannable(BaseModel):
     nodes: int = 0
     depth: int = 0
     timed_out: bool = False
+    declined: str | None = None
+    """Why the walk declined it, when it did (Phase 3-3): the abandonment names
+    its blocker instead of reading as a bare no-plan."""
 
 
 class PlanTreeNode(BaseModel):

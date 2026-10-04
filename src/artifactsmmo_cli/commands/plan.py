@@ -56,8 +56,9 @@ def _print_report(player: GamePlayer, report: PlanReport) -> None:
         # NODE_CAP = the memory bound truncated the search (a subset of
         # timed_out); distinguish it so a too-tight cap is diagnosable live.
         timed += " NODE_CAP" if g.get("node_capped") else ""
+        reason = f" declined={g['declined']}" if g.get("declined") else ""
         print(f"  {g.get('goal')}: nodes={g.get('nodes')} depth={g.get('depth')} "
-              f"plan_len={g.get('plan_len')}{timed}{flag}")
+              f"plan_len={g.get('plan_len')}{timed}{flag}{reason}")
     if report.drop_inputs:
         print("-" * 70)
         print("monster-drop recipe inputs (winnable with the LIVE loadout?):")

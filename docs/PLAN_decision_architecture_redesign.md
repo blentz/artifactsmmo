@@ -842,6 +842,9 @@ Infeasibility is the walk's answer, re-asked from live state every cycle (it cos
   - **Skill XP/h 7,304 → 4,041 (−45%).** Not a slowdown of the same work: HAL and Lor moved from fishing (1,624 / 1,844 XP/h, ~95% of cycles) to the weaponcrafting climb that gates their gear (337 / 358 weaponcrafting XP/h plus mining/woodcutting by-products). Before, a `bag_overflow` decline on that climb doomed it for up to 160 cycles and the arbiter fell through to fishing; now it is re-asked each cycle and plans whenever the bag allows. The root walk is doing what it is for (gear-gated progress) at a lower raw XP rate.
   - **`GrindCharacterXP` searches 24 → 109/h**, 88/h empty: all Robby's `full_moon_vampire` (551 of 551) — fixed by 3-0b, needs the restart.
 
+- **3-0b witness (restart 04:12Z 2026-10-04, preliminary 11 min):** Robby `GrindCharacterXP(vampire)` 14 searches, 0 empty; 14/14 `Fight(vampire)` ok, 434 char XP. Cost: 25 of his 40 cycles RestoreHP (about one rest per fight) — the HP-recovery and fight-loss residuals now matter for the character-XP trunk.
+- **3-3 telemetry (built 2026-10-04).** Every `goals_tried` record carries `declined` (the walk's first named reason, else None); `GoalAttempt` and `ObjectiveUnplannable` carry it into the cycle snapshot, the TUI log line prints `declined=…`, and the plan CLI prints it beside `NO PLAN`. A no-plan is never a bare `plan_len=0` any more.
+
 **Exit:** `doomed_skip`, `doomed_mark`, `not_plannable` and `servable_promotion` are 0 (the mechanisms are gone); each blocked gear target shows its named blocker in the plan pane.
 
 ## Risks and open questions

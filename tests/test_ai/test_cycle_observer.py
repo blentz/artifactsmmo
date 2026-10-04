@@ -92,9 +92,10 @@ class TestObserverHook:
                 "nodes": 842, "depth": 7, "timed_out": False, "plan_len": 3,
                 "goals_tried": [
                     {"goal": "CraftEquipment", "nodes": 842, "depth": 7,
-                     "timed_out": False, "plan_len": 3},
+                     "timed_out": False, "plan_len": 3, "declined": None},
                     {"goal": "FightMonster", "nodes": 120, "depth": 4,
-                     "timed_out": True, "plan_len": 0},
+                     "timed_out": True, "plan_len": 0,
+                     "declined": "bag_overflow:qty=171/158:slots=11/20"},
                 ],
                 "goal_rank": [{"goal": "CraftEquipment", "priority": 88.0}],
                 "path_blocked": True,
@@ -110,6 +111,8 @@ class TestObserverHook:
         assert [g.goal for g in snap.goals_tried] == ["CraftEquipment", "FightMonster"]
         assert snap.goals_tried[1].timed_out is True
         assert snap.goals_tried[1].nodes == 120
+        assert snap.goals_tried[0].declined is None
+        assert snap.goals_tried[1].declined == "bag_overflow:qty=171/158:slots=11/20"
         # Nothing was abandoned on this cycle: the first attempt planned.
         assert snap.objective_unplannable is None
 
@@ -130,6 +133,7 @@ class TestObserverHook:
                     "goal": "UpgradeEquipment(greater_wooden_staff)",
                     "nodes": 3873, "depth": 8, "timed_out": True,
                     "plan_len": 0, "priority": 35.0,
+                    "declined": "upgrade:equip_inapplicable:Equip(staff)",
                 },
             },
         )
@@ -139,6 +143,8 @@ class TestObserverHook:
         assert abandoned.nodes == 3873
         assert abandoned.depth == 8
         assert abandoned.timed_out is True
+        # Phase 3-3: the abandonment names why.
+        assert abandoned.declined == "upgrade:equip_inapplicable:Equip(staff)"
 
     def test_notify_observer_noop_when_unset(self):
         """No observer = silent skip; no exception."""

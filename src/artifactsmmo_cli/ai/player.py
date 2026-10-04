@@ -2748,6 +2748,7 @@ class GamePlayer:
             GoalAttempt(
                 goal=str(g["goal"]), nodes=int(g["nodes"]), depth=int(g["depth"]),
                 timed_out=bool(g["timed_out"]), plan_len=int(g["plan_len"]),
+                declined=None if g["declined"] is None else str(g["declined"]),
             )
             for g in attempts
         ]
@@ -2757,6 +2758,8 @@ class GamePlayer:
                 goal=str(raw_abandoned["goal"]), nodes=int(raw_abandoned["nodes"]),
                 depth=int(raw_abandoned["depth"]),
                 timed_out=bool(raw_abandoned["timed_out"]),
+                declined=(None if raw_abandoned["declined"] is None
+                          else str(raw_abandoned["declined"])),
             )
             if isinstance(raw_abandoned, dict) else None
         )

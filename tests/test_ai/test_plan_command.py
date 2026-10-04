@@ -137,6 +137,9 @@ def _canned_report() -> PlanReport:
              "plan_len": 0, "timed_out": True, "node_capped": True},
             {"goal": "GatherMaterials(feather)", "nodes": 5, "depth": 2,
              "plan_len": 2, "timed_out": False},
+            {"goal": "GatherMaterials(backpack)", "nodes": 0, "depth": 0,
+             "plan_len": 0, "timed_out": False,
+             "declined": "infeasible:backpack:no_route:backpack"},
         ],
         drop_inputs=[
             {"item": "feather", "droppers": ["chicken"], "winnable": ["chicken"]},
@@ -174,6 +177,9 @@ def test_plan_command_prints_report(capsys):
     assert "resolution (top 8)" in out
     assert "cycles to 50" not in out
     assert "  gear  ObtainItem(feather_coat)  ->  step=ObtainItem(feather)" in out
+    # Phase 3-3: a declined attempt names why next to its NO PLAN.
+    assert ("GatherMaterials(backpack): nodes=0 depth=0 plan_len=0  <-- NO PLAN "
+            "declined=infeasible:backpack:no_route:backpack") in out
     # Phase 3-2: the walk's named declines are printed with their reason.
     assert "  ObtainItem(backpack): infeasible:backpack:no_route:backpack" in out
 

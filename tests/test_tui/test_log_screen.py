@@ -19,6 +19,8 @@ def _snap(**overrides) -> CycleSnapshot:
         goals_tried=[
             GoalAttempt(goal="FarmItems", nodes=842, depth=7, plan_len=3),
             GoalAttempt(goal="FightMonster", nodes=120, depth=4, plan_len=0, timed_out=True),
+            GoalAttempt(goal="GatherMaterials(backpack)", plan_len=0,
+                        declined="infeasible:backpack:no_route:backpack"),
         ],
         goal_rank=[GoalRankEntry(goal="FarmItems", priority=75.0),
                    GoalRankEntry(goal="TaskCancel", priority=0.0)],
@@ -72,6 +74,9 @@ def test_debug_line_shows_goals_tried_with_timeout_flag():
     line = build_debug_log_line(_snap())
     assert "FarmItems(n=842 d=7 len=3)" in line
     assert "FightMonster(n=120 d=4 len=0 TIMEOUT)" in line
+    # Phase 3-3: a declined attempt names why.
+    assert ("GatherMaterials(backpack)(n=0 d=0 len=0 "
+            "declined=infeasible:backpack:no_route:backpack)") in line
 
 
 def test_debug_line_shows_suppressed_only_when_present():

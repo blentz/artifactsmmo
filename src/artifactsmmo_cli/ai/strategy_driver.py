@@ -834,6 +834,7 @@ class StrategyArbiter:
                 "plan_len": 1,
                 "priority": priority,
                 "elapsed_ms": _elapsed_ms(),
+                "declined": None,
             })
             return wait_plan
         # Fast path: an obtain-shaped goal (GatherMaterials, a potion batch,
@@ -842,6 +843,9 @@ class StrategyArbiter:
         # why (DECOMPOSE_DECLINE) and is the goal's answer (Phase 2e); only a
         # shape the walk does not serve, or a deliberate handoff
         # (`SEARCH_HANDOFFS`), runs the search.
+        # The decline's FIRST reason rides every attempt record as `declined`
+        # (Phase 3-3), so a no-plan in the trace, the snapshot and the plan CLI
+        # names why instead of reading as a bare `plan_len=0`.
         declined: list[str] = []
         gen = decompose(goal, state, game_data, actions, ctx, declined)
         for reason in declined:
@@ -856,6 +860,7 @@ class StrategyArbiter:
                 "plan_len": len(gen),
                 "priority": priority,
                 "elapsed_ms": _elapsed_ms(),
+                "declined": None,
             })
             return gen
         if not hands_off_to_search(declined):
@@ -867,6 +872,7 @@ class StrategyArbiter:
                 "plan_len": 0,
                 "priority": priority,
                 "elapsed_ms": _elapsed_ms(),
+                "declined": declined[0] if declined else None,
             })
             return []
         plan = self._planner.plan(state, goal, actions, game_data, self._history,
@@ -891,6 +897,7 @@ class StrategyArbiter:
             "plan_len": len(plan),
             "priority": priority,
             "elapsed_ms": _elapsed_ms(),
+            "declined": declined[0] if declined else None,
         })
         return plan
 
