@@ -134,9 +134,8 @@ def has_structural_upgrade(state: WorldState, game_data: GameData,
 # `ProgressionCandidate`.
 # `RootScore.j` and `.reachable_level` are UNCHANGED — spec §1.4 keeps those
 # two, they were folded into the wave-3b table's row count (9/10/11) not this
-# one. `StrategyDecision.aged_pick` is unchanged too: it is reconnected and
-# live (row 6) — `GamePlayer._charge_focus` reads it every cycle — and stays
-# set from `resolution.aged` in `decide_tree` below.
+# one. `StrategyDecision.aged_pick` outlived them until Phase 4-2b-ii deleted
+# the focus-aging interleave it reported.
 #
 # WAVE 3b task 4 then deleted the whole ranking substrate that had been left
 # stranded by THE FLIP (re-derived list §3 rows 8/9/10/11/12/16 and §5): the
@@ -210,8 +209,7 @@ def decide_tree(state: WorldState, game_data: GameData,
     so it is dropped. `StrategyDecision.j_ranking` took its field default for
     the same reason — the ranking that produced it is gone — and wave 3b
     deleted the field entirely, along with `.desired_state` (always `{}`
-    here). `.aged_pick` is NOT the same story: it is reconnected and live
-    (spec row 6), so it is set from `resolution.aged` below, not defaulted.
+    here). `.aged_pick` went in Phase 4-2b-ii with the interleave it reported.
 
     What SURVIVES, and must:
 
@@ -248,11 +246,6 @@ def decide_tree(state: WorldState, game_data: GameData,
         ranking=_resolution_rows(state, game_data, resolution, ctx),
         fallback_steps=fallback_steps,
         fallback_roots=fallback_roots,
-        # Set by the ONE node that takes the interleave, not re-derived here.
-        # The old `aged_pick` was a clause-for-clause MIRROR of
-        # `focus_aging_pick`'s fast-path guard, carrying its own drift warning
-        # and two mutation anchors; a single producer cannot drift from itself.
-        aged_pick=resolution.aged,
         declined=resolution.declined,
         blocked_target=resolution.blocked_target,
     )

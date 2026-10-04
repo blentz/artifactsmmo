@@ -38,10 +38,12 @@ class Mechanism(StrEnum):
     # instead (subject: the declined root's repr; detail: the reason its step
     # cannot be served this cycle):
     ROOT_DECLINE = "root_decline"
-    # Stability between cycles (subject: goal/root repr).
+    # Stability between cycles (subject: goal/root repr). `aged_pick` was
+    # retired by Phase 4-2b-ii with the focus-aging interleave it reported; the
+    # cycle budget and its one-turn yield (INTENTION_BUDGET) replace it. Its
+    # value stays in `decision_events` history and must not be reused.
     COMMITMENT_CHANGE = "commitment_change"
     GUARD_PREEMPT = "guard_preempt"
-    AGED_PICK = "aged_pick"
     PLAN_CACHE_HIT = "plan_cache_hit"
     COMMITMENT_KEPT = "commitment_kept"
     # The intention ended because its progress stopped moving (Phase 4-2a;

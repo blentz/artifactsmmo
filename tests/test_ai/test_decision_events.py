@@ -132,19 +132,18 @@ class TestArbiter:
 
 
 class TestPlayer:
-    def test_decide_notes_each_root_decline_and_the_aged_pick(self) -> None:
+    def test_decide_notes_each_root_decline(self) -> None:
         player = GamePlayer(character="hero")
         player._strategy = MagicMock()
         decision = MagicMock(chosen_root="Root(b)", chosen_step=None,
-                             declined=(("Root(a)", "no_route:x"),), aged_pick=True)
+                             declined=(("Root(a)", "no_route:x"),))
         player._strategy.decide.return_value = decision
         with (patch.object(player._arbiter, "select", return_value=(None, [], [])),
               patch.object(player, "_record_decision_targets", return_value=None),
               patch.object(player, "_selection_context", return_value=MagicMock())):
             player._decide_band(make_state(), GameData(), [], None)
         assert player._events.drain() == [
-            (Mechanism.ROOT_DECLINE, "Root(a)", "no_route:x"),
-            (Mechanism.AGED_PICK, "'Root(b)'", "")]
+            (Mechanism.ROOT_DECLINE, "Root(a)", "no_route:x")]
 
     def test_stuck_recovery_notes_every_suppression_it_sets(self) -> None:
         player = GamePlayer(character="hero")

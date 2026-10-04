@@ -62,7 +62,7 @@ class _Store:
 def _resolution(root: object, alternatives: tuple = (),
                 blocked_target: str | None = None) -> RootResolution:
     return RootResolution(root=root, alternatives=alternatives, trail=(),
-                          aged=False, blocked_target=blocked_target)
+                          blocked_target=blocked_target)
 
 
 def _empty_world() -> tuple[WorldState, GameData]:

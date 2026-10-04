@@ -57,7 +57,6 @@ and no longer disagrees with this module):
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from fractions import Fraction
 
 # MODULE import, same idiom as `_skill_grindable` and `_route` below, and for the
 # same reason but the OTHER direction: `gather_demand` imports
@@ -102,8 +101,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachCharLevel,
     ReachSkillLevel,
     StepDecline,
-    contender_focus_key,
-    focus_key_str,
     no_decline,
 )
 from artifactsmmo_cli.ai.tiers.objective import (
@@ -111,12 +108,7 @@ from artifactsmmo_cli.ai.tiers.objective import (
     GearTarget,
     _gear_candidates_by_type,
 )
-from artifactsmmo_cli.ai.tiers.progression_tree_core import (
-    FOCUS_FLAT,
-    dhondt_step,
-    milestone_pure,
-    run_falloff,
-)
+from artifactsmmo_cli.ai.tiers.progression_tree_core import milestone_pure
 from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, tier_of_level
 from artifactsmmo_cli.ai.tiers.tier_progress import next_uncleared_tier
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
@@ -146,12 +138,6 @@ class RootResolution:
     root: MetaGoal | None
     alternatives: tuple[MetaGoal, ...]
     trail: tuple[str, ...]
-    aged: bool = False
-    """Whether `WhichSlotIsFurthestBehind` took the d'Hondt interleave rather
-    than its unaged fast path — see `RootWalk.aged`. `decide_tree` copies it
-    onto `StrategyDecision.aged_pick`, which is what gates the player's seat
-    bump (`GamePlayer._charge_focus`)."""
-
     blocked_target: str | None = None
     """The gear code a crafting-skill gate turned into this walk's
     `ReachSkillLevel` — see `RootWalk.blocked_target`. `decide_tree` copies it
@@ -188,18 +174,9 @@ class RootWalk:
       and the target itself is dropped, which is exactly the item a sibling
       could have made: measured on the live fleet, `SupplyBank` has run 0 times
       in 105,159 cycles because a blocked character publishes NO demand at all.
-      Deposited by the ONE node that reads the gate, for the same reason `aged`
-      is — a re-derivation in the player would be a second classifier, and
-      `classify_target`'s own docstring records what masking costs.
-
-    * `aged` — whether `WhichSlotIsFurthestBehind` took the d'Hondt
-      interleave rather than its unaged fast path. `GamePlayer._charge_focus`
-      gates the SEAT bump on it, so the schedule and the ledger advance in
-      lockstep. It is set by the ONE node that makes the choice and read
-      straight off `RootResolution`, which is strictly better than the shape
-      it replaces: `decide_tree` used to re-derive the same verdict as a
-      clause-for-clause MIRROR of `focus_aging_pick`'s fast-path guard, and
-      that duplicate carried its own drift warning and two mutation anchors.
+      Deposited by the ONE node that reads the gate — a re-derivation in the
+      player would be a second classifier, and `classify_target`'s own
+      docstring records what masking costs.
 
     * `step_decline` / `declined` — the walk asks each gear target's step
       whether it can be served (`StepDecline`) and lets only a served one head
@@ -212,7 +189,6 @@ class RootWalk:
 
     trail: list[str] = field(default_factory=list)
     sibling_targets: list[tuple[str, GearTarget]] = field(default_factory=list)
-    aged: bool = False
     blocked_target: str | None = None
     step_decline: StepDecline = no_decline
     declined: dict[str, str] = field(default_factory=dict)
@@ -773,52 +749,26 @@ class IsMyGearBehindMyTier(Decision[MetaGoal]):
 
 
 class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
-    """The largest tier gap among the blocked slots wins — UNTIL the winner has
-    held the decision past its farm window, at which point the d'Hondt
-    interleave hands cycles to the alternatives. The rest become
+    """The largest tier gap among the served slots wins; the rest become
     `RootResolution.alternatives`, in `_slot_order`.
 
     `targets` is never empty: the only constructor call site is
-    `IsMyGearBehindMyTier.resolve`, inside its `if not targets` NEGATIVE arm.
+    `IsMyGearBehindMyTier.resolve`, inside its `if not served` NEGATIVE arm.
 
-    THE ANTI-STARVATION FIX LIVES HERE (reconnected, wave 3a fix-round 1).
-    `_slot_order` alone is a pure, history-free total order over a set that
-    does not change while the character makes no progress, so it re-elects the
-    same slot every cycle forever. That is precisely the ring2 shape the
-    arbiter-starvation epic was written for: a target whose only route is an
-    unbeatable monster's drop, held once, so it is a live candidate that PLANS
-    (a `Fight`) and never completes. Nothing else in the walk catches it —
-    `_servable_promotion` demotes what the planner CANNOT SERVE, and this root
-    can be; and it does not leave the sheet either, because
-    `gear_targets_with_blockers` deliberately keeps unattainable targets.
+    FAIRNESS IS NOT DECIDED HERE ANY MORE. `_slot_order` is a pure total order
+    over a set that does not change while the character makes no progress, so
+    on its own it would re-elect the same slot forever (the ring2 shape: a
+    target whose only route is an unbeatable monster's drop, held once). That
+    used to be answered here by focus aging and a d'Hondt interleave over the
+    slots. Phase 4-2b replaced both with facts about the intention: a target
+    that makes no progress ends as `stalled` (and a lost fight is learned, so
+    the walk declines it), and one that spends its cycle budget YIELDS a turn
+    (`GamePlayer._step_decline` declines it `yielded:budget`), so the next
+    served target heads here.
 
-    Two arms, inherited from the shape `focus_aging_pick` had before wave 3b
-    deleted it (this node is now the only place that shape exists):
-
-    * every candidate inside the flat farm window (`focus <= FOCUS_FLAT`) —
-      the head is `_slot_order`'s argmax, BIT-IDENTICAL to the history-free
-      walk. No jitter for fresh roots, and every ledger-free caller (the whole
-      offline scenario set, `NO_PROFILE_CONTEXT`) is unaffected.
-    * otherwise — the head is one `dhondt_step` over `tier_gap * falloff(focus)`
-      GIVEN the seats handed out so far, so a decayed stuck root sheds cycles
-      to reachable alternatives without ever being abandoned (`FOCUS_FLOOR` is
-      strictly positive). `walk.aged` records that this happened; the player
-      bumps exactly one seat for it.
-
-    The weight is the TIER GAP, not `pursuit_value`: the gap is what
-    `_slot_order` already ranks on, so the aged and unaged arms decay the same
-    quantity and a fully-inert ledger cannot reorder anything.
-
-    THE DEAD-TARGET DEMOTION IS A KEY, NOT A GATE, and it is ordered against the
-    aging above rather than layered over it. `dead_target_slots` is asked ONCE
-    here and leads `_slot_order`, so a provably-dead target cannot head the
-    UNAGED arm — and since the player charges focus against the committed root,
-    a target that never commits never ages, so it cannot open the aged arm for
-    itself either. It remains d'Hondt-eligible once some OTHER root has aged,
-    which is the anti-starvation property this node exists for and which the
-    demotion deliberately does not revoke: a dead-today target is dead at THIS
-    state, and a walk that could never revisit it would be a filter wearing a
-    sort key's clothes.
+    THE DEAD-TARGET DEMOTION IS A KEY, NOT A GATE. `dead_target_slots` is asked
+    ONCE here and leads `_slot_order`, so a provably-dead target cannot head the
+    walk while a servable sibling exists, and it stays on offer.
     """
 
     name = "WhichSlotIsFurthestBehind"
@@ -835,81 +785,9 @@ class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
         dead = dead_target_slots(self.targets, state, game_data)
         ranked = sorted(self.targets.items(),
                         key=lambda item: _slot_order(item, state, game_data, dead))
-        head = self._aged_head(ranked, state, game_data, ctx, history)
-        self.walk.sibling_targets = [item for item in ranked if item is not head]
-        slot, target = head
+        (slot, target), *siblings = ranked
+        self.walk.sibling_targets = siblings
         return IsThisTargetBlocked(slot, target, self.walk)
-
-    def _ledger_key(self, slot: str, target: GearTarget, state: WorldState,
-                    game_data: GameData, ctx: SelectionContext,
-                    history: LearningStore | None) -> tuple[str, str]:
-        """The ledger key this slot would be charged under if it won.
-
-        Keyed on the ROOT the slot RESOLVES TO, not on `(slot, target.code)`,
-        because that root is what `GamePlayer._charge_focus` charges. The two
-        differ for exactly the cases the flip introduced: a skill-gated slot
-        resolves to a `ReachSkillLevel` and a material-gated one to a slot-less
-        `ObtainItem`. Reading the sheet entry here while the player wrote the
-        resolved root would leave the two halves permanently unable to meet —
-        the fix-round-2 defect.
-
-        NEVER None, and by the TYPE rather than by a runtime check:
-        `IsThisTargetBlocked.resolve` returns `ObtainItem | ReachSkillLevel`,
-        which is exactly `contender_focus_key`'s domain. `focus_key`'s nullable
-        arms exist for `GamePlayer`, whose committed root can be the trunk or
-        the wall; neither can arrive here, and the `key is None` fallbacks this
-        used to feed were dead lines the coverage gate could not see
-        (`branch = false`). Their named failure mode is worth keeping in view:
-        a future arm returning `ReachCharLevel` would have been weighted under
-        its raw `slot` while the player wrote nothing for it, so that root
-        would never take a seat and could monopolise the interleave —
-        starvation reintroduced by a different door. The union above is what
-        now makes that unrepresentable.
-
-        A throwaway `RootWalk`: this is a conversion, not a visit, so it must
-        not append to the trail. Same idiom as `resolve_root`'s sibling
-        conversion — and passed the SAME `history`, not `None`, so the two
-        conversions cannot disagree if `IsThisTargetBlocked.resolve` ever
-        grows a history-dependent arm (inert today: it does not read
-        `history`)."""
-        return contender_focus_key(IsThisTargetBlocked(
-            slot, target, RootWalk()).resolve(state, game_data, ctx, history))
-
-    def _aged_head(self, ranked: list[tuple[str, GearTarget]], state: WorldState,
-                   game_data: GameData, ctx: SelectionContext,
-                   history: LearningStore | None) -> tuple[str, GearTarget]:
-        """`ranked[0]`, or the interleave's pick once anything has aged."""
-        keys = [self._ledger_key(slot, target, state, game_data, ctx, history)
-                for slot, target in ranked]
-        focus = [ctx.gear_focus.get(key, 0) for key in keys]
-        if all(level <= FOCUS_FLAT for level in focus):
-            return ranked[0]
-        # Apportioned over `focus_key_str`, the SAME scalar the player's seat
-        # ledger is keyed by. Two slots that resolve to one root (two slots
-        # gated on the same skill) collapse onto one entry ON PURPOSE — it is
-        # one piece of work — and `next(...)` below then returns the
-        # highest-ranked of them, which is `_slot_order`'s own answer.
-        #
-        # `max(1, gap)`: a slot can only be a target because something wants
-        # replacing, but an equal-rung swap scores 0 and a zero weight is one
-        # `dhondt_step` can never elect — which would be starvation reinstated
-        # by the very mechanism that exists to prevent it.
-        # `run_falloff`, not `falloff`: the weight is sampled once per
-        # INTERLEAVE_RUN so it does not move between seat bumps. Otherwise the
-        # decay band re-thrashes — the seat cadence holds the QUOTIENT still,
-        # but inside the band `falloff` shrank the winner's weight every cycle
-        # and the argmax flipped anyway (81% of transitions, median run 1).
-        # Past the band the two are identical by construction.
-        weighted = [
-            (focus_key_str(key),
-             Fraction(max(1, _tier_gap(slot, target, state, game_data)))
-             * run_falloff(level))
-            for (slot, target), key, level in zip(ranked, keys, focus, strict=True)]
-        winner = dhondt_step(weighted, ctx.interleave_seats)
-        assert winner is not None  # `ranked` is non-empty; see the docstring
-        self.walk.aged = True
-        return next(item for item, weight in zip(ranked, weighted, strict=True)
-                    if weight[0] == winner)
 
 
 class IsThisTargetBlocked(Decision[MetaGoal]):
@@ -934,13 +812,9 @@ class IsThisTargetBlocked(Decision[MetaGoal]):
 
     `resolve` narrows its return type all the way to `ObtainItem |
     ReachSkillLevel`: every arm returns one of those two, this node has no
-    `Decision` child and no None arm. The narrowing is load-bearing twice over
-    — it lets `resolve_root` reuse this node to convert a sibling target
-    without inventing an unreachable None branch, and (fix-round 3) it lets
-    `_ledger_key` return a NON-optional key straight from
-    `meta_goal.contender_focus_key`, instead of carrying `key is None`
-    fallbacks that could never run and that `branch = false` hid from the
-    coverage gate.
+    `Decision` child and no None arm. The narrowing is load-bearing: it lets
+    `resolve_root` (and `RootWalk.serves`) reuse this node to convert a
+    target without inventing an unreachable None branch.
     """
 
     name = "IsThisTargetBlocked"
@@ -1105,6 +979,6 @@ def resolve_root(state: WorldState, game_data: GameData,
         if alt != root and alt not in alternatives:
             alternatives.append(alt)
     return RootResolution(root=root, alternatives=tuple(alternatives),
-                          trail=tuple(walk.trail), aged=walk.aged,
+                          trail=tuple(walk.trail),
                           blocked_target=walk.blocked_target,
                           declined=tuple(walk.declined.items()))

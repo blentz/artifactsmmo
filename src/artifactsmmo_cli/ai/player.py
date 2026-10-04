@@ -79,7 +79,6 @@ from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
 from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
@@ -155,11 +154,8 @@ from artifactsmmo_cli.ai.tiers.band_target import band_combat_target
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
-    focus_key,
-    focus_key_str,
 )
 from artifactsmmo_cli.ai.tiers.progression_tree import has_structural_upgrade
-from artifactsmmo_cli.ai.tiers.progression_tree_core import INTERLEAVE_RUN
 from artifactsmmo_cli.ai.tiers.root_group import root_group_of
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.tracer import Tracer
@@ -175,12 +171,6 @@ _BANK_RETRY_SECONDS = 60.0  # retry bank access this long after an HTTP 496 bloc
 _ACHIEVEMENT_CODE_RE = re.compile(r"\((\w+) achievement_unlocked")
 _BANK_TILE = None  # resolved from game_data at runtime
 
-# Item types that occupy a real equipment slot, EXCLUDING "utility" (potions /
-# consumables occupy a utility slot but are not gear the focus-aging arbiter
-# should treat as "real progress" — see GamePlayer._maybe_reset_focus). Reuses
-# the same generic API-derived taxonomy as the rest of the keep/junk logic
-# (gear_taxonomy.ITEM_TYPE_TO_SLOTS) rather than a hand-maintained set.
-EQUIPMENT_SLOT_TYPES: frozenset[str] = frozenset(ITEM_TYPE_TO_SLOTS) - {"utility"}
 
 
 def _error_text(exc: BaseException) -> str:
@@ -330,27 +320,6 @@ class GamePlayer:
         self._max_healthy_streak: dict[StuckSignal, int] = {s: 0 for s in StuckSignal}
         self._prev_cycle_state_key: tuple[object, ...] | None = None
         self._last_goal_name: str | None = None
-        # Arbiter anti-starvation epic (Task 6): per-(slot, code) count of
-        # consecutive cycles this cycle's chosen gear root has been picked,
-        # fed into StrategyEngine.decide's aging pick/order (Task 4) so a
-        # root that keeps losing ties to a higher-scoring but perpetually
-        # unservable sibling eventually ages past it. Bumped in
-        # `_bump_focus` right after each `decide()` call; cleared wholesale
-        # in `_maybe_reset_focus` on real progress (level-up or a successful
-        # non-consumable-equippable craft) so aging never persists past the
-        # event that actually resolves starvation.
-        self._gear_focus: dict[tuple[str, str], int] = {}
-        # Arbiter perf (Task 12): incremental d'Hondt seat accumulator for the
-        # focus-aging interleave, keyed by equipment SLOT. Advanced by one seat
-        # (for the committed root's slot) on each AGED committed cycle in
-        # `_bump_focus`, and CLEARED in lockstep with `_gear_focus` on real
-        # progress (`_maybe_reset_focus`). Replaces feeding the unbounded global
-        # `_cycle_counter` into the interleave (was O(global cycle) per replan —
-        # a CPU-peg risk on a long-lived stuck character); one `dhondt_step`
-        # over accumulated seats is O(candidates). For fixed weights the
-        # accumulated seats reproduce the old `interleave_due(scaled, cycle)`
-        # schedule seat-for-seat (the fold identity).
-        self._interleave_seats: dict[str, int] = {}
         self.tracer: Tracer = tracer or NullTracer()
         self._cycle_counter: int = 0
         # Tier-3 strategy engine (built after game-data load); P3a runs it in
@@ -610,170 +579,6 @@ class GamePlayer:
         if self._planning_observer is not None:
             self._planning_observer(active)
 
-    @staticmethod
-    def _gear_root_key(root: "MetaGoal | None") -> tuple[str, str] | None:
-        """The ledger key for a committed root — `meta_goal.focus_key`.
-
-        DELEGATES rather than reimplements (wave 3a fix-round 2). This used to
-        be a `getattr(root, "slot"/"code")` duck-type that returned None unless
-        BOTH were `str`, which silently excluded the two root shapes the
-        resolution walk introduced — `ReachSkillLevel` and the slot-less
-        material-gated `ObtainItem` — so the ledger never filled and the aged
-        arm never engaged. The read side in `decisions/root` now calls the SAME
-        function, which is the point: one key, both halves."""
-        return focus_key(root)
-
-    @staticmethod
-    def _focus_key_str(key: tuple[str, str]) -> str:
-        """`meta_goal.focus_key_str` — the JSON/apportionment scalar form."""
-        return focus_key_str(key)
-
-    def _bump_focus(self, decision: "StrategyDecision") -> None:
-        """Age `decision.chosen_root` one more cycle-committed. This counts
-        cycles the root is COMMITTED to, not merely cycles `decide()` was
-        called: the live loop's `_plan_or_reuse` calls this once per
-        run-loop iteration off the EFFECTIVE committed decision — the fresh
-        one on a replan, or the still-active `self._last_decision` on a
-        cache-hit cycle that reuses a prior plan without calling `decide()`
-        again (Fix 2) — so a root pursued across a long cached plan ages by
-        wall-clock cycles, matching the FOCUS_FLAT/FOCUS_SPAN "iterations"
-        the aging pick/order (Task 4) is calibrated against. The offline
-        `plan_from_state` seam (no plan-cache concept — one decide() per CLI
-        invocation) calls this directly after its own `decide()`.
-
-        Only the chosen root is charged. A root DISPLACED by servability
-        promotion used to be charged too, so an unservable head pick would age
-        out of a position it could not use (live 2026-07-27, `lich_race_trophy`
-        won 16 of 18 head picks and never entered the ledger). Since Phase 3-2
-        an unservable target cannot head the walk at all, so there is no
-        displaced pick to charge."""
-        self._charge_focus(self._gear_root_key(decision.chosen_root),
-                           decision.aged_pick)
-
-    def _charge_focus(self, key: "tuple[str, str] | None", aged_pick: bool) -> None:
-        """One cycle of focus (and, when the pick was interleaved, one d'Hondt
-        seat) against `key`. No-op for a non-gear root."""
-        if key is None:
-            return
-        self._gear_focus[key] = self._gear_focus.get(key, 0) + 1
-        # Seat accumulator (Task 12) advances in lockstep with the focus ledger,
-        # but ONLY when THIS decision's gear pick actually went through the
-        # focus-aging interleave (`decision.aged_pick`, the candidate-scoped
-        # verdict computed in `decide_tree`). A whole-ledger scan would diverge:
-        # a stale `(slot,code)` entry past FOCUS_FLAT for a root that has LEFT
-        # the candidate set (its slot filled by equipping owned gear — no reset)
-        # would falsely bump a seat on a fast-path cycle where no interleave
-        # ran, polluting the d'Hondt schedule.
-        #
-        # Keyed by the FULL key (fix-round 2), not by the charged root's slot.
-        # Two roots can share a sentinel slot — `<skill>` for `gearcrafting`
-        # and for `jewelrycrafting` — and a slot-only seat key would collapse
-        # them into one apportionment entry. `_aged_head` apportions over the
-        # same string, so this IS the key `dhondt_step` returns.
-        #
-        # ONCE PER RUN, NOT ONCE PER CYCLE. `dhondt_step` is a pure argmax of
-        # `w/(seats+1)`, so between seat bumps its inputs do not move and this
-        # key keeps winning — charging every aged cycle dropped the winner's
-        # quotient every cycle and made the argmax alternate. That is
-        # proportional apportionment at one-cycle granularity, and it cost the
-        # fleet roughly half its cycles in travel: 100% of root flips rode
-        # `aged_pick`, and Lor changed root in 97% of 1,998 cycles while walking
-        # 4,680 tiles across 18 distinct ones (measured 2026-08-27).
-        #
-        # The RATIOS are untouched — one seat per `INTERLEAVE_RUN` cycles of
-        # this key's own work — so the schedule stays proportional and
-        # `interleaveDue_reaches` (stated over seat allocations) still bounds
-        # starvation. See `INTERLEAVE_RUN` for the measurement and the residual.
-        if aged_pick and self._gear_focus[key] % INTERLEAVE_RUN == 0:
-            seat = self._focus_key_str(key)
-            self._interleave_seats[seat] = self._interleave_seats.get(seat, 0) + 1
-
-    def _bump_committed_focus(self) -> None:
-        """Bump the ledger for whichever gear root is EFFECTIVELY committed
-        this run-loop iteration: `self._last_decision` is authoritative
-        whether this iteration replanned (in which case `_decide_band` just
-        set it to the fresh decision) or hit the plan cache (in which case
-        it still holds the decision that originally produced the active
-        `self._plan_cache` — nothing can swap `self._plan_cache` without
-        also going through a fresh `_decide_band` call that updates
-        `self._last_decision` in lockstep, see `should_replan`). `None` only
-        on a resumed-from-history cache that was rehydrated by
-        `_resume_plan_cache` before any `decide()` ever ran this session —
-        that one cycle abstains rather than bump a guessed root."""
-        if self._last_decision is not None:
-            self._bump_focus(self._last_decision)
-
-    def _maybe_reset_focus(
-        self, prev_level: int, cur_level: int,
-        executed_action: "Action | None", outcome: str,
-    ) -> None:
-        """On a level-up, PRUNE the aging ledger to the current decision's
-        live gear candidates instead of wiping it: the bot levels up BY
-        GRINDING the very monster the fall-off exists to decay (e.g. wolves
-        for wolf_ears), so a full clear on level-up defeats the
-        anti-starvation for exactly the scenario it was built for. A root
-        still live this cycle (`decision.chosen_root` or one of
-        `decision.fallback_roots`) KEEPS its accumulated fall-off; a stale
-        entry for a root that has LEFT the candidate set (its slot filled or
-        superseded) is dropped. Newly-unlocked gear needs no special-casing:
-        a new `(slot, code)` is simply absent from the ledger already (focus
-        0). On a successful craft of a non-consumable EQUIPPABLE item, the
-        ledger is still FULLY cleared — that is real, freshly-earned gear
-        progress and deserves a clean farm window, unlike a level-up bought
-        with the stuck root's own grind. Consumables/potions (item type
-        "utility") and failed actions do NOT reset either branch — the drop
-        root must not get a free farm window for churning potions."""
-        if cur_level > prev_level:
-            decision = self._last_decision
-            if decision is None:
-                # No decide() has run yet this session (e.g. resumed from
-                # history before the first cycle) — nothing to prune
-                # against. Preserve the ledger rather than guess or clear.
-                return
-            candidate_roots = [decision.chosen_root, *decision.fallback_roots]
-            live_keys: set[tuple[str, str]] = {
-                key for key in (self._gear_root_key(r) for r in candidate_roots)
-                if key is not None
-            }
-            self._gear_focus = {
-                k: v for k, v in self._gear_focus.items() if k in live_keys
-            }
-            live_seats = {self._focus_key_str(k) for k in live_keys}
-            self._interleave_seats = {
-                seat: s for seat, s in self._interleave_seats.items()
-                if seat in live_seats
-            }  # lockstep with the pruned focus ledger
-            return
-        if outcome != "ok" or not isinstance(executed_action, CraftAction):
-            return
-        if self.game_data is None:
-            return
-        stats = self.game_data.item_stats(executed_action.code)
-        if stats is None:
-            return
-        if stats.type_ in EQUIPMENT_SLOT_TYPES:
-            # Drop ONLY the crafted root's own entry, not the whole ledger.
-            # Crafting X is progress for X; a different root Y that is still
-            # stuck made none, and wiping its accumulated fall-off hands it a
-            # fresh farm window it did not earn. This is the same contamination
-            # the level-up branch above was narrowed to fix -- one step removed,
-            # because here the progress is real, it just belongs to ONE root.
-            #
-            # Live case: a gear root whose equippable is NPC-buy-only, priced in
-            # a 0.5%-drop currency. That root can never be CRAFTED, so every
-            # unrelated equippable craft reset its decay before it ever reached
-            # FOCUS_FLAT and the anti-starvation never engaged.
-            if self._last_decision is None:
-                return          # nothing to prune against -- preserve, don't guess
-            crafted_keys = {k for k in self._gear_focus if k[1] == executed_action.code}
-            for key in crafted_keys:
-                self._gear_focus.pop(key, None)
-            live_seats = {self._focus_key_str(k) for k in self._gear_focus}
-            self._interleave_seats = {
-                seat: s for seat, s in self._interleave_seats.items()
-                if seat in live_seats
-            }  # lockstep with the focus ledger
-
     def _record_decision_targets(self, decision: "StrategyDecision") -> str | None:
         """The chosen step's item code, and the blocked target beside it.
 
@@ -838,8 +643,6 @@ class GamePlayer:
         self._last_decision = decision
         for root_repr, reason in decision.declined:
             self._events.note(Mechanism.ROOT_DECLINE, root_repr, reason)
-        if decision.aged_pick:
-            self._events.note(Mechanism.AGED_PICK, repr(decision.chosen_root))
         crafting_target = self._record_decision_targets(decision)
         self.state = state = replace(state, crafting_target=crafting_target)
         selected_goal, plan, goals_tried = self._arbiter.select(
@@ -902,7 +705,6 @@ class GamePlayer:
                 cache.cycles_since_replan = 0
                 self._events.note(Mechanism.COMMITMENT_KEPT, cache.goal_repr)
                 self.state = replace(state, crafting_target=cache.crafting_target)
-                self._bump_committed_focus()
                 return cache.selected_goal, cache.plan[cache.cursor:], goals_tried, True
             if plan and selected_goal is not None:
                 self._plan_cache = PlanCache(
@@ -923,20 +725,11 @@ class GamePlayer:
                         self._last_decide_crafting_target, self._regear_edge.active)
             else:
                 self._plan_cache = None
-            self._bump_committed_focus()
             return selected_goal, plan, goals_tried, True
-        # cache hit — the plan being reused is STILL the currently-committed
-        # gear root's plan (it was cached from `self._last_decision` on the
-        # fresh-decide cycle that populated it, and nothing between then and
-        # now can change `self._last_decision` without also invalidating the
-        # cache — see should_replan). Bump it here too so a root pursued
-        # across a long cached plan ages by wall-clock cycles-committed, not
-        # by how often the planner happened to re-decide (Fix 2).
         assert cache is not None
         self._events.note(Mechanism.PLAN_CACHE_HIT, cache.goal_repr)
         self.state = replace(state, crafting_target=cache.crafting_target)
         self._notify_planning(False)
-        self._bump_committed_focus()
         return cache.selected_goal, cache.plan[cache.cursor:], [], False
 
     def _resume_plan_cache(self, state: WorldState, game_data: GameData | None) -> None:
@@ -1136,7 +929,6 @@ class GamePlayer:
                 step_decline=self._step_decline(state, game_data, ctx, actions),
                 ctx=ctx,
                 history=self.history)
-        self._bump_focus(decision)
         self._last_decision = decision
         crafting_target = self._record_decision_targets(decision)
         self.state = state = replace(state, crafting_target=crafting_target)
@@ -1342,18 +1134,6 @@ class GamePlayer:
                     executed_action = action
                 else:
                     new_state, outcome, executed_action = self._execute(action, client)
-
-                # Arbiter anti-starvation epic (Task 6): clear the gear-focus
-                # aging ledger on real progress from THIS action (level-up or
-                # a successful non-consumable-equippable craft). Must run here
-                # — the only point in the loop where the executed action, its
-                # outcome, and the level straddling it (pre-action
-                # `prev_state_for_learning.level` vs post-action
-                # `new_state.level`) are all known together; `decide()` is not
-                # even guaranteed to have run this cycle (a cache-hit reuses
-                # the prior plan without a fresh decision).
-                self._maybe_reset_focus(
-                    prev_state_for_learning.level, new_state.level, action, outcome)
 
                 now = datetime.now(tz=timezone.utc)
                 cooldown_remaining = 0.0
@@ -2415,21 +2195,6 @@ class GamePlayer:
             # Phase B3: fired guard/means kinds as selection saw them (see
             # StrategyArbiter.last_fires) — consumed by the trace lockstep.
             "fires": dict(self._arbiter.last_fires),
-            # Arbiter anti-starvation epic follow-up: the runtime gear-focus
-            # aging ledger, on THIS surface too — `play-trace-*.jsonl` (what
-            # gets analyzed) is written HERE via `self.tracer.write_cycle`,
-            # not via `CycleSnapshot` (that's the separate cycle_observer/TUI
-            # surface; see `_notify_observer`). Same string-key encoding
-            # (`f"{slot}|{code}"`, `GamePlayer._focus_key_str`) so both
-            # surfaces agree.
-            "gear_focus": {
-                self._focus_key_str(k): v for k, v in self._gear_focus.items()
-            },
-            "interleave_seats": dict(self._interleave_seats),
-            "aged_pick": (
-                self._last_decision.aged_pick
-                if self._last_decision is not None else False
-            ),
             # Emergent-specialization spec: the coordination fields
             # `CycleSnapshot` (the TUI surface) already carries — see
             # `role=self._role` / `supply_target=...` a few hundred lines
@@ -2494,8 +2259,6 @@ class GamePlayer:
             # does not have — and it is trace-record only: it never drives the
             # real chosen root (that's `_last_decision`/`_plan_cache`).
             #
-            # (The Fix-2 note about `focus=`/`seats=` that stood here died with
-            # the aging ledger in wave 3a; there is no argmax left to un-age.)
             decision = self._last_decision or self._strategy.decide(
                 self.state, self.game_data,
                 ctx=self._last_ctx, history=self.history)
@@ -2905,14 +2668,6 @@ class GamePlayer:
                 if self._last_decision is not None and self.game_data is not None else ()
             ),
             fight=fight_record,
-            gear_focus={
-                self._focus_key_str(k): v for k, v in self._gear_focus.items()
-            },
-            aged_pick=(
-                self._last_decision.aged_pick
-                if self._last_decision is not None else False
-            ),
-            interleave_seats=dict(self._interleave_seats),
             role=self._role,
             supply_target=repr(self._supply_target) if self._supply_target is not None else None,
             role_change=self._role_change,
@@ -3994,13 +3749,6 @@ class GamePlayer:
             # `_update_coordination`, empty on every single-character run.
             # `bank_drain.bank_drain_excess` subtracts it from the bank's
             # available quantity so five children stop racing for one pile.
-            # The anti-starvation ledger, read by the root walk's
-            # `WhichSlotIsFurthestBehind` (wave 3a fix-round 1). Same seam and
-            # same lifecycle as `supply_target`: a per-cycle player runtime fact,
-            # owned and mutated by `_charge_focus`, threaded here as DATA
-            # rather than as two more `decide()` parameters.
-            gear_focus=self._gear_focus,
-            interleave_seats=self._interleave_seats,
             sibling_bank_claims=self._sibling_bank_claims,
             sibling_order_claims=self._sibling_order_claims,
             # This cycle's resolved fleet turn-in / recall ask, same source

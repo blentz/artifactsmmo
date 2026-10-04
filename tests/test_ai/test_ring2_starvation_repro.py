@@ -1,49 +1,31 @@
-"""Headline regression test for the ring2 arbiter-starvation bug (branch
-fix/ring2-arbiter-starvation, docs/superpowers/plans/
-2026-07-18-arbiter-focus-aging.md Task 8).
+"""Headline regression test for the ring2 arbiter-starvation bug.
 
 The bug: an achievable craftable gear root (a 2nd `iron_ring` for
 `ring2_slot`) starved forever behind a stuck, higher-value, drop-gated root
-(`wolf_ears` helmet) — the tree's plain argmax (`gear_target_pick`) always
-re-picks the highest-gain candidate every cycle, so a root that can never
-actually be COMPLETED (its only source is a monster the character cannot
-beat) permanently starves every lower-gain alternative. Tasks 1-7 fixed this
-by aging the focused root's selection weight down a deterministic falloff
-curve (`falloff`) and handing cycles to reachable alternatives via a
-deterministic proportional scheduler once the focused root has run past
-`FOCUS_FLAT` cycles. That scheduler was `interleave_due`; wave 3b deleted it in
-favour of the equivalent incremental form the resolution walk runs — one
-`dhondt_step` per cycle over `GamePlayer._interleave_seats`.
+(`wolf_ears` helmet). The walk's slot order is a pure, history-free total
+order, so a root that can never actually be COMPLETED (its only source is a
+monster the character cannot beat) heads it on every cycle.
 
-This test drives the FULL decision path (`StrategyEngine.decide`, which
-delegates to `decide_tree`), not the pure cores in isolation — it is the
-end-to-end proof that the fix reaches the real arbiter entry point, not just
-`progression_tree_core.py`'s unit tests.
-
-WAVE 3a REMOVED THAT FIX FROM THIS PATH. `decide_tree` no longer takes a focus
-ledger or a seat accumulator, so the aging cannot engage through
-`StrategyEngine.decide` at all. The two tests that proved it did are gone and
-`test_wave3a_walk_re_exhibits_the_starvation_this_file_was_written_for` stands
-in their place, pinning what the walk actually does now. Read that test's
-docstring before treating this file as green."""
+The first fix aged the focused root down a fall-off curve and interleaved the
+slots with a d'Hondt scheduler. Phase 4-2b replaced both with facts about the
+intention: an intention that makes no progress ends `stalled`, and one that
+spends its cycle budget YIELDS its root for one turn
+(`GamePlayer._step_decline` declines it `yielded:budget`). The yield's own
+bookkeeping is unit-tested in `test_intention_budget.py`; this file drives the
+FULL decision path (`StrategyEngine.decide`) to show the walk hands the turn
+to the craftable ring when the stuck root is declined."""
 
 from dataclasses import replace
-from itertools import pairwise
 from pathlib import Path
 
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import (
-    SCENARIOS,
     ScenarioCharacter,
-    load_bundle_game_data,
     scenario_state,
 )
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
-from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT, FOCUS_SPAN
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -124,187 +106,35 @@ def test_wolf_ears_route_is_genuinely_unattainable_from_scratch() -> None:
     assert is_attainable_now("wolf_ears", stripped, gd) is False
 
 
-def test_stuck_drop_root_does_not_starve_the_craftable_second_ring() -> None:
-    """THE HEADLINE FIX, restored. Over a full falloff window (flat + decay +
-    margin) ring2's craftable iron_ring must be chosen at least once: the
-    aging hands cycles to it instead of wolf_ears monopolising forever.
+_WOLF_EARS = ObtainItem(code="wolf_ears", quantity=1, slot="helmet_slot")
+_RING2 = ObtainItem(code="iron_ring", quantity=1, slot="ring2_slot")
 
-    RE-ROUTED BY WAVE 3a fix-round 1. The ledger no longer rides two
-    `decide()` parameters; it rides `SelectionContext`, the same seam
-    `supply_target` uses, and the walk reads it in
-    `WhichSlotIsFurthestBehind`. The loop below is otherwise the one that
-    stood here before the flip: bump focus for the committed slot every cycle,
-    bump a d'Hondt seat only on an INTERLEAVED decision (`aged_pick`), exactly
-    as `GamePlayer._charge_focus` does.
 
-    Why the flip broke it and why servability does not cover it: `_slot_order`
-    is a pure, history-free total order over a target set that does not change
-    while the character makes no progress, and `_servable_promotion` only
-    demotes a root the planner CANNOT SERVE — wolf_ears is held, so its
-    `UpgradeEquipment` plans every cycle and never completes. Nothing but
-    aging rotates off it.
+def _yield_of(stuck: MetaGoal):
+    """The walk's view of a spent budget: the yielded root is declined
+    `yielded:budget`, everything else is servable. The same answer
+    `GamePlayer._step_decline` gives for the yielded root; its other arm (the
+    decomposition question) is not what this file is about."""
+    return lambda root: "yielded:budget" if root == stuck else None
 
-    FIX-ROUND 2: the loop CALLS `GamePlayer._gear_root_key` and
-    `._focus_key_str` instead of hand-rolling
-    `("ring2_slot", "iron_ring") if … else …`. The hand-rolled version returned
-    what the real collaborator returns ONLY for this fixture's two slotted
-    `ObtainItem` roots, so it passed while the production key was answering
-    None for every skill-gated and material-gated root the walk can name — the
-    ledger stayed empty live and this test could not see it. Decorative
-    mechanism 5, in the pin written to prevent exactly this class of miss."""
+
+def test_without_a_yield_the_stuck_drop_root_heads_every_cycle() -> None:
+    """The non-vacuity twin: with nothing declined the walk's slot order is
+    history-free, so wolf_ears heads on EVERY cycle and the ring waits behind
+    it. This is the starvation the yield answers."""
     state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
     engine = StrategyEngine(objective)
-    # THE PRODUCTION BUMP, CALLED — not replicated. This loop used to hand-roll
-    # `_charge_focus`'s body, which meant it kept driving the OLD one-seat-per-
-    # cycle cadence after production moved to one seat per `INTERLEAVE_RUN`
-    # (2026-08-27). It would have gone on passing while verifying a schedule
-    # production no longer runs, which is the two-producers trap applied to a
-    # liveness guarantee.
-    player = GamePlayer(character="ring2_repro")
-    chosen_ring2 = False
-    for _ in range(FOCUS_FLAT + FOCUS_SPAN + 20):
-        ctx = replace(NO_PROFILE_CONTEXT, gear_focus=player._gear_focus,
-                      interleave_seats=player._interleave_seats)
-        d = engine.decide(state, gd, ctx=ctx)
-        if "ring2_slot" in repr(d.chosen_root):
-            chosen_ring2 = True
-        assert GamePlayer._gear_root_key(d.chosen_root) is not None, (
-            "the committed root must carry a ledger key, or nothing ages: "
-            f"{d.chosen_root!r}")
-        player._bump_focus(d)
-    assert chosen_ring2, "ring2 iron_ring was never chosen — still starved"
+    picks = {engine.decide(state, gd).chosen_root for _ in range(30)}
+    assert picks == {_WOLF_EARS}
+    assert _RING2 in engine.decide(state, gd).fallback_roots
 
 
-def test_a_skill_gated_head_carries_a_ledger_key_and_rotates() -> None:
-    """THE ROOT SHAPE THE FLIP INTRODUCED AND FIX-ROUND 1 COULD NOT AGE.
-
-    `IsThisTargetBlocked`'s skill arm returns `ReachSkillLevel`, which has
-    neither `.slot` nor `.code`; the material arm returns `ObtainItem` with
-    `slot=None`. The old `_gear_root_key` duck-typed both to None, so
-    `_charge_focus` returned early — no focus entry AND no d'Hondt seat — and
-    the ledger stayed permanently empty. Measured over 130 charged cycles on
-    `l10_weapon_upgrade`: one distinct root, `ledger: {}`. The skill-climb root
-    this whole epic exists to produce was precisely the one that could not
-    rotate.
-
-    Driven through `GamePlayer._gear_root_key` for the same reason the test
-    above now is: a hand-rolled key would pass whatever the production one
-    does."""
-    gd = load_bundle_game_data(BUNDLE)
-    state = scenario_state(SCENARIOS["l10_weapon_upgrade"], gd)
-    engine = StrategyEngine(CharacterObjective.from_game_data(gd))
-
-    first = engine.decide(state, gd)
-    assert first.chosen_root == ReachSkillLevel(skill="jewelrycrafting", level=2)
-    assert GamePlayer._gear_root_key(first.chosen_root) is not None, (
-        "a skill-gated head must key, or it can never age")
-
-    # Production's own bump, for the reason given in the test above.
-    player = GamePlayer(character="skill_head_repro")
-    seen: set[str] = set()
-    for _ in range(FOCUS_FLAT + FOCUS_SPAN + 20):
-        ctx = replace(NO_PROFILE_CONTEXT, gear_focus=player._gear_focus,
-                      interleave_seats=player._interleave_seats)
-        d = engine.decide(state, gd, ctx=ctx)
-        seen.add(repr(d.chosen_root))
-        assert GamePlayer._gear_root_key(d.chosen_root) is not None, (
-            f"the committed root must carry a ledger key: {d.chosen_root!r}")
-        player._bump_focus(d)
-    focus = player._gear_focus
-    assert focus, "the ledger never filled — nothing was charged"
-    assert len(seen) > 1, (
-        f"the skill-climb head never rotated over a full falloff window: {seen}")
-
-
-def test_absent_aging_the_stuck_drop_root_would_starve() -> None:
-    """The non-vacuity twin: with the ledger frozen EMPTY every cycle the walk
-    takes its unaged fast path — `_slot_order`'s argmax, bit-identical to the
-    history-free order — and wolf_ears wins on EVERY cycle. Without this, the
-    test above could pass because the walk had become nondeterministic rather
-    than because the aging engaged."""
+def test_a_yielded_stuck_root_hands_the_turn_to_the_craftable_second_ring() -> None:
+    """THE HEADLINE FIX. Once wolf_ears's intention spends its budget, the
+    walk declines it for one turn and the craftable ring heads instead, and
+    wolf_ears stays on offer as a fallback for the turn after."""
     state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
-    engine = StrategyEngine(objective)
-    picks = {repr(engine.decide(state, gd).chosen_root) for _ in range(30)}
-    assert picks == {"ObtainItem(code='wolf_ears', quantity=1, slot='helmet_slot')"}
-    assert ObtainItem(code="iron_ring", quantity=1, slot="ring2_slot") in \
-        engine.decide(state, gd).fallback_roots
-
-
-def test_the_interleave_hands_out_RUNS_not_alternating_single_cycles() -> None:
-    """THE THRASH THIS SCHEDULE USED TO PRODUCE, pinned at the real engine.
-
-    `dhondt_step` is a pure argmax of `w/(seats+1)`. While a seat was charged on
-    every aged cycle the winner's quotient fell every cycle, so the argmax
-    alternated — proportional apportionment at one-cycle granularity, which is
-    MAXIMAL interleaving. Measured live on the fleet run ending 2026-08-27:
-    `aged_pick` true in 99% of cycles, 100% of root flips riding it, and Lor
-    changing root in 97% of 1,998 cycles while walking 4,680 tiles across 18
-    DISTINCT ones — roughly half a rate-limited run spent pacing between the
-    same few nodes rather than working at one.
-
-    Charging once per `INTERLEAVE_RUN` cycles instead lets the winner HOLD:
-    between bumps the apportionment's inputs do not move.
-
-    Driven PAST the decay band (seeded focus), because inside the band
-    `falloff` moves the weights every cycle by design and runs stay short there
-    — see `INTERLEAVE_RUN`'s RESIDUAL note. The live fleet sat at focus
-    393-1157, far past it."""
-    state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
-    engine = StrategyEngine(objective)
-    player = GamePlayer(character="run_locality")
-
-    # Past the ramp for every candidate, so `falloff` is flat at FOCUS_FLOOR and
-    # the only thing that can move the argmax is a SEAT.
-    settled = FOCUS_FLAT + FOCUS_SPAN + 1
-    for slot, code in (("helmet_slot", "wolf_ears"), ("ring2_slot", "iron_ring")):
-        player._gear_focus[(slot, code)] = settled
-
-    picks: list[str] = []
-    for _ in range(60):
-        ctx = replace(NO_PROFILE_CONTEXT, gear_focus=player._gear_focus,
-                      interleave_seats=player._interleave_seats)
-        decision = engine.decide(state, gd, ctx=ctx)
-        picks.append(repr(decision.chosen_root))
-        player._bump_focus(decision)
-
-    flips = sum(1 for a, b in pairwise(picks) if a != b)
-    assert len(set(picks)) > 1, (
-        "both roots must still get turns — this is the anti-starvation property")
-    assert flips * 4 < len(picks), (
-        f"the interleave is still thrashing: {flips} flips over {len(picks)} "
-        f"cycles. A seat must be charged once per run, not once per cycle.")
-
-
-def test_the_interleave_holds_runs_INSIDE_the_decay_band_too() -> None:
-    """The band was the residual the seat cadence did NOT fix.
-
-    `INTERLEAVE_RUN` stops the d'Hondt quotient moving between bumps, which is
-    enough once a candidate's weight has settled at `FOCUS_FLOOR`. Inside the
-    decay band the WEIGHT itself still shrank every cycle, so the argmax flipped
-    with no seat charged at all — simulated 81% of transitions, median run 1,
-    i.e. the same thrash one band lower. `run_falloff` samples the curve once
-    per run, so the weight holds too.
-
-    Seeded INSIDE the band on purpose; the test above covers past it."""
-    state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
-    engine = StrategyEngine(objective)
-    player = GamePlayer(character="band_locality")
-
-    in_band = FOCUS_FLAT + 1
-    for slot, code in (("helmet_slot", "wolf_ears"), ("ring2_slot", "iron_ring")):
-        player._gear_focus[(slot, code)] = in_band
-
-    picks: list[str] = []
-    for _ in range(FOCUS_SPAN):
-        ctx = replace(NO_PROFILE_CONTEXT, gear_focus=player._gear_focus,
-                      interleave_seats=player._interleave_seats)
-        decision = engine.decide(state, gd, ctx=ctx)
-        picks.append(repr(decision.chosen_root))
-        player._bump_focus(decision)
-
-    flips = sum(1 for a, b in pairwise(picks) if a != b)
-    assert len(set(picks)) > 1, (
-        "both roots must still get turns while the ramp hands off")
-    assert flips * 4 < len(picks), (
-        f"the decay band is still thrashing: {flips} flips over {len(picks)} "
-        f"cycles. The weight must hold across a run, not shrink every cycle.")
+    decision = StrategyEngine(objective).decide(
+        state, gd, step_decline=_yield_of(_WOLF_EARS))
+    assert decision.chosen_root == _RING2
+    assert (repr(_WOLF_EARS), "yielded:budget") in decision.declined

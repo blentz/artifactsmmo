@@ -3501,12 +3501,11 @@ ROOT_DECISION_MUTATIONS = [
      " WITH gear targets is sent to the combat question",
      "        if not served:\n",
      "        if served:\n"),
-    # Re-anchored 2026-08-23 (fix-round 1): the head is chosen by `_aged_head`
-    # now, and the siblings are whatever is left, so the LEAST-behind mutant
-    # edits the fast path's return rather than a slice.
+    # Re-anchored 2026-10-04 (Phase 4-2b-ii): the aged head is gone, so the
+    # head is the ranking's first entry and the siblings are the rest.
     ("root: WhichSlotIsFurthestBehind picks the LEAST-behind slot",
-     "            return ranked[0]\n",
-     "            return ranked[-1]\n"),
+     "        (slot, target), *siblings = ranked\n",
+     "        *siblings, (slot, target) = ranked\n"),
     # The mask this graph exists to avoid: a skill-gated target also carries
     # `blocker=None`, so hoisting the attainable arm reports it as buildable
     # and the character chases a craft it cannot perform. Same shape as the
@@ -3659,41 +3658,10 @@ ROOT_DECISION_MUTATIONS = [
      " so one unservable gear step abandons the gear branch",
      "    ordered.append(ReachCharLevel(level=milestone_pure(state.level)))\n",
      "    ordered.insert(0, ReachCharLevel(level=milestone_pure(state.level)))\n"),
-    # The anti-starvation read side, reconnected in fix-round 1: drop the
-    # interleave and `WhichSlotIsFurthestBehind` is a pure, history-free total
-    # order again — the ring2 stuck-drop-root starvation, reinstated.
-    ("root: the aged head is dropped, so the slot order never rotates",
-     "        head = self._aged_head(ranked, state, game_data, ctx, history)\n",
-     "        head = ranked[0]\n"),
-    # THE DECAY BAND'S HALF OF THE THRASH FIX (2026-08-27). `INTERLEAVE_RUN`
-    # holds the d'Hondt QUOTIENT still between seat bumps, but reading the
-    # SMOOTH curve shrinks the winner's WEIGHT every cycle, so the argmax flips
-    # even when no seat was charged. Measured by reverting exactly this call:
-    # 99 flips over 100 in-band cycles. Killed by
-    # test_the_interleave_holds_runs_INSIDE_the_decay_band_too
-    # (tests/test_ai/test_ring2_starvation_repro.py).
-    ("root: the aged head reads the SMOOTH falloff again"
-     " (decay band re-thrashes, one-cycle runs)",
-     "             * run_falloff(level))",
-     "             * falloff(level))"),
-    # ...and the fast-path guard inverted: an UNAGED board would take the
-    # d'Hondt interleave, so a fresh root jitters instead of being pursued.
-    # Re-anchored 2026-08-23 (fix-round 2): the focus levels are now read
-    # through `_ledger_key`, on the ROOT each slot resolves to, so the guard
-    # reads a precomputed list instead of the sheet entry.
-    ("root: the flat farm window is inverted, so fresh roots interleave",
-     "        if all(level <= FOCUS_FLAT for level in focus):\n",
-     "        if any(level > FOCUS_FLAT for level in focus):\n"),
-    # THE FIX-ROUND-2 DEFECT ITSELF, anchored so it cannot come back: read the
-    # SHEET entry `(slot, target.code)` instead of the resolved root's key, and
-    # a skill-gated or material-gated head can never match what
-    # `GamePlayer._charge_focus` wrote — the ledger stays empty and nothing
-    # ever ages.
-    ("root: the aged read keys on the SHEET entry, not on the resolved root,"
-     " so a skill-gated head can never age",
-     "        keys = [self._ledger_key(slot, target, state, game_data, ctx, history)\n"
-     "                for slot, target in ranked]\n",
-     "        keys = [(slot, target.code) for slot, target in ranked]\n"),
+    # Phase 4-2b-ii deleted the aged head with the focus ledger, and with it
+    # four mutants: the dropped head, the smooth-falloff read, the inverted
+    # farm window and the sheet-keyed read. The cycle budget and its one-turn
+    # yield (`INTENTION_BUDGET_MUTATIONS`) carry the anti-starvation duty now.
 ]
 
 # THE GATHERING-DEMAND GATE (the third conjunct of `_orphan_skill_roots`, and
@@ -4498,8 +4466,8 @@ RECIPE_PRODUCIBLE_MUTATIONS = [
 # `focus_aging_pick`'s fast-path guard and four over `_scaled_weights`. §6.4
 # named only the last eight; the other three anchored on the same deleted code
 # and would have failed `--check-anchors`. What is left guards what the
-# resolution walk actually calls: `milestone_pure`, `potion_type_weight`,
-# `falloff` and `dhondt_step` (`ai/decisions/root.py:348-365`).
+# resolution walk actually calls: `milestone_pure` and `potion_type_weight`.
+# Phase 4-2b-ii retired five more with `falloff` and `dhondt_step`.
 PROGRESSION_TREE_MUTATIONS = [
     ("tree: milestone off-by-a-band (current band, not next)",
      "    return min(TRUNK_CAP, (level // BAND + 1) * BAND)",
@@ -4510,40 +4478,15 @@ PROGRESSION_TREE_MUTATIONS = [
     ("tree: unknown potion family weighs like health",
      "    return POTION_TYPE_WEIGHTS.get(family, Fraction(0))",
      "    return POTION_TYPE_WEIGHTS.get(family, Fraction(1))"),
-    # Focus-aging pure functions (Task 7, 2026-07-18): unit-killed group.
-    # falloff: flat-window floor swap.
-    ("falloff: floor instead of full weight in flat window",
-     "    if focus_level <= FOCUS_FLAT:\n        return Fraction(1)",
-     "    if focus_level <= FOCUS_FLAT:\n        return FOCUS_FLOOR"),
-    # falloff: drop the convex decay term (weight never decays past FOCUS_FLAT).
-    ("falloff: drop the convex decay term",
-     "    return Fraction(1) - (Fraction(1) - FOCUS_FLOOR) * t * t",
-     "    return Fraction(1)"),
-    # dhondt_step: ignore seats already handed out in the d'Hondt quotient
-    # (breaks proportionality — the same top-weight key wins every seat, so the
-    # aged head collapses to one winner every cycle: starvation reinstated).
-    ("dhondt_step: ignore seats in the quotient (breaks proportionality)",
-     "        key=lambda kw: (kw[1] / (seats.get(kw[0], 0) + 1), kw[1], kw[0]),",
-     "        key=lambda kw: (kw[1], kw[1], kw[0]),"),
-    # dhondt_step: multiply by (seats+1) instead of dividing — favours the most
-    # saturated key (inverts highest-averages), so the quotient rewards seats.
-    ("dhondt_step: multiply seats into the quotient instead of dividing",
-     "        key=lambda kw: (kw[1] / (seats.get(kw[0], 0) + 1), kw[1], kw[0]),",
-     "        key=lambda kw: (kw[1] * (seats.get(kw[0], 0) + 1), kw[1], kw[0]),"),
-    # dhondt_step: lowest-quotient wins instead of highest.
-    ("dhondt_step: lowest-averages instead of highest",
-     "    return max(\n        weighted,",
-     "    return min(\n        weighted,"),
 ]
 
-# synergy_core.synergy_pure — the purity factor of weight = gain*falloff*synergy
-# (spec 2026-07-19 §3, Phase 2). Unit-killed by tests/test_ai/test_synergy_core.py;
+# synergy_core.synergy_pure — the purity factor read by the taskmaster choice and
+# the means-worth gate (spec 2026-07-19 §3, Phase 2). Unit-killed by tests/test_ai/test_synergy_core.py;
 # the same core is proven in Formal/Synergy.lean (synergy_le_one/ge_floor/floor_pos/
 # monotone/total_zero). Each mutant breaks a named bound.
 SYNERGY_CORE_MUTATIONS = [
-    # Floor sinks to falloff's floor: synergy's 3:1 range no longer stays strictly
-    # inside falloff's 9:1, so aging stops dominating alignment (§3.5 invariant).
-    ("synergy: floor sunk to 1/9 (range no longer inside falloff)",
+    # Floor sunk: a zero-overlap candidate's weight drops from 1/3 to 1/9.
+    ("synergy: floor sunk to 1/9",
      "S_MIN = Fraction(1, 3)",
      "S_MIN = Fraction(1, 9)"),
     # Degenerate guard weakened: total == 0 (needs nothing) now falls through to the
@@ -4705,29 +4648,29 @@ PASSIVE_CURRENCY_HELPER_MUTATIONS = [
      "        return (total >= 0"),
 ]
 
-# GamePlayer's gear-focus aging ledger. Unit-killed by
-# tests/test_ai/test_player_focus_ledger.py.
-FOCUS_CHARGE_MUTATIONS = [
-    # Stop charging the COMMITTED root: the root actually being pursued never
-    # ages, so nothing ever rotates away from it — the starvation the ledger
-    # exists to prevent. (The displaced-pick charge and its mutant went with
-    # servability promotion, Phase 3-2.)
-    ("focus ledger: committed root no longer ages",
-     "        self._charge_focus(self._gear_root_key(decision.chosen_root),\n"
-     "                           decision.aged_pick)",
-     "        self._charge_focus(None, decision.aged_pick)"),
-    # THE INTERLEAVE CADENCE (2026-08-27). Reverting to a seat on every aged
-    # cycle drops the winner's d'Hondt quotient every cycle, so the argmax
-    # alternates and no root is held long enough to do the work it travelled
-    # for: measured live at 100% of root flips riding `aged_pick`, Lor changing
-    # root in 97% of 1,998 cycles across 4,680 tiles of pacing. Killed by
-    # test_a_seat_is_charged_once_per_run_not_once_per_cycle
-    # (tests/test_ai/test_player_focus_ledger.py) and, at the real engine, by
-    # test_the_interleave_hands_out_RUNS_not_alternating_single_cycles.
-    ("focus ledger: a d'Hondt seat is charged EVERY aged cycle again"
-     " (interleave thrashes, one-cycle runs)",
-     "        if aged_pick and self._gear_focus[key] % INTERLEAVE_RUN == 0:",
-     "        if aged_pick:"),
+# The intention's cycle budget and its one-turn yield (Phase 4-2b), which
+# replaced the focus-aging ledger and its d'Hondt interleave (retired in 4-2b-ii
+# with `FOCUS_CHARGE_MUTATIONS`). Unit-killed by
+# tests/test_ai/test_intention_budget.py.
+INTENTION_BUDGET_MUTATIONS = [
+    # Progress resets the budget too: an intention that keeps making progress
+    # never spends it, so a root that progresses slowly holds the fleet forever.
+    ("budget: progress resets the cycle budget as well as the stall count",
+     "            self._intention_stall = 0\n        else:\n",
+     "            self._intention_stall = self._intention_cycles = 0\n        else:\n"),
+    # The budget is never spent: no intention ever yields, the ring2 shape.
+    ("budget: the cycle budget is never spent",
+     "        elif self._intention_cycles >= BUDGET_CYCLES:\n",
+     "        elif False:\n"),
+    # The yield is recorded but the walk is never told: the spent root heads
+    # again on the very next cycle.
+    ("budget: the yielded root is not declined",
+     "            if repr(root) == yielded:\n",
+     "            if False:\n"),
+    # The holder ends but the yield stays: the yielded root is declined forever.
+    ("budget: the yield never clears after its holder ends",
+     "        else:\n            self._yield = None\n        self._persist_yield()\n",
+     "        else:\n            pass\n        self._persist_yield()\n"),
 ]
 
 # _equippable_goal passive-currency gate (obtain_item_routing.py, moved from
@@ -8865,8 +8808,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_pursuit_value.py", survivors)
     run_group(STRATEGIC_VALUE_SRC, STRATEGIC_BOUND_MUTATIONS,
               "tests/test_ai/test_tiers_strategic_value.py", survivors)
-    run_group(PLAYER_SRC, FOCUS_CHARGE_MUTATIONS,
-              "tests/test_ai/test_player_focus_ledger.py", survivors)
+    run_group(PLAYER_SRC, INTENTION_BUDGET_MUTATIONS,
+              "tests/test_ai/test_intention_budget.py", survivors)
     run_group(REQUIREMENT_GRAPH_MEMO_SRC, MEMO_ENRICH_MUTATIONS,
               "tests/test_ai/test_requirement_multiset_enrichment.py", survivors)
     run_group(MEANS_WORTH_SRC, MEANS_SERVES_MUTATIONS,

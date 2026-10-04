@@ -1326,28 +1326,21 @@ open Formal.PriorityBand
 #check @Formal.PotionProvisionQty.provision_le_max           -- never more than a full stack
 #check @Formal.PotionProvisionQty.provision_le_held          -- never more than actually held
 #check @Formal.PotionProvisionQty.provision_nonneg           -- never negative
--- ProgressionTree (trunk milestones, potion weights, focus-aging falloff and the
--- d'Hondt interleave — what `ai/decisions/root.py` calls on an aged cycle):
+-- ProgressionTree (trunk milestones and potion weights — what `ai/decisions/root.py`
+-- calls):
 #check @Formal.ProgressionTree.milestone_gt_level            -- the milestone strictly exceeds the level below the cap
 #check @Formal.ProgressionTree.milestone_le_cap              -- the milestone never exceeds the cap
 #check @Formal.ProgressionTree.milestone_band_aligned        -- milestones are band boundaries (divisible by 10)
 #check @Formal.ProgressionTree.milestone_advances            -- crossing a milestone strictly advances it (trunk descent)
 #check @Formal.ProgressionTree.potionWeight_health_maximal   -- health dominates every potion family (tuning decision, pinned)
 #check @Formal.ProgressionTree.potionWeight_unknown_floor    -- unknown families never outrank anything
-#check @Formal.ProgressionTree.falloff_flat                  -- FLAT window: below focusFlat the multiplier is exactly 1
-#check @Formal.ProgressionTree.falloff_le_one                -- the multiplier never exceeds 1
-#check @Formal.ProgressionTree.falloff_ge_floor              -- a stuck root is never fully abandoned (floor)
-#check @Formal.ProgressionTree.falloff_floor_after           -- at/past focusFlat + focusSpan the multiplier IS the floor
-#check @Formal.ProgressionTree.falloff_antitone              -- ANTITONE: aging never increases the multiplier
-#check @Formal.ProgressionTree.selectMax_quot_max            -- HIGHEST-AVERAGES: the per-seat winner maximises the d'Hondt quotient
-#check @Formal.ProgressionTree.dhondtStepKey_quot_max        -- dhondt_step returns a quotient-dominant key (one seat of apportionment)
 -- Synergy (the pool-overlap multiplier pinned into [sMin, 1]):
 #check @Formal.Synergy.synergyRatio_nonneg                   -- the overlap ratio is nonneg
 #check @Formal.Synergy.synergyRatio_le_one                   -- with shared ≤ total the ratio is ≤ 1
 #check @Formal.Synergy.synergy_total_zero                    -- a candidate needing nothing is maximally aligned
-#check @Formal.Synergy.synergy_ge_floor                      -- never below sMin (the anti-starvation floor)
+#check @Formal.Synergy.synergy_ge_floor                      -- never below sMin
 #check @Formal.Synergy.synergy_le_one                        -- never above 1
-#check @Formal.Synergy.synergy_floor_pos                     -- the floor is strictly positive (feeds interleaveDue_reaches)
+#check @Formal.Synergy.synergy_floor_pos                     -- the floor is strictly positive
 #check @Formal.Synergy.synergy_monotone                      -- MONOTONE: higher overlap scores no lower
 -- XpPositive (the server level_penalty band that decides whether a kill pays xp):
 #check @Formal.XpPositive.gate_iff                           -- characterisation: the gate IS the integer band, exactly

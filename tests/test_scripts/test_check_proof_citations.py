@@ -136,8 +136,8 @@ def test_a_wrong_namespace_fails_even_though_the_leaf_exists(tmp_path: Path) -> 
 
 
 def test_a_declaration_in_a_file_whose_path_differs_from_its_namespace(tmp_path: Path) -> None:
-    """The real shape: `interleaveDue_reaches` is declared under
-    `namespace Formal.ProgressionTree` inside `Formal/Liveness/...`. The
+    """The shape `interleaveDue_reaches` had (until Phase 4-2b-ii): declared
+    under `namespace Formal.ProgressionTree` inside `Formal/Liveness/...`. The
     NAMESPACE resolves; the path-derived spelling does not."""
     _tree(tmp_path)
     (tmp_path / "formal" / "Formal" / "Liveness").mkdir()

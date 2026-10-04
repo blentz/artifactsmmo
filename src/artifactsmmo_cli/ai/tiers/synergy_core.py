@@ -26,19 +26,16 @@ from fractions import Fraction
 
 S_MIN = Fraction(1, 3)
 """Floor of the synergy multiplier (> 0): even a zero-overlap target keeps a
-strictly-positive weight, so d'Hondt still awards it a seat eventually
-(`interleaveDue_reaches`, resting on `minWeight_pos`). The range S_MAX/S_MIN = 3
-is deliberately kept strictly inside `falloff`'s 9:1 (FOCUS_FLOOR = 1/9) so
-aging structurally dominates alignment — a high-synergy stuck root still decays
-(spec §3.5). This is the ONLY tuning surface; the shape is an affine map into
-[S_MIN, 1], pinned by the tests and Synergy.lean."""
+strictly-positive weight. `means_worth` thresholds at it (`> S_MIN` iff the
+overlap is non-empty). This is the ONLY tuning surface; the shape is an affine
+map into [S_MIN, 1], pinned by the tests and Synergy.lean."""
 
 
 def synergy_pure(shared: int, total: int) -> Fraction:
     """Purity multiplier for a candidate whose own work is `total`
     demand-weighted units, of which `shared` overlap the other live roots.
 
-    Affine map of `shared/total` into `[S_MIN, 1]` — same shape as `falloff`.
+    Affine map of `shared/total` into `[S_MIN, 1]`.
     Exact `Fraction`, no float in the decision path.
 
     `total <= 0` means the candidate needs nothing new, which is maximally
@@ -56,8 +53,7 @@ TOP_QUANTILE = Fraction(1, 3)
 """Fraction of a task pool that counts toward a taskmaster's expected synergy
 (spec 2026-07-19 §4.3). A bad task draw is a cheap cancel (1 coin), so a master
 is worth its GOOD draws, not its average — the aggregate reads the top third.
-Unvalidated tuning surface (residual R4): calibrate against a live trace, the
-way FOCUS_FLOOR was."""
+Unvalidated tuning surface (residual R4): calibrate against a live trace."""
 
 
 def expected_pool_synergy(synergies: Sequence[Fraction],

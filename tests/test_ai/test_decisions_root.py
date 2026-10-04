@@ -60,11 +60,8 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
-    focus_key,
-    focus_key_str,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
-from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT, FOCUS_SPAN
 from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, normal_band, tier_of_level
 from artifactsmmo_cli.audit.open_rung_completeness import census_state
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -766,44 +763,16 @@ def test_the_siblings_become_the_alternatives_then_the_trunk_then_the_orphans():
     )
 
 
-def test_the_slot_walk_does_not_rotate_while_every_target_is_fresh():
-    """The unaged fast path: with an empty ledger the head is `_slot_order`'s
-    argmax on every call, bit-identical to the history-free walk. Every
-    ledger-free caller — the whole offline scenario set, `NO_PROFILE_CONTEXT` —
-    depends on this."""
+def test_the_slot_walk_is_history_free():
+    """The head is `_slot_order`'s first entry on every call: the walk holds
+    no history. Rotation away from a stuck head is the intention's job (its
+    stall and budget end it, and a spent budget's yield declines the root for
+    one turn, Phase 4-2b), not the walk's."""
     gd = _gd()
     state = make_state(level=15)
     heads = {repr(resolve_root(state, gd, _objective(gd), _ctx(), None).root)
              for _ in range(10)}
     assert heads == {repr(ReachSkillLevel(skill="gearcrafting", level=2))}
-
-
-def test_an_aged_slot_hands_the_decision_to_an_alternative():
-    """THE ANTI-STARVATION FIX AT THE NODE. Age the winning slot past the flat
-    farm window and the d'Hondt interleave must hand the head to a different
-    slot — and say so, via `aged`, which is what gates the player's seat bump.
-
-    Without this the run_group for `ROOT_DECISION_MUTATIONS` could not reach
-    the claim at all: it binds only this file, and the end-to-end rotation
-    proof lives in `test_ring2_starvation_repro.py` (the run_group-binding trap
-    `test_progression_tree.py` already documents)."""
-    gd = _gd()
-    state = make_state(level=15)
-    fresh = resolve_root(state, gd, _objective(gd), _ctx(), None)
-    assert fresh.aged is False
-    # The stuck key is `focus_key(fresh.root)` — the RESOLVED root, which is
-    # what `GamePlayer._charge_focus` charges and therefore what the walk must
-    # read. Derived, not hand-written: this fixture's head is a skill-gated
-    # slot, so the key is `("<skill>", "gearcrafting")` and NOT
-    # `("shield_slot", "iron_shield")`. A hand-written sheet key here would be
-    # the fix-round-2 defect reproduced inside its own regression test.
-    stuck_key = focus_key(fresh.root)
-    assert stuck_key is not None
-    aged_ctx = replace(_ctx(), gear_focus={stuck_key: FOCUS_FLAT + FOCUS_SPAN},
-                       interleave_seats={focus_key_str(stuck_key): 40})
-    rotated = resolve_root(state, gd, _objective(gd), aged_ctx, None)
-    assert rotated.aged is True
-    assert rotated.root != fresh.root
 
 
 def test_converting_a_sibling_does_not_pollute_the_trail():
@@ -1191,8 +1160,7 @@ def test_a_skill_gated_pick_records_the_target_it_could_not_build(
     Measured on the live fleet before this field existed: a blocked character
     publishes no demand at all, `SupplyBank` has executed 0 times in 105,159
     cycles, and `supply_claims` is empty. Recorded by the ONE node that reads
-    the gate, for the same reason `aged` is — a re-derivation in the player
-    would be a second classifier."""
+    the gate — a re-derivation in the player would be a second classifier."""
     gd = bundle_game_data
     state = scenario_state(SCENARIOS["l12_deep_chain_grind"], gd)
     resolution = resolve_root(state, gd, CharacterObjective.from_game_data(gd),

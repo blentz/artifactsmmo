@@ -183,27 +183,6 @@ class CycleSnapshot(BaseModel):
     plan_tree: tuple[PlanTreeNode, ...] = ()
 
 
-    # Arbiter anti-starvation epic follow-up: the runtime gear-focus aging
-    # ledger, so a trace can verify the fall-off climbs and SUSTAINS across
-    # level-ups instead of resetting. `GamePlayer._gear_focus` is keyed by
-    # the `(slot, code)` tuple; JSON object keys must be strings, so each key
-    # is encoded as `f"{slot}|{code}"` (see `GamePlayer._focus_key_str`).
-    gear_focus: dict[str, int] = Field(default_factory=dict)
-    # Whether THIS cycle's committed gear pick went through the focus-aging
-    # interleave (`StrategyDecision.aged_pick`) rather than the unaged fast
-    # path. The two arms are `WhichSlotIsFurthestBehind._aged_head`'s: the
-    # fast path is the head of `_slot_order`'s ranking, NOT the scored argmax
-    # the flat ranking used to run — wave 3a replaced that with the walk and
-    # wave 3b deleted it.
-    aged_pick: bool = False
-    # The d'Hondt seat accumulator (`GamePlayer._interleave_seats`), keyed by
-    # `meta_goal.focus_key_str` — the FULL "slot|code" ledger key, same as
-    # `gear_focus` above. It was keyed by equipment slot alone until wave 3a
-    # fix-round 2; a root can now resolve to a sentinel slot (`<skill>`,
-    # `<item>`), and a slot-only key would collapse two different roots into
-    # one apportionment entry.
-    interleave_seats: dict[str, int] = Field(default_factory=dict)
-
     # The transcript of the fight executed this cycle, when the action was a
     # FightAction that reached the server. None on every other cycle. Drives the
     # log pane's summary line and the fight modal.

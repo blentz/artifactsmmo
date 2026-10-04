@@ -6,13 +6,10 @@ Formal model of the pure synergy core
 The Python core is bound to these semantics by the SYNERGY_CORE_MUTATIONS
 group (unit-killed, formal/diff/mutate.py).
 
-`synergyPure shared total` is the third modulating factor in the tree's
-selection weight `gain * falloff(focus) * synergy`: an affine map of the
-demand-weighted overlap ratio `shared/total` into `[sMin, 1]`. Same curve
-shape as `falloff` (FLOOR + (1 - FLOOR) * x), so the obligations below are
-structural twins of `falloff_le_one` / `falloff_ge_floor` / `falloff_floor_pos`
-in `Formal/ProgressionTree.lean`. This file imports nothing (core Lean only),
-so the two small `Rat` order helpers are re-stated locally.
+`synergyPure shared total` is an affine map of the demand-weighted overlap
+ratio `shared/total` into `[sMin, 1]` (FLOOR + (1 - FLOOR) * x), read by the
+taskmaster choice and the means-worth gate. This file imports nothing (core
+Lean only), so the two small `Rat` order helpers are re-stated locally.
 -/
 
 namespace Formal.Synergy
@@ -29,9 +26,8 @@ theorem ratDivNonneg {a c : Rat} (ha : 0 ≤ a) (hc : 0 < c) : 0 ≤ a / c := by
   rw [Rat.div_def]
   exact Rat.mul_nonneg ha (Rat.le_of_lt (Rat.inv_pos.mpr hc))
 
-/-- Synergy floor: even a zero-overlap target keeps a strictly-positive weight,
-so d'Hondt still seats it eventually (`minWeight_pos`). `sMin = 1/3`; the range
-`sMax/sMin = 3` stays strictly inside falloff's `1/focusFloor = 9`. -/
+/-- Synergy floor: even a zero-overlap target keeps a strictly-positive weight.
+`sMin = 1/3`. -/
 def sMin : Rat := mkRat 1 3
 
 /-- Overlap ratio `shared/total` as an exact `Rat` (Python
@@ -85,7 +81,7 @@ Proven, not commented. -/
 theorem synergy_total_zero (shared : Nat) : synergyPure shared 0 = 1 := by
   simp [synergyPure]
 
-/-- The multiplier never drops below `sMin` (the anti-starvation floor). -/
+/-- The multiplier never drops below `sMin`. -/
 theorem synergy_ge_floor (shared total : Nat) : sMin ≤ synergyPure shared total := by
   unfold synergyPure
   split
@@ -109,8 +105,7 @@ theorem synergy_le_one {shared total : Nat} (h : shared ≤ total) :
     rw [Rat.mul_one] at hmul
     grind
 
-/-- The floor is strictly positive — the `minWeight_pos` feeder that preserves
-`interleaveDue_reaches` (no-starvation). -/
+/-- The floor is strictly positive: even a zero-overlap candidate keeps weight. -/
 theorem synergy_floor_pos (shared total : Nat) :
     (0 : Rat) < synergyPure shared total := by
   unfold synergyPure

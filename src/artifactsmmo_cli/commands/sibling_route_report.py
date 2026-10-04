@@ -336,11 +336,6 @@ def _print_root_section(
           "LearningStore, while the sensed player itself planned against an "
           "in-memory store -- gear_target_tier reads the on-disk one, so this is "
           "not a defect, but the two are not the same object.")
-    print("chosen-root caveat: ctx.gear_focus/interleave_seats are the live "
-          "player's near-empty in-memory accumulators in a fresh CLI run, so "
-          "the aged d'Hondt interleave rarely engages here -- this can move WHICH "
-          "candidate is reported as chosen relative to the running fleet, though "
-          "not the candidate SET or the four counts above, which stay robust.")
     print(f"{len(rows)} candidate root(s) (resolution.root + resolution.alternatives)")
     print(f"{len(named)} name an item")
     print(f"{len(not_craftable)} name an item that is not craftable at all (no recipe "

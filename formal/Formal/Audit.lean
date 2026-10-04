@@ -1023,13 +1023,6 @@ open Formal.PriorityBand
 #print axioms Formal.ProgressionTree.milestone_advances
 #print axioms Formal.ProgressionTree.potionWeight_health_maximal
 #print axioms Formal.ProgressionTree.potionWeight_unknown_floor
-#print axioms Formal.ProgressionTree.falloff_flat
-#print axioms Formal.ProgressionTree.falloff_le_one
-#print axioms Formal.ProgressionTree.falloff_ge_floor
-#print axioms Formal.ProgressionTree.falloff_floor_after
-#print axioms Formal.ProgressionTree.falloff_antitone
-#print axioms Formal.ProgressionTree.selectMax_quot_max
-#print axioms Formal.ProgressionTree.dhondtStepKey_quot_max
 #print axioms Formal.Synergy.synergyRatio_nonneg
 #print axioms Formal.Synergy.synergyRatio_le_one
 #print axioms Formal.Synergy.synergy_total_zero

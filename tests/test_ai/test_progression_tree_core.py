@@ -9,24 +9,19 @@ gear-argmax/aging family (`branch_pick_pure`, `gear_target_pick`,
 `focus_aging_order`, `interleave_due`, `_NO_SYNERGY`/`_NO_ACHIEVABILITY`/
 `_NO_ROLE`) left the module — see the re-derived deletion list §4/§5. What
 remains here is what `ai/decisions/root.py` actually calls: `milestone_pure`,
-`potion_type_weight`, `FOCUS_FLAT`, `falloff`, `dhondt_step`, and the
-`GearCandidate` record `tiers/progression_tree.py` still assembles."""
+`potion_type_weight`, and the `GearCandidate` record
+`tiers/progression_tree.py` still assembles. Phase 4-2b-ii deleted `falloff`,
+`run_falloff` and `dhondt_step`: the intention's cycle budget and one-turn yield
+replaced the aging they scheduled."""
 
 from dataclasses import fields
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
-    FOCUS_FLAT,
-    FOCUS_FLOOR,
-    FOCUS_SPAN,
-    INTERLEAVE_RUN,
     POTION_TYPE_WEIGHTS,
     GearCandidate,
-    dhondt_step,
-    falloff,
     milestone_pure,
     potion_type_weight,
-    run_falloff,
 )
 
 
@@ -63,83 +58,6 @@ class TestPotionWeights:
             assert isinstance(w, Fraction) and w >= 0
 
 
-def test_falloff_flat_full_weight_through_flat_window():
-    for level in range(0, FOCUS_FLAT + 1):
-        assert falloff(level) == Fraction(1)
-
-
-def test_falloff_reaches_floor_at_and_after_span_end():
-    end = FOCUS_FLAT + FOCUS_SPAN
-    assert falloff(end) == FOCUS_FLOOR
-    assert falloff(end + 50) == FOCUS_FLOOR
-
-
-def test_falloff_monotone_non_increasing():
-    prev = falloff(0)
-    for level in range(1, FOCUS_FLAT + FOCUS_SPAN + 20):
-        cur = falloff(level)
-        assert cur <= prev
-        prev = cur
-
-
-def test_falloff_strictly_decreases_inside_decay_window():
-    a = falloff(FOCUS_FLAT + 1)
-    b = falloff(FOCUS_FLAT + FOCUS_SPAN - 1)
-    assert b < a < Fraction(1)
-
-
-def test_falloff_floor_is_positive():
-    assert FOCUS_FLOOR > 0
-
-
-def test_dhondt_step_empty_is_none():
-    assert dhondt_step([], {}) is None
-
-
-def test_dhondt_step_single_key():
-    assert dhondt_step([("a", Fraction(3))], {}) == "a"
-    assert dhondt_step([("a", Fraction(3))], {"a": 99}) == "a"
-
-
-def test_dhondt_step_no_seats_picks_max_quotient():
-    # seats={}: every quotient is w/1, so the heaviest weight wins.
-    w = [("a", Fraction(1)), ("b", Fraction(3)), ("c", Fraction(2))]
-    assert dhondt_step(w, {}) == "b"
-
-
-def test_dhondt_step_seats_can_flip_the_winner():
-    # heavy key already seated enough that its quotient drops below the light
-    # key's: 3/(3+1)=3/4 < 1/(0+1)=1 -> the light key wins this seat.
-    w = [("a", Fraction(1)), ("b", Fraction(3))]
-    assert dhondt_step(w, {}) == "b"           # unseated: heavy wins
-    assert dhondt_step(w, {"b": 3}) == "a"     # heavy saturated: light flips in
-
-
-def test_dhondt_step_is_order_independent():
-    fwd = [("a", Fraction(5)), ("b", Fraction(2)), ("c", Fraction(1))]
-    rev = list(reversed(fwd))
-    for seats in ({}, {"a": 4}, {"a": 2, "b": 1}, {"c": 3}):
-        assert dhondt_step(fwd, seats) == dhondt_step(rev, seats)
-
-
-def test_dhondt_step_full_tie_breaks_on_the_HIGHER_key():
-    """Split out of the wave-3a `test_tie_break_flips_under_achievability_
-    dhondt_vs_argmax`, which pinned this against `gear_target_pick`'s opposite
-    convention. That comparand is gone; the `dhondt_step` half is not, and it is
-    the half the live `WhichSlotIsFurthestBehind._aged_head` depends on.
-
-    `max` over `(quotient, weight, key)` breaks an exact tie by DESCENDING key
-    string, so of two identically-weighted, identically-seated slots the LATER
-    slot name wins — the live `ring1_slot`/`ring2_slot` duplicate-slot shape.
-    Order-independent, so both list orders give the same answer."""
-    w = [("ring1_slot", Fraction(100)), ("ring2_slot", Fraction(100))]
-    assert dhondt_step(w, {}) == "ring2_slot"
-    assert dhondt_step(list(reversed(w)), {}) == "ring2_slot"
-    # ...and it really is the KEY doing the work: seat the higher key once and
-    # the tie is no longer a tie, so the lower key takes this seat.
-    assert dhondt_step(w, {"ring2_slot": 1}) == "ring1_slot"
-
-
 def test_modulating_weights_absent_from_gear_candidate_identity():
     """A modulating weight is never candidate identity — it must not enter
     GearCandidate's fields or its repr (the currency-grind lesson: a moving
@@ -152,47 +70,3 @@ def test_modulating_weights_absent_from_gear_candidate_identity():
     assert repr(a) == repr(b)
 
 
-def test_run_falloff_is_constant_within_a_run():
-    """THE DECAY BAND'S HALF OF THE THRASH FIX.
-
-    The seat cadence made the interleave hold runs once the weights stopped
-    moving — but inside the decay band `falloff` shrinks the winner's weight
-    EVERY cycle, so the argmax could still flip with no seat charged (~81% of
-    transitions, simulated). `run_falloff` samples the same curve at RUN
-    boundaries, so the weight is constant across a run and the winner holds for
-    the same reason it does past the band."""
-    for start in (FOCUS_FLAT, FOCUS_FLAT + INTERLEAVE_RUN * 3,
-                  FOCUS_FLAT + FOCUS_SPAN):
-        base = start - start % INTERLEAVE_RUN
-        held = {run_falloff(base + offset) for offset in range(INTERLEAVE_RUN)}
-        assert len(held) == 1, (
-            f"weight moved inside the run beginning at {base}: {held}")
-
-
-def test_run_falloff_still_steps_down_and_reaches_the_floor():
-    """Coarsened, NOT cancelled: the hand-off ramp must still run from full
-    weight to the floor across the span, or a stuck root would never shed
-    cycles and the anti-starvation aging would be inert."""
-    assert run_falloff(FOCUS_FLAT) == Fraction(1)
-    assert run_falloff(FOCUS_FLAT + FOCUS_SPAN) == FOCUS_FLOOR
-    assert run_falloff(FOCUS_FLAT + FOCUS_SPAN + 50) == FOCUS_FLOOR
-    mid = FOCUS_FLAT + FOCUS_SPAN // 2
-    assert FOCUS_FLOOR < run_falloff(mid) < Fraction(1)
-
-
-def test_run_falloff_is_monotone_non_increasing():
-    """A staircase is still a ramp: quantising the ARGUMENT cannot break the
-    antitone property `falloff_antitone` proves of the curve itself."""
-    prev = run_falloff(0)
-    for level in range(1, FOCUS_FLAT + FOCUS_SPAN + 20):
-        cur = run_falloff(level)
-        assert cur <= prev
-        prev = cur
-
-
-def test_run_falloff_never_exceeds_the_smooth_curve():
-    """It samples the run's START, so it holds the higher (earlier) weight for
-    the rest of the run — never a weight the smooth curve had not already
-    reached, which is what keeps the coarsening conservative."""
-    for level in range(0, FOCUS_FLAT + FOCUS_SPAN + 20):
-        assert run_falloff(level) >= falloff(level)

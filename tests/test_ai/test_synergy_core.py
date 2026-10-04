@@ -1,19 +1,15 @@
 """Wave 2 of the synergy-weighting epic: the pure synergy core.
 
-`synergy_pure(shared, total)` is the third modulating factor in
-`weight = gain * falloff(focus) * synergy` (design spec §3). It is a scalar
-twin of `falloff`: an affine map of a normalised ratio into `[S_MIN, 1]`,
-exact `Fraction`, no float in the decision path. These tests pin the bounds,
-the degenerate case, the assert-not-clamp contract, and — load-bearing — the
-§3.5 invariant that synergy's dynamic range stays strictly inside `falloff`'s
-so aging always dominates alignment.
+`synergy_pure(shared, total)` is an affine map of a normalised overlap ratio
+into `[S_MIN, 1]`, exact `Fraction`, no float in the decision path (design spec
+§3), read by the taskmaster choice and the means-worth gate. These tests pin
+the bounds, the degenerate case and the assert-not-clamp contract.
 """
 
 from fractions import Fraction
 
 import pytest
 
-from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLOOR, falloff
 from artifactsmmo_cli.ai.tiers.synergy_core import (
     S_MIN,
     TOP_QUANTILE,
@@ -30,6 +26,9 @@ def test_synergy_core_bounds():
             s = synergy_pure(shared, total)
             assert S_MIN <= s <= Fraction(1)
     assert synergy_pure(0, 7) == S_MIN            # zero overlap -> floor
+    # The floor's VALUE, not only its name: `Formal/Synergy.lean`'s `sMin` is
+    # `mkRat 1 3`, and `means_worth` thresholds at it.
+    assert Fraction(1, 3) == S_MIN
     assert synergy_pure(7, 7) == Fraction(1)      # full overlap -> ceiling
 
 
@@ -47,16 +46,6 @@ def test_synergy_asserts_shared_gt_total():
     violation means the assembly layer is wrong and must fail loudly (§3, Phase 2)."""
     with pytest.raises(AssertionError):
         synergy_pure(8, 7)
-
-
-def test_synergy_range_inside_falloff():
-    """The §3.5 anti-starvation invariant, as arithmetic over the REAL constants:
-    synergy's dynamic range (S_MAX/S_MIN = 3) must stay strictly inside falloff's
-    (FOCUS_1/FOCUS_FLOOR = 9), so aging structurally dominates alignment and a
-    high-synergy stuck root still decays. Retuning either constant trips this."""
-    s_max = synergy_pure(1, 1)                     # ceiling of the synergy curve
-    focus_1 = falloff(0)                           # flat-top of the falloff curve
-    assert s_max / S_MIN < focus_1 / FOCUS_FLOOR
 
 
 # --- Wave 4: reroll-aware pool synergy for taskmaster choice (spec §4.3) ---

@@ -38,7 +38,7 @@
 # take the LEAF (`${ident##*.}`) and grep the whole tree for it, so a citation
 # with the WRONG namespace resolved as long as the leaf existed ANYWHERE.
 # Two live citations disagreed about the namespace of `interleaveDue_reaches`
-# and BOTH passed — which is precisely the failure mode this file exists to
+# (deleted in Phase 4-2b-ii with its file) and BOTH passed — which is precisely the failure mode this file exists to
 # prevent, one level up: a reader who runs `#check` on the cited name gets
 # "unknown identifier" and cannot tell a typo from a deleted proof. So the
 # index below is built namespace-aware and the match is EXACT.

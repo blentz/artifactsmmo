@@ -45,8 +45,7 @@ def test_role_and_supply_target_present_when_a_role_is_held():
 def test_role_and_supply_target_are_present_but_null_with_no_role():
     """A missing key and a null key mean different things to a downstream
     reader ('never emitted this shape' vs. 'observed, no role held'). Every
-    cycle emits both keys; the value is null when no role is held — the
-    same discipline `aged_pick` already follows on this same record."""
+    cycle emits both keys; the value is null when no role is held."""
     player = _player()
 
     player._emit_trace("Act()", "Goal()", "ok", PLANNER_STATS)

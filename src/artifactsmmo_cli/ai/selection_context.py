@@ -14,19 +14,9 @@ the one exception is `TurnIn` below, a leaf pure-data class (`ai.currency_turnin
 imports only stdlib) that carries no cycle risk of its own.
 """
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
-from types import MappingProxyType
 
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
-
-_NO_FOCUS: Mapping[tuple[str, str], int] = MappingProxyType({})
-"""Immutable empty focus ledger — "no root has been committed long enough to
-age". Every `.get` misses and `falloff` reads `1`, the no-decay default."""
-
-_NO_SEATS: Mapping[str, int] = MappingProxyType({})
-"""Immutable empty d'Hondt seat accumulator, sibling of `_NO_FOCUS`. An unseated
-slot defaults to 0 seats — `dhondt_step`'s closed-universe convention."""
 
 
 @dataclass(frozen=True)
@@ -184,57 +174,6 @@ class SelectionContext:
     # the recipe as inputs and the measured request cost as the unlock, so a
     # sibling saves the SKILL GATE and nothing else.
     sibling_skills: dict[str, int] = field(default_factory=dict)
-    # ANTI-STARVATION LEDGER, reconnected in wave 3a fix-round 1. Per-(slot,
-    # code) consecutive-cycles-committed counts and the d'Hondt seat
-    # accumulator keyed the same way — the FULL "slot|code" ledger key (fix-
-    # round 2 re-keyed it off equipment slot alone, once a root could resolve
-    # to a sentinel slot like `<skill>`/`<item>` a slot-only key would
-    # collapse) — both owned and mutated by `GamePlayer._charge_focus`. THE
-    # ROOT WALK READS THEM HERE, on the same seam `supply_target`
-    # uses and for the same reason it chose it: they are
-    # per-cycle player runtime facts, which is exactly what this context
-    # carries, so the walk reads them here rather than through two more
-    # `decide`/`decide_tree` parameters (the six the flip removed).
-    #
-    # THE FLIP DISCONNECTED THEM AND THAT WAS THE BRANCH'S MOST SERIOUS DEFECT.
-    # `decide_tree` was the only production caller of the aging family
-    # (`focus_aging_pick` / `focus_aging_order`) and of `dhondt_step`, so
-    # removing its `focus`/`seats` parameters left `falloff` and the d'Hondt
-    # scheduler with no caller at all, and left
-    # `Formal.ProgressionTree.interleaveDue_reaches` — a kernel-checked
-    # no-starvation proof — modelling a scheduler nothing ran.
-    #
-    # BOTH HALVES OF THAT SENTENCE ARE HISTORY NOW, AND THEY RESOLVED
-    # DIFFERENTLY. `falloff` and `dhondt_step` are LIVE: fix-round 1
-    # reconnected them at `WhichSlotIsFurthestBehind._aged_head`
-    # (`ai/decisions/root.py:348-365`), which composes the fall-off and one
-    # d'Hondt seat directly, and the proof is live over them. Because that
-    # composition IS the walk's aged arm, wave 3b deleted `focus_aging_pick`
-    # and `focus_aging_order` — the pre-composed pair had no caller left. Do
-    # not read "the d'Hondt scheduler is dead" out of this comment: deleting
-    # `falloff`/`dhondt_step`/`FOCUS_FLAT`, or
-    # `Formal/Liveness/InterleaveNoStarvation.lean` (where
-    # `Formal.ProgressionTree.interleaveDue_reaches` is declared — that is its
-    # NAMESPACE; the file sits under `Formal/Liveness/`), breaks live code and
-    # destroys the proof of the exact anti-starvation the ledger below exists
-    # for.
-    #
-    # `WhichSlotIsFurthestBehind`'s slot order is a pure, history-free total
-    # order, so a stuck-but-plannable root (the ring2 shape: a `Fight` that
-    # plans every cycle and never completes) wins it forever. Servability
-    # promotion does not cover that case — it demotes what CANNOT be served,
-    # and this root can be — and such a target does not leave the sheet either,
-    # because `gear_targets_with_blockers` deliberately keeps unattainable
-    # targets.
-    #
-    # Empty (the default) is the whole-history-free case and is BIT-IDENTICAL
-    # to the unaged slot order: `WhichSlotIsFurthestBehind` takes its fast path
-    # while every candidate sits inside the flat farm window, exactly as the
-    # since-deleted `focus_aging_pick` did.
-    gear_focus: Mapping[tuple[str, str], int] = field(
-        default_factory=lambda: _NO_FOCUS)
-    interleave_seats: Mapping[str, int] = field(
-        default_factory=lambda: _NO_SEATS)
 
 
 NO_PROFILE_CONTEXT = SelectionContext(

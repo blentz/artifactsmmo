@@ -249,22 +249,6 @@ class StrategyDecision:
     # not an `ObtainItem`, so without this it publishes nothing at all and the
     # one item a sibling could make for it is the one never asked for.
     blocked_target: str | None = None
-    # Whether the committed gear pick went through the focus-aging INTERLEAVE
-    # this decision (Task 12): True iff a gear candidate was chosen AND at least
-    # one candidate had aged past FOCUS_FLAT. Produced by the ONE node that
-    # makes that choice — `WhichSlotIsFurthestBehind._aged_head`
-    # (`ai/decisions/root.py:348-365`) sets `RootResolution.aged`, and
-    # `decide_tree` copies it straight across. It used to be re-derived here as
-    # the negation of `focus_aging_pick`'s fast-path condition over the same
-    # candidates; wave 3a made the node the single producer and wave 3b deleted
-    # `focus_aging_pick`, so there is no second derivation left to drift from.
-    # The player gates its
-    # d'Hondt SEAT bump on this — a seat is consumed only on an interleaved
-    # decision, so a stale ledger entry for a root that has LEFT the candidate
-    # set (e.g. its slot got filled by equipping owned gear, no reset) can no
-    # longer pollute the schedule. Defaulted False: fast-path / non-gear / XP
-    # decisions consume no seat, and every non-tree constructor is unaffected.
-    aged_pick: bool = False
     # `(root repr, reason)` for each gear target the walk passed over because
     # its step cannot be served this cycle (`RootResolution.declined`). The
     # named blockers; they replace the promoted-from root servability promotion
