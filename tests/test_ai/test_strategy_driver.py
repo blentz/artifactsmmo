@@ -1375,8 +1375,12 @@ def test_select_no_double_count_when_committed_becomes_unplannable():
     assert len(accept_reprs) <= 1, f"double-counted: {tried2}"
 
 
-def test_select_guard_clears_committed_repr():
-    """Fix 2: when a guard fires and plans, _committed_repr is cleared (not left stale)."""
+def test_select_guard_win_keeps_the_commitment_and_it_resumes():
+    """Phase 4-1a: a guard is an INTERRUPT. When it fires and plans it wins the
+    cycle but leaves `_committed_repr` alone, and once it no longer fires the
+    committed means resumes without a fresh choice. (Until 2026-10-04 a guard
+    win cleared the commitment: live, Robby re-chose from scratch after every
+    rest, 96 goal switches in 124 cycles.)"""
     planner = GOAPPlanner()
     gd = _make_planner_gd()
     state_calm = make_state(hp=150, max_hp=150, task_code=None, task_total=0)
@@ -1398,8 +1402,13 @@ def test_select_guard_clears_committed_repr():
     goal2, plan2, _ = arbiter.select(decision, state_low_hp, gd, actions, ctx)
     assert isinstance(goal2, RestoreHPGoal), f"expected RestoreHPGoal, got {goal2!r}"
     assert len(plan2) >= 1
-    # commitment must be cleared after a guard return
-    assert arbiter._committed_repr is None
+    # the interrupt does not erase what it interrupted
+    assert arbiter._committed_repr == repr(goal1)
+
+    # Cycle 3: HP restored — the committed means resumes
+    goal3, _, _ = arbiter.select(decision, state_calm, gd, actions, ctx)
+    assert repr(goal3) == repr(goal1)
+    assert arbiter._committed_repr == repr(goal1)
 
 
 # ---------------------------------------------------------------------------

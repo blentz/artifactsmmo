@@ -81,7 +81,7 @@ def encOut (f : Nat → String) :
 /-- The walk-loop body the extractor emits (the `_findSome` lambda); marked
 reducible so `rw` can match it against the generated term. -/
 @[reducible] def eWalkBody (f? : Nat → List Unit) (sat sup : Nat → Bool)
-    (t : Option String) (cand : Extracted.ArbiterSelect.Candidate Nat) :
+    (t k : Option String) (cand : Extracted.ArbiterSelect.Candidate Nat) :
     Option (Option Nat × List Unit × Option String) :=
   if decide (t = some cand.repr_) then none
   else if sup cand.goal then none
@@ -89,8 +89,12 @@ reducible so `rw` can match it against the generated term. -/
   else
     let plan := f? cand.goal
     if decide ((Int.ofNat (List.length plan)) > 0) then
-      let new_committed := if cand.is_means then some cand.repr_ else none
-      some (some cand.goal, plan, new_committed)
+      let new_committed : Option String := k
+      if cand.is_means then
+        let new_committed := some cand.repr_
+        some (some cand.goal, plan, new_committed)
+      else
+        some (some cand.goal, plan, new_committed)
     else none
 
 /-! ## Pointwise transport lemmas (injective `f`) -/
@@ -235,14 +239,14 @@ private theorem lower_band_bridge (f : Nat → String) (hf : ∀ a b, f a = f b 
 output encoding — for any `t : Option String` whose tried-test agrees with the
 hand `tried` pointwise (instantiated below at `none` / `some (f cid)`). -/
 private theorem findSome_walk_bridge (f : Nat → String)
-    (p sat sup : Nat → Bool) (tried : Option Nat) (t : Option String)
+    (p sat sup : Nat → Bool) (tried : Option Nat) (t k : Option String)
     (hT : ∀ id : Nat, decide (t = some (f id))
         = (match tried with | some u => decide (u = id) | none => false)) :
     ∀ cs : List Formal.ArbiterSelect.Candidate,
       Extracted.ArbiterSelect._findSome
-          (eWalkBody (encPlan p) sat sup t) (cs.map (encC f))
+          (eWalkBody (encPlan p) sat sup t k) (cs.map (encC f))
         = (walk p sat sup tried cs).map
-            (fun c => (some c.id, [()], if c.isMeans then some (f c.id) else none)) := by
+            (fun c => (some c.id, [()], if c.isMeans then some (f c.id) else k)) := by
   intro cs
   cases tried with
   | none =>
@@ -259,6 +263,7 @@ private theorem findSome_walk_bridge (f : Nat → String)
         · simpa [ht, hsup, hsat] using ih
         · by_cases hp : p c.id = true
           · simp [ht, hsup, hsat, hp, encPlan]
+            cases c.isMeans <;> rfl
           · simpa [ht, hsup, hsat, hp, encPlan] using ih
   | some u =>
     induction cs with
@@ -275,6 +280,7 @@ private theorem findSome_walk_bridge (f : Nat → String)
           · simpa [ht, hu, hsup, hsat] using ih
           · by_cases hp : p c.id = true
             · simp [ht, hu, hsup, hsat, hp, encPlan]
+              cases c.isMeans <;> rfl
             · simpa [ht, hu, hsup, hsat, hp, encPlan] using ih
 
 /-- `hT` instance: no sticky attempt (`t = none`). -/
@@ -316,7 +322,7 @@ theorem arbiter_select_bridge (f : Nat → String) (hf : ∀ a b, f a = f b → 
   cases committed with
   | none =>
     simp only [Extracted.ArbiterSelect.select_pure, Option.map_none]
-    rw [findSome_walk_bridge f plannable satisfied suppressed none none
+    rw [findSome_walk_bridge f plannable satisfied suppressed none none none
       (hT_none f) cs]
     cases hw : walk plannable satisfied suppressed none cs with
     | none =>
@@ -336,7 +342,7 @@ theorem arbiter_select_bridge (f : Nat → String) (hf : ∀ a b, f a = f b → 
     cases hfc : findCommitted cs cid with
     | none =>
       simp only [Option.map_none]
-      rw [findSome_walk_bridge f plannable satisfied suppressed none none
+      rw [findSome_walk_bridge f plannable satisfied suppressed none none (some (f cid))
         (hT_none f) cs]
       cases hw : walk plannable satisfied suppressed none cs with
       | none =>
@@ -357,8 +363,8 @@ theorem arbiter_select_bridge (f : Nat → String) (hf : ∀ a b, f a = f b → 
       rw [guard_any_bridge f hf cs cid]
       rw [lower_band_bridge f hf cs c cid]
       rw [findSome_walk_bridge f plannable satisfied suppressed (some cid)
-        (some (f cid)) (hT_some f hf cid) cs]
-      rw [findSome_walk_bridge f plannable satisfied suppressed none none
+        (some (f cid)) (some (f cid)) (hT_some f hf cid) cs]
+      rw [findSome_walk_bridge f plannable satisfied suppressed none none (some (f cid))
         (hT_none f) cs]
       cases hs : satisfied c.id with
       | true =>

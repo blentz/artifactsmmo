@@ -847,6 +847,40 @@ Infeasibility is the walk's answer, re-asked from live state every cycle (it cos
 
 **Exit:** `doomed_skip`, `doomed_mark`, `not_plannable` and `servable_promotion` are 0 (the mechanisms are gone); each blocked gear target shows its named blocker in the plan pane.
 
+## Phase 4 — the intention (design, 2026-10-04)
+
+### Measured (50 min after the 04:12Z restart, build `d3665225`)
+
+| char | cycles | goal switches | mean run | A-B-A returns | dominant flip |
+|---|---|---|---|---|---|
+| Robby | 124 | 96 | 1.3 | 95 | `GrindCharacterXP(vampire)` ↔ `RestoreHP` |
+| C3P0 | 49 | 40 | 1.2 | 37 | `GrindCharacterXP(spider)` ↔ `RestoreHP` |
+| R2D2 | 100 | 23 | 4.2 | 1 | `UpgradeEquipment(water_boost_potion)` → `ReachSkill(gearcrafting)` → `RestoreHP` |
+| HAL | 117 | 3 | 29 | 1 | — |
+| Lor | 152 | 0 | 152 | 0 | — |
+
+Per hour: `commitment_change` 194, `guard_preempt` 91, `replan` 231, `plan_cache_hit` 412 (64% hits). One `GOAL_OSCILLATION` stuck signal suppressed C3P0's spider grind for 5 cycles: the ladder read the ordinary fight → rest → fight loop as a livelock.
+
+- **Every guard win erases the commitment** (`select_pure` commits only a means goal; a guard win returns None). After the rest, the choice runs from scratch. For a character-XP grind that is one decision per fight.
+- **Two layers of commitment.** The arbiter's sticky `_committed_repr` (memory only, lost on restart) runs only on replan cycles, inside the plan cache's refresh (persisted in `plan_commitment`, never cleared).
+- **Four clocks.** Suppressions count executed cycles, `cycles_since_replan` counts ok cycles, focus counts every loop, and `BANK_REFRESH_INTERVAL` is both the staleness bound and the full-refresh period.
+- **Not persisted:** the commitment, the focus ledger and seats, RegearEdge, the stuck level, every countdown. A persisted `latch_active=True` forces a replan against a fresh, unarmed RegearEdge.
+- Side findings: `Goal.preemptive` is never read; the stuck LADDER (levels, durations, StuckExit) has no formal pin, only the detector does; the main suppression path can suppress `Wait` (only the worth-gate bypass honours `NEVER_SUPPRESSED`).
+
+### Design
+
+One record, `intention`, per character in the learning DB: the root and the step goal it is pursuing, the decomposed plan (its task stack), a **progress measure** read from state (holdings toward N, skill XP toward a level, character XP toward a level, the slot holding the item), the cycle it began and its **budget**, and the cycles since progress last moved.
+
+- **4-1 The intention survives an interrupt and a restart.** A guard (RestoreHP, deposit, …) runs and the intention resumes: a guard win no longer clears it. It replaces `_committed_repr` and the plan cache's stabilising role (the current plan legs stay, owned by the intention). Loaded on start.
+- **4-2 Ending is a fact.** The intention ends when: its goal is satisfied; the walk declines it (named reason); its progress measure has not moved for K attempts (named `stalled`); or its budget is spent (re-rank, it may be chosen again). Each end is a decision event with its reason. This replaces the stuck ladder's goal suppressions and StuckExit for goal-level livelock, focus aging / d'Hondt (the budget is the fairness), and RegearEdge (a level-up or a lost fight is a re-rank fact, not a latch).
+- **4-3 Delete** what 4-1 and 4-2 replace, with their formal pins retired explicitly.
+
+**User decisions (2026-10-04):** a guard win resumes the intention in Phase 4 (Phase 5 still moves guards out of the band walk); fairness is a cycle budget (proposed 100) then a re-rank in which the intention is one candidate, replacing focus aging / d'Hondt; a stalled progress measure abandons the intention with a named reason, goal suppressions and countdowns go, and StuckExit stays only as a last resort when no intention has progressed for a long window; the worth gate stays as a per-cycle candidate filter.
+
+- **4-1a built (2026-10-04).** `select_pure` keeps the prior commitment when a guard wins (`new_committed` defaults to `committed_repr`, set to the chosen repr only for a means); the hand model `ArbiterSelect.selectPure` returns the prior `committed`, the extraction is regenerated, and `Bridges2.arbiter_select_bridge` is re-proved with the walk lemma parametrised by the kept commitment `k`. The guard-wins safety theorems are unchanged (they speak to the CHOICE, not the commitment). Mutants: the old "commit on guard win" re-anchored, plus "guard win clears the commitment" (both verified killed by the differential). Expected live: `commitment_change` falls (it fired on every guard win), and the interrupted grind resumes through the sticky try after the rest. The stuck detector still reads fight → rest → fight as `GOAL_OSCILLATION` until 4-2a.
+
+**Increments:** 4-1a guard win keeps the commitment (arbiter + `ArbiterSelect` model); 4-1b the persisted `intention` record (replaces `_committed_repr` and `plan_commitment`); 4-2a progress measure + stall abandonment (replaces the goal-level ladder); 4-2b cycle budget + re-rank (replaces focus aging, RegearEdge); 4-3 deletions.
+
 ## Risks and open questions
 
 - **Formal surface:** many Lean models and diff harnesses pin components slated

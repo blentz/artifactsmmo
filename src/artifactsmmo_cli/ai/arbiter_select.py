@@ -95,8 +95,12 @@ def select_pure(
 ) -> tuple[Goal | None, list[Action], str | None]:
     """Sticky-then-walk selection. Returns (chosen_goal, plan, new_committed_repr).
 
-    new_committed_repr is the chosen goal's repr if it is a means, else None
-    (a guard win clears commitment). On no-plan returns (None, [], None).
+    new_committed_repr is the chosen goal's repr if it is a means; a guard win
+    KEEPS the prior commitment (Phase 4-1a: a guard is an interrupt — RestoreHP
+    runs, then the committed means resumes — so it must not erase what it
+    interrupted; live 2026-10-04, Robby flipped vampire <-> RestoreHP 96 times
+    in 124 cycles, re-choosing from scratch after every rest). On no-plan
+    returns (None, [], None).
 
     Pure w.r.t. its closures: side effects (e.g. recording planning attempts)
     happen inside `try_plan`, not here. The selector calls `try_plan` AT MOST
@@ -150,7 +154,9 @@ def select_pure(
             continue
         plan = try_plan(cand.goal)
         if len(plan) > 0:
-            new_committed = cand.repr_ if cand.is_means else None
+            new_committed: str | None = committed_repr
+            if cand.is_means:
+                new_committed = cand.repr_
             return cand.goal, plan, new_committed
 
     return None, [], None

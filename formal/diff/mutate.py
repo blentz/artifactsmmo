@@ -2430,10 +2430,15 @@ ARBITER_SELECT_MUTATIONS = [
      "        plan = try_plan(cand.goal)\n        if len(plan) > 0:\n",
      "        plan = try_plan(cand.goal)\n        if len(plan) == 0:\n"),
     # drop the is_means commitment guard: a guard win wrongly sets new_committed
-    # to the guard's repr (commitment should clear on guard wins).
+    # to the guard's repr (a guard win must KEEP the prior commitment).
     ("arbiter_select: commit on guard win (drop is_means guard)",
-     "            new_committed = cand.repr_ if cand.is_means else None",
-     "            new_committed = cand.repr_"),
+     "            if cand.is_means:\n                new_committed = cand.repr_\n",
+     "            if True:\n                new_committed = cand.repr_\n"),
+    # Phase 4-1a reverted: a guard win clears the commitment, so the
+    # interrupted means is re-chosen from scratch after every guard.
+    ("arbiter_select: guard win clears the commitment",
+     "            new_committed: str | None = committed_repr\n",
+     "            new_committed: str | None = None\n"),
 ]
 
 

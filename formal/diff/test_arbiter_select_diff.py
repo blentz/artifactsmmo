@@ -183,8 +183,8 @@ def test_sticky_safety_guard_wins_explicit():
     ]
     py = _run_python(raw, committed=1)
     lean = _run_lean(raw, committed=1)
-    assert py == (0, False, -1)  # guard wins; commitment cleared
-    assert lean == (0, False, -1)
+    assert py == (0, False, 1)  # guard wins; the commitment survives (Phase 4-1a)
+    assert lean == (0, False, 1)
     assert py == lean
 
 

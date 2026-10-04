@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/arbiter_select.py (sha256: a9ff7a9080b1194dd96c713fc0d40d1bdf03618c13b3e16c5622a134e3acd8a9) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/arbiter_select.py (sha256: 0e6e4a0d080655f19fffaa03516647b077a3f8c394f0ce92cd3c3cfc85b90698) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.ArbiterSelect
@@ -93,8 +93,13 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
                       let plan := (try_plan (cand.goal))
                       (if (decide ((Int.ofNat (List.length plan)) > 0))
                        then
-                        let new_committed := (if (cand.is_means) then (some (cand.repr_)) else none)
-                        (some ((some (cand.goal)), plan, new_committed))
+                        let new_committed : Option String := (some committed_repr_1)
+                        (if (cand.is_means)
+                         then
+                          let new_committed := (some (cand.repr_))
+                          (some ((some (cand.goal)), plan, new_committed))
+                         else
+                          (some ((some (cand.goal)), plan, new_committed)))
                        else
                         none)))))
                 candidates) with
@@ -119,8 +124,13 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
                     let plan := (try_plan (cand.goal))
                     (if (decide ((Int.ofNat (List.length plan)) > 0))
                      then
-                      let new_committed := (if (cand.is_means) then (some (cand.repr_)) else none)
-                      (some ((some (cand.goal)), plan, new_committed))
+                      let new_committed : Option String := (some committed_repr_1)
+                      (if (cand.is_means)
+                       then
+                        let new_committed := (some (cand.repr_))
+                        (some ((some (cand.goal)), plan, new_committed))
+                       else
+                        (some ((some (cand.goal)), plan, new_committed)))
                      else
                       none)))))
               candidates) with
@@ -145,8 +155,13 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
                   let plan := (try_plan (cand.goal))
                   (if (decide ((Int.ofNat (List.length plan)) > 0))
                    then
-                    let new_committed := (if (cand.is_means) then (some (cand.repr_)) else none)
-                    (some ((some (cand.goal)), plan, new_committed))
+                    let new_committed : Option String := (some committed_repr_1)
+                    (if (cand.is_means)
+                     then
+                      let new_committed := (some (cand.repr_))
+                      (some ((some (cand.goal)), plan, new_committed))
+                     else
+                      (some ((some (cand.goal)), plan, new_committed)))
                    else
                     none)))))
             candidates) with
@@ -171,8 +186,13 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
                   let plan := (try_plan (cand.goal))
                   (if (decide ((Int.ofNat (List.length plan)) > 0))
                    then
-                    let new_committed := (if (cand.is_means) then (some (cand.repr_)) else none)
-                    (some ((some (cand.goal)), plan, new_committed))
+                    let new_committed : Option String := (some committed_repr_1)
+                    (if (cand.is_means)
+                     then
+                      let new_committed := (some (cand.repr_))
+                      (some ((some (cand.goal)), plan, new_committed))
+                     else
+                      (some ((some (cand.goal)), plan, new_committed)))
                    else
                     none)))))
             candidates) with
@@ -197,8 +217,13 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
               let plan := (try_plan (cand.goal))
               (if (decide ((Int.ofNat (List.length plan)) > 0))
                then
-                let new_committed := (if (cand.is_means) then (some (cand.repr_)) else none)
-                (some ((some (cand.goal)), plan, new_committed))
+                let new_committed : Option String := committed_repr
+                (if (cand.is_means)
+                 then
+                  let new_committed := (some (cand.repr_))
+                  (some ((some (cand.goal)), plan, new_committed))
+                 else
+                  (some ((some (cand.goal)), plan, new_committed)))
                else
                 none)))))
         candidates) with

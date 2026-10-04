@@ -20,7 +20,8 @@ has a `repr` (string). The arbiter holds a sticky `committed_repr`.
      - try planning `c`. If plannable, RETURN `c` immediately.
      - else mark `tried = committed` and fall through.
 2. WALK: iterate candidates; skip tried / suppressed / satisfied; return the
-   first plannable. New `committed = chosen.repr` if `chosen.is_means`, else `none`.
+   first plannable. New `committed = chosen.repr` if `chosen.is_means`, else the
+   PRIOR `committed` (Phase 4-1a: a guard win is an interrupt and keeps it).
 3. Nothing plans → `(none, none)`.
 
 ## Modeling
@@ -148,7 +149,7 @@ def selectPure
   | (none, tried) =>
     match walk plannable satisfied suppressed tried cs with
     | none => (none, none)
-    | some c => (some c, if c.isMeans then some c.id else none)
+    | some c => (some c, if c.isMeans then some c.id else committed)
 
 /-! ### Well-formedness. -/
 
