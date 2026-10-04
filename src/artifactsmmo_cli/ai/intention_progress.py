@@ -4,11 +4,18 @@ docs/PLAN_decision_architecture_redesign.md).
 An intention ends on a fact. One such fact is that its progress has not moved
 for `STALL_CYCLES` of its own cycles; this module says what "moved" means.
 
-A character grind is measured in character XP and a skill grind in that
-skill's XP — the quantity the goal exists to raise. Every other goal has no XP
-measure: its plan comes from decomposition, whose legs are proved to deliver
-(`Formal.CommittedLoop.committed_loop_delivers`), so one of its actions
-succeeding IS the progress. Only cycles that ran the committed goal count; a
+A cycle progresses when the committed goal's action SUCCEEDED or the quantity
+the goal exists to raise went up (character XP for a character grind, that
+skill's XP for a skill grind). Its plan comes from decomposition, whose legs are
+proved to deliver (`Formal.CommittedLoop.committed_loop_delivers`), so a
+successful leg is progress even before it pays XP. A stall is therefore
+`STALL_CYCLES` committed cycles with neither: a fight grind that keeps losing,
+or a leg that keeps failing.
+
+WITNESSED 2026-10-04 (restart 12:19Z): the first rule counted only XP for a
+skill grind, and a crafting climb gathers for more than 20 cycles before its
+craft pays — 90 false stalls in 6.5 h (HAL / Lor weaponcrafting, R2D2
+gear/jewelry), each dropped and re-chosen at once. Only cycles that ran the committed goal count; a
 guard that interrupts it (RestoreHP between fights) is neither progress nor
 stall.
 
@@ -42,8 +49,9 @@ def progress_measure(goal: Goal, state: WorldState) -> Measure | None:
 
 
 def progressed(before: Measure | None, after: Measure | None, ok: bool) -> bool:
-    """Did one committed cycle move the intention forward? With a measure, it
-    must have risen; without one, the cycle's action must have succeeded."""
-    if before is None or after is None:
-        return ok
-    return after > before
+    """Did one committed cycle move the intention forward: its action
+    succeeded, or its XP measure rose (a lost fight that still levelled up
+    counts)?"""
+    if ok:
+        return True
+    return before is not None and after is not None and after > before

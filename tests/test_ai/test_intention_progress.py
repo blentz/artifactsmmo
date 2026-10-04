@@ -34,13 +34,15 @@ def test_other_goals_have_no_xp_measure():
     assert progress_measure(GatherMaterialsGoal("x", {"x": 1}), make_state()) is None
 
 
-def test_xp_moves_or_does_not():
+def test_a_successful_leg_or_rising_xp_is_progress():
     assert progressed((30, 100), (30, 140), ok=True)
-    assert progressed((30, 19_000), (31, 5), ok=True)  # a level-up wraps xp
-    # a lost fight: no XP, and the failed action is no progress either
+    # a crafting climb's gather leg: it succeeded and pays no skill XP yet —
+    # still progress (witnessed: 90 false stalls when this was not counted)
+    assert progressed((20, 450), (20, 450), ok=True)
+    # a failed action whose XP still rose (and wraps across a level) counts
+    assert progressed((30, 19_000), (31, 5), ok=False)
+    # a lost fight: no XP and a failed action is no progress
     assert not progressed((30, 100), (30, 100), ok=False)
-    # an ok action that earned no XP (a rest leg, a move) is no XP progress
-    assert not progressed((30, 100), (30, 100), ok=True)
 
 
 def test_without_a_measure_a_successful_leg_is_progress():
