@@ -2086,16 +2086,12 @@ STUCK_DETECTOR_MUTATIONS = [
     ("stuck_detector: detect precedence swap (noprog before frozen)",
      "        if self._check_state_frozen():\n"
      "            return StuckSignal.STATE_FROZEN\n"
-     "        if self._check_goal_oscillation():\n"
-     "            return StuckSignal.GOAL_OSCILLATION\n"
      "        if self._check_no_progress():\n"
      "            return StuckSignal.NO_PROGRESS",
      "        if self._check_no_progress():\n"
      "            return StuckSignal.NO_PROGRESS\n"
      "        if self._check_state_frozen():\n"
-     "            return StuckSignal.STATE_FROZEN\n"
-     "        if self._check_goal_oscillation():\n"
-     "            return StuckSignal.GOAL_OSCILLATION"),
+     "            return StuckSignal.STATE_FROZEN"),
     # threshold off-by-one: frozen window requires len < 10 -> len < 9, so a 9-record
     # window wrongly satisfies the length gate (fires one record early).
     ("stuck_detector: frozen threshold off-by-one (count=10 -> 9)",
@@ -2103,24 +2099,9 @@ STUCK_DETECTOR_MUTATIONS = [
      "        if len(window) < STATE_FROZEN_WINDOW:",
      "        window = self._recent_since(cutoff, count=STATE_FROZEN_WINDOW - 1)\n"
      "        if len(window) < STATE_FROZEN_WINDOW - 1:"),
-    # drop the round-trip requirement: the switch gate goes vacuous, so a single
-    # clean goal switch (7xA+1xB, the 2026-06-10 false-positive trace) wrongly
-    # fires osc again whenever the failure gate also passes.
-    ("stuck_detector: osc drop round-trip requirement (switches < min -> < 0)",
-     "        if switches < OSC_MIN_SWITCHES:\n"
-     "            return False",
-     "        if switches < 0:\n"
-     "            return False"),
-    # drop the failure requirement: productive alternation (e.g. gather/deposit
-    # loops, or a failure-free A/B flap) wrongly fires osc again.
-    ("stuck_detector: osc drop failure requirement (failures >= min -> >= 0)",
-     "        failures = sum(1 for r in window if not r.succeeded)\n"
-     "        return failures >= OSC_MIN_FAILURES",
-     "        failures = sum(1 for r in window if not r.succeeded)\n"
-     "        return failures >= 0"),
     # _recent_since index off-by-one: start_idx + i becomes start_idx + i + 1, so a
     # boundary record at exactly the cutoff is wrongly excluded (the window-boundary
-    # case lands the kept length on 10/4/8, so this flips the verdict). Pins the math.
+    # case lands the kept length on 10/4, so this flips the verdict). Pins the math.
     ("stuck_detector: _recent_since index off-by-one (start_idx + i -> + i + 1)",
      "            if start_idx + i >= cutoff_cycle",
      "            if start_idx + i + 1 >= cutoff_cycle"),

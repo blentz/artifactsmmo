@@ -209,7 +209,7 @@ class TestEmitEventsWiring:
             patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
         ):
             mock_player = Mock()
-            mock_player.run.side_effect = StuckExit(StuckSignal.GOAL_OSCILLATION)
+            mock_player.run.side_effect = StuckExit(StuckSignal.NO_PROGRESS)
             mock_player_cls.return_value = mock_player
             mock_store = Mock()
             mock_store_cls.return_value = mock_store

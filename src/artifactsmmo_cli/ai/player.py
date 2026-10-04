@@ -2519,15 +2519,13 @@ class GamePlayer:
         counter-evidence streaks for escalation decay.
 
         A cycle is counter-evidence for a signal when it refutes that signal's
-        stuck hypothesis: a real plan refutes NO_PROGRESS, a succeeded action
-        refutes GOAL_OSCILLATION (the flap is failure-driven), and a CHANGED
+        stuck hypothesis: a real plan refutes NO_PROGRESS, and a CHANGED
         state key refutes STATE_FROZEN (frozen loops can "succeed" while the
         state stays put, so success alone proves nothing there).
         """
         self._detector.record(record)
         counter_evidence = {
             StuckSignal.NO_PROGRESS: record.action_name != "<no_plan>",
-            StuckSignal.GOAL_OSCILLATION: record.succeeded,
             StuckSignal.STATE_FROZEN: (
                 self._prev_cycle_state_key is not None
                 and record.state_key != self._prev_cycle_state_key
@@ -2597,36 +2595,6 @@ class GamePlayer:
                 for name in list(self._suppressed_goals):
                     self._suppressed_goals[name] = max(self._suppressed_goals[name], 10)
                 print(f"[{self._now()}] [recovery] STATE_FROZEN L3: broadened suppression to 10 cycles")
-
-        elif signal == StuckSignal.GOAL_OSCILLATION:
-            history = list(self._detector._history)[-8:]
-            # Only suppress goals that were actually failing in the window. A
-            # succeeded goal that merely appears in the oscillation window
-            # (e.g. AcceptTask that fired once between TaskExchange retries)
-            # is not the source of the loop. Also drop "<none>" — it's the
-            # no-plan placeholder, not a real goal that can be suppressed.
-            distinct = {
-                r.goal_name for r in history
-                if not r.succeeded and r.goal_name != "<none>"
-            }
-            if not distinct:
-                # Nothing real to suppress; just clear the signal and let the
-                # next cycle replan instead of escalating.
-                print(f"[{self._now()}] [recovery] GOAL_OSCILLATION: no failing goals to suppress; clearing signal")
-            elif level == 1:
-                suppress_cycles = 5
-                for name in distinct:
-                    self._suppressed_goals[name] = suppress_cycles
-                print(f"[{self._now()}] [recovery] GOAL_OSCILLATION L1: suppressing {distinct} for 5 cycles")
-            elif level == 2:
-                suppress_cycles = 15
-                for name in distinct:
-                    self._suppressed_goals[name] = suppress_cycles
-                print(f"[{self._now()}] [recovery] GOAL_OSCILLATION L2: suppressing {distinct} for 15 cycles")
-            else:
-                print(f"[{self._now()}] [recovery] GOAL_OSCILLATION L3: recovery exhausted — "
-                      "stopping run (manual intervention)")
-                raise StuckExit(signal)
 
         elif signal == StuckSignal.NO_PROGRESS:
             if level == 1:

@@ -8,13 +8,12 @@ that to the Lean oracle. The Lean model abstracts a record as `(state, goal,
 noPlan)` — the only fields the detector reads — so we encode state/goal as small
 ints and `noPlan = (action_name == "<no_plan>")`.
 
-The suite covers: frozen-fires, osc-fires, noprog-fires, precedence
-(frozen+noprog → frozen), ack-suppression (would-fire-frozen but acked → not
-frozen), eviction (counter > len via >30 records), a WINDOW-BOUNDARY case
-where the kept-window length lands exactly on the 4/8/10 threshold so an
-off-by-one in `_recent_since` flips the verdict, and the genuine-oscillation
-gates (2026-06-10): a clean goal switch / a failure-free alternation must NOT
-fire osc; failure-driven flapping must.
+The suite covers: frozen-fires, noprog-fires, precedence (frozen+noprog →
+frozen), ack-suppression (would-fire-frozen but acked → not frozen), eviction
+(counter > len via >30 records), WINDOW-BOUNDARY cases where the kept-window
+length lands exactly on the 4/10 threshold so an off-by-one in `_recent_since`
+flips the verdict, and the repeated-action signal. (GOAL_OSCILLATION and its
+cases were retired in Phase 4-2a-ii.)
 """
 import random
 
@@ -27,7 +26,6 @@ from formal.diff.oracle_client import run_oracle
 _NO_PLAN = "<no_plan>"
 _VERDICT = {
     StuckSignal.STATE_FROZEN: "frozen",
-    StuckSignal.GOAL_OSCILLATION: "osc",
     StuckSignal.NO_PROGRESS: "noprog",
     StuckSignal.REPEATED_ACTION_FAILURE: "repeated",
     None: "none",
@@ -59,10 +57,9 @@ def _record(state: int, goal: int, no_plan: bool, ok: bool | None = None,
     )
 
 
-def _ack_cutoffs(det: StuckDetector) -> tuple[int, int, int, int]:
+def _ack_cutoffs(det: StuckDetector) -> tuple[int, int, int]:
     return (
         det._ack_index.get(StuckSignal.STATE_FROZEN, 0),
-        det._ack_index.get(StuckSignal.GOAL_OSCILLATION, 0),
         det._ack_index.get(StuckSignal.NO_PROGRESS, 0),
         det._ack_index.get(StuckSignal.REPEATED_ACTION_FAILURE, 0),
     )
@@ -71,8 +68,8 @@ def _ack_cutoffs(det: StuckDetector) -> tuple[int, int, int, int]:
 def _oracle_args(det: StuckDetector) -> list[int]:
     history = list(det._history)
     counter = det._cycle_counter
-    ack_f, ack_o, ack_n, ack_r = _ack_cutoffs(det)
-    flat: list[int] = [counter, ack_f, ack_o, ack_n, ack_r, len(history)]
+    ack_f, ack_n, ack_r = _ack_cutoffs(det)
+    flat: list[int] = [counter, ack_f, ack_n, ack_r, len(history)]
     # state/goal/action codes are recovered from the synthetic encoding above;
     # a <no_plan> record carries action code 0 (the model filters noPlan out of
     # the repeated-action tally, so its code is irrelevant).
@@ -113,7 +110,7 @@ def test_random_histories(n, seed, do_ack, ack_signal, n_states, n_goals, noplan
     for i in range(n):
         no_plan = rng.randint(0, 100) < noplan_p
         # no-plan cycles are always failures in production; action cycles fail
-        # independently (exercises the osc failure gate).
+        # independently (exercises the repeated-action failure tally).
         ok = None if no_plan else rng.randint(0, 100) >= fail_p
         det.record(_record(
             state=rng.randrange(n_states),
@@ -132,73 +129,6 @@ def test_noprog_fires():
     for _ in range(4):
         det.record(_record(0, 0, no_plan=True))
     assert det.detect() == StuckSignal.NO_PROGRESS
-    _assert_matches(det)
-
-
-def test_osc_fires():
-    det = StuckDetector()
-    for i in range(8):
-        # exactly 2 distinct goals, strict alternation, every cycle failing
-        det.record(_record(i, i % 2, no_plan=False, ok=False))
-    assert det.detect() == StuckSignal.GOAL_OSCILLATION
-    _assert_matches(det)
-
-
-# ---- genuine-oscillation gate regressions (2026-06-10 traces) ----
-def test_osc_clean_switch_does_not_fire():
-    """Trace windows at cycles 20/30/46 of the -160206 session: 7 productive
-    GrindCharacterXP cycles then 1 productive TaskExchange — a clean goal
-    switch (1 switch, 0 failures) must NOT fire."""
-    det = StuckDetector()
-    for i in range(7):
-        det.record(_record(i, 0, no_plan=False, ok=True))
-    det.record(_record(7, 1, no_plan=False, ok=True))
-    assert det.detect() is None
-    _assert_matches(det)
-
-
-def test_osc_mostly_productive_window_does_not_fire():
-    """7 productive cycles of one goal + 1 FAILING other goal: a single
-    failure in a productive window is not a livelock (fails both gates)."""
-    det = StuckDetector()
-    for i in range(7):
-        det.record(_record(i, 0, no_plan=False, ok=True))
-    det.record(_record(7, 1, no_plan=False, ok=False))
-    assert det.detect() is None
-    _assert_matches(det)
-
-
-def test_osc_failure_free_alternation_does_not_fire():
-    """Strict A/B alternation with every cycle SUCCEEDING (e.g. a productive
-    gather/deposit loop): kills the drop-the-failure-requirement mutant."""
-    det = StuckDetector()
-    for i in range(8):
-        det.record(_record(i, i % 2, no_plan=False, ok=True))
-    assert det.detect() is None
-    _assert_matches(det)
-
-
-def test_osc_block_switch_with_failures_does_not_fire():
-    """AAAABBBB with failures: 2 distinct goals and >= 2 failures but only ONE
-    switch — no round-trips, not oscillation. Kills the drop-the-round-trip-
-    requirement mutant."""
-    det = StuckDetector()
-    for i in range(8):
-        det.record(_record(i, 0 if i < 4 else 1, no_plan=False, ok=False))
-    assert det.detect() is None
-    _assert_matches(det)
-
-
-def test_osc_genuine_failing_flap_fires():
-    """A->B->A->B... with every cycle failing (distinct states so frozen stays
-    quiet): genuine failure-driven oscillation must still fire."""
-    det = StuckDetector()
-    for i in range(8):
-        det.record(_record(i, i % 2, no_plan=False, ok=False))
-    lean = run_oracle("stuck_detector", [_oracle_args(det)])[0]
-    assert lean["osc_switches"] == 7
-    assert lean["osc_failures"] == 8
-    assert det.detect() == StuckSignal.GOAL_OSCILLATION
     _assert_matches(det)
 
 
@@ -291,23 +221,10 @@ def test_window_boundary_noprog_one_short():
     _assert_matches(det)
 
 
-def test_window_boundary_osc_exact_8():
-    det = StuckDetector()
-    for _ in range(5):
-        det.record(_record(3, 3, no_plan=False))
-    det.acknowledge(StuckSignal.GOAL_OSCILLATION)  # cutoff = 5
-    for i in range(8):  # exactly 8 fresh failing records, 2 goals alternating
-        det.record(_record(i, i % 2, no_plan=False, ok=False))
-    lean = run_oracle("stuck_detector", [_oracle_args(det)])[0]
-    assert lean["osc_window_len"] == 8
-    assert det.detect() == StuckSignal.GOAL_OSCILLATION
-    _assert_matches(det)
-
-
 # ---- REPEATED_ACTION_FAILURE scenarios (the 478 bank-loop class) ----
 def test_repeated_action_failure_fires():
     """Action 'a0' fails 10x among 10 interspersed successes, with state varying
-    every cycle (frozen quiet), one goal code (osc quiet), no <no_plan> (noprog
+    every cycle (frozen quiet), one goal code, no <no_plan> (noprog
     quiet). The class the first three signals all miss."""
     det = StuckDetector()
     for i in range(20):

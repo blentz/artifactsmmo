@@ -1113,39 +1113,27 @@ example : ∀ (d : Formal.StuckDetector.Detector) (cutoff count : Nat) (r : Form
       ∃ i, i < d.history.length ∧
         Formal.StuckDetector.startIdx d + i ≥ cutoff ∧ d.history[i]? = some r :=
   @Formal.StuckDetector.recentSince_mem_global
--- detect_precedence: strict order frozen > osc > noprog > repeated, else none.
+-- detect_precedence: strict order frozen > noprog > repeated, else none.
 example : ∀ (d : Formal.StuckDetector.Detector),
     (Formal.StuckDetector.checkStateFrozen d = true →
       Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.frozen) ∧
     (Formal.StuckDetector.checkStateFrozen d = false →
-      Formal.StuckDetector.checkGoalOscillation d = true →
-      Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.osc) ∧
-    (Formal.StuckDetector.checkStateFrozen d = false →
-      Formal.StuckDetector.checkGoalOscillation d = false →
       Formal.StuckDetector.checkNoProgress d = true →
       Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.noprog) ∧
     (Formal.StuckDetector.checkStateFrozen d = false →
-      Formal.StuckDetector.checkGoalOscillation d = false →
       Formal.StuckDetector.checkNoProgress d = false →
       Formal.StuckDetector.checkRepeatedAction d = true →
       Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.repeated) ∧
     (Formal.StuckDetector.checkStateFrozen d = false →
-      Formal.StuckDetector.checkGoalOscillation d = false →
       Formal.StuckDetector.checkNoProgress d = false →
       Formal.StuckDetector.checkRepeatedAction d = false →
       Formal.StuckDetector.detect d = none) :=
   @Formal.StuckDetector.detect_precedence
--- detect_frozen_wins: frozen check holding forces frozen even if osc/noprog hold.
+-- detect_frozen_wins: frozen check holding forces frozen even if noprog/repeated hold.
 example : ∀ (d : Formal.StuckDetector.Detector),
     Formal.StuckDetector.checkStateFrozen d = true →
       Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.frozen :=
   @Formal.StuckDetector.detect_frozen_wins
--- detect_osc_over_noprog: frozen false ∧ osc true ⇒ osc wins over noprog.
-example : ∀ (d : Formal.StuckDetector.Detector),
-    Formal.StuckDetector.checkStateFrozen d = false →
-    Formal.StuckDetector.checkGoalOscillation d = true →
-      Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.osc :=
-  @Formal.StuckDetector.detect_osc_over_noprog
 -- noprog_threshold: noprog ↔ post-ack last-4 window is full (= 4) ∧ all <no_plan>.
 example : ∀ (d : Formal.StuckDetector.Detector),
     Formal.StuckDetector.checkNoProgress d = true
@@ -1154,45 +1142,6 @@ example : ∀ (d : Formal.StuckDetector.Detector),
           (Formal.StuckDetector.recentSince d d.ackNoprog
             Formal.StuckDetector.noprogThreshold).all (fun r => r.noPlan) = true) :=
   @Formal.StuckDetector.noprog_threshold
--- osc_threshold: osc ↔ post-ack last-8 window full (= 8) ∧ EXACTLY 2 distinct
--- goals ∧ ≥ 3 adjacent goal switches (genuine alternation) ∧ ≥ 2 failures
--- (failure-driven flapping). Genuine-oscillation semantics, 2026-06-10.
-example : ∀ (d : Formal.StuckDetector.Detector),
-    Formal.StuckDetector.checkGoalOscillation d = true
-      ↔ ((Formal.StuckDetector.recentSince d d.ackOsc
-            Formal.StuckDetector.oscThreshold).length = Formal.StuckDetector.oscThreshold ∧
-          (Formal.StuckDetector.distinctGoals (Formal.StuckDetector.recentSince d d.ackOsc
-            Formal.StuckDetector.oscThreshold)).length = 2 ∧
-          Formal.StuckDetector.switches ((Formal.StuckDetector.recentSince d d.ackOsc
-            Formal.StuckDetector.oscThreshold).map Formal.StuckDetector.Rec.goal)
-            ≥ Formal.StuckDetector.oscSwitchMin ∧
-          Formal.StuckDetector.failures (Formal.StuckDetector.recentSince d d.ackOsc
-            Formal.StuckDetector.oscThreshold) ≥ Formal.StuckDetector.oscFailureMin) :=
-  @Formal.StuckDetector.osc_threshold
--- osc_requires_round_trips: < 3 goal switches in the window ⇒ osc can NEVER
--- fire (a clean goal switch is provably not oscillation, for ALL inputs).
-example : ∀ (d : Formal.StuckDetector.Detector),
-    Formal.StuckDetector.switches ((Formal.StuckDetector.recentSince d d.ackOsc
-      Formal.StuckDetector.oscThreshold).map Formal.StuckDetector.Rec.goal)
-      < Formal.StuckDetector.oscSwitchMin →
-    Formal.StuckDetector.checkGoalOscillation d = false :=
-  @Formal.StuckDetector.osc_requires_round_trips
--- osc_requires_failures: < 2 failed cycles in the window ⇒ osc can NEVER fire
--- (productive alternation is provably not a livelock, for ALL inputs).
-example : ∀ (d : Formal.StuckDetector.Detector),
-    Formal.StuckDetector.failures (Formal.StuckDetector.recentSince d d.ackOsc
-      Formal.StuckDetector.oscThreshold) < Formal.StuckDetector.oscFailureMin →
-    Formal.StuckDetector.checkGoalOscillation d = false :=
-  @Formal.StuckDetector.osc_requires_failures
--- trace regressions (2026-06-10): clean switch / mostly-productive ⇒ none;
--- genuine failing flap ⇒ osc.
-example : Formal.StuckDetector.detect Formal.StuckDetector.cleanSwitchTrace = none :=
-  Formal.StuckDetector.clean_switch_no_fire
-example : Formal.StuckDetector.detect Formal.StuckDetector.mostlyProductiveTrace = none :=
-  Formal.StuckDetector.mostly_productive_no_fire
-example : Formal.StuckDetector.detect Formal.StuckDetector.genuineFlapTrace
-    = some Formal.StuckDetector.Signal.osc :=
-  Formal.StuckDetector.genuine_flap_fires
 -- frozen_threshold: frozen ↔ post-ack last-10 window full (= 10) ∧ some state ≥ 5.
 example : ∀ (d : Formal.StuckDetector.Detector),
     Formal.StuckDetector.checkStateFrozen d = true
@@ -1211,19 +1160,13 @@ example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counte
       (Formal.StuckDetector.acknowledge d Formal.StuckDetector.Signal.noprog).ackNoprog
       Formal.StuckDetector.noprogThreshold = [] :=
   @Formal.StuckDetector.ack_suppression_noprog
--- ack_suppression (frozen) / (osc): same emptiness for the other windows.
+-- ack_suppression (frozen): same emptiness for the frozen window.
 example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counter →
     Formal.StuckDetector.recentSince (Formal.StuckDetector.acknowledge d
         Formal.StuckDetector.Signal.frozen)
       (Formal.StuckDetector.acknowledge d Formal.StuckDetector.Signal.frozen).ackFrozen
       Formal.StuckDetector.frozenThreshold = [] :=
   @Formal.StuckDetector.ack_suppression_frozen
-example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counter →
-    Formal.StuckDetector.recentSince (Formal.StuckDetector.acknowledge d
-        Formal.StuckDetector.Signal.osc)
-      (Formal.StuckDetector.acknowledge d Formal.StuckDetector.Signal.osc).ackOsc
-      Formal.StuckDetector.oscThreshold = [] :=
-  @Formal.StuckDetector.ack_suppression_osc
 -- ack_*_cannot_fire: an empty post-ack window can never meet the threshold, so
 -- the just-acked signal cannot re-fire until ≥ threshold fresh records accumulate.
 example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counter →
@@ -1234,10 +1177,6 @@ example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counte
     Formal.StuckDetector.checkStateFrozen (Formal.StuckDetector.acknowledge d
       Formal.StuckDetector.Signal.frozen) = false :=
   @Formal.StuckDetector.ack_frozen_cannot_fire
-example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counter →
-    Formal.StuckDetector.checkGoalOscillation (Formal.StuckDetector.acknowledge d
-      Formal.StuckDetector.Signal.osc) = false :=
-  @Formal.StuckDetector.ack_osc_cannot_fire
 
 -- REPEATED_ACTION_FAILURE role contracts (4th signal, 2026-06-24).
 -- repeated_threshold: fires ↔ max per-action failure tally in the last-20 window ≥ 10.
@@ -1263,10 +1202,9 @@ example : ∀ (d : Formal.StuckDetector.Detector),
       ∧ ∃ r ∈ Formal.StuckDetector.recentSince d d.ackRepeated Formal.StuckDetector.repeatedWindow,
           r.action = a ∧ r.ok = false ∧ r.noPlan = false :=
   @Formal.StuckDetector.repeated_fire_witness
--- detect_repeated_last: frozen/osc/noprog false ∧ repeated ⇒ detect = repeated.
+-- detect_repeated_last: frozen/noprog false ∧ repeated ⇒ detect = repeated.
 example : ∀ (d : Formal.StuckDetector.Detector),
     Formal.StuckDetector.checkStateFrozen d = false →
-    Formal.StuckDetector.checkGoalOscillation d = false →
     Formal.StuckDetector.checkNoProgress d = false →
     Formal.StuckDetector.checkRepeatedAction d = true →
     Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.repeated :=

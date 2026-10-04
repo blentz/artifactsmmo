@@ -212,28 +212,19 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 -- StuckDetector required roles:
 #check @Formal.StuckDetector.recent_since_window      -- _recent_since = keep global idx ≥ cutoff, last count
 #check @Formal.StuckDetector.recentSince_mem_global   -- every kept record's global index clears cutoff
-#check @Formal.StuckDetector.detect_precedence        -- strict frozen > osc > noprog, else none
-#check @Formal.StuckDetector.detect_frozen_wins       -- frozen check ⇒ frozen (even if osc/noprog fire)
-#check @Formal.StuckDetector.detect_osc_over_noprog   -- osc beats noprog when frozen false
+#check @Formal.StuckDetector.detect_precedence        -- strict frozen > noprog > repeated, else none
+#check @Formal.StuckDetector.detect_frozen_wins       -- frozen check ⇒ frozen (even if noprog/repeated fire)
 #check @Formal.StuckDetector.noprog_threshold         -- noprog ↔ last-4 full ∧ all <no_plan>
-#check @Formal.StuckDetector.osc_threshold            -- osc ↔ last-8 full ∧ 2 distinct ∧ ≥3 switches ∧ ≥2 failures
-#check @Formal.StuckDetector.osc_requires_round_trips -- <3 goal switches ⇒ osc can NEVER fire (clean-switch safe)
-#check @Formal.StuckDetector.osc_requires_failures    -- <2 failures ⇒ osc can NEVER fire (productive flap safe)
-#check @Formal.StuckDetector.clean_switch_no_fire     -- 2026-06-10 trace: 7×A+1×B clean switch ⇒ none
-#check @Formal.StuckDetector.mostly_productive_no_fire -- 7 ok + 1 failing other ⇒ none
-#check @Formal.StuckDetector.genuine_flap_fires       -- failing A→B→A→B… ⇒ osc
 #check @Formal.StuckDetector.frozen_threshold         -- frozen ↔ last-10 full ∧ some state ≥ 5
 #check @Formal.StuckDetector.ack_suppression_noprog   -- post-ack noprog window empty
 #check @Formal.StuckDetector.ack_suppression_frozen   -- post-ack frozen window empty
-#check @Formal.StuckDetector.ack_suppression_osc      -- post-ack osc window empty
 #check @Formal.StuckDetector.ack_noprog_cannot_fire   -- just-acked noprog cannot re-fire
 #check @Formal.StuckDetector.ack_frozen_cannot_fire   -- just-acked frozen cannot re-fire
-#check @Formal.StuckDetector.ack_osc_cannot_fire      -- just-acked osc cannot re-fire
 -- REPEATED_ACTION_FAILURE (4th signal, 2026-06-24):
 #check @Formal.StuckDetector.repeated_threshold       -- repeated ↔ some action fails ≥10 in last-20
 #check @Formal.StuckDetector.repeated_requires_failures -- max tally <10 ⇒ repeated can NEVER fire
 #check @Formal.StuckDetector.repeated_fire_witness    -- fires ⇒ a real ≥10-failing named action exists (non-vacuity)
-#check @Formal.StuckDetector.detect_repeated_last     -- frozen/osc/noprog false ∧ repeated ⇒ repeated
+#check @Formal.StuckDetector.detect_repeated_last     -- frozen/noprog false ∧ repeated ⇒ repeated
 #check @Formal.StuckDetector.ack_suppression_repeated -- post-ack repeated window empty
 #check @Formal.StuckDetector.ack_repeated_cannot_fire -- just-acked repeated cannot re-fire
 #check @Formal.StuckDetector.repeated_fires           -- 10-of-20 wedged-action trace ⇒ repeated

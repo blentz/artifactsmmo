@@ -6,7 +6,11 @@ Formal model of the `StuckDetector` deterministic state machine from
 The detector keeps a bounded history (a `collections.deque(maxlen=30)`) of cycle
 records, a monotone global cycle counter, and per-signal acknowledge cutoffs.
 `detect()` returns the FIRST matching signal in strict precedence
-`STATE_FROZEN > GOAL_OSCILLATION > NO_PROGRESS`, else `none`.
+`STATE_FROZEN > NO_PROGRESS > REPEATED_ACTION_FAILURE`, else `none`.
+(GOAL_OSCILLATION was retired in Phase 4-2a-ii of
+docs/PLAN_decision_architecture_redesign.md: it read the fight -> rest ->
+fight loop as a livelock; a stalled intention now ends on its own progress
+measure.)
 
 We model:
 * a record as `(state, goal, action)` where `action` is `true` iff it is the
@@ -32,8 +36,8 @@ namespace Formal.StuckDetector
 
 /-- One cycle record. `state`, `goal` and `action` are abstract codes (`Nat`);
 `noPlan` is `true` iff the record carries the `"<no_plan>"` sentinel; `ok`
-mirrors `CycleRecord.succeeded` (the oscillation / repeated-action checks count
-failures). `action` mirrors `CycleRecord.action_key` — the STABLE,
+mirrors `CycleRecord.succeeded` (the repeated-action check counts failures).
+`action` mirrors `CycleRecord.action_key` — the STABLE,
 quantity-free `Action.learning_key()` the repeated-action check groups by, NOT
 the `action_name` repr, which for a closure-sized gather carries a per-cycle
 batch size and would split one repeatedly-failing action into a bucket per size
@@ -47,14 +51,13 @@ structure Rec where
   action : Nat
   deriving DecidableEq, Repr
 
-/-- The four stuck-state signals. Precedence: `frozen > osc > noprog > repeated`.
+/-- The three stuck-state signals. Precedence: `frozen > noprog > repeated`.
 `repeated` (REPEATED_ACTION_FAILURE) is the backstop: a single named action that
 keeps failing across a window even while other progress happens — the class the
-first three miss (the 478 bank loop varied state, didn't oscillate goals, and was
-not a 4-consecutive `<no_plan>` run). -/
+other two miss (the 478 bank loop varied state and was not a 4-consecutive
+`<no_plan>` run). -/
 inductive Signal where
   | frozen
-  | osc
   | noprog
   | repeated
   deriving DecidableEq, Repr
@@ -66,14 +69,12 @@ structure Detector where
   history : List Rec
   counter : Nat
   ackFrozen : Nat
-  ackOsc : Nat
   ackNoprog : Nat
   ackRepeated : Nat
   deriving Repr
 
 /-- Thresholds (mirror the `count=` arguments / `len(window) <` checks). -/
 def noprogThreshold : Nat := 4
-def oscThreshold : Nat := 8
 def frozenThreshold : Nat := 10
 
 /-- REPEATED_ACTION_FAILURE: the window width (`count=` for `_recent_since`) and
@@ -108,44 +109,11 @@ def recentSince (d : Detector) (cutoff count : Nat) : List Rec :=
 def stateCount (s : Nat) (w : List Rec) : Nat :=
   (w.filter (fun r => decide (r.state = s))).length
 
-/-- The distinct goals in a window (dedup, order-insensitive count). -/
-def distinctGoals (w : List Rec) : List Nat :=
-  (w.map Rec.goal).eraseDups
-
-/-- Adjacent goal switches: the number of positions `i` with
-`goals[i] ≠ goals[i+1]`. Mirrors
-`sum(1 for a, b in pairwise(goals) if a != b)`. -/
-def switches : List Nat → Nat
-  | a :: b :: rest => (if a = b then 0 else 1) + switches (b :: rest)
-  | _ => 0
-
-/-- Failed cycles in a window (`succeeded == False`). -/
-def failures (w : List Rec) : Nat :=
-  (w.filter (fun r => !r.ok)).length
-
-/-- Genuine-oscillation gates (mirror `OSC_MIN_SWITCHES` / `OSC_MIN_FAILURES`):
-≥ 3 adjacent switches means the 2-goal sequence leaves-and-returns at least
-twice (two overlapping A→B→A round-trips); ≥ 2 failures means the flapping is
-failure-driven, not a benign switch in a productive window. -/
-def oscSwitchMin : Nat := 3
-def oscFailureMin : Nat := 2
-
 /-- `_check_no_progress`: window of last-4 post-(noprog-ack), `len = 4` AND every
 record is the `<no_plan>` sentinel. -/
 def checkNoProgress (d : Detector) : Bool :=
   let w := recentSince d d.ackNoprog noprogThreshold
   decide (w.length = noprogThreshold) && w.all (fun r => r.noPlan)
-
-/-- `_check_goal_oscillation`: window of last-8 post-(osc-ack), `len = 8` AND
-EXACTLY 2 distinct goals AND ≥ `oscSwitchMin` adjacent goal switches (genuine
-alternation) AND ≥ `oscFailureMin` failed cycles (failure-driven flapping).
-The 2026-06-10 false-positive family (7×A+1×B clean switch; mostly-productive
-windows) fails the switch/failure gates and can no longer fire. -/
-def checkGoalOscillation (d : Detector) : Bool :=
-  let w := recentSince d d.ackOsc oscThreshold
-  decide (w.length = oscThreshold) && decide ((distinctGoals w).length = 2)
-    && decide (switches (w.map Rec.goal) ≥ oscSwitchMin)
-    && decide (failures w ≥ oscFailureMin)
 
 /-- `_check_state_frozen`: window of last-10 post-(frozen-ack), `len = 10` AND
 some state recurs `≥ 5`. -/
@@ -174,10 +142,9 @@ per-action failure tally matters. -/
 def checkRepeatedAction (d : Detector) : Bool :=
   decide (maxActionFailCount (recentSince d d.ackRepeated repeatedWindow) ≥ repeatedThreshold)
 
-/-- `detect()`: strict precedence frozen > osc > noprog > repeated, else none. -/
+/-- `detect()`: strict precedence frozen > noprog > repeated, else none. -/
 def detect (d : Detector) : Option Signal :=
   if checkStateFrozen d then some Signal.frozen
-  else if checkGoalOscillation d then some Signal.osc
   else if checkNoProgress d then some Signal.noprog
   else if checkRepeatedAction d then some Signal.repeated
   else none
@@ -186,7 +153,6 @@ def detect (d : Detector) : Option Signal :=
 def acknowledge (d : Detector) (s : Signal) : Detector :=
   match s with
   | Signal.frozen => { d with ackFrozen := d.counter }
-  | Signal.osc => { d with ackOsc := d.counter }
   | Signal.noprog => { d with ackNoprog := d.counter }
   | Signal.repeated => { d with ackRepeated := d.counter }
 
@@ -216,33 +182,24 @@ theorem recent_since_start_idx (d : Detector) (h : d.history.length ≤ d.counte
   omega
 
 /-- **detect_precedence**: `detect` honors the strict order
-frozen > osc > noprog > repeated. Each clause is exactly the cascaded `if`. -/
+frozen > noprog > repeated. Each clause is exactly the cascaded `if`. -/
 theorem detect_precedence (d : Detector) :
     (checkStateFrozen d = true → detect d = some Signal.frozen) ∧
-    (checkStateFrozen d = false → checkGoalOscillation d = true →
-      detect d = some Signal.osc) ∧
-    (checkStateFrozen d = false → checkGoalOscillation d = false →
+    (checkStateFrozen d = false →
       checkNoProgress d = true → detect d = some Signal.noprog) ∧
-    (checkStateFrozen d = false → checkGoalOscillation d = false →
+    (checkStateFrozen d = false →
       checkNoProgress d = false → checkRepeatedAction d = true →
       detect d = some Signal.repeated) ∧
-    (checkStateFrozen d = false → checkGoalOscillation d = false →
+    (checkStateFrozen d = false →
       checkNoProgress d = false → checkRepeatedAction d = false →
       detect d = none) := by
-  refine ⟨?_, ?_, ?_, ?_, ?_⟩ <;> intro <;> simp_all [detect]
+  refine ⟨?_, ?_, ?_, ?_⟩ <;> intro <;> simp_all [detect]
 
 /-- **detect_frozen_wins**: frozen-check holding forces `frozen`, REGARDLESS of
-whether the osc/noprog checks also hold (the anti-gaming precedence anchor). -/
+whether the noprog/repeated checks also hold (the anti-gaming precedence anchor). -/
 theorem detect_frozen_wins (d : Detector) (hf : checkStateFrozen d = true) :
     detect d = some Signal.frozen := by
   simp [detect, hf]
-
-/-- **detect_osc_over_noprog**: with frozen false and osc true, `osc` wins even if
-noprog would also fire. -/
-theorem detect_osc_over_noprog (d : Detector)
-    (hf : checkStateFrozen d = false) (ho : checkGoalOscillation d = true) :
-    detect d = some Signal.osc := by
-  simp [detect, hf, ho]
 
 /-- **noprog_threshold**: noprog fires IFF the post-ack last-4 window has exactly
 4 records, all `<no_plan>`. -/
@@ -252,84 +209,6 @@ theorem noprog_threshold (d : Detector) :
           (recentSince d d.ackNoprog noprogThreshold).all (fun r => r.noPlan) = true) := by
   unfold checkNoProgress
   simp only [Bool.and_eq_true, decide_eq_true_eq]
-
-/-- **osc_threshold**: osc fires IFF the post-ack last-8 window has 8 records,
-EXACTLY 2 distinct goals, ≥ `oscSwitchMin` adjacent goal switches AND
-≥ `oscFailureMin` failures. (Genuine-oscillation semantics, 2026-06-10.) -/
-theorem osc_threshold (d : Detector) :
-    checkGoalOscillation d = true
-      ↔ ((recentSince d d.ackOsc oscThreshold).length = oscThreshold ∧
-          (distinctGoals (recentSince d d.ackOsc oscThreshold)).length = 2 ∧
-          switches ((recentSince d d.ackOsc oscThreshold).map Rec.goal) ≥ oscSwitchMin ∧
-          failures (recentSince d d.ackOsc oscThreshold) ≥ oscFailureMin) := by
-  unfold checkGoalOscillation
-  simp only [Bool.and_eq_true, decide_eq_true_eq, and_assoc]
-
-/-- **osc_requires_round_trips**: a window whose goal sequence has fewer than
-`oscSwitchMin` adjacent switches can NEVER fire osc, no matter how it fails.
-This is the 2026-06-10 clean-switch regression (7×GrindCharacterXP then
-1×TaskExchange = 1 switch) proved impossible for ALL inputs. -/
-theorem osc_requires_round_trips (d : Detector)
-    (h : switches ((recentSince d d.ackOsc oscThreshold).map Rec.goal) < oscSwitchMin) :
-    checkGoalOscillation d = false := by
-  cases hc : checkGoalOscillation d
-  · rfl
-  · obtain ⟨-, -, hsw, -⟩ := (osc_threshold d).mp hc
-    omega
-
-/-- **osc_requires_failures**: a window with fewer than `oscFailureMin` failed
-cycles can NEVER fire osc — productive alternation between two goals (e.g.
-gather/deposit loops) is not a livelock. -/
-theorem osc_requires_failures (d : Detector)
-    (h : failures (recentSince d d.ackOsc oscThreshold) < oscFailureMin) :
-    checkGoalOscillation d = false := by
-  cases hc : checkGoalOscillation d
-  · rfl
-  · obtain ⟨-, -, -, hfail⟩ := (osc_threshold d).mp hc
-    omega
-
-/-! ### Trace-locked regressions (2026-06-10 sessions, replayed exactly)
-
-Goal codes: 0 = GrindCharacterXP, 1 = TaskExchange / other. States distinct
-per cycle (the bot was acting), so frozen cannot fire and `detect` reflects
-the oscillation verdict alone. -/
-
-/-- The benign window that false-fired at cycles 20/30/46 of the `-160206`
-session: 7 productive Grind cycles then 1 productive TaskExchange — a clean
-goal switch (1 switch, 0 failures). -/
-def cleanSwitchTrace : Detector :=
-  { history :=
-      [⟨0, 0, false, true, 0⟩, ⟨1, 0, false, true, 0⟩, ⟨2, 0, false, true, 0⟩,
-       ⟨3, 0, false, true, 0⟩, ⟨4, 0, false, true, 0⟩, ⟨5, 0, false, true, 0⟩,
-       ⟨6, 0, false, true, 0⟩, ⟨7, 1, false, true, 1⟩],
-    counter := 8, ackFrozen := 0, ackOsc := 0, ackNoprog := 0, ackRepeated := 0 }
-
-/-- **clean_switch_no_fire**: the clean-switch trace window must NOT fire. -/
-theorem clean_switch_no_fire : detect cleanSwitchTrace = none := by decide
-
-/-- A mostly-productive window: 7 ok cycles of one goal and a single failing
-cycle of another (the 7-productive+1-other false-positive class). -/
-def mostlyProductiveTrace : Detector :=
-  { history :=
-      [⟨0, 0, false, true, 0⟩, ⟨1, 0, false, true, 0⟩, ⟨2, 0, false, true, 0⟩,
-       ⟨3, 0, false, true, 0⟩, ⟨4, 0, false, true, 0⟩, ⟨5, 0, false, true, 0⟩,
-       ⟨6, 0, false, true, 0⟩, ⟨7, 1, false, false, 1⟩],
-    counter := 8, ackFrozen := 0, ackOsc := 0, ackNoprog := 0, ackRepeated := 0 }
-
-/-- **mostly_productive_no_fire**: one failing odd cycle in a productive
-window must NOT fire. -/
-theorem mostly_productive_no_fire : detect mostlyProductiveTrace = none := by decide
-
-/-- Genuine failure-driven flapping: A→B→A→B… with every cycle failing. -/
-def genuineFlapTrace : Detector :=
-  { history :=
-      [⟨0, 0, false, false, 0⟩, ⟨1, 1, false, false, 1⟩, ⟨2, 0, false, false, 0⟩,
-       ⟨3, 1, false, false, 1⟩, ⟨4, 0, false, false, 0⟩, ⟨5, 1, false, false, 1⟩,
-       ⟨6, 0, false, false, 0⟩, ⟨7, 1, false, false, 1⟩],
-    counter := 8, ackFrozen := 0, ackOsc := 0, ackNoprog := 0, ackRepeated := 0 }
-
-/-- **genuine_flap_fires**: real failure-driven oscillation still fires. -/
-theorem genuine_flap_fires : detect genuineFlapTrace = some Signal.osc := by decide
 
 /-- **frozen_threshold**: frozen fires IFF the post-ack last-10 window has 10
 records and SOME state recurs ≥ 5. -/
@@ -418,23 +297,6 @@ theorem ack_suppression_frozen (d : Detector) (h : d.history.length ≤ d.counte
       omega
   rw [hempty]; simp
 
-theorem ack_suppression_osc (d : Detector) (h : d.history.length ≤ d.counter) :
-    recentSince (acknowledge d Signal.osc) (acknowledge d Signal.osc).ackOsc
-      oscThreshold = [] := by
-  unfold acknowledge recentSince takeLast withIdx startIdx
-  simp only
-  have hempty :
-      (((List.range d.history.length).zip d.history).filter
-        (fun p => decide (d.counter - d.history.length + p.1 ≥ d.counter))).map Prod.snd = [] := by
-    rw [List.filter_eq_nil_iff.mpr]
-    · simp
-    · intro p hp
-      have hz := List.of_mem_zip hp
-      have hlt : p.1 < d.history.length := by simpa using List.mem_range.mp hz.1
-      simp only [decide_eq_true_eq, ge_iff_le]
-      omega
-  rw [hempty]; simp
-
 /-- **ack_suppression_no_fire**: an empty post-ack window can never satisfy the
 threshold checks (since `0 ≠ 4/8/10`), so the just-acked signal cannot re-fire. -/
 theorem ack_noprog_cannot_fire (d : Detector) (h : d.history.length ≤ d.counter) :
@@ -448,12 +310,6 @@ theorem ack_frozen_cannot_fire (d : Detector) (h : d.history.length ≤ d.counte
   unfold checkStateFrozen
   rw [ack_suppression_frozen d h]
   simp [frozenThreshold]
-
-theorem ack_osc_cannot_fire (d : Detector) (h : d.history.length ≤ d.counter) :
-    checkGoalOscillation (acknowledge d Signal.osc) = false := by
-  unfold checkGoalOscillation
-  rw [ack_suppression_osc d h]
-  simp [oscThreshold, distinctGoals]
 
 /-! ### REPEATED_ACTION_FAILURE role theorems (spec 2026-06-24).
 
@@ -532,13 +388,13 @@ theorem repeated_fire_witness (d : Detector) :
   obtain ⟨r, _, hrc⟩ := maxActionFailCount_witness (by decide) hmax
   exact ⟨r.action, hrc, actionFailCount_witness (Nat.lt_of_lt_of_le (by decide) hrc)⟩
 
-/-- **detect_repeated_last**: with frozen/osc/noprog all false and repeated true,
-`detect` returns `repeated` (the backstop fires only after the first three pass). -/
+/-- **detect_repeated_last**: with frozen/noprog false and repeated true,
+`detect` returns `repeated` (the backstop fires only after the others pass). -/
 theorem detect_repeated_last (d : Detector)
-    (hf : checkStateFrozen d = false) (ho : checkGoalOscillation d = false)
+    (hf : checkStateFrozen d = false)
     (hn : checkNoProgress d = false) (hr : checkRepeatedAction d = true) :
     detect d = some Signal.repeated := by
-  simp [detect, hf, ho, hn, hr]
+  simp [detect, hf, hn, hr]
 
 /-- **ack_suppression_repeated**: after `acknowledge(repeated)` the repeated window
 is EMPTY (cutoff now = counter), mirroring the other signals. -/
@@ -569,7 +425,7 @@ theorem ack_repeated_cannot_fire (d : Detector) (h : d.history.length ≤ d.coun
 
 /-! ### REPEATED_ACTION_FAILURE trace regressions (the 478 bank-loop class).
 
-20 distinct states (frozen quiet), one goal code (osc needs exactly 2 — quiet),
+20 distinct states (frozen quiet), one goal code,
 named actions (noprog quiet). Action code 0 = the wedged `Withdraw`, action 1 =
 interspersed productive cycles. -/
 
@@ -583,7 +439,7 @@ def repeatedFiresTrace : Detector :=
        ⟨12, 0, false, false, 0⟩, ⟨13, 0, false, true, 1⟩, ⟨14, 0, false, false, 0⟩,
        ⟨15, 0, false, true, 1⟩, ⟨16, 0, false, false, 0⟩, ⟨17, 0, false, true, 1⟩,
        ⟨18, 0, false, false, 0⟩, ⟨19, 0, false, true, 1⟩],
-    counter := 20, ackFrozen := 0, ackOsc := 0, ackNoprog := 0, ackRepeated := 0 }
+    counter := 20, ackFrozen := 0, ackNoprog := 0, ackRepeated := 0 }
 
 /-- **repeated_fires**: the wedged 10-of-20 trace fires repeated. -/
 theorem repeated_fires : detect repeatedFiresTrace = some Signal.repeated := by decide
@@ -599,7 +455,7 @@ def repeatedOneShortTrace : Detector :=
        ⟨12, 0, false, false, 0⟩, ⟨13, 0, false, true, 1⟩, ⟨14, 0, false, false, 0⟩,
        ⟨15, 0, false, true, 1⟩, ⟨16, 0, false, false, 0⟩, ⟨17, 0, false, true, 1⟩,
        ⟨18, 0, false, false, 0⟩, ⟨19, 0, false, true, 1⟩],
-    counter := 20, ackFrozen := 0, ackOsc := 0, ackNoprog := 0, ackRepeated := 0 }
+    counter := 20, ackFrozen := 0, ackNoprog := 0, ackRepeated := 0 }
 
 /-- **repeated_one_short_no_fire**: 9 failures of one action does NOT fire. -/
 theorem repeated_one_short_no_fire : detect repeatedOneShortTrace = none := by decide

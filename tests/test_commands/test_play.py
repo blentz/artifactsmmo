@@ -288,14 +288,13 @@ class TestPlayCommandWiring:
         # A real player whose recovery state sits at L2 with a genuine
         # failing-flap window: the next fire escalates to L3 -> StuckExit.
         real_player = GamePlayer(character="hero")
-        for i in range(8):
+        for i in range(20):
             real_player._record_cycle(CycleRecord(
                 state_key=(i, 0, 5, (), (), None, 0, False),
-                goal_name="GoalA" if i % 2 == 0 else "GoalB",
-                action_name="X", action_key="X", planned_depth=1,
+                goal_name="GoalA", action_name="X", action_key="X", planned_depth=1,
                 planner_timed_out=False, succeeded=False,
             ))
-        real_player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 2
+        real_player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
 
         with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
             mock_player = Mock()
@@ -309,7 +308,7 @@ class TestPlayCommandWiring:
                     session_id="overwritten", cycle_index=0,
                     character="overwritten", outcome="error:fight_lost",
                 ))
-                real_player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
+                real_player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
 
             mock_player.run.side_effect = stuck_run
             mock_player_cls.return_value = mock_player
@@ -524,7 +523,7 @@ class TestRunWithTui:
         hook_before = threading.excepthook
         with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
             mock_player = Mock()
-            mock_player.run.side_effect = StuckExit(StuckSignal.GOAL_OSCILLATION)
+            mock_player.run.side_effect = StuckExit(StuckSignal.NO_PROGRESS)
             mock_player_cls.return_value = mock_player
             with (
                 patch("artifactsmmo_cli.commands.play.ClientManager"),

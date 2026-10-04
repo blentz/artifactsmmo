@@ -851,60 +851,47 @@ def runBankSelection (args : Array Json) : Json :=
 args layout (all Nat ≥ 0):
 * `[0]`            counter (global cycle counter; ≥ history length)
 * `[1]`            ackFrozen cutoff
-* `[2]`            ackOsc cutoff
-* `[3]`            ackNoprog cutoff
-* `[4]`            ackRepeated cutoff
-* `[5]`            n (history length)
-* `[6 .. 6+5n-1]`  n records flat: state0 goal0 noPlan0(0/1) ok0(0/1) action0
+* `[2]`            ackNoprog cutoff
+* `[3]`            ackRepeated cutoff
+* `[4]`            n (history length)
+* `[5 .. 5+5n-1]`  n records flat: state0 goal0 noPlan0(0/1) ok0(0/1) action0
   state1 ... (oldest first, mirroring `list(deque)`)
 
-Emits the `detect()` verdict ("frozen"/"osc"/"noprog"/"repeated"/"none"), the
-four window lengths (to pin `_recent_since`'s index arithmetic), the osc
-switch/failure counts (to pin the genuine-oscillation gates), and the
-repeated-action max failure tally (to pin the repeated-action threshold). -/
+Emits the `detect()` verdict ("frozen"/"noprog"/"repeated"/"none"), the three
+window lengths (to pin `_recent_since`'s index arithmetic) and the
+repeated-action max failure tally (to pin the repeated-action threshold).
+(GOAL_OSCILLATION and its slot were retired in Phase 4-2a-ii.) -/
 def runStuckDetector (args : Array Json) : Json :=
   let g := fun i => (intArg args i).toNat
   let counter := g 0
   let ackFrozen := g 1
-  let ackOsc := g 2
-  let ackNoprog := g 3
-  let ackRepeated := g 4
-  let n := g 5
+  let ackNoprog := g 2
+  let ackRepeated := g 3
+  let n := g 4
   let history : List Formal.StuckDetector.Rec :=
     (List.range n).map (fun k =>
-      { state := g (6 + 5*k), goal := g (7 + 5*k), noPlan := g (8 + 5*k) != 0,
-        ok := g (9 + 5*k) != 0, action := g (10 + 5*k) })
+      { state := g (5 + 5*k), goal := g (6 + 5*k), noPlan := g (7 + 5*k) != 0,
+        ok := g (8 + 5*k) != 0, action := g (9 + 5*k) })
   let d : Formal.StuckDetector.Detector :=
     { history := history, counter := counter,
-      ackFrozen := ackFrozen, ackOsc := ackOsc, ackNoprog := ackNoprog,
+      ackFrozen := ackFrozen, ackNoprog := ackNoprog,
       ackRepeated := ackRepeated }
   let verdict : String := match Formal.StuckDetector.detect d with
     | some Formal.StuckDetector.Signal.frozen => "frozen"
-    | some Formal.StuckDetector.Signal.osc => "osc"
     | some Formal.StuckDetector.Signal.noprog => "noprog"
     | some Formal.StuckDetector.Signal.repeated => "repeated"
     | none => "none"
   let frozenLen := (Formal.StuckDetector.recentSince d ackFrozen
     Formal.StuckDetector.frozenThreshold).length
-  let oscLen := (Formal.StuckDetector.recentSince d ackOsc
-    Formal.StuckDetector.oscThreshold).length
   let noprogLen := (Formal.StuckDetector.recentSince d ackNoprog
     Formal.StuckDetector.noprogThreshold).length
-  let oscWindow := Formal.StuckDetector.recentSince d ackOsc
-    Formal.StuckDetector.oscThreshold
-  let oscSwitches := Formal.StuckDetector.switches
-    (oscWindow.map Formal.StuckDetector.Rec.goal)
-  let oscFailures := Formal.StuckDetector.failures oscWindow
   let repeatedWindow := Formal.StuckDetector.recentSince d ackRepeated
     Formal.StuckDetector.repeatedWindow
   let repeatedLen := repeatedWindow.length
   let repeatedMaxFail := Formal.StuckDetector.maxActionFailCount repeatedWindow
   Json.mkObj [("detect", Json.str verdict),
     ("frozen_window_len", Json.num (Int.ofNat frozenLen)),
-    ("osc_window_len", Json.num (Int.ofNat oscLen)),
     ("noprog_window_len", Json.num (Int.ofNat noprogLen)),
-    ("osc_switches", Json.num (Int.ofNat oscSwitches)),
-    ("osc_failures", Json.num (Int.ofNat oscFailures)),
     ("repeated_window_len", Json.num (Int.ofNat repeatedLen)),
     ("repeated_max_fail", Json.num (Int.ofNat repeatedMaxFail))]
 

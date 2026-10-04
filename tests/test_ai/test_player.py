@@ -1920,26 +1920,6 @@ class TestHandleStuckExtended:
         assert player._suppressed_goals["GoalA"] == 10
         assert player._recovery_level[StuckSignal.STATE_FROZEN] == 3
 
-    def test_goal_oscillation_level2_suppresses_for_15_cycles(self):
-        player = GamePlayer(character="hero")
-        from artifactsmmo_cli.ai.recovery import CycleRecord
-        # succeeded=False so the recovery handler treats these as the
-        # source of the oscillation (succeeded goals are excluded post-b2be2ad).
-        for i in range(8):
-            name = "GoalA" if i % 2 == 0 else "GoalB"
-            player._detector.record(CycleRecord(
-                state_key=(i, 0, 5, (), (), None, 0, False),
-                goal_name=name, action_name="X", action_key="X", planned_depth=1,
-                planner_timed_out=False, succeeded=False,
-            ))
-        player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 1
-
-        player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
-
-        assert player._suppressed_goals.get("GoalA") == 15
-        assert player._suppressed_goals.get("GoalB") == 15
-        assert player._recovery_level[StuckSignal.GOAL_OSCILLATION] == 2
-
     def test_no_progress_level2_refreshes_and_clears_blockers(self):
         player = GamePlayer(character="hero")
         player._recovery_level[StuckSignal.NO_PROGRESS] = 1
