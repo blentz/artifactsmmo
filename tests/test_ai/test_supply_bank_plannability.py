@@ -25,7 +25,6 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
-from artifactsmmo_cli.ai.min_plan_length import min_plan_length
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -192,33 +191,6 @@ def test_planner_plans_a_crafted_supply_target() -> None:
     assert not planner.last_stats.timed_out
     assert plan, "a crafted supply target must be plannable"
     assert isinstance(plan[-1], DepositAllAction)
-
-
-def test_banked_inputs_count_toward_the_depth_bound() -> None:
-    """The depth bound credits what the bank can supply.
-
-    Every banked code EXCEPT the target itself is a real, withdrawable input, so
-    it shortens the minimum plan.
-
-    Values updated by Task 3 (planner-gather-batching): the mint term switched
-    from raw-UNIT counting to `min_gather_steps` (distinct raw leaves still
-    unmet). `deep_chain_gd`'s closure has exactly ONE raw leaf (`supply_ore`),
-    so from an empty bank the bound is `min_gather_steps=1 + min_crafts=2 = 3`
-    — already comfortably under the 100 floor, so BOTH states are now
-    plannable (the empty-bank case is no longer the "correctly refused"
-    contrast this test used to demonstrate; see the docstring update on
-    `test_unreachable_depth_is_refused_before_the_search` below for why). What
-    banking still demonstrably does is SHRINK the bound to `min_gather_steps=0
-    + min_crafts=1 = 1` (verified directly against `min_plan_length`, not
-    inferred) — the credit still counts, it just no longer flips a True/False
-    boundary in this single-raw-leaf fixture."""
-    gd = _deep_chain_gd()
-    recipes = gd.crafting_recipes
-
-    assert min_plan_length("deep_widget", 1, recipes, {}, gd.max_gather_yield,
-                           equip=False) == 3
-    assert min_plan_length("deep_widget", 1, recipes, {"mid_part": 11},
-                           gd.max_gather_yield, equip=False) == 1
 
 
 def test_relevant_actions_scopes_the_search_to_the_closure_plus_deposit() -> None:

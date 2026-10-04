@@ -60,100 +60,17 @@ class UpgradeEquipmentGoal(Goal):
 
     @property
     def max_depth(self) -> int:
-        """Deeper than the base 15 so a craft+equip plan whose lower bound sits
-        just under the base bound is actually FOUND by the A*, not falsely
-        admitted then abandoned. is_plannable gates on min_plan_length (an
-        A*-budget HEURISTIC, not a proved bound — see that module's PROOF STATUS
-        paragraph; the cited NOT-PROVED: Formal.PlanModel.min_plan_length_le_plan never
-        existed, corrected 2026-08-13): for a 2nd
-        copper_ring with bar×4/ore×8 in hand the bound is 15 == base max_depth, so
-        the goal was admitted, yet the real plan (gather ×12 → craft bar ×2 →
-        craft ring → equip) is 16 actions > 15 — the planner returned plan_len 0
-        and the bot fell to a discretionary skill-grind (wooden_shield) instead of
-        crafting the ring it could plainly make. 32 covers single-tier gear
-        craft+equip from materials-in-hand while still routing genuinely deep
-        from-scratch chains to GatherMaterials accumulation via the depth-
-        reachability split.
+        """Deeper than the base 15, for the A* searches this goal still reaches
+        (the two deliberate handoffs, `upgrade:uncommitted` and
+        `upgrade:ge_venue`). A committed upgrade is otherwise decomposed by the
+        walk, which has no depth cap. The base 15 cut real single-tier plans
+        short: a 2nd copper_ring with bar×4/ore×8 in hand is 16 actions (gather
+        ×12, craft bar ×2, craft ring, equip), and the planner returned none.
 
-        UPDATED 2026-08-13 (planner-gather-batching, Task 3): the mint term
-        `min_plan_length` feeds into this gate switched from raw-UNIT counting
-        to `min_gather_steps` (distinct raw leaves still unmet, not units).
-        copper_boots (80 raw copper_ore through ONE recipe leaf) is now
-        genuinely depth-REACHABLE and no longer routes to GatherMaterials —
-        verified against the real planner, see
-        `tests/test_ai/test_upgrade_reachability_gate.py
-        ::test_is_plannable_admits_from_scratch_copper_boots`. steel_boots (480
-        raw iron_ore cascading through THREE recipe tiers: steel_bar <- iron_bar
-        <- iron_ore) is ALSO now admitted, and correctly so: `min_crafts`
-        counts one craft per produced node as a sound LOWER bound
-        "irrespective of per-action craft batching" (its own docstring) — a
-        lower bound is allowed to be loose, and `is_plannable` is a
-        WASTE-AVOIDANCE filter over that bound, not a soundness gate (its
-        purpose, stated a few lines above: skip the search only when NO plan
-        CAN exist). Real craft batching (`craft_batch_size_pure`) is bounded
-        by inventory space, and for `steel_bar` that space is exhausted by
-        `iron_bar`'s own 80-raw-unit footprint before a single `steel_bar`
-        batch can exceed quantity 1, cascading across three recipe tiers — so
-        the real planner still cannot find a plan within this depth, but that
-        is now a BOUNDED cost (one timed-out search, then Task 11/12's memo),
-        not a silently-lost goal. Task 3's swap unmasked this pre-existing
-        `min_crafts` looseness; it did not create it — the raw-unit gather
-        term used to be large enough to exceed `max_depth` on its own, hiding
-        it. An inventory-aware `min_crafts` is the real fix and is out of
-        scope here; see `tests/test_ai/test_strategy_driver.py`'s
-        `steel_boots` cases (which now assert admission-plus-bounded-timeout,
-        not rejection) and Task 3's report for the reproducer and the exact
-        `craft_batch_size_pure` mechanism.
-
-        SECOND RESIDUAL, found by Task 3's own code review (2026-08-13): the
-        depth-reject branch this docstring describes is LIVE-DEAD on real
-        game data, not merely loosened. Computed `min_plan_length` over all
-        321 recipes in `formal/sim/game_data_snapshot.json`: MAXIMUM 15
-        (the `greater_*_amulet` family), threshold 32, COUNT EXCEEDING = 0.
-        No real recipe ever fails this gate, so `is_plannable` can never
-        return False via the depth branch in production. At the time of this
-        review (Task 3, 2026-08-13) its two downstream consumers of that
-        False — `strategy_driver._gather_goal_for_unreachable_equippable`
-        and `objective_step_goal`'s branch-3 fallback — were unreachable
-        code on real data: the cross-cycle material-accumulation valve those
-        provide (see `_equippable_goal`'s docstring) did not fire for ANY
-        real equippable, not just deep 3-tier ones. `steel_boots` (three
-        tiers, the `min_crafts` residual above) neither routed to
-        incremental gathering NOR planned — it used to route, and then just
-        timed out.
-
-        `tests/test_ai/test_strategy_driver.py`'s 3 tests that exercise the
-        depth-reject/gather-routing branches (retargeted after their old
-        2-tier witnesses, `copper_boots`/`feather_coat`, stopped exceeding
-        `max_depth`) use a synthetic 35-distinct-raw-material fixture that no
-        real recipe approaches — the largest real recipe has 7 direct inputs,
-        and EIGHT are tied there: `adamantite_fishing_rod`,
-        `dark_horned_helmet`, `duskarmor`, `dust_amulet`, `eternal_red_ring`,
-        `hell_armor`, `skullforged_pants`, `vital_armor`. (This listed five
-        until 2026-08-13, silently dropping the first three; recomputed over
-        `formal/sim/game_data_snapshot.json`, whose 321 recipes distribute
-        1:47, 2:35, 3:35, 4:55, 5:98, 6:43, 7:8.) This was left as a design
-        decision for a follow-up task with these numbers in hand: raise the
-        threshold's bite by tightening `min_crafts` (the first residual), or
-        accept the valve is currently vestigial and remove/repurpose the
-        dead branches — not something to change in Task 3 itself.
-
-        UPDATED 2026-08-14 (stop-at-the-achievable-step, Task 1): that
-        follow-up task took the second option. `_equippable_goal` — the only
-        one of the two consumers named above that actually read `is_plannable`
-        to decide routing (`objective_step_goal`'s branch-3 never did; it still
-        does not call `actionable_step` either — see "Why only one site broke"
-        in the design spec) — no longer reads it. It asks `actionable_step`
-        directly and routes whenever the deepest achievable node differs from
-        the goal, not when this depth gate rejects. The depth branch above is
-        unchanged and still never fires on real data (the count above still
-        holds); it simply stopped being anyone's routing trigger.
-        `_gather_goal_for_unreachable_equippable` (reached from
-        `_equippable_goal`) now fires for real equippables, including
-        `steel_boots` — the trigger moved, not the destination. `is_plannable`
-        remains real elsewhere, purely as a waste-avoidance filter over this
-        lower bound (skip a search that provably cannot find a plan), never as
-        a routing decision."""
+        HISTORY: this docstring used to describe `is_plannable`'s depth gate
+        over `min_plan_length` (an A*-budget heuristic that never fired on real
+        data: max 15 over all 321 recipes against 32). Phase 3-2 deleted the
+        gate and both bounds; the goal's answer is the walk's own."""
         return 32
 
     def value(self, state: WorldState, game_data: GameData,

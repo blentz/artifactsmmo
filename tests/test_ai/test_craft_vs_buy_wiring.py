@@ -279,39 +279,6 @@ def _satchel_gd() -> GameData:
     return gd
 
 
-def test_a_secondary_resource_drop_leaf_is_not_a_currency_block() -> None:
-    """A leaf gatherable ONLY via a SECONDARY drop (`resource_drops_full` — a
-    gem/algae dropped at a low rate, absent from the primary `resource_drops`
-    map) is still gatherable, so it is NOT a currency-buy leaf even when a
-    located gold vendor also sells it. Live census 2026-07-11: `algae`
-    (fish_merchant @ 50 gold, but a secondary resource drop) FALSELY pruned every
-    recipe needing it (earth_boost_potion, greater_health_potion) at is_plannable,
-    because `_classify_leaves` tested the primary `resource_drops.values()`
-    (which — per its own docstring — understates gatherability) instead of
-    `gatherable_drop_items()`. Production then skipped goals it could plan by
-    simply gathering the leaf."""
-    from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
-
-    gd = GameData()
-    gd._crafting_recipes = {"widget": {"algae": 1}}
-    gd._item_stats = {
-        "widget": ItemStats(code="widget", level=1, type_="weapon",
-                            crafting_skill="weaponcrafting", crafting_level=1),
-    }
-    # algae: NOT a primary resource_drop, but a SECONDARY drop of algae_field.
-    gd._resource_drops = {}
-    gd._resource_drops_full = {"algae_field": [("algae", 100, 1, 1)]}
-    # ...and a located gold vendor the character cannot afford (the pre-fix trap).
-    gd._npc_stock = {"fish_merchant": {"algae": 50}}
-    gd._npc_buy_currency = {"fish_merchant": {"algae": "gold"}}
-    gd._npc_locations = {"fish_merchant": (0, 0)}
-    gd._task_coin_rewards = {"chicken": 1}
-    state = make_state(skills={"weaponcrafting": 5}, inventory={"gold": 0},
-                       bank_items={}, x=0, y=0)
-    result = analyze_currency_leaves({"widget": 1}, state, gd)
-    assert result.blocked is False, "gatherable-via-secondary-drop leaf must NOT block"
-
-
 def test_relevant_actions_emits_npcbuy_for_deep_closure_currency_buy_leaf() -> None:
     """C4 Task 1: a deep recipe-closure leaf that is currency-bought (not
     craftable, not a resource/monster drop) must surface an NpcBuyAction even
@@ -372,7 +339,6 @@ def test_event_npc_vendor_blocked_but_not_funded() -> None:
                        bank_items={}, x=0, y=0)
 
     result = analyze_currency_leaves({"widget": 1}, state, gd)
-    assert result.blocked is True, "event-only vendor leaf must block is_plannable"
     assert result.funding_target is None, (
         "must NOT route ReachCurrencyGoal toward an event/non-task currency: "
         f"got {result.funding_target}"
@@ -401,7 +367,6 @@ def test_gold_leaf_blocked_but_not_funded() -> None:
                        bank_items={}, x=0, y=0)
 
     result = analyze_currency_leaves({"widget": 1}, state, gd)
-    assert result.blocked is True, "unaffordable gold leaf must block is_plannable"
     assert result.funding_target is None, (
         "must NOT route ReachCurrencyGoal toward gold (unfundable by tasks): "
         f"got {result.funding_target}"
@@ -446,7 +411,6 @@ def test_gold_leaf_affordable_from_pocket_gold() -> None:
     state = make_state(skills={"weaponcrafting": 5}, gold=500 + _GOLD_VENDOR_RESERVE,
                        inventory={}, bank_items={}, x=0, y=0)
     result = analyze_currency_leaves({"widget": 1}, state, gd)
-    assert result.blocked is False, "pocket gold must fund a gold-priced leaf"
     assert result.gold_deficit == 0, result.gold_deficit
 
 
@@ -463,18 +427,7 @@ def test_gold_leaf_affordable_pocket_plus_bank_gold() -> None:
                        bank_gold=300 + _GOLD_VENDOR_RESERVE,
                        inventory={}, bank_items={}, x=0, y=0)
     result = analyze_currency_leaves({"widget": 1}, state, gd)
-    assert result.blocked is False
     assert result.gold_deficit == 300, result.gold_deficit
-
-
-def test_gold_leaf_unknown_bank_gold_not_credited() -> None:
-    """bank_gold=None is UNKNOWN, not zero — it credits nothing (GAP-1's
-    bank-stock rule): pocket 200 alone < 500 → blocked, honest deferral."""
-    gd = _gold_vendor_gd()
-    state = make_state(skills={"weaponcrafting": 5}, gold=200, bank_gold=None,
-                       inventory={}, bank_items={}, x=0, y=0)
-    result = analyze_currency_leaves({"widget": 1}, state, gd)
-    assert result.blocked is True, "unknown bank gold must not fund the leaf"
 
 
 def test_gold_leaf_owned_stock_needs_no_gold() -> None:
@@ -484,47 +437,10 @@ def test_gold_leaf_owned_stock_needs_no_gold() -> None:
     state = make_state(skills={"weaponcrafting": 5}, gold=0,
                        inventory={"rare_gem": 1}, bank_items={}, x=0, y=0)
     result = analyze_currency_leaves({"widget": 1}, state, gd)
-    assert result.blocked is False
     assert result.gold_deficit == 0, result.gold_deficit
 
 
 # --- Task 3 (gold-reserve discipline, 2026-07-08) ---------------------------
-
-def test_gold_leaf_reserve_boundary_affordable() -> None:
-    """Reserve-boundary case: pocket gold exactly equals price + reserve
-    (500 + 100). `gold_on_hand >= price*qty + reserve` (P4a exact-int form,
-    no signed subtraction) must read affordable AT the boundary, not past
-    it — this is the currency_demand.py module-docstring invariant, pinned."""
-    gd = _gold_vendor_gd()
-    state = make_state(skills={"weaponcrafting": 5},
-                       gold=500 + _GOLD_VENDOR_RESERVE,
-                       inventory={}, bank_items={}, x=0, y=0)
-    result = analyze_currency_leaves({"widget": 1}, state, gd)
-    assert result.blocked is False
-
-
-def test_gold_leaf_reserve_boundary_minus_one_blocked() -> None:
-    """One gold short of the reserve-adjusted price blocks — same honest
-    deferral as plain unaffordable (no funding root; the bot earns gold by
-    its normal means and retries later)."""
-    gd = _gold_vendor_gd()
-    state = make_state(skills={"weaponcrafting": 5},
-                       gold=500 + _GOLD_VENDOR_RESERVE - 1,
-                       inventory={}, bank_items={}, x=0, y=0)
-    result = analyze_currency_leaves({"widget": 1}, state, gd)
-    assert result.blocked is True
-
-
-def test_gold_leaf_reserve_none_bank_still_uncredited() -> None:
-    """The reserve change must not disturb GAP-1's None-bank rule: an UNKNOWN
-    bank (None) credits nothing toward EITHER the price or the reserve —
-    pocket alone (500, short of the reserve-adjusted 600) still blocks."""
-    gd = _gold_vendor_gd()
-    state = make_state(skills={"weaponcrafting": 5}, gold=500, bank_gold=None,
-                       inventory={}, bank_items={}, x=0, y=0)
-    result = analyze_currency_leaves({"widget": 1}, state, gd)
-    assert result.blocked is True, "unknown bank gold must not fund the reserve either"
-
 
 def test_gold_leaf_deficit_sizing_respects_reserve_invariant() -> None:
     """WithdrawGold deficit-sizing derivation, pinned: pocket 100 + bank 500
@@ -541,7 +457,6 @@ def test_gold_leaf_deficit_sizing_respects_reserve_invariant() -> None:
     state = make_state(skills={"weaponcrafting": 5}, gold=pocket, bank_gold=bank,
                        inventory={}, bank_items={}, x=0, y=0)
     result = analyze_currency_leaves({"widget": 1}, state, gd)
-    assert result.blocked is False
     assert result.gold_deficit == 400, result.gold_deficit
     assert pocket + bank - 500 == _GOLD_VENDOR_RESERVE, (
         "post-buy total gold must land exactly at the reserve floor")
@@ -624,7 +539,6 @@ def test_item_currency_deficit_sizes_pocket_shortfall() -> None:
     admitted with no edge able to fire."""
     gd = _ticket_vendor_gd()
     result = analyze_currency_leaves({"lich_race_medal": 1}, _medal_state(), gd)
-    assert result.blocked is False
     assert result.currency_deficits == (("event_ticket", 100),), result.currency_deficits
 
 
@@ -845,7 +759,6 @@ def test_item_currency_route_skips_gold_vendor() -> None:
     state = make_state(inventory={}, bank_items={"event_ticket": 148},
                        gold=0, bank_gold=0, x=0, y=0)
     result = analyze_currency_leaves({"lich_race_medal": 1}, state, gd)
-    assert result.blocked is False, "the item-currency vendor funds the leaf"
     assert result.currency_deficits == (("event_ticket", 100),), result.currency_deficits
 
 
@@ -856,7 +769,6 @@ def test_item_currency_unaffordable_leaf_still_blocks() -> None:
     gd = _ticket_vendor_gd()
     state = make_state(inventory={}, bank_items={"event_ticket": 40}, x=0, y=0)
     result = analyze_currency_leaves({"lich_race_medal": 1}, state, gd)
-    assert result.blocked is True
     assert result.currency_deficits == (), result.currency_deficits
 
 
@@ -945,7 +857,6 @@ def test_tasks_coin_leaf_blocked_and_funded() -> None:
                        bank_items={}, x=0, y=0)
 
     result = analyze_currency_leaves({"satchel": 1}, state, gd)
-    assert result.blocked is True
     # jasper_crystal x2 (closure qty) @ 8 tasks_coin = 16
     assert result.funding_target == ("tasks_coin", 16), result.funding_target
 
@@ -1025,7 +936,6 @@ def test_directly_requested_currency_item_is_funded() -> None:
 
     state = make_state(inventory={}, bank_items={})
     result = analyze_currency_leaves({"gem": 1}, state, gd)
-    assert result.blocked is True, "unaffordable direct currency request must block"
     assert result.funding_target == ("tasks_coin", 8)
 
 
@@ -1046,7 +956,6 @@ def test_directly_requested_currency_item_affordable_not_blocked() -> None:
 
     state = make_state(inventory={"tasks_coin": 8}, bank_items={})
     result = analyze_currency_leaves({"gem": 1}, state, gd)
-    assert result.blocked is False
     assert result.funding_target is None
 
 
@@ -1092,7 +1001,6 @@ def test_joint_gold_leaves_each_safe_alone_overspend_together() -> None:
     state = make_state(skills={"jewelrycrafting": 1}, gold=500, bank_gold=0,
                        inventory={}, bank_items={}, x=0, y=0)
     result = analyze_currency_leaves({"gizmo": 1}, state, gd)
-    assert result.blocked is True, "gem_b cannot jointly be funded -> honest block"
     # gold_deficit reflects ONLY the admitted leaf (gem_a, 200) — the ferry
     # must never size for the rejected leaf (admit/emit symmetry).
     assert result.gold_deficit == 0, result.gold_deficit  # 200 admitted <= state.gold (500)
@@ -1107,7 +1015,6 @@ def test_joint_gold_leaves_both_admitted_when_budget_covers_the_sum() -> None:
     state = make_state(skills={"jewelrycrafting": 1}, gold=550, bank_gold=0,
                        inventory={}, bank_items={}, x=0, y=0)
     result = analyze_currency_leaves({"gizmo": 1}, state, gd)
-    assert result.blocked is False
     assert result.gold_deficit == 0, result.gold_deficit  # 450 admitted <= state.gold (550)
 
 
@@ -1127,7 +1034,6 @@ def test_joint_gold_leaves_admission_is_cheapest_first_not_iteration_order() -> 
     state = make_state(skills={"jewelrycrafting": 1}, gold=400, bank_gold=0,
                        inventory={}, bank_items={}, x=0, y=0)
     result = analyze_currency_leaves({"gizmo": 1}, state, gd)
-    assert result.blocked is True  # gem_a rejected -> closure still blocked
     assert result.gold_deficit == 0, result.gold_deficit  # only gem_b (100) admitted, <= 400
 
 
@@ -1143,5 +1049,4 @@ def test_joint_gold_leaves_deficit_sizes_only_the_admitted_leaf() -> None:
     state = make_state(skills={"jewelrycrafting": 1}, gold=50, bank_gold=450,
                        inventory={}, bank_items={}, x=0, y=0)
     result = analyze_currency_leaves({"gizmo": 1}, state, gd)
-    assert result.blocked is True
     assert result.gold_deficit == 150, result.gold_deficit

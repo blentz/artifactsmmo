@@ -20,15 +20,9 @@ There is **no craft lower bound and no whole-plan-length lower bound** in this
 module. Nothing here bounds `min_plan_length` against `plan.length`.
 
 The batched-gather change is therefore not falsifying a proof; it is landing
-beside an absence. What it does have is
-`Formal.MinGatherStepsBound.minGatherSteps_le_minGathers`: under `PosRecipes`
-the batched leaf count never exceeds the per-unit count — so against the RAW
-UNIT term the `is_plannable` gate can only become more permissive. That module's
-header states the one place the comparison does not carry over (the term this
-one REPLACED was `ceil_gathers(min_gathers …, max_gather_yield)`, and above
-yield 1 the leaf count can exceed it), with a kernel-checked witness. Production
-has called `min_gather_steps` directly since `c6a4089e`
-(`min_plan_length.py:47`); `ceil_gathers` is no longer on that path.
+beside an absence. (`min_plan_length`, `min_gather_steps` and the
+`MinGatherStepsBound` comparison between them were retired with the
+`is_plannable` gate they served, Phase 3-2.)
 
 ## What this models
 
@@ -95,8 +89,8 @@ The following are **outside this model** and are noted here for honesty:
      exists; proving A\* completeness is out of scope.
   4. **Batch crafting / multi-drop / BATCHED GATHERS** — `craft` produces
      exactly 1 copy, and `Action.gather` yields exactly 1 unit. `ceil_gathers`
-     (via `max_gather_yield`) accounts for multi-drop resources at the
-     `minPlanLength` level; the per-action model uses 1 for structural clarity.
+     (via `max_gather_yield`) accounted for multi-drop resources in the retired
+     `min_plan_length`; the per-action model uses 1 for structural clarity.
 
      **Divergence from the running planner (2026-08-13).** The production
      `GatherAction` now carries a `quantity`: ONE gather action serves a whole
@@ -107,16 +101,11 @@ The following are **outside this model** and are noted here for honesty:
      cost-mass machinery below are stated over `ExecState.gathers` as a count
      of ACTIONS, which a quantity-carrying gather would falsify unless that
      counter switched to units — and the plan-length results it would serve are
-     conditional on the retired `corner3` anyway. The property that actually
-     protects the admission gate across the batching switch is proved
-     separately — over the two EXTRACTED oracles rather than over this model,
-     and free of `corner3` (its only hypothesis is `PosRecipes`):
-     `Formal.MinGatherStepsBound.minGatherSteps_le_minGathers`.
+     conditional on the retired `corner3` anyway.
 -/
 
 import Formal.Extracted.MinGathers
 import Formal.Extracted.MinCrafts
-import Formal.Extracted.MinPlanLength
 import Formal.StepDispatch
 import Formal.Extracted.Bridges6
 
@@ -344,25 +333,6 @@ def SatisfiesEquip (plan : Plan) (item : String) (owned : List (String × Int))
   ValidPlan recipes owned plan ∧
   Action.equip item ∈ plan ∧
   1 ≤ dictGet (planHoldings recipes plan owned) item
-
--- ---------------------------------------------------------------------------
--- minPlanLength Lean wrapper
--- ---------------------------------------------------------------------------
-
-/-- Lean wrapper for the production-level `min_plan_length` composition:
-
-    `ceil_gathers(min_gathers(item, qty, recipes, owned), max_gather_yield)
-     + min_crafts(item, qty, recipes, owned)
-     + (if equip then 1 else 0)`
-
-This delegates to the extracted cores (`Extracted.MinPlanLength.min_plan_length`)
-and is the definition Tasks 5–7 prove a lower bound over. -/
-def minPlanLength (item : String) (qty : Int)
-    (recipes : List (String × List (String × Int)))
-    (owned : List (String × Int))
-    (maxGatherYield : Int)
-    (equip : Bool) : Int :=
-  Extracted.MinPlanLength.min_plan_length item qty recipes owned maxGatherYield equip
 
 -- ---------------------------------------------------------------------------
 -- Sanity check: the 2-action cheat plan is REJECTED
@@ -3394,8 +3364,11 @@ proven 0-sorry; this is the whole theorem reduced to exactly one lemma.
 
 **STATUS (2026-06-20): `corner3` RETIRED — intentionally not discharged.** A
 production-necessity audit established that this lower bound is NOT load-bearing:
-its sole consumer is `is_plannable` (`ai/goals/progression.py`'s `min_plan_length`
-gate), which functions purely as an A*-budget optimization. Both unsoundness
+its sole consumer was `is_plannable` (`ai/goals/progression.py`'s `min_plan_length`
+gate), which functioned purely as an A*-budget optimization, and which Phase 3-2
+of docs/PLAN_decision_architecture_redesign.md DELETED (2026-10-03) — so this
+lower-bound half now has no production consumer at all (a recorded residual: it
+is retired with the rest of the gather-count machinery, not kept as a pin). Both unsoundness
 failure modes are BENIGN — a false rejection reroutes to an incremental
 `GatherMaterialsGoal` on the same recipe path (`ai/strategy_driver.py` `_equippable_goal`
 ~437 / `objective_step_goal` ~490), and an over-admission falls through the

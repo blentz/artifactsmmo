@@ -62,7 +62,6 @@ import pathlib
 PRICING_PRODUCERS: frozenset[str] = frozenset({
     "acquisition_cost",
     "acquisition_cost_core",
-    "min_plan_length",
     "bid_vs_craft",
     "learning.projections",
 })

@@ -74,7 +74,6 @@ GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gathe
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
 SHOPPING_LIST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "shopping_list.py"
 MIN_GATHERS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "min_gathers.py"
-MIN_GATHER_STEPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "min_gather_steps.py"
 INTERMEDIATE_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "intermediate_batch.py"
 GATHER_STEP_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_step_target.py"
 MONSTER_DROP_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "monster_drop_selection.py"
@@ -5083,8 +5082,8 @@ _ALL_SRCS = [
     CYCLE_STEP_SRC,
     # Piece-C — feasibility router for depth-unreachable equippable roots.
     GATHER_STEP_TARGET_SRC,
-    # Gather-batching epic — batch-aware plan-length bound + closure rebatcher.
-    MIN_GATHER_STEPS_SRC, INTERMEDIATE_BATCH_SRC,
+    # Gather-batching epic — closure rebatcher.
+    INTERMEDIATE_BATCH_SRC,
     # #16 — efficiency-weighted strategic_value scorer.
     STRATEGIC_VALUE_SRC,
     # C1 — acquisition-leaf attainability (task-earnable + currency-buy disjuncts).
@@ -5465,42 +5464,6 @@ GATHER_BATCH_MUTATIONS = [
      "            break\n        inv = gather_apply_pure(inv, drop_item)\n",
      "    for _ in range(max(0, qty)):\n        if inv.used >= inv.cap:\n"
      "            break\n        inv = inv\n"),
-]
-
-
-# min_gather_steps mutations -- the batch-aware GATHER-ACTION lower bound that
-# replaced `ceil_gathers(min_gathers(...))` inside `min_plan_length`. Killed by
-# formal/diff/test_min_gather_steps_diff.py, which binds min_gather_steps to
-# Formal.MinGatherSteps over a DAG fuzz, a cyclic fuzz, and the holdings rows.
-MIN_GATHER_STEPS_MUTATIONS = [
-    # Count leaves with MULTIPLICITY instead of distinctly: a leaf shared by two
-    # branches is charged twice, so the "bound" exceeds the real action count and
-    # is_plannable rejects reachable goals. Killed by
-    # test_shared_leaf_counted_once.
-    ("min_gather_steps: leaves counted with multiplicity (dedupe dropped)",
-     "        return (leaves if item in leaves else [*leaves, item], owned)",
-     "        return ([*leaves, item], owned)"),
-    # Never record the leaf: every bound collapses to 0, which is trivially
-    # admissible but useless -- and wrong for any real chain. Killed by
-    # test_two_level_chain_is_one_leaf.
-    ("min_gather_steps: base case records no leaf",
-     "    if len(recipe) == 0:\n"
-     "        return (leaves if item in leaves else [*leaves, item], owned)",
-     "    if len(recipe) == 0:\n"
-     "        return (leaves, owned)"),
-    # Ignore holdings: what the character already owns no longer offsets demand,
-    # so a fully-covered material still counts a gather. Killed by
-    # test_holdings_cover_everything (all demand held -> 0 steps).
-    ("min_gather_steps: holdings ignored (used -> 0)",
-     "    used = min(held, qty)",
-     "    used = 0"),
-    # Boundary <= -> < on the satisfied test: at EXACTLY covered demand
-    # (remaining == 0) the walk should stop, but now descends and charges a
-    # gather for demand that is already met. Killed by
-    # test_holdings_cover_everything and test_zero_demand_breaks_the_bound.
-    ("min_gather_steps: satisfied boundary <= to <",
-     "    if remaining <= 0:",
-     "    if remaining < 0:"),
 ]
 
 
@@ -8425,8 +8388,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_monster_drop_apply_diff.py", survivors)
     run_group(GATHER_APPLY_SRC, GATHER_BATCH_MUTATIONS,
               "tests/test_ai/test_gather_apply_core.py", survivors)
-    run_group(MIN_GATHER_STEPS_SRC, MIN_GATHER_STEPS_MUTATIONS,
-              "formal/diff/test_min_gather_steps_diff.py", survivors)
     run_group(INTERMEDIATE_BATCH_SRC, SIZE_CLOSURE_GATHER_MUTATIONS,
               "tests/test_ai/test_intermediate_batch.py", survivors)
     run_group(GATHER_SELECTION_SRC, GATHER_SELECTION_MUTATIONS,

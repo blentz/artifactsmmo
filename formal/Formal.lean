@@ -58,10 +58,8 @@ import Formal.Extracted.InventoryCaps
 import Formal.Extracted.CyclesForProgress
 import Formal.Extracted.ScalarCore
 import Formal.Extracted.MinGathers
-import Formal.Extracted.MinGatherSteps
 import Formal.Extracted.GatherFloor
 import Formal.Extracted.MinCrafts
-import Formal.Extracted.MinPlanLength
 import Formal.Extracted.EquipmentScoring
 import Formal.Extracted.EquipValue
 import Formal.Extracted.Bridges
@@ -204,7 +202,6 @@ import Formal.Liveness.WitnessAcquirable
 import Formal.DoomedMemo
 import Formal.CurrencyAffordFastFail
 import Formal.PlanModel
-import Formal.MinGatherStepsBound
 import Formal.LeafAttainable
 import Formal.ObtainModelReady
 import Formal.Decompose

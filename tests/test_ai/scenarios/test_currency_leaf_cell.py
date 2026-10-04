@@ -143,7 +143,6 @@ def test_the_step_graph_routes_to_funding_not_to_gathering(
     state = _state(unlocked)
     assert state.inventory.get(TASKS_COIN_CODE, 0) == 0
     analysis = analyze_currency_leaves({LEAF: 1}, state, unlocked)
-    assert analysis.blocked is True
     assert analysis.funding_target == (TASKS_COIN_CODE, LEAF_PRICE)
     goal = objective_step_goal(ObtainItem(code=LEAF, quantity=1), state,
                                unlocked, NO_PROFILE_CONTEXT, root=_root(),
@@ -160,7 +159,6 @@ def test_holding_the_coins_flips_the_arm_and_the_goal(
     funded = dataclasses.replace(
         state, inventory={**state.inventory, TASKS_COIN_CODE: 40})
     analysis = analyze_currency_leaves({LEAF: 1}, funded, unlocked)
-    assert analysis.blocked is False
     assert analysis.funding_target is None
     goal = objective_step_goal(ObtainItem(code=LEAF, quantity=1), funded,
                                unlocked, NO_PROFILE_CONTEXT, root=_root(),

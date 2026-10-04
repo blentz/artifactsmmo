@@ -805,8 +805,6 @@ open Formal.PriorityBand
 #print axioms Formal.PlannerDepthBound.reachable_planLen_eq_depth
 #print axioms Formal.PlannerDepthBound.reachable_depth_le_maxDepth
 #print axioms Formal.PlannerDepthBound.plan_length_le_max_depth
-#print axioms Formal.PlannerDepthBound.reachable_not_satisfying_when_lb_exceeds_depth
-#print axioms Formal.PlannerDepthBound.copper_boots_unreachable_under_upgrade_depth
 #print axioms Formal.RegearEdge.set_on_levelup
 #print axioms Formal.RegearEdge.set_on_loss
 #print axioms Formal.RegearEdge.clear_iff_no_upgrade
@@ -1061,9 +1059,6 @@ open Formal.PriorityBand
 #print axioms Formal.PlanModel.canonicalPlan_valid
 #print axioms Formal.PlanModel.length_eq_counts
 #print axioms Formal.PlanModel.gear_obtainable_of_perActionLength_le
-#print axioms Formal.MinGatherStepsBound.minGatherSteps_le_minGathers
-#print axioms Formal.MinGatherStepsBound.twin_step
-#print axioms Formal.MinGatherStepsBound.posRecipes_of_entries
 #print axioms Formal.ArbiterSelect.findCommitted_some_props
 #print axioms Formal.ArbiterSelect.guard_precedes_means_in_guardsFirst
 #print axioms Formal.ArbiterSelect.select_pure_any_plannable_guard_wins

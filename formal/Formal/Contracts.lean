@@ -2393,17 +2393,10 @@ example : Formal.GoalValueBands.gatherMaterialsValue 0
     = Formal.GoalValueBands.gatherMaterialsFloor :=
   @Formal.GoalValueBands.gatherMaterials_cold_eq_floor
 
--- PlannerDepthBound (planner returns no plan longer than max_depth ⇒ the
--- depth-based reachability gate is sound):
+-- PlannerDepthBound (planner returns no plan longer than max_depth):
 example : ∀ (maxDepth : Nat) (n : Formal.PlannerDepthBound.Node),
     Formal.PlannerDepthBound.Reachable maxDepth n → n.planLen ≤ maxDepth :=
   @Formal.PlannerDepthBound.plan_length_le_max_depth
-
-example : ∀ (maxDepth lb : Nat) (satisfyingLen : Formal.PlannerDepthBound.Node → Prop),
-    (∀ n, satisfyingLen n → n.planLen ≥ lb) → maxDepth < lb →
-    ∀ (n : Formal.PlannerDepthBound.Node),
-      Formal.PlannerDepthBound.Reachable maxDepth n → ¬ satisfyingLen n :=
-  @Formal.PlannerDepthBound.reachable_not_satisfying_when_lb_exceeds_depth
 
 -- RegearEdge (gear-review latch transition mirroring RegearEdge.update):
 -- set_on_levelup: level-up + craftable upgrade ⇒ latch ON.

@@ -148,14 +148,11 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
     """Map an equippable target to UpgradeEquipment when it is reachable, else to
     GatherMaterials for the strategy's next achievable step toward it.
 
-    Routes on the STEP, not on a depth-bound proxy for it. `is_plannable`
-    compares `min_plan_length` against `max_depth` 32, and `min_plan_length`
-    maxes at 15 across all 321 real recipes (see `UpgradeEquipmentGoal.max_depth`'s
-    SECOND RESIDUAL), so it never rejects — using it as a trigger here was dead
-    code: the arbiter planned a 100,080-node search that timed out instead of
-    the 2-node gather `actionable_step` had already identified. `is_plannable`
-    is still consulted elsewhere as a waste-avoidance filter; it is not used
-    by this function.
+    Routes on the STEP, not on a depth-bound proxy for it. The proxy it once
+    used (`is_plannable`'s `min_plan_length <= max_depth`, deleted in Phase
+    3-2) maxed at 15 against 32 over all 321 real recipes, so it never
+    rejected: the arbiter planned a 100,080-node search that timed out instead
+    of the 2-node gather `actionable_step` had already identified.
 
     The direct question this function asks is the one the helper asks
     internally: is the deepest achievable node (`actionable_step`) something
@@ -237,12 +234,8 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
                     target_item=currency,
                     needed={currency: currency_grind_target_pure(held, price)})
         return GatherMaterialsGoal(target_item=code, needed={code: 1})
-    # Route on the STEP, not on a depth-bound proxy for it. `is_plannable`
-    # compares min_plan_length against max_depth 32, and min_plan_length maxes
-    # at 15 across all 321 real recipes (see UpgradeEquipmentGoal.max_depth's
-    # SECOND RESIDUAL), so it never rejects and this routing was dead — the
-    # arbiter planned a 100,080-node search that timed out instead of the
-    # 2-node gather `actionable_step` had already identified.
+    # Route on the STEP, not on a depth-bound proxy for it (see the docstring:
+    # the deleted `is_plannable` depth gate never rejected on real data).
     #
     # The direct question is the one the helper asks internally: is the deepest
     # achievable node something OTHER than the goal itself? It self-corrects in

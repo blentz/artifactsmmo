@@ -90,11 +90,10 @@ might have freed room for it — the simpler rule is preferred so the policy
 stays a one-line-provable prefix invariant rather than a combinatorial
 search).
 
-Rejected gold candidates fall through to the SAME `blocked` signal as a
+Rejected gold candidates fall through to the SAME unaffordable verdict as a
 leaf with no usable vendor at all (via `currency_afford_plannable_pure`,
-unchanged) — is_plannable prunes exactly as before, just now on the JOINT
-verdict instead of a per-leaf one that could pass two leaves that cannot
-both be bought.
+unchanged), now on the JOINT verdict instead of a per-leaf one that could pass
+two leaves that cannot both be bought.
 
 Item-currency legs are untouched by this task: item-currency affordability
 stays per-leaf (independent stacks, no shared pool the way gold is), computed
@@ -126,16 +125,15 @@ affordability (`item_route`), then `demand - pocket` and capped at KNOWN bank
 stock. The ferry is transfer-only and spends nothing, so — as with gold — it
 cannot disturb any affordability verdict already reached above.
 
-ONE closure walk serves two consumers (DRY), each reading a DIFFERENT signal:
-  - `blocked`  — GatherMaterialsGoal.is_plannable fast-fails when any currency-buy
-    leaf is unaffordable (currency_afford_plannable_pure is the proved live
-    decision). A leaf with no usable vendor at all is also blocking.
+ONE closure walk serves its consumers (DRY). The `blocked` signal it also
+returned fed only `GatherMaterialsGoal.is_plannable`, deleted in Phase 3-2;
+the walk's own BUY-route gates answer that question now.
   - `funding_target` — the arbiter routes ReachCurrencyGoal to FUND the currency.
     This fires ONLY for a leaf whose currency is `tasks_coin` (the currency
     ReachCurrencyGoal can actually produce by completing tasks — C2
     CompleteTaskAction mints tasks_coin, nothing else). A leaf priced in gold or
-    a non-task currency is `blocked` when unaffordable, but is NOT a funding
-    target — ReachCurrencyGoal cannot earn that currency, so routing to it would
+    a non-task currency, when unaffordable, is NOT a funding target —
+    ReachCurrencyGoal cannot earn that currency, so routing to it would
     chase an unfundable goal; the bot earns gold/other currencies by its normal
     means instead. Among the leaf's eligible vendors, the one with the FEWEST
     funding cycles (proved `funding_cycles_pure`) is chosen — a semantic key, not
@@ -186,8 +184,6 @@ class _CurrencyLeaf(NamedTuple):
 class CurrencyLeafAnalysis(NamedTuple):
     """Result of walking a recipe closure for currency-buy leaves.
 
-    `blocked`: at least one currency-buy leaf is unaffordable (and unowned) via
-    every usable vendor — GatherMaterialsGoal.is_plannable must prune.
     `funding_target`: (tasks_coin, required_amount) for the FIRST unaffordable
     leaf the arbiter can fund via ReachCurrencyGoal, or None when no unaffordable
     leaf is tasks_coin-funded.
@@ -205,7 +201,6 @@ class CurrencyLeafAnalysis(NamedTuple):
     never alphabetical).
     """
 
-    blocked: bool
     funding_target: tuple[str, int] | None
     gold_deficit: int
     currency_deficits: tuple[tuple[str, int], ...]
@@ -339,8 +334,8 @@ def _admit_gold_leaves(
 def analyze_currency_leaves(
     needed: dict[str, int], state: WorldState, game_data: GameData
 ) -> CurrencyLeafAnalysis:
-    """Walk the recipe closure of `needed` once, returning the `blocked` signal
-    (for is_plannable) and the `funding_target` (for the arbiter)."""
+    """Walk the recipe closure of `needed` once, returning the `funding_target`
+    (for the arbiter) and the gold / item-currency deficits (for the ferry)."""
     bank = state.bank_items or {}
     # Gold on hand: pocket + KNOWN bank gold. `bank_gold or 0` is the GAP-1
     # unknown-bank rule — None means unknown, which credits nothing (never a
@@ -357,23 +352,20 @@ def analyze_currency_leaves(
     gold_demand = sum(
         (lf.gold_price or 0) * lf.qty for lf in leaves if lf.leaf in admitted)
 
-    blocked = False
     funding_target: tuple[str, int] | None = None
 
     for lf in leaves:
         # affordable = via item currency (unchanged, per-leaf) OR admitted
         # into the joint gold budget. currency_afford_plannable_pure is the
-        # proved live decision: a leaf is only blocking when not affordable
-        # AND not already owned in sufficient quantity.
+        # proved decision: a leaf needs funding only when not affordable AND
+        # not already owned in sufficient quantity.
         affordable = lf.item_affordable or (lf.gold_price is not None and lf.leaf in admitted)
         if currency_afford_plannable_pure(True, affordable, lf.owned, lf.qty):
             continue
 
-        blocked = True  # is_plannable must prune; the leaf cannot be acquired now.
-
         if not lf.fundable:
-            continue  # gold/event/non-task currency leaf: blocked but unfundable;
-            #           keep scanning for a later tasks_coin-funded blocking leaf.
+            continue  # gold/event/non-task currency leaf: unfundable; keep
+            #           scanning for a later tasks_coin-funded leaf.
 
         floor = game_data.min_task_coin_reward()  # ≥1, enforced at load (C2)
         # Pick the vendor needing the FEWEST funding cycles (semantic, proved
@@ -388,9 +380,9 @@ def analyze_currency_leaves(
             scored.append((key, currency, target))
         _key, best_currency, best_target = min(scored, key=lambda s: s[0])
         funding_target = (best_currency, best_target)
-        break  # blocked is already True and we have the FIRST fundable target.
+        break  # the FIRST fundable unaffordable leaf is the target.
 
     return CurrencyLeafAnalysis(
-        blocked=blocked, funding_target=funding_target,
+        funding_target=funding_target,
         gold_deficit=max(0, gold_demand - state.gold),
         currency_deficits=_currency_deficits(leaves, state))

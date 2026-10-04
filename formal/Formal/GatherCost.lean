@@ -275,9 +275,8 @@ strictly between `q₁` and `q₂` so the `min` term is live on both sides too.
 `mismatch = true` throughout, so the loadout term is LIVE in every witness —
 at `mismatch = false` the third summand is identically `0` and these examples
 would say nothing about the term this file was amended to carry.
-Contrast `Formal.MinGatherStepsBound`'s `PosRecipes`, which really can fail —
-these side conditions cannot, so the witness is a one-line application rather
-than a hunt for a counterexample-free corner.
+These side conditions cannot fail, so the witness is a one-line application
+rather than a hunt for a counterexample-free corner.
 
 Each single-literal hypothesis (`0 ≤ 6`, `0 ≤ 100`, `3 ≤ 9`, …) closes with
 `decide` — confirmed against this build. What does NOT reduce under kernel
