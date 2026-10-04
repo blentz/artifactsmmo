@@ -1073,6 +1073,9 @@ class GamePlayer:
         client = ClientManager().client
         self._initialize(client)
         self._maybe_periodic_refresh(client)
+        # Mirrors a live bot's start: the persisted intention is the
+        # commitment (`--committed` still overrides it, in `plan_from_state`).
+        self._arbiter.resume_intention()
         return self.plan_from_state(committed=committed)
 
     def plan_from_state(self, committed: str | None = None) -> PlanReport:
@@ -1165,6 +1168,9 @@ class GamePlayer:
         self._initialize(client)
         if self.state is not None:
             self._resume_plan_cache(self.state, self.game_data)
+            # The intention a previous process held (Phase 4-1b): the arbiter
+            # resumes it instead of choosing from scratch.
+            self._arbiter.resume_intention()
 
         print(f"[{self._now()}] Starting play loop for {self.character}")
 

@@ -879,6 +879,9 @@ One record, `intention`, per character in the learning DB: the root and the step
 
 - **4-1a built (2026-10-04).** `select_pure` keeps the prior commitment when a guard wins (`new_committed` defaults to `committed_repr`, set to the chosen repr only for a means); the hand model `ArbiterSelect.selectPure` returns the prior `committed`, the extraction is regenerated, and `Bridges2.arbiter_select_bridge` is re-proved with the walk lemma parametrised by the kept commitment `k`. The guard-wins safety theorems are unchanged (they speak to the CHOICE, not the commitment). Mutants: the old "commit on guard win" re-anchored, plus "guard win clears the commitment" (both verified killed by the differential). Expected live: `commitment_change` falls (it fired on every guard win), and the interrupted grind resumes through the sticky try after the rest. The stuck detector still reads fight → rest → fight as `GOAL_OSCILLATION` until 4-2a.
 
+- **4-1a pushed @6fcfffec.**
+- **4-1b built (2026-10-04).** New learning-DB table `intention` (character, `committed_repr`, `began_ts`), one row while a commitment exists. The arbiter writes it on every commitment change (`LearningStore.save_intention`; re-saving the same goal keeps `began_ts`, None deletes the row), and `StrategyArbiter.resume_intention` reads it back: `run()` calls it on start (before the first decision) and `plan_once` too, so the CLI mirrors a live bot (`--committed` still overrides). The commitment used to be memory-only and was lost on every restart. `plan_commitment` (the plan legs) is unchanged; it folds into the intention in 4-3.
+
 **Increments:** 4-1a guard win keeps the commitment (arbiter + `ArbiterSelect` model); 4-1b the persisted `intention` record (replaces `_committed_repr` and `plan_commitment`); 4-2a progress measure + stall abandonment (replaces the goal-level ladder); 4-2b cycle budget + re-rank (replaces focus aging, RegearEdge); 4-3 deletions.
 
 ## Risks and open questions

@@ -157,6 +157,36 @@ class TestPlayerRun:
                                         with pytest.raises(KeyboardInterrupt):
                                             player.run()
 
+    def test_run_resumes_the_persisted_intention_before_the_first_decision(self):
+        """Phase 4-1b: the commitment a previous process persisted is adopted
+        on start, so a restart resumes instead of choosing from scratch."""
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+        order: list[str] = []
+
+        def fake_wait():
+            raise KeyboardInterrupt
+
+        def first_decision(*_a: object, **_k: object) -> None:
+            order.append("decide")
+            raise KeyboardInterrupt
+
+        with patch.object(ClientManager_mock := MagicMock(), "client", client):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+                with _patch_game_data_load():
+                    with patch.object(player, "_fetch_world_state", return_value=make_state()), \
+                            patch.object(player, "_wait_for_cooldown", side_effect=fake_wait), \
+                            patch.object(player, "_maybe_periodic_refresh"), \
+                            patch.object(player, "_reconcile_open_orders"), \
+                            patch.object(player, "_build_actions", return_value=[]), \
+                            patch.object(player._arbiter, "resume_intention",
+                                         side_effect=lambda: order.append("resume")), \
+                            patch.object(player, "_plan_or_reuse", side_effect=first_decision), \
+                            patch("artifactsmmo_cli.ai.player.time.sleep"):
+                        with pytest.raises(KeyboardInterrupt):
+                            player.run()
+        assert order == ["resume", "decide"]
+
     def test_initial_bank_load_before_first_plan(self):
         """The bank MUST be synced into state during init (before the first
         _build_actions/plan). Otherwise bank_items stays None until the ~20-action

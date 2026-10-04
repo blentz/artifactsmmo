@@ -23,6 +23,8 @@ from artifactsmmo_cli.ai.learning.models import (
     CraftYieldObservation,
     Cycle,
     DecisionEvent,
+    Intention,
+    IntentionBase,
     LearnedSetting,
     LoadoutProfileObservation,
     PlanBodyLog,
@@ -1477,6 +1479,41 @@ class LearningStore:
                 s.commit()
         except SQLAlchemyError as e:
             print(f"[learning] save_plan_commitment failed: {e}")
+
+    def save_intention(self, committed_repr: str | None) -> None:
+        """Record this character's commitment (Phase 4-1b). None ends the
+        intention (the row is deleted); the same repr again keeps `began_ts`;
+        a different one starts a new intention now."""
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(
+                    select(Intention).where(Intention.character == self._character)
+                ).first()
+                if committed_repr is None:
+                    if row is not None:
+                        s.delete(row)
+                elif row is None:
+                    s.add(Intention(character=self._character,
+                                    committed_repr=committed_repr,
+                                    began_ts=datetime.now(tz=timezone.utc).isoformat()))
+                elif row.committed_repr != committed_repr:
+                    row.committed_repr = committed_repr
+                    row.began_ts = datetime.now(tz=timezone.utc).isoformat()
+                    s.add(row)
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] save_intention failed: {e}")
+
+    def load_intention(self) -> IntentionBase | None:
+        """This character's persisted intention, or None when there is none
+        (or on DB error)."""
+        try:
+            with SqlSession(self._engine) as s:
+                return s.exec(
+                    select(Intention).where(Intention.character == self._character)
+                ).first()
+        except SQLAlchemyError:
+            return None
 
     def load_plan_commitment(self) -> PlanCommitmentBase | None:
         """Read the live commitment row, or None when absent / on DB error."""

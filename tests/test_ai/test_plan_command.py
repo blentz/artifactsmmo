@@ -60,6 +60,19 @@ def test_plan_once_seeds_committed_for_diagnostics():
     assert report.simulated_committed == "GrindCharacterXP(green_slime)"
 
 
+def test_plan_once_resumes_the_persisted_intention_like_a_live_bot():
+    """Phase 4-1b: a live bot starts committed to the intention it persisted,
+    so the diagnostic does too — before its own `--committed` override."""
+    player = GamePlayer(character="hero")
+    state = make_state()
+    with contextlib.ExitStack() as stack:
+        for cm in _plan_once_mocks(player, state):
+            stack.enter_context(cm)
+        resume = stack.enter_context(patch.object(player._arbiter, "resume_intention"))
+        player.plan_once()
+    resume.assert_called_once_with()
+
+
 def test_plan_once_crafting_target_from_fallback():
     """When chosen_step is None, plan_once derives the bank keep-set crafting_target
     from the first ObtainItem fallback (mirrors run())."""

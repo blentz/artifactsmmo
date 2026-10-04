@@ -762,6 +762,13 @@ class StrategyArbiter:
         # with its own log so arbiter and player events land in one batch.
         self.events = DecisionEventLog()
 
+    def resume_intention(self) -> None:
+        """Adopt the commitment persisted by a previous process (Phase 4-1b),
+        so a restart resumes what the character was doing instead of choosing
+        from scratch. No store, or no persisted intention: no commitment."""
+        row = self._history.load_intention() if self._history is not None else None
+        self._committed_repr = row.committed_repr if row is not None else None
+
     def set_event_log(self, events: DecisionEventLog) -> None:
         """Share the player's per-cycle decision-event buffer."""
         self.events = events
@@ -1022,6 +1029,10 @@ class StrategyArbiter:
         if new_committed != prev_committed:
             self.events.note(Mechanism.COMMITMENT_CHANGE, str(new_committed),
                              f"from={prev_committed}")
+            # The intention outlives the process (Phase 4-1b): written on every
+            # change, read back by `resume_intention` on start.
+            if self._history is not None:
+                self._history.save_intention(new_committed)
         # WHICH GUARD WON, if one did — set unconditionally so a cycle the walk
         # won clears the previous cycle's guard instead of inheriting it. The
         # match is `c.goal is chosen`: `select_pure` returns a candidate's own

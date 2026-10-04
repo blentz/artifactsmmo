@@ -609,6 +609,25 @@ class PlanCommitment(PlanCommitmentBase, table=True):
     __tablename__ = "plan_commitment"
 
 
+class IntentionBase(SQLModel):
+    """The character's persisted intention (Phase 4 of
+    docs/PLAN_decision_architecture_redesign.md) — one row per character.
+
+    `committed_repr` is the means goal the arbiter is committed to; a guard
+    interrupts it and it resumes (4-1a). The row exists only while there is a
+    commitment, and it is loaded on start, so the commitment survives a
+    restart. `began_ts` is when this commitment began (unchanged by re-saving
+    the same goal): the clock the per-intention budget is measured from."""
+
+    character: str = Field(primary_key=True)
+    committed_repr: str
+    began_ts: str
+
+
+class Intention(IntentionBase, table=True):
+    __tablename__ = "intention"
+
+
 class CraftYieldObservation(SQLModel, table=True):
     """Observed output quantity and XP per craft run, per character + item.
 
