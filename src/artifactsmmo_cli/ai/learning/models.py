@@ -628,6 +628,21 @@ class Intention(IntentionBase, table=True):
     __tablename__ = "intention"
 
 
+class IntentionYieldBase(SQLModel):
+    """The root that spent its intention budget and yields for one turn
+    (Phase 4-2b) — one row per character while a yield is active.
+    `holder` is the commitment that took over, once one has; the yield clears
+    when that commitment ends."""
+
+    character: str = Field(primary_key=True)
+    yielded_root: str
+    holder: str | None = None
+
+
+class IntentionYield(IntentionYieldBase, table=True):
+    __tablename__ = "intention_yield"
+
+
 class CraftYieldObservation(SQLModel, table=True):
     """Observed output quantity and XP per craft run, per character + item.
 

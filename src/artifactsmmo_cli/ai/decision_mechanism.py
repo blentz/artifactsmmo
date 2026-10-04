@@ -47,6 +47,9 @@ class Mechanism(StrEnum):
     # The intention ended because its progress stopped moving (Phase 4-2a;
     # subject: the committed goal repr, detail: `stalled:<cycles>`).
     INTENTION_STALLED = "intention_stalled"
+    # The intention ended because it spent its cycle budget, and its root
+    # yields one turn (Phase 4-2b; detail: `budget:<cycles>`).
+    INTENTION_BUDGET = "intention_budget"
     REPLAN = "replan"
     # Recovery by countdown (subject: signal, goal or action key).
     STUCK_SIGNAL = "stuck_signal"

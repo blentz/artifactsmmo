@@ -111,3 +111,25 @@ def test_resume_without_a_store_or_an_intention_commits_to_nothing(tmp_path):
     empty = StrategyArbiter(GOAPPlanner(), history=_store(tmp_path))
     empty.resume_intention()
     assert empty._committed_repr is None
+
+
+def test_a_yield_round_trips_and_clears(tmp_path):
+    store = _store(tmp_path)
+    assert store.load_yield() is None
+    store.save_yield("ObtainItem(code='life_ring')", None)
+    store.save_yield("ObtainItem(code='life_ring')", "GrindCharacterXP(spider)")
+    row = store.load_yield()
+    assert (row.yielded_root, row.holder) == ("ObtainItem(code='life_ring')",
+                                              "GrindCharacterXP(spider)")
+    store.save_yield(None, None)
+    assert store.load_yield() is None
+    store.save_yield(None, None)  # clearing nothing is a no-op
+    assert store.load_yield() is None
+
+
+def test_a_db_error_on_yield_is_reported_or_reads_as_none(tmp_path, capsys):
+    store = _store(tmp_path)
+    _break_engine(store)
+    store.save_yield("ObtainItem(code='life_ring')", None)
+    assert "save_yield failed" in capsys.readouterr().out
+    assert store.load_yield() is None

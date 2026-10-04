@@ -69,7 +69,7 @@ def test_an_abandoned_intention_is_cleared_and_named(tmp_path):
     arbiter = StrategyArbiter(GOAPPlanner(), history=store)
     arbiter._committed_repr = "GrindCharacterXP(vampire)"
     store.save_intention("GrindCharacterXP(vampire)")
-    arbiter.abandon_intention("stalled:20")
+    arbiter.abandon_intention(Mechanism.INTENTION_STALLED, "stalled:20")
     assert arbiter._committed_repr is None
     assert store.load_intention() is None
     assert arbiter.events.drain() == [

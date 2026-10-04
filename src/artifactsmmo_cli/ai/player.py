@@ -85,7 +85,12 @@ from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
-from artifactsmmo_cli.ai.intention_progress import STALL_CYCLES, progress_measure, progressed
+from artifactsmmo_cli.ai.intention_progress import (
+    BUDGET_CYCLES,
+    STALL_CYCLES,
+    progress_measure,
+    progressed,
+)
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
@@ -274,7 +279,11 @@ class GamePlayer:
         # The intention's committed cycles since its progress last moved, and
         # the commitment they belong to (Phase 4-2a, `_track_intention`).
         self._intention_stall = 0
+        self._intention_cycles = 0
         self._intention_counted: str | None = None
+        # The root that spent its budget and yields one turn, and the
+        # commitment holding that turn (Phase 4-2b, `_advance_yield`).
+        self._yield: tuple[str, str | None] | None = None
         self._suppressed_goals: dict[str, int] = {}
         # Per-ACTION block (action_repr -> cycles remaining) set by the
         # REPEATED_ACTION_FAILURE recovery. Unlike goal suppression, this filters
@@ -1081,6 +1090,7 @@ class GamePlayer:
         # Mirrors a live bot's start: the persisted intention is the
         # commitment (`--committed` still overrides it, in `plan_from_state`).
         self._arbiter.resume_intention()
+        self._resume_yield()
         return self.plan_from_state(committed=committed)
 
     def plan_from_state(self, committed: str | None = None) -> PlanReport:
@@ -1176,6 +1186,7 @@ class GamePlayer:
             # The intention a previous process held (Phase 4-1b): the arbiter
             # resumes it instead of choosing from scratch.
             self._arbiter.resume_intention()
+            self._resume_yield()
 
         print(f"[{self._now()}] Starting play loop for {self.character}")
 
@@ -2494,25 +2505,75 @@ class GamePlayer:
 
     def _track_intention(self, goal: Goal | None, before: WorldState,
                          after: WorldState, ok: bool) -> None:
-        """Count one executed cycle against the intention (Phase 4-2a).
+        """Count one executed cycle against the intention (Phase 4-2).
 
         Only a cycle that ran the COMMITTED goal counts: a guard interrupting
-        it (RestoreHP between fights) is neither progress nor stall. Progress
-        (`intention_progress.progressed`) resets the count; `STALL_CYCLES`
-        committed cycles without it end the intention with the reason named.
-        A new commitment starts its own count."""
+        it (RestoreHP between fights) is neither progress nor stall. Two facts
+        end an intention, each named:
+
+        * a stall — `STALL_CYCLES` committed cycles without progress
+          (`intention_progress.progressed`; progress resets this count);
+        * a spent budget — `BUDGET_CYCLES` committed cycles, progress or not
+          (fairness: the intention's root then YIELDS one turn, `_yield`).
+
+        A new commitment starts its own counts, and moves the yield along: the
+        first commitment after a budget ends holds the yield, and the yield
+        clears when that holder ends."""
         committed = self._arbiter._committed_repr
         if committed != self._intention_counted:
-            self._intention_counted, self._intention_stall = committed, 0
+            self._advance_yield(committed)
+            self._intention_counted = committed
+            self._intention_stall = self._intention_cycles = 0
         if committed is None or goal is None or repr(goal) != committed:
             return
+        self._intention_cycles += 1
         if progressed(progress_measure(goal, before), progress_measure(goal, after), ok):
             self._intention_stall = 0
-            return
-        self._intention_stall += 1
+        else:
+            self._intention_stall += 1
         if self._intention_stall >= STALL_CYCLES:
-            self._arbiter.abandon_intention(f"stalled:{self._intention_stall}")
-            self._intention_counted, self._intention_stall = None, 0
+            self._arbiter.abandon_intention(Mechanism.INTENTION_STALLED,
+                                            f"stalled:{self._intention_stall}")
+            self._advance_yield(None)
+        elif self._intention_cycles >= BUDGET_CYCLES:
+            root = self._last_decision.chosen_root if self._last_decision is not None else None
+            self._yield = (repr(root), None) if root is not None else None
+            self._persist_yield()
+            self._arbiter.abandon_intention(Mechanism.INTENTION_BUDGET,
+                                            f"budget:{self._intention_cycles}")
+        else:
+            return
+        self._intention_counted = None
+        self._intention_stall = self._intention_cycles = 0
+
+    def _advance_yield(self, committed: str | None) -> None:
+        """The yield's turn (Phase 4-2b), called whenever the commitment
+        changes: the first commitment after a budget becomes its holder, and
+        any change away from the holder (it ended: satisfied, stalled, budget,
+        re-chosen) clears the yield."""
+        if self._yield is None:
+            return
+        yielded, holder = self._yield
+        if holder is None:
+            if committed is None:
+                return
+            self._yield = (yielded, committed)
+        else:
+            self._yield = None
+        self._persist_yield()
+
+    def _persist_yield(self) -> None:
+        """Write the yield through to the learning DB (no store: memory only)."""
+        if self.history is not None:
+            if self._yield is None:
+                self.history.save_yield(None, None)
+            else:
+                self.history.save_yield(*self._yield)
+
+    def _resume_yield(self) -> None:
+        """Adopt the yield a previous process persisted (Phase 4-2b)."""
+        row = self.history.load_yield() if self.history is not None else None
+        self._yield = (row.yielded_root, row.holder) if row is not None else None
 
     def _record_cycle(self, record: CycleRecord) -> None:
         """Record one cycle for stuck detection AND track per-signal
@@ -3059,7 +3120,13 @@ class GamePlayer:
         a second model that refused goals the walk serves (live 2026-10-03:
         HAL's `GatherMaterials(hard_leather x5)`, which the walk plans as
         withdraw, fight cow, buy)."""
+        yielded = self._yield[0] if self._yield is not None else None
+
         def decline(root: MetaGoal) -> str | None:
+            if repr(root) == yielded:
+                # Its budget is spent: one turn for the next served root
+                # (Phase 4-2b).
+                return "yielded:budget"
             step = actionable_step(root, state, game_data, ctx) or root
             goal = objective_step_goal(step, state, game_data, ctx,
                                        root=root, history=self.history)

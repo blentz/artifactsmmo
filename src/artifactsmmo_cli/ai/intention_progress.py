@@ -35,6 +35,13 @@ STALL_CYCLES = 20
 stalled. A grind's fight or craft lands well inside it; a plan leg that keeps
 failing, or a fight that never pays, does not."""
 
+BUDGET_CYCLES = 100
+"""Committed cycles an intention may hold before goal choice re-ranks (Phase
+4-2b). Fairness, not liveness: progress does not reset it. On exhaustion the
+intention ends and its root YIELDS for one turn, so the next served root heads
+the walk; the exhausted root competes again after that. Replaces focus aging
+and the d'Hondt interleave."""
+
 Measure = tuple[int, int]
 
 

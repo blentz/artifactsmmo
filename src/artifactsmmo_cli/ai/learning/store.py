@@ -25,6 +25,8 @@ from artifactsmmo_cli.ai.learning.models import (
     DecisionEvent,
     Intention,
     IntentionBase,
+    IntentionYield,
+    IntentionYieldBase,
     LearnedSetting,
     LoadoutProfileObservation,
     PlanBodyLog,
@@ -1511,6 +1513,36 @@ class LearningStore:
             with SqlSession(self._engine) as s:
                 return s.exec(
                     select(Intention).where(Intention.character == self._character)
+                ).first()
+        except SQLAlchemyError:
+            return None
+
+    def save_yield(self, yielded_root: str | None, holder: str | None) -> None:
+        """Record this character's active yield (Phase 4-2b); None clears it."""
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(
+                    select(IntentionYield).where(IntentionYield.character == self._character)
+                ).first()
+                if yielded_root is None:
+                    if row is not None:
+                        s.delete(row)
+                elif row is None:
+                    s.add(IntentionYield(character=self._character,
+                                         yielded_root=yielded_root, holder=holder))
+                else:
+                    row.yielded_root, row.holder = yielded_root, holder
+                    s.add(row)
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] save_yield failed: {e}")
+
+    def load_yield(self) -> IntentionYieldBase | None:
+        """This character's active yield, or None (or on DB error)."""
+        try:
+            with SqlSession(self._engine) as s:
+                return s.exec(
+                    select(IntentionYield).where(IntentionYield.character == self._character)
                 ).first()
         except SQLAlchemyError:
             return None
