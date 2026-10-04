@@ -834,6 +834,14 @@ Infeasibility is the walk's answer, re-asked from live state every cycle (it cos
 - **3-2b pushed @54de9986.**
 - **3-0b spawn floor (built 2026-10-04).** The 3-0 agreement, one more executor gate: the action factory builds a `FightAction` only for a monster with spawn tiles, but `band_combat_target` and the windowed picker (`_pick_winnable_monster`) offered any winnable XP-paying monster. Robby's band named `full_moon_vampire` (event monster, not up, no tiles) and `GrindCharacterXP` failed 23 of 23 searches. Both now require `GameData.monster_locations(code)`. Live probe after: Robby's target is `vampire` (L24, tiles (10,6) and (10,8)).
 
+- **3-0b pushed @d3665225 (needs a restart).**
+- **Witness, Phase 3 (3-0/3-1/role/3-2 on `2a190052`; before = 18:03–21:46Z 2026-10-03 on `75e01ee1`, 3.7 h; after = 21:48Z–04:05Z, 6.3 h, two restarts on the same build).** 🔥 The 01:05Z restart was the SECOND on this build: 3-2 was already live from the 21:46Z restart, found by slicing on `sessions.started_at`.
+  - **Mechanisms, per hour:** `doomed_skip` 1,136 → 0, `servable_promotion` 170 → 0, `doomed_mark` 27 → 0, `not_plannable` 17 → 0, `aged_pick` 145 → 4.5. New: `root_decline` 593 (named blockers). Cost: `decompose_decline` 10 → 458 (declined fallback steps re-asked each cycle, a few ms each).
+  - **Throughput:** cycles/h 531 → 522, ok 98.8% → 98.8%, 0 timeouts both.
+  - **Character XP/h 0 → 426:** C3P0 grinds spider (3-0). Its cost: C3P0 skill XP/h 1,172 → 236, 53% of its cycles RestoreHP, 29 fights lost (vs 1) — a winnability-prediction residual like R2D2's skeleton.
+  - **Skill XP/h 7,304 → 4,041 (−45%).** Not a slowdown of the same work: HAL and Lor moved from fishing (1,624 / 1,844 XP/h, ~95% of cycles) to the weaponcrafting climb that gates their gear (337 / 358 weaponcrafting XP/h plus mining/woodcutting by-products). Before, a `bag_overflow` decline on that climb doomed it for up to 160 cycles and the arbiter fell through to fishing; now it is re-asked each cycle and plans whenever the bag allows. The root walk is doing what it is for (gear-gated progress) at a lower raw XP rate.
+  - **`GrindCharacterXP` searches 24 → 109/h**, 88/h empty: all Robby's `full_moon_vampire` (551 of 551) — fixed by 3-0b, needs the restart.
+
 **Exit:** `doomed_skip`, `doomed_mark`, `not_plannable` and `servable_promotion` are 0 (the mechanisms are gone); each blocked gear target shows its named blocker in the plan pane.
 
 ## Risks and open questions
