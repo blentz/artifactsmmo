@@ -85,6 +85,7 @@ from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
+from artifactsmmo_cli.ai.intention_progress import STALL_CYCLES, progress_measure, progressed
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
@@ -270,6 +271,10 @@ class GamePlayer:
         # by adding a code to this registry instead of growing player.
         self._blockers = BlockerRegistry()
         self._detector = StuckDetector(history_size=STUCK_DETECTOR_WINDOW)
+        # The intention's committed cycles since its progress last moved, and
+        # the commitment they belong to (Phase 4-2a, `_track_intention`).
+        self._intention_stall = 0
+        self._intention_counted: str | None = None
         self._suppressed_goals: dict[str, int] = {}
         # Per-ACTION block (action_repr -> cycles remaining) set by the
         # REPEATED_ACTION_FAILURE recovery. Unlike goal suppression, this filters
@@ -1436,6 +1441,8 @@ class GamePlayer:
                     outcome == "ok" or outcome == "error:cooldown"
                     or outcome == self.RATE_LIMITED_OUTCOME
                 )
+                self._track_intention(selected_goal, prev_state_for_learning,
+                                      new_state, outcome == "ok")
                 self._record_cycle(self._make_cycle_record(
                     goal_name=repr(selected_goal),
                     action=action,
@@ -2484,6 +2491,28 @@ class GamePlayer:
             record["strategy"] = decision.to_trace()
         self.tracer.write_cycle(record)
         self._cycle_counter += 1
+
+    def _track_intention(self, goal: Goal | None, before: WorldState,
+                         after: WorldState, ok: bool) -> None:
+        """Count one executed cycle against the intention (Phase 4-2a).
+
+        Only a cycle that ran the COMMITTED goal counts: a guard interrupting
+        it (RestoreHP between fights) is neither progress nor stall. Progress
+        (`intention_progress.progressed`) resets the count; `STALL_CYCLES`
+        committed cycles without it end the intention with the reason named.
+        A new commitment starts its own count."""
+        committed = self._arbiter._committed_repr
+        if committed != self._intention_counted:
+            self._intention_counted, self._intention_stall = committed, 0
+        if committed is None or goal is None or repr(goal) != committed:
+            return
+        if progressed(progress_measure(goal, before), progress_measure(goal, after), ok):
+            self._intention_stall = 0
+            return
+        self._intention_stall += 1
+        if self._intention_stall >= STALL_CYCLES:
+            self._arbiter.abandon_intention(f"stalled:{self._intention_stall}")
+            self._intention_counted, self._intention_stall = None, 0
 
     def _record_cycle(self, record: CycleRecord) -> None:
         """Record one cycle for stuck detection AND track per-signal

@@ -769,6 +769,16 @@ class StrategyArbiter:
         row = self._history.load_intention() if self._history is not None else None
         self._committed_repr = row.committed_repr if row is not None else None
 
+    def abandon_intention(self, reason: str) -> None:
+        """End the current intention on a fact (Phase 4-2a): no commitment,
+        nothing persisted, and the reason recorded. The next decision chooses
+        afresh — from facts the abandoned attempt has since added (a lost fight
+        is learned, a declined walk is named)."""
+        self.events.note(Mechanism.INTENTION_STALLED, str(self._committed_repr), reason)
+        self._committed_repr = None
+        if self._history is not None:
+            self._history.save_intention(None)
+
     def set_event_log(self, events: DecisionEventLog) -> None:
         """Share the player's per-cycle decision-event buffer."""
         self.events = events

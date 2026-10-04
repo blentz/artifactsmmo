@@ -44,6 +44,9 @@ class Mechanism(StrEnum):
     AGED_PICK = "aged_pick"
     PLAN_CACHE_HIT = "plan_cache_hit"
     COMMITMENT_KEPT = "commitment_kept"
+    # The intention ended because its progress stopped moving (Phase 4-2a;
+    # subject: the committed goal repr, detail: `stalled:<cycles>`).
+    INTENTION_STALLED = "intention_stalled"
     REPLAN = "replan"
     # Recovery by countdown (subject: signal, goal or action key).
     STUCK_SIGNAL = "stuck_signal"
