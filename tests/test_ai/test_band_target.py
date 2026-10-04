@@ -26,11 +26,13 @@ def _gd() -> GameData:
     }
     gd._monster_level = {"chicken": 1, "mushmush": 10, "king_slime": 15,
                          "spider": 20, "ogre": 20}
+    gd._monster_locations = {c: [(i, 0)] for i, c in enumerate(gd._monster_level)}
     gd._monster_type = {"chicken": "normal", "mushmush": "normal",
                         "king_slime": "boss", "spider": "normal",
                         "ogre": "normal"}
     gd._monster_hp = {"chicken": 60, "mushmush": 350, "king_slime": 1000,
                       "spider": 550, "ogre": 650}
+    gd._monster_locations = {code: [(i, 0)] for i, code in enumerate(gd._monster_level)}
     return gd
 
 
@@ -83,6 +85,7 @@ def test_normal_band_is_called_not_band(monkeypatch):
     }
     gd._monster_level = {"chicken": 1, "weakling": 10, "other_normal": 10,
                          "strongboss": 10}
+    gd._monster_locations = {c: [(i, 0)] for i, c in enumerate(gd._monster_level)}
     gd._monster_type = {"chicken": "normal", "weakling": "normal",
                         "other_normal": "normal", "strongboss": "boss"}
     gd._monster_hp = {"chicken": 60, "weakling": 300, "other_normal": 300,
@@ -132,6 +135,22 @@ def test_a_band_that_pays_no_xp_yields_none(monkeypatch):
     assert gd.xp_per_kill("spider", 31) == 0
     assert band_combat_target(make_state(level=30), gd, None) == "spider"
     assert band_combat_target(make_state(level=31), gd, None) is None
+
+
+def test_a_monster_with_no_spawn_is_no_target(monkeypatch):
+    """`FightAction` is built only for a monster with spawn tiles (the action
+    factory's `all_monster_locations`), so an event monster that is not up
+    is a target nothing can fight. Live 2026-10-04: Robby's band named
+    `full_moon_vampire` (L24, 32 XP, winnable, no tiles) and `GrindCharacterXP`
+    failed 23 of 23 searches. Spider is the band's only other winnable monster."""
+    def fake_is_winnable(s: object, g: object, c: str, h: object) -> bool:
+        return c != "ogre"
+    monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
+    monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
+    gd = _gd()
+    assert band_combat_target(make_state(level=30), gd, None) == "spider"
+    gd._monster_locations = {k: v for k, v in gd._monster_locations.items() if k != "spider"}
+    assert band_combat_target(make_state(level=30), gd, None) is None
 
 
 def test_a_finished_ladder_yields_none(monkeypatch):
@@ -203,6 +222,7 @@ def test_semantic_tiebreak_uses_level_not_alphabetical(monkeypatch):
         "iron_sword": ItemStats(code="iron_sword", level=15, type_="weapon"),
     }
     gd._monster_level = {"zzz_low": 10, "aaa_high": 15}
+    gd._monster_locations = {c: [(i, 0)] for i, c in enumerate(gd._monster_level)}
     gd._monster_type = {"zzz_low": "normal", "aaa_high": "normal"}
     gd._monster_hp = {"zzz_low": 625, "aaa_high": 500}
     state = make_state(level=20)
@@ -242,6 +262,7 @@ def test_xp_tiebreak_without_monkeypatched_band_derivation(monkeypatch):
     }
     # Both monsters at level 20 (in the same tier band), plus a dummy unwinnable
     gd._monster_level = {"spider": 20, "ogre": 20, "dummy_unwinnable": 20}
+    gd._monster_locations = {c: [(i, 0)] for i, c in enumerate(gd._monster_level)}
     gd._monster_type = {"spider": "normal", "ogre": "normal", "dummy_unwinnable": "normal"}
     gd._monster_hp = {"spider": 550, "ogre": 650, "dummy_unwinnable": 1000}
     state = make_state(level=30)
@@ -273,6 +294,7 @@ def test_band_bound_not_defeated_by_xp_ordering(monkeypatch):
     # Add goblin(15) normal to make band(10) have unwinnable member
     gd._monster_level = {"chicken": 1, "mushmush": 10, "goblin": 15,
                          "spider": 20, "ogre": 20}
+    gd._monster_locations = {c: [(i, 0)] for i, c in enumerate(gd._monster_level)}
     gd._monster_type = {"chicken": "normal", "mushmush": "normal",
                         "goblin": "normal", "spider": "normal", "ogre": "normal"}
     gd._monster_hp = {"chicken": 60, "mushmush": 350, "goblin": 400,
@@ -316,6 +338,7 @@ def test_stat_winnable_but_out_of_window_yields_none(monkeypatch):
         "steel_sword": ItemStats(code="steel_sword", level=15, type_="weapon"),
     }
     gd._monster_level = {"chicken": 1, "mushmush": 10, "highwayman": 15, "pig": 19}
+    gd._monster_locations = {c: [(i, 0)] for i, c in enumerate(gd._monster_level)}
     gd._monster_type = {"chicken": "normal", "mushmush": "normal",
                         "highwayman": "normal", "pig": "normal"}
     gd._monster_hp = {"chicken": 60, "mushmush": 350, "highwayman": 500, "pig": 600}

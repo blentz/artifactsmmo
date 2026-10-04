@@ -78,6 +78,7 @@ def test_unfightable_band_target_falls_through_to_the_windowed_picker(monkeypatc
         "steel_sword": ItemStats(code="steel_sword", level=15, type_="weapon"),
     }
     gd._monster_level = {"chicken": 1, "mushmush": 10, "highwayman": 15, "pig": 19}
+    gd._monster_locations = {c: [(i, 0)] for i, c in enumerate(gd._monster_level)}
     gd._monster_type = {"chicken": "normal", "mushmush": "normal",
                         "highwayman": "normal", "pig": "normal"}
     gd._monster_hp = {"chicken": 60, "mushmush": 350, "highwayman": 500, "pig": 600}

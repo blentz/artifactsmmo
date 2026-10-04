@@ -75,7 +75,11 @@ def band_combat_target(state: WorldState, game_data: GameData,
     gear strength) and the `xp_per_kill > 0` floor (an XP fight is refused
     against a grey). A monster that passes the first but fails either of the
     others is stat-winnable and still never gets fought — see the module
-    docstring.
+    docstring. A monster must also SPAWN somewhere now
+    (`GameData.monster_locations`): the action factory builds a `FightAction`
+    only for those, so an event monster that is not up is no target either
+    (live 2026-10-04: Robby's band named `full_moon_vampire` and
+    `GrindCharacterXP` failed 23 of 23 searches).
     """
     tier = next_uncleared_tier(state, game_data, history)
     if tier is None:
@@ -85,6 +89,7 @@ def band_combat_target(state: WorldState, game_data: GameData,
     winnable = [code for code in normal_band(game_data, tier)
                 if game_data.monster_levels[code] <= level_ceiling
                 and game_data.xp_per_kill(code, state.level) > 0
+                and game_data.monster_locations(code)
                 and is_winnable(rested, game_data, code, history)]
     if not winnable:
         return None

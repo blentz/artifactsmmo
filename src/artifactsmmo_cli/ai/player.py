@@ -2938,6 +2938,11 @@ class GamePlayer:
         nothing winnable grants XP — then gear progression is the only
         path, which is correct. Decision logic lives in the pure core
         `combat_picker.pick_winnable_monster_pure` (Lean-diff-locked).
+
+        Candidates are the monsters that SPAWN somewhere now
+        (`GameData.monster_locations`): the action factory builds a
+        `FightAction` only for those, so an event monster that is not up is a
+        target nothing can fight (live 2026-10-04: Robby, `full_moon_vampire`).
         """
         assert self.game_data is not None
         assert self.state is not None
@@ -2945,7 +2950,8 @@ class GamePlayer:
         char_level = self.state.level
         return pick_winnable_monster_pure(
             char_level,
-            list(game_data.monster_levels.items()),
+            [(code, level) for code, level in game_data.monster_levels.items()
+             if game_data.monster_locations(code)],
             self._is_winnable,
             lambda code: game_data.xp_per_kill(code, char_level) > 0,
         )

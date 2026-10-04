@@ -403,6 +403,9 @@ def _winnable_gd(monsters: dict[str, dict]) -> GameData:
         gd._monster_resistance[code] = m.get("resistance", {})
         gd._monster_critical_strike[code] = m.get("crit", 0)
         gd._monster_initiative[code] = m.get("initiative", 0)
+    # Every monster spawns somewhere: the picker only offers monsters the
+    # action factory can build a FightAction for.
+    gd._monster_locations = {code: [(i, 0)] for i, code in enumerate(monsters)}
     return gd
 
 

@@ -138,6 +138,7 @@ class TestReachUnlockLevelGoal:
     def test_relevant_actions_filters_beatable_monsters_only(self):
         gd = GameData()
         gd._monster_level = {"chicken": 1, "yellow_slime": 3, "sea_marauder": 7}
+        gd._monster_locations = {c: [(i, 0)] for i, c in enumerate(gd._monster_level)}
         goal = ReachUnlockLevelGoal(target_level=6)
         actions = [
             FightAction(monster_code="chicken"),       # level 1, char L2 can beat
@@ -200,6 +201,7 @@ class TestPickWinnableMonster:
         player = GamePlayer(character="hero", history=store)
         gd = GameData()
         gd._monster_level = monster_levels
+        gd._monster_locations = {c: [(i, 0)] for i, c in enumerate(gd._monster_level)}
         hp_overrides = monster_hp or {}
         for code in monster_levels:
             gd._monster_hp[code] = hp_overrides.get(code, 10)
@@ -219,6 +221,18 @@ class TestPickWinnableMonster:
             monster_hp={"ogre": 100000},
         )
         assert player._pick_winnable_monster() == "yellow_slime"
+        store.close()
+
+    def test_a_monster_with_no_spawn_is_not_picked(self, tmp_path):
+        """Only a monster that spawns somewhere now is a candidate: the action
+        factory builds no `FightAction` for an event monster that is not up
+        (live 2026-10-04, Robby's `full_moon_vampire`)."""
+        player, store = self._player_with_monsters(
+            tmp_path, level=3, monster_levels={"chicken": 1, "yellow_slime": 3},
+        )
+        assert player._pick_winnable_monster() == "yellow_slime"
+        del player.game_data._monster_locations["yellow_slime"]
+        assert player._pick_winnable_monster() == "chicken"
         store.close()
 
     def test_returns_none_when_nothing_winnable(self, tmp_path):
@@ -294,6 +308,7 @@ class TestPathAlignedMonster:
         player = GamePlayer(character="hero", history=store)
         player.game_data = GameData()
         player.game_data._monster_level = {"chicken": 1, "yellow_slime": 2}
+        player.game_data._monster_locations = {c: [(i, 0)] for i, c in enumerate(player.game_data._monster_level)}
         player.game_data._monster_hp = {"chicken": 60, "yellow_slime": 70}
         player.game_data._monster_type = {"chicken": "normal", "yellow_slime": "normal"}
         # Harmless: `cheapest_path_to_level` charges each kill the Rest its damage
@@ -343,6 +358,7 @@ class TestPathAlignedMonster:
         player = GamePlayer(character="hero", history=store)
         player.game_data = GameData()
         player.game_data._monster_level = {"chicken": 1, "yellow_slime": 2}
+        player.game_data._monster_locations = {c: [(i, 0)] for i, c in enumerate(player.game_data._monster_level)}
         player.game_data._monster_hp = {"chicken": 60, "yellow_slime": 70}
         player.game_data._monster_type = {"chicken": "normal", "yellow_slime": "normal"}
         player.game_data._monster_attack = {"chicken": {}, "yellow_slime": {}}
@@ -373,6 +389,7 @@ class TestPathAlignedMonster:
         player = GamePlayer(character="hero", history=None)
         player.game_data = GameData()
         player.game_data._monster_level = {"chicken": 1}
+        player.game_data._monster_locations = {c: [(i, 0)] for i, c in enumerate(player.game_data._monster_level)}
         player.state = make_state(level=1, character="hero")
         monkeypatch.setattr(player_mod, "band_combat_target",
                             lambda state, game_data, history: "chicken")
