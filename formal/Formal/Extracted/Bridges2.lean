@@ -5,57 +5,53 @@ import Formal.ArbiterSelect
 # Extracted ↔ hand-model bridge: arbiter_select (P2b, docs/PLAN_mechanical_extraction.md)
 
 HAND-WRITTEN (continuation of `Bridges.lean`; split out for size). Proves the
-mechanically-extracted `Extracted.ArbiterSelect.select_pure` (regenerated from
-`src/artifactsmmo_cli/ai/arbiter_select.py` by `scripts/extract_lean.py`)
-equal to the hand model `Formal.ArbiterSelect.selectPure` — THE most-pinned
-decision function in the repo (objective-committed arbitration, worth
-suppression, sticky preemption).
+mechanically-extracted `Extracted.ArbiterSelect.select_interrupt` and
+`select_pure` (regenerated from `src/artifactsmmo_cli/ai/arbiter_select.py` by
+`scripts/extract_lean.py`) equal to the hand models
+`Formal.ArbiterSelect.selectInterrupt` / `selectPure` — THE most-pinned
+decision functions in the repo (interrupts, objective-committed arbitration,
+worth suppression, sticky preemption).
 
-* `arbiter_select_bridge` — a FULL commuting square, with NO wellformedness
-  hypothesis beyond injectivity of the id embedding: for EVERY injective
-  `f : Nat → String` (the hand model codes candidate `repr` strings as `Nat`
-  ids; `f` embeds them back into strings), every candidate list, every
-  committed id and all three predicate oracles,
+* `arbiter_select_bridge` / `select_interrupt_bridge` — FULL commuting
+  squares, with NO wellformedness hypothesis beyond injectivity of the id
+  embedding: for EVERY injective `f : Nat → String` (the hand model codes
+  candidate `repr` strings as `Nat` ids; `f` embeds them back into strings),
+  every candidate list, every committed id and all predicate oracles,
 
       extracted ∘ encode = encOut ∘ handModel
 
   where the encoding instantiates the extracted polymorphism at `Goal := Nat`,
   `Action := Unit` (goals are pure payload — carried, never inspected; a plan
-  is `[()]` iff plannable) and `encOut` packages the hand `(chosen?,
-  newCommitted?)` as the Python `(goal?, plan, committed_repr?)` triple.
-  Duplicate ids, missing committed ids and arbitrary orderings are all in
-  scope: both sides resolve them first-match-wins, so no `idsDisjoint` /
-  `guardsFirst` precondition is needed for equality (those remain hypotheses
-  of the hand SAFETY theorems only).
+  is `[()]` iff plannable). Duplicate ids, missing committed ids and arbitrary
+  orderings are all in scope: both sides resolve them first-match-wins.
 
-* `select_pure_guard_wins_extracted` — THE sticky-safety theorem transferred
-  to the extracted definition: a plannable, non-satisfied, non-suppressed
-  head guard wins regardless of commitment. The generalised
-  any-plannable-guard-wins, sticky-idempotence and walk-order theorems
-  transfer through the same square.
+* `select_interrupt_wins_extracted` — the interrupt-safety theorem transferred
+  to the extracted definition: any plannable, unsatisfied interrupt makes the
+  extracted pre-pass return an interrupt of the list.
+
+Phase 5-2a moved the guards out of `select_pure` into `select_interrupt`; the
+guard scan bridge (`guard_any_bridge`) and the `is_means` encoding went with
+them.
 
 NO sorry / admit / extra axioms (gate-enforced). Lean core only — no mathlib.
 -/
 
 namespace Extracted.Bridges
 
-open Formal.ArbiterSelect (indexOf? precedes findCommitted guardPrecedes
-  lowerBandPrecedes walk stickyOutcome selectPure)
+open Formal.ArbiterSelect (indexOf? precedes findCommitted lowerBandPrecedes walk
+  stickyOutcome selectPure selectInterrupt)
 
 /-! ## Encodings -/
 
-/-- Candidate encoding: the hand `(id, isMeans)` becomes the extracted
-`(goal, is_means, repr_)` with `Goal := Nat` (the id is the payload) and the
-repr string the image of the id under the embedding `f`. -/
+/-- Candidate encoding: the hand `(id, band)` becomes the extracted
+`(goal, repr_, band)` with `Goal := Nat` (the id is the payload) and the repr
+string the image of the id under the embedding `f`. -/
 def encC (f : Nat → String) (c : Formal.ArbiterSelect.Candidate) :
     Extracted.ArbiterSelect.Candidate Nat :=
-  ⟨c.id, c.isMeans, f c.id, c.band⟩
+  ⟨c.id, f c.id, c.band⟩
 
 @[simp] theorem encC_goal (f : Nat → String) (c : Formal.ArbiterSelect.Candidate) :
     (encC f c).goal = c.id := rfl
-
-@[simp] theorem encC_is_means (f : Nat → String) (c : Formal.ArbiterSelect.Candidate) :
-    (encC f c).is_means = c.isMeans := rfl
 
 @[simp] theorem encC_repr (f : Nat → String) (c : Formal.ArbiterSelect.Candidate) :
     (encC f c).repr_ = f c.id := rfl
@@ -81,7 +77,7 @@ def encOut (f : Nat → String) :
 /-- The walk-loop body the extractor emits (the `_findSome` lambda); marked
 reducible so `rw` can match it against the generated term. -/
 @[reducible] def eWalkBody (f? : Nat → List Unit) (sat sup : Nat → Bool)
-    (t k : Option String) (cand : Extracted.ArbiterSelect.Candidate Nat) :
+    (t : Option String) (cand : Extracted.ArbiterSelect.Candidate Nat) :
     Option (Option Nat × List Unit × Option String) :=
   if decide (t = some cand.repr_) then none
   else if sup cand.goal then none
@@ -89,12 +85,7 @@ reducible so `rw` can match it against the generated term. -/
   else
     let plan := f? cand.goal
     if decide ((Int.ofNat (List.length plan)) > 0) then
-      let new_committed : Option String := k
-      if cand.is_means then
-        let new_committed := some cand.repr_
-        some (some cand.goal, plan, new_committed)
-      else
-        some (some cand.goal, plan, new_committed)
+      some (some cand.goal, plan, some cand.repr_)
     else none
 
 /-! ## Pointwise transport lemmas (injective `f`) -/
@@ -151,7 +142,7 @@ private theorem find_committed_bridge (f : Nat → String)
     (hf : ∀ a b, f a = f b → a = b) (cid : Nat) :
     ∀ cs : List Formal.ArbiterSelect.Candidate,
       Extracted.ArbiterSelect._find
-          (fun c => c.is_means && decide (c.repr_ = f cid)) (cs.map (encC f))
+          (fun c => decide (c.repr_ = f cid)) (cs.map (encC f))
         = (findCommitted cs cid).map (encC f) := by
   intro cs
   induction cs with
@@ -159,44 +150,9 @@ private theorem find_committed_bridge (f : Nat → String)
   | cons c rest ih =>
     unfold Formal.ArbiterSelect.findCommitted at ih ⊢
     by_cases h : c.id = cid
-    · cases hm : c.isMeans with
-      | true => simp [Extracted.ArbiterSelect._find, hm, h]
-      | false => simp [Extracted.ArbiterSelect._find, hm, h, ih]
+    · simp [Extracted.ArbiterSelect._find, h]
     · have hne : f c.id ≠ f cid := fun hc => h (hf _ _ hc)
       simp [Extracted.ArbiterSelect._find, h, hne, ih]
-
-/-- The generated guard scan (`any` of `_precedes` over `map repr_ ∘ filter
-¬is_means`) IS the hand `guardPrecedes`. -/
-private theorem guard_any_aux (f : Nat → String) (hf : ∀ a b, f a = f b → a = b)
-    (cs : List Formal.ArbiterSelect.Candidate) (cid : Nat) :
-    ∀ gs : List Formal.ArbiterSelect.Candidate,
-      List.any
-          (List.map (fun c => c.repr_)
-            (List.filter (fun c => !c.is_means) (gs.map (encC f))))
-          (fun gr => Extracted.ArbiterSelect._precedes (cs.map (encC f)) gr (f cid))
-        = (gs.filter (fun c => !c.isMeans)).any (fun g => precedes cs g.id cid) := by
-  intro gs
-  induction gs with
-  | nil => rfl
-  | cons g rest ih =>
-    cases hm : g.isMeans with
-    | true =>
-      simp only [List.map_cons, List.filter_cons, encC_is_means, hm,
-        Bool.not_true, Bool.false_eq_true, if_false, ih]
-    | false =>
-      simp only [List.map_cons, List.filter_cons, encC_is_means, hm,
-        Bool.not_false, if_true, List.any_cons, ih, encC_repr,
-        precedes_bridge f hf cs g.id cid]
-
-private theorem guard_any_bridge (f : Nat → String) (hf : ∀ a b, f a = f b → a = b)
-    (cs : List Formal.ArbiterSelect.Candidate) (cid : Nat) :
-    List.any
-        (List.map (fun c => c.repr_)
-          (List.filter (fun c => !c.is_means) (cs.map (encC f))))
-        (fun gr => Extracted.ArbiterSelect._precedes (cs.map (encC f)) gr (f cid))
-      = guardPrecedes cs cid := by
-  unfold Formal.ArbiterSelect.guardPrecedes
-  exact guard_any_aux f hf cs cid cs
 
 /-- The generated lower-band scan (`any` of `band < committedBand ∧ _precedes`
 over the encoded list) IS the hand `lowerBandPrecedes` any-body — the `.band`
@@ -239,14 +195,14 @@ private theorem lower_band_bridge (f : Nat → String) (hf : ∀ a b, f a = f b 
 output encoding — for any `t : Option String` whose tried-test agrees with the
 hand `tried` pointwise (instantiated below at `none` / `some (f cid)`). -/
 private theorem findSome_walk_bridge (f : Nat → String)
-    (p sat sup : Nat → Bool) (tried : Option Nat) (t k : Option String)
+    (p sat sup : Nat → Bool) (tried : Option Nat) (t : Option String)
     (hT : ∀ id : Nat, decide (t = some (f id))
         = (match tried with | some u => decide (u = id) | none => false)) :
     ∀ cs : List Formal.ArbiterSelect.Candidate,
       Extracted.ArbiterSelect._findSome
-          (eWalkBody (encPlan p) sat sup t k) (cs.map (encC f))
+          (eWalkBody (encPlan p) sat sup t) (cs.map (encC f))
         = (walk p sat sup tried cs).map
-            (fun c => (some c.id, [()], if c.isMeans then some (f c.id) else k)) := by
+            (fun c => (some c.id, [()], some (f c.id))) := by
   intro cs
   cases tried with
   | none =>
@@ -255,15 +211,13 @@ private theorem findSome_walk_bridge (f : Nat → String)
     | cons c rest ih =>
       have ht : ¬(t = some (f c.id)) := by simpa using hT c.id
       simp only [List.map_cons, Extracted.ArbiterSelect._findSome, eWalkBody,
-        encC_repr, encC_goal, encC_is_means, Formal.ArbiterSelect.walk,
-        Bool.false_or]
+        encC_repr, encC_goal, Formal.ArbiterSelect.walk, Bool.false_or]
       by_cases hsup : sup c.id = true
       · simpa [ht, hsup] using ih
       · by_cases hsat : sat c.id = true
         · simpa [ht, hsup, hsat] using ih
         · by_cases hp : p c.id = true
           · simp [ht, hsup, hsat, hp, encPlan]
-            cases c.isMeans <;> rfl
           · simpa [ht, hsup, hsat, hp, encPlan] using ih
   | some u =>
     induction cs with
@@ -271,7 +225,7 @@ private theorem findSome_walk_bridge (f : Nat → String)
     | cons c rest ih =>
       have ht : (t = some (f c.id)) ↔ (u = c.id) := by simpa using hT c.id
       simp only [List.map_cons, Extracted.ArbiterSelect._findSome, eWalkBody,
-        encC_repr, encC_goal, encC_is_means, Formal.ArbiterSelect.walk]
+        encC_repr, encC_goal, Formal.ArbiterSelect.walk]
       by_cases hu : u = c.id
       · simpa [ht, hu] using ih
       · by_cases hsup : sup c.id = true
@@ -280,7 +234,6 @@ private theorem findSome_walk_bridge (f : Nat → String)
           · simpa [ht, hu, hsup, hsat] using ih
           · by_cases hp : p c.id = true
             · simp [ht, hu, hsup, hsat, hp, encPlan]
-              cases c.isMeans <;> rfl
             · simpa [ht, hu, hsup, hsat, hp, encPlan] using ih
 
 /-- `hT` instance: no sticky attempt (`t = none`). -/
@@ -305,13 +258,11 @@ private theorem hT_some (f : Nat → String) (hf : ∀ a b, f a = f b → a = b)
 
 /-! ## THE BRIDGE -/
 
-/-- BRIDGE: the extracted selector commutes with the hand model through the
-candidate/plan/output encodings, for EVERY injective id embedding `f`, every
-candidate list (duplicate ids and all), every commitment and every oracle
-triple — `extracted ∘ encode = encOut ∘ handModel`. All
-`Formal.ArbiterSelect` safety theorems (guard-wins, generalised
-any-plannable-guard-wins, sticky idempotence, no-commitment walk order)
-transfer. -/
+/-- BRIDGE (means): the extracted `select_pure` commutes with the hand model
+through the candidate/plan/output encodings, for EVERY injective id embedding
+`f`, every candidate list (duplicate ids and all), every commitment and every
+oracle triple. Sticky idempotence, band anti-freeze and no-commitment walk
+order transfer. -/
 theorem arbiter_select_bridge (f : Nat → String) (hf : ∀ a b, f a = f b → a = b)
     (cs : List Formal.ArbiterSelect.Candidate) (committed : Option Nat)
     (plannable satisfied suppressed : Nat → Bool) :
@@ -322,50 +273,33 @@ theorem arbiter_select_bridge (f : Nat → String) (hf : ∀ a b, f a = f b → 
   cases committed with
   | none =>
     simp only [Extracted.ArbiterSelect.select_pure, Option.map_none]
-    rw [findSome_walk_bridge f plannable satisfied suppressed none none none
-      (hT_none f) cs]
+    rw [findSome_walk_bridge f plannable satisfied suppressed none none (hT_none f) cs]
     cases hw : walk plannable satisfied suppressed none cs with
     | none =>
-      simp [Formal.ArbiterSelect.selectPure, Formal.ArbiterSelect.stickyOutcome,
-        hw, encOut]
+      simp [Formal.ArbiterSelect.selectPure, Formal.ArbiterSelect.stickyOutcome, hw, encOut]
     | some c =>
-      cases hm : c.isMeans with
-      | true =>
-        simp [Formal.ArbiterSelect.selectPure, Formal.ArbiterSelect.stickyOutcome,
-          hw, hm, encOut]
-      | false =>
-        simp [Formal.ArbiterSelect.selectPure, Formal.ArbiterSelect.stickyOutcome,
-          hw, hm, encOut]
+      simp [Formal.ArbiterSelect.selectPure, Formal.ArbiterSelect.stickyOutcome, hw, encOut]
   | some cid =>
     simp only [Extracted.ArbiterSelect.select_pure, Option.map_some]
     rw [find_committed_bridge f hf cid cs]
     cases hfc : findCommitted cs cid with
     | none =>
       simp only [Option.map_none]
-      rw [findSome_walk_bridge f plannable satisfied suppressed none none (some (f cid))
-        (hT_none f) cs]
+      rw [findSome_walk_bridge f plannable satisfied suppressed none none (hT_none f) cs]
       cases hw : walk plannable satisfied suppressed none cs with
       | none =>
         simp [Formal.ArbiterSelect.selectPure, Formal.ArbiterSelect.stickyOutcome,
           hfc, hw, encOut]
       | some c =>
-        cases hm : c.isMeans with
-        | true =>
-          simp [Formal.ArbiterSelect.selectPure, Formal.ArbiterSelect.stickyOutcome,
-            hfc, hw, hm, encOut]
-        | false =>
-          simp [Formal.ArbiterSelect.selectPure, Formal.ArbiterSelect.stickyOutcome,
-            hfc, hw, hm, encOut]
+        simp [Formal.ArbiterSelect.selectPure, Formal.ArbiterSelect.stickyOutcome,
+          hfc, hw, encOut]
     | some c =>
-      obtain ⟨hcm, hcid, _⟩ :=
-        Formal.ArbiterSelect.findCommitted_some_props cs cid c hfc
+      obtain ⟨hcid, _⟩ := Formal.ArbiterSelect.findCommitted_some_props cs cid c hfc
       simp only [Option.map_some, encC_goal]
-      rw [guard_any_bridge f hf cs cid]
       rw [lower_band_bridge f hf cs c cid]
       rw [findSome_walk_bridge f plannable satisfied suppressed (some cid)
-        (some (f cid)) (some (f cid)) (hT_some f hf cid) cs]
-      rw [findSome_walk_bridge f plannable satisfied suppressed none none (some (f cid))
-        (hT_none f) cs]
+        (some (f cid)) (hT_some f hf cid) cs]
+      rw [findSome_walk_bridge f plannable satisfied suppressed none none (hT_none f) cs]
       cases hs : satisfied c.id with
       | true =>
         cases hw : walk plannable satisfied suppressed none cs with
@@ -373,13 +307,8 @@ theorem arbiter_select_bridge (f : Nat → String) (hf : ∀ a b, f a = f b → 
           simp [Formal.ArbiterSelect.selectPure, Formal.ArbiterSelect.stickyOutcome,
             hfc, hs, hw, encOut]
         | some c' =>
-          cases hm' : c'.isMeans with
-          | true =>
-            simp [Formal.ArbiterSelect.selectPure,
-              Formal.ArbiterSelect.stickyOutcome, hfc, hs, hw, hm', encOut]
-          | false =>
-            simp [Formal.ArbiterSelect.selectPure,
-              Formal.ArbiterSelect.stickyOutcome, hfc, hs, hw, hm', encOut]
+          simp [Formal.ArbiterSelect.selectPure, Formal.ArbiterSelect.stickyOutcome,
+            hfc, hs, hw, encOut]
       | false =>
         cases hsu : suppressed c.id with
         | true =>
@@ -388,100 +317,97 @@ theorem arbiter_select_bridge (f : Nat → String) (hf : ∀ a b, f a = f b → 
             simp [Formal.ArbiterSelect.selectPure,
               Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hw, encOut]
           | some c' =>
-            cases hm' : c'.isMeans with
-            | true =>
-              simp [Formal.ArbiterSelect.selectPure,
-                Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hw, hm', encOut]
-            | false =>
-              simp [Formal.ArbiterSelect.selectPure,
-                Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hw, hm', encOut]
+            simp [Formal.ArbiterSelect.selectPure,
+              Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hw, encOut]
         | false =>
-          cases hgp : guardPrecedes cs cid with
+          cases hlbp : lowerBandPrecedes cs cid c.band with
           | true =>
             cases hw : walk plannable satisfied suppressed none cs with
             | none =>
               simp [Formal.ArbiterSelect.selectPure,
-                Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hw, encOut]
+                Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hlbp, hw, encOut]
             | some c' =>
-              cases hm' : c'.isMeans with
-              | true =>
-                simp [Formal.ArbiterSelect.selectPure,
-                  Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hw,
-                  hm', encOut]
-              | false =>
-                simp [Formal.ArbiterSelect.selectPure,
-                  Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hw,
-                  hm', encOut]
+              simp [Formal.ArbiterSelect.selectPure,
+                Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hlbp, hw, encOut]
           | false =>
-            cases hlbp : lowerBandPrecedes cs cid c.band with
+            cases hp : plannable c.id with
             | true =>
-              -- extracted `(!gp) && (!lbp)` = true && false = false ⇒ walk (tried none);
-              -- hand stickyOutcome hits the lowerBandPrecedes branch ⇒ (none, none) ⇒ walk none.
-              cases hw : walk plannable satisfied suppressed none cs with
+              have hp' : plannable cid = true := hcid ▸ hp
+              have hs' : satisfied cid = false := hcid ▸ hs
+              have hsu' : suppressed cid = false := hcid ▸ hsu
+              simp [Formal.ArbiterSelect.selectPure,
+                Formal.ArbiterSelect.stickyOutcome, hfc, hlbp,
+                hp', hs', hsu', encOut, encPlan, hcid]
+            | false =>
+              cases hw : walk plannable satisfied suppressed (some cid) cs with
               | none =>
                 simp [Formal.ArbiterSelect.selectPure,
-                  Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hlbp, hw, encOut]
+                  Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hlbp, hp, hw,
+                  encOut, encPlan]
               | some c' =>
-                cases hm' : c'.isMeans with
-                | true =>
-                  simp [Formal.ArbiterSelect.selectPure,
-                    Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hlbp, hw,
-                    hm', encOut]
-                | false =>
-                  simp [Formal.ArbiterSelect.selectPure,
-                    Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hlbp, hw,
-                    hm', encOut]
-            | false =>
-              cases hp : plannable c.id with
-              | true =>
-                have hp' : plannable cid = true := hcid ▸ hp
-                have hs' : satisfied cid = false := hcid ▸ hs
-                have hsu' : suppressed cid = false := hcid ▸ hsu
                 simp [Formal.ArbiterSelect.selectPure,
-                  Formal.ArbiterSelect.stickyOutcome, hfc, hgp, hlbp,
-                  hp', hs', hsu', encOut, encPlan, hcid]
-              | false =>
-                cases hw : walk plannable satisfied suppressed (some cid) cs with
-                | none =>
-                  simp [Formal.ArbiterSelect.selectPure,
-                    Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hlbp, hp, hw,
-                    encOut, encPlan]
-                | some c' =>
-                  cases hm' : c'.isMeans with
-                  | true =>
-                    simp [Formal.ArbiterSelect.selectPure,
-                      Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hlbp, hp,
-                      hw, hm', encOut, encPlan]
-                  | false =>
-                    simp [Formal.ArbiterSelect.selectPure,
-                      Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hlbp, hp,
-                      hw, hm', encOut, encPlan]
+                  Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hlbp, hp,
+                  hw, encOut, encPlan]
+
+/-- BRIDGE (interrupts): the extracted pre-pass returns the hand
+`selectInterrupt`'s choice, carrying the plan `[()]`, or `(none, [])`. -/
+theorem select_interrupt_bridge (f : Nat → String)
+    (plannable satisfied : Nat → Bool) :
+    ∀ is : List Formal.ArbiterSelect.Candidate,
+      Extracted.ArbiterSelect.select_interrupt
+          (is.map (encC f)) (encPlan plannable) satisfied
+        = match selectInterrupt is plannable satisfied with
+          | some c => (some c.id, [()])
+          | none => (none, []) := by
+  intro is
+  induction is with
+  | nil => rfl
+  | cons c rest ih =>
+    unfold Extracted.ArbiterSelect.select_interrupt at ih ⊢
+    simp only [List.map_cons, Extracted.ArbiterSelect._findSome, encC_goal]
+    unfold Formal.ArbiterSelect.selectInterrupt at ih ⊢
+    by_cases hs : satisfied c.id = true
+    · simp only [hs, if_true, List.find?, Bool.not_true, Bool.false_and]
+      exact ih
+    · by_cases hp : plannable c.id = true
+      · simp [hs, hp, encPlan, List.find?]
+      · simp only [hs, hp, encPlan, List.find?, Bool.false_eq_true, if_false,
+          List.length_nil, Bool.and_false]
+        simpa using ih
+
+/-- BRIDGE (arbitration): the extracted composition — interrupts first, keeping
+the commitment, then the means — is the hand `arbitrate`. -/
+theorem arbitrate_bridge (f : Nat → String) (hf : ∀ a b, f a = f b → a = b)
+    (is cs : List Formal.ArbiterSelect.Candidate) (committed : Option Nat)
+    (plannable satisfied suppressed : Nat → Bool) :
+    Extracted.ArbiterSelect.arbitrate
+        (is.map (encC f)) (cs.map (encC f)) (committed.map f)
+        (encPlan plannable) satisfied suppressed
+      = encOut f (Formal.ArbiterSelect.arbitrate is cs committed
+          plannable satisfied suppressed) := by
+  unfold Extracted.ArbiterSelect.arbitrate Formal.ArbiterSelect.arbitrate
+  rw [select_interrupt_bridge f plannable satisfied is]
+  cases hi : selectInterrupt is plannable satisfied with
+  | some g => simp [encOut]
+  | none =>
+    simp only [List.length_nil]
+    exact arbiter_select_bridge f hf cs committed plannable satisfied suppressed
 
 /-! ## Transferred safety theorem -/
 
-/-- THE sticky-safety theorem, restated on the EXTRACTED definition: under
-id-disjointness, a plannable / non-satisfied / non-suppressed HEAD guard wins
-regardless of commitment — through every encoding. -/
-theorem select_pure_guard_wins_extracted (f : Nat → String)
-    (hf : ∀ a b, f a = f b → a = b)
-    (g : Formal.ArbiterSelect.Candidate) (rest : List Formal.ArbiterSelect.Candidate)
-    (committed : Option Nat) (plannable satisfied suppressed : Nat → Bool)
-    (hguard : g.isMeans = false)
-    (hplan : plannable g.id = true)
-    (hnsat : satisfied g.id = false)
-    (hnsup : suppressed g.id = false)
-    (hdisj : Formal.ArbiterSelect.idsDisjoint (g :: rest)) :
-    (Extracted.ArbiterSelect.select_pure
-        ((g :: rest).map (encC f)) (committed.map f)
-        (encPlan plannable) satisfied suppressed).1 = some g.id := by
-  rw [arbiter_select_bridge f hf]
-  have h := Formal.ArbiterSelect.select_pure_guard_wins g rest committed
-    plannable satisfied suppressed hguard hplan hnsat hnsup hdisj
-  rcases hsel : selectPure (g :: rest) committed plannable satisfied suppressed
-    with ⟨c?, n⟩
-  rw [hsel] at h
-  simp only at h
-  subst h
-  rfl
+/-- INTERRUPT SAFETY on the EXTRACTED definition: any plannable, unsatisfied
+interrupt makes the extracted pre-pass return an interrupt of the list (whose
+plan is the one-step plan) — through every encoding. -/
+theorem select_interrupt_wins_extracted (f : Nat → String)
+    (is : List Formal.ArbiterSelect.Candidate) (g : Formal.ArbiterSelect.Candidate)
+    (plannable satisfied : Nat → Bool)
+    (hmem : g ∈ is) (hplan : plannable g.id = true) (hnsat : satisfied g.id = false) :
+    ∃ r, r ∈ is ∧
+      Extracted.ArbiterSelect.select_interrupt
+          (is.map (encC f)) (encPlan plannable) satisfied = (some r.id, [()]) := by
+  obtain ⟨r, hr, hrmem⟩ := Formal.ArbiterSelect.select_interrupt_any_plannable_wins
+    is g plannable satisfied hmem hplan hnsat
+  refine ⟨r, hrmem, ?_⟩
+  rw [select_interrupt_bridge f plannable satisfied is, hr]
 
 end Extracted.Bridges

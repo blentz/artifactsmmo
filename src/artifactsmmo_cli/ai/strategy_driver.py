@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
     BAND_RAID,
     BAND_STEP,
     Candidate,
+    arbitrate,
     select_pure,
 )
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess, drain_snapshot
@@ -1171,10 +1172,10 @@ class StrategyArbiter:
         candidates: list[Candidate] = []
         for gk in guard_kinds:
             g = map_guard(gk, game_data, ctx, state, step_profile, self._history)
-            candidates.append(Candidate(goal=g, is_means=False, repr_=repr(g), band=BAND_GUARD))
+            candidates.append(Candidate(goal=g, repr_=repr(g), band=BAND_GUARD))
         for mk in collect_kinds:
             g = map_means(mk, game_data, ctx, state, self._history, needs)
-            candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g), band=BAND_COLLECT))
+            candidates.append(Candidate(goal=g, repr_=repr(g), band=BAND_COLLECT))
         # Equip-owned-gear (COLLECT band): a first-class objective that equips
         # already-OWNED positive-Rank gear into currently-EMPTY slots, so free
         # gear is worn before the bot grinds for more (COLLECT outranks the
@@ -1199,8 +1200,7 @@ class StrategyArbiter:
             frozenset(task_reserved_demand(state, game_data)) | turn_in_reserved)
         if equip_fills:
             eq_goal = EquipOwnedGoal(fills=equip_fills)
-            candidates.append(Candidate(goal=eq_goal, is_means=True,
-                                        repr_=repr(eq_goal), band=BAND_COLLECT))
+            candidates.append(Candidate(goal=eq_goal, repr_=repr(eq_goal), band=BAND_COLLECT))
         # Withdraw-tools (COLLECT band): same materialized-here contract as
         # EquipOwnedGoal — bounded, self-satisfying, never a blocker. Ferries a
         # strictly-better BANKED gathering tool into the bag; the proven gather
@@ -1216,8 +1216,7 @@ class StrategyArbiter:
             if tool_fills:
                 wt_goal = WithdrawToolsGoal(fills=tool_fills, bank_location=bank_tile,
                                             accessible=ctx.bank_accessible)
-                candidates.append(Candidate(goal=wt_goal, is_means=True,
-                                            repr_=repr(wt_goal), band=BAND_COLLECT))
+                candidates.append(Candidate(goal=wt_goal, repr_=repr(wt_goal), band=BAND_COLLECT))
         # Urgent-hoard recycle (COLLECT band): the discretionary RECYCLE_SURPLUS
         # means is starved while a step goal stays plannable, so a skill grind
         # feeds its output pile unboundedly (copper_helmet x30, trace
@@ -1235,8 +1234,7 @@ class StrategyArbiter:
             rs_goal = RecycleSurplusGoal(
                 game_data=game_data, ctx=ctx,
                 initial_total=sum(recycle_surplus_map.values()))
-            candidates.append(Candidate(goal=rs_goal, is_means=True,
-                                        repr_=repr(rs_goal), band=BAND_COLLECT))
+            candidates.append(Candidate(goal=rs_goal, repr_=repr(rs_goal), band=BAND_COLLECT))
         # Urgent-hoard SELL and DRAIN (COLLECT band) — 2026-08-05, part 2 of the
         # disposal-unification epic. The recycle hoist above fixed exactly ONE of
         # the three starved shed rungs; the other two kept firing and kept losing.
@@ -1280,8 +1278,7 @@ class StrategyArbiter:
             si_goal = SellInventoryGoal(game_data=game_data, ctx=ctx,
                                         bank_accessible=ctx.bank_accessible,
                                         state=state)
-            candidates.append(Candidate(goal=si_goal, is_means=True,
-                                        repr_=repr(si_goal), band=BAND_COLLECT))
+            candidates.append(Candidate(goal=si_goal, repr_=repr(si_goal), band=BAND_COLLECT))
         drain_excess_map = bank_drain_excess(state, game_data, ctx)
         hoist_drain = (bank_shed_hoist(drain_excess_map, state.inventory_max)
                        and ctx.bank_accessible
@@ -1294,8 +1291,7 @@ class StrategyArbiter:
             db_goal = DrainBankJunkGoal(game_data=game_data, ctx=ctx,
                                         bank_accessible=ctx.bank_accessible,
                                         snapshot=drain_snapshot(state, game_data, ctx))
-            candidates.append(Candidate(goal=db_goal, is_means=True,
-                                        repr_=repr(db_goal), band=BAND_COLLECT))
+            candidates.append(Candidate(goal=db_goal, repr_=repr(db_goal), band=BAND_COLLECT))
         # Append step_goal + every fallback-step goal in ranking order so
         # select_pure walks them all before reaching discretionary. Trace
         # 2026-06-06 16:34 (cycles 0-1): top step's GrindCharacterXP
@@ -1321,7 +1317,7 @@ class StrategyArbiter:
         if step_goal is not None:
             r = repr(step_goal)
             candidates.append(Candidate(
-                goal=step_goal, is_means=True, repr_=r,
+                goal=step_goal, repr_=r,
                 band=BAND_STEP if step_is_real else BAND_FALLBACK_STEP))
             added_reprs.add(r)
         if step_is_real:
@@ -1343,7 +1339,7 @@ class StrategyArbiter:
             if r in added_reprs:
                 continue
             added_reprs.add(r)
-            candidates.append(Candidate(goal=alt_goal, is_means=True, repr_=r, band=BAND_FALLBACK_STEP))
+            candidates.append(Candidate(goal=alt_goal, repr_=r, band=BAND_FALLBACK_STEP))
         for mk in discretionary_kinds:
             if hoist_recycle and mk is MeansKind.RECYCLE_SURPLUS:
                 # Already materialized in the COLLECT band this cycle; a second
@@ -1365,7 +1361,7 @@ class StrategyArbiter:
                 # the all-or-nothing goal that can never plan.
                 continue
             g = map_means(mk, game_data, ctx, state, self._history, needs)
-            candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g), band=BAND_DISCRETIONARY))
+            candidates.append(Candidate(goal=g, repr_=repr(g), band=BAND_DISCRETIONARY))
         return candidates
 
     def _append_raid_candidates(self, candidates: list[Candidate],
@@ -1373,8 +1369,7 @@ class StrategyArbiter:
         """File every open raid at `BAND_RAID`, at the caller's chosen position
         in the walk order. One call site per position, not two lists."""
         for raid_goal in self._raid_candidates(state, game_data):
-            candidates.append(Candidate(goal=raid_goal, is_means=True,
-                                        repr_=repr(raid_goal), band=BAND_RAID))
+            candidates.append(Candidate(goal=raid_goal, repr_=repr(raid_goal), band=BAND_RAID))
 
     def _raid_candidates(self, state: WorldState,
                          game_data: GameData) -> list[ParticipateRaidGoal]:
@@ -1482,7 +1477,9 @@ class StrategyArbiter:
             r = repr(goal)
             return r != "TaskCancel" and r in worth_suppressed
 
-        non_wait = [c for c in candidates if not isinstance(c.goal, WaitGoal)]
+        interrupts = [c for c in candidates if c.band == BAND_GUARD]
+        non_wait = [c for c in candidates
+                    if c.band != BAND_GUARD and not isinstance(c.goal, WaitGoal)]
 
         def try_plan(goal: Goal) -> list[Action]:
             # Every candidate is asked every cycle. A walk-served goal's answer
@@ -1499,9 +1496,12 @@ class StrategyArbiter:
         def satisfied(goal: Goal) -> bool:
             return goal.is_satisfied(state)
 
-        # THE walk over non-Wait candidates, in band order.
-        chosen, plan, new_committed = select_pure(
-            candidates=non_wait, committed_repr=self._committed_repr,
+        # Interrupts first (Phase 5-2a): a firing guard that plans runs and
+        # leaves the commitment as it is, so the intention resumes. Otherwise
+        # THE walk over the non-Wait means, in band order.
+        chosen, plan, new_committed = arbitrate(
+            interrupts=interrupts, candidates=non_wait,
+            committed_repr=self._committed_repr,
             try_plan=try_plan, is_satisfied=satisfied, is_suppressed=is_suppressed)
         if chosen is None and worth_suppressed:
             # Last resort: objective step unplannable AND every need-serving means

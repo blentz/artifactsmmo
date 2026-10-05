@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/arbiter_select.py (sha256: 0e6e4a0d080655f19fffaa03516647b077a3f8c394f0ce92cd3c3cfc85b90698) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/arbiter_select.py (sha256: 16559a8b5d891028062d4dd05861efe8660ed76d35c59c0e8151cc92e7ae862f) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.ArbiterSelect
@@ -32,14 +32,13 @@ def _findSome {α β : Type} (f : α → Option β) (xs : List α) : Option β :
     | some r => some r
     | none => _findSome f rest
 
-/-- Extracted from `@dataclass Candidate` (line 64). -/
+/-- Extracted from `@dataclass Candidate` (line 63). -/
 structure Candidate (Goal : Type) where
   goal : Goal
-  is_means : Bool
   repr_ : String
   band : Int
 
-/-- Extracted from `_precedes` (line 80). -/
+/-- Extracted from `_precedes` (line 79). -/
 def _precedes {Goal : Type} (candidates : List (Candidate Goal)) (a_repr : String) (b_repr : String) :
     Bool :=
   let a_idx := (_findIdx (fun (c : Candidate Goal) => (decide ((c.repr_) = a_repr))) candidates)
@@ -54,21 +53,39 @@ def _precedes {Goal : Type} (candidates : List (Candidate Goal)) (a_repr : Strin
     | some b_idx_2 =>
       (decide (a_idx_1 < b_idx_2))))
 
-/-- Extracted from `select_pure` (line 89). -/
+/-- Extracted from `select_interrupt` (line 88). -/
+def select_interrupt {Goal : Type} {Action : Type} (interrupts : List (Candidate Goal)) (try_plan : (Goal → (List Action))) (is_satisfied : (Goal → Bool)) :
+    ((Option Goal) × (List Action)) :=
+  (match (_findSome
+      (fun (cand : Candidate Goal) =>
+        (if (is_satisfied (cand.goal))
+       then
+        none
+       else
+        let plan := (try_plan (cand.goal))
+        (if (decide ((Int.ofNat (List.length plan)) > 0))
+         then
+          (some ((some (cand.goal)), plan))
+         else
+          none)))
+      interrupts) with
+  | some _r_1 => _r_1
+  | none =>
+    (none, []))
+
+/-- Extracted from `select_pure` (line 104). -/
 def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal)) (committed_repr : Option String) (try_plan : (Goal → (List Action))) (is_satisfied : (Goal → Bool)) (is_suppressed : (Goal → Bool)) :
     ((Option Goal) × (List Action) × (Option String)) :=
   let tried_repr : Option String := none
   (match committed_repr with
   | some committed_repr_1 =>
-    let committed_cand := (_find (fun (c : Candidate Goal) => ((c.is_means) && (decide ((c.repr_) = committed_repr_1)))) candidates)
+    let committed_cand := (_find (fun (c : Candidate Goal) => (decide ((c.repr_) = committed_repr_1))) candidates)
     (match committed_cand with
     | some committed_cand_2 =>
       (if ((!(is_satisfied (committed_cand_2.goal))) && (!(is_suppressed (committed_cand_2.goal))))
        then
-        let guard_reprs := (List.map (fun (c : Candidate Goal) => (c.repr_)) (List.filter (fun (c : Candidate Goal) => (!(c.is_means))) candidates))
-        let guard_precedes := (List.any guard_reprs (fun (gr : String) => (_precedes candidates gr committed_repr_1)))
         let lower_band_precedes := ((decide ((committed_cand_2.band) < 5)) && (List.any candidates (fun (c : Candidate Goal) => ((decide ((c.band) < (committed_cand_2.band))) && (_precedes candidates (c.repr_) committed_repr_1)))))
-        (if ((!guard_precedes) && (!lower_band_precedes))
+        (if (!lower_band_precedes)
          then
           let plan := (try_plan (committed_cand_2.goal))
           let tried_repr := (some committed_repr_1)
@@ -93,13 +110,7 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
                       let plan := (try_plan (cand.goal))
                       (if (decide ((Int.ofNat (List.length plan)) > 0))
                        then
-                        let new_committed : Option String := (some committed_repr_1)
-                        (if (cand.is_means)
-                         then
-                          let new_committed := (some (cand.repr_))
-                          (some ((some (cand.goal)), plan, new_committed))
-                         else
-                          (some ((some (cand.goal)), plan, new_committed)))
+                        (some ((some (cand.goal)), plan, (some (cand.repr_))))
                        else
                         none)))))
                 candidates) with
@@ -124,13 +135,7 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
                     let plan := (try_plan (cand.goal))
                     (if (decide ((Int.ofNat (List.length plan)) > 0))
                      then
-                      let new_committed : Option String := (some committed_repr_1)
-                      (if (cand.is_means)
-                       then
-                        let new_committed := (some (cand.repr_))
-                        (some ((some (cand.goal)), plan, new_committed))
-                       else
-                        (some ((some (cand.goal)), plan, new_committed)))
+                      (some ((some (cand.goal)), plan, (some (cand.repr_))))
                      else
                       none)))))
               candidates) with
@@ -155,13 +160,7 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
                   let plan := (try_plan (cand.goal))
                   (if (decide ((Int.ofNat (List.length plan)) > 0))
                    then
-                    let new_committed : Option String := (some committed_repr_1)
-                    (if (cand.is_means)
-                     then
-                      let new_committed := (some (cand.repr_))
-                      (some ((some (cand.goal)), plan, new_committed))
-                     else
-                      (some ((some (cand.goal)), plan, new_committed)))
+                    (some ((some (cand.goal)), plan, (some (cand.repr_))))
                    else
                     none)))))
             candidates) with
@@ -186,13 +185,7 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
                   let plan := (try_plan (cand.goal))
                   (if (decide ((Int.ofNat (List.length plan)) > 0))
                    then
-                    let new_committed : Option String := (some committed_repr_1)
-                    (if (cand.is_means)
-                     then
-                      let new_committed := (some (cand.repr_))
-                      (some ((some (cand.goal)), plan, new_committed))
-                     else
-                      (some ((some (cand.goal)), plan, new_committed)))
+                    (some ((some (cand.goal)), plan, (some (cand.repr_))))
                    else
                     none)))))
             candidates) with
@@ -217,18 +210,22 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
               let plan := (try_plan (cand.goal))
               (if (decide ((Int.ofNat (List.length plan)) > 0))
                then
-                let new_committed : Option String := committed_repr
-                (if (cand.is_means)
-                 then
-                  let new_committed := (some (cand.repr_))
-                  (some ((some (cand.goal)), plan, new_committed))
-                 else
-                  (some ((some (cand.goal)), plan, new_committed)))
+                (some ((some (cand.goal)), plan, (some (cand.repr_))))
                else
                 none)))))
         candidates) with
     | some _r_7 => _r_7
     | none =>
       (none, [], none)))
+
+/-- Extracted from `arbitrate` (line 168). -/
+def arbitrate {Goal : Type} {Action : Type} (interrupts : List (Candidate Goal)) (candidates : List (Candidate Goal)) (committed_repr : Option String) (try_plan : (Goal → (List Action))) (is_satisfied : (Goal → Bool)) (is_suppressed : (Goal → Bool)) :
+    ((Option Goal) × (List Action) × (Option String)) :=
+  let interrupt := (select_interrupt interrupts try_plan is_satisfied)
+  (if (decide ((Int.ofNat (List.length (interrupt.2))) > 0))
+   then
+    ((interrupt.1), (interrupt.2), committed_repr)
+   else
+    (select_pure candidates committed_repr try_plan is_satisfied is_suppressed))
 
 end Extracted.ArbiterSelect

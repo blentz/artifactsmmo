@@ -1,27 +1,26 @@
-"""Pure core of `StrategyArbiter.select`: the candidate-walk with sticky
-commitment.
+"""Pure core of `StrategyArbiter.select`: the interrupt pre-pass, then the
+candidate walk with sticky commitment.
 
 Extracted so the Lean model in `formal/Formal/ArbiterSelect.lean` can mirror the
-EXACT decision logic (band-ordered candidates, sticky-commitment, guard
-preemption) without dragging Goal classes, the planner, or the world state into
-the model. The production `StrategyArbiter.select` builds inputs (candidates +
-committed-repr + per-goal planning closure + suppression set) then delegates
-here. Behavior is identical.
+EXACT decision logic without dragging Goal classes, the planner, or the world
+state into the model. The production `StrategyArbiter.select` builds inputs
+(interrupts + candidates + committed-repr + per-goal planning closure +
+suppression predicate) then delegates here.
 
-Candidates are pre-ordered: guards in `GUARD_ORDER`, then collect-reward in
-`COLLECT_REWARD_ORDER`, then optional objective step, then discretionary in
-`DISCRETIONARY_ORDER`. Each candidate carries an `is_means` flag (False for
-guards, True for collect/step/discretionary).
+INTERRUPTS (Phase 5-2a of docs/PLAN_decision_architecture_redesign.md): the
+guards — HP critical, bag/bank pressure, GE cancel, ... — are preconditions of
+continuing whatever the character is doing. `select_interrupt` runs them FIRST,
+in `GUARD_ORDER`: the first one that is not satisfied and plans wins, and the
+commitment is untouched (the intention resumes after it). They used to be
+candidates walked in band order against the objective, with a `guard_precedes`
+rule blocking the sticky commitment whenever one was present.
 
-Sticky-commitment: if `committed_repr` matches an is_means candidate AND no
-guard candidate precedes it (i.e. there is no guard candidate at all — guards
-are always prepended), try planning the committed candidate first. If it plans
-and is not satisfied / suppressed, return it. Otherwise fall through to the
-ordered walk.
-
-The walk returns the first plannable, non-suppressed, non-satisfied candidate.
-On success, the new committed_repr is the chosen goal's repr (if is_means) or
-None (if a guard won).
+The WALK (`select_pure`) then sees only means — collect-reward, objective step,
+raids, fallback steps, discretionary — in that band order. Sticky commitment:
+if `committed_repr` matches a candidate and no strictly-higher-priority band
+precedes it (discretionary is exempt), try planning the committed candidate
+first. Otherwise the walk returns the first plannable, non-suppressed,
+non-satisfied candidate, which becomes the new commitment.
 """
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -62,17 +61,17 @@ BAND_DISCRETIONARY = 5
 
 @dataclass(frozen=True)
 class Candidate:
-    """A (goal, is_means, repr, band) tuple — the unit the pure selector walks.
+    """A (goal, repr, band) triple — the unit the pure selectors walk.
 
     `band` is the priority tier the candidate was built in (0 guards, 1 collect,
     2 top objective step, 3 open raid windows, 4 fallback steps,
-    5 discretionary). Sticky commitment
-    may defend the committed goal within-or-below its own band but must never
+    5 discretionary). Band-0 candidates are interrupts (`select_interrupt`);
+    every other band is a means walked by `select_pure`. Sticky commitment may
+    defend the committed goal within-or-below its own band but must never
     preempt a STRICTLY LOWER band (higher-priority) candidate — see
     `lower_band_precedes` in `select_pure`.
     """
     goal: Goal
-    is_means: bool
     repr_: str
     band: int
 
@@ -86,6 +85,22 @@ def _precedes(candidates: list[Candidate], a_repr: str, b_repr: str) -> bool:
     return a_idx < b_idx
 
 
+def select_interrupt(
+    interrupts: list[Candidate],
+    try_plan: Callable[[Goal], list[Action]],
+    is_satisfied: Callable[[Goal], bool],
+) -> tuple[Goal | None, list[Action]]:
+    """The interrupt pre-pass: the first interrupt, in order, that is not
+    satisfied and plans. (None, []) when none does — the intention runs."""
+    for cand in interrupts:
+        if is_satisfied(cand.goal):
+            continue
+        plan = try_plan(cand.goal)
+        if len(plan) > 0:
+            return cand.goal, plan
+    return None, []
+
+
 def select_pure(
     candidates: list[Candidate],
     committed_repr: str | None,
@@ -93,13 +108,8 @@ def select_pure(
     is_satisfied: Callable[[Goal], bool],
     is_suppressed: Callable[[Goal], bool],
 ) -> tuple[Goal | None, list[Action], str | None]:
-    """Sticky-then-walk selection. Returns (chosen_goal, plan, new_committed_repr).
-
-    new_committed_repr is the chosen goal's repr if it is a means; a guard win
-    KEEPS the prior commitment (Phase 4-1a: a guard is an interrupt — RestoreHP
-    runs, then the committed means resumes — so it must not erase what it
-    interrupted; live 2026-10-04, Robby flipped vampire <-> RestoreHP 96 times
-    in 124 cycles, re-choosing from scratch after every rest). On no-plan
+    """Sticky-then-walk selection over the means. Returns (chosen_goal, plan,
+    new_committed_repr): the chosen goal becomes the commitment. On no-plan
     returns (None, [], None).
 
     Pure w.r.t. its closures: side effects (e.g. recording planning attempts)
@@ -111,16 +121,12 @@ def select_pure(
 
     if committed_repr is not None:
         committed_cand = next(
-            (c for c in candidates if c.is_means and c.repr_ == committed_repr),
+            (c for c in candidates if c.repr_ == committed_repr),
             None,
         )
         if (committed_cand is not None
                 and not is_satisfied(committed_cand.goal)
                 and not is_suppressed(committed_cand.goal)):
-            guard_reprs = [c.repr_ for c in candidates if not c.is_means]
-            guard_precedes = any(
-                _precedes(candidates, gr, committed_repr) for gr in guard_reprs
-            )
             # A strictly-lower band (higher-priority) candidate that precedes the
             # committed one blocks the sticky short-circuit: the ordered walk must
             # get to try the higher-priority candidate first. Without this a stale
@@ -139,7 +145,7 @@ def select_pure(
                 c.band < committed_cand.band and _precedes(candidates, c.repr_, committed_repr)
                 for c in candidates
             )
-            if not guard_precedes and not lower_band_precedes:
+            if not lower_band_precedes:
                 plan = try_plan(committed_cand.goal)
                 tried_repr = committed_repr
                 if len(plan) > 0:
@@ -154,9 +160,23 @@ def select_pure(
             continue
         plan = try_plan(cand.goal)
         if len(plan) > 0:
-            new_committed: str | None = committed_repr
-            if cand.is_means:
-                new_committed = cand.repr_
-            return cand.goal, plan, new_committed
+            return cand.goal, plan, cand.repr_
 
     return None, [], None
+
+
+def arbitrate(
+    interrupts: list[Candidate],
+    candidates: list[Candidate],
+    committed_repr: str | None,
+    try_plan: Callable[[Goal], list[Action]],
+    is_satisfied: Callable[[Goal], bool],
+    is_suppressed: Callable[[Goal], bool],
+) -> tuple[Goal | None, list[Action], str | None]:
+    """Interrupts first, then the means: a winning interrupt keeps the
+    commitment (the intention resumes after it); otherwise `select_pure`."""
+    interrupt = select_interrupt(interrupts, try_plan, is_satisfied)
+    # A chosen interrupt always carries a non-empty plan, and only then.
+    if len(interrupt[1]) > 0:
+        return interrupt[0], interrupt[1], committed_repr
+    return select_pure(candidates, committed_repr, try_plan, is_satisfied, is_suppressed)

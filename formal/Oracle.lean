@@ -1001,49 +1001,52 @@ def runScalarizer (args : Array Json) : Json :=
     coinValue charScale goldUnit
   Json.mkObj [("scalar_num", Json.num r.num), ("scalar_den", Json.num (Int.ofNat r.den))]
 
-/-- Compute one arbiter_select result using the SAME proved `selectPure`.
+/-- Compute one arbitration using the SAME proved `arbitrate` (Phase 5-2a:
+interrupts first, then the means).
 
 args layout:
 * `[0]`          = nCands
-* per-candidate block (6 Ints, repeated nCands times starting at index 1):
-  `[id, isMeans(0/1), plannable(0/1), satisfied(0/1), suppressed(0/1), band]`
+* per-candidate block (5 Ints, repeated nCands times starting at index 1):
+  `[id, plannable(0/1), satisfied(0/1), suppressed(0/1), band]`
 * trailing: `[committed_present(0/1), committed_id]`
 
-The per-candidate `plannable/satisfied/suppressed` flags encode the closures
-the Python passes in. The oracle reconstructs an `id → Bool` table keyed by
-`Candidate.id` (assumes ids are unique across the candidate list — the
-production guarantee captured by `idsDisjoint`-style well-formedness in the
-diff generator).
+Band-0 candidates are the interrupts and the rest the means, in list order —
+the split `StrategyArbiter._arbitrate` makes. The per-candidate flags encode the
+closures the Python passes in; the oracle rebuilds an `id → Bool` table keyed by
+`Candidate.id` (ids unique across the list — the diff generator guarantees it).
 
-Emits the chosen id (or -1), is-means flag, and new committed id (or -1). -/
+Emits the chosen id (or -1), whether it is an interrupt, and the new committed
+id (or -1). -/
 def runArbiterSelect (args : Array Json) : Json :=
   let n := (intArg args 0).toNat
   let cands : List Formal.ArbiterSelect.Candidate :=
     (List.range n).map (fun k =>
-      let base := 1 + 6 * k
-      ⟨(intArg args base).toNat, intArg args (base + 1) != 0, intArg args (base + 5)⟩)
-  -- Build (id → Bool) tables.
+      let base := 1 + 5 * k
+      ⟨(intArg args base).toNat, intArg args (base + 4)⟩)
   let lookup (offset : Nat) (id : Nat) : Bool :=
     let rec loop : Nat → Bool
       | 0 => false
       | k + 1 =>
-        let base := 1 + 6 * (n - k - 1)
+        let base := 1 + 5 * (n - k - 1)
         if (intArg args base).toNat = id then intArg args (base + offset) != 0
         else loop k
     loop n
-  let plannable := lookup 2
-  let satisfied := lookup 3
-  let suppressed := lookup 4
-  let commPresent := intArg args (1 + 6 * n) != 0
-  let commId := intArg args (2 + 6 * n)
+  let plannable := lookup 1
+  let satisfied := lookup 2
+  let suppressed := lookup 3
+  let commPresent := intArg args (1 + 5 * n) != 0
+  let commId := intArg args (2 + 5 * n)
   let committed : Option Nat := if commPresent then some commId.toNat else none
-  let (chosen, newCommitted) := Formal.ArbiterSelect.selectPure cands committed plannable satisfied suppressed
+  let interrupts := cands.filter (fun c => decide (c.band = 0))
+  let means := cands.filter (fun c => decide (c.band ≠ 0))
+  let (chosen, newCommitted) :=
+    Formal.ArbiterSelect.arbitrate interrupts means committed plannable satisfied suppressed
   let chosenId : Int := match chosen with | some c => Int.ofNat c.id | none => -1
-  let chosenIsMeans : Bool := match chosen with | some c => c.isMeans | none => false
+  let chosenIsInterrupt : Bool := match chosen with | some c => decide (c.band = 0) | none => false
   let newCommittedId : Int := match newCommitted with | some i => Int.ofNat i | none => -1
   Json.mkObj [
     ("chosen_id", Json.num chosenId),
-    ("chosen_is_means", Json.bool chosenIsMeans),
+    ("chosen_is_interrupt", Json.bool chosenIsInterrupt),
     ("new_committed_id", Json.num newCommittedId)
   ]
 

@@ -39,7 +39,7 @@ def _player(tmp_path=None) -> GamePlayer:
 
 
 def _cand(repr_: str, band: int) -> Candidate:
-    return Candidate(goal=MagicMock(), is_means=band != BAND_GUARD, repr_=repr_, band=band)
+    return Candidate(goal=MagicMock(), repr_=repr_, band=band)
 
 
 def _order(candidates: list[Candidate]) -> list[tuple[str, int]]:

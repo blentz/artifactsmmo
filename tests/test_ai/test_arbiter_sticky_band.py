@@ -15,7 +15,12 @@ so the ordered walk runs and the higher-priority step wins.
 from collections.abc import Callable
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.arbiter_select import BAND_DISCRETIONARY, Candidate, select_pure
+from artifactsmmo_cli.ai.arbiter_select import (
+    BAND_DISCRETIONARY,
+    Candidate,
+    select_interrupt,
+    select_pure,
+)
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -68,14 +73,14 @@ def _closures(
     return try_plan, is_satisfied, is_suppressed
 
 
-def _cand(tag: str, is_means: bool, band: int) -> Candidate:
-    return Candidate(goal=_StubGoal(tag), is_means=is_means, repr_=tag, band=band)
+def _cand(tag: str, band: int) -> Candidate:
+    return Candidate(goal=_StubGoal(tag), repr_=tag, band=band)
 
 
 def test_committed_lower_band_grind_yields_to_higher_band_step():
     """The exact freeze: committed band-4 grind loses to a plannable band-2 step."""
-    step = _cand("GrindCharacterXP(green_slime)", is_means=True, band=2)
-    grind = _cand("GatherMaterials(copper_ring)", is_means=True, band=4)
+    step = _cand("GrindCharacterXP(green_slime)", band=2)
+    grind = _cand("GatherMaterials(copper_ring)", band=4)
     # Candidate order mirrors _build_candidates: top step (band 2) precedes the
     # fallback grind (BAND_FALLBACK_STEP).
     candidates = [step, grind]
@@ -97,8 +102,8 @@ def test_committed_lower_band_grind_yields_to_higher_band_step():
 def test_committed_same_band_is_still_kept():
     """Within-band anti-thrash preserved: committed defends against an equal-band
     peer that precedes it (the sticky-idempotence contract)."""
-    first = _cand("AcceptTask", is_means=True, band=5)
-    committed = _cand("PursueTask", is_means=True, band=5)
+    first = _cand("AcceptTask", band=5)
+    committed = _cand("PursueTask", band=5)
     candidates = [first, committed]  # peer precedes committed, SAME band
     try_plan, is_sat, is_sup = _closures(plannable={"AcceptTask", "PursueTask"})
 
@@ -118,8 +123,8 @@ def test_committed_discretionary_task_exempt_from_band_preemption():
     """Narrow rule: a committed DISCRETIONARY task is NOT preempted by a
     lower-band step — income tasks stay governed by the semantic worth gate, not
     this structural band rule (preserves the worth-gate epic's arbitration)."""
-    step = _cand("GatherMaterials(copper_dagger)", is_means=True, band=2)
-    task = _cand("PursueTask(cooked_gudgeon)", is_means=True, band=5)
+    step = _cand("GatherMaterials(copper_dagger)", band=2)
+    task = _cand("PursueTask(cooked_gudgeon)", band=5)
     candidates = [step, task]  # band-2 step precedes the discretionary committed task
     try_plan, is_sat, is_sup = _closures(
         plannable={"GatherMaterials(copper_dagger)", "PursueTask(cooked_gudgeon)"})
@@ -139,8 +144,8 @@ def test_committed_discretionary_task_exempt_from_band_preemption():
 def test_committed_higher_band_still_wins_over_lower_band_when_first():
     """A committed candidate that is itself the lowest band present is still
     defended (nothing lower precedes it)."""
-    committed = _cand("GrindCharacterXP(green_slime)", is_means=True, band=2)
-    grind = _cand("GatherMaterials(copper_ring)", is_means=True, band=4)
+    committed = _cand("GrindCharacterXP(green_slime)", band=2)
+    grind = _cand("GatherMaterials(copper_ring)", band=4)
     candidates = [committed, grind]
     try_plan, is_sat, is_sup = _closures(plannable={repr(committed.goal), repr(grind.goal)})
 
@@ -154,3 +159,19 @@ def test_committed_higher_band_still_wins_over_lower_band_when_first():
 
     assert repr(chosen) == "GrindCharacterXP(green_slime)"
     assert new_committed == "GrindCharacterXP(green_slime)"
+
+
+def test_a_satisfied_interrupt_is_skipped_and_none_plans_runs_the_intention():
+    """Phase 5-2a: the pre-pass skips an interrupt whose goal is already met and
+    returns the next one that plans; when none plans the intention runs."""
+    met = _cand("RestoreHP", band=0)
+    deposit = _cand("DepositInventory", band=0)
+    try_plan, _sat, _sup = _closures({"RestoreHP", "DepositInventory"})
+
+    def is_satisfied(goal: Goal) -> bool:
+        return repr(goal) == "RestoreHP"
+
+    goal, plan = select_interrupt([met, deposit], try_plan, is_satisfied)
+    assert repr(goal) == "DepositInventory" and plan
+    nothing = _closures(set())[0]
+    assert select_interrupt([met, deposit], nothing, is_satisfied) == (None, [])

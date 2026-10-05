@@ -215,12 +215,14 @@ open Formal.PriorityBand
 #print axioms Formal.PlannerAdmissibility.fScore_monotone_along_path
 #print axioms Formal.PlannerAdmissibility.consistent_closedSet_preserves_optimal
 #print axioms Formal.PlannerAdmissibility.RHP_closedSet_preserves_optimal
-#print axioms Formal.ArbiterSelect.select_pure_guard_wins
+#print axioms Formal.ArbiterSelect.arbitrate_interrupt_wins
+#print axioms Formal.ArbiterSelect.select_interrupt_head_wins
+#print axioms Formal.ArbiterSelect.select_interrupt_any_plannable_wins
+#print axioms Formal.ArbiterSelect.arbitrate_no_interrupt_is_select_pure
 #print axioms Formal.ArbiterSelect.select_pure_sticky_idempotent
 #print axioms Formal.ArbiterSelect.select_pure_no_sticky_preempt_lower_band
 #print axioms Formal.ArbiterSelect.select_pure_no_commitment_is_walk
 #print axioms Formal.ArbiterSelect.walk_returns_head
-#print axioms Formal.ArbiterSelect.guardPrecedes_of_head_guard
 #print axioms Formal.TaskDecision.combat_or_no_history_pivots
 #print axioms Formal.TaskDecision.req_none_pursues
 #print axioms Formal.TaskDecision.no_div_by_zero_from_invariant
@@ -822,7 +824,9 @@ open Formal.PriorityBand
 #print axioms Extracted.Bridges.shopping_raw_node_bridge
 #print axioms Extracted.Bridges.shopping_covered_short_circuit_bridge
 #print axioms Extracted.Bridges.arbiter_select_bridge
-#print axioms Extracted.Bridges.select_pure_guard_wins_extracted
+#print axioms Extracted.Bridges.select_interrupt_bridge
+#print axioms Extracted.Bridges.arbitrate_bridge
+#print axioms Extracted.Bridges.select_interrupt_wins_extracted
 #print axioms Extracted.Bridges.task_batch_bridge
 #print axioms Extracted.Bridges.task_batch_bridge_none
 #print axioms Extracted.Bridges.task_batch_ge_one_extracted
@@ -1037,9 +1041,6 @@ open Formal.PriorityBand
 #print axioms Formal.PlanModel.length_eq_counts
 #print axioms Formal.PlanModel.gear_obtainable_of_perActionLength_le
 #print axioms Formal.ArbiterSelect.findCommitted_some_props
-#print axioms Formal.ArbiterSelect.guard_precedes_means_in_guardsFirst
-#print axioms Formal.ArbiterSelect.select_pure_any_plannable_guard_wins
-#print axioms Formal.ArbiterSelect.walk_returns_guard_when_plannable_guard_exists
 #print axioms Formal.CheapestPath.all_zero_blocks_witness
 #print axioms Formal.CheapestPath.beatable_level_zero_refused_witness
 #print axioms Formal.CheapestPath.beatable_plus_one_witness

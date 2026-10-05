@@ -272,13 +272,15 @@ open Formal.PriorityBand
 #check @Formal.PlannerAdmissibility.fScore_monotone_along_path -- consistency ⇒ f non-decreasing along any path from the start
 #check @Formal.PlannerAdmissibility.consistent_closedSet_preserves_optimal -- admissible+consistent ⇒ A*-with-visited optimal on both fronts (front 2 via path-monotonicity)
 #check @Formal.PlannerAdmissibility.RHP_closedSet_preserves_optimal -- whole closed-set contract discharged on the RestoreHP instance with the planner's real h ≡ 0
--- ArbiterSelect required roles:
-#check @Formal.ArbiterSelect.select_pure_guard_wins              -- sticky-safety: head-guard plannable ⇒ guard returned regardless of committed
-#check @Formal.ArbiterSelect.select_pure_sticky_idempotent       -- sticky-idempotence: no guards ∧ committed plans ⇒ committed returned
+-- ArbiterSelect required roles (Phase 5-2a: interrupts first, then the means):
+#check @Formal.ArbiterSelect.arbitrate_interrupt_wins            -- interrupt-safety: a plannable interrupt wins regardless of committed, and keeps it
+#check @Formal.ArbiterSelect.select_interrupt_head_wins          -- interrupt order: the first plannable interrupt wins
+#check @Formal.ArbiterSelect.select_interrupt_any_plannable_wins -- interrupt totality: any plannable interrupt ⇒ some interrupt returned
+#check @Formal.ArbiterSelect.arbitrate_no_interrupt_is_select_pure -- no interrupt ⇒ the means selector decides
+#check @Formal.ArbiterSelect.select_pure_sticky_idempotent       -- sticky-idempotence: committed plans ⇒ committed returned
 #check @Formal.ArbiterSelect.select_pure_no_sticky_preempt_lower_band -- band-anti-freeze: lower-band precedes committed (non-discretionary) ⇒ no sticky preempt
 #check @Formal.ArbiterSelect.select_pure_no_commitment_is_walk   -- no-commit: select = walk in band order
 #check @Formal.ArbiterSelect.walk_returns_head                   -- walk-head: head plannable & non-skipped ⇒ head returned
-#check @Formal.ArbiterSelect.guardPrecedes_of_head_guard         -- structural: head guard with id ≠ committed precedes committed means in rest
 -- TaskDecision required roles:
 #check @Formal.TaskDecision.combat_or_no_history_pivots          -- combat-pivots: combat ∨ ¬history ⇒ PIVOT
 #check @Formal.TaskDecision.req_none_pursues                     -- already-feasible: req None ⇒ PURSUE
@@ -1012,7 +1014,9 @@ open Formal.PriorityBand
 -- plannable), extracted ∘ encode = encOut ∘ hand — no wellformedness
 -- precondition; every Formal.ArbiterSelect safety theorem transfers.
 #check @Extracted.Bridges.arbiter_select_bridge                       -- extracted ∘ encode = encOut ∘ hand
-#check @Extracted.Bridges.select_pure_guard_wins_extracted            -- sticky-safety on the extracted def
+#check @Extracted.Bridges.select_interrupt_bridge                     -- extracted pre-pass = hand selectInterrupt
+#check @Extracted.Bridges.arbitrate_bridge                            -- extracted arbitration = hand arbitrate
+#check @Extracted.Bridges.select_interrupt_wins_extracted             -- interrupt-safety on the extracted def
 
 -- Extracted-model bridges (mechanical extraction P3a): the recipe family —
 -- recipe_closure / task_batch / task_reservation, hoisted to pure cores over
@@ -1352,11 +1356,8 @@ open Formal.PriorityBand
 -- The 112 declarations below were listed ONLY in Audit.lean: their axioms
 -- were scanned but they had no traceability row. Audit.lean is generated
 -- from this file, so they are recorded here to keep them scanned.
--- ArbiterSelect (4):
+-- ArbiterSelect (1):
 #check @Formal.ArbiterSelect.findCommitted_some_props
-#check @Formal.ArbiterSelect.guard_precedes_means_in_guardsFirst
-#check @Formal.ArbiterSelect.select_pure_any_plannable_guard_wins
-#check @Formal.ArbiterSelect.walk_returns_guard_when_plannable_guard_exists
 -- CheapestPath (7):
 #check @Formal.CheapestPath.all_zero_blocks_witness
 #check @Formal.CheapestPath.beatable_level_zero_refused_witness

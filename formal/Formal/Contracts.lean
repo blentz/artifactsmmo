@@ -3337,6 +3337,14 @@ example : ∀ (cs : List Formal.ArbiterSelect.Candidate) (cid : Nat)
     Formal.ArbiterSelect.precedes cs d.id cid = true →
     (Formal.ArbiterSelect.stickyOutcome cs (some cid) plannable satisfied suppressed).1 = none :=
   @Formal.ArbiterSelect.select_pure_no_sticky_preempt_lower_band
+-- Interrupt safety (Phase 5-2a): a plannable, unsatisfied interrupt wins the
+-- arbitration regardless of the commitment, which it keeps.
+example : ∀ (is cs : List Formal.ArbiterSelect.Candidate) (committed : Option Nat)
+    (g : Formal.ArbiterSelect.Candidate) (plannable satisfied suppressed : Nat → Bool),
+    g ∈ is → plannable g.id = true → satisfied g.id = false →
+    ∃ r, r ∈ is ∧ Formal.ArbiterSelect.arbitrate is cs committed
+      plannable satisfied suppressed = (some r, committed) :=
+  @Formal.ArbiterSelect.arbitrate_interrupt_wins
 
 /-! ### InventoryKeep role contracts (the single keep authority's COMBINATOR).
 

@@ -317,7 +317,7 @@ MODULES: tuple[ModuleSpec, ...] = (
         source="src/artifactsmmo_cli/ai/arbiter_select.py",
         output=f"{GENERATED_DIR}/ArbiterSelect.lean",
         core_name="ArbiterSelect",
-        functions=("_precedes", "select_pure"),
+        functions=("_precedes", "select_interrupt", "select_pure", "arbitrate"),
         opaque_types=("Goal", "Action"),
         structures=("Candidate",),
     ),

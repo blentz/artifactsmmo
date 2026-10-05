@@ -2354,25 +2354,29 @@ CANCEL_SELECTION_MUTATIONS = [
 
 
 # arbiter_select mutations -- old strings matched to current arbiter_select.py text.
+# Phase 5-2a moved the guards into the interrupt pre-pass: the guard_precedes
+# and is_means mutants retired with that code; the interrupt mutants below
+# replace them.
 ARBITER_SELECT_MUTATIONS = [
-    # drop the guard_precedes check: sticky-committed means survives a firing
-    # plannable guard. This is the bug-likely safety-violation the proof pins.
-    ("arbiter_select: drop guard_precedes check (sticky wins over guard)",
-     "            if not guard_precedes and not lower_band_precedes:\n"
-     "                plan = try_plan(committed_cand.goal)\n"
-     "                tried_repr = committed_repr\n"
-     "                if len(plan) > 0:\n"
-     "                    return committed_cand.goal, plan, committed_repr",
-     "            if True:\n"
-     "                plan = try_plan(committed_cand.goal)\n"
-     "                tried_repr = committed_repr\n"
-     "                if len(plan) > 0:\n"
-     "                    return committed_cand.goal, plan, committed_repr"),
+    # The interrupt pre-pass skipped: a firing, plannable guard loses to the
+    # committed means — the safety violation `arbitrate_interrupt_wins` pins.
+    ("arbiter_select: interrupts are skipped (the means always decide)",
+     "    if len(interrupt[1]) > 0:\n",
+     "    if False:\n"),
+    # An interrupt win clears the commitment: the interrupted intention is
+    # re-chosen from scratch after every guard (Phase 4-1a reverted).
+    ("arbiter_select: an interrupt win clears the commitment",
+     "        return interrupt[0], interrupt[1], committed_repr\n",
+     "        return interrupt[0], interrupt[1], None\n"),
+    # The pre-pass returns the first interrupt that does NOT plan.
+    ("arbiter_select: select_interrupt picks an unplannable interrupt",
+     "        if len(plan) > 0:\n            return cand.goal, plan\n",
+     "        if len(plan) == 0:\n            return cand.goal, plan\n"),
     # sticky always wins: skip the walk entirely if committed is found. Even
     # when committed is not plannable, the function returns None instead of
     # falling through.
     ("arbiter_select: sticky always wins (return committed unconditionally)",
-     "            if not guard_precedes and not lower_band_precedes:\n"
+     "            if not lower_band_precedes:\n"
      "                plan = try_plan(committed_cand.goal)\n"
      "                tried_repr = committed_repr\n"
      "                if len(plan) > 0:\n"
@@ -2384,8 +2388,8 @@ ARBITER_SELECT_MUTATIONS = [
     # copper_ring char-XP freeze (trace 2026-07-01). Killed by the freeze
     # regression differential.
     ("arbiter_select: drop lower_band_precedes check (stale commit preempts step)",
-     "            if not guard_precedes and not lower_band_precedes:\n",
-     "            if not guard_precedes:\n"),
+     "            if not lower_band_precedes:\n",
+     "            if True:\n"),
     # flip the band comparison: c.band < committed.band -> c.band > committed.band,
     # so a lower band no longer counts as "preceding higher priority" and the
     # freeze is not prevented.
@@ -2394,32 +2398,24 @@ ARBITER_SELECT_MUTATIONS = [
      "                c.band > committed_cand.band and _precedes(candidates, c.repr_, committed_repr)"),
     # widen the discretionary exemption so band-5 commits are ALSO preemptable —
     # breaks the worth-gate-governed task arbitration the exemption preserves.
-    # (band-4 in the original; discretionary moved 4 -> 5 with the 2026-08-23
-    # `BAND_RAID` insertion.)
     ("arbiter_select: widen discretionary exemption (band < 5 -> band < 999)",
      "            lower_band_precedes = committed_cand.band < 5 and any(",
      "            lower_band_precedes = committed_cand.band < 999 and any("),
-    # reverse the precedes comparison: a_idx < b_idx -> a_idx > b_idx, so a
-    # guard at index 0 no longer "precedes" a means at index ≥ 1. guard_precedes
-    # becomes false when it should be true, and sticky can override a guard.
+    # reverse the precedes comparison: a lower band that comes first no longer
+    # "precedes" the commitment, so the freeze is not prevented.
     ("arbiter_select: precedes comparison flip (< -> >)",
      "    return a_idx < b_idx",
      "    return a_idx > b_idx"),
-    # walk's plannable check inverted: returns first NON-plannable goal,
+    # walk's plannable check inverted: returns first NON-plannable means,
     # corrupting the band-order first-plannable contract.
     ("arbiter_select: walk plannable check inverted (if plan -> if not plan)",
-     "        plan = try_plan(cand.goal)\n        if len(plan) > 0:\n",
-     "        plan = try_plan(cand.goal)\n        if len(plan) == 0:\n"),
-    # drop the is_means commitment guard: a guard win wrongly sets new_committed
-    # to the guard's repr (a guard win must KEEP the prior commitment).
-    ("arbiter_select: commit on guard win (drop is_means guard)",
-     "            if cand.is_means:\n                new_committed = cand.repr_\n",
-     "            if True:\n                new_committed = cand.repr_\n"),
-    # Phase 4-1a reverted: a guard win clears the commitment, so the
-    # interrupted means is re-chosen from scratch after every guard.
-    ("arbiter_select: guard win clears the commitment",
-     "            new_committed: str | None = committed_repr\n",
-     "            new_committed: str | None = None\n"),
+     "        if len(plan) > 0:\n            return cand.goal, plan, cand.repr_\n",
+     "        if len(plan) == 0:\n            return cand.goal, plan, cand.repr_\n"),
+    # The chosen means does not become the commitment: the walk keeps the stale
+    # one, so the next cycle sticks to a goal the walk did not choose.
+    ("arbiter_select: the chosen means does not become the commitment",
+     "            return cand.goal, plan, cand.repr_\n",
+     "            return cand.goal, plan, committed_repr\n"),
 ]
 
 
@@ -3833,8 +3829,8 @@ EMPTY_SLOT_FILLS_MUTATIONS = [
 # assertion (tests/test_ai/test_equip_owned_arbiter.py).
 EQUIP_OWNED_BAND_MUTATIONS = [
     ("strategy_driver: EquipOwnedGoal band COLLECT->DISCRETIONARY (sinks below step)",
-     "                                        repr_=repr(eq_goal), band=BAND_COLLECT))",
-     "                                        repr_=repr(eq_goal), band=BAND_DISCRETIONARY))"),
+     "candidates.append(Candidate(goal=eq_goal, repr_=repr(eq_goal), band=BAND_COLLECT))",
+     "candidates.append(Candidate(goal=eq_goal, repr_=repr(eq_goal), band=BAND_DISCRETIONARY))"),
 ]
 
 
@@ -3859,8 +3855,8 @@ BANK_TOOL_FILLS_MUTATIONS = [
 
 WITHDRAW_TOOLS_BAND_MUTATIONS = [
     ("strategy_driver: WithdrawToolsGoal band COLLECT->DISCRETIONARY (sinks below step)",
-     "                                            repr_=repr(wt_goal), band=BAND_COLLECT))",
-     "                                            repr_=repr(wt_goal), band=BAND_DISCRETIONARY))"),
+     "candidates.append(Candidate(goal=wt_goal, repr_=repr(wt_goal), band=BAND_COLLECT))",
+     "candidates.append(Candidate(goal=wt_goal, repr_=repr(wt_goal), band=BAND_DISCRETIONARY))"),
     ("strategy_driver: drop bank-accessible gate on WithdrawTools",
      "        if ctx.bank_accessible and bank_tile is not None:",
      "        if bank_tile is not None:"),
@@ -3949,8 +3945,8 @@ RECYCLE_HOIST_MUTATIONS = [
      "                         and used_fraction(state) < SELL_PRESSURE_FRACTION)",
      "        hoist_recycle = (shed_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY)"),
     ("strategy_driver: hoisted recycle band COLLECT->DISCRETIONARY",
-     "                                        repr_=repr(rs_goal), band=BAND_COLLECT))",
-     "                                        repr_=repr(rs_goal), band=BAND_DISCRETIONARY))"),
+     "candidates.append(Candidate(goal=rs_goal, repr_=repr(rs_goal), band=BAND_COLLECT))",
+     "candidates.append(Candidate(goal=rs_goal, repr_=repr(rs_goal), band=BAND_DISCRETIONARY))"),
     ("strategy_driver: drop the discretionary dedup of a hoisted recycle",
      "            if hoist_recycle and mk is MeansKind.RECYCLE_SURPLUS:",
      "            if False and mk is MeansKind.RECYCLE_SURPLUS:"),
@@ -3983,8 +3979,8 @@ SHED_HOIST_MUTATIONS = [
      "                                                         owned=0))\n"
      "            candidates.append("),
     ("strategy_driver: hoisted drain band COLLECT->DISCRETIONARY",
-     "                                        repr_=repr(db_goal), band=BAND_COLLECT))",
-     "                                        repr_=repr(db_goal), band=BAND_DISCRETIONARY))"),
+     "candidates.append(Candidate(goal=db_goal, repr_=repr(db_goal), band=BAND_COLLECT))",
+     "candidates.append(Candidate(goal=db_goal, repr_=repr(db_goal), band=BAND_DISCRETIONARY))"),
     ("strategy_driver: drop the discretionary dedup of a hoisted drain",
      "            if hoist_drain and mk is MeansKind.DRAIN_BANK_JUNK:",
      "            if False and mk is MeansKind.DRAIN_BANK_JUNK:"),
@@ -3997,8 +3993,8 @@ SHED_HOIST_MUTATIONS = [
      "                      and used_fraction(state) < SELL_PRESSURE_FRACTION)",
      "        hoist_sell = (used_fraction(state) < SELL_PRESSURE_FRACTION)"),
     ("strategy_driver: hoisted sell band COLLECT->DISCRETIONARY",
-     "                                        repr_=repr(si_goal), band=BAND_COLLECT))",
-     "                                        repr_=repr(si_goal), band=BAND_DISCRETIONARY))"),
+     "candidates.append(Candidate(goal=si_goal, repr_=repr(si_goal), band=BAND_COLLECT))",
+     "candidates.append(Candidate(goal=si_goal, repr_=repr(si_goal), band=BAND_DISCRETIONARY))"),
     ("strategy_driver: hoisted sell drops the bank-arm snapshot (arm goes inert)",
      "            si_goal = SellInventoryGoal(game_data=game_data, ctx=ctx,\n"
      "                                        bank_accessible=ctx.bank_accessible,\n"
