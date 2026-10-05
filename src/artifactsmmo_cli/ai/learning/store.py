@@ -1492,6 +1492,22 @@ class LearningStore:
         except SQLAlchemyError as e:
             print(f"[learning] save_plan_commitment failed: {e}")
 
+    def clear_plan_commitment(self) -> None:
+        """Delete this character's persisted plan (Phase 4-3a): the plan
+        belongs to an intention, and an intention that ended must not be
+        restored by a restart."""
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(
+                    select(PlanCommitment).where(
+                        PlanCommitment.character == self._character)
+                ).first()
+                if row is not None:
+                    s.delete(row)
+                    s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] clear_plan_commitment failed: {e}")
+
     def save_intention(self, committed_repr: str | None) -> None:
         """Record this character's commitment (Phase 4-1b). None ends the
         intention (the row is deleted); the same repr again keeps `began_ts`;

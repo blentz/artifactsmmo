@@ -21,6 +21,7 @@ from artifactsmmo_cli.ai.intention_progress import (
     demote_yielded,
 )
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 
@@ -171,3 +172,42 @@ def test_no_commitment_yet_keeps_waiting_for_a_holder():
     player._yield = (YIELDED, None)
     player._advance_yield(None)
     assert player._yield == (YIELDED, None)
+
+
+def _cache(goal) -> PlanCache:
+    return PlanCache(selected_goal=goal, plan=[MagicMock()], crafting_target=None,
+                     latch_active=False, goal_repr=repr(goal))
+
+
+def test_an_ended_intention_drops_its_plan_here_and_in_the_store(tmp_path):
+    """Phase 4-3a: after the budget the abandoned climb's cached plan ran 4-7
+    more cycles (Lor, HAL, 2026-10-05). The plan belongs to the intention."""
+    goal = GrindCharacterXPGoal("vampire")
+    player = _player(tmp_path)
+    player._arbiter._committed_repr = repr(goal)
+    player._plan_cache = _cache(goal)
+    player.history.save_plan_commitment(repr(goal), "{}", ["Fight(vampire)"], 0, None, False)
+    _run(player, goal, BUDGET_CYCLES)
+    assert player._plan_cache is None
+    assert player.history.load_plan_commitment() is None
+
+
+def test_a_stalled_intention_drops_its_plan():
+    goal = GrindCharacterXPGoal("vampire")
+    player = _player()
+    player._arbiter._committed_repr = repr(goal)
+    player._plan_cache = _cache(goal)
+    state = make_state(level=30, xp=100)
+    for _ in range(STALL_CYCLES):
+        player._track_intention(goal, state, state, ok=False)
+    assert player._plan_cache is None
+
+
+def test_a_cached_plan_of_another_goal_is_not_the_intentions():
+    goal = GrindCharacterXPGoal("vampire")
+    player = _player()
+    player._arbiter._committed_repr = repr(goal)
+    other = _cache(GrindCharacterXPGoal("spider"))
+    player._plan_cache = other
+    _run(player, goal, BUDGET_CYCLES)
+    assert player._plan_cache is other

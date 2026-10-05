@@ -904,6 +904,9 @@ One record, `intention`, per character in the learning DB: the root and the step
   - Store: `intention_yield.yielded_root` renamed `yielded_goal`; pre-existing rows (root reprs) are dropped on open.
   - Mutants: `INTENTION_YIELD_MUTATIONS` (3), `YIELD_WIRING_MUTATIONS` (1), budget group re-pointed (5); all 9 killed.
   - Witness: `intention_yield` events after each `intention_budget`, and R2D2/HAL's next commitment differs from the yielded climb.
+- **4-2b-iii witnessed (restart 03:40Z 2026-10-05).** Lor `ReachSkill(weaponcrafting->21)` budget at cycle 104 → `intention_yield demoted` → `ReachSkill(gearcrafting->20)`; HAL `weaponcrafting->19` → `fishing->20`. Residual: after the budget, the abandoned climb's CACHED plan ran 4 (Lor) and 7 (HAL) more cycles before the re-decide.
+- **4-3 measured (7 days to 2026-10-05):** goal suppressions since 4-2a-ii: 0 (the last, 2026-10-04 12:13Z, was GOAL_OSCILLATION); `STATE_FROZEN` signals 23, none suppressing; StuckExit 0 since 2026-09-21. Increments: 4-3a the intention owns its plan; 4-3b RegearEdge; 4-3c the remaining ladder's goal-suppression halves and countdowns (StuckExit stays as the last resort).
+- **4-3a built (2026-10-05): the intention owns its plan.** When an intention ends (stall or budget) `GamePlayer._drop_intention_plan` drops the cached plan if it is that goal's, and `LearningStore.clear_plan_commitment` deletes the persisted row, so neither the next cycle nor a restart runs it. A cached guard plan is not the intention's and is kept. Mutants: 2 (both killed).
 
 **Increments:** 4-1a guard win keeps the commitment (arbiter + `ArbiterSelect` model); 4-1b the persisted `intention` record (replaces `_committed_repr` and `plan_commitment`); 4-2a progress measure + stall abandonment (replaces the goal-level ladder); 4-2b cycle budget + re-rank (replaces focus aging, RegearEdge); 4-3 deletions.
 

@@ -146,6 +146,21 @@ def test_a_root_named_yield_from_before_4_2b_iii_is_dropped_on_open(tmp_path):
     assert store.load_yield().yielded_goal == "ReachSkill(weaponcrafting->21)"
 
 
+def test_clearing_the_plan_commitment_deletes_it(tmp_path):
+    store = _store(tmp_path)
+    store.clear_plan_commitment()  # nothing to clear is a no-op
+    store.save_plan_commitment("G", "{}", ["A"], 0, None, False)
+    store.clear_plan_commitment()
+    assert store.load_plan_commitment() is None
+
+
+def test_a_db_error_on_clearing_the_plan_is_reported(tmp_path, capsys):
+    store = _store(tmp_path)
+    _break_engine(store)
+    store.clear_plan_commitment()
+    assert "clear_plan_commitment failed" in capsys.readouterr().out
+
+
 def test_a_db_error_on_yield_is_reported_or_reads_as_none(tmp_path, capsys):
     store = _store(tmp_path)
     _break_engine(store)

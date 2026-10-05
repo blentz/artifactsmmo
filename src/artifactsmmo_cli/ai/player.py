@@ -2307,8 +2307,22 @@ class GamePlayer:
                                             f"budget:{self._intention_cycles}")
         else:
             return
+        self._drop_intention_plan(committed)
         self._intention_counted = None
         self._intention_stall = self._intention_cycles = 0
+
+    def _drop_intention_plan(self, ended: str) -> None:
+        """The plan belongs to the intention (Phase 4-3a): when the intention
+        ends, its cached plan ends with it, here and in the learning DB, so the
+        next cycle re-decides. Witnessed 2026-10-05: after the budget, the
+        abandoned climb's cached plan ran 4-7 more cycles (Lor, HAL).
+
+        Only the ended goal's plan: a cached guard plan is not the intention's."""
+        if self._plan_cache is None or self._plan_cache.goal_repr != ended:
+            return
+        self._plan_cache = None
+        if self.history is not None:
+            self.history.clear_plan_commitment()
 
     def _advance_yield(self, committed: str | None) -> None:
         """The yield's turn (Phase 4-2b), called whenever the commitment

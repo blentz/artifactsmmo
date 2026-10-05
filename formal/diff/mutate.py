@@ -4672,6 +4672,15 @@ INTENTION_BUDGET_MUTATIONS = [
     ("budget: the player does not hand its yield to the arbiter",
      "            yielded=self._yield[0] if self._yield is not None else None,\n",
      "            yielded=None,\n"),
+    # The intention ends but its cached plan runs on (Phase 4-3a; Lor/HAL ran
+    # the abandoned climb 4-7 more cycles, 2026-10-05).
+    ("budget: an ended intention keeps its cached plan",
+     "        self._drop_intention_plan(committed)\n",
+     "        pass\n"),
+    # ...and the drop must not take a plan that is not the intention's.
+    ("budget: an ended intention drops any cached plan",
+     "        if self._plan_cache is None or self._plan_cache.goal_repr != ended:\n",
+     "        if self._plan_cache is None:\n"),
     # The holder ends but the yield stays: the yielded goal is demoted forever.
     ("budget: the yield never clears after its holder ends",
      "        else:\n            self._yield = None\n        self._persist_yield()\n",
