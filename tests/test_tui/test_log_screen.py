@@ -79,12 +79,6 @@ def test_debug_line_shows_goals_tried_with_timeout_flag():
             "declined=infeasible:backpack:no_route:backpack)") in line
 
 
-def test_debug_line_shows_suppressed_only_when_present():
-    assert "suppressed" not in build_debug_log_line(_snap(suppressed_goals=[]))
-    line = build_debug_log_line(_snap(suppressed_goals=["NpcSell", "ExpandBank"]))
-    assert "suppressed" in line and "NpcSell" in line and "ExpandBank" in line
-
-
 def test_debug_line_is_multiline_block():
     line = build_debug_log_line(_snap())
     assert "\n" in line  # trace renders as a multi-line block, not one clipped line

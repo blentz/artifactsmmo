@@ -13,13 +13,16 @@ import typer
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.ai.file_tracer import FileTracer
+from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.intention_progress import EXIT_CYCLES
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.recovery import CycleRecord, StuckExit, StuckSignal
+from artifactsmmo_cli.ai.recovery import StuckExit
 from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.commands.play import default_learn_db_path, play
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
+from tests.test_ai.fixtures import make_state
 
 # `play` is a plain command function registered directly on the root app in
 # main.py (`app.command("play")(play)`) — it is no longer its own Typer group
@@ -279,36 +282,32 @@ class TestPlayCommandWiring:
                 mock_store.close.assert_called_once_with()
 
     def test_stuck_exit_records_stuck_exit_reason_in_real_store(self, runner, tmp_path):
-        """Honest terminal path on real sqlite: the stuck handler's L3
-        StuckExit (raised by the REAL GamePlayer._handle_stuck, not a stub
-        exception) stops the run cleanly and the session row records
+        """Honest terminal path on real sqlite: the last-resort StuckExit
+        (raised by the REAL GamePlayer._track_intention when no intention has
+        progressed for EXIT_CYCLES, not a stub exception) stops the run cleanly and the session row records
         exit_reason='stuck_exit' — NOT 'crash' (the 2026-06-10 lie where
         the detector's SystemExit(2) was filed as a crash)."""
         db_path = tmp_path / "learn.db"
-        # A real player whose recovery state sits at L2 with a genuine
-        # failing-flap window: the next fire escalates to L3 -> StuckExit.
+        # A real player one unproductive committed cycle short of the exit.
         real_player = GamePlayer(character="hero")
-        for i in range(20):
-            real_player._record_cycle(CycleRecord(
-                state_key=(i, 0, 5, (), (), None, 0, False),
-                goal_name="GoalA", action_name="X", action_key="X", planned_depth=1,
-                planner_timed_out=False, succeeded=False,
-            ))
-        real_player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
+        grind = GrindCharacterXPGoal("chicken")
+        real_player._arbiter._committed_repr = repr(grind)
+        real_player._cycles_without_progress = EXIT_CYCLES - 1
+        frozen = make_state(level=3, xp=10)
 
         with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
             mock_player = Mock()
 
             def stuck_run():
                 # The bot played real cycles (the session row exists), then
-                # the detector's escalation ladder ran out.
+                # no intention progressed for the whole exit window.
                 store = mock_player_cls.call_args.kwargs["history"]
                 store.record_cycle(Cycle(
                     ts="2026-06-10T16:02:06+00:00",
                     session_id="overwritten", cycle_index=0,
                     character="overwritten", outcome="error:fight_lost",
                 ))
-                real_player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
+                real_player._track_intention(grind, frozen, frozen, ok=False)
 
             mock_player.run.side_effect = stuck_run
             mock_player_cls.return_value = mock_player
@@ -523,7 +522,7 @@ class TestRunWithTui:
         hook_before = threading.excepthook
         with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
             mock_player = Mock()
-            mock_player.run.side_effect = StuckExit(StuckSignal.NO_PROGRESS)
+            mock_player.run.side_effect = StuckExit("200 committed cycles")
             mock_player_cls.return_value = mock_player
             with (
                 patch("artifactsmmo_cli.commands.play.ClientManager"),
@@ -544,7 +543,7 @@ class TestRunWithTui:
                 _, exit_kwargs = fake_app.exit_calls[0]
                 assert "Bot stopped" in exit_kwargs["message"]
                 assert "crashed" not in exit_kwargs["message"]
-                assert "stuck recovery exhausted" in exit_kwargs["message"]
+                assert "no intention progressed" in exit_kwargs["message"]
                 # Post-teardown terminal output: honest stop, no traceback.
                 assert "Bot for 'hero' stopped" in result.output
                 assert "crashed; traceback" not in result.output

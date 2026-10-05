@@ -45,6 +45,12 @@ intention ends and its goal YIELDS for one turn (`demote_yielded`), so the next
 candidate gets an intention; the exhausted goal competes again after that.
 Replaces focus aging and the d'Hondt interleave."""
 
+EXIT_CYCLES = 200
+"""Committed cycles, across intentions, with no progress at all (no successful
+leg, no XP) before the run stops (`recovery.StuckExit`, Phase 4-3c). Two full
+budgets and ten stall windows: every intention in that span stalled or spent
+its budget without one successful leg. The last resort, and the only exit."""
+
 Measure = tuple[int, int]
 
 

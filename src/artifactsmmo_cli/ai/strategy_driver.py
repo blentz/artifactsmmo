@@ -4,7 +4,6 @@ existing goal.
 Lives above goals/ and tiers/ (imports both) to avoid the goals→tiers cycle."""
 
 import time
-from collections.abc import Collection
 from dataclasses import replace
 from datetime import datetime, timezone
 
@@ -246,32 +245,6 @@ def _step_protection_profile(step_goal: Goal | None, state: WorldState,
 # ---------------------------------------------------------------------------
 # Flat map functions + StrategyArbiter
 # ---------------------------------------------------------------------------
-
-#: Goal reprs that recovery may NEVER suppress, whatever the stuck ladder decides.
-#:
-#: `TaskCancel` is the escape hatch for a stuck TASK, and an escape hatch you can
-#: suppress is not one.
-#:
-#: `Wait` is the escape hatch for a stuck LADDER, and the argument is stronger:
-#: `Formal.Liveness.NoDeadlockV2.productionLadder_total` — the headline "the bot
-#: always has something to do" theorem — is proved VIA `waitFires s = true`, so
-#: the Lean model says `wait` fires UNCONDITIONALLY while the runtime could
-#: suppress it. That divergence killed C3P0 twice on 2026-08-21: every goal timed
-#: out, every goal was memoised doomed, the ranking went empty, `Wait` was
-#: selected as the last resort — and because `Wait` changes no state,
-#: `STATE_FROZEN` fired and its L2 remedy is `_suppressed_goals[last] = 5` with
-#: `last == "Wait"`. With the witness suppressed there were NO candidates at all:
-#: four cycles of `<none>` / `no_plan`, then `StuckExit`. Idle became dead.
-#:
-#: Suppressing `Wait` cannot help under ANY signal — it is the rung that exists
-#: for when nothing else fires, so removing it can only empty the ladder.
-NEVER_SUPPRESSED: frozenset[str] = frozenset({"TaskCancel", "Wait"})
-
-
-def _suppressed_predicate(goal_repr: str, suppressed: "Collection[str]") -> bool:
-    """Is this goal shelved by stuck-recovery? `NEVER_SUPPRESSED` is exempt."""
-    return goal_repr not in NEVER_SUPPRESSED and goal_repr in suppressed
-
 
 def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
               state: WorldState | None = None,
@@ -897,7 +870,6 @@ class StrategyArbiter:
         game_data: GameData,
         actions: list[Action],
         ctx: SelectionContext,
-        suppressed: frozenset[str] | set[str] = frozenset(),
         objective: CharacterObjective | None = None,
         yielded: str | None = None,
     ) -> tuple[Goal | None, list[Action], list[dict[str, object]]]:
@@ -908,8 +880,10 @@ class StrategyArbiter:
 
         decision must have a .chosen_step attribute (MetaGoal | None).
 
-        Candidates whose repr is in `suppressed` are skipped, EXCEPT TaskCancel
-        which is never suppressed (it is the escape hatch for a stuck task).
+        Discretionary task means that serve none of the objective's needs are
+        worth-gated (`_worth_gate_suppressed`), EXCEPT TaskCancel, the escape
+        hatch for a stuck task. Stuck-recovery goal suppressions were deleted in
+        Phase 4-3c: an intention ends on a fact (stall, budget), not a countdown.
 
         Returns (goal, plan, goals_tried).
         """
@@ -1012,7 +986,7 @@ class StrategyArbiter:
         # was STICKY on, which `select_pure` probes ahead of the ranked walk.
         prev_committed = self._committed_repr
         chosen, plan, new_committed = self._arbitrate(
-            candidates, suppressed, worth_suppressed, state, game_data, actions, ctx)
+            candidates, worth_suppressed, state, game_data, actions, ctx)
 
         self._committed_repr = new_committed
         if new_committed != prev_committed:
@@ -1491,7 +1465,6 @@ class StrategyArbiter:
     def _arbitrate(
         self,
         candidates: list[Candidate],
-        suppressed: frozenset[str] | set[str],
         worth_suppressed: set[str],
         state: WorldState,
         game_data: GameData,
@@ -1505,14 +1478,9 @@ class StrategyArbiter:
         the escalation was unreachable in practice and the cheap budget was the
         real budget for every objective."""
 
-        def _is_suppressed_base(goal: Goal) -> bool:
-            return _suppressed_predicate(repr(goal), suppressed)
-
-        _effective_suppressed = set(suppressed) | worth_suppressed
-
         def is_suppressed(goal: Goal) -> bool:
             r = repr(goal)
-            return r != "TaskCancel" and r in _effective_suppressed
+            return r != "TaskCancel" and r in worth_suppressed
 
         non_wait = [c for c in candidates if not isinstance(c.goal, WaitGoal)]
 
@@ -1543,7 +1511,7 @@ class StrategyArbiter:
             chosen, plan, new_committed = select_pure(
                 candidates=non_wait, committed_repr=self._committed_repr,
                 try_plan=try_plan, is_satisfied=satisfied,
-                is_suppressed=_is_suppressed_base)
+                is_suppressed=lambda _goal: False)
             if chosen is not None:
                 self.events.note(Mechanism.WORTH_GATE_BYPASS, repr(chosen))
                 # A MARKER, not an attempt — the plan it reports was produced by
@@ -1556,7 +1524,7 @@ class StrategyArbiter:
         if chosen is None:
             # Last resort: Wait (special-cased to a single WaitAction).
             wait = next((c for c in candidates if isinstance(c.goal, WaitGoal)), None)
-            if wait is not None and not is_suppressed(wait.goal):
+            if wait is not None:
                 self.events.note(Mechanism.WAIT_FALLBACK, repr(wait.goal))
                 chosen, plan, new_committed = wait.goal, [WaitAction()], self._committed_repr
         return chosen, plan, new_committed

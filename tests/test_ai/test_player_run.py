@@ -287,12 +287,13 @@ class TestPlayerRun:
     def test_run_no_plan_sleeps(self):
         """When no plan is found, run() sleeps for 5s.
 
-        WaitGoal is the always-firing last-resort means; this test
-        suppresses it (via _suppressed_goals) so the no-plan path
-        downstream of an empty actions list is still reachable.
+        WaitGoal is the always-firing last-resort means, so the arbiter always
+        selects something; the no-plan path is reached by stubbing the arbiter
+        to select nothing (stuck-recovery goal suppression, which once could
+        suppress Wait, was deleted in Phase 4-3c).
         """
         player = GamePlayer(character="hero")
-        player._suppressed_goals["Wait"] = 999
+        player._arbiter.select = lambda *a, **k: (None, [], [])  # type: ignore[method-assign]
         client = MagicMock()
 
         # The loop is stopped from the TOP-of-iteration hook, not from
@@ -327,9 +328,10 @@ class TestPlayerRun:
     def test_run_verbose_logs_no_plan(self, capsys):
         """run() logs 'No plan found' when no goal can be planned (empty actions).
 
-        WaitGoal suppressed so the no-plan branch remains reachable."""
+        The arbiter is stubbed to select nothing so the no-plan branch is
+        reached (Wait otherwise always plans)."""
         player = GamePlayer(character="hero", verbose=True)
-        player._suppressed_goals["Wait"] = 999
+        player._arbiter.select = lambda *a, **k: (None, [], [])  # type: ignore[method-assign]
         client = MagicMock()
 
         # Stopped from the top-of-iteration hook — a no-plan cycle never
@@ -481,9 +483,9 @@ def test_run_calls_handle_stuck_in_no_plan_path():
     in the no-plan branch fires NO_PROGRESS → calls _handle_stuck → increments the level.
     """
     player = GamePlayer(character="hero")
-    # Suppress WaitGoal so the no-plan branch remains reachable; without
-    # this the always-firing WaitGoal would short-circuit the path under test.
-    player._suppressed_goals["Wait"] = 999
+    # Stub the arbiter to select nothing so the no-plan branch is reached;
+    # the always-firing WaitGoal would otherwise short-circuit it.
+    player._arbiter.select = lambda *a, **k: (None, [], [])  # type: ignore[method-assign]
     client = MagicMock()
 
     # Pre-seed detector with 3 no-plan records (one short of the NO_PROGRESS threshold of 4)

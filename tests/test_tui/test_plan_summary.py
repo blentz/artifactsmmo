@@ -32,13 +32,6 @@ def test_header_none_objective_message():
     assert "No committed objective" in out
 
 
-def test_header_lists_suppressed():
-    out = _text(build_plan_header(_snap(
-        chosen_root="ReachCharLevel(level=3)",
-        suppressed_goals=["PursueTask", "GatherMaterials"])))
-    assert "suppressed" in out and "PursueTask" in out and "GatherMaterials" in out
-
-
 def test_header_omits_eta_when_absent():
     out = _text(build_plan_header(_snap(chosen_root="ReachCharLevel(level=3)")))
     assert "ETA" not in out

@@ -3,6 +3,8 @@ between competing intentions is an explicit budget, not focus aging."""
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from artifactsmmo_cli.ai.arbiter_select import (
     BAND_COLLECT,
     BAND_DISCRETIONARY,
@@ -17,12 +19,14 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.intention_progress import (
     BUDGET_CYCLES,
+    EXIT_CYCLES,
     STALL_CYCLES,
     demote_yielded,
 )
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.recovery import StuckExit
 from tests.test_ai.fixtures import make_state
 
 YIELDED = "ReachSkill(jewelrycrafting->21)"
@@ -211,3 +215,32 @@ def test_a_cached_plan_of_another_goal_is_not_the_intentions():
     player._plan_cache = other
     _run(player, goal, BUDGET_CYCLES)
     assert player._plan_cache is other
+
+
+def _unproductive(player: GamePlayer, cycles: int) -> None:
+    """`cycles` committed cycles with no progress, re-committing whenever a
+    stall ends the intention — the exit window spans intentions."""
+    goal = GrindCharacterXPGoal("vampire")
+    state = make_state(level=30, xp=100)
+    for _ in range(cycles):
+        player._arbiter._committed_repr = repr(goal)
+        player._track_intention(goal, state, state, ok=False)
+
+
+def test_no_progress_across_intentions_for_the_exit_window_stops_the_run():
+    """Phase 4-3c: the only StuckExit. Stalls end each intention every
+    STALL_CYCLES, and the window keeps counting through them."""
+    player = _player()
+    _unproductive(player, EXIT_CYCLES - 1)
+    with pytest.raises(StuckExit, match=f"{EXIT_CYCLES} committed cycles"):
+        _unproductive(player, 1)
+
+
+def test_any_progress_restarts_the_exit_window():
+    player = _player()
+    _unproductive(player, EXIT_CYCLES - 1)
+    goal = GrindCharacterXPGoal("vampire")
+    player._arbiter._committed_repr = repr(goal)
+    _run(player, goal, 1)  # a successful leg
+    assert player._cycles_without_progress == 0
+    _unproductive(player, EXIT_CYCLES - 1)

@@ -43,19 +43,22 @@ REPEATED_ACTION_FAILURE_THRESHOLD = 10
 # suppressions in the 7 days to 2026-10-04). An intention that stops
 # progressing now ends on that fact (`ai/intention_progress.py`).
 class StuckExit(Exception):
-    """Terminal stuck-recovery escalation (L3): recovery options are exhausted
-    and the run must stop for manual intervention.
+    """The last resort: no intention has progressed for a long window
+    (`intention_progress.EXIT_CYCLES`), so the run stops for manual
+    intervention.
 
-    Raised by the player's stuck handler INSTEAD of SystemExit so the play()
-    boundary can record an honest exit_reason="stuck_exit" (trace 2026-06-10:
-    SystemExit(2) from a detector false-positive was recorded as
-    exit_reason="crash"). Narrow by design — only the run-loop boundary
-    catches it.
+    Phase 4-3c made this the ONLY exit (user decision 2026-10-04: "StuckExit
+    stays only as a last resort when no intention has progressed for a long
+    window"); the ladder's L3 exits on NO_PROGRESS and REPEATED_ACTION_FAILURE
+    are gone. Raised INSTEAD of SystemExit so the play() boundary can record
+    an honest exit_reason="stuck_exit" (trace 2026-06-10: SystemExit(2) from a
+    detector false-positive was recorded as exit_reason="crash"). Narrow by
+    design — only the run-loop boundary catches it.
     """
 
-    def __init__(self, signal: StuckSignal) -> None:
-        super().__init__(f"stuck recovery exhausted at L3 for {signal.value}")
-        self.signal = signal
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"no intention progressed: {reason}")
+        self.reason = reason
 
 
 @dataclass(frozen=True)

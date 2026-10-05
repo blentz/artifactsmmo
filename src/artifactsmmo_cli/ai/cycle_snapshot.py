@@ -161,7 +161,6 @@ class CycleSnapshot(BaseModel):
     plan_len: int = 0
     goals_tried: list[GoalAttempt] = Field(default_factory=list)
     objective_unplannable: ObjectiveUnplannable | None = None
-    suppressed_goals: list[str] = Field(default_factory=list)
     path_blocked: bool = False
 
     # Committed strategy root + ranking + bank, for the TUI plan screen.

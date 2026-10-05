@@ -19,8 +19,7 @@ def build_debug_log_line(snap: CycleSnapshot) -> str:
     - planner internals (nodes/depth/plan_len/timeout) + task progress, vitals,
       cooldown, position, path-next, projected cycles, path-blocked;
     - every planner attempt (goals_tried) with its own nodes/depth/plan_len;
-    - the full goal-rank ranking (priority > 0);
-    - suppressed goals (only when any are active).
+    - the full goal-rank ranking (priority > 0).
     """
     ts = snap.timestamp[11:19] if len(snap.timestamp) >= 19 else snap.timestamp
     outcome_color = {"ok": "green", "no_plan": "yellow"}.get(snap.outcome, "red")
@@ -49,8 +48,6 @@ def build_debug_log_line(snap: CycleSnapshot) -> str:
         f"{gr.goal}={gr.priority:.0f}" for gr in snap.goal_rank if gr.priority > 0
     )
     lines.append(f"  [dim]rank[/dim] {ranks}")
-    if snap.suppressed_goals:
-        lines.append(f"  [dim]suppressed[/dim] {'  '.join(snap.suppressed_goals)}")
     return "\n".join(lines)
 
 

@@ -27,7 +27,7 @@ from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.player import GamePlayer, _format_plan
-from artifactsmmo_cli.ai.recovery import StuckExit, StuckSignal
+from artifactsmmo_cli.ai.recovery import StuckSignal
 from artifactsmmo_cli.ai.tiers import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision, StrategyEngine
@@ -1909,17 +1909,6 @@ class TestEmitTrace:
 class TestHandleStuckExtended:
     """Tests for additional _handle_stuck escalation levels."""
 
-    def test_state_frozen_level3_broadens_suppression(self):
-        player = GamePlayer(character="hero")
-        player._recovery_level[StuckSignal.STATE_FROZEN] = 2
-        player._suppressed_goals = {"GoalA": 3}
-
-        player._handle_stuck(StuckSignal.STATE_FROZEN, client=None)
-
-        # Should broaden GoalA from 3 to max(3, 10) = 10
-        assert player._suppressed_goals["GoalA"] == 10
-        assert player._recovery_level[StuckSignal.STATE_FROZEN] == 3
-
     def test_no_progress_level2_refreshes_and_clears_blockers(self):
         player = GamePlayer(character="hero")
         player._recovery_level[StuckSignal.NO_PROGRESS] = 1
@@ -1933,18 +1922,6 @@ class TestHandleStuckExtended:
         assert player.state is refreshed
         assert cleared == ["bank"]
         assert player._recovery_level[StuckSignal.NO_PROGRESS] == 2
-
-    def test_no_progress_level3_raises_stuck_exit(self):
-        """L3 is an honest terminal path: StuckExit (recorded as
-        exit_reason='stuck_exit' at the play() boundary), NOT SystemExit."""
-        player = GamePlayer(character="hero")
-        player._recovery_level[StuckSignal.NO_PROGRESS] = 2
-
-        with pytest.raises(StuckExit) as exc_info:
-            player._handle_stuck(StuckSignal.NO_PROGRESS, client=None)
-
-        assert exc_info.value.signal == StuckSignal.NO_PROGRESS
-        assert not isinstance(exc_info.value, SystemExit)
 
 
 class TestBuildGoalsExtended:
@@ -2092,140 +2069,6 @@ class TestBuildActionsExtended:
             "the legacy hp_restore>0 gate, leaving gold unspendable on gear)"
         )
         assert "mystery_box" not in npc_buy_items  # unknown items legitimately skipped
-
-
-class TestBuildGoalsTaskCancelNeverSuppressed:
-    """TaskCancelGoal must survive suppression — it is the escape hatch for infeasible tasks."""
-
-    def _make_minimal_player(self) -> GamePlayer:
-        player = GamePlayer(character="hero")
-        gd = GameData()
-        gd._monster_locations = {"chicken": [(1, 0)]}
-        gd._monster_level = {"chicken": 1}
-        gd._resource_locations = {}
-        gd._workshop_locations = {}
-        gd._bank_location = (4, 0)
-        gd._taskmaster_location = (1, 2)
-        gd._item_stats = {}
-        gd._crafting_recipes = {}
-        gd._resource_skill = {}
-        player.game_data = gd
-        player.state = make_state()
-        return player
-
-    def _arbiter_player(self, history=None) -> GamePlayer:
-        player = GamePlayer(character="hero", history=history)
-        gd = GameData()
-        gd._monster_locations = {"chicken": [(1, 0)]}
-        gd._monster_level = {"chicken": 1}
-        gd._monster_hp = {"chicken": 10}
-        gd._monster_attack = {"chicken": {"fire": 1}}
-        gd._monster_resistance = {"chicken": {}}
-        gd._monster_critical_strike = {"chicken": 0}
-        gd._monster_initiative = {"chicken": 0}
-        gd._monster_type = {"chicken": "normal"}
-        gd._resource_locations = {}
-        gd._workshop_locations = {}
-        gd._bank_location = (4, 0)
-        gd._taskmaster_location = (1, 2)
-        # See `make_game_data_mock`: the ladder is derived from the equippable
-        # catalogue and `tier_of_level` refuses an empty one.
-        gd._item_stats = {"wooden_stick": ItemStats(
-            code="wooden_stick", level=1, type_="weapon", attack={"air": 2})}
-        gd._crafting_recipes = {}
-        gd._resource_skill = {}
-        player.game_data = gd
-        player.state = make_state()
-        player._objective = CharacterObjective.from_game_data(gd)
-        player._strategy = StrategyEngine(player._objective)
-        return player
-
-    def test_task_cancel_survives_suppression(self, tmp_path):
-        """TaskCancel must remain selectable even when in _suppressed_goals."""
-        store = LearningStore(db_path=str(tmp_path / "tc.db"), character="hero")
-        try:
-            player = self._arbiter_player(history=store)
-            # A monsters task far above the char's level → task_decision PIVOTs so
-            # TASK_CANCEL fires; suppress TaskCancel as oscillation recovery would.
-            gd = player.game_data
-            gd._monster_level["dragon"] = 50
-            gd._monster_hp["dragon"] = 100000
-            gd._monster_attack["dragon"] = {"fire": 1}
-            gd._monster_resistance["dragon"] = {}
-            gd._monster_critical_strike["dragon"] = 0
-            gd._monster_initiative["dragon"] = 0
-            gd._monster_type["dragon"] = "normal"
-            # A pocket coin: S-052 works an undiscardable task rather than
-            # cancelling it, so TASK_CANCEL needs one to fire at all.
-            player.state = make_state(hp=150, max_hp=150,
-                                      level=5, task_type="monsters", task_code="dragon",
-                                      task_total=5, task_progress=0,
-                                      inventory={"tasks_coin": 1})
-            player._suppressed_goals = {"TaskCancel": 5}
-            decision = player._strategy.decide(player.state, player.game_data)
-            actions = player._build_actions()
-            _goal, _plan, tried = player._arbiter.select(
-                decision, player.state, player.game_data, actions,
-                player._selection_context(), suppressed=set(player._suppressed_goals))
-            # TaskCancel must not be filtered from the candidates the arbiter walks.
-            assert any(gt["goal"] == "TaskCancel" for gt in tried)
-        finally:
-            store.close()
-
-    def test_other_suppressed_goals_are_still_filtered(self):
-        """Suppression of goals other than TaskCancel must still work."""
-        player = self._arbiter_player()
-        player.state = make_state(hp=150, max_hp=150,
-                                  task_type="monsters", task_code="chicken",
-                                  task_total=5, task_progress=5)
-        player._suppressed_goals = {"CompleteTask": 5}
-        decision = player._strategy.decide(player.state, player.game_data)
-        actions = player._build_actions()
-        _goal, _plan, tried = player._arbiter.select(
-            decision, player.state, player.game_data, actions,
-            player._selection_context(), suppressed=set(player._suppressed_goals))
-        assert not any(gt["goal"] == "CompleteTask" for gt in tried)
-
-
-def test_fetch_world_state_retries_on_404(monkeypatch):
-    """_fetch_world_state should retry 3 times on 404 before raising."""
-    attempts = []
-
-    def fake_get_character(client, name):
-        attempts.append(name)
-        return ErrorResponseSchema(
-            error=ErrorSchema(code=404, message="Character not found."),
-        )
-
-    monkeypatch.setattr("artifactsmmo_cli.ai.player.get_character", fake_get_character)
-    monkeypatch.setattr("time.sleep", lambda _: None)  # don't actually wait
-    # get_all_active_events is only reached after a successful get_character; not needed here
-
-    player = GamePlayer(character="TestChar")
-    with pytest.raises(RuntimeError) as exc:
-        player._fetch_world_state(client=None)
-    assert len(attempts) == 3
-    assert "404" in str(exc.value)
-    assert "TestChar" in str(exc.value)
-
-
-def test_fetch_world_state_retries_on_httperror(monkeypatch):
-    """_fetch_world_state retries on httpx.HTTPError, then raises the outage
-    type after 3 attempts."""
-    attempts = []
-
-    def fake_get_character(client, name):
-        attempts.append(name)
-        raise httpx.ConnectError("boom")
-
-    monkeypatch.setattr("artifactsmmo_cli.ai.player.get_character", fake_get_character)
-    monkeypatch.setattr("time.sleep", lambda _: None)
-
-    player = GamePlayer(character="NetChar")
-    with pytest.raises(ServerUnavailableError) as exc:
-        player._fetch_world_state(client=MagicMock())
-    assert len(attempts) == 3
-    assert "NetChar" in str(exc.value)
 
 
 class TestComputeCyclesToSatisfy:

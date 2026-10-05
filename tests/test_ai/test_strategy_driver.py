@@ -48,6 +48,7 @@ from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
+from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_item_routing import (
@@ -1253,13 +1254,9 @@ def test_select_falls_through_unplannable_to_next():
     assert len(plan) >= 1
 
 
-def test_select_returns_none_when_nothing_plans():
-    """No plannable goal → (None, [], goals_tried).
-
-    WaitGoal is suppressed because it is the always-firing last-resort
-    means added in Phase 20e-v2; without suppression it would always
-    short-circuit this path.
-    """
+def test_select_falls_back_to_wait_when_nothing_plans():
+    """No plannable goal → the unconditional Wait rung. (Stuck recovery could
+    once suppress Wait itself; goal suppressions were deleted in Phase 4-3c.)"""
     planner = GOAPPlanner()
     gd = _make_planner_gd()
     state = make_state(hp=150, max_hp=150, task_code="chicken", task_type="monster",
@@ -1268,10 +1265,9 @@ def test_select_returns_none_when_nothing_plans():
     ctx = _ctx()
     arbiter = StrategyArbiter(planner, history=None)
     decision = _FakeDecision(chosen_step=None)
-    goal, plan, _goals_tried = arbiter.select(
-        decision, state, gd, actions, ctx, suppressed={"Wait"})
-    assert goal is None
-    assert plan == []
+    goal, plan, _goals_tried = arbiter.select(decision, state, gd, actions, ctx)
+    assert isinstance(goal, WaitGoal)
+    assert len(plan) == 1
 
 
 class _SpyPlanner:
@@ -1297,24 +1293,9 @@ def test_plans_runs_planner_for_a_shape_the_walk_does_not_serve():
     assert spy.calls == 1
 
 
-def test_select_skips_suppressed_means():
-    """A means whose repr is in `suppressed` is skipped, falling through."""
-    planner = GOAPPlanner()
-    gd = _make_planner_gd()
-    state = make_state(hp=150, max_hp=150, task_code=None, task_total=0)
-    actions = [AcceptTaskAction(taskmaster_location=(2, 1))]
-    ctx = _ctx(combat_monster="chicken")
-    arbiter = StrategyArbiter(planner, history=None)
-    decision = _FakeDecision(chosen_step=ReachCharLevel(5))
-    # Without suppression AcceptTask would be selected; suppress it.
-    goal, _plan, tried = arbiter.select(
-        decision, state, gd, actions, ctx, suppressed={"AcceptTask"})
-    assert goal is None or repr(goal) != "AcceptTask"
-    assert not any(gt["goal"] == "AcceptTask" for gt in tried)
-
-
-def test_select_never_suppresses_task_cancel(tmp_path):
-    """TaskCancel is the escape hatch and must never be filtered by suppression."""
+def test_the_worth_gate_never_suppresses_task_cancel(tmp_path):
+    """TaskCancel is the escape hatch and must never be filtered by the worth
+    gate."""
     planner = GOAPPlanner()
     gd = _make_planner_gd()
     # A monsters task far above the character's level → task_decision PIVOTs, so
@@ -1333,8 +1314,8 @@ def test_select_never_suppresses_task_cancel(tmp_path):
         ctx = _ctx()
         arbiter = StrategyArbiter(planner, history=store)
         decision = _FakeDecision(chosen_step=None)
-        _goal, _plan, tried = arbiter.select(
-            decision, state, gd, actions, ctx, suppressed={"TaskCancel"})
+        with patch.object(arbiter, "_worth_gate_suppressed", return_value={"TaskCancel"}):
+            _goal, _plan, tried = arbiter.select(decision, state, gd, actions, ctx)
         assert any(gt["goal"] == "TaskCancel" for gt in tried), (
             "TaskCancel must not be skipped even when suppressed"
         )
@@ -1378,12 +1359,9 @@ def test_select_no_double_count_when_committed_becomes_unplannable():
     assert arbiter._committed_repr is not None
 
     # Cycle 2: remove AcceptTaskAction so the committed goal can't plan;
-    # provide no other plannable action either → expect (None, []).
-    # WaitGoal suppressed: it is the always-firing last-resort means and
-    # would otherwise short-circuit the (None, []) outcome under test.
-    goal2, _plan2, tried2 = arbiter.select(
-        decision, state, gd, [], ctx, suppressed={"Wait"})
-    assert goal2 is None
+    # provide no other plannable action either → the Wait fallback.
+    goal2, _plan2, tried2 = arbiter.select(decision, state, gd, [], ctx)
+    assert isinstance(goal2, WaitGoal)
 
     # AcceptTask repr must appear at most once in goals_tried (not double-counted)
     accept_reprs = [e["goal"] for e in tried2 if e["goal"] == repr(AcceptTaskGoal())]
@@ -2648,11 +2626,13 @@ def test_no_event_when_the_first_attempted_candidate_plans():
 
 
 def test_no_event_when_the_top_candidate_was_never_attempted():
-    """A SUPPRESSED candidate never reaches try_plan, so it was not abandoned —
-    the first ATTEMPTED candidate is the one that counts, and here it plans."""
+    """A SUPPRESSED (worth-gated) candidate never reaches try_plan, so it was
+    not abandoned — the first ATTEMPTED candidate is the one that counts, and
+    here it plans."""
     arbiter = _unplannable_objective_arbiter(plannable={"AcceptTask"})
-    goal, _plan, tried = _select_with(
-        arbiter, suppressed={"GrindCharacterXP(chicken)"})
+    with patch.object(arbiter, "_worth_gate_suppressed",
+                      return_value={"GrindCharacterXP(chicken)"}):
+        goal, _plan, tried = _select_with(arbiter)
     assert [t["goal"] for t in tried] == ["AcceptTask"]
     assert repr(goal) == "AcceptTask"
     assert arbiter.objective_unplannable is None
@@ -2691,35 +2671,3 @@ def test_event_is_cleared_on_the_next_healthy_cycle():
     arbiter._planner.plannable = {"AcceptTask", "GrindCharacterXP(chicken)"}
     _select_with(arbiter)
     assert arbiter.objective_unplannable is None
-
-
-def test_wait_is_never_suppressed_because_it_is_the_totality_witness() -> None:
-    """THE DEADLOCK. `Liveness.NoDeadlockV2.productionLadder_total` — the headline
-    "the bot always has something to do" theorem — is proved VIA `waitFires s =
-    true`, i.e. `wait` fires UNCONDITIONALLY. The runtime could suppress it, so
-    the model and the implementation disagreed on the one rung the proof rests on.
-
-    Live C3P0, 2026-08-21, twice: every goal timed out, every goal was memoised
-    doomed, the ranking went empty, `Wait` was selected as last resort — and
-    because `Wait` changes no state, `STATE_FROZEN` fired and its L2 remedy is
-    `self._suppressed_goals[last] = 5` where `last` is "Wait". With the witness
-    suppressed there were NO candidates at all: four cycles of `<none>` /
-    `no_plan`, then `StuckExit`. Idle became dead.
-
-    `TaskCancel` already carries this exemption for the same reason — it is the
-    escape hatch for a stuck task, and an escape hatch you can suppress is not
-    one. `Wait` is the escape hatch for a stuck LADDER.
-    """
-    suppressed = {"Wait", "TaskCancel", "GrindCharacterXP(pig)"}
-
-    assert _is_suppressed_for_test("GrindCharacterXP(pig)", suppressed) is True
-    assert _is_suppressed_for_test("TaskCancel", suppressed) is False
-    assert _is_suppressed_for_test("Wait", suppressed) is False
-
-
-def _is_suppressed_for_test(goal_repr: str, suppressed: set[str]) -> bool:
-    """Exercise the REAL predicate through the arbiter rather than restating it —
-    a test that re-implemented the rule would agree with any implementation."""
-    from artifactsmmo_cli.ai.strategy_driver import _suppressed_predicate
-
-    return _suppressed_predicate(goal_repr, suppressed)

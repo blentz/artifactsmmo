@@ -4664,8 +4664,9 @@ INTENTION_BUDGET_MUTATIONS = [
     # Progress resets the budget too: an intention that keeps making progress
     # never spends it, so a root that progresses slowly holds the fleet forever.
     ("budget: progress resets the cycle budget as well as the stall count",
-     "            self._intention_stall = 0\n        else:\n",
-     "            self._intention_stall = self._intention_cycles = 0\n        else:\n"),
+     "            self._intention_stall = 0\n            self._cycles_without_progress = 0\n        else:\n",
+     "            self._intention_stall = self._intention_cycles = 0\n"
+     "            self._cycles_without_progress = 0\n        else:\n"),
     # The budget is never spent: no intention ever yields, the ring2 shape.
     ("budget: the cycle budget is never spent",
      "        elif self._intention_cycles >= BUDGET_CYCLES:\n",
@@ -4688,6 +4689,16 @@ INTENTION_BUDGET_MUTATIONS = [
     ("budget: an ended intention drops any cached plan",
      "        if self._plan_cache is None or self._plan_cache.goal_repr != ended:\n",
      "        if self._plan_cache is None:\n"),
+    # The last resort never fires (Phase 4-3c): a character that progresses
+    # nowhere runs forever.
+    ("exit: the no-progress window never stops the run",
+     "            if self._cycles_without_progress >= EXIT_CYCLES:\n",
+     "            if False:\n"),
+    # Progress does not restart the window: a slow but working character is
+    # stopped after EXIT_CYCLES unproductive cycles spread over hours.
+    ("exit: progress does not restart the no-progress window",
+     "            self._intention_stall = 0\n            self._cycles_without_progress = 0\n",
+     "            self._intention_stall = 0\n"),
     # The holder ends but the yield stays: the yielded goal is demoted forever.
     ("budget: the yield never clears after its holder ends",
      "        else:\n            self._yield = None\n        self._persist_yield()\n",

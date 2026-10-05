@@ -145,21 +145,19 @@ class TestPlayer:
         assert player._events.drain() == [
             (Mechanism.ROOT_DECLINE, "Root(a)", "no_route:x")]
 
-    def test_stuck_recovery_notes_every_suppression_it_sets(self) -> None:
+    def test_stuck_recovery_notes_every_action_block_it_sets(self) -> None:
         player = GamePlayer(character="hero")
-        player._suppressed_goals = {"Old": 3}
-        player._failed_action_backoff = {}
+        player._failed_action_backoff = {"Old": 3}
 
         def recover(signal: StuckSignal, client: object) -> None:
-            player._suppressed_goals["Old"] = 3  # unchanged: not a new suppression
-            player._suppressed_goals["Grind"] = 10
+            player._failed_action_backoff["Old"] = 3  # unchanged: not a new block
             player._failed_action_backoff["Gather(ash_tree)"] = 5
 
         with patch.object(player, "_apply_stuck_recovery", side_effect=recover):
-            player._handle_stuck(StuckSignal.NO_PROGRESS, MagicMock())
+            player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, MagicMock())
         assert player._events.drain() == [
-            (Mechanism.SUPPRESS, "Grind", "goal cycles=10 signal=NO_PROGRESS"),
-            (Mechanism.SUPPRESS, "Gather(ash_tree)", "action cycles=5 signal=NO_PROGRESS")]
+            (Mechanism.SUPPRESS, "Gather(ash_tree)",
+             "action cycles=5 signal=REPEATED_ACTION_FAILURE")]
 
     def test_the_cycle_row_carries_its_events_into_the_store(self, tmp_path: Path) -> None:
         store = LearningStore(str(tmp_path / "l.db"), character="hero")

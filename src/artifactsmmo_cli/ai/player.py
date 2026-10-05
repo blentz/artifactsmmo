@@ -86,6 +86,7 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.intention_progress import (
     BUDGET_CYCLES,
+    EXIT_CYCLES,
     STALL_CYCLES,
     progress_measure,
     progressed,
@@ -273,13 +274,16 @@ class GamePlayer:
         # The goal that spent its budget and yields one turn, and the
         # commitment holding that turn (Phase 4-2b, `_advance_yield`).
         self._yield: tuple[str, str | None] | None = None
-        self._suppressed_goals: dict[str, int] = {}
+        # Committed cycles, across intentions, since any intention last made
+        # progress; `EXIT_CYCLES` of them is the last-resort StuckExit (4-3c).
+        self._cycles_without_progress = 0
         # Per-ACTION block (action_repr -> cycles remaining) set by the
-        # REPEATED_ACTION_FAILURE recovery. Unlike goal suppression, this filters
-        # the action out of the planning list, so a GUARD/interrupt-driven action
-        # (which bypasses goal suppression) is routed around instead of spun on
-        # (live 476 deadlock: the RestoreHP guard looped UseConsumable). Decays
-        # per cycle alongside _suppressed_goals.
+        # REPEATED_ACTION_FAILURE recovery. It filters the action out of the
+        # planning list, so a GUARD/interrupt-driven action is routed around
+        # instead of spun on (live 476 deadlock: the RestoreHP guard looped
+        # UseConsumable). The goal suppressions beside it went in Phase 4-3c;
+        # this countdown stays until Phase 5 moves guards into the interrupt
+        # layer (user decision 2026-10-05). Decays per cycle.
         self._failed_action_backoff: dict[str, int] = {}
         # Actions the SERVER has categorically refused (`ai/action_rejection`):
         # 473 "invalid item for recycling" and friends say the item is not
@@ -640,7 +644,6 @@ class GamePlayer:
         self.state = state = replace(state, crafting_target=crafting_target)
         selected_goal, plan, goals_tried = self._arbiter.select(
             decision, state, game_data, actions, ctx,
-            suppressed=set(self._suppressed_goals),
             objective=self._objective,
             yielded=self._yield[0] if self._yield is not None else None,
         )
@@ -927,7 +930,7 @@ class GamePlayer:
             self._arbiter._committed_repr = committed
         selected_goal, plan, goals_tried = self._arbiter.select(
             decision, state, game_data, actions, ctx,
-            suppressed=set(self._suppressed_goals), objective=self._objective,
+            objective=self._objective,
             yielded=self._yield[0] if self._yield is not None else None)
         # For the chosen objective's recipe, report each monster-drop input's live
         # winnability — an unwinnable drop (e.g. chicken too strong) makes the gear
@@ -2048,10 +2051,7 @@ class GamePlayer:
         return None
 
     def _decrement_suppressions(self) -> None:
-        """Decrement each suppression counter; prune zero entries."""
-        self._suppressed_goals = {
-            name: n - 1 for name, n in self._suppressed_goals.items() if n > 1
-        }
+        """Decrement each action-block counter; prune zero entries."""
         self._failed_action_backoff = {
             name: n - 1 for name, n in self._failed_action_backoff.items() if n > 1
         }
@@ -2166,7 +2166,6 @@ class GamePlayer:
             "action": action_name,
             "outcome": outcome,
             "recovery": recovery,
-            "suppressed_goals": list(self._suppressed_goals.keys()),
             # The gear targets the root walk passed over this cycle, each with
             # the named reason its step cannot be served (Phase 3-2).
             "declined": (dict(self._last_decision.declined)
@@ -2247,7 +2246,9 @@ class GamePlayer:
 
     def _track_intention(self, goal: Goal | None, before: WorldState,
                          after: WorldState, ok: bool) -> None:
-        """Count one executed cycle against the intention (Phase 4-2).
+        """Count one executed cycle against the intention (Phase 4-2), and
+        against the last-resort exit (Phase 4-3c: `EXIT_CYCLES` committed cycles
+        with no progress across intentions raise `StuckExit`).
 
         Only a cycle that ran the COMMITTED goal counts: a guard interrupting
         it (RestoreHP between fights) is neither progress nor stall. Two facts
@@ -2271,8 +2272,14 @@ class GamePlayer:
         self._intention_cycles += 1
         if progressed(progress_measure(goal, before), progress_measure(goal, after), ok):
             self._intention_stall = 0
+            self._cycles_without_progress = 0
         else:
             self._intention_stall += 1
+            self._cycles_without_progress += 1
+            if self._cycles_without_progress >= EXIT_CYCLES:
+                # The last resort (Phase 4-3c): across every intention in the
+                # window, not one successful leg and no XP.
+                raise StuckExit(f"{self._cycles_without_progress} committed cycles")
         if self._intention_stall >= STALL_CYCLES:
             self._arbiter.abandon_intention(Mechanism.INTENTION_STALLED,
                                             f"stalled:{self._intention_stall}")
@@ -2364,16 +2371,10 @@ class GamePlayer:
                 self._healthy_streak[sig] = 0
 
     def _handle_stuck(self, signal: StuckSignal, client: AuthenticatedClient) -> None:
-        """Apply recovery for a stuck signal, noting every goal suppression and
-        action backoff it sets (Phase 0b). The recovery ladder writes those two
-        maps from a dozen branches; diffing them here records all of them
-        without threading the event log through each branch."""
-        goals_before = dict(self._suppressed_goals)
+        """Apply recovery for a stuck signal, noting every action backoff it
+        sets (Phase 0b)."""
         actions_before = dict(self._failed_action_backoff)
         self._apply_stuck_recovery(signal, client)
-        for name, cycles in self._suppressed_goals.items():
-            if goals_before.get(name) != cycles:
-                self._events.note(Mechanism.SUPPRESS, name, f"goal cycles={cycles} signal={signal.name}")
         for key, cycles in self._failed_action_backoff.items():
             if actions_before.get(key) != cycles:
                 self._events.note(Mechanism.SUPPRESS, key, f"action cycles={cycles} signal={signal.name}")
@@ -2397,39 +2398,20 @@ class GamePlayer:
         self._recovery_level[signal] = level
         self._events.note(Mechanism.STUCK_SIGNAL, signal.name, f"level={level}")
 
+        # STATE_FROZEN and NO_PROGRESS are perception facts: the answer is a
+        # full refresh, every time (Phase 4-3c deleted their goal-suppression
+        # and StuckExit rungs; the only exit is the intention one).
         if signal == StuckSignal.STATE_FROZEN:
-            if level == 1:
-                print(f"[{self._now()}] [recovery] STATE_FROZEN L1: forcing full refresh")
-                self.state = self._fetch_world_state(client)
-            elif level == 2:
-                last = self._last_goal_name
-                if last:
-                    self._suppressed_goals[last] = 5
-                    print(f"[{self._now()}] [recovery] STATE_FROZEN L2: suppressing {last} for 5 cycles")
-            else:
-                # L3 — broaden suppression on already-suppressed goals
-                for name in list(self._suppressed_goals):
-                    self._suppressed_goals[name] = max(self._suppressed_goals[name], 10)
-                print(f"[{self._now()}] [recovery] STATE_FROZEN L3: broadened suppression to 10 cycles")
+            print(f"[{self._now()}] [recovery] STATE_FROZEN: forcing full refresh")
+            self.state = self._fetch_world_state(client)
 
         elif signal == StuckSignal.NO_PROGRESS:
-            if level == 1:
-                print(f"[{self._now()}] [recovery] NO_PROGRESS L1: forcing full refresh")
-                self.state = self._fetch_world_state(client)
-            elif level == 2:
-                print(f"[{self._now()}] [recovery] NO_PROGRESS L2: forcing full refresh + clearing blockers")
-                self.state = self._fetch_world_state(client)
-                self._blockers.clear("bank")
-            else:
-                print(f"[{self._now()}] [recovery] NO_PROGRESS L3: recovery exhausted — "
-                      "stopping run (manual intervention)")
-                raise StuckExit(signal)
+            print(f"[{self._now()}] [recovery] NO_PROGRESS: forcing full refresh + clearing blockers")
+            self.state = self._fetch_world_state(client)
+            self._blockers.clear("bank")
 
         elif signal == StuckSignal.REPEATED_ACTION_FAILURE:
-            # Suppress the goal(s) driving the repeatedly-failing action(s). Find
-            # the action_key(s) that failed >= threshold in the window, then the
-            # goal_name(s) whose records emitted them. Drop "<none>" (the no-plan
-            # placeholder, not a suppressible goal).
+            # Find the action_key(s) that failed >= threshold in the window.
             #
             # Keyed on `action_key` (`Action.learning_key()`), matching the
             # detector rule that fired this signal. Keyed on the repr, a closure
@@ -2458,36 +2440,14 @@ class GamePlayer:
                 a for a, c in fail_counts.items()
                 if c >= REPEATED_ACTION_FAILURE_THRESHOLD
             }
-            distinct = {
-                r.goal_name for r in window
-                if r.action_key in repeated_actions
-                and not r.succeeded and r.goal_name != "<none>"
-            }
-            # Block the failing ACTION(S) directly (not just the driving goal):
-            # a guard/interrupt-driven action bypasses goal suppression, so the
-            # action-level block is what actually breaks a guard spin.
+            # Block the failing ACTION(S): a guard/interrupt-driven action has
+            # no intention to stall, so the action-level block is what breaks
+            # a guard spin.
             block_cycles = 10 if level == 1 else 30
-            if repeated_actions and level < 3:
-                for a in repeated_actions:
-                    self._failed_action_backoff[a] = block_cycles
-            if not distinct:
-                print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE: "
-                      f"blocking {repeated_actions} for {block_cycles} cycles "
-                      "(no goal to suppress)")
-            elif level == 1:
-                for name in distinct:
-                    self._suppressed_goals[name] = 10
-                print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE L1: "
-                      f"suppressing {distinct} + blocking {repeated_actions} for 10 cycles")
-            elif level == 2:
-                for name in distinct:
-                    self._suppressed_goals[name] = 30
-                print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE L2: "
-                      f"suppressing {distinct} + blocking {repeated_actions} for 30 cycles")
-            else:
-                print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE L3: "
-                      "recovery exhausted — stopping run (manual intervention)")
-                raise StuckExit(signal)
+            for a in repeated_actions:
+                self._failed_action_backoff[a] = block_cycles
+            print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE L{level}: "
+                  f"blocking {repeated_actions} for {block_cycles} cycles")
 
         self._detector.acknowledge(signal)
 
@@ -2635,7 +2595,6 @@ class GamePlayer:
             plan_len=int(stats.get("plan_len", 0)),
             goals_tried=goals_tried,
             objective_unplannable=objective_unplannable,
-            suppressed_goals=list(self._suppressed_goals.keys()),
             path_blocked=bool(stats.get("path_blocked", False)),
             chosen_root=(repr(self._last_decision.chosen_root)
                          if self._last_decision is not None
@@ -2781,8 +2740,8 @@ class GamePlayer:
 
         This used to return the task monster with NO winnability check, and the
         cascade documented that as deliberate: "a persistent loss loop is caught by
-        the stuck/recovery backstop, not here". It is not. That backstop's remedy
-        is a COUNTDOWN (`_suppressed_goals`, 5 cycles then 15) which expires
+        the stuck/recovery backstop, not here". It was not. That backstop's remedy
+        was a COUNTDOWN (`_suppressed_goals`, deleted in Phase 4-3c) which expired
         whether or not anything changed, so the loop could not converge, and its
         terminal rung raises `StuckExit` — killing the character instead of fixing
         the gear. Live 2026-08-20: C3P0, 0 wins / 42 losses, the fleet's first

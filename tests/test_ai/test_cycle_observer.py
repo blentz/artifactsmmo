@@ -24,7 +24,6 @@ class TestCycleSnapshot:
         assert snap.plan_len == 0
         assert snap.goals_tried == []
         assert snap.objective_unplannable is None
-        assert snap.suppressed_goals == []
         assert snap.path_blocked is False
 
 
@@ -84,7 +83,6 @@ class TestObserverHook:
         calls: list[CycleSnapshot] = []
         player = GamePlayer(character="hero", cycle_observer=calls.append)
         player.state = make_state(level=3)
-        player._suppressed_goals = {"NpcSell": 4}
         player._notify_observer(
             "CraftEquipment", "MoveTo(1,2)", "ok",
             goal_rank_trace=[{"goal": "CraftEquipment", "priority": 88.0}],
@@ -107,7 +105,6 @@ class TestObserverHook:
         assert snap.planner_timed_out is False
         assert snap.plan_len == 3
         assert snap.path_blocked is True
-        assert snap.suppressed_goals == ["NpcSell"]
         assert [g.goal for g in snap.goals_tried] == ["CraftEquipment", "FightMonster"]
         assert snap.goals_tried[1].timed_out is True
         assert snap.goals_tried[1].nodes == 120
