@@ -38,7 +38,7 @@ from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
-from artifactsmmo_cli.ai.tiers.means import MeansKind
+from artifactsmmo_cli.ai.tiers.means import COLLECT_REWARD_ORDER, INTERRUPT_MEANS, MeansKind
 from artifactsmmo_cli.ai.tiers.means import _fires as _means_fires
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.sim.fake_server import FakeServer
@@ -465,12 +465,14 @@ def test_ladder_entry_count_matches_lean() -> None:
 
 def test_the_ladder_interrupt_prefix_is_what_production_runs_as_interrupts() -> None:
     """Phase 5-2a/5-2b: `StrategyArbiter._arbitrate` runs the band-0 candidates
-    (the guards in `GUARD_ORDER`, then SELL_PRESSURED) before any means. The
+    (the guards in `GUARD_ORDER`, then the `INTERRUPT_MEANS` in
+    `COLLECT_REWARD_ORDER`) before any means. The
     liveness ladder keeps that order as its prefix, so the model's "ladder
     order" and the code's "interrupts, then the walk" are one order. (The
     shed-urgency hoists are interrupts too, but the ladder models their idle
     forms as discretionary rungs and has no hoist rung at all.)"""
-    interrupts = [LadderMeans[g.name] for g in GUARD_ORDER] + [LadderMeans.SELL_PRESSURED]
+    interrupts = ([LadderMeans[g.name] for g in GUARD_ORDER]
+                  + [LadderMeans[m.name] for m in COLLECT_REWARD_ORDER if m in INTERRUPT_MEANS])
     assert list(ALL_IN_LADDER_ORDER[:len(interrupts)]) == interrupts
 
 

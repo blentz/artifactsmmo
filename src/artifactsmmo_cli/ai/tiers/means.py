@@ -127,12 +127,22 @@ class MeansKind(Enum):
     CURRENCY_TURNIN = "currency_turnin"  # 2026-08-16: spend/surrender a dual-role currency.
 
 
+INTERRUPT_MEANS: frozenset[MeansKind] = frozenset({
+    MeansKind.SELL_PRESSURED,
+    MeansKind.CLAIM_PENDING,
+})
+"""Means that are chores, not rewards: preconditions of continuing whatever the
+character does, so `StrategyArbiter._build_candidates` builds them at
+`BAND_GUARD` and they run in the interrupt pre-pass (Phase 5 of
+docs/PLAN_decision_architecture_redesign.md). SELL_PRESSURED is the bag at the
+pressure threshold (5-2b); CLAIM_PENDING is one action that collects a pending
+item and serves no objective (5-2c-i). They lead `COLLECT_REWARD_ORDER`."""
+
+
 COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
-    # FIRST since Phase 5-2b: SELL_PRESSURED fires only at bag pressure, which
-    # makes it a precondition of continuing rather than a reward to collect, so
-    # it runs as an INTERRUPT (`StrategyArbiter._build_candidates` builds it at
-    # `BAND_GUARD`) at the end of the guard prefix — the order the Lean ladder
-    # (`MeansKind.allInLadderOrder`) states.
+    # The INTERRUPT_MEANS lead the order (Phase 5-2b/5-2c-i): they are chores,
+    # run as interrupts at the end of the guard prefix — the order the Lean
+    # ladder (`MeansKind.allInLadderOrder`) states.
     MeansKind.SELL_PRESSURED,
     MeansKind.CLAIM_PENDING,
     MeansKind.COMPLETE_TASK,

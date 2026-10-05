@@ -2675,14 +2675,18 @@ def test_event_is_cleared_on_the_next_healthy_cycle():
     assert arbiter.objective_unplannable is None
 
 
-def test_sell_pressured_is_built_as_an_interrupt():
-    """Phase 5-2b: the bag at the pressure threshold is a precondition of
-    continuing, so SELL_PRESSURED is an interrupt (band 0) — run before every
-    collect means — while CLAIM_PENDING stays a collect means."""
+def test_the_chore_means_are_built_as_interrupts():
+    """Phase 5-2b/5-2c-i: SELL_PRESSURED (the bag at the pressure threshold) and
+    CLAIM_PENDING (one action, no objective) are chores, built as interrupts
+    (band 0); COMPLETE_TASK is still a collect means."""
     arbiter = StrategyArbiter(GOAPPlanner(), history=None)
     cands = arbiter._build_candidates(
         [], [MeansKind.SELL_PRESSURED, MeansKind.CLAIM_PENDING], [], None, [], [],
         make_state(), _make_planner_gd(), _ctx())
     bands = {c.repr_: c.band for c in cands}
     assert bands["SellInventory"] == BAND_GUARD
-    assert bands["ClaimPending"] == BAND_COLLECT
+    assert bands["ClaimPending"] == BAND_GUARD  # Phase 5-2c-i
+    complete = arbiter._build_candidates(
+        [], [MeansKind.COMPLETE_TASK], [], None, [], [],
+        make_state(), _make_planner_gd(), _ctx())
+    assert [c.band for c in complete] == [BAND_COLLECT]

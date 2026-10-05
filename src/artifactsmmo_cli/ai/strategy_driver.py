@@ -91,6 +91,7 @@ from artifactsmmo_cli.ai.tiers.guards import (
     used_fraction,
 )
 from artifactsmmo_cli.ai.tiers.means import (
+    INTERRUPT_MEANS,
     SELL_PRESSURE_FRACTION,
     MeansKind,
     active_means,
@@ -1175,9 +1176,9 @@ class StrategyArbiter:
             candidates.append(Candidate(goal=g, repr_=repr(g), band=BAND_GUARD))
         for mk in collect_kinds:
             g = map_means(mk, game_data, ctx, state, self._history, needs)
-            # SELL_PRESSURED is the bag at the pressure threshold: an interrupt
-            # (Phase 5-2b), which `_arbitrate` runs before the means.
-            band = BAND_GUARD if mk is MeansKind.SELL_PRESSURED else BAND_COLLECT
+            # The chores among the means are interrupts (`INTERRUPT_MEANS`,
+            # Phase 5-2b/5-2c-i), which `_arbitrate` runs before the means.
+            band = BAND_GUARD if mk in INTERRUPT_MEANS else BAND_COLLECT
             candidates.append(Candidate(goal=g, repr_=repr(g), band=band))
         # Equip-owned-gear (COLLECT band): a first-class objective that equips
         # already-OWNED positive-Rank gear into currently-EMPTY slots, so free

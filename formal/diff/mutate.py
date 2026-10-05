@@ -4717,9 +4717,17 @@ INTENTION_YIELD_MUTATIONS = [
 # SELL_PRESSURED is an interrupt (Phase 5-2b): built at BAND_GUARD so it runs
 # before the means. Unit-killed by tests/test_ai/test_strategy_driver.py.
 SELL_PRESSURED_INTERRUPT_MUTATIONS = [
-    ("strategy_driver: SELL_PRESSURED is a collect means again, not an interrupt",
-     "            band = BAND_GUARD if mk is MeansKind.SELL_PRESSURED else BAND_COLLECT\n",
+    ("strategy_driver: the chore means are collect means again, not interrupts",
+     "            band = BAND_GUARD if mk in INTERRUPT_MEANS else BAND_COLLECT\n",
      "            band = BAND_COLLECT\n"),
+]
+
+# CLAIM_PENDING is a chore (Phase 5-2c-i). Unit-killed by
+# tests/test_ai/test_strategy_driver.py.
+INTERRUPT_MEANS_MUTATIONS = [
+    ("means: CLAIM_PENDING is no longer an interrupt",
+     "    MeansKind.CLAIM_PENDING,\n})\n",
+     "})\n"),
 ]
 
 # The arbiter applies the yield before arbitration. Unit-killed by
@@ -8841,6 +8849,8 @@ def _collect_all_groups() -> None:
     run_group(STRATEGY_DRIVER_SRC, YIELD_WIRING_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, SELL_PRESSURED_INTERRUPT_MUTATIONS,
+              "tests/test_ai/test_strategy_driver.py", survivors)
+    run_group(MEANS_SRC, INTERRUPT_MEANS_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(REQUIREMENT_GRAPH_MEMO_SRC, MEMO_ENRICH_MUTATIONS,
               "tests/test_ai/test_requirement_multiset_enrichment.py", survivors)
