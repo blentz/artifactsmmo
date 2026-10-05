@@ -15,7 +15,9 @@ from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.arbiter_select import (
+    BAND_COLLECT,
     BAND_FALLBACK_STEP,
+    BAND_GUARD,
     BAND_STEP,
     Candidate,
     _precedes,
@@ -2671,3 +2673,16 @@ def test_event_is_cleared_on_the_next_healthy_cycle():
     arbiter._planner.plannable = {"AcceptTask", "GrindCharacterXP(chicken)"}
     _select_with(arbiter)
     assert arbiter.objective_unplannable is None
+
+
+def test_sell_pressured_is_built_as_an_interrupt():
+    """Phase 5-2b: the bag at the pressure threshold is a precondition of
+    continuing, so SELL_PRESSURED is an interrupt (band 0) — run before every
+    collect means — while CLAIM_PENDING stays a collect means."""
+    arbiter = StrategyArbiter(GOAPPlanner(), history=None)
+    cands = arbiter._build_candidates(
+        [], [MeansKind.SELL_PRESSURED, MeansKind.CLAIM_PENDING], [], None, [], [],
+        make_state(), _make_planner_gd(), _ctx())
+    bands = {c.repr_: c.band for c in cands}
+    assert bands["SellInventory"] == BAND_GUARD
+    assert bands["ClaimPending"] == BAND_COLLECT

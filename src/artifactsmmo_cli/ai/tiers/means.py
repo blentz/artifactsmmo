@@ -128,9 +128,14 @@ class MeansKind(Enum):
 
 
 COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
+    # FIRST since Phase 5-2b: SELL_PRESSURED fires only at bag pressure, which
+    # makes it a precondition of continuing rather than a reward to collect, so
+    # it runs as an INTERRUPT (`StrategyArbiter._build_candidates` builds it at
+    # `BAND_GUARD`) at the end of the guard prefix — the order the Lean ladder
+    # (`MeansKind.allInLadderOrder`) states.
+    MeansKind.SELL_PRESSURED,
     MeansKind.CLAIM_PENDING,
     MeansKind.COMPLETE_TASK,
-    MeansKind.SELL_PRESSURED,
     MeansKind.LOW_YIELD_CANCEL,
     MeansKind.TASK_CANCEL,
     # 2026-08-01, human ruling: SUPPLY_BANK is promoted out of

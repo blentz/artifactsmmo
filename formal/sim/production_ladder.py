@@ -85,9 +85,9 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.DEPOSIT_FULL,
     LadderMeans.DISCARD_HIGH,
     LadderMeans.CRAFT_POTIONS,
+    LadderMeans.SELL_PRESSURED,
     LadderMeans.CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK,
-    LadderMeans.SELL_PRESSURED,
     LadderMeans.LOW_YIELD_CANCEL,
     LadderMeans.TASK_CANCEL,
     LadderMeans.SUPPLY_BANK,
@@ -164,9 +164,9 @@ assert tuple(g for g in GUARD_ORDER) == (
 ), "GUARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 assert COLLECT_REWARD_ORDER == (
+    MeansKind.SELL_PRESSURED,
     MeansKind.CLAIM_PENDING,
     MeansKind.COMPLETE_TASK,
-    MeansKind.SELL_PRESSURED,
     MeansKind.LOW_YIELD_CANCEL,
     MeansKind.TASK_CANCEL,
     MeansKind.SUPPLY_BANK,

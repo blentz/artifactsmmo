@@ -1175,7 +1175,10 @@ class StrategyArbiter:
             candidates.append(Candidate(goal=g, repr_=repr(g), band=BAND_GUARD))
         for mk in collect_kinds:
             g = map_means(mk, game_data, ctx, state, self._history, needs)
-            candidates.append(Candidate(goal=g, repr_=repr(g), band=BAND_COLLECT))
+            # SELL_PRESSURED is the bag at the pressure threshold: an interrupt
+            # (Phase 5-2b), which `_arbitrate` runs before the means.
+            band = BAND_GUARD if mk is MeansKind.SELL_PRESSURED else BAND_COLLECT
+            candidates.append(Candidate(goal=g, repr_=repr(g), band=band))
         # Equip-owned-gear (COLLECT band): a first-class objective that equips
         # already-OWNED positive-Rank gear into currently-EMPTY slots, so free
         # gear is worn before the bot grinds for more (COLLECT outranks the
@@ -1217,7 +1220,12 @@ class StrategyArbiter:
                 wt_goal = WithdrawToolsGoal(fills=tool_fills, bank_location=bank_tile,
                                             accessible=ctx.bank_accessible)
                 candidates.append(Candidate(goal=wt_goal, repr_=repr(wt_goal), band=BAND_COLLECT))
-        # Urgent-hoard recycle (COLLECT band): the discretionary RECYCLE_SURPLUS
+        # THE URGENT CHORES ARE INTERRUPTS (Phase 5-2b): the recycle, sell and
+        # drain hoists below are built at BAND_GUARD, so `_arbitrate` runs them
+        # before the means and the intention resumes after them. Their idle
+        # forms stay discretionary candidates (housekeeping when nothing wins).
+        #
+        # Urgent-hoard recycle: the discretionary RECYCLE_SURPLUS
         # means is starved while a step goal stays plannable, so a skill grind
         # feeds its output pile unboundedly (copper_helmet x30, trace
         # 2026-07-05). Past RECYCLE_HOIST_URGENCY (every 5 surplus copies of the
@@ -1234,7 +1242,7 @@ class StrategyArbiter:
             rs_goal = RecycleSurplusGoal(
                 game_data=game_data, ctx=ctx,
                 initial_total=sum(recycle_surplus_map.values()))
-            candidates.append(Candidate(goal=rs_goal, repr_=repr(rs_goal), band=BAND_COLLECT))
+            candidates.append(Candidate(goal=rs_goal, repr_=repr(rs_goal), band=BAND_GUARD))
         # Urgent-hoard SELL and DRAIN (COLLECT band) — 2026-08-05, part 2 of the
         # disposal-unification epic. The recycle hoist above fixed exactly ONE of
         # the three starved shed rungs; the other two kept firing and kept losing.
@@ -1278,7 +1286,7 @@ class StrategyArbiter:
             si_goal = SellInventoryGoal(game_data=game_data, ctx=ctx,
                                         bank_accessible=ctx.bank_accessible,
                                         state=state)
-            candidates.append(Candidate(goal=si_goal, repr_=repr(si_goal), band=BAND_COLLECT))
+            candidates.append(Candidate(goal=si_goal, repr_=repr(si_goal), band=BAND_GUARD))
         drain_excess_map = bank_drain_excess(state, game_data, ctx)
         hoist_drain = (bank_shed_hoist(drain_excess_map, state.inventory_max)
                        and ctx.bank_accessible
@@ -1291,7 +1299,7 @@ class StrategyArbiter:
             db_goal = DrainBankJunkGoal(game_data=game_data, ctx=ctx,
                                         bank_accessible=ctx.bank_accessible,
                                         snapshot=drain_snapshot(state, game_data, ctx))
-            candidates.append(Candidate(goal=db_goal, repr_=repr(db_goal), band=BAND_COLLECT))
+            candidates.append(Candidate(goal=db_goal, repr_=repr(db_goal), band=BAND_GUARD))
         # Append step_goal + every fallback-step goal in ranking order so
         # select_pure walks them all before reaching discretionary. Trace
         # 2026-06-06 16:34 (cycles 0-1): top step's GrindCharacterXP

@@ -25,7 +25,7 @@ from artifactsmmo_cli.ai.accumulation_sell import (
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-from artifactsmmo_cli.ai.arbiter_select import BAND_COLLECT, BAND_STEP
+from artifactsmmo_cli.ai.arbiter_select import BAND_DISCRETIONARY, BAND_GUARD, BAND_STEP
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess, drain_snapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -124,7 +124,7 @@ def test_drain_hoist_is_suppressed_under_inventory_pressure(gd: GameData) -> Non
     state = _state(gd, bank=LIVE_BANK, bag={"sap": 40}, inventory_max=45)
     cands = _candidates(gd, state)
     hoisted = [c for c in cands
-               if isinstance(c.goal, DrainBankJunkGoal) and c.band == BAND_COLLECT]
+               if isinstance(c.goal, DrainBankJunkGoal) and c.band == BAND_GUARD]
     assert not hoisted
 
 
@@ -136,11 +136,11 @@ def _candidates(gd: GameData, state: WorldState, discretionary=()) -> list:
         state=state, game_data=gd, ctx=_ctx())
 
 
-def test_drain_hoist_lands_in_the_collect_band_above_the_step(gd: GameData) -> None:
+def test_drain_hoist_is_an_interrupt_above_the_step(gd: GameData) -> None:
     cands = _candidates(gd, _state(gd, bank=LIVE_BANK))
     drains = [c for c in cands if isinstance(c.goal, DrainBankJunkGoal)]
     assert len(drains) == 1
-    assert drains[0].band == BAND_COLLECT < BAND_STEP
+    assert drains[0].band == BAND_GUARD < BAND_STEP
 
 
 def test_hoisted_drain_is_deduped_from_the_discretionary_band(gd: GameData) -> None:
@@ -150,7 +150,7 @@ def test_hoisted_drain_is_deduped_from_the_discretionary_band(gd: GameData) -> N
     cands = _candidates(gd, _state(gd, bank=LIVE_BANK),
                         discretionary=[MeansKind.DRAIN_BANK_JUNK])
     drains = [c for c in cands if isinstance(c.goal, DrainBankJunkGoal)]
-    assert len(drains) == 1 and drains[0].band == BAND_COLLECT
+    assert len(drains) == 1 and drains[0].band == BAND_GUARD
 
 
 def test_sub_bag_load_bank_stock_keeps_the_discretionary_drain(gd: GameData) -> None:
@@ -164,7 +164,7 @@ def test_sub_bag_load_bank_stock_keeps_the_discretionary_drain(gd: GameData) -> 
     assert 0 < max(bank_drain_excess(state, gd, _ctx()).values()) < state.inventory_max
     cands = _candidates(gd, state, discretionary=[MeansKind.DRAIN_BANK_JUNK])
     drains = [c for c in cands if isinstance(c.goal, DrainBankJunkGoal)]
-    assert len(drains) == 1 and drains[0].band != BAND_COLLECT
+    assert len(drains) == 1 and drains[0].band == BAND_DISCRETIONARY
 
 
 def test_bank_hoist_fires_at_exactly_one_bag_load(gd: GameData) -> None:
@@ -374,18 +374,18 @@ def test_sell_value_is_zero_with_nothing_to_sell(gd: GameData) -> None:
     assert goal.value(state, gd) == 0.0
 
 
-def test_sell_hoist_lands_in_the_collect_band(gd: GameData) -> None:
+def test_sell_hoist_is_an_interrupt(gd: GameData) -> None:
     state = _state(gd, bank={"sap": 703}, events=(SELL_EVENT,))
     cands = _candidates(gd, state, discretionary=[MeansKind.SELL_IDLE])
     sells = [c for c in cands if isinstance(c.goal, SellInventoryGoal)]
-    assert len(sells) == 1 and sells[0].band == BAND_COLLECT
+    assert len(sells) == 1 and sells[0].band == BAND_GUARD
 
 
 def test_sell_hoist_stands_down_with_no_licensed_surplus(gd: GameData) -> None:
     state = _state(gd, bank={}, events=(SELL_EVENT,))
     cands = _candidates(gd, state, discretionary=[MeansKind.SELL_IDLE])
     sells = [c for c in cands if isinstance(c.goal, SellInventoryGoal)]
-    assert len(sells) == 1 and sells[0].band != BAND_COLLECT
+    assert len(sells) == 1 and sells[0].band == BAND_DISCRETIONARY
 
 
 # ── part 1's invariant still holds with the hoist live ───────────────────────

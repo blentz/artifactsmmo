@@ -37,7 +37,7 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.tiers.means import _fires as _means_fires
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -461,6 +461,17 @@ def test_ladder_entry_count_matches_lean() -> None:
     − GEAR_REVIEW (retired in Phase 4-3b: its one arm never fired).
     Lean side mirrors via MeansKind.allInLadderOrder."""
     assert len(ALL_IN_LADDER_ORDER) == 30
+
+
+def test_the_ladder_interrupt_prefix_is_what_production_runs_as_interrupts() -> None:
+    """Phase 5-2a/5-2b: `StrategyArbiter._arbitrate` runs the band-0 candidates
+    (the guards in `GUARD_ORDER`, then SELL_PRESSURED) before any means. The
+    liveness ladder keeps that order as its prefix, so the model's "ladder
+    order" and the code's "interrupts, then the walk" are one order. (The
+    shed-urgency hoists are interrupts too, but the ladder models their idle
+    forms as discretionary rungs and has no hoist rung at all.)"""
+    interrupts = [LadderMeans[g.name] for g in GUARD_ORDER] + [LadderMeans.SELL_PRESSURED]
+    assert list(ALL_IN_LADDER_ORDER[:len(interrupts)]) == interrupts
 
 
 def test_no_task_state_acceptTask_fires() -> None:

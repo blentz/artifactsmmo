@@ -1080,8 +1080,8 @@ private def gearScanPrefix : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
-   .discardHigh, .craftPotions, .claimPending, .completeTask,
-   .sellPressured, .lowYieldCancel, .taskCancel,
+   .discardHigh, .craftPotions, .sellPressured, .claimPending, .completeTask,
+   .lowYieldCancel, .taskCancel,
    .supplyBank, .currencyTurnIn, .acceptTask,
    -- 2026-09-13: BANK_EXPAND promoted, LAST in the collect group.
    .bankExpand]

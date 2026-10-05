@@ -3944,8 +3944,8 @@ RECYCLE_HOIST_MUTATIONS = [
      "        hoist_recycle = (shed_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY\n"
      "                         and used_fraction(state) < SELL_PRESSURE_FRACTION)",
      "        hoist_recycle = (shed_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY)"),
-    ("strategy_driver: hoisted recycle band COLLECT->DISCRETIONARY",
-     "candidates.append(Candidate(goal=rs_goal, repr_=repr(rs_goal), band=BAND_COLLECT))",
+    ("strategy_driver: hoisted recycle band GUARD->DISCRETIONARY (no longer an interrupt)",
+     "candidates.append(Candidate(goal=rs_goal, repr_=repr(rs_goal), band=BAND_GUARD))",
      "candidates.append(Candidate(goal=rs_goal, repr_=repr(rs_goal), band=BAND_DISCRETIONARY))"),
     ("strategy_driver: drop the discretionary dedup of a hoisted recycle",
      "            if hoist_recycle and mk is MeansKind.RECYCLE_SURPLUS:",
@@ -3978,8 +3978,8 @@ SHED_HOIST_MUTATIONS = [
      "                                        snapshot=replace(drain_snapshot(state, game_data, ctx),\n"
      "                                                         owned=0))\n"
      "            candidates.append("),
-    ("strategy_driver: hoisted drain band COLLECT->DISCRETIONARY",
-     "candidates.append(Candidate(goal=db_goal, repr_=repr(db_goal), band=BAND_COLLECT))",
+    ("strategy_driver: hoisted drain band GUARD->DISCRETIONARY (no longer an interrupt)",
+     "candidates.append(Candidate(goal=db_goal, repr_=repr(db_goal), band=BAND_GUARD))",
      "candidates.append(Candidate(goal=db_goal, repr_=repr(db_goal), band=BAND_DISCRETIONARY))"),
     ("strategy_driver: drop the discretionary dedup of a hoisted drain",
      "            if hoist_drain and mk is MeansKind.DRAIN_BANK_JUNK:",
@@ -3992,8 +3992,8 @@ SHED_HOIST_MUTATIONS = [
      "                       or bank_shed_hoist(sell_bank, state.inventory_max))\n"
      "                      and used_fraction(state) < SELL_PRESSURE_FRACTION)",
      "        hoist_sell = (used_fraction(state) < SELL_PRESSURE_FRACTION)"),
-    ("strategy_driver: hoisted sell band COLLECT->DISCRETIONARY",
-     "candidates.append(Candidate(goal=si_goal, repr_=repr(si_goal), band=BAND_COLLECT))",
+    ("strategy_driver: hoisted sell band GUARD->DISCRETIONARY (no longer an interrupt)",
+     "candidates.append(Candidate(goal=si_goal, repr_=repr(si_goal), band=BAND_GUARD))",
      "candidates.append(Candidate(goal=si_goal, repr_=repr(si_goal), band=BAND_DISCRETIONARY))"),
     ("strategy_driver: hoisted sell drops the bank-arm snapshot (arm goes inert)",
      "            si_goal = SellInventoryGoal(game_data=game_data, ctx=ctx,\n"
@@ -4712,6 +4712,14 @@ INTENTION_YIELD_MUTATIONS = [
     ("yield: the yielded goal is moved to the front",
      "        at = max((i + 1 for i, c in enumerate(out) if c.band <= band), default=0)\n",
      "        at = 0\n"),
+]
+
+# SELL_PRESSURED is an interrupt (Phase 5-2b): built at BAND_GUARD so it runs
+# before the means. Unit-killed by tests/test_ai/test_strategy_driver.py.
+SELL_PRESSURED_INTERRUPT_MUTATIONS = [
+    ("strategy_driver: SELL_PRESSURED is a collect means again, not an interrupt",
+     "            band = BAND_GUARD if mk is MeansKind.SELL_PRESSURED else BAND_COLLECT\n",
+     "            band = BAND_COLLECT\n"),
 ]
 
 # The arbiter applies the yield before arbitration. Unit-killed by
@@ -8831,6 +8839,8 @@ def _collect_all_groups() -> None:
     run_group(INTENTION_PROGRESS_SRC, INTENTION_YIELD_MUTATIONS,
               "tests/test_ai/test_intention_budget.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, YIELD_WIRING_MUTATIONS,
+              "tests/test_ai/test_strategy_driver.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, SELL_PRESSURED_INTERRUPT_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(REQUIREMENT_GRAPH_MEMO_SRC, MEMO_ENRICH_MUTATIONS,
               "tests/test_ai/test_requirement_multiset_enrichment.py", survivors)

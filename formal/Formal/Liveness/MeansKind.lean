@@ -171,7 +171,11 @@ def allInLadderOrder : List MeansKind :=
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull, .discardHigh,
    .craftPotions,
-   .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
+   -- 2026-10-05 (Phase 5-2b): SELL_PRESSURED is an INTERRUPT — the bag at the
+   -- pressure threshold is a precondition of continuing — so it closes the
+   -- interrupt prefix, ahead of the collect rungs.
+   .sellPressured,
+   .claimPending, .completeTask, .lowYieldCancel, .taskCancel,
    .supplyBank,
    .currencyTurnIn,
    -- 2026-08-19 (S-051): promoted out of the discretionary group. Below

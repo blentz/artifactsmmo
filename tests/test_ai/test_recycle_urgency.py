@@ -8,7 +8,7 @@ rungs now read it — see `test_shed_hoists.py`); these cases still exercise it
 through the recycle rung it was written for.
 """
 
-from artifactsmmo_cli.ai.arbiter_select import BAND_COLLECT, BAND_STEP
+from artifactsmmo_cli.ai.arbiter_select import BAND_DISCRETIONARY, BAND_GUARD, BAND_STEP
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.recycle_surplus import (
@@ -134,12 +134,12 @@ def _build(state: WorldState, gd: GameData, discretionary=()) -> list:
     )
 
 
-def test_urgent_hoard_hoists_recycle_into_collect_band() -> None:
+def test_urgent_hoard_hoists_recycle_into_an_interrupt() -> None:
     cands = _build(_state(40), _gd())
     recycles = [c for c in cands if isinstance(c.goal, RecycleSurplusGoal)]
     assert len(recycles) == 1, [c.repr_ for c in cands]
-    assert recycles[0].band == BAND_COLLECT
-    assert BAND_COLLECT < BAND_STEP
+    assert recycles[0].band == BAND_GUARD
+    assert BAND_GUARD < BAND_STEP
     step_idx = [c.repr_ for c in cands].index("GrindCharacterXP(green_slime)")
     assert cands.index(recycles[0]) < step_idx
 
@@ -154,7 +154,7 @@ def test_hoist_fires_at_urgency_two_exactly() -> None:
     # 7 held -> surplus 6 -> urgency 2 (the threshold).
     cands = _build(_state(7), _gd())
     recycles = [c for c in cands if isinstance(c.goal, RecycleSurplusGoal)]
-    assert len(recycles) == 1 and recycles[0].band == BAND_COLLECT
+    assert len(recycles) == 1 and recycles[0].band == BAND_GUARD
 
 
 def test_hoist_suppressed_under_inventory_pressure() -> None:
@@ -171,7 +171,7 @@ def test_hoisted_recycle_is_deduped_from_discretionary() -> None:
     cands = _build(_state(40), _gd(), discretionary=[MeansKind.RECYCLE_SURPLUS])
     recycles = [c for c in cands if isinstance(c.goal, RecycleSurplusGoal)]
     assert len(recycles) == 1
-    assert recycles[0].band == BAND_COLLECT
+    assert recycles[0].band == BAND_GUARD
 
 
 def test_small_surplus_keeps_discretionary_recycle() -> None:
@@ -179,7 +179,7 @@ def test_small_surplus_keeps_discretionary_recycle() -> None:
     cands = _build(_state(6), _gd(), discretionary=[MeansKind.RECYCLE_SURPLUS])
     recycles = [c for c in cands if isinstance(c.goal, RecycleSurplusGoal)]
     assert len(recycles) == 1
-    assert recycles[0].band != BAND_COLLECT
+    assert recycles[0].band == BAND_DISCRETIONARY
 
 
 def test_goal_with_snapshot_satisfied_by_partial_progress() -> None:
