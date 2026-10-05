@@ -628,6 +628,22 @@ class Intention(IntentionBase, table=True):
     __tablename__ = "intention"
 
 
+class RefusalFactBase(SQLModel):
+    """A categorical server refusal, recorded once and shared by the fleet
+    (Phase 5-1): `action_kind` refused `item_code` with `http_code`, while the
+    item's game-data type was `item_type`. See `ai/refusal_fact_core`."""
+
+    action_kind: str = Field(primary_key=True)
+    item_code: str = Field(primary_key=True)
+    http_code: int
+    item_type: str | None = None
+    first_ts: str
+
+
+class RefusalFact(RefusalFactBase, table=True):
+    __tablename__ = "refusal_fact"
+
+
 class IntentionYieldBase(SQLModel):
     """The goal that spent its intention budget and yields for one turn
     (Phase 4-2b) — one row per character while a yield is active.

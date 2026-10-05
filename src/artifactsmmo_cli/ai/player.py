@@ -28,7 +28,7 @@ from artifactsmmo_api_client.types import Unset
 
 from artifactsmmo_cli.ai.account_read_cache import AccountReadCache
 from artifactsmmo_cli.ai.action_kind import action_kind_of
-from artifactsmmo_cli.ai.action_rejection import is_categorical_rejection, rejection_key
+from artifactsmmo_cli.ai.action_rejection import is_categorical_rejection
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
 from artifactsmmo_cli.ai.actions.base import Action
@@ -74,7 +74,6 @@ from artifactsmmo_cli.ai.cycle_snapshot import (
 )
 from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
-from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.fight_record import FightRecord
@@ -123,6 +122,7 @@ from artifactsmmo_cli.ai.recovery import (
     StuckExit,
     StuckSignal,
 )
+from artifactsmmo_cli.ai.refusal_facts import RefusalFacts
 from artifactsmmo_cli.ai.role_catalog import (
     ROLE_CATALOG,
     ROLES_BY_NAME,
@@ -287,16 +287,15 @@ class GamePlayer:
         self._failed_action_backoff: dict[str, int] = {}
         # Actions the SERVER has categorically refused (`ai/action_rejection`):
         # 473 "invalid item for recycling" and friends say the item is not
-        # eligible for the action at all, which no state change fixes. The same
-        # memo the arbiter uses for unplannable goals, at the execution layer —
-        # one mechanism, two subjects. Keyed quantity-free by
-        # `rejection_key(action)`, NOT by repr.
+        # eligible for the action at all. Kept as FLEET-WIDE model facts
+        # (Phase 5-1, `ai/refusal_facts`), keyed quantity-free by
+        # `rejection_key(action)`; they replaced a per-process memo that
+        # re-probed on a timer.
         #
         # Live 2026-08-23: C3P0 sent `Recycle(water_boost_potion×1)` 37 times
         # over eight hours, every one answered 473, because nothing carried the
-        # refusal back into the model. The escalating re-probe means a
-        # misclassified code self-heals instead of disabling an action forever.
-        self._rejected_actions = DoomedMemo()
+        # refusal back into the model.
+        self._refusals = RefusalFacts(history)
         self._actions_since_full_refresh: int = 0
         # `time.monotonic()` of the last whole-book GE order reload, or None
         # until the first cycle sets the interval's origin. Monotonic because a
@@ -881,6 +880,7 @@ class GamePlayer:
         # commitment (`--committed` still overrides it, in `plan_from_state`).
         self._arbiter.resume_intention()
         self._resume_yield()
+        self._refusals.load()
         return self.plan_from_state(committed=committed)
 
     def plan_from_state(self, committed: str | None = None) -> PlanReport:
@@ -971,6 +971,7 @@ class GamePlayer:
             # resumes it instead of choosing from scratch.
             self._arbiter.resume_intention()
             self._resume_yield()
+            self._refusals.load()
 
         print(f"[{self._now()}] Starting play loop for {self.character}")
 
@@ -1478,14 +1479,12 @@ class GamePlayer:
             # classified — and 485 is exactly such a code. The named branches
             # it now also covers are 499 and 496, neither of which is
             # categorical, so hoisting changes nothing for them.
-            if is_categorical_rejection(e.code) and self.state is not None:
-                key = rejection_key(action)
+            if is_categorical_rejection(e.code) and self.game_data is not None:
+                key = self._refusals.record(action, e.code, self.game_data)
                 if key is not None:
                     print(f"[{self._now()}] {key} refused categorically "
-                          f"(HTTP {e.code}) — routing around it")
-                    self._rejected_actions.mark(key, self.state,
-                                                self._cycle_counter)
-                    self._events.note(Mechanism.REFUSAL_POISON, key, f"HTTP {e.code}")
+                          f"(HTTP {e.code}) — recorded as a fact")
+                    self._events.note(Mechanism.REFUSAL_FACT, key, f"HTTP {e.code}")
             refreshed = self._fetch_world_state(client)
             if outcome.startswith("error:HTTP_") and isinstance(
                 action, (WithdrawItemAction, DepositAllAction, DepositItemAction)
@@ -2492,17 +2491,15 @@ class GamePlayer:
         return built
 
     def _is_categorically_refused(self, action: Action) -> bool:
-        """Has the server refused this action's item as ineligible, recently?
+        """Does a recorded categorical refusal still close this action
+        (`ai/refusal_facts`)?
 
         False before state exists: the planner holds this predicate from
         construction, and "we have not sensed the world yet" must not be an
         assertion failure inside a per-action hot path."""
-        if self.state is None:
+        if self.state is None or self.game_data is None:
             return False
-        key = rejection_key(action)
-        if key is None:
-            return False
-        return self._rejected_actions.is_doomed(key, self.state, self._cycle_counter)
+        return self._refusals.refused(action, self.state, self.game_data)
 
     def _notify_observer(
         self,

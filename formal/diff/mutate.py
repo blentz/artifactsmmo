@@ -349,7 +349,7 @@ OBTAIN_MODEL_DROP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
 FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding_core.py"
 CURRENCY_AFFORD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_afford_core.py"
-DOOMED_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "doomed_memo.py"
+REFUSAL_FACT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "refusal_fact_core.py"
 STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
 DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decision.py"
 OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "obtain_item.py"
@@ -3445,21 +3445,16 @@ CURRENCY_AFFORD_MUTATIONS = [
      "    return True"),
 ]
 
-# Killed by formal/diff/test_doomed_memo_diff.py (binds DoomedMemo._ttl / is_doomed
-# to the proved Formal.DoomedMemo.ttl / isDoomed).
-DOOMED_MEMO_MUTATIONS = [
-    ("doomed_memo: drop exponential backoff (window stays at base)",
-     "        return min(self._base_retry << (failures - 1), self._max_retry)",
-     "        return min(self._base_retry, self._max_retry)"),
-    ("doomed_memo: ttl shift off-by-one (failures-1 becomes failures)",
-     "        return min(self._base_retry << (failures - 1), self._max_retry)",
-     "        return min(self._base_retry << failures, self._max_retry)"),
-    ("doomed_memo: drop signature invalidation (skip even when plannability moved)",
-     "        if sig != plannability_signature(state):\n            return False",
-     "        if False:\n            return False"),
-    ("doomed_memo: window off-by-one (< becomes <=)",
-     "        return cycle - set_at < self._ttl(failures)",
-     "        return cycle - set_at <= self._ttl(failures)"),
+# Killed by formal/diff/test_refusal_fact_diff.py (binds refusal_holds to the
+# proved Formal.RefusalFact.holds). Phase 5-1 retired DOOMED_MEMO_MUTATIONS with
+# the re-probe memo this replaced.
+REFUSAL_FACT_MUTATIONS = [
+    ("refusal: 485 holds whether or not the code is worn",
+     "    if http_code == ALREADY_EQUIPPED:\n        return worn\n",
+     "    if http_code == ALREADY_EQUIPPED:\n        return True\n"),
+    ("refusal: a game-data refusal survives the item's redefinition",
+     "    return recorded_type == current_type\n",
+     "    return True\n"),
 ]
 
 # Killed by tests/test_ai/test_combat.py — the learned-veto threshold that stops the
@@ -4974,7 +4969,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
-    DOOMED_MEMO_SRC, STRATEGY_DRIVER_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
+    REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
     ROOT_DECISION_SRC, GATHER_DEMAND_SRC,
     OBTAIN_ITEM_ROUTING_SRC, EQUIP_VALUE_SRC,
     GEAR_VALUE_CORE_SRC,
@@ -7776,8 +7771,8 @@ ACTION_REJECTION_MUTATIONS = [
 ]
 PLAYER_CATEGORICAL_SCOPE_MUTATIONS = [
     ("player: confine categorical poisoning to the else arm (485 unreachable again)",
-     "            if is_categorical_rejection(e.code) and self.state is not None:",
-     "            if (is_categorical_rejection(e.code) and self.state is not None\n"
+     "            if is_categorical_rejection(e.code) and self.game_data is not None:",
+     "            if (is_categorical_rejection(e.code) and self.game_data is not None\n"
      "                    and outcome.startswith(\"error:HTTP_\")):"),
 ]
 # Target F: store_warmup_core warmup gates.
@@ -8684,8 +8679,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_currency_funding_diff.py", survivors)
     run_group(CURRENCY_AFFORD_CORE_SRC, CURRENCY_AFFORD_MUTATIONS,
               "formal/diff/test_currency_afford_diff.py", survivors)
-    run_group(DOOMED_MEMO_SRC, DOOMED_MEMO_MUTATIONS,
-              "formal/diff/test_doomed_memo_diff.py", survivors)
+    run_group(REFUSAL_FACT_SRC, REFUSAL_FACT_MUTATIONS,
+              "formal/diff/test_refusal_fact_diff.py", survivors)
     run_group(DECISION_SRC, DECISION_MUTATIONS,
               "tests/test_ai/test_decision.py", survivors)
     run_group(OBTAIN_ITEM_DECISION_SRC, OBTAIN_ITEM_DECISION_MUTATIONS,

@@ -3373,7 +3373,7 @@ failure modes are BENIGN — a false rejection reroutes to an incremental
 `GatherMaterialsGoal` on the same recipe path (`ai/strategy_driver.py` `_equippable_goal`
 ~437 / `objective_step_goal` ~490), and an over-admission falls through the
 `len(plan) > 0` arbiter discipline (`ai/arbiter_select.py` ~84/95) to the next
-candidate (capped by `DoomedMemo`). The real progress invariant is those runtime
+candidate. The real progress invariant is those runtime
 guards, NOT this proof. The OBTAINABILITY direction (the half the level-50
 liveness actually needs) IS proven 0-sorry below (`canonicalPlan*` /
 `gear_obtainable_of_perActionLength_le`). `corner3`/`star_of_corner3` are kept as

@@ -60,4 +60,8 @@ class Mechanism(StrEnum):
     STUCK_SIGNAL = "stuck_signal"
     SUPPRESS = "suppress"
     ERROR_BACKOFF = "error_backoff"
-    REFUSAL_POISON = "refusal_poison"
+    # A categorical server refusal recorded as a fleet-wide fact (Phase 5-1;
+    # subject: `rejection_key`, detail: the HTTP code). `refusal_poison` (the
+    # per-process re-probe memo it replaced) is retired; its value stays in
+    # `decision_events` history and must not be reused.
+    REFUSAL_FACT = "refusal_fact"

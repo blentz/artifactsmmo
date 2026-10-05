@@ -2270,18 +2270,13 @@ def runMonsterDropApply (args : Array Json) : Json :=
               ("counts", Json.arr ((query.map (fun k => Json.num (Int.ofNat (out.counts k)))).toArray))]
 
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
--- DoomedMemo: re-probe window ttl(base, maxR, failures).
-def runDoomedTtl (args : Array Json) : Json :=
-  let r := Formal.DoomedMemo.ttl (intArg args 0).toNat (intArg args 1).toNat (intArg args 2).toNat
-  Json.mkObj [("ttl", Json.num (Int.ofNat r))]
-
--- DoomedMemo: is_doomed decision. args = [base, maxR, sig0, setAt, failures, sig, cycle]
--- (signatures modeled as Int — isDoomed only compares them for equality).
-def runDoomedIsDoomed (args : Array Json) : Json :=
-  let d := Formal.DoomedMemo.isDoomed (σ := Int)
-    (intArg args 0).toNat (intArg args 1).toNat (intArg args 2)
-    (intArg args 3).toNat (intArg args 4).toNat (intArg args 5) (intArg args 6).toNat
-  Json.mkObj [("doomed", Json.bool d)]
+-- RefusalFact: does a recorded categorical refusal still hold?
+-- args = [httpCode, recordedType, currentType, worn(0/1)]; a type is an Int id,
+-- negative = absent from game data (types are compared for equality only).
+def runRefusalHolds (args : Array Json) : Json :=
+  let ty (i : Nat) : Option Int := let v := intArg args i; if v < 0 then none else some v
+  let h := Formal.RefusalFact.holds (intArg args 0).toNat (ty 1) (ty 2) (intArg args 3 != 0)
+  Json.mkObj [("holds", Json.bool h)]
 
 -- LeafAttainable: acquisition-leaf attainability.
 -- args = [gatherable(0/1), knownSpawnDrop(0/1), taskEarnable(0/1), buyable(0/1)]
@@ -3007,10 +3002,8 @@ def runOne (item : Json) : Json :=
     runSkillGrindSelection args
   else if kind == "monster_drop_apply" then
     runMonsterDropApply args
-  else if kind == "doomed_ttl" then
-    runDoomedTtl args
-  else if kind == "doomed_is_doomed" then
-    runDoomedIsDoomed args
+  else if kind == "refusal_holds" then
+    runRefusalHolds args
   else if kind == "leaf_attainable" then
     runLeafAttainable args
   else if kind == "obtain_model_ready" then

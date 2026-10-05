@@ -30,7 +30,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | DecomposeWitness | core, planner | sufficiency, validity |
 | DisposalRoute | inventory | dominance, safety, totality, liveness |
 | DominancePareto | equipment, selling | safety |
-| DoomedMemo | core, planner | monotonicity, safety, reachability |
 | EquipValueAugmented | items, characters | dominance, monotonicity |
 | EquipmentProfile | equipment-profile | safety, validity, totality |
 | EquipmentScoring | items, gear | validity, dominance |
@@ -88,6 +87,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | PurposeRouting | items, characters | dominance |
 | RealizableLoadout | items, characters | safety |
 | RecycleProtection | items, crafting | safety |
+| RefusalFact | core, planner | safety, reachability |
 | Scalarizer | core | monotonicity |
 | ShoppingList | resources | dominance, monotonicity, safety, totality |
 | SkillGrindSelection | crafting, planner | safety, totality |

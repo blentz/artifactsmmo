@@ -197,7 +197,7 @@ import Formal.Liveness.GearBuildTermination
 import Formal.Liveness.GearTierLeveling
 import Formal.Liveness.WinnableGrounded
 import Formal.Liveness.WitnessAcquirable
-import Formal.DoomedMemo
+import Formal.RefusalFact
 import Formal.CurrencyAffordFastFail
 import Formal.PlanModel
 import Formal.LeafAttainable

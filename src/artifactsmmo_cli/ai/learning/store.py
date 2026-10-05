@@ -33,6 +33,8 @@ from artifactsmmo_cli.ai.learning.models import (
     PlanBodyLogBase,
     PlanCommitment,
     PlanCommitmentBase,
+    RefusalFact,
+    RefusalFactBase,
     Session,
     SkillXpObservation,
     TaskRewardObservation,
@@ -1583,6 +1585,33 @@ class LearningStore:
                 ).first()
         except SQLAlchemyError:
             return None
+
+    def save_refusal_fact(self, action_kind: str, item_code: str, http_code: int,
+                          item_type: str | None) -> None:
+        """Record a categorical refusal fleet-wide (Phase 5-1). A re-refusal of
+        the same (kind, code) refreshes the code and type, keeping the first
+        sighting's timestamp."""
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.get(RefusalFact, (action_kind, item_code))
+                if row is None:
+                    s.add(RefusalFact(action_kind=action_kind, item_code=item_code,
+                                      http_code=http_code, item_type=item_type,
+                                      first_ts=datetime.now(tz=timezone.utc).isoformat()))
+                else:
+                    row.http_code, row.item_type = http_code, item_type
+                    s.add(row)
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] save_refusal_fact failed: {e}")
+
+    def load_refusal_facts(self) -> list[RefusalFactBase]:
+        """Every recorded refusal, any character's (empty on DB error)."""
+        try:
+            with SqlSession(self._engine) as s:
+                return list(s.exec(select(RefusalFact)).all())
+        except SQLAlchemyError:
+            return []
 
     def load_plan_commitment(self) -> PlanCommitmentBase | None:
         """Read the live commitment row, or None when absent / on DB error."""

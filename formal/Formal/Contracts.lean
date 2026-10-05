@@ -12,7 +12,7 @@ import Formal.LoadoutProjection
 import Formal.EquipmentScoring
 import Formal.SkillGrindSelection
 import Formal.SkillXpPositive
-import Formal.DoomedMemo
+import Formal.RefusalFact
 import Formal.CurrencyAffordFastFail
 import Formal.LeafAttainable
 import Formal.ObtainModelReady
@@ -2830,30 +2830,16 @@ example : ∀ (s : Formal.Liveness.ItemsTaskRun.RunState),
           = s.total :=
   @Formal.Liveness.ItemsTaskRun.held_accounts
 
--- ─── DoomedMemo (exponential-backoff no-plan memo) anti-weakening pins ───
--- cap: the re-probe window NEVER exceeds maxR (weakening to maxR+1 fails here).
-example : ∀ (base maxR failures : Nat),
-    Formal.DoomedMemo.ttl base maxR failures ≤ maxR :=
-  @Formal.DoomedMemo.ttl_le_max
--- geometric: the uncapped window EXACTLY doubles per consecutive failure (f ≥ 1).
-example : ∀ (base f : Nat), 1 ≤ f →
-    base <<< ((f + 1) - 1) = 2 * (base <<< (f - 1)) :=
-  @Formal.DoomedMemo.window_doubles
--- monotone: more failures never shrink the window.
-example : ∀ (base maxR : Nat) {f1 f2 : Nat}, f1 ≤ f2 →
-    Formal.DoomedMemo.ttl base maxR f1 ≤ Formal.DoomedMemo.ttl base maxR f2 :=
-  @Formal.DoomedMemo.ttl_monotone
--- signature change ⇒ not doomed (the memo never suppresses a moved precondition).
-example : ∀ {σ : Type} [inst : DecidableEq σ] (base maxR : Nat) (sig0 : σ)
-    (setAt failures : Nat) (sig : σ) (cycle : Nat), sig ≠ sig0 →
-    Formal.DoomedMemo.isDoomed base maxR sig0 setAt failures sig cycle = false :=
-  @Formal.DoomedMemo.isDoomed_sig_change
--- liveness: once the window elapses the goal is re-probed (never a permanent skip).
-example : ∀ {σ : Type} [inst : DecidableEq σ] (base maxR : Nat) (sig0 : σ)
-    (setAt failures : Nat) (sig : σ) (cycle : Nat),
-    Formal.DoomedMemo.ttl base maxR failures ≤ cycle - setAt →
-    Formal.DoomedMemo.isDoomed base maxR sig0 setAt failures sig cycle = false :=
-  @Formal.DoomedMemo.isDoomed_expires
+-- ─── RefusalFact (categorical refusals as model facts) anti-weakening pins ───
+example : ∀ {σ : Type} [DecidableEq σ] (r c : Option σ) (w : Bool),
+    Formal.RefusalFact.holds Formal.RefusalFact.alreadyEquipped r c w = w :=
+  @Formal.RefusalFact.equipped_holds_iff_worn
+example : ∀ {σ : Type} [DecidableEq σ] (code : Nat), code ≠ Formal.RefusalFact.alreadyEquipped →
+    ∀ (t : Option σ) (w : Bool), Formal.RefusalFact.holds code t t w = true :=
+  @Formal.RefusalFact.game_fact_holds_while_unchanged
+example : ∀ {σ : Type} [DecidableEq σ] (code : Nat), code ≠ Formal.RefusalFact.alreadyEquipped →
+    ∀ (r c : Option σ), r ≠ c → ∀ (w : Bool), Formal.RefusalFact.holds code r c w = false :=
+  @Formal.RefusalFact.game_fact_voids_on_redefinition
 
 -- ─── LeafAttainable (acquisition-leaf attainability) anti-weakening pins ───
 -- VALIDITY: the decision is EXACTLY the 4-way source disjunction (weakening any

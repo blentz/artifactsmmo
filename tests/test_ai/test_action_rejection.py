@@ -1,4 +1,4 @@
-"""A server rejection that is CATEGORICAL must poison the action, not be retried.
+"""A server rejection that is CATEGORICAL must become a model fact, not be retried.
 
 Live 2026-08-23: C3P0 sent `Recycle(water_boost_potion x1)` 37 times over eight
 hours, every one answered HTTP 473 "Invalid item for recycling". The recycle
@@ -19,10 +19,14 @@ from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
-from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
+from artifactsmmo_cli.ai.game_data import ItemStats
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.refusal_fact_core import refusal_holds
+from artifactsmmo_cli.ai.refusal_facts import RefusalFacts
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.test_intention_store import _break_engine
 from tests.test_ai.test_strategy_driver import _make_planner_gd
 
 
@@ -64,18 +68,20 @@ def test_the_categorical_set_is_about_item_eligibility():
     assert frozenset({472, 473, 476, 485, 437, 441, 442}) == CATEGORICAL_REJECTIONS
 
 
-def test_the_memo_poisons_an_action_repr_like_it_poisons_a_goal():
-    """The memo is subject-agnostic: same mark/is_doomed contract, keyed on any
-    repr. Reusing it is the point — a second implementation is what this fix
-    exists to stop."""
-    memo = DoomedMemo()
-    state = make_state(level=20)
+def test_a_game_data_refusal_holds_until_the_item_is_redefined():
+    """Phase 5-1: "not recyclable" is a fact about the item. It holds at any
+    loadout, and only a change of the item's game-data type (a season reset
+    redefining it) voids it."""
+    assert refusal_holds(473, "utility", "utility", worn=False) is True
+    assert refusal_holds(473, "utility", "utility", worn=True) is True
+    assert refusal_holds(473, "utility", "ring", worn=False) is False
 
-    assert memo.is_doomed("Recycle(water_boost_potion×1)", state, cycle=1) is False
-    memo.mark("Recycle(water_boost_potion×1)", state, cycle=1)
 
-    assert memo.is_doomed("Recycle(water_boost_potion×1)", state, cycle=2) is True
-    assert memo.is_doomed("Recycle(copper_ring×1)", state, cycle=2) is False
+def test_already_equipped_holds_exactly_while_the_code_is_worn():
+    """485 is a fact about the worn loadout, not the item: unequip the worn copy
+    and the same equip succeeds."""
+    assert refusal_holds(485, "artifact", "artifact", worn=True) is True
+    assert refusal_holds(485, "artifact", "artifact", worn=False) is False
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +131,7 @@ def test_an_action_with_no_item_has_no_rejection_key():
 # ---------------------------------------------------------------------------
 
 
-def test_the_player_wires_its_planner_to_the_refusal_memo(bundle_game_data):
+def test_the_player_wires_its_planner_to_the_refusal_facts(bundle_game_data):
     """The WIRING. `set_refusal_filter` is only useful if the player actually
     calls it, and the predicate it passes must read the live memo.
 
@@ -144,31 +150,44 @@ def test_the_player_wires_its_planner_to_the_refusal_memo(bundle_game_data):
     survivors = player.planner._surviving_actions([refused])
     assert survivors == [refused], "precondition: not refused yet"
 
-    key = rejection_key(refused)
-    assert key is not None
-    player._rejected_actions.mark(key, player.state, cycle=player._cycle_counter)
+    assert player._refusals.record(refused, 473, player.game_data) is not None
 
     assert player.planner._surviving_actions([refused]) == [], (
-        "the player's planner must consult the live refusal memo")
+        "the player's planner must consult the live refusal facts")
     assert player.planner._surviving_actions(
         [RecycleAction(code="copper_ring", quantity=1)]) != [], (
         "poisoning one item must not disturb another")
 
 
-def test_a_refused_action_is_offered_again_after_the_reprobe_window():
-    """Poisoning is a re-probe, not a permanent ban — a misclassified code must
-    self-heal rather than disable an action for the session."""
-    player = GamePlayer(character="C3P0")
-    player.state = make_state(level=20)
-    player.game_data = _make_planner_gd()
-
+def test_a_refusal_is_shared_by_the_fleet_and_survives_a_restart(tmp_path):
+    """Phase 5-1: recorded once, in the learning DB, without a character — a
+    sibling (or the same character after a restart) loads it and never
+    re-sends the refused call."""
+    gd = _make_planner_gd()
+    gd._item_stats["water_boost_potion"] = ItemStats(
+        code="water_boost_potion", level=1, type_="utility")
+    db = str(tmp_path / "refusals.db")
     refused = RecycleAction(code="water_boost_potion", quantity=1)
-    key = rejection_key(refused)
-    assert key is not None
-    player._rejected_actions.mark(key, player.state, cycle=1)
+    first = RefusalFacts(LearningStore(db, character="C3P0"))
+    first.record(refused, 473, gd)
+    first.record(refused, 473, gd)  # a re-refusal keeps one fact
+    sibling = RefusalFacts(LearningStore(db, character="R2D2"))
+    sibling.load()
+    assert sibling.refused(refused, make_state(level=20), gd) is True
+    # A season reset that redefines the item voids the fact.
+    gd._item_stats["water_boost_potion"] = ItemStats(
+        code="water_boost_potion", level=1, type_="ring")
+    assert sibling.refused(refused, make_state(level=20), gd) is False
 
-    assert player._rejected_actions.is_doomed(key, player.state, cycle=2) is True
-    assert player._rejected_actions.is_doomed(key, player.state, cycle=500) is False
+
+def test_no_store_keeps_facts_in_memory_only():
+    facts = RefusalFacts(None)
+    facts.load()
+    refused = RecycleAction(code="water_boost_potion", quantity=1)
+    assert facts.record(refused, 473, _make_planner_gd()) is not None
+    assert facts.refused(refused, make_state(), _make_planner_gd()) is True
+    assert facts.record(RestAction(), 473, _make_planner_gd()) is None
+    assert facts.refused(RestAction(), make_state(), _make_planner_gd()) is False
 
 
 def test_a_quantity_two_recycle_is_also_dropped_by_a_quantity_one_refusal():
@@ -179,9 +198,8 @@ def test_a_quantity_two_recycle_is_also_dropped_by_a_quantity_one_refusal():
     player.state = make_state(level=20)
     player.game_data = _make_planner_gd()
 
-    key = rejection_key(RecycleAction(code="fire_boost_potion", quantity=1))
-    assert key is not None
-    player._rejected_actions.mark(key, player.state, cycle=1)
+    player._refusals.record(RecycleAction(code="fire_boost_potion", quantity=1), 473,
+                            player.game_data)
 
     assert player._is_categorically_refused(
         RecycleAction(code="fire_boost_potion", quantity=2)) is True
@@ -202,7 +220,7 @@ def test_a_473_from_the_server_poisons_the_action(monkeypatch, bundle_game_data)
     action = RecycleAction(code="water_boost_potion", quantity=1)
     key = rejection_key(action)
     assert key is not None
-    assert player._rejected_actions.is_doomed(key, player.state, 0) is False
+    assert player._is_categorically_refused(action) is False
 
     def _refuse(*_args: object, **_kwargs: object) -> WorldState:
         raise ApiActionError(473, "Invalid item for recycling")
@@ -214,8 +232,7 @@ def test_a_473_from_the_server_poisons_the_action(monkeypatch, bundle_game_data)
     _state, outcome, _executed = player._execute(action, client=None)
 
     assert outcome == "error:HTTP_473"
-    assert player._rejected_actions.is_doomed(
-        key, player.state, player._cycle_counter) is True
+    assert player._is_categorically_refused(action) is True
 
 
 def test_a_cooldown_does_not_poison_the_action(monkeypatch, bundle_game_data):
@@ -239,8 +256,7 @@ def test_a_cooldown_does_not_poison_the_action(monkeypatch, bundle_game_data):
 
     player._execute(action, client=None)
 
-    assert player._rejected_actions.is_doomed(
-        key, player.state, player._cycle_counter) is False
+    assert player._is_categorically_refused(action) is False
 
 
 def test_a_485_from_the_server_poisons_the_equip(monkeypatch, bundle_game_data):
@@ -276,6 +292,9 @@ def test_a_485_from_the_server_poisons_the_equip(monkeypatch, bundle_game_data):
     # Next cycle: the identical step is no longer offered to the search.
     assert player._is_categorically_refused(action) is True
     assert player.planner._surviving_actions([action]) == []
+    # Unequip the worn copy and the equip is offered again (Phase 5-1).
+    player.state = make_state(level=20, inventory={"lich_race_medal": 2})
+    assert player._is_categorically_refused(action) is False
 
 
 def test_a_485_poisons_the_code_in_every_slot_it_could_be_offered_for():
@@ -284,12 +303,13 @@ def test_a_485_poisons_the_code_in_every_slot_it_could_be_offered_for():
     so refusing one slot refuses them all — otherwise the loop just walks to the
     next empty sibling."""
     player = GamePlayer(character="Lor")
-    player.state = make_state(level=20, inventory={"lich_race_medal": 1})
+    player.game_data = _make_planner_gd()
+    player.state = make_state(
+        level=20, inventory={"lich_race_medal": 1},
+        equipment={**make_state().equipment, "artifact1_slot": "lich_race_medal"})
 
     refused = EquipAction(code="lich_race_medal", slot="artifact2_slot")
-    key = rejection_key(refused)
-    assert key is not None
-    player._rejected_actions.mark(key, player.state, player._cycle_counter)
+    assert player._refusals.record(refused, 485, player.game_data) is not None
 
     assert player._is_categorically_refused(
         EquipAction(code="lich_race_medal", slot="artifact3_slot")) is True
@@ -310,3 +330,11 @@ def test_the_refusal_predicate_is_safe_before_the_world_is_sensed():
         RecycleAction(code="water_boost_potion", quantity=1)) is False
     assert player.planner._surviving_actions(
         [RecycleAction(code="water_boost_potion", quantity=1)]) != []
+
+
+def test_a_db_error_on_a_refusal_fact_is_reported_or_reads_as_empty(tmp_path, capsys):
+    store = LearningStore(str(tmp_path / "broken.db"), character="C3P0")
+    _break_engine(store)
+    store.save_refusal_fact("RecycleAction", "water_boost_potion", 473, "utility")
+    assert "save_refusal_fact failed" in capsys.readouterr().out
+    assert store.load_refusal_facts() == []

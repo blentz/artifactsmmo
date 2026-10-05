@@ -53,13 +53,10 @@ corrected — but a corrected model is exactly what was believed on 2026-07-03,
 and the point of this entry is that the NEXT wrong occupancy assertion costs one
 cycle instead of a day.
 
-The unequip that would make a 485-refused equip legal changes `state.equipment`,
-which `plannability_signature` does NOT carry (it is `(level, skills)`), so this
-poisoning does not self-heal on that specific change — it heals on a level/skill
-change or when `DoomedMemo`'s escalating re-probe window elapses (20 → 160
-cycles). That bound is the whole point and the cost is nil: while the code is
-still worn the server refuses anyway, and once it is unequipped the loadout
-picker re-derives the equip from the free slot on the next re-probe.
+Since Phase 5-1 a refusal is a fleet-wide model fact (`ai/refusal_facts`), and
+485 is the one whose validity is not game data: it holds exactly while the code
+is worn (`refusal_fact_core.refusal_holds`), so unequipping the worn copy
+reopens the equip on the next cycle.
 """
 
 

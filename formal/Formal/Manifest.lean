@@ -20,7 +20,7 @@ import Formal.WithdrawSetExpansion
 import Formal.RecycleProtection
 import Formal.BankExpansionTiming
 import Formal.LoadoutProfiles
-import Formal.DoomedMemo
+import Formal.RefusalFact
 import Formal.LeafAttainable
 import Formal.ObtainModelReady
 import Formal.Decompose
@@ -1157,16 +1157,13 @@ open Formal.PriorityBand
 #check @Extracted.Bridges.strategic_value_mono_inventorySpace_extracted -- inventory_space monotone (transferred)
 #check @Extracted.Bridges.strategic_value_mono_haste_extracted        -- haste monotone (transferred)
 
--- DoomedMemo required roles (exponential-backoff no-plan memo;
--- src/artifactsmmo_cli/ai/doomed_memo.py + plannability_signature.py):
-#check @Formal.DoomedMemo.ttl_base                  -- first failure window = min base maxR
-#check @Formal.DoomedMemo.ttl_le_max                -- cap: window ≤ maxR ∀ failures
-#check @Formal.DoomedMemo.window_doubles            -- geometric: uncapped window ×2 per failure
-#check @Formal.DoomedMemo.ttl_monotone             -- more failures never shrink the window
-#check @Formal.DoomedMemo.isDoomed_sig_change      -- new signature ⇒ not doomed (re-probe)
-#check @Formal.DoomedMemo.isDoomed_window          -- doomed ⇔ inside ttl window (same sig)
-#check @Formal.DoomedMemo.isDoomed_expires         -- liveness: window elapsed ⇒ not doomed
-#check @Formal.DoomedMemo.escalation_grows_window  -- same-sig re-mark never shrinks window
+-- RefusalFact required roles (categorical refusals as model facts, Phase 5-1;
+-- src/artifactsmmo_cli/ai/refusal_fact_core.py):
+#check @Formal.RefusalFact.equipped_holds_iff_worn          -- 485 holds exactly while worn
+#check @Formal.RefusalFact.equipped_heals_when_unworn       -- unequip re-opens the equip
+#check @Formal.RefusalFact.game_fact_ignores_loadout        -- a game-data refusal ignores the loadout
+#check @Formal.RefusalFact.game_fact_holds_while_unchanged  -- never re-sent on a timer
+#check @Formal.RefusalFact.game_fact_voids_on_redefinition  -- a redefined item re-opens it
 
 -- LeafAttainable required roles (acquisition-leaf attainability;
 -- src/artifactsmmo_cli/ai/tiers/leaf_attainable_core.py + tiers/objective.py is_attainable):
