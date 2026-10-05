@@ -14,7 +14,7 @@ These are the foundation of the faithful `BlockersQuiet` transience argument: th
 contrapositive (`pressureGatedChores_quiet_of_low`) says that below the binding
 85% threshold all four are quiet, so combat-pressure reduction (a deposit/discard
 that drops `inventoryUsed`) provably drives them silent — the step the eventual
-settled-reachability proof needs. The opaque chores (`craftRelief`, `gearReview`,
+settled-reachability proof needs. The opaque chores (`craftRelief`,
 `claimPending`) and the two latches are handled in later bricks; this brick is the
 threshold-gated four, which need nothing but their existing definitions.
 

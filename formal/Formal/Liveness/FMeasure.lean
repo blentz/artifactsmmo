@@ -26,13 +26,12 @@ and every means that RAISES a slot strictly descends an earlier one:
 | 7 | `recyclableFlag`| recycleRelief | nothing in-model |
 | 8 | `craftReliefFlag` | craftRelief (`.craft` clears both craft flags) | nothing in-model |
 | 9 | `craftPotionsFlag` | craftPotions | nothing in-model |
-| 10 | `gearReviewFlag` | gearReview | nothing in-model |
-| 11 | `pendingFlag`  | claimPending | nothing in-model |
-| 12 | `bankPressure` (= raw `inventoryUsed`) | reducers (`→ 0`) | fight `+DROP_BOUND` (slots 1/2), claim `+1` (slot 11) |
-| 13 | `hpDeficit`    | hpCritical / restForCombat (`hp := maxHp`, fires imply `hp < maxHp`) | nothing in-model |
-| 14 | `geCancelFlag` | geCancel (fire-and-lose; clears only its own flag) | nothing in-model |
-| 15 | `supplyDemandSlot` (2026-08-01) | supplyBank (`.gather` discharges one unit; fires require `supplyDemand ≥ SUPPLY_DEMAND_MIN > 0`) | nothing in-model |
-| 16 | `currencyTurnInFlag` (2026-08-16) | currencyTurnIn (`.npcBuy` clears the flag; fire-and-lose, no threshold) | nothing in-model |
+| 10 | `pendingFlag`  | claimPending | nothing in-model |
+| 11 | `bankPressure` (= raw `inventoryUsed`) | reducers (`→ 0`) | fight `+DROP_BOUND` (slots 1/2), claim `+1` (slot 10) |
+| 12 | `hpDeficit`    | hpCritical / restForCombat (`hp := maxHp`, fires imply `hp < maxHp`) | nothing in-model |
+| 13 | `geCancelFlag` | geCancel (fire-and-lose; clears only its own flag) | nothing in-model |
+| 14 | `supplyDemandSlot` (2026-08-01) | supplyBank (`.gather` discharges one unit; fires require `supplyDemand ≥ SUPPLY_DEMAND_MIN > 0`) | nothing in-model |
+| 15 | `currencyTurnInFlag` (2026-08-16) | currencyTurnIn (`.npcBuy` clears the flag; fire-and-lose, no threshold) | nothing in-model |
 
 Deliberately NOT in the tuple: `objectiveStepFires`/`objectiveStepIsFight` (the ONLY
 fields `perceptionRefresh` mutates — so the refresh is FMeasure-invariant by
@@ -84,7 +83,6 @@ structure FMeasure where
   recyclableFlag         : Nat
   craftReliefFlag        : Nat
   craftPotionsFlag       : Nat
-  gearReviewFlag         : Nat
   pendingFlag            : Nat
   bankPressure           : Nat
   hpDeficit              : Nat
@@ -93,7 +91,7 @@ structure FMeasure where
   -- bottom of the cascade — a geCancel step decreases it with every higher slot
   -- equal, and no OTHER chore ever needs it (they all descend at a higher slot).
   geCancelFlag           : Nat
-  -- Slot 15 (2026-08-01). SUPPLY_BANK was promoted ABOVE `.objectiveStep`, so a
+  -- Slot 14 (2026-08-01). SUPPLY_BANK was promoted ABOVE `.objectiveStep`, so a
   -- supply cycle is now selectable below the cap and must itself descend. Its
   -- `.gather` apply touches NO higher slot (it bumps `trackedSkillLevel`,
   -- `inventoryItems`, `skillXpDelta` — none of which are in this tuple) and
@@ -104,7 +102,7 @@ structure FMeasure where
   -- threshold does real proof work — without it, a demand of 0 could fire the
   -- rung and the supply excursion would not terminate.
   supplyDemandSlot       : Nat
-  -- Slot 16 (2026-08-16, fleet-currency-turn-in epic Task 6). CURRENCY_TURNIN
+  -- Slot 15 (2026-08-16, fleet-currency-turn-in epic Task 6). CURRENCY_TURNIN
   -- sits directly below `supplyBank` in COLLECT_REWARD_ORDER — also ABOVE
   -- `.objectiveStep`, so it too is selectable below the cap and owes a
   -- descent. Its `.npcBuy` apply touches NO higher slot (it clears only
@@ -113,7 +111,7 @@ structure FMeasure where
   -- flag sits at the bottom of the cascade, one below `supplyDemandSlot`
   -- since it is the newer of the two collect rungs.
   currencyTurnInFlag     : Nat
-  -- Slot 18 (2026-09-13). BANK_EXPAND was promoted ABOVE `.objectiveStep`
+  -- Slot 17 (2026-09-13). BANK_EXPAND was promoted ABOVE `.objectiveStep`
   -- (LAST in COLLECT_REWARD_ORDER), so a bank-expansion cycle is now selectable
   -- and must itself descend. `.buyBankExpansion` touches NO higher slot — it
   -- changes only `gold` (down) and `bankCapacity` (up), neither of which is in
@@ -151,7 +149,6 @@ noncomputable def fMeasure (s : State) : FMeasure :=
     recyclableFlag         := b2n s.recyclableSurplusNonempty
     craftReliefFlag        := b2n s.craftReliefFires
     craftPotionsFlag       := b2n s.craftPotionsFires
-    gearReviewFlag         := b2n s.gearReviewFires
     pendingFlag            := b2n s.pendingItemsNonempty
     bankPressure           := s.inventoryUsed
     hpDeficit              := s.maxHp - s.hp
@@ -223,17 +220,6 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.recyclableFlag = m₂.recyclableFlag
      ∧ m₁.craftReliefFlag = m₂.craftReliefFlag
      ∧ m₁.craftPotionsFlag = m₂.craftPotionsFlag
-     ∧ m₁.gearReviewFlag < m₂.gearReviewFlag)
-  ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
-     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
-     ∧ m₁.phasePresent = m₂.phasePresent
-     ∧ m₁.overstockFlag = m₂.overstockFlag
-     ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
-     ∧ m₁.sellableFlag = m₂.sellableFlag
-     ∧ m₁.recyclableFlag = m₂.recyclableFlag
-     ∧ m₁.craftReliefFlag = m₂.craftReliefFlag
-     ∧ m₁.craftPotionsFlag = m₂.craftPotionsFlag
-     ∧ m₁.gearReviewFlag = m₂.gearReviewFlag
      ∧ m₁.pendingFlag < m₂.pendingFlag)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
      ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
@@ -244,7 +230,6 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.recyclableFlag = m₂.recyclableFlag
      ∧ m₁.craftReliefFlag = m₂.craftReliefFlag
      ∧ m₁.craftPotionsFlag = m₂.craftPotionsFlag
-     ∧ m₁.gearReviewFlag = m₂.gearReviewFlag
      ∧ m₁.pendingFlag = m₂.pendingFlag
      ∧ m₁.bankPressure < m₂.bankPressure)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
@@ -256,7 +241,6 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.recyclableFlag = m₂.recyclableFlag
      ∧ m₁.craftReliefFlag = m₂.craftReliefFlag
      ∧ m₁.craftPotionsFlag = m₂.craftPotionsFlag
-     ∧ m₁.gearReviewFlag = m₂.gearReviewFlag
      ∧ m₁.pendingFlag = m₂.pendingFlag
      ∧ m₁.bankPressure = m₂.bankPressure
      ∧ m₁.hpDeficit < m₂.hpDeficit)
@@ -269,7 +253,6 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.recyclableFlag = m₂.recyclableFlag
      ∧ m₁.craftReliefFlag = m₂.craftReliefFlag
      ∧ m₁.craftPotionsFlag = m₂.craftPotionsFlag
-     ∧ m₁.gearReviewFlag = m₂.gearReviewFlag
      ∧ m₁.pendingFlag = m₂.pendingFlag
      ∧ m₁.bankPressure = m₂.bankPressure
      ∧ m₁.hpDeficit = m₂.hpDeficit
@@ -283,7 +266,6 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.recyclableFlag = m₂.recyclableFlag
      ∧ m₁.craftReliefFlag = m₂.craftReliefFlag
      ∧ m₁.craftPotionsFlag = m₂.craftPotionsFlag
-     ∧ m₁.gearReviewFlag = m₂.gearReviewFlag
      ∧ m₁.pendingFlag = m₂.pendingFlag
      ∧ m₁.bankPressure = m₂.bankPressure
      ∧ m₁.hpDeficit = m₂.hpDeficit
@@ -298,7 +280,6 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.recyclableFlag = m₂.recyclableFlag
      ∧ m₁.craftReliefFlag = m₂.craftReliefFlag
      ∧ m₁.craftPotionsFlag = m₂.craftPotionsFlag
-     ∧ m₁.gearReviewFlag = m₂.gearReviewFlag
      ∧ m₁.pendingFlag = m₂.pendingFlag
      ∧ m₁.bankPressure = m₂.bankPressure
      ∧ m₁.hpDeficit = m₂.hpDeficit
@@ -314,7 +295,6 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.recyclableFlag = m₂.recyclableFlag
      ∧ m₁.craftReliefFlag = m₂.craftReliefFlag
      ∧ m₁.craftPotionsFlag = m₂.craftPotionsFlag
-     ∧ m₁.gearReviewFlag = m₂.gearReviewFlag
      ∧ m₁.pendingFlag = m₂.pendingFlag
      ∧ m₁.bankPressure = m₂.bankPressure
      ∧ m₁.hpDeficit = m₂.hpDeficit
@@ -330,7 +310,7 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
     `drawOwedFlag`. (The name is historical and one widening behind by
     construction; the arity is the tuple below, not the name.) -/
 abbrev LexSixteen :=
-  Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
+  Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
     Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
 /-- Embed an `FMeasure` into the right-associated lex 16-tuple. -/
@@ -345,21 +325,20 @@ def toLex13 (m : FMeasure) : LexSixteen :=
               toLex (m.recyclableFlag,
                 toLex (m.craftReliefFlag,
                   toLex (m.craftPotionsFlag,
-                    toLex (m.gearReviewFlag,
                       toLex (m.pendingFlag,
                         toLex (m.bankPressure,
                           toLex (m.hpDeficit,
                             toLex (m.geCancelFlag,
                               toLex (m.supplyDemandSlot,
                                 toLex (m.currencyTurnInFlag,
-                                  m.bankExpandSlot)))))))))))))))))
+                                  m.bankExpandSlot))))))))))))))))
 
 /-- `fMeasureLt` implies the embedded `<` on `LexFifteen`. -/
 theorem toLex13_lt_of_fMeasureLt
     {m₁ m₂ : FMeasure} (h : fMeasureLt m₁ m₂) :
     toLex13 m₁ < toLex13 m₂ := by
   simp only [toLex13, Prod.Lex.lt_iff, ofLex_toLex]
-  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h
+  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h
   · exact Or.inl h
   · obtain ⟨h1, h⟩ := h
     exact Or.inr ⟨h1, Or.inl h⟩
@@ -413,14 +392,7 @@ theorem toLex13_lt_of_fMeasureLt
     exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
             Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
               Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
-                Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
-  · obtain ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15,
-            h16, h⟩ := h
-    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
-            Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
-              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
-                Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15,
-                  Or.inr ⟨h16, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+                Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Well-foundedness of `fMeasureLt`, by `InvImage` reduction to Mathlib's
     standard well-founded order on `LexSixteen`. -/
@@ -534,23 +506,7 @@ theorem fLt_of_craftPotions_dec {m₁ m₂ : FMeasure}
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
     (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h⟩)))))))))
 
-/-- Slot 10 (`gearReviewFlag`) decrease with slots 1-9 equal. -/
-theorem fLt_of_gearReview_dec {m₁ m₂ : FMeasure}
-    (h1 : m₁.levelDeficit = m₂.levelDeficit)
-    (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
-    (h3 : m₁.phasePresent = m₂.phasePresent)
-    (h4 : m₁.overstockFlag = m₂.overstockFlag)
-    (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
-    (h6 : m₁.sellableFlag = m₂.sellableFlag)
-    (h7 : m₁.recyclableFlag = m₂.recyclableFlag)
-    (h8 : m₁.craftReliefFlag = m₂.craftReliefFlag)
-    (h9 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h : m₁.gearReviewFlag < m₂.gearReviewFlag) : fMeasureLt m₁ m₂ :=
-  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h⟩))))))))))
-
-/-- Slot 11 (`pendingFlag`) decrease with slots 1-10 equal (slot 12 free — the
+/-- Slot 10 (`pendingFlag`) decrease with slots 1-9 equal (slot 12 free — the
     claim mint's `+1` pressure is exactly what this dominates). -/
 theorem fLt_of_pending_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
@@ -563,12 +519,11 @@ theorem fLt_of_pending_dec {m₁ m₂ : FMeasure}
     (h7 : m₁.recyclableFlag = m₂.recyclableFlag)
     (h8 : m₁.craftReliefFlag = m₂.craftReliefFlag)
     (h9 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h10 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h : m₁.pendingFlag < m₂.pendingFlag) : fMeasureLt m₁ m₂ :=
-  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10, h⟩)))))))))))
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+    (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h⟩))))))))))
 
-/-- Slot 13 (`hpDeficit`) decrease with slots 1-12 equal. -/
+/-- Slot 12 (`hpDeficit`) decrease with slots 1-11 equal. -/
 theorem fLt_of_hpDeficit_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
@@ -580,15 +535,14 @@ theorem fLt_of_hpDeficit_dec {m₁ m₂ : FMeasure}
     (h7 : m₁.recyclableFlag = m₂.recyclableFlag)
     (h8 : m₁.craftReliefFlag = m₂.craftReliefFlag)
     (h9 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h10 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h11 : m₁.pendingFlag = m₂.pendingFlag)
     (h12 : m₁.bankPressure = m₂.bankPressure)
     (h : m₁.hpDeficit < m₂.hpDeficit) : fMeasureLt m₁ m₂ :=
-  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10, h11,
-      h12, h⟩)))))))))))))
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h11,
+      h12, h⟩))))))))))))
 
-/-- Slot 14 (`geCancelFlag`) decrease with slots 1-13 equal — the fire-and-lose
+/-- Slot 13 (`geCancelFlag`) decrease with slots 1-12 equal — the fire-and-lose
     GE_CANCEL guard. `.geCancelOrder` clears only `geCancelTargetsNonempty`, so every
     higher slot is unchanged and this bottom slot strictly drops. -/
 theorem fLt_of_geCancel_dec {m₁ m₂ : FMeasure}
@@ -602,16 +556,14 @@ theorem fLt_of_geCancel_dec {m₁ m₂ : FMeasure}
     (h7 : m₁.recyclableFlag = m₂.recyclableFlag)
     (h8 : m₁.craftReliefFlag = m₂.craftReliefFlag)
     (h9 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h10 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h11 : m₁.pendingFlag = m₂.pendingFlag)
     (h12 : m₁.bankPressure = m₂.bankPressure)
     (h13 : m₁.hpDeficit = m₂.hpDeficit)
     (h : m₁.geCancelFlag < m₂.geCancelFlag) : fMeasureLt m₁ m₂ :=
-  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10,
-      h11, h12, h13, h⟩))))))))))))))
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h11, h12, h13, h⟩)))))))))))))
 
-/-- Slot 15 (`supplyDemandSlot`) decrease with slots 1-14 equal (2026-08-01).
+/-- Slot 14 (`supplyDemandSlot`) decrease with slots 1-13 equal (2026-08-01).
     The SUPPLY_BANK rung's `.gather` apply touches no other slot, so — exactly
     like `geCancel` one rung above it — the whole cascade above is equal and the
     bottom slot carries the descent. -/
@@ -626,17 +578,15 @@ theorem fLt_of_supplyDemand_dec {m₁ m₂ : FMeasure}
     (h7 : m₁.recyclableFlag = m₂.recyclableFlag)
     (h8 : m₁.craftReliefFlag = m₂.craftReliefFlag)
     (h9 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h10 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h11 : m₁.pendingFlag = m₂.pendingFlag)
     (h12 : m₁.bankPressure = m₂.bankPressure)
     (h13 : m₁.hpDeficit = m₂.hpDeficit)
     (h14 : m₁.geCancelFlag = m₂.geCancelFlag)
     (h : m₁.supplyDemandSlot < m₂.supplyDemandSlot) : fMeasureLt m₁ m₂ :=
-  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10,
-      h11, h12, h13, h14, h⟩)))))))))))))))
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h11, h12, h13, h14, h⟩))))))))))))))
 
-/-- Slot 16 (`currencyTurnInFlag`) decrease with slots 1-15 equal
+/-- Slot 15 (`currencyTurnInFlag`) decrease with slots 1-14 equal
     (2026-08-16). The CURRENCY_TURNIN rung's `.npcBuy` apply touches no other
     slot, so — exactly like `supplyDemandSlot` one rung above it — the whole
     cascade above is equal and the bottom slot carries the descent. Unlike
@@ -654,19 +604,17 @@ theorem fLt_of_currencyTurnIn_dec {m₁ m₂ : FMeasure}
     (h7 : m₁.recyclableFlag = m₂.recyclableFlag)
     (h8 : m₁.craftReliefFlag = m₂.craftReliefFlag)
     (h9 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h10 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h11 : m₁.pendingFlag = m₂.pendingFlag)
     (h12 : m₁.bankPressure = m₂.bankPressure)
     (h13 : m₁.hpDeficit = m₂.hpDeficit)
     (h14 : m₁.geCancelFlag = m₂.geCancelFlag)
     (h15 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
     (h : m₁.currencyTurnInFlag < m₂.currencyTurnInFlag) : fMeasureLt m₁ m₂ :=
-  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
     (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl
-      ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10,
-       h11, h12, h13, h14, h15, h⟩))))))))))))))))
+      ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h11, h12, h13, h14, h15, h⟩)))))))))))))))
 
-/-- Slot 18 (`bankExpandSlot`) decrease dominates, with every higher slot
+/-- Slot 17 (`bankExpandSlot`) decrease dominates, with every higher slot
     equal. The bottom of the cascade, like `geCancelFlag` above it —
     `.buyBankExpansion` touches no slot in this tuple except this one. -/
 theorem fLt_of_bankExpand_dec {m₁ m₂ : FMeasure}
@@ -680,7 +628,6 @@ theorem fLt_of_bankExpand_dec {m₁ m₂ : FMeasure}
     (h7 : m₁.recyclableFlag = m₂.recyclableFlag)
     (h8 : m₁.craftReliefFlag = m₂.craftReliefFlag)
     (h9 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h10 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h11 : m₁.pendingFlag = m₂.pendingFlag)
     (h12 : m₁.bankPressure = m₂.bankPressure)
     (h13 : m₁.hpDeficit = m₂.hpDeficit)
@@ -688,10 +635,9 @@ theorem fLt_of_bankExpand_dec {m₁ m₂ : FMeasure}
     (h15 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
     (h16 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
     (h : m₁.bankExpandSlot < m₂.bankExpandSlot) : fMeasureLt m₁ m₂ :=
-  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
     (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-      ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10,
-       h11, h12, h13, h14, h15, h16, h⟩))))))))))))))))
+      ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h11, h12, h13, h14, h15, h16, h⟩)))))))))))))))
 
 /-! ## The engine — reach 50 from per-cycle FMeasure descent (the
 `MeasureDescent.exists_level_ge_of_descent` shape over the richer tuple). -/

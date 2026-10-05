@@ -223,12 +223,6 @@ structure State where
       `predict_win`; a diff harness must assert the production computation
       matches this field. -/
   restForCombatReady : Bool
-  /-- OPAQUE: production's GEAR_REVIEW guard firing predicate. Mirrors
-      `tiers/guards.py::_fires(GuardKind.GEAR_REVIEW, …)`: fires iff
-      `ctx.regear_level_up` (the post-level-up / post-loss gear
-      prioritization latch). State-carried Bool — a diff harness asserts
-      agreement with `ctx.regear_level_up`. -/
-  gearReviewFires : Bool
   /-- OPAQUE: production's CRAFT_POTIONS guard firing predicate. Mirrors
       `tiers/guards.py::_fires(GuardKind.CRAFT_POTIONS, …)` =
       `craft_potions_fires(state, game_data)`: fires when a utility-slot
@@ -535,12 +529,12 @@ structure State where
       only by `CycleStepE`; defaulted. -/
   gearGap : Nat := 0
   /-- OPAQUE (E-tower, increment 4): production's observation that THIS
-      `.gearReview` cycle actually advanced the build — an item acquired, a
+      non-combat `.objectiveStep` cycle actually advanced the build — an item acquired, a
       material gathered, a component crafted.
 
       Defaulted FALSE deliberately. `gearProgress` used to decrement `gearGap`
       unconditionally, granting that every gear cycle is productive. The real
-      arbiter can spend a `.gearReview` cycle travelling, replanning, or losing
+      arbiter can spend such a cycle travelling, replanning, or losing
       the call to an API failure, and then the cycle moves nothing. That is now
       representable; `CycleStepE.GearCycleMakesProgressAt` is the named residual
       ruling it out along a trajectory. -/

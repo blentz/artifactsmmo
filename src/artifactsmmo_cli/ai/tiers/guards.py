@@ -89,7 +89,6 @@ class GuardKind(Enum):
     SELL_RELIEF = "sell_relief"
     DEPOSIT_FULL = "deposit_full"
     DISCARD_HIGH = "discard_high"
-    GEAR_REVIEW = "gear_review"  # post-level-up / post-loss gear prioritization
     CRAFT_POTIONS = "craft_potions"  # preemptively stock the utility-slot potion baseline
     GE_CANCEL = "ge_cancel"  # on-need + TTL cancellation of posted GE orders (appended LAST)
 
@@ -112,7 +111,6 @@ GUARD_ORDER: tuple[GuardKind, ...] = (
     GuardKind.SELL_RELIEF,  # bank-full: sell surplus to NPC before deposit/discard
     GuardKind.DEPOSIT_FULL,
     GuardKind.DISCARD_HIGH,
-    GuardKind.GEAR_REVIEW,  # post-level-up / post-loss gear prioritization
     GuardKind.CRAFT_POTIONS,  # lowest-priority guard: stock potions before grind
 )
 
@@ -263,8 +261,6 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
         return (bool(discardable_surplus(state, game_data,
                                          deposit_context(ctx, step_profile)))
                 and _quantity_fraction(state) >= DISCARD_HIGH_FRACTION)
-    if kind is GuardKind.GEAR_REVIEW:
-        return ctx.regear_level_up
     if kind is GuardKind.CRAFT_POTIONS:
         return craft_potions_fires(state, game_data, history)
     if kind is GuardKind.GE_CANCEL:

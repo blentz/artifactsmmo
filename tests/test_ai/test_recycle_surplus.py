@@ -40,8 +40,7 @@ def _gd() -> GameData:
 
 def _ctx(**kw) -> SelectionContext:
     base = dict(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
-                initial_xp=0, task_exchange_min_coins=1, combat_monster=None,
-                regear_level_up=False)
+                initial_xp=0, task_exchange_min_coins=1, combat_monster=None)
     base.update(kw)
     return SelectionContext(**base)
 

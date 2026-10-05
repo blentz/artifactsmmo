@@ -26,7 +26,6 @@ from artifactsmmo_cli.ai.tiers.guards import (
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_strategy_driver import _ctx as driver_ctx
 
 
 def _ctx(**kw) -> SelectionContext:
@@ -212,23 +211,9 @@ def test_fires_returns_false_for_unknown_guard_kind():
     assert result is False
 
 
-def test_gear_review_in_guard_order_below_survival_above_none():
-    # GEAR_REVIEW is below all survival guards and above CRAFT_POTIONS.
-    assert GuardKind.HP_CRITICAL in GUARD_ORDER[:GUARD_ORDER.index(GuardKind.GEAR_REVIEW)]
-    assert GUARD_ORDER.index(GuardKind.GEAR_REVIEW) < GUARD_ORDER.index(GuardKind.CRAFT_POTIONS)
-
-
 def test_craft_potions_is_last_guard():
     # CRAFT_POTIONS is the LAST (lowest-priority) guard — still preempts all means.
     assert GUARD_ORDER[-1] is GuardKind.CRAFT_POTIONS
-
-
-def test_gear_review_fires_only_when_ctx_active(make_planner_gd):
-    state = make_state(hp=150, max_hp=150)
-    active_ctx = driver_ctx(regear_level_up=True)
-    inactive_ctx = driver_ctx(regear_level_up=False)
-    assert GuardKind.GEAR_REVIEW in active_guards(state, make_planner_gd, None, active_ctx)
-    assert GuardKind.GEAR_REVIEW not in active_guards(state, make_planner_gd, None, inactive_ctx)
 
 
 def test_discard_high_silent_when_step_profile_protects_goal_item():

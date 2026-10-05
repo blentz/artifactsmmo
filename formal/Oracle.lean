@@ -1169,7 +1169,7 @@ def runDecideKey (args : Array Json) : Json :=
       | 5 => .depositFull
       | 6 => .discardHigh
       | 7 => .restForCombat
-      | 8 => .gearReview
+      -- 8 was `.gearReview`, retired in Phase 4-3b; the index stays reserved.
       | 9 => .recycleRelief
       | 10 => .sellRelief
       | 11 => .craftPotions
@@ -2476,7 +2476,9 @@ ARG LAYOUT (flat ints; index → field):
 * `[23]` recyclableSurplusNonempty    (Bool 0/1)
 * `[24]` taskFeasibleProjected        (Bool 0/1)
 * `[25]` restForCombatReady           (Bool 0/1)
-* `[26]` gearReviewFires              (Bool 0/1)
+* `[26]` reserved — was gearReviewFires, retired in Phase 4-3b; callers
+                                        send 0 and it is ignored, so every
+                                        later index keeps its position.
 * `[27]` craftReliefFires             (Bool 0/1)
 * `[28]` objectiveStepFires           (Bool 0/1)
 * `[29]` maintainConsumablesFires     (Bool 0/1)
@@ -2542,7 +2544,7 @@ def runLadder (args : Array Json) : Json :=
     hasOverstockItems := b 19, selectBankDepositsNonempty := b 20,
     pendingItemsNonempty := b 21, sellableInventoryNonempty := b 22,
     recyclableSurplusNonempty := b 23, taskFeasibleProjected := b 24,
-    restForCombatReady := b 25, gearReviewFires := b 26,
+    restForCombatReady := b 25,
     craftReliefFires := b 27, objectiveStepFires := b 28,
     maintainConsumablesFires := b 29, bankItemsKnown := b 30,
     bankJunkNonempty := b 31, craftPotionsFires := b 32,
@@ -2596,7 +2598,7 @@ def runCycleStepD (args : Array Json) : Json :=
     hasOverstockItems := b 19, selectBankDepositsNonempty := b 20,
     pendingItemsNonempty := b 21, sellableInventoryNonempty := b 22,
     recyclableSurplusNonempty := b 23, taskFeasibleProjected := b 24,
-    restForCombatReady := b 25, gearReviewFires := b 26,
+    restForCombatReady := b 25,
     craftReliefFires := b 27, objectiveStepFires := b 28,
     maintainConsumablesFires := b 29, bankItemsKnown := b 30,
     bankJunkNonempty := b 31, craftPotionsFires := b 32,
@@ -2630,7 +2632,7 @@ def runCycleStepD (args : Array Json) : Json :=
 * `[38]` loadoutAdequate (Bool 0/1 — production `is_winnable(current gear,
          band target)` observation)
 * `[41]` gearCycleProductive (Bool 0/1 — the production observation that THIS
-                             `.gearReview` cycle advanced the build. ADDED
+                             non-combat objective-step cycle advanced the build. ADDED
                              2026-07-20 increment 4: `gearProgress` used to
                              decrement unconditionally. See
                              `GearCycleMakesProgressAt`.)
@@ -2665,7 +2667,7 @@ def runCycleStepE (args : Array Json) : Json :=
     hasOverstockItems := b 19, selectBankDepositsNonempty := b 20,
     pendingItemsNonempty := b 21, sellableInventoryNonempty := b 22,
     recyclableSurplusNonempty := b 23, taskFeasibleProjected := b 24,
-    restForCombatReady := b 25, gearReviewFires := b 26,
+    restForCombatReady := b 25,
     craftReliefFires := b 27, objectiveStepFires := b 28,
     maintainConsumablesFires := b 29, bankItemsKnown := b 30,
     bankJunkNonempty := b 31, craftPotionsFires := b 32,

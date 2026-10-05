@@ -32,7 +32,7 @@ _GATHER_JSON = json.dumps(
 def test_resume_discards_when_step_unmatchable(tmp_path):
     store = _store(tmp_path)
     store.save_plan_commitment(
-        "GatherMaterials(...)", _GATHER_JSON, ["NoSuchAction()"], 0, None, False)
+        "GatherMaterials(...)", _GATHER_JSON, ["NoSuchAction()"], 0, None, 5)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._build_actions = lambda: []  # type: ignore[attr-defined]
     player._resume_plan_cache(make_state(), None)
@@ -41,7 +41,7 @@ def test_resume_discards_when_step_unmatchable(tmp_path):
 
 def test_resume_skips_when_goal_not_plan_bearing(tmp_path):
     store = _store(tmp_path)
-    store.save_plan_commitment("Deposit", "{}", ["StepA"], 0, None, False)
+    store.save_plan_commitment("Deposit", "{}", ["StepA"], 0, None, 5)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._build_actions = lambda: [_Act("StepA")]  # type: ignore[attr-defined]
     player._resume_plan_cache(make_state(), None)
@@ -51,7 +51,7 @@ def test_resume_skips_when_goal_not_plan_bearing(tmp_path):
 def test_resume_rehydrates_when_all_steps_applicable(tmp_path):
     store = _store(tmp_path)
     store.save_plan_commitment(
-        "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 0, "copper_ring", False)
+        "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 0, "copper_ring", 5)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._build_actions = lambda: [_Act("StepA"), _Act("StepB")]  # type: ignore[attr-defined]
     game_data_stub = object()
@@ -64,7 +64,7 @@ def test_resume_rehydrates_when_all_steps_applicable(tmp_path):
 def test_resume_discards_when_step_not_applicable(tmp_path):
     store = _store(tmp_path)
     store.save_plan_commitment(
-        "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 0, "copper_ring", False)
+        "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 0, "copper_ring", 5)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     # StepB is not applicable — validation must reject and leave cache None
     player._build_actions = lambda: [_Act("StepA"), _Act("StepB", applicable=False)]  # type: ignore[attr-defined]
@@ -76,7 +76,7 @@ def test_resume_discards_when_step_not_applicable(tmp_path):
 def test_resume_discards_when_no_game_data(tmp_path):
     store = _store(tmp_path)
     store.save_plan_commitment(
-        "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 0, "copper_ring", False)
+        "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 0, "copper_ring", 5)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._build_actions = lambda: [_Act("StepA"), _Act("StepB")]  # type: ignore[attr-defined]
     player._resume_plan_cache(make_state(), None)  # no game_data -> early discard
@@ -87,7 +87,7 @@ def test_resume_discards_when_cursor_at_plan_end(tmp_path):
     store = _store(tmp_path)
     # cursor == len(plan): the remaining tail is empty -> nothing to rebuild
     store.save_plan_commitment(
-        "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 2, "copper_ring", False)
+        "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 2, "copper_ring", 5)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._build_actions = lambda: [_Act("StepA"), _Act("StepB")]  # type: ignore[attr-defined]
     game_data_stub = object()
@@ -100,7 +100,7 @@ def test_resume_uses_persisted_cursor(tmp_path):
     # Cursor=1 means StepA was already completed — resume should start from StepB.
     store.save_plan_commitment(
         "GatherMaterials(...)", _GATHER_JSON,
-        ["StepA", "StepB", "StepC"], 1, None, False)
+        ["StepA", "StepB", "StepC"], 1, None, 5)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._build_actions = lambda: [  # type: ignore[attr-defined]
         _Act("StepA"), _Act("StepB"), _Act("StepC")]

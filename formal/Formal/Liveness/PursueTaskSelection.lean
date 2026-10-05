@@ -41,7 +41,7 @@ open Formal.Liveness.CycleStep
 
 /-- Item 3a: bundle predicate. None of the ladder slots above
     `.pursueTask` fires (13 original + `.restForCombat` after `.hpCritical`
-    + `.gearReview` after `.discardHigh` + `.recycleRelief` after `.craftRelief`
+    + `.recycleRelief` after `.craftRelief`
     + `.sellRelief` after `.recycleRelief`). -/
 def pursueSelectionConditions (s : State) : Prop :=
   hpCriticalFires s = false
@@ -55,7 +55,6 @@ def pursueSelectionConditions (s : State) : Prop :=
   ∧ sellReliefFires s = false
   ∧ depositFullFires s = false
   ∧ discardHighFires s = false
-  ∧ gearReviewFires s = false
   ∧ craftPotionsFires s = false
   ∧ claimPendingFires s = false
   ∧ completeTaskFires s = false
@@ -99,10 +98,10 @@ theorem productionLadder_eq_pursueTask
   show MeansKind.allInLadderOrder.findSome?
         (fun k => if fires k s then some k else none)
       = some .pursueTask
-  obtain ⟨h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, h11, hcp, h12, h13, h14, h15, h16,
+  obtain ⟨h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, hcp, h12, h13, h14, h15, h16,
           hsb, hct, hat, hbe, h17⟩ := hConds
   simp only [MeansKind.allInLadderOrder, List.findSome?,
-             fires, h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, h11, hcp, h12, h13,
+             fires, h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, hcp, h12, h13,
              h14, h15, h16, hsb, hct, hat, hbe, h17, hPursue, if_true]
   rfl
 

@@ -193,7 +193,6 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
     | sellRelief      => exact descendsE_sellRelief s hk
     | depositFull     => exact descendsE_depositFull s hk
     | discardHigh     => exact descendsE_discardHigh s hk
-    | gearReview      => exact descendsE_gearReview s hlvl hk
     | craftPotions    => exact descendsE_craftPotions s hk
     | claimPending    => exact descendsE_claimPending s hk
     | completeTask    => exact descendsE_completeTask s hk
@@ -202,7 +201,7 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
     | taskCancel      => exact descendsE_taskCancel s hk
     | objectiveStep   =>
         by_cases hisF : (perceptionRefreshE s).objectiveStepIsFight = true
-        · exact descendsE_fight s hlvl (Or.inr (Or.inr (Or.inr ⟨hk, hisF⟩)))
+        · exact descendsE_fight s hlvl (Or.inr (Or.inr ⟨hk, hisF⟩))
         · exact descendsE_placeholder s hArms hGear hk (Bool.eq_false_iff.mpr hisF)
     | pursueTask      => exact descendsE_pursueTask s hArms hlvl hk
     | acceptTask      => exact descendsE_acceptTask s hk
@@ -258,7 +257,7 @@ theorem adequateArmsFight_satisfiable_with_goal (s : State) (h : s.level ≥ 50)
 
 /-! ## `GEAR_CAP` grounding (increment 3 of the honest-restatement spec).
 
-`CycleStepE.gearProgress` decrements `gearGap` by one per `.gearReview` cycle and
+`CycleStepE.gearProgress` decrements `gearGap` by one per productive gear-step cycle and
 restores adequacy at zero, so `CycleStepE.GEAR_CAP` — the value `gearGap` is reset
 to on a band change — must bound the number of ACQUISITION STEPS for a band's
 witness loadout.

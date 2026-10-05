@@ -8,18 +8,23 @@ from artifactsmmo_cli.ai.plan_cache import PlanCache
 def should_replan(
     cache: PlanCache | None,
     last_outcome: str | None,
-    latch_active: bool,
+    level: int,
     goal_satisfied: bool,
     step_applicable: bool,
     replan_interval: int,
 ) -> bool:
     """True => re-decide from scratch. Triggers (any):
     1. no cache (cold start)
-    2. previous action did not succeed
+    2. previous action did not succeed (a lost fight is one)
     3. goal satisfied or plan exhausted
-    4. gear-review latch armed/cleared since plan time
+    4. the character's level changed since plan time
     5. cached run reached the staleness bound
     6. the cached step is no longer applicable
+
+    Trigger 4 was the RegearEdge latch (armed on a level-up or a lost fight,
+    cleared when no craftable upgrade remained) until Phase 4-3b: a level-up
+    is a re-rank FACT, read here off the state, and a lost fight is already
+    trigger 2.
     """
     if cache is None:
         return True
@@ -27,7 +32,7 @@ def should_replan(
         return True
     if goal_satisfied or cache.exhausted():
         return True
-    if latch_active != cache.latch_active:
+    if level != cache.plan_level:
         return True
     if cache.cycles_since_replan >= replan_interval:
         return True
@@ -37,7 +42,7 @@ def should_replan(
 def refresh_only(
     cache: PlanCache | None,
     last_outcome: str | None,
-    latch_active: bool,
+    level: int,
     goal_satisfied: bool,
     step_applicable: bool,
     replan_interval: int,
@@ -50,6 +55,6 @@ def refresh_only(
     return (cache is not None
             and (last_outcome is None or last_outcome == "ok")
             and not goal_satisfied and not cache.exhausted()
-            and latch_active == cache.latch_active
+            and level == cache.plan_level
             and cache.cycles_since_replan >= replan_interval
             and step_applicable)

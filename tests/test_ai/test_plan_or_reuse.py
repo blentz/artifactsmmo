@@ -32,7 +32,6 @@ class _Act:
 
 def _player_with_stub_plan(plan, goal):
     player = GamePlayer(character="hero", dry_run=True)
-    player._regear_edge._active = False
     calls = {"n": 0}
 
     def _fake_decide(state, game_data, actions, ctx_combat_monster):
@@ -76,7 +75,6 @@ def test_replan_persists_body_and_commitment(tmp_path):
     store = LearningStore(db_path=str(tmp_path / "l.db"), character="hero")
     store.start_session()
     player = GamePlayer(character="hero", dry_run=True, history=store)
-    player._regear_edge._active = False
 
     def _fake_decide(state, game_data, actions, ctx_combat_monster):
         return goal, list(plan), [{"goal": repr(goal)}]
@@ -117,7 +115,7 @@ def test_advance_with_history_persists_cursor(tmp_path):
     # Pre-seed history with a commitment at cursor=0 so update_commitment_cursor
     # has a row to update.
     store.save_plan_commitment("FakeGoal()", '{"type":"GatherMaterialsGoal","target_item":"copper_ring","needed":{}}',
-                               [repr(rest), repr(rest)], 0, None, False)
+                               [repr(rest), repr(rest)], 0, None, 5)
 
     import pytest
 

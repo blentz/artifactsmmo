@@ -796,10 +796,6 @@ open Formal.PriorityBand
 #print axioms Formal.PlannerDepthBound.reachable_planLen_eq_depth
 #print axioms Formal.PlannerDepthBound.reachable_depth_le_maxDepth
 #print axioms Formal.PlannerDepthBound.plan_length_le_max_depth
-#print axioms Formal.RegearEdge.set_on_levelup
-#print axioms Formal.RegearEdge.set_on_loss
-#print axioms Formal.RegearEdge.clear_iff_no_upgrade
-#print axioms Formal.RegearEdge.monotone_until_clear
 #print axioms Formal.Liveness.ItemsTaskTermination.keepSet_contains_task_item
 #print axioms Formal.Liveness.ItemsTaskTermination.keepSet_contains_recipe_inputs
 #print axioms Formal.Liveness.ItemsTaskTermination.batchK_ge_one

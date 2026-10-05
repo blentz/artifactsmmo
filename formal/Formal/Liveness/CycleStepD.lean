@@ -16,7 +16,7 @@ Brick D2 of `docs/PLAN_residual_closure.md`. Three refinements over
    conjuncts (`pursueTaskFires`, `taskProgress < taskTotal`) make it
    self-certifying: they are exactly the facts the pursueTask descent needs.
 2. **Mint-driven chore re-arm** (`choreRearm` / `rearmOnMint`, Phase A1): EVERY
-   cycle that dispatches a `.fight` re-arms ALL 8 chore latches (worst case of
+   cycle that dispatches a `.fight` re-arms ALL 7 chore latches (worst case of
    loot), and the two MINTING chores re-arm the latches lex-below their own
    descent slot (claim → the 7 non-pending flags; completeTask → everything).
    Reach-50 still holds — each row's strict slot lex-dominates its re-arms.
@@ -71,7 +71,7 @@ def dispatchesFight (k : MeansKind) (r : State) : Bool :=
     slot is always lex-dominated by the minting row's own descent. -/
 def DEBT_CAP : Nat := 8
 
-/-- Worst-case chore re-arm: arm ALL 8 chore latches AND restore the three
+/-- Worst-case chore re-arm: arm ALL 7 chore latches AND restore the three
     multi-batch debts to `DEBT_CAP`. Over-approximates any loot-driven
     production re-arming. -/
 def choreRearm (st : State) : State :=
@@ -81,7 +81,6 @@ def choreRearm (st : State) : State :=
             recyclableSurplusNonempty := true,
             craftReliefFires := true,
             craftPotionsFires := true,
-            gearReviewFires := true,
             pendingItemsNonempty := true,
             overstockDebt := DEBT_CAP,
             depositDebt := DEBT_CAP,
@@ -89,7 +88,7 @@ def choreRearm (st : State) : State :=
 
 /-- Phase-A1 mint re-arm map. Fight dispatches re-arm EVERYTHING (worst case of
     loot). The two MINTING chores re-arm the flags lex-BELOW their own descent
-    slot: `claimPending` (descends `pendingFlag`, slot 5) re-arms the 7 other
+    slot: `claimPending` (descends `pendingFlag`, slot 5) re-arms the 6 other
     chore latches — the formerly disclosed claim→overstock cross-arm, now
     modelled; `completeTask` (descends slot 1/3) re-arms everything incl.
     `pendingFlag` (task rewards mint pending items). -/
@@ -104,7 +103,6 @@ def rearmOnMint (k : MeansKind) (r st : State) : State :=
                   recyclableSurplusNonempty := true,
                   craftReliefFires := true,
                   craftPotionsFires := true,
-                  gearReviewFires := true,
                   overstockDebt := DEBT_CAP,
                   depositDebt := DEBT_CAP,
                   sellDebt := DEBT_CAP }
@@ -172,7 +170,7 @@ theorem cycleStepDN_succ_outer (n : Nat) (s : State) :
       rw [cycleStepDN_succ, ih, cycleStepDN_succ]
 
 /-! ## Field bridges — `perceptionRefreshD` mutates only the two objective
-Bools; `rearmOnMint`/`choreRearm` mutate only the 8 chore latches;
+Bools; `rearmOnMint`/`choreRearm` mutate only the 7 chore latches;
 `pressureDeltaD` mutates only `inventoryUsed`. -/
 
 theorem perceptionRefreshD_level (s : State) :

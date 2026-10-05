@@ -601,7 +601,7 @@ class PlanCommitmentBase(SQLModel):
     plan_json: str  # JSON list[str] of action reprs
     cursor: int
     crafting_target: str | None = None
-    latch_active: bool = False
+    plan_level: int  # the character level the plan was made at (Phase 4-3b)
     replanned_ts: str
 
 

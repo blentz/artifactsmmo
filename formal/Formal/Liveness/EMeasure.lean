@@ -13,11 +13,8 @@ import Mathlib.Data.Prod.Lex
   gap-exhausted gear cycle that RESTORES adequacy (without it that cycle
   moves nothing the measure sees — a livelock the row analysis caught
   before proving). Raised only by the rollover re-arm (slot 1 pays).
-* `gearReviewFlag` sits at slot 19, BELOW `hpDeficit`: the
-  inadequate-arming refresh raises the latch on cycles that select
-  rest/chores, so every other row descends above it; its own descent row is
-  the STALE-latch clear (latch true in the pre-state with adequacy already
-  true — the refresh only arms when inadequate).
+* The `gearReviewFlag` slot was retired in Phase 4-3b with the GEAR_REVIEW
+  guard (the inadequate-arming refresh arms the objective step, not a latch).
 * fight hp-loss raises only `hpDeficit` — dominated by slots 1/4.
 
 Additive only. Liveness namespace — Mathlib allowed. -/
@@ -52,20 +49,19 @@ structure EMeasure where
   craftPotionsFlag       : Nat
   bankPressure           : Nat
   hpDeficit              : Nat
-  -- geCancel fire-and-lose slot, placed ABOVE BOTH `gearReviewFlag` and
-  -- `objectiveStepFlag` — the two slots `perceptionRefreshE` can RAISE — so a
-  -- geCancel step keeps every higher slot equal.
+  -- geCancel fire-and-lose slot, placed ABOVE `objectiveStepFlag` — the slot
+  -- `perceptionRefreshE` can RAISE — so a geCancel step keeps every higher
+  -- slot equal.
   geCancelFlag           : Nat
   -- supplyBank slot (2026-08-01): the promoted rung's `.gather` apply discharges
   -- one unit of the outstanding sibling request and touches no higher slot.
-  -- Placed (like `geCancelFlag`) ABOVE the two slots `perceptionRefreshE` can
-  -- RAISE, `gearReviewFlag` and `objectiveStepFlag`.
+  -- Placed (like `geCancelFlag`) ABOVE `objectiveStepFlag`, which
+  -- `perceptionRefreshE` can RAISE.
   supplyDemandSlot       : Nat
   -- currencyTurnIn slot (2026-08-16, fleet-currency-turn-in epic Task 6): the
   -- promoted rung's `.npcBuy` apply clears only `currencyTurnInActive` and
-  -- touches no higher slot. Placed (like `supplyDemandSlot`) ABOVE the two
-  -- slots `perceptionRefreshE` can RAISE, `gearReviewFlag` and
-  -- `objectiveStepFlag`.
+  -- touches no higher slot. Placed (like `supplyDemandSlot`) ABOVE
+  -- `objectiveStepFlag`, which `perceptionRefreshE` can RAISE.
   currencyTurnInFlag     : Nat
   -- 2026-09-13: BANK_EXPAND promoted into COLLECT_REWARD_ORDER, LAST — above
   -- `.objectiveStep` and so selectable here too. Directly below
@@ -74,7 +70,6 @@ structure EMeasure where
   -- flag, because the 75% trigger is not cleared by a single buy — see
   -- `FMeasure.bankExpandSlot`.
   bankExpandSlot         : Nat
-  gearReviewFlag         : Nat
   objectiveStepFlag      : Nat
   deriving DecidableEq, Repr
 
@@ -105,12 +100,11 @@ noncomputable def eMeasure (s : State) : EMeasure :=
     bankExpandSlot         :=
       (ProductionLadder.BANK_EXPAND_FILL_DEN * s.bankItemsCount + 1)
         - ProductionLadder.BANK_EXPAND_FILL_NUM * s.bankCapacity
-    gearReviewFlag         := b2n s.gearReviewFires
     objectiveStepFlag      := b2n s.objectiveStepFires }
 
 /-- Right-associated 23-tuple of `Nat`. -/
 abbrev LexE :=
-  Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
+  Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
     Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
     Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
@@ -140,7 +134,7 @@ def toLexE (m : EMeasure) : LexE :=
       toLex (m.supplyDemandSlot,
       toLex (m.currencyTurnInFlag,
       toLex (m.bankExpandSlot,
-      toLex (m.gearReviewFlag, m.objectiveStepFlag))))))))))))))))))))))))
+      m.objectiveStepFlag)))))))))))))))))))))))
 
 /-- Strict lex order via the Mathlib embedding. -/
 def eMeasureLt (m₁ m₂ : EMeasure) : Prop :=
@@ -419,35 +413,6 @@ theorem eLt_of_hpDeficit_dec {m₁ m₂ : EMeasure}
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
   exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
-theorem eLt_of_gearReview_dec {m₁ m₂ : EMeasure}
-    (h1 : m₁.levelDeficit = m₂.levelDeficit)
-    (h2 : m₁.gearGap = m₂.gearGap)
-    (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
-    (h4 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
-    (h5 : m₁.phasePresent = m₂.phasePresent)
-    (h6 : m₁.taskCycles = m₂.taskCycles)
-    (h7 : m₁.pendingFlag = m₂.pendingFlag)
-    (h8 : m₁.overstockDebt = m₂.overstockDebt)
-    (h9 : m₁.overstockFlag = m₂.overstockFlag)
-    (h10 : m₁.depositDebt = m₂.depositDebt)
-    (h11 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
-    (h12 : m₁.sellDebt = m₂.sellDebt)
-    (h13 : m₁.sellableFlag = m₂.sellableFlag)
-    (h14 : m₁.recyclableFlag = m₂.recyclableFlag)
-    (h15 : m₁.craftReliefFlag = m₂.craftReliefFlag)
-    (h16 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h17 : m₁.bankPressure = m₂.bankPressure)
-    (h18 : m₁.hpDeficit = m₂.hpDeficit)
-    (h19 : m₁.geCancelFlag = m₂.geCancelFlag)
-    (h20 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
-    (h21 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
-    (h22 : m₁.bankExpandSlot = m₂.bankExpandSlot)
-    (h : m₁.gearReviewFlag < m₂.gearReviewFlag) : eMeasureLt m₁ m₂ := by
-  apply lex_intro
-  simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inr ⟨h22, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
-
 /-- Slot for `bankExpandSlot` (2026-09-13): decrease with every higher slot
     equal, directly below `currencyTurnInFlag`. -/
 theorem eLt_of_bankExpand_dec {m₁ m₂ : EMeasure}
@@ -502,11 +467,10 @@ theorem eLt_of_objectiveStepFlag_dec {m₁ m₂ : EMeasure}
     (h20 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
     (h21 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
     (hbe : m₁.bankExpandSlot = m₂.bankExpandSlot)
-    (h22 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h : m₁.objectiveStepFlag < m₂.objectiveStepFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inr ⟨hbe, Or.inr ⟨h22, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inr ⟨hbe, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_geCancel_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)

@@ -146,10 +146,32 @@ def test_a_root_named_yield_from_before_4_2b_iii_is_dropped_on_open(tmp_path):
     assert store.load_yield().yielded_goal == "ReachSkill(weaponcrafting->21)"
 
 
+def test_a_latch_era_plan_commitment_is_dropped_on_open(tmp_path):
+    """Phase 4-3b: the cached plan records the level it was made at instead of
+    the RegearEdge latch. A row from before carries no level, so the migration
+    drops it (one cold re-plan) and swaps the column."""
+    path = str(tmp_path / "old_plan.db")
+    engine = create_engine(f"sqlite:///{path}")
+    with engine.begin() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE plan_commitment (character VARCHAR NOT NULL PRIMARY KEY, "
+            "goal_repr VARCHAR NOT NULL, goal_json VARCHAR NOT NULL, "
+            "plan_json VARCHAR NOT NULL, cursor INTEGER NOT NULL, "
+            "crafting_target VARCHAR, latch_active BOOLEAN NOT NULL, "
+            "replanned_ts VARCHAR NOT NULL)")
+        conn.exec_driver_sql(
+            "INSERT INTO plan_commitment VALUES ('Robby', 'G', '{}', '[]', 0, NULL, 1, 'ts')")
+    engine.dispose()
+    store = LearningStore(path, character="Robby")
+    assert store.load_plan_commitment() is None
+    store.save_plan_commitment("G", "{}", ["A"], 0, None, 7)
+    assert store.load_plan_commitment().plan_level == 7
+
+
 def test_clearing_the_plan_commitment_deletes_it(tmp_path):
     store = _store(tmp_path)
     store.clear_plan_commitment()  # nothing to clear is a no-op
-    store.save_plan_commitment("G", "{}", ["A"], 0, None, False)
+    store.save_plan_commitment("G", "{}", ["A"], 0, None, 5)
     store.clear_plan_commitment()
     assert store.load_plan_commitment() is None
 

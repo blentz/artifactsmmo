@@ -86,9 +86,6 @@ inductive MeansKind where
                         --                     inventory nonempty)
   | depositFull         -- DEPOSIT_FULL,       guards.py:75
   | discardHigh         -- DISCARD_HIGH,       guards.py:76
-  | gearReview          -- GEAR_REVIEW,        guards.py:77 (lowest-priority
-                        --                     guard, still above all means;
-                        --                     fires on ctx.regear_level_up)
   | craftPotions        -- CRAFT_POTIONS,      guards.py (LAST guard in
                         --                     GUARD_ORDER; stocks the utility-slot
                         --                     potion baseline before grind;
@@ -172,7 +169,7 @@ inductive MeansKind where
 def allInLadderOrder : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
    .geCancel,
-   .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull, .discardHigh, .gearReview,
+   .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull, .discardHigh,
    .craftPotions,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
    .supplyBank,
@@ -197,7 +194,8 @@ def allInLadderOrder : List MeansKind :=
    .sellIdle, .recycleSurplus, .geBid, .drainBankJunk,
    .wait]
 
-/-- Sanity: 31 rungs (one per constructor). -/
-example : allInLadderOrder.length = 31 := by decide
+/-- Sanity: 30 rungs (one per constructor). GEAR_REVIEW was retired in Phase
+    4-3b: its one arm never fired in recorded history. -/
+example : allInLadderOrder.length = 30 := by decide
 
 end Formal.Liveness.MeansKind

@@ -229,6 +229,17 @@ class LearningStore:
             # names the committed GOAL, not the walk's root. A row written
             # before holds a root repr, which names no candidate, so it is
             # dropped rather than carried: it would only miss one turn.
+            # Plan-level migration (2026-10-05, Phase 4-3b): the cached plan
+            # records the level it was made at instead of the RegearEdge latch.
+            # A row from before carries a latch and no level, so it is dropped
+            # (one cold re-plan) rather than given a fabricated level.
+            pc_cols = {row[1] for row in
+                       conn.exec_driver_sql("PRAGMA table_info(plan_commitment)")}
+            if "latch_active" in pc_cols:
+                conn.exec_driver_sql("DELETE FROM plan_commitment")
+                conn.exec_driver_sql("ALTER TABLE plan_commitment DROP COLUMN latch_active")
+                conn.exec_driver_sql(
+                    "ALTER TABLE plan_commitment ADD COLUMN plan_level INTEGER NOT NULL DEFAULT 0")
             iy_cols = {row[1] for row in
                        conn.exec_driver_sql("PRAGMA table_info(intention_yield)")}
             if "yielded_root" in iy_cols:
@@ -1462,7 +1473,7 @@ class LearningStore:
     def save_plan_commitment(self, goal_repr: str, goal_json: str,
                              plan_reprs: list[str], cursor: int,
                              crafting_target: str | None,
-                             latch_active: bool) -> None:
+                             plan_level: int) -> None:
         """Upsert the single live commitment row for this character."""
         try:
             with SqlSession(self._engine) as s:
@@ -1477,7 +1488,7 @@ class LearningStore:
                     row.plan_json = json.dumps(plan_reprs)
                     row.cursor = cursor
                     row.crafting_target = crafting_target
-                    row.latch_active = latch_active
+                    row.plan_level = plan_level
                     row.replanned_ts = ts
                     s.add(row)
                 else:
@@ -1485,7 +1496,7 @@ class LearningStore:
                         character=self._character, goal_repr=goal_repr,
                         goal_json=goal_json,
                         plan_json=json.dumps(plan_reprs), cursor=cursor,
-                        crafting_target=crafting_target, latch_active=latch_active,
+                        crafting_target=crafting_target, plan_level=plan_level,
                         replanned_ts=ts,
                     ))
                 s.commit()

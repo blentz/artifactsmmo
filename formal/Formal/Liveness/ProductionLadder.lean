@@ -213,12 +213,6 @@ def discardHighFires (s : State) : Bool :=
   && decide (DISCARD_HIGH_DEN * s.inventoryUsed
               ≥ DISCARD_HIGH_NUM * s.inventoryMax)
 
-/-- GEAR_REVIEW guard. Mirrors `guards.py:266-267`:
-      return ctx.regear_level_up
-    Opaque Bool — the Lean state carries production's `ctx.regear_level_up`
-    latch; a diff harness asserts agreement. -/
-def gearReviewFires (s : State) : Bool := s.gearReviewFires
-
 /-- CRAFT_POTIONS guard. Mirrors `guards.py::_fires(GuardKind.CRAFT_POTIONS, …)`:
       return craft_potions_fires(state, game_data)
     Opaque Bool — the Lean state carries production's answer; a diff harness
@@ -471,7 +465,6 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .sellRelief       => sellReliefFires s
   | .depositFull      => depositFullFires s
   | .discardHigh      => discardHighFires s
-  | .gearReview       => gearReviewFires s
   | .craftPotions     => craftPotionsFires s
   | .claimPending     => claimPendingFires s
   | .completeTask     => completeTaskFires s

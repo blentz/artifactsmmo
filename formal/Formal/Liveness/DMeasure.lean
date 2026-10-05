@@ -30,7 +30,7 @@ batches is modelled step for step.
 | 9 | `selectBankDepositsFlag` | depositFull at debt 0 | mints; partial clears (8) |
 | 10 | `sellDebt`     | sellPressured/sellRelief while debt > 0 | mints |
 | 11 | `sellableFlag` | sellPressured/sellRelief at debt 0 | mints; partial clears (10) |
-| 12-15 | recyclable / craftRelief / craftPotions / gearReview latches | their rows | mints |
+| 12-14 | recyclable / craftRelief / craftPotions latches | their rows | mints |
 | 16 | `bankPressure` | reducers | fight loot (1/2), claim mint (5) |
 | 17 | `hpDeficit`    | hpCritical / restForCombat | — |
 | 18 | `objectiveStepFlag` | synthetic placeholder | `perceptionRefreshD` arming — every other row descends a slot ≤ 17 |
@@ -68,7 +68,6 @@ structure DMeasure where
   recyclableFlag         : Nat
   craftReliefFlag        : Nat
   craftPotionsFlag       : Nat
-  gearReviewFlag         : Nat
   bankPressure           : Nat
   hpDeficit              : Nat
   -- geCancel fire-and-lose slot: `.geCancelOrder` clears only
@@ -117,7 +116,6 @@ noncomputable def dMeasure (s : State) : DMeasure :=
     recyclableFlag         := b2n s.recyclableSurplusNonempty
     craftReliefFlag        := b2n s.craftReliefFires
     craftPotionsFlag       := b2n s.craftPotionsFires
-    gearReviewFlag         := b2n s.gearReviewFires
     bankPressure           := s.inventoryUsed
     hpDeficit              := s.maxHp - s.hp
     geCancelFlag           := b2n s.geCancelTargetsNonempty
@@ -132,7 +130,7 @@ noncomputable def dMeasure (s : State) : DMeasure :=
     `bankExpandSlot`. (The name is historical and several widenings behind by
     construction; the arity is the tuple below, not the name.) -/
 abbrev LexNineteenD :=
-  Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
+  Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
     Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
     Nat ×ₗ Nat
 
@@ -153,13 +151,12 @@ def toLexD (m : DMeasure) : LexNineteenD :=
       toLex (m.recyclableFlag,
       toLex (m.craftReliefFlag,
       toLex (m.craftPotionsFlag,
-      toLex (m.gearReviewFlag,
       toLex (m.bankPressure,
       toLex (m.hpDeficit,
       toLex (m.geCancelFlag,
       toLex (m.supplyDemandSlot,
       toLex (m.currencyTurnInFlag,
-      toLex (m.bankExpandSlot, m.objectiveStepFlag))))))))))))))))))))))
+      toLex (m.bankExpandSlot, m.objectiveStepFlag)))))))))))))))))))))
 
 /-- Strict lex order on `DMeasure` — via the Mathlib lex embedding. -/
 def dMeasureLt (m₁ m₂ : DMeasure) : Prop :=
@@ -371,27 +368,6 @@ theorem dLt_of_craftPotions_dec {m₁ m₂ : DMeasure}
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
   exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
-theorem dLt_of_gearReview_dec {m₁ m₂ : DMeasure}
-    (h1 : m₁.levelDeficit = m₂.levelDeficit)
-    (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
-    (h3 : m₁.phasePresent = m₂.phasePresent)
-    (h4 : m₁.taskCycles = m₂.taskCycles)
-    (h5 : m₁.pendingFlag = m₂.pendingFlag)
-    (h6 : m₁.overstockDebt = m₂.overstockDebt)
-    (h7 : m₁.overstockFlag = m₂.overstockFlag)
-    (h8 : m₁.depositDebt = m₂.depositDebt)
-    (h9 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
-    (h10 : m₁.sellDebt = m₂.sellDebt)
-    (h11 : m₁.sellableFlag = m₂.sellableFlag)
-    (h12 : m₁.recyclableFlag = m₂.recyclableFlag)
-    (h13 : m₁.craftReliefFlag = m₂.craftReliefFlag)
-    (h14 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h : m₁.gearReviewFlag < m₂.gearReviewFlag) : dMeasureLt m₁ m₂ := by
-  apply lex_intro
-  simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
-
 theorem dLt_of_hpDeficit_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
@@ -408,12 +384,11 @@ theorem dLt_of_hpDeficit_dec {m₁ m₂ : DMeasure}
     (h12 : m₁.recyclableFlag = m₂.recyclableFlag)
     (h13 : m₁.craftReliefFlag = m₂.craftReliefFlag)
     (h14 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h15 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h16 : m₁.bankPressure = m₂.bankPressure)
     (h : m₁.hpDeficit < m₂.hpDeficit) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem dLt_of_objectiveStepFlag_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
@@ -431,7 +406,6 @@ theorem dLt_of_objectiveStepFlag_dec {m₁ m₂ : DMeasure}
     (h12 : m₁.recyclableFlag = m₂.recyclableFlag)
     (h13 : m₁.craftReliefFlag = m₂.craftReliefFlag)
     (h14 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h15 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h16 : m₁.bankPressure = m₂.bankPressure)
     (h17 : m₁.hpDeficit = m₂.hpDeficit)
     (h18 : m₁.geCancelFlag = m₂.geCancelFlag)
@@ -441,7 +415,7 @@ theorem dLt_of_objectiveStepFlag_dec {m₁ m₂ : DMeasure}
     (h : m₁.objectiveStepFlag < m₂.objectiveStepFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Slot 21 (`bankExpandSlot`, 2026-09-13) decrease with slots 1-20 equal. -/
 theorem dLt_of_bankExpand_dec {m₁ m₂ : DMeasure}
@@ -460,7 +434,6 @@ theorem dLt_of_bankExpand_dec {m₁ m₂ : DMeasure}
     (h12 : m₁.recyclableFlag = m₂.recyclableFlag)
     (h13 : m₁.craftReliefFlag = m₂.craftReliefFlag)
     (h14 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h15 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h16 : m₁.bankPressure = m₂.bankPressure)
     (h17 : m₁.hpDeficit = m₂.hpDeficit)
     (h18 : m₁.geCancelFlag = m₂.geCancelFlag)
@@ -469,7 +442,7 @@ theorem dLt_of_bankExpand_dec {m₁ m₂ : DMeasure}
     (h : m₁.bankExpandSlot < m₂.bankExpandSlot) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem dLt_of_geCancel_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
@@ -487,13 +460,12 @@ theorem dLt_of_geCancel_dec {m₁ m₂ : DMeasure}
     (h12 : m₁.recyclableFlag = m₂.recyclableFlag)
     (h13 : m₁.craftReliefFlag = m₂.craftReliefFlag)
     (h14 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h15 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h16 : m₁.bankPressure = m₂.bankPressure)
     (h17 : m₁.hpDeficit = m₂.hpDeficit)
     (h : m₁.geCancelFlag < m₂.geCancelFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Slot 19 (`supplyDemandSlot`, 2026-08-01) decrease with slots 1-18 equal.
     The SUPPLY_BANK rung's `.gather` apply touches no higher slot; strictness
@@ -515,14 +487,13 @@ theorem dLt_of_supplyDemand_dec {m₁ m₂ : DMeasure}
     (h12 : m₁.recyclableFlag = m₂.recyclableFlag)
     (h13 : m₁.craftReliefFlag = m₂.craftReliefFlag)
     (h14 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h15 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h16 : m₁.bankPressure = m₂.bankPressure)
     (h17 : m₁.hpDeficit = m₂.hpDeficit)
     (h18 : m₁.geCancelFlag = m₂.geCancelFlag)
     (h : m₁.supplyDemandSlot < m₂.supplyDemandSlot) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Slot 20 (`currencyTurnInFlag`, 2026-08-16) decrease with slots 1-19 equal.
     The CURRENCY_TURNIN rung's `.npcBuy` apply touches no higher slot;
@@ -545,7 +516,6 @@ theorem dLt_of_currencyTurnIn_dec {m₁ m₂ : DMeasure}
     (h12 : m₁.recyclableFlag = m₂.recyclableFlag)
     (h13 : m₁.craftReliefFlag = m₂.craftReliefFlag)
     (h14 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
-    (h15 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h16 : m₁.bankPressure = m₂.bankPressure)
     (h17 : m₁.hpDeficit = m₂.hpDeficit)
     (h18 : m₁.geCancelFlag = m₂.geCancelFlag)
@@ -553,7 +523,7 @@ theorem dLt_of_currencyTurnIn_dec {m₁ m₂ : DMeasure}
     (h : m₁.currencyTurnInFlag < m₂.currencyTurnInFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-! ## The engine — reach 50 from per-cycle DMeasure descent. -/
 

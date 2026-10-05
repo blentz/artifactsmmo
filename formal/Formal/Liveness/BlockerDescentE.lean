@@ -6,11 +6,10 @@ import Formal.Liveness.UnconditionalDescent
 
 E-tower (C2b, `docs/PLAN_c2_composed_liveness.md`): every means selectable
 below 50 under `perceptionRefreshE` strictly descends the 20-slot `EMeasure`.
-The D-tower rows carry over (chore applies never touch the gear fields; the
-gear latch slot moved BELOW `hpDeficit` because the inadequate-arming refresh
-raises it on rest/chore cycles). New rows: the three-case `gearReview`
-(open gap / gap exhausted / stale latch) and the fight rows re-proved against
-the fight hp-loss + rollover gear re-arm layers.
+The D-tower rows carry over (chore applies never touch the gear fields). New
+rows: the fight rows re-proved against the fight hp-loss + rollover gear re-arm
+layers, and the gear objective step. (The `gearReview` latch and its row were
+retired in Phase 4-3b.)
 
 Liveness namespace — Mathlib allowed. -/
 
@@ -222,10 +221,9 @@ private theorem rearmOnMint_adequate (k : MeansKind) (r st : State) :
     (rearmOnMint k r st).loadoutAdequate = st.loadoutAdequate := by
   cases k <;> simp [rearmOnMint, choreRearm, dispatchesFight, apply_ite]
 
--- WAVE 4 RE-HOME: `gearProgress` moved from the `.gearReview` rung to the
--- non-combat OBJECTIVE STEP, so "this step makes no gear progress" is no longer
--- "the rung is not gearReview". It is "the rung is not the objective step, OR it
--- is and that step is a FIGHT" — the two arms `gearProgress` keeps disjoint.
+-- WAVE 4 RE-HOME: `gearProgress` runs on the non-combat OBJECTIVE STEP, so
+-- "this step makes no gear progress" is "the rung is not the objective step, OR
+-- it is and that step is a FIGHT" — the two arms `gearProgress` keeps disjoint.
 private theorem gearProgress_gearGap_of_notGear {k : MeansKind} (st : State)
     (h : k ≠ .objectiveStep ∨ st.objectiveStepIsFight = true) :
     (gearProgress k st).gearGap = st.gearGap := by
@@ -533,8 +531,8 @@ theorem descendsE_geCancel (s : State)
 
 
 /-- `supplyBank` (→ `.gather`) strictly descends at `supplyDemandSlot`
-    (2026-08-01) — the promoted rung, above `gearReviewFlag`/`objectiveStepFlag`
-    (the two slots the refresh can raise). Strictness comes from the firing gate
+    (2026-08-01) — the promoted rung, above `objectiveStepFlag` (the slot the
+    refresh can raise). Strictness comes from the firing gate
     `supplyDemand ≥ SUPPLY_DEMAND_MIN` plus `SUPPLY_DEMAND_MIN_pos`; the
     asymmetry arm (2026-08-16) carries its own `supplyDemand > 0` conjunct for
     the same reason (see `supplyBankFires`'s doc comment), so `hpos` follows in
@@ -567,8 +565,8 @@ theorem descendsE_supplyBank (s : State)
     omega
 
 /-- `currencyTurnIn` (→ `.npcBuy`) strictly descends at `currencyTurnInFlag`
-    (2026-08-16) — directly below `supplyBank`, above `gearReviewFlag`/
-    `objectiveStepFlag` (the two slots the refresh can raise). Fire-and-lose:
+    (2026-08-16) — directly below `supplyBank`, above `objectiveStepFlag` (the
+    slot the refresh can raise). Fire-and-lose:
     `.npcBuy` clears only `currencyTurnInActive`. -/
 private theorem refreshE_bankItemsCount (s : State) :
     (perceptionRefreshE s).bankItemsCount = s.bankItemsCount := by
@@ -1015,13 +1013,12 @@ theorem descendsE_completeTask (s : State)
       refreshE_gearGap, refreshE_adequate,
       perceptionRefreshE_level, perceptionRefreshE_xp]
 
-/-! ## The gearReview row — three cases: open gap, gap exhausted, stale latch. -/
+/-! ## The fight row. -/
 
 
 theorem descendsE_fight (s : State) (hlvl : s.level < 50)
     (hfire : productionLadder (perceptionRefreshE s) = some .bankUnlock
         ∨ productionLadder (perceptionRefreshE s) = some .reachUnlockLevel
-        ∨ productionLadder (perceptionRefreshE s) = some .gearReview
         ∨ (productionLadder (perceptionRefreshE s) = some .objectiveStep
             ∧ (perceptionRefreshE s).objectiveStepIsFight = true)) :
     eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
@@ -1036,17 +1033,15 @@ theorem descendsE_fight (s : State) (hlvl : s.level < 50)
     rw [cycleStepE_xp, hcp]
   have hrl : (perceptionRefreshE s).level = s.level := perceptionRefreshE_level s
   have hrx : (perceptionRefreshE s).xp = s.xp := perceptionRefreshE_xp s
-  -- WAVE 4: the excluded rung is no longer `.gearReview` (which now FIGHTS and
-  -- makes no gear progress) but the GEAR objective step. Every member of the
+  -- WAVE 4: the excluded rung is the GEAR objective step. Every member of the
   -- fight family is either not the objective step at all, or is one whose
   -- `objectiveStepIsFight` is true — which is exactly `gearProgress`'s guard.
   have hk : ∃ k, (k ≠ MeansKind.objectiveStep
         ∨ (perceptionRefreshE s).objectiveStepIsFight = true)
       ∧ productionLadder (perceptionRefreshE s) = some k := by
-    rcases hfire with h | h | h | ⟨h, hf⟩
+    rcases hfire with h | h | ⟨h, hf⟩
     · exact ⟨.bankUnlock, Or.inl (by decide), h⟩
     · exact ⟨.reachUnlockLevel, Or.inl (by decide), h⟩
-    · exact ⟨.gearReview, Or.inl (by decide), h⟩
     · exact ⟨.objectiveStep, Or.inr hf, h⟩
   obtain ⟨k, hkne, hksel⟩ := hk
   by_cases hwill : s.xp + 10 ≥ xpToNextLevel s.level
@@ -1085,7 +1080,7 @@ private def gearScanPrefix : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
-   .discardHigh, .gearReview, .craftPotions, .claimPending, .completeTask,
+   .discardHigh, .craftPotions, .claimPending, .completeTask,
    .sellPressured, .lowYieldCancel, .taskCancel,
    .supplyBank, .currencyTurnIn, .acceptTask,
    -- 2026-09-13: BANK_EXPAND promoted, LAST in the collect group.
@@ -1094,64 +1089,6 @@ private def gearScanPrefix : List MeansKind :=
 private theorem blockerPrefix_split :
     Formal.Liveness.UnconditionalDescent.blockerPrefix
       = gearScanPrefix ++ [.objectiveStep] := rfl
-
-/-- Selection = `.objectiveStep` forces every EARLIER prefix means quiet — in
-    particular the gear latch (it precedes the objective in the ladder). -/
-private theorem gearReview_quiet_of_objectiveStep {r : State}
-    (hk : productionLadder r = some .objectiveStep) :
-    r.gearReviewFires = false := by
-  unfold productionLadder at hk
-  rw [Formal.Liveness.UnconditionalDescent.ladder_split,
-    List.findSome?_append] at hk
-  cases hpre : (Formal.Liveness.UnconditionalDescent.blockerPrefix).findSome?
-      (fun k => if fires k r then some k else none) with
-  | none =>
-      exfalso
-      rw [hpre, Option.none_or] at hk
-      rw [List.findSome?_eq_some_iff] at hk
-      obtain ⟨pre, x, suf, hl, hbody, _⟩ := hk
-      by_cases hf : fires x r = true
-      · simp only [hf, if_true] at hbody
-        have hx : x = .objectiveStep := Option.some.inj hbody
-        have hxmem : x ∈ Formal.Liveness.UnconditionalDescent.discretionaryTail := by
-          rw [hl]
-          exact List.mem_append_right _ List.mem_cons_self
-        rw [hx] at hxmem
-        revert hxmem
-        decide
-      · simp [hf] at hbody
-  | some k' =>
-      rw [hpre] at hk
-      simp only [Option.some_or] at hk
-      have hk' : k' = .objectiveStep := Option.some.inj hk
-      rw [hk'] at hpre
-      rw [blockerPrefix_split, List.findSome?_append] at hpre
-      cases hpre2 : gearScanPrefix.findSome?
-          (fun k => if fires k r then some k else none) with
-      | some k'' =>
-          exfalso
-          rw [hpre2] at hpre
-          simp only [Option.some_or] at hpre
-          have hkk : k'' = .objectiveStep := Option.some.inj hpre
-          rw [List.findSome?_eq_some_iff] at hpre2
-          obtain ⟨pre, x, suf, hl, hbody, _⟩ := hpre2
-          by_cases hf : fires x r = true
-          · simp only [hf, if_true] at hbody
-            have hx : x = k'' := Option.some.inj hbody
-            have hxmem : x ∈ gearScanPrefix := by
-              rw [hl]
-              exact List.mem_append_right _ List.mem_cons_self
-            rw [hx, hkk] at hxmem
-            revert hxmem
-            decide
-          · simp [hf] at hbody
-      | none =>
-          rw [List.findSome?_eq_none_iff] at hpre2
-          have h := hpre2 .gearReview (by decide)
-          by_cases hf : fires .gearReview r = true
-          · rw [if_pos hf] at h; cases h
-          · simpa [fires, ProductionLadder.gearReviewFires,
-              Bool.not_eq_true] using hf
 
 /-! ## The two refresh-shaped rows: placeholder + pursueTask. -/
 
@@ -1332,12 +1269,6 @@ theorem descendsE_pursueTask (s : State) (hArms : AdequateArmsFightAt s) (hlvl :
     · rw [if_pos hf] at h; cases h
     · simpa [fires, ProductionLadder.objectiveStepFires,
         Bool.not_eq_true] using hf
-  have hquietG : (perceptionRefreshE s).gearReviewFires = false := by
-    have h := hprefix_none .gearReview (by decide)
-    by_cases hf : fires .gearReview (perceptionRefreshE s) = true
-    · rw [if_pos hf] at h; cases h
-    · simpa [fires, ProductionLadder.gearReviewFires,
-        Bool.not_eq_true] using hf
   have hcond : (decide (s.level < 50) && !(deferGate s)) = false := by
     by_cases hc : (decide (s.level < 50) && !(deferGate s)) = true
     · exfalso
@@ -1396,16 +1327,5 @@ theorem descendsE_pursueTask (s : State) (hArms : AdequateArmsFightAt s) (hlvl :
   · simp only [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
       if_false, Bool.false_eq_true, Bool.false_and, reduceIte, applyActionKind]
     omega
-
-/-- `gearReview` (→ `.fight`) strictly descends at `levelDeficit`/`xpDeficit`.
-
-    WAVE 4 RE-WITNESS: the guard now maps to `ReachUnlockLevelGoal`, the same
-    goal class `.reachUnlockLevel` maps to, so the witness is `.fight` and this
-    is an instance of the fight descent. It lands ABOVE the old `gearReviewFlag`
-    slot, which is merely unchanged and lex-dominated. -/
-theorem descendsE_gearReview (s : State) (hlvl : s.level < 50)
-    (hk : productionLadder (perceptionRefreshE s) = some .gearReview) :
-    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
-  exact descendsE_fight s hlvl (Or.inr (Or.inr (Or.inl hk)))
 
 end Formal.Liveness.BlockerDescentE

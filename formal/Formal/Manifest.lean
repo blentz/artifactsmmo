@@ -960,13 +960,6 @@ open Formal.PriorityBand
 #check @Formal.PlannerDepthBound.reachable_depth_le_maxDepth
 #check @Formal.PlannerDepthBound.plan_length_le_max_depth
 
--- RegearEdge (gear-review latch state machine: set on level-up / fight-loss,
--- clear when no craftable upgrade remains, hold otherwise):
-#check @Formal.RegearEdge.set_on_levelup
-#check @Formal.RegearEdge.set_on_loss
-#check @Formal.RegearEdge.clear_iff_no_upgrade
-#check @Formal.RegearEdge.monotone_until_clear
-
 -- ItemsTaskTermination (items-task keepSet/batchK conformance models —
 -- Task 1 of tasks-termination; capstone added in a later task):
 #check @Formal.Liveness.ItemsTaskTermination.keepSet_contains_task_item     -- safety

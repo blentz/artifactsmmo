@@ -101,7 +101,7 @@ def _ctx(**kw):
     # default is what these fixtures already assumed.
     base = dict(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
                 initial_xp=0, task_exchange_min_coins=1, combat_monster=None,
-                regear_level_up=False, draw_owed=True)
+                draw_owed=True)
     base.update(kw)
     return SelectionContext(**base)
 
@@ -639,13 +639,6 @@ def test_equippable_non_passive_currency_still_grinds():
     goal = _equippable_goal("medal", "artifact1_slot", state, gd)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal._target_item == "ticket"     # currency grind fires
-
-
-
-def test_map_guard_gear_review_no_state_raises():
-    """map_guard(GEAR_REVIEW) without a state must raise ValueError (line 137)."""
-    with pytest.raises(ValueError, match="GEAR_REVIEW guard requires a state"):
-        map_guard(GuardKind.GEAR_REVIEW, GameData(), _ctx())
 
 
 

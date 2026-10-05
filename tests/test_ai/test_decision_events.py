@@ -198,7 +198,7 @@ class TestPlayer:
         with patch.object(player, "_decide_band", return_value=(goal, [], [])):
             player._plan_or_reuse(state, GameData(), [], None)  # no cache: replan
         player._plan_cache = PlanCache(selected_goal=goal, plan=[MagicMock()], crafting_target=None,
-                                       latch_active=player._regear_edge.active, goal_repr="Goal(x)")
+                                       plan_level=state.level, goal_repr="Goal(x)")
         goal.is_satisfied.return_value = False
         player._last_outcome = "ok"
         with patch.object(player._plan_cache.plan[0], "is_applicable", return_value=True):
@@ -217,7 +217,7 @@ class TestPlayer:
         state = make_state()
         first, second = MagicMock(), MagicMock()
         player._plan_cache = PlanCache(selected_goal=goal, plan=[first, second], crafting_target=None,
-                                       latch_active=player._regear_edge.active, goal_repr="Goal(x)",
+                                       plan_level=state.level, goal_repr="Goal(x)",
                                        cursor=1, cycles_since_replan=BANK_REFRESH_INTERVAL)
         player._last_outcome = "ok"
         fresh = MagicMock()

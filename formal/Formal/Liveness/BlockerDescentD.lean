@@ -106,9 +106,6 @@ private theorem refreshD_craftRelief (s : State) :
 private theorem refreshD_craftPotions (s : State) :
     (perceptionRefreshD s).craftPotionsFires = s.craftPotionsFires := by
   unfold perceptionRefreshD; split <;> rfl
-private theorem refreshD_gearReview (s : State) :
-    (perceptionRefreshD s).gearReviewFires = s.gearReviewFires := by
-  unfold perceptionRefreshD; split <;> rfl
 private theorem refreshD_pending (s : State) :
     (perceptionRefreshD s).pendingItemsNonempty = s.pendingItemsNonempty := by
   unfold perceptionRefreshD; split <;> rfl
@@ -140,7 +137,6 @@ private theorem refreshD_objectiveFires (s : State) :
   · exact Or.inl rfl
   · exact Or.inr rfl
 
-
 /-! ## Rest rows — slot 14 (`hpDeficit`). -/
 
 theorem descendsD_hpCritical (s : State)
@@ -159,7 +155,7 @@ theorem descendsD_hpCritical (s : State)
       applyActionKind, if_false, Bool.false_eq_true, reduceIte,
       refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
       perceptionRefreshD_level, perceptionRefreshD_xp] <;>
@@ -185,7 +181,7 @@ theorem descendsD_restForCombat (s : State)
       applyActionKind, if_false, Bool.false_eq_true, reduceIte,
       refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
       perceptionRefreshD_level, perceptionRefreshD_xp] <;>
@@ -212,7 +208,7 @@ theorem descendsD_discardCritical (s : State)
         applyActionKind, hfire.1.1, hdebt,
         refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-        refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+        refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
         refreshD_hp, refreshD_maxHp,
         refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -223,7 +219,7 @@ theorem descendsD_discardCritical (s : State)
         applyActionKind, hfire.1.1, hdebt,
         refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-        refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+        refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
         refreshD_hp, refreshD_maxHp,
         refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -249,7 +245,7 @@ theorem descendsD_discardHigh (s : State)
         applyActionKind, hfire.1.1, hdebt,
         refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-        refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+        refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
         refreshD_hp, refreshD_maxHp,
         refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -260,7 +256,7 @@ theorem descendsD_discardHigh (s : State)
         applyActionKind, hfire.1.1, hdebt,
         refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-        refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+        refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
         refreshD_hp, refreshD_maxHp,
         refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -287,7 +283,7 @@ theorem descendsD_geCancel (s : State)
       applyActionKind, hfire,
       refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
       refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -322,7 +318,7 @@ theorem descendsD_supplyBank (s : State)
       applyActionKind, grantSkillXp, refreshD_supplyDemand,
       refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
       refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -356,7 +352,7 @@ theorem descendsD_bankExpand (s : State)
       ProductionLadder.BANK_EXPAND_FILL_DEN, ProductionLadder.BANK_EXPAND_FILL_NUM,
       refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
       refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -385,7 +381,7 @@ theorem descendsD_currencyTurnIn (s : State)
       applyActionKind, hfire,
       refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
       refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -410,7 +406,7 @@ theorem descendsD_depositFull (s : State)
         applyActionKind, hfire.2, hdebt,
         refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-        refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+        refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
         refreshD_hp, refreshD_maxHp,
         refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -421,7 +417,7 @@ theorem descendsD_depositFull (s : State)
         applyActionKind, hfire.2, hdebt,
         refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-        refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+        refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
         refreshD_hp, refreshD_maxHp,
         refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -447,7 +443,7 @@ theorem descendsD_sellPressured (s : State)
         applyActionKind, hfire.2, hdebt,
         refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-        refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+        refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
         refreshD_hp, refreshD_maxHp,
         refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -458,7 +454,7 @@ theorem descendsD_sellPressured (s : State)
         applyActionKind, hfire.2, hdebt,
         refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-        refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+        refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
         refreshD_hp, refreshD_maxHp,
         refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -484,7 +480,7 @@ theorem descendsD_sellRelief (s : State)
         applyActionKind, hfire.2, hdebt,
         refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-        refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+        refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
         refreshD_hp, refreshD_maxHp,
         refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -495,7 +491,7 @@ theorem descendsD_sellRelief (s : State)
         applyActionKind, hfire.2, hdebt,
         refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-        refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+        refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
         refreshD_hp, refreshD_maxHp,
         refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -519,7 +515,7 @@ theorem descendsD_recycleRelief (s : State)
       applyActionKind, hfire.2,
       refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
       refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -542,7 +538,7 @@ theorem descendsD_craftRelief (s : State)
       applyActionKind, hfire,
       refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
       refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -565,7 +561,7 @@ theorem descendsD_claimPending (s : State)
       applyActionKind, hfire,
       refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
       refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -590,7 +586,7 @@ theorem descendsD_craftPotions (s : State)
         applyActionKind, hrelief,
         refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
       refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -601,7 +597,7 @@ theorem descendsD_craftPotions (s : State)
         applyActionKind, hrelief, hfire,
         refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
       refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -650,7 +646,7 @@ theorem descendsD_taskCancel (s : State)
       applyActionKind, hphase,
       refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
       refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -675,7 +671,7 @@ theorem descendsD_lowYieldCancel (s : State)
       applyActionKind, hphase,
       refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
       refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
@@ -738,7 +734,6 @@ and the armed flag. -/
 theorem descendsD_fight (s : State) (hlvl : s.level < 50)
     (hfire : productionLadder (perceptionRefreshD s) = some .bankUnlock
         ∨ productionLadder (perceptionRefreshD s) = some .reachUnlockLevel
-        ∨ productionLadder (perceptionRefreshD s) = some .gearReview
         ∨ (productionLadder (perceptionRefreshD s) = some .objectiveStep
             ∧ (perceptionRefreshD s).objectiveStepIsFight = true)) :
     dMeasureLt (dMeasure (cycleStepD s)) (dMeasure s) := by
@@ -894,16 +889,5 @@ theorem descendsD_pursueTask (s : State) (hlvl : s.level < 50)
   · simp only [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
       if_false, Bool.false_eq_true, reduceIte, applyActionKind]
     omega
-
-/-- `gearReview` (→ `.fight`) strictly descends at `levelDeficit`/`xpDeficit`.
-
-    WAVE 4 RE-WITNESS: the guard now maps to `ReachUnlockLevelGoal`, the same
-    goal class `.reachUnlockLevel` maps to, so the witness is `.fight` and this
-    is an instance of the fight descent. It lands ABOVE the old `gearReviewFlag`
-    slot, which is merely unchanged and lex-dominated. -/
-theorem descendsD_gearReview (s : State) (hlvl : s.level < 50)
-    (hk : productionLadder (perceptionRefreshD s) = some .gearReview) :
-    dMeasureLt (dMeasure (cycleStepD s)) (dMeasure s) := by
-  exact descendsD_fight s hlvl (Or.inr (Or.inr (Or.inl hk)))
 
 end Formal.Liveness.BlockerDescentD

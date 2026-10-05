@@ -75,7 +75,6 @@ def inertLadderState : State where
   objectiveStepIsFight := false
   craftReliefFires := false
   restForCombatReady := false
-  gearReviewFires := false
   maintainConsumablesFires := false
   supplyDemand := 0
   supplyAsymmetric := false
@@ -262,7 +261,6 @@ def meansKindName : MeansKind → String
   | .sellRelief          => "sellRelief"
   | .depositFull         => "depositFull"
   | .discardHigh         => "discardHigh"
-  | .gearReview          => "gearReview"
   | .craftPotions        => "craftPotions"
   | .claimPending        => "claimPending"
   | .completeTask        => "completeTask"

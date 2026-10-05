@@ -9,10 +9,10 @@ with the combat-outcome gaps closed:
    defer window, the combat objective is armed ONLY when `loadoutAdequate`
    (production image: the arbiter emits a fight step when `is_winnable`
    finds a band target for the CURRENT gear). When inadequate it arms the
-   GEAR latch instead (`gearReviewFires` — the UpgradeEquipment band): the
+   non-combat GEAR objective step instead (the acquisition chain): the
    model stops crediting xp for fights the real bot could not win, the
    gap-1 fix the B1/B2 trace phases measured.
-2. **Gear progress** (`gearProgress`): a PRODUCTIVE `.gearReview` cycle with
+2. **Gear progress** (`gearProgress`): a PRODUCTIVE gear objective-step cycle with
    `gearGap > 0` strictly decrements the gap (an unproductive one moves
    nothing — see `GearCycleMakesProgressAt`); at an exhausted gap the cycle
    RESTORES adequacy (paid at the measure's `inadequacyFlag` slot) —
@@ -45,7 +45,7 @@ open Formal.Liveness.CycleStep
 open Formal.Liveness.InventoryDynamics
 open Formal.Liveness.CycleStepD
 
-/-- Gear re-arm size on a band change: the number of `.gearReview` cycles the
+/-- Gear re-arm size on a band change: the number of gear-step cycles the
     model allows for rebuilding a band's witness loadout.
 
     GROUNDED 2026-07-20 (increment 3). This was `8`, self-declared "provisional".
@@ -63,7 +63,7 @@ open Formal.Liveness.CycleStepD
 
     STILL RESIDUAL (`GearCycleMakesProgress`, spec increment 4): that ONE gear
     cycle accomplishes ONE acquisition step. The real arbiter may spend a
-    `.gearReview` cycle travelling, or lose it to an API failure. This constant
+    gear-step cycle travelling, or lose it to an API failure. This constant
     bounds the STEPS; it does not bound the CYCLES those steps take. -/
 def GEAR_CAP : Nat := 11
 
@@ -162,10 +162,10 @@ def perceptionRefreshE (s : State) : State :=
 
     `GEAR_CAP` bounds the acquisition STEPS for a band's witness loadout — pinned
     against the fixture by `GearedDescent.witness_loadout_le_gear_cap`
-    (increment 3). What remained granted is the RATE: that one `.gearReview`
+    (increment 3). What remained granted is the RATE: that one gear-step
     cycle accomplishes one step.
 
-    Not derivable offline. The arbiter may select `.gearReview` and spend the
+    Not derivable offline. The arbiter may select the gear step and spend the
     cycle travelling to a workshop, replanning, or absorbing an API failure.
     `GearBuildTermination.grounded_builds_target` gives ∃-a-finite-build-sequence
     over a `Graph`, but `State` carries only an opaque `Nat` here; bridging needs
@@ -178,13 +178,12 @@ def GearCycleMakesProgressAt (s : State) : Prop :=
 /-- Gear progress: a PRODUCTIVE non-combat OBJECTIVE STEP with an open gap
     closes one step and restores adequacy exactly at zero.
 
-    RE-HOMED 2026-08-26 (wave 4). This fired on the `.gearReview` RUNG, because
-    that rung mapped to `UpgradeEquipmentGoal` and built gear. Increment 4.2b
+    RE-HOMED 2026-08-26 (wave 4). This fired on the GEAR_REVIEW rung (retired
+    in Phase 4-3b), because that rung mapped to `UpgradeEquipmentGoal` and built
+    gear. Increment 4.2b
     moved gear acquisition into the resolution graph —
     `IsAFightBlockingMe -> WhichSlotClosesTheFight -> ObtainItem` — which the bot
-    executes as its OBJECTIVE STEP, while the `.gearReview` rung now maps to
-    `ReachUnlockLevelGoal` and fights. Leaving this on `.gearReview` would have
-    modelled one cycle as both fighting AND closing a gear gap.
+    executes as its OBJECTIVE STEP.
 
     The `objectiveStepIsFight` guard is what keeps the two arms disjoint: a
     combat objective step grinds XP (it descends at level/xp), a non-combat one

@@ -122,7 +122,6 @@ from artifactsmmo_cli.ai.recovery import (
     StuckExit,
     StuckSignal,
 )
-from artifactsmmo_cli.ai.regear_edge import RegearEdge
 from artifactsmmo_cli.ai.role_catalog import (
     ROLE_CATALOG,
     ROLES_BY_NAME,
@@ -342,11 +341,6 @@ class GamePlayer:
         self._last_path_plan: PathPlan | None = None
         self._cycle_observer = cycle_observer
         self._planning_observer: Callable[[bool], None] | None = None
-        # Event-driven gear prioritization: the latch (set on level-up or a
-        # predicted-winnable fight loss, cleared when gear is level-appropriate)
-        # is updated once per cycle BEFORE selection and read into the
-        # SelectionContext to fire the GEAR_REVIEW guard.
-        self._regear_edge = RegearEdge()
         # Authoritative aged open-order list, persisted independently of
         # self.state. Non-GE Action.execute() rebuilds reset
         # self.state.open_orders to (), so reconcile must fold against THIS
@@ -359,7 +353,6 @@ class GamePlayer:
         # cache -- a cached list still holding the order it just cancelled
         # would re-target it for an HTTP 404.
         self._ge_orders_dirty = False
-        self._prev_level: int | None = None
         self._last_outcome: str | None = None
         self._plan_cache: PlanCache | None = None
         self._last_decide_crafting_target: str | None = None
@@ -690,12 +683,12 @@ class GamePlayer:
         goal_satisfied = cache is not None and cache.selected_goal.is_satisfied(state)
         step_applicable = step is not None and step.is_applicable(state, game_data)
         if should_replan(
-            cache, self._last_outcome, self._regear_edge.active,
+            cache, self._last_outcome, state.level,
             goal_satisfied, step_applicable, BANK_REFRESH_INTERVAL,
         ):
             self._events.note(Mechanism.REPLAN, repr(cache.selected_goal) if cache else "<none>")
             refreshing = refresh_only(
-                cache, self._last_outcome, self._regear_edge.active,
+                cache, self._last_outcome, state.level,
                 goal_satisfied, step_applicable, BANK_REFRESH_INTERVAL)
             selected_goal, plan, goals_tried = self._decide_band(
                 state, game_data, actions, ctx_combat_monster)
@@ -712,7 +705,7 @@ class GamePlayer:
                     selected_goal=selected_goal,
                     plan=list(plan),
                     crafting_target=self._last_decide_crafting_target,
-                    latch_active=self._regear_edge.active,
+                    plan_level=state.level,
                     goal_repr=repr(selected_goal),
                 )
                 self._plan_cache.arm_step(state.inventory, game_data)
@@ -723,7 +716,7 @@ class GamePlayer:
                         repr(selected_goal), plan_reprs[0], plan_reprs)
                     self.history.save_plan_commitment(
                         repr(selected_goal), goal_json, plan_reprs, 0,
-                        self._last_decide_crafting_target, self._regear_edge.active)
+                        self._last_decide_crafting_target, state.level)
             else:
                 self._plan_cache = None
             return selected_goal, plan, goals_tried, True
@@ -761,7 +754,7 @@ class GamePlayer:
             selected_goal=goal,
             plan=rebuilt,
             crafting_target=row.crafting_target,
-            latch_active=row.latch_active,
+            plan_level=row.plan_level,
             goal_repr=row.goal_repr,
         )
         # KNOWN-DEAD for a batched gather: `by_repr` above is built from
@@ -905,13 +898,7 @@ class GamePlayer:
         # publishes and it contends, and a read-only diagnostic must not change
         # what the fleet does. See `_refresh_sibling_reads`.
         self._refresh_sibling_reads(datetime.now(tz=timezone.utc))
-        prev = self._prev_level if self._prev_level is not None else state.level
-        # The farm target is computed BEFORE the latch because the latch's
-        # standing arm needs it: a gear deficit against an unwinnable task
-        # monster only blocks when there is nothing else worth fighting.
         combat_monster = self._winnable_farm_target()
-        self._regear_edge.update(prev, state, self._last_outcome, game_data)
-        self._prev_level = state.level
         ctx = self._selection_context(combat_monster)
         self._last_ctx = ctx
         # Built BEFORE the decision, as `run()` builds it before `_decide_band`:
@@ -1007,17 +994,7 @@ class GamePlayer:
 
                 self._maybe_retry_bank()
 
-                # Update the gear-review latch BEFORE selection so the
-                # GEAR_REVIEW guard sees this cycle's state. prev is the
-                # character level from the previous cycle (or the current level
-                # on the very first cycle, so no spurious level-up trigger).
-                prev = self._prev_level if self._prev_level is not None else state.level
-                # Computed BEFORE the latch because the latch's standing arm
-                # needs it: a gear deficit against an unwinnable task monster
-                # only blocks when there is nothing else worth fighting.
                 combat_monster = self._winnable_farm_target()
-                self._regear_edge.update(prev, state, self._last_outcome, game_data)
-                self._prev_level = state.level
                 # Coordination: renew our lease, publish what we still need,
                 # and re-decide our role. All local SQLite against the shared
                 # learning DB — zero API calls, so this costs nothing from the
@@ -3745,7 +3722,6 @@ class GamePlayer:
             target_gear=target_gear,
             target_tools=target_tools,
             near_term_targets=near_term_targets,
-            regear_level_up=self._regear_edge.level_up_pending,
             gear_keep=gear_keep,
             # Cross-character coordination (Task 11): None whenever no
             # coordination store is attached (every single-character run),
@@ -3984,7 +3960,7 @@ class GamePlayer:
             # (its only production producer), so reading it here recorded the
             # last-resolved root's group on every guard cycle — RestoreHP,
             # DepositInventory, DiscardOverstock, CraftRelief, RecycleSurplus
-            # and GEAR_REVIEW alike, ~15% of C3P0's recent rows. The arbiter is
+            # alike, ~15% of C3P0's recent rows. The arbiter is
             # where a guard actually wins, so it is what is asked.
             root_group=root_group_of(
                 self._arbiter.last_selected_guard,

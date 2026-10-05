@@ -75,10 +75,10 @@ class TaskHorizon:
     """The held task's fight, read against the one-level horizon.
 
     `gear_target` is carried ONLY as evidence for the `HORIZON_GEAR` verdict — the
-    unpriced first step of the chain that closes the fight. The `GEAR_REVIEW` guard
-    re-asks `deficit_upgrade_target` with its own `acquisition_actions` pricing,
-    because WHICH item to build first is an economics question and this is not: see
-    `resolve_task_horizon`.
+    unpriced first step of the chain that closes the fight. The walk's
+    `WhichSlotClosesTheFight` re-asks `deficit_upgrade_target` with its own
+    pricing, because WHICH item to build first is an economics question and this
+    is not: see `resolve_task_horizon`.
     """
 
     monster: str
@@ -165,14 +165,11 @@ def resolve_task_horizon(state: WorldState, game_data: GameData) -> TaskHorizon 
     own pricing. It is NOT a second pricing path into `tiers/means.py`, whose own
     header records the import cycle that would reopen.
 
-    The `GEAR_REVIEW` guard keeps its own priced call for the target it commits to —
-    that answer is pinned by `test_the_task_triple_moves_the_gear_review_target` and
-    does not move here.
 
     ONE READING PER CYCLE, SHARED. Memoised on the IDENTITY of `(state, game_data)`
-    (`per_state_memo`, the pattern the keep authority uses): the gear latch, the
-    `GEAR_REVIEW` guard mapper and the `TASK_CANCEL` means rung all ask within one
-    cycle and must not be able to disagree, and the walk costs a catalogue sweep per
+    (`per_state_memo`, the pattern the keep authority uses): every caller within
+    one cycle (the `TASK_CANCEL` means rung among them) must not be able to
+    disagree, and the walk costs a catalogue sweep per
     chain step. `combat_deficit`'s own docstring says a per-cycle caller must
     memoise; this is that caller.
     """

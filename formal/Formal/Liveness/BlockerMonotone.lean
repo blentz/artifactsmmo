@@ -14,7 +14,7 @@ whole `cycleStepN` trajectory, and the blocker never fires again.
 blocker is quiet at every future step once its flag is false.
 
 Flags covered: `hasOverstockItems` (discardCritical + discardHigh),
-`selectBankDepositsNonempty` (depositFull), `gearReviewFires` (gearReview),
+`selectBankDepositsNonempty` (depositFull),
 `pendingItemsNonempty` (claimPending), `sellableInventoryNonempty` (sellPressured),
 `craftReliefFires` (craftRelief).
 
@@ -105,39 +105,6 @@ theorem depositFull_quiet_forever (s : State)
     (h : s.selectBankDepositsNonempty = false) (n : Nat) :
     fires .depositFull (cycleStepN n s) = false := by
   simp [fires, depositFullFires, selectBankDeposits_false_cycleStepN n s h]
-
-/-! ## gearReviewFires (gearReview) -/
-
-theorem gearReviewFires_false_apply (a : ActionKind) (s : State)
-    (h : s.gearReviewFires = false) :
-    (applyActionKind a s).gearReviewFires = false := by
-  cases a
-  case move => simp only [applyActionKind]; rcases s.moveTarget with _ | ⟨tx, ty⟩ <;> exact h
-  case mapTransition => simp only [applyActionKind]; rcases s.moveTarget with _ | ⟨tx, ty⟩ <;> exact h
-  all_goals first | exact h | (simp [applyActionKind])
-
-theorem gearReviewFires_false_cycleStep (s : State) (h : s.gearReviewFires = false) :
-    (cycleStep s).gearReviewFires = false := by
-  unfold cycleStep
-  split
-  · exact h
-  · split
-    · exact h
-    · exact gearReviewFires_false_apply _ s h
-
-theorem gearReviewFires_false_cycleStepN :
-    ∀ (n : Nat) (s : State), s.gearReviewFires = false →
-      (cycleStepN n s).gearReviewFires = false
-  | 0, _, h => h
-  | n + 1, s, h => by
-      rw [cycleStepN_succ]
-      exact gearReviewFires_false_cycleStepN n (cycleStep s)
-        (gearReviewFires_false_cycleStep s h)
-
-/-- Once the gear-review latch is clear, `gearReview` never fires again. -/
-theorem gearReview_quiet_forever (s : State) (h : s.gearReviewFires = false) (n : Nat) :
-    fires .gearReview (cycleStepN n s) = false := by
-  simp [fires, ProductionLadder.gearReviewFires, gearReviewFires_false_cycleStepN n s h]
 
 /-! ## craftPotionsFires (craftPotions) -/
 

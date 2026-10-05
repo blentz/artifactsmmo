@@ -445,12 +445,11 @@ def test_ladder_entry_count_matches_lean() -> None:
 
     30 = original 17 + WAIT (Phase 20e-v2) + CRAFT_RELIEF (circuit
     breaker between DISCARD_CRITICAL and DEPOSIT_FULL) + REST_FOR_COMBAT
-    (after HP_CRITICAL) + GEAR_REVIEW (lowest-priority guard, after
-    DISCARD_HIGH) + MAINTAIN_CONSUMABLES (PLAN #6a, after TASK_EXCHANGE)
+    (after HP_CRITICAL) + MAINTAIN_CONSUMABLES (PLAN #6a, after TASK_EXCHANGE)
     + RECYCLE_RELIEF (bank-full cascade, after CRAFT_RELIEF)
     + SELL_RELIEF (bank-full cascade, after RECYCLE_RELIEF)
     + DRAIN_BANK_JUNK (lowest-value housekeeping, after BANK_EXPAND)
-    + CRAFT_POTIONS (last guard in GUARD_ORDER, after GEAR_REVIEW)
+    + CRAFT_POTIONS (last guard in GUARD_ORDER, after DISCARD_HIGH)
     + GE_CANCEL (on-need + TTL order cancellation, below the FIGHT gates)
     + GE_BID (discretionary reactive buy-post, above DRAIN_BANK_JUNK)
     + SUPPLY_BANK (2026-08-01 human ruling, produce for a sibling; PROMOTED out
@@ -459,8 +458,9 @@ def test_ladder_entry_count_matches_lean() -> None:
     + CURRENCY_TURNIN (2026-08-16, fleet-currency-turn-in epic Task 6; sits
     directly below SUPPLY_BANK in COLLECT_REWARD_ORDER, still above
     OBJECTIVE_STEP).
+    − GEAR_REVIEW (retired in Phase 4-3b: its one arm never fired).
     Lean side mirrors via MeansKind.allInLadderOrder."""
-    assert len(ALL_IN_LADDER_ORDER) == 31
+    assert len(ALL_IN_LADDER_ORDER) == 30
 
 
 def test_no_task_state_acceptTask_fires() -> None:

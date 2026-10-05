@@ -79,10 +79,9 @@ class UpgradeEquipmentGoal(Goal):
 
         WHO DECIDED IT FIRES, AND WHY THIS ASKS SOMETHING ELSE. A committed
         instance reaches the arbiter from `obtain_item_routing._equippable_goal`
-        (the objective step / fallback steps) or from `map_guard(GEAR_REVIEW)`.
-        Neither asks what this method asks: the router asks whether
-        `actionable_step` names the root itself, the guard asks whether the
-        deficit walk named the item, and `_find_upgrade` asks whether the
+        (the objective step / fallback steps). It does not ask what this method
+        asks: the router asks whether `actionable_step` names the root itself,
+        and `_find_upgrade` asks whether the
         COMMITTED target's materials are in hand. So a committed goal whose
         chain has dead-ended — a recipe-less, non-vendor equippable such as
         `novice_guide` or `wooden_stick` — is a live candidate reporting 0.0.

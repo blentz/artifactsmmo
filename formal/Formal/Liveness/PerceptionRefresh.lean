@@ -242,11 +242,6 @@ theorem perceptionRefresh_fires_discardHigh (s : State) :
     fires .discardHigh (perceptionRefresh s) = fires .discardHigh s := by
   unfold perceptionRefresh; split <;> rfl
 
-/-- `perceptionRefresh` preserves the gearReview fire. -/
-theorem perceptionRefresh_fires_gearReview (s : State) :
-    fires .gearReview (perceptionRefresh s) = fires .gearReview s := by
-  unfold perceptionRefresh; split <;> rfl
-
 /-- `perceptionRefresh` preserves the claimPending fire. -/
 theorem perceptionRefresh_fires_claimPending (s : State) :
     fires .claimPending (perceptionRefresh s) = fires .claimPending s := by

@@ -20,7 +20,6 @@ import Formal.UpgradeSelection
 import Formal.Scalarizer
 import Formal.PlannerAdmissibility
 import Formal.PlannerDepthBound
-import Formal.RegearEdge
 import Formal.ArbiterSelect
 import Formal.TaskDecision
 import Formal.LowYieldCancel

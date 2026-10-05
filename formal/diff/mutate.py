@@ -197,7 +197,6 @@ COMBAT_DEFICIT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_deficit.
 TASK_HORIZON_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_horizon.py"
 ROUTE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai"
              / "decisions" / "route.py")
-REGEAR_EDGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "regear_edge.py"
 CATALOGUE_SCOPE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai"
                        / "catalogue_scope.py")
 # decompose_core (Phase 2c-2a, THE ONE WALK) -- killed by
@@ -3198,6 +3197,14 @@ REFRESH_ONLY_MUTATIONS = [
     ("should_replan: a refresh keeps a plan whose next leg no longer applies",
      "            and cache.cycles_since_replan >= replan_interval\n            and step_applicable)",
      "            and cache.cycles_since_replan >= replan_interval)"),
+    # Phase 4-3b: a level-up is a re-rank fact (it replaced the RegearEdge
+    # latch). Ignored, a plan made at the old level runs on after the level-up.
+    ("should_replan: a level-up since plan time no longer re-decides",
+     "    if level != cache.plan_level:\n        return True\n",
+     "    if False:\n        return True\n"),
+    ("should_replan: a refresh keeps a plan made at another level",
+     "            and level == cache.plan_level\n",
+     "            and True\n"),
 ]
 PLAYER_COMMITMENT_MUTATIONS = [
     ("player: the refresh never keeps the committed plan (re-walks mid-plan)",
@@ -4818,7 +4825,7 @@ COMBAT_DEFICIT_FUTILE_TARGET_MUTATIONS = [
      "    if deficit is None or not deficit.chain:"),
     # The bound is load-bearing in the OTHER direction: at max_chain=1 a fight
     # that two items would close reads as unclosable, so honouring `closes`
-    # would silently narrow GEAR_REVIEW instead of correcting it.
+    # would silently narrow the walk's fight arm instead of correcting it.
     ("deficit_upgrade_target: walk bounded at one step, so multi-item chains vanish",
      "                             candidates=candidates, actions_of=actions_of)",
      "                             candidates=candidates, max_chain=1, actions_of=actions_of)"),
@@ -4860,8 +4867,8 @@ ROUTE_PRICE_MUTATIONS = [
 ]
 
 ROOT_FIGHT_ARM_MUTATIONS = [
-    # The standing arm, re-broadened one layer down from where regear_edge used
-    # to hold it. Killed by test_decisions_root.py's re-homed
+    # The standing arm, re-broadened one layer down from where RegearEdge used
+    # to hold it (RegearEdge itself was deleted in Phase 4-3b). Killed by test_decisions_root.py's re-homed
     # `test_a_futile_deficit_does_not_take_the_fight_arm` /
     # `test_a_level_up_verdict_does_not_take_the_fight_arm`: both verdicts would
     # take the fight arm, which is the 981-cycle freeze's shape.
@@ -4907,43 +4914,13 @@ TASK_HORIZON_MUTATIONS = [
      "    if at_next is not None and at_next.closes:"),
 ]
 
-# The horizon's consumer on the LATCH — the highest-risk edit of the change and,
-# until 2026-08-25, the one with no anchor and no end-to-end witness at all.
-# `RegearEdge` has a 981-cycle / 31.6-hour character-XP freeze in its history caused
-# by this arm arming on a STANDING FACT, so a mutation that re-broadens it back to
-# that fact must not survive. `resolve_task_horizon` returns non-None exactly when
-# `has_combat_deficit` does, so dropping the verdict test IS the pre-`63533b82`
-# code. Killed end to end (`plan_from_state`) by
-# tests/test_ai/scenarios/test_held_task.py — the guard fires for all three of a
-# GEAR / LEVEL_UP / OUT_OF_REACH task instead of only the first, and the character
-# is diverted off its own objective. OWN run_group (unit-killed mutant).
-# Every per-catalogue memo names its GameData by `id()`, which is unique only
-# among LIVE objects — so the scope MUST drop a catalogue's sub-cache before its
-# address can be recycled, or one catalogue's answers are served to another. Not
-# a hypothetical: it made `test_flame_rod_has_positive_marginal...` return 0 at
-# 97% of a serial run on 2026-08-25, and `unlock_boost_target` hand a boost-less
-# catalogue the previous catalogue's boost on the FIRST recycled address.
-# `weakref.finalize`'s return value is discarded, so it is exactly the line a
-# tidying edit deletes as dead — hence the anchor. Killed at every call site:
-# tests/test_ai/test_catalogue_scope.py, test_unlock_boost.py,
-# test_weapon_winnability.py, test_loadout_cache.py, test_kit_selection.py and
-# test_skill_grind_target.py all fail on this one edit.
-# OWN run_group (unit-killed mutant).
+# The horizon's consumer on the LATCH (`REGEAR_EDGE_HORIZON_MUTATIONS`) was
+# retired in Phase 4-3b with `RegearEdge` and the GEAR_REVIEW guard it fed; the
+# fight-arm half lives on in ROOT_FIGHT_ARM_MUTATIONS.
 CATALOGUE_SCOPE_PURGE_MUTATIONS = [
     ("catalogue_scope: a catalogue's sub-cache outlives the catalogue",
      "            weakref.finalize(game_data, self._caches.pop, key, None)",
      "            pass  # finalizer removed"),
-]
-
-REGEAR_EDGE_HORIZON_MUTATIONS = [
-    # RETIRED at wave 4: `_blocked` left this class for
-    # `decisions/root.IsAFightBlockingMe`. Its replacement is
-    # ROOT_FIGHT_ARM_MUTATIONS below, which re-broadens the same test one
-    # layer down. What stays here is the narrow flag the guard now reads.
-    ("regear_edge: the level-up flag re-broadens to the bare edge",
-     "        self._level_up_pending = (horizon is not None\n"
-     "                                  and horizon.verdict == HORIZON_LEVEL_UP)",
-     "        self._level_up_pending = horizon is not None"),
 ]
 
 # The horizon's consumer on the discard rung. Killed by
@@ -5030,7 +5007,6 @@ _ALL_SRCS = [
     COMBAT_PICKER_SRC,
     COMBAT_DEFICIT_SRC,
     TASK_HORIZON_SRC,
-    REGEAR_EDGE_SRC,
     CATALOGUE_SCOPE_SRC,
     PROJECTIONS_SRC,
     # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
@@ -8886,8 +8862,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_decisions_route.py", survivors)
     run_group(ROOT_DECISION_SRC, ROOT_FIGHT_ARM_MUTATIONS,
               "tests/test_ai/test_decisions_root.py", survivors)
-    run_group(REGEAR_EDGE_SRC, REGEAR_EDGE_HORIZON_MUTATIONS,
-              "tests/test_ai/scenarios/test_held_task.py", survivors)
     run_group(CATALOGUE_SCOPE_SRC, CATALOGUE_SCOPE_PURGE_MUTATIONS,
               "tests/test_ai/test_catalogue_scope.py", survivors)
     run_group(MEANS_SRC, MEANS_TASK_HORIZON_MUTATIONS,

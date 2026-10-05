@@ -4,7 +4,7 @@
 file, no scenario set it: 30 of 30 carried `task_code=None`, so
 `combat_deficit.blocked_task_monster` returned `None` in every offline test and
 everything downstream of it — `has_combat_deficit`, `deficit_upgrade_target`,
-`RegearEdge`, the `GEAR_REVIEW` guard — was reachable only through hand-built
+`RegearEdge`, the `GEAR_REVIEW` guard (both deleted in Phase 4-3b) — was reachable only through hand-built
 states. Live, 21.1 % of cycles hold a task, and every one of them is a
 `monsters` task.
 
@@ -60,13 +60,11 @@ from artifactsmmo_cli.ai.decisions.root import (
     resolve_root,
 )
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_appropriateness import has_craftable_upgrade_any_slot
 from artifactsmmo_cli.ai.inventory_keep import keep_in_bag
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.task_horizon import (
     HORIZON_GEAR,
     HORIZON_LEVEL_UP,
@@ -74,7 +72,6 @@ from artifactsmmo_cli.ai.task_horizon import (
     resolve_task_horizon,
 )
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
-from artifactsmmo_cli.ai.tiers.guards import GuardKind
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 
@@ -246,8 +243,9 @@ def test_the_task_triple_splits_the_deficit_three_ways(gd: GameData) -> None:
     assert gd.monster_level("lich") <= SCENARIOS[TRIPLE_OPEN].level
 
 
-def test_the_task_triple_flips_the_regear_edge(gd: GameData) -> None:
-    """`regear_edge.py:79`, the STANDING arm, with the task as the only input moving.
+def test_the_task_triple_arms_the_fight_arm(gd: GameData) -> None:
+    """The latch's former STANDING arm (now `IsAFightBlockingMe`), with the task
+    as the only input moving.
 
     The latch's standing arm is a three-way conjunction: a craftable upgrade
     exists, the cascade found nothing else worth fighting, and a combat deficit
@@ -281,7 +279,6 @@ def test_the_task_triple_flips_the_regear_edge(gd: GameData) -> None:
         rows below are unchanged from the latch era — the behaviour moved, it
         did not change."""
         state = _state(name, gd)
-        assert has_craftable_upgrade_any_slot(state, gd) is True
         monster = "chicken" if winnable_alternative else None
         child = IsAFightBlockingMe(
             _obj(gd), RootWalk()).resolve(
@@ -320,7 +317,6 @@ def test_the_triple_starves_the_winnable_cascade(gd: GameData) -> None:
         player.plan_from_state()
         assert player._last_ctx is not None
         assert player._last_ctx.combat_monster is None
-        assert player._last_ctx.regear_level_up is False
 
 
 def test_the_task_triple_moves_the_gear_review_target(gd: GameData) -> None:
@@ -363,26 +359,8 @@ def test_the_task_triple_moves_the_gear_review_target(gd: GameData) -> None:
 # monster-blind goal. What it could not say is that landing there is WRONG for
 # cell 3 and right for cell 1: the workable cell has no fight to lose, the open
 # cell has one it will never win with gear. The three tests below are that
-# distinction, taken at the three places the fact is consumed.
-
-
-def test_the_gear_review_guard_takes_the_level_when_gear_cannot(gd: GameData) -> None:
-    """The middle clause, at the one place it becomes an action.
-
-    `l13_drop_recipe_grind` against `mushmush`: no chain closes the fight at 13,
-    `iron_dagger` closes it at 14, and the catalogue pool is identical at both
-    levels — so the level, not the pool, is what buys the fight. The guard maps to
-    `ReachUnlockLevelGoal(14)` instead of falling through to the monster-blind
-    value scan, which is what it did for every such state before."""
-    state = dataclasses.replace(
-        _state(UNWINNABLE_CLOSABLE, gd), task_code="mushmush", task_type="monsters",
-        task_progress=0, task_total=10,
-        task_lifecycle_phase=TaskLifecyclePhase.IN_PROGRESS)
-    ctx = dataclasses.replace(NO_PROFILE_CONTEXT, regear_level_up=True)
-
-    assert resolve_task_horizon(state, gd).verdict == HORIZON_LEVEL_UP
-    assert repr(map_guard(GuardKind.GEAR_REVIEW, gd, ctx, state=state)) == (
-        f"ReachUnlockLevel({state.level + 1})")
+# distinction, taken at the places the fact is consumed (the GEAR_REVIEW
+# guard's LEVEL_UP arm was one until Phase 4-3b deleted it: it never fired).
 
 
 def test_the_open_task_is_cancelled_end_to_end_with_a_coin(gd: GameData) -> None:
@@ -456,7 +434,8 @@ def _starved_run(monster: str | None, game_data: GameData):
 
 
 def test_a_starved_cascade_witnesses_the_standing_arm_end_to_end(gd: GameData) -> None:
-    """The `GEAR_REVIEW` guard, fired and NOT fired, through `plan_from_state`.
+    """The standing arm (the walk's `IsAFightBlockingMe` since wave 4), taken
+    and NOT taken, through `plan_from_state`.
 
     All three rows share `has_combat_deficit is True` — the bare fact the arm
     used to test — so before `63533b82` all three armed the latch and all three
@@ -470,7 +449,6 @@ def test_a_starved_cascade_witnesses_the_standing_arm_end_to_end(gd: GameData) -
         state, player, _ = _starved_run(monster, gd)
         # The three conjuncts of the standing arm, measured rather than passed in.
         assert player._winnable_farm_target() is None
-        assert has_craftable_upgrade_any_slot(state, gd) is True
         # ...and the fact the OLD arm read, identical across all three rows.
         assert has_combat_deficit(state, gd) is True
 
@@ -480,19 +458,7 @@ def test_a_starved_cascade_witnesses_the_standing_arm_end_to_end(gd: GameData) -
                         STARVED_LEVEL_UP: HORIZON_LEVEL_UP,
                         STARVED_OUT_OF_REACH: HORIZON_OUT_OF_REACH}
 
-    # WHERE EACH VERDICT IS SERVED, after wave 4 split the two arms.
-    #
-    # The guard flag is now `level_up_pending`, which needs an EDGE. A seeded
-    # player has none (`_last_outcome` is None and `prev_level == state.level`),
-    # so it is False on all three rows — including the gear row, which used to
-    # be True here. That is the split, not a regression: the gear verdict is
-    # served by the graph now, and the assertion below is what says so.
-    active = {m: _starved_run(m, gd)[1]._last_ctx.regear_level_up
-              for m in (STARVED_GEAR, STARVED_LEVEL_UP, STARVED_OUT_OF_REACH)}
-    assert active == {STARVED_GEAR: False,
-                      STARVED_LEVEL_UP: False,
-                      STARVED_OUT_OF_REACH: False}
-
+    # WHERE EACH VERDICT IS SERVED: the gear verdict by the walk's fight arm.
     armed = {m: isinstance(
                  IsAFightBlockingMe(_obj(gd), RootWalk()).resolve(
                      _starved_state(m, gd), gd, NO_PROFILE_CONTEXT, None),

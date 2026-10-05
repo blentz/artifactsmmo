@@ -574,7 +574,6 @@ open Formal.Liveness.BlockerMonotone
 #print axioms discardCritical_quiet_forever
 #print axioms discardHigh_quiet_forever
 #print axioms depositFull_quiet_forever
-#print axioms gearReview_quiet_forever
 #print axioms claimPending_quiet_forever
 #print axioms sellPressured_quiet_forever
 #print axioms craftRelief_quiet_forever

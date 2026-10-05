@@ -35,11 +35,11 @@ BOTH sides from one set of fields:
   * the concrete numeric/structural fields (hp, maxHp, level, xp, fill, task
     lifecycle, bank state, coins) feed production's `WorldState` /
     `SelectionContext` / `GameData` AND the oracle arg array; and
-  * the opaque Bools we CAN pass through identically — `objective_step_fires`
-    (→ `production_ladder(..., objective_step_fires)` and oracle arg[28]) and
-    `regear_level_up` (→ `ctx.regear_level_up` and oracle arg[26]) — are
-    handed to both sides verbatim, so `objectiveStep` and `gearReview` are
-    genuinely compared, not skipped.
+  * the opaque Bool we CAN pass through identically — `objective_step_fires`
+    (→ `production_ladder(..., objective_step_fires)` and oracle arg[28]) — is
+    handed to both sides verbatim, so `objectiveStep` is genuinely compared,
+    not skipped. (Oracle arg[26] was `gearReviewFires`; it is reserved since
+    the GEAR_REVIEW guard was retired in Phase 4-3b, and both sides send 0.)
 
 ## Slots ASSERTED (per-slot agreement, every scenario)
 
@@ -55,7 +55,6 @@ computes from the supplied inputs under an empty-catalog `GameData`:
   * depositFull         — bank_accessible AND fill >= 0.90 AND a non-kept
                           inventory item exists (select_bank_deposits nonempty).
   * discardHigh         — overstock AND fill >= 0.85.
-  * gearReview          — ctx.regear_level_up (passed identically).
   * claimPending        — bool(pending_items).
   * completeTask        — task set AND total>0 AND progress>=total
                           (≡ TaskLifecyclePhase.complete).
@@ -88,10 +87,10 @@ the teeth bite per slot:
                           (`craftReliefFires := s.craftReliefFires`, …): the Lean
                           per-slot value is production's verdict fed straight
                           back in, so the per-slot check is fed-through (vacuous
-                          by construction). (gearReview / objectiveStep are the
-                          SAME passthrough mechanism but are NOT deferred — the
-                          sweep passes their Bool to both sides every scenario, so
-                          they sit in ASSERTED_SLOTS, driven directly.) The TEETH
+                          by construction). (objectiveStep is the
+                          SAME passthrough mechanism but is NOT deferred — the
+                          sweep passes its Bool to both sides every scenario, so
+                          it sits in ASSERTED_SLOTS, driven directly.) The TEETH
                           are in the `selected` assertion — a RICH fixture fires
                           the slot in production and the oracle must SELECT the
                           same MeansKind over the
@@ -215,7 +214,6 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.SELL_RELIEF: "sellRelief",
     LadderMeans.DEPOSIT_FULL: "depositFull",
     LadderMeans.DISCARD_HIGH: "discardHigh",
-    LadderMeans.GEAR_REVIEW: "gearReview",
     LadderMeans.CRAFT_POTIONS: "craftPotions",
     LadderMeans.CLAIM_PENDING: "claimPending",
     LadderMeans.COMPLETE_TASK: "completeTask",
@@ -276,7 +274,6 @@ class Scenario:
     gold: int                # POCKET gold (WorldState.gold)
     bank_gold: int           # BANKED gold; account = gold + bank_gold
     item_sellable: bool      # NPC buys JUNK -> sellable
-    gear_review: bool        # opaque, passed identically to both sides
     objective_step: bool     # opaque, passed identically to both sides
 
 
@@ -386,7 +383,6 @@ def _make_ctx(scn: Scenario) -> SelectionContext:
         gold_reserve=scn.gold_reserve,
         target_gear=frozenset(),
         target_tools=frozenset(),
-        regear_level_up=scn.gear_review,
     )
 
 
@@ -459,7 +455,7 @@ def _oracle_args(scn: Scenario, w: WorldState,
         # this harness tests, and that is unaffected.
         0 if task_cancel_fires else 1,           # 24 taskFeasibleProjected
         0,                                       # 25 restForCombatReady (deferred TRUE path)
-        1 if scn.gear_review else 0,             # 26 gearReviewFires (passed identically)
+        0,                                       # 26 reserved (was gearReviewFires)
         0,                                       # 27 craftReliefFires (deferred)
         1 if scn.objective_step else 0,          # 28 objectiveStepFires (passed identically)
         0,                                       # 29 maintainConsumablesFires (deferred)
@@ -652,7 +648,6 @@ def _scenario(draw) -> Scenario:
         # (dff7198a) passed 850 differential cases unseen.
         bank_gold=draw(st.integers(min_value=0, max_value=20000)),
         item_sellable=draw(st.booleans()),
-        gear_review=draw(st.booleans()),
         objective_step=draw(st.booleans()),
     )
 
@@ -707,7 +702,7 @@ def _base_scn(**overrides) -> Scenario:
         bank_known=False, bank_items_count=0, bank_capacity=0,
         next_expansion_cost=0, gold=0, bank_gold=0, gold_reserve=0,
         item_sellable=False,
-        gear_review=False, objective_step=False,
+        objective_step=False,
     )
     defaults.update(overrides)
     return Scenario(**defaults)
@@ -860,8 +855,7 @@ def test_bank_expand_witness_pocket_too_poor_to_execute() -> None:
     ))
 
 
-def test_gear_review_and_objective_step_passthrough() -> None:
-    _assert_full_agreement(_base_scn(gear_review=True))
+def test_objective_step_passthrough() -> None:
     _assert_full_agreement(_base_scn(objective_step=True))
 
 
@@ -900,8 +894,8 @@ def test_scope_documents_deferred_slots() -> None:
 # production-derived Bool into the oracle's matching arg index, then assert
 # (a) per-slot agreement and (b) `selected` agreement.
 #
-# This mirrors the existing `gearReview`/`objectiveStep` passthrough handling
-# (those Bools are fed identically to both sides), but here the Bool is DRIVEN
+# This mirrors the existing `objectiveStep` passthrough handling
+# (that Bool is fed identically to both sides), but here the Bool is DRIVEN
 # by production's real predicate on a hand-built fixture rather than sampled.
 #
 # Cluster A (4a): craftRelief (arg[27]) + recycleSurplus (arg[23]).
@@ -984,7 +978,7 @@ def _rich_oracle_args(
         1 if (task_feasible_projected
               and not prod[LadderMeans.TASK_CANCEL]) else 0,  # 24 taskFeasibleProjected
         1 if prod[LadderMeans.REST_FOR_COMBAT] else 0,   # 25 restForCombatReady
-        1 if ctx.regear_level_up else 0,          # 26 gearReviewFires
+        0,                                        # 26 reserved (was gearReviewFires)
         1 if prod[LadderMeans.CRAFT_RELIEF] else 0,  # 27 craftReliefFires
         1 if objective_step else 0,                  # 28 objectiveStepFires
         1 if prod[LadderMeans.MAINTAIN_CONSUMABLES] else 0,  # 29 maintainConsumablesFires
@@ -993,7 +987,7 @@ def _rich_oracle_args(
         # NOT the slot verdict — the helper IS the opaque nonempty signal.
         1 if bank_drain_excess(w, gd, ctx) else 0,    # 31 bankJunkNonempty
         # 32 craftPotionsFires: opaque CRAFT_POTIONS latch — derive from the SAME
-        # production verdict (like gearReview/craftRelief/maintainConsumables).
+        # production verdict (like craftRelief/maintainConsumables).
         1 if prod[LadderMeans.CRAFT_POTIONS] else 0,  # 32 craftPotionsFires
         ctx.gold_reserve,                             # 33 goldReserve (ctx-threaded)
         # 34: derive from production's REAL ge_bid_candidates helper (like 31),
@@ -1008,7 +1002,7 @@ def _rich_oracle_args(
         # 36 supplyDemand: production's `_fires(SUPPLY_BANK, …)` reads
         # `ctx.supply_target`'s UNMET-demand component and compares it against
         # `SUPPLY_DEMAND_MIN`, so thread that number itself — one value, two
-        # sides, exact lockstep (like gearReview at 26).
+        # sides, exact lockstep.
         _supply_demand(ctx),  # 36 supplyDemand
         # 37 currencyTurnInActive: production's `_fires(CURRENCY_TURNIN, …)` is
         # exactly `ctx.turn_in is not None or ctx.recall is not None`, so thread
@@ -1144,7 +1138,6 @@ def _craft_relief_ctx() -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
-        regear_level_up=False,
         draw_owed=True)
 
 
@@ -1244,7 +1237,6 @@ def _recycle_ctx(*, protect_dagger: bool = False) -> SelectionContext:
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
         gear_keep={"dagger": 2} if protect_dagger else {},
-        regear_level_up=False,
         draw_owed=True)
 
 
@@ -1332,7 +1324,6 @@ def _drain_ctx(*, protect_sap: bool = False) -> SelectionContext:
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
         gear_keep={"sap": 5} if protect_sap else {},
-        regear_level_up=False,
         draw_owed=True)
 
 
@@ -1566,7 +1557,6 @@ def _rest_combat_ctx() -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster="mob",
         target_gear=frozenset(), target_tools=frozenset(),
-        regear_level_up=False,
         draw_owed=True)
 
 
@@ -1668,7 +1658,6 @@ def _maintain_ctx() -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster="mob",
         target_gear=frozenset(), target_tools=frozenset(),
-        regear_level_up=False,
         draw_owed=True)
 
 
@@ -1724,8 +1713,7 @@ def test_maintain_consumables_near_miss_no_combat() -> None:
     ctx = SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(), target_tools=frozenset(),
-        regear_level_up=False)
+        target_gear=frozenset(), target_tools=frozenset())
     prod, _, lean, _ = drive_and_contest(
         w, gd, ctx, driven=frozenset({LadderMeans.MAINTAIN_CONSUMABLES}))
     assert prod[LadderMeans.MAINTAIN_CONSUMABLES] is False
@@ -1844,7 +1832,7 @@ def _plain_ctx(*, combat_monster: str | None = None,
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=combat_monster,
         target_gear=frozenset(), target_tools=frozenset(),
-        regear_level_up=False, draw_owed=draw_owed)
+        draw_owed=draw_owed)
 
 
 def _monsters_task_world(*, task_code: str, progress: int, total: int,
@@ -2155,7 +2143,6 @@ def _supply_ctx(demand: int) -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
-        regear_level_up=False,
         supply_target=("copper_ore", 999, demand),
         draw_owed=True)
 
@@ -2209,7 +2196,6 @@ def _supply_ctx_asymmetric(demand: int, *, asymmetric: bool) -> SelectionContext
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
-        regear_level_up=False,
         supply_target=("copper_ore", 999, demand),
         asymmetric_demand=frozenset({"copper_ore"}) if asymmetric else frozenset(),
         draw_owed=True)

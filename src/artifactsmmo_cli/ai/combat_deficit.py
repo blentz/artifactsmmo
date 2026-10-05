@@ -33,7 +33,7 @@ cost of progress." So the chain STACKS rather than giving up, and there is no
 fallback to an easier monster.
 
 Greedy on MARGIN, deliberately. The live failure was the opposite: `map_guard`'s
-GEAR_REVIEW branch ranked upgrades with a monster-blind `_best_by_value` scan and
+GEAR_REVIEW branch (since deleted) ranked upgrades with a monster-blind `_best_by_value` scan and
 chose `iron_boots` — already worn, and absent from all 24 items that improved the
 pig margin — while the weapon that actually moved `rounds_to_kill` went unbuilt
 for ten hours.
@@ -153,8 +153,9 @@ def has_combat_deficit(state: WorldState, game_data: GameData) -> bool:
     """Is the held task's monster unwinnable? The CHEAP form of the same fact.
 
     `combat_deficit` walks every candidate to name what closes the gap; this is
-    one `predict_win`. `RegearEdge.update` runs every cycle and only needs to know
-    THAT a deficit exists, so the walk would be the wrong thing to put there.
+    one `predict_win`. `task_horizon.resolve_task_horizon` runs every cycle and
+    first needs to know THAT a deficit exists, so the walk would be the wrong
+    thing to put there.
 
     Exactly equivalent to `combat_deficit(...) is not None` — pinned by a test,
     because if the two ever disagreed the latch would arm for a deficit the gear
@@ -176,7 +177,7 @@ def deficit_upgrade_target(
     """`(item_code, slot)` to build next to make the HELD TASK's monster winnable.
 
     This is the causal link "lose fight -> upgrade gear" that the bot never had.
-    `map_guard`'s GEAR_REVIEW branch sets its target with a monster-BLIND
+    `map_guard`'s GEAR_REVIEW branch (deleted in Phase 4-3b) set its target with a monster-BLIND
     `_best_by_value` scan: live it chose `iron_boots`, already worn and absent
     from all 24 items that improved the pig margin, while the weapon that
     actually moved `rounds_to_kill` went unbuilt for ten hours. The gear latch
@@ -214,8 +215,8 @@ def deficit_upgrade_target(
     122 of the 648 futile pairs turn out to have a closing chain (30 at depth 2,
     59 by depth 3, 122 by depth 8) and keep the SAME first target, now honestly
     justified; the other 526 fall through to the value scan, which is what
-    `strategy_driver`'s GEAR_REVIEW branch does with a None. GEAR_REVIEW still
-    fires and still buys gear — only the monster-scoped claim is withdrawn when
+    `strategy_driver`'s GEAR_REVIEW branch did with a None (that guard was
+    deleted in Phase 4-3b) — only the monster-scoped claim is withdrawn when
     the monster cannot be reached by gear at all.
 
     `closes` subsumes the old `chain` check: it is set only immediately after a

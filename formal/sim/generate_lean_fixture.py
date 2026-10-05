@@ -391,7 +391,6 @@ def generate_lean(snapshot: dict) -> str:
         "  objectiveStepFires := false",
         "  craftReliefFires := false",
         "  restForCombatReady := false",
-        "  gearReviewFires := false",
         "  bankItemsKnown := false",
         "  bankItemsCount := 0",
         "  bankCapacity := 0",

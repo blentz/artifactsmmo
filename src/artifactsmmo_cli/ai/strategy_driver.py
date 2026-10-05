@@ -347,36 +347,6 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
                                  ctx=deposit_context(ctx, step_profile),
                                  bank_accessible=ctx.bank_accessible,
                                  relief=True)
-    if kind is GuardKind.GEAR_REVIEW:
-        if state is None:
-            raise ValueError("GEAR_REVIEW guard requires a state")
-        # ONE ARM, since wave 4: a level, not an item.
-        #
-        # The gear arm that stood here — the priced `deficit_upgrade_target`
-        # walk, then a monster-BLIND `find_upgrade_target` value scan behind it
-        # — is now `decisions/root.WhichSlotClosesTheFight`, reached through
-        # `IsAFightBlockingMe`. The scan went with it, and that is a deletion
-        # rather than a move: it is the scan that chose `iron_boots`, already
-        # worn and absent from every item that improved the pig margin, while
-        # the weapon that moved `rounds_to_kill` went unbuilt for ten hours.
-        # The graph's answer when nothing closes the fight is the objective's
-        # own next step, which is an answer rather than a guess.
-        #
-        # What is left is the EDGE arm's verdict. The held task's fight is lost,
-        # no chain of acquisitions closes it at this level, and one level plus
-        # the gear that level admits does. `RegearEdge.level_up_pending` already
-        # tested `verdict == HORIZON_LEVEL_UP`, so this branch does not re-ask:
-        # the guard fires on exactly the condition this arm serves.
-        #
-        # `ReachUnlockLevelGoal` rather than a new goal class: it is already
-        # "grind character XP until state.level >= target_level", already emits
-        # Fight over every beatable monster plus HP recovery, and is already
-        # mapped from a guard slot. A second class would be a second
-        # implementation of one sentence. The target is `state.level + 1` and
-        # nothing else — the horizon is a HARD bound, and its own
-        # MAX_ACHIEVABLE_GAP (5) can never bind at a gap of one.
-        return ReachUnlockLevelGoal(target_level=state.level + 1,
-                                    blocker_code=state.task_code or "task")
     if kind is GuardKind.CRAFT_POTIONS:
         # `state=` seeds the goal's frozen craft target. Without it the goal
         # re-resolves its target per planner node and can demand one its own
@@ -744,7 +714,7 @@ class StrategyArbiter:
         # is hardcoded None by `progression_tree.decide_tree`, its sole
         # production producer. The learning store's `root_group` column reads
         # this, so without it every RestoreHP / DepositInventory /
-        # DiscardOverstock / GEAR_REVIEW cycle would be filed under whichever
+        # DiscardOverstock cycle would be filed under whichever
         # root the walk last resolved and never ran (~15% of C3P0's rows).
         #
         # A `last_fires["guards"]` entry is NOT the same fact: a guard can fire

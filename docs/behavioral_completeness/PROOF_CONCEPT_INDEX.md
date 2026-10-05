@@ -88,7 +88,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | PurposeRouting | items, characters | dominance |
 | RealizableLoadout | items, characters | safety |
 | RecycleProtection | items, crafting | safety |
-| RegearEdge | items, characters | safety, monotonicity |
 | Scalarizer | core | monotonicity |
 | ShoppingList | resources | dominance, monotonicity, safety, totality |
 | SkillGrindSelection | crafting, planner | safety, totality |

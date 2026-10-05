@@ -19,7 +19,7 @@ def _cache(plan):
         selected_goal=object(),
         plan=list(plan),
         crafting_target="copper_ring",
-        latch_active=False,
+        plan_level=1,
         goal_repr="Goal(copper_ring)",
     )
 
@@ -49,7 +49,7 @@ def test_cursor_holds_until_the_batch_target_is_reached(game_data):
     gather = GatherAction(resource_code="spruce_tree", quantity=3,
                           locations=frozenset({(0, 0)}))
     cache = PlanCache(selected_goal=object(), plan=[gather, object()],
-                      crafting_target=None, latch_active=False,
+                      crafting_target=None, plan_level=1,
                       goal_repr="G")
     drop = gather.drop_item(game_data)
     cache.arm_step({drop: 5}, game_data)
@@ -64,7 +64,7 @@ def test_a_lucky_multi_unit_drop_satisfies_early(game_data):
     gather = GatherAction(resource_code="spruce_tree", quantity=3,
                           locations=frozenset({(0, 0)}))
     cache = PlanCache(selected_goal=object(), plan=[gather],
-                      crafting_target=None, latch_active=False, goal_repr="G")
+                      crafting_target=None, plan_level=1, goal_repr="G")
     drop = gather.drop_item(game_data)
     cache.arm_step({drop: 0}, game_data)
     assert cache.batch_satisfied({drop: 12}, game_data) is True
@@ -72,7 +72,7 @@ def test_a_lucky_multi_unit_drop_satisfies_early(game_data):
 
 def test_unbatched_steps_are_always_satisfied(game_data):
     cache = PlanCache(selected_goal=object(), plan=[object()],
-                      crafting_target=None, latch_active=False, goal_repr="G")
+                      crafting_target=None, plan_level=1, goal_repr="G")
     cache.arm_step({}, game_data)
     assert cache.step_target is None
     assert cache.batch_satisfied({}, game_data) is True
@@ -88,7 +88,7 @@ def test_a_stale_target_does_not_hold_a_cursor_that_moved_off_the_gather(game_da
                           locations=frozenset({(0, 0)}))
     craft = object()
     cache = PlanCache(selected_goal=object(), plan=[gather, craft],
-                      crafting_target=None, latch_active=False, goal_repr="G")
+                      crafting_target=None, plan_level=1, goal_repr="G")
     drop = gather.drop_item(game_data)
     cache.arm_step({drop: 5}, game_data)
     assert cache.step_target == 8
@@ -105,7 +105,7 @@ def test_a_planned_fight_repeats_until_its_drop_is_in(game_data):
     the bag holds 8 more, so the craft after it finds its inputs."""
     fight = FightAction(monster_code="chicken", drop_target=("feather", 8))
     cache = PlanCache(selected_goal=object(), plan=[fight, object()],
-                      crafting_target=None, latch_active=False, goal_repr="G")
+                      crafting_target=None, plan_level=1, goal_repr="G")
     cache.arm_step({"feather": 1}, game_data)
     assert cache.step_target == 9
     assert cache.batch_satisfied({"feather": 5}, game_data) is False
@@ -115,7 +115,7 @@ def test_a_planned_fight_repeats_until_its_drop_is_in(game_data):
 def test_a_fight_planned_for_no_drop_advances_after_one_win(game_data):
     fight = FightAction(monster_code="chicken")
     cache = PlanCache(selected_goal=object(), plan=[fight],
-                      crafting_target=None, latch_active=False, goal_repr="G")
+                      crafting_target=None, plan_level=1, goal_repr="G")
     cache.arm_step({}, game_data)
     assert cache.step_target is None
     assert cache.batch_satisfied({}, game_data) is True
@@ -127,7 +127,7 @@ def test_a_single_gather_is_armed_too(game_data):
     gather = GatherAction(resource_code="gudgeon_spot", quantity=1, drop_item_override="algae",
                           locations=frozenset({(0, 0)}))
     cache = PlanCache(selected_goal=object(), plan=[gather, object()],
-                      crafting_target=None, latch_active=False, goal_repr="G")
+                      crafting_target=None, plan_level=1, goal_repr="G")
     cache.arm_step({"algae": 2}, game_data)
     assert cache.step_target == 3
     assert cache.batch_satisfied({"algae": 2}, game_data) is False

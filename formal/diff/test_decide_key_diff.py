@@ -32,7 +32,7 @@ _GUARD_INDEX = {
     GuardKind.DEPOSIT_FULL: 5,
     GuardKind.DISCARD_HIGH: 6,
     GuardKind.REST_FOR_COMBAT: 7,
-    GuardKind.GEAR_REVIEW: 8,
+    # 8 was GEAR_REVIEW, retired in Phase 4-3b; the index stays reserved.
     GuardKind.RECYCLE_RELIEF: 9,
     GuardKind.SELL_RELIEF: 10,
     GuardKind.CRAFT_POTIONS: 11,

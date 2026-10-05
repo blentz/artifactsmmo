@@ -9,8 +9,6 @@ Extracted from `strategy_driver.py` (Task 5, PF-2 wiring) so that
 `Decision`s call `_equippable_goal` / `_gather_step_target_is_root` /
 `_recipe_has_combat_drop_input`. Both modules importing this one (instead of
 each other) breaks the cycle that direction would otherwise create.
-`strategy_driver.py` still uses `_gather_goal_for_unreachable_equippable`
-directly (the `GEAR_REVIEW` guard branch) and imports it back from here.
 """
 
 from artifactsmmo_cli.ai.currency_grind_target import currency_grind_target_pure
@@ -70,8 +68,8 @@ def _gather_goal_for_unreachable_equippable(
     targeted `code` itself — see that function's docstring for why, and for
     the measurements backing it. `None` means: don't wrap the root in a
     second `GatherMaterials` pass over itself; the caller must fall through
-    to its own reachable-root goal (`_equippable_goal`'s `upgrade`, the
-    `GEAR_REVIEW` guard's `committed`, `objective_step_goal`'s `upgrade`).
+    to its own reachable-root goal (`_equippable_goal`'s `upgrade`,
+    `objective_step_goal`'s `upgrade`).
 
     `step` is the caller's already-computed `actionable_step` result, passed
     so the traversal runs once per decision instead of twice (once to decide
@@ -124,21 +122,9 @@ def _gather_goal_for_unreachable_equippable(
     # No deeper actionable step (the root itself is the actionable leaf, or the
     # chain is cyclically blocked): fall back to the direct recipe. `_equippable_goal`
     # never reaches here recipe-less — its `if recipe:` guard filters that before
-    # calling in. `map_guard`'s GEAR_REVIEW branch makes no such guarantee:
-    # `find_upgrade_target` can surface a BANK-ONLY item via `_find_inventory_upgrade`
-    # (inventory OR bank, no recipe required — see that method's docstring), and the
-    # GEAR_REVIEW gate at `:335` checks `state.inventory` but not the bank, while
-    # `_materials_in_hand` requires `bool(recipe)` and so also fails. A bank-only
-    # recipe-less equippable (46 of the real ones have no recipe, e.g.
-    # `corrupted_skull`/`life_crystal`/`forest_ring`) therefore DOES reach this
-    # line with `recipe = {}`, returning `GatherMaterialsGoal(code, {})`. Not a
-    # soundness break: that goal's own `is_satisfied` short-circuits True for a
-    # target held in inventory OR bank when the target is not itself a key of
-    # `needed` (see `GatherMaterialsGoal.is_satisfied`'s docstring) — `needed={}`
-    # makes that always the case here, so it fires zero actions rather than a
-    # wrong one. Whether the bank-held item then actually gets withdrawn and
-    # equipped is a different goal's job, not this fallback's. Neither caller
-    # consults `is_plannable` to decide whether to call in.
+    # calling in, and it is the only caller (the GEAR_REVIEW guard branch, which
+    # could reach here with a bank-only recipe-less item, was deleted in Phase
+    # 4-3b).
     recipe = game_data.crafting_recipe(code) or {}
     return GatherMaterialsGoal(target_item=code, needed=dict(recipe))
 

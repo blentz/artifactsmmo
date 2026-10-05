@@ -1489,11 +1489,9 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         "Held-task triple, value WORKABLE: a pig task this loadout wins — "
         "the negative arm of the deficit check."),
     # D2 = UNWINNABLE, A GEAR CHAIN CLOSES IT. The greedy margin walk names
-    # `perfect_bow` unpriced and `earth_boost_potion` under the GEAR_REVIEW
-    # guard's `acquisition_actions` pricing — either way it names SOMETHING,
-    # which is the "I lost, so get gear" link, and the input that makes
-    # `strategy_driver`'s GEAR_REVIEW arm pick a MONSTER-AWARE target instead
-    # of falling through to the monster-blind value scan.
+    # `perfect_bow` unpriced and `earth_boost_potion` under acquisition
+    # pricing — either way it names SOMETHING, which is the "I lost, so get
+    # gear" link the walk's `WhichSlotClosesTheFight` follows.
     "l32_held_task_closable": _held_task_cell(
         "l32_held_task_closable", ("ogre", "monsters", 4, 10),
         "Held-task triple, value UNWINNABLE-CLOSABLE: an ogre task this "

@@ -486,7 +486,6 @@ rollover/accumulate split re-proved against the richer tuple. -/
 theorem descends_fight (s : State) (hlvl : s.level < 50)
     (hfire : productionLadder (perceptionRefresh s) = some .bankUnlock
         ∨ productionLadder (perceptionRefresh s) = some .reachUnlockLevel
-        ∨ productionLadder (perceptionRefresh s) = some .gearReview
         ∨ (productionLadder (perceptionRefresh s) = some .objectiveStep
             ∧ (perceptionRefresh s).objectiveStepIsFight = true)) :
     fMeasureLt (fMeasure (cycleStepF s)) (fMeasure s) := by
@@ -523,24 +522,5 @@ theorem descends_fight (s : State) (hlvl : s.level < 50)
     · simp only [fMeasure, hFl, hfl]
     · simp only [fMeasure, hFl, hfl, hFx, hfx]
       omega
-
-/-- `gearReview` (→ `.fight`) strictly descends at `levelDeficit`/`xpDeficit`.
-
-    WAVE 4 RE-WITNESS. This rung descended at `gearReviewFlag` (slot 10) because
-    its witness was `.optimizeLoadout`, whose application cleared the flag. That
-    witness was chosen because the guard mapped to `UpgradeEquipmentGoal`.
-    Increment 4.2b narrowed the guard to one arm mapping `HORIZON_LEVEL_UP` to
-    `ReachUnlockLevelGoal(level + 1)`, whose planner output is a FIGHT, so the
-    witness is now `.fight` and this is an instance of `descends_fight`.
-
-    The descent got STRONGER, not weaker: it now lands at slot 1/2 rather than
-    slot 10, and `gearReviewFlag` is merely unchanged (`.fight` does not touch
-    it), which lex-dominates from above. The `hlvl` hypothesis is what the fight
-    family needs and what the rollover case rests on; every caller already has
-    it in scope for the sibling rungs. -/
-theorem descends_gearReview (s : State) (hlvl : s.level < 50)
-    (hk : productionLadder (perceptionRefresh s) = some .gearReview) :
-    fMeasureLt (fMeasure (cycleStepF s)) (fMeasure s) := by
-  exact descends_fight s hlvl (Or.inr (Or.inr (Or.inl hk)))
 
 end Formal.Liveness.BlockerDescent

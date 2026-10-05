@@ -176,7 +176,7 @@ def test_no_commitment_yet_keeps_waiting_for_a_holder():
 
 def _cache(goal) -> PlanCache:
     return PlanCache(selected_goal=goal, plan=[MagicMock()], crafting_target=None,
-                     latch_active=False, goal_repr=repr(goal))
+                     plan_level=1, goal_repr=repr(goal))
 
 
 def test_an_ended_intention_drops_its_plan_here_and_in_the_store(tmp_path):
@@ -186,7 +186,7 @@ def test_an_ended_intention_drops_its_plan_here_and_in_the_store(tmp_path):
     player = _player(tmp_path)
     player._arbiter._committed_repr = repr(goal)
     player._plan_cache = _cache(goal)
-    player.history.save_plan_commitment(repr(goal), "{}", ["Fight(vampire)"], 0, None, False)
+    player.history.save_plan_commitment(repr(goal), "{}", ["Fight(vampire)"], 0, None, 5)
     _run(player, goal, BUDGET_CYCLES)
     assert player._plan_cache is None
     assert player.history.load_plan_commitment() is None

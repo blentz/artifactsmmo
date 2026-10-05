@@ -133,8 +133,7 @@ def _make_ctx(scn: Scenario) -> SelectionContext:
         initial_xp=0, task_exchange_min_coins=5,
         combat_monster=COMBAT_MONSTER if scn.combat_target_exists else None,
         target_gear=frozenset(), target_tools=frozenset(),
-        regear_level_up=False,
-    )
+        )
 
 
 def _production_answers(scn: Scenario) -> bool:

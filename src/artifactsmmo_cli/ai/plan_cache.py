@@ -18,7 +18,9 @@ class PlanCache:
     selected_goal: Goal
     plan: list[Action]
     crafting_target: str | None
-    latch_active: bool
+    plan_level: int
+    """The character level the plan was made at: a level-up re-decides
+    (`should_replan` trigger 4)."""
     goal_repr: str
     cursor: int = 0
     cycles_since_replan: int = 0

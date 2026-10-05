@@ -35,9 +35,10 @@ namespace Formal.DecideKey
 /-! ## Dispatcher inductives + total `repr` maps. -/
 
 /-- Mirror of `src/artifactsmmo_cli/ai/tiers/guards.py::GuardKind`. The trailing
-variants (`restForCombat`, `gearReview`, `recycleRelief`) are appended last so
-the oracle's index dispatch (and the diff test's `_GUARD_INDEX`) keeps the
-existing 0..7 positions stable. -/
+variants (`restForCombat`, `recycleRelief`) are appended last so the oracle's
+index dispatch (and the diff test's `_GUARD_INDEX`) keeps the existing 0..7
+positions stable. Index 8 was `gearReview`, retired in Phase 4-3b; it stays
+reserved. -/
 inductive GuardKind where
   | hpCritical
   | bankUnlock
@@ -47,7 +48,6 @@ inductive GuardKind where
   | depositFull
   | discardHigh
   | restForCombat
-  | gearReview
   | recycleRelief
   | sellRelief
   | craftPotions
@@ -110,7 +110,6 @@ def goalReprOfGuard : GuardKind → String
   | .reachUnlockLevel => "ReachUnlockLevel"
   | .craftRelief      => "CraftRelief"
   | .depositFull      => "DepositInventory"
-  | .gearReview       => "UpgradeEquipment"
   | .recycleRelief    => "RecycleSurplus"
   | .sellRelief       => "SellInventory"
   | .craftPotions     => "CraftPotions"

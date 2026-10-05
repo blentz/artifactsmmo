@@ -67,7 +67,7 @@ def _base_vector() -> list[int]:
     v[40] = 1          # objectiveStepIsFight
     # GEAR PRODUCTIVITY (slot 41). Supplied, not fabricated: since increment 4
     # `gearProgress` only advances the build when production observed that this
-    # `.gearReview` cycle actually did something. A vector leaving it 0 models a
+    # gear objective-step cycle actually did something. A vector leaving it 0 models a
     # cycle spent travelling or lost to an API failure -- and then the gap does
     # NOT close, which is the livelock the old unconditional decrement hid.
     v[41] = 1          # gearCycleProductive
@@ -173,12 +173,13 @@ def test_defer_window_outranks_gear_arming() -> None:
     v_total[39] = 4
     # taskProgress/taskTotal are not in the vector head; the D entry models
     # them via phase alone — pursueTask fires on the phase. If the gate does
-    # not hold the refresh arms the gear latch instead; both outcomes keep
-    # gearGap intact, which is the wiring property pinned here.
+    # not hold the refresh arms the gear objective step instead, and a
+    # productive gear step closes one unit of the gap; when the gap is intact
+    # the selected rung was not that gear step.
     (r,) = _run([v_total])
     assert r["gear_gap"] in (3, 4)
     if r["gear_gap"] == 4:
-        assert r["selected"] != "gearReview"
+        assert r["selected"] != "objectiveStep"
 
 
 def test_adequate_but_unarmed_does_not_fight() -> None:
@@ -206,7 +207,7 @@ def test_adequate_but_unarmed_does_not_fight() -> None:
 
 
 def test_unproductive_gear_cycle_does_not_close_the_gap() -> None:
-    """An unproductive `.gearReview` cycle moves nothing.
+    """An unproductive gear objective-step cycle moves nothing.
 
     Before increment 4 `gearProgress` decremented `gearGap` on EVERY gear cycle,
     granting that each one advances the build. The real arbiter can spend the

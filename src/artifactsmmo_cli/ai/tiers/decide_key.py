@@ -46,9 +46,6 @@ _GUARD_REPR: dict[GuardKind, str] = {
     GuardKind.CRAFT_RELIEF: "CraftRelief",
     GuardKind.RECYCLE_RELIEF: "RecycleSurplus",
     GuardKind.SELL_RELIEF: "SellInventory",
-    # GEAR_REVIEW maps to UpgradeEquipment or GatherMaterials depending on
-    # material availability — the static prefix covers exhaustiveness.
-    GuardKind.GEAR_REVIEW: "UpgradeEquipment",
     GuardKind.CRAFT_POTIONS: "CraftPotions",
     GuardKind.GE_CANCEL: "CancelOrders",
 }
@@ -73,7 +70,7 @@ _MEANS_REPR: dict[MeansKind, str] = {
     # CURRENCY_TURNIN maps to CurrencyTurnInGoal (buyer, `ctx.turn_in`) or
     # SurrenderCurrencyGoal (holder, `ctx.recall`) depending on state — the
     # static prefix below satisfies exhaustiveness (uniqueness across enum
-    # variants), same treatment as CRAFT_RELIEF/GEAR_REVIEW above.
+    # variants), same treatment as CRAFT_RELIEF above.
     MeansKind.CURRENCY_TURNIN: "CurrencyTurnIn",
 }
 

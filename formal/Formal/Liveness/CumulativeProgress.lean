@@ -643,12 +643,6 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | discardHigh =>
       show (applyActionKind .deleteItem s).level ≥ s.level
       simp [applyActionKind]
-    | gearReview =>
-      -- WAVE 4: witness is `.fight` (same goal class as `reachUnlockLevel`),
-      -- so this is that case's proof, not the flag one.
-      show (applyActionKind .fight s).level ≥ s.level
-      simp only [applyActionKind]
-      split <;> omega
     | craftPotions =>
       show (applyActionKind .craft s).level ≥ s.level
       simp [applyActionKind]
@@ -1143,12 +1137,11 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   | taskCancel      => exfalso; revert hmem; unfold progressMeans; decide
   | pursueTask      => exfalso; revert hmem; unfold progressMeans; decide
   | acceptTask      => exfalso; revert hmem; unfold progressMeans; decide
-  -- restForCombat / gearReview are guards OUT of `progressMeans` scope
+  -- restForCombat is a guard OUT of `progressMeans` scope
   -- (same as completeTask/lowYieldCancel/taskCancel above): no
   -- measure-decrease commitment is made for them here; their progress is
   -- carried by `CycleStep.cycleStep_progress_or_waits`.
   | restForCombat   => exfalso; revert hmem; unfold progressMeans; decide
-  | gearReview      => exfalso; revert hmem; unfold progressMeans; decide
   | craftPotions    => exfalso; revert hmem; unfold progressMeans; decide
 
 /-! ## Headline — strong form (restricted trajectory) — RETIRED (2026-06-29)

@@ -617,10 +617,9 @@ class IsAFightBlockingMe(Decision[MetaGoal]):
         letting the objective's own XP grind run IS the level-up being pursued.
 
     `ctx.combat_monster`, not a separate `winnable_alternative` parameter.
-    `player.py` computes `_winnable_farm_target()` ONCE and hands the same value
-    to the latch and to `_selection_context`, so this is the same fact today —
-    but as two parameters they could drift, and the sibling node
-    `IsThereACombatTarget` already reads `ctx`. One read.
+    `player.py` computes `_winnable_farm_target()` ONCE and hands it to
+    `_selection_context`; the sibling node `IsThereACombatTarget` already reads
+    `ctx`. One read.
 
     `has_craftable_upgrade_any_slot` is NOT re-tested here. In the latch it was
     the AND-guard that stopped the standing arm firing with nothing to build; in
@@ -657,7 +656,8 @@ class WhichSlotClosesTheFight(Decision[MetaGoal]):
     monster, per action spent.
 
     `combat_deficit.deficit_upgrade_target`, ABSORBED (wave 4). It was
-    `map_guard`'s GEAR_REVIEW branch, the only link the bot has between "I cannot
+    `map_guard`'s GEAR_REVIEW branch (that guard was deleted in Phase 4-3b), the
+    only link the bot had between "I cannot
     win this fight" and "build this". Its predecessor was a monster-BLIND
     `_best_by_value` scan that chose `iron_boots` — already worn, absent from all
     24 items that improved the pig margin — while the weapon that moved
