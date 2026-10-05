@@ -69,6 +69,7 @@ from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal, tasks_coin
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
+from artifactsmmo_cli.ai.intention_progress import demote_yielded
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner
@@ -774,7 +775,7 @@ class StrategyArbiter:
         nothing persisted, and the reason recorded under `mechanism` (a stall,
         or a spent budget). The next decision chooses afresh — from facts the
         abandoned attempt has since added (a lost fight is learned, a declined
-        walk is named, a spent budget yields its root)."""
+        walk is named, a spent budget yields its goal for one turn)."""
         self.events.note(mechanism, str(self._committed_repr), reason)
         self._committed_repr = None
         if self._history is not None:
@@ -928,8 +929,12 @@ class StrategyArbiter:
         ctx: SelectionContext,
         suppressed: frozenset[str] | set[str] = frozenset(),
         objective: CharacterObjective | None = None,
+        yielded: str | None = None,
     ) -> tuple[Goal | None, list[Action], list[dict[str, object]]]:
         """Select the first plannable goal from the ordered candidate list.
+
+        `yielded` is the goal whose intention spent its cycle budget and is
+        yielding its turn (`intention_progress.demote_yielded`), or None.
 
         decision must have a .chosen_step attribute (MetaGoal | None).
 
@@ -1025,6 +1030,9 @@ class StrategyArbiter:
             guard_kinds, collect_kinds, discretionary_kinds, step_goal,
             fallback_steps, fallback_roots, state, game_data, ctx, step_profile,
             chosen_root=chosen_root, needs=needs)
+        if any(c.repr_ == yielded for c in candidates):
+            self.events.note(Mechanism.INTENTION_YIELD, str(yielded), "demoted")
+        candidates = demote_yielded(candidates, yielded)
 
         worth_suppressed = self._worth_gate_suppressed(
             objective, chosen_root, discretionary_kinds, state, game_data, ctx,

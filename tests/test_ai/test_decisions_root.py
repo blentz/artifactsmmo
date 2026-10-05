@@ -766,8 +766,8 @@ def test_the_siblings_become_the_alternatives_then_the_trunk_then_the_orphans():
 def test_the_slot_walk_is_history_free():
     """The head is `_slot_order`'s first entry on every call: the walk holds
     no history. Rotation away from a stuck head is the intention's job (its
-    stall and budget end it, and a spent budget's yield declines the root for
-    one turn, Phase 4-2b), not the walk's."""
+    stall and budget end it, and a spent budget's goal yields one turn in the
+    arbiter, Phase 4-2b), not the walk's."""
     gd = _gd()
     state = make_state(level=15)
     heads = {repr(resolve_root(state, gd, _objective(gd), _ctx(), None).root)

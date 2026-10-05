@@ -116,15 +116,34 @@ def test_resume_without_a_store_or_an_intention_commits_to_nothing(tmp_path):
 def test_a_yield_round_trips_and_clears(tmp_path):
     store = _store(tmp_path)
     assert store.load_yield() is None
-    store.save_yield("ObtainItem(code='life_ring')", None)
-    store.save_yield("ObtainItem(code='life_ring')", "GrindCharacterXP(spider)")
+    store.save_yield("ReachSkill(weaponcrafting->21)", None)
+    store.save_yield("ReachSkill(weaponcrafting->21)", "GrindCharacterXP(spider)")
     row = store.load_yield()
-    assert (row.yielded_root, row.holder) == ("ObtainItem(code='life_ring')",
+    assert (row.yielded_goal, row.holder) == ("ReachSkill(weaponcrafting->21)",
                                               "GrindCharacterXP(spider)")
     store.save_yield(None, None)
     assert store.load_yield() is None
     store.save_yield(None, None)  # clearing nothing is a no-op
     assert store.load_yield() is None
+
+
+def test_a_root_named_yield_from_before_4_2b_iii_is_dropped_on_open(tmp_path):
+    """The 4-2b-i table named a ROOT; a root repr names no candidate, so the
+    migration clears the row and renames the column to what it now holds."""
+    path = str(tmp_path / "old.db")
+    engine = create_engine(f"sqlite:///{path}")
+    with engine.begin() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE intention_yield (character VARCHAR NOT NULL PRIMARY KEY, "
+            "yielded_root VARCHAR NOT NULL, holder VARCHAR)")
+        conn.exec_driver_sql(
+            "INSERT INTO intention_yield VALUES ('Robby', "
+            "'ReachSkillLevel(skill=''weaponcrafting'', level=21)', NULL)")
+    engine.dispose()
+    store = LearningStore(path, character="Robby")
+    assert store.load_yield() is None
+    store.save_yield("ReachSkill(weaponcrafting->21)", None)
+    assert store.load_yield().yielded_goal == "ReachSkill(weaponcrafting->21)"
 
 
 def test_a_db_error_on_yield_is_reported_or_reads_as_none(tmp_path, capsys):

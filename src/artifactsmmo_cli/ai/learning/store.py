@@ -225,6 +225,16 @@ class LearningStore:
                           for row in conn.exec_driver_sql("PRAGMA table_info(craft_yield)")}
             if yield_cols and "skill_level" not in yield_cols:
                 conn.exec_driver_sql("ALTER TABLE craft_yield ADD COLUMN skill_level INTEGER")
+            # Intention-yield migration (2026-10-05, Phase 4-2b-iii): the yield
+            # names the committed GOAL, not the walk's root. A row written
+            # before holds a root repr, which names no candidate, so it is
+            # dropped rather than carried: it would only miss one turn.
+            iy_cols = {row[1] for row in
+                       conn.exec_driver_sql("PRAGMA table_info(intention_yield)")}
+            if "yielded_root" in iy_cols:
+                conn.exec_driver_sql("DELETE FROM intention_yield")
+                conn.exec_driver_sql(
+                    "ALTER TABLE intention_yield RENAME COLUMN yielded_root TO yielded_goal")
 
         # PRAGMAs go on their OWN connection, after the lock is released:
             # Composite-index migration (2026-08-21). `create_all` adds missing
@@ -1517,21 +1527,21 @@ class LearningStore:
         except SQLAlchemyError:
             return None
 
-    def save_yield(self, yielded_root: str | None, holder: str | None) -> None:
+    def save_yield(self, yielded_goal: str | None, holder: str | None) -> None:
         """Record this character's active yield (Phase 4-2b); None clears it."""
         try:
             with SqlSession(self._engine) as s:
                 row = s.exec(
                     select(IntentionYield).where(IntentionYield.character == self._character)
                 ).first()
-                if yielded_root is None:
+                if yielded_goal is None:
                     if row is not None:
                         s.delete(row)
                 elif row is None:
                     s.add(IntentionYield(character=self._character,
-                                         yielded_root=yielded_root, holder=holder))
+                                         yielded_goal=yielded_goal, holder=holder))
                 else:
-                    row.yielded_root, row.holder = yielded_root, holder
+                    row.yielded_goal, row.holder = yielded_goal, holder
                     s.add(row)
                 s.commit()
         except SQLAlchemyError as e:

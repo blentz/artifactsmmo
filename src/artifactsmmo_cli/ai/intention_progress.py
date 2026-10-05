@@ -25,6 +25,9 @@ suppressed the grind for 5 cycles (93 suppressions in 7 days to 2026-10-04,
 66 of them HAL's vampire grind).
 """
 
+from dataclasses import replace
+
+from artifactsmmo_cli.ai.arbiter_select import BAND_FALLBACK_STEP, BAND_STEP, Candidate
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
@@ -38,9 +41,9 @@ failing, or a fight that never pays, does not."""
 BUDGET_CYCLES = 100
 """Committed cycles an intention may hold before goal choice re-ranks (Phase
 4-2b). Fairness, not liveness: progress does not reset it. On exhaustion the
-intention ends and its root YIELDS for one turn, so the next served root heads
-the walk; the exhausted root competes again after that. Replaces focus aging
-and the d'Hondt interleave."""
+intention ends and its goal YIELDS for one turn (`demote_yielded`), so the next
+candidate gets an intention; the exhausted goal competes again after that.
+Replaces focus aging and the d'Hondt interleave."""
 
 Measure = tuple[int, int]
 
@@ -62,3 +65,25 @@ def progressed(before: Measure | None, after: Measure | None, ok: bool) -> bool:
     if ok:
         return True
     return before is not None and after is not None and after > before
+
+
+def demote_yielded(candidates: list[Candidate], yielded: str | None) -> list[Candidate]:
+    """The candidate list with the yielded goal moved behind its peers (Phase
+    4-2b): every candidate whose repr is `yielded` goes to the END of its band,
+    and the objective step's band counts as the fallback chain's, so the next
+    step or fallback is tried first. Nothing is removed — when no peer can plan,
+    the yielded goal still runs, so the yield never empties the turn.
+
+    The yield names the committed GOAL, not the walk's root. A character at the
+    walk's wall (`CanIClearMyTier`) has no root, and its intention is a walk
+    ALTERNATIVE: witnessed 2026-10-05, R2D2 and HAL spent their budgets on a
+    skill climb, yielded nothing, and re-committed it the next cycle."""
+    if yielded is None:
+        return candidates
+    out = list(candidates)
+    for hit in [c for c in candidates if c.repr_ == yielded]:
+        band = BAND_FALLBACK_STEP if hit.band == BAND_STEP else hit.band
+        del out[next(i for i, c in enumerate(out) if c is hit)]
+        at = max((i + 1 for i, c in enumerate(out) if c.band <= band), default=0)
+        out.insert(at, replace(hit, band=band))
+    return out

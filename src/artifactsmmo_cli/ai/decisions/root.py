@@ -763,8 +763,8 @@ class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
     slots. Phase 4-2b replaced both with facts about the intention: a target
     that makes no progress ends as `stalled` (and a lost fight is learned, so
     the walk declines it), and one that spends its cycle budget YIELDS a turn
-    (`GamePlayer._step_decline` declines it `yielded:budget`), so the next
-    served target heads here.
+    (the arbiter tries its goal behind every peer,
+    `intention_progress.demote_yielded`), so the next candidate gets one.
 
     THE DEAD-TARGET DEMOTION IS A KEY, NOT A GATE. `dead_target_slots` is asked
     ONCE here and leads `_slot_order`, so a provably-dead target cannot head the

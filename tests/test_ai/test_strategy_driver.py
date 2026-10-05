@@ -14,7 +14,14 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
-from artifactsmmo_cli.ai.arbiter_select import Candidate, _precedes, select_pure
+from artifactsmmo_cli.ai.arbiter_select import (
+    BAND_FALLBACK_STEP,
+    BAND_STEP,
+    Candidate,
+    _precedes,
+    select_pure,
+)
+from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.cancel_orders import CancelOrdersGoal
@@ -1062,6 +1069,21 @@ def test_select_guard_preempts_means():
     goal, plan, _goals_tried = arbiter.select(decision, state, gd, actions, ctx)
     assert isinstance(goal, RestoreHPGoal), f"expected RestoreHPGoal, got {goal!r}"
     assert len(plan) >= 1
+
+
+def test_select_tries_the_yielded_goal_last_and_names_the_yield():
+    """Phase 4-2b: the goal whose intention spent its budget is moved behind
+    its peers before the arbitration, and the cycle says so."""
+    step = Candidate(goal=RestoreHPGoal(), is_means=True, repr_="Yielded", band=BAND_STEP)
+    peer = Candidate(goal=RestoreHPGoal(), is_means=True, repr_="Peer",
+                     band=BAND_FALLBACK_STEP)
+    arbiter = StrategyArbiter(GOAPPlanner(), history=None)
+    with (patch.object(arbiter, "_build_candidates", return_value=[step, peer]),
+          patch.object(arbiter, "_arbitrate", return_value=(None, [], None)) as arbitrate):
+        arbiter.select(_FakeDecision(chosen_step=None), make_state(), _make_planner_gd(),
+                       [], _ctx(), yielded="Yielded")
+    assert [c.repr_ for c in arbitrate.call_args.args[0]] == ["Peer", "Yielded"]
+    assert (Mechanism.INTENTION_YIELD, "Yielded", "demoted") in arbiter.events.drain()
 
 
 @dataclass(frozen=True)

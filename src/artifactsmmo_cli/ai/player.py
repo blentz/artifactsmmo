@@ -271,7 +271,7 @@ class GamePlayer:
         self._intention_stall = 0
         self._intention_cycles = 0
         self._intention_counted: str | None = None
-        # The root that spent its budget and yields one turn, and the
+        # The goal that spent its budget and yields one turn, and the
         # commitment holding that turn (Phase 4-2b, `_advance_yield`).
         self._yield: tuple[str, str | None] | None = None
         self._suppressed_goals: dict[str, int] = {}
@@ -649,6 +649,7 @@ class GamePlayer:
             decision, state, game_data, actions, ctx,
             suppressed=set(self._suppressed_goals),
             objective=self._objective,
+            yielded=self._yield[0] if self._yield is not None else None,
         )
         return selected_goal, plan, goals_tried
 
@@ -939,7 +940,8 @@ class GamePlayer:
             self._arbiter._committed_repr = committed
         selected_goal, plan, goals_tried = self._arbiter.select(
             decision, state, game_data, actions, ctx,
-            suppressed=set(self._suppressed_goals), objective=self._objective)
+            suppressed=set(self._suppressed_goals), objective=self._objective,
+            yielded=self._yield[0] if self._yield is not None else None)
         # For the chosen objective's recipe, report each monster-drop input's live
         # winnability — an unwinnable drop (e.g. chicken too strong) makes the gear
         # unbuildable, which is the difference between "hunts chickens" and "can't".
@@ -2277,7 +2279,7 @@ class GamePlayer:
         * a stall — `STALL_CYCLES` committed cycles without progress
           (`intention_progress.progressed`; progress resets this count);
         * a spent budget — `BUDGET_CYCLES` committed cycles, progress or not
-          (fairness: the intention's root then YIELDS one turn, `_yield`).
+          (fairness: the committed goal then YIELDS one turn, `_yield`).
 
         A new commitment starts its own counts, and moves the yield along: the
         first commitment after a budget ends holds the yield, and the yield
@@ -2299,8 +2301,7 @@ class GamePlayer:
                                             f"stalled:{self._intention_stall}")
             self._advance_yield(None)
         elif self._intention_cycles >= BUDGET_CYCLES:
-            root = self._last_decision.chosen_root if self._last_decision is not None else None
-            self._yield = (repr(root), None) if root is not None else None
+            self._yield = (committed, None)
             self._persist_yield()
             self._arbiter.abandon_intention(Mechanism.INTENTION_BUDGET,
                                             f"budget:{self._intention_cycles}")
@@ -2336,7 +2337,7 @@ class GamePlayer:
     def _resume_yield(self) -> None:
         """Adopt the yield a previous process persisted (Phase 4-2b)."""
         row = self.history.load_yield() if self.history is not None else None
-        self._yield = (row.yielded_root, row.holder) if row is not None else None
+        self._yield = (row.yielded_goal, row.holder) if row is not None else None
 
     def _record_cycle(self, record: CycleRecord) -> None:
         """Record one cycle for stuck detection AND track per-signal
@@ -2875,13 +2876,7 @@ class GamePlayer:
         a second model that refused goals the walk serves (live 2026-10-03:
         HAL's `GatherMaterials(hard_leather x5)`, which the walk plans as
         withdraw, fight cow, buy)."""
-        yielded = self._yield[0] if self._yield is not None else None
-
         def decline(root: MetaGoal) -> str | None:
-            if repr(root) == yielded:
-                # Its budget is spent: one turn for the next served root
-                # (Phase 4-2b).
-                return "yielded:budget"
             step = actionable_step(root, state, game_data, ctx) or root
             goal = objective_step_goal(step, state, game_data, ctx,
                                        root=root, history=self.history)

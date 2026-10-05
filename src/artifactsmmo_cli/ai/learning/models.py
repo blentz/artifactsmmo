@@ -629,13 +629,13 @@ class Intention(IntentionBase, table=True):
 
 
 class IntentionYieldBase(SQLModel):
-    """The root that spent its intention budget and yields for one turn
+    """The goal that spent its intention budget and yields for one turn
     (Phase 4-2b) — one row per character while a yield is active.
     `holder` is the commitment that took over, once one has; the yield clears
     when that commitment ends."""
 
     character: str = Field(primary_key=True)
-    yielded_root: str
+    yielded_goal: str
     holder: str | None = None
 
 

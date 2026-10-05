@@ -177,6 +177,7 @@ CURRENCY_BUY_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_bu
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
+INTENTION_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "intention_progress.py"
 LEVEL_SKILL_EXPAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grind_rung.py"
 GRIND_CYCLE_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "grind_cycle_census.py"
 PLAN_CACHE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "plan_cache.py"
@@ -4662,15 +4663,45 @@ INTENTION_BUDGET_MUTATIONS = [
     ("budget: the cycle budget is never spent",
      "        elif self._intention_cycles >= BUDGET_CYCLES:\n",
      "        elif False:\n"),
-    # The yield is recorded but the walk is never told: the spent root heads
-    # again on the very next cycle.
-    ("budget: the yielded root is not declined",
-     "            if repr(root) == yielded:\n",
-     "            if False:\n"),
-    # The holder ends but the yield stays: the yielded root is declined forever.
+    # The budget ends the intention but names no yield: the spent goal is
+    # re-chosen on the very next cycle (R2D2/HAL at the wall, 2026-10-05).
+    ("budget: a spent budget records no yield",
+     "            self._yield = (committed, None)\n",
+     "            self._yield = None\n"),
+    # The yield is kept but never handed to the arbiter.
+    ("budget: the player does not hand its yield to the arbiter",
+     "            yielded=self._yield[0] if self._yield is not None else None,\n",
+     "            yielded=None,\n"),
+    # The holder ends but the yield stays: the yielded goal is demoted forever.
     ("budget: the yield never clears after its holder ends",
      "        else:\n            self._yield = None\n        self._persist_yield()\n",
      "        else:\n            pass\n        self._persist_yield()\n"),
+]
+
+# The yield's ordering (`intention_progress.demote_yielded`, Phase 4-2b-iii).
+# Unit-killed by tests/test_ai/test_intention_budget.py.
+INTENTION_YIELD_MUTATIONS = [
+    # The yield is ignored: the spent goal keeps its place and wins again.
+    ("yield: the yielded goal keeps its place",
+     "    if yielded is None:\n        return candidates\n",
+     "    return candidates\n"),
+    # The objective step keeps its own band, so it still precedes every
+    # fallback: the step yields to nothing.
+    ("yield: the yielded step keeps the step band",
+     "        band = BAND_FALLBACK_STEP if hit.band == BAND_STEP else hit.band\n",
+     "        band = hit.band\n"),
+    # Moved to the FRONT instead of behind its peers.
+    ("yield: the yielded goal is moved to the front",
+     "        at = max((i + 1 for i, c in enumerate(out) if c.band <= band), default=0)\n",
+     "        at = 0\n"),
+]
+
+# The arbiter applies the yield before arbitration. Unit-killed by
+# tests/test_ai/test_strategy_driver.py.
+YIELD_WIRING_MUTATIONS = [
+    ("arbiter: the yield is never applied",
+     "        candidates = demote_yielded(candidates, yielded)\n",
+     "        candidates = demote_yielded(candidates, None)\n"),
 ]
 
 # _equippable_goal passive-currency gate (obtain_item_routing.py, moved from
@@ -8810,6 +8841,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_tiers_strategic_value.py", survivors)
     run_group(PLAYER_SRC, INTENTION_BUDGET_MUTATIONS,
               "tests/test_ai/test_intention_budget.py", survivors)
+    run_group(INTENTION_PROGRESS_SRC, INTENTION_YIELD_MUTATIONS,
+              "tests/test_ai/test_intention_budget.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, YIELD_WIRING_MUTATIONS,
+              "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(REQUIREMENT_GRAPH_MEMO_SRC, MEMO_ENRICH_MUTATIONS,
               "tests/test_ai/test_requirement_multiset_enrichment.py", survivors)
     run_group(MEANS_WORTH_SRC, MEANS_SERVES_MUTATIONS,

@@ -899,6 +899,11 @@ One record, `intention`, per character in the learning DB: the root and the step
   - Deleted from formal: the `falloff`/d'Hondt half of `ProgressionTree.lean` (7 manifest roles), and `Liveness/InterleaveNoStarvation.lean` (`interleaveDue_reaches`).
   - Mutants: 4 root aged-head, 5 tree falloff/d'Hondt and 2 focus-charge mutants retired; the LEAST-behind mutant re-anchored. New `INTENTION_BUDGET_MUTATIONS` (4, all killed by `test_intention_budget.py`) carries the anti-starvation duty. The synergy 1/9 mutant lost its killer (`test_synergy_range_inside_falloff`) and is now killed by an explicit `S_MIN == 1/3` pin.
   - `test_ring2_starvation_repro.py` rewritten: without a decline wolf_ears heads every cycle; with it yielded, the craftable ring heads.
+- **4-2b-iii built (2026-10-05): the yield names the committed GOAL, applied in the arbiter.** Witness of 4-2b-ii (restart 23:42Z): budget fired at exactly 100 cycles ×3; Lor yielded correctly, but R2D2 and HAL re-committed the same skill climb at once. Both sit at the walk's WALL (`CanIClearMyTier` → None, `root_group=none` all day): their intention is a walk ALTERNATIVE, the yield recorded `chosen_root` (None), so nothing yielded.
+  - Fix: `_yield = (committed goal repr, holder)`; `StrategyArbiter.select(..., yielded=)` runs `intention_progress.demote_yielded` over the candidates — the yielded goal goes to the end of its band, a step counting as the fallback band — and notes `intention_yield`. The walk-level `yielded:budget` decline is removed (one mechanism). A yield, not a ban: with no peer the goal still runs.
+  - Store: `intention_yield.yielded_root` renamed `yielded_goal`; pre-existing rows (root reprs) are dropped on open.
+  - Mutants: `INTENTION_YIELD_MUTATIONS` (3), `YIELD_WIRING_MUTATIONS` (1), budget group re-pointed (5); all 9 killed.
+  - Witness: `intention_yield` events after each `intention_budget`, and R2D2/HAL's next commitment differs from the yielded climb.
 
 **Increments:** 4-1a guard win keeps the commitment (arbiter + `ArbiterSelect` model); 4-1b the persisted `intention` record (replaces `_committed_repr` and `plan_commitment`); 4-2a progress measure + stall abandonment (replaces the goal-level ladder); 4-2b cycle budget + re-rank (replaces focus aging, RegearEdge); 4-3 deletions.
 

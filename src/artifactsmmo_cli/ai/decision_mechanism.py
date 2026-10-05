@@ -52,6 +52,9 @@ class Mechanism(StrEnum):
     # The intention ended because it spent its cycle budget, and its root
     # yields one turn (Phase 4-2b; detail: `budget:<cycles>`).
     INTENTION_BUDGET = "intention_budget"
+    # The budget-spent goal was moved behind its peers this cycle: its turn is
+    # yielded (subject: the goal repr; Phase 4-2b).
+    INTENTION_YIELD = "intention_yield"
     REPLAN = "replan"
     # Recovery by countdown (subject: signal, goal or action key).
     STUCK_SIGNAL = "stuck_signal"

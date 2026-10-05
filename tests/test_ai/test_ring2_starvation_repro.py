@@ -9,11 +9,11 @@ monster the character cannot beat) heads it on every cycle.
 The first fix aged the focused root down a fall-off curve and interleaved the
 slots with a d'Hondt scheduler. Phase 4-2b replaced both with facts about the
 intention: an intention that makes no progress ends `stalled`, and one that
-spends its cycle budget YIELDS its root for one turn
-(`GamePlayer._step_decline` declines it `yielded:budget`). The yield's own
-bookkeeping is unit-tested in `test_intention_budget.py`; this file drives the
-FULL decision path (`StrategyEngine.decide`) to show the walk hands the turn
-to the craftable ring when the stuck root is declined."""
+spends its cycle budget YIELDS its goal for one turn — the arbiter tries it
+behind every peer (`intention_progress.demote_yielded`, tested in
+`test_intention_budget.py`). This file pins the walk half of that answer: the
+walk keeps the craftable ring on offer as the stuck root's first alternative,
+which is what the yielded turn goes to."""
 
 from dataclasses import replace
 from pathlib import Path
@@ -24,7 +24,7 @@ from artifactsmmo_cli.ai.scenario import (
     ScenarioCharacter,
     scenario_state,
 )
-from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -110,31 +110,12 @@ _WOLF_EARS = ObtainItem(code="wolf_ears", quantity=1, slot="helmet_slot")
 _RING2 = ObtainItem(code="iron_ring", quantity=1, slot="ring2_slot")
 
 
-def _yield_of(stuck: MetaGoal):
-    """The walk's view of a spent budget: the yielded root is declined
-    `yielded:budget`, everything else is servable. The same answer
-    `GamePlayer._step_decline` gives for the yielded root; its other arm (the
-    decomposition question) is not what this file is about."""
-    return lambda root: "yielded:budget" if root == stuck else None
-
-
 def test_without_a_yield_the_stuck_drop_root_heads_every_cycle() -> None:
-    """The non-vacuity twin: with nothing declined the walk's slot order is
-    history-free, so wolf_ears heads on EVERY cycle and the ring waits behind
-    it. This is the starvation the yield answers."""
+    """The walk's slot order is history-free, so wolf_ears heads on EVERY
+    cycle — the starvation the budget answers — and the craftable ring is its
+    FIRST alternative, so a yielded turn goes to the ring."""
     state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
     engine = StrategyEngine(objective)
     picks = {engine.decide(state, gd).chosen_root for _ in range(30)}
     assert picks == {_WOLF_EARS}
-    assert _RING2 in engine.decide(state, gd).fallback_roots
-
-
-def test_a_yielded_stuck_root_hands_the_turn_to_the_craftable_second_ring() -> None:
-    """THE HEADLINE FIX. Once wolf_ears's intention spends its budget, the
-    walk declines it for one turn and the craftable ring heads instead, and
-    wolf_ears stays on offer as a fallback for the turn after."""
-    state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
-    decision = StrategyEngine(objective).decide(
-        state, gd, step_decline=_yield_of(_WOLF_EARS))
-    assert decision.chosen_root == _RING2
-    assert (repr(_WOLF_EARS), "yielded:budget") in decision.declined
+    assert engine.decide(state, gd).fallback_roots[0] == _RING2
