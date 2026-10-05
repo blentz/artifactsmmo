@@ -260,7 +260,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l32_held_task_workable | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_workable | ReachSkillLevel(skill='jewelrycrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_workable | ReachSkillLevel(skill='weaponcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l32_held_task_closable | ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot') | argmax | PASS | 20 | 20 | 20 | - | - | - | - | - |
+| l32_held_task_closable | ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot') | argmax | PASS | 29 | 29 | 29 | - | - | - | - | - |
 | l32_held_task_closable | ReachCharLevel(level=40) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_closable | ReachSkillLevel(skill='cooking', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_closable | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |

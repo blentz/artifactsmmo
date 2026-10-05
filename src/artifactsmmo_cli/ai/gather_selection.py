@@ -18,11 +18,19 @@ class GatherCandidate:
     distance: int      # Manhattan distance to nearest node (>= 0)
 
 
+def expected_gathers(rate: int, min_quantity: int, max_quantity: int) -> Fraction:
+    """Expected gathers to acquire one unit of a drop row: rate / average yield.
+    Exact rational (never float) so the proof is about the real ordering, not a
+    surrogate. Public because every price of a gather (`GatherAction.cost`, the
+    acquisition walk's GATHER route) charges THIS figure per unit: a planner
+    gather credits one unit, and a 1-in-20 secondary drop takes 20 real gathers
+    to deliver it."""
+    avg_quantity = Fraction(min_quantity + max_quantity, 2)
+    return Fraction(rate) / avg_quantity
+
+
 def _expected_gathers(c: GatherCandidate) -> Fraction:
-    """Expected gathers to acquire one unit: rate / average yield. Exact rational
-    (never float) so the proof is about the real ordering, not a surrogate."""
-    avg_quantity = Fraction(c.min_quantity + c.max_quantity, 2)
-    return Fraction(c.rate) / avg_quantity
+    return expected_gathers(c.rate, c.min_quantity, c.max_quantity)
 
 
 def _key(c: GatherCandidate) -> tuple[Fraction, int, str]:

@@ -16,7 +16,9 @@ decomposition every grind leg uses.
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from fractions import Fraction
 
+from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.consumable_supply import (
     HEAL_STOCK_FLOOR,
     craftable_heals,
@@ -45,11 +47,19 @@ def heal_prep_goal(state: WorldState, game_data: GameData,
     """The goal that stocks heals before a grind fight, or None when the stock
     is met or no craftable heal can be supplied in the batch.
 
-    The heal is the strongest craftable one whose batch the obtain model finds
-    feasible under `HEAL_PREP_POLICY` (no fights): the
-    strongest heal on skill alone is often unsuppliable (live C3P0: `apple_pie`
-    while holding milk for `cheese`), and a prep that cannot decompose would
-    never run.
+    Among the craftable heals whose batch the obtain model finds feasible under
+    `HEAL_PREP_POLICY` (no fights) — the strongest heal on skill alone is often
+    unsuppliable (live C3P0: `apple_pie` while holding milk for `cheese`), and a
+    prep that cannot decompose would never run — the heal is the one whose batch
+    costs the fewest actions per hp it restores (`acquisition_actions`, the
+    walk's price), the stronger heal on a tie.
+
+    PRICE, NOT STRENGTH (2026-10-05). The choice used to be the strongest
+    feasible heal. `apple_pie` (320 hp) is feasible wherever `ash_tree` grows,
+    but an apple drops 1 gather in 20 and a pie takes two: the fleet's grinds
+    spent 554 gathers on 25 apples in an afternoon, against `cheese` at 150 hp
+    for one banked milk bucket. Strength is what a heal is worth; the price is
+    what it costs, and the stock is for saving actions.
 
     The batch is the deficit to the stock target on top of the bag. A banked
     heal is withdrawn by the walk like any banked copy of its target (Phase
@@ -57,12 +67,19 @@ def heal_prep_goal(state: WorldState, game_data: GameData,
     deficit = heal_stock_target(HEAL_STOCK_FLOOR) - heal_stock(state, game_data)
     if deficit <= 0:
         return None
-    heals = craftable_heals(state, game_data)
-    if not heals:
-        return None
     model = ObtainModel(state, game_data, ctx, datetime.now(UTC))
-    for code in heals:
+    priced: list[tuple[Fraction, int, str]] = []
+    for code in craftable_heals(state, game_data):
         want = state.inventory.get(code, 0) + deficit
-        if model.feasible(code, want, HEAL_PREP_POLICY):
-            return GatherMaterialsGoal(target_item=code, needed={code: want})
-    return None
+        if not model.feasible(code, want, HEAL_PREP_POLICY):
+            continue
+        restore = game_data.hp_restore_of(code)
+        actions = acquisition_actions(code, want, state, game_data, ctx, equip=False,
+                                      gated_drop=False, policy=HEAL_PREP_POLICY)
+        priced.append((Fraction(actions, deficit * restore), -restore, code))
+    if not priced:
+        return None
+    # `min` keeps the FIRST of equal keys, and `craftable_heals` is strongest
+    # first — so a full tie falls to its order, never to the code's spelling.
+    code = min(priced, key=lambda row: row[:2])[2]
+    return GatherMaterialsGoal(target_item=code, needed={code: state.inventory.get(code, 0) + deficit})

@@ -385,6 +385,10 @@ open Formal.PriorityBand
 #print axioms Formal.GatherCost.gather_cost_one_is_base
 #print axioms Formal.GatherCost.gather_cost_loadout_parity
 #print axioms Formal.GatherCost.gather_cost_batch_parity
+#print axioms Formal.GatherCost.gather_cost_rated_one
+#print axioms Formal.GatherCost.gather_cost_rated_nonneg
+#print axioms Formal.GatherCost.gather_cost_rated_monotone
+#print axioms Formal.GatherCost.gather_cost_rated_monotone_rate
 #print axioms Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership
 #print axioms Formal.RealizableLoadout.apply_cur_ge_1
 #print axioms Formal.RealizableLoadout.ownership_counts_equipped

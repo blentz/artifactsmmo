@@ -48,6 +48,7 @@ import Formal.ProgressionReserve
 import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
+import Formal.GatherCost
 import Formal.ShoppingList
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
@@ -3401,3 +3402,27 @@ example : ∀ (bag bank : Nat) (owned : List Nat),
     Formal.InventoryKeep.destroyable bag bank owned ≥
       Formal.InventoryKeep.destroyable bag 0 owned :=
   @Formal.InventoryKeep.destroyable_counts_bank_copies
+
+/-! ### GatherCost rated contracts (a rare drop is priced per GATHER, not per unit). -/
+-- gather_cost_rated_one: a primary drop (perUnit = 1) is the unrated cost exactly.
+example : ∀ (base dist bankPenalty loadPenalty : Rat) (qty banked : Nat) (mismatch : Bool),
+    Formal.GatherCost.gatherCostRated base dist bankPenalty loadPenalty 1 qty banked mismatch
+      = Formal.GatherCost.gatherCost base dist bankPenalty loadPenalty qty banked mismatch :=
+  @Formal.GatherCost.gather_cost_rated_one
+-- gather_cost_rated_monotone_rate: a rarer drop is never cheaper (the apple bug).
+example : ∀ (base dist bankPenalty loadPenalty p₁ p₂ : Rat) (qty banked : Nat) (mismatch : Bool),
+    p₁ ≤ p₂ → 0 ≤ base → 0 ≤ dist → 0 ≤ loadPenalty →
+    Formal.GatherCost.gatherCostRated base dist bankPenalty loadPenalty p₁ qty banked mismatch
+      ≤ Formal.GatherCost.gatherCostRated base dist bankPenalty loadPenalty p₂ qty banked mismatch :=
+  @Formal.GatherCost.gather_cost_rated_monotone_rate
+-- gather_cost_rated_nonneg: A* edge non-negativity at any rate ≥ 0.
+example : ∀ (base dist bankPenalty loadPenalty perUnit : Rat) (qty banked : Nat) (mismatch : Bool),
+    0 ≤ base → 0 ≤ dist → 0 ≤ bankPenalty → 0 ≤ loadPenalty → 0 ≤ perUnit →
+    0 ≤ Formal.GatherCost.gatherCostRated base dist bankPenalty loadPenalty perUnit qty banked mismatch :=
+  @Formal.GatherCost.gather_cost_rated_nonneg
+-- gather_cost_rated_monotone: a bigger batch is never cheaper, at any rate ≥ 0.
+example : ∀ (base dist bankPenalty loadPenalty perUnit : Rat) (q₁ q₂ banked : Nat) (mismatch : Bool),
+    q₁ ≤ q₂ → 0 ≤ base → 0 ≤ dist → 0 ≤ bankPenalty → 0 ≤ loadPenalty → 0 ≤ perUnit →
+    Formal.GatherCost.gatherCostRated base dist bankPenalty loadPenalty perUnit q₁ banked mismatch
+      ≤ Formal.GatherCost.gatherCostRated base dist bankPenalty loadPenalty perUnit q₂ banked mismatch :=
+  @Formal.GatherCost.gather_cost_rated_monotone

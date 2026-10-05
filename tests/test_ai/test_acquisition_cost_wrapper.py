@@ -105,7 +105,33 @@ def test_gather_uses_the_resource_tile_as_its_venue(state, game_data) -> None:
                   Source(SourceKind.GATHER, "copper_rocks", 1, UNBOUNDED_CAPACITY),
                   state, game_data)
     assert opt.venue == "copper_rocks"
-    assert opt.yield_per == max(1, game_data.max_gather_yield)
+    assert (opt.actions_per_application, opt.yield_per) == (1, 1)
+
+
+def test_a_secondary_drop_costs_its_expected_gathers(state, game_data, monkeypatch) -> None:
+    """Live 2026-10-05: `apple` drops off `ash_tree` at 1 in 20, and priced at
+    one gather a unit the fleet spent 554 gathers on 25 apples. One application
+    is 20 gathers for 1 apple; the primary wood off the same tree stays 1 for 1."""
+    monkeypatch.setattr(game_data.recipes_catalog, "resource_drops_full", {
+        **game_data.recipes_catalog.resource_drops_full,
+        "ash_tree": [("ash_wood", 1, 1, 1), ("apple", 20, 1, 1)]})
+    apple = _priced("apple", Source(SourceKind.GATHER, "ash_tree", 1, UNBOUNDED_CAPACITY),
+                    state, game_data)
+    wood = _priced("ash_wood", Source(SourceKind.GATHER, "ash_tree", 1, UNBOUNDED_CAPACITY),
+                   state, game_data)
+    assert (apple.actions_per_application, apple.yield_per) == (20, 1)
+    assert (wood.actions_per_application, wood.yield_per) == (1, 1)
+
+
+def test_a_multi_unit_drop_is_priced_in_lowest_terms(state, game_data, monkeypatch) -> None:
+    """1 to 2 units a gather is 2/3 of a gather a unit: two gathers yield three,
+    exactly, rather than rounding the ratio to a whole action either way."""
+    monkeypatch.setattr(game_data.recipes_catalog, "resource_drops_full", {
+        **game_data.recipes_catalog.resource_drops_full,
+        "copper_rocks": [("copper_ore", 1, 1, 2)]})
+    opt = _priced("copper_ore", Source(SourceKind.GATHER, "copper_rocks", 1, UNBOUNDED_CAPACITY),
+                  state, game_data)
+    assert (opt.actions_per_application, opt.yield_per) == (2, 3)
 
 
 def _ctx_with_siblings(**skills):  # type: ignore[no-untyped-def]

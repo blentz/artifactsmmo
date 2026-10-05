@@ -151,6 +151,20 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
     return max(1, ceil(float(kills) * per_kill))
 
 
+def _gather_rate(item: str, resource: str, game_data: GameData) -> tuple[int, int]:
+    """`(actions, yield)` of one GATHER application: `actions` gathers deliver
+    `yield` units, the exact ratio `GameData.gathers_per_unit` (rate over average
+    quantity) in lowest terms.
+
+    A secondary drop is the case this exists for. `apple` drops off `ash_tree` at
+    1 in 20, so one application is 20 gathers for 1 apple; priced as one gather a
+    unit — which every GATHER route was, at `max_gather_yield` units an action —
+    an apple looked as cheap as the tree's wood (live 2026-10-05: 554 gathers for
+    25 apples). A primary drop is `(1, 1)`, its price unchanged."""
+    per_unit = game_data.gathers_per_unit(resource, item)
+    return per_unit.numerator, per_unit.denominator
+
+
 def _priced(item: str, source: Source, state: WorldState,
             game_data: GameData,
             store: LearningStore | None = None) -> RouteOption:
@@ -182,9 +196,10 @@ def _priced(item: str, source: Source, state: WorldState,
                            actions_per_application=1, yield_per=source.yield_per,
                            capacity=source.capacity, inputs=dict(recipe))
     if source.kind is SourceKind.GATHER:
+        actions, yield_per = _gather_rate(item, source.code, game_data)
         return RouteOption(kind=source.kind.value, venue=source.code,
-                           actions_per_application=1,
-                           yield_per=max(1, game_data.max_gather_yield),
+                           actions_per_application=actions,
+                           yield_per=yield_per,
                            capacity=source.capacity)
     if source.kind is SourceKind.SELL:
         npc_code, price = _sale_of(source.code, state, game_data)
@@ -371,9 +386,10 @@ def _gated_skill_option(item: str, state: WorldState, game_data: GameData,
         state.skills.get(skill, 1), state.skill_xp.get(skill, 0),
         max_xp, level, rate)
     if kind is SourceKind.GATHER:
+        actions, yield_per = _gather_rate(item, route.via, game_data)
         return RouteOption(
-            kind=kind.value, venue=route.via, actions_per_application=1,
-            yield_per=max(1, game_data.max_gather_yield), capacity=UNBOUNDED_CAPACITY,
+            kind=kind.value, venue=route.via, actions_per_application=actions,
+            yield_per=yield_per, capacity=UNBOUNDED_CAPACITY,
             unlock=f"skill:{skill}:{level}", unlock_actions=grind)
     return RouteOption(
         kind=SourceKind.CRAFT.value, venue=_workshop_venue(skill),

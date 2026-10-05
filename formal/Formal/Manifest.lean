@@ -478,6 +478,12 @@ open Formal.PriorityBand
 -- neutral below it. Use the first for anything the re-arm depends on.
 #check @Formal.GatherCost.gather_cost_loadout_parity -- unconditional term-by-term decomposition
 #check @Formal.GatherCost.gather_cost_batch_parity  -- full-cost: qty ≤ banked ⇒ qty × singleton
+-- Rated: travel + loadout charged per GATHER (qty × expected gathers per unit),
+-- so a 1-in-20 secondary drop costs 20 gathers a unit (the 2026-10-05 apple bug):
+#check @Formal.GatherCost.gather_cost_rated_one            -- perUnit = 1 is gatherCost exactly
+#check @Formal.GatherCost.gather_cost_rated_nonneg         -- non-negative at any rate ≥ 0
+#check @Formal.GatherCost.gather_cost_rated_monotone       -- monotone in qty at any rate ≥ 0
+#check @Formal.GatherCost.gather_cost_rated_monotone_rate  -- a rarer drop is never cheaper
 -- RealizableLoadout required roles (the multi-slot pick_loadout bug fix):
 #check @Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership -- contract: realizability ⇔ per-code demand ≤ ownership
 #check @Formal.RealizableLoadout.apply_cur_ge_1                        -- apply assert: realizable ⇒ cur ≥ 1 at every decrement

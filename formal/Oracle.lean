@@ -1866,13 +1866,17 @@ def runActionCostNonneg (args : Array Json) : Json :=
   Json.mkObj [("cost", Json.num (Int.ofNat cost)),
               ("nonneg", Json.bool true)]
 
-/-- Compute one gather_cost result using the proved `Formal.GatherCost.gatherCost`
+/-- Compute one gather_cost result using the proved `Formal.GatherCost.gatherCostRated`
 (the BATCHED `GatherAction.cost` static term). Args are the exact rationals
 `(base, dist, bankPenalty, loadPenalty)` as `(num, den)` pairs, then the two
 `Nat`s and the mismatch flag:
 
 `[baseNum, baseDen, distNum, distDen, bankPenNum, bankPenDen,
-  loadPenNum, loadPenDen, qty, banked, mismatch]`
+  loadPenNum, loadPenDen, qty, banked, mismatch, perUnitNum, perUnitDen]`
+
+`perUnit` is the expected gathers per unit of the drop
+(`gather_selection.expected_gathers`); the travel and loadout terms are charged
+on `qty * perUnit` gathers (`gatherCostRated`; `1` is `gatherCost` exactly).
 
 `mismatch` (0/1) is the `pick_loadout_cached` comparison in the shipped
 `cost`; when set, the loadout penalty is charged PER UNIT of the batch
@@ -1889,7 +1893,9 @@ def runGatherCost (args : Array Json) : Json :=
   let qty := (intArg args 8).toNat
   let banked := (intArg args 9).toNat
   let mismatch := (intArg args 10) != 0
-  let r := Formal.GatherCost.gatherCost base dist bankPenalty loadPenalty qty banked mismatch
+  let perUnit := ratArg args 11
+  let r := Formal.GatherCost.gatherCostRated base dist bankPenalty loadPenalty perUnit qty banked
+    mismatch
   Json.mkObj [("cost_num", Json.num r.num),
               ("cost_den", Json.num (Int.ofNat r.den))]
 

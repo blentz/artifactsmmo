@@ -2968,6 +2968,13 @@ GATED_GATHER_MUTATIONS = [
     ("acquisition_cost: no gated gather route",
      "        for kind in (SourceKind.CRAFT, SourceKind.GATHER):",
      "        for kind in (SourceKind.CRAFT,):"),
+    # The apple bug (2026-10-05): a secondary drop priced at one gather a unit.
+    ("acquisition_cost: a GATHER route ignores its drop rate (one gather a unit)",
+     "    return per_unit.numerator, per_unit.denominator",
+     "    return 1, 1"),
+    ("acquisition_cost: a GATHER route's ratio inverted (yield per action as actions)",
+     "    return per_unit.numerator, per_unit.denominator",
+     "    return per_unit.denominator, per_unit.numerator"),
 ]
 # The grind ranks under its own pricing policy. Killed by
 # tests/test_ai/scenarios/test_fisher_cooking_rung.py.
@@ -3161,6 +3168,13 @@ POTION_DECOMPOSE_POLICY_MUTATIONS = [
      "    legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False)"),
 ]
 GRIND_HEAL_PREP_POLICY_MUTATIONS = [
+    # The apple bug (2026-10-05): the strongest feasible heal, whatever its price.
+    ("grind_heal_prep: the strongest feasible heal wins again (price ignored)",
+     "    code = min(priced, key=lambda row: row[:2])[2]",
+     "    code = priced[0][2]"),
+    ("grind_heal_prep: the heal priced per unit, not per hp",
+     "        priced.append((Fraction(actions, deficit * restore), -restore, code))",
+     "        priced.append((Fraction(actions, deficit), -restore, code))"),
     ("grind_heal_prep: the heal prep counts drops as supply",
      "HEAL_PREP_POLICY: Policy = replace(DECOMPOSE_POLICY, drop_routes=False)",
      "HEAL_PREP_POLICY: Policy = DECOMPOSE_POLICY"),
@@ -4207,15 +4221,22 @@ GATHER_REARM_MUTATIONS = [
 # is where the formula (not the plan shape) is the unit under test.
 GATHER_LOADOUT_SCALING_MUTATIONS = [
     ("gather cost: loadout penalty once per action, not per unit (kills the re-arm)",
-     "                static += GATHER_LOADOUT_PENALTY * self.quantity",
-     "                static += GATHER_LOADOUT_PENALTY"),
+     "                static += Fraction(GATHER_LOADOUT_PENALTY) * gathers",
+     "                static += Fraction(GATHER_LOADOUT_PENALTY)"),
     # `pass`, not deletion: the statement is the whole body of an `if`, so
     # removing it leaves an empty block and the mutant dies of IndentationError
     # at COLLECTION — a pytest rc=2 harness error, which this runner correctly
     # refuses to score as a kill.
     ("gather cost: drop the loadout penalty entirely (re-arm never pays)",
-     "                static += GATHER_LOADOUT_PENALTY * self.quantity",
+     "                static += Fraction(GATHER_LOADOUT_PENALTY) * gathers",
      "                pass"),
+    # THE APPLE BUG (2026-10-05): a secondary drop priced at one gather a unit.
+    # `Gather(ash_tree->apple)` (rate 20) looked as cheap as `ash_wood`, and the
+    # fleet spent 554 gathers on 25 apples. Killed by the rated pins against
+    # `Formal.GatherCost.gatherCostRated`.
+    ("gather cost: a secondary drop priced at one gather per unit (the apple bug)",
+     "        gathers = self.quantity * game_data.gathers_per_unit(self.resource_code, drop_item)",
+     "        gathers = Fraction(self.quantity)"),
 ]
 
 # THE OWNERSHIP BOUND ON A RECYCLE (whole-branch review, CRITICAL 1). The licence
@@ -5540,15 +5561,15 @@ GATHER_SELECTION_MUTATIONS = [
     # ignoring min/max quantity. A high-yield high-rate source then loses to a
     # low-yield low-rate one — the avg-quantity cases in the diff fire.
     ("gather_selection: drop avg_quantity divisor (metric = rate only)",
-     "    avg_quantity = Fraction(c.min_quantity + c.max_quantity, 2)\n"
-     "    return Fraction(c.rate) / avg_quantity",
-     "    avg_quantity = Fraction(c.min_quantity + c.max_quantity, 2)\n"
-     "    return Fraction(c.rate)"),
+     "    avg_quantity = Fraction(min_quantity + max_quantity, 2)\n"
+     "    return Fraction(rate) / avg_quantity",
+     "    avg_quantity = Fraction(min_quantity + max_quantity, 2)\n"
+     "    return Fraction(rate)"),
     # avg_quantity uses `*` instead of `+`: wrong average (min*max not min+max),
     # so the expected-gathers ordering changes whenever min != max.
     ("gather_selection: avg_quantity + -> * (wrong average)",
-     "    avg_quantity = Fraction(c.min_quantity + c.max_quantity, 2)",
-     "    avg_quantity = Fraction(c.min_quantity * c.max_quantity, 2)"),
+     "    avg_quantity = Fraction(min_quantity + max_quantity, 2)",
+     "    avg_quantity = Fraction(min_quantity * max_quantity, 2)"),
     # Argmin -> argmax: pick the WORST (most expensive) source. Any list with two
     # distinct keys diverges from the Lean lex-min.
     ("gather_selection: min -> max (argmin becomes argmax)",

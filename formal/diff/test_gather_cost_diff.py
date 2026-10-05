@@ -91,11 +91,12 @@ def _state(x: int, y: int, banked: int) -> WorldState:
     )
 
 
-def _lean_gather_cost(dist: int, qty: int, banked: int, mismatch: bool) -> Fraction:
+def _lean_gather_cost(dist: int, qty: int, banked: int, mismatch: bool,
+                      per_unit: Fraction = Fraction(1)) -> Fraction:
     args = [_BASE.numerator, _BASE.denominator, dist, 1,
             _PENALTY.numerator, _PENALTY.denominator,
             _LOAD_PENALTY.numerator, _LOAD_PENALTY.denominator,
-            qty, banked, 1 if mismatch else 0]
+            qty, banked, 1 if mismatch else 0, per_unit.numerator, per_unit.denominator]
     res = run_oracle("gather_cost", [args])[0]
     return Fraction(res["cost_num"], res["cost_den"])
 
@@ -364,3 +365,78 @@ def test_negative_inputs_are_unreachable_by_construction(qty, banked, dist):
     qty=banked=dist point) still agrees, not a claim the negative corner is
     reachable."""
     assert _check(dist, qty, banked) >= 0.0
+
+
+# ─── Rated: a secondary drop is priced per GATHER (`gatherCostRated`) ─────────
+# Live 2026-10-05: `Gather(ash_tree->apple)` was priced at one gather per apple,
+# and the fleet spent 554 gathers on 25 apples (rate 20). The batch is `qty`
+# units but `qty * expected_gathers` server gathers.
+
+_RATED_RESOURCE = "rated_tree"
+
+
+def _rated_game_data(rate: int, mn: int, mx: int) -> GameData:
+    """A resource whose drop table carries `_DROP_ITEM` at `rate` (1 in `rate`
+    gathers), `mn..mx` per drop, and no gather skill (no loadout branch)."""
+    gd = GameData()
+    gd.recipes_catalog.resource_drops_full = {_RATED_RESOURCE: [(_DROP_ITEM, rate, mn, mx)]}
+    return gd
+
+
+def _check_rated(dist: int, qty: int, banked: int, rate: int, mn: int, mx: int) -> float:
+    gd = _rated_game_data(rate, mn, mx)
+    per_unit = gd.gathers_per_unit(_RATED_RESOURCE, _DROP_ITEM)
+    assert per_unit == Fraction(2 * rate, mn + mx), "fixture is vacuous: the row was not read"
+    action = GatherAction(resource_code=_RATED_RESOURCE, quantity=qty,
+                          locations=frozenset({(dist, 0)}),
+                          drop_item_override=_DROP_ITEM)
+    py_cost = action.cost(_state(0, 0, banked), gd, history=None)
+    lean_cost = _lean_gather_cost(dist, qty, banked, mismatch=False, per_unit=per_unit)
+    # The shipped cost is exact `Fraction` arithmetic rounded ONCE, so it is the
+    # float nearest the proved rational, bit for bit.
+    assert py_cost == float(lean_cost), (dist, qty, banked, rate, mn, mx, py_cost, lean_cost)
+    return py_cost
+
+
+@settings(max_examples=300, deadline=None)
+@given(
+    dist=st.integers(min_value=0, max_value=200),
+    qty=st.integers(min_value=0, max_value=100),
+    banked=st.integers(min_value=0, max_value=100),
+    rate=st.integers(min_value=1, max_value=1000),
+    mn=st.integers(min_value=1, max_value=5),
+    extra=st.integers(min_value=0, max_value=5),
+)
+def test_rated_gather_cost_matches_lean(dist, qty, banked, rate, mn, extra):
+    _check_rated(dist, qty, banked, rate, mn, mn + extra)
+
+
+def test_apple_is_priced_at_twenty_gathers_a_unit():
+    """The live configuration: `apple` off `ash_tree`, rate 20, one per drop.
+    Two apples are forty gathers of travel, not two."""
+    assert _check_rated(dist=3, qty=2, banked=0, rate=20, mn=1, mx=1) == (6.0 + 3) * 2 * 20
+
+
+def test_a_primary_drop_is_priced_as_before():
+    """`gather_cost_rated_one`: rate 1, one per gather is the unrated cost."""
+    assert _check_rated(dist=4, qty=5, banked=2, rate=1, mn=1, mx=1) == (6.0 + 4) * 5 + 2 * 100.0
+
+
+def test_a_fractional_rate_is_exact():
+    """Rate 1, 1..2 per gather: 2/3 of a gather per unit, so the travel term is
+    a non-dyadic rational the float cost must still round to exactly."""
+    assert _check_rated(dist=1, qty=1, banked=0, rate=1, mn=1, mx=2) == float(Fraction(7 * 2, 3))
+
+
+@settings(max_examples=200, deadline=None)
+@given(
+    dist=st.integers(min_value=0, max_value=100),
+    qty=st.integers(min_value=0, max_value=50),
+    banked=st.integers(min_value=0, max_value=50),
+    r1=st.integers(min_value=1, max_value=500),
+    extra=st.integers(min_value=0, max_value=500),
+)
+def test_rarer_is_never_cheaper(dist, qty, banked, r1, extra):
+    """Runtime mirror of `gather_cost_rated_monotone_rate`."""
+    assert (_check_rated(dist, qty, banked, r1, 1, 1)
+            <= _check_rated(dist, qty, banked, r1 + extra, 1, 1))

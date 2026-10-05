@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 from artifactsmmo_cli.ai import craft_plan_gen
+from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -95,6 +96,55 @@ class TestHealPrepGoal:
         assert isinstance(goal, GatherMaterialsGoal)
         assert list(goal.needed) == ["cheese"]
         goal = heal_prep_goal(_state(gd, {"milk": 10, "apple": 10}), gd, NO_PROFILE_CONTEXT)
+        assert isinstance(goal, GatherMaterialsGoal)
+        assert list(goal.needed) == ["pie"]
+
+    def test_a_heal_built_from_a_rare_drop_loses_to_a_cheap_one(self):
+        """Live 2026-10-05: `apple_pie` (320 hp) won as the strongest feasible
+        heal, and its apples drop 1 gather in 20 — 554 gathers bought 25 apples.
+        Priced per hp it loses to `cheese` (150 hp) off milk already in the bag;
+        with the apples on hand it wins back, because then the pie is cheaper."""
+        gd = _gd()
+        gd._item_stats["pie"] = ItemStats(code="pie", level=1, type_="consumable",
+                                          hp_restore=320, crafting_skill="cooking",
+                                          crafting_level=1)
+        gd._item_stats["apple"] = ItemStats(code="apple", level=1, type_="resource")
+        gd._item_stats["ash_wood"] = ItemStats(code="ash_wood", level=1, type_="resource")
+        gd._crafting_recipes["pie"] = {"apple": 2}
+        gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd.recipes_catalog.resource_drops_full = {
+            "ash_tree": [("ash_wood", 1, 1, 1), ("apple", 20, 1, 1)]}
+        gd._resource_locations = {"ash_tree": [(0, 1)]}
+        state = _state(gd, {"milk": 10})
+        model = ObtainModel(state, gd, NO_PROFILE_CONTEXT, datetime.now(UTC))
+        assert model.feasible("pie", HEAL_STOCK_FLOOR, HEAL_PREP_POLICY), (
+            "fixture is vacuous: the pie must be suppliable, or price never decides")
+        goal = heal_prep_goal(state, gd, NO_PROFILE_CONTEXT)
+        assert isinstance(goal, GatherMaterialsGoal)
+        assert list(goal.needed) == ["cheese"]
+        goal = heal_prep_goal(_state(gd, {"milk": 10, "apple": 20}), gd, NO_PROFILE_CONTEXT)
+        assert isinstance(goal, GatherMaterialsGoal)
+        assert list(goal.needed) == ["pie"]
+
+    def test_the_price_is_per_hp_not_per_heal(self):
+        """Eight apples in the bag and two banked: the pie batch costs 9 actions
+        to cheese's 6 — dearer per HEAL — but restores 320 hp to cheese's 150,
+        so it is cheaper per hp, and hp is what the stock is for."""
+        gd = _gd()
+        gd._item_stats["pie"] = ItemStats(code="pie", level=1, type_="consumable",
+                                          hp_restore=320, crafting_skill="cooking",
+                                          crafting_level=1)
+        gd._item_stats["apple"] = ItemStats(code="apple", level=1, type_="resource")
+        gd._crafting_recipes["pie"] = {"apple": 2}
+        gd._bank_location = (5, 5)
+        state = _state(gd, {"milk": 10, "apple": 8}, bank={"apple": 2})
+        price = {code: acquisition_actions(code, HEAL_STOCK_FLOOR, state, gd, NO_PROFILE_CONTEXT,
+                                           equip=False, gated_drop=False, policy=HEAL_PREP_POLICY)
+                 for code in ("pie", "cheese")}
+        assert price["pie"] > price["cheese"], (
+            f"fixture is vacuous: per-heal and per-hp must disagree, got {price}")
+        assert price["pie"] * 150 < price["cheese"] * 320, price
+        goal = heal_prep_goal(state, gd, NO_PROFILE_CONTEXT)
         assert isinstance(goal, GatherMaterialsGoal)
         assert list(goal.needed) == ["pie"]
 

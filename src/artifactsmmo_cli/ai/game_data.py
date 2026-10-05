@@ -12,6 +12,7 @@ import time
 from collections.abc import Callable, Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
+from fractions import Fraction
 from functools import cached_property
 from typing import Any, TypedDict
 
@@ -51,6 +52,7 @@ from artifactsmmo_api_client.types import Unset
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.game_data_cache import GameDataCache
 from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
+from artifactsmmo_cli.ai.gather_selection import expected_gathers
 from artifactsmmo_cli.ai.ge_order_index import index_best_ge_orders
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS, stats_is_combat_bearing
 from artifactsmmo_cli.ai.gear_taxonomy_core import (
@@ -838,6 +840,19 @@ class GameData:
     def resource_drop_table(self, code: str) -> list[tuple[str, int, int, int]]:
         """Full (item, rate, min_q, max_q) drop rows for a resource; [] if unknown."""
         return self.recipes_catalog.resource_drop_table(code)
+
+    def gathers_per_unit(self, resource: str, item: str) -> Fraction:
+        """Expected gathers of `resource` to obtain ONE `item`
+        (`gather_selection.expected_gathers` over its drop row): 1 for a primary
+        drop, 20 for `apple` off `ash_tree` (rate 20).
+
+        A resource known only from the primary-drop map has no drop-table row;
+        it is a sure drop, rated 1 — the same convention
+        `ObtainModel._ranked_gathers` and `_gather` apply to such a resource."""
+        row = next((r for r in self.resource_drop_table(resource) if r[0] == item), None)
+        if row is None:
+            return Fraction(1)
+        return expected_gathers(row[1], row[2], row[3])
 
     MAX_CHARACTER_LEVEL = 50
     """Documented character level cap.

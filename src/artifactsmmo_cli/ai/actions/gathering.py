@@ -2,6 +2,7 @@
 
 import dataclasses
 from dataclasses import dataclass, field
+from fractions import Fraction
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
@@ -201,7 +202,18 @@ class GatherAction(Action):
              history: LearningStore | None = None) -> float:
         dest = nearest_or_error(state.x, state.y, self.locations, "gather")
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
-        static = (6.0 + dist) * self.quantity
+        # The batch is `quantity` UNITS but `gathers` SERVER GATHERS: the planner
+        # credits one unit per sim-gather, while a secondary drop arrives once in
+        # `rate` gathers (`apple` off `ash_tree`: 1 in 20). Every per-gather term
+        # (travel, wrong tool, learned cooldown) is charged per gather, so a rare
+        # drop is priced at what it takes to deliver it. Live 2026-10-05: priced at
+        # one gather per apple, the fleet spent 554 gathers on 25 apples. Exact
+        # `Fraction` arithmetic, rounded once at the end — the proved model is
+        # `Formal.GatherCost.gatherCostRated`, and a primary drop (1 per gather)
+        # reduces to `gatherCost` exactly (`gather_cost_rated_one`).
+        drop_item = self.drop_item(game_data)
+        gathers = self.quantity * game_data.gathers_per_unit(self.resource_code, drop_item)
+        static = (6 + dist) * gathers
         # Penalize re-gathering a material the bank already holds, so the
         # planner withdraws banked stock before re-gathering it (see
         # _BANKED_REGATHER_PENALTY). The penalty applies per banked unit's
@@ -210,9 +222,8 @@ class GatherAction(Action):
         # exhausted (or the batch outgrows it), the remaining deficit gathers
         # carry no penalty, preserving optimal handling of the unavoidable
         # shortfall.
-        drop_item = self.drop_item(game_data)
         banked = (state.bank_items or {}).get(drop_item, 0)
-        static += min(banked, self.quantity) * self._BANKED_REGATHER_PENALTY
+        static += min(banked, self.quantity) * Fraction(self._BANKED_REGATHER_PENALTY)
         # Penalize gathering with a suboptimal tool, mirroring LOADOUT_PENALTY in
         # FightAction.cost: add GATHER_LOADOUT_PENALTY when pick_loadout(Gather)
         # differs from the current equipment in any slot, so the planner sequences
@@ -231,19 +242,20 @@ class GatherAction(Action):
             skill, _ = skill_req
             optimal = pick_loadout_cached(Gather(skill), state, game_data)
             if any(state.equipment.get(slot) != code for slot, code in optimal.items()):
-                static += GATHER_LOADOUT_PENALTY * self.quantity
+                static += Fraction(GATHER_LOADOUT_PENALTY) * gathers
         if history is None:
-            return learned_cost_pure(static, 0.0, 1.0, has_history=False)
-        # `default` must be a PER-UNIT figure (matched against `learned`,
-        # which is per-unit and then scaled by quantity below): under 5
-        # samples `action_cost` falls back to this default, so it must carry
-        # the same banked/loadout penalties `static` does, not just the bare
-        # `6.0 + dist`, or a low-sample quantity=1 gather would diverge from
-        # the pre-batching cost the moment it picked up any history at all.
-        learned = history.action_cost(self.learning_key(), default=(static / self.quantity),
-                                      window=50) * self.quantity
+            return learned_cost_pure(float(static), 0.0, 1.0, has_history=False)
+        # `default` must be a PER-GATHER figure (matched against `learned`,
+        # which is the recorded cost of one server gather and is then scaled by
+        # the batch's gathers below): under 5 samples `action_cost` falls back to
+        # this default, so it must carry the same banked/loadout penalties
+        # `static` does, not just the bare `6.0 + dist`, or a low-sample
+        # quantity=1 gather would diverge from the pre-batching cost the moment
+        # it picked up any history at all.
+        learned = history.action_cost(self.learning_key(), default=float(static / gathers),
+                                      window=50) * float(gathers)
         rate = history.success_rate(self.learning_key(), window=50)
-        return learned_cost_pure(static, learned, rate, has_history=True)
+        return learned_cost_pure(float(static), learned, rate, has_history=True)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         dest = nearest_or_error(state.x, state.y, self.locations, "gather")
