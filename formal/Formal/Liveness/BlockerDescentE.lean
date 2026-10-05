@@ -1080,11 +1080,10 @@ private def gearScanPrefix : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
-   .discardHigh, .craftPotions, .sellPressured, .claimPending, .completeTask,
+   .discardHigh, .craftPotions, .sellPressured, .claimPending, .bankExpand,
+   .completeTask,
    .lowYieldCancel, .taskCancel,
-   .supplyBank, .currencyTurnIn, .acceptTask,
-   -- 2026-09-13: BANK_EXPAND promoted, LAST in the collect group.
-   .bankExpand]
+   .supplyBank, .currencyTurnIn, .acceptTask]
 
 private theorem blockerPrefix_split :
     Formal.Liveness.UnconditionalDescent.blockerPrefix

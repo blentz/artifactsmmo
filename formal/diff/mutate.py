@@ -4726,7 +4726,10 @@ SELL_PRESSURED_INTERRUPT_MUTATIONS = [
 # tests/test_ai/test_strategy_driver.py.
 INTERRUPT_MEANS_MUTATIONS = [
     ("means: CLAIM_PENDING is no longer an interrupt",
-     "    MeansKind.CLAIM_PENDING,\n})\n",
+     "    MeansKind.CLAIM_PENDING,\n    MeansKind.BANK_EXPAND,\n})\n",
+     "    MeansKind.BANK_EXPAND,\n})\n"),
+    ("means: BANK_EXPAND is no longer an interrupt (Phase 5-2c-ii)",
+     "    MeansKind.BANK_EXPAND,\n})\n",
      "})\n"),
 ]
 

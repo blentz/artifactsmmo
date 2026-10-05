@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import (
     COLLECT_REWARD_ORDER,
     DISCRETIONARY_ORDER,
+    INTERRUPT_MEANS,
     SUPPLY_DEMAND_MIN,
     MeansKind,
     active_means,
@@ -972,12 +973,15 @@ def test_bank_expand_is_a_collect_rung_not_a_discretionary_one():
     assert MeansKind.BANK_EXPAND not in discretionary
 
 
-def test_bank_expand_is_last_in_the_collect_band():
-    """Position, not just membership. A one-action purchase must not preempt a
-    resolved turn-in election, a sibling's supply request, or a task booking —
-    the same argument ACCEPT_TASK, SUPPLY_BANK and CURRENCY_TURNIN each make for
-    their own slots. So it goes last, immediately above the objective step."""
-    assert COLLECT_REWARD_ORDER[-1] is MeansKind.BANK_EXPAND
+def test_bank_expand_is_an_interrupt_after_the_claim():
+    """Phase 5-2c-ii: buying a bank slot keeps the deposit sink open, a
+    precondition of continuing, so BANK_EXPAND is an interrupt. Position, not
+    just membership: it closes the interrupt group, right after CLAIM_PENDING,
+    so the collect means (task bookings, supply, turn-in) all follow it."""
+    assert MeansKind.BANK_EXPAND in INTERRUPT_MEANS
+    order = list(COLLECT_REWARD_ORDER)
+    assert order.index(MeansKind.BANK_EXPAND) == order.index(MeansKind.CLAIM_PENDING) + 1
+    assert all(m in INTERRUPT_MEANS for m in order[:order.index(MeansKind.BANK_EXPAND) + 1])
 
 
 def test_bank_expand_fires_at_the_three_quarter_fill_mark():

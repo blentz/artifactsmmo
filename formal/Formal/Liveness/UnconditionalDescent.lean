@@ -55,12 +55,10 @@ def blockerPrefix : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
-   .discardHigh, .craftPotions, .sellPressured, .claimPending, .completeTask,
+   .discardHigh, .craftPotions, .sellPressured, .claimPending, .bankExpand,
+   .completeTask,
    .lowYieldCancel, .taskCancel,
    .supplyBank, .currencyTurnIn, .acceptTask,
-   -- 2026-09-13: BANK_EXPAND joined the collect group, LAST, so it is part of
-   -- the prefix `.objectiveStep` terminates rather than part of the tail.
-   .bankExpand,
    .objectiveStep]
 
 /-- The discretionary tail — everything after `.objectiveStep`. -/

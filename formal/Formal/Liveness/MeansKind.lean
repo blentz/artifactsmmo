@@ -175,7 +175,13 @@ def allInLadderOrder : List MeansKind :=
    -- pressure threshold is a precondition of continuing — so it closes the
    -- interrupt prefix, ahead of the collect rungs.
    .sellPressured,
-   .claimPending, .completeTask, .lowYieldCancel, .taskCancel,
+   .claimPending,
+   -- 2026-10-05 (Phase 5-2c-ii): BANK_EXPAND is an INTERRUPT — it keeps the
+   -- deposit sink open — so it closes the interrupt prefix. (It was the last
+   -- collect rung from its 2026-09-13 promotion out of the discretionary group,
+   -- where it fired against a 50/50 bank and was selected zero times.)
+   .bankExpand,
+   .completeTask, .lowYieldCancel, .taskCancel,
    .supplyBank,
    .currencyTurnIn,
    -- 2026-08-19 (S-051): promoted out of the discretionary group. Below
@@ -185,14 +191,6 @@ def allInLadderOrder : List MeansKind :=
    -- turn-in election or a sibling's supply request, which is the same argument
    -- those two make for their own positions.
    .acceptTask,
-   -- 2026-09-13: promoted out of the discretionary group for the same reason
-   -- `.acceptTask` was — below `.objectiveStep` it was unreachable, since a
-   -- character essentially always has a step. Measured live: the rung fired
-   -- against a 50/50 bank and was selected zero times while the fleet lost its
-   -- deposit sink entirely. LAST in the collect group, below `.acceptTask`: a
-   -- one-action purchase must not preempt a resolved turn-in election or a
-   -- sibling's supply request.
-   .bankExpand,
    .objectiveStep,
    .pursueTask, .taskExchange, .maintainConsumables,
    .sellIdle, .recycleSurplus, .geBid, .drainBankJunk,

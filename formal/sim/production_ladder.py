@@ -87,6 +87,9 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.CRAFT_POTIONS,
     LadderMeans.SELL_PRESSURED,
     LadderMeans.CLAIM_PENDING,
+    # Phase 5-2c-ii: an interrupt (the deposit sink), mirroring
+    # `Formal.Liveness.MeansKind.allInLadderOrder`.
+    LadderMeans.BANK_EXPAND,
     LadderMeans.COMPLETE_TASK,
     LadderMeans.LOW_YIELD_CANCEL,
     LadderMeans.TASK_CANCEL,
@@ -95,10 +98,6 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     # 2026-08-19 (S-051): promoted above the objective step, mirroring
     # `Formal.Liveness.MeansKind.allInLadderOrder`. LAST in the collect group.
     LadderMeans.ACCEPT_TASK,
-    # 2026-09-13: promoted above the objective step, same mirror, LAST in the
-    # collect group — a one-action purchase must not preempt a resolved turn-in
-    # election or a sibling's supply request.
-    LadderMeans.BANK_EXPAND,
     LadderMeans.OBJECTIVE_STEP,
     LadderMeans.PURSUE_TASK,
     LadderMeans.TASK_EXCHANGE,
@@ -166,13 +165,13 @@ assert tuple(g for g in GUARD_ORDER) == (
 assert COLLECT_REWARD_ORDER == (
     MeansKind.SELL_PRESSURED,
     MeansKind.CLAIM_PENDING,
+    MeansKind.BANK_EXPAND,
     MeansKind.COMPLETE_TASK,
     MeansKind.LOW_YIELD_CANCEL,
     MeansKind.TASK_CANCEL,
     MeansKind.SUPPLY_BANK,
     MeansKind.CURRENCY_TURNIN,
     MeansKind.ACCEPT_TASK,
-    MeansKind.BANK_EXPAND,
 ), "COLLECT_REWARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 assert DISCRETIONARY_ORDER == (

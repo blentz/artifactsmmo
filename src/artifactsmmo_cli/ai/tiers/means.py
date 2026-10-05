@@ -130,13 +130,15 @@ class MeansKind(Enum):
 INTERRUPT_MEANS: frozenset[MeansKind] = frozenset({
     MeansKind.SELL_PRESSURED,
     MeansKind.CLAIM_PENDING,
+    MeansKind.BANK_EXPAND,
 })
 """Means that are chores, not rewards: preconditions of continuing whatever the
 character does, so `StrategyArbiter._build_candidates` builds them at
 `BAND_GUARD` and they run in the interrupt pre-pass (Phase 5 of
 docs/PLAN_decision_architecture_redesign.md). SELL_PRESSURED is the bag at the
 pressure threshold (5-2b); CLAIM_PENDING is one action that collects a pending
-item and serves no objective (5-2c-i). They lead `COLLECT_REWARD_ORDER`."""
+item and serves no objective (5-2c-i); BANK_EXPAND keeps the deposit sink open
+(5-2c-ii). They lead `COLLECT_REWARD_ORDER`."""
 
 
 COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
@@ -145,6 +147,14 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     # ladder (`MeansKind.allInLadderOrder`) states.
     MeansKind.SELL_PRESSURED,
     MeansKind.CLAIM_PENDING,
+    # Phase 5-2c-ii: an INTERRUPT. Buying a bank slot is what keeps the deposit
+    # sink open, a precondition of continuing rather than a reward, so it runs
+    # with the bag/bank chores at the end of the interrupt prefix. (It was the
+    # LAST collect rung since its 2026-09-13 promotion out of the discretionary
+    # band, where it fired against a 50/50 bank and was selected zero times.
+    # USER 2026-09-13: "expanding the bank is good to do whenever we have the
+    # money for it.")
+    MeansKind.BANK_EXPAND,
     MeansKind.COMPLETE_TASK,
     MeansKind.LOW_YIELD_CANCEL,
     MeansKind.TASK_CANCEL,
@@ -207,20 +217,6 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     # and it is still AFTER both cancel rungs, so a dead draw goes back before
     # a new one is taken.
     MeansKind.ACCEPT_TASK,
-    # 2026-09-13: promoted out of the discretionary group, where it was
-    # unreachable for the same reason ACCEPT_TASK was — a character essentially
-    # always has an objective step, so nothing below the step is ever selected.
-    # `audit/liveness_completeness.py` had carried it as
-    # `unreachable: MeansKind.BANK_EXPAND is in the discretionary band` for
-    # exactly that reason. Measured live 2026-09-13: the rung FIRED for two
-    # characters against a 50/50 bank and was selected zero times, while every
-    # inventory in the fleet climbed with no deposit sink left.
-    #
-    # POSITION: LAST, below ACCEPT_TASK, for the same reason ACCEPT_TASK is last
-    # — a one-action purchase must not preempt a resolved turn-in election or a
-    # sibling's supply request. USER 2026-09-13: "expanding the bank is good to
-    # do whenever we have the money for it."
-    MeansKind.BANK_EXPAND,
 )
 DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.PURSUE_TASK,

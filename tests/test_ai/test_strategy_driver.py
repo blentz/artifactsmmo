@@ -2681,11 +2681,12 @@ def test_the_chore_means_are_built_as_interrupts():
     (band 0); COMPLETE_TASK is still a collect means."""
     arbiter = StrategyArbiter(GOAPPlanner(), history=None)
     cands = arbiter._build_candidates(
-        [], [MeansKind.SELL_PRESSURED, MeansKind.CLAIM_PENDING], [], None, [], [],
-        make_state(), _make_planner_gd(), _ctx())
+        [], [MeansKind.SELL_PRESSURED, MeansKind.CLAIM_PENDING, MeansKind.BANK_EXPAND],
+        [], None, [], [], make_state(), _make_planner_gd(), _ctx())
     bands = {c.repr_: c.band for c in cands}
     assert bands["SellInventory"] == BAND_GUARD
     assert bands["ClaimPending"] == BAND_GUARD  # Phase 5-2c-i
+    assert bands["ExpandBank"] == BAND_GUARD    # Phase 5-2c-ii
     complete = arbiter._build_candidates(
         [], [MeansKind.COMPLETE_TASK], [], None, [], [],
         make_state(), _make_planner_gd(), _ctx())
