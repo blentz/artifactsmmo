@@ -389,6 +389,12 @@ open Formal.PriorityBand
 #print axioms Formal.GatherCost.gather_cost_rated_nonneg
 #print axioms Formal.GatherCost.gather_cost_rated_monotone
 #print axioms Formal.GatherCost.gather_cost_rated_monotone_rate
+#print axioms Formal.TurnRotation.pickL_spec
+#print axioms Formal.TurnRotation.pick_of_below_zero
+#print axioms Formal.TurnRotation.below_serve_lt
+#print axioms Formal.TurnRotation.below_lt
+#print axioms Formal.TurnRotation.rotation_fair
+#print axioms Formal.TurnRotation.rotation_fair_bound
 #print axioms Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership
 #print axioms Formal.RealizableLoadout.apply_cur_ge_1
 #print axioms Formal.RealizableLoadout.ownership_counts_equipped

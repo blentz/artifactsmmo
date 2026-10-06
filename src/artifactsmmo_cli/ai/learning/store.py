@@ -4,7 +4,7 @@ import json
 import re
 import weakref
 from collections import Counter
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -25,8 +25,7 @@ from artifactsmmo_cli.ai.learning.models import (
     DecisionEvent,
     Intention,
     IntentionBase,
-    IntentionYield,
-    IntentionYieldBase,
+    IntentionTurn,
     LearnedSetting,
     LoadoutProfileObservation,
     PlanBodyLog,
@@ -227,10 +226,6 @@ class LearningStore:
                           for row in conn.exec_driver_sql("PRAGMA table_info(craft_yield)")}
             if yield_cols and "skill_level" not in yield_cols:
                 conn.exec_driver_sql("ALTER TABLE craft_yield ADD COLUMN skill_level INTEGER")
-            # Intention-yield migration (2026-10-05, Phase 4-2b-iii): the yield
-            # names the committed GOAL, not the walk's root. A row written
-            # before holds a root repr, which names no candidate, so it is
-            # dropped rather than carried: it would only miss one turn.
             # Plan-level migration (2026-10-05, Phase 4-3b): the cached plan
             # records the level it was made at instead of the RegearEdge latch.
             # A row from before carries a latch and no level, so it is dropped
@@ -242,12 +237,10 @@ class LearningStore:
                 conn.exec_driver_sql("ALTER TABLE plan_commitment DROP COLUMN latch_active")
                 conn.exec_driver_sql(
                     "ALTER TABLE plan_commitment ADD COLUMN plan_level INTEGER NOT NULL DEFAULT 0")
-            iy_cols = {row[1] for row in
-                       conn.exec_driver_sql("PRAGMA table_info(intention_yield)")}
-            if "yielded_root" in iy_cols:
-                conn.exec_driver_sql("DELETE FROM intention_yield")
-                conn.exec_driver_sql(
-                    "ALTER TABLE intention_yield RENAME COLUMN yielded_root TO yielded_goal")
+            # Turn-order migration (2026-10-05, Phase 5-2c-iii-a): the one-goal
+            # yield became a turn log (`intention_turn`). A pending yield is
+            # dropped, not converted: it costs at most one turn.
+            conn.exec_driver_sql("DROP TABLE IF EXISTS intention_yield")
 
         # PRAGMAs go on their OWN connection, after the lock is released:
             # Composite-index migration (2026-08-21). `create_all` adds missing
@@ -1556,35 +1549,29 @@ class LearningStore:
         except SQLAlchemyError:
             return None
 
-    def save_yield(self, yielded_goal: str | None, holder: str | None) -> None:
-        """Record this character's active yield (Phase 4-2b); None clears it."""
+    def save_turns(self, turns: Mapping[str, int]) -> None:
+        """Replace this character's turn log (Phase 5-2c-iii-a)."""
         try:
             with SqlSession(self._engine) as s:
-                row = s.exec(
-                    select(IntentionYield).where(IntentionYield.character == self._character)
-                ).first()
-                if yielded_goal is None:
-                    if row is not None:
-                        s.delete(row)
-                elif row is None:
-                    s.add(IntentionYield(character=self._character,
-                                         yielded_goal=yielded_goal, holder=holder))
-                else:
-                    row.yielded_goal, row.holder = yielded_goal, holder
-                    s.add(row)
+                for row in s.exec(select(IntentionTurn).where(
+                        IntentionTurn.character == self._character)).all():
+                    s.delete(row)
+                for goal_repr, turn in turns.items():
+                    s.add(IntentionTurn(character=self._character, goal_repr=goal_repr, turn=turn))
                 s.commit()
         except SQLAlchemyError as e:
-            print(f"[learning] save_yield failed: {e}")
+            print(f"[learning] save_turns failed: {e}")
 
-    def load_yield(self) -> IntentionYieldBase | None:
-        """This character's active yield, or None (or on DB error)."""
+    def load_turns(self) -> dict[str, int]:
+        """This character's turn log: goal repr -> its last spent budget's
+        sequence number. Empty on a fresh store (or on DB error)."""
         try:
             with SqlSession(self._engine) as s:
-                return s.exec(
-                    select(IntentionYield).where(IntentionYield.character == self._character)
-                ).first()
+                rows = s.exec(select(IntentionTurn).where(
+                    IntentionTurn.character == self._character)).all()
+                return {row.goal_repr: row.turn for row in rows}
         except SQLAlchemyError:
-            return None
+            return {}
 
     def save_refusal_fact(self, action_kind: str, item_code: str, http_code: int,
                           item_type: str | None) -> None:

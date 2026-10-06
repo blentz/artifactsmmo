@@ -1067,9 +1067,10 @@ def test_select_guard_preempts_means():
     assert len(plan) >= 1
 
 
-def test_select_tries_the_yielded_goal_last_and_names_the_yield():
-    """Phase 4-2b: the goal whose intention spent its budget is moved behind
-    its peers before the arbitration, and the cycle says so."""
+def test_select_puts_the_served_goal_last_and_names_its_turn():
+    """Phase 5-2c-iii-a: a goal whose intention spent its budget is ordered
+    behind its unserved peers before the arbitration, and the cycle names the
+    most recently served goal on offer."""
     step = Candidate(goal=RestoreHPGoal(), repr_="Yielded", band=BAND_STEP)
     peer = Candidate(goal=RestoreHPGoal(), repr_="Peer",
                      band=BAND_FALLBACK_STEP)
@@ -1077,9 +1078,9 @@ def test_select_tries_the_yielded_goal_last_and_names_the_yield():
     with (patch.object(arbiter, "_build_candidates", return_value=[step, peer]),
           patch.object(arbiter, "_arbitrate", return_value=(None, [], None)) as arbitrate):
         arbiter.select(_FakeDecision(chosen_step=None), make_state(), _make_planner_gd(),
-                       [], _ctx(), yielded="Yielded")
+                       [], _ctx(), turns={"Yielded": 7, "Absent": 9})
     assert [c.repr_ for c in arbitrate.call_args.args[0]] == ["Peer", "Yielded"]
-    assert (Mechanism.INTENTION_YIELD, "Yielded", "demoted") in arbiter.events.drain()
+    assert (Mechanism.INTENTION_YIELD, "Yielded", "turn:7") in arbiter.events.drain()
 
 
 @dataclass(frozen=True)

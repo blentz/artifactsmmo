@@ -4683,15 +4683,19 @@ INTENTION_BUDGET_MUTATIONS = [
     ("budget: the cycle budget is never spent",
      "        elif self._intention_cycles >= BUDGET_CYCLES:\n",
      "        elif False:\n"),
-    # The budget ends the intention but names no yield: the spent goal is
+    # The budget ends the intention but records no turn: the spent goal is
     # re-chosen on the very next cycle (R2D2/HAL at the wall, 2026-10-05).
-    ("budget: a spent budget records no yield",
-     "            self._yield = (committed, None)\n",
-     "            self._yield = None\n"),
-    # The yield is kept but never handed to the arbiter.
-    ("budget: the player does not hand its yield to the arbiter",
-     "            yielded=self._yield[0] if self._yield is not None else None,\n",
-     "            yielded=None,\n"),
+    ("budget: a spent budget records no turn",
+     "            self._turns = record_turn(self._turns, committed)\n",
+     "            pass\n"),
+    # The turn log is kept but never handed to the arbiter.
+    ("budget: the player does not hand its turns to the arbiter",
+     "            objective=self._objective,\n            turns=self._turns,\n        )",
+     "            objective=self._objective,\n            turns={},\n        )"),
+    # The turn log is not persisted: a restart forgets every turn.
+    ("budget: the turn log is not persisted",
+     "                self.history.save_turns(self._turns)\n",
+     "                pass\n"),
     # The intention ends but its cached plan runs on (Phase 4-3a; Lor/HAL ran
     # the abandoned climb 4-7 more cycles, 2026-10-05).
     ("budget: an ended intention keeps its cached plan",
@@ -4711,28 +4715,42 @@ INTENTION_BUDGET_MUTATIONS = [
     ("exit: progress does not restart the no-progress window",
      "            self._intention_stall = 0\n            self._cycles_without_progress = 0\n",
      "            self._intention_stall = 0\n"),
-    # The holder ends but the yield stays: the yielded goal is demoted forever.
-    ("budget: the yield never clears after its holder ends",
-     "        else:\n            self._yield = None\n        self._persist_yield()\n",
-     "        else:\n            pass\n        self._persist_yield()\n"),
 ]
 
-# The yield's ordering (`intention_progress.demote_yielded`, Phase 4-2b-iii).
+# The turn order (`intention_progress.rotate`/`record_turn`, Phase 5-2c-iii-a).
 # Unit-killed by tests/test_ai/test_intention_budget.py.
 INTENTION_YIELD_MUTATIONS = [
-    # The yield is ignored: the spent goal keeps its place and wins again.
-    ("yield: the yielded goal keeps its place",
-     "    if yielded is None:\n        return candidates\n",
-     "    return candidates\n"),
+    # The turn log is ignored: the spent goal keeps its place and wins again.
+    ("turns: the served goals keep their place",
+     "    for served in sorted({c.repr_ for c in candidates if c.repr_ in turns},\n",
+     "    for served in sorted(set[str](),\n"),
     # The objective step keeps its own band, so it still precedes every
     # fallback: the step yields to nothing.
-    ("yield: the yielded step keeps the step band",
+    ("turns: the served step keeps the step band",
      "        band = BAND_FALLBACK_STEP if hit.band == BAND_STEP else hit.band\n",
      "        band = hit.band\n"),
     # Moved to the FRONT instead of behind its peers.
-    ("yield: the yielded goal is moved to the front",
+    ("turns: the served goal is moved to the front",
      "        at = max((i + 1 for i, c in enumerate(out) if c.band <= band), default=0)\n",
      "        at = 0\n"),
+    # The newest turn is not newer than the others: a re-served goal can sort
+    # ahead of one that waited.
+    ("turns: a recorded turn is not the newest",
+     "    logged = {**turns, goal: max(turns.values(), default=0) + 1}\n",
+     "    logged = {**turns, goal: 1}\n"),
+    # The log keeps the OLDEST turns, forgetting the newest — the goal just
+    # served counts as never served and leads again.
+    ("turns: the log keeps the oldest turns",
+     "    kept = sorted(logged, key=logged.__getitem__)[-TURN_LOG_SIZE:]\n",
+     "    kept = sorted(logged, key=logged.__getitem__)[:TURN_LOG_SIZE]\n"),
+]
+# The turn order against the proved pick. Killed by
+# formal/diff/test_turn_rotation_diff.py.
+TURN_ROTATION_DIFF_MUTATIONS = [
+    # Most recently served first: the one-goal yield's A, B, A, B, generalised.
+    ("turns: served goals ordered newest first",
+     "                         key=turns.__getitem__):\n",
+     "                         key=lambda r: -turns[r]):\n"),
 ]
 
 # SELL_PRESSURED is an interrupt (Phase 5-2b): built at BAND_GUARD so it runs
@@ -4758,8 +4776,8 @@ INTERRUPT_MEANS_MUTATIONS = [
 # tests/test_ai/test_strategy_driver.py.
 YIELD_WIRING_MUTATIONS = [
     ("arbiter: the yield is never applied",
-     "        candidates = demote_yielded(candidates, yielded)\n",
-     "        candidates = demote_yielded(candidates, None)\n"),
+     "        candidates = rotate(candidates, turns)\n",
+     "        candidates = rotate(candidates, {})\n"),
 ]
 
 # _equippable_goal passive-currency gate (obtain_item_routing.py, moved from
@@ -8870,6 +8888,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_intention_budget.py", survivors)
     run_group(INTENTION_PROGRESS_SRC, INTENTION_YIELD_MUTATIONS,
               "tests/test_ai/test_intention_budget.py", survivors)
+    run_group(INTENTION_PROGRESS_SRC, TURN_ROTATION_DIFF_MUTATIONS,
+              "formal/diff/test_turn_rotation_diff.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, YIELD_WIRING_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, SELL_PRESSURED_INTERRUPT_MUTATIONS,

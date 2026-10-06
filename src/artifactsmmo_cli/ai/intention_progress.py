@@ -25,6 +25,7 @@ suppressed the grind for 5 cycles (93 suppressions in 7 days to 2026-10-04,
 66 of them HAL's vampire grind).
 """
 
+from collections.abc import Mapping
 from dataclasses import replace
 
 from artifactsmmo_cli.ai.arbiter_select import BAND_FALLBACK_STEP, BAND_STEP, Candidate
@@ -41,8 +42,8 @@ failing, or a fight that never pays, does not."""
 BUDGET_CYCLES = 100
 """Committed cycles an intention may hold before goal choice re-ranks (Phase
 4-2b). Fairness, not liveness: progress does not reset it. On exhaustion the
-intention ends and its goal YIELDS for one turn (`demote_yielded`), so the next
-candidate gets an intention; the exhausted goal competes again after that.
+intention ends and its goal goes to the back of the turn order (`rotate`), so
+every other plannable goal gets an intention before it runs again.
 Replaces focus aging and the d'Hondt interleave."""
 
 EXIT_CYCLES = 200
@@ -50,6 +51,11 @@ EXIT_CYCLES = 200
 leg, no XP) before the run stops (`recovery.StuckExit`, Phase 4-3c). Two full
 budgets and ten stall windows: every intention in that span stalled or spent
 its budget without one successful leg. The last resort, and the only exit."""
+
+TURN_LOG_SIZE = 32
+"""Spent budgets remembered per character. A walk offers a handful of step and
+fallback goals (seven at most, live 2026-10-05); the log keeps far more, so a
+goal still on offer is never forgotten while it waits."""
 
 Measure = tuple[int, int]
 
@@ -73,23 +79,51 @@ def progressed(before: Measure | None, after: Measure | None, ok: bool) -> bool:
     return before is not None and after is not None and after > before
 
 
-def demote_yielded(candidates: list[Candidate], yielded: str | None) -> list[Candidate]:
-    """The candidate list with the yielded goal moved behind its peers (Phase
-    4-2b): every candidate whose repr is `yielded` goes to the END of its band,
-    and the objective step's band counts as the fallback chain's, so the next
-    step or fallback is tried first. Nothing is removed — when no peer can plan,
-    the yielded goal still runs, so the yield never empties the turn.
-
-    The yield names the committed GOAL, not the walk's root. A character at the
-    walk's wall (`CanIClearMyTier`) has no root, and its intention is a walk
-    ALTERNATIVE: witnessed 2026-10-05, R2D2 and HAL spent their budgets on a
-    skill climb, yielded nothing, and re-committed it the next cycle."""
-    if yielded is None:
-        return candidates
+def _demote(candidates: list[Candidate], served: str) -> list[Candidate]:
+    """The candidate list with `served` moved behind its peers: every candidate
+    whose repr is `served` goes to the END of its band, and the objective step's
+    band counts as the fallback chain's, so the next step or fallback is tried
+    first. Nothing is removed — when no peer can plan, the served goal still
+    runs, so a turn never empties."""
     out = list(candidates)
-    for hit in [c for c in candidates if c.repr_ == yielded]:
+    for hit in [c for c in candidates if c.repr_ == served]:
         band = BAND_FALLBACK_STEP if hit.band == BAND_STEP else hit.band
         del out[next(i for i, c in enumerate(out) if c is hit)]
         at = max((i + 1 for i, c in enumerate(out) if c.band <= band), default=0)
         out.insert(at, replace(hit, band=band))
     return out
+
+
+def rotate(candidates: list[Candidate], turns: Mapping[str, int]) -> list[Candidate]:
+    """The candidate list in turn order (Phase 5-2c-iii-a): within each band —
+    the objective step's counting as the fallback chain's — the goals that never
+    had a turn keep the walk's order and come first, and the goals that did
+    follow, least recently served first. A served step leaves the step band, so
+    it cannot preempt the goal whose turn it is. Nothing is removed: a lone
+    plannable goal still runs.
+
+    `turns` maps a goal repr to the sequence number of its last spent budget
+    (`record_turn`). Each served goal is demoted to the end of its band in
+    increasing turn order, so the most recently served ends last.
+
+    WHY A TURN ORDER, NOT ONE YIELD (2026-10-05). The yield (Phase 4-2b)
+    remembered ONE goal and cleared when the next intention ended, so the root's
+    step returned at once: A, B, A, B. A walk alternative third or later never
+    had a turn while the first two could plan — the orphan skill roots and, in
+    5-2c-iii, the task objective. Proved fair in `Formal.TurnRotation`: with k
+    plannable goals, every one is picked within k - 1 turns
+    (`rotation_fair`)."""
+    out = candidates
+    for served in sorted({c.repr_ for c in candidates if c.repr_ in turns},
+                         key=turns.__getitem__):
+        out = _demote(out, served)
+    return out
+
+
+def record_turn(turns: Mapping[str, int], goal: str) -> dict[str, int]:
+    """`turns` with `goal`'s turn recorded as the newest, keeping the
+    `TURN_LOG_SIZE` most recent. A goal dropped from the log counts as never
+    served, which only moves it forward."""
+    logged = {**turns, goal: max(turns.values(), default=0) + 1}
+    kept = sorted(logged, key=logged.__getitem__)[-TURN_LOG_SIZE:]
+    return {code: logged[code] for code in kept}

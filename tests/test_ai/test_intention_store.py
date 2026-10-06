@@ -113,37 +113,37 @@ def test_resume_without_a_store_or_an_intention_commits_to_nothing(tmp_path):
     assert empty._committed_repr is None
 
 
-def test_a_yield_round_trips_and_clears(tmp_path):
+def test_the_turn_log_round_trips_and_is_replaced(tmp_path):
     store = _store(tmp_path)
-    assert store.load_yield() is None
-    store.save_yield("ReachSkill(weaponcrafting->21)", None)
-    store.save_yield("ReachSkill(weaponcrafting->21)", "GrindCharacterXP(spider)")
-    row = store.load_yield()
-    assert (row.yielded_goal, row.holder) == ("ReachSkill(weaponcrafting->21)",
-                                              "GrindCharacterXP(spider)")
-    store.save_yield(None, None)
-    assert store.load_yield() is None
-    store.save_yield(None, None)  # clearing nothing is a no-op
-    assert store.load_yield() is None
+    assert store.load_turns() == {}
+    store.save_turns({"ReachSkill(weaponcrafting->21)": 1, "GrindCharacterXP(spider)": 2})
+    assert store.load_turns() == {"ReachSkill(weaponcrafting->21)": 1,
+                                  "GrindCharacterXP(spider)": 2}
+    store.save_turns({"GrindCharacterXP(spider)": 3})
+    assert store.load_turns() == {"GrindCharacterXP(spider)": 3}
+    other = _store(tmp_path, character="Lor")
+    assert other.load_turns() == {}, "the log is per character"
 
 
-def test_a_root_named_yield_from_before_4_2b_iii_is_dropped_on_open(tmp_path):
-    """The 4-2b-i table named a ROOT; a root repr names no candidate, so the
-    migration clears the row and renames the column to what it now holds."""
+def test_the_one_goal_yield_table_is_dropped_on_open(tmp_path):
+    """Phase 5-2c-iii-a: the yield became a turn log. A pending yield is
+    dropped (it costs at most one turn) and the old table goes."""
     path = str(tmp_path / "old.db")
     engine = create_engine(f"sqlite:///{path}")
     with engine.begin() as conn:
         conn.exec_driver_sql(
             "CREATE TABLE intention_yield (character VARCHAR NOT NULL PRIMARY KEY, "
-            "yielded_root VARCHAR NOT NULL, holder VARCHAR)")
+            "yielded_goal VARCHAR NOT NULL, holder VARCHAR)")
         conn.exec_driver_sql(
-            "INSERT INTO intention_yield VALUES ('Robby', "
-            "'ReachSkillLevel(skill=''weaponcrafting'', level=21)', NULL)")
+            "INSERT INTO intention_yield VALUES ('Robby', 'ReachSkill(weaponcrafting->21)', NULL)")
     engine.dispose()
     store = LearningStore(path, character="Robby")
-    assert store.load_yield() is None
-    store.save_yield("ReachSkill(weaponcrafting->21)", None)
-    assert store.load_yield().yielded_goal == "ReachSkill(weaponcrafting->21)"
+    assert store.load_turns() == {}
+    with store._engine.connect() as conn:
+        tables = {row[0] for row in conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "intention_yield" not in tables
+    assert "intention_turn" in tables
 
 
 def test_a_latch_era_plan_commitment_is_dropped_on_open(tmp_path):
@@ -183,9 +183,9 @@ def test_a_db_error_on_clearing_the_plan_is_reported(tmp_path, capsys):
     assert "clear_plan_commitment failed" in capsys.readouterr().out
 
 
-def test_a_db_error_on_yield_is_reported_or_reads_as_none(tmp_path, capsys):
+def test_a_db_error_on_the_turn_log_is_reported_or_reads_as_empty(tmp_path, capsys):
     store = _store(tmp_path)
     _break_engine(store)
-    store.save_yield("ObtainItem(code='life_ring')", None)
-    assert "save_yield failed" in capsys.readouterr().out
-    assert store.load_yield() is None
+    store.save_turns({"ObtainItem(code='life_ring')": 1})
+    assert "save_turns failed" in capsys.readouterr().out
+    assert store.load_turns() == {}

@@ -484,6 +484,14 @@ open Formal.PriorityBand
 #check @Formal.GatherCost.gather_cost_rated_nonneg         -- non-negative at any rate ≥ 0
 #check @Formal.GatherCost.gather_cost_rated_monotone       -- monotone in qty at any rate ≥ 0
 #check @Formal.GatherCost.gather_cost_rated_monotone_rate  -- a rarer drop is never cheaper
+-- TurnRotation (Phase 5-2c-iii-a: the intention's least-recently-served turn
+-- order; the one-goal yield it replaces gave A, B, A, B):
+#check @Formal.TurnRotation.pickL_spec          -- pick = the least plannable goal in turn order
+#check @Formal.TurnRotation.pick_of_below_zero  -- nothing plannable ahead ⇒ picked
+#check @Formal.TurnRotation.below_serve_lt      -- a turn spent elsewhere lowers the potential
+#check @Formal.TurnRotation.below_lt            -- potential < n
+#check @Formal.TurnRotation.rotation_fair       -- picked within `below g` turns
+#check @Formal.TurnRotation.rotation_fair_bound -- picked within n - 1 turns
 -- RealizableLoadout required roles (the multi-slot pick_loadout bug fix):
 #check @Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership -- contract: realizability ⇔ per-code demand ≤ ownership
 #check @Formal.RealizableLoadout.apply_cur_ge_1                        -- apply assert: realizable ⇒ cur ≥ 1 at every decrement

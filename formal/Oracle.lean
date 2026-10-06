@@ -1899,6 +1899,19 @@ def runGatherCost (args : Array Json) : Json :=
   Json.mkObj [("cost_num", Json.num r.num),
               ("cost_den", Json.num (Int.ofNat r.den))]
 
+/-- The turn order's pick (`Formal.TurnRotation.pick`): the first plannable
+goal of one step/fallback group after `intention_progress.rotate`. Args:
+`[n, t_0 … t_{n-1}, p_0 … p_{n-1}]`, `t_i` the candidate's last turn (0 = never
+served) and `p_i` (0/1) whether it plans. Emits the picked position, -1 for
+none. -/
+def runTurnRotationPick (args : Array Json) : Json :=
+  let n := (intArg args 0).toNat
+  let t : Nat → Nat := fun i => (intArg args (1 + i)).toNat
+  let p : Nat → Bool := fun i => intArg args (1 + n + i) != 0
+  match Formal.TurnRotation.pick n p t with
+  | some g => Json.mkObj [("pick", Json.num (Int.ofNat g))]
+  | none => Json.mkObj [("pick", Json.num (-1))]
+
 /-- Compute one inventory_chain_safe result. Single shared dispatcher for the
 four chain_safe instantiations and the TaskCancel coin step.
 
@@ -2989,6 +3002,8 @@ def runOne (item : Json) : Json :=
     runActionCostNonneg args
   else if kind == "gather_cost" then
     runGatherCost args
+  else if kind == "turn_rotation_pick" then
+    runTurnRotationPick args
   else if kind == "inventory_chain_safe" then
     runInventoryChainSafe args
   else if kind == "inventory_profile" then

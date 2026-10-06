@@ -644,19 +644,17 @@ class RefusalFact(RefusalFactBase, table=True):
     __tablename__ = "refusal_fact"
 
 
-class IntentionYieldBase(SQLModel):
-    """The goal that spent its intention budget and yields for one turn
-    (Phase 4-2b) — one row per character while a yield is active.
-    `holder` is the commitment that took over, once one has; the yield clears
-    when that commitment ends."""
+class IntentionTurn(SQLModel, table=True):
+    """One goal's last spent intention budget (Phase 5-2c-iii-a): `turn` is the
+    character's sequence number for it, and goal choice orders the walk's goals
+    least recently served first (`intention_progress.rotate`). At most
+    `TURN_LOG_SIZE` rows per character."""
+
+    __tablename__ = "intention_turn"
 
     character: str = Field(primary_key=True)
-    yielded_goal: str
-    holder: str | None = None
-
-
-class IntentionYield(IntentionYieldBase, table=True):
-    __tablename__ = "intention_yield"
+    goal_repr: str = Field(primary_key=True)
+    turn: int
 
 
 class CraftYieldObservation(SQLModel, table=True):

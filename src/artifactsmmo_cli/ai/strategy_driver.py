@@ -4,6 +4,7 @@ existing goal.
 Lives above goals/ and tiers/ (imports both) to avoid the goals→tiers cycle."""
 
 import time
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime, timezone
 
@@ -69,7 +70,7 @@ from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal, tasks_coin
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
-from artifactsmmo_cli.ai.intention_progress import demote_yielded
+from artifactsmmo_cli.ai.intention_progress import rotate
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner
@@ -873,12 +874,12 @@ class StrategyArbiter:
         actions: list[Action],
         ctx: SelectionContext,
         objective: CharacterObjective | None = None,
-        yielded: str | None = None,
+        turns: Mapping[str, int] | None = None,
     ) -> tuple[Goal | None, list[Action], list[dict[str, object]]]:
         """Select the first plannable goal from the ordered candidate list.
 
-        `yielded` is the goal whose intention spent its cycle budget and is
-        yielding its turn (`intention_progress.demote_yielded`), or None.
+        `turns` is the player's turn log: goal repr -> its last spent budget's
+        sequence number (`intention_progress.rotate` orders by it), or None.
 
         decision must have a .chosen_step attribute (MetaGoal | None).
 
@@ -976,9 +977,12 @@ class StrategyArbiter:
             guard_kinds, collect_kinds, discretionary_kinds, step_goal,
             fallback_steps, fallback_roots, state, game_data, ctx, step_profile,
             chosen_root=chosen_root, needs=needs)
-        if any(c.repr_ == yielded for c in candidates):
-            self.events.note(Mechanism.INTENTION_YIELD, str(yielded), "demoted")
-        candidates = demote_yielded(candidates, yielded)
+        turns = turns or {}
+        served = [c.repr_ for c in candidates if c.repr_ in turns]
+        if served:
+            last = max(served, key=turns.__getitem__)
+            self.events.note(Mechanism.INTENTION_YIELD, last, f"turn:{turns[last]}")
+        candidates = rotate(candidates, turns)
 
         worth_suppressed = self._worth_gate_suppressed(
             objective, chosen_root, discretionary_kinds, state, game_data, ctx,

@@ -1,5 +1,6 @@
-"""The per-intention budget and the one-turn yield (Phase 4-2b): fairness
-between competing intentions is an explicit budget, not focus aging."""
+"""The per-intention budget (Phase 4-2b) and the turn order it feeds (Phase
+5-2c-iii-a): fairness between competing intentions is an explicit budget and a
+least-recently-served rotation, not focus aging."""
 
 from unittest.mock import MagicMock, patch
 
@@ -21,7 +22,9 @@ from artifactsmmo_cli.ai.intention_progress import (
     BUDGET_CYCLES,
     EXIT_CYCLES,
     STALL_CYCLES,
-    demote_yielded,
+    TURN_LOG_SIZE,
+    record_turn,
+    rotate,
 )
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.plan_cache import PlanCache
@@ -53,8 +56,8 @@ def _run(player: GamePlayer, goal, cycles: int) -> None:
         player._track_intention(goal, state, state, ok=True)
 
 
-def test_an_intention_that_spends_its_budget_ends_and_its_goal_yields(tmp_path):
-    """The yield names the committed GOAL: at the walk's wall there is no root
+def test_an_intention_that_spends_its_budget_ends_and_its_turn_is_recorded(tmp_path):
+    """The turn names the committed GOAL: at the walk's wall there is no root
     to name, and the intention is a walk alternative (R2D2/HAL, 2026-10-05)."""
     goal = GrindCharacterXPGoal("vampire")
     player = _player(tmp_path)
@@ -63,7 +66,8 @@ def test_an_intention_that_spends_its_budget_ends_and_its_goal_yields(tmp_path):
     assert player._arbiter._committed_repr == repr(goal)
     _run(player, goal, 1)
     assert player._arbiter._committed_repr is None
-    assert player._yield == (repr(goal), None)
+    assert player._turns == {repr(goal): 1}
+    assert player.history.load_turns() == {repr(goal): 1}
     assert (Mechanism.INTENTION_BUDGET, repr(goal), f"budget:{BUDGET_CYCLES}") \
         in player._arbiter.events.drain()
 
@@ -78,104 +82,117 @@ def test_progress_does_not_reset_the_budget():
     assert player._arbiter._committed_repr is None
 
 
-def test_the_yielded_step_goes_behind_every_fallback():
+def test_the_served_step_goes_behind_every_fallback():
     cands = [_cand("Rest", BAND_GUARD), _cand(YIELDED, BAND_STEP),
              _cand("Raid", BAND_RAID), _cand("Fallback(a)", BAND_FALLBACK_STEP),
              _cand("Fallback(b)", BAND_FALLBACK_STEP), _cand("Task", BAND_DISCRETIONARY)]
-    assert _order(demote_yielded(cands, YIELDED)) == [
+    assert _order(rotate(cands, {YIELDED: 1})) == [
         ("Rest", BAND_GUARD), ("Raid", BAND_RAID),
         ("Fallback(a)", BAND_FALLBACK_STEP), ("Fallback(b)", BAND_FALLBACK_STEP),
         (YIELDED, BAND_FALLBACK_STEP), ("Task", BAND_DISCRETIONARY)]
 
 
-def test_a_yielded_fallback_goes_behind_its_peers():
+def test_a_served_fallback_goes_behind_its_peers():
     """The wall case: no root, the intention is a fallback alternative."""
     cands = [_cand(YIELDED, BAND_FALLBACK_STEP), _cand("Fallback(b)", BAND_FALLBACK_STEP),
              _cand("Task", BAND_DISCRETIONARY)]
-    assert _order(demote_yielded(cands, YIELDED)) == [
+    assert _order(rotate(cands, {YIELDED: 1})) == [
         ("Fallback(b)", BAND_FALLBACK_STEP), (YIELDED, BAND_FALLBACK_STEP),
         ("Task", BAND_DISCRETIONARY)]
 
 
-def test_a_yielded_means_stays_in_its_band():
-    """A collect-band means yields to its band peers only, never to a lower
-    priority band."""
+def test_a_served_means_stays_in_its_band():
+    """A collect-band means goes behind its band peers only, never behind a
+    lower priority band."""
     cands = [_cand(YIELDED, BAND_COLLECT), _cand("Equip", BAND_COLLECT),
              _cand("Step", BAND_STEP)]
-    assert _order(demote_yielded(cands, YIELDED)) == [
+    assert _order(rotate(cands, {YIELDED: 1})) == [
         ("Equip", BAND_COLLECT), (YIELDED, BAND_COLLECT), ("Step", BAND_STEP)]
 
 
-def test_a_yield_with_no_peer_still_runs():
-    """A yield, not a ban: with nothing else to try, the goal keeps its turn."""
+def test_a_served_goal_with_no_peer_still_runs():
+    """A turn order, not a ban: with nothing else to try, the goal runs."""
     cands = [_cand(YIELDED, BAND_STEP)]
-    assert _order(demote_yielded(cands, YIELDED)) == [(YIELDED, BAND_FALLBACK_STEP)]
+    assert _order(rotate(cands, {YIELDED: 1})) == [(YIELDED, BAND_FALLBACK_STEP)]
 
 
-def test_no_yield_or_an_absent_goal_leaves_the_order_alone():
+def test_no_turns_or_absent_goals_leave_the_order_alone():
     cands = [_cand("Step", BAND_STEP), _cand("Fallback(a)", BAND_FALLBACK_STEP)]
-    assert demote_yielded(cands, None) is cands
-    assert _order(demote_yielded(cands, YIELDED)) == _order(cands)
+    assert rotate(cands, {}) is cands
+    assert _order(rotate(cands, {YIELDED: 1})) == _order(cands)
 
 
-def test_the_player_hands_its_yield_to_the_arbiter():
+def test_the_least_recently_served_goal_comes_first():
+    """THE DEFECT (2026-10-05): one remembered yield gave A, B, A, B — a third
+    alternative never ran. In turn order, a never-served goal leads, then the
+    served ones oldest first."""
+    cands = [_cand("A", BAND_STEP), _cand("B", BAND_FALLBACK_STEP),
+             _cand("C", BAND_FALLBACK_STEP), _cand("D", BAND_FALLBACK_STEP)]
+    assert _order(rotate(cands, {"A": 1, "B": 2})) == [
+        ("C", BAND_FALLBACK_STEP), ("D", BAND_FALLBACK_STEP),
+        ("A", BAND_FALLBACK_STEP), ("B", BAND_FALLBACK_STEP)]
+    assert _order(rotate(cands, {"A": 3, "B": 2, "C": 4, "D": 1})) == [
+        ("D", BAND_FALLBACK_STEP), ("B", BAND_FALLBACK_STEP),
+        ("A", BAND_FALLBACK_STEP), ("C", BAND_FALLBACK_STEP)]
+
+
+def test_every_goal_gets_a_turn_before_any_gets_a_second():
+    """Four always-plannable goals, each turn spent: the order of turns is a
+    cycle through all four, then repeats."""
+    names = ["A", "B", "C", "D"]
+    cands = [_cand(names[0], BAND_STEP), *(_cand(n, BAND_FALLBACK_STEP) for n in names[1:])]
+    turns: dict[str, int] = {}
+    served = []
+    for _ in range(8):
+        head = rotate(cands, turns)[0].repr_
+        served.append(head)
+        turns = record_turn(turns, head)
+    assert served == names + names
+
+
+def test_the_turn_log_keeps_the_most_recent():
+    turns: dict[str, int] = {}
+    for i in range(TURN_LOG_SIZE + 3):
+        turns = record_turn(turns, f"G{i}")
+    assert len(turns) == TURN_LOG_SIZE
+    assert "G0" not in turns and f"G{TURN_LOG_SIZE + 2}" in turns
+    assert turns[f"G{TURN_LOG_SIZE + 2}"] == TURN_LOG_SIZE + 3
+    assert record_turn({"A": 4, "B": 9}, "A") == {"A": 10, "B": 9}
+
+
+def test_the_player_hands_its_turns_to_the_arbiter():
     player = _player()
     player._strategy = MagicMock()
-    player._yield = (YIELDED, None)
+    player._turns = {YIELDED: 1}
     with (patch.object(player._arbiter, "select", return_value=(None, [], [])) as select,
           patch.object(player, "_record_decision_targets", return_value=None),
           patch.object(player, "_selection_context", return_value=MagicMock())):
         player._decide_band(make_state(), GameData(), [], None)
-    assert select.call_args.kwargs["yielded"] == YIELDED
+    assert select.call_args.kwargs["turns"] == {YIELDED: 1}
 
 
-def test_the_yield_lasts_for_the_next_intention_and_then_clears():
-    player = _player()
-    player._yield = (YIELDED, None)
-    taker = GrindCharacterXPGoal("spider")
-    player._arbiter._committed_repr = repr(taker)
-    _run(player, taker, 1)
-    assert player._yield == (YIELDED, repr(taker))
-    player._arbiter._committed_repr = None
-    _run(player, taker, 1)
-    assert player._yield is None
-
-
-def test_the_yield_survives_a_restart(tmp_path):
+def test_the_turns_survive_a_restart(tmp_path):
     player = _player(tmp_path)
-    player._yield = (YIELDED, None)
-    player._persist_yield()
+    goal = GrindCharacterXPGoal("vampire")
+    player._arbiter._committed_repr = repr(goal)
+    _run(player, goal, BUDGET_CYCLES)
     restarted = GamePlayer(character="hero", history=player.history)
-    restarted._resume_yield()
-    assert restarted._yield == (YIELDED, None)
-    restarted._yield = None
-    restarted._persist_yield()
-    again = GamePlayer(character="hero", history=player.history)
-    again._resume_yield()
-    assert again._yield is None
+    restarted._resume_turns()
+    assert restarted._turns == {repr(goal): 1}
+    assert _player()._resume_turns() is None and _player()._turns == {}
 
 
-def test_a_holder_that_stalls_ends_the_yield():
-    """However the holder's intention ends — here a stall — the yield's turn
-    is over with it."""
+def test_a_stalled_intention_records_no_turn():
+    """A stall ends the intention without a turn: the goal did not spend a
+    budget, so it keeps its place."""
     player = _player()
-    player._yield = (YIELDED, None)
     taker = GrindCharacterXPGoal("spider")
     player._arbiter._committed_repr = repr(taker)
     state = make_state(level=30, xp=100)
-    player._track_intention(taker, state, state, ok=True)
-    assert player._yield == (YIELDED, repr(taker))
     for _ in range(STALL_CYCLES):
         player._track_intention(taker, state, state, ok=False)
     assert player._arbiter._committed_repr is None
-    assert player._yield is None
-
-
-def test_no_commitment_yet_keeps_waiting_for_a_holder():
-    player = _player()
-    player._yield = (YIELDED, None)
-    player._advance_yield(None)
-    assert player._yield == (YIELDED, None)
+    assert player._turns == {}
 
 
 def _cache(goal) -> PlanCache:

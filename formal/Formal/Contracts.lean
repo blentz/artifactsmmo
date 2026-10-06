@@ -49,6 +49,7 @@ import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
 import Formal.GatherCost
+import Formal.TurnRotation
 import Formal.ShoppingList
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
@@ -3426,3 +3427,15 @@ example : ∀ (base dist bankPenalty loadPenalty perUnit : Rat) (q₁ q₂ banke
     Formal.GatherCost.gatherCostRated base dist bankPenalty loadPenalty perUnit q₁ banked mismatch
       ≤ Formal.GatherCost.gatherCostRated base dist bankPenalty loadPenalty perUnit q₂ banked mismatch :=
   @Formal.GatherCost.gather_cost_rated_monotone
+
+/-! ### TurnRotation contracts (every plannable goal gets a turn). -/
+-- rotation_fair_bound: FAIRNESS — a plannable goal is picked within n - 1 turns.
+example : ∀ (n : Nat) (p : Nat → Bool) (g : Nat), g < n → p g = true →
+    ∀ (t : Nat → Nat), ∃ m, m + 1 ≤ n ∧
+      Formal.TurnRotation.pick n p (Formal.TurnRotation.run n p m t) = some g :=
+  @Formal.TurnRotation.rotation_fair_bound
+-- pickL_spec: the pick is plannable and ahead of every other plannable goal.
+example : ∀ (t : Nat → Nat) (p : Nat → Bool) (l : List Nat) (h : Nat),
+    Formal.TurnRotation.pickL t p l = some h →
+      h ∈ l ∧ p h = true ∧ ∀ j ∈ l, p j = true → j ≠ h → Formal.TurnRotation.before t h j = true :=
+  @Formal.TurnRotation.pickL_spec
