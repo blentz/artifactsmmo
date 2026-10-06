@@ -8,7 +8,7 @@
 >
 > The crossing is a differential on production's own pricer — the candidate priced as it stands, then again with the walled items granted. No closure is re-derived here; obligation O6 forbids a second cost model and this census must not be one.
 
-343 candidate cells over 44 scenarios; gate opens 2 of 9 walls (store-less); obtainable 76; not_drop_walled 256; walled 9 (9 on ALTERNATIVES); closes 9; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
+345 candidate cells over 44 scenarios; gate opens 2 of 9 walls (store-less); obtainable 78; not_drop_walled 256; walled 9 (9 on ALTERNATIVES); closes 9; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
 
 argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only the argmax sees those 0 and misses 9 — an infinite price is a veto, so a walled candidate never becomes the argmax.
 
@@ -171,6 +171,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l12_gearcrafting_gap | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l12_gearcrafting_gap | ReachSkillLevel(skill='gearcrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_gearcrafting_gap | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l12_gearcrafting_gap | ReachTaskOutcome(task_code='cow') | alt | PASS | 22 | 22 | 22 | - | - | - | - | - |
 | l12_gearcrafting_gap | ReachSkillLevel(skill='cooking', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_gearcrafting_gap | ReachSkillLevel(skill='jewelrycrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_gearcrafting_gap | ReachSkillLevel(skill='weaponcrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -256,6 +257,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l32_held_task_workable | ObtainItem(code='adventurer_pants', quantity=1, slot='leg_armor_slot') | alt | PASS | 255 | 255 | 255 | - | - | - | - | - |
 | l32_held_task_workable | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 64 | 64 | 64 | - | - | - | - | - |
 | l32_held_task_workable | ReachCharLevel(level=40) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l32_held_task_workable | ReachTaskOutcome(task_code='pig') | alt | PASS | 26 | 26 | 26 | - | - | - | - | - |
 | l32_held_task_workable | ReachSkillLevel(skill='cooking', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_workable | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_workable | ReachSkillLevel(skill='jewelrycrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |

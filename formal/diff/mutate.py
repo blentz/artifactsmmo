@@ -350,6 +350,7 @@ COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / 
 FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding_core.py"
 CURRENCY_AFFORD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_afford_core.py"
 REFUSAL_FACT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "refusal_fact_core.py"
+TASK_KILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "task_kills.py"
 STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
 DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decision.py"
 OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "obtain_item.py"
@@ -7237,6 +7238,34 @@ FIGHT_APPLICABILITY_MUTATIONS = [
 ]
 
 
+# The task objective (Phase 5-2c-iii-c-1). Killed by
+# tests/test_ai/test_task_objective.py.
+TASK_ROOT_MUTATIONS = [
+    ("root: the task objective is never offered",
+     "    if task is not None:\n        ordered.append(task)\n",
+     "    if task is not None:\n        pass\n"),
+    ("root: an unwinnable task is offered as itself, not asking for gear",
+     "    if is_winnable(replace(state, hp=state.max_hp), game_data, state.task_code, history):\n",
+     "    if True:\n"),
+    ("root: a met task is still offered",
+     "            or state.task_progress >= state.task_total):\n        return None\n",
+     "            ):\n        return None\n"),
+]
+TASK_STEP_MUTATIONS = [
+    ("step: the task objective maps to no goal",
+     "        return TaskKillsGoal(step.task_code, state.task_progress)\n",
+     "        return None\n"),
+]
+TASK_KILLS_MUTATIONS = [
+    ("task kills: one kill does not satisfy it",
+     "                or state.task_progress > self._initial_progress)\n",
+     "                or False)\n"),
+    ("task kills: any monster's fight is relevant",
+     "                if (isinstance(action, FightAction) and action.monster_code == self._task_code)\n",
+     "                if isinstance(action, FightAction)\n"),
+]
+
+
 # The learned-loss veto is level- and gear-scoped (USER 2026-10-05: old losses
 # are gear-specific and level-specific). Store arms killed by
 # tests/test_ai/learning/test_combat_loadout_outcome_store.py, the veto arm by
@@ -8872,6 +8901,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_no_combat_deadlock.py", survivors)
     run_group(APPLY_FIGHT_SRC, TASK_FIGHT_BYPASS_MUTATIONS,
               "tests/test_ai/test_grey_farm.py", survivors)
+    run_group(ROOT_DECISION_SRC, TASK_ROOT_MUTATIONS,
+              "tests/test_ai/test_task_objective.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, TASK_STEP_MUTATIONS,
+              "tests/test_ai/test_task_objective.py", survivors)
+    run_group(TASK_KILLS_SRC, TASK_KILLS_MUTATIONS,
+              "tests/test_ai/test_task_objective.py", survivors)
     run_group(LEARNING_STORE_SRC, COMBAT_RECORD_SCOPE_MUTATIONS,
               "tests/test_ai/learning/test_combat_loadout_outcome_store.py", survivors)
     run_group(COMBAT_SRC, LOSS_VETO_MUTATIONS,

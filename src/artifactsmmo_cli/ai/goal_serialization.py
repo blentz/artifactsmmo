@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
+from artifactsmmo_cli.ai.goals.task_kills import TaskKillsGoal
 
 
 def goal_to_dict(goal: object) -> dict[str, object] | None:
@@ -45,6 +46,10 @@ def goal_from_dict(data: dict[str, object], game_data: GameData | None) -> Goal:
         return GrindCharacterXPGoal(
             cast(str, data["target_monster"]),
             cast(int, data["initial_xp"]))
+    if t == "TaskKillsGoal":
+        return TaskKillsGoal(
+            cast(str, data["task_code"]),
+            cast(int, data["initial_progress"]))
     if t == "ReachSkillGoal":
         return ReachSkillGoal(
             cast(str, data["skill_name"]),

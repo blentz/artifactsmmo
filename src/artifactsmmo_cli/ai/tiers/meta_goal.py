@@ -96,7 +96,25 @@ class ReachSkillLevel:
         return state.skills.get(self.skill, 1) >= self.level
 
 
-META_GOAL_KINDS: tuple[type, ...] = (ObtainItem, ReachCharLevel, ReachSkillLevel)
+@dataclass(frozen=True)
+class ReachTaskOutcome:
+    """The held monsters task `task_code` reaches its count (Phase 5-2c-iii-c).
+
+    A root ALTERNATIVE, offered by `resolve_root` after the trunk while the task
+    is held, unmet and its monster winnable, so the turn order (`rotate`) gives
+    the task its own turns. Its step is `TaskKillsGoal`. Satisfied the moment
+    the task is no longer this one or its count is met — the turn-in is the
+    COMPLETE_TASK rung's, until 5-2c-iii-c-2 folds it in.
+    """
+
+    task_code: str
+
+    def is_satisfied(self, state: WorldState, game_data: GameData) -> bool:
+        return state.task_code != self.task_code or state.task_progress >= state.task_total
+
+
+META_GOAL_KINDS: tuple[type, ...] = (ObtainItem, ReachCharLevel, ReachSkillLevel,
+                                     ReachTaskOutcome)
 """The complete set of concrete MetaGoal variants, as a runtime-checkable
 isinstance tuple. `MetaGoal` is a Protocol — it cannot be isinstance-tested
 directly — so this is the single place a fourth variant must be registered.

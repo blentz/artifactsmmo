@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
+    ReachTaskOutcome,
 )
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -112,6 +113,10 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData,
     if isinstance(node, ReachSkillLevel):
         # A skill climb has no MetaGoal prerequisites — LevelSkill /
         # ReachSkillGoal owns the sub-plan (§5.1).
+        return []
+    if isinstance(node, ReachTaskOutcome):
+        # The task's kills are its own step (`TaskKillsGoal`); an unwinnable
+        # task monster is offered as its gear root instead, never as this.
         return []
     # Fail loudly rather than silently reporting "no prerequisites" for a kind
     # this dispatch does not know (fix-round-1, task 2 review): the trailing

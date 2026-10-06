@@ -56,7 +56,7 @@ and no longer disagrees with this module):
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 # MODULE import, same idiom as `_skill_grindable` and `_route` below, and for the
 # same reason but the OTHER direction: `gather_demand` imports
@@ -81,6 +81,7 @@ from artifactsmmo_cli.ai import gather_demand as _gather_demand
 # already use on each other, for this reason. (It used to be `level_skill`,
 # whose `LevelSkill.is_applicable` wrapped this same predicate.)
 from artifactsmmo_cli.ai import skill_grindable as _skill_grindable
+from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.combat_deficit import deficit_upgrade_target
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
 
@@ -100,6 +101,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
+    ReachTaskOutcome,
     StepDecline,
     no_decline,
 )
@@ -924,6 +926,44 @@ class CanIClearMyTier(Decision[MetaGoal]):
         return None
 
 
+def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
+               history: LearningStore | None) -> MetaGoal | None:
+    """The held monsters task as a root alternative, or None.
+
+    USER 2026-10-05: a held task that pays no progression XP is ROTATED IN, not
+    left inert. Live, three tasks had been held 15 days with no task fight (R2D2
+    `ogre` 0/327, Lor `spider` 0/206, C3P0 `pig` 5/104): the task was no root,
+    so it had no turn, and its grey monster was no fight.
+
+    * winnable (projected to max hp, with the learned-loss veto — the same
+      verdict `GamePlayer._is_winnable` gives the cascade): the task itself,
+      `ReachTaskOutcome`, whose step is one more kill;
+    * NOT winnable — USER ruling: the task ASKS FOR GEAR. The root is the
+      acquisition that most improves the margin against the task monster
+      (`combat_deficit.deficit_upgrade_target`, the question
+      `WhichSlotClosesTheFight` asks), as an `ObtainItem` in its slot;
+    * no gear closes the gap: None. The task waits, inert, for a coin to cancel
+      it (S-052).
+
+    Items tasks are not offered here: PURSUE_TASK still serves them until
+    5-2c-iii-c-2 folds that rung in."""
+    if (state.task_type != "monsters" or not state.task_code
+            or state.task_progress >= state.task_total):
+        return None
+    if is_winnable(replace(state, hp=state.max_hp), game_data, state.task_code, history):
+        return ReachTaskOutcome(state.task_code)
+
+    def actions_of(code: str, slot: str) -> int:
+        return _route.route_price(ObtainItem(code, 1, slot=slot), state,
+                                  game_data, ctx, history)
+
+    target = deficit_upgrade_target(state, game_data, actions_of=actions_of)
+    if target is None:
+        return None
+    code, slot = target
+    return ObtainItem(code, 1, slot=slot)
+
+
 def resolve_root(state: WorldState, game_data: GameData,
                  objective: CharacterObjective, ctx: SelectionContext,
                  history: LearningStore | None,
@@ -971,6 +1011,14 @@ def resolve_root(state: WorldState, game_data: GameData,
     # which `Sequence[MetaGoal]` cannot type — filtered rather than left in,
     # since `gather_demand._seed` would skip it anyway (neither an `ObtainItem`
     # nor a `ReachSkillLevel`).
+    # THE TASK OBJECTIVE (Phase 5-2c-iii-c), after the trunk and before the
+    # orphan skill roots: the held monsters task as a root of its own, so the
+    # turn order gives it turns. Its position matters little under `rotate` —
+    # every plannable alternative gets a turn — but behind the trunk it does not
+    # displace the objective's own provisioning, for the reason given above.
+    task = _task_root(state, game_data, ctx, history)
+    if task is not None:
+        ordered.append(task)
     offered = [g for g in (root, *ordered) if g is not None]
     ordered.extend(_orphan_skill_roots(state, game_data, offered, ctx))
 

@@ -67,6 +67,7 @@ from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.goals.surrender_currency import SurrenderCurrencyGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal, tasks_coin_total
+from artifactsmmo_cli.ai.goals.task_kills import TaskKillsGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
@@ -104,6 +105,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
+    ReachTaskOutcome,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.objective_needs import (
@@ -656,6 +658,12 @@ def objective_step_goal(
         # `LevelSkill` at that skill, exactly as `decisions/obtain_item.
         # CanICraftCurrentTier` does for a skill-gated craft one layer down.
         return ReachSkillGoal(skill_name=step.skill, target_level=step.level)
+    if isinstance(step, ReachTaskOutcome):
+        # Phase 5-2c-iii-c: the task objective's step is one more kill of its
+        # monster, at the count it has now; a met or dropped task has none.
+        if step.is_satisfied(state, game_data):
+            return None
+        return TaskKillsGoal(step.task_code, state.task_progress)
     return None
 
 

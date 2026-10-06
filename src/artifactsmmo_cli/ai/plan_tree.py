@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
+    ReachTaskOutcome,
 )
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
@@ -72,6 +73,8 @@ def _label(node: MetaGoal) -> tuple[str, str]:
         # category, so the plan pane and the resolved root's own category
         # agree on what kind of root this is.
         return f"{node.skill} → {node.level}", "skill"
+    if isinstance(node, ReachTaskOutcome):
+        return f"task {node.task_code}", "task"
     return short_root(repr(node)), "obtain"
 
 

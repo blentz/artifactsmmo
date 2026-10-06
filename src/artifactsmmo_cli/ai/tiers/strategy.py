@@ -17,6 +17,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
+    ReachTaskOutcome,
     StepDecline,
     no_decline,
 )
@@ -33,6 +34,8 @@ def root_category(node: MetaGoal) -> str:
         return "char_level"
     if isinstance(node, ReachSkillLevel):
         return "skill"
+    if isinstance(node, ReachTaskOutcome):
+        return "task"
     return "gear"  # ObtainItem
 
 

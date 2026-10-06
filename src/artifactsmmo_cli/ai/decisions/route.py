@@ -36,9 +36,13 @@ as one — wave 4's `WhichSlotClosesTheFight` makes one textual call to
 never appear inside a `sorted(...)` key over an unbounded list.
 """
 
+from math import ceil
+
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
+from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
@@ -50,6 +54,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
+    ReachTaskOutcome,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -168,6 +173,16 @@ TOTAL over `META_GOAL_KINDS` since wave 6. The two climbs return
         if plan.blocked:
             return UNOBTAINABLE_PER_UNIT
         return int(plan.total_cycles)
+    if isinstance(goal, ReachTaskOutcome):
+        # The remaining kills, each at the whole-loop `cycles_per_kill` a drop
+        # farm and a level grind are both quoted in (`acquisition_cost.
+        # _drop_actions`): a fight plus its forced rests. A task that is no
+        # longer held or already met costs nothing more.
+        if goal.is_satisfied(state, game_data):
+            return 0
+        per_kill = cycles_per_kill(
+            expected_damage_per_fight(state, game_data, goal.task_code), state.max_hp)
+        return ceil((state.task_total - state.task_progress) * per_kill)
     assert not isinstance(goal, META_GOAL_KINDS), (
         f"{goal!r} is in META_GOAL_KINDS but route_price has no arm for it")
     raise AssertionError(f"unhandled MetaGoal kind: {goal!r}")
