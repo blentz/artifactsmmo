@@ -15,6 +15,8 @@ Scenario 2 (negative): the same character with no alchemy-craftable utility
 potion in the catalog -> the guard stays quiet, so nothing preempts the grind.
 """
 
+import dataclasses
+
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
@@ -25,7 +27,7 @@ from artifactsmmo_cli.ai.combat import combat_margin
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
-from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
+from artifactsmmo_cli.ai.potion_supply import craft_potions_fires, potion_batch
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext, active_guards
@@ -40,10 +42,11 @@ _INGREDIENT = "sunflower"
 _RESOURCE = "sunflower_field"
 
 
-def _ctx() -> SelectionContext:
+def _ctx(fight_monster: str | None = None) -> SelectionContext:
     return SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=1, combat_monster=None,
+        fight_monster=fight_monster,
     )
 
 
@@ -92,7 +95,7 @@ def _understocked_state():
 def test_understocked_producible_fires_guard_maps_goal_and_plans_craft_and_equip():
     gd = _gd_with_potion_and_hurting_monster()
     state = _understocked_state()
-    ctx = _ctx()
+    ctx = _ctx(fight_monster=_MONSTER)
 
     # 1. The guard ladder fires CRAFT_POTIONS.
     fired = active_guards(state, gd, None, ctx)
@@ -245,7 +248,7 @@ def test_guard_fires_for_beneficial_boost_when_heal_stocked():
     """
     gd = _gd_boost_winnable()
     state = _state_heals_stocked()
-    assert craft_potions_fires(state, gd) is True
+    assert craft_potions_fires(state, gd, None, _MONSTER) is True
 
 
 def test_guard_no_boost_when_none_beneficial():
@@ -260,46 +263,26 @@ def test_guard_no_boost_when_none_beneficial():
     """
     gd = _gd_boost_trivial_monster()
     state = _state_heals_stocked()
-    assert craft_potions_fires(state, gd) is False
+    assert craft_potions_fires(state, gd, None, _MONSTER) is False
 
 
 def test_c1_guard_and_goal_agree_on_boost_target():
-    """C1 spin regression: guard picks boost-target via primary_combat_target;
-    goal must use the SAME selector — NOT self._combat_monster.
-
-    Pre-fix: CraftPotionsGoal._active_craft guarded the boost branch on
-    ``self._combat_monster is not None``.  When the goal was constructed with
-    ``combat_monster=None`` (or any monster that differs from primary_combat_target),
-    _active_craft returned None even though craft_potions_fires returned True
-    → guard re-fired every cycle → infinite spin.
-
-    Post-fix: the goal's boost branch calls primary_combat_target(state, gd),
-    identical to the guard, so guard and goal always agree on the target.
+    """C1 spin regression: the guard and the goal must size for the SAME
+    monster, or a fired guard builds a goal with nothing to do and re-fires
+    every cycle. Both read `ctx.fight_monster` (2026-10-06; it was
+    `primary_combat_target` for both before).
 
     Non-vacuous: fire_boost IS craftable-now (alchemy=10 >= gate=1), IS
     beneficial against slime (fire attack → gain > 0), and IS producible
-    (3 sunflowers held satisfy recipe {sunflower:3}).  The only variable is
-    which monster the goal uses — post-fix it matches the guard's pick.
-    """
+    (3 sunflowers held satisfy recipe {sunflower:3})."""
     gd = _gd_boost_winnable()
     state = _state_heals_stocked()
-
-    # Guard fires: primary_combat_target = slime → fire_boost beneficial + producible.
-    assert craft_potions_fires(state, gd) is True
-
-    # Goal constructed with combat_monster=None: simulates the mismatch where
-    # the strategy driver passes a task-aligned monster different from the guard's pick.
-    goal = CraftPotionsGoal(combat_monster=None)
-
-    # Post-fix: _active_craft uses primary_combat_target → slime → fire_boost plan.
-    # Pre-fix: the combat_monster=None branch was skipped entirely → returned None.
+    ctx = _ctx(fight_monster=_MONSTER)
+    assert craft_potions_fires(state, gd, None, ctx.fight_monster) is True
+    goal = map_guard(GuardKind.CRAFT_POTIONS, gd, ctx, state)
+    assert isinstance(goal, CraftPotionsGoal)
     result = goal._active_craft(state, gd)
-    assert result is not None, (
-        "guard fired for slime's fire_boost but _active_craft returned None "
-        "(C1 spin: goal boost-path was gated on self._combat_monster, "
-        "not primary_combat_target)"
-    )
-    assert result[0] == _BOOST
+    assert result is not None and result[0] == _BOOST
 
 
 # ── anti-grind regression (Task 5) ──────────────────────────────────────────
@@ -430,7 +413,23 @@ def test_guard_fires_when_consumption_is_projected():
         utility1_slot_quantity=0,
         inventory={_INGREDIENT: 3},
     )
-    assert craft_potions_fires(state, gd, None) is True
+    assert craft_potions_fires(state, gd, None, _MONSTER) is True
+
+
+def test_no_stock_without_a_fight_ahead():
+    """2026-10-06, live Lor: the stock was sized for the first winnable in-band
+    monster (`rat`), which Lor never fought; ~258 sunflower gathers in three
+    hours bought potions the server drank in cow and wolf fights. Now the stock
+    is for the fight the intention has ahead, and with none there is none."""
+    gd = _gd_boost_winnable()
+    state = make_state(
+        level=5, hp=100, max_hp=100, attack={"fire": 50},
+        skills={**make_state().skills, "alchemy": 10},
+        equipment={**make_state().equipment, "utility1_slot": _POTION},
+        utility1_slot_quantity=0, inventory={_INGREDIENT: 3},
+    )
+    assert craft_potions_fires(state, gd, None, _MONSTER) is True
+    assert craft_potions_fires(state, gd, None, None) is False
 
 
 def test_guard_quiet_when_the_heal_target_has_an_empty_recipe():
@@ -462,3 +461,15 @@ def test_guard_quiet_when_the_beneficial_boost_has_no_producible_recipe():
         "fixture must still offer a BENEFICIAL boost, or this tests nothing"
     )
     assert craft_potions_fires(state, gd, None) is False
+
+
+def test_no_boost_batch_once_the_boost_stack_meets_the_ramp():
+    """Heals stocked and the beneficial boost already equipped at the level
+    ramp: nothing left to brew for the fight ahead."""
+    gd = _gd_boost_winnable()
+    state = dataclasses.replace(
+        _state_heals_stocked(),
+        equipment={**_state_heals_stocked().equipment, "utility2_slot": _BOOST},
+        utility2_slot_quantity=100)
+    assert potion_batch(state, gd, None, _MONSTER) is None
+    assert craft_potions_fires(state, gd, None, _MONSTER) is False

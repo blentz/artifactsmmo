@@ -76,7 +76,6 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
-from artifactsmmo_cli.ai.potion_supply import primary_combat_target
 from artifactsmmo_cli.ai.raid_participation import raid_survivable_pure
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.requirement_projections import demand_set
@@ -330,34 +329,14 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
         # re-resolves its target per planner node and can demand one its own
         # (seed-frozen) action set never provides — see CraftPotionsGoal.__init__.
         #
-        # `combat_monster=` IS THE GUARD'S OWN MONSTER, NOT `ctx.combat_monster`.
-        # `craft_potions_fires` — "the exclusive gating truth for
-        # CraftPotionsGoal" (potion_supply.py) — projects the heal need from
-        # `primary_combat_target(state, game_data)`, while `ctx.combat_monster`
-        # is the arbiter's FARM target from a different cascade
-        # (`GamePlayer._winnable_farm_target`). Seeding the goal from the farm
-        # target let it size for a monster the guard had NOT fired on: where the
-        # two named different monsters the goal answered `is_satisfied() == True`
-        # and `select_pure` skipped it, so a fired guard was discarded with
-        # nothing in `goals_tried` to record that it ever fired. Measured
-        # 2026-08-25 on `l21_grey_material_grind` / `l22_grey_rung_grind` (ctx
-        # `mushmush` vs the guard's `pig`), 14 of 294 cells across the 42
-        # scenarios x 7 bag shapes.
-        #
-        # Forwarding the predicate's own call is what makes the goal's
-        # `_baseline` fall-through — `self._combat_monster or
-        # primary_combat_target(...)` — read the SAME answer either way, so the
-        # guard and the goal can no longer name different monsters. It is one
-        # extra call to a pure function, and only on a cycle where the guard has
-        # already fired. `test_craft_potions_goal_sizes_from_the_monster_the_guard_fired_on`
-        # is what fails if `ctx.combat_monster` is ever wired back in.
-        #
-        # `state is None` is the legacy-caller case this function's docstring
-        # already carves out; the goal's own fall-through then supplies the
-        # monster from whatever state it is asked about.
+        # `combat_monster=` IS THE GUARD'S OWN MONSTER: `ctx.fight_monster`, the
+        # one `craft_potions_fires` was asked about, so the guard and the goal
+        # cannot size for different monsters. (It was `primary_combat_target`
+        # for both until 2026-10-06 — a monster the intention might never fight;
+        # before 2026-08-25 the goal read `ctx.combat_monster`, the farm target,
+        # so a fired guard could build a goal already satisfied.)
         return CraftPotionsGoal(
-            combat_monster=(primary_combat_target(state, game_data)
-                            if state is not None else None),
+            combat_monster=ctx.fight_monster,
             game_data=game_data, history=history, state=state)
     if kind is GuardKind.GE_CANCEL:
         if state is None:

@@ -55,7 +55,7 @@ def _gd(*, with_boost: bool, monster_level: int = 3, ingredient_qty: int = 1) ->
     (`fight_is_marginal_pure`): a comfortably-won fight projects zero in-combat
     consumption, so the goal would correctly have nothing to do and the test
     would pass vacuously. `monster_level` keeps it inside the character's combat
-    band so `primary_combat_target` selects it.
+    band, where it is the fight the goal is built for.
     """
     gd = GameData()
     stats = {
@@ -124,7 +124,7 @@ def test_goal_is_plannable_without_a_craftable_boost():
     action set covers it, and the planner finds the craft+equip plan."""
     gd = _gd(with_boost=False, monster_level=18)
     state = _state()
-    goal = CraftPotionsGoal(game_data=gd, state=state)
+    goal = CraftPotionsGoal(combat_monster=_HURTS, game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
     plan = (decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or [])
@@ -142,7 +142,7 @@ def test_goal_stays_plannable_once_a_boost_becomes_craftable():
     """
     gd = _gd(with_boost=True, monster_level=18)
     state = _state()
-    goal = CraftPotionsGoal(game_data=gd, state=state)
+    goal = CraftPotionsGoal(combat_monster=_HURTS, game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
     plan = decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or []
@@ -164,7 +164,7 @@ def test_goal_is_plannable_when_the_deficit_exceeds_one_gather_batch():
     """
     gd = _gd(with_boost=False, monster_level=18)
     state = _state(inventory={})          # nothing held: forces the gather rung
-    goal = CraftPotionsGoal(game_data=gd, state=state)
+    goal = CraftPotionsGoal(combat_monster=_HURTS, game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
     plan = decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or []
@@ -189,7 +189,7 @@ def test_goal_provisions_depth_for_the_batch_its_own_ladder_sized():
     """
     gd = _gd(with_boost=False, monster_level=18, ingredient_qty=3)
     state = _state(inventory={})          # nothing held: forces the gather rung
-    goal = CraftPotionsGoal(game_data=gd, state=state)
+    goal = CraftPotionsGoal(combat_monster=_HURTS, game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
     plan = decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or []

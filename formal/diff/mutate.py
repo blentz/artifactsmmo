@@ -8143,9 +8143,27 @@ DEPOSIT_INVENTORY_SPACE_FRACTION_MUTATIONS = [
 # `is_satisfied() == True` and the fired guard is silently discarded.
 CRAFT_POTIONS_GUARD_MONSTER_MUTATIONS = [
     ("map_guard(CRAFT_POTIONS): seed the FARM target instead of the guard's monster",
-     "            combat_monster=(primary_combat_target(state, game_data)\n"
-     "                            if state is not None else None),",
-     "            combat_monster=ctx.combat_monster,"),
+     "            combat_monster=ctx.fight_monster,\n",
+     "            combat_monster=ctx.combat_monster,\n"),
+]
+# The potion stock is for the fight ahead (2026-10-06, live Lor: ~258 sunflower
+# gathers for `rat`, a monster it never fought). Guard arm killed by
+# tests/test_ai/test_tiers_guards.py, player arms by tests/test_ai/test_fight_monster.py.
+POTION_FIGHT_AHEAD_GUARD_MUTATIONS = [
+    ("guards(CRAFT_POTIONS): size for no fight (the stock is never justified)",
+     "        return craft_potions_fires(state, game_data, history, ctx.fight_monster)",
+     "        return craft_potions_fires(state, game_data, history, None)"),
+]
+POTION_FIGHT_AHEAD_PLAYER_MUTATIONS = [
+    ("player: the fight is forgotten when an interrupt replaces the plan cache",
+     "        if self._intention_fight is None or self._intention_fight[0] != committed:\n",
+     "        if cache is None or cache.goal_repr != committed:\n"),
+    ("player: the fight is read from the start of the plan, not the cursor",
+     "            monster = next((a.monster_code for a in cache.plan[cache.cursor:]\n",
+     "            monster = next((a.monster_code for a in cache.plan\n"),
+    ("player: the fight outlives its commitment",
+     "        if self._intention_fight is None or self._intention_fight[0] != committed:\n",
+     "        if self._intention_fight is None:\n"),
 ]
 
 SELL_INVENTORY_GOAL_MUTATIONS = [
@@ -8907,6 +8925,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_task_objective.py", survivors)
     run_group(TASK_KILLS_SRC, TASK_KILLS_MUTATIONS,
               "tests/test_ai/test_task_objective.py", survivors)
+    run_group(GUARDS_SRC, POTION_FIGHT_AHEAD_GUARD_MUTATIONS,
+              "tests/test_ai/test_tiers_guards.py", survivors)
+    run_group(PLAYER_SRC, POTION_FIGHT_AHEAD_PLAYER_MUTATIONS,
+              "tests/test_ai/test_fight_monster.py", survivors)
     run_group(LEARNING_STORE_SRC, COMBAT_RECORD_SCOPE_MUTATIONS,
               "tests/test_ai/learning/test_combat_loadout_outcome_store.py", survivors)
     run_group(COMBAT_SRC, LOSS_VETO_MUTATIONS,

@@ -8,7 +8,6 @@ for the CRAFT_POTIONS guard tier (guards.py) and CraftPotionsGoal.
 from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.boost_selection import best_boost_potion
-from artifactsmmo_cli.ai.combat_targets import combat_target_monsters
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
@@ -33,12 +32,6 @@ from artifactsmmo_cli.ai.thresholds import (
 )
 from artifactsmmo_cli.ai.unlock_boost import unlock_boost_target
 from artifactsmmo_cli.ai.world_state import WorldState
-
-
-def primary_combat_target(state: WorldState, game_data: GameData) -> str | None:
-    """First winnable in-band monster from combat_target_monsters, or None when empty."""
-    targets = combat_target_monsters(state, game_data)
-    return targets[0] if targets else None
 
 
 def target_potion_pure(
@@ -211,8 +204,10 @@ def potion_batch(state: WorldState, game_data: GameData,
       combat monster while its stack is below the level ramp.
     Each batch is sized by the supply ladder (`_ladder_runs`: held first, then
     an affordable buy mix, then a gather batch) and then cut to the runs the
-    ladder can actually supply (`feasible_runs`). `combat_monster` defaults to
-    `primary_combat_target`, the monster the guard fires on."""
+    ladder can actually supply (`feasible_runs`). `combat_monster` is the monster
+    the committed intention fights next (`SelectionContext.fight_monster`); None
+    — no fight ahead — means no heal or boost stock: there is no in-combat
+    consumption to stock for."""
     pair = unlock_boost_target(state, game_data)
     if pair is not None and feasible_runs(pair[0], 1, state, game_data):
         boost = pair[0]
@@ -220,7 +215,7 @@ def potion_batch(state: WorldState, game_data: GameData,
     code = target_potion_pure(state, game_data, effect)
     if code is None:
         return None
-    monster = combat_monster or primary_combat_target(state, game_data)
+    monster = combat_monster
     deficit = heal_stock_target(state, game_data, history, monster, code) \
         - equipped_potion_qty(state, code)
     if deficit > 0:
@@ -237,12 +232,13 @@ def potion_batch(state: WorldState, game_data: GameData,
 
 
 def craft_potions_fires(state: WorldState, game_data: GameData,
-                        history: LearningStore | None = None) -> bool:
+                        history: LearningStore | None = None,
+                        fight_monster: str | None = None) -> bool:
     """True when the CRAFT_POTIONS guard should preempt the grind: exactly when
     `potion_batch` names a batch the ladder can supply. The exclusive gating
     truth for `CraftPotionsGoal`, by construction rather than by a parallel
     re-derivation."""
-    return potion_batch(state, game_data, history) is not None
+    return potion_batch(state, game_data, history, fight_monster) is not None
 
 
 def _level_ramp(level: int) -> int:

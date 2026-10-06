@@ -272,6 +272,9 @@ class GamePlayer:
         self._intention_stall = 0
         self._intention_cycles = 0
         self._intention_counted: str | None = None
+        # (committed repr, the monster its plan fights next), kept across
+        # interrupts that replace the plan cache (`_committed_fight_monster`).
+        self._intention_fight: tuple[str | None, str | None] | None = None
         # The turn log (Phase 5-2c-iii-a): goal repr -> the sequence number of
         # its last spent budget. Goal choice tries the least recently served
         # first (`intention_progress.rotate`).
@@ -3619,6 +3622,26 @@ class GamePlayer:
             self._draw_owed = False
         return self._draw_owed
 
+    def _committed_fight_monster(self) -> str | None:
+        """The monster the committed intention fights next, or None when it
+        fights nothing (2026-10-06). The CRAFT_POTIONS guard sizes its stock for
+        this fight and no other.
+
+        Read from the INTENTION's cached plan — the first Fight left in it — and
+        remembered while that commitment holds: an interrupt (a rest, the potion
+        batch itself) replaces the cache with its own plan, and the fight it
+        interrupts is still the one ahead. Without the memory a potion batch
+        would see no fight the cycle after it started and stop half made."""
+        committed = self._arbiter._committed_repr
+        cache = self._plan_cache
+        if cache is not None and cache.goal_repr == committed:
+            monster = next((a.monster_code for a in cache.plan[cache.cursor:]
+                            if isinstance(a, FightAction)), None)
+            self._intention_fight = (committed, monster)
+        if self._intention_fight is None or self._intention_fight[0] != committed:
+            return None
+        return self._intention_fight[1]
+
     def _selection_context(self, combat_monster: str | None = None) -> SelectionContext:
         assert self.state is not None
         assert self.game_data is not None
@@ -3682,6 +3705,7 @@ class GamePlayer:
             # on every single-character run. Feeds
             # `acquisition_cost._sibling_craft_option`.
             sibling_skills=self._sibling_skills,
+            fight_monster=self._committed_fight_monster(),
         )
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:

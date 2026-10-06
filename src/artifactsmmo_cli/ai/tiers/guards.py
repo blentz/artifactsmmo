@@ -262,7 +262,7 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                                          deposit_context(ctx, step_profile)))
                 and _quantity_fraction(state) >= DISCARD_HIGH_FRACTION)
     if kind is GuardKind.CRAFT_POTIONS:
-        return craft_potions_fires(state, game_data, history)
+        return craft_potions_fires(state, game_data, history, ctx.fight_monster)
     if kind is GuardKind.GE_CANCEL:
         # On-need + TTL cancellation. `needed_items` is the active step's material
         # demand (`step_profile` codes — the same per-cycle demand GE_BID reads); a

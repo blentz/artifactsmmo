@@ -41,16 +41,18 @@ import dataclasses
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.boost_selection import best_boost_potion
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
+from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
 from artifactsmmo_cli.ai.potion_supply import (
     craft_potions_fires,
-    primary_combat_target,
     target_potion_pure,
 )
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
@@ -81,15 +83,24 @@ def state(bundle_game_data: GameData) -> WorldState:
 
 def _goal(state: WorldState, game_data: GameData) -> CraftPotionsGoal:
     """The goal built the way `strategy_driver.map_guard` builds it: seeded from
-    the state, with `combat_monster` = the guard's own `primary_combat_target`."""
-    return CraftPotionsGoal(game_data=game_data, state=state,
-                            combat_monster=primary_combat_target(state, game_data))
+    the state, with `combat_monster` = the fight the intention has ahead
+    (`ctx.fight_monster`), which in this cell is the highwayman grind."""
+    return CraftPotionsGoal(game_data=game_data, state=state, combat_monster=MONSTER)
 
 
 def _planned(state: WorldState, game_data: GameData):
+    """One cycle MID-INTENTION: the character is grinding `highwayman`, its
+    cached plan holds the next fight. Potion stock is for the fight ahead
+    (2026-10-06), so a cycle with no intention has none to size for."""
     player = GamePlayer(character=CELL, history=None)
     player.seed_offline(state, game_data)
-    return player, player.plan_from_state()
+    grind = GrindCharacterXPGoal(MONSTER, state.xp)
+    fight = FightAction(monster_code=MONSTER,
+                        locations=frozenset(game_data.all_monster_locations[MONSTER]))
+    player._arbiter._committed_repr = repr(grind)
+    player._plan_cache = PlanCache(selected_goal=grind, plan=[fight], crafting_target=None,
+                                   plan_level=state.level, goal_repr=repr(grind))
+    return player, player.plan_from_state(committed=repr(grind))
 
 
 def _arm_is_boost_stock(state: WorldState, game_data: GameData) -> bool:
@@ -126,7 +137,6 @@ def test_the_stall_breaker_is_silent_so_only_the_stock_arm_can_fire(
     bare-winnable). It must be None here or the cell would be exercising arm 1,
     which `l30_rune_fill` already covers."""
     assert unlock_boost_target(state, bundle_game_data) is None
-    assert primary_combat_target(state, bundle_game_data) == MONSTER
     assert best_boost_potion(state, bundle_game_data, MONSTER) == BOOST
     assert equipped_potion_qty(state, BOOST) == 0
 
@@ -161,7 +171,7 @@ def test_the_guard_fires_and_the_goal_agrees_on_the_boost_arm(
     """Guard and goal are PAIRED on this arm — the guard opens the rung and the
     goal has boost work, in the same cycle. This is the assertion an earlier
     scoping document said could not hold."""
-    assert craft_potions_fires(state, bundle_game_data, None) is True
+    assert craft_potions_fires(state, bundle_game_data, None, MONSTER) is True
     assert _arm_is_boost_stock(state, bundle_game_data) is True
 
 
@@ -255,7 +265,7 @@ def test_the_next_cycle_does_not_reverse_the_arm(
     after = state
     for action in report.plan:
         after = action.apply(after, bundle_game_data)
-    assert craft_potions_fires(after, bundle_game_data, None) is False
+    assert craft_potions_fires(after, bundle_game_data, None, MONSTER) is False
     assert _goal(after, bundle_game_data)._active_craft(after, bundle_game_data) is None
     # The heal arm's own gate is still closed — the precondition survived.
     goal = _goal(after, bundle_game_data)
@@ -298,7 +308,7 @@ def test_one_potion_fewer_moves_the_guard_back_to_the_heal_arm(
     """Proof it bites. ONE field changes — the utility1 quantity, 40 -> 39 —
     and the guard is still up but the arm is the heal one."""
     understocked = dataclasses.replace(state, utility1_slot_quantity=39)
-    assert craft_potions_fires(understocked, bundle_game_data, None) is True
+    assert craft_potions_fires(understocked, bundle_game_data, None, MONSTER) is True
     assert _arm_is_boost_stock(understocked, bundle_game_data) is False
     plan = _goal(understocked, bundle_game_data)._active_craft(
         understocked, bundle_game_data)
@@ -313,11 +323,22 @@ def test_this_is_the_only_cell_that_reaches_the_boost_stock_arm(
     firing, boost_arm = set(), set()
     for name, scenario in SCENARIOS.items():
         world = scenario_state(scenario, bundle_game_data)
-        if craft_potions_fires(world, bundle_game_data, None):
+        # The fight each scenario has ahead: its farm target, the monster the
+        # trunk's grind would fight (a scenario carries no intention of its own).
+        player = GamePlayer(character=name, history=None)
+        player.seed_offline(world, bundle_game_data)
+        ahead = player._winnable_farm_target()
+        if craft_potions_fires(world, bundle_game_data, None, ahead):
             firing.add(name)
             if _arm_is_boost_stock(world, bundle_game_data):
                 boost_arm.add(name)
     assert boost_arm == {CELL}
-    assert firing == {CELL, "l10_copper_adequate", "l21_grey_material_grind",
-                      "l22_grey_rung_grind", "l20_relief_full_bank",
-                      "l20_bag_critical_empty_bank"}
+    # Re-measured 2026-10-06 when the stock moved to the fight ahead: 6 -> 14
+    # cells, because each scenario's farm target (the grind's monster) hurts
+    # more than the first in-band monster the guard used to size for.
+    assert firing == {CELL, "l10_copper_adequate", "l12_gearcrafting_gap",
+                      "l20_bag_critical_empty_bank", "l20_dual_utility",
+                      "l20_dual_utility_one_stocked", "l20_relief_full_bank",
+                      "l21_grey_material_grind", "l22_grey_rung_grind",
+                      "l22_rest_for_combat", "l24_fisher_cooking_rung",
+                      "l30_rune_fill", "l47_depth3_amulet", "l48_event_active"}

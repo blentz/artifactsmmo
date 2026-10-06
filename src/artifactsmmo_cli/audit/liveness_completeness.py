@@ -227,12 +227,6 @@ DORMANT: dict[str, str] = {
     "ParticipateRaidGoal": "unreachable: expected_damage_per_fight prices a SOLO "
                            "raid-boss kill (pixie: 1,844,857 vs 1,570 hp), so "
                            "raid_survivable_pure refuses every real loadout",
-    # --- New in Phase 5-2c-iii-c-1 (2026-10-05). Not yet run by the live fleet:
-    # its first run needs the restart that ships it. The scratch-DB probe
-    # planned `TaskKills(pig)` -> `Fight(pig)` for C3P0; remove this entry once
-    # the store shows it running.
-    "TaskKillsGoal": "conditional: the task root's step, shipped 2026-10-05; "
-                     "needs a held monsters task with a winnable monster and a turn",
     # --- Genuinely conditional on world state the fleet has not met.
     "TeleportAction": "conditional: needs an unlocked teleport destination",
     # --- Conditional on a character state the fleet has not reached.

@@ -19,7 +19,6 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.potion_supply import (
     heal_stock_target,
     potion_batch,
-    primary_combat_target,
     target_potion_pure,
 )
 from artifactsmmo_cli.ai.unlock_boost import unlock_boost_target
@@ -81,7 +80,7 @@ class CraftPotionsGoal(Goal):
         """Combat-projected potion target, capped by the level ramp: the SAME
         stock target `potion_supply.potion_batch` sizes from (so guard and goal
         cannot disagree), for the monster this goal was built for (the guard's
-        `primary_combat_target` when none was forwarded). 0 with no state, no
+        `ctx.fight_monster`). 0 with no state, no
         game data, no combat monster or no target potion: no in-combat
         consumption to stock for. `level` is the state's own and kept for the
         existing callers."""
@@ -90,8 +89,7 @@ class CraftPotionsGoal(Goal):
         target_potion = self._target_potion(state, game_data)
         if target_potion is None:
             return 0
-        return heal_stock_target(state, game_data, history,
-                                 self._combat_monster or primary_combat_target(state, game_data),
+        return heal_stock_target(state, game_data, history, self._combat_monster,
                                  target_potion)
 
     def _active_craft(self, state: WorldState, game_data: GameData) -> tuple[str, int, int] | None:

@@ -172,6 +172,15 @@ class SelectionContext:
     # sibling saves the SKILL GATE and nothing else.
     sibling_skills: dict[str, int] = field(default_factory=dict)
 
+    # The monster the committed intention FIGHTS next: the first Fight in its
+    # cached plan, or None when the intention fights nothing (2026-10-06). The
+    # CRAFT_POTIONS guard sizes its stock for this monster and nothing else.
+    # Live Lor: sized for `primary_combat_target` — the first winnable in-band
+    # monster, `rat`, which Lor never fought — the guard gathered ~258
+    # sunflowers in three hours for potions the server drank in cow and wolf
+    # fights Lor won anyway.
+    fight_monster: str | None = None
+
 
 NO_PROFILE_CONTEXT = SelectionContext(
     bank_accessible=True,

@@ -58,8 +58,8 @@ def combat_target_monsters(state: WorldState, game_data: GameData) -> list[str]:
     tile at all -- among them the raid bosses `pixie` and `sonnengott`, which no
     action can ever target because `factory.py` only emits a `FightAction` per
     entry of `all_monster_locations`. Without the spawn gate this helper returned
-    them, and `potion_supply.primary_combat_target` delegates here, so potion
-    stocking could size itself against a fight that can never happen.
+    them, and potion stocking (then sized from this list's head) could size
+    itself against a fight that can never happen.
 
     The gate keys on REACHABILITY, not on being event content: `monster_spawn_known`
     is event-aware, so an event monster counts while its event runs and drops out

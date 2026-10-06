@@ -164,7 +164,9 @@ def test_value_is_baseline_deficit_when_understocked():
     # _HURTS projects real in-combat consumption; the ramp caps it at 5 for
     # level 1, and nothing is equipped -> deficit 5.
     state = make_state(level=1, attack={"fire": 20})
-    assert CraftPotionsGoal().value(state, gd) == 5.0
+    assert CraftPotionsGoal(combat_monster=_HURTS).value(state, gd) == 5.0
+    # No fight ahead: nothing to stock for (2026-10-06).
+    assert CraftPotionsGoal().value(state, gd) == 0.0
 
 
 def test_value_zero_when_satisfied():
@@ -252,8 +254,8 @@ def test_baseline_capped_by_level_ramp(tmp_path):
 def test_baseline_zero_when_no_target_monster():
     """NEW CONTRACT (combat-justified stocking): no combat target → target 0.
 
-    The character has no attack, so nothing in the catalog is winnable and
-    `primary_combat_target` returns None. There is no fight to be consumed in, so
+    The goal was built for no fight (`ctx.fight_monster` is None). There is no
+    fight to be consumed in, so
     there is nothing to stock for — the level ramp does NOT apply as a floor.
     Previously this returned the bare level_baseline (5) regardless of combat.
     """

@@ -87,19 +87,14 @@ EXPECTATIONS: dict[str, Golden] = {
     "l1_fresh": Golden(
         goal_class="GatherMaterials(ash_wood", first_action="Gather(ash_tree"),
 
-    # l10_copper_adequate: full copper set but shield_slot is empty.
-    # RE-DERIVED WAVE 3a fix-round 1. The walk's root here is also the
-    # jewelrycrafting climb (gear-target tier 5), but the ARBITER does not
-    # reach it: a guard fires first and the goal is `CraftPotionsGoal`. That is
-    # what makes this scenario the one of the four that discriminates on the
-    # GUARD ladder rather than on the walk — and why its golden differs from
-    # `l10_weapon_upgrade`'s despite the identical root.
-    #
-    # (The 2026-08-04 pursuit_value derivation this replaces argued the shield
-    # over the potion on a 52.8M-vs-6.0M ranking. That ranking is deleted; the
-    # potion is back, but through the guard, not through a candidate score.)
+    # l10_copper_adequate: full copper set but shield_slot is empty. The walk's
+    # root is the jewelrycrafting climb (gear-target tier 5), and the arbiter
+    # takes it. RE-DERIVED 2026-10-06: it used to be `CraftPotionsGoal`, the
+    # potion guard sizing a stock for the first winnable in-band monster. The
+    # stock is now for the fight the intention has ahead, and a scenario cycle
+    # has no intention — so no fight, no stock, and the climb runs.
     "l10_copper_adequate": Golden(
-        goal_class="CraftPotionsGoal", first_action="Withdraw(sunflower"),
+        goal_class="ReachSkill(jewelrycrafting", first_action="Gather(copper_rocks"),
 
     # l12_taskgated_bag: GEAR-FIRST re-derivation 2026-07-08 (Task-3
     # pursuit_value; user ruling). The tree's chosen_root is

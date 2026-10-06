@@ -9,7 +9,6 @@ from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.potion_supply import (
     craft_potions_fires,
-    primary_combat_target,
     projected_heal_need_per_fight,
 )
 from artifactsmmo_cli.ai.strategy_driver import map_guard
@@ -711,7 +710,7 @@ def _understocked_producible(level: int = 3, equipped: int = 0):
     """Level 3: baseline = POTION_LOW_QTY = 5; equipped=0 < 5; potion gatherable."""
     state = make_state(level=level, skills={"alchemy": 1},
                        utility1_slot_quantity=equipped, attack={"fire": 20})
-    return state, _potion_gd(), _ctx()
+    return state, _potion_gd(), _ctx(fight_monster="red_slime")
 
 
 def _understocked_but_no_alchemy(level: int = 3, equipped: int = 0):
@@ -719,7 +718,7 @@ def _understocked_but_no_alchemy(level: int = 3, equipped: int = 0):
     gd = GameData()  # empty catalog — no potions
     state = make_state(level=level, skills={"alchemy": 1},
                        utility1_slot_quantity=equipped)
-    return state, gd, _ctx()
+    return state, gd, _ctx(fight_monster="red_slime")
 
 
 def _stocked_to_baseline(level: int = 3, equipped: int = 5):
@@ -734,7 +733,7 @@ def _stocked_to_baseline(level: int = 3, equipped: int = 5):
     }
     state = make_state(level=level, skills={"alchemy": 1},
                        equipment=eq, utility1_slot_quantity=equipped)
-    return state, _potion_gd(), _ctx()
+    return state, _potion_gd(), _ctx(fight_monster="red_slime")
 
 
 def test_craft_potions_guard_fires_when_understocked_and_producible():
@@ -760,7 +759,7 @@ def test_craft_potions_guard_fires_when_ingredients_held():
     producibility fires (potion_supply.py:74)."""
     state = make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0,
                        inventory={"red_slimeball": 2}, attack={"fire": 20})
-    assert _fires(GuardKind.CRAFT_POTIONS, state, _potion_gd(), None, _ctx(), None) is True
+    assert _fires(GuardKind.CRAFT_POTIONS, state, _potion_gd(), None, _ctx(fight_monster="red_slime"), None) is True
 
 
 def test_craft_potions_guard_fires_when_ingredients_buyable_for_gold():
@@ -772,7 +771,7 @@ def test_craft_potions_guard_fires_when_ingredients_buyable_for_gold():
     gd._npc_locations = {"alchemist": (4, 4)}
     state = make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0,
                        inventory={}, attack={"fire": 20})
-    assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, _ctx(), None) is True
+    assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, _ctx(fight_monster="red_slime"), None) is True
 
 
 def test_craft_potions_guard_quiet_when_recipe_is_empty():
@@ -854,25 +853,15 @@ def test_deposit_full_never_fires_on_a_goal_that_reports_zero_value():
 
 
 def test_craft_potions_goal_sizes_from_the_monster_the_guard_fired_on():
-    """ONE MONSTER, AND `craft_potions_fires` NAMES IT.
+    """ONE MONSTER, AND `ctx.fight_monster` NAMES IT.
 
-    `craft_potions_fires` is documented as "the exclusive gating truth for
-    CraftPotionsGoal — the guard never fires when the goal would have no
-    plannable path", and it projects the heal need from
-    `primary_combat_target(state, game_data)`. `map_guard` used to seed the
-    goal with `ctx.combat_monster` — the arbiter's FARM target, a different
-    cascade (`GamePlayer._winnable_farm_target`) — so when the two named
-    different monsters the goal sized from one the guard had not fired on,
-    reported `is_satisfied() == True`, and `select_pure` skipped it: the
-    guard's decision was discarded with nothing in `goals_tried` to say so.
-
-    Measured 2026-08-25: `l21_grey_material_grind` / `l22_grey_rung_grind`
-    (ctx `mushmush` vs the guard's `pig`) in the as-shipped corpus, 14 of 294
-    cells across the 42 scenarios x 7 bag shapes.
-
-    This cell has TWO tiled winnable monsters. `combat_target_monsters` orders
-    them, so `primary_combat_target` names one of them, and the ctx names the
-    other on purpose — exactly the divergence above.
+    The guard and the goal both size for the fight the intention has ahead
+    (`ctx.fight_monster`, 2026-10-06). `map_guard` once seeded the goal with
+    `ctx.combat_monster` — the arbiter's FARM target, a different cascade — so
+    when the two named different monsters the goal sized from one the guard had
+    not fired on, reported `is_satisfied() == True`, and `select_pure` skipped it
+    (measured 2026-08-25: 14 of 294 cells). The ctx here names the farm target
+    as the OTHER monster on purpose: that divergence must not leak in.
     """
     gd = GameData()
     gd._item_stats = {
@@ -893,18 +882,18 @@ def test_craft_potions_goal_sizes_from_the_monster_the_guard_fired_on():
     fill_monster_stat_defaults(gd)
     state = make_state(level=1, hp=150, max_hp=150, attack={"fire": 20})
 
-    fired = primary_combat_target(state, gd)
-    other = "nibbler" if fired == "biter" else "biter"
-    # NON-VACUOUS: both monsters are winnable and tiled, the guard fires on
-    # `fired` (projected need 120 HP) and `other` projects 0 — so seeding the
-    # goal with `other` is what used to silence it.
+    fired, other = "biter", "nibbler"
+    # NON-VACUOUS: both monsters are winnable and tiled; `fired` projects 120 HP
+    # of need and `other` projects 0, so seeding the goal from `other` is what
+    # used to silence it.
     assert combat_target_monsters(state, gd) == ["biter", "nibbler"]
     assert projected_heal_need_per_fight(state, gd, fired, None) > 0
     assert projected_heal_need_per_fight(state, gd, other, None) == 0
-    assert craft_potions_fires(state, gd, None) is True
+    assert craft_potions_fires(state, gd, None, fired) is True
+    assert craft_potions_fires(state, gd, None, None) is False
 
-    goal = map_guard(GuardKind.CRAFT_POTIONS, gd, _ctx(combat_monster=other),
-                     state, None, None)
+    goal = map_guard(GuardKind.CRAFT_POTIONS, gd,
+                     _ctx(combat_monster=other, fight_monster=fired), state, None, None)
     # A guard that fired must not emit a goal the arbiter throws away unread.
     assert goal.is_satisfied(state) is False
     assert goal.value(state, gd) > 0.0
