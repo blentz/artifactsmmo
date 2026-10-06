@@ -1116,17 +1116,17 @@ class TestDegradationOnDbError:
         assert store.task_reward_sample_count() == 0
         assert store.mean_task_reward_value(default=7.0) == 7.0
 
-    def test_get_learned_int_returns_default_on_error(self, tmp_db_path):
+    def test_get_fleet_learned_int_returns_default_on_error(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="hero")
         _break_engine(store)
-        assert store.get_learned_int("task_exchange_min_coins", default=3) == 3
+        assert store.get_fleet_learned_int("task_exchange_min_coins", default=3) == 3
 
-    def test_set_learned_int_swallows_error(self, tmp_db_path, capsys):
+    def test_set_fleet_learned_int_swallows_error(self, tmp_db_path, capsys):
         store = LearningStore(db_path=tmp_db_path, character="hero")
         _break_engine(store)
         # No exception; best-effort write degrades to a logged message.
-        store.set_learned_int("task_exchange_min_coins", 9)
-        assert "set_learned_int" in capsys.readouterr().out
+        store.set_fleet_learned_int("task_exchange_min_coins", 9)
+        assert "set_fleet_learned_int" in capsys.readouterr().out
 
     def test_hp_healed_per_fight_returns_none_on_db_error(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="hero")
@@ -1134,27 +1134,45 @@ class TestDegradationOnDbError:
         assert store.hp_healed_per_fight("red_slime", lambda c: 0) is None
 
 
-class TestLearnedInt:
+class TestFleetLearnedInt:
     def test_round_trip_and_update(self, tmp_db_path):
-        """First set inserts; a second set on the same key updates the existing
-        row in place (lines 522-524) rather than inserting a duplicate."""
+        """First set inserts; a second set on the same key updates the row in
+        place rather than inserting a duplicate."""
         store = LearningStore(db_path=tmp_db_path, character="hero")
-        assert store.get_learned_int("min_coins", default=1) == 1  # absent -> default
-        store.set_learned_int("min_coins", 4)
-        assert store.get_learned_int("min_coins", default=1) == 4
-        store.set_learned_int("min_coins", 9)  # update existing row
-        assert store.get_learned_int("min_coins", default=1) == 9
+        assert store.get_fleet_learned_int("min_coins", default=1) == 1  # absent -> default
+        store.set_fleet_learned_int("min_coins", 4)
+        assert store.get_fleet_learned_int("min_coins", default=1) == 4
+        store.set_fleet_learned_int("min_coins", 9)
+        assert store.get_fleet_learned_int("min_coins", default=1) == 9
         store.close()
 
-    def test_learned_int_is_per_character(self, tmp_db_path):
+    def test_one_value_for_every_character(self, tmp_db_path):
         a = LearningStore(db_path=tmp_db_path, character="alice")
-        a.set_learned_int("min_coins", 5)
+        a.set_fleet_learned_int("min_coins", 5)
         b = LearningStore(db_path=tmp_db_path, character="bob")
-        # bob has no row for this key -> default.
-        assert b.get_learned_int("min_coins", default=0) == 0
-        assert a.get_learned_int("min_coins", default=0) == 5
+        assert b.get_fleet_learned_int("min_coins", default=0) == 5
         a.close()
         b.close()
+
+    def test_per_character_rows_fold_into_the_fleet_row(self, tmp_db_path):
+        """The 2026-10-06 migration: the old per-character table folds into one
+        row per key at its largest value (every row bounds the same constant),
+        and the old table is gone."""
+        with closing(sqlite3.connect(tmp_db_path)) as conn:
+            conn.execute("CREATE TABLE learned_settings (id INTEGER PRIMARY KEY, "
+                         "character VARCHAR, key VARCHAR, value INTEGER)")
+            conn.executemany(
+                "INSERT INTO learned_settings (character, key, value) VALUES (?, ?, ?)",
+                [("R2D2", "task_exchange_min_coins", 2), ("Lor", "task_exchange_min_coins", 6),
+                 ("HAL", "task_exchange_min_coins", 5), ("HAL", "other", 3)])
+            conn.commit()
+        store = LearningStore(db_path=tmp_db_path, character="C3P0")
+        assert store.get_fleet_learned_int("task_exchange_min_coins", default=1) == 6
+        assert store.get_fleet_learned_int("other", default=1) == 3
+        store.close()
+        with closing(sqlite3.connect(tmp_db_path)) as conn:
+            names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
+        assert "learned_settings" not in names
 
 
 def test_parse_skill_xp_value_none_returns_zero():

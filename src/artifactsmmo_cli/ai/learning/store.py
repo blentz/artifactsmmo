@@ -23,10 +23,10 @@ from artifactsmmo_cli.ai.learning.models import (
     CraftYieldObservation,
     Cycle,
     DecisionEvent,
+    FleetLearnedSetting,
     Intention,
     IntentionBase,
     IntentionTurn,
-    LearnedSetting,
     LoadoutProfileObservation,
     PlanBodyLog,
     PlanBodyLogBase,
@@ -248,6 +248,17 @@ class LearningStore:
             if "level" not in clo_cols:
                 conn.exec_driver_sql(
                     "ALTER TABLE combat_loadout_outcome ADD COLUMN level INTEGER")
+            # Fleet-wide learning (2026-10-06): the per-character
+            # `learned_settings` rows fold into one account-wide row per key.
+            # The largest value wins: every row is a lower bound on the same
+            # server constant, or that constant itself.
+            tables = {row[0] for row in conn.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            if "learned_settings" in tables:
+                conn.exec_driver_sql(
+                    "INSERT OR IGNORE INTO fleet_learned_settings (key, value) "
+                    "SELECT key, MAX(value) FROM learned_settings GROUP BY key")
+                conn.exec_driver_sql("DROP TABLE learned_settings")
 
         # PRAGMAs go on their OWN connection, after the lock is released:
             # Composite-index migration (2026-08-21). `create_all` adds missing
@@ -1391,44 +1402,27 @@ class LearningStore:
         self._engine.dispose()
 
 
-    def get_learned_int(self, key: str, default: int) -> int:
-        """Read a per-character int setting (e.g. `task_exchange_min_coins`).
+    def get_fleet_learned_int(self, key: str, default: int) -> int:
+        """Read an account-wide int setting (e.g. `task_exchange_min_coins`).
         Returns `default` when the row is missing or any DB error fires —
         keeps the player loop alive on degraded storage."""
         try:
             with SqlSession(self._engine) as s:
-                row = s.exec(
-                    select(LearnedSetting).where(
-                        LearnedSetting.character == self._character,
-                        LearnedSetting.key == key,
-                    )
-                ).first()
-                return int(row.value) if row is not None else default
+                row = s.get(FleetLearnedSetting, key)
+                return row.value if row is not None else default
         except SQLAlchemyError:
             return default
 
-    def set_learned_int(self, key: str, value: int) -> None:
-        """Upsert a per-character int setting. Persists across sessions so
-        repeated re-discovery (e.g. the taskmaster's exchange cost via HTTP
-        478 climbs) only pays its discovery rejections once per character."""
+    def set_fleet_learned_int(self, key: str, value: int) -> None:
+        """Upsert an account-wide int setting. Every character of the fleet
+        reads it, so a fact one character learns is never re-discovered by a
+        sibling, nor by any of them after a restart."""
         try:
             with SqlSession(self._engine) as s:
-                row = s.exec(
-                    select(LearnedSetting).where(
-                        LearnedSetting.character == self._character,
-                        LearnedSetting.key == key,
-                    )
-                ).first()
-                if row is not None:
-                    row.value = int(value)
-                    s.add(row)
-                else:
-                    s.add(LearnedSetting(
-                        character=self._character, key=key, value=int(value),
-                    ))
+                s.merge(FleetLearnedSetting(key=key, value=int(value)))
                 s.commit()
         except SQLAlchemyError as e:
-            print(f"[learning] set_learned_int({key}) failed: {e}")
+            print(f"[learning] set_fleet_learned_int({key}) failed: {e}")
 
     def record_plan_body(self, goal_repr: str, head_action_repr: str,
                          body: list[str]) -> None:

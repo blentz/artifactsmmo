@@ -231,20 +231,20 @@ class TaskRewardObservation(SQLModel, table=True):
     value: float
 
 
-class LearnedSetting(SQLModel, table=True):
-    """Generic per-character key/int store for facts the bot learns from
-    API responses and that should survive session restarts. First use:
-    `task_exchange_min_coins` — the taskmaster's per-exchange coin cost,
-    discovered by climbing past HTTP 478 ("missing items") rejections.
-    Without persistence each new session re-pays ~3-5 HTTP 478 rejections
-    to re-learn the same minimum (trace: 42 HTTP_478 across ~10 sessions =
-    ~4 per restart, exactly the discovery climb)."""
+class FleetLearnedSetting(SQLModel, table=True):
+    """Account-wide key/int store for facts the bot learns from API responses
+    that hold for EVERY character, and that should survive session restarts.
+    First use: `task_exchange_min_coins` — the taskmaster's per-exchange coin
+    cost, discovered by climbing past HTTP 478 ("missing items") rejections.
 
-    __tablename__ = "learned_settings"
+    Fleet-wide since 2026-10-06 (USER: "share the learning fleet-wide"). The
+    cost is one server constant, but each character learned it alone: after
+    the restart that day four characters each paid a 478 while Lor alone had
+    pinned the exact cost (6), and three were left holding lower bounds."""
 
-    id: int | None = Field(default=None, primary_key=True)
-    character: str = Field(index=True)
-    key: str = Field(index=True)
+    __tablename__ = "fleet_learned_settings"
+
+    key: str = Field(primary_key=True)
     value: int
 
 

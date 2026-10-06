@@ -57,41 +57,74 @@ def test_non_task_exchange_action_is_ignored():
     assert p._task_exchange_min_coins == 1  # untouched
 
 
+def _stored_player(store: LearningStore) -> GamePlayer:
+    p = GamePlayer.__new__(GamePlayer)
+    p._task_exchange_min_coins = 1
+    p.history = store
+    return p
+
+
 def test_learned_minimum_persists_across_sessions(tmp_path):
     """Trace 2026-05/06: 42 HTTP_478 across ~10 sessions = ~4 rejections per
-    re-discovery. Persisting the learned minimum via LearningStore drops the
-    second-session rediscovery cost to zero: a fresh GamePlayer hooked up to
-    the same DB should pick up the value the prior session learned."""
+    re-discovery. A fresh player on the same DB starts from what the prior
+    session learned."""
     db = str(tmp_path / "learn.db")
     store_a = LearningStore(db_path=db, character="hero")
-    p1 = GamePlayer.__new__(GamePlayer)
-    p1._task_exchange_min_coins = 1
-    p1.history = store_a
     prev = make_state(inventory={"tasks_coin": 5})
-    p1._learn_task_exchange_cost(_exchange(), prev, prev, "error:HTTP_478")
-    assert p1._task_exchange_min_coins == 6
+    _stored_player(store_a)._learn_task_exchange_cost(_exchange(), prev, prev, "error:HTTP_478")
     store_a.close()
 
-    # New session: a fresh store/player binding to the same DB should restore
-    # the learned minimum on construction.
     store_b = LearningStore(db_path=db, character="hero")
-    restored = store_b.get_learned_int("task_exchange_min_coins", default=1)
-    assert restored == 6, (
-        f"learned task_exchange_min_coins should persist across sessions; "
-        f"got {restored}"
-    )
+    assert _stored_player(store_b)._exchange_min_coins() == 6
     store_b.close()
 
 
-def test_learned_minimum_is_per_character(tmp_path):
-    """Two characters discovering different exchange costs shouldn't
-    overwrite each other's learned bound."""
+def test_a_cost_one_character_learns_reaches_a_running_sibling(tmp_path):
+    """USER 2026-10-06: the learning is fleet-wide. Live that day Lor pinned
+    the exact cost (6) while R2D2, C3P0, HAL and Robby each paid their own 478.
+    A sibling already running reads the cost on its next call — no restart."""
     db = str(tmp_path / "learn.db")
-    a = LearningStore(db_path=db, character="alice")
-    b = LearningStore(db_path=db, character="bob")
-    a.set_learned_int("task_exchange_min_coins", 6)
-    b.set_learned_int("task_exchange_min_coins", 4)
-    assert a.get_learned_int("task_exchange_min_coins", 1) == 6
-    assert b.get_learned_int("task_exchange_min_coins", 1) == 4
-    a.close()
-    b.close()
+    lor = _stored_player(LearningStore(db_path=db, character="Lor"))
+    r2d2 = _stored_player(LearningStore(db_path=db, character="R2D2"))
+    assert r2d2._exchange_min_coins() == 1
+    lor._learn_task_exchange_cost(_exchange(), make_state(inventory={"tasks_coin": 7}),
+                                  make_state(inventory={"tasks_coin": 1}), "ok")
+    assert r2d2._exchange_min_coins() == 6
+    lor.history.close()
+    r2d2.history.close()
+
+
+def test_a_sibling_478_below_the_fleet_bound_never_lowers_it(tmp_path):
+    db = str(tmp_path / "learn.db")
+    lor = _stored_player(LearningStore(db_path=db, character="Lor"))
+    hal = _stored_player(LearningStore(db_path=db, character="HAL"))
+    lor._learn_task_exchange_cost(_exchange(), make_state(inventory={"tasks_coin": 5}),
+                                  make_state(inventory={"tasks_coin": 5}), "error:HTTP_478")
+    stale = make_state(inventory={"tasks_coin": 1})
+    hal._learn_task_exchange_cost(_exchange(), stale, stale, "error:HTTP_478")
+    assert lor._exchange_min_coins() == hal._exchange_min_coins() == 6
+    lor.history.close()
+    hal.history.close()
+
+
+def test_a_success_lowers_a_bound_the_cost_fell_below(tmp_path):
+    """The exact cost from a success overwrites the fleet value, so a server
+    cost that drops (a season reset) is relearned, not held at the old bound."""
+    db = str(tmp_path / "learn.db")
+    p = _stored_player(LearningStore(db_path=db, character="Lor"))
+    p.history.set_fleet_learned_int("task_exchange_min_coins", 6)
+    p._learn_task_exchange_cost(_exchange(), make_state(inventory={"tasks_coin": 6}),
+                                make_state(inventory={"tasks_coin": 2}), "ok")
+    assert p._exchange_min_coins() == 4
+    p.history.close()
+
+
+def test_an_unchanged_value_is_not_rewritten(tmp_path):
+    db = str(tmp_path / "learn.db")
+    p = _stored_player(LearningStore(db_path=db, character="Lor"))
+    p.history.set_fleet_learned_int("task_exchange_min_coins", 6)
+    p.history.set_fleet_learned_int = None  # a write would raise TypeError
+    p._learn_task_exchange_cost(_exchange(), make_state(inventory={"tasks_coin": 6}),
+                                make_state(inventory={"tasks_coin": 0}), "ok")
+    assert p._exchange_min_coins() == 6
+    p.history.close()

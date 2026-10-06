@@ -333,17 +333,11 @@ class GamePlayer:
         # shadow — its decision is traced each cycle but does not drive the bot.
         self._objective: CharacterObjective | None = None
         self._strategy: StrategyEngine | None = None
-        # Learned minimum tasks_coin worth attempting a taskmaster exchange. The
-        # API does not expose the per-exchange cost as data, so we discover it
-        # from HTTP 478 ("missing items") failures: raise the bound past any coin
-        # count that failed, and pin it to the exact cost once an exchange
-        # succeeds. Persisted via history.set_learned_int so a restart doesn't
-        # re-pay the discovery climb (trace 2026-05/06: 42 HTTP 478s across
-        # ~10 sessions = ~4 rejections per re-discovery).
-        self._task_exchange_min_coins: int = (
-            history.get_learned_int("task_exchange_min_coins", 1)
-            if history is not None else 1
-        )
+        # Learned minimum tasks_coin worth attempting a taskmaster exchange,
+        # for a player with no learning store. With one, the value lives in the
+        # store's fleet-wide row and is read fresh each cycle
+        # (`_exchange_min_coins`).
+        self._task_exchange_min_coins: int = 1
         self._goal_first_selected_at: dict[str, int] = {}
         self.history = history
         self._last_path_plan: PathPlan | None = None
@@ -2446,7 +2440,7 @@ class GamePlayer:
             state=self.state,
             objective=self._objective,
             bank_accessible=not self._blockers.is_blocked("bank"),
-            task_exchange_min_coins=self._task_exchange_min_coins,
+            task_exchange_min_coins=self._exchange_min_coins(),
         )
         # Route around actions the REPEATED_ACTION_FAILURE recovery has blocked,
         # so a repeatedly-failing action (even guard-driven) is dropped from the
@@ -3665,7 +3659,7 @@ class GamePlayer:
             bank_required_level=bank_blocker.required_level if bank_blocker else 0,
             bank_unlock_monster=bank_blocker.unlock_monster if bank_blocker else None,
             initial_xp=self.state.xp,
-            task_exchange_min_coins=self._task_exchange_min_coins,
+            task_exchange_min_coins=self._exchange_min_coins(),
             combat_monster=combat_monster,
             # A bank expansion is never a reserved gear code → buying=None
             # applies the full progression-reserve floor (same call the goal
@@ -3712,31 +3706,46 @@ class GamePlayer:
         suffix = f"  [{_format_plan(plan[1:])}]" if len(plan) > 1 else ""
         print(f"[{self._now()}] → {action!r}{suffix}  (goal: {goal!r})")
 
+    def _exchange_min_coins(self) -> int:
+        """The minimum tasks_coin worth attempting a taskmaster exchange.
+
+        The API does not expose the per-exchange cost as data, so it is
+        learned (`_learn_task_exchange_cost`). The cost is one server
+        constant, so the learned value is FLEET-WIDE (USER 2026-10-06): read
+        from the store on every call, a cost one character learns reaches its
+        running siblings on their next cycle and survives restarts. Live that
+        day, four characters each paid a 478 that Lor's success had already
+        made unnecessary."""
+        if self.history is None:
+            return self._task_exchange_min_coins
+        return self.history.get_fleet_learned_int("task_exchange_min_coins", 1)
+
     def _learn_task_exchange_cost(self, action: Action, prev_state: WorldState,
                                   new_state: WorldState, outcome: str) -> None:
         """Discover the taskmaster exchange cost from outcomes — never hardcoded.
 
-        The API does not expose the per-exchange coin cost as data. HTTP 478
-        ("missing items") means the coin count we tried was too low, so raise the
-        minimum past it. A success reveals the exact cost via the coin delta, so
-        pin the minimum to that.
+        HTTP 478 ("missing items") means the coin count we tried was too low,
+        so raise the minimum past it. A success reveals the exact cost via the
+        coin delta, so pin the minimum to that — which also lowers a bound the
+        server's cost has dropped below.
         """
         if not isinstance(action, TaskExchangeAction):
             return
         before = prev_state.inventory.get(TASKS_COIN_CODE, 0)
-        prev = self._task_exchange_min_coins
+        prev = self._exchange_min_coins()
+        learned = prev
         if outcome == "error:HTTP_478":
-            self._task_exchange_min_coins = max(self._task_exchange_min_coins, before + 1)
+            learned = max(prev, before + 1)
         elif outcome == "ok":
             spent = before - new_state.inventory.get(TASKS_COIN_CODE, 0)
             if spent > 0:
-                self._task_exchange_min_coins = spent
-        # Persist any change so the next session doesn't re-discover the same
-        # minimum via fresh HTTP 478 rejections.
-        if self.history is not None and self._task_exchange_min_coins != prev:
-            self.history.set_learned_int(
-                "task_exchange_min_coins", self._task_exchange_min_coins,
-            )
+                learned = spent
+        if learned == prev:
+            return
+        if self.history is None:
+            self._task_exchange_min_coins = learned
+        else:
+            self.history.set_fleet_learned_int("task_exchange_min_coins", learned)
 
     def _record_skill_observations(self, state: WorldState, skill_max_xp: dict[str, int]) -> None:
         """Persist observed XP-to-next-level for each skill at its current level."""

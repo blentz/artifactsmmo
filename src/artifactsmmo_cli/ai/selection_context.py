@@ -184,7 +184,7 @@ NO_PROFILE_CONTEXT = SelectionContext(
     bank_unlock_monster=None,
     initial_xp=0,
     # ONE COIN, matching production's own default
-    # (`player.py`: `get_learned_int("task_exchange_min_coins", 1)`), not zero.
+    # (`player.py`: `get_fleet_learned_int("task_exchange_min_coins", 1)`), not zero.
     # `_fires(TASK_EXCHANGE)` is `coins >= this`, so zero read `coins >= 0` —
     # true for every character alive — and the rung fired in 44 of 44 offline
     # scenarios, all of them coinless. The goal it built was satisfied on

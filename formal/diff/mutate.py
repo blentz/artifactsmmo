@@ -7216,6 +7216,31 @@ FIGHT_APPLICABILITY_MUTATIONS = [
 ]
 
 
+# Fleet-wide exchange-cost learning (USER 2026-10-06). Killed by
+# tests/test_ai/test_task_exchange_learning.py.
+EXCHANGE_COST_FLEET_MUTATIONS = [
+    ("exchange cost: a stored player reads only its own in-memory value",
+     "        if self.history is None:\n            return self._task_exchange_min_coins\n",
+     "        if True:\n            return self._task_exchange_min_coins\n"),
+    ("exchange cost: a success never lowers the learned bound",
+     "            if spent > 0:\n                learned = spent\n",
+     "            if spent > 0:\n                learned = max(prev, spent)\n"),
+    ("exchange cost: a 478 can lower the fleet bound",
+     "            learned = max(prev, before + 1)\n",
+     "            learned = before + 1\n"),
+    ("exchange cost: the learned value is never written to the store",
+     "            self.history.set_fleet_learned_int(\"task_exchange_min_coins\", learned)\n",
+     "            pass\n"),
+]
+# The per-character rows fold at their LARGEST value. Killed by
+# tests/test_ai/test_learning_store.py.
+FLEET_LEARNED_MIGRATION_MUTATIONS = [
+    ("fleet migration: per-character rows fold at their smallest value",
+     "SELECT key, MAX(value) FROM learned_settings GROUP BY key",
+     "SELECT key, MIN(value) FROM learned_settings GROUP BY key"),
+]
+
+
 # The accept gate: no task held and a draw owed, nothing else (USER
 # 2026-10-06 dropped the gear-chain deferral). Killed by
 # tests/test_ai/test_tiers_means.py.
@@ -8954,6 +8979,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_grey_farm.py", survivors)
     run_group(TASK_ACCEPT_SRC, TASK_ACCEPT_MUTATIONS,
               "tests/test_ai/test_tiers_means.py", survivors)
+    run_group(PLAYER_SRC, EXCHANGE_COST_FLEET_MUTATIONS,
+              "tests/test_ai/test_task_exchange_learning.py", survivors)
+    run_group(LEARNING_STORE_SRC, FLEET_LEARNED_MIGRATION_MUTATIONS,
+              "tests/test_ai/test_learning_store.py", survivors)
     run_group(ROOT_DECISION_SRC, TASK_ROOT_MUTATIONS,
               "tests/test_ai/test_task_objective.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, TASK_STEP_MUTATIONS,

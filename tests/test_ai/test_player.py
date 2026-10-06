@@ -328,7 +328,7 @@ class TestArbiterSelection:
         player._path_aligned_monster = lambda: "chicken"
         ctx = player._selection_context()
         assert ctx.combat_monster == "chicken"
-        assert ctx.task_exchange_min_coins == player._task_exchange_min_coins
+        assert ctx.task_exchange_min_coins == player._exchange_min_coins()
 
 
     def test_bag_full_selects_deposit_inventory(self):
