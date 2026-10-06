@@ -1,6 +1,5 @@
 """Tests for persistent blocker memory + ReachUnlockLevelGoal."""
 
-from sqlmodel import Session
 
 import artifactsmmo_cli.ai.learning.projections as proj
 import artifactsmmo_cli.ai.player as player_mod
@@ -9,16 +8,16 @@ from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.blockers import BlockerRegistry
+from artifactsmmo_cli.ai.combat import fight_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.reach_unlock_level import (
     MAX_ACHIEVABLE_GAP,
     PRIORITY_WHEN_BLOCKER_ACTIVE,
     ReachUnlockLevelGoal,
 )
-from artifactsmmo_cli.ai.learning.models import Cycle
-from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.loadout_profiles import combat_key
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 
@@ -253,22 +252,13 @@ class TestPickWinnableMonster:
         player, store = self._player_with_monsters(
             tmp_path, level=2, monster_levels={"chicken": 1, "yellow_slime": 3},
         )
-        # Seed 6 cycles of Fight(yellow_slime) all failed → success_rate=0.
-        store.start_session()
-        with Session(store._engine) as s:
-            s.add(SessionModel(session_id=store._session_id,
-                                started_at="2026-05-18T00:00:00Z", character="hero"))
-            for i in range(6):
-                s.add(Cycle(
-                    ts=f"2026-05-18T00:{i:02d}:00Z",
-                    session_id=store._session_id,
-                    cycle_index=i, character="hero",
-                    selected_goal="FarmMonster(yellow_slime)",
-                    action_repr="Fight(yellow_slime)",
-                    action_class="FightAction",
-                    outcome="error:fight_lost",
-                ))
-            s.commit()
+        # Six fights lost to yellow_slime at this level in the fight's loadout:
+        # the scoped loss veto's evidence (2026-10-05).
+        for _ in range(6):
+            store.record_combat_outcome(
+                combat_key("yellow_slime"),
+                fight_loadout(player.state, player.game_data, "yellow_slime"),
+                True, False, player.state.level)
         # yellow_slime excluded due to low win rate; chicken (untested) wins.
         assert player._pick_winnable_monster() == "chicken"
         store.close()

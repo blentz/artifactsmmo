@@ -20,11 +20,13 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.combat import fight_loadout
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.loadout_profiles import combat_key
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.player import GamePlayer, _format_plan
 from artifactsmmo_cli.ai.recovery import StuckSignal
@@ -434,6 +436,15 @@ def _seed_fights(store: LearningStore, monster_code: str, *, wins: int, losses: 
         s.commit()
 
 
+def _seed_outcomes(store: LearningStore, state: WorldState, gd: GameData, monster_code: str,
+                   *, wins: int, losses: int) -> None:
+    """Resolved fights against `monster_code` at the state's level, in the loadout
+    the fight is fought in — the evidence the scoped loss veto reads."""
+    for won in [True] * wins + [False] * losses:
+        store.record_combat_outcome(combat_key(monster_code),
+                                    fight_loadout(state, gd, monster_code), True, won, state.level)
+
+
 class TestWinnable:
     """_is_winnable / _pick_winnable_monster driven by the real predict_win
     estimator and a real LearningStore win-rate veto (no mocking)."""
@@ -463,9 +474,9 @@ class TestWinnable:
     def test_observed_losses_veto_a_predicted_win(self, tmp_path):
         store = LearningStore(db_path=str(tmp_path / "veto.db"), character="hero")
         try:
-            _seed_fights(store, "chicken", wins=0, losses=5)  # 0% over 5 fights
             gd = _winnable_gd({"chicken": {"level": 1, "hp": 10, "attack": {"fire": 1}}})
             state = make_state(level=5, max_hp=100, attack={"fire": 50}, initiative=50)
+            _seed_outcomes(store, state, gd, "chicken", wins=0, losses=5)  # 0% over 5 fights
             # Stats say win, but the learned 0% win-rate vetoes it.
             assert self._player(gd, state, history=store)._is_winnable("chicken") is False
         finally:
@@ -474,9 +485,9 @@ class TestWinnable:
     def test_veto_ignored_below_min_samples(self, tmp_path):
         store = LearningStore(db_path=str(tmp_path / "few.db"), character="hero")
         try:
-            _seed_fights(store, "chicken", wins=0, losses=4)  # < MIN_WIN_SAMPLES
             gd = _winnable_gd({"chicken": {"level": 1, "hp": 10, "attack": {"fire": 1}}})
             state = make_state(level=5, max_hp=100, attack={"fire": 50}, initiative=50)
+            _seed_outcomes(store, state, gd, "chicken", wins=0, losses=4)  # < MIN_WIN_SAMPLES
             # Too few fights to trust the loss record -> defer to the stat win.
             assert self._player(gd, state, history=store)._is_winnable("chicken") is True
         finally:

@@ -7237,6 +7237,28 @@ FIGHT_APPLICABILITY_MUTATIONS = [
 ]
 
 
+# The learned-loss veto is level- and gear-scoped (USER 2026-10-05: old losses
+# are gear-specific and level-specific). Store arms killed by
+# tests/test_ai/learning/test_combat_loadout_outcome_store.py, the veto arm by
+# tests/test_ai/test_combat.py.
+COMBAT_RECORD_SCOPE_MUTATIONS = [
+    ("combat_record: losses at any level count",
+     "                    CombatLoadoutOutcome.level == level,\n",
+     ""),
+    ("combat_record: losses in any loadout count",
+     "                    CombatLoadoutOutcome.loadout == encoded)))\n",
+     "                    CombatLoadoutOutcome.loadout == CombatLoadoutOutcome.loadout)))\n"),
+]
+LOSS_VETO_MUTATIONS = [
+    ("is_winnable: the learned-loss veto never fires",
+     "        if samples >= MIN_WIN_SAMPLES and wins < WIN_RATE_THRESHOLD * samples:\n",
+     "        if False:\n"),
+    ("is_winnable: the veto asks about the level-1 fight",
+     "            combat_key(monster_code), state.level, fight_loadout(state, game_data, monster_code))\n",
+     "            combat_key(monster_code), 1, fight_loadout(state, game_data, monster_code))\n"),
+]
+
+
 # The task-fight bypass (Phase 5-2c-iii-b). Killed by tests/test_ai/test_grey_farm.py.
 TASK_FIGHT_BYPASS_MUTATIONS = [
     ("fight-is_applicable: no task-fight bypass (a grey task monster cannot be fought)",
@@ -8850,6 +8872,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_no_combat_deadlock.py", survivors)
     run_group(APPLY_FIGHT_SRC, TASK_FIGHT_BYPASS_MUTATIONS,
               "tests/test_ai/test_grey_farm.py", survivors)
+    run_group(LEARNING_STORE_SRC, COMBAT_RECORD_SCOPE_MUTATIONS,
+              "tests/test_ai/learning/test_combat_loadout_outcome_store.py", survivors)
+    run_group(COMBAT_SRC, LOSS_VETO_MUTATIONS,
+              "tests/test_ai/test_combat.py", survivors)
     run_group(MONSTER_CATALOG_SRC, XP_POSITIVE_MUTATIONS,
               "formal/diff/test_xp_positive_diff.py", survivors)
     run_group(SKILL_XP_POSITIVE_SRC, SKILL_XP_POSITIVE_MUTATIONS,

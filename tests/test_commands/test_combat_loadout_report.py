@@ -29,12 +29,14 @@ def _seed_outcomes(db: str) -> None:
         loadout={"weapon_slot": "stick"},
         predicted_win=True,
         actual_win=True,
+        level=5,
     )
     store_hero.record_combat_outcome(
         task_key="combat:chicken",
         loadout={"weapon_slot": "stick"},
         predicted_win=True,
         actual_win=False,  # over-estimate
+        level=5,
     )
     store_ally = LearningStore(db_path=db, character="ally")
     store_ally.record_combat_outcome(
@@ -42,6 +44,7 @@ def _seed_outcomes(db: str) -> None:
         loadout={"weapon_slot": "sword"},
         predicted_win=False,
         actual_win=True,  # under-estimate
+        level=5,
     )
 
 

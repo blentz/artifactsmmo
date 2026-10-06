@@ -3791,10 +3791,10 @@ class GamePlayer:
         self.history.record_loadout_profile(task_key, loadout)
 
     def _record_combat_outcome(self, action: Action, state: WorldState, outcome: str) -> None:
-        """Record a resolved fight's worn loadout, predict_win verdict, and actual
-        result for diagnostics (sub-project D).  Fires on win ('ok') and loss
-        ('error:fight_lost') only — other outcomes mean no fight resolved.
-        Best-effort; drives no behavior."""
+        """Record a resolved fight's worn loadout, level, predict_win verdict, and
+        actual result. Fires on win ('ok') and loss ('error:fight_lost') only —
+        other outcomes mean no fight resolved. The learned-loss veto reads these
+        rows (`combat.is_winnable`)."""
         if self.history is None or self.game_data is None:
             return
         if not isinstance(action, FightAction):
@@ -3804,7 +3804,7 @@ class GamePlayer:
         loadout = {slot: code for slot, code in state.equipment.items() if code is not None}
         predicted = predict_win(state, self.game_data, action.monster_code)
         self.history.record_combat_outcome(
-            combat_key(action.monster_code), loadout, predicted, outcome == "ok")
+            combat_key(action.monster_code), loadout, predicted, outcome == "ok", state.level)
 
     def _record_learning_cycle(
         self,

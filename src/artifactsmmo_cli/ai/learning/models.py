@@ -702,10 +702,14 @@ class LoadoutProfileObservation(SQLModel, table=True):
 
 
 class CombatLoadoutOutcome(SQLModel, table=True):
-    """One row per resolved fight: the worn loadout, predict_win's verdict, and the
-    actual result. APPEND (calibration history; NOT last-write). task_key is
-    'combat:<monster>'. `loadout` is JSON {slot: code}. Read-only diagnostics
-    (sub-project D); drives no bot behavior."""
+    """One row per resolved fight: the worn loadout, the character's level,
+    predict_win's verdict, and the actual result. APPEND (NOT last-write).
+    task_key is 'combat:<monster>'. `loadout` is JSON {slot: code}.
+
+    The learned-loss veto reads it (`combat.is_winnable`, 2026-10-05): a loss is
+    evidence about THIS loadout at THIS level, so the veto counts only rows that
+    match both. `level` is None on rows written before it existed, which match
+    no level and so count nowhere."""
 
     __tablename__ = "combat_loadout_outcome"
 
@@ -715,3 +719,4 @@ class CombatLoadoutOutcome(SQLModel, table=True):
     loadout: str  # JSON {slot: code}
     predicted_win: bool
     actual_win: bool
+    level: int | None = None

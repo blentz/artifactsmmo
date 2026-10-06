@@ -241,6 +241,13 @@ class LearningStore:
             # yield became a turn log (`intention_turn`). A pending yield is
             # dropped, not converted: it costs at most one turn.
             conn.exec_driver_sql("DROP TABLE IF EXISTS intention_yield")
+            # Scoped loss veto (2026-10-05): a fight outcome records the level
+            # it was fought at. Older rows keep NULL, which no veto counts.
+            clo_cols = {row[1] for row in
+                        conn.exec_driver_sql("PRAGMA table_info(combat_loadout_outcome)")}
+            if "level" not in clo_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE combat_loadout_outcome ADD COLUMN level INTEGER")
 
         # PRAGMAs go on their OWN connection, after the lock is released:
             # Composite-index migration (2026-08-21). `create_all` adds missing
@@ -1320,9 +1327,9 @@ class LearningStore:
         return sum(vals) / len(vals) if vals else default
 
     def record_combat_outcome(self, task_key: str, loadout: dict[str, str],
-                              predicted_win: bool, actual_win: bool) -> None:
-        """Append one fight outcome row. APPEND (calibration history); NOT upsert.
-        Best-effort: SQLAlchemyError is caught and printed; never raised."""
+                              predicted_win: bool, actual_win: bool, level: int) -> None:
+        """Append one fight outcome row, at the character's `level`. APPEND;
+        NOT upsert. Best-effort: SQLAlchemyError is caught and printed."""
         try:
             with SqlSession(self._engine) as s:
                 s.add(CombatLoadoutOutcome(
@@ -1331,10 +1338,34 @@ class LearningStore:
                     loadout=json.dumps(loadout, sort_keys=True),
                     predicted_win=predicted_win,
                     actual_win=actual_win,
+                    level=level,
                 ))
                 s.commit()
         except SQLAlchemyError as e:
             print(f"[learning] record_combat_outcome failed: {e}")
+
+    def combat_record(self, task_key: str, level: int,
+                      loadout: dict[str, str]) -> tuple[int, int]:
+        """(fights, wins) this character has resolved against `task_key` at
+        exactly `level` wearing exactly `loadout` — the evidence the learned-loss
+        veto may use (`combat.is_winnable`). SEARCH-CACHED like `win_count`: the
+        veto runs inside every winnability walk. (0, 0) on a DB error."""
+        encoded = json.dumps(loadout, sort_keys=True)
+        return self._cached(("combat_record", task_key, level, encoded),
+                            lambda: self._combat_record_uncached(task_key, level, encoded))
+
+    def _combat_record_uncached(self, task_key: str, level: int,
+                                encoded: str) -> tuple[int, int]:
+        try:
+            with SqlSession(self._engine) as s:
+                wins = list(s.exec(select(CombatLoadoutOutcome.actual_win).where(
+                    CombatLoadoutOutcome.character == self._character,
+                    CombatLoadoutOutcome.task_key == task_key,
+                    CombatLoadoutOutcome.level == level,
+                    CombatLoadoutOutcome.loadout == encoded)))
+            return len(wins), sum(1 for won in wins if won)
+        except SQLAlchemyError:
+            return 0, 0
 
     def combat_loadout_outcomes(self) -> list[CombatLoadoutOutcomeRow]:
         """All recorded fight outcome rows for this character, insertion order.

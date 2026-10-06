@@ -1,5 +1,7 @@
 """Tests for the documented combat-outcome estimator."""
 
+import json
+
 import pytest
 
 from artifactsmmo_cli.ai.combat import (
@@ -10,12 +12,14 @@ from artifactsmmo_cli.ai.combat import (
     _expected_hit,
     _round_half_up,
     combat_margin,
+    fight_loadout,
     is_winnable,
     predict_win,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.loadout_profiles import combat_key
 from tests.test_ai.fixtures import make_state
 
 
@@ -37,6 +41,15 @@ def _record_mixed(store: LearningStore, action_repr: str, wins: int, losses: int
             ts=f"2026-05-25T00:00:{i:02d}+00:00", session_id="x", cycle_index=i,
             character="x", outcome=outcome, action_repr=action_repr,
         ))
+
+
+def _record_outcomes(store: LearningStore, state, gd, monster: str,  # type: ignore[no-untyped-def]
+                     wins: int, losses: int, level: int | None = None) -> None:
+    """Resolved fights against `monster` at `level` (default: the state's) in
+    the loadout the fight is fought in — the evidence the scoped veto reads."""
+    for won in [True] * wins + [False] * losses:
+        store.record_combat_outcome(combat_key(monster), fight_loadout(state, gd, monster),
+                                    True, won, state.level if level is None else level)
 
 
 def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifesteal=0,
@@ -391,8 +404,50 @@ def test_is_winnable_veto_overrides_optimistic_prediction(tmp_path):
     state = make_state(max_hp=100, attack={"fire": 30}, initiative=50)
     gd = _gd(hp=30, attack={"fire": 5}, initiative=10)  # predict_win -> True
     store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
-    _record_losses(store, "Fight(mob)", MIN_WIN_SAMPLES)
+    _record_outcomes(store, state, gd, "mob", wins=0, losses=MIN_WIN_SAMPLES)
     assert is_winnable(state, gd, "mob", store) is False
+    store.close()
+
+
+def test_the_veto_counts_only_this_level(tmp_path):
+    """USER 2026-10-05: old losses are level-specific. C3P0 lost 42/42 to pig at
+    level 19 and was still vetoed at level 30, where the stats win."""
+    state = make_state(level=30, max_hp=100, attack={"fire": 30}, initiative=50)
+    gd = _gd(hp=30, attack={"fire": 5}, initiative=10)  # predict_win -> True
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
+    _record_outcomes(store, state, gd, "mob", wins=0, losses=42, level=19)
+    assert is_winnable(state, gd, "mob", store) is True
+    store.close()
+
+
+def test_the_veto_counts_only_this_loadout(tmp_path):
+    """USER 2026-10-05: old losses are gear-specific. Losses in another loadout
+    say nothing about the loadout the fight is fought in now."""
+    state = make_state(level=30, max_hp=100, attack={"fire": 30}, initiative=50)
+    gd = _gd(hp=30, attack={"fire": 5}, initiative=10)
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
+    for _ in range(MIN_WIN_SAMPLES):
+        store.record_combat_outcome(combat_key("mob"), {"weapon_slot": "old_stick"},
+                                    True, False, state.level)
+    assert fight_loadout(state, gd, "mob") != {"weapon_slot": "old_stick"}
+    assert is_winnable(state, gd, "mob", store) is True
+    store.close()
+
+
+def test_rows_from_before_the_level_column_count_nowhere(tmp_path):
+    """A pre-migration row has no level, so it matches no level."""
+    state = make_state(level=30, max_hp=100, attack={"fire": 30}, initiative=50)
+    gd = _gd(hp=30, attack={"fire": 5}, initiative=10)
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
+    with store._engine.begin() as conn:
+        for _ in range(MIN_WIN_SAMPLES):
+            conn.exec_driver_sql(
+                "INSERT INTO combat_loadout_outcome (character, task_key, loadout, "
+                "predicted_win, actual_win, level) VALUES (?, ?, ?, 1, 0, NULL)",
+                ("h", combat_key("mob"), json.dumps(fight_loadout(state, gd, "mob"),
+                                                    sort_keys=True)))
+    assert store.combat_record(combat_key("mob"), 30, fight_loadout(state, gd, "mob")) == (0, 0)
+    assert is_winnable(state, gd, "mob", store) is True
     store.close()
 
 
@@ -401,7 +456,7 @@ def test_is_winnable_no_veto_below_sample_threshold(tmp_path):
     state = make_state(max_hp=100, attack={"fire": 30}, initiative=50)
     gd = _gd(hp=30, attack={"fire": 5}, initiative=10)
     store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
-    _record_losses(store, "Fight(mob)", MIN_WIN_SAMPLES - 1)
+    _record_outcomes(store, state, gd, "mob", wins=0, losses=MIN_WIN_SAMPLES - 1)
     assert is_winnable(state, gd, "mob", store) is True
     store.close()
 
@@ -415,7 +470,7 @@ def test_is_winnable_keeps_marginal_grindable_winrate(tmp_path):
     state = make_state(max_hp=100, attack={"fire": 30}, initiative=50)
     gd = _gd(hp=30, attack={"fire": 5}, initiative=10)  # predict_win -> True
     store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
-    _record_mixed(store, "Fight(mob)", wins=8, losses=2)  # 80% >= 0.4 threshold
+    _record_outcomes(store, state, gd, "mob", wins=8, losses=2)  # 80% >= 0.4 threshold
     assert is_winnable(state, gd, "mob", store) is True
     store.close()
 
@@ -427,7 +482,7 @@ def test_is_winnable_vetoes_genuine_loser(tmp_path):
     state = make_state(max_hp=100, attack={"fire": 30}, initiative=50)
     gd = _gd(hp=30, attack={"fire": 5}, initiative=10)  # predict_win -> True
     store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
-    _record_mixed(store, "Fight(mob)", wins=3, losses=7)  # 30% < 0.4 threshold
+    _record_outcomes(store, state, gd, "mob", wins=3, losses=7)  # 30% < 0.4 threshold
     assert is_winnable(state, gd, "mob", store) is False
     store.close()
 

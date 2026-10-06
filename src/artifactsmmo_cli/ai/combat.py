@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.loadout_profiles import combat_key
 from artifactsmmo_cli.ai.world_state import WorldState
 
 MAX_TURNS = 100
@@ -137,6 +138,18 @@ def _die_step(
 def _effective_player_hp(hp: int, max_hp: int) -> int:
     """Player HP at fight start: current HP capped at max_hp, or 0 if already dead."""
     return min(hp, max_hp) if hp > 0 else 0
+
+
+def fight_loadout(state: WorldState, game_data: GameData, monster_code: str) -> dict[str, str]:
+    """The loadout a fight against `monster_code` is fought in: the best on-hand
+    combat loadout (`pick_loadout_cached`), which `FightAction` requires be
+    worn. `predict_win` evaluates it and the learned-loss veto asks about it."""
+    loadout = pick_loadout_cached(
+        Combat(game_data.monster_attack(monster_code),
+               game_data.monster_resistance(monster_code), dict(state.attack)),
+        state, game_data,
+    )
+    return {slot: code for slot, code in loadout.items() if code is not None}
 
 
 def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bool:
@@ -368,7 +381,8 @@ def is_winnable(
 
     Three gates, in order, when a history is supplied:
     1. LEARNED-LOSS veto: a monster lost in >= MIN_WIN_SAMPLES observed fights at
-       < WIN_RATE_THRESHOLD success is judged unwinnable regardless of the formula.
+       < WIN_RATE_THRESHOLD success is judged unwinnable regardless of the formula —
+       counting ONLY fights at this level in this loadout (`fight_loadout`).
     2. MONOTONIC-WIN inference: an observed win against ANY monster of level >= this
        one's level proves this (no-harder) monster is winnable too — until a future
        loss against it appears. Beating a level-2 slime flags every level-1 monster
@@ -383,9 +397,17 @@ def is_winnable(
     upstream.
     """
     if history is not None:
-        samples = history.sample_count(f"Fight({monster_code})")
-        if (samples >= MIN_WIN_SAMPLES
-                and history.success_rate(f"Fight({monster_code})") < WIN_RATE_THRESHOLD):
+        # LEVEL- AND GEAR-SCOPED (USER 2026-10-05: "Old losses are gear-specific
+        # and level-specific"). The veto read every Fight(monster) cycle ever
+        # recorded, so a monster lost to once could never be fought again — and
+        # a vetoed monster is never fought, so no later evidence could clear it.
+        # Live: C3P0 lost 42/42 to its task pig at level 19 (2026-08-20); at
+        # level 30 the stats win and the veto still refused, holding the task
+        # inert. Evidence about another level or another loadout is evidence
+        # about a different fight.
+        samples, wins = history.combat_record(
+            combat_key(monster_code), state.level, fight_loadout(state, game_data, monster_code))
+        if samples >= MIN_WIN_SAMPLES and wins < WIN_RATE_THRESHOLD * samples:
             return False
         if _won_at_or_above_level(history, game_data, monster_code):
             return True
