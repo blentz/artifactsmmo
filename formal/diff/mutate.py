@@ -7211,16 +7211,18 @@ FIGHT_APPLICABILITY_MUTATIONS = [
         #   test_fight_applicable_when_winnable_despite_low_gear_level  (L3/L4 case)
         #   test_every_picker_target_is_applicable  (char_level loop, no equipment)
         "fight-is_applicable: re-introduce best_eq >= monster_level - 1 gear gate",
-        "        return self.drop_farm or game_data.xp_per_kill(self.monster_code, state.level) > 0",
+        "        return (self.drop_farm or self._is_task_fight(state)\n"
+        "                or game_data.xp_per_kill(self.monster_code, state.level) > 0)",
         "        best_eq = max(\n"
         "            (game_data.all_item_stats[c].level\n"
         "             for c in state.equipment.values() if c and c in game_data.all_item_stats),\n"
         "            default=0,\n"
         "        )\n"
+        "        return (self.drop_farm or self._is_task_fight(state)\n"
         # E501: this is ONE injected line of production source. Splitting the
         # literal would inject a line break into the mutant body, so its width is
         # set by the code it replaces, not by formatting.
-        "        return self.drop_farm or (game_data.xp_per_kill(self.monster_code, state.level) > 0 and best_eq >= monster_level - 1)",  # noqa: E501
+        "                or (game_data.xp_per_kill(self.monster_code, state.level) > 0 and best_eq >= monster_level - 1))",  # noqa: E501
     ),
     (
         # Widen the drop-farm bypass to swallow the whole gate: every fight
@@ -7229,9 +7231,23 @@ FIGHT_APPLICABILITY_MUTATIONS = [
         # tests/test_ai/test_grey_farm.py::TestDropFarmMechanism (default False
         # must keep the xp gate) via the grey-farm unit group.
         "fight-is_applicable: drop_farm bypass swallows the xp gate (always True)",
-        "        return self.drop_farm or game_data.xp_per_kill(self.monster_code, state.level) > 0",
-        "        return True or game_data.xp_per_kill(self.monster_code, state.level) > 0",
+        "                or game_data.xp_per_kill(self.monster_code, state.level) > 0)",
+        "                or True)",
     ),
+]
+
+
+# The task-fight bypass (Phase 5-2c-iii-b). Killed by tests/test_ai/test_grey_farm.py.
+TASK_FIGHT_BYPASS_MUTATIONS = [
+    ("fight-is_applicable: no task-fight bypass (a grey task monster cannot be fought)",
+     "        return (self.drop_farm or self._is_task_fight(state)\n",
+     "        return (self.drop_farm\n"),
+    ("fight-is_applicable: the task bypass ignores the count (a met task is fought on)",
+     "                and state.task_progress < state.task_total)",
+     "                and True)"),
+    ("fight-is_applicable: the task bypass admits any monster",
+     "        return (state.task_type == \"monsters\" and state.task_code == self.monster_code\n",
+     "        return (state.task_type == \"monsters\"\n"),
 ]
 
 
@@ -8832,6 +8848,8 @@ def _collect_all_groups() -> None:
     # picker-consistency test and the Task-1 regression test.
     run_group(APPLY_FIGHT_SRC, FIGHT_APPLICABILITY_MUTATIONS,
               "tests/test_ai/test_no_combat_deadlock.py", survivors)
+    run_group(APPLY_FIGHT_SRC, TASK_FIGHT_BYPASS_MUTATIONS,
+              "tests/test_ai/test_grey_farm.py", survivors)
     run_group(MONSTER_CATALOG_SRC, XP_POSITIVE_MUTATIONS,
               "formal/diff/test_xp_positive_diff.py", survivors)
     run_group(SKILL_XP_POSITIVE_SRC, SKILL_XP_POSITIVE_MUTATIONS,

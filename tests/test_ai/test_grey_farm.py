@@ -229,6 +229,39 @@ class TestDropFarmMechanism:
         assert repr(farm) == repr(plain)
 
 
+class TestTaskFightBypass:
+    """Phase 5-2c-iii-b: the held monsters task's own fight bypasses the zero-XP
+    gate — a task kill is worth its progress (live: R2D2 `ogre` 0/327 at level
+    29, held 15 days)."""
+
+    def _task_state(self, **task):  # type: ignore[no-untyped-def]
+        base = make_state(level=12, skills={"alchemy": 5})
+        return dataclasses.replace(base, **{"task_code": "chicken", "task_type": "monsters",
+                                            "task_progress": 3, "task_total": 10, **task})
+
+    def test_the_task_monster_is_fightable_at_zero_xp(self) -> None:
+        gd = _gd()
+        fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))
+        assert fight.is_applicable(make_state(level=12, skills={"alchemy": 5}), gd) is False
+        assert fight.is_applicable(self._task_state(), gd) is True
+
+    def test_only_while_the_count_is_unmet(self) -> None:
+        gd = _gd()
+        fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))
+        assert fight.is_applicable(self._task_state(task_progress=10), gd) is False
+
+    def test_only_for_the_task_monster_of_a_monsters_task(self) -> None:
+        gd = _gd()
+        fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))
+        assert fight.is_applicable(self._task_state(task_code="cow"), gd) is False
+        assert fight.is_applicable(self._task_state(task_type="items"), gd) is False
+
+    def test_the_bypass_is_only_the_xp_gate(self) -> None:
+        gd = _gd()
+        fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))
+        assert fight.is_applicable(self._task_state(hp=1, max_hp=100), gd) is False
+
+
 class TestGatherEmitsDropFarmFights:
     def test_grey_dropper_plans_when_policy_allows(self) -> None:
         """GatherMaterials(feather) at L12 must plan Fight(chicken) as a

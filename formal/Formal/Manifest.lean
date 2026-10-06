@@ -797,6 +797,8 @@ open Formal.PriorityBand
 #check @Formal.ActionApplicability.winnable_does_not_imply_applicable
 #check @Formal.ActionApplicability.fightApplicable_false_of_suboptimal_loadout
 #check @Formal.ActionApplicability.fightApplicable_iff
+#check @Formal.ActionApplicability.taskFight_zero_xp_applicable_iff_structural -- the task bypass is ONLY the xp gate (5-2c-iii-b)
+#check @Formal.ActionApplicability.taskFight_grey_task_monster_applicable_nonvacuous -- live R2D2/ogre shape is applicable
 #check @Formal.ActionApplicability.below_old_window_xp_positive_is_applicable
 #check @Formal.ActionApplicability.winnable_inWindow_imp_fightApplicable
 #check @Formal.ActionApplicability.winnable_inWindow_imp_fightApplicable_nonvacuous

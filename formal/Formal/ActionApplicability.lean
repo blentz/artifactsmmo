@@ -96,6 +96,11 @@ structure FightInputs where
   -- target's dropper. The flag bypasses ONLY the xpPositive lower gate;
   -- every structural gate (locations, inventory room, hp floor, level+2
   -- suicide guard) still applies. Mirrors Python FightAction.drop_farm.
+  taskFight     : Bool := false
+  -- Task-fight variant (Phase 5-2c-iii-b, 2026-10-05): the monster is the held
+  -- monsters task's and the count is not met. A task kill is worth its
+  -- progress, not its XP, so it bypasses ONLY the xpPositive lower gate, as
+  -- dropFarm does. Mirrors Python `FightAction._is_task_fight`.
   loadoutMatches : Bool := true
   -- Loadout gate (2026-07-10): equipped == best on-hand combat loadout.
   -- Defaults true so every pre-existing witness/proof that predates the gate
@@ -111,7 +116,7 @@ def fightApplicable (i : FightInputs) : Bool :=
   i.hasLocations
     && hasInventoryRoom i.inventoryFree i.minFreeSlots
     && hpAboveFightFloor i.hp i.maxHp
-    && (i.dropFarm || xpPositive i.xpPerKill)
+    && (i.dropFarm || i.taskFight || xpPositive i.xpPerKill)
     && monsterNotOverleveled i.playerLevel i.monsterLevel
     && loadoutOptimal i.loadoutMatches
 
@@ -145,11 +150,11 @@ drop-farm variant, the predicate is false. This is the NEW lower gate —
 replaces `fightApplicable_false_of_underleveled_monster` (the old hard
 window). A drop-farm fight (dropFarm = true) bypasses exactly this gate. -/
 theorem fightApplicable_false_of_zero_xp (i : FightInputs)
-    (h : i.xpPerKill ≤ 0) (hFarm : i.dropFarm = false) :
+    (h : i.xpPerKill ≤ 0) (hFarm : i.dropFarm = false) (hTask : i.taskFight = false) :
     fightApplicable i = false := by
   unfold fightApplicable xpPositive
   have : ¬ (i.xpPerKill > 0) := by omega
-  simp [this, hFarm]
+  simp [this, hFarm, hTask]
 
 /-- If monster level exceeds `state.level + 2`, the predicate is false.
 The suicide guard survives the P0 revision unchanged. -/
@@ -218,10 +223,10 @@ winnable candidates by `xp_per_kill > 0`, exactly what
 `CombatTargetExistence.pickWinnableWindowed` does. -/
 theorem winnable_does_not_imply_applicable
     (i : FightInputs) (winnable : Bool)
-    (hZero : i.xpPerKill ≤ 0) (hFarm : i.dropFarm = false) :
+    (hZero : i.xpPerKill ≤ 0) (hFarm : i.dropFarm = false) (hTask : i.taskFight = false) :
     fightApplicable i = false ∧ winnable = winnable := by
   refine ⟨?_, rfl⟩
-  exact fightApplicable_false_of_zero_xp i hZero hFarm
+  exact fightApplicable_false_of_zero_xp i hZero hFarm hTask
 
 /-- Exact characterization of the predicate as a conjunction of the six
 atomic conditions (the lower gate is the drop-farm/xp disjunction; the sixth
@@ -230,11 +235,11 @@ LIVE. -/
 theorem fightApplicable_iff (i : FightInputs) :
     fightApplicable i = true ↔
       i.hasLocations = true ∧ i.inventoryFree ≥ i.minFreeSlots ∧
-      i.hp * 100 > 50 * i.maxHp ∧ (i.dropFarm = true ∨ i.xpPerKill > 0) ∧
+      i.hp * 100 > 50 * i.maxHp ∧ (i.dropFarm = true ∨ i.taskFight = true ∨ i.xpPerKill > 0) ∧
       i.monsterLevel ≤ i.playerLevel + 2 ∧ i.loadoutMatches = true := by
   unfold fightApplicable hasInventoryRoom hpAboveFightFloor xpPositive
     monsterNotOverleveled loadoutOptimal
-  simp [and_assoc]
+  simp [and_assoc, Bool.or_assoc]
 
 /-- **P0 regression witness (2026-06-09)**: a monster BELOW the old hard
 window `[max(1, level-1), level+2]` but with positive XP IS applicable —
@@ -250,7 +255,7 @@ theorem below_old_window_xp_positive_is_applicable
     (hLoad : i.loadoutMatches = true)
     (_hBelow : i.monsterLevel < max 1 (i.playerLevel - 1)) :
     fightApplicable i = true := by
-  exact (fightApplicable_iff i).mpr ⟨hLoc, hInv, hHp, Or.inr hXp, hUp, hLoad⟩
+  exact (fightApplicable_iff i).mpr ⟨hLoc, hInv, hHp, Or.inr (Or.inr hXp), hUp, hLoad⟩
 
 /-! ## Capability ⇒ structural applicability (the L50 fight-liveness seam). -/
 
@@ -333,6 +338,32 @@ theorem dropFarm_grey_mob_applicable_nonvacuous :
       { hasLocations := true, inventoryFree := 1, hp := 100, maxHp := 100,
         playerLevel := 12, monsterLevel := 1, minFreeSlots := 1,
         xpPerKill := 0, dropFarm := true }
+    fightApplicable i = true := by
+  decide
+
+/-! ## Task-fight bypass scope (Phase 5-2c-iii-b, 2026-10-05).
+
+A held monsters task counts a grey kill like any other, so the task's own
+fight bypasses the XP gate — and nothing else. -/
+
+/-- With `taskFight` set and zero xp, applicability reduces exactly to the
+structural gates. -/
+theorem taskFight_zero_xp_applicable_iff_structural (i : FightInputs)
+    (hTask : i.taskFight = true) (_hZero : i.xpPerKill ≤ 0) :
+    fightApplicable i = true ↔
+      i.hasLocations = true ∧ i.inventoryFree ≥ i.minFreeSlots ∧
+      i.hp * 100 > 50 * i.maxHp ∧ i.monsterLevel ≤ i.playerLevel + 2 ∧
+      i.loadoutMatches = true := by
+  rw [fightApplicable_iff]
+  simp [hTask]
+
+/-- Non-vacuity at the live case: R2D2 (level 29) on its `ogre` task (level
+20, zero xp), every structural gate met, IS applicable. -/
+theorem taskFight_grey_task_monster_applicable_nonvacuous :
+    let i : FightInputs :=
+      { hasLocations := true, inventoryFree := 3, hp := 490, maxHp := 490,
+        playerLevel := 29, monsterLevel := 20, minFreeSlots := 3,
+        xpPerKill := 0, taskFight := true }
     fightApplicable i = true := by
   decide
 

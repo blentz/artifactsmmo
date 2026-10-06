@@ -116,10 +116,22 @@ class FightAction(Action):
         # removed; UPPER bound (level+2 suicide guard) stays. Capability is decided
         # upstream by is_winnable (predict_win); this gate stays structural.
         # Lean lockstep: formal/Formal/ActionApplicability.lean (xpPositive gate,
-        # dropFarm bypass arm). drop_farm bypasses ONLY this lower gate — the
-        # structural gates above (locations, inventory room, hp floor, level+2
-        # suicide guard) always apply.
-        return self.drop_farm or game_data.xp_per_kill(self.monster_code, state.level) > 0
+        # dropFarm and taskFight bypass arms). Each bypasses ONLY this lower
+        # gate — the structural gates above (locations, inventory room, hp
+        # floor, level+2 suicide guard) always apply.
+        return (self.drop_farm or self._is_task_fight(state)
+                or game_data.xp_per_kill(self.monster_code, state.level) > 0)
+
+    def _is_task_fight(self, state: WorldState) -> bool:
+        """This fight advances the held monsters task: its monster is the
+        task's and the count is not met. A task kill is worth its progress, not
+        its XP — the server counts a grey kill like any other — so it bypasses
+        the zero-XP gate the way a drop farm does (Phase 5-2c-iii-b). Live
+        2026-10-05: R2D2 `ogre` 0/327, Lor `spider` 0/206, C3P0 `pig` 5/104,
+        held 15 days, level 19-20 monsters against level 29-30 characters, and
+        a task fight that could not be planned."""
+        return (state.task_type == "monsters" and state.task_code == self.monster_code
+                and state.task_progress < state.task_total)
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if not self._structurally_applicable(state, game_data):

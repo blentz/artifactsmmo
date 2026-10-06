@@ -673,6 +673,8 @@ open Formal.PriorityBand
 #print axioms Formal.ActionApplicability.winnable_does_not_imply_applicable
 #print axioms Formal.ActionApplicability.fightApplicable_false_of_suboptimal_loadout
 #print axioms Formal.ActionApplicability.fightApplicable_iff
+#print axioms Formal.ActionApplicability.taskFight_zero_xp_applicable_iff_structural
+#print axioms Formal.ActionApplicability.taskFight_grey_task_monster_applicable_nonvacuous
 #print axioms Formal.ActionApplicability.below_old_window_xp_positive_is_applicable
 #print axioms Formal.ActionApplicability.winnable_inWindow_imp_fightApplicable
 #print axioms Formal.ActionApplicability.winnable_inWindow_imp_fightApplicable_nonvacuous
