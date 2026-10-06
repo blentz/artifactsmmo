@@ -9,11 +9,13 @@ monster was no fight (`FightAction`'s zero-XP gate, lifted for a task fight in
 import dataclasses
 from unittest.mock import patch
 
+from artifactsmmo_cli.ai import strategy_driver as driver_mod
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.decisions import root as root_mod
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
+from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.task_kills import PRIORITY, TaskKillsGoal
 from artifactsmmo_cli.ai.plan_tree import _label
 from artifactsmmo_cli.ai.planner import GOAPPlanner
@@ -145,3 +147,19 @@ class TestTaskRoot:
         assert ReachTaskOutcome("chicken") in resolution.alternatives
         trunk = next(i for i, a in enumerate(offered) if isinstance(a, ReachCharLevel))
         assert offered.index(ReachTaskOutcome("chicken")) == trunk + 1
+
+
+class TestLowYieldCancelFold:
+    """Phase 5-2c-iii-c-2: the LOW_YIELD_CANCEL collect rung is retired; a
+    data-confirmed poor task is the task objective's own step, on its turn."""
+
+    def test_a_poor_task_is_offered_whatever_its_type(self) -> None:
+        with patch.object(root_mod._route, "task_pays_less", return_value=True):
+            got = root_mod._task_root(_held(task_type="items"), _gd(), NO_PROFILE_CONTEXT, None)
+        assert got == ReachTaskOutcome("chicken")
+
+    def test_its_step_is_the_cancel(self) -> None:
+        node = ReachTaskOutcome("chicken")
+        with patch.object(driver_mod, "low_yield_cancel_fires", return_value=True):
+            goal = objective_step_goal(node, _held(3), _gd(), NO_PROFILE_CONTEXT)
+        assert isinstance(goal, LowYieldCancelGoal)

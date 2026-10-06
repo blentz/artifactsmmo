@@ -55,7 +55,6 @@ class LadderMeans(Enum):
     CLAIM_PENDING = "claim_pending"
     COMPLETE_TASK = "complete_task"
     SELL_PRESSURED = "sell_pressured"
-    LOW_YIELD_CANCEL = "low_yield_cancel"
     TASK_CANCEL = "task_cancel"
     SUPPLY_BANK = "supply_bank"
     CURRENCY_TURNIN = "currency_turnin"
@@ -91,7 +90,6 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     # `Formal.Liveness.MeansKind.allInLadderOrder`.
     LadderMeans.BANK_EXPAND,
     LadderMeans.COMPLETE_TASK,
-    LadderMeans.LOW_YIELD_CANCEL,
     LadderMeans.TASK_CANCEL,
     LadderMeans.SUPPLY_BANK,
     LadderMeans.CURRENCY_TURNIN,
@@ -129,7 +127,6 @@ _MEANS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.CLAIM_PENDING: MeansKind.CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK: MeansKind.COMPLETE_TASK,
     LadderMeans.SELL_PRESSURED: MeansKind.SELL_PRESSURED,
-    LadderMeans.LOW_YIELD_CANCEL: MeansKind.LOW_YIELD_CANCEL,
     LadderMeans.TASK_CANCEL: MeansKind.TASK_CANCEL,
     LadderMeans.PURSUE_TASK: MeansKind.PURSUE_TASK,
     LadderMeans.ACCEPT_TASK: MeansKind.ACCEPT_TASK,
@@ -167,7 +164,6 @@ assert COLLECT_REWARD_ORDER == (
     MeansKind.CLAIM_PENDING,
     MeansKind.BANK_EXPAND,
     MeansKind.COMPLETE_TASK,
-    MeansKind.LOW_YIELD_CANCEL,
     MeansKind.TASK_CANCEL,
     MeansKind.SUPPLY_BANK,
     MeansKind.CURRENCY_TURNIN,

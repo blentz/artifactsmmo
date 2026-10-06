@@ -59,7 +59,6 @@ def pursueSelectionConditions (s : State) : Prop :=
   ∧ claimPendingFires s = false
   ∧ completeTaskFires s = false
   ∧ sellPressuredFires s = false
-  ∧ lowYieldCancelFires s = false
   ∧ taskCancelFires s = false
   -- 2026-08-01: SUPPLY_BANK was promoted into COLLECT_REWARD_ORDER, so it now
   -- sits between `taskCancel` and `objectiveStep` — a new rung in the SAME
@@ -92,17 +91,17 @@ theorem productionLadder_eq_pursueTask
   unfold productionLadder
   -- allInLadderOrder = [.hpCritical, .bankUnlock, .reachUnlockLevel,
   --   .discardCritical, .depositFull, .discardHigh, .claimPending,
-  --   .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
+  --   .completeTask, .sellPressured, .taskCancel,
   --   .objectiveStep, .pursueTask, .acceptTask, .taskExchange,
   --   .sellIdle, .bankExpand, .wait]
   show MeansKind.allInLadderOrder.findSome?
         (fun k => if fires k s then some k else none)
       = some .pursueTask
-  obtain ⟨h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, hcp, h12, h13, h14, h15, h16,
+  obtain ⟨h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, hcp, h12, h13, h14, h16,
           hsb, hct, hat, hbe, h17⟩ := hConds
   simp only [MeansKind.allInLadderOrder, List.findSome?,
              fires, h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, hcp, h12, h13,
-             h14, h15, h16, hsb, hct, hat, hbe, h17, hPursue, if_true]
+             h14, h16, hsb, hct, hat, hbe, h17, hPursue, if_true]
   rfl
 
 /-- Item 3 corollary: under the conditions, `cycleStep` applies

@@ -390,20 +390,6 @@ theorem _fires_sellPressured_implies_sellInventory_positive (s : State) :
   have : usedFractionRat s * 100 ≥ 85 := by linarith
   linarith
 
-/-- LOW_YIELD_CANCEL: Phase 23c-3b phase-based form.
-    `_fires .lowYieldCancel s` means `taskLifecyclePhase = .inProgress`.
-    `lowYieldCancelGoalValue true = 70 > 0` (Phase-18 GoalSystem).
-    The lemma asserts the goal-value form is positive under the
-    constant input `true`, which corresponds to "goal fires" in the
-    Phase-18 wrapper. -/
-theorem _fires_lowYieldCancel_implies_lowYieldCancel_positive
-    (s : State) :
-    fires .lowYieldCancel s = true →
-    lowYieldCancelGoalValue true > 0 := by
-  intro _
-  unfold lowYieldCancelGoalValue lowYieldCancelValue
-  norm_num
-
 /-- TASK_CANCEL: opaque-gated; the Phase-18 value at
     `satisfied=false, pivots=true` is unconditionally 12 > 0. -/
 theorem _fires_taskCancel_implies_taskCancel_positive

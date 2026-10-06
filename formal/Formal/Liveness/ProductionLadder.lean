@@ -70,17 +70,6 @@ open Formal.Liveness.Measure
 open Formal.Liveness.MeansKind
 open Formal.Liveness.TaskLifecyclePhase
 
-/-- Phase 23d-5 / Perimeter-hardening (post-Phase-24): graduated from
-    AXIOM to DEF. Production's `low_yield_cancel_fires`
-    (src/.../learning/projections.py:384) short-circuits to False when
-    `sample_count == 0`. So the empirical threshold is exactly 1 —
-    after the first sample the boundary check can trigger. Hard-coded
-    literal mirrors production. -/
-def lowYieldSampleThreshold : Nat := 1
-
-/-- LIV-003b positivity — THEOREM (was axiom). Trivial by `decide`. -/
-theorem lowYieldSampleThreshold_pos : lowYieldSampleThreshold > 0 := by decide
-
 /-! ## Numeric thresholds (mirror production constants) -/
 
 /-- `CRITICAL_HP_FRACTION = 0.75` (thresholds.py). Raised from 0.25; every proof
@@ -237,19 +226,6 @@ def sellPressuredFires (s : State) : Bool :=
   && decide (SELL_PRESSURE_DEN * s.inventoryUsed
               ≥ SELL_PRESSURE_NUM * s.inventoryMax)
   && s.sellableInventoryNonempty
-
-/-- LOW_YIELD_CANCEL. Phase 23d-5 — substantive sample-count gate.
-    Production: `low_yield_fires_pure` (low_yield_boundary.py:60) requires
-    `farm_samples ≥ LOW_YIELD_SAMPLE_THRESHOLD` (production = 1) before
-    firing. The Lean model gates on `actionsAttempted ≥
-    lowYieldSampleThreshold`, where `actionsAttempted` is the per-task
-    counter bumped by progress-attempting applies (Phase 23d-4) and
-    `lowYieldSampleThreshold` is the opaque positive `Nat` declared above.
-    Restricted to in-progress phase (the only phase where farm samples
-    accrue against an active task). -/
-def lowYieldCancelFires (s : State) : Bool :=
-  decide (s.taskLifecyclePhase = .inProgress)
-  && decide (s.actionsAttempted ≥ lowYieldSampleThreshold)
 
 /-- TASK_CANCEL. Phase 23c-3b: faithful phase-based predicate.
     Production: `means.py:80-83` requires a task exists (accepted or
@@ -469,7 +445,6 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .claimPending     => claimPendingFires s
   | .completeTask     => completeTaskFires s
   | .sellPressured    => sellPressuredFires s
-  | .lowYieldCancel   => lowYieldCancelFires s
   | .taskCancel       => taskCancelFires s
   | .objectiveStep    => objectiveStepFires s
   | .pursueTask       => pursueTaskFires s

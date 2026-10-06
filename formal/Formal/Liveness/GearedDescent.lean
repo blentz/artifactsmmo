@@ -197,7 +197,6 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
     | claimPending    => exact descendsE_claimPending s hk
     | completeTask    => exact descendsE_completeTask s hk
     | sellPressured   => exact descendsE_sellPressured s hk
-    | lowYieldCancel  => exact descendsE_lowYieldCancel s hk
     | taskCancel      => exact descendsE_taskCancel s hk
     | objectiveStep   =>
         by_cases hisF : (perceptionRefreshE s).objectiveStepIsFight = true

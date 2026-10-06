@@ -59,7 +59,6 @@ inductive MeansKind where
   | claimPending
   | completeTask
   | sellPressured
-  | lowYieldCancel
   | taskCancel
   | pursueTask
   | acceptTask
@@ -121,7 +120,6 @@ def goalReprOfMeans : MeansKind → String
   | .completeTask    => "CompleteTask"
   | .sellPressured   => "SellInventory"
   | .sellIdle        => "SellInventory"
-  | .lowYieldCancel  => "LowYieldCancel"
   | .taskCancel      => "TaskCancel"
   | .pursueTask      => "PursueTask"
   | .acceptTask      => "AcceptTask"

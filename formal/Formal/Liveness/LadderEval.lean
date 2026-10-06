@@ -68,7 +68,6 @@ def inertLadderState : State where
   geCancelTargetsNonempty := false
   taskCoinsTotal := 0
   taskExchangeMinCoins := 0
-  lowYieldCancelFires := false
   taskCancelFires := false
   pursueTaskFires := false
   objectiveStepFires := false
@@ -265,7 +264,6 @@ def meansKindName : MeansKind → String
   | .claimPending        => "claimPending"
   | .completeTask        => "completeTask"
   | .sellPressured       => "sellPressured"
-  | .lowYieldCancel      => "lowYieldCancel"
   | .taskCancel          => "taskCancel"
   | .objectiveStep       => "objectiveStep"
   | .pursueTask          => "pursueTask"

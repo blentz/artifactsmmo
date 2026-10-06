@@ -210,7 +210,6 @@ noncomputable def applyActionKind : ActionKind → State → State
         | some c => c :: s.taskCodesSeen
         | none => s.taskCodesSeen
       { s with taskCancelFires := false,
-               lowYieldCancelFires := false,
                pursueTaskFires := false,
                taskCode := none,
                taskTotal := 0,

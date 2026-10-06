@@ -126,7 +126,6 @@ open Formal.Liveness.CycleStep
 #print axioms _fires_claimPending_implies_claimPending_positive
 #print axioms _fires_completeTask_implies_completeTask_positive
 #print axioms _fires_sellPressured_implies_sellInventory_positive
-#print axioms _fires_lowYieldCancel_implies_lowYieldCancel_positive
 #print axioms _fires_taskCancel_implies_taskCancel_positive
 #print axioms _fires_pursueTask_implies_pursueTask_positive
 #print axioms _fires_acceptTask_implies_acceptTask_positive
@@ -161,7 +160,6 @@ open Formal.Liveness.CycleStep
 #print axioms plan_exists_for_depositFull
 #print axioms plan_exists_for_sellPressured
 #print axioms plan_exists_for_sellIdle
-#print axioms plan_exists_for_lowYieldCancel
 
 -- Phase 21c: Fight-based plan-existence lemmas. Both extend
 -- `applyActionKind .fight` to model (a) bank-unlock achievement flip
@@ -220,12 +218,8 @@ open Formal.Liveness.LIV003Decomposition
 #print axioms taskAccepted_implies_cancelOrPursueFires
 #print axioms taskInProgress_implies_cancelOrPursueFires
 #print axioms taskActive_implies_cancelOrPursueFires
--- Phase 23d-5: `lowYieldSampleThreshold(_pos)` relocated to
--- `Formal.Liveness.ProductionLadder` so the production firing predicate
--- and the abstract theorem share the SAME opaque constant.
-#print axioms Formal.Liveness.ProductionLadder.lowYieldSampleThreshold
-#print axioms Formal.Liveness.ProductionLadder.lowYieldSampleThreshold_pos
-#print axioms inProgress_decides_within_threshold
+-- LIV-003b (lowYieldSampleThreshold, inProgress_decides_within_threshold) retired
+-- with the LOW_YIELD_CANCEL rung, Phase 5-2c-iii-c-2.
 #print axioms taskPoolFinite
 #print axioms taskPoolFinite_pos
 -- Item 1g-C: accept_cancel_loop_bound + lifecycle_progress_from_bounds
@@ -561,7 +555,6 @@ open Formal.Liveness.BlockerQuieting
 #print axioms sellPressured_quiet_after_firing
 #print axioms completeTask_quiet_after_firing
 #print axioms taskCancel_quiet_after_firing
-#print axioms lowYieldCancel_quiet_after_firing
 #print axioms restForCombat_quiet_after_firing
 #print axioms hpCritical_quiet_after_firing
 #print axioms bankUnlock_quiet_after_firing

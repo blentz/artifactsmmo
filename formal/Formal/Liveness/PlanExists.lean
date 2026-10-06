@@ -243,18 +243,6 @@ theorem plan_exists_for_sellIdle :
   simp [planAchieves, applyActionKind, fires,
         sellIdleFires]
 
-/-- `[.taskCancel]` clears `lowYieldCancel`. The opaque Bool
-    `lowYieldCancelFires` is reset to `false` by the apply — production's
-    cancel clears the active task, so no low-yield cancellation can fire
-    on the post-state. -/
-theorem plan_exists_for_lowYieldCancel :
-    ∀ s, fires .lowYieldCancel s = true →
-      ∃ p : Plan, planAchieves p s .lowYieldCancel := by
-  intro s h
-  refine ⟨[.taskCancel], ?_⟩
-  simp [planAchieves, applyActionKind, fires,
-        lowYieldCancelFires]
-
 /-! ## Wait — honest weaker statement -/
 
 /-- `WaitGoal` is unsatisfiable by waiting (the action is a no-op and

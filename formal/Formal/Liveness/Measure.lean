@@ -172,8 +172,6 @@ structure State where
   taskCoinsTotal : Nat
   /-- ctx — `SelectionContext.task_exchange_min_coins` (guards.py:30). -/
   taskExchangeMinCoins : Nat
-  /-- OPAQUE: `low_yield_cancel_fires(state, history)` (means.py:78). -/
-  lowYieldCancelFires : Bool
   /-- OPAQUE: `task_decision(state, game_data, history) == PIVOT`, with
       gating `bool(state.task_code) and history is not None` already
       folded in (means.py:80-83). -/

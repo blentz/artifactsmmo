@@ -18,7 +18,6 @@ from artifactsmmo_cli.ai.consumable_supply import maintain_consumables_fires
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
-from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
@@ -108,7 +107,6 @@ class MeansKind(Enum):
     CLAIM_PENDING = "claim_pending"
     COMPLETE_TASK = "complete_task"
     SELL_PRESSURED = "sell_pressured"
-    LOW_YIELD_CANCEL = "low_yield_cancel"
     TASK_CANCEL = "task_cancel"
     PURSUE_TASK = "pursue_task"
     ACCEPT_TASK = "accept_task"
@@ -156,7 +154,9 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     # money for it.")
     MeansKind.BANK_EXPAND,
     MeansKind.COMPLETE_TASK,
-    MeansKind.LOW_YIELD_CANCEL,
+    # LOW_YIELD_CANCEL was retired here in Phase 5-2c-iii-c-2: a data-confirmed
+    # poor task is the task objective's own step (`ReachTaskOutcome`), taken on
+    # the task's turn, not a collect rung above every root.
     MeansKind.TASK_CANCEL,
     # 2026-08-01, human ruling: SUPPLY_BANK is promoted out of
     # DISCRETIONARY_ORDER to here, ABOVE the objective step, so a character can
@@ -254,9 +254,6 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # has a located buyer" test. See `sellable_tradeable_now`.
         return (used_fraction(state) >= SELL_PRESSURE_FRACTION
                 and sellable_tradeable_now(state, game_data))
-
-    if kind is MeansKind.LOW_YIELD_CANCEL:
-        return low_yield_cancel_fires(state, game_data, history)
 
     if kind is MeansKind.TASK_CANCEL:
         if not state.task_code:

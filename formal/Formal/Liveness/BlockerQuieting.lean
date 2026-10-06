@@ -113,15 +113,6 @@ theorem taskCancel_quiet_after_firing (s : State)
     unfold cycleStep; rw [h]; rfl
   rw [hcs]; simp [fires, taskCancelFires, applyActionKind]
 
-/-- `lowYieldCancel` dispatches `taskCancel`, resetting the phase to `.none`
-    (the `.inProgress` firing condition fails). -/
-theorem lowYieldCancel_quiet_after_firing (s : State)
-    (h : productionLadder s = some .lowYieldCancel) :
-    fires .lowYieldCancel (cycleStep s) = false := by
-  have hcs : cycleStep s = applyActionKind .taskCancel s := by
-    unfold cycleStep; rw [h]; rfl
-  rw [hcs]; simp [fires, lowYieldCancelFires, applyActionKind]
-
 /-- `restForCombat` dispatches `rest`, restoring `hp := maxHp` (the `hp < maxHp`
     firing condition fails). -/
 theorem restForCombat_quiet_after_firing (s : State)

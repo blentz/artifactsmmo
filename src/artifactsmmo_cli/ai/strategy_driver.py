@@ -72,6 +72,7 @@ from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
 from artifactsmmo_cli.ai.intention_progress import rotate
+from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner
@@ -391,8 +392,6 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
                                  snapshot=drain_snapshot(state, game_data, ctx))
     if kind is MeansKind.GE_BID:
         return PostBuyBidGoal(game_data=game_data, ctx=ctx)
-    if kind is MeansKind.LOW_YIELD_CANCEL:
-        return LowYieldCancelGoal()
     if kind is MeansKind.TASK_CANCEL:
         return TaskCancelGoal()
     if kind is MeansKind.PURSUE_TASK:
@@ -638,8 +637,12 @@ def objective_step_goal(
         # CanICraftCurrentTier` does for a skill-gated craft one layer down.
         return ReachSkillGoal(skill_name=step.skill, target_level=step.level)
     if isinstance(step, ReachTaskOutcome):
-        # Phase 5-2c-iii-c: the task objective's step is one more kill of its
-        # monster, at the count it has now; a met or dropped task has none.
+        # Phase 5-2c-iii-c: the task objective's step. A data-confirmed poor task
+        # is cancelled (c-2: this was the LOW_YIELD_CANCEL collect rung); else
+        # one more kill of its monster, at the count it has now; a met or
+        # dropped task has none.
+        if low_yield_cancel_fires(state, game_data, history):
+            return LowYieldCancelGoal()
         if step.is_satisfied(state, game_data):
             return None
         return TaskKillsGoal(step.task_code, state.task_progress)

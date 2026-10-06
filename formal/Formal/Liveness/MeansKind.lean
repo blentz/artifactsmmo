@@ -94,7 +94,7 @@ inductive MeansKind where
   | claimPending        -- CLAIM_PENDING,      means.py:69
   | completeTask        -- COMPLETE_TASK,      means.py:72
   | sellPressured       -- SELL_PRESSURED,     means.py:76
-  | lowYieldCancel      -- LOW_YIELD_CANCEL,   means.py:79
+  -- (lowYieldCancel retired: Phase 5-2c-iii-c-2)
   | taskCancel          -- TASK_CANCEL,        means.py:82
   | supplyBank          -- SUPPLY_BANK,        means.py (2026-08-01 human ruling):
                         --                     produce a material a SIBLING declared
@@ -181,7 +181,7 @@ def allInLadderOrder : List MeansKind :=
    -- collect rung from its 2026-09-13 promotion out of the discretionary group,
    -- where it fired against a 50/50 bank and was selected zero times.)
    .bankExpand,
-   .completeTask, .lowYieldCancel, .taskCancel,
+   .completeTask, .taskCancel,
    .supplyBank,
    .currencyTurnIn,
    -- 2026-08-19 (S-051): promoted out of the discretionary group. Below
@@ -196,8 +196,9 @@ def allInLadderOrder : List MeansKind :=
    .sellIdle, .recycleSurplus, .geBid, .drainBankJunk,
    .wait]
 
-/-- Sanity: 30 rungs (one per constructor). GEAR_REVIEW was retired in Phase
-    4-3b: its one arm never fired in recorded history. -/
-example : allInLadderOrder.length = 30 := by decide
+/-- Sanity: 29 rungs (one per constructor). GEAR_REVIEW was retired in Phase
+    4-3b: its one arm never fired in recorded history. LOW_YIELD_CANCEL was
+    retired in Phase 5-2c-iii-c-2: the task objective's step owns the cancel. -/
+example : allInLadderOrder.length = 29 := by decide
 
 end Formal.Liveness.MeansKind

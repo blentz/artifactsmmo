@@ -663,9 +663,6 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | sellPressured =>
       show (applyActionKind .npcSell s).level ≥ s.level
       simp [applyActionKind]
-    | lowYieldCancel =>
-      show (applyActionKind .taskCancel s).level ≥ s.level
-      simp [applyActionKind]
     | taskCancel =>
       show (applyActionKind .taskCancel s).level ≥ s.level
       simp [applyActionKind]
@@ -1133,7 +1130,6 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   -- `ExtMeasure` slot. Per-cycle progress is carried by
   -- `CycleStep.cycleStep_progress_or_waits`.
   | currencyTurnIn  => exfalso; revert hmem; unfold progressMeans; decide
-  | lowYieldCancel  => exfalso; revert hmem; unfold progressMeans; decide
   | taskCancel      => exfalso; revert hmem; unfold progressMeans; decide
   | pursueTask      => exfalso; revert hmem; unfold progressMeans; decide
   | acceptTask      => exfalso; revert hmem; unfold progressMeans; decide

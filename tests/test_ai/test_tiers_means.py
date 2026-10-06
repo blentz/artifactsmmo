@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
-from artifactsmmo_cli.ai.learning.projections import Yield
+from artifactsmmo_cli.ai.learning.projections import Yield, low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import map_means
@@ -354,8 +354,7 @@ def test_task_exchange_fires_when_enough_coins():
 def test_low_yield_cancel_absent_when_no_history():
     state = make_state(task_code="x", task_total=20, task_progress=5,
                        inventory={"tasks_coin": 1})
-    collect, _ = active_means(state, GameData(), None, _ctx())
-    assert MeansKind.LOW_YIELD_CANCEL not in collect
+    assert low_yield_cancel_fires(state, GameData(), None) is False
 
 
 def _gd_task_rewards() -> GameData:
@@ -375,8 +374,7 @@ def test_low_yield_cancel_fires_with_seeded_history(tmp_path):
     _seed_cycles(store, cycles)
     state = make_state(task_code="gudgeon", task_type="items", task_total=347,
                        task_progress=5, inventory={"tasks_coin": 1})
-    collect, _ = active_means(state, _gd_task_rewards(), store, _ctx())
-    assert MeansKind.LOW_YIELD_CANCEL in collect
+    assert low_yield_cancel_fires(state, _gd_task_rewards(), store) is True
     store.close()
 
 
@@ -541,8 +539,7 @@ def test_low_yield_cancel_absent_when_no_alt_history(tmp_path):
     _seed_cycles(store, cycles)
     state = make_state(task_code="x", task_type="items", task_total=20, task_progress=5,
                        inventory={"tasks_coin": 1})
-    collect, _ = active_means(state, GameData(), store, _ctx())
-    assert MeansKind.LOW_YIELD_CANCEL not in collect
+    assert low_yield_cancel_fires(state, GameData(), store) is False
     store.close()
 
 
@@ -553,8 +550,7 @@ def test_low_yield_cancel_absent_when_no_farmitems_history(tmp_path):
     _seed_cycles(store, cycles)
     state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5,
                        inventory={"tasks_coin": 1})
-    collect, _ = active_means(state, GameData(), store, _ctx())
-    assert MeansKind.LOW_YIELD_CANCEL not in collect
+    assert low_yield_cancel_fires(state, GameData(), store) is False
     store.close()
 
 
@@ -570,8 +566,7 @@ def test_low_yield_cancel_positive_path_fires_above_margin(tmp_path):
     _seed_cycles(store, cycles)
     state = make_state(task_code="x", task_type="items", task_total=50,
                        task_progress=10, inventory={"tasks_coin": 1})
-    collect, _ = active_means(state, _gd_task_rewards(), store, _ctx())
-    assert MeansKind.LOW_YIELD_CANCEL in collect
+    assert low_yield_cancel_fires(state, _gd_task_rewards(), store) is True
     store.close()
 
 
@@ -586,8 +581,7 @@ def test_low_yield_cancel_absent_below_confidence_threshold(tmp_path):
     _seed_cycles(store, cycles)
     state = make_state(task_code="x", task_type="items", task_total=50, task_progress=3,
                        inventory={"tasks_coin": 1})
-    collect, _ = active_means(state, _gd_task_rewards(), store, _ctx())
-    assert MeansKind.LOW_YIELD_CANCEL not in collect
+    assert low_yield_cancel_fires(state, _gd_task_rewards(), store) is False
     store.close()
 
 
@@ -602,8 +596,7 @@ def test_low_yield_cancel_positive_path_no_fire_below_margin(tmp_path):
     _seed_cycles(store, cycles)
     state = make_state(task_code="x", task_type="items", task_total=50, task_progress=10,
                        inventory={"tasks_coin": 1})
-    collect, _ = active_means(state, _gd_task_rewards(), store, _ctx())
-    assert MeansKind.LOW_YIELD_CANCEL not in collect
+    assert low_yield_cancel_fires(state, _gd_task_rewards(), store) is False
     store.close()
 
 
@@ -616,8 +609,7 @@ def test_best_alternative_repr_returns_none_on_sqla_error(tmp_path):
                        inventory={"tasks_coin": 1})
     with patch("artifactsmmo_cli.ai.learning.projections.Session") as mock_session:
         mock_session.side_effect = SQLAlchemyError("db error")
-        collect, _ = active_means(state, GameData(), store, _ctx())
-        assert MeansKind.LOW_YIELD_CANCEL not in collect
+        assert low_yield_cancel_fires(state, GameData(), store) is False
     store.close()
 
 
@@ -644,8 +636,7 @@ def test_best_alternative_repr_returns_none_when_all_goals_none(tmp_path):
             return iter([None, None])
 
     with patch("artifactsmmo_cli.ai.learning.projections.Session", FakeSession):
-        collect, _ = active_means(state, GameData(), store, _ctx())
-        assert MeansKind.LOW_YIELD_CANCEL not in collect
+        assert low_yield_cancel_fires(state, GameData(), store) is False
     store.close()
 
 
@@ -710,8 +701,7 @@ def test_low_yield_cancel_absent_when_alt_repr_found_but_no_yield(tmp_path):
 
     with patch.object(projections_mod, "_best_alternative_repr", fake_best_alt):
         with patch("artifactsmmo_cli.ai.learning.projections.expected_yield_per_cycle", fake_yield):
-            collect, _ = active_means(state, GameData(), store, _ctx())
-            assert MeansKind.LOW_YIELD_CANCEL not in collect
+            assert low_yield_cancel_fires(state, GameData(), store) is False
     store.close()
 
 

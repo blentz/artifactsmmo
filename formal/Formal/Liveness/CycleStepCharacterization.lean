@@ -187,10 +187,6 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
       show (applyActionKind .npcSell s).level = s.level
             ∧ (applyActionKind .npcSell s).xp = s.xp
       exact ⟨rfl, rfl⟩
-    | lowYieldCancel =>
-      show (applyActionKind .taskCancel s).level = s.level
-            ∧ (applyActionKind .taskCancel s).xp = s.xp
-      exact ⟨rfl, rfl⟩
     | taskCancel =>
       show (applyActionKind .taskCancel s).level = s.level
             ∧ (applyActionKind .taskCancel s).xp = s.xp

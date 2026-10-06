@@ -69,7 +69,6 @@ def test_currency_turnin_is_last_in_the_collect_reward_band() -> None:
     assert (COLLECT_REWARD_ORDER.index(MeansKind.CURRENCY_TURNIN)
             < COLLECT_REWARD_ORDER.index(MeansKind.ACCEPT_TASK))
     for cheap in (MeansKind.CLAIM_PENDING, MeansKind.COMPLETE_TASK,
-                  MeansKind.SELL_PRESSURED, MeansKind.LOW_YIELD_CANCEL,
-                  MeansKind.TASK_CANCEL):
+                  MeansKind.SELL_PRESSURED, MeansKind.TASK_CANCEL):
         assert (COLLECT_REWARD_ORDER.index(cheap)
                 < COLLECT_REWARD_ORDER.index(MeansKind.CURRENCY_TURNIN))

@@ -945,8 +945,14 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
     * no gear closes the gap: None. The task waits, inert, for a coin to cancel
       it (S-052).
 
-    Items tasks are not offered here: PURSUE_TASK still serves them until
-    5-2c-iii-c-2 folds that rung in."""
+    * a data-confirmed poor task (any type, a pocket coin to cancel it with):
+      the task itself, whose step is the cancel (c-2: this was the
+      LOW_YIELD_CANCEL collect rung).
+
+    Items tasks are otherwise not offered here: PURSUE_TASK still serves them
+    until c-2 folds that rung in."""
+    if state.task_code and _route.task_pays_less(state, game_data, history):
+        return ReachTaskOutcome(state.task_code)
     if (state.task_type != "monsters" or not state.task_code
             or state.task_progress >= state.task_total):
         return None

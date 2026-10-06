@@ -2338,7 +2338,6 @@ noncomputable def fixtureFreshState : State where
   recyclableSurplusNonempty := false
   taskCoinsTotal := 0
   taskExchangeMinCoins := 1
-  lowYieldCancelFires := false
   taskCancelFires := false
   pursueTaskFires := false
   objectiveStepFires := false

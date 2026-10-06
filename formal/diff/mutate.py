@@ -7241,6 +7241,9 @@ FIGHT_APPLICABILITY_MUTATIONS = [
 # The task objective (Phase 5-2c-iii-c-1). Killed by
 # tests/test_ai/test_task_objective.py.
 TASK_ROOT_MUTATIONS = [
+    ("root: a poor task is never offered for its cancel (c-2 low-yield fold)",
+     "    if state.task_code and _route.task_pays_less(state, game_data, history):\n",
+     "    if False:\n"),
     ("root: the task objective is never offered",
      "    if task is not None:\n        ordered.append(task)\n",
      "    if task is not None:\n        pass\n"),
@@ -7252,6 +7255,9 @@ TASK_ROOT_MUTATIONS = [
      "            ):\n        return None\n"),
 ]
 TASK_STEP_MUTATIONS = [
+    ("step: a poor task is worked, not cancelled (c-2 low-yield fold)",
+     "        if low_yield_cancel_fires(state, game_data, history):\n            return LowYieldCancelGoal()\n",
+     ""),
     ("step: the task objective maps to no goal",
      "        return TaskKillsGoal(step.task_code, state.task_progress)\n",
      "        return None\n"),

@@ -60,7 +60,6 @@ class CycleState:
     sellable_inventory_nonempty: bool
     task_coins_total: int
     task_exchange_min_coins: int
-    low_yield_cancel_fires: bool
     task_cancel_fires: bool
     pursue_task_fires: bool
     objective_step_fires: bool
@@ -97,7 +96,6 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.CLAIM_PENDING:      "claimPendingItem",
     LadderMeans.COMPLETE_TASK:      "completeTask",
     LadderMeans.SELL_PRESSURED:     "npcSell",
-    LadderMeans.LOW_YIELD_CANCEL:   "taskCancel",
     LadderMeans.TASK_CANCEL:        "taskCancel",
     LadderMeans.OBJECTIVE_STEP:     "objectiveStep",
     LadderMeans.PURSUE_TASK:        "taskTrade",
@@ -138,7 +136,6 @@ MIRROR_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK,
     LadderMeans.SELL_PRESSURED,
-    LadderMeans.LOW_YIELD_CANCEL,
     LadderMeans.TASK_CANCEL,
     LadderMeans.OBJECTIVE_STEP,
     LadderMeans.PURSUE_TASK,
@@ -256,7 +253,6 @@ def fires_mirror(k: LadderMeans, s: CycleState) -> bool:
     if k is LadderMeans.CLAIM_PENDING:      return s.pending_items_nonempty
     if k is LadderMeans.COMPLETE_TASK:      return _complete_task_fires(s)
     if k is LadderMeans.SELL_PRESSURED:     return _sell_pressured_fires(s)
-    if k is LadderMeans.LOW_YIELD_CANCEL:   return s.low_yield_cancel_fires
     if k is LadderMeans.TASK_CANCEL:        return s.task_cancel_fires
     if k is LadderMeans.OBJECTIVE_STEP:     return s.objective_step_fires
     if k is LadderMeans.PURSUE_TASK:        return s.pursue_task_fires
@@ -329,7 +325,6 @@ def apply_action_kind_mirror(action: str, s: CycleState) -> CycleState:
         return dataclasses.replace(
             s,
             task_cancel_fires=False,
-            low_yield_cancel_fires=False,
             pursue_task_fires=False,
             task_code=None,
             task_total=0,

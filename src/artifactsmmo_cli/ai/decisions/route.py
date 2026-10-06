@@ -43,7 +43,7 @@ from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
-from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
+from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level, low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -186,3 +186,15 @@ TOTAL over `META_GOAL_KINDS` since wave 6. The two climbs return
     assert not isinstance(goal, META_GOAL_KINDS), (
         f"{goal!r} is in META_GOAL_KINDS but route_price has no arm for it")
     raise AssertionError(f"unhandled MetaGoal kind: {goal!r}")
+
+
+def task_pays_less(state: WorldState, game_data: GameData,
+                   history: LearningStore | None) -> bool:
+    """The held task is data-confirmed to pay clearly less than the best
+    alternative, and a pocket coin can cancel it (`low_yield_cancel_fires`).
+
+    A RATE COMPARISON — the task's char-XP per cycle against an alternative's —
+    so it reaches the walk through this funnel like every other price (O6), not
+    by `decisions/root.py` importing the projection itself. Phase 5-2c-iii-c-2:
+    it decides whether the task objective is offered for its cancel step."""
+    return low_yield_cancel_fires(state, game_data, history)

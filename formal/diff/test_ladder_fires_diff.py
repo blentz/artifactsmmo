@@ -195,7 +195,6 @@ DEFERRED_SLOTS: frozenset[LadderMeans] = frozenset({
     LadderMeans.CRAFT_RELIEF,
     LadderMeans.RECYCLE_RELIEF,  # opaque passthrough: bank-full + recyclableSurplusNonempty
     LadderMeans.MAINTAIN_CONSUMABLES,
-    LadderMeans.LOW_YIELD_CANCEL,
     LadderMeans.TASK_CANCEL,
     LadderMeans.PURSUE_TASK,
     LadderMeans.RECYCLE_SURPLUS,
@@ -218,7 +217,6 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.CLAIM_PENDING: "claimPending",
     LadderMeans.COMPLETE_TASK: "completeTask",
     LadderMeans.SELL_PRESSURED: "sellPressured",
-    LadderMeans.LOW_YIELD_CANCEL: "lowYieldCancel",
     LadderMeans.TASK_CANCEL: "taskCancel",
     LadderMeans.OBJECTIVE_STEP: "objectiveStep",
     LadderMeans.PURSUE_TASK: "pursueTask",
@@ -1872,10 +1870,6 @@ def test_task_cancel_drives_and_selects() -> None:
     # Production REALLY PIVOTs (not faked):
     assert prod[LadderMeans.TASK_CANCEL] is True
     assert lean[LadderMeans.TASK_CANCEL] is True
-    # lowYieldCancel (idx 12, above) is quiet on both sides (accepted phase /
-    # empty task-pursuit history).
-    assert prod[LadderMeans.LOW_YIELD_CANCEL] is False
-    assert lean[LadderMeans.LOW_YIELD_CANCEL] is False
     # Strong selection teeth: taskCancel wins on both ladders.
     assert prod_sel is LadderMeans.TASK_CANCEL
     assert lean_sel is LadderMeans.TASK_CANCEL
@@ -1984,8 +1978,6 @@ def test_pursue_task_drives_and_selects() -> None:
     # The slots above pursueTask that could contest are quiet on both ladders.
     assert prod[LadderMeans.TASK_CANCEL] is False
     assert lean[LadderMeans.TASK_CANCEL] is False
-    assert prod[LadderMeans.LOW_YIELD_CANCEL] is False
-    assert lean[LadderMeans.LOW_YIELD_CANCEL] is False
     # Strong selection teeth: pursueTask wins on both ladders.
     assert prod_sel is LadderMeans.PURSUE_TASK
     assert lean_sel is LadderMeans.PURSUE_TASK
@@ -2022,112 +2014,6 @@ def test_pursue_task_near_miss_too_hard() -> None:
     # side (taskFeasibleProjected=0, accepted phase) fires taskCancel too.
     assert prod[LadderMeans.TASK_CANCEL] is True
     assert lean[LadderMeans.TASK_CANCEL] is True
-
-
-# ---------------------------------------------------------------------------
-# Slot 3 — lowYieldCancel (Lean idx 12).  Production `low_yield_cancel_fires`
-# (projections.py ~365 + low_yield_boundary.py): a held task (task_code set,
-# task_total>0), task-pursuit yield with sample_count>0, a best-alternative
-# GrindCharacterXP with sample_count>0, and the zero-fast-path
-# (`current_xp == 0 ∧ alt_xp > 0`). The POPULATED store from `_yield_history`
-# supplies a task-pursuit cycle yielding 0 char-XP and a grind cycle yielding
-# positive char-XP, so the zero-fast-path fires.
-#
-# Lean `lowYieldCancelFires` (ProductionLadder.lean ~205): phase==inProgress
-# AND `actionsAttempted >= lowYieldSampleThreshold` (=1). We drive
-# phase=inProgress (progress 1/5) and actions_attempted=1; taskFeasibleProjected
-# =1 keeps taskCancel quiet on Lean (idx 13, below 12 anyway). lowYieldCancel
-# (idx 12) is the highest firing slot and WINS selection on BOTH ladders.
-# ---------------------------------------------------------------------------
-
-
-def _farm_items_world(*, progress: int, total: int) -> WorldState:
-    # An IN_PROGRESS items-task (progress 1/5), clean otherwise so every slot
-    # above lowYieldCancel(12) stays quiet.
-    #
-    # A POCKET `tasks_coin`, for the same reason `_monsters_task_world` takes
-    # one: `low_yield_cancel_fires` gained the coin gate on 2026-08-25 so both
-    # cancel rungs agree with `TaskCancelAction.is_applicable` about whether a
-    # cancel can happen at all. The Lean ladder does not model the coin (neither
-    # `taskCancelFires` nor `lowYieldCancelFires` takes it), so a fixture that
-    # means "this rung fires" has to hold one — exactly the convention the
-    # taskCancel fixtures already follow. Every slot ABOVE 12 stays quiet with a
-    # coin in the bag (COMPLETE_TASK needs progress>=total, SELL_* need a buyer,
-    # CLAIM_PENDING needs pending items), so this does not disturb the contest.
-    return WorldState(
-        character="diff", level=10, xp=0, max_xp=999999, hp=100, max_hp=100,
-        gold=0, skills={}, x=0, y=0, inventory={"tasks_coin": 1}, inventory_max=20,
-        inventory_slots_max=20,
-        equipment={}, cooldown_expires=None, bank_items=None, bank_gold=None,
-        pending_items=None, task_code="widget", task_type="items",
-        task_progress=progress, task_total=total)
-
-
-def test_low_yield_cancel_drives_and_selects() -> None:
-    """TRUE fixture: held items-task 1/5 (in-progress), a POPULATED store where
-    Task pursuit yields 0 char-XP/cycle and GrindCharacterXP(chicken) yields positive
-    char-XP/cycle -> the zero-fast-path fires -> production LOW_YIELD_CANCEL
-    fires. Lean: phase=inProgress + actionsAttempted=1 -> lowYieldCancel fires.
-    It is ladder idx 12, the highest firing slot, and WINS selection on BOTH
-    ladders. A wrong Lean priority for lowYieldCancel would break this."""
-    w = _farm_items_world(progress=1, total=5)
-    gd = _feasible_items_gd()
-    hist = _yield_history(farm_items_xp=0, farm_monster_xp=20)
-    prod, prod_sel, lean, lean_sel = drive_and_contest(
-        w, gd, _plain_ctx(),
-        driven=frozenset({LadderMeans.LOW_YIELD_CANCEL}),
-        history=hist, actions_attempted=1, task_feasible_projected=True)
-    # Production REALLY fires the driven slot (not faked):
-    assert prod[LadderMeans.LOW_YIELD_CANCEL] is True
-    assert lean[LadderMeans.LOW_YIELD_CANCEL] is True
-    # Strong selection teeth: lowYieldCancel wins on both ladders.
-    assert prod_sel is LadderMeans.LOW_YIELD_CANCEL
-    assert lean_sel is LadderMeans.LOW_YIELD_CANCEL
-
-
-def test_low_yield_cancel_near_miss_positive_current_xp() -> None:
-    """Near-miss: FarmItems yields positive char-XP (5), so the zero-fast-path
-    (`current_xp == 0`) does NOT apply; the remaining margin path then needs the
-    confidence gate (`project_task_completion(...).confidence`) to clear, which a
-    single sample does not -> production LOW_YIELD_CANCEL does NOT fire. (Pins the
-    zero-fast-path / confidence gate.)
-
-    `actions_attempted=0` makes the Lean lowYieldCancel quiet too (Lean gates on
-    actionsAttempted >= 1), so its per-slot contest agrees at False. With
-    lowYieldCancel/taskCancel quiet, both ladders fall through to pursueTask
-    (in-progress, feasible) and SELECTION still AGREES -- so it stays asserted."""
-    w = _farm_items_world(progress=1, total=5)
-    gd = _feasible_items_gd()
-    hist = _yield_history(farm_items_xp=5, farm_monster_xp=20)
-    prod, _, lean, _ = drive_and_contest(
-        w, gd, _plain_ctx(),
-        driven=frozenset({LadderMeans.LOW_YIELD_CANCEL}),
-        history=hist, actions_attempted=0, task_feasible_projected=True)
-    assert prod[LadderMeans.LOW_YIELD_CANCEL] is False
-    assert lean[LadderMeans.LOW_YIELD_CANCEL] is False
-
-
-def test_low_yield_cancel_near_miss_no_alternative() -> None:
-    """Near-miss: FarmItems yields 0 char-XP but there is NO FarmMonster
-    alternative recorded -> `_best_alternative_repr` returns None -> production
-    LOW_YIELD_CANCEL does NOT fire (pins the alt-sample prerequisite).
-
-    `actions_attempted=0` makes the Lean lowYieldCancel quiet too, so its per-slot
-    contest agrees at False; both ladders fall through to pursueTask and SELECTION
-    AGREES -- so it stays asserted."""
-    w = _farm_items_world(progress=1, total=5)
-    gd = _feasible_items_gd()
-    store = LearningStore(db_path=":memory:", character="hero")
-    store.start_session()
-    store.record_cycle(Cycle(
-        ts="2026-06-18T00:00:00+00:00", cycle_index=0, outcome="ok",
-        selected_goal="FarmItems", delta_xp=0))
-    prod, _, lean, _ = drive_and_contest(
-        w, gd, _plain_ctx(),
-        driven=frozenset({LadderMeans.LOW_YIELD_CANCEL}),
-        history=store, actions_attempted=0, task_feasible_projected=True)
-    assert prod[LadderMeans.LOW_YIELD_CANCEL] is False
-    assert lean[LadderMeans.LOW_YIELD_CANCEL] is False
 
 
 # ---------------------------------------------------------------------------

@@ -110,7 +110,6 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
         | some c => c :: s.taskCodesSeen
         | none => s.taskCodesSeen
       { s with taskCancelFires := false,
-               lowYieldCancelFires := false,
                pursueTaskFires := false,
                taskCode := none,
                taskTotal := 0,
@@ -410,7 +409,6 @@ def planForC : MeansKind → State → Plan
   | .claimPending     , _ => [.claimPendingItem]
   | .completeTask     , _ => [.completeTask]
   | .sellPressured    , _ => [.npcSell]
-  | .lowYieldCancel   , _ => [.taskCancel]
   | .taskCancel       , _ => [.taskCancel]
   | .objectiveStep    , s =>
       -- O5.2 (2026-06-16): a combat/char-leveling objective dispatches a

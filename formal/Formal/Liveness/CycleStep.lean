@@ -127,7 +127,6 @@ noncomputable def planFor : MeansKind → State → Plan
   | .claimPending     , _ => [.claimPendingItem]
   | .completeTask     , _ => [.completeTask]
   | .sellPressured    , _ => [.npcSell]
-  | .lowYieldCancel   , _ => [.taskCancel]
   | .taskCancel       , _ => [.taskCancel]
   | .objectiveStep    , s =>
       -- O5.2 (2026-06-16): a combat/char-leveling objective dispatches a
@@ -532,22 +531,6 @@ theorem cycleStep_progress_or_waits
       have : (applyActionKind .npcSell s).sellableInventoryNonempty = false := hpost
       rw [heq] at this; exact this
     rw [hpre] at hpre'; cases hpre'
-  | lowYieldCancel =>
-    left
-    have hcs : cycleStep s = applyActionKind .taskCancel s := by
-      unfold cycleStep; rw [hk]; rfl
-    rw [hcs]
-    -- Phase 23d-5: hfires = (decide phase=.inProgress) && (decide attempts ≥ T)
-    simp only [fires, lowYieldCancelFires, Bool.and_eq_true, decide_eq_true_eq] at hfires
-    -- hfires : phase = .inProgress ∧ actionsAttempted ≥ T
-    intro heq
-    have hpost : (applyActionKind .taskCancel s).taskLifecyclePhase
-                  = TaskLifecyclePhase.TaskLifecyclePhase.none := by
-      simp [applyActionKind]
-    have hpre' : s.taskLifecyclePhase
-                  = TaskLifecyclePhase.TaskLifecyclePhase.none := by
-      rw [heq] at hpost; exact hpost
-    rw [hfires.1] at hpre'; cases hpre'
   | taskCancel =>
     left
     have hcs : cycleStep s = applyActionKind .taskCancel s := by

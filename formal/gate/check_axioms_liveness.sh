@@ -20,9 +20,9 @@
 # definition (witness k = 0). The Phase 23d-4 `actionsAttempted` field
 # on `State` is added as the carrier for a future refinement that mirrors
 # the production sample-count gate; no new axioms introduced:
-#   * LIV-003b-A1: lowYieldSampleThreshold                    | spec: LOW_YIELD_SAMPLE_THRESHOLD in projections.py    | approved 2026-06-01
-#   * LIV-003b-A1: lowYieldSampleThreshold_pos                | spec: LOW_YIELD_SAMPLE_THRESHOLD in projections.py    | approved 2026-06-01
-#   * LIV-003b-A2: inProgress_decides_within_threshold        | GRADUATED TO THEOREM Phase 23d-4 (was axiom in 23d-1)  | n/a
+#   * LIV-003b-A1: lowYieldSampleThreshold | RETIRED Phase 5-2c-iii-c-2 with the LOW_YIELD_CANCEL rung
+#   * LIV-003b-A1: lowYieldSampleThreshold_pos | RETIRED Phase 5-2c-iii-c-2 with the LOW_YIELD_CANCEL rung
+#   * LIV-003b-A2: inProgress_decides_within_threshold | RETIRED Phase 5-2c-iii-c-2 with the LOW_YIELD_CANCEL rung
 #   * LIV-003c-A1: taskPoolFinite                             | spec: /v3/my/{name}/action/task/new (finite pool)    | approved 2026-06-01
 #   * LIV-003c-A1: taskPoolFinite_pos                         | spec: /v3/my/{name}/action/task/new (finite pool)    | approved 2026-06-01
 #   * LIV-003c-A2: accept_cancel_loop_bound                   | DELETED 2026-06-03 (Item 1g-C) — unused in any proof
@@ -68,8 +68,7 @@ MANIFEST="gate/liveness_axioms.manifest"
   echo "# Mathlib pin: v4.30.0 (see lakefile.toml)"
   echo "# Allow-list: {propext, Classical.choice, Quot.sound,"
   echo "#              Formal.Liveness.Measure.xpToNextLevel(_pos) [LIV-001],"
-  echo "#              Formal.Liveness.LIV003Decomposition.lowYieldSampleThreshold(_pos) [LIV-003b],"
-  echo "#              (LIV-003b-A2 inProgress_decides_within_threshold GRADUATED TO THEOREM in Phase 23d-4)"
+  echo "#              (LIV-003b retired in Phase 5-2c-iii-c-2 with the LOW_YIELD_CANCEL rung)"
   echo "#              Formal.Liveness.LIV003Decomposition.taskPoolFinite(_pos) [LIV-003c],"
   echo "#              (LIV-003c-A2 accept_cancel_loop_bound DELETED in Item 1g-C)"
   echo "#              (LIV-003-bridge lifecycle_progress_from_bounds DISCHARGED as THEOREM in Item 1g-B2)}"
