@@ -179,9 +179,8 @@ DORMANT: dict[str, str] = {
     # premises are still unmet rather than merely unobserved.
     "PursueTaskGoal": "conditional: requires a held items-task the projection says to pursue",
     "LowYieldCancelGoal": "conditional: requires a held task and enough samples to judge it",
-    "TaskExchangeGoal": "conditional: requires tasks_coin, earned only by "
-                        "completing tasks",
-    "TaskExchangeAction": "conditional: emitted only by TaskExchangeGoal",
+    # 2026-10-06: `TaskExchangeGoal`/`TaskExchangeAction` LEFT this list — the
+    # task objective's exchange (c-2 #2) ran 5 cycles live, Lor's paying out.
     "TaskTradeAction": "conditional: items-task delivery, requires a held items-task",
     # 2026-09-13: ExpandBankGoal and BuyBankExpansionAction were removed from
     # this table entirely. They carried `unreachable: MeansKind.BANK_EXPAND is

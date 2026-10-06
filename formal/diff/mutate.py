@@ -351,6 +351,7 @@ CURRENCY_AFFORD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / 
 REFUSAL_FACT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "refusal_fact_core.py"
 TASK_KILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "task_kills.py"
 STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
+TASK_ACCEPT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_accept.py"
 DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decision.py"
 OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "obtain_item.py"
 ROOT_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "root.py"
@@ -7215,6 +7216,22 @@ FIGHT_APPLICABILITY_MUTATIONS = [
 ]
 
 
+# The accept gate: no task held and a draw owed, nothing else (USER
+# 2026-10-06 dropped the gear-chain deferral). Killed by
+# tests/test_ai/test_tiers_means.py.
+TASK_ACCEPT_MUTATIONS = [
+    ("accept: a draw is taken while a task is held",
+     "    return not state.task_code and ctx.draw_owed\n",
+     "    return ctx.draw_owed\n"),
+    ("accept: the no-immediate-redraw gate is dropped",
+     "    return not state.task_code and ctx.draw_owed\n",
+     "    return not state.task_code\n"),
+    ("accept: target gear defers the draw again",
+     "    return not state.task_code and ctx.draw_owed\n",
+     "    return not state.task_code and ctx.draw_owed and not ctx.target_gear\n"),
+]
+
+
 # The task objective (Phase 5-2c-iii-c-1). Killed by
 # tests/test_ai/test_task_objective.py.
 TASK_ROOT_MUTATIONS = [
@@ -7222,7 +7239,7 @@ TASK_ROOT_MUTATIONS = [
      "    if state.task_type == \"items\" and _route.task_worth_pursuing(state, game_data, history):\n",
      "    if False:\n"),
     ("root: an owed draw never offers the task objective (c-2 accept fold)",
-     "    if not state.task_code and accept_due(state, game_data, ctx):\n",
+     "    if not state.task_code and accept_due(state, ctx):\n",
      "    if False:\n"),
     ("root: exchange coin comparator >= -> > (boundary coins==min, was the TASK_EXCHANGE rung's)",
      "    if tasks_coin_total(state) >= ctx.task_exchange_min_coins:\n        # c-2 #2",
@@ -7248,7 +7265,7 @@ TASK_STEP_MUTATIONS = [
      "            return _pursue_goal(state, game_data) if pursue_due(state, game_data, history) else None\n",
      "            return None\n"),
     ("step: an owed draw is never taken (c-2 accept fold)",
-     "        if step.task_code is None and accept_due(state, game_data, ctx):\n",
+     "        if step.task_code is None and accept_due(state, ctx):\n",
      "        if False:\n"),
     ("step: earned coins are never exchanged (c-2 exchange fold)",
      "        if tasks_coin_total(state) >= ctx.task_exchange_min_coins:\n            # c-2 #2",
@@ -8935,6 +8952,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_no_combat_deadlock.py", survivors)
     run_group(APPLY_FIGHT_SRC, TASK_FIGHT_BYPASS_MUTATIONS,
               "tests/test_ai/test_grey_farm.py", survivors)
+    run_group(TASK_ACCEPT_SRC, TASK_ACCEPT_MUTATIONS,
+              "tests/test_ai/test_tiers_means.py", survivors)
     run_group(ROOT_DECISION_SRC, TASK_ROOT_MUTATIONS,
               "tests/test_ai/test_task_objective.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, TASK_STEP_MUTATIONS,

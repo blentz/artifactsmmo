@@ -768,15 +768,6 @@ open Formal.PriorityBand
 #print axioms Formal.FallbackChain.walk_deterministic
 #print axioms Formal.FallbackChain.passOne_first_match
 #print axioms Formal.FallbackChain.trace_122752_walk_picks_equip
-#print axioms Formal.AcceptTaskGate.fires_total
-#print axioms Formal.AcceptTaskGate.fires_deterministic
-#print axioms Formal.AcceptTaskGate.fires_false_when_active_task
-#print axioms Formal.AcceptTaskGate.entry_defers_when_owned_not_equipped
-#print axioms Formal.AcceptTaskGate.entry_defers_when_craftable
-#print axioms Formal.AcceptTaskGate.fires_false_when_owned_unequipped_gear_exists
-#print axioms Formal.AcceptTaskGate.fires_false_when_craftable_gear_exists
-#print axioms Formal.AcceptTaskGate.entry_does_not_defer_when_equipped
-#print axioms Formal.AcceptTaskGate.entry_does_not_defer_when_unowned_uncraftable
 #print axioms Formal.TaskTradeReadyPriority.suppress_total
 #print axioms Formal.TaskTradeReadyPriority.suppress_deterministic
 #print axioms Formal.TaskTradeReadyPriority.hasPursueTask_true_of_mem

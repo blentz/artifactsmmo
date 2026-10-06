@@ -611,7 +611,7 @@ def objective_step_goal(
         # dropped task has none.
         if low_yield_cancel_fires(state, game_data, history):
             return LowYieldCancelGoal()
-        if step.task_code is None and accept_due(state, game_data, ctx):
+        if step.task_code is None and accept_due(state, ctx):
             # c-2 #3 (was the ACCEPT_TASK collect rung): take the owed draw on
             # the task's turn. Synergy Wave 4: steer the task DISTRIBUTION toward
             # the master whose pool best serves the ACTIVE LINK's demand

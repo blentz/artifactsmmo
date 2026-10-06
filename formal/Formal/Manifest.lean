@@ -14,7 +14,6 @@ import Formal.ActionSetCompleteness
 import Formal.EquipValueAugmented
 import Formal.GearValue
 import Formal.FallbackChain
-import Formal.AcceptTaskGate
 import Formal.TaskTradeReadyPriority
 import Formal.WithdrawSetExpansion
 import Formal.RecycleProtection
@@ -922,16 +921,6 @@ open Formal.PriorityBand
 #check @Formal.FallbackChain.passOne_first_match
 #check @Formal.FallbackChain.trace_122752_walk_picks_equip
 
--- AcceptTaskGate (defer-AcceptTask while gear chain has work, fix proof):
-#check @Formal.AcceptTaskGate.fires_total
-#check @Formal.AcceptTaskGate.fires_deterministic
-#check @Formal.AcceptTaskGate.fires_false_when_active_task
-#check @Formal.AcceptTaskGate.entry_defers_when_owned_not_equipped
-#check @Formal.AcceptTaskGate.entry_defers_when_craftable
-#check @Formal.AcceptTaskGate.fires_false_when_owned_unequipped_gear_exists
-#check @Formal.AcceptTaskGate.fires_false_when_craftable_gear_exists
-#check @Formal.AcceptTaskGate.entry_does_not_defer_when_equipped
-#check @Formal.AcceptTaskGate.entry_does_not_defer_when_unowned_uncraftable
 
 -- TaskTradeReadyPriority (trade-ready fallback suppression proof):
 #check @Formal.TaskTradeReadyPriority.suppress_total

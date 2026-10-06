@@ -300,7 +300,7 @@ def test_phantomTask_state_is_a_real_deadlock_shape(
         pursue = pursue_due(state, gd, LearningStore(":memory:", "diff"))
         step_phase = production_fires(LadderMeans.OBJECTIVE_STEP, state, gd,
                                       None, ctx, False)
-        accept = accept_due(state, gd, ctx)
+        accept = accept_due(state, ctx)
         assert not (complete or pursue or step_phase or accept), (
             f"Phantom-task state but a task means fires anyway — "
             f"production semantics changed; revisit Lean invariant taskValid. "
@@ -314,7 +314,7 @@ def test_phantomTask_state_is_a_real_deadlock_shape(
         # The task objective can still take a draw for orphan-total
         # (`accept_due` keys on `not state.task_code`). So orphan-total is
         # recoverable.
-        accept = accept_due(state, gd, ctx)
+        accept = accept_due(state, ctx)
         assert accept, "orphan-total state: the task objective should still accept"
         COUNTERS.task_valid_violations.append(
             f"orphan-total: total={state.task_total} (recoverable via the accept)"
@@ -511,7 +511,7 @@ def test_no_task_state_with_a_draw_owed_offers_the_task_objective() -> None:
         hp=100, max_hp=100, inventory_used=0, inventory_max=100,
         bank_items={}, pending=None, level=1, xp=0, gold=0,
     )
-    assert accept_due(state, gd, ctx)
+    assert accept_due(state, ctx)
     assert _task_root(state, gd, ctx, None) == ReachTaskOutcome(None)
     res = production_ladder(state, gd, None, ctx, objective_step_fires=True)
     assert res is LadderMeans.OBJECTIVE_STEP, f"expected OBJECTIVE_STEP, got {res!r}"

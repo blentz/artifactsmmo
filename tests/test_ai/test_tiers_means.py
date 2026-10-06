@@ -96,64 +96,28 @@ def test_complete_task_in_collect_reward_when_task_done():
     assert MeansKind.COMPLETE_TASK in collect
 
 
-def test_accept_task_is_a_collect_rung_when_a_draw_is_owed():
+def test_accept_task_is_due_when_a_draw_is_owed():
     """It left the discretionary band on 2026-08-19 (S-051): below the objective
     step it was unreachable, and the fleet held a task in 0 of 63,310 cycles."""
     state = make_state(task_code=None)
-    assert accept_due(state, GameData(), _ctx()) is True
+    assert accept_due(state, _ctx()) is True
 
 
 def test_accept_task_is_quiet_when_no_draw_is_owed():
-    """The gate that makes the promotion safe: accept and discard both sit above
-    the step, so an ungated redraw would spin between them at a coin a cycle."""
+    """The no-immediate-redraw gate: an ungated redraw would spin between
+    accept and discard at a coin a cycle."""
     state = make_state(task_code=None)
-    assert accept_due(state, GameData(), _ctx(draw_owed=False)) is False
+    assert accept_due(state, _ctx(draw_owed=False)) is False
 
 
-def test_accept_task_fires_when_target_gear_already_equipped():
-    """Equipped target gear doesn't block AcceptTask — that gear slot needs no
-    further work, so the deferral `continue`s past it."""
-    state = make_state(task_code=None,
-                       equipment={"weapon_slot": "copper_dagger"})
-    assert accept_due(state, GameData(), _ctx(target_gear=frozenset({"copper_dagger"}))) is True
-
-
-def test_accept_task_deferred_when_target_gear_owned_but_unequipped():
-    """Target gear sitting in inventory unequipped defers AcceptTask so
-    UpgradeEquipment can fire first (the trace 2026-06-06 regression)."""
+def test_accept_task_does_not_wait_on_target_gear():
+    """USER 2026-10-06: no gear-chain deferral. Target gear owned-unequipped,
+    or craftable at the current skill, no longer holds the draw back — live,
+    a "craftable" `hard_leather_boots` nobody worked kept three characters
+    taskless for over a day."""
     state = make_state(task_code=None, inventory={"copper_dagger": 1})
-    assert accept_due(state, GameData(), _ctx(target_gear=frozenset({"copper_dagger"}))) is False
-
-
-def test_accept_task_deferred_when_target_gear_craftable_now():
-    """Target gear that's craftable under current skills defers AcceptTask so
-    the gear chain wins material contention."""
-    gd = GameData()
-    gd._item_stats = {
-        "copper_dagger": ItemStats(
-            code="copper_dagger", level=1, type_="weapon",
-            crafting_skill="weaponcrafting", crafting_level=1),
-    }
-    # weaponcrafting defaults to 1 in make_state → skill >= crafting_level.
-    state = make_state(task_code=None)
-    assert accept_due(state, gd, _ctx(target_gear=frozenset({"copper_dagger"}))) is False
-
-
-def test_accept_task_fires_when_target_gear_unknown_or_uncraftable():
-    """Target gear with no stats (or no crafting_skill, or skill too low) does
-    not defer AcceptTask — the loop falls through and the task is accepted."""
-    gd = GameData()
-    gd._item_stats = {
-        # Skill too high to craft now (skill-gate path, line 133-134 false).
-        "future_gear": ItemStats(
-            code="future_gear", level=20, type_="weapon",
-            crafting_skill="weaponcrafting", crafting_level=20),
-        # No crafting_skill at all (line 132 continue path).
-        "dropped_gear": ItemStats(
-            code="dropped_gear", level=5, type_="weapon"),
-    }
-    state = make_state(task_code=None)
-    assert accept_due(state, gd, _ctx(target_gear=frozenset({"future_gear", "dropped_gear"}))) is True
+    ctx = _ctx(target_gear=frozenset({"copper_dagger", "iron_sword"}))
+    assert accept_due(state, ctx) is True
 
 
 def test_claim_pending_fires_with_pending_items():
@@ -465,7 +429,7 @@ def test_complete_task_not_in_collect_when_incomplete():
 
 def test_accept_task_not_in_discretionary_when_task_held():
     state = make_state(task_code="cyclops", task_type="monsters", task_total=5, task_progress=3)
-    assert accept_due(state, GameData(), _ctx()) is False
+    assert accept_due(state, _ctx()) is False
 
 
 def test_bank_expand_fires_when_conditions_met():

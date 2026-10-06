@@ -6,7 +6,6 @@ concept tag, or a concept with no module, is a traceability gap.
 
 | Module | Concepts | Properties |
 |---|---|---|
-| AcceptTaskGate | tasks, items | safety, totality |
 | AccumulationSell | inventory, selling | safety, monotonicity |
 | ActionApplicability | combat, characters | safety, monotonicity |
 | ActionCostNonneg | core, planner | safety |

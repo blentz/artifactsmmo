@@ -951,11 +951,12 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
       the task itself, whose step is the cancel (c-2: this was the
       LOW_YIELD_CANCEL collect rung).
 
-    Items tasks are otherwise not offered here: PURSUE_TASK still serves them
-    until c-2 folds that rung in."""
+    * a held items task the projection says to pursue
+      (`route.task_worth_pursuing`): the task itself (c-2 #4: this was the
+      PURSUE_TASK rung)."""
     if state.task_code and _route.task_pays_less(state, game_data, history):
         return ReachTaskOutcome(state.task_code)
-    if not state.task_code and accept_due(state, game_data, ctx):
+    if not state.task_code and accept_due(state, ctx):
         # c-2 #3 (was the ACCEPT_TASK collect rung): an owed draw is taken on
         # the task objective's turn (USER: no task is drawn until then).
         return ReachTaskOutcome(None)
