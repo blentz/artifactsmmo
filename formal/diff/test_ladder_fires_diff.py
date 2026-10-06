@@ -220,7 +220,6 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.TASK_CANCEL: "taskCancel",
     LadderMeans.OBJECTIVE_STEP: "objectiveStep",
     LadderMeans.PURSUE_TASK: "pursueTask",
-    LadderMeans.ACCEPT_TASK: "acceptTask",
     LadderMeans.MAINTAIN_CONSUMABLES: "maintainConsumables",
     LadderMeans.SUPPLY_BANK: "supplyBank",
     LadderMeans.CURRENCY_TURNIN: "currencyTurnIn",
@@ -1253,19 +1252,18 @@ def _recycle_world(dagger_qty: int) -> WorldState:
 def test_recycle_surplus_drives_true() -> None:
     """TRUE fixture: 2 daggers (> cap 1), under 0.85 fill, skill at level,
     workshop known, unprotected, unequipped -> production RECYCLE_SURPLUS
-    fires. It loses selection to ACCEPT_TASK (phase NONE) on BOTH ladders, so
-    `selected` agrees at acceptTask while arg[23] is bound by the per-slot
-    contest."""
+    fires, and wins selection on BOTH ladders (nothing above it fires at phase
+    NONE since ACCEPT_TASK was retired), so `selected` agrees at it."""
     w = _recycle_world(dagger_qty=2)
     gd = _recycle_gd()
     prod, prod_sel, lean, lean_sel = drive_and_contest(
         w, gd, _recycle_ctx(), driven=frozenset({LadderMeans.RECYCLE_SURPLUS}))
     assert prod[LadderMeans.RECYCLE_SURPLUS] is True
     assert lean[LadderMeans.RECYCLE_SURPLUS] is True
-    # recycleSurplus is structurally unreachable as a Lean selection; both
-    # ladders settle on acceptTask at phase NONE (selection agreement).
-    assert prod_sel is LadderMeans.ACCEPT_TASK
-    assert lean_sel is LadderMeans.ACCEPT_TASK
+    # Since ACCEPT_TASK's retirement (Phase 5-2c-iii-c-2 #3) nothing above
+    # it fires at phase NONE, so both ladders select RECYCLE_SURPLUS.
+    assert prod_sel is LadderMeans.RECYCLE_SURPLUS
+    assert lean_sel is LadderMeans.RECYCLE_SURPLUS
 
 
 def test_recycle_surplus_near_miss_protected() -> None:
@@ -1338,16 +1336,18 @@ def _drain_world(bank_sap_qty: int) -> WorldState:
 
 def test_drain_bank_junk_drives_true() -> None:
     """TRUE fixture: 5 sap banked (over cap 0), empty bag under 0.85 fill,
-    unprotected -> production DRAIN_BANK_JUNK fires. It loses selection to
-    ACCEPT_TASK (phase NONE) on BOTH ladders, binding arg[31] per-slot."""
+    unprotected -> production DRAIN_BANK_JUNK fires and wins selection on BOTH
+    ladders (ACCEPT_TASK, which outranked it, is retired)."""
     w = _drain_world(bank_sap_qty=5)
     gd = _drain_gd()
     prod, prod_sel, lean, lean_sel = drive_and_contest(
         w, gd, _drain_ctx(), driven=frozenset({LadderMeans.DRAIN_BANK_JUNK}))
     assert prod[LadderMeans.DRAIN_BANK_JUNK] is True
     assert lean[LadderMeans.DRAIN_BANK_JUNK] is True
-    assert prod_sel is LadderMeans.ACCEPT_TASK
-    assert lean_sel is LadderMeans.ACCEPT_TASK
+    # Since ACCEPT_TASK's retirement (Phase 5-2c-iii-c-2 #3) nothing above
+    # it fires at phase NONE, so both ladders select DRAIN_BANK_JUNK.
+    assert prod_sel is LadderMeans.DRAIN_BANK_JUNK
+    assert lean_sel is LadderMeans.DRAIN_BANK_JUNK
 
 
 def test_drain_bank_junk_near_miss_protected() -> None:
@@ -1455,16 +1455,18 @@ def test_ge_bid_drives_true() -> None:
     """TRUE fixture: steel is a needed (step_profile), unheld material that
     costs MORE ACTIONS to self-craft (26) than the bid horizon (TTL_CYCLES=20),
     with a live buy-anchor + NPC alt + GE_POST venue -> production GE_BID
-    fires. It loses selection to ACCEPT_TASK (phase NONE) on BOTH ladders, binding
-    arg[34] per-slot."""
+    fires and wins selection on BOTH ladders (ACCEPT_TASK, which outranked it,
+    is retired)."""
     w = _gebid_world()
     gd = _gebid_gd()
     prod, prod_sel, lean, lean_sel = drive_and_contest(
         w, gd, _gebid_ctx({"steel": 1}), driven=frozenset({LadderMeans.GE_BID}))
     assert prod[LadderMeans.GE_BID] is True
     assert lean[LadderMeans.GE_BID] is True
-    assert prod_sel is LadderMeans.ACCEPT_TASK
-    assert lean_sel is LadderMeans.ACCEPT_TASK
+    # Since ACCEPT_TASK's retirement (Phase 5-2c-iii-c-2 #3) nothing above
+    # it fires at phase NONE, so both ladders select GE_BID.
+    assert prod_sel is LadderMeans.GE_BID
+    assert lean_sel is LadderMeans.GE_BID
 
 
 def test_ge_bid_near_miss_suppressed_by_open_order() -> None:
@@ -1560,7 +1562,7 @@ def _rest_combat_ctx() -> SelectionContext:
 def _rest_combat_world(hp: int, max_hp: int) -> WorldState:
     # Player attack {fire:50}, initiative 0 (ties the monster -> player first).
     # No task (phase NONE) so when restForCombat does NOT fire the selection
-    # falls cleanly through to acceptTask on both ladders.
+    # falls cleanly through to Wait on both ladders.
     return WorldState(
         character="diff", level=10, xp=0, max_xp=999999, hp=hp, max_hp=max_hp,
         gold=0, skills={}, x=0, y=0, inventory={}, inventory_max=20,
@@ -1595,16 +1597,18 @@ def test_rest_for_combat_drives_and_selects() -> None:
 def test_rest_for_combat_near_miss_winnable_now() -> None:
     """Near-miss (clause c): hp 100/110 — predict_win TRUE at CURRENT hp
     (winnable now) so REST_FOR_COMBAT does NOT fire even though hp < max_hp.
-    Selection falls through to acceptTask (phase NONE) on both ladders, so the
-    fixture cleanly agrees and selection is asserted."""
+    Selection falls through to Wait (phase NONE, nothing else firing) on both
+    ladders, so the fixture cleanly agrees and selection is asserted."""
     w = _rest_combat_world(hp=100, max_hp=110)
     gd = _rest_combat_gd()
     prod, prod_sel, _, lean_sel = drive_and_contest(
         w, gd, _rest_combat_ctx(),
         driven=frozenset({LadderMeans.REST_FOR_COMBAT}))
     assert prod[LadderMeans.REST_FOR_COMBAT] is False
-    assert prod_sel is LadderMeans.ACCEPT_TASK
-    assert lean_sel is LadderMeans.ACCEPT_TASK
+    # Since ACCEPT_TASK's retirement (Phase 5-2c-iii-c-2 #3) nothing above
+    # it fires at phase NONE, so both ladders select WAIT.
+    assert prod_sel is LadderMeans.WAIT
+    assert lean_sel is LadderMeans.WAIT
 
 
 def test_rest_for_combat_near_miss_full_hp() -> None:
@@ -1617,8 +1621,10 @@ def test_rest_for_combat_near_miss_full_hp() -> None:
         w, gd, _rest_combat_ctx(),
         driven=frozenset({LadderMeans.REST_FOR_COMBAT}))
     assert prod[LadderMeans.REST_FOR_COMBAT] is False
-    assert prod_sel is LadderMeans.ACCEPT_TASK
-    assert lean_sel is LadderMeans.ACCEPT_TASK
+    # Since ACCEPT_TASK's retirement (Phase 5-2c-iii-c-2 #3) nothing above
+    # it fires at phase NONE, so both ladders select WAIT.
+    assert prod_sel is LadderMeans.WAIT
+    assert lean_sel is LadderMeans.WAIT
 
 
 # ---------------------------------------------------------------------------
@@ -1673,10 +1679,8 @@ def _maintain_world(potion_qty: int) -> WorldState:
 
 def test_maintain_consumables_drives_true() -> None:
     """TRUE fixture: combat target set, heal_stock 0 < 5, a craftable potion
-    (alchemy@1, hp_restore 50) -> production MAINTAIN_CONSUMABLES fires. It is
-    structurally below acceptTask, so it loses selection to ACCEPT_TASK (phase
-    NONE) on BOTH ladders; `selected` agrees at acceptTask while arg[29] is
-    bound by the per-slot contest."""
+    (alchemy@1, hp_restore 50) -> production MAINTAIN_CONSUMABLES fires and wins
+    selection on BOTH ladders (ACCEPT_TASK, which outranked it, is retired)."""
     w = _maintain_world(potion_qty=0)
     gd = _maintain_gd()
     prod, prod_sel, lean, lean_sel = drive_and_contest(
@@ -1684,10 +1688,10 @@ def test_maintain_consumables_drives_true() -> None:
         driven=frozenset({LadderMeans.MAINTAIN_CONSUMABLES}))
     assert prod[LadderMeans.MAINTAIN_CONSUMABLES] is True
     assert lean[LadderMeans.MAINTAIN_CONSUMABLES] is True
-    # maintainConsumables is structurally unreachable as a Lean selection; both
-    # ladders settle on acceptTask at phase NONE (selection agreement).
-    assert prod_sel is LadderMeans.ACCEPT_TASK
-    assert lean_sel is LadderMeans.ACCEPT_TASK
+    # Since ACCEPT_TASK's retirement (Phase 5-2c-iii-c-2 #3) nothing above
+    # it fires at phase NONE, so both ladders select MAINTAIN_CONSUMABLES.
+    assert prod_sel is LadderMeans.MAINTAIN_CONSUMABLES
+    assert lean_sel is LadderMeans.MAINTAIN_CONSUMABLES
 
 
 def test_maintain_consumables_near_miss_stocked() -> None:

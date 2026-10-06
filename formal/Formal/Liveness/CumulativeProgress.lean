@@ -685,9 +685,6 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | pursueTask =>
       show (applyActionKind .taskTrade s).level ≥ s.level
       simp [applyActionKind]
-    | acceptTask =>
-      show (applyActionKind .acceptTask s).level ≥ s.level
-      simp [applyActionKind]
     | sellIdle =>
       show (applyActionKind .npcSell s).level ≥ s.level
       simp [applyActionKind]
@@ -1103,7 +1100,6 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   | currencyTurnIn  => exfalso; revert hmem; unfold progressMeans; decide
   | taskCancel      => exfalso; revert hmem; unfold progressMeans; decide
   | pursueTask      => exfalso; revert hmem; unfold progressMeans; decide
-  | acceptTask      => exfalso; revert hmem; unfold progressMeans; decide
   -- restForCombat is a guard OUT of `progressMeans` scope
   -- (same as completeTask/lowYieldCancel/taskCancel above): no
   -- measure-decrease commitment is made for them here; their progress is

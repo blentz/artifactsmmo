@@ -120,9 +120,6 @@ def completeTaskSatisfied (s : State) : Bool :=
 /-- `CompleteTaskGoal` progressFull witness for Phase-18 routing. -/
 def completeTaskProgressFull (s : State) : Bool := decide (s.taskProgress ≥ s.taskTotal)
 
-/-- `AcceptTaskGoal.is_satisfied` — there IS a task code. -/
-def acceptTaskSatisfied (s : State) : Bool := s.taskCode.isSome
-
 /-- `PursueTaskGoal.is_satisfied` model — no task / total=0 / progress
     already at total. Used in the opaque invariant. -/
 def pursueTaskSatisfied (s : State) : Bool :=
@@ -452,45 +449,6 @@ theorem _fires_pursueTask_implies_pursueTask_positive
             simp [htot_ne, Nat.not_le_of_lt hprog_lt]
           rw [hsat_false]
           exact pursueTaskValueModel_positive_when_unsatisfied
-
-/-- ACCEPT_TASK: Phase 23c-3b phase-based form. `_fires .acceptTask s`
-    means `taskLifecyclePhase = .none`. Under `taskPhaseConsistent`
-    (which bundles the production normalization invariant
-    `taskCode ≠ some ""`), this gives `taskCode = none`, so
-    `acceptTaskSatisfied s = false` and `acceptTaskValue false = 20 > 0`. -/
-theorem _fires_acceptTask_implies_acceptTask_positive
-    (s : State) (hcons : taskPhaseConsistent s) :
-    fires .acceptTask s = true →
-    acceptTaskValue (acceptTaskSatisfied s) > 0 := by
-  intro h
-  unfold fires acceptTaskFires at h
-  -- `acceptTaskFires` is a conjunction since 2026-08-19 (`&& s.drawOwed`), so the
-  -- phase equality has to be projected out of it. The drawOwed half says nothing
-  -- about the VALUE and is discarded.
-  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
-  obtain ⟨h, _hdraw⟩ := h
-  -- h : s.taskLifecyclePhase = .none
-  obtain ⟨hderive, hnonemp, htotpos⟩ := hcons
-  rw [h] at hderive
-  unfold Formal.Liveness.TaskLifecyclePhase.deriveTaskLifecyclePhase at hderive
-  unfold acceptTaskValue acceptTaskSatisfied
-  cases hc : s.taskCode with
-  | none =>
-    simp
-  | some code =>
-    rw [hc] at hderive hnonemp htotpos
-    have hemp_ne : code ≠ "" := fun heq => hnonemp (by rw [heq])
-    have htot_pos : s.taskTotal > 0 := htotpos (by rfl)
-    have htot_ne : ¬ s.taskTotal = 0 := Nat.pos_iff_ne_zero.mp htot_pos
-    simp [hemp_ne, htot_ne] at hderive
-    -- Now hderive: .none = (if progress ≥ total then complete else
-    --                       if progress = 0 then accepted else inProgress)
-    by_cases hge : s.taskProgress ≥ s.taskTotal
-    · simp [hge] at hderive
-    · simp [hge] at hderive
-      by_cases hp0 : s.taskProgress = 0
-      · simp [hp0] at hderive
-      · simp [hp0] at hderive
 
 /-- SELL_IDLE: `_fires .sellIdle s` ⇒ `sellInventoryValue > 0`
     (activeWindow=true branch yields ≥ sellSeizeWindowValue = 60). -/

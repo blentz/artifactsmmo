@@ -70,12 +70,8 @@ def pursueSelectionConditions (s : State) : Prop :=
   -- directly below `supplyBank` in COLLECT_REWARD_ORDER — same reasoning as
   -- the SUPPLY_BANK comment directly above.
   ∧ currencyTurnInFires s = false
-  -- 2026-08-19 (S-051): ACCEPT_TASK promoted into COLLECT_REWARD_ORDER, LAST in
-  -- that group. One more rung above `pursueTask` that has to be quiet, not a
-  -- weaker claim.
-  ∧ acceptTaskFires s = false
   -- 2026-09-13: BANK_EXPAND promoted into COLLECT_REWARD_ORDER, LAST in that
-  -- group, directly below `acceptTask`. Same reasoning as the three comments
+  -- group. Same reasoning as the two comments
   -- above — one more rung above `pursueTask` that has to be quiet, which
   -- STRENGTHENS the hypothesis rather than weakening the claim.
   ∧ bankExpandFires s = false
@@ -92,16 +88,16 @@ theorem productionLadder_eq_pursueTask
   -- allInLadderOrder = [.hpCritical, .bankUnlock, .reachUnlockLevel,
   --   .discardCritical, .depositFull, .discardHigh, .claimPending,
   --   .completeTask, .sellPressured, .taskCancel,
-  --   .objectiveStep, .pursueTask, .acceptTask,
+  --   .objectiveStep, .pursueTask,
   --   .sellIdle, .bankExpand, .wait]
   show MeansKind.allInLadderOrder.findSome?
         (fun k => if fires k s then some k else none)
       = some .pursueTask
   obtain ⟨h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, hcp, h12, h13, h14, h16,
-          hsb, hct, hat, hbe, h17⟩ := hConds
+          hsb, hct, hbe, h17⟩ := hConds
   simp only [MeansKind.allInLadderOrder, List.findSome?,
              fires, h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, hcp, h12, h13,
-             h14, h16, hsb, hct, hat, hbe, h17, hPursue, if_true]
+             h14, h16, hsb, hct, hbe, h17, hPursue, if_true]
   rfl
 
 /-- Item 3 corollary: under the conditions, `cycleStep` applies

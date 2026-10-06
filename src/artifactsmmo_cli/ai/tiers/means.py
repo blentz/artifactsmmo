@@ -109,7 +109,6 @@ class MeansKind(Enum):
     SELL_PRESSURED = "sell_pressured"
     TASK_CANCEL = "task_cancel"
     PURSUE_TASK = "pursue_task"
-    ACCEPT_TASK = "accept_task"
     SELL_IDLE = "sell_idle"
     RECYCLE_SURPLUS = "recycle_surplus"
     BANK_EXPAND = "bank_expand"
@@ -198,24 +197,9 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     # every firing cycle is one the fleet can actually complete — there is no
     # sub-threshold case to filter the way SUPPLY_DEMAND_MIN filters SUPPLY_BANK.
     MeansKind.CURRENCY_TURNIN,
-    # 2026-08-19, USER ruling + S-051: ACCEPT_TASK is promoted out of
-    # DISCRETIONARY_ORDER to here. Below the step it was unreachable for the same
-    # reason SUPPLY_BANK was — a character essentially always has an objective
-    # step (14,064 of 14,064 traced cycles) — and the fleet has held a task in 0
-    # of 63,310 cycles, so every rung downstream of it has never run.
-    #
-    # It is gated on `ctx.draw_owed`, which is what makes the promotion sound
-    # rather than a livelock: accept and discard both sit above the step, so an
-    # ungated redraw would spin between them at a coin a cycle. The gate is
-    # mirrored in `acceptTaskFires` and is the conjunct the Lean descent argument
-    # rests on.
-    #
-    # POSITION: LAST in this group. A one-action booking must not preempt a
-    # resolved turn-in election or a sibling's supply request — the same
-    # argument SUPPLY_BANK and CURRENCY_TURNIN make for their own positions —
-    # and it is still AFTER both cancel rungs, so a dead draw goes back before
-    # a new one is taken.
-    MeansKind.ACCEPT_TASK,
+    # ACCEPT_TASK was retired here in Phase 5-2c-iii-c-2 #3: taking a draw is the
+    # task objective's own step (`ReachTaskOutcome`), on its turn — the USER's
+    # ruling that no task is drawn until the objective has its turn.
 )
 DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.PURSUE_TASK,
@@ -305,44 +289,6 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
                 and history is not None
                 and task_decision(state, game_data, history) == PURSUE)
 
-    if kind is MeansKind.ACCEPT_TASK:
-        if state.task_code:
-            return False
-        # S-051 + the no-immediate-redraw rule: a draw must be OWED. Mirrors
-        # `Formal.Liveness.ProductionLadder.acceptTaskFires`, which carries the
-        # same conjunct so the rung can descend `drawOwedFlag` from above the
-        # objective step.
-        if not ctx.draw_owed:
-            return False
-        # Defer AcceptTask whenever the player has GEAR-CHAIN work to do.
-        # An immediate AcceptTask after TaskComplete re-locks the cycle
-        # into another items task before UpgradeEquipment can fire,
-        # leaving target gear unworn for hundreds of cycles. Two
-        # deferral conditions:
-        #   (a) target gear is OWNED but UNEQUIPPED → UpgradeEquipment
-        #       should win first (one-action equip);
-        #   (b) target gear is CRAFTABLE under current skill levels →
-        #       the fallback walk should drive the gather/craft chain
-        #       rather than accept another task that competes for the
-        #       same materials.
-        # Both conditions are about the AI's own gear pipeline, not the
-        # task economy — accepting a task while gear is in progress
-        # creates contention for materials (copper_bar) that the gear
-        # chain needs. Trace 2026-06-06 12:28: 2 copper_daggers crafted
-        # via CraftRelief never equipped; full armor set never started
-        # despite 2300+ gold and crafting skills at level 6+.
-        equipped = {c for c in state.equipment.values() if c is not None}
-        for code in ctx.target_gear:
-            if code in equipped:
-                continue
-            if state.inventory.get(code, 0) > 0:
-                return False  # owned + unequipped → defer for UpgradeEquipment
-            stats = game_data.item_stats(code)
-            if stats is None or not stats.crafting_skill:
-                continue
-            if state.skills.get(stats.crafting_skill, 1) >= stats.crafting_level:
-                return False  # craftable now → defer for gear chain
-        return True
 
     if kind is MeansKind.SELL_IDLE:
         return (used_fraction(state) < SELL_PRESSURE_FRACTION

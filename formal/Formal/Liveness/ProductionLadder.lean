@@ -255,12 +255,6 @@ def pursueTaskFires (s : State) : Bool :=
   decide (s.taskLifecyclePhase = .accepted)
   || decide (s.taskLifecyclePhase = .inProgress)
 
-/-- ACCEPT_TASK. Phase 23c-3b: faithful phase-based predicate.
-    Production: `means.py:92-93` checks `not state.task_code`, which
-    is precisely `TaskLifecyclePhase.none`. -/
-def acceptTaskFires (s : State) : Bool :=
-  decide (s.taskLifecyclePhase = .none) && s.drawOwed
-
 /-- SELL_IDLE. Mirrors `means.py:98-99`:
       used/max < 0.85 ∧ has_sellable -/
 def sellIdleFires (s : State) : Bool :=
@@ -443,7 +437,6 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .taskCancel       => taskCancelFires s
   | .objectiveStep    => objectiveStepFires s
   | .pursueTask       => pursueTaskFires s
-  | .acceptTask       => acceptTaskFires s
   | .maintainConsumables => maintainConsumablesFires s
   | .supplyBank       => supplyBankFires s
   | .currencyTurnIn   => currencyTurnInFires s

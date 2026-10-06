@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.tiers.objective_needs import NeedSet
 from artifactsmmo_cli.ai.tiers.synergy_core import S_MIN, synergy_pure
 from artifactsmmo_cli.ai.world_state import WorldState
 
-_TASK_KINDS = frozenset({MeansKind.PURSUE_TASK, MeansKind.ACCEPT_TASK})
+_TASK_KINDS = frozenset({MeansKind.PURSUE_TASK})
 
 #: The task's output kinds — char XP (monsters only), skill XP, the task item,
 #: and funding (gold + coins). The denominator of the means<->objective synergy

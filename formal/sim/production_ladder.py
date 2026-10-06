@@ -60,7 +60,6 @@ class LadderMeans(Enum):
     CURRENCY_TURNIN = "currency_turnin"
     OBJECTIVE_STEP = "objective_step"
     PURSUE_TASK = "pursue_task"
-    ACCEPT_TASK = "accept_task"
     MAINTAIN_CONSUMABLES = "maintain_consumables"
     SELL_IDLE = "sell_idle"
     RECYCLE_SURPLUS = "recycle_surplus"
@@ -92,9 +91,6 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.TASK_CANCEL,
     LadderMeans.SUPPLY_BANK,
     LadderMeans.CURRENCY_TURNIN,
-    # 2026-08-19 (S-051): promoted above the objective step, mirroring
-    # `Formal.Liveness.MeansKind.allInLadderOrder`. LAST in the collect group.
-    LadderMeans.ACCEPT_TASK,
     LadderMeans.OBJECTIVE_STEP,
     LadderMeans.PURSUE_TASK,
     LadderMeans.MAINTAIN_CONSUMABLES,
@@ -127,7 +123,6 @@ _MEANS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.SELL_PRESSURED: MeansKind.SELL_PRESSURED,
     LadderMeans.TASK_CANCEL: MeansKind.TASK_CANCEL,
     LadderMeans.PURSUE_TASK: MeansKind.PURSUE_TASK,
-    LadderMeans.ACCEPT_TASK: MeansKind.ACCEPT_TASK,
     LadderMeans.MAINTAIN_CONSUMABLES: MeansKind.MAINTAIN_CONSUMABLES,
     LadderMeans.SUPPLY_BANK: MeansKind.SUPPLY_BANK,
     LadderMeans.CURRENCY_TURNIN: MeansKind.CURRENCY_TURNIN,
@@ -164,7 +159,6 @@ assert COLLECT_REWARD_ORDER == (
     MeansKind.TASK_CANCEL,
     MeansKind.SUPPLY_BANK,
     MeansKind.CURRENCY_TURNIN,
-    MeansKind.ACCEPT_TASK,
 ), "COLLECT_REWARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 assert DISCRETIONARY_ORDER == (

@@ -3610,9 +3610,9 @@ class GamePlayer:
         * HOLDING a task means the draw has been taken. That is what makes a
           discard non-re-arming: S-048 sends a dead draw back, `task_code` goes
           None, and the flag stays down until the course itself changes. Without
-          that, accept and discard would spin above the objective step at a coin
-          a cycle — the livelock the Lean measure now forbids
-          (`Formal.Liveness.BlockerDescent.descends_acceptTask`).
+          that, accept and discard would spin at a coin a cycle. (Since Phase
+          5-2c-iii-c-2 #3 the accept is the task objective's step, taken on its
+          turn — `task_accept.accept_due` reads this flag.)
         """
         root = repr(self._last_decision.chosen_root) if self._last_decision else None
         if root != self._draw_course:

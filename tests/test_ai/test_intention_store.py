@@ -11,7 +11,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_strategy_driver import _ctx, _FakeDecision, _make_planner_gd
+from tests.test_ai.test_strategy_driver import _ctx, _make_planner_gd, _with_task_root
 
 
 def _store(tmp_path, character: str = "hero") -> LearningStore:
@@ -93,7 +93,7 @@ def test_the_arbiter_persists_its_commitment_and_a_new_one_resumes_it(tmp_path):
     arbiter = StrategyArbiter(GOAPPlanner(), history=store)
     state = make_state(hp=150, max_hp=150, task_code=None, task_total=0)
     actions = [AcceptTaskAction(taskmaster_location=(2, 1))]
-    goal, _, _ = arbiter.select(_FakeDecision(chosen_step=None), state,
+    goal, _, _ = arbiter.select(_with_task_root(None), state,
                                 _make_planner_gd(), actions, _ctx())
     assert isinstance(goal, AcceptTaskGoal)
     assert store.load_intention().committed_repr == repr(goal)

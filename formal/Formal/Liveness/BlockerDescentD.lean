@@ -606,27 +606,6 @@ theorem descendsD_craftPotions (s : State)
 
 /-! ## Task-lifecycle rows — slot 3 (`phasePresent`). -/
 
-/-- `acceptTask` strictly descends `drawOwedFlag` — the D-tower twin of
-    `BlockerDescent.descends_acceptTask`. It fires only with a draw OWED and
-    discharges it, and the flag sits one slot ABOVE `phasePresent`, which the
-    accept raises. -/
-theorem descendsD_acceptTask (s : State)
-    (hk : productionLadder (perceptionRefreshD s) = some .acceptTask) :
-    dMeasureLt (dMeasure (cycleStepD s)) (dMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, acceptTaskFires, Bool.and_eq_true, decide_eq_true_eq,
-    refreshD_drawOwed] at hfire
-  have hdraw : s.drawOwed = true := hfire.2
-  rw [cycleStepD_some s hk]
-  have hcs : cycleStep (perceptionRefreshD s) =
-      applyActionKind .acceptTask (perceptionRefreshD s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  apply dLt_of_drawOwed_dec <;>
-    simp [dMeasure, rearmOnMint, dispatchesFight, choreRearm, partialClear,
-      pressureDeltaD, applyActionKind, hdraw, refreshD_drawOwed,
-      perceptionRefreshD_level, perceptionRefreshD_xp]
-
 /-- `taskCancel` (→ `.taskCancel`) strictly descends at `phasePresent`. -/
 theorem descendsD_taskCancel (s : State)
     (hk : productionLadder (perceptionRefreshD s) = some .taskCancel) :

@@ -1186,16 +1186,15 @@ def runDecideKey (args : Array Json) : Json :=
       | 2 => .sellPressured
       | 3 => .taskCancel
       | 4 => .pursueTask
-      | 5 => .acceptTask
-      | 6 => .sellIdle
-      | 7 => .recycleSurplus
-      | 8 => .bankExpand
-      | 9 => .wait
-      | 10 => .maintainConsumables
-      | 11 => .drainBankJunk
-      | 12 => .geBid
-      | 13 => .supplyBank
-      | _ => .currencyTurnIn  -- index 14 (lowYieldCancel, taskExchange retired, Phase 5-2c-iii-c-2)
+      | 5 => .sellIdle
+      | 6 => .recycleSurplus
+      | 7 => .bankExpand
+      | 8 => .wait
+      | 9 => .maintainConsumables
+      | 10 => .drainBankJunk
+      | 11 => .geBid
+      | 12 => .supplyBank
+      | _ => .currencyTurnIn  -- index 13 (lowYieldCancel, taskExchange, acceptTask retired, Phase 5-2c-iii-c-2)
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfMeans k))]
 
 /-- progression_reserve: args layout (all Nat ≥ 0):

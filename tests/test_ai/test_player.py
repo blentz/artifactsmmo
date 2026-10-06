@@ -358,20 +358,26 @@ class TestArbiterSelection:
             decision, player.state, player.game_data, actions, player._selection_context())
         assert goal is not None and repr(goal) == "CompleteTask"
 
-    def test_idle_no_task_takes_its_owed_draw_before_grinding(self):
-        """UPDATED 2026-08-19 (S-051). ACCEPT_TASK moved into the collect band
-        above the objective step, so a taskless character with a draw OWED takes
-        it first — one action, and holding the task then raises the value of the
-        very grind it delayed (S-050).
+    def test_idle_no_task_takes_its_owed_draw_on_the_task_objectives_turn(self):
+        """UPDATED 2026-10-06 (Phase 5-2c-iii-c-2 #3). USER: no task is drawn
+        until the task objective has its turn. The owed draw is the task
+        objective's step (`ReachTaskOutcome(None)`, a walk alternative), so the
+        objective step runs first; once its turn is spent, the accept runs.
 
-        The step still wins once the draw is spent, which the companion below
-        pins. Before the promotion this test asserted the grind outright."""
+        (2026-08-19 to 2026-10-06 the accept was a collect rung ABOVE the step
+        and won outright.)"""
         player = self._with_strategy(make_game_data_mock(), level=3,
                                      task_type=None, task_code=None)
-        decision = player._strategy.decide(player.state, player.game_data)
+        ctx = player._selection_context()
+        decision = player._strategy.decide(player.state, player.game_data, ctx=ctx)
         actions = player._build_actions()
         goal, _plan, _tried = player._arbiter.select(
-            decision, player.state, player.game_data, actions, player._selection_context())
+            decision, player.state, player.game_data, actions, ctx)
+        assert goal is not None and repr(goal) == "GrindCharacterXP(cow)"
+        player._arbiter._committed_repr = None
+        goal, _plan, _tried = player._arbiter.select(
+            decision, player.state, player.game_data, actions, ctx,
+            turns={"GrindCharacterXP(cow)": 1})
         assert goal is not None and repr(goal) == "AcceptTask"
 
     def test_idle_no_task_selects_xp_grind_once_no_draw_is_owed(self):

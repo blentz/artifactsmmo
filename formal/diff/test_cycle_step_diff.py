@@ -80,7 +80,6 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
@@ -276,17 +275,6 @@ def _fix_COMPLETE_TASK():
            LadderMeans.COMPLETE_TASK
 
 
-def _fix_ACCEPT_TASK():
-    gd = _base_gd()
-    w = _base_world()
-    # A draw is OWED — ACCEPT_TASK's gate since 2026-08-19 (S-051). Without it
-    # the rung is quiet and this fixture drives nothing.
-    ctx = _ctx(draw_owed=True)
-    cs = _world_to_cycle(w, ctx=ctx, gd=gd, overrides={})
-    return cs, w, gd, ctx, AcceptTaskAction(taskmaster_location=(1, 2)), \
-           LadderMeans.ACCEPT_TASK
-
-
 def _fix_PURSUE_TASK():
     """Inject pursue_task_fires=True on the mirror side; on the production
     side, set the items-task and use TaskTradeAction(quantity = remaining).
@@ -350,7 +338,6 @@ FIXTURES: dict[LadderMeans, callable] = {
     LadderMeans.HP_CRITICAL:    _fix_HP_CRITICAL,
     LadderMeans.CLAIM_PENDING:  _fix_CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK:  _fix_COMPLETE_TASK,
-    LadderMeans.ACCEPT_TASK:    _fix_ACCEPT_TASK,
     LadderMeans.PURSUE_TASK:    _fix_PURSUE_TASK,
     LadderMeans.WAIT:           _fix_WAIT,
     LadderMeans.BANK_EXPAND:    _fix_BUY_BANK_EXPANSION,

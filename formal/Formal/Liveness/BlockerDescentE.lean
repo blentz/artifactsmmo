@@ -659,33 +659,6 @@ theorem descendsE_craftRelief (s : State)
       refreshE_gearGap, refreshE_adequate,
       perceptionRefreshE_level, perceptionRefreshE_xp]
 
-
-/-- `acceptTask` strictly descends `drawOwedFlag` — the E-tower twin of
-    `descends_acceptTask`. Fires only with a draw OWED, discharges it, and the
-    flag sits above `phasePresent`, which the accept raises. -/
-theorem descendsE_acceptTask (s : State)
-    (hk : productionLadder (perceptionRefreshE s) = some .acceptTask) :
-    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, acceptTaskFires, Bool.and_eq_true, decide_eq_true_eq,
-    refreshE_drawOwed] at hfire
-  have hdraw : s.drawOwed = true := hfire.2
-  rw [cycleStepE_some s hk]
-  have hcs : cycleStep (perceptionRefreshE s) =
-      applyActionKind .acceptTask (perceptionRefreshE s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  apply eLt_of_drawOwed_dec <;>
-    simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-      applyActionKind, hdraw,
-      refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
-      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
-      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
-      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
-      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
-      refreshE_gearGap, refreshE_adequate,
-      perceptionRefreshE_level, perceptionRefreshE_xp]
-
 /-- `claimPending` (→ `.claimPendingItem`) strictly descends. -/
 theorem descendsE_claimPending (s : State)
     (hk : productionLadder (perceptionRefreshE s) = some .claimPending) :
@@ -1058,7 +1031,7 @@ private def gearScanPrefix : List MeansKind :=
    .discardHigh, .craftPotions, .sellPressured, .claimPending, .bankExpand,
    .completeTask,
    .taskCancel,
-   .supplyBank, .currencyTurnIn, .acceptTask]
+   .supplyBank, .currencyTurnIn]
 
 private theorem blockerPrefix_split :
     Formal.Liveness.UnconditionalDescent.blockerPrefix

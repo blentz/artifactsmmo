@@ -25,7 +25,7 @@ from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_player_run import _patch_game_data_load
-from tests.test_ai.test_strategy_driver import _ctx, _FakeDecision, _make_planner_gd
+from tests.test_ai.test_strategy_driver import _ctx, _FakeDecision, _make_planner_gd, _with_task_root
 from tests.test_ai.test_strategy_driver_tiered import _arbiter_with, _ScriptedPlanner
 
 
@@ -77,7 +77,7 @@ class TestAttemptElapsed:
 
     def _walk(self, planner):
         arbiter = _arbiter_with(planner)
-        arbiter.select(_FakeDecision(chosen_step=None),
+        arbiter.select(_with_task_root(None),
                        make_state(task_code=None, task_total=0),
                        _make_planner_gd(),
                        [AcceptTaskAction(taskmaster_location=(2, 1))],

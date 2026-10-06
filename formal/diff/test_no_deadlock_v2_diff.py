@@ -36,10 +36,13 @@ Result reporting: at session end the module emits a coverage summary
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
+from artifactsmmo_cli.ai.decisions.root import _task_root
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import COLLECT_REWARD_ORDER, INTERRUPT_MEANS, MeansKind
 from artifactsmmo_cli.ai.tiers.means import _fires as _means_fires
+from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.sim.fake_server import FakeServer
 from formal.sim.production_ladder import (
@@ -268,7 +271,8 @@ def test_phantomTask_state_is_a_real_deadlock_shape(
     if perceive.py ever produced such a state, production would deadlock
     on the discretionary tier alone. This test demonstrates the deadlock
     shape EXPLICITLY by constructing it and showing no means in
-    {COMPLETE_TASK, PURSUE_TASK, ACCEPT_TASK} fires.
+    {COMPLETE_TASK, PURSUE_TASK} fires and no draw can be taken (`accept_due`,
+    the task objective's accept since ACCEPT_TASK was retired).
 
     The assertion is the documentation: when this shape occurs, the
     discretionary tier is empty. Production survives only via the
@@ -280,7 +284,7 @@ def test_phantomTask_state_is_a_real_deadlock_shape(
     if state.task_code is not None and state.task_total <= 0:
         complete = _means_fires(MeansKind.COMPLETE_TASK, state, gd, None, ctx)
         pursue = _means_fires(MeansKind.PURSUE_TASK, state, gd, None, ctx)
-        accept = _means_fires(MeansKind.ACCEPT_TASK, state, gd, None, ctx)
+        accept = accept_due(state, gd, ctx)
         assert not (complete or pursue or accept), (
             f"Phantom-task state but a task means fires anyway — "
             f"production semantics changed; revisit Lean invariant taskValid. "
@@ -290,12 +294,13 @@ def test_phantomTask_state_is_a_real_deadlock_shape(
             f"phantom-task: code={state.task_code!r} total={state.task_total}"
         )
     if state.task_total > 0 and state.task_code is None:
-        # ACCEPT_TASK still fires for orphan-total (means.py:92-93 keys on
-        # `not state.task_code`). So orphan-total is recoverable.
-        accept = _means_fires(MeansKind.ACCEPT_TASK, state, gd, None, ctx)
-        assert accept, "orphan-total state: ACCEPT_TASK should still fire"
+        # The task objective can still take a draw for orphan-total
+        # (`accept_due` keys on `not state.task_code`). So orphan-total is
+        # recoverable.
+        accept = accept_due(state, gd, ctx)
+        assert accept, "orphan-total state: the task objective should still accept"
         COUNTERS.task_valid_violations.append(
-            f"orphan-total: total={state.task_total} (recoverable via ACCEPT_TASK)"
+            f"orphan-total: total={state.task_total} (recoverable via the accept)"
         )
 
 
@@ -443,7 +448,7 @@ def test_ladder_entry_count_matches_lean() -> None:
     `MeansKind.allInLadderOrder` (whose length is pinned by the `example` at the
     bottom of `formal/Formal/Liveness/MeansKind.lean` — update BOTH together).
 
-    28 = original 17 + WAIT (Phase 20e-v2) + CRAFT_RELIEF (circuit
+    27 = original 17 + WAIT (Phase 20e-v2) + CRAFT_RELIEF (circuit
     breaker between DISCARD_CRITICAL and DEPOSIT_FULL) + REST_FOR_COMBAT
     (after HP_CRITICAL) + MAINTAIN_CONSUMABLES (PLAN #6a, after TASK_EXCHANGE)
     + RECYCLE_RELIEF (bank-full cascade, after CRAFT_RELIEF)
@@ -459,10 +464,10 @@ def test_ladder_entry_count_matches_lean() -> None:
     directly below SUPPLY_BANK in COLLECT_REWARD_ORDER, still above
     OBJECTIVE_STEP).
     − GEAR_REVIEW (retired in Phase 4-3b: its one arm never fired).
-    − LOW_YIELD_CANCEL, TASK_EXCHANGE (retired in Phase 5-2c-iii-c-2: the task
-    objective's step).
+    − LOW_YIELD_CANCEL, TASK_EXCHANGE, ACCEPT_TASK (retired in Phase
+    5-2c-iii-c-2: the task objective's step).
     Lean side mirrors via MeansKind.allInLadderOrder."""
-    assert len(ALL_IN_LADDER_ORDER) == 28
+    assert len(ALL_IN_LADDER_ORDER) == 27
 
 
 def test_the_ladder_interrupt_prefix_is_what_production_runs_as_interrupts() -> None:
@@ -478,11 +483,14 @@ def test_the_ladder_interrupt_prefix_is_what_production_runs_as_interrupts() -> 
     assert list(ALL_IN_LADDER_ORDER[:len(interrupts)]) == interrupts
 
 
-def test_no_task_state_acceptTask_fires() -> None:
-    """A baseline: no task AND a draw owed ⇒ ACCEPT_TASK fires.
+def test_no_task_state_with_a_draw_owed_offers_the_task_objective() -> None:
+    """A baseline: no task AND a draw owed ⇒ the task objective is offered, so
+    the objective step fires and the ladder takes it.
 
-    The draw-owed conjunct is new (2026-08-19, S-051): the rung sits above the
-    objective step now, and without the gate accept/discard would spin there."""
+    Until Phase 5-2c-iii-c-2 #3 this was the ACCEPT_TASK rung above the step;
+    the accept is now the task objective's step (`ReachTaskOutcome(None)`),
+    which is why `Formal.Liveness.NoWait.productionLadder_ne_wait` no longer
+    needs a draw-owed disjunct of its own."""
     gd = _empty_gd()
     ctx = SelectionContext(
         draw_owed=True,
@@ -498,8 +506,10 @@ def test_no_task_state_acceptTask_fires() -> None:
         hp=100, max_hp=100, inventory_used=0, inventory_max=100,
         bank_items={}, pending=None, level=1, xp=0, gold=0,
     )
-    res = production_ladder(state, gd, None, ctx, objective_step_fires=False)
-    assert res is LadderMeans.ACCEPT_TASK, f"expected ACCEPT_TASK, got {res!r}"
+    assert accept_due(state, gd, ctx)
+    assert _task_root(state, gd, ctx, None) == ReachTaskOutcome(None)
+    res = production_ladder(state, gd, None, ctx, objective_step_fires=True)
+    assert res is LadderMeans.OBJECTIVE_STEP, f"expected OBJECTIVE_STEP, got {res!r}"
 
 
 def test_completed_task_state_completeTask_fires() -> None:

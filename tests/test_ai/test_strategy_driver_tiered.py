@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_strategy_driver import _ctx, _FakeDecision, _make_planner_gd
+from tests.test_ai.test_strategy_driver import _ctx, _FakeDecision, _make_planner_gd, _with_task_root
 
 
 class _ScriptedPlanner:
@@ -50,7 +50,7 @@ def test_every_candidate_is_planned_at_the_one_budget():
     planner = _ScriptedPlanner(plannable={"AcceptTask"})
     a = _arbiter_with(planner)
     state = make_state(task_code=None, task_total=0)
-    decision = _FakeDecision(chosen_step=None)
+    decision = _with_task_root(None)
     goal, _plan, _ = a.select(decision, state, _make_planner_gd(),
                               [AcceptTaskAction(taskmaster_location=(2, 1))],
                               _ctx(combat_monster="chicken"))
@@ -69,10 +69,10 @@ def test_a_no_plan_goal_is_asked_again_next_cycle():
     state = make_state(task_code=None, task_total=0)
     ctx = _ctx(combat_monster="chicken")
     actions = [AcceptTaskAction(taskmaster_location=(2, 1))]
-    goal0, _, _ = a.select(_FakeDecision(chosen_step=None), state, _make_planner_gd(), actions, ctx)
+    goal0, _, _ = a.select(_with_task_root(None), state, _make_planner_gd(), actions, ctx)
     calls_cycle0 = len([1 for (r, _) in planner.budgets if r == "AcceptTask"])
     planner.budgets.clear()
-    goal1, _, _ = a.select(_FakeDecision(chosen_step=None), state, _make_planner_gd(), actions, ctx)
+    goal1, _, _ = a.select(_with_task_root(None), state, _make_planner_gd(), actions, ctx)
     calls_cycle1 = len([1 for (r, _) in planner.budgets if r == "AcceptTask"])
     assert isinstance(goal0, WaitGoal) and isinstance(goal1, WaitGoal)
     assert calls_cycle0 >= 1

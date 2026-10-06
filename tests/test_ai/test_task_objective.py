@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.decisions import root as root_mod
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
+from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.task_kills import PRIORITY, TaskKillsGoal
@@ -200,3 +201,19 @@ class TestExchangeFold:
         rich = dataclasses.replace(_held(3), inventory={"tasks_coin": 3})
         goal = objective_step_goal(ReachTaskOutcome("chicken"), rich, _gd(), ctx)
         assert isinstance(goal, TaskExchangeGoal)
+
+
+class TestAcceptFold:
+    """Phase 5-2c-iii-c-2 #3: ACCEPT_TASK retired; USER: no task is drawn until
+    the task objective has its turn. The owed draw is the objective's step."""
+
+    def test_an_owed_draw_offers_the_objective(self) -> None:
+        owed = dataclasses.replace(NO_PROFILE_CONTEXT, draw_owed=True)
+        assert root_mod._task_root(make_state(level=12), _gd(), owed, None) == ReachTaskOutcome(None)
+        assert root_mod._task_root(make_state(level=12), _gd(), NO_PROFILE_CONTEXT, None) is None
+
+    def test_its_step_is_the_accept_ahead_of_the_exchange(self) -> None:
+        owed = dataclasses.replace(NO_PROFILE_CONTEXT, draw_owed=True, task_exchange_min_coins=1)
+        rich = dataclasses.replace(make_state(level=12), inventory={"tasks_coin": 3})
+        goal = objective_step_goal(ReachTaskOutcome(None), rich, _gd(), owed)
+        assert isinstance(goal, AcceptTaskGoal)

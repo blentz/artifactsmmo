@@ -17,8 +17,8 @@ from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.strategy_driver import map_means
-from artifactsmmo_cli.ai.tiers.means import MeansKind
+from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
+from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.tiers.objective_needs import NeedSet
 from artifactsmmo_cli.ai.tiers.taskmaster_choice import choose_taskmaster
 from tests.test_ai.fixtures import make_state
@@ -143,7 +143,7 @@ def test_choice_fires_on_real_bundle(bundle_game_data: GameData):
     code, tile = chosen
     assert code in tiles and tile == tiles[code]
 
-def test_map_means_parameterises_the_goal_with_the_chosen_master(
+def test_the_accept_step_parameterises_the_goal_with_the_chosen_master(
         bundle_game_data: GameData):
     """The choice reaches the GOAL, not just the helper. A parameterised
     `AcceptTaskGoal` carries the chosen tile and emits its own action rather than
@@ -160,8 +160,8 @@ def test_map_means_parameterises_the_goal_with_the_chosen_master(
     # link that actually wants something.
     needs = NeedSet(materials=frozenset({"iron_ore"}), skill_xp=frozenset(),
                     buy_only=frozenset(), char_xp=False)
-    goal = map_means(MeansKind.ACCEPT_TASK, bundle_game_data, ctx, state,
-                     needs=needs)
+    goal = objective_step_goal(ReachTaskOutcome(None), state, bundle_game_data, ctx,
+                               needs=needs)
     assert isinstance(goal, AcceptTaskGoal)
     emitted = goal.relevant_actions([], state, bundle_game_data)
     assert len(emitted) == 1, "a parameterised goal emits its own accept"

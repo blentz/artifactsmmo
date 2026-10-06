@@ -20,7 +20,7 @@ In scope (8 means with single-action plans, mirroring Lean PlanExists):
   * DEPOSIT_FULL         → witness [DepositAllAction]
   * CLAIM_PENDING        → witness [ClaimPendingItemAction]
   * COMPLETE_TASK        → witness [CompleteTaskAction]
-  * ACCEPT_TASK          → witness [AcceptTaskAction]
+  * (ACCEPT_TASK retired in Phase 5-2c-iii-c-2 #3: the task objective's step)
   * (TASK_EXCHANGE retired in Phase 5-2c-iii-c-2: the task objective's step)
   * PURSUE_TASK (items)  → witness [TaskTradeAction]
   * WAIT                 → witness [WaitAction] (StrategyArbiter short-circuit)
@@ -68,7 +68,6 @@ from dataclasses import replace
 
 import pytest
 
-from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
@@ -278,15 +277,6 @@ def _state_COMPLETE_TASK():
     return state, ctx, gd, CompleteTaskAction, LadderMeans.COMPLETE_TASK
 
 
-def _state_ACCEPT_TASK():
-    gd = _base_game_data()
-    state = _base_state()  # no task
-    ctx = _ctx()
-    assert _means_fires(MeansKind.ACCEPT_TASK, state, gd, None, ctx), \
-        "ACCEPT_TASK firing precondition not met"
-    return state, ctx, gd, AcceptTaskAction, LadderMeans.ACCEPT_TASK
-
-
 def _state_PURSUE_TASK():
     gd = _base_game_data()
     # items task in progress; inventory has the task item so TaskTradeAction
@@ -328,7 +318,6 @@ IN_SCOPE_CASES: dict[LadderMeans, Callable] = {
     LadderMeans.DEPOSIT_FULL: _state_DEPOSIT_FULL,
     LadderMeans.CLAIM_PENDING: _state_CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK: _state_COMPLETE_TASK,
-    LadderMeans.ACCEPT_TASK: _state_ACCEPT_TASK,
     LadderMeans.PURSUE_TASK: _state_PURSUE_TASK,
     LadderMeans.WAIT: _state_WAIT,
 }
@@ -343,7 +332,6 @@ GUARD_KINDS_MAP: dict[LadderMeans, GuardKind] = {
 MEANS_KINDS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.CLAIM_PENDING: MeansKind.CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK: MeansKind.COMPLETE_TASK,
-    LadderMeans.ACCEPT_TASK: MeansKind.ACCEPT_TASK,
     LadderMeans.PURSUE_TASK: MeansKind.PURSUE_TASK,
     LadderMeans.WAIT: MeansKind.WAIT,
 }
@@ -466,7 +454,8 @@ def test_task_exchange_storm_state_plans_short() -> None:
         bank_gold=0,
         inventory_max=20,
     )
-    ctx = _ctx(task_exchange_min_coins=1)
+    # No draw owed, so the objective's step is the exchange, not the accept.
+    ctx = _ctx(task_exchange_min_coins=1, draw_owed=False)
     # c-2 #2: the exchange is the task objective's step (was the TASK_EXCHANGE
     # rung); with no task held the objective is `ReachTaskOutcome(None)`.
     player = _build_player_with_data(gd, state, task_exchange_min_coins=1)
@@ -516,7 +505,6 @@ def test_in_scope_covers_at_least_8_means() -> None:
         LadderMeans.DEPOSIT_FULL,
         LadderMeans.CLAIM_PENDING,
         LadderMeans.COMPLETE_TASK,
-        LadderMeans.ACCEPT_TASK,
         LadderMeans.PURSUE_TASK,
         LadderMeans.WAIT,
     }

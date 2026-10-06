@@ -419,7 +419,6 @@ def planForC : MeansKind → State → Plan
       -- placeholder clears `objectiveStepFires` (legacy default: isFight=false).
       if s.objectiveStepIsFight then [.fight] else [.objectiveStep]
   | .pursueTask       , _ => [.taskTrade]
-  | .acceptTask       , _ => [.acceptTask]
   | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
   | .supplyBank       , _ => [.gather]  -- 2026-08-01: produce for a sibling
   | .currencyTurnIn   , _ => [.npcBuy]  -- 2026-08-16: fleet-currency turn-in

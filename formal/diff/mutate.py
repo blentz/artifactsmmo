@@ -7236,6 +7236,9 @@ FIGHT_APPLICABILITY_MUTATIONS = [
 # The task objective (Phase 5-2c-iii-c-1). Killed by
 # tests/test_ai/test_task_objective.py.
 TASK_ROOT_MUTATIONS = [
+    ("root: an owed draw never offers the task objective (c-2 accept fold)",
+     "    if not state.task_code and accept_due(state, game_data, ctx):\n",
+     "    if False:\n"),
     ("root: exchange coin comparator >= -> > (boundary coins==min, was the TASK_EXCHANGE rung's)",
      "    if tasks_coin_total(state) >= ctx.task_exchange_min_coins:\n        # c-2 #2",
      "    if tasks_coin_total(state) > ctx.task_exchange_min_coins:\n        # c-2 #2"),
@@ -7256,6 +7259,9 @@ TASK_ROOT_MUTATIONS = [
      "            ):\n        return None\n"),
 ]
 TASK_STEP_MUTATIONS = [
+    ("step: an owed draw is never taken (c-2 accept fold)",
+     "        if step.task_code is None and accept_due(state, game_data, ctx):\n",
+     "        if False:\n"),
     ("step: earned coins are never exchanged (c-2 exchange fold)",
      "        if tasks_coin_total(state) >= ctx.task_exchange_min_coins:\n            # c-2 #2",
      "        if False:\n            # c-2 #2"),

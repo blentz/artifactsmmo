@@ -81,6 +81,7 @@ from artifactsmmo_cli.ai.raid_participation import raid_survivable_pure
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.requirement_projections import demand_set
 from artifactsmmo_cli.ai.shed_urgency import bank_shed_hoist, shed_urgency
+from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_coins import tasks_coin_total
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
@@ -408,22 +409,6 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
         return PursueTaskGoal(task_code=state.task_code,
                               initial_progress=state.task_progress,
                               batch=task_batch_size(state, game_data))
-    if kind is MeansKind.ACCEPT_TASK:
-        # Synergy Wave 4: steer the task DISTRIBUTION toward the master whose pool
-        # best serves the pursued gear (spec §4). `ctx.target_gear` is the live
-        # gear demand B available at this site; the choice returns None (no second
-        # master, or neither pool has a level-appropriate task), meaning fall back
-        # to today's default master.
-        # THE ACTIVE LINK'S DEMAND, not the whole gear sheet. `ctx.target_gear`
-        # is everything the objective will EVER want; `link_demand(needs)` is
-        # what it is blocked on now. Scoring a task pool against the sheet makes
-        # every master look equally useful, because the sheet always contains
-        # something each one can serve.
-        chosen = choose_taskmaster(state, game_data, link_demand(needs))
-        if chosen is None:
-            return AcceptTaskGoal()
-        code, tile = chosen
-        return AcceptTaskGoal(taskmaster_location=tile, taskmaster_code=code)
     if kind is MeansKind.BANK_EXPAND:
         return ExpandBankGoal(
             bank_accessible=ctx.bank_accessible,
@@ -540,8 +525,12 @@ def objective_step_goal(
     ctx: SelectionContext,
     root: MetaGoal | None = None,
     history: LearningStore | None = None,
+    needs: NeedSet | None = None,
 ) -> Goal | None:
     """Map the strategy's chosen step to a Goal.
+
+    `needs` is the committed objective's unmet demand; only the task
+    objective's accept step reads it, to score the taskmaster pool.
 
     When `root` is provided and is an equippable ObtainItem (e.g.
     copper_boots) while `step` is an intermediate recipe-input
@@ -637,6 +626,17 @@ def objective_step_goal(
         # dropped task has none.
         if low_yield_cancel_fires(state, game_data, history):
             return LowYieldCancelGoal()
+        if step.task_code is None and accept_due(state, game_data, ctx):
+            # c-2 #3 (was the ACCEPT_TASK collect rung): take the owed draw on
+            # the task's turn. Synergy Wave 4: steer the task DISTRIBUTION toward
+            # the master whose pool best serves the ACTIVE LINK's demand
+            # (`link_demand(needs)`, not the whole gear sheet, which makes every
+            # master look equally useful); None means the default master.
+            chosen = choose_taskmaster(state, game_data, link_demand(needs))
+            if chosen is None:
+                return AcceptTaskGoal()
+            code, tile = chosen
+            return AcceptTaskGoal(taskmaster_location=tile, taskmaster_code=code)
         if tasks_coin_total(state) >= ctx.task_exchange_min_coins:
             # c-2 #2 (was the TASK_EXCHANGE rung). ONE-batch semantics: the
             # construction-time coin total makes the goal satisfied after a
@@ -1329,7 +1329,7 @@ class StrategyArbiter:
         for idx, alt in enumerate(fallback_steps):
             alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
             alt_goal = objective_step_goal(alt, state, game_data, ctx, root=alt_root,
-                                          history=self._history)
+                                          history=self._history, needs=needs)
             # Route every fallback-alt step goal through the SAME task
             # suppression as the top step (reservation + redundancy +
             # trade-ready). Pre-fix these were re-appended UNSUPPRESSED, so a

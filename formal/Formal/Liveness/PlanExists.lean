@@ -104,16 +104,6 @@ theorem plan_exists_for_completeTask :
   simp [planAchieves, applyActionKind, fires,
         completeTaskFires]
 
-/-- `[.acceptTask]` clears `acceptTask` (post-state has
-    `taskCode = some "__pending__"`, so `taskCode.isNone = false`). -/
-theorem plan_exists_for_acceptTask :
-    ∀ s, fires .acceptTask s = true →
-      ∃ p : Plan, planAchieves p s .acceptTask := by
-  intro s h
-  refine ⟨[.acceptTask], ?_⟩
-  simp [planAchieves, applyActionKind, fires,
-        acceptTaskFires]
-
 /-- `[.taskCancel]` clears `taskCancel`. The opaque Bool
     `taskCancelFires` is reset to `false` by the apply, mirroring
     production's post-cancel state observation. -/

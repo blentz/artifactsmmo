@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.projections import Yield, low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.strategy_driver import map_means
+from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import (
@@ -98,17 +99,14 @@ def test_accept_task_is_a_collect_rung_when_a_draw_is_owed():
     """It left the discretionary band on 2026-08-19 (S-051): below the objective
     step it was unreachable, and the fleet held a task in 0 of 63,310 cycles."""
     state = make_state(task_code=None)
-    collect, discretionary = active_means(state, GameData(), None, _ctx())
-    assert MeansKind.ACCEPT_TASK in collect
-    assert MeansKind.ACCEPT_TASK not in discretionary
+    assert accept_due(state, GameData(), _ctx()) is True
 
 
 def test_accept_task_is_quiet_when_no_draw_is_owed():
     """The gate that makes the promotion safe: accept and discard both sit above
     the step, so an ungated redraw would spin between them at a coin a cycle."""
     state = make_state(task_code=None)
-    collect, _ = active_means(state, GameData(), None, _ctx(draw_owed=False))
-    assert MeansKind.ACCEPT_TASK not in collect
+    assert accept_due(state, GameData(), _ctx(draw_owed=False)) is False
 
 
 def test_accept_task_fires_when_target_gear_already_equipped():
@@ -116,18 +114,14 @@ def test_accept_task_fires_when_target_gear_already_equipped():
     further work, so the deferral `continue`s past it."""
     state = make_state(task_code=None,
                        equipment={"weapon_slot": "copper_dagger"})
-    collect, _ = active_means(
-        state, GameData(), None, _ctx(target_gear=frozenset({"copper_dagger"})))
-    assert MeansKind.ACCEPT_TASK in collect
+    assert accept_due(state, GameData(), _ctx(target_gear=frozenset({"copper_dagger"}))) is True
 
 
 def test_accept_task_deferred_when_target_gear_owned_but_unequipped():
     """Target gear sitting in inventory unequipped defers AcceptTask so
     UpgradeEquipment can fire first (the trace 2026-06-06 regression)."""
     state = make_state(task_code=None, inventory={"copper_dagger": 1})
-    collect, _ = active_means(
-        state, GameData(), None, _ctx(target_gear=frozenset({"copper_dagger"})))
-    assert MeansKind.ACCEPT_TASK not in collect
+    assert accept_due(state, GameData(), _ctx(target_gear=frozenset({"copper_dagger"}))) is False
 
 
 def test_accept_task_deferred_when_target_gear_craftable_now():
@@ -141,9 +135,7 @@ def test_accept_task_deferred_when_target_gear_craftable_now():
     }
     # weaponcrafting defaults to 1 in make_state → skill >= crafting_level.
     state = make_state(task_code=None)
-    collect, _ = active_means(
-        state, gd, None, _ctx(target_gear=frozenset({"copper_dagger"})))
-    assert MeansKind.ACCEPT_TASK not in collect
+    assert accept_due(state, gd, _ctx(target_gear=frozenset({"copper_dagger"}))) is False
 
 
 def test_accept_task_fires_when_target_gear_unknown_or_uncraftable():
@@ -160,10 +152,7 @@ def test_accept_task_fires_when_target_gear_unknown_or_uncraftable():
             code="dropped_gear", level=5, type_="weapon"),
     }
     state = make_state(task_code=None)
-    collect, _ = active_means(
-        state, gd, None,
-        _ctx(target_gear=frozenset({"future_gear", "dropped_gear"})))
-    assert MeansKind.ACCEPT_TASK in collect
+    assert accept_due(state, gd, _ctx(target_gear=frozenset({"future_gear", "dropped_gear"}))) is True
 
 
 def test_claim_pending_fires_with_pending_items():
@@ -475,8 +464,7 @@ def test_complete_task_not_in_collect_when_incomplete():
 
 def test_accept_task_not_in_discretionary_when_task_held():
     state = make_state(task_code="cyclops", task_type="monsters", task_total=5, task_progress=3)
-    collect, _ = active_means(state, GameData(), None, _ctx())
-    assert MeansKind.ACCEPT_TASK not in collect
+    assert accept_due(state, GameData(), _ctx()) is False
 
 
 def test_bank_expand_fires_when_conditions_met():

@@ -128,7 +128,6 @@ open Formal.Liveness.CycleStep
 #print axioms _fires_sellPressured_implies_sellInventory_positive
 #print axioms _fires_taskCancel_implies_taskCancel_positive
 #print axioms _fires_pursueTask_implies_pursueTask_positive
-#print axioms _fires_acceptTask_implies_acceptTask_positive
 #print axioms _fires_sellIdle_implies_sellInventory_positive
 #print axioms _fires_bankExpand_implies_expandBank_positive
 #print axioms _fires_wait_implies_wait_positive
@@ -145,7 +144,6 @@ open Formal.Liveness.CycleStep
 #print axioms plan_exists_for_hpCritical
 #print axioms plan_exists_for_claimPending
 #print axioms plan_exists_for_completeTask
-#print axioms plan_exists_for_acceptTask
 #print axioms plan_exists_for_taskCancel
 #print axioms plan_exists_for_bankExpand
 #print axioms plan_exists_for_wait

@@ -60,6 +60,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
+    ReachTaskOutcome,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
 from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, normal_band, tier_of_level
@@ -759,6 +760,9 @@ def test_the_siblings_become_the_alternatives_then_the_trunk_then_the_orphans():
         ObtainItem(code="copper_helmet", quantity=1, slot="helmet_slot"),
         ObtainItem(code="leather", quantity=2),
         ReachCharLevel(level=20),
+        # The task objective, behind the trunk: the ctx owes a draw (Phase
+        # 5-2c-iii-c-2 #3 — the accept is its step).
+        ReachTaskOutcome(task_code=None),
         ReachSkillLevel(skill="weaponcrafting", level=2),
     )
 
@@ -803,6 +807,7 @@ def test_the_chosen_root_is_never_repeated_as_its_own_alternative(monkeypatch):
     # trunk, changing nothing above it. The GATHERING half of the group is
     # still empty, which is what the surrounding comment is about.
     assert resolution.alternatives == (
+        ReachTaskOutcome(task_code=None),  # the owed draw, behind the trunk-root
         ReachSkillLevel(skill="gearcrafting", level=2),
         ReachSkillLevel(skill="weaponcrafting", level=2),
     )
@@ -831,6 +836,7 @@ def test_a_wall_still_offers_the_trunk_as_an_alternative(monkeypatch):
     # still empty, which is what the surrounding comment is about.
     assert resolution.alternatives == (
         ReachCharLevel(level=20),
+        ReachTaskOutcome(task_code=None),  # the owed draw, behind the trunk
         ReachSkillLevel(skill="gearcrafting", level=2),
         ReachSkillLevel(skill="weaponcrafting", level=2),
     )

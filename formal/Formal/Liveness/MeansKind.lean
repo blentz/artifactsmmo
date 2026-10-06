@@ -144,7 +144,7 @@ inductive MeansKind where
   | objectiveStep       -- OBJECTIVE_STEP
   -- Discretionary (DISCRETIONARY_ORDER, means.py:42)
   | pursueTask          -- PURSUE_TASK,        means.py:87
-  | acceptTask          -- ACCEPT_TASK,        means.py:94
+  -- (acceptTask retired: Phase 5-2c-iii-c-2 #3)
   -- (taskExchange retired: Phase 5-2c-iii-c-2 #2)
   | maintainConsumables -- MAINTAIN_CONSUMABLES, means.py (PLAN #6a): cook/brew
                         --                     heals when combat-active + under-stocked
@@ -184,22 +184,15 @@ def allInLadderOrder : List MeansKind :=
    .completeTask, .taskCancel,
    .supplyBank,
    .currencyTurnIn,
-   -- 2026-08-19 (S-051): promoted out of the discretionary group. Below
-   -- `.objectiveStep` it was unreachable — a character essentially always has a
-   -- step — and accepting belongs to a COURSE rather than competing with one.
-   -- LAST in the collect group: a one-action booking must not preempt a resolved
-   -- turn-in election or a sibling's supply request, which is the same argument
-   -- those two make for their own positions.
-   .acceptTask,
    .objectiveStep,
    .pursueTask, .maintainConsumables,
    .sellIdle, .recycleSurplus, .geBid, .drainBankJunk,
    .wait]
 
-/-- Sanity: 28 rungs (one per constructor). GEAR_REVIEW was retired in Phase
-    4-3b: its one arm never fired in recorded history. LOW_YIELD_CANCEL and
-    TASK_EXCHANGE were retired in Phase 5-2c-iii-c-2: the task objective's step
-    owns the cancel and the exchange. -/
-example : allInLadderOrder.length = 28 := by decide
+/-- Sanity: 27 rungs (one per constructor). GEAR_REVIEW was retired in Phase
+    4-3b: its one arm never fired in recorded history. LOW_YIELD_CANCEL,
+    TASK_EXCHANGE and ACCEPT_TASK were retired in Phase 5-2c-iii-c-2: the task
+    objective's step owns the cancel, the exchange and the accept. -/
+example : allInLadderOrder.length = 27 := by decide
 
 end Formal.Liveness.MeansKind

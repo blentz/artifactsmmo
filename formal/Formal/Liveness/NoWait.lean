@@ -8,14 +8,18 @@ because `.wait` fires unconditionally as the last-resort — i.e. "never deadloc
 there is satisfied by WAITING, which is no progress at all. The real obligation is
 `hnowait`: the ladder NEVER returns `.wait`, i.e. a PRODUCTIVE means always fires.
 
-This is UNCONDITIONALLY true and proven here from the task lifecycle alone: the
-three task means are phase-total —
-  `acceptTaskFires  = (phase = none)`
+It holds while a task is in flight or the objective has a step: the two task
+means left on the ladder cover every held task —
   `pursueTaskFires  = (phase ∈ {accepted, inProgress})`
   `completeTaskFires = (phase = complete)`
-so for EVERY state one of them fires, and all three sit before `.wait` in
-`allInLadderOrder`. The first firing means is therefore never `.wait`. The bot
-always has a task move (accept / pursue / complete) — it is never idle.
+and both, like `.objectiveStep`, sit before `.wait` in `allInLadderOrder`.
+
+THE TASKLESS CASE MOVED, it did not vanish (Phase 5-2c-iii-c-2 #3). Taking a
+draw was the ACCEPT_TASK rung; it is now the task objective's step, inside
+`.objectiveStep`: an owed draw makes `decisions.root._task_root` offer
+`ReachTaskOutcome(None)`, so `objectiveStepFires` holds whenever a draw is owed
+(pinned in production by `test_an_owed_draw_offers_the_objective`). The model's
+`objectiveStepFires` is opaque, so that link lives on the production side.
 
 Core liveness module (Mathlib allowed). No new axioms.
 -/
@@ -26,21 +30,16 @@ open Formal.Liveness.Measure
 open Formal.Liveness.MeansKind
 open Formal.Liveness.ProductionLadder
 
-/-- Phase-totality, WEAKENED 2026-08-19. One of the three task means fires — or
-    the character is taskless with no draw owed, which is the one state none of
-    them covers.
-
-    `acceptTaskFires` used to be `phase = .none` outright, making this a genuine
-    totality. The USER's no-immediate-redraw rule gates it on `drawOwed` (S-048
-    discards a dead draw; redrawing at once would spin accept/discard above the
-    objective step, burning a coin a cycle), and a gated accept cannot cover the
-    taskless case unconditionally. The fourth disjunct is that hole, named. -/
+/-- Phase-totality over a HELD task: pursue or complete fires, or the character
+    holds no task. (Until Phase 5-2c-iii-c-2 #3 an `acceptTask` disjunct also
+    covered the taskless state with a draw owed; that draw is now the task
+    objective's step, inside `.objectiveStep` — see the module docstring.) -/
 theorem task_means_always_fires (s : State) :
-    fires .acceptTask s = true ∨ fires .pursueTask s = true
+    fires .pursueTask s = true
       ∨ fires .completeTask s = true
-      ∨ (s.taskLifecyclePhase = .none ∧ s.drawOwed = false) := by
-  simp only [fires, acceptTaskFires, pursueTaskFires, completeTaskFires]
-  cases h : s.taskLifecyclePhase <;> cases hd : s.drawOwed <;> simp [h, hd]
+      ∨ s.taskLifecyclePhase = .none := by
+  simp only [fires, pursueTaskFires, completeTaskFires]
+  cases h : s.taskLifecyclePhase <;> simp
 
 /-- Generic: a member whose body is `some` makes `findSome?` non-`none`. -/
 theorem findSome?_ne_none_of_mem {α β : Type} {f : α → Option β} {l : List α}
@@ -59,30 +58,25 @@ theorem ladder_split : allInLadderOrder = allInLadderOrder.dropLast ++ [MeansKin
 
 theorem wait_notin_init : MeansKind.wait ∉ allInLadderOrder.dropLast := by decide
 
-/-- **hnowait, CONDITIONAL since 2026-08-19.** The ladder never returns `.wait`
-    while there is something to do: a task is in flight, a draw is owed, or the
-    objective has a step.
+/-- **hnowait, CONDITIONAL.** The ladder never returns `.wait` while a task is
+    in flight or the objective has a step.
 
-    It was unconditional, and rested entirely on `acceptTaskFires = (phase =
-    .none)` — "you can always accept a task". Gating the accept on `drawOwed`
-    (see `task_means_always_fires`) opens exactly one hole: taskless, no draw
-    owed, and no objective step. `.wait` is the CORRECT answer there and
-    `WaitGoal` is the declared totality witness for it, so this is a deliberate
-    loosening rather than a regression — but it is a loosening, and the
-    hypothesis says so out loud. -/
+    An owed draw is no longer its own disjunct (Phase 5-2c-iii-c-2 #3): it is
+    the task objective's step, so in production it implies `objectiveStepFires`
+    (module docstring). Taskless with no objective step is the one hole, and
+    `.wait` is the CORRECT answer there — `WaitGoal` is the declared totality
+    witness for it. -/
 theorem productionLadder_ne_wait (s : State)
-    (hlive : s.taskLifecyclePhase ≠ .none ∨ s.drawOwed = true
+    (hlive : s.taskLifecyclePhase ≠ .none
              ∨ s.objectiveStepFires = true) :
     productionLadder s ≠ some .wait := by
   -- A task means fires AND lives in the init (before .wait).
   have hinit_fires : ∃ k ∈ allInLadderOrder.dropLast, fires k s = true := by
-    rcases task_means_always_fires s with h | h | h | ⟨hnone, hnodraw⟩
-    · exact ⟨.acceptTask, by decide, h⟩
+    rcases task_means_always_fires s with h | h | hnone
     · exact ⟨.pursueTask, by decide, h⟩
     · exact ⟨.completeTask, by decide, h⟩
-    · rcases hlive with hph | hdraw | hstep
+    · rcases hlive with hph | hstep
       · exact absurd hnone hph
-      · rw [hnodraw] at hdraw; cases hdraw
       · exact ⟨.objectiveStep, by decide, by simp [fires, objectiveStepFires, hstep]⟩
   obtain ⟨k, hkmem, hkf⟩ := hinit_fires
   -- so the init's findSome? is `some b` for some firing init member b.

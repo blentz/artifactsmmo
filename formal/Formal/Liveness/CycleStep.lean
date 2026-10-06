@@ -125,7 +125,6 @@ noncomputable def planFor : MeansKind → State → Plan
       -- placeholder clears `objectiveStepFires` (legacy default: isFight=false).
       if s.objectiveStepIsFight then [.fight] else [.objectiveStep]
   | .pursueTask       , _ => [.taskTrade]
-  | .acceptTask       , _ => [.acceptTask]
   | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
   -- SUPPLY_BANK (2026-08-01): `SupplyBankGoal.desired_state` targets a BANKED
   -- quantity, so production plans a produce-then-deposit chain. The witness is
@@ -590,25 +589,6 @@ theorem cycleStep_progress_or_waits
     have hpre' : s.taskProgress = s.taskProgress + 1 := by
       rw [heq] at hpost; exact hpost
     exact Nat.succ_ne_self _ hpre'.symm
-  | acceptTask =>
-    left
-    have hcs : cycleStep s = applyActionKind .acceptTask s := by
-      unfold cycleStep; rw [hk]; rfl
-    rw [hcs]
-    -- `acceptTaskFires` gained `&& s.drawOwed` on 2026-08-19; project the phase
-    -- equality out of the conjunction. The drawOwed half is irrelevant to the
-    -- phase transition being contradicted below.
-    simp only [fires, acceptTaskFires, Bool.and_eq_true, decide_eq_true_eq] at hfires
-    obtain ⟨hfires, _hdraw⟩ := hfires
-    -- hfires : s.taskLifecyclePhase = .none
-    intro heq
-    have hpost : (applyActionKind .acceptTask s).taskLifecyclePhase
-                  = TaskLifecyclePhase.TaskLifecyclePhase.accepted := by
-      simp [applyActionKind]
-    have hpre' : s.taskLifecyclePhase
-                  = TaskLifecyclePhase.TaskLifecyclePhase.accepted := by
-      rw [heq] at hpost; exact hpost
-    rw [hfires] at hpre'; cases hpre'
   | sellIdle =>
     left
     have hcs : cycleStep s = applyActionKind .npcSell s := by

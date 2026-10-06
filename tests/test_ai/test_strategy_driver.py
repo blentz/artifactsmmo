@@ -710,19 +710,15 @@ def test_map_means_task_cancel():
     assert isinstance(map_means(MeansKind.TASK_CANCEL, GameData(), _ctx(), make_state()), TaskCancelGoal)
 
 
-def test_map_means_accept_task():
-    assert isinstance(map_means(MeansKind.ACCEPT_TASK, GameData(), _ctx(), make_state()), AcceptTaskGoal)
-
-
 def test_the_task_objective_exchanges_coins():
     """c-2 #2: the exchange is the task objective's step (was TASK_EXCHANGE)."""
     state = make_state(inventory={"tasks_coin": 3})
     g = objective_step_goal(ReachTaskOutcome(None), state, GameData(),
-                            _ctx(task_exchange_min_coins=3))
+                            _ctx(task_exchange_min_coins=3, draw_owed=False))
     assert isinstance(g, TaskExchangeGoal)
     poor = make_state(inventory={"tasks_coin": 2})
     assert objective_step_goal(ReachTaskOutcome(None), poor, GameData(),
-                               _ctx(task_exchange_min_coins=3)) is None
+                               _ctx(task_exchange_min_coins=3, draw_owed=False)) is None
 
 
 def test_the_exchange_step_threads_initial_total():
@@ -731,7 +727,7 @@ def test_the_exchange_step_threads_initial_total():
     batch is spent (7 -> 4 with min 3), not only when fully drained."""
     state = make_state(inventory={"tasks_coin": 4}, bank_items={"tasks_coin": 3})
     g = objective_step_goal(ReachTaskOutcome(None), state, GameData(),
-                            _ctx(task_exchange_min_coins=3))
+                            _ctx(task_exchange_min_coins=3, draw_owed=False))
     assert g.is_satisfied(state) is False
     one_batch_spent = make_state(inventory={"tasks_coin": 1},
                                  bank_items={"tasks_coin": 3})
@@ -1095,6 +1091,15 @@ class _FallbackDecision:
     fallback_roots: list
 
 
+def _with_task_root(chosen_step):  # type: ignore[no-untyped-def]
+    """A decision whose walk offers the task objective as its alternative: with
+    no task held and a draw owed, its step is the accept (Phase 5-2c-iii-c-2 #3;
+    this was the ACCEPT_TASK collect rung)."""
+    task = ReachTaskOutcome(None)
+    return _FallbackDecision(chosen_step=chosen_step, fallback_steps=[task],
+                             fallback_roots=[task])
+
+
 def test_fallback_serves_when_top_step_yields_no_goal():
     """Zombie-commitment release: when the top chosen_step's objective_step_goal
     is None (e.g. ReachCharLevel with no winnable monster, or a reservation-
@@ -1223,7 +1228,7 @@ def test_select_suppresses_step_when_no_task():
     ]
     ctx = _ctx(combat_monster="chicken")
     arbiter = StrategyArbiter(planner, history=None)
-    decision = _FakeDecision(chosen_step=ObtainItem("copper_ring"))
+    decision = _with_task_root(ObtainItem("copper_ring"))
     goal, plan, tried = arbiter.select(decision, state, gd, actions, ctx)
     # AcceptTask must win: the loop-breaker contract.
     assert isinstance(goal, AcceptTaskGoal), (
@@ -1254,7 +1259,7 @@ def test_select_falls_through_unplannable_to_next():
     # chosen_step is ReachCharLevel → maps to GrindCharacterXPGoal which needs FightAction
     ctx = _ctx(combat_monster="chicken")
     arbiter = StrategyArbiter(planner, history=None)
-    decision = _FakeDecision(chosen_step=ReachCharLevel(5))
+    decision = _with_task_root(ReachCharLevel(5))
     goal, plan, _goals_tried = arbiter.select(decision, state, gd, actions, ctx)
     assert isinstance(goal, AcceptTaskGoal), f"expected AcceptTaskGoal, got {goal!r}"
     assert len(plan) >= 1
@@ -1338,7 +1343,7 @@ def test_select_sticky_keeps_committed_means():
     actions = [AcceptTaskAction(taskmaster_location=(2, 1))]
     ctx = _ctx()
     arbiter = StrategyArbiter(planner, history=None)
-    decision = _FakeDecision(chosen_step=None)
+    decision = _with_task_root(None)
 
     goal1, _plan1, _ = arbiter.select(decision, state, gd, actions, ctx)
     assert isinstance(goal1, AcceptTaskGoal), f"cycle 1: expected AcceptTask, got {goal1!r}"
@@ -1357,7 +1362,7 @@ def test_select_no_double_count_when_committed_becomes_unplannable():
     actions_with_accept = [AcceptTaskAction(taskmaster_location=(2, 1))]
     ctx = _ctx()
     arbiter = StrategyArbiter(planner, history=None)
-    decision = _FakeDecision(chosen_step=None)
+    decision = _with_task_root(None)
 
     # Cycle 1: AcceptTask commits
     goal1, _plan1, _ = arbiter.select(decision, state, gd, actions_with_accept, ctx)
@@ -1389,7 +1394,7 @@ def test_select_guard_win_keeps_the_commitment_and_it_resumes():
     ]
     ctx = _ctx()
     arbiter = StrategyArbiter(planner, history=None)
-    decision = _FakeDecision(chosen_step=None)
+    decision = _with_task_root(None)
 
     # Cycle 1: calm state — AcceptTask commits
     goal1, _, _ = arbiter.select(decision, state_calm, gd, actions, ctx)
@@ -1514,7 +1519,7 @@ def test_select_skips_satisfied_step_goal_continues_to_next():
     arbiter = StrategyArbiter(planner, history=None)
 
     # Use ObtainItem("ash_plank", 6) as chosen_step; state already satisfies it
-    decision = _FakeDecision(chosen_step=ObtainItem("ash_plank", 6))
+    decision = _with_task_root(ObtainItem("ash_plank", 6))
     goal, plan, goals_tried = arbiter.select(decision, state, gd, actions, ctx)
 
     # The satisfied GatherMaterialsGoal must have been skipped (not attempted)
@@ -2588,16 +2593,16 @@ def _unplannable_objective_arbiter(plannable):
 
 
 def _select_with(arbiter, *, draw_owed=True, **kw):
-    """`draw_owed=True`: a taskless character owes a draw, so ACCEPT_TASK is the
-    fall-through goal these fixtures expect to win.
-
-    It sits ABOVE the objective step since 2026-08-19 (S-051), which is why
-    `objective_unplannable` now skips collect-band attempts — otherwise the
-    accept, a one-action booking, would be recorded as the abandoned objective.
-    """
+    """`draw_owed=True`: a taskless character owes a draw, so the task
+    objective's accept step (`ReachTaskOutcome(None)`, offered as a walk
+    alternative since Phase 5-2c-iii-c-2 #3) is the fall-through goal these
+    fixtures expect to win, BEHIND the objective step."""
     state = make_state(hp=150, max_hp=150, task_code=None, task_total=0)
+    task = ReachTaskOutcome(None)
     return arbiter.select(
-        _FakeDecision(chosen_step=ReachCharLevel(5)), state, _make_planner_gd(),
+        _FallbackDecision(chosen_step=ReachCharLevel(5), fallback_steps=[task],
+                          fallback_roots=[task]),
+        state, _make_planner_gd(),
         [AcceptTaskAction(taskmaster_location=(2, 1))],
         _ctx(combat_monster="chicken", draw_owed=draw_owed), **kw)
 
@@ -2606,13 +2611,12 @@ def test_first_attempted_candidate_is_recorded_when_it_is_abandoned():
     """31 hours of traces recorded NOTHING when the first-attempted objective was
     abandoned; the run read as 'the bot chose to grind XP'. The fall-through to a
     lower-ranked candidate is intended — only the silence is the bug."""
-    # ACCEPT_TASK is attempted FIRST now — it sits in the collect band above the
-    # objective step (S-051) — and is unplannable here, so the walk reaches the
-    # step, abandons it, and falls through to Wait. The accept must NOT be what
-    # gets recorded: a one-action booking is not the abandoned objective.
+    # The objective step is attempted first, abandoned, then the task
+    # objective's accept (a walk alternative) — unplannable too — and the walk
+    # falls through to Wait. The step is what gets recorded.
     arbiter = _unplannable_objective_arbiter(plannable=set())
     goal, plan, tried = _select_with(arbiter)
-    assert [t["goal"] for t in tried] == ["AcceptTask", "GrindCharacterXP(chicken)"]
+    assert [t["goal"] for t in tried] == ["GrindCharacterXP(chicken)", "AcceptTask"]
     # Fall-through is intended — here to the unconditional Wait rung, which is
     # selected outside the walk and so never appears in `goals_tried`.
     assert repr(goal) == "Wait" and len(plan) == 1
@@ -2667,10 +2671,8 @@ def test_under_a_commitment_the_event_names_the_COMMITTED_objective():
 def test_event_is_cleared_on_the_next_healthy_cycle():
     """The field is per-cycle state: a cycle whose first attempt plans must not
     inherit the previous cycle's abandonment."""
-    # Cycle 0: nothing plans, so the walk reaches the objective step, abandons
-    # it, and falls through to the unconditional Wait rung. (With ACCEPT_TASK
-    # plannable the walk would stop at it — a collect-band booking above the
-    # step — and never attempt the objective at all.)
+    # Cycle 0: nothing plans, so the walk abandons the objective step and falls
+    # through to the unconditional Wait rung.
     arbiter = _unplannable_objective_arbiter(plannable=set())
     _select_with(arbiter)
     assert arbiter.objective_unplannable is not None

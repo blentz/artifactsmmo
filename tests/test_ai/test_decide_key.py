@@ -58,16 +58,9 @@ def test_currency_turnin_is_last_in_the_collect_reward_band() -> None:
     assert MeansKind.CURRENCY_TURNIN not in DISCRETIONARY_ORDER
     assert (COLLECT_REWARD_ORDER.index(MeansKind.SUPPLY_BANK)
             < COLLECT_REWARD_ORDER.index(MeansKind.CURRENCY_TURNIN))
-    # 2026-08-19 (S-051): ACCEPT_TASK joined this band and took the last slot.
-    # BANK_EXPAND took it in turn on 2026-09-13 and left it for the interrupt
-    # prefix on 2026-10-05 (Phase 5-2c-ii): a one-action purchase that runs as
-    # an interrupt delays an election by one action and the walk resumes. The
-    # property that matters is asserted directly — the turn-in still sits
-    # behind nothing open-ended, and putting the accept BEFORE the turn-in did
-    # preempt it (caught by test_turn_in_scenario).
-    assert COLLECT_REWARD_ORDER[-1] is MeansKind.ACCEPT_TASK
-    assert (COLLECT_REWARD_ORDER.index(MeansKind.CURRENCY_TURNIN)
-            < COLLECT_REWARD_ORDER.index(MeansKind.ACCEPT_TASK))
+    # ACCEPT_TASK held the last slot from 2026-08-19 until Phase 5-2c-iii-c-2
+    # #3 retired it into the task objective's step; the turn-in is now last.
+    assert COLLECT_REWARD_ORDER[-1] is MeansKind.CURRENCY_TURNIN
     for cheap in (MeansKind.CLAIM_PENDING, MeansKind.COMPLETE_TASK,
                   MeansKind.SELL_PRESSURED, MeansKind.TASK_CANCEL):
         assert (COLLECT_REWARD_ORDER.index(cheap)

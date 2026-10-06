@@ -61,7 +61,6 @@ inductive MeansKind where
   | sellPressured
   | taskCancel
   | pursueTask
-  | acceptTask
   | sellIdle
   | recycleSurplus  -- 2026-06-14: proactive recycle of surplus craftable gear
   | bankExpand
@@ -121,7 +120,6 @@ def goalReprOfMeans : MeansKind → String
   | .sellIdle        => "SellInventory"
   | .taskCancel      => "TaskCancel"
   | .pursueTask      => "PursueTask"
-  | .acceptTask      => "AcceptTask"
   | .recycleSurplus  => "RecycleSurplus"
   | .bankExpand      => "ExpandBank"
   | .wait            => "Wait"

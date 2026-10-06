@@ -99,7 +99,6 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.TASK_CANCEL:        "taskCancel",
     LadderMeans.OBJECTIVE_STEP:     "objectiveStep",
     LadderMeans.PURSUE_TASK:        "taskTrade",
-    LadderMeans.ACCEPT_TASK:        "acceptTask",
     LadderMeans.MAINTAIN_CONSUMABLES: "craft",  # PLAN #6a: cook/brew a heal
     # 2026-08-01: SupplyBankGoal plans produce-then-deposit; the witness is the
     # HEAD produce step (the demand board routes each item to the role that
@@ -138,7 +137,6 @@ MIRROR_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.TASK_CANCEL,
     LadderMeans.OBJECTIVE_STEP,
     LadderMeans.PURSUE_TASK,
-    LadderMeans.ACCEPT_TASK,
     LadderMeans.SELL_IDLE,
     LadderMeans.BANK_EXPAND,
     LadderMeans.WAIT,
@@ -250,7 +248,6 @@ def fires_mirror(k: LadderMeans, s: CycleState) -> bool:
     if k is LadderMeans.TASK_CANCEL:        return s.task_cancel_fires
     if k is LadderMeans.OBJECTIVE_STEP:     return s.objective_step_fires
     if k is LadderMeans.PURSUE_TASK:        return s.pursue_task_fires
-    if k is LadderMeans.ACCEPT_TASK:        return s.task_code is None
     if k is LadderMeans.SELL_IDLE:          return _sell_idle_fires(s)
     if k is LadderMeans.BANK_EXPAND:        return _bank_expand_fires(s)
     if k is LadderMeans.WAIT:               return True

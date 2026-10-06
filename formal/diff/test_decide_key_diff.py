@@ -45,24 +45,23 @@ _MEANS_INDEX = {
     MeansKind.SELL_PRESSURED: 2,
     MeansKind.TASK_CANCEL: 3,
     MeansKind.PURSUE_TASK: 4,
-    MeansKind.ACCEPT_TASK: 5,
-    MeansKind.SELL_IDLE: 6,
-    MeansKind.RECYCLE_SURPLUS: 7,  # 2026-06-14: proactive recycle surplus gear.
-    MeansKind.BANK_EXPAND: 8,
-    MeansKind.WAIT: 9,  # Phase 20e-v2 step 1: always-firing sentinel.
-    MeansKind.MAINTAIN_CONSUMABLES: 10,  # PLAN #6a: cook/brew heals (combat-active).
-    MeansKind.DRAIN_BANK_JUNK: 11,  # 2026-06-24: drain over-cap bank junk.
-    MeansKind.GE_BID: 12,  # 2026-07-24: post a discretionary GE buy order.
-    # 2026-08-01: produce a material a sibling declared. 13 is the position of
+    MeansKind.SELL_IDLE: 5,
+    MeansKind.RECYCLE_SURPLUS: 6,  # 2026-06-14: proactive recycle surplus gear.
+    MeansKind.BANK_EXPAND: 7,
+    MeansKind.WAIT: 8,  # Phase 20e-v2 step 1: always-firing sentinel.
+    MeansKind.MAINTAIN_CONSUMABLES: 9,  # PLAN #6a: cook/brew heals (combat-active).
+    MeansKind.DRAIN_BANK_JUNK: 10,  # 2026-06-24: drain over-cap bank junk.
+    MeansKind.GE_BID: 11,  # 2026-07-24: post a discretionary GE buy order.
+    # 2026-08-01: produce a material a sibling declared. 12 is the position of
     # `supplyBank` in the LEAN `Formal.DecideKey.MeansKind` inductive (appended
     # last, like every variant since `wait`), which is what the oracle's index
     # dispatch reads — NOT the Python enum's declaration ordinal.
-    MeansKind.SUPPLY_BANK: 13,
-    # 2026-08-16 (fleet-currency-turn-in epic Task 6): 14 is the position of
+    MeansKind.SUPPLY_BANK: 12,
+    # 2026-08-16 (fleet-currency-turn-in epic Task 6): 13 is the position of
     # `currencyTurnIn` in the LEAN `Formal.DecideKey.MeansKind` inductive
     # (appended last, like `supplyBank` above it) — the oracle's index dispatch
     # reads this, NOT the Python enum's declaration ordinal.
-    MeansKind.CURRENCY_TURNIN: 14,
+    MeansKind.CURRENCY_TURNIN: 13,
 }
 
 

@@ -35,17 +35,13 @@ class SelectionContext:
     # reserve-free (legacy fixtures keep their old semantics).
     gold_reserve: int = 0
     # 2026-08-19 (S-051 + the USER's no-immediate-redraw rule). True when a task
-    # DRAW is owed for the course in flight. ACCEPT_TASK fires only when it is
-    # set, and taking the draw clears it — which is the whole reason the rung can
-    # sit ABOVE the objective step: it descends the measure at a slot one above
-    # `phasePresent`, so discharging the draw dominates the phase rise an accept
-    # causes (`Formal.Liveness.BlockerDescent.descends_acceptTask`, and its D/E
-    # twins `descendsD_acceptTask` / `descendsE_acceptTask`). Without the gate,
-    # accept and discard would spin above the step at a coin a cycle — see
+    # DRAW is owed for the course in flight. The task objective takes a draw only
+    # when it is set (`task_accept.accept_due`; the ACCEPT_TASK rung until Phase
+    # 5-2c-iii-c-2 #3), and taking the draw clears it. Without the gate, accept
+    # and discard would spin at a coin a cycle — see
     # docs/PLAN_task_draw_and_judge.md.
     #
-    # Defaults False so a caller that does not manage it gets today's behaviour
-    # for the rung: quiet.
+    # Defaults False so a caller that does not manage it gets no draw.
     draw_owed: bool = False
     # Long-term gear and tool codes — fed by player from the
     # CharacterObjective so the CRAFT_RELIEF guard can score gear/tool
