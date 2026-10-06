@@ -100,7 +100,6 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.OBJECTIVE_STEP:     "objectiveStep",
     LadderMeans.PURSUE_TASK:        "taskTrade",
     LadderMeans.ACCEPT_TASK:        "acceptTask",
-    LadderMeans.TASK_EXCHANGE:      "taskExchange",
     LadderMeans.MAINTAIN_CONSUMABLES: "craft",  # PLAN #6a: cook/brew a heal
     # 2026-08-01: SupplyBankGoal plans produce-then-deposit; the witness is the
     # HEAD produce step (the demand board routes each item to the role that
@@ -140,7 +139,6 @@ MIRROR_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.OBJECTIVE_STEP,
     LadderMeans.PURSUE_TASK,
     LadderMeans.ACCEPT_TASK,
-    LadderMeans.TASK_EXCHANGE,
     LadderMeans.SELL_IDLE,
     LadderMeans.BANK_EXPAND,
     LadderMeans.WAIT,
@@ -224,10 +222,6 @@ def _sell_idle_fires(s: CycleState) -> bool:
     return s.sellable_inventory_nonempty and s.task_code is None
 
 
-def _task_exchange_fires(s: CycleState) -> bool:
-    return s.task_coins_total >= s.task_exchange_min_coins
-
-
 def _bank_expand_fires(s: CycleState) -> bool:
     if s.bank_capacity == 0 or not s.bank_items_known:
         return False
@@ -257,7 +251,6 @@ def fires_mirror(k: LadderMeans, s: CycleState) -> bool:
     if k is LadderMeans.OBJECTIVE_STEP:     return s.objective_step_fires
     if k is LadderMeans.PURSUE_TASK:        return s.pursue_task_fires
     if k is LadderMeans.ACCEPT_TASK:        return s.task_code is None
-    if k is LadderMeans.TASK_EXCHANGE:      return _task_exchange_fires(s)
     if k is LadderMeans.SELL_IDLE:          return _sell_idle_fires(s)
     if k is LadderMeans.BANK_EXPAND:        return _bank_expand_fires(s)
     if k is LadderMeans.WAIT:               return True

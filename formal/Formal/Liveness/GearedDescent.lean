@@ -204,7 +204,6 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
         · exact descendsE_placeholder s hArms hGear hk (Bool.eq_false_iff.mpr hisF)
     | pursueTask      => exact descendsE_pursueTask s hArms hlvl hk
     | acceptTask      => exact descendsE_acceptTask s hk
-    | taskExchange    => exact absurd hmem (by decide)
     | maintainConsumables => exact absurd hmem (by decide)
     | supplyBank      => exact descendsE_supplyBank s hk
     | currencyTurnIn  => exact descendsE_currencyTurnIn s hk

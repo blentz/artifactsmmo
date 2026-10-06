@@ -443,7 +443,7 @@ def test_ladder_entry_count_matches_lean() -> None:
     `MeansKind.allInLadderOrder` (whose length is pinned by the `example` at the
     bottom of `formal/Formal/Liveness/MeansKind.lean` — update BOTH together).
 
-    29 = original 17 + WAIT (Phase 20e-v2) + CRAFT_RELIEF (circuit
+    28 = original 17 + WAIT (Phase 20e-v2) + CRAFT_RELIEF (circuit
     breaker between DISCARD_CRITICAL and DEPOSIT_FULL) + REST_FOR_COMBAT
     (after HP_CRITICAL) + MAINTAIN_CONSUMABLES (PLAN #6a, after TASK_EXCHANGE)
     + RECYCLE_RELIEF (bank-full cascade, after CRAFT_RELIEF)
@@ -459,9 +459,10 @@ def test_ladder_entry_count_matches_lean() -> None:
     directly below SUPPLY_BANK in COLLECT_REWARD_ORDER, still above
     OBJECTIVE_STEP).
     − GEAR_REVIEW (retired in Phase 4-3b: its one arm never fired).
-    − LOW_YIELD_CANCEL (retired in Phase 5-2c-iii-c-2: the task objective's step).
+    − LOW_YIELD_CANCEL, TASK_EXCHANGE (retired in Phase 5-2c-iii-c-2: the task
+    objective's step).
     Lean side mirrors via MeansKind.allInLadderOrder."""
-    assert len(ALL_IN_LADDER_ORDER) == 29
+    assert len(ALL_IN_LADDER_ORDER) == 28
 
 
 def test_the_ladder_interrupt_prefix_is_what_production_runs_as_interrupts() -> None:

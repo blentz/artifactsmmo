@@ -85,7 +85,6 @@ from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
-from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -288,20 +287,6 @@ def _fix_ACCEPT_TASK():
            LadderMeans.ACCEPT_TASK
 
 
-def _fix_TASK_EXCHANGE():
-    gd = _base_gd()
-    # Need a task assigned so ACCEPT_TASK doesn't fire above us in the ladder.
-    # Task in progress (not complete) so COMPLETE_TASK doesn't fire either.
-    w = _base_world(
-        inventory={TASKS_COIN_CODE: 3},
-        task_code="t", task_type="items", task_progress=0, task_total=5,
-    )
-    ctx = _ctx(task_exchange_min_coins=1)
-    cs = _world_to_cycle(w, ctx=ctx, gd=gd, overrides={})
-    return cs, w, gd, ctx, TaskExchangeAction(min_coins=1, taskmaster_location=(1, 2)), \
-           LadderMeans.TASK_EXCHANGE
-
-
 def _fix_PURSUE_TASK():
     """Inject pursue_task_fires=True on the mirror side; on the production
     side, set the items-task and use TaskTradeAction(quantity = remaining).
@@ -366,7 +351,6 @@ FIXTURES: dict[LadderMeans, callable] = {
     LadderMeans.CLAIM_PENDING:  _fix_CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK:  _fix_COMPLETE_TASK,
     LadderMeans.ACCEPT_TASK:    _fix_ACCEPT_TASK,
-    LadderMeans.TASK_EXCHANGE:  _fix_TASK_EXCHANGE,
     LadderMeans.PURSUE_TASK:    _fix_PURSUE_TASK,
     LadderMeans.WAIT:           _fix_WAIT,
     LadderMeans.BANK_EXPAND:    _fix_BUY_BANK_EXPANSION,

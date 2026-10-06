@@ -25,13 +25,14 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
-from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal, tasks_coin_total
+from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.task_coins import tasks_coin_total
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults

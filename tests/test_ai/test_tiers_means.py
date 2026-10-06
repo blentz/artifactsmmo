@@ -18,7 +18,6 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.projections import Yield, low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import map_means
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
@@ -343,12 +342,6 @@ def test_a_small_request_the_asker_can_make_itself_still_does_not_fire():
 def test_no_supply_target_never_fires():
     ctx = _ctx(supply_target=None, asymmetric_demand=frozenset({"greater_wooden_staff"}))
     assert _fires(MeansKind.SUPPLY_BANK, make_state(), _gd(), ctx) is False
-
-
-def test_task_exchange_fires_when_enough_coins():
-    state = make_state(inventory={"tasks_coin": 5}, task_code="t", task_total=1, task_progress=0)
-    _, discretionary = active_means(state, GameData(), None, _ctx(task_exchange_min_coins=3))
-    assert MeansKind.TASK_EXCHANGE in discretionary
 
 
 def test_low_yield_cancel_absent_when_no_history():
@@ -893,27 +886,6 @@ def test_the_rung_and_the_goal_it_emits_report_the_same_answer():
     assert MeansKind.TASK_CANCEL in collect
     goal = map_means(MeansKind.TASK_CANCEL, gd, _ctx(), state, None)
     assert goal.value(state, gd, None) > 0.0
-
-
-def test_the_offline_context_does_not_fire_task_exchange_on_zero_coins():
-    """`NO_PROFILE_CONTEXT` must agree with production about what a coinless
-    character can exchange.
-
-    `_fires(TASK_EXCHANGE)` is `coins >= ctx.task_exchange_min_coins`. The
-    offline stand-in carried 0, so the predicate read `coins >= 0` — TRUE for
-    every character alive, coins or not — while production's own default is 1
-    (`player.py`: `get_learned_int("task_exchange_min_coins", 1)`). Measured on
-    the committed bundle before the fix: the rung fired in 44 of 44 scenarios,
-    all with zero coins, and built a goal that was satisfied on construction.
-
-    The arbiter skips satisfied goals, so nothing was mis-selected — but every
-    offline measurement of the discretionary band carried a rung with nothing to
-    do, which is the shape `_fires`' own TASK_CANCEL comment says this ladder has
-    been bitten by twice.
-    """
-    state = make_state(inventory={}, task_code="t", task_total=10, task_progress=0)
-    _, discretionary = active_means(state, GameData(), None, NO_PROFILE_CONTEXT)
-    assert MeansKind.TASK_EXCHANGE not in discretionary
 
 
 def test_bank_expand_fires_on_account_gold_not_pocket_alone():

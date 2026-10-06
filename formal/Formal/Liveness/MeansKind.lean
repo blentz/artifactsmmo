@@ -145,7 +145,7 @@ inductive MeansKind where
   -- Discretionary (DISCRETIONARY_ORDER, means.py:42)
   | pursueTask          -- PURSUE_TASK,        means.py:87
   | acceptTask          -- ACCEPT_TASK,        means.py:94
-  | taskExchange        -- TASK_EXCHANGE,      means.py:97
+  -- (taskExchange retired: Phase 5-2c-iii-c-2 #2)
   | maintainConsumables -- MAINTAIN_CONSUMABLES, means.py (PLAN #6a): cook/brew
                         --                     heals when combat-active + under-stocked
   | sellIdle            -- SELL_IDLE,          means.py:100
@@ -192,13 +192,14 @@ def allInLadderOrder : List MeansKind :=
    -- those two make for their own positions.
    .acceptTask,
    .objectiveStep,
-   .pursueTask, .taskExchange, .maintainConsumables,
+   .pursueTask, .maintainConsumables,
    .sellIdle, .recycleSurplus, .geBid, .drainBankJunk,
    .wait]
 
-/-- Sanity: 29 rungs (one per constructor). GEAR_REVIEW was retired in Phase
-    4-3b: its one arm never fired in recorded history. LOW_YIELD_CANCEL was
-    retired in Phase 5-2c-iii-c-2: the task objective's step owns the cancel. -/
-example : allInLadderOrder.length = 29 := by decide
+/-- Sanity: 28 rungs (one per constructor). GEAR_REVIEW was retired in Phase
+    4-3b: its one arm never fired in recorded history. LOW_YIELD_CANCEL and
+    TASK_EXCHANGE were retired in Phase 5-2c-iii-c-2: the task objective's step
+    owns the cancel and the exchange. -/
+example : allInLadderOrder.length = 28 := by decide
 
 end Formal.Liveness.MeansKind

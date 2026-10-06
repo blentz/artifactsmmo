@@ -221,7 +221,6 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.OBJECTIVE_STEP: "objectiveStep",
     LadderMeans.PURSUE_TASK: "pursueTask",
     LadderMeans.ACCEPT_TASK: "acceptTask",
-    LadderMeans.TASK_EXCHANGE: "taskExchange",
     LadderMeans.MAINTAIN_CONSUMABLES: "maintainConsumables",
     LadderMeans.SUPPLY_BANK: "supplyBank",
     LadderMeans.CURRENCY_TURNIN: "currencyTurnIn",

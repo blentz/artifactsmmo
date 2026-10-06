@@ -7,13 +7,8 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.task_coins import tasks_coin_total
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
-
-
-def tasks_coin_total(state: WorldState) -> int:
-    """Inventory + bank tasks_coin total (bank-unknown counts as zero)."""
-    bank = state.bank_items or {}
-    return state.inventory.get(TASKS_COIN_CODE, 0) + bank.get(TASKS_COIN_CODE, 0)
 
 
 class TaskExchangeGoal(Goal):

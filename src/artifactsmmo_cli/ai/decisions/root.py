@@ -95,6 +95,7 @@ from artifactsmmo_cli.ai.drop_evidence import drop_evidence
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.task_coins import tasks_coin_total
 from artifactsmmo_cli.ai.task_horizon import HORIZON_GEAR, resolve_task_horizon
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -953,6 +954,10 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
     until c-2 folds that rung in."""
     if state.task_code and _route.task_pays_less(state, game_data, history):
         return ReachTaskOutcome(state.task_code)
+    if tasks_coin_total(state) >= ctx.task_exchange_min_coins:
+        # c-2 #2 (was the TASK_EXCHANGE rung): earned coins are the task
+        # objective's to exchange, task held or not.
+        return ReachTaskOutcome(state.task_code or None)
     if (state.task_type != "monsters" or not state.task_code
             or state.task_progress >= state.task_total):
         return None

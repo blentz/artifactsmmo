@@ -27,8 +27,7 @@
      shape parity with `productionLadder_total`.
 
   4. `cycleStep_progress_or_waits`
-     The headline: under a mild non-degeneracy hypothesis on
-     `.taskExchange`, every cycle either changes state or is in a
+     The headline: every cycle either changes state or is in a
      wait-only ladder configuration. Connects Phase 20's no-deadlock
      (`productionLadder_total`) with Phase 21's plan-exists witnesses.
 
@@ -57,17 +56,6 @@
   fires. Phase 20's `productionLadder_total` guarantees something
   fires; the WAIT fallback is the honest model of the "nothing
   actionable right now" steady state.
-
-  ## Honest disclosure: `.taskExchange` degeneracy
-
-  `taskExchangeFires` is `s.taskCoinsTotal ≥ s.taskExchangeMinCoins`,
-  which is trivially `true` when `taskExchangeMinCoins = 0`. In that
-  degenerate case `applyActionKind .taskExchange` is a no-op (Nat
-  saturating subtraction). `Formal.Liveness.PlanExists`'s
-  `plan_exists_for_taskExchange` already flags this with a `0 <
-  taskExchangeMinCoins` precondition; we mirror it here as a single
-  hypothesis on the headline theorem. The HTTP 478 server contract on
-  `min_coins = 0` would be a server bug.
 
   ## Integrity
 
@@ -138,7 +126,6 @@ noncomputable def planFor : MeansKind → State → Plan
       if s.objectiveStepIsFight then [.fight] else [.objectiveStep]
   | .pursueTask       , _ => [.taskTrade]
   | .acceptTask       , _ => [.acceptTask]
-  | .taskExchange     , _ => [.taskExchange]
   | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
   -- SUPPLY_BANK (2026-08-01): `SupplyBankGoal.desired_state` targets a BANKED
   -- quantity, so production plans a produce-then-deposit chain. The witness is
@@ -224,13 +211,10 @@ private theorem fires_of_productionLadder
     rw [← hbody]; exact hfire
   · simp [hfire] at hbody
 
-/-- Headline. Under the mild non-degeneracy hypothesis on
-    `.taskExchange` (positive `taskExchangeMinCoins` whenever the
-    ladder selects `.taskExchange`), every cycle either changes the
+/-- Headline. Every cycle either changes the
     state or sits in a wait-only ladder configuration. -/
 theorem cycleStep_progress_or_waits
-    (s : State)
-    (hex : productionLadder s = some .taskExchange → s.taskExchangeMinCoins > 0) :
+    (s : State) :
     cycleStep s ≠ s ∨ productionLadder s = some .wait := by
   -- productionLadder s = some k (by productionLadder_total).
   obtain ⟨k, hk⟩ := exists_firing_means s
@@ -625,22 +609,6 @@ theorem cycleStep_progress_or_waits
                   = TaskLifecyclePhase.TaskLifecyclePhase.accepted := by
       rw [heq] at hpost; exact hpost
     rw [hfires] at hpre'; cases hpre'
-  | taskExchange =>
-    left
-    have hcs : cycleStep s = applyActionKind .taskExchange s := by
-      unfold cycleStep; rw [hk]; rfl
-    rw [hcs]
-    have hmin : s.taskExchangeMinCoins > 0 := hex hk
-    intro heq
-    have hpost_eq : (applyActionKind .taskExchange s).taskCoinsTotal
-                    = s.taskCoinsTotal - s.taskExchangeMinCoins := by
-      show ({s with taskCoinsTotal := s.taskCoinsTotal - s.taskExchangeMinCoins} : State).taskCoinsTotal
-            = s.taskCoinsTotal - s.taskExchangeMinCoins
-      rfl
-    have heq2 : s.taskCoinsTotal - s.taskExchangeMinCoins = s.taskCoinsTotal := by
-      rw [heq] at hpost_eq; exact hpost_eq.symm
-    simp only [fires, taskExchangeFires, decide_eq_true_eq] at hfires
-    omega
   | sellIdle =>
     left
     have hcs : cycleStep s = applyActionKind .npcSell s := by

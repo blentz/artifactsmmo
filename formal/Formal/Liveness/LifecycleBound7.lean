@@ -121,8 +121,6 @@ theorem lifecycle_progress_from_bounds_proven
     (hzero : ∀ s', cycleStepN' 0 s' = s')
     (hlvl : s.level < 50)
     (_hnowait : ∀ k, productionLadder (cycleStepN' k s) ≠ some .wait)
-    (_hex : ∀ k, productionLadder (cycleStepN' k s) = some .taskExchange →
-                  (cycleStepN' k s).taskExchangeMinCoins > 0)
     (_hbe : ∀ k, productionLadder (cycleStepN' k s) = some .bankExpand →
                   (cycleStepN' k s).nextExpansionCost > 0)
     -- NOTE (2026-06-15): the former `_hperc` perception hypothesis was REMOVED —

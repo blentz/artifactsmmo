@@ -92,7 +92,7 @@ theorem productionLadder_eq_pursueTask
   -- allInLadderOrder = [.hpCritical, .bankUnlock, .reachUnlockLevel,
   --   .discardCritical, .depositFull, .discardHigh, .claimPending,
   --   .completeTask, .sellPressured, .taskCancel,
-  --   .objectiveStep, .pursueTask, .acceptTask, .taskExchange,
+  --   .objectiveStep, .pursueTask, .acceptTask,
   --   .sellIdle, .bankExpand, .wait]
   show MeansKind.allInLadderOrder.findSome?
         (fun k => if fires k s then some k else none)

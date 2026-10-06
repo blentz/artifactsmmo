@@ -66,7 +66,7 @@ from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.goals.surrender_currency import SurrenderCurrencyGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
-from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal, tasks_coin_total
+from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.task_kills import TaskKillsGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
@@ -82,6 +82,7 @@ from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.requirement_projections import demand_set
 from artifactsmmo_cli.ai.shed_urgency import bank_shed_hoist, shed_urgency
 from artifactsmmo_cli.ai.task_batch import task_batch_size
+from artifactsmmo_cli.ai.task_coins import tasks_coin_total
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
@@ -423,13 +424,6 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
             return AcceptTaskGoal()
         code, tile = chosen
         return AcceptTaskGoal(taskmaster_location=tile, taskmaster_code=code)
-    if kind is MeansKind.TASK_EXCHANGE:
-        # ONE-batch semantics: capture the construction-time coin total so the
-        # goal is satisfied after a single exchange (initial - min_coins), not
-        # after draining every coin (which exceeded max_depth and stormed the
-        # planner budget).
-        return TaskExchangeGoal(min_coins=ctx.task_exchange_min_coins,
-                                initial_total=tasks_coin_total(state))
     if kind is MeansKind.BANK_EXPAND:
         return ExpandBankGoal(
             bank_accessible=ctx.bank_accessible,
@@ -643,7 +637,14 @@ def objective_step_goal(
         # dropped task has none.
         if low_yield_cancel_fires(state, game_data, history):
             return LowYieldCancelGoal()
-        if step.is_satisfied(state, game_data):
+        if tasks_coin_total(state) >= ctx.task_exchange_min_coins:
+            # c-2 #2 (was the TASK_EXCHANGE rung). ONE-batch semantics: the
+            # construction-time coin total makes the goal satisfied after a
+            # single exchange (initial - min_coins), not after draining every
+            # coin (which exceeded max_depth and stormed the planner budget).
+            return TaskExchangeGoal(min_coins=ctx.task_exchange_min_coins,
+                                    initial_total=tasks_coin_total(state))
+        if step.task_code is None or step.is_satisfied(state, game_data):
             return None
         return TaskKillsGoal(step.task_code, state.task_progress)
     return None

@@ -110,7 +110,6 @@ class MeansKind(Enum):
     TASK_CANCEL = "task_cancel"
     PURSUE_TASK = "pursue_task"
     ACCEPT_TASK = "accept_task"
-    TASK_EXCHANGE = "task_exchange"
     SELL_IDLE = "sell_idle"
     RECYCLE_SURPLUS = "recycle_surplus"
     BANK_EXPAND = "bank_expand"
@@ -220,7 +219,8 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
 )
 DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.PURSUE_TASK,
-    MeansKind.TASK_EXCHANGE,
+    # TASK_EXCHANGE was retired here in Phase 5-2c-iii-c-2: coins are exchanged
+    # by the task objective's own step (`ReachTaskOutcome`) on its turn.
     MeansKind.MAINTAIN_CONSUMABLES,  # prep heals for combat before idle housekeeping
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
@@ -234,10 +234,6 @@ DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.DRAIN_BANK_JUNK,
     MeansKind.WAIT,
 )
-
-
-def _tasks_coin_total(state: WorldState) -> int:
-    return state.inventory.get(TASKS_COIN_CODE, 0) + (state.bank_items or {}).get(TASKS_COIN_CODE, 0)
 
 
 def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
@@ -347,9 +343,6 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
             if state.skills.get(stats.crafting_skill, 1) >= stats.crafting_level:
                 return False  # craftable now → defer for gear chain
         return True
-
-    if kind is MeansKind.TASK_EXCHANGE:
-        return _tasks_coin_total(state) >= ctx.task_exchange_min_coins
 
     if kind is MeansKind.SELL_IDLE:
         return (used_fraction(state) < SELL_PRESSURE_FRACTION

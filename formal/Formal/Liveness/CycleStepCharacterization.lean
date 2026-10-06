@@ -104,7 +104,7 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
   | some k =>
     -- The remaining ladder slots: hpCritical, discardCritical, depositFull,
     -- discardHigh, claimPending, sellPressured, lowYieldCancel, taskCancel,
-    -- objectiveStep, pursueTask, acceptTask, taskExchange, sellIdle,
+    -- objectiveStep, pursueTask, acceptTask, sellIdle,
     -- bankExpand, wait.
     -- planFor maps each to a non-fight, non-completeTask action.
     cases k with
@@ -208,10 +208,6 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
     | acceptTask =>
       show (applyActionKind .acceptTask s).level = s.level
             ∧ (applyActionKind .acceptTask s).xp = s.xp
-      exact ⟨rfl, rfl⟩
-    | taskExchange =>
-      show (applyActionKind .taskExchange s).level = s.level
-            ∧ (applyActionKind .taskExchange s).xp = s.xp
       exact ⟨rfl, rfl⟩
     | sellIdle =>
       show (applyActionKind .npcSell s).level = s.level

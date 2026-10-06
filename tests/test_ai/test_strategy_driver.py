@@ -76,6 +76,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
+    ReachTaskOutcome,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
@@ -713,17 +714,24 @@ def test_map_means_accept_task():
     assert isinstance(map_means(MeansKind.ACCEPT_TASK, GameData(), _ctx(), make_state()), AcceptTaskGoal)
 
 
-def test_map_means_task_exchange():
-    g = map_means(MeansKind.TASK_EXCHANGE, GameData(), _ctx(task_exchange_min_coins=3), make_state())
+def test_the_task_objective_exchanges_coins():
+    """c-2 #2: the exchange is the task objective's step (was TASK_EXCHANGE)."""
+    state = make_state(inventory={"tasks_coin": 3})
+    g = objective_step_goal(ReachTaskOutcome(None), state, GameData(),
+                            _ctx(task_exchange_min_coins=3))
     assert isinstance(g, TaskExchangeGoal)
+    poor = make_state(inventory={"tasks_coin": 2})
+    assert objective_step_goal(ReachTaskOutcome(None), poor, GameData(),
+                               _ctx(task_exchange_min_coins=3)) is None
 
 
-def test_map_means_task_exchange_threads_initial_total():
-    """ONE-batch threading: map_means captures the construction-time
+def test_the_exchange_step_threads_initial_total():
+    """ONE-batch threading: the step captures the construction-time
     inventory+bank coin total, so the goal is satisfied after a single
     batch is spent (7 -> 4 with min 3), not only when fully drained."""
     state = make_state(inventory={"tasks_coin": 4}, bank_items={"tasks_coin": 3})
-    g = map_means(MeansKind.TASK_EXCHANGE, GameData(), _ctx(task_exchange_min_coins=3), state)
+    g = objective_step_goal(ReachTaskOutcome(None), state, GameData(),
+                            _ctx(task_exchange_min_coins=3))
     assert g.is_satisfied(state) is False
     one_batch_spent = make_state(inventory={"tasks_coin": 1},
                                  bank_items={"tasks_coin": 3})

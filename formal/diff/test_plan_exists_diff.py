@@ -21,7 +21,7 @@ In scope (8 means with single-action plans, mirroring Lean PlanExists):
   * CLAIM_PENDING        → witness [ClaimPendingItemAction]
   * COMPLETE_TASK        → witness [CompleteTaskAction]
   * ACCEPT_TASK          → witness [AcceptTaskAction]
-  * TASK_EXCHANGE        → witness [TaskExchangeAction]
+  * (TASK_EXCHANGE retired in Phase 5-2c-iii-c-2: the task objective's step)
   * PURSUE_TASK (items)  → witness [TaskTradeAction]
   * WAIT                 → witness [WaitAction] (StrategyArbiter short-circuit)
 
@@ -78,14 +78,16 @@ from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.strategy_driver import map_guard, map_means
+from artifactsmmo_cli.ai.strategy_driver import map_guard, map_means, objective_step_goal
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
 from artifactsmmo_cli.ai.tiers.guards import _fires as _guard_fires
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.tiers.means import _fires as _means_fires
+from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.sim.production_ladder import LadderMeans
 
@@ -285,19 +287,6 @@ def _state_ACCEPT_TASK():
     return state, ctx, gd, AcceptTaskAction, LadderMeans.ACCEPT_TASK
 
 
-def _state_TASK_EXCHANGE():
-    gd = _base_game_data()
-    # Need >= min_coins of tasks_coin in inventory; min_coins=1 by default.
-    state = _base_state(
-        inventory={TASKS_COIN_CODE: 3},
-        inventory_max=20,
-    )
-    ctx = _ctx(task_exchange_min_coins=1)
-    assert _means_fires(MeansKind.TASK_EXCHANGE, state, gd, None, ctx), \
-        "TASK_EXCHANGE firing precondition not met"
-    return state, ctx, gd, TaskExchangeAction, LadderMeans.TASK_EXCHANGE
-
-
 def _state_PURSUE_TASK():
     gd = _base_game_data()
     # items task in progress; inventory has the task item so TaskTradeAction
@@ -340,7 +329,6 @@ IN_SCOPE_CASES: dict[LadderMeans, Callable] = {
     LadderMeans.CLAIM_PENDING: _state_CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK: _state_COMPLETE_TASK,
     LadderMeans.ACCEPT_TASK: _state_ACCEPT_TASK,
-    LadderMeans.TASK_EXCHANGE: _state_TASK_EXCHANGE,
     LadderMeans.PURSUE_TASK: _state_PURSUE_TASK,
     LadderMeans.WAIT: _state_WAIT,
 }
@@ -356,7 +344,6 @@ MEANS_KINDS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.CLAIM_PENDING: MeansKind.CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK: MeansKind.COMPLETE_TASK,
     LadderMeans.ACCEPT_TASK: MeansKind.ACCEPT_TASK,
-    LadderMeans.TASK_EXCHANGE: MeansKind.TASK_EXCHANGE,
     LadderMeans.PURSUE_TASK: MeansKind.PURSUE_TASK,
     LadderMeans.WAIT: MeansKind.WAIT,
 }
@@ -480,11 +467,12 @@ def test_task_exchange_storm_state_plans_short() -> None:
         inventory_max=20,
     )
     ctx = _ctx(task_exchange_min_coins=1)
-    assert _means_fires(MeansKind.TASK_EXCHANGE, state, gd, None, ctx), \
-        "TASK_EXCHANGE firing precondition not met"
+    # c-2 #2: the exchange is the task objective's step (was the TASK_EXCHANGE
+    # rung); with no task held the objective is `ReachTaskOutcome(None)`.
     player = _build_player_with_data(gd, state, task_exchange_min_coins=1)
     actions = _build_actions(player)
-    goal = map_means(MeansKind.TASK_EXCHANGE, gd, ctx, state)
+    goal = objective_step_goal(ReachTaskOutcome(None), state, gd, ctx)
+    assert isinstance(goal, TaskExchangeGoal)
     planner = GOAPPlanner()
     plan = planner.plan(state, goal, actions, gd, None)
     assert plan, (
@@ -529,7 +517,6 @@ def test_in_scope_covers_at_least_8_means() -> None:
         LadderMeans.CLAIM_PENDING,
         LadderMeans.COMPLETE_TASK,
         LadderMeans.ACCEPT_TASK,
-        LadderMeans.TASK_EXCHANGE,
         LadderMeans.PURSUE_TASK,
         LadderMeans.WAIT,
     }

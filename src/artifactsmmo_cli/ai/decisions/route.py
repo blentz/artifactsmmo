@@ -178,6 +178,8 @@ TOTAL over `META_GOAL_KINDS` since wave 6. The two climbs return
         # farm and a level grind are both quoted in (`acquisition_cost.
         # _drop_actions`): a fight plus its forced rests. A task that is no
         # longer held or already met costs nothing more.
+        if goal.task_code is None:
+            return 1  # no task held: the step is one exchange
         if goal.is_satisfied(state, game_data):
             return 0
         per_kill = cycles_per_kill(

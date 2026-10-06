@@ -59,7 +59,6 @@ _MEANS_REPR: dict[MeansKind, str] = {
     MeansKind.TASK_CANCEL: "TaskCancel",
     MeansKind.PURSUE_TASK: "PursueTask",
     MeansKind.ACCEPT_TASK: "AcceptTask",
-    MeansKind.TASK_EXCHANGE: "TaskExchange",
     MeansKind.BANK_EXPAND: "ExpandBank",
     MeansKind.WAIT: "Wait",
     MeansKind.MAINTAIN_CONSUMABLES: "MaintainConsumables",

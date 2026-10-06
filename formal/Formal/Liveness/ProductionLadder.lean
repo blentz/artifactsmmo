@@ -261,11 +261,6 @@ def pursueTaskFires (s : State) : Bool :=
 def acceptTaskFires (s : State) : Bool :=
   decide (s.taskLifecyclePhase = .none) && s.drawOwed
 
-/-- TASK_EXCHANGE. Mirrors `means.py:95-96`:
-      tasks_coin_total ≥ ctx.task_exchange_min_coins -/
-def taskExchangeFires (s : State) : Bool :=
-  decide (s.taskCoinsTotal ≥ s.taskExchangeMinCoins)
-
 /-- SELL_IDLE. Mirrors `means.py:98-99`:
       used/max < 0.85 ∧ has_sellable -/
 def sellIdleFires (s : State) : Bool :=
@@ -449,7 +444,6 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .objectiveStep    => objectiveStepFires s
   | .pursueTask       => pursueTaskFires s
   | .acceptTask       => acceptTaskFires s
-  | .taskExchange     => taskExchangeFires s
   | .maintainConsumables => maintainConsumablesFires s
   | .supplyBank       => supplyBankFires s
   | .currencyTurnIn   => currencyTurnInFires s

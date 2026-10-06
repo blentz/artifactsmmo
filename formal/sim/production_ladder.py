@@ -61,7 +61,6 @@ class LadderMeans(Enum):
     OBJECTIVE_STEP = "objective_step"
     PURSUE_TASK = "pursue_task"
     ACCEPT_TASK = "accept_task"
-    TASK_EXCHANGE = "task_exchange"
     MAINTAIN_CONSUMABLES = "maintain_consumables"
     SELL_IDLE = "sell_idle"
     RECYCLE_SURPLUS = "recycle_surplus"
@@ -98,7 +97,6 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.ACCEPT_TASK,
     LadderMeans.OBJECTIVE_STEP,
     LadderMeans.PURSUE_TASK,
-    LadderMeans.TASK_EXCHANGE,
     LadderMeans.MAINTAIN_CONSUMABLES,
     LadderMeans.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS,
@@ -130,7 +128,6 @@ _MEANS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.TASK_CANCEL: MeansKind.TASK_CANCEL,
     LadderMeans.PURSUE_TASK: MeansKind.PURSUE_TASK,
     LadderMeans.ACCEPT_TASK: MeansKind.ACCEPT_TASK,
-    LadderMeans.TASK_EXCHANGE: MeansKind.TASK_EXCHANGE,
     LadderMeans.MAINTAIN_CONSUMABLES: MeansKind.MAINTAIN_CONSUMABLES,
     LadderMeans.SUPPLY_BANK: MeansKind.SUPPLY_BANK,
     LadderMeans.CURRENCY_TURNIN: MeansKind.CURRENCY_TURNIN,
@@ -172,7 +169,6 @@ assert COLLECT_REWARD_ORDER == (
 
 assert DISCRETIONARY_ORDER == (
     MeansKind.PURSUE_TASK,
-    MeansKind.TASK_EXCHANGE,
     MeansKind.MAINTAIN_CONSUMABLES,
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,

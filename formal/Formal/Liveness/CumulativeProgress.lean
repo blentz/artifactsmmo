@@ -37,11 +37,11 @@
   restriction by augmenting the state with a "task lifecycle counter"
   that absorbs the lifecycle transitions.
 
-  The 12 in-scope means (`progressMeans`) are:
+  The 11 in-scope means (`progressMeans`) are:
     .hpCritical, .bankUnlock, .reachUnlockLevel,
     .discardCritical, .depositFull, .discardHigh,
     .claimPending, .sellPressured, .objectiveStep,
-    .taskExchange, .sellIdle, .bankExpand.
+    .sellIdle, .bankExpand.
 
   The 5 out-of-scope means (deferred to 23c, surfaced as restriction):
     .completeTask, .lowYieldCancel, .taskCancel, .pursueTask, .acceptTask.
@@ -64,7 +64,7 @@
      10. sellableFlag               (NEW — sellPressured/sellIdle)
      11. pendingItemsFlag           (NEW — claimPending)
      12. objectiveStepFlag          (NEW — objectiveStep)
-     13. taskCoinsTotal             (NEW — taskExchange, gated by hex)
+     13. taskCoinsTotal             (NEW — no ladder rung descends it since TASK_EXCHANGE retired)
      14. gold                       (NEW — bankExpand, gated by nextExpansionCost > 0)
 
   Slots 1-6 match the existing Phase-19 measure verbatim. Adding slots
@@ -161,7 +161,7 @@ def progressMeans : List MeansKind :=
   [.hpCritical, .bankUnlock, .reachUnlockLevel,
    .discardCritical, .craftRelief, .depositFull, .discardHigh,
    .claimPending, .sellPressured, .objectiveStep,
-   .taskExchange, .sellIdle, .bankExpand]
+   .sellIdle, .bankExpand]
 
 /-! ## Extended lex measure (Phase 23b)
 
@@ -688,9 +688,6 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | acceptTask =>
       show (applyActionKind .acceptTask s).level ≥ s.level
       simp [applyActionKind]
-    | taskExchange =>
-      show (applyActionKind .taskExchange s).level ≥ s.level
-      simp [applyActionKind]
     | sellIdle =>
       show (applyActionKind .npcSell s).level ≥ s.level
       simp [applyActionKind]
@@ -730,7 +727,6 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
     (s : State) (k : MeansKind)
     (hk : productionLadder s = some k)
     (hmem : k ∈ progressMeans)
-    (hex : k = .taskExchange → s.taskExchangeMinCoins > 0)
     (hbe : k = .bankExpand → s.nextExpansionCost > 0)
     (hperc : k = .bankUnlock ∨ k = .reachUnlockLevel
               ∨ (k = .objectiveStep ∧ s.objectiveStepIsFight = true) →
@@ -1030,31 +1026,6 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
               < b2n s.objectiveStepFires
         show b2n false < b2n s.objectiveStepFires
         rw [hfires]; decide
-  | taskExchange =>
-    right
-    have hcs : cycleStep s = applyActionKind .taskExchange s := by
-      unfold cycleStep; rw [hk]; rfl
-    rw [hcs]
-    have hmin : s.taskExchangeMinCoins > 0 := hex rfl
-    simp only [fires, taskExchangeFires, decide_eq_true_eq] at hfires
-    refine ⟨rfl, ?_⟩
-    refine extLt_of_taskCoins_dec ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · show ({s with taskCoinsTotal := s.taskCoinsTotal - s.taskExchangeMinCoins}
-              : State).taskCoinsTotal < s.taskCoinsTotal
-      show s.taskCoinsTotal - s.taskExchangeMinCoins < s.taskCoinsTotal
-      omega
   | sellIdle =>
     right
     have hcs : cycleStep s = applyActionKind .npcSell s := by

@@ -98,18 +98,24 @@ class ReachSkillLevel:
 
 @dataclass(frozen=True)
 class ReachTaskOutcome:
-    """The held monsters task `task_code` reaches its count (Phase 5-2c-iii-c).
+    """The task objective (Phase 5-2c-iii-c): the held task `task_code`
+    reaching its outcome, or — `task_code` None — the task economy with no task
+    held (earned coins to exchange).
 
-    A root ALTERNATIVE, offered by `resolve_root` after the trunk while the task
-    is held, unmet and its monster winnable, so the turn order (`rotate`) gives
-    the task its own turns. Its step is `TaskKillsGoal`. Satisfied the moment
-    the task is no longer this one or its count is met — the turn-in is the
-    COMPLETE_TASK rung's, until 5-2c-iii-c-2 folds it in.
+    A root ALTERNATIVE, offered by `resolve_root` after the trunk when it has a
+    step, so the turn order (`rotate`) gives the task its own turns. Its step
+    (`objective_step_goal`): cancel a data-confirmed poor task, exchange coins,
+    else one more kill (`TaskKillsGoal`). A held task is satisfied the moment
+    it is no longer this one or its count is met — the turn-in is the
+    COMPLETE_TASK rung's until c-2 folds it in. With no task held it is never
+    satisfied: it is offered only while its exchange is due.
     """
 
-    task_code: str
+    task_code: str | None
 
     def is_satisfied(self, state: WorldState, game_data: GameData) -> bool:
+        if self.task_code is None:
+            return False
         return state.task_code != self.task_code or state.task_progress >= state.task_total
 
 

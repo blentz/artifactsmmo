@@ -6868,11 +6868,6 @@ LADDER_MEANS_FIRES_MUTATIONS = [
         "SELL_PRESSURE_FRACTION = 0.95",
     ),
     (
-        "ladder/means: TASK_EXCHANGE coin comparator >= -> > (boundary coins==min leaks)",
-        "        return _tasks_coin_total(state) >= ctx.task_exchange_min_coins",
-        "        return _tasks_coin_total(state) > ctx.task_exchange_min_coins",
-    ),
-    (
         "ladder/means: SELL_IDLE fill comparator < -> <= (boundary 0.85 leaks vs sellPressured)",
         "        return (used_fraction(state) < SELL_PRESSURE_FRACTION\n"
         "                and sellable_tradeable_now(state, game_data))",
@@ -7241,6 +7236,12 @@ FIGHT_APPLICABILITY_MUTATIONS = [
 # The task objective (Phase 5-2c-iii-c-1). Killed by
 # tests/test_ai/test_task_objective.py.
 TASK_ROOT_MUTATIONS = [
+    ("root: exchange coin comparator >= -> > (boundary coins==min, was the TASK_EXCHANGE rung's)",
+     "    if tasks_coin_total(state) >= ctx.task_exchange_min_coins:\n        # c-2 #2",
+     "    if tasks_coin_total(state) > ctx.task_exchange_min_coins:\n        # c-2 #2"),
+    ("root: earned coins never offer the task objective (c-2 exchange fold)",
+     "    if tasks_coin_total(state) >= ctx.task_exchange_min_coins:\n        # c-2 #2",
+     "    if False:\n        # c-2 #2"),
     ("root: a poor task is never offered for its cancel (c-2 low-yield fold)",
      "    if state.task_code and _route.task_pays_less(state, game_data, history):\n",
      "    if False:\n"),
@@ -7255,6 +7256,9 @@ TASK_ROOT_MUTATIONS = [
      "            ):\n        return None\n"),
 ]
 TASK_STEP_MUTATIONS = [
+    ("step: earned coins are never exchanged (c-2 exchange fold)",
+     "        if tasks_coin_total(state) >= ctx.task_exchange_min_coins:\n            # c-2 #2",
+     "        if False:\n            # c-2 #2"),
     ("step: a poor task is worked, not cancelled (c-2 low-yield fold)",
      "        if low_yield_cancel_fires(state, game_data, history):\n            return LowYieldCancelGoal()\n",
      ""),

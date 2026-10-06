@@ -114,30 +114,6 @@ theorem plan_exists_for_acceptTask :
   simp [planAchieves, applyActionKind, fires,
         acceptTaskFires]
 
-/-- `[.taskExchange]` clears `taskExchange` PROVIDED the per-exchange
-    minimum coin cost is positive AND the current coin total is less
-    than two exchange's worth. Production's `TaskExchangeAction.apply`
-    consumes `min_coins` task coins per exchange; the firing predicate
-    is `taskCoinsTotal ≥ taskExchangeMinCoins`, so a single exchange
-    drops the total below `min` exactly when `total < 2 * min`.
-
-    Honest disclosure: with `taskCoinsTotal ≥ 2 * min`, the planner
-    needs multiple exchanges (deferred to Phase 21b's multi-step
-    machinery). With `min = 0`, the firing predicate is degenerate
-    (always true) and no number of exchanges clears it; the positive-
-    `min` precondition rules this out (HTTP 478 on `min = 0` would be a
-    server bug). -/
-theorem plan_exists_for_taskExchange :
-    ∀ s, fires .taskExchange s = true →
-      0 < s.taskExchangeMinCoins →
-      s.taskCoinsTotal < 2 * s.taskExchangeMinCoins →
-      ∃ p : Plan, planAchieves p s .taskExchange := by
-  intro s hfire hmin hbound
-  refine ⟨[.taskExchange], ?_⟩
-  simp [planAchieves, applyActionKind, fires,
-        taskExchangeFires] at hfire ⊢
-  omega
-
 /-- `[.taskCancel]` clears `taskCancel`. The opaque Bool
     `taskCancelFires` is reset to `false` by the apply, mirroring
     production's post-cancel state observation. -/

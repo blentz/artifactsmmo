@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.decisions import root as root_mod
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
+from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.task_kills import PRIORITY, TaskKillsGoal
 from artifactsmmo_cli.ai.plan_tree import _label
 from artifactsmmo_cli.ai.planner import GOAPPlanner
@@ -163,3 +164,39 @@ class TestLowYieldCancelFold:
         with patch.object(driver_mod, "low_yield_cancel_fires", return_value=True):
             goal = objective_step_goal(node, _held(3), _gd(), NO_PROFILE_CONTEXT)
         assert isinstance(goal, LowYieldCancelGoal)
+
+
+class TestExchangeFold:
+    """Phase 5-2c-iii-c-2 #2: TASK_EXCHANGE retired; earned coins are the task
+    objective's to exchange, task held or not."""
+
+    def test_coins_offer_the_objective_with_or_without_a_task(self) -> None:
+        from_ctx = dataclasses.replace(NO_PROFILE_CONTEXT, task_exchange_min_coins=3)
+        rich = dataclasses.replace(make_state(level=12), inventory={"tasks_coin": 3})
+        assert root_mod._task_root(rich, _gd(), from_ctx, None) == ReachTaskOutcome(None)
+        held = dataclasses.replace(_held(task_type="items"), inventory={"tasks_coin": 3})
+        assert root_mod._task_root(held, _gd(), from_ctx, None) == ReachTaskOutcome("chicken")
+        poor = dataclasses.replace(make_state(level=12), inventory={"tasks_coin": 2})
+        assert root_mod._task_root(poor, _gd(), from_ctx, None) is None
+
+    def test_the_offline_context_offers_no_exchange_on_zero_coins(self) -> None:
+        """`NO_PROFILE_CONTEXT`'s floor is one coin, production's own default:
+        a zero floor read `coins >= 0` and fired for every coinless character
+        (44 of 44 offline scenarios, before 2026-08)."""
+        assert root_mod._task_root(make_state(level=12), _gd(), NO_PROFILE_CONTEXT, None) is None
+
+    def test_no_task_and_no_exchange_has_no_step(self) -> None:
+        assert objective_step_goal(ReachTaskOutcome(None), make_state(level=12), _gd(),
+                                   NO_PROFILE_CONTEXT) is None
+        assert not ReachTaskOutcome(None).is_satisfied(make_state(level=12), _gd())
+
+    def test_the_no_task_objective_prices_one_exchange_and_labels_coins(self) -> None:
+        node = ReachTaskOutcome(None)
+        assert route_price(node, make_state(level=12), _gd(), NO_PROFILE_CONTEXT, None) == 1
+        assert _label(node) == ("task (coins)", "task")
+
+    def test_the_step_is_the_exchange(self) -> None:
+        ctx = dataclasses.replace(NO_PROFILE_CONTEXT, task_exchange_min_coins=3)
+        rich = dataclasses.replace(_held(3), inventory={"tasks_coin": 3})
+        goal = objective_step_goal(ReachTaskOutcome("chicken"), rich, _gd(), ctx)
+        assert isinstance(goal, TaskExchangeGoal)

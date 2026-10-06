@@ -39,7 +39,6 @@ WITNESS: dict[LadderMeans, list[str]] = {
     # OBJECTIVE_STEP: synthetic — skipped in the operational differential.
     LadderMeans.PURSUE_TASK: ["taskTrade"],
     LadderMeans.ACCEPT_TASK: ["acceptTask"],
-    LadderMeans.TASK_EXCHANGE: ["taskExchange"],
     LadderMeans.SELL_IDLE: ["npcSell"],
     LadderMeans.BANK_EXPAND: ["buyBankExpansion"],
     LadderMeans.WAIT: ["wait"],

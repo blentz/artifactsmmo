@@ -74,7 +74,7 @@ def _label(node: MetaGoal) -> tuple[str, str]:
         # agree on what kind of root this is.
         return f"{node.skill} → {node.level}", "skill"
     if isinstance(node, ReachTaskOutcome):
-        return f"task {node.task_code}", "task"
+        return f"task {node.task_code or '(coins)'}", "task"
     return short_root(repr(node)), "obtain"
 
 

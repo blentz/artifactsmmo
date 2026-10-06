@@ -492,18 +492,6 @@ theorem _fires_acceptTask_implies_acceptTask_positive
       · simp [hp0] at hderive
       · simp [hp0] at hderive
 
-/-- TASK_EXCHANGE: `_fires .taskExchange s` ⇒
-    `taskExchangeValue (false) = 22 > 0`. Production `_fires` is the
-    coins-threshold predicate; we pass `satisfied=false` (Phase-18's
-    routing only depends on satisfied, which production's firing
-    equivalently flips off when the threshold is met). -/
-theorem _fires_taskExchange_implies_taskExchange_positive (s : State) :
-    fires .taskExchange s = true →
-    taskExchangeValue false > 0 := by
-  intro _
-  unfold taskExchangeValue
-  simp
-
 /-- SELL_IDLE: `_fires .sellIdle s` ⇒ `sellInventoryValue > 0`
     (activeWindow=true branch yields ≥ sellSeizeWindowValue = 60). -/
 theorem _fires_sellIdle_implies_sellInventory_positive (s : State) :
