@@ -13,8 +13,9 @@ Brick D2 of `docs/PLAN_residual_closure.md`. Three refinements over
    production's actual behaviour in the one branch the F-tower
    over-approximated (residual 3). `itemsTaskDeferActive` is a state-carried
    production observation (opaque-Bool discipline); the gate's other two
-   conjuncts (`pursueTaskFires`, `taskProgress < taskTotal`) make it
-   self-certifying: they are exactly the facts the pursueTask descent needs.
+   conjuncts (`Plan.phaseActive`, `taskProgress < taskTotal`) make it
+   self-certifying. (Until Phase 5-2c-iii-c-2 #4 they were the facts the
+   PURSUE_TASK descent needed; that rung is retired.)
 2. **Mint-driven chore re-arm** (`choreRearm` / `rearmOnMint`, Phase A1): EVERY
    cycle that dispatches a `.fight` re-arms ALL 7 chore latches (worst case of
    loot), and the two MINTING chores re-arm the latches lex-below their own
@@ -42,11 +43,11 @@ open Formal.Liveness.InventoryDynamics
     AND the facts making the window self-certifying for the descent proof.
     Production (`test_objectivestep_arming_diff.py`): defer ⟺ `bootstrap_gap >
     4 ∧ items-task active` — an active items task means phase ∈
-    {accepted, inProgress} (`pursueTaskFires`) with work remaining
+    {accepted, inProgress} (`Plan.phaseActive`) with work remaining
     (`taskProgress < taskTotal`), so the conjuncts under-approximate nothing. -/
 def deferGate (s : State) : Bool :=
   s.itemsTaskDeferActive
-  && pursueTaskFires s
+  && Formal.Liveness.Plan.phaseActive s
   && decide (s.taskProgress < s.taskTotal)
 
 /-- Defer-gated perception: arm the combat objective below the cap ONLY outside

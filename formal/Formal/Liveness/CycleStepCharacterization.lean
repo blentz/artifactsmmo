@@ -104,7 +104,7 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
   | some k =>
     -- The remaining ladder slots: hpCritical, discardCritical, depositFull,
     -- discardHigh, claimPending, sellPressured, lowYieldCancel, taskCancel,
-    -- objectiveStep, pursueTask, sellIdle,
+    -- objectiveStep, sellIdle,
     -- bankExpand, wait.
     -- planFor maps each to a non-fight, non-completeTask action.
     cases k with
@@ -194,17 +194,17 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
     | objectiveStep =>
       have hisf' : s.objectiveStepIsFight = false := hof hpl
       show (match (if s.objectiveStepIsFight then [ActionKind.fight]
-                    else [ActionKind.objectiveStep]) with
+                    else if s.objectiveStepFires then [ActionKind.objectiveStep]
+                    else [ActionKind.taskTrade]) with
               | [] => s | a :: _ => applyActionKind a s).level = s.level
             ∧ (match (if s.objectiveStepIsFight then [ActionKind.fight]
-                    else [ActionKind.objectiveStep]) with
+                    else if s.objectiveStepFires then [ActionKind.objectiveStep]
+                    else [ActionKind.taskTrade]) with
               | [] => s | a :: _ => applyActionKind a s).xp = s.xp
       rw [if_neg (by simp [hisf'])]
-      exact ⟨rfl, rfl⟩
-    | pursueTask =>
-      show (applyActionKind .taskTrade s).level = s.level
-            ∧ (applyActionKind .taskTrade s).xp = s.xp
-      exact ⟨rfl, rfl⟩
+      by_cases hosf : s.objectiveStepFires = true
+      · rw [if_pos hosf]; exact ⟨rfl, rfl⟩
+      · rw [if_neg hosf]; exact ⟨rfl, rfl⟩
     | sellIdle =>
       show (applyActionKind .npcSell s).level = s.level
             ∧ (applyActionKind .npcSell s).xp = s.xp

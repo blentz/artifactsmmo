@@ -963,6 +963,10 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
         # c-2 #2 (was the TASK_EXCHANGE rung): earned coins are the task
         # objective's to exchange, task held or not.
         return ReachTaskOutcome(state.task_code or None)
+    if state.task_type == "items" and _route.task_worth_pursuing(state, game_data, history):
+        # c-2 #4 (was the PURSUE_TASK rung): the items task the projection says
+        # to pursue is worked on the task objective's turn.
+        return ReachTaskOutcome(state.task_code)
     if (state.task_type != "monsters" or not state.task_code
             or state.task_progress >= state.task_total):
         return None

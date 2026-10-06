@@ -146,7 +146,7 @@ def has_structural_upgrade(state: WorldState, game_data: GameData,
 # `_skill_gate_levels` and `_synergy_map`'s private `_TRUNK_DEMAND` datum. Each
 # had zero production callers: the only occurrence of every one of those names
 # in `src/` was its own definition. `tiers/synergy_core` STAYS — it has live
-# non-ranking consumers at `tiers/taskmaster_choice.py` and `tiers/means_worth.py`.
+# non-ranking consumer at `tiers/taskmaster_choice.py` (`tiers/means_worth.py` retired).
 
 
 def _resolution_rows(state: WorldState, game_data: GameData,

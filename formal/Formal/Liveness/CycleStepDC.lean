@@ -417,8 +417,9 @@ def planForC : MeansKind → State → Plan
       -- FIGHTS (+10 char xp / rollover via `applyActionKind .fight`) — the
       -- model's faithful general leveling path. Otherwise the synthetic
       -- placeholder clears `objectiveStepFires` (legacy default: isFight=false).
-      if s.objectiveStepIsFight then [.fight] else [.objectiveStep]
-  | .pursueTask       , _ => [.taskTrade]
+      -- Phase 5-2c-iii-c-2 #4: fired only by a held task ⇒ the task work.
+      if s.objectiveStepIsFight then [.fight]
+      else if s.objectiveStepFires then [.objectiveStep] else [.taskTrade]
   | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
   | .supplyBank       , _ => [.gather]  -- 2026-08-01: produce for a sibling
   | .currencyTurnIn   , _ => [.npcBuy]  -- 2026-08-16: fleet-currency turn-in

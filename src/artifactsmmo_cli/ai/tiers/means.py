@@ -22,7 +22,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.task_alignment import task_advances_progression
-from artifactsmmo_cli.ai.task_decision import PIVOT, PURSUE, task_decision
+from artifactsmmo_cli.ai.task_decision import PIVOT, task_decision
 from artifactsmmo_cli.ai.task_horizon import HORIZON_OUT_OF_REACH, resolve_task_horizon
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import (
@@ -108,7 +108,6 @@ class MeansKind(Enum):
     COMPLETE_TASK = "complete_task"
     SELL_PRESSURED = "sell_pressured"
     TASK_CANCEL = "task_cancel"
-    PURSUE_TASK = "pursue_task"
     SELL_IDLE = "sell_idle"
     RECYCLE_SURPLUS = "recycle_surplus"
     BANK_EXPAND = "bank_expand"
@@ -202,7 +201,8 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     # ruling that no task is drawn until the objective has its turn.
 )
 DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
-    MeansKind.PURSUE_TASK,
+    # PURSUE_TASK was retired here in Phase 5-2c-iii-c-2 #4: an items task is
+    # worked by the task objective's own step (`ReachTaskOutcome`) on its turn.
     # TASK_EXCHANGE was retired here in Phase 5-2c-iii-c-2: coins are exchanged
     # by the task objective's own step (`ReachTaskOutcome`) on its turn.
     MeansKind.MAINTAIN_CONSUMABLES,  # prep heals for combat before idle housekeeping
@@ -282,12 +282,6 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         return (history is not None
                 and task_decision(state, game_data, history) == PIVOT)
 
-    if kind is MeansKind.PURSUE_TASK:
-        return (state.task_type == "items"
-                and bool(state.task_code) and state.task_total > 0
-                and state.task_progress < state.task_total
-                and history is not None
-                and task_decision(state, game_data, history) == PURSUE)
 
 
     if kind is MeansKind.SELL_IDLE:

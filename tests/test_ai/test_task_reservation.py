@@ -8,6 +8,8 @@ worth-suppressed for items tasks — it only runs via the bypass pass), and
 Craft(copper_helmet) ate 6 bars. Task restarted from zero, forever.
 """
 
+from unittest.mock import patch
+
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -16,7 +18,6 @@ from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.planner import PlanStats
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
-from artifactsmmo_cli.ai.tiers.means import MeansKind
 from tests.test_ai.fixtures import make_state
 
 
@@ -180,13 +181,18 @@ def _arbiter() -> StrategyArbiter:
     return StrategyArbiter(_TrivialPlanner(), history=None)
 
 
+def _suppress(goal, state):  # type: ignore[no-untyped-def]
+    """The guard while the held items task is being worked (`pursue_due`)."""
+    with patch("artifactsmmo_cli.ai.strategy_driver.pursue_due", return_value=True):
+        return _arbiter()._suppress_step_for_task(goal, state, _gd())
+
+
 def test_suppress_task_complete_allows_step():
     """remaining == 0 => the reservation is inert and the step passes."""
     state = _task_state(task_progress=11)
     goal = GatherMaterialsGoal(target_item="copper_helmet",
                                needed={"copper_helmet": 1})
-    out = _arbiter()._suppress_step_for_task(
-        goal, [MeansKind.PURSUE_TASK], state, _gd())
+    out = _suppress(goal, state)
     assert out is goal
 
 
@@ -196,8 +202,7 @@ def test_suppress_upgrade_equipment_consuming_reserved_inputs():
     state = _task_state()
     goal = UpgradeEquipmentGoal(initial_equipment=state.equipment,
                                 committed_target=("copper_helmet", "helmet_slot"))
-    out = _arbiter()._suppress_step_for_task(
-        goal, [MeansKind.PURSUE_TASK], state, _gd())
+    out = _suppress(goal, state)
     assert out is None
 
 
@@ -207,8 +212,7 @@ def test_owned_upgrade_target_is_one_action_equip_never_deferred():
     state = _task_state(inventory={"copper_bar": 5, "copper_helmet": 1})
     goal = UpgradeEquipmentGoal(initial_equipment=state.equipment,
                                 committed_target=("copper_helmet", "helmet_slot"))
-    out = _arbiter()._suppress_step_for_task(
-        goal, [MeansKind.PURSUE_TASK], state, _gd())
+    out = _suppress(goal, state)
     assert out is goal
 
 
@@ -216,8 +220,7 @@ def test_uncommitted_upgrade_equipment_passes():
     """No committed target => no known consumption => step passes."""
     state = _task_state()
     goal = UpgradeEquipmentGoal(initial_equipment=state.equipment)
-    out = _arbiter()._suppress_step_for_task(
-        goal, [MeansKind.PURSUE_TASK], state, _gd())
+    out = _suppress(goal, state)
     assert out is goal
 
 
@@ -226,28 +229,36 @@ def test_recipeless_committed_target_passes():
     state = _task_state()
     goal = UpgradeEquipmentGoal(initial_equipment=state.equipment,
                                 committed_target=("copper_ore", "helmet_slot"))
-    out = _arbiter()._suppress_step_for_task(
-        goal, [MeansKind.PURSUE_TASK], state, _gd())
+    out = _suppress(goal, state)
     assert out is goal
 
 
-def test_trade_ready_clause_still_fires_on_surplus():
-    """With SURPLUS bars (reservation passes) the pre-existing trade-ready
-    rule still defers a gather targeting the task item itself: task 20/21,
-    2 bars held (demand 1) — trade now instead of gathering more."""
+def test_a_surplus_gather_of_the_task_item_passes():
+    """With SURPLUS bars the reservation passes, and nothing else defers the
+    step any more: the trade-ready deferral existed only so the retired
+    PURSUE_TASK rung could win positionally (USER, Phase 5-2c-iii-c-2 #4), and
+    the task objective now trades on its own turn."""
     state = _task_state(task_progress=20, task_total=21,
                         inventory={"copper_bar": 2})
     goal = GatherMaterialsGoal(target_item="copper_bar",
                                needed={"copper_bar": 8})
-    out = _arbiter()._suppress_step_for_task(
-        goal, [MeansKind.PURSUE_TASK], state, _gd())
-    assert out is None
+    out = _suppress(goal, state)
+    assert out is goal
 
 
 def test_non_consuming_goal_type_passes():
     """ReachSkill (no craft closure) is a sustained goal — never deferred."""
     state = _task_state()
     goal = ReachSkillGoal(skill_name="gearcrafting", target_level=5)
-    out = _arbiter()._suppress_step_for_task(
-        goal, [MeansKind.PURSUE_TASK], state, _gd())
+    out = _suppress(goal, state)
     assert out is goal
+
+
+
+def test_no_guard_while_the_task_is_not_being_worked():
+    """`pursue_due` False (no history here): the step passes untouched."""
+    state = _task_state()
+    goal = UpgradeEquipmentGoal(initial_equipment=state.equipment,
+                                committed_target=("copper_helmet", "helmet_slot"))
+    assert _arbiter()._suppress_step_for_task(goal, state, _gd()) is goal
+    assert _arbiter()._suppress_step_for_task(None, state, _gd()) is None

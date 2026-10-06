@@ -1037,7 +1037,109 @@ private theorem blockerPrefix_split :
     Formal.Liveness.UnconditionalDescent.blockerPrefix
       = gearScanPrefix ++ [.objectiveStep] := rfl
 
-/-! ## The two refresh-shaped rows: placeholder + pursueTask. -/
+/-! ## The refresh-shaped row: placeholder. (The `pursueTask` row retired with
+    the PURSUE_TASK rung, Phase 5-2c-iii-c-2 #4.) -/
+
+/-- The task-work branch of the non-combat objective step (Phase 5-2c-iii-c-2
+    #4, replacing the retired `pursueTask` row). The refreshed Bool is unarmed,
+    so the refresh was the identity (both arming branches set it) — below 50
+    that forces the defer gate, which certifies an active phase with work
+    remaining. The step fired on the held task and dispatches `.taskTrade`.
+    The gear layer may additionally close a gap (slot 2) or restore adequacy
+    (slot 3); otherwise `taskCycles` (slot 7) strictly descends. -/
+theorem descendsE_taskWork (s : State) (hArms : AdequateArmsFightAt s)
+    (hlvl : s.level < 50)
+    (hk : productionLadder (perceptionRefreshE s) = some .objectiveStep)
+    (hisF : (perceptionRefreshE s).objectiveStepIsFight = false)
+    (hofR : (perceptionRefreshE s).objectiveStepFires = false) :
+    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
+  have hcond : (decide (s.level < 50) && !(deferGate s)) = false := by
+    by_cases hc : (decide (s.level < 50) && !(deferGate s)) = true
+    · exfalso
+      by_cases hadq : s.loadoutAdequate = true
+      · have hgd : deferGate s = false := by
+          by_contra hne
+          rw [Bool.not_eq_false] at hne
+          simp [hne] at hc
+        have : (perceptionRefreshE s).objectiveStepFires = true := by
+          unfold perceptionRefreshE
+          rw [if_pos hc, if_pos hadq]
+          exact (hArms hlvl hgd hadq).1
+        rw [this] at hofR; cases hofR
+      · have : (perceptionRefreshE s).objectiveStepFires = true := by
+          unfold perceptionRefreshE
+          rw [if_pos hc, if_neg hadq]
+        rw [this] at hofR; cases hofR
+    · rwa [Bool.not_eq_true] at hc
+  have hgate : deferGate s = true := by
+    rcases Bool.and_eq_false_iff.mp hcond with h | h
+    · exact absurd (decide_eq_true_eq.mpr hlvl) (by rw [h]; exact Bool.false_ne_true)
+    · simpa using h
+  have heq : perceptionRefreshE s = s := by
+    unfold perceptionRefreshE
+    rw [if_neg (by rw [hcond]; exact Bool.false_ne_true)]
+  have hk0 : productionLadder s = some .objectiveStep := by rwa [heq] at hk
+  have his0 : s.objectiveStepIsFight = false := by rwa [heq] at hisF
+  have hof0 : s.objectiveStepFires = false := by rwa [heq] at hofR
+  have hg := hgate
+  simp only [deferGate, Bool.and_eq_true, decide_eq_true_eq] at hg
+  obtain ⟨⟨_hdefer, hactive⟩, hprog⟩ := hg
+  have hphase : s.taskLifecyclePhase ≠ .none := by
+    simp only [Formal.Liveness.Plan.phaseActive, Bool.or_eq_true,
+      decide_eq_true_eq] at hactive
+    rcases hactive with h | h <;> (rw [h]; intro hc; cases hc)
+  have htot : s.taskTotal ≠ 0 := by omega
+  rw [cycleStepE_some s hk, heq]
+  have hcs : cycleStep s = applyActionKind .taskTrade s := by
+    unfold cycleStep; rw [hk0]; simp [planFor, his0, hof0]
+  rw [hcs]
+  have hpost : (applyActionKind .taskTrade s).taskLifecyclePhase ≠ .none := by
+    simp only [applyActionKind]
+    rw [if_neg htot]
+    split <;> (intro hc; cases hc)
+  have hchain : fightLoss .objectiveStep s (partialClear .objectiveStep
+      (pressureDeltaD .objectiveStep s (applyActionKind .taskTrade s)))
+      = applyActionKind .taskTrade s := by
+    simp [fightLoss, partialClear, pressureDeltaD, dispatchesFight, his0]
+  rw [hchain]
+  have htIF : (applyActionKind .taskTrade s).objectiveStepIsFight = false := by
+    simp [applyActionKind, his0]
+  have htL : (applyActionKind .taskTrade s).level = s.level := by simp [applyActionKind]
+  have htG : (applyActionKind .taskTrade s).gearGap = s.gearGap := by simp [applyActionKind]
+  have htA : (applyActionKind .taskTrade s).loadoutAdequate = s.loadoutAdequate := by
+    simp [applyActionKind]
+  have hLV : (gearProgress .objectiveStep (applyActionKind .taskTrade s)).level = s.level := by
+    rw [gearProgress_level, htL]
+  rw [rearmE_eq_mint_of_no_levelup hLV]
+  rcases gearProgress_objectiveStep_cases _ htIF with hid | hlt | ⟨heq2, hadq, hpre⟩
+  · -- The gear layer moved nothing: the task trade descends `taskCycles`.
+    rw [hid]
+    have hmint : rearmOnMint .objectiveStep s (applyActionKind .taskTrade s)
+        = applyActionKind .taskTrade s := by
+      simp [rearmOnMint, dispatchesFight, his0]
+    rw [hmint]
+    apply eLt_of_taskCycles_dec
+    · simp [eMeasure, applyActionKind]
+    · simp [eMeasure, applyActionKind]
+    · simp [eMeasure, applyActionKind]
+    · simp [eMeasure, applyActionKind]
+    -- slot 5 (`drawOwedFlag`): untouched by this action
+    · simp [eMeasure, applyActionKind]
+    · simp [eMeasure, hpost, hphase]
+    · simp only [eMeasure, applyActionKind]
+      omega
+  · -- A gap closed: slot 2.
+    apply eLt_of_gearGap_dec
+    · simp [eMeasure, rearmOnMint_level, hLV]
+    · simp only [eMeasure, rearmOnMint_gearGap]
+      rw [htG] at hlt; exact hlt
+  · -- Gap was zero and adequacy is restored: slot 3, with slot 2 equal.
+    apply eLt_of_inadequacy_dec
+    · simp [eMeasure, rearmOnMint_level, hLV]
+    · simp only [eMeasure, rearmOnMint_gearGap]; rw [heq2, htG]
+    · simp only [eMeasure, rearmOnMint_adequate]
+      rw [hadq, ← htA, hpre]
+      simp [b2n]
 
 /-- A non-combat objective step. TWO ways to reach it since wave 4, and they
     descend at different slots.
@@ -1053,13 +1155,16 @@ private theorem blockerPrefix_split :
         (slot 2) or restores adequacy at zero (slot 3).
       * identity refresh   -> the stale arm: descends at `objectiveStepFlag`. -/
 theorem descendsE_placeholder (s : State) (hArms : AdequateArmsFightAt s)
-    (hGear : GearCycleMakesProgressAt s)
+    (hGear : GearCycleMakesProgressAt s) (hlvl : s.level < 50)
     (hk : productionLadder (perceptionRefreshE s) = some .objectiveStep)
     (hisF : (perceptionRefreshE s).objectiveStepIsFight = false) :
     eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
+  by_cases hofR : (perceptionRefreshE s).objectiveStepFires = true
+  swap
+  · exact descendsE_taskWork s hArms hlvl hk hisF (Bool.eq_false_iff.mpr hofR)
   have hcs : cycleStep (perceptionRefreshE s)
       = applyActionKind .objectiveStep (perceptionRefreshE s) := by
-    unfold cycleStep; rw [hk]; simp [planFor, hisF]
+    unfold cycleStep; rw [hk]; simp [planFor, hisF, hofR]
   -- The state `gearProgress` sees, and the two facts the split needs about it.
   have hIF : (fightLoss .objectiveStep (perceptionRefreshE s)
       (partialClear .objectiveStep
@@ -1149,12 +1254,11 @@ theorem descendsE_placeholder (s : State) (hArms : AdequateArmsFightAt s)
         rw [if_neg hc]
     have hk0 : productionLadder s = some .objectiveStep := by rwa [heq] at hk
     have his0 : s.objectiveStepIsFight = false := by rwa [heq] at hisF
-    have hfire := fires_of_ladder hk0
-    simp only [fires, ProductionLadder.objectiveStepFires] at hfire
+    have hfire : s.objectiveStepFires = true := by rwa [heq] at hofR
     rw [heq] at hid
     rw [cycleStepE_some s hk, heq]
     have hcs0 : cycleStep s = applyActionKind .objectiveStep s := by
-      unfold cycleStep; rw [hk0]; simp [planFor, his0]
+      unfold cycleStep; rw [hk0]; simp [planFor, his0, hfire]
     rw [hcs0, hid]
     apply eLt_of_objectiveStepFlag_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight,
@@ -1174,105 +1278,5 @@ theorem descendsE_placeholder (s : State) (hArms : AdequateArmsFightAt s)
     · simp only [eMeasure, rearmOnMint_adequate]
       rw [hadq, ← hAD, hpre]
       simp [b2n]
-
-/-- `pursueTask` is selectable only inside the defer window: outside it the
-    refresh arms the objective (adequate) or the gear latch (inadequate), and
-    BOTH outrank it. The gate certifies work remains — `taskCycles` descends. -/
-theorem descendsE_pursueTask (s : State) (hArms : AdequateArmsFightAt s) (hlvl : s.level < 50)
-    (hk : productionLadder (perceptionRefreshE s) = some .pursueTask) :
-    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
-  have hprefix_none :
-      (Formal.Liveness.UnconditionalDescent.blockerPrefix).findSome?
-        (fun k => if fires k (perceptionRefreshE s) then some k else none)
-      = none := by
-    have hk' := hk
-    unfold productionLadder at hk'
-    rw [Formal.Liveness.UnconditionalDescent.ladder_split,
-      List.findSome?_append] at hk'
-    cases hpre : (Formal.Liveness.UnconditionalDescent.blockerPrefix).findSome?
-        (fun k => if fires k (perceptionRefreshE s) then some k else none) with
-    | some k' =>
-        exfalso
-        rw [hpre] at hk'
-        simp only [Option.some_or] at hk'
-        have hk'' := Option.some.inj hk'
-        rw [List.findSome?_eq_some_iff] at hpre
-        obtain ⟨pre, x, suf, hl, hbody, _⟩ := hpre
-        by_cases hf : fires x (perceptionRefreshE s) = true
-        · simp only [hf, if_true] at hbody
-          have hx : x = .pursueTask := (Option.some.inj hbody).trans hk''
-          have hxmem : x ∈ Formal.Liveness.UnconditionalDescent.blockerPrefix := by
-            rw [hl]
-            exact List.mem_append_right _ List.mem_cons_self
-          rw [hx] at hxmem
-          revert hxmem
-          decide
-        · simp [hf] at hbody
-    | none => rfl
-  rw [List.findSome?_eq_none_iff] at hprefix_none
-  have hquietO : (perceptionRefreshE s).objectiveStepFires = false := by
-    have h := hprefix_none .objectiveStep (by decide)
-    by_cases hf : fires .objectiveStep (perceptionRefreshE s) = true
-    · rw [if_pos hf] at h; cases h
-    · simpa [fires, ProductionLadder.objectiveStepFires,
-        Bool.not_eq_true] using hf
-  have hcond : (decide (s.level < 50) && !(deferGate s)) = false := by
-    by_cases hc : (decide (s.level < 50) && !(deferGate s)) = true
-    · exfalso
-      by_cases hadq : s.loadoutAdequate = true
-      · have hgd : deferGate s = false := by
-          by_contra hne
-          rw [Bool.not_eq_false] at hne
-          simp [hne] at hc
-        have hlt : s.level < 50 := by
-          by_contra hne
-          simp [hne] at hc
-        have : (perceptionRefreshE s).objectiveStepFires = true := by
-          unfold perceptionRefreshE
-          rw [if_pos hc, if_pos hadq]
-          exact (hArms hlt hgd hadq).1
-        rw [this] at hquietO; cases hquietO
-      · -- WAVE 4: the inadequate branch now arms the OBJECTIVE step too (the
-        -- gear chain moved into the graph), so both adequacy cases land on the
-        -- same contradiction and the gear-latch branch is gone.
-        have : (perceptionRefreshE s).objectiveStepFires = true := by
-          unfold perceptionRefreshE
-          rw [if_pos hc, if_neg hadq]
-        rw [this] at hquietO; cases hquietO
-    · rwa [Bool.not_eq_true] at hc
-  have hgate : deferGate s = true := by
-    rcases Bool.and_eq_false_iff.mp hcond with h | h
-    · exact absurd (decide_eq_true_eq.mpr hlvl) (by rw [h]; exact Bool.false_ne_true)
-    · simpa using h
-  have heq : perceptionRefreshE s = s := by
-    unfold perceptionRefreshE
-    rw [if_neg (by rw [hcond]; exact Bool.false_ne_true)]
-  have hk0 : productionLadder s = some .pursueTask := by rwa [heq] at hk
-  have hg := hgate
-  simp only [deferGate, Bool.and_eq_true, decide_eq_true_eq] at hg
-  obtain ⟨⟨_hdefer, hpursue⟩, hprog⟩ := hg
-  have hphase : s.taskLifecyclePhase ≠ .none := by
-    simp only [pursueTaskFires, Bool.or_eq_true, decide_eq_true_eq] at hpursue
-    rcases hpursue with h | h <;> (rw [h]; intro hc; cases hc)
-  have htot : s.taskTotal ≠ 0 := by omega
-  rw [cycleStepE_some s hk, heq]
-  have hcs : cycleStep s = applyActionKind .taskTrade s := by
-    unfold cycleStep; rw [hk0]; rfl
-  rw [hcs]
-  have hpost : (applyActionKind .taskTrade s).taskLifecyclePhase ≠ .none := by
-    simp only [applyActionKind]
-    rw [if_neg htot]
-    split <;> (intro hc; cases hc)
-  apply eLt_of_taskCycles_dec
-  · simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD, applyActionKind]
-  · simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD, applyActionKind]
-  · simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD, applyActionKind]
-  · simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD, applyActionKind]
-  -- slot 5 (`drawOwedFlag`): untouched by this action
-  · simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD, applyActionKind, refreshE_drawOwed]
-  · simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD, hpost, hphase]
-  · simp only [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-      if_false, Bool.false_eq_true, Bool.false_and, reduceIte, applyActionKind]
-    omega
 
 end Formal.Liveness.BlockerDescentE

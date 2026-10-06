@@ -26,8 +26,9 @@ from fractions import Fraction
 
 S_MIN = Fraction(1, 3)
 """Floor of the synergy multiplier (> 0): even a zero-overlap target keeps a
-strictly-positive weight. `means_worth` thresholds at it (`> S_MIN` iff the
-overlap is non-empty). This is the ONLY tuning surface; the shape is an affine
+strictly-positive weight. The worth gate (`means_worth`, retired in Phase
+5-2c-iii-c-2 #4) thresholded at it (`> S_MIN` iff the overlap is non-empty).
+This is the ONLY tuning surface; the shape is an affine
 map into [S_MIN, 1], pinned by the tests and Synergy.lean."""
 
 

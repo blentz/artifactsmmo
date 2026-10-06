@@ -603,48 +603,20 @@ theorem plan_exists_for_reachUnlockLevel :
 
 /-! ## Phase 21d-1 — final Tier-3 plan-existence lemmas
 
-Two lemmas closing Tier-3 plan-existence coverage:
+One lemma closing Tier-3 plan-existence coverage (`plan_exists_for_pursueTask`
+retired with the PURSUE_TASK rung, Phase 5-2c-iii-c-2 #4):
 
-  - `plan_exists_for_pursueTask`: witness `[.taskTrade]`, collapsing a
-    multi-trade delivery into one step (honest disclosure in
-    `Plan.lean`'s `.taskTrade` branch).
   - `plan_exists_for_objectiveStep`: witness `[.objectiveStep]`, the
     synthetic placeholder ActionKind (honest disclosure in
     `PlanAction.lean`'s docstring "Phase 21d-1: synthetic
     `.objectiveStep` placeholder").
 -/
 
-/-- `[.taskTrade, .completeTask]` clears `pursueTask`.
-
-    Phase 23d-5 update: with the refined `.taskTrade` semantics
-    (taskProgress += 1, NOT taskProgress := taskTotal), one `.taskTrade`
-    step may leave the phase at `.inProgress` if `taskProgress + 1 <
-    taskTotal`. To guarantee clearing of `pursueTaskFires` (which
-    requires `phase ∉ {.accepted, .inProgress}`), we follow with a
-    `.completeTask` step. The `.completeTask` apply (Plan.lean line 149)
-    unconditionally clears `taskCode`, `taskProgress`, `taskTotal`, and
-    sets `taskLifecyclePhase := .none` — regardless of whether the task
-    is structurally ready for completion. This is a planner-side
-    projection; production would never sequence these two without an
-    intervening progress check, but the existential plan-existence claim
-    is about model-side state transitions, not production sequencing.
-
-    Honest disclosure: the witness `[.taskTrade, .completeTask]` is a
-    two-step plan that the planner WOULD NOT actually emit in production
-    (the strategy arbiter sequences them via the ladder, one at a time).
-    The plan-existence claim is purely about the Lean state-machine: a
-    plan EXISTS that flips the post-state's firing predicate to false. -/
-theorem plan_exists_for_pursueTask :
-    ∀ s, fires .pursueTask s = true →
-      ∃ p : Plan, planAchieves p s .pursueTask := by
-  intro s h
-  refine ⟨[.taskTrade, .completeTask], ?_⟩
-  simp [planAchieves, applyActionKind, fires,
-        ProductionLadder.pursueTaskFires, applyPlan]
-
-/-- `[.objectiveStep]` clears `objectiveStep`. The Phase 21d-1 synthetic
-    placeholder ActionKind flips the opaque `objectiveStepFires` Bool to
-    `false`. Honest disclosure: `.objectiveStep` is NOT a production
+/-- `[.objectiveStep, .completeTask]` clears `objectiveStep`. The Phase 21d-1
+    synthetic placeholder ActionKind flips the opaque `objectiveStepFires` Bool
+    to `false`; since Phase 5-2c-iii-c-2 #4 the step also fires on a held
+    active-phase task, which `.completeTask` clears (it sets the phase to
+    `.none`, as in the retired `plan_exists_for_pursueTask` witness). Honest disclosure: `.objectiveStep` is NOT a production
     Action subclass — it is a tier-dispatch tag. Production composes the
     sub-goal's plan from ordinary Action subclasses; Phase 22 (Cycle
     Loop) will refine this composition. The existential claim "the
@@ -653,8 +625,8 @@ theorem plan_exists_for_objectiveStep :
     ∀ s, fires .objectiveStep s = true →
       ∃ p : Plan, planAchieves p s .objectiveStep := by
   intro s h
-  refine ⟨[.objectiveStep], ?_⟩
+  refine ⟨[.objectiveStep, .completeTask], ?_⟩
   simp [planAchieves, applyActionKind, fires,
-        ProductionLadder.objectiveStepFires]
+        ProductionLadder.objectiveStepFires, applyPlan]
 
 end Formal.Liveness.PlanExists

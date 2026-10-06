@@ -14,7 +14,7 @@ File it; do not paper it over.
 
 ## Scope (honest disclosure)
 
-In scope (8 means with single-action plans, mirroring Lean PlanExists):
+In scope (single-action plans, mirroring Lean PlanExists):
   * HP_CRITICAL          → witness [RestAction]
   * BANK_UNLOCK          → witness [FightAction(target_monster)]
   * DEPOSIT_FULL         → witness [DepositAllAction]
@@ -22,7 +22,11 @@ In scope (8 means with single-action plans, mirroring Lean PlanExists):
   * COMPLETE_TASK        → witness [CompleteTaskAction]
   * (ACCEPT_TASK retired in Phase 5-2c-iii-c-2 #3: the task objective's step)
   * (TASK_EXCHANGE retired in Phase 5-2c-iii-c-2: the task objective's step)
-  * PURSUE_TASK (items)  → witness [TaskTradeAction]
+  * (PURSUE_TASK retired in Phase 5-2c-iii-c-2 #4: the held items task is
+    the task objective's step — pinned separately by
+    `test_planner_finds_plan_for_task_phase_objective_step`, witness
+    [TaskTradeAction], the production half of the Lean `planFor .objectiveStep`
+    `.taskTrade` arm)
   * WAIT                 → witness [WaitAction] (StrategyArbiter short-circuit)
 
 Honestly skipped (firing predicate requires fixtures outside this test's
@@ -51,13 +55,14 @@ scope; the Lean lemmas cover them separately):
     `state.bank_items` populated to >= 95% AND `state.gold >=
     _next_expansion_cost`. Constructible but adds bank-fixture overhead;
     the Lean lemma covers existence.
-  * OBJECTIVE_STEP — synthetic ActionKind, NOT a production Action subclass.
-    Production decomposes a sub-goal into ordinary Actions per the chosen
-    MetaGoal shape. Out of scope for this differential (covered separately
-    by the Lean lemma `plan_exists_for_objectiveStep` which proves the
-    existence claim opaquely).
+  * OBJECTIVE_STEP (opaque-flag arm) — synthetic ActionKind, NOT a
+    production Action subclass. Production decomposes a sub-goal into
+    ordinary Actions per the chosen MetaGoal shape. Out of scope for this
+    differential (the Lean lemma `plan_exists_for_objectiveStep` proves
+    existence via the `[.objectiveStep, .completeTask]` witness). Its
+    TASK-PHASE arm (an items task in progress) IS pinned, by its own test.
 
-The 9 in-scope cases pin the planner's plan-existence guarantee on every
+The in-scope cases pin the planner's plan-existence guarantee on every
 single-action firing means whose production-goal materialisation is
 within the planner's reach in a synthetic, no-fixture state. Mutations
 (below) remove specific Action classes from `_build_actions` and verify
@@ -77,11 +82,14 @@ from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.strategy_driver import map_guard, map_means, objective_step_goal
+from artifactsmmo_cli.ai.task_pursue import pursue_due
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
 from artifactsmmo_cli.ai.tiers.guards import _fires as _guard_fires
 from artifactsmmo_cli.ai.tiers.means import MeansKind
@@ -277,31 +285,6 @@ def _state_COMPLETE_TASK():
     return state, ctx, gd, CompleteTaskAction, LadderMeans.COMPLETE_TASK
 
 
-def _state_PURSUE_TASK():
-    gd = _base_game_data()
-    # items task in progress; inventory has the task item so TaskTradeAction
-    # is applicable. task_code is unknown to game_data ⇒ task_requirement()
-    # returns None ⇒ task_decision returns PURSUE (via req_is_none branch),
-    # so PURSUE_TASK fires even with history=None. (See task_decision.py:48.)
-    state = _base_state(
-        task_code="task_x",
-        task_type="items",
-        task_progress=0,
-        task_total=5,
-        inventory={"task_x": 5},
-        inventory_max=20,
-    )
-    ctx = _ctx()
-    # Pass a placeholder non-None history so the means firing predicate's
-    # `history is not None` conjunct holds; task_decision still hits the
-    # req_is_none short-circuit and returns PURSUE.
-    from artifactsmmo_cli.ai.learning.store import LearningStore
-    history = LearningStore(":memory:", "diff")
-    assert _means_fires(MeansKind.PURSUE_TASK, state, gd, history, ctx), \
-        "PURSUE_TASK firing precondition not met"
-    return state, ctx, gd, TaskTradeAction, LadderMeans.PURSUE_TASK
-
-
 def _state_WAIT():
     gd = _base_game_data()
     state = _base_state()
@@ -318,7 +301,6 @@ IN_SCOPE_CASES: dict[LadderMeans, Callable] = {
     LadderMeans.DEPOSIT_FULL: _state_DEPOSIT_FULL,
     LadderMeans.CLAIM_PENDING: _state_CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK: _state_COMPLETE_TASK,
-    LadderMeans.PURSUE_TASK: _state_PURSUE_TASK,
     LadderMeans.WAIT: _state_WAIT,
 }
 
@@ -332,7 +314,6 @@ GUARD_KINDS_MAP: dict[LadderMeans, GuardKind] = {
 MEANS_KINDS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.CLAIM_PENDING: MeansKind.CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK: MeansKind.COMPLETE_TASK,
-    LadderMeans.PURSUE_TASK: MeansKind.PURSUE_TASK,
     LadderMeans.WAIT: MeansKind.WAIT,
 }
 
@@ -399,15 +380,8 @@ def test_planner_finds_plan_for_firing_means(means: LadderMeans) -> None:
         )
         return
 
-    # Provide the same history shape we used to validate the firing
-    # predicate, so the planner sees the same world the predicate did.
-    history = None
-    if means is LadderMeans.PURSUE_TASK:
-        from artifactsmmo_cli.ai.learning.store import LearningStore
-        history = LearningStore(":memory:", "diff")
-
     goal = _materialise_goal(means, gd, ctx, state)
-    plan = GOAPPlanner().plan(state, goal, actions, gd, history)
+    plan = GOAPPlanner().plan(state, goal, actions, gd, None)
 
     assert plan, (
         f"PLAN-EXISTS BUG: planner returned empty plan for firing means {means.name}.\n"
@@ -476,8 +450,52 @@ def test_task_exchange_storm_state_plans_short() -> None:
     assert any(isinstance(a, TaskExchangeAction) for a in plan)
 
 
+def test_planner_finds_plan_for_task_phase_objective_step() -> None:
+    """Phase 5-2c-iii-c-2 #4: the retired PURSUE_TASK rung's work is the task
+    objective's step. An items task in progress fires OBJECTIVE_STEP on its
+    phase (Lean `objectiveStepFires … || phaseActive`), and Lean
+    `planFor .objectiveStep` dispatches `.taskTrade` when the opaque flag is
+    unset. The production half: `pursue_due` holds on this state (task_code
+    unknown to game_data ⇒ `task_requirement` None ⇒ `task_decision` PURSUE
+    via the req_is_none branch; the in-memory store satisfies the
+    `history is not None` conjunct), `objective_step_goal(ReachTaskOutcome)`
+    materialises the pursuit goal, and the REAL planner over the REAL action
+    menu returns a non-empty plan containing the TaskTradeAction witness."""
+    gd = _base_game_data()
+    state = _base_state(
+        task_code="task_x",
+        task_type="items",
+        task_progress=0,
+        task_total=5,
+        inventory={"task_x": 5},
+        inventory_max=20,
+    )
+    ctx = _ctx()
+    history = LearningStore(":memory:", "diff")
+    assert pursue_due(state, gd, history), "pursue_due firing precondition not met"
+    player = _build_player_with_data(
+        gd, state,
+        bank_accessible=ctx.bank_accessible,
+        task_exchange_min_coins=ctx.task_exchange_min_coins,
+    )
+    actions = _build_actions(player)
+    goal = objective_step_goal(ReachTaskOutcome("task_x"), state, gd, ctx,
+                               history=history)
+    assert isinstance(goal, PursueTaskGoal), goal
+    plan = GOAPPlanner().plan(state, goal, actions, gd, history)
+    assert plan, (
+        "PLAN-EXISTS BUG: planner returned empty plan for the task-phase "
+        f"objective step.\n  goal: {goal!r}"
+    )
+    assert any(isinstance(a, TaskTradeAction) for a in plan), (
+        "PLAN-EXISTS BUG: the task-phase objective step planned without the "
+        "TaskTradeAction witness (Lean `planFor .objectiveStep` = [.taskTrade]).\n"
+        f"  plan: {[type(a).__name__ for a in plan]}"
+    )
+
+
 def test_objective_step_honestly_skipped() -> None:
-    """OBJECTIVE_STEP is the synthetic tier-dispatch ActionKind (Phase
+    """The opaque-flag arm of OBJECTIVE_STEP is the synthetic tier-dispatch ActionKind (Phase
     21d-1). Production materialises a sub-goal (UpgradeEquipmentGoal,
     GatherMaterialsGoal, GrindCharacterXPGoal, ReachSkillGoal) per the
     chosen MetaGoal shape; the planner finds a plan for each via ordinary
@@ -486,16 +504,18 @@ def test_objective_step_honestly_skipped() -> None:
     (test_no_deadlock_v2_diff.py::test_productionLadder_totality_with_objective_step)
     which passes with `objective_step_fires=True` over 800 adversarial states.
 
-    The Lean lemma `plan_exists_for_objectiveStep` proves existence opaquely
-    via the synthetic `.objectiveStep` ActionKind. The cross-language pinning
+    The Lean lemma `plan_exists_for_objectiveStep` proves existence via the
+    `[.objectiveStep, .completeTask]` witness. The cross-language pinning
     of objective-tier plan-existence is therefore (a) opaquely proven in
-    Lean and (b) operationally demonstrated by the 20d-v2 differential. No
-    additional pinning is needed at this phase."""
+    Lean and (b) operationally demonstrated by the 20d-v2 differential. The
+    TASK-PHASE arm (what PURSUE_TASK was) is pinned by
+    `test_planner_finds_plan_for_task_phase_objective_step`, outside the
+    flat-means registry."""
     assert LadderMeans.OBJECTIVE_STEP not in IN_SCOPE_CASES
 
 
-def test_in_scope_covers_at_least_8_means() -> None:
-    """Regression: don't accidentally narrow scope. The 8 means below
+def test_in_scope_covers_at_least_6_means() -> None:
+    """Regression: don't accidentally narrow scope. The 6 means below
     correspond 1:1 to Lean PlanExists single-action lemmas (excluding the
     `.objectiveStep` synthetic and the multi-step `.reachUnlockLevel` /
     `.fight^N` lemma, which is honestly skipped per module docstring)."""
@@ -505,7 +525,6 @@ def test_in_scope_covers_at_least_8_means() -> None:
         LadderMeans.DEPOSIT_FULL,
         LadderMeans.CLAIM_PENDING,
         LadderMeans.COMPLETE_TASK,
-        LadderMeans.PURSUE_TASK,
         LadderMeans.WAIT,
     }
     assert required.issubset(IN_SCOPE_CASES.keys()), (

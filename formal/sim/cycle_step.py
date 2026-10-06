@@ -61,7 +61,6 @@ class CycleState:
     task_coins_total: int
     task_exchange_min_coins: int
     task_cancel_fires: bool
-    pursue_task_fires: bool
     objective_step_fires: bool
     bank_items_known: bool
     bank_items_count: int
@@ -98,7 +97,6 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.SELL_PRESSURED:     "npcSell",
     LadderMeans.TASK_CANCEL:        "taskCancel",
     LadderMeans.OBJECTIVE_STEP:     "objectiveStep",
-    LadderMeans.PURSUE_TASK:        "taskTrade",
     LadderMeans.MAINTAIN_CONSUMABLES: "craft",  # PLAN #6a: cook/brew a heal
     # 2026-08-01: SupplyBankGoal plans produce-then-deposit; the witness is the
     # HEAD produce step (the demand board routes each item to the role that
@@ -131,14 +129,15 @@ MIRROR_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.SELL_RELIEF,
     LadderMeans.DEPOSIT_FULL,
     LadderMeans.DISCARD_HIGH,
-    LadderMeans.CLAIM_PENDING,
-    LadderMeans.COMPLETE_TASK,
+    # Phase 5-2b / 5-2c-ii: SELL_PRESSURED and BANK_EXPAND are interrupts,
+    # closing the prefix ahead of the collect rungs (`allInLadderOrder`).
     LadderMeans.SELL_PRESSURED,
+    LadderMeans.CLAIM_PENDING,
+    LadderMeans.BANK_EXPAND,
+    LadderMeans.COMPLETE_TASK,
     LadderMeans.TASK_CANCEL,
     LadderMeans.OBJECTIVE_STEP,
-    LadderMeans.PURSUE_TASK,
     LadderMeans.SELL_IDLE,
-    LadderMeans.BANK_EXPAND,
     LadderMeans.WAIT,
 )
 
@@ -246,8 +245,12 @@ def fires_mirror(k: LadderMeans, s: CycleState) -> bool:
     if k is LadderMeans.COMPLETE_TASK:      return _complete_task_fires(s)
     if k is LadderMeans.SELL_PRESSURED:     return _sell_pressured_fires(s)
     if k is LadderMeans.TASK_CANCEL:        return s.task_cancel_fires
-    if k is LadderMeans.OBJECTIVE_STEP:     return s.objective_step_fires
-    if k is LadderMeans.PURSUE_TASK:        return s.pursue_task_fires
+    if k is LadderMeans.OBJECTIVE_STEP:
+        # A held, unmet task's work is the task objective's step (c-2 #4;
+        # mirrors the Lean `objectiveStepFires || phaseActive`).
+        task_active = (s.task_code is not None and s.task_total > 0
+                       and s.task_progress < s.task_total)
+        return s.objective_step_fires or task_active
     if k is LadderMeans.SELL_IDLE:          return _sell_idle_fires(s)
     if k is LadderMeans.BANK_EXPAND:        return _bank_expand_fires(s)
     if k is LadderMeans.WAIT:               return True
@@ -315,7 +318,6 @@ def apply_action_kind_mirror(action: str, s: CycleState) -> CycleState:
         return dataclasses.replace(
             s,
             task_cancel_fires=False,
-            pursue_task_fires=False,
             task_code=None,
             task_total=0,
             task_progress=0,
@@ -350,7 +352,7 @@ def apply_action_kind_mirror(action: str, s: CycleState) -> CycleState:
         )
     if action == "taskTrade":
         return dataclasses.replace(
-            s, pursue_task_fires=False, task_progress=s.task_total,
+            s, task_progress=s.task_total,
         )
     if action == "objectiveStep":
         return dataclasses.replace(s, objective_step_fires=False)
@@ -372,6 +374,11 @@ def cycle_step_mirror(s: CycleState) -> CycleState:
     if k is None:
         return s
     action = MIRROR_PLAN_FOR.get(k)
+    if k is LadderMeans.OBJECTIVE_STEP and not s.objective_step_fires:
+        # The step fired on the task phase alone: its work is the task's
+        # (c-2 #4; mirrors Lean `planFor .objectiveStep`'s `.taskTrade` arm,
+        # what the retired PURSUE_TASK rung dispatched).
+        action = "taskTrade"
     if action is None:
         return s
     return apply_action_kind_mirror(action, s)

@@ -31,7 +31,6 @@ class Mechanism(StrEnum):
     # Phase 2c-2.0: before it, a decline was silent and the caller searched.
     DECOMPOSE_DECLINE = "decompose_decline"
     # Selection-order compensations (subject: goal repr).
-    WORTH_GATE_BYPASS = "worth_gate_bypass"
     WAIT_FALLBACK = "wait_fallback"
     # `servable_promotion` was retired by Phase 3-2: the root walk no longer
     # promotes past an unservable pick, it never picks one. What it names

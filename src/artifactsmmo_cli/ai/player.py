@@ -3165,8 +3165,7 @@ class GamePlayer:
         if attempt is None:
             return
         # Every record carrying a goal REPR comes from `StrategyArbiter._plans`,
-        # which always writes `plan_len` (the one synthetic record the arbiter
-        # appends is keyed "worth_gate_bypassed" and cannot match). Indexed, not
+        # which always writes `plan_len`. Indexed, not
         # `.get`-with-default, so a future record shape fails loudly instead of
         # silently counting as unservable.
         if attempt["plan_len"] > 0:

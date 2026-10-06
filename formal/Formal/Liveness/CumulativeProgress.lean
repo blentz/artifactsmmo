@@ -671,20 +671,24 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
       -- both branches preserve level (≥).
       by_cases hisf : s.objectiveStepIsFight = true
       · show (match (if s.objectiveStepIsFight then [ActionKind.fight]
-                      else [ActionKind.objectiveStep]) with
+                      else if s.objectiveStepFires then [ActionKind.objectiveStep]
+                      else [ActionKind.taskTrade]) with
                 | [] => s | a :: _ => applyActionKind a s).level ≥ s.level
         rw [if_pos hisf]
         show (applyActionKind .fight s).level ≥ s.level
         simp only [applyActionKind]; split <;> omega
       · show (match (if s.objectiveStepIsFight then [ActionKind.fight]
-                      else [ActionKind.objectiveStep]) with
+                      else if s.objectiveStepFires then [ActionKind.objectiveStep]
+                      else [ActionKind.taskTrade]) with
                 | [] => s | a :: _ => applyActionKind a s).level ≥ s.level
         rw [if_neg hisf]
-        show (applyActionKind .objectiveStep s).level ≥ s.level
-        simp [applyActionKind]
-    | pursueTask =>
-      show (applyActionKind .taskTrade s).level ≥ s.level
-      simp [applyActionKind]
+        by_cases hof : s.objectiveStepFires = true
+        · rw [if_pos hof]
+          show (applyActionKind .objectiveStep s).level ≥ s.level
+          simp [applyActionKind]
+        · rw [if_neg hof]
+          show (applyActionKind .taskTrade s).level ≥ s.level
+          simp [applyActionKind]
     | sellIdle =>
       show (applyActionKind .npcSell s).level ≥ s.level
       simp [applyActionKind]
@@ -719,7 +723,13 @@ private theorem fires_of_ladder {s : State} {k : MeansKind}
     produces a state whose level strictly advances OR whose extended
     measure strictly decreases.
 
-    Phase 23b's core sub-lemma. -/
+    Phase 23b's core sub-lemma.
+
+    `htask` (Phase 5-2c-iii-c-2 #4): the objective step now also fires on a
+    held active-phase task and then dispatches `.taskTrade`, which descends
+    `taskCycles` only while work remains. The ladder's phase test does not
+    imply `taskProgress < taskTotal` on an arbitrary (phase-inconsistent)
+    `State`, so that fact is a hypothesis of this branch alone. -/
 theorem progressMeans_decreases_extMeasure_or_advances_level
     (s : State) (k : MeansKind)
     (hk : productionLadder s = some k)
@@ -727,7 +737,9 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
     (hbe : k = .bankExpand → s.nextExpansionCost > 0)
     (hperc : k = .bankUnlock ∨ k = .reachUnlockLevel
               ∨ (k = .objectiveStep ∧ s.objectiveStepIsFight = true) →
-              s.xp < xpToNextLevel s.level ∧ s.level < 50) :
+              s.xp < xpToNextLevel s.level ∧ s.level < 50)
+    (htask : k = .objectiveStep → s.objectiveStepIsFight = false →
+              s.objectiveStepFires = false → s.taskProgress < s.taskTotal) :
     (cycleStep s).level > s.level
     ∨ ((cycleStep s).level = s.level
         ∧ extMeasureLt (extMeasure (cycleStep s)) (extMeasure s)) := by
@@ -1002,10 +1014,24 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
         cases h : s.objectiveStepIsFight with
         | true => exact absurd h hisf
         | false => rfl
+      by_cases hof : s.objectiveStepFires = true
+      swap
+      · -- Task-work branch (Phase 5-2c-iii-c-2 #4): `.taskTrade` descends
+        -- `taskCycles` given work remains (`htask`).
+        have hof' : s.objectiveStepFires = false := Bool.eq_false_iff.mpr hof
+        have hprog := htask rfl hisf' hof'
+        have hcs : cycleStep s = applyActionKind .taskTrade s := by
+          unfold cycleStep; rw [hk]; simp [planFor, hisf', hof']
+        rw [hcs]
+        refine ⟨by simp [applyActionKind], ?_⟩
+        refine Or.inr (Or.inr (Or.inl ⟨?_, ?_, ?_⟩))
+        · simp [extMeasure, applyActionKind]
+        · simp [extMeasure, applyActionKind]
+        · simp only [extMeasure, applyActionKind]; omega
       have hcs : cycleStep s = applyActionKind .objectiveStep s := by
-        unfold cycleStep; rw [hk]; simp [planFor, hisf']
+        unfold cycleStep; rw [hk]; simp [planFor, hisf', hof]
       rw [hcs]
-      simp only [fires, ProductionLadder.objectiveStepFires] at hfires
+      have hfires := hof
       refine ⟨rfl, ?_⟩
       refine extLt_of_objStep_dec ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
       · unfold extMeasure applyActionKind; rfl
@@ -1099,7 +1125,6 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   -- `CycleStep.cycleStep_progress_or_waits`.
   | currencyTurnIn  => exfalso; revert hmem; unfold progressMeans; decide
   | taskCancel      => exfalso; revert hmem; unfold progressMeans; decide
-  | pursueTask      => exfalso; revert hmem; unfold progressMeans; decide
   -- restForCombat is a guard OUT of `progressMeans` scope
   -- (same as completeTask/lowYieldCancel/taskCancel above): no
   -- measure-decrease commitment is made for them here; their progress is
@@ -1147,7 +1172,7 @@ it is live in `PerceptionInvariant`/`Plan` and still audited below. -/
 
     The decomposition lives in `Formal.Liveness.LIV003Decomposition`:
 
-      • LIV-003a — THEOREM `taskAccepted_implies_cancelOrPursueFires`
+      • LIV-003a — THEOREM `taskAccepted_implies_cancelOrStepFires`
         (no axiom; provable from `ProductionLadder` fires defs)
 
       • LIV-003b — SMALL AXIOMS `lowYieldSampleThreshold`,
@@ -1196,14 +1221,15 @@ it is live in `PerceptionInvariant`/`Plan` and still audited below. -/
 /-- Sanity wrapper exposing LIV-003a at the cumulative-progress layer.
 
     User-mandate (a)/(b) restated structurally: in any `.accepted`
-    state, the planner's ladder commits to Cancel OR Pursue — it does
-    NOT stall. Provable from `ProductionLadder.taskCancelFires` /
-    `pursueTaskFires` definitions; this theorem is a re-export
-    convenience. -/
-theorem accepted_state_decides_cancel_or_pursue (s : State)
+    state, the planner's ladder commits to Cancel OR the objective step
+    (which works the held task since Phase 5-2c-iii-c-2 #4, replacing the
+    retired PURSUE_TASK rung) — it does NOT stall. Provable from
+    `ProductionLadder.taskCancelFires` / `objectiveStepFires` definitions;
+    this theorem is a re-export convenience. -/
+theorem accepted_state_decides_cancel_or_step (s : State)
     (h : s.taskLifecyclePhase = .accepted) :
-    taskCancelFires s = true ∨ pursueTaskFires s = true :=
-  taskAccepted_implies_cancelOrPursueFires s h
+    taskCancelFires s = true ∨ objectiveStepFires s = true :=
+  taskAccepted_implies_cancelOrStepFires s h
 
 -- Item 1g-C: cumulative_progress_under_no_wait DELETED. Its body
 -- depended on the now-deleted lifecycle_progress_from_bounds AXIOM.

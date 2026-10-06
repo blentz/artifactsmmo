@@ -48,6 +48,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
+from artifactsmmo_cli.ai.task_pursue import pursue_due
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     META_GOAL_KINDS,
     MetaGoal,
@@ -200,3 +201,12 @@ def task_pays_less(state: WorldState, game_data: GameData,
     by `decisions/root.py` importing the projection itself. Phase 5-2c-iii-c-2:
     it decides whether the task objective is offered for its cancel step."""
     return low_yield_cancel_fires(state, game_data, history)
+
+
+def task_worth_pursuing(state: WorldState, game_data: GameData,
+                        history: LearningStore | None) -> bool:
+    """The held items task is one the projection says to PURSUE
+    (`task_pursue.pursue_due` -> `task_decision`). A rate verdict, so it reaches
+    the walk through this funnel (O6). Phase 5-2c-iii-c-2 #4: it decides whether
+    the task objective is offered for the items-task work."""
+    return pursue_due(state, game_data, history)

@@ -21,6 +21,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.strategy_driver import map_means
 from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
+from artifactsmmo_cli.ai.task_pursue import pursue_due
 from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import (
     COLLECT_REWARD_ORDER,
@@ -621,47 +622,42 @@ def test_best_alternative_repr_returns_none_when_all_goals_none(tmp_path):
     store.close()
 
 
-class TestPursueTask:
-    def test_in_discretionary_order(self):
-        assert MeansKind.PURSUE_TASK in DISCRETIONARY_ORDER
+class TestPursueDue:
+    """The held items task's PURSUE verdict (`task_pursue.pursue_due`; the
+    PURSUE_TASK rung's predicate until Phase 5-2c-iii-c-2 #4)."""
 
-    def test_fires_for_items_task_on_pursue(self):
+    def test_true_for_items_task_on_pursue(self):
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0)
         store = LearningStore(db_path=":memory:", character="hero")
-        with patch("artifactsmmo_cli.ai.tiers.means.task_decision", return_value="pursue"):
-            _, discretionary = active_means(state, GameData(), store, _ctx())
-        assert MeansKind.PURSUE_TASK in discretionary
+        with patch("artifactsmmo_cli.ai.task_pursue.task_decision", return_value="pursue"):
+            assert pursue_due(state, GameData(), store) is True
 
-    def test_does_not_fire_for_monster_task(self):
+    def test_false_for_monster_task(self):
         state = make_state(task_code="chicken", task_type="monsters",
                            task_total=20, task_progress=0)
         store = LearningStore(db_path=":memory:", character="hero")
-        with patch("artifactsmmo_cli.ai.tiers.means.task_decision", return_value="pursue"):
-            _, discretionary = active_means(state, GameData(), store, _ctx())
-        assert MeansKind.PURSUE_TASK not in discretionary
+        with patch("artifactsmmo_cli.ai.task_pursue.task_decision", return_value="pursue"):
+            assert pursue_due(state, GameData(), store) is False
 
-    def test_does_not_fire_on_pivot(self):
+    def test_false_on_pivot(self):
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0)
         store = LearningStore(db_path=":memory:", character="hero")
-        with patch("artifactsmmo_cli.ai.tiers.means.task_decision", return_value="pivot"):
-            _, discretionary = active_means(state, GameData(), store, _ctx())
-        assert MeansKind.PURSUE_TASK not in discretionary
+        with patch("artifactsmmo_cli.ai.task_pursue.task_decision", return_value="pivot"):
+            assert pursue_due(state, GameData(), store) is False
 
-    def test_does_not_fire_when_full(self):
+    def test_false_when_full(self):
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=20)
         store = LearningStore(db_path=":memory:", character="hero")
-        with patch("artifactsmmo_cli.ai.tiers.means.task_decision", return_value="pursue"):
-            _, discretionary = active_means(state, GameData(), store, _ctx())
-        assert MeansKind.PURSUE_TASK not in discretionary
+        with patch("artifactsmmo_cli.ai.task_pursue.task_decision", return_value="pursue"):
+            assert pursue_due(state, GameData(), store) is False
 
-    def test_does_not_fire_without_history(self):
+    def test_false_without_history(self):
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0)
-        _, discretionary = active_means(state, GameData(), None, _ctx())
-        assert MeansKind.PURSUE_TASK not in discretionary
+        assert pursue_due(state, GameData(), None) is False
 
 
 def test_low_yield_cancel_absent_when_alt_repr_found_but_no_yield(tmp_path):

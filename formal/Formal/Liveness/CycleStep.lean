@@ -123,8 +123,11 @@ noncomputable def planFor : MeansKind → State → Plan
       -- FIGHTS (+10 char xp / rollover via `applyActionKind .fight`) — the
       -- model's faithful general leveling path. Otherwise the synthetic
       -- placeholder clears `objectiveStepFires` (legacy default: isFight=false).
-      if s.objectiveStepIsFight then [.fight] else [.objectiveStep]
-  | .pursueTask       , _ => [.taskTrade]
+      -- PROTOTYPE (Phase 5-2c-iii-c-2 #4): when the step fires only because a
+      -- task is held (the opaque Bool is unarmed), the step IS the task work —
+      -- `.taskTrade`, the plan the retired PURSUE_TASK rung dispatched.
+      if s.objectiveStepIsFight then [.fight]
+      else if s.objectiveStepFires then [.objectiveStep] else [.taskTrade]
   | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
   -- SUPPLY_BANK (2026-08-01): `SupplyBankGoal.desired_state` targets a BANKED
   -- quantity, so production plans a produce-then-deposit chain. The witness is
@@ -158,7 +161,7 @@ noncomputable def planFor : MeansKind → State → Plan
 /-- `planFor k s` is always non-empty (single-element). -/
 theorem planFor_ne_nil (k : MeansKind) (s : State) : planFor k s ≠ [] := by
   cases k <;> simp only [planFor]
-  case objectiveStep => split <;> simp
+  case objectiveStep => split <;> (try split) <;> simp
   all_goals simp
 
 /-! ## cycleStep — one cycle's pure transition -/
@@ -333,7 +336,7 @@ theorem cycleStep_progress_or_waits
   | craftRelief =>
     -- CRAFT_RELIEF plans `.craft`, which advances `craftableSlots` by +1
     -- (Plan.lean line ≈387). The post-state's craftableSlots differs from
-    -- the pre-state's, hence cycleStep s ≠ s. Mirrors the pursueTask /
+    -- the pre-state's, hence cycleStep s ≠ s. Mirrors the
     -- bankExpand pattern of "post.field = pre.field + 1 → state changed".
     left
     have hcs : cycleStep s = applyActionKind .craft s := by
@@ -564,31 +567,28 @@ theorem cycleStep_progress_or_waits
         cases h : s.objectiveStepIsFight with
         | true => exact absurd h hisf
         | false => rfl
-      have hcs : cycleStep s = applyActionKind .objectiveStep s := by
-        unfold cycleStep; rw [hk]; simp [planFor, hisf']
-      rw [hcs]
-      simp only [fires, ProductionLadder.objectiveStepFires] at hfires
-      intro heq
-      have hpost : ({s with objectiveStepFires := false} : State).objectiveStepFires = false := rfl
-      have hpre' : s.objectiveStepFires = false := by
-        have : (applyActionKind .objectiveStep s).objectiveStepFires = false := hpost
-        rw [heq] at this; exact this
-      rw [hfires] at hpre'; cases hpre'
-  | pursueTask =>
-    left
-    have hcs : cycleStep s = applyActionKind .taskTrade s := by
-      unfold cycleStep; rw [hk]; rfl
-    rw [hcs]
-    -- Phase 23d-5: applyActionKind .taskTrade advances taskProgress by +1.
-    -- So the post-state's taskProgress differs from the pre-state's,
-    -- hence the post-state is not s.
-    intro heq
-    have hpost : (applyActionKind .taskTrade s).taskProgress
-                  = s.taskProgress + 1 := by
-      simp [applyActionKind]
-    have hpre' : s.taskProgress = s.taskProgress + 1 := by
-      rw [heq] at hpost; exact hpost
-    exact Nat.succ_ne_self _ hpre'.symm
+      by_cases hof : s.objectiveStepFires = true
+      · have hcs : cycleStep s = applyActionKind .objectiveStep s := by
+          unfold cycleStep; rw [hk]; simp [planFor, hisf', hof]
+        rw [hcs]
+        intro heq
+        have hpost : ({s with objectiveStepFires := false} : State).objectiveStepFires = false := rfl
+        have hpre' : s.objectiveStepFires = false := by
+          have : (applyActionKind .objectiveStep s).objectiveStepFires = false := hpost
+          rw [heq] at this; exact this
+        rw [hof] at hpre'; cases hpre'
+      · -- Task-work branch: `.taskTrade` advances taskProgress by +1.
+        have hof' : s.objectiveStepFires = false := Bool.eq_false_iff.mpr hof
+        have hcs : cycleStep s = applyActionKind .taskTrade s := by
+          unfold cycleStep; rw [hk]; simp [planFor, hisf', hof']
+        rw [hcs]
+        intro heq
+        have hpost : (applyActionKind .taskTrade s).taskProgress
+                      = s.taskProgress + 1 := by
+          simp [applyActionKind]
+        have hpre' : s.taskProgress = s.taskProgress + 1 := by
+          rw [heq] at hpost; exact hpost
+        exact Nat.succ_ne_self _ hpre'.symm
   | sellIdle =>
     left
     have hcs : cycleStep s = applyActionKind .npcSell s := by

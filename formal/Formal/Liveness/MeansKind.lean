@@ -143,7 +143,7 @@ inductive MeansKind where
   -- Objective step (StrategyArbiter inserts a single objective StepGoal here)
   | objectiveStep       -- OBJECTIVE_STEP
   -- Discretionary (DISCRETIONARY_ORDER, means.py:42)
-  | pursueTask          -- PURSUE_TASK,        means.py:87
+  -- (pursueTask retired: Phase 5-2c-iii-c-2 #4)
   -- (acceptTask retired: Phase 5-2c-iii-c-2 #3)
   -- (taskExchange retired: Phase 5-2c-iii-c-2 #2)
   | maintainConsumables -- MAINTAIN_CONSUMABLES, means.py (PLAN #6a): cook/brew
@@ -185,14 +185,15 @@ def allInLadderOrder : List MeansKind :=
    .supplyBank,
    .currencyTurnIn,
    .objectiveStep,
-   .pursueTask, .maintainConsumables,
+   .maintainConsumables,
    .sellIdle, .recycleSurplus, .geBid, .drainBankJunk,
    .wait]
 
-/-- Sanity: 27 rungs (one per constructor). GEAR_REVIEW was retired in Phase
+/-- Sanity: 26 rungs (one per constructor). GEAR_REVIEW was retired in Phase
     4-3b: its one arm never fired in recorded history. LOW_YIELD_CANCEL,
-    TASK_EXCHANGE and ACCEPT_TASK were retired in Phase 5-2c-iii-c-2: the task
-    objective's step owns the cancel, the exchange and the accept. -/
-example : allInLadderOrder.length = 27 := by decide
+    TASK_EXCHANGE, ACCEPT_TASK and PURSUE_TASK were retired in Phase
+    5-2c-iii-c-2: the task objective's step owns the cancel, the exchange, the
+    accept and the items-task pursuit. -/
+example : allInLadderOrder.length = 26 := by decide
 
 end Formal.Liveness.MeansKind

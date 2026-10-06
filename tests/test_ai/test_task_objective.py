@@ -217,3 +217,29 @@ class TestAcceptFold:
         rich = dataclasses.replace(make_state(level=12), inventory={"tasks_coin": 3})
         goal = objective_step_goal(ReachTaskOutcome(None), rich, _gd(), owed)
         assert isinstance(goal, AcceptTaskGoal)
+
+
+class TestPursueFold:
+    """Phase 5-2c-iii-c-2 #4: PURSUE_TASK retired; the held items task the
+    projection says to pursue is worked on the task objective's turn."""
+
+    def test_a_pursued_items_task_offers_the_objective(self) -> None:
+        held = _held(task_type="items")
+        with patch.object(root_mod._route, "task_worth_pursuing", return_value=True):
+            assert root_mod._task_root(held, _gd(), NO_PROFILE_CONTEXT, None) == ReachTaskOutcome("chicken")
+        with patch.object(root_mod._route, "task_worth_pursuing", return_value=False):
+            assert root_mod._task_root(held, _gd(), NO_PROFILE_CONTEXT, None) is None
+
+    def test_its_step_is_the_pursuit(self) -> None:
+        held = _held(task_type="items")
+        node = ReachTaskOutcome("chicken")
+        with patch.object(driver_mod, "pursue_due", return_value=True):
+            goal = objective_step_goal(node, held, _gd(), NO_PROFILE_CONTEXT)
+        assert repr(goal) == "PursueTask(chicken)"
+        with patch.object(driver_mod, "pursue_due", return_value=False):
+            assert objective_step_goal(node, held, _gd(), NO_PROFILE_CONTEXT) is None
+
+    def test_the_funnel_asks_the_pursue_verdict(self) -> None:
+        with patch("artifactsmmo_cli.ai.decisions.route.pursue_due", return_value=True) as due:
+            assert root_mod._route.task_worth_pursuing(_held(task_type="items"), _gd(), None)
+        assert due.called

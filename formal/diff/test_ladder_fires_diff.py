@@ -109,7 +109,7 @@ the teeth bite per slot:
                           in production (binding the per-slot arg) and assert
                           `selected` agrees at the higher winner (acceptTask at
                           phase none) — a real Lean-model finding, reported.
-  * lowYieldCancel / taskCancel / pursueTask — phase-derived
+  * taskCancel — phase-derived
                           OVER-APPROXIMATIONS: Lean computes them from
                           `taskLifecyclePhase` / `actionsAttempted` /
                           `taskFeasibleProjected` (no LearningStore concept),
@@ -144,12 +144,12 @@ separately-anchored machinery), so they are not mutation targets HERE.
 
 ## Model-fidelity note
 
-The Lean phase-based predicates (`completeTask`/`acceptTask`/`pursueTask`/…)
+The Lean phase-based predicates (`completeTask`/`acceptTask`/…)
 are deliberate over-approximations of production's richer task-economy checks.
 For completeTask/acceptTask they coincide EXACTLY with production under empty
 target_gear (acceptTask) and the canonical complete condition (completeTask),
-which is why those two are asserted, not deferred. pursueTask/taskCancel/
-lowYieldCancel do NOT coincide (production reads `history`/`task_decision`),
+which is why those two are asserted, not deferred. taskCancel does NOT
+coincide (production reads `history`/`task_decision`),
 which is precisely why they are deferred and their phases excluded above.
 """
 from __future__ import annotations
@@ -173,6 +173,7 @@ from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
+from artifactsmmo_cli.ai.task_pursue import pursue_due
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.means import SUPPLY_DEMAND_MIN
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -196,7 +197,6 @@ DEFERRED_SLOTS: frozenset[LadderMeans] = frozenset({
     LadderMeans.RECYCLE_RELIEF,  # opaque passthrough: bank-full + recyclableSurplusNonempty
     LadderMeans.MAINTAIN_CONSUMABLES,
     LadderMeans.TASK_CANCEL,
-    LadderMeans.PURSUE_TASK,
     LadderMeans.RECYCLE_SURPLUS,
 })
 
@@ -219,7 +219,6 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.SELL_PRESSURED: "sellPressured",
     LadderMeans.TASK_CANCEL: "taskCancel",
     LadderMeans.OBJECTIVE_STEP: "objectiveStep",
-    LadderMeans.PURSUE_TASK: "pursueTask",
     LadderMeans.MAINTAIN_CONSUMABLES: "maintainConsumables",
     LadderMeans.SUPPLY_BANK: "supplyBank",
     LadderMeans.CURRENCY_TURNIN: "currencyTurnIn",
@@ -1043,30 +1042,29 @@ def drive_and_contest(
 
     Per-slot agreement is asserted for the NON-DEFERRED slots (`ASSERTED_SLOTS`)
     plus the explicitly `driven` opaque slots (the slot(s) this fixture stands
-    up production's real machinery for). The OTHER deferred slots
-    (pursueTask/taskCancel/lowYieldCancel) are deliberate phase-based Lean
-    over-approximations of history-gated production predicates — they diverge
-    by design whenever the fixture's phase is accepted/inProgress, and are NOT
-    asserted per-slot here (that is Bricks 4b/4c's job). They CAN still fire on
-    the Lean side below the driven slot.
+    up production's real machinery for). The OTHER deferred slot (taskCancel)
+    is a deliberate phase-based Lean over-approximation of a history-gated
+    production predicate — it can diverge by design whenever the fixture's
+    phase is accepted/inProgress, and is NOT asserted per-slot here (that is
+    Brick 4c's job). The objectiveStep slot's task-phase arm (Phase
+    5-2c-iii-c-2 #4, the retired pursueTask's work) is phase-based on BOTH
+    sides, so it is asserted like any other slot.
 
     `assert_selection` (default True) asserts `selected` agreement; the driven
     slot's TRUE fixtures DO win (or lose to an agreed-upon higher slot) and pin
     selection. Pass `assert_selection=False` for a near-miss whose ONLY purpose
     is the per-slot `driven`-slot contest and whose phase deliberately trips a
-    NOT-YET-BOUND deferred slot below it (e.g. an in-progress items-task with no
-    history makes Lean `pursueTask` win while history-gated production falls
-    through to `wait` — a known over-approximation, not this brick's contest).
+    NOT-YET-BOUND deferred slot below it.
 
     Returns ``(prod_per_slot, prod_selected, lean_per_slot, lean_selected)`` so
     callers can additionally assert WHICH slot fired/was selected.
 
     `history` (default None) is threaded into production's `fires` /
-    `production_ladder` so the history-gated slots (taskCancel/pursueTask/
-    lowYieldCancel) reach their real `LearningStore` path. The Lean side has no
-    history concept — `actions_attempted` (arg[11]) and `task_feasible_projected`
-    (arg[24]) carry the Lean-side equivalent and MUST be set consistent with
-    production's history verdict for the driven scenario. 4a/4b pass history=None
+    `production_ladder` so the history-gated slot (taskCancel) reaches its
+    real `LearningStore` path. The Lean side has no history concept —
+    `actions_attempted` (arg[11]) and `task_feasible_projected` (arg[24]) carry
+    the Lean-side equivalent and MUST be set consistent with production's
+    history verdict for the driven scenario. 4a/4b pass history=None
     and the defaults, so their behaviour is unchanged.
 
     Shared scaffold for Brick 4 (4a uses it for craftRelief/recycleSurplus;
@@ -1196,11 +1194,12 @@ def test_craft_relief_near_miss_zero_net_relief() -> None:
 #
 # SELECTION NOTE (a real Lean-model finding, reported): recycleSurplus sits
 # below the lifecycle slots, and for EVERY phase some higher slot fires on the
-# Lean ladder — acceptTask(none) / pursueTask(accepted|inProgress) /
-# completeTask(complete). So recycleSurplus can NEVER be the Lean SELECTION; it
-# can only fire-and-lose. The contest here therefore drives recycleSurplus TRUE
-# (the per-slot agreement that binds arg[23]) under phase=none, where BOTH
-# ladders select acceptTask — selection agreement holds at the winner.
+# Lean ladder — acceptTask(none) / objectiveStep(accepted|inProgress, the
+# retired pursueTask's task-phase arm) / completeTask(complete). So
+# recycleSurplus can NEVER be the Lean SELECTION; it can only fire-and-lose.
+# The contest here therefore drives recycleSurplus TRUE (the per-slot
+# agreement that binds arg[23]) under phase=none, where BOTH ladders select
+# acceptTask — selection agreement holds at the winner.
 # ---------------------------------------------------------------------------
 
 
@@ -1636,9 +1635,9 @@ def test_rest_for_combat_near_miss_full_hp() -> None:
 #
 # SELECTION NOTE (a real Lean-model finding, reported — mirrors recycleSurplus
 # in 4a): maintainConsumables is ladder idx 18, BELOW the lifecycle slots
-# acceptTask(16)/pursueTask/completeTask. For EVERY phase some higher slot fires
-# on the Lean ladder (acceptTask at phase none, completeTask at complete,
-# pursueTask at accepted/inProgress), so maintainConsumables can NEVER be the
+# acceptTask(16)/objectiveStep/completeTask. For EVERY phase some higher slot
+# fires on the Lean ladder (acceptTask at phase none, completeTask at complete,
+# objectiveStep's task-phase arm at accepted/inProgress), so maintainConsumables can NEVER be the
 # Lean SELECTION — it can only fire-and-lose. The contest drives it TRUE (the
 # per-slot agreement binding arg[29]) at phase NONE, where BOTH ladders select
 # acceptTask; selection agreement holds at that winner.
@@ -1722,10 +1721,10 @@ def test_maintain_consumables_near_miss_no_combat() -> None:
 
 
 # ===========================================================================
-# Brick 4c — the HISTORY-GATED phase slots: taskCancel + pursueTask +
-# lowYieldCancel.
+# Brick 4c — the HISTORY-GATED phase slot taskCancel, and the task-phase arm
+# of objectiveStep that replaced the retired pursueTask (Phase 5-2c-iii-c-2 #4).
 #
-# UNLIKE 4a/4b's passthrough slots, these three are Lean phase-derived
+# UNLIKE 4a/4b's passthrough slots, taskCancel is Lean phase-derived
 # OVER-APPROXIMATIONS: Lean computes them from `taskLifecyclePhase` (arg[16]),
 # `actionsAttempted` (arg[11]), and `taskFeasibleProjected` (arg[24]) — it has
 # NO `LearningStore` concept — whereas production reads a real `LearningStore`
@@ -1740,10 +1739,9 @@ def test_maintain_consumables_near_miss_no_combat() -> None:
 # asserted, so any divergence that changes the WINNER is caught.
 #
 # Real production `LearningStore` (not a mock) is threaded through
-# `drive_and_contest(history=...)`; taskCancel/pursueTask take an essentially
-# EMPTY store (their PIVOT/PURSUE verdicts short-circuit before reading
-# aggregates), lowYieldCancel takes a POPULATED one (its zero-fast-path reads
-# task-pursuit + char-XP-grind yield rows).
+# `drive_and_contest(history=...)`; taskCancel and the production `pursue_due`
+# take an essentially EMPTY store (their PIVOT/PURSUE verdicts short-circuit
+# before reading aggregates).
 # ===========================================================================
 
 
@@ -1751,7 +1749,7 @@ def _empty_history() -> LearningStore:
     """A started-but-unpopulated in-memory LearningStore. Non-None (so the
     history-gated production predicates engage) but holding no Cycle rows —
     sufficient for taskCancel (PIVOT on a combat req short-circuits before any
-    aggregate read) and pursueTask (PURSUE on a req-None items task likewise)."""
+    aggregate read) and `pursue_due` (PURSUE on a req-None items task likewise)."""
     store = LearningStore(db_path=":memory:", character="hero")
     store.start_session()
     return store
@@ -1885,24 +1883,26 @@ def test_task_cancel_near_miss_feasible_task() -> None:
     taskFeasibleProjected=1 (matching feasibility) so Lean taskCancel is also
     quiet — the per-slot taskCancel contest is the point.
 
-    Selection is NOT asserted: this is a MONSTERS-task, so production PURSUE_TASK
-    (items-only) stays False and production falls through to WAIT, while Lean
-    `pursueTaskFires` is a phase-based over-approximation that fires for ANY
-    accepted task — a known divergence (see `drive_and_contest`), not this
-    near-miss's contest."""
+    Selection IS asserted: since Phase 5-2c-iii-c-2 #4 a held, unmet task fires
+    the objective step on its phase on BOTH ladders (production `fires` reads
+    `task_lifecycle_phase`; Lean `objectiveStepFires … || phaseActive`), so the
+    accepted monsters-task selects OBJECTIVE_STEP on both. (Before, production
+    PURSUE_TASK was items-only and fell through to WAIT while Lean
+    `pursueTaskFires` fired for any accepted task — that divergence is gone.)"""
     w = _monsters_task_world(task_code="easy_mob", progress=0, total=5)
     gd = GameData()
     gd._monster_level = {"easy_mob": 5}
     gd._item_stats = {}
     gd._crafting_recipes = {}
     fill_monster_stat_defaults(gd)  # craft_potions_fires→unlock_boost_target→predict_win needs full stats
-    prod, _, lean, _ = drive_and_contest(
+    prod, prod_sel, lean, lean_sel = drive_and_contest(
         w, gd, _plain_ctx(),
         driven=frozenset({LadderMeans.TASK_CANCEL}),
-        history=_empty_history(), task_feasible_projected=True,
-        assert_selection=False)
+        history=_empty_history(), task_feasible_projected=True)
     assert prod[LadderMeans.TASK_CANCEL] is False
     assert lean[LadderMeans.TASK_CANCEL] is False
+    assert prod_sel is LadderMeans.OBJECTIVE_STEP
+    assert lean_sel is LadderMeans.OBJECTIVE_STEP
 
 
 def test_task_cancel_near_miss_no_history() -> None:
@@ -1921,19 +1921,17 @@ def test_task_cancel_near_miss_no_history() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Slot 2 — pursueTask (Lean idx 15).  Production `_means_fires(PURSUE_TASK)`
-# (means.py ~106): items-task AND `task_code` AND `task_total>0` AND
-# `task_progress<task_total` AND `history is not None` AND `task_decision ==
-# PURSUE`. The cheapest PURSUE: a FEASIBLE items-task — empty catalog ⇒
-# `task_requirement` None ⇒ `task_decision_pure(req_is_none=True)` = PURSUE,
-# independent of any yield aggregate, so an EMPTY history suffices.
-#
-# Lean `pursueTaskFires` (ProductionLadder.lean ~233): phase ∈ {accepted,
-# inProgress} (NO feasibility conjunct). We drive phase=accepted and feed
-# taskFeasibleProjected=1 so the HIGHER taskCancel (idx 13) stays QUIET on the
-# Lean side, and objective_step=False so objectiveStep (idx 14) is quiet too;
-# pursueTask (idx 15) is then the highest firing slot and WINS selection on
-# both ladders.
+# Slot 2 — objectiveStep's TASK-PHASE arm (Phase 5-2c-iii-c-2 #4: the retired
+# pursueTask rung's work is now the task objective's step). Both ladders fire
+# OBJECTIVE_STEP on a held, unmet task's phase alone: production
+# `production_ladder.fires` reads `task_lifecycle_phase in {ACCEPTED,
+# IN_PROGRESS}`, Lean `objectiveStepFires := s.objectiveStepFires ||
+# phaseActive`. Neither conjoins the PURSUE verdict — a documented
+# over-approximation (the same one the old Lean `pursueTaskFires` carried);
+# whether the step has WORK is production's `pursue_due` (task_pursue.py),
+# read by `objective_step_goal`, not the ladder. We drive phase=accepted with
+# objective_step=False (the opaque flag OFF, so only the phase arm can fire)
+# and taskFeasibleProjected=1 so the HIGHER taskCancel stays QUIET.
 # ---------------------------------------------------------------------------
 
 
@@ -1962,37 +1960,42 @@ def _items_task_world(*, progress: int, total: int) -> WorldState:
         task_progress=progress, task_total=total)
 
 
-def test_pursue_task_drives_and_selects() -> None:
+def test_task_phase_drives_objective_step_and_selects() -> None:
     """TRUE fixture: feasible items-task `widget` 0/5 (phase accepted), empty
-    catalog -> `task_decision` PURSUE -> production PURSUE_TASK fires with a
-    non-None (empty) history. taskFeasibleProjected=1 keeps Lean taskCancel
-    quiet; objective_step=False keeps objectiveStep quiet; pursueTask is the
-    highest firing slot and WINS selection on BOTH ladders."""
+    catalog -> `task_decision` PURSUE, so production `pursue_due` holds (the
+    step has work). With the opaque objective_step flag OFF, OBJECTIVE_STEP
+    fires on the task phase alone on BOTH ladders; taskFeasibleProjected=1
+    keeps taskCancel quiet; OBJECTIVE_STEP is the highest firing slot and WINS
+    selection on BOTH ladders (what PURSUE_TASK used to win)."""
     w = _items_task_world(progress=0, total=5)
     gd = _feasible_items_gd()
+    hist = _empty_history()
     prod, prod_sel, lean, lean_sel = drive_and_contest(
         w, gd, _plain_ctx(),
-        driven=frozenset({LadderMeans.PURSUE_TASK}),
-        history=_empty_history(), task_feasible_projected=True,
+        driven=frozenset({LadderMeans.OBJECTIVE_STEP}),
+        history=hist, task_feasible_projected=True,
         objective_step=False)
-    # Production REALLY PURSUEs (not faked):
-    assert prod[LadderMeans.PURSUE_TASK] is True
-    assert lean[LadderMeans.PURSUE_TASK] is True
-    # The slots above pursueTask that could contest are quiet on both ladders.
+    # Production REALLY has the pursuit to do (not faked):
+    assert pursue_due(w, gd, hist) is True
+    assert prod[LadderMeans.OBJECTIVE_STEP] is True
+    assert lean[LadderMeans.OBJECTIVE_STEP] is True
+    # The slot above the step that could contest is quiet on both ladders.
     assert prod[LadderMeans.TASK_CANCEL] is False
     assert lean[LadderMeans.TASK_CANCEL] is False
-    # Strong selection teeth: pursueTask wins on both ladders.
-    assert prod_sel is LadderMeans.PURSUE_TASK
-    assert lean_sel is LadderMeans.PURSUE_TASK
+    # Strong selection teeth: the objective step wins on both ladders.
+    assert prod_sel is LadderMeans.OBJECTIVE_STEP
+    assert lean_sel is LadderMeans.OBJECTIVE_STEP
 
 
-def test_pursue_task_near_miss_too_hard() -> None:
+def test_task_phase_near_miss_too_hard() -> None:
     """Near-miss: an items-task whose deliverable needs an out-of-reach crafting
     skill (`gizmo` requires weaponcrafting 30, char has none) ->
     `task_requirement` is a non-combat skill gap -> `task_decision` PIVOTs (the
-    unobserved-gap margin rejects a default reward) -> production PURSUE_TASK
-    does NOT fire. taskFeasibleProjected=0 + driving taskCancel keeps the Lean
-    contest honest (taskCancel becomes the agreed winner)."""
+    unobserved-gap margin rejects a default reward) -> production `pursue_due`
+    is False. The objective step's task-phase arm still fires on BOTH ladders
+    (it does not read the verdict — the documented over-approximation), but
+    the PIVOT fires taskCancel ABOVE it on both (taskFeasibleProjected=0,
+    accepted phase), so both ladders agree on selecting TASK_CANCEL."""
     w = WorldState(
         character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
         # A pocket coin: this fixture DRIVES taskCancel, and S-052 refuses to
@@ -2008,15 +2011,20 @@ def test_pursue_task_near_miss_too_hard() -> None:
                            crafting_skill="weaponcrafting", crafting_level=30),
     }
     gd._crafting_recipes = {"gizmo": {"copper_bar": 6}}
-    prod, _, lean, _ = drive_and_contest(
+    hist = _empty_history()
+    prod, prod_sel, lean, lean_sel = drive_and_contest(
         w, gd, _plain_ctx(),
-        driven=frozenset({LadderMeans.TASK_CANCEL}),
-        history=_empty_history(), task_feasible_projected=False)
-    assert prod[LadderMeans.PURSUE_TASK] is False
+        driven=frozenset({LadderMeans.TASK_CANCEL, LadderMeans.OBJECTIVE_STEP}),
+        history=hist, task_feasible_projected=False)
+    assert pursue_due(w, gd, hist) is False
     # The infeasible items-task PIVOTs, so production taskCancel fires; the Lean
     # side (taskFeasibleProjected=0, accepted phase) fires taskCancel too.
     assert prod[LadderMeans.TASK_CANCEL] is True
     assert lean[LadderMeans.TASK_CANCEL] is True
+    assert prod[LadderMeans.OBJECTIVE_STEP] is True
+    assert lean[LadderMeans.OBJECTIVE_STEP] is True
+    assert prod_sel is LadderMeans.TASK_CANCEL
+    assert lean_sel is LadderMeans.TASK_CANCEL
 
 
 # ---------------------------------------------------------------------------

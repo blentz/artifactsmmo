@@ -20,7 +20,6 @@ from artifactsmmo_cli.ai.arbiter_select import (
     BAND_STEP,
     Candidate,
     arbitrate,
-    select_pure,
 )
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess, drain_snapshot
 from artifactsmmo_cli.ai.consumable_supply import best_held_heal
@@ -85,6 +84,7 @@ from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_coins import tasks_coin_total
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
+from artifactsmmo_cli.ai.task_pursue import pursue_due
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.tiers.guards import (
@@ -99,9 +99,7 @@ from artifactsmmo_cli.ai.tiers.means import (
     SELL_PRESSURE_FRACTION,
     MeansKind,
     active_means,
-    means_fires,
 )
-from artifactsmmo_cli.ai.tiers.means_worth import means_serves
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -396,19 +394,6 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
         return PostBuyBidGoal(game_data=game_data, ctx=ctx)
     if kind is MeansKind.TASK_CANCEL:
         return TaskCancelGoal()
-    if kind is MeansKind.PURSUE_TASK:
-        req = task_requirement(state, game_data)
-        if req is not None and req.skill != "combat":
-            current = state.skills.get(req.skill, 0)
-            target = min(req.required_level, current + LEVEL_LOOKAHEAD)
-            # P3a Task 2: route the task-skill grind through the planner-native
-            # LevelSkill action (via ReachSkillGoal) instead of LevelSkillGoal
-            # (retired in P3b). Arbiter ordering is unchanged (both fire at 55.0).
-            return ReachSkillGoal(skill_name=req.skill, target_level=target)
-        assert state.task_code is not None  # _fires guarantees an active task
-        return PursueTaskGoal(task_code=state.task_code,
-                              initial_progress=state.task_progress,
-                              batch=task_batch_size(state, game_data))
     if kind is MeansKind.BANK_EXPAND:
         return ExpandBankGoal(
             bank_accessible=ctx.bank_accessible,
@@ -646,8 +631,28 @@ def objective_step_goal(
                                     initial_total=tasks_coin_total(state))
         if step.task_code is None or step.is_satisfied(state, game_data):
             return None
+        if state.task_type == "items":
+            # c-2 #4 (was the PURSUE_TASK rung): work the items task the
+            # projection says to pursue.
+            return _pursue_goal(state, game_data) if pursue_due(state, game_data, history) else None
         return TaskKillsGoal(step.task_code, state.task_progress)
     return None
+
+
+def _pursue_goal(state: WorldState, game_data: GameData) -> Goal:
+    """The held items task's work: the task skill's grind while it gates the
+    task item, else the task pursuit batch."""
+    req = task_requirement(state, game_data)
+    if req is not None and req.skill != "combat":
+        current = state.skills.get(req.skill, 0)
+        target = min(req.required_level, current + LEVEL_LOOKAHEAD)
+        # Route the task-skill grind through the planner-native LevelSkill
+        # action (via ReachSkillGoal).
+        return ReachSkillGoal(skill_name=req.skill, target_level=target)
+    assert state.task_code is not None  # pursue_due guarantees an active task
+    return PursueTaskGoal(task_code=state.task_code,
+                          initial_progress=state.task_progress,
+                          batch=task_batch_size(state, game_data))
 
 
 class StrategyArbiter:
@@ -874,10 +879,10 @@ class StrategyArbiter:
 
         decision must have a .chosen_step attribute (MetaGoal | None).
 
-        Discretionary task means that serve none of the objective's needs are
-        worth-gated (`_worth_gate_suppressed`), EXCEPT TaskCancel, the escape
-        hatch for a stuck task. Stuck-recovery goal suppressions were deleted in
-        Phase 4-3c: an intention ends on a fact (stall, budget), not a countdown.
+        Stuck-recovery goal suppressions were deleted in Phase 4-3c (an
+        intention ends on a fact: stall, budget), and the worth gate with
+        PURSUE_TASK in Phase 5-2c-iii-c-2 #4 (the task objective has its own
+        turns).
 
         Returns (goal, plan, goals_tried).
         """
@@ -891,17 +896,7 @@ class StrategyArbiter:
 
         step_goal = self._resolve_step_goal(
             chosen_step, chosen_root, fallback_steps, fallback_roots, state, game_data, ctx)
-        # Task suppression needs ONE means predicate (PURSUE_TASK), and that one
-        # reads no ctx field at all (state.task_* + history), so it is evaluated
-        # here — before the step profile exists. Every OTHER means is evaluated
-        # below, on the BOUND ctx: SELL_IDLE / RECYCLE_SURPLUS / DRAIN_BANK_JUNK
-        # ask the keep authority what may be shed, and the authority reads
-        # `ctx.step_profile`. Firing them on the unbound (empty-profile) ctx let a
-        # means fire on surplus its own goal — running on the FULL profile — then
-        # refused to shed, producing a satisfied goal and a zero-length plan.
-        task_means = [k for k in (MeansKind.PURSUE_TASK,)
-                      if means_fires(k, state, game_data, self._history, ctx)]
-        step_goal = self._suppress_step_for_task(step_goal, task_means, state, game_data)
+        step_goal = self._suppress_step_for_task(step_goal, state, game_data)
 
         # The step goal is resolved BEFORE the guards so its needed map can
         # join the deposit/discard protection profile. Trace 2026-06-11 22:36
@@ -975,15 +970,11 @@ class StrategyArbiter:
             self.events.note(Mechanism.INTENTION_YIELD, last, f"turn:{turns[last]}")
         candidates = rotate(candidates, turns)
 
-        worth_suppressed = self._worth_gate_suppressed(
-            objective, chosen_root, discretionary_kinds, state, game_data, ctx,
-            needs=needs)
-
         # Captured BEFORE `_committed_repr` is overwritten: the goal this cycle
         # was STICKY on, which `select_pure` probes ahead of the ranked walk.
         prev_committed = self._committed_repr
         chosen, plan, new_committed = self._arbitrate(
-            candidates, worth_suppressed, state, game_data, actions, ctx)
+            candidates, state, game_data, actions, ctx)
 
         self._committed_repr = new_committed
         if new_committed != prev_committed:
@@ -1098,54 +1089,25 @@ class StrategyArbiter:
     def _suppress_step_for_task(
         self,
         step_goal: Goal | None,
-        discretionary_kinds: list[MeansKind],
         state: WorldState,
         game_data: GameData,
     ) -> Goal | None:
-        """Step-suppression: drop a step the active items task already covers,
-        can trade now, or whose craft would EAT the task's reserved materials."""
-        if MeansKind.PURSUE_TASK not in discretionary_kinds:
+        """Defer a step whose craft would EAT the held items task's pooled
+        materials (P0 2026-06-09: GatherMaterials(copper_helmet) ate the 6
+        copper_bars a copper_bar items task had pooled, and the task restarted
+        from zero, forever). Surplus above the remaining task need passes;
+        re-evaluated every cycle (defer, not ban). Covers GatherMaterials AND a
+        committed UpgradeEquipment whose craft consumes reserved inputs.
+
+        Only while the task is being worked (`pursue_due`). Phase 5-2c-iii-c-2
+        #4 (USER) kept this guard and deleted the two that only existed to let
+        the retired PURSUE_TASK rung win positionally — dropping a step the task
+        chain already produced, and deferring fallback gathering of a held task
+        item — since the task objective now has its own turns."""
+        if step_goal is None or not pursue_due(state, game_data, self._history):
             return step_goal
-        # Task-material reservation (P0 2026-06-09): a step whose craft closure
-        # CONSUMES a reserved item without surplus is deferred this cycle —
-        # otherwise GatherMaterials(copper_helmet) eats the 6 copper_bars the
-        # copper_bar items task just pooled and the task restarts from zero,
-        # forever. Surplus above the remaining task need passes; re-evaluated
-        # every cycle (defer, not ban). Covers GatherMaterials AND a committed
-        # UpgradeEquipment whose craft consumes reserved inputs.
-        if step_goal is not None:
-            needed = _reservation_consumption(step_goal, state, game_data)
-            if needed is not None and consumes_reserved(needed, state, game_data):
-                return None
-        if not isinstance(step_goal, GatherMaterialsGoal):
-            return step_goal
-        # An active items-task pursuit suppresses the meta-objective's
-        # GatherMaterials step ONLY when that step targets an item the task's
-        # OWN recipe chain already produces — PursueTask plans the same
-        # gather, so the meta-step is a redundant 1-cycle detour. A step
-        # whose target lives outside the task chain (e.g. ash_wood for a
-        # wooden_shield while the task is copper_ore) is independent gear
-        # progress and must not be suppressed; without it the bot never
-        # crafts equipment because the chain never gets cycles to
-        # accumulate. Non-GatherMaterials steps (UpgradeEquipment, LevelSkill)
-        # are sustained, high-value goals and always allowed to compete.
-        if step_goal._target_item in _task_recipe_inputs(state.task_code, game_data):
-            return None
-        # Trade-ready PursueTask wins over fallback gear-chain gathering.
-        # Trace 2026-06-06 14:40 (cycles 25-26): task=items/copper_bar at
-        # 20/21, 1 copper_bar in inventory; gear-chain fallback
-        # ObtainItem(copper_boots) → GatherMaterials(copper_bar, needed=8)
-        # ran instead of PursueTask's TaskTrade. One trade would complete
-        # the task; the bot instead gathered MORE copper_ore for armor
-        # while the held bar sat unused.
-        # When the fallback step's target IS the task code AND the bot
-        # holds that item, defer the fallback for one cycle so
-        # PursueTask's TaskTrade can immediately advance task_progress.
-        # After TaskComplete + rotation (or after trading), the suppression
-        # clears and fallback resumes the gear chain.
-        if (state.task_type == "items"
-                and step_goal._target_item == state.task_code
-                and state.inventory.get(state.task_code, 0) > 0):
+        needed = _reservation_consumption(step_goal, state, game_data)
+        if needed is not None and consumes_reserved(needed, state, game_data):
             return None
         return step_goal
 
@@ -1335,8 +1297,7 @@ class StrategyArbiter:
             # trade-ready). Pre-fix these were re-appended UNSUPPRESSED, so a
             # goal the reservation deferred leaked back in via the fallback
             # chain and still ate the task's pooled materials.
-            alt_goal = self._suppress_step_for_task(
-                alt_goal, discretionary_kinds, state, game_data)
+            alt_goal = self._suppress_step_for_task(alt_goal, state, game_data)
             if alt_goal is None:
                 continue
             r = repr(alt_goal)
@@ -1410,76 +1371,20 @@ class StrategyArbiter:
                                            xp_floor=state.xp))
         return out
 
-    def _worth_gate_suppressed(
-        self,
-        objective: CharacterObjective | None,
-        chosen_root: MetaGoal | None,
-        discretionary_kinds: list[MeansKind],
-        state: WorldState,
-        game_data: GameData,
-        ctx: SelectionContext,
-        needs: NeedSet | None = None,
-    ) -> set[str]:
-        """Worth gate: reprs of discretionary task means serving none of the committed objective's unmet needs."""
-        # ── Worth gate ─────────────────────────────────────────────────────
-        # Suppress discretionary task means (PursueTask/AcceptTask) that serve
-        # NONE of the committed objective's unmet needs. A suppressed committed
-        # task is skipped before the sticky check, so the objective step (earlier
-        # in the candidate order) wins instead of an always-plannable distraction
-        # task. See spec 2026-06-09 Components 3/4.
-        worth_suppressed: set[str] = set()
-        if objective is None or chosen_root is None:
-            return worth_suppressed
-        # Supplied by the caller — see the ONE PRODUCER note at its call site,
-        # which computes it exactly when `chosen_root` is not None. The early
-        # return above has already handled the None-root case, so it is present
-        # here by construction.
-        #
-        # An `if needs is None: recompute` fallback stood here briefly and was
-        # UNREACHABLE — the coverage gate said so. A second producer that can
-        # never run is worse than none: it reads as a safety net while being
-        # exactly the drift this parameter exists to remove.
-        assert needs is not None
-        if not needs.is_empty:
-            # PURSUE_TASK only. ACCEPT_TASK left this gate with its promotion
-            # to the collect band on 2026-08-19, and the gate could never have
-            # worked for it anyway: `means_serves` scores the overlap between the
-            # HELD task and the objective's needs, and an accept has no held task
-            # to score — it returned 0 and suppressed the rung whenever the
-            # objective had any unmet need, which is nearly always. A draw cannot
-            # be judged before it is drawn; S-047 judges it after, and S-048
-            # discards it when it advances nothing.
-            #
-            # The loop also only ever sees `discretionary_kinds`, which
-            # ACCEPT_TASK is no longer a member of — leaving it named here would
-            # be a dead branch.
-            for mk in (MeansKind.PURSUE_TASK,):
-                if mk not in discretionary_kinds:
-                    continue
-                g = map_means(mk, game_data, ctx, state)
-                if not means_serves(mk, g, needs, state, game_data):
-                    worth_suppressed.add(repr(g))
-        return worth_suppressed
-
     def _arbitrate(
         self,
         candidates: list[Candidate],
-        worth_suppressed: set[str],
         state: WorldState,
         game_data: GameData,
         actions: list[Action],
         ctx: SelectionContext,
     ) -> tuple[Goal | None, list[Action], str | None]:
-        """Ordered walk → worth-gate bypass → Wait fallback.
+        """Ordered walk → Wait fallback.
 
         ONE walk at ONE budget. The cheap/full two-pass this replaced escalated
         only `if chosen is None`, and a fallback combat grind always plans, so
         the escalation was unreachable in practice and the cheap budget was the
         real budget for every objective."""
-
-        def is_suppressed(goal: Goal) -> bool:
-            r = repr(goal)
-            return r != "TaskCancel" and r in worth_suppressed
 
         interrupts = [c for c in candidates if c.band == BAND_GUARD]
         non_wait = [c for c in candidates
@@ -1506,25 +1411,11 @@ class StrategyArbiter:
         chosen, plan, new_committed = arbitrate(
             interrupts=interrupts, candidates=non_wait,
             committed_repr=self._committed_repr,
-            try_plan=try_plan, is_satisfied=satisfied, is_suppressed=is_suppressed)
-        if chosen is None and worth_suppressed:
-            # Last resort: objective step unplannable AND every need-serving means
-            # failed, leaving only worth-suppressed task means. Re-run WITHOUT the
-            # worth gate so the bot keeps earning instead of idling. Mark the trace
-            # so "objective stalled, doing income" is observable.
-            chosen, plan, new_committed = select_pure(
-                candidates=non_wait, committed_repr=self._committed_repr,
-                try_plan=try_plan, is_satisfied=satisfied,
-                is_suppressed=lambda _goal: False)
-            if chosen is not None:
-                self.events.note(Mechanism.WORTH_GATE_BYPASS, repr(chosen))
-                # A MARKER, not an attempt — the plan it reports was produced by
-                # the re-run walk's own entries. `elapsed_ms` is 0.0 so summing
-                # the column over a cycle still yields the search time and
-                # nothing else.
-                self.goals_tried.append({"goal": "worth_gate_bypassed", "nodes": 0,
-                                         "depth": 0, "timed_out": False,
-                                         "plan_len": len(plan), "elapsed_ms": 0.0})
+            try_plan=try_plan, is_satisfied=satisfied,
+            # The worth gate (the hook's only producer) was retired with
+            # PURSUE_TASK in Phase 5-2c-iii-c-2 #4: the task objective has its
+            # own turns, so nothing is suppressed for serving no need.
+            is_suppressed=lambda _goal: False)
         if chosen is None:
             # Last resort: Wait (special-cased to a single WaitAction).
             wait = next((c for c in candidates if isinstance(c.goal, WaitGoal)), None)

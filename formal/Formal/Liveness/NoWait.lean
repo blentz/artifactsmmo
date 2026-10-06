@@ -8,11 +8,16 @@ because `.wait` fires unconditionally as the last-resort — i.e. "never deadloc
 there is satisfied by WAITING, which is no progress at all. The real obligation is
 `hnowait`: the ladder NEVER returns `.wait`, i.e. a PRODUCTIVE means always fires.
 
-It holds while a task is in flight or the objective has a step: the two task
-means left on the ladder cover every held task —
-  `pursueTaskFires  = (phase ∈ {accepted, inProgress})`
-  `completeTaskFires = (phase = complete)`
-and both, like `.objectiveStep`, sit before `.wait` in `allInLadderOrder`.
+It holds while a task is in flight or the objective has a step: every held
+task is covered —
+  `objectiveStepFires ⊇ (phase ∈ {accepted, inProgress})`
+  `completeTaskFires  = (phase = complete)`
+and both sit before `.wait` in `allInLadderOrder`.
+
+THE IN-FLIGHT CASE MOVED into `.objectiveStep` (Phase 5-2c-iii-c-2 #4): a held
+task's work is the task objective's step, so the ladder's
+`objectiveStepFires` carries the phase disjunct the retired `pursueTaskFires`
+carried (the same over-approximation).
 
 THE TASKLESS CASE MOVED, it did not vanish (Phase 5-2c-iii-c-2 #3). Taking a
 draw was the ACCEPT_TASK rung; it is now the task objective's step, inside
@@ -30,15 +35,18 @@ open Formal.Liveness.Measure
 open Formal.Liveness.MeansKind
 open Formal.Liveness.ProductionLadder
 
-/-- Phase-totality over a HELD task: pursue or complete fires, or the character
-    holds no task. (Until Phase 5-2c-iii-c-2 #3 an `acceptTask` disjunct also
-    covered the taskless state with a draw owed; that draw is now the task
-    objective's step, inside `.objectiveStep` — see the module docstring.) -/
+/-- Phase-totality over a HELD task: complete or the objective step fires, or
+    the character holds no task. RESTATED Phase 5-2c-iii-c-2 #4: the
+    `pursueTask` disjunct became `objectiveStep`, whose ladder predicate now
+    includes the active-phase test `pursueTaskFires` was. (Until #3 an
+    `acceptTask` disjunct also covered the taskless state with a draw owed;
+    that draw is now the task objective's step too — see the module
+    docstring.) -/
 theorem task_means_always_fires (s : State) :
-    fires .pursueTask s = true
-      ∨ fires .completeTask s = true
+    fires .completeTask s = true
+      ∨ fires .objectiveStep s = true
       ∨ s.taskLifecyclePhase = .none := by
-  simp only [fires, pursueTaskFires, completeTaskFires]
+  simp only [fires, objectiveStepFires, completeTaskFires]
   cases h : s.taskLifecyclePhase <;> simp
 
 /-- Generic: a member whose body is `some` makes `findSome?` non-`none`. -/
@@ -73,8 +81,8 @@ theorem productionLadder_ne_wait (s : State)
   -- A task means fires AND lives in the init (before .wait).
   have hinit_fires : ∃ k ∈ allInLadderOrder.dropLast, fires k s = true := by
     rcases task_means_always_fires s with h | h | hnone
-    · exact ⟨.pursueTask, by decide, h⟩
     · exact ⟨.completeTask, by decide, h⟩
+    · exact ⟨.objectiveStep, by decide, h⟩
     · rcases hlive with hph | hstep
       · exact absurd hnone hph
       · exact ⟨.objectiveStep, by decide, by simp [fires, objectiveStepFires, hstep]⟩

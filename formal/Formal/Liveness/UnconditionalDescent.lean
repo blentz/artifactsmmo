@@ -8,7 +8,7 @@ perception refresh arms `objectiveStepFires`, so:
 1. the ladder can never return `none` (`.objectiveStep` always fires);
 2. the selected means always sits in the 18-element ladder prefix ending at
    `.objectiveStep` (`ladder_mem_blockerPrefix`) — the discretionary tail
-   (`pursueTask … wait`) is unreachable below the cap;
+   (`maintainConsumables … wait`) is unreachable below the cap;
 3. every prefix means strictly descends `FMeasure`
    (`BlockerDescent.descends_*`).
 
@@ -63,7 +63,7 @@ def blockerPrefix : List MeansKind :=
 
 /-- The discretionary tail — everything after `.objectiveStep`. -/
 def discretionaryTail : List MeansKind :=
-  [.pursueTask, .maintainConsumables,
+  [.maintainConsumables,
    .sellIdle, .recycleSurplus, .geBid, .drainBankJunk, .wait]
 
 /-- `allInLadderOrder` splits at `.objectiveStep`. -/
@@ -108,7 +108,7 @@ theorem ladder_some_below_fifty (s : State) (hlvl : s.level < 50) :
   rw [List.findSome?_eq_none_iff] at hnone
   have hobj : fires .objectiveStep (perceptionRefresh s) = true := by
     simp only [fires, ProductionLadder.objectiveStepFires]
-    exact perceptionRefresh_objectiveStepFires s hlvl
+    simp [perceptionRefresh_objectiveStepFires s hlvl]
   have h : (if fires .objectiveStep (perceptionRefresh s) = true
       then some MeansKind.objectiveStep else none) = (none : Option MeansKind) :=
     hnone .objectiveStep (by decide)
@@ -124,7 +124,7 @@ theorem cycleStepF_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     fMeasureLt (fMeasure (cycleStepF s)) (fMeasure s) := by
   have hobj : fires .objectiveStep (perceptionRefresh s) = true := by
     simp only [fires, ProductionLadder.objectiveStepFires]
-    exact perceptionRefresh_objectiveStepFires s hlvl
+    simp [perceptionRefresh_objectiveStepFires s hlvl]
   cases hk : productionLadder (perceptionRefresh s) with
   | none => exact absurd hk (ladder_some_below_fifty s hlvl)
   | some k =>
@@ -151,7 +151,6 @@ theorem cycleStepF_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | objectiveStep   =>
         exact descends_fight s hlvl (Or.inr (Or.inr
           ⟨hk, perceptionRefresh_objectiveStepIsFight s hlvl⟩))
-    | pursueTask      => exact absurd hmem (by decide)
     | maintainConsumables => exact absurd hmem (by decide)
     | sellIdle        => exact absurd hmem (by decide)
     | recycleSurplus  => exact absurd hmem (by decide)

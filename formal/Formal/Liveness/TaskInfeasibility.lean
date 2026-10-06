@@ -335,27 +335,6 @@ theorem taskInfeasible_implies_taskCancelFires_headline
     taskCancelFires s = true :=
   taskInfeasible_implies_taskCancelFires s h
 
-/-- Strict-form companion (Phase 23d-3): the symmetric form for
-    `pursueTaskFires`, which is also phase-gated on `{.accepted,
-    .inProgress}` in the Liveness model. An infeasible task ALSO
-    satisfies the `pursueTaskFires` phase predicate; the PIVOT/PURSUE
-    decision-level disambiguation is the Theorem B content.
-
-    Honest disclosure: at the Liveness layer this means BOTH
-    `taskCancelFires` AND `pursueTaskFires` fire on an active task —
-    production picks one via `task_decision`; the Liveness model
-    collapses to "an active-task means is plannable". The Phase 23d-1
-    `taskAccepted_implies_cancelOrPursueFires` already noted this
-    determinism property. -/
-theorem taskInfeasible_implies_pursueTaskFires
-    (s : State) (h : taskInfeasible s) :
-    pursueTaskFires s = true := by
-  obtain ⟨_, hPhase, _⟩ := h
-  unfold pursueTaskFires
-  cases hPhase with
-  | inl ha => rw [ha]; simp
-  | inr hi => rw [hi]; simp
-
 /-! ## Non-vacuity witnesses -/
 
 /-- Non-vacuity: a concrete skill-gap witness exists. Demonstrates the

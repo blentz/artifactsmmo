@@ -148,7 +148,6 @@ import Formal.Liveness.XpMonotonicity
 import Formal.Liveness.LifecycleBound7
 import Formal.Liveness.GameDataInvariance
 import Formal.Liveness.CategoryBBridge
-import Formal.Liveness.PursueTaskSelection
 import Formal.Liveness.InventorySemantics
 import Formal.Liveness.EquipmentSemantics
 import Formal.Liveness.PositionSemantics

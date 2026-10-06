@@ -61,8 +61,6 @@ import Formal.Liveness.XpMonotonicity
 import Formal.Liveness.LifecycleBound7
 import Formal.Liveness.GameDataInvariance
 import Formal.Liveness.CategoryBBridge
-import Formal.Liveness.PursueTaskSelection
-import Formal.Liveness.InProgressDecidesWithSelection
 import Formal.Liveness.InventorySemantics
 import Formal.Liveness.EquipmentSemantics
 import Formal.Liveness.PositionSemantics
@@ -127,11 +125,9 @@ open Formal.Liveness.CycleStep
 #print axioms _fires_completeTask_implies_completeTask_positive
 #print axioms _fires_sellPressured_implies_sellInventory_positive
 #print axioms _fires_taskCancel_implies_taskCancel_positive
-#print axioms _fires_pursueTask_implies_pursueTask_positive
 #print axioms _fires_sellIdle_implies_sellInventory_positive
 #print axioms _fires_bankExpand_implies_expandBank_positive
 #print axioms _fires_wait_implies_wait_positive
-#print axioms pursueTaskValueModel_positive_when_unsatisfied
 
 -- Phase 20e-v2 step 2: unconditional no-deadlock headline (replaces the
 -- retracted Phase 20c-v2 conditional `productionLadder_total_under_invariants`
@@ -165,11 +161,10 @@ open Formal.Liveness.CycleStep
 #print axioms plan_exists_for_bankUnlock
 #print axioms plan_exists_for_reachUnlockLevel
 
--- Phase 21d-1: final Tier-3 plan-existence lemmas. `.taskTrade` collapses
--- multi-trade delivery into one step (pursueTask). `.objectiveStep` is a
+-- Phase 21d-1: final Tier-3 plan-existence lemmas (`plan_exists_for_pursueTask`
+-- retired with PURSUE_TASK, Phase 5-2c-iii-c-2 #4). `.objectiveStep` is a
 -- synthetic placeholder ActionKind (NOT a production Action subclass) —
 -- see PlanAction.lean docstring for the honest disclosure.
-#print axioms plan_exists_for_pursueTask
 #print axioms plan_exists_for_objectiveStep
 
 -- Phase 22a: cycle-loop infrastructure (Tier 4 scaffold). `cycleStep`
@@ -202,7 +197,7 @@ open Formal.Liveness.CumulativeProgress
 -- The OLD `cumulative_progress_lifecycle_axiom` has been DELETED; the
 -- unrestricted headline `cumulative_progress_under_no_wait` now depends on
 -- the smaller decomposed axioms in `Formal.Liveness.LIV003Decomposition`:
---   • LIV-003a — THEOREM `taskAccepted_implies_cancelOrPursueFires`
+--   • LIV-003a — THEOREM `taskAccepted_implies_cancelOrStepFires`
 --     (provable; no axiom)
 --   • LIV-003b — `lowYieldSampleThreshold`, `_pos`,
 --     `inProgress_decides_within_threshold`
@@ -211,9 +206,9 @@ open Formal.Liveness.CumulativeProgress
 --     composition residual replacing the fat axiom)
 -- See `Formal/Liveness/LIV003Decomposition.lean` for the full disclosure.
 open Formal.Liveness.LIV003Decomposition
-#print axioms taskAccepted_implies_cancelOrPursueFires
-#print axioms taskInProgress_implies_cancelOrPursueFires
-#print axioms taskActive_implies_cancelOrPursueFires
+#print axioms taskAccepted_implies_cancelOrStepFires
+#print axioms taskInProgress_implies_cancelOrStepFires
+#print axioms taskActive_implies_cancelOrStepFires
 -- LIV-003b (lowYieldSampleThreshold, inProgress_decides_within_threshold) retired
 -- with the LOW_YIELD_CANCEL rung, Phase 5-2c-iii-c-2.
 #print axioms taskPoolFinite
@@ -222,7 +217,7 @@ open Formal.Liveness.LIV003Decomposition
 -- axioms DELETED; the bridge axiom discharged as
 -- lifecycle_progress_from_bounds_proven (LifecycleBound7).
 -- cumulative_progress_under_no_wait also deleted (axiom-using wrapper).
-#print axioms accepted_state_decides_cancel_or_pursue
+#print axioms accepted_state_decides_cancel_or_step
 
 -- Phase 23d-3 — LIV-003a STRONG FORM: feasibility-grounded bridge.
 -- `taskInfeasible` packages a Phase-13 feasibility witness with the
@@ -234,7 +229,6 @@ open Formal.Liveness.LIV003Decomposition
 open Formal.Liveness.TaskInfeasibility
 #print axioms taskInfeasible_implies_taskCancelFires
 #print axioms taskInfeasible_implies_taskCancelFires_headline
-#print axioms taskInfeasible_implies_pursueTaskFires
 #print axioms combatGate_implies_pivot_decision
 #print axioms noHistory_implies_pivot_decision
 #print axioms vpc_below_threshold_implies_pivot
@@ -398,16 +392,8 @@ open Formal.Liveness.CategoryBBridge
 #print axioms hnowait_safety_anchor
 #print axioms hfightFires_safety_anchor
 
--- Item 3a/3b: pursueTask ladder selection conditions + headline.
-open Formal.Liveness.PursueTaskSelection
-#print axioms productionLadder_eq_pursueTask
-#print axioms cycleStep_eq_taskTrade
-#print axioms pursueTaskFires_when_inProgress
-#print axioms hpursue_under_conditions
-
--- Item 3c: bundle-form headline.
-open Formal.Liveness.InProgressDecidesWithSelection
-#print axioms inProgress_decides_within_threshold_with_selection_conditions
+-- Item 3a/3b (PursueTaskSelection) retired with the PURSUE_TASK rung,
+-- Phase 5-2c-iii-c-2 #4.
 
 -- Item 4a: inventory composition semantics.
 open Formal.Liveness.InventorySemantics
@@ -679,8 +665,9 @@ open Formal.Liveness.UnconditionalDescent
 -- Residual closure (2026-07-04, docs/PLAN_residual_closure.md): the
 -- defer-faithful, adversarially-re-arming capstone. cycleStepD models the
 -- items-task LONG-HAUL DEFER window (residual 3: arming gated on
--- itemsTaskDeferActive; inside the window the cycle pursues the items task,
--- descending taskCycles) and worst-cases chore re-arming (residual 4, fight
+-- itemsTaskDeferActive; inside the window the objective step works the held
+-- items task — since Phase 5-2c-iii-c-2 #4 that is the task objective's step,
+-- which replaced the PURSUE_TASK rung — descending taskCycles) and worst-cases chore re-arming (residual 4, fight
 -- direction: EVERY fight re-arms ALL 8 chore latches; reach-50 still holds —
 -- flags are lex-dominated by the fight's level/xp descent). The synthetic
 -- placeholder row (stale-armed objective Bool inside the window) descends the
@@ -692,10 +679,10 @@ open Formal.Liveness.DMeasure
 open Formal.Liveness.BlockerDescentD
 #print axioms descendsD_fight
 #print axioms descendsD_placeholder
-#print axioms descendsD_pursueTask
 #print axioms descendsD_completeTask
 open Formal.Liveness.DeferFaithful
-#print axioms ladder_mem_pursuePrefix
+#print axioms perceptionRefreshD_window
+#print axioms objectiveStepD_fires_below_fifty
 #print axioms ladderD_some_below_fifty
 #print axioms cycleStepD_descends_below_fifty
 #print axioms ai_reaches_fifty_defer_faithful
@@ -775,6 +762,7 @@ open Formal.Liveness.WitnessAcquirable
 -- nothing but a reader. The kernel cannot keep a modelling constant honest;
 -- this constant is the example, not the exception.
 open Formal.Liveness.GearedDescent
+#print axioms objectiveStepE_fires_in_window
 #print axioms cycleStepE_descends_below_fifty
 #print axioms ai_reaches_fifty_geared
 

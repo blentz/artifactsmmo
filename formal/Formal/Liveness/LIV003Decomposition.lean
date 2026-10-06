@@ -16,15 +16,17 @@
 
   ## Decomposition
 
-    • LIV-003a — **THEOREM** (cancel-vs-pursue determinism). Provable from
-      the Phase 23c-3b phase-based `taskCancelFires` / `pursueTaskFires`
-      definitions in `Formal.Liveness.ProductionLadder`. NO new axiom.
+    • LIV-003a — **THEOREM** (cancel-vs-step determinism). Provable from
+      the phase-based `taskCancelFires` / `objectiveStepFires` definitions
+      in `Formal.Liveness.ProductionLadder`. NO new axiom. (Until Phase
+      5-2c-iii-c-2 #4 the second predicate was `pursueTaskFires`; that rung
+      is retired and the objective step carries its active-phase test.)
 
       Claim: when `taskLifecyclePhase = .accepted`, the production ladder's
       task-decision predicates are determinate: either `taskCancelFires` or
-      `pursueTaskFires` returns `true`. This corresponds to user mandate (a)
-      and (b): the planner ALWAYS picks one of {Cancel, Pursue} when a task
-      is accepted; it does not stall.
+      `objectiveStepFires` returns `true`. This corresponds to user mandate
+      (a) and (b): the planner ALWAYS picks one of {Cancel, work the task}
+      when a task is accepted; it does not stall.
 
     • LIV-003b — **SMALL AXIOM + DERIVED THEOREM** (in-progress decision
       within N samples). One opaque positive Nat (`lowYieldSampleThreshold`)
@@ -118,59 +120,56 @@ open Formal.Liveness.TaskLifecyclePhase
 open Formal.Liveness.Plan
 open Formal.Liveness.PlanAction
 
-/-! ## LIV-003a — Cancel-vs-Pursue determinism (THEOREM) -/
+/-! ## LIV-003a — Cancel-vs-Step determinism (THEOREM) -/
 
-/-- LIV-003a (Phase 23d-1) — **THEOREM**, NOT an axiom.
+/-- LIV-003a (Phase 23d-1; RESTATED Phase 5-2c-iii-c-2 #4) — **THEOREM**, NOT
+    an axiom.
 
     When a task is in the `.accepted` phase (post-`acceptTask`,
     pre-progress), the production ladder's task-decision predicates are
-    determinate: at least one of `taskCancelFires` or `pursueTaskFires`
+    determinate: at least one of `taskCancelFires` or `objectiveStepFires`
     returns `true`. In production terms, the planner ALWAYS commits to
-    Cancel or Pursue when a task is sitting at `.accepted`; it does NOT
-    stall or no-op.
+    Cancel or to working the task when a task is sitting at `.accepted`; it
+    does NOT stall.
 
     This corresponds to the user's mandate clauses (a) and (b): given a
     task whose objective is only known after `TaskAccept`, the planner
     EITHER finds the task unsatisfiable and Cancels (a), OR takes an
     action attempting the objective (b).
 
-    Proof: by case analysis on `s.taskLifecyclePhase = .accepted`, both
-    `taskCancelFires` (decide(.accepted) || decide(.inProgress)) and
-    `pursueTaskFires` (same gate) evaluate to `true`. -/
-theorem taskAccepted_implies_cancelOrPursueFires
+    Restatement: the second disjunct was `pursueTaskFires`. PURSUE_TASK is
+    retired — a held task's work is the task objective's step — and the
+    ladder's `objectiveStepFires` now carries the same active-phase test, so
+    the claim is unchanged in strength. -/
+theorem taskAccepted_implies_cancelOrStepFires
     (s : State) (h : s.taskLifecyclePhase = .accepted) :
-    taskCancelFires s = true ∨ pursueTaskFires s = true := by
+    taskCancelFires s = true ∨ objectiveStepFires s = true := by
   -- Item 1d: refined taskCancelFires needs !taskFeasibleProjected too,
-  -- which isn't guaranteed here. pursueTaskFires has no such gate, so
-  -- choose the right disjunct.
+  -- which isn't guaranteed here. The objective step's phase disjunct has no
+  -- such gate, so choose the right disjunct.
   right
-  unfold pursueTaskFires
+  unfold objectiveStepFires
   rw [h]
   simp
 
-/-- LIV-003a corollary — same shape, for `.inProgress`. The PIVOT decision
-    in production fires (via `lowYieldCancel`) only with `≥
-    lowYieldSampleThreshold` samples; here we capture the WEAKER
-    structural fact that the gating predicates are non-empty. -/
-theorem taskInProgress_implies_cancelOrPursueFires
+/-- LIV-003a corollary — same shape, for `.inProgress`. -/
+theorem taskInProgress_implies_cancelOrStepFires
     (s : State) (h : s.taskLifecyclePhase = .inProgress) :
-    taskCancelFires s = true ∨ pursueTaskFires s = true := by
+    taskCancelFires s = true ∨ objectiveStepFires s = true := by
   right
-  unfold pursueTaskFires
+  unfold objectiveStepFires
   rw [h]
   simp
 
-/-- LIV-003a — the cancel/pursue predicates are mutually-exhaustive over
-    the two task-active phases. Used by the composition to show that
-    `.accepted`/`.inProgress` states make PROGRESS via the ladder rather
-    than stalling. -/
-theorem taskActive_implies_cancelOrPursueFires
+/-- LIV-003a — the cancel/step predicates are mutually-exhaustive over
+    the two task-active phases. -/
+theorem taskActive_implies_cancelOrStepFires
     (s : State) (h : s.taskLifecyclePhase = .accepted
                   ∨ s.taskLifecyclePhase = .inProgress) :
-    taskCancelFires s = true ∨ pursueTaskFires s = true := by
+    taskCancelFires s = true ∨ objectiveStepFires s = true := by
   cases h with
-  | inl h => exact taskAccepted_implies_cancelOrPursueFires s h
-  | inr h => exact taskInProgress_implies_cancelOrPursueFires s h
+  | inl h => exact taskAccepted_implies_cancelOrStepFires s h
+  | inr h => exact taskInProgress_implies_cancelOrStepFires s h
 
 /-! ## LIV-003b — retired (Phase 5-2c-iii-c-2)
 

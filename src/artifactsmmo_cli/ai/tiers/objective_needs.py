@@ -129,16 +129,12 @@ def objective_needs(root: MetaGoal, state: WorldState, game_data: GameData) -> N
                        char_xp=state.level < root.level)
     if isinstance(root, ReachSkillLevel):
         # Wave 3a THE FLIP. A skill climb's one unmet need is XP in that skill,
-        # and `NeedSet.skill_xp` is exactly the set `means_worth._task_need_
-        # overlap` intersects the held task's craft/gather chain against. Before
-        # the flip nothing could hand this function a `ReachSkillLevel`, so the
-        # empty fallthrough below was unreachable for it; the moment the root
-        # graph could resolve one, that fallthrough would have returned an EMPTY
-        # NeedSet and switched the arbiter's PURSUE_TASK worth gate OFF for the
-        # whole climb — `means_serves` returns True unconditionally on an empty
-        # need set. A live gate silently disabled by a new root kind is not a
-        # deletion anyone reviewed, so the arm lands with the flip that makes it
-        # reachable, not after it.
+        # carried as `NeedSet.skill_xp`. Before the flip nothing could hand this
+        # function a `ReachSkillLevel`, so the empty fallthrough below was
+        # unreachable for it; the arm lands with the flip that makes it
+        # reachable, so a skill climb never reads as "no unmet need". (Its first
+        # consumer, the PURSUE_TASK worth gate, was retired in Phase
+        # 5-2c-iii-c-2 #4.)
         #
         # Emptiness mirrors the `ReachCharLevel` arm above: the need is stated
         # only while it is UNMET. `.get(..., 1)` is the skill floor this

@@ -30,7 +30,6 @@
   Opaque-gated MeansKinds:
     - `lowYieldCancel`  (LowYieldCancelGoal value is constant 70 if `fires`)
     - `taskCancel`      (TaskCancelGoal value is 12 if pivoting + not satisfied)
-    - `pursueTask`      (PursueTaskGoal value > 0 if not satisfied)
     - `objectiveStep`   (NO Phase-18 value function — GAP, see below)
 
   ## Disclosed gap: `objectiveStep`
@@ -44,17 +43,6 @@
   per-MeansKind table in the phase report. A later phase must either
   add a Phase-18 model for the objective StepGoal or fold the objective
   step into a different firing-witness contract.
-
-  ## Disclosed model: `pursueTask`
-
-  `Formal.GoalSystem` does NOT expose a `pursueTaskValue` in the
-  Phase-18 "Bool → Rat" shape. `Formal.Phase10GoalLattices.pursueTaskValue`
-  has a 5-input form with batch logic that doesn't cleanly compose here.
-  We therefore define a local `pursueTaskValueModel` mirroring the
-  production goal's "value = priority constant when not satisfied" — a
-  thin wrapper whose semantics match production exactly for the
-  fire-positive direction we care about. This makes the load-bearing
-  modeling commitment explicit.
 
   Liveness namespace — Mathlib axioms allowed.
 -/
@@ -119,22 +107,6 @@ def completeTaskSatisfied (s : State) : Bool :=
 
 /-- `CompleteTaskGoal` progressFull witness for Phase-18 routing. -/
 def completeTaskProgressFull (s : State) : Bool := decide (s.taskProgress ≥ s.taskTotal)
-
-/-- `PursueTaskGoal.is_satisfied` model — no task / total=0 / progress
-    already at total. Used in the opaque invariant. -/
-def pursueTaskSatisfied (s : State) : Bool :=
-  s.taskCode.isNone || decide (s.taskTotal = 0)
-    || decide (s.taskProgress ≥ s.taskTotal)
-
-/-- Production-shape `PursueTaskGoal.value` — priority `PRIORITY_FLOOR = 35`
-    when not satisfied, else 0. Modeled directly here because
-    `Formal.GoalSystem` does not expose this exact shape. -/
-def pursueTaskValueModel (satisfied : Bool) : Rat :=
-  if satisfied then 0 else 35
-
-theorem pursueTaskValueModel_positive_when_unsatisfied :
-    pursueTaskValueModel false > 0 := by
-  unfold pursueTaskValueModel; norm_num
 
 /-! ## ProductionInvariants — load-bearing opaque-Bool connections. -/
 
@@ -400,55 +372,6 @@ theorem _fires_taskCancel_implies_taskCancel_positive
 /-! ### Objective step — DISCLOSED GAP (no lemma) -/
 
 /-! ### Discretionary tier -/
-
-/-- PURSUE_TASK: Phase 23c-3b phase-based form. `_fires .pursueTask s`
-    means `taskLifecyclePhase ∈ {.accepted, .inProgress}`. Under the
-    consistency predicate, the phase determines `taskCode.isSome` and
-    `taskProgress < taskTotal`, so `pursueTaskSatisfied s = false` and
-    `pursueTaskValueModel false = 35 > 0`. -/
-theorem _fires_pursueTask_implies_pursueTask_positive
-    (s : State) (hcons : taskPhaseConsistent s) :
-    fires .pursueTask s = true →
-    pursueTaskValueModel (pursueTaskSatisfied s) > 0 := by
-  intro h
-  unfold fires pursueTaskFires at h
-  simp only [Bool.or_eq_true, decide_eq_true_eq] at h
-  obtain ⟨hderive, _hnonemp, _htotpos⟩ := hcons
-  unfold Formal.Liveness.TaskLifecyclePhase.deriveTaskLifecyclePhase at hderive
-  unfold pursueTaskSatisfied
-  cases hc : s.taskCode with
-  | none =>
-    rw [hc] at hderive
-    cases h with
-    | inl heq => rw [heq] at hderive; cases hderive
-    | inr heq => rw [heq] at hderive; cases hderive
-  | some code =>
-    rw [hc] at hderive
-    by_cases hemp : code = ""
-    · simp [hemp] at hderive
-      cases h with
-      | inl heq => rw [heq] at hderive; cases hderive
-      | inr heq => rw [heq] at hderive; cases hderive
-    · simp [hemp] at hderive
-      by_cases htot0 : s.taskTotal = 0
-      · simp [htot0] at hderive
-        cases h with
-        | inl heq => rw [heq] at hderive; cases hderive
-        | inr heq => rw [heq] at hderive; cases hderive
-      · simp [htot0] at hderive
-        by_cases hge : s.taskProgress ≥ s.taskTotal
-        · simp [hge] at hderive
-          cases h with
-          | inl heq => rw [heq] at hderive; cases hderive
-          | inr heq => rw [heq] at hderive; cases hderive
-        · have htot_ne : ¬ s.taskTotal = 0 := htot0
-          have hprog_lt : s.taskProgress < s.taskTotal := Nat.lt_of_not_le hge
-          have hsat_false :
-              ((some code).isNone || decide (s.taskTotal = 0)
-                || decide (s.taskProgress ≥ s.taskTotal)) = false := by
-            simp [htot_ne, Nat.not_le_of_lt hprog_lt]
-          rw [hsat_false]
-          exact pursueTaskValueModel_positive_when_unsatisfied
 
 /-- SELL_IDLE: `_fires .sellIdle s` ⇒ `sellInventoryValue > 0`
     (activeWindow=true branch yields ≥ sellSeizeWindowValue = 60). -/

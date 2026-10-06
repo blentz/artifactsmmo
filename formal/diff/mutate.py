@@ -185,7 +185,6 @@ SHOULD_REPLAN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "should_replan.py
 GRIND_HEAL_PREP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grind_heal_prep.py"
 BAG_PEAK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bag_peak.py"
 ACTION_REJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "action_rejection.py"
-MEANS_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means_worth.py"
 TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "taskmaster_choice.py"
 EQUIPMENT_PROFILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equipment_profile.py"
 INVENTORY_ROOM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_room.py"
@@ -2531,9 +2530,6 @@ DECIDE_KEY_MUTATIONS = [
      "    GuardKind.HP_CRITICAL: \"RestoreHP\",",
      "    GuardKind.HP_CRITICAL: \"WRONG\","),
     # MeansKind dispatch: similar — corrupt the PURSUE_TASK mapping.
-    ("decide_key: PURSUE_TASK repr corrupted",
-     "    MeansKind.PURSUE_TASK: \"PursueTask\",",
-     "    MeansKind.PURSUE_TASK: \"WRONG\","),
     # PLAN #6a: the MAINTAIN_CONSUMABLES repr must match the Lean mirror.
     ("decide_key: MAINTAIN_CONSUMABLES repr corrupted",
      "    MeansKind.MAINTAIN_CONSUMABLES: \"MaintainConsumables\",",
@@ -4610,20 +4606,6 @@ MEMO_ENRICH_MUTATIONS = [
     ("memo enrich: buy-only currency cost dropped",
      "                if SourceKind.BUY in graph.leaves.get(item, frozenset()):",
      "                if False:"),
-]
-
-# means_worth.means_serves — the boolean special case of the means<->objective
-# synergy (spec §2.5). Unit-killed by tests/test_ai/test_means_worth.py.
-MEANS_SERVES_MUTATIONS = [
-    # Threshold loosened: overlap 0 gives synergy == S_MIN, so `>=` serves EVERY
-    # task, dissolving the worth gate.
-    ("means_serves: threshold >= floods every task through the gate",
-     "    return synergy_pure(overlap, _TASK_OUTPUT_KINDS) > S_MIN",
-     "    return synergy_pure(overlap, _TASK_OUTPUT_KINDS) >= S_MIN"),
-    # char-XP clause dropped: a monsters-task no longer serves a char-level need.
-    ("means_serves: monsters-task char-xp clause dropped",
-     "    if needs.char_xp and state.task_type == \"monsters\":\n        serving += 1",
-     "    if False:\n        serving += 1"),
 ]
 
 # taskmaster_choice.choose_taskmaster — the master lever (spec §4). Unit-killed by
@@ -7236,6 +7218,9 @@ FIGHT_APPLICABILITY_MUTATIONS = [
 # The task objective (Phase 5-2c-iii-c-1). Killed by
 # tests/test_ai/test_task_objective.py.
 TASK_ROOT_MUTATIONS = [
+    ("root: a pursued items task is never offered (c-2 pursue fold)",
+     "    if state.task_type == \"items\" and _route.task_worth_pursuing(state, game_data, history):\n",
+     "    if False:\n"),
     ("root: an owed draw never offers the task objective (c-2 accept fold)",
      "    if not state.task_code and accept_due(state, game_data, ctx):\n",
      "    if False:\n"),
@@ -7259,6 +7244,9 @@ TASK_ROOT_MUTATIONS = [
      "            ):\n        return None\n"),
 ]
 TASK_STEP_MUTATIONS = [
+    ("step: an items task is never worked (c-2 pursue fold)",
+     "            return _pursue_goal(state, game_data) if pursue_due(state, game_data, history) else None\n",
+     "            return None\n"),
     ("step: an owed draw is never taken (c-2 accept fold)",
      "        if step.task_code is None and accept_due(state, game_data, ctx):\n",
      "        if False:\n"),
@@ -7271,6 +7259,18 @@ TASK_STEP_MUTATIONS = [
     ("step: the task objective maps to no goal",
      "        return TaskKillsGoal(step.task_code, state.task_progress)\n",
      "        return None\n"),
+]
+# The held items task's pooled materials are protected from the step (kept
+# from `_suppress_step_for_task`, USER Phase 5-2c-iii-c-2 #4). Killed by
+# tests/test_ai/test_task_reservation.py.
+TASK_RESERVATION_GUARD_MUTATIONS = [
+    ("reservation: a step that eats the task pool is no longer deferred",
+     "        if needed is not None and consumes_reserved(needed, state, game_data):\n"
+     "            return None\n        return step_goal\n",
+     "        return step_goal\n"),
+    ("reservation: the guard runs while the task is not being worked",
+     "        if step_goal is None or not pursue_due(state, game_data, self._history):\n",
+     "        if step_goal is None:\n"),
 ]
 TASK_KILLS_MUTATIONS = [
     ("task kills: one kill does not satisfy it",
@@ -8939,6 +8939,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_task_objective.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, TASK_STEP_MUTATIONS,
               "tests/test_ai/test_task_objective.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, TASK_RESERVATION_GUARD_MUTATIONS,
+              "tests/test_ai/test_task_reservation.py", survivors)
     run_group(TASK_KILLS_SRC, TASK_KILLS_MUTATIONS,
               "tests/test_ai/test_task_objective.py", survivors)
     run_group(GUARDS_SRC, POTION_FIGHT_AHEAD_GUARD_MUTATIONS,
@@ -9015,8 +9017,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(REQUIREMENT_GRAPH_MEMO_SRC, MEMO_ENRICH_MUTATIONS,
               "tests/test_ai/test_requirement_multiset_enrichment.py", survivors)
-    run_group(MEANS_WORTH_SRC, MEANS_SERVES_MUTATIONS,
-              "tests/test_ai/test_means_worth.py", survivors)
     run_group(TASKMASTER_CHOICE_SRC, TASKMASTER_CHOICE_MUTATIONS,
               "tests/test_ai/test_taskmaster_choice.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, PASSIVE_CURRENCY_HELPER_MUTATIONS,

@@ -21,6 +21,7 @@ from enum import Enum
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.tiers.guards import (
     GUARD_ORDER,
     GuardKind,
@@ -59,7 +60,6 @@ class LadderMeans(Enum):
     SUPPLY_BANK = "supply_bank"
     CURRENCY_TURNIN = "currency_turnin"
     OBJECTIVE_STEP = "objective_step"
-    PURSUE_TASK = "pursue_task"
     MAINTAIN_CONSUMABLES = "maintain_consumables"
     SELL_IDLE = "sell_idle"
     RECYCLE_SURPLUS = "recycle_surplus"
@@ -92,7 +92,6 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.SUPPLY_BANK,
     LadderMeans.CURRENCY_TURNIN,
     LadderMeans.OBJECTIVE_STEP,
-    LadderMeans.PURSUE_TASK,
     LadderMeans.MAINTAIN_CONSUMABLES,
     LadderMeans.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS,
@@ -122,7 +121,6 @@ _MEANS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.COMPLETE_TASK: MeansKind.COMPLETE_TASK,
     LadderMeans.SELL_PRESSURED: MeansKind.SELL_PRESSURED,
     LadderMeans.TASK_CANCEL: MeansKind.TASK_CANCEL,
-    LadderMeans.PURSUE_TASK: MeansKind.PURSUE_TASK,
     LadderMeans.MAINTAIN_CONSUMABLES: MeansKind.MAINTAIN_CONSUMABLES,
     LadderMeans.SUPPLY_BANK: MeansKind.SUPPLY_BANK,
     LadderMeans.CURRENCY_TURNIN: MeansKind.CURRENCY_TURNIN,
@@ -162,7 +160,6 @@ assert COLLECT_REWARD_ORDER == (
 ), "COLLECT_REWARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 assert DISCRETIONARY_ORDER == (
-    MeansKind.PURSUE_TASK,
     MeansKind.MAINTAIN_CONSUMABLES,
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
@@ -170,6 +167,9 @@ assert DISCRETIONARY_ORDER == (
     MeansKind.DRAIN_BANK_JUNK,
     MeansKind.WAIT,
 ), "DISCRETIONARY_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
+
+
+_ACTIVE_PHASES = frozenset({TaskLifecyclePhase.ACCEPTED, TaskLifecyclePhase.IN_PROGRESS})
 
 
 def fires(
@@ -187,7 +187,12 @@ def fires(
     the differential test supplies its observation here.
     """
     if k is LadderMeans.OBJECTIVE_STEP:
-        return objective_step_fires
+        # A held, unmet task's work is the task objective's step (Phase
+        # 5-2c-iii-c-2 #4), mirroring the Lean ladder's
+        # `objectiveStepFires := s.objectiveStepFires || phaseActive s` — the
+        # same phase-based over-approximation the retired PURSUE_TASK rung's
+        # Lean predicate carried.
+        return objective_step_fires or state.task_lifecycle_phase in _ACTIVE_PHASES
     if k in _GUARD_MAP:
         return _guard_fires(_GUARD_MAP[k], state, game_data, history, ctx)
     return _means_fires(_MEANS_MAP[k], state, game_data, history, ctx)

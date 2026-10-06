@@ -66,16 +66,26 @@ open Formal.Liveness.BlockerDescentE
 open Formal.Liveness.UnconditionalDescent
 open Formal.Liveness.DeferFaithful
 
-private theorem refreshE_phase' (s : State) :
-    (perceptionRefreshE s).taskLifecyclePhase = s.taskLifecyclePhase := by
-  unfold perceptionRefreshE
-  split
-  · split <;> rfl
-  · rfl
+/-- Inside the defer window the E refresh is the identity, and the gate's
+    active task phase fires the objective step: a held task's work is the task
+    objective's step (Phase 5-2c-iii-c-2 #4; the window was the retired
+    `pursueTask` rung's). -/
+theorem objectiveStepE_fires_in_window (s : State) (hgate : deferGate s = true) :
+    fires .objectiveStep (perceptionRefreshE s) = true := by
+  have heq : perceptionRefreshE s = s := by
+    unfold perceptionRefreshE
+    rw [if_neg (by simp [hgate])]
+  rw [heq]
+  have hg := hgate
+  simp only [deferGate, Bool.and_eq_true] at hg
+  have hact := hg.1.2
+  simp only [Formal.Liveness.Plan.phaseActive] at hact
+  simp only [fires, ProductionLadder.objectiveStepFires, Bool.or_assoc, hact,
+    Bool.or_true]
 
 /-- Below the cap the ladder always selects something: inside the defer window
-    `pursueTask` fires; outside it the refresh arms the objective (adequate)
-    or the gear latch (inadequate) — all three fire. -/
+    the objective step fires on the held task; outside it the refresh arms the
+    objective (adequate) or the gear step (inadequate). -/
 theorem ladderE_some_below_fifty (s : State) (hArms : AdequateArmsFightAt s)
     (hlvl : s.level < 50) :
     productionLadder (perceptionRefreshE s) ≠ none := by
@@ -83,16 +93,10 @@ theorem ladderE_some_below_fifty (s : State) (hArms : AdequateArmsFightAt s)
   unfold productionLadder at hnone
   rw [List.findSome?_eq_none_iff] at hnone
   by_cases hgate : deferGate s = true
-  · have hpf : fires .pursueTask (perceptionRefreshE s) = true := by
-      have hg := hgate
-      simp only [deferGate, Bool.and_eq_true] at hg
-      simp only [fires, pursueTaskFires, refreshE_phase']
-      have := hg.1.2
-      simpa [pursueTaskFires] using this
-    have h : (if fires .pursueTask (perceptionRefreshE s) = true
-        then some MeansKind.pursueTask else none) = (none : Option MeansKind) :=
-      hnone .pursueTask (by decide)
-    rw [if_pos hpf] at h
+  · have h : (if fires .objectiveStep (perceptionRefreshE s) = true
+        then some MeansKind.objectiveStep else none) = (none : Option MeansKind) :=
+      hnone .objectiveStep (by decide)
+    rw [if_pos (objectiveStepE_fires_in_window s hgate)] at h
     cases h
   · have hg : deferGate s = false := Bool.eq_false_iff.mpr hgate
     have hcondT : (decide (s.level < 50) && !(deferGate s)) = true := by
@@ -102,7 +106,7 @@ theorem ladderE_some_below_fifty (s : State) (hArms : AdequateArmsFightAt s)
         simp only [fires, ProductionLadder.objectiveStepFires]
         unfold perceptionRefreshE
         rw [if_pos hcondT, if_pos hadq]
-        exact (hArms hlvl hg hadq).1
+        simp [(hArms hlvl hg hadq).1]
       have h : (if fires .objectiveStep (perceptionRefreshE s) = true
           then some MeansKind.objectiveStep else none) = (none : Option MeansKind) :=
         hnone .objectiveStep (by decide)
@@ -113,7 +117,7 @@ theorem ladderE_some_below_fifty (s : State) (hArms : AdequateArmsFightAt s)
       have hobj : fires .objectiveStep (perceptionRefreshE s) = true := by
         simp only [fires, ProductionLadder.objectiveStepFires]
         unfold perceptionRefreshE
-        rw [if_pos hcondT, if_neg hadq]
+        rw [if_pos hcondT, if_neg hadq]; simp
       have h : (if fires .objectiveStep (perceptionRefreshE s) = true
           then some MeansKind.objectiveStep else none) = (none : Option MeansKind) :=
         hnone .objectiveStep (by decide)
@@ -127,15 +131,9 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
   cases hk : productionLadder (perceptionRefreshE s) with
   | none => exact absurd hk (ladderE_some_below_fifty s hArms hlvl)
   | some k =>
-    have hmem : k ∈ pursuePrefix := by
+    have hmem : k ∈ blockerPrefix := by
       by_cases hgate : deferGate s = true
-      · have hpf : fires .pursueTask (perceptionRefreshE s) = true := by
-          have hg := hgate
-          simp only [deferGate, Bool.and_eq_true] at hg
-          simp only [fires, pursueTaskFires, refreshE_phase']
-          have := hg.1.2
-          simpa [pursueTaskFires] using this
-        exact ladder_mem_pursuePrefix hpf hk
+      · exact ladder_mem_blockerPrefix (objectiveStepE_fires_in_window s hgate) hk
       · have hg : deferGate s = false := Bool.eq_false_iff.mpr hgate
         have hcondT : (decide (s.level < 50) && !(deferGate s)) = true := by
           simp [hlvl, hg]
@@ -144,14 +142,14 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
             simp only [fires, ProductionLadder.objectiveStepFires]
             unfold perceptionRefreshE
             rw [if_pos hcondT, if_pos hadq]
-            exact (hArms hlvl hg hadq).1
-          exact List.mem_append_left _ (ladder_mem_blockerPrefix hobj hk)
+            simp [(hArms hlvl hg hadq).1]
+          exact ladder_mem_blockerPrefix hobj hk
         · -- WAVE 4: the inadequate branch arms the OBJECTIVE step, so the
           -- witness here is the same one the adequate branch uses.
           have hgear : fires .objectiveStep (perceptionRefreshE s) = true := by
             simp only [fires, ProductionLadder.objectiveStepFires]
             unfold perceptionRefreshE
-            rw [if_pos hcondT, if_neg hadq]
+            rw [if_pos hcondT, if_neg hadq]; simp
           -- It fires and sits in the blocker prefix, so the selection resolves
           -- there too (same argument, objectiveStep witness).
           have hkmem : k ∈ Formal.Liveness.UnconditionalDescent.blockerPrefix := by
@@ -180,7 +178,7 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
                 rw [hl, ← hx]
                 exact List.mem_append_right _ List.mem_cons_self
               · simp [hf] at hbody
-          exact List.mem_append_left _ hkmem
+          exact hkmem
     cases k with
     | hpCritical      => exact descendsE_hpCritical s hk
     | restForCombat   => exact descendsE_restForCombat s hk
@@ -201,8 +199,7 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
     | objectiveStep   =>
         by_cases hisF : (perceptionRefreshE s).objectiveStepIsFight = true
         · exact descendsE_fight s hlvl (Or.inr (Or.inr ⟨hk, hisF⟩))
-        · exact descendsE_placeholder s hArms hGear hk (Bool.eq_false_iff.mpr hisF)
-    | pursueTask      => exact descendsE_pursueTask s hArms hlvl hk
+        · exact descendsE_placeholder s hArms hGear hlvl hk (Bool.eq_false_iff.mpr hisF)
     | maintainConsumables => exact absurd hmem (by decide)
     | supplyBank      => exact descendsE_supplyBank s hk
     | currencyTurnIn  => exact descendsE_currencyTurnIn s hk

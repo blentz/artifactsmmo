@@ -240,19 +240,18 @@ def taskCancelFires (s : State) : Bool :=
   -- Item 1d: refined to gate on `taskFeasibleProjected`. Mirrors
   -- production task_decision == PIVOT semantics.
 
-/-- OBJECTIVE_STEP. Opaque Bool — the StrategyArbiter's objective tier
-    yields a plannable StepGoal iff this is true. -/
-def objectiveStepFires (s : State) : Bool := s.objectiveStepFires
+/-- OBJECTIVE_STEP. The opaque Bool — the StrategyArbiter's objective tier
+    yields a plannable StepGoal — OR a held task in an active phase.
 
-/-- PURSUE_TASK. Phase 23c-3b: faithful phase-based predicate.
-    Production: `means.py:85-90` requires `task_type == "items"`,
-    `task_code` set, `task_progress < task_total`, history present, and
-    `task_decision == PURSUE`. We simplify to the lifecycle gating
-    `phase ∈ {accepted, inProgress}`; the items-task-type and PURSUE
-    decision branches are collapsed (the proof claim is production
-    fires → phase predicate fires, which holds in this direction). -/
-def pursueTaskFires (s : State) : Bool :=
-  decide (s.taskLifecyclePhase = .accepted)
+    A held task's work is the task objective's step (Phase 5-2c-iii-c-2 #4);
+    this carries the SAME phase-based over-approximation the retired
+    `pursueTaskFires` carried (it ignores production's PURSUE verdict /
+    winnability), so no theorem rests on anything weaker than before. The
+    phase test is inlined (it is `Plan.phaseActive`) to keep the import graph
+    acyclic. -/
+def objectiveStepFires (s : State) : Bool :=
+  s.objectiveStepFires
+  || decide (s.taskLifecyclePhase = .accepted)
   || decide (s.taskLifecyclePhase = .inProgress)
 
 /-- SELL_IDLE. Mirrors `means.py:98-99`:
@@ -436,7 +435,6 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .sellPressured    => sellPressuredFires s
   | .taskCancel       => taskCancelFires s
   | .objectiveStep    => objectiveStepFires s
-  | .pursueTask       => pursueTaskFires s
   | .maintainConsumables => maintainConsumablesFires s
   | .supplyBank       => supplyBankFires s
   | .currencyTurnIn   => currencyTurnInFires s

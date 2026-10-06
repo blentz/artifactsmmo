@@ -31,7 +31,7 @@ model claims.
 
 ## Honest disclosure: TRACKED_FIELDS
 
-The Lean `State` has 32 fields, many opaque Bools (`pursueTaskFires`,
+The Lean `State` has 32 fields, many opaque Bools (`objectiveStepFires`,
 `taskCancelFires`, …) whose post-cycle value in production is determined
 by the next perception refresh (not the action's `.apply`).  We compare
 ONLY the fields whose mutation rules are equivalent across:
@@ -195,7 +195,6 @@ def _world_to_cycle(w: WorldState, *, ctx: SelectionContext, gd: GameData,
         task_coins_total=w.inventory.get(TASKS_COIN_CODE, 0),
         task_exchange_min_coins=ctx.task_exchange_min_coins,
         task_cancel_fires=False,
-        pursue_task_fires=False,
         objective_step_fires=False,
         bank_items_known=(w.bank_items is not None),
         bank_items_count=(len(w.bank_items) if w.bank_items is not None else 0),
@@ -275,37 +274,34 @@ def _fix_COMPLETE_TASK():
            LadderMeans.COMPLETE_TASK
 
 
-def _fix_PURSUE_TASK():
-    """Inject pursue_task_fires=True on the mirror side; on the production
-    side, set the items-task and use TaskTradeAction(quantity = remaining).
-    Both sides see PURSUE_TASK fire and apply taskTrade -> task_progress
-    advances to task_total."""
+def _fix_OBJECTIVE_STEP_TASK_PHASE():
+    """An items task in progress with the opaque `objective_step_fires` flag
+    FALSE: OBJECTIVE_STEP fires on the task phase alone on BOTH ladders
+    (production `fires` reads `task_lifecycle_phase`; the mirror reads
+    task_code/total/progress), and the mirror dispatches `taskTrade` — the
+    Lean `planFor .objectiveStep` arm for a step that fired on the phase
+    (c-2 #4, what the retired PURSUE_TASK rung dispatched). Production applies
+    TaskTradeAction(quantity = remaining) -> task_progress advances to
+    task_total on both sides."""
     gd = _base_gd()
     w = _base_world(task_code="task_x", task_type="items",
                     task_progress=0, task_total=5,
                     inventory={"task_x": 5})
     ctx = _ctx()
-    cs = _world_to_cycle(w, ctx=ctx, gd=gd, overrides={
-        "pursue_task_fires": True,
-    })
-    # On production we drive the action directly; production_ladder would
-    # also fire PURSUE_TASK iff a LearningStore is supplied — we substitute
-    # the means selection (see drive_one_cycle's `forced_means` path).
+    cs = _world_to_cycle(w, ctx=ctx, gd=gd, overrides={})
+    assert cs.objective_step_fires is False
     return cs, w, gd, ctx, TaskTradeAction(
         code="task_x", quantity=5, taskmaster_location=(1, 2),
-    ), LadderMeans.PURSUE_TASK
+    ), LadderMeans.OBJECTIVE_STEP
 
 
 def _fix_WAIT():
     gd = _base_gd()
-    # Need task assigned (else ACCEPT_TASK fires) AND no task coins (else
-    # TASK_EXCHANGE fires) AND no sellable (no NPC stock in gd: ok). Also
-    # bank_capacity=0 so BANK_EXPAND doesn't fire. Resources task whose
-    # progress is 0/very-large so PURSUE_TASK doesn't fire (and history=None).
-    w = _base_world(
-        task_code="t", task_type="resources",
-        task_progress=0, task_total=99,
-    )
+    # No task held: a held unmet task fires OBJECTIVE_STEP on its phase
+    # (c-2 #4), and accepting one is the task objective's step, not a rung
+    # (c-2 #3). No sellable (no NPC stock in gd: ok). bank_capacity=0 so
+    # BANK_EXPAND doesn't fire.
+    w = _base_world()
     ctx = _ctx()
     cs = _world_to_cycle(w, ctx=ctx, gd=gd, overrides={})
     return cs, w, gd, ctx, WaitAction(), LadderMeans.WAIT
@@ -317,7 +313,8 @@ def _fix_BUY_BANK_EXPANSION():
     gd = _base_gd()
     gd._bank_capacity = 30
     gd._next_expansion_cost = 100
-    # Same task-assignment trick as WAIT so ACCEPT_TASK is suppressed.
+    # A held unmet task fires OBJECTIVE_STEP on its phase; BANK_EXPAND is an
+    # interrupt (Phase 5-2c-ii) and must still win over it.
     w = _base_world(
         gold=200, bank_items={f"i_{i}": 1 for i in range(29)},
         task_code="t", task_type="resources",
@@ -338,7 +335,7 @@ FIXTURES: dict[LadderMeans, callable] = {
     LadderMeans.HP_CRITICAL:    _fix_HP_CRITICAL,
     LadderMeans.CLAIM_PENDING:  _fix_CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK:  _fix_COMPLETE_TASK,
-    LadderMeans.PURSUE_TASK:    _fix_PURSUE_TASK,
+    LadderMeans.OBJECTIVE_STEP: _fix_OBJECTIVE_STEP_TASK_PHASE,
     LadderMeans.WAIT:           _fix_WAIT,
     LadderMeans.BANK_EXPAND:    _fix_BUY_BANK_EXPANSION,
 }
@@ -356,16 +353,7 @@ def drive_one_cycle(
 ) -> tuple[LadderMeans | None, WorldState]:
     """Run one cycle production-side: real `production_ladder` (mirror that
     dispatches into real `_fires`) + production `action.apply`.
-
-    For PURSUE_TASK we bypass `production_ladder` (it requires a learning
-    history fixture) and assert directly that the production action is the
-    expected witness; see Phase 21d-2 differential for the analogous
-    history-shape skip.
     """
-    if expected_means in (LadderMeans.PURSUE_TASK,):
-        # Skip real-ladder check; just apply the witness action.
-        new_state = production_action.apply(w, gd)
-        return expected_means, new_state
     picked = production_ladder(w, gd, None, ctx, force_objective_step)
     new_state = production_action.apply(w, gd)
     return picked, new_state
@@ -387,13 +375,12 @@ def test_mirror_picks_same_means_as_production(means: LadderMeans) -> None:
         f"  mirror picked: {mirror_pick}\n"
         f"  expected:      {expected}"
     )
-    if means is not LadderMeans.PURSUE_TASK:
-        prod_pick = production_ladder(w, gd, None, ctx, False)
-        assert prod_pick is expected, (
-            f"PRODUCTION LADDER DRIFT for {means.name}:\n"
-            f"  production picked: {prod_pick}\n"
-            f"  expected:          {expected}"
-        )
+    prod_pick = production_ladder(w, gd, None, ctx, False)
+    assert prod_pick is expected, (
+        f"PRODUCTION LADDER DRIFT for {means.name}:\n"
+        f"  production picked: {prod_pick}\n"
+        f"  expected:          {expected}"
+    )
 
 
 @pytest.mark.parametrize("means", list(FIXTURES.keys()), ids=lambda m: m.name)
@@ -444,11 +431,7 @@ def _wait_neighbour_state(draw) -> tuple[CycleState, WorldState, GameData,
     xp = draw(st.integers(min_value=0, max_value=400))
     gold = draw(st.integers(min_value=0, max_value=10000))
     gd = _base_gd()
-    w = _base_world(
-        level=level, xp=xp, gold=gold,
-        task_code="t", task_type="resources",
-        task_progress=0, task_total=99,
-    )
+    w = _base_world(level=level, xp=xp, gold=gold)
     ctx = _ctx()
     cs = _world_to_cycle(w, ctx=ctx, gd=gd, overrides={})
     return cs, w, gd, ctx
