@@ -225,7 +225,7 @@ def potion_batch(state: WorldState, game_data: GameData,
     best_boost = best_boost_potion(state, game_data, monster)
     if best_boost is None:
         return None
-    boost_deficit = _level_ramp(state.level) - equipped_potion_qty(state, best_boost)
+    boost_deficit = potion_level_ramp(state.level) - equipped_potion_qty(state, best_boost)
     if boost_deficit <= 0 or not game_data.crafting_recipes.get(best_boost):
         return None
     return _sized(best_boost, boost_deficit, state, game_data)
@@ -241,7 +241,9 @@ def craft_potions_fires(state: WorldState, game_data: GameData,
     return potion_batch(state, game_data, history, fight_monster) is not None
 
 
-def _level_ramp(level: int) -> int:
+def potion_level_ramp(level: int) -> int:
+    """The potion stock the level ramp allows — the batch the potion guard
+    stocks toward, capped by projected need (`heal_stock_target`)."""
     return potion_baseline_pure(level, POTION_LOW_LEVEL, POTION_LOW_QTY,
                                 POTION_HIGH_LEVEL, POTION_HIGH_QTY)
 
@@ -253,7 +255,7 @@ def heal_stock_target(state: WorldState, game_data: GameData, history: LearningS
     if monster is None:
         return 0
     hp_need = projected_heal_need_per_fight(state, game_data, monster, history)
-    return potion_stock_target_pure(hp_need, game_data.hp_restore_of(code), _level_ramp(state.level))
+    return potion_stock_target_pure(hp_need, game_data.hp_restore_of(code), potion_level_ramp(state.level))
 
 
 def _sized(code: str, deficit: int, state: WorldState,

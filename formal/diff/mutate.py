@@ -351,6 +351,8 @@ CURRENCY_AFFORD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / 
 REFUSAL_FACT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "refusal_fact_core.py"
 TASK_KILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "task_kills.py"
 STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
+FIGHT_UPKEEP_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "fight_upkeep_core.py"
+BAND_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "band_target.py"
 TASK_ACCEPT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_accept.py"
 DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decision.py"
 OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "obtain_item.py"
@@ -7221,6 +7223,46 @@ FIGHT_APPLICABILITY_MUTATIONS = [
 ]
 
 
+# The band target ranks by XP per action, upkeep included (USER 2026-10-07).
+# Killed by tests/test_ai/test_fight_upkeep.py.
+FIGHT_UPKEEP_CORE_MUTATIONS = [
+    ("upkeep: consumables are not priced",
+     "        (qty * price_of(code) for code, qty in upkeep.consumed_per_kill.items()),\n",
+     "        (qty * 0 for code, qty in upkeep.consumed_per_kill.items()),\n"),
+    ("upkeep: the actions per kill are not charged",
+     "    actions = upkeep.actions_per_kill + sum(\n",
+     "    actions = 1 + sum(\n"),
+]
+FIGHT_UPKEEP_STORE_MUTATIONS = [
+    ("upkeep store: a lost fight's consumables are not counted",
+     "        for r in fights:\n            consumed.update(",
+     "        for r in fights:\n            if r.outcome != \"ok\":\n"
+     "                continue\n            consumed.update("),
+    ("upkeep store: actions per kill counts only fights",
+     "            actions_per_kill=Fraction(len(rows), kills),\n",
+     "            actions_per_kill=Fraction(len(fights), kills),\n"),
+    ("upkeep store: no warmup",
+     "        if kills < WARMUP_MIN_SAMPLES:\n            return None\n        consumed",
+     "        if kills < 1:\n            return None\n        consumed"),
+]
+BAND_UPKEEP_MUTATIONS = [
+    ("band: the measured upkeep is ignored",
+     "        upkeep = history.fight_upkeep(code) if history is not None else None\n",
+     "        upkeep = None\n"),
+]
+CONSUMABLE_PRICE_MUTATIONS = [
+    ("price: held copies are priced as already owned",
+     "            inventory={c: q for c, q in state.inventory.items() if c != code},\n",
+     "            inventory=dict(state.inventory),\n"),
+    ("price: worn copies are priced as already owned",
+     "            equipment={slot: (None if worn == code else worn)\n",
+     "            equipment={slot: worn\n"),
+    ("price: the batch price is not divided by the batch",
+     "        return Fraction(actions, batch)\n",
+     "        return Fraction(actions)\n"),
+]
+
+
 # Fleet-wide exchange-cost learning (USER 2026-10-06). Killed by
 # tests/test_ai/test_task_exchange_learning.py.
 EXCHANGE_COST_FLEET_MUTATIONS = [
@@ -8982,6 +9024,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_no_combat_deadlock.py", survivors)
     run_group(APPLY_FIGHT_SRC, TASK_FIGHT_BYPASS_MUTATIONS,
               "tests/test_ai/test_grey_farm.py", survivors)
+    run_group(FIGHT_UPKEEP_CORE_SRC, FIGHT_UPKEEP_CORE_MUTATIONS,
+              "tests/test_ai/test_fight_upkeep.py", survivors)
+    run_group(LEARNING_STORE_SRC, FIGHT_UPKEEP_STORE_MUTATIONS,
+              "tests/test_ai/test_fight_upkeep.py", survivors)
+    run_group(BAND_TARGET_SRC, BAND_UPKEEP_MUTATIONS,
+              "tests/test_ai/test_fight_upkeep.py", survivors)
+    run_group(PLAYER_SRC, CONSUMABLE_PRICE_MUTATIONS,
+              "tests/test_ai/test_fight_upkeep.py", survivors)
     run_group(TASK_ACCEPT_SRC, TASK_ACCEPT_MUTATIONS,
               "tests/test_ai/test_tiers_means.py", survivors)
     run_group(PLAYER_SRC, EXCHANGE_COST_FLEET_MUTATIONS,

@@ -321,7 +321,7 @@ class TestPathAlignedMonster:
             f"{real_plan.next_action_monster!r}")
 
         monkeypatch.setattr(player_mod, "band_combat_target",
-                            lambda state, game_data, history: "chicken")
+                            lambda state, game_data, history, price_of: "chicken")
         target = player._path_aligned_monster()
         assert target == "chicken"
         # Plan still cached for trace exposure, even though its own
@@ -366,7 +366,7 @@ class TestPathAlignedMonster:
             "for this test to say anything about the delegation")
 
         monkeypatch.setattr(player_mod, "band_combat_target",
-                            lambda state, game_data, history: None)
+                            lambda state, game_data, history, price_of: None)
         assert player._path_aligned_monster() is None
         store.close()
 
@@ -382,6 +382,6 @@ class TestPathAlignedMonster:
         player.game_data._monster_locations = {c: [(i, 0)] for i, c in enumerate(player.game_data._monster_level)}
         player.state = make_state(level=1, character="hero")
         monkeypatch.setattr(player_mod, "band_combat_target",
-                            lambda state, game_data, history: "chicken")
+                            lambda state, game_data, history, price_of: "chicken")
         assert player._path_aligned_monster() == "chicken"
         assert player._last_path_plan is None

@@ -17,6 +17,11 @@ from artifactsmmo_cli.ai.tiers.tier_ladder import normal_band as real_normal_ban
 from tests.test_ai.fixtures import make_state
 
 
+def _never_priced(code: str) -> int:
+    """No store, so no measured upkeep and no consumable to price."""
+    raise AssertionError(f"priced {code} with no upkeep measured")
+
+
 def _gd() -> GameData:
     gd = GameData()
     gd._item_stats = {
@@ -43,7 +48,7 @@ def test_the_target_comes_from_the_next_uncleared_band(monkeypatch):
         return c != "ogre"
     monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
     monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
-    assert band_combat_target(make_state(level=30), _gd(), None) == "spider"
+    assert band_combat_target(make_state(level=30), _gd(), None, _never_priced) == "spider"
 
 
 def test_normal_band_is_called_not_band(monkeypatch):
@@ -104,7 +109,7 @@ def test_normal_band_is_called_not_band(monkeypatch):
         f"fixture must make the boss outrank the normal monster on XP: "
         f"other_normal={xp_other} strongboss={xp_boss}")
 
-    target = band_combat_target(state, gd, None)
+    target = band_combat_target(state, gd, None, _never_priced)
     assert target == "other_normal", (
         "boss must never be the target even though it outranks the only "
         f"other winnable candidate on XP; got {target!r}")
@@ -117,7 +122,7 @@ def test_no_winnable_monster_in_the_band_yields_none(monkeypatch):
         return False
     monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
     monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
-    assert band_combat_target(make_state(level=30), _gd(), None) is None
+    assert band_combat_target(make_state(level=30), _gd(), None, _never_priced) is None
 
 
 def test_a_band_that_pays_no_xp_yields_none(monkeypatch):
@@ -133,8 +138,8 @@ def test_a_band_that_pays_no_xp_yields_none(monkeypatch):
     gd = _gd()
     assert gd.xp_per_kill("spider", 30) > 0
     assert gd.xp_per_kill("spider", 31) == 0
-    assert band_combat_target(make_state(level=30), gd, None) == "spider"
-    assert band_combat_target(make_state(level=31), gd, None) is None
+    assert band_combat_target(make_state(level=30), gd, None, _never_priced) == "spider"
+    assert band_combat_target(make_state(level=31), gd, None, _never_priced) is None
 
 
 def test_a_monster_with_no_spawn_is_no_target(monkeypatch):
@@ -148,9 +153,9 @@ def test_a_monster_with_no_spawn_is_no_target(monkeypatch):
     monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
     monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
     gd = _gd()
-    assert band_combat_target(make_state(level=30), gd, None) == "spider"
+    assert band_combat_target(make_state(level=30), gd, None, _never_priced) == "spider"
     gd._monster_locations = {k: v for k, v in gd._monster_locations.items() if k != "spider"}
-    assert band_combat_target(make_state(level=30), gd, None) is None
+    assert band_combat_target(make_state(level=30), gd, None, _never_priced) is None
 
 
 def test_a_finished_ladder_yields_none(monkeypatch):
@@ -159,7 +164,7 @@ def test_a_finished_ladder_yields_none(monkeypatch):
         return True
     monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
     monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
-    assert band_combat_target(make_state(level=30), _gd(), None) is None
+    assert band_combat_target(make_state(level=30), _gd(), None, _never_priced) is None
 
 
 def test_hp_does_not_affect_winnable_list(bundle_game_data):
@@ -188,7 +193,7 @@ def test_hp_does_not_affect_winnable_list(bundle_game_data):
     full_hp = scenario_state(SCENARIOS["l11_band_floor"], gd)
     assert full_hp.hp == full_hp.max_hp
 
-    full_target = band_combat_target(full_hp, gd, None)
+    full_target = band_combat_target(full_hp, gd, None, _never_priced)
     assert full_target is not None, (
         "l11_band_floor must have a winnable band target at full HP for "
         "this test to say anything about HP-independence")
@@ -196,7 +201,7 @@ def test_hp_does_not_affect_winnable_list(bundle_game_data):
     damaged = dataclasses.replace(full_hp, hp=max(1, full_hp.max_hp // 3))
     assert damaged.hp != damaged.max_hp
 
-    damaged_target = band_combat_target(damaged, gd, None)
+    damaged_target = band_combat_target(damaged, gd, None, _never_priced)
     assert damaged_target == full_target, (
         f"band_combat_target depends on current hp: {full_target!r} at "
         f"full hp vs {damaged_target!r} damaged")
@@ -238,7 +243,7 @@ def test_semantic_tiebreak_uses_level_not_alphabetical(monkeypatch):
         return ("zzz_low", "aaa_high")
     monkeypatch.setattr(mod, "next_uncleared_tier", fake_next_uncleared)
     monkeypatch.setattr(mod, "normal_band", fake_normal_band)
-    result = band_combat_target(state, gd, None)
+    result = band_combat_target(state, gd, None, _never_priced)
     # XP is tied. max(..., code) picks zzz_low (alphabetically last).
     # max(..., monster_levels[code]) picks aaa_high (higher level).
     # Semantic tiebreak picks the higher level.
@@ -268,7 +273,7 @@ def test_xp_tiebreak_without_monkeypatched_band_derivation(monkeypatch):
     state = make_state(level=30)
     # Among the winnable monsters (spider and ogre), pick the one with higher XP
     best = max(("spider", "ogre"), key=lambda c: gd.xp_per_kill(c, state.level))
-    result = band_combat_target(state, gd, None)
+    result = band_combat_target(state, gd, None, _never_priced)
     assert result == best
 
 
@@ -305,7 +310,7 @@ def test_band_bound_not_defeated_by_xp_ordering(monkeypatch):
     # band(10) = [mushmush], no other normal monsters
     # Correct (banded T10): picks mushmush (only winnable in band)
     # Mutation (unbounded): could pick spider if grey XP doesn't zero out
-    result = band_combat_target(state, gd, None)
+    result = band_combat_target(state, gd, None, _never_priced)
     assert result == "mushmush"
 
 
@@ -348,4 +353,4 @@ def test_stat_winnable_but_out_of_window_yields_none(monkeypatch):
     # this test says nothing if the fixture accidentally sits inside it.
     assert gd.monster_levels["highwayman"] > state.level + FIGHT_LEVEL_GAP_CEILING
 
-    assert band_combat_target(state, gd, None) is None
+    assert band_combat_target(state, gd, None, _never_priced) is None

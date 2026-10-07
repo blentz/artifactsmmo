@@ -50,10 +50,13 @@ speculatively.
 """
 
 import dataclasses
+from collections.abc import Callable
+from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_upkeep_core import NO_UPKEEP, xp_per_action
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.tiers.tier_ladder import normal_band
 from artifactsmmo_cli.ai.tiers.tier_progress import next_uncleared_tier
@@ -61,9 +64,18 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 
 def band_combat_target(state: WorldState, game_data: GameData,
-                       history: LearningStore | None) -> str | None:
+                       history: LearningStore | None,
+                       price_of: Callable[[str], Fraction]) -> str | None:
     """Best winnable, FIGHTABLE normal monster in the next uncleared tier's
-    band, by XP.
+    band, by XP per ACTION, its upkeep included (USER 2026-10-07).
+
+    The rank used to be XP per KILL, where upkeep is invisible. Live, Lor's
+    death_knight grind used ~3 small_health_potion a fight: 46% of 5.8h went to
+    gathering sunflowers, 40% to resting, 11% to fighting. The key is
+    `fight_upkeep_core.xp_per_action` over the measured `fight_upkeep`
+    (actions and consumables per kill), each consumable at `price_of` — its
+    acquisition actions per unit. A monster without a measurement counts one
+    action a kill and is tried. Ties go to the higher level.
 
     Evaluated at RESTORABLE HP, never current — route existence must not
     depend on incidental damage. A character resting to full is always an
@@ -93,5 +105,10 @@ def band_combat_target(state: WorldState, game_data: GameData,
                 and is_winnable(rested, game_data, code, history)]
     if not winnable:
         return None
-    return max(winnable, key=lambda code: (game_data.xp_per_kill(code, state.level),
-                                           game_data.monster_levels[code]))
+    def key(code: str) -> tuple[Fraction, int]:
+        upkeep = history.fight_upkeep(code) if history is not None else None
+        rate = xp_per_action(game_data.xp_per_kill(code, state.level),
+                             upkeep or NO_UPKEEP, price_of)
+        return rate, game_data.monster_levels[code]
+
+    return max(winnable, key=key)

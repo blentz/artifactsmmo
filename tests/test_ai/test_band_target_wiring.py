@@ -16,7 +16,7 @@ def test_the_cascade_asks_the_band_not_the_unbounded_projection(monkeypatch):
     player.game_data = _make_planner_gd()
 
     monkeypatch.setattr(player_mod, "band_combat_target",
-                        lambda state, game_data, history: "spider")
+                        lambda state, game_data, history, price_of: "spider")
     monkeypatch.setattr(GamePlayer, "_task_aligned_monster", lambda self: None)
     monkeypatch.setattr(GamePlayer, "_is_winnable", lambda self, code: True)
 
@@ -30,7 +30,7 @@ def test_no_band_target_yields_no_combat_target(monkeypatch):
     player.game_data = _make_planner_gd()
 
     monkeypatch.setattr(player_mod, "band_combat_target",
-                        lambda state, game_data, history: None)
+                        lambda state, game_data, history, price_of: None)
     monkeypatch.setattr(GamePlayer, "_task_aligned_monster", lambda self: None)
 
     assert player._winnable_farm_target() is None
@@ -45,7 +45,7 @@ def test_a_winnable_task_monster_still_wins(monkeypatch):
 
     monkeypatch.setattr(GamePlayer, "_task_aligned_monster", lambda self: "pig")
     monkeypatch.setattr(player_mod, "band_combat_target",
-                        lambda state, game_data, history: "spider")
+                        lambda state, game_data, history, price_of: "spider")
 
     assert player._winnable_farm_target() == "pig"
 
