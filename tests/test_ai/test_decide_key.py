@@ -62,6 +62,6 @@ def test_currency_turnin_is_last_in_the_collect_reward_band() -> None:
     # #3 retired it into the task objective's step; the turn-in is now last.
     assert COLLECT_REWARD_ORDER[-1] is MeansKind.CURRENCY_TURNIN
     for cheap in (MeansKind.CLAIM_PENDING, MeansKind.COMPLETE_TASK,
-                  MeansKind.SELL_PRESSURED, MeansKind.TASK_CANCEL):
+                  MeansKind.SELL_PRESSURED):
         assert (COLLECT_REWARD_ORDER.index(cheap)
                 < COLLECT_REWARD_ORDER.index(MeansKind.CURRENCY_TURNIN))

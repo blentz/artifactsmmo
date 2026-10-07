@@ -12,7 +12,7 @@ from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
+from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves, closure_gold_demand
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -1050,3 +1050,14 @@ def test_joint_gold_leaves_deficit_sizes_only_the_admitted_leaf() -> None:
                        inventory={}, bank_items={}, x=0, y=0)
     result = analyze_currency_leaves({"gizmo": 1}, state, gd)
     assert result.gold_deficit == 150, result.gold_deficit
+
+
+def test_closure_gold_demand_counts_the_unowned_gold_leaves() -> None:
+    """The root purchase half of a task's GOLD need (c-2 #5): every unowned
+    gold-buy leaf at its vendor price; an owned copy is spent first."""
+    gd = _gold_vendor_gd()
+    state = make_state(skills={"weaponcrafting": 5}, inventory={}, bank_items={}, x=0, y=0)
+    assert closure_gold_demand({"widget": 2}, state, gd) == 1000
+    owned = make_state(skills={"weaponcrafting": 5}, inventory={"rare_gem": 1},
+                       bank_items={}, x=0, y=0)
+    assert closure_gold_demand({"widget": 2}, owned, gd) == 500

@@ -84,6 +84,7 @@ from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
 from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.goals.currency_demand import closure_gold_demand
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY
 from artifactsmmo_cli.ai.intention_progress import (
@@ -114,7 +115,7 @@ from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.player_helpers import delete_cost as _delete_cost  # noqa: F401  (test import target)
 from artifactsmmo_cli.ai.player_helpers import format_plan as _format_plan
 from artifactsmmo_cli.ai.potion_supply import potion_level_ramp
-from artifactsmmo_cli.ai.progression_reserve import reserve_floor
+from artifactsmmo_cli.ai.progression_reserve import account_gold, progression_reserve, reserve_floor
 from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.reconcile_open_orders import reconcile_open_orders
@@ -3634,6 +3635,20 @@ class GamePlayer:
         self._turn_in = chosen
         self._recall = (chosen.currency, own[chosen.currency])
 
+    def _gold_short(self) -> bool:
+        """Account gold (pocket + bank) is below the larger of the progression
+        reserve and the gold the previous cycle's chosen root will spend at
+        vendors — a task's GOLD need (`task_worth`, USER 2026-10-07: "Both, the
+        larger"). The root is read off `_last_decision` like the draw course:
+        the ctx is built before `decide` runs. Only an `ObtainItem` root names
+        items to buy."""
+        assert self.state is not None and self.game_data is not None
+        root = self._last_decision.chosen_root if self._last_decision is not None else None
+        root_need = (closure_gold_demand({root.code: root.quantity}, self.state, self.game_data)
+                     if isinstance(root, ObtainItem) else 0)
+        need = max(progression_reserve(self.state, self.game_data), root_need)
+        return account_gold(self.state) < need
+
     def _draw_owed_for_course(self) -> bool:
         """Whether a task DRAW is owed right now — ACCEPT_TASK's gate.
 
@@ -3711,6 +3726,7 @@ class GamePlayer:
             # makes inside should_expand_bank's inputs).
             gold_reserve=reserve_floor(self.state, self.game_data, None),
             draw_owed=self._draw_owed_for_course(),
+            gold_short=self._gold_short(),
             target_gear=target_gear,
             target_tools=target_tools,
             near_term_targets=near_term_targets,

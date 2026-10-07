@@ -53,7 +53,10 @@
   the firing predicates no longer consume them. The phase-based forms
   are simplifications in the direction "production fires ⇒ phase
   predicate fires": the lifecycle phase is a necessary gating condition
-  for each, but PIVOT/PURSUE decisions are collapsed.
+  for each, but PIVOT/PURSUE decisions are collapsed. (Of these only
+  `completeTask` is still a rung: Phase 5-2c-iii-c-2 retired the others into
+  the task objective's step, whose `objectiveStepFires` carries the
+  active-phase test.)
 
   Liveness namespace — Mathlib axioms allowed; see
   `formal/Formal/Liveness/README.md`.
@@ -226,19 +229,6 @@ def sellPressuredFires (s : State) : Bool :=
   && decide (SELL_PRESSURE_DEN * s.inventoryUsed
               ≥ SELL_PRESSURE_NUM * s.inventoryMax)
   && s.sellableInventoryNonempty
-
-/-- TASK_CANCEL. Phase 23c-3b: faithful phase-based predicate.
-    Production: `means.py:80-83` requires a task exists (accepted or
-    in-progress) AND `task_decision == PIVOT`. The PIVOT decision is
-    opaque; phase ∈ {accepted, inProgress} is the gating necessary
-    condition. Lifecycle-phase mutual exclusion with `acceptTask`
-    (which requires `.none`) is preserved by construction. -/
-def taskCancelFires (s : State) : Bool :=
-  (decide (s.taskLifecyclePhase = .accepted)
-   || decide (s.taskLifecyclePhase = .inProgress))
-  && !s.taskFeasibleProjected
-  -- Item 1d: refined to gate on `taskFeasibleProjected`. Mirrors
-  -- production task_decision == PIVOT semantics.
 
 /-- OBJECTIVE_STEP. The opaque Bool — the StrategyArbiter's objective tier
     yields a plannable StepGoal — OR a held task in an active phase.
@@ -433,7 +423,6 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .claimPending     => claimPendingFires s
   | .completeTask     => completeTaskFires s
   | .sellPressured    => sellPressuredFires s
-  | .taskCancel       => taskCancelFires s
   | .objectiveStep    => objectiveStepFires s
   | .maintainConsumables => maintainConsumablesFires s
   | .supplyBank       => supplyBankFires s

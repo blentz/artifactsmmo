@@ -9,6 +9,8 @@ monster was no fight (`FightAction`'s zero-XP gate, lifted for a task fight in
 import dataclasses
 from unittest.mock import patch
 
+import pytest
+
 from artifactsmmo_cli.ai import strategy_driver as driver_mod
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
@@ -16,7 +18,7 @@ from artifactsmmo_cli.ai.decisions import root as root_mod
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
-from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
+from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.task_kills import PRIORITY, TaskKillsGoal
 from artifactsmmo_cli.ai.plan_tree import _label
@@ -111,11 +113,10 @@ class TestReachTaskOutcome:
 
 
 class TestTaskRoot:
-    def test_no_root_without_an_unmet_monsters_task(self) -> None:
+    def test_no_root_without_an_unmet_task(self) -> None:
         gd = _gd()
         assert root_mod._task_root(make_state(level=12), gd, NO_PROFILE_CONTEXT, None) is None
         assert root_mod._task_root(_held(10, 10), gd, NO_PROFILE_CONTEXT, None) is None
-        assert root_mod._task_root(_held(task_type="items"), gd, NO_PROFILE_CONTEXT, None) is None
 
     def test_a_winnable_task_is_its_own_root(self) -> None:
         with patch.object(root_mod, "is_winnable", return_value=True):
@@ -151,22 +152,44 @@ class TestTaskRoot:
         assert offered.index(ReachTaskOutcome("chicken")) == trunk + 1
 
 
-class TestLowYieldCancelFold:
-    """Phase 5-2c-iii-c-2: the LOW_YIELD_CANCEL collect rung is retired; a
-    data-confirmed poor task is the task objective's own step, on its turn."""
+class TestWorthCancelFold:
+    """Phase 5-2c-iii-c-2 #5: TASK_CANCEL (and low-yield before it) retired;
+    a worthless task with a pocket coin is cancelled on the task objective's
+    turn (USER 2026-10-07, `task_worth_core`)."""
 
-    def test_a_poor_task_is_offered_whatever_its_type(self) -> None:
-        with patch.object(root_mod._route, "task_pays_less", return_value=True):
-            got = root_mod._task_root(_held(task_type="items"), _gd(), NO_PROFILE_CONTEXT, None)
-        assert got == ReachTaskOutcome("chicken")
+    def test_a_cancel_due_task_offers_the_objective(self) -> None:
+        """An unwinnable task no gear closes: no other arm offers it, so only
+        the cancel can."""
+        with (patch.object(root_mod, "is_winnable", return_value=False),
+              patch.object(root_mod, "deficit_upgrade_target", return_value=None)):
+            with patch.object(root_mod._route, "task_cancel_due", return_value=True):
+                got = root_mod._task_root(_held(), _gd(), NO_PROFILE_CONTEXT, None)
+            assert got == ReachTaskOutcome("chicken")
+            with patch.object(root_mod._route, "task_cancel_due", return_value=False):
+                assert root_mod._task_root(_held(), _gd(), NO_PROFILE_CONTEXT, None) is None
 
     def test_its_step_is_the_cancel(self) -> None:
         node = ReachTaskOutcome("chicken")
-        with patch.object(driver_mod, "low_yield_cancel_fires", return_value=True):
-            goal = objective_step_goal(node, _held(3), _gd(), NO_PROFILE_CONTEXT)
-        assert isinstance(goal, LowYieldCancelGoal)
+        with patch.object(driver_mod, "task_cancel_due", return_value=True):
+            goal = objective_step_goal(node, _held(), _gd(), NO_PROFILE_CONTEXT)
+        assert isinstance(goal, TaskCancelGoal)
+
+    def test_the_funnel_asks_the_worth_verdict(self) -> None:
+        with patch("artifactsmmo_cli.ai.decisions.route.held_task_cancel_due",
+                   return_value=True) as due:
+            assert root_mod._route.task_cancel_due(_held(), _gd(), NO_PROFILE_CONTEXT, None)
+        assert due.called
 
 
+@pytest.fixture
+def _cancel_not_due(monkeypatch):  # type: ignore[no-untyped-def]
+    """A held task with coins has its worth read (the cancel); these cases are
+    about the exchange, so the cancel is pinned not due."""
+    monkeypatch.setattr(root_mod._route, "task_cancel_due", lambda *a: False)
+    monkeypatch.setattr(driver_mod, "task_cancel_due", lambda *a: False)
+
+
+@pytest.mark.usefixtures("_cancel_not_due")
 class TestExchangeFold:
     """Phase 5-2c-iii-c-2 #2: TASK_EXCHANGE retired; earned coins are the task
     objective's to exchange, task held or not."""
@@ -219,27 +242,17 @@ class TestAcceptFold:
         assert isinstance(goal, AcceptTaskGoal)
 
 
-class TestPursueFold:
-    """Phase 5-2c-iii-c-2 #4: PURSUE_TASK retired; the held items task the
-    projection says to pursue is worked on the task objective's turn."""
+class TestItemsTaskIsWorked:
+    """Phase 5-2c-iii-c-2 #4/#5: a held, unmet items task not cancelled for its
+    worth is worked on the task objective's turn (the PIVOT gate is gone)."""
 
-    def test_a_pursued_items_task_offers_the_objective(self) -> None:
+    def test_a_held_items_task_offers_the_objective(self) -> None:
         held = _held(task_type="items")
-        with patch.object(root_mod._route, "task_worth_pursuing", return_value=True):
-            assert root_mod._task_root(held, _gd(), NO_PROFILE_CONTEXT, None) == ReachTaskOutcome("chicken")
-        with patch.object(root_mod._route, "task_worth_pursuing", return_value=False):
-            assert root_mod._task_root(held, _gd(), NO_PROFILE_CONTEXT, None) is None
+        assert root_mod._task_root(held, _gd(), NO_PROFILE_CONTEXT, None) == ReachTaskOutcome("chicken")
+        met = _held(10, 10, task_type="items")
+        assert root_mod._task_root(met, _gd(), NO_PROFILE_CONTEXT, None) is None
 
     def test_its_step_is_the_pursuit(self) -> None:
-        held = _held(task_type="items")
-        node = ReachTaskOutcome("chicken")
-        with patch.object(driver_mod, "pursue_due", return_value=True):
-            goal = objective_step_goal(node, held, _gd(), NO_PROFILE_CONTEXT)
+        goal = objective_step_goal(ReachTaskOutcome("chicken"), _held(task_type="items"),
+                                   _gd(), NO_PROFILE_CONTEXT)
         assert repr(goal) == "PursueTask(chicken)"
-        with patch.object(driver_mod, "pursue_due", return_value=False):
-            assert objective_step_goal(node, held, _gd(), NO_PROFILE_CONTEXT) is None
-
-    def test_the_funnel_asks_the_pursue_verdict(self) -> None:
-        with patch("artifactsmmo_cli.ai.decisions.route.pursue_due", return_value=True) as due:
-            assert root_mod._route.task_worth_pursuing(_held(task_type="items"), _gd(), None)
-        assert due.called

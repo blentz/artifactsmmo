@@ -663,9 +663,6 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | sellPressured =>
       show (applyActionKind .npcSell s).level ≥ s.level
       simp [applyActionKind]
-    | taskCancel =>
-      show (applyActionKind .taskCancel s).level ≥ s.level
-      simp [applyActionKind]
     | objectiveStep =>
       -- O5.2: planFor .objectiveStep = fight-or-placeholder (defeq to the if);
       -- both branches preserve level (≥).
@@ -1124,9 +1121,8 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   -- `ExtMeasure` slot. Per-cycle progress is carried by
   -- `CycleStep.cycleStep_progress_or_waits`.
   | currencyTurnIn  => exfalso; revert hmem; unfold progressMeans; decide
-  | taskCancel      => exfalso; revert hmem; unfold progressMeans; decide
   -- restForCombat is a guard OUT of `progressMeans` scope
-  -- (same as completeTask/lowYieldCancel/taskCancel above): no
+  -- (same as completeTask above): no
   -- measure-decrease commitment is made for them here; their progress is
   -- carried by `CycleStep.cycleStep_progress_or_waits`.
   | restForCombat   => exfalso; revert hmem; unfold progressMeans; decide
@@ -1172,7 +1168,7 @@ it is live in `PerceptionInvariant`/`Plan` and still audited below. -/
 
     The decomposition lives in `Formal.Liveness.LIV003Decomposition`:
 
-      • LIV-003a — THEOREM `taskAccepted_implies_cancelOrStepFires`
+      • LIV-003a — THEOREM `taskAccepted_implies_stepFires`
         (no axiom; provable from `ProductionLadder` fires defs)
 
       • LIV-003b — SMALL AXIOMS `lowYieldSampleThreshold`,
@@ -1221,15 +1217,16 @@ it is live in `PerceptionInvariant`/`Plan` and still audited below. -/
 /-- Sanity wrapper exposing LIV-003a at the cumulative-progress layer.
 
     User-mandate (a)/(b) restated structurally: in any `.accepted`
-    state, the planner's ladder commits to Cancel OR the objective step
-    (which works the held task since Phase 5-2c-iii-c-2 #4, replacing the
-    retired PURSUE_TASK rung) — it does NOT stall. Provable from
-    `ProductionLadder.taskCancelFires` / `objectiveStepFires` definitions;
-    this theorem is a re-export convenience. -/
-theorem accepted_state_decides_cancel_or_step (s : State)
+    state, the planner's ladder commits to the objective step, which works
+    the held task (Phase 5-2c-iii-c-2 #4, replacing the retired PURSUE_TASK
+    rung) or cancels it (#5, replacing the retired TASK_CANCEL rung) — it
+    does NOT stall. Provable from the `ProductionLadder.objectiveStepFires`
+    definition; this theorem is a re-export convenience. RESTATED #5: the
+    `taskCancelFires` disjunct went with its rung. -/
+theorem accepted_state_decides_step (s : State)
     (h : s.taskLifecyclePhase = .accepted) :
-    taskCancelFires s = true ∨ objectiveStepFires s = true :=
-  taskAccepted_implies_cancelOrStepFires s h
+    objectiveStepFires s = true :=
+  taskAccepted_implies_stepFires s h
 
 -- Item 1g-C: cumulative_progress_under_no_wait DELETED. Its body
 -- depended on the now-deleted lifecycle_progress_from_bounds AXIOM.

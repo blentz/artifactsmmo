@@ -101,3 +101,164 @@ Uses:
 5. **Draw without a coin** (follows from 3): a worthless draw is worked to clear
    it, so a draw is owed whenever the master's pool for this level holds a
    worthy task, coin or not.
+6. **Low-yield cancel** (c-2 #1, `route.task_pays_less`): "Worth wins, drop
+   it". An XP task is kept however slow its XP; the turn order gives the faster
+   alternative its own turns.
+7. **Other gold:** "The grind target's gold". The comparison rate is the fight
+   gold per cycle of `ctx.combat_monster`, the activity the character would
+   otherwise do.
+
+## 7. Progress
+
+- **Increment 1 — DONE @fa2ccf4a.** Pure core `ai/task_worth_core.py`, Lean
+  `Formal/TaskWorth.lean` (12 theorems), oracle `task_worth`, differential, 8
+  mutants.
+- **Increment 2 — keep/cancel by worth.**
+  - Live inputs: `ai/task_worth.py` (`task_worth_for`, `short_items`,
+    `held_task_cancel_due`).
+  - `ctx.gold_short` is computed by `GamePlayer._gold_short`. `account_gold` is
+    compared with max(`progression_reserve`, `closure_gold_demand` of the
+    previous cycle's `ObtainItem` root). It lives in the player to avoid an
+    import cycle: `progression_reserve` → `tiers` → `route`.
+  - The funnel is `route.task_cancel_due`.
+  - `_task_root` and `objective_step_goal` cancel by worth (`TaskCancelGoal`).
+    A held unmet items task is always worked.
+  - Retired: the TASK_CANCEL rung (production, Lean, sim, diffs), the
+    low-yield cancel in root/step, and `task_pursue.pursue_due` (its PIVOT
+    gate).
+  - Lean restatements: LIV-003a `…_stepFires`, `accepted_state_decides_step`,
+    `taskInfeasible_implies_stepFires`.
+- **Live probe (2026-10-07):**
+  - At L30-32, grey tasks are worthless (sheep, wolf, mushmush), except
+    skeleton, whose skeleton_bone is short for the royal_skeleton gear.
+  - XP tasks are worthy.
+  - GOLD never fires: every character holds about 225k gold against a 1,766
+    reserve.
+- **Residuals:**
+  - `Formal/LowYieldCancel.lean` + `low_yield_cancel_fires` +
+    `LowYieldCancelGoal` + their diff and tests have NO production caller now:
+    delete them in cleanup.
+  - Gold demand counts NPC leaves only; GE leaves are in the reserve via
+    `buy_price`.
+  - An items task is always feasible (its chain is the walk's to find).
+  - `planFor .objectiveStep` has no cancel dispatch (an existing
+    over-approximation).
+- **Increment 3 (next):** the draw is owed by pool worth (`draw_owed` over
+  `GameData.tasks_for`), replacing `_draw_owed_for_course`.
+
+## 8. Increment 3 plan: a draw owed by pool worth
+
+### 8.1 Today
+
+`GamePlayer._draw_owed_for_course` owes a draw only when the chosen root
+CHANGES (S-051 plus the no-immediate-redraw rule). It clears the debt while a
+task is held. `ctx.draw_owed` feeds `task_accept.accept_due`, which feeds
+`_task_root` (the offer) and the objective step (`AcceptTaskGoal` at
+`choose_taskmaster`'s master).
+
+Live cost (2026-10-06/07):
+- After a turn-in or a cancel, the next draw waits for an unrelated root
+  change: C3P0 waited 5h+, and R2D2 held nothing after its 13:28 turn-in.
+- The course rule exists to stop an accept→cancel spin, a coin per cycle.
+  Under worth, that spin only happens on worthless draws while coins last, so
+  a course change is the wrong brake.
+
+### 8.2 The rule (USER: "Owe a draw when" XP plus gold, gold that funds a
+purchase quickly, or aligned drops)
+
+A draw is owed when NO task is held and the master's POOL is worth drawing
+from:
+
+    p      = worthy share of the pool   (task_worth_for over GameData.tasks_for(type, level),
+                                          each task at its mean quantity)
+    owe  ⇔ p > 0 ∧ expected rerolls (1 - p) / p ≤ coins a completion pays
+
+A worthless draw is cancelled for 1 coin while a coin is in the pocket, so the
+expected coins spent before a worthy draw is (1 - p) / p. A completion pays
+`task_coin_reward` (4 on every record). Drawing is a loss when the rerolls
+cost more coins than a worthy task returns.
+
+Live probe (2026-10-07, level 30-32):
+- C3P0: 9/21 worthy (p ≈ 0.43), 1.33 rerolls.
+- Lor and HAL: 7/21 worthy (p ≈ 0.33), 2 rerolls.
+- All are owed.
+
+A worthless draw kept for lack of a coin is worked to clear it (rule §6.3). So
+a coinless character draws on the same rule: its "reroll" is working the task.
+
+- The COURSE rule is deleted (`_draw_course`, `_draw_owed_for_course`): the
+  debt comes from worth, not from root changes.
+- The anti-spin bound is the economics above. A pool too poor to pay its
+  rerolls owes nothing, and a cancelled draw does not re-arm a pool that was
+  not worth drawing from.
+
+### 8.3 Which master
+
+`choose_taskmaster` picks by link-demand synergy, and None means the default
+master. Rule: draw from the master whose pool has the higher worthy share `p`
+(the master's own task type: monsters or items). A tie or a single master
+falls back to `choose_taskmaster`. A master whose pool fails 8.2 is never
+chosen.
+
+### 8.4 Formal
+
+`Formal/TaskWorth.lean` gains:
+- `drawDue (worthy size coinReward : Nat) : Bool := 0 < worthy ∧
+  (size - worthy) ≤ coinReward * worthy`. This is the cross-multiplied
+  (1-p)/p ≤ R.
+- Theorems:
+  - `drawDue → ∃ worthy task` (it refines `drawOwed_iff`);
+  - monotone: more worthy tasks never revoke a draw;
+  - a pool with no worthy task never owes;
+  - satisfiability witnesses.
+- Oracle `task_draw_due` and a differential against the Python `draw_due` core.
+
+The Lean liveness `State.drawOwed` stays an OPAQUE Bool. Only its producer
+changes, so the F/D/E measure slot and the `{f,d,e}Lt_of_drawOwed_dec` lemmas
+are untouched; the residual stays a residual.
+
+### 8.5 Production
+
+- `task_worth_core.draw_due(worthy, size, coin_reward) -> bool` (pure, Lean
+  mirror).
+- `task_worth.pool_draw(state, gd, ctx, history) -> tuple[str, bool]`: per
+  master type, the pool's worthy count, then the chosen master and whether a
+  draw is due. Evaluated only when no task is held, once per cycle (the pool
+  has about 21 tasks; the horizon walk runs only for a lost fight).
+- `GamePlayer`: `ctx.draw_owed` = `pool_draw(...)` when no task is held; the
+  course fields go.
+- `AcceptTaskGoal` goes to the chosen master's tile.
+
+### 8.6 Tests, mutants, witness
+
+- **Unit:**
+  - the draw-due arithmetic, including its boundary (`(1-p)/p` = R owes);
+  - an empty pool or a worthless pool owes nothing;
+  - master choice by share;
+  - no task held is required.
+- **Differential:** `test_task_draw_due_diff.py`.
+- **Mutants:** the comparator, the worthy>0 guard, master choice, and the held
+  check.
+- **Witness after restart:**
+  - a character holds no task for under one turn after a turn-in;
+  - accepted draws per worthy draw ≈ 1/p;
+  - no coin is spent on a pool that fails 8.2.
+
+### 8.7 USER answers (2026-10-07) to the questions below
+
+- Brake: "Rerolls ≤ completion coins" (8.2 as written).
+- Pool: "Uniform now"; record each accepted draw so the assumption can be
+  checked once there are enough draws.
+- Master: "Higher worthy share" (8.3 as written).
+
+### 8.8 The questions as asked
+
+1. **The brake:** is "rerolls cost ≤ coins a completion pays" the right
+   economics, or should a draw be owed whenever the pool holds any worthy task
+   (no brake beyond coins running out)?
+2. **The pool distribution:** the rule assumes the master draws uniformly from
+   `tasks_for(type, level)`. Keep that assumption, or learn the draw
+   distribution from accepted tasks first? Today's evidence: 5 draws, which is
+   too few to fit anything.
+3. **The master:** choose by worthy share as 8.3, or keep `choose_taskmaster`'s
+   link-demand synergy and only gate the draw?

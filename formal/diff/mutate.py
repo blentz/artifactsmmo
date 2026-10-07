@@ -352,6 +352,8 @@ REFUSAL_FACT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "refusal_fact_core
 TASK_KILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "task_kills.py"
 STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
 TASK_WORTH_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth_core.py"
+CURRENCY_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_demand.py"
+TASK_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth.py"
 FIGHT_UPKEEP_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "fight_upkeep_core.py"
 BAND_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "band_target.py"
 TASK_ACCEPT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_accept.py"
@@ -4975,12 +4977,55 @@ CATALOGUE_SCOPE_PURGE_MUTATIONS = [
      "            pass  # finalizer removed"),
 ]
 
-# The horizon's consumer on the discard rung. Killed by
+# The horizon's consumer on the cancel verdict: an out-of-reach fight makes the
+# task infeasible, hence worthless (`task_worth.task_worth_for`; the discard
+# rung TASK_CANCEL read it until Phase 5-2c-iii-c-2 #5). Killed by
 # tests/test_ai/test_tiers_means.py. OWN run_group (unit-killed mutant).
-MEANS_TASK_HORIZON_MUTATIONS = [
-    ("means: TASK_CANCEL stops reading the one-level horizon",
-     "            return horizon is not None and horizon.verdict == HORIZON_OUT_OF_REACH",
-     "            return False"),
+TASK_WORTH_HORIZON_MUTATIONS = [
+    ("task_worth: the one-level horizon stops making a task infeasible",
+     "        feasible = horizon is None or horizon.verdict != HORIZON_OUT_OF_REACH\n",
+     "        feasible = True\n"),
+]
+# The task worth's live inputs (c-2 #5, increment 2). Killed by
+# tests/test_ai/test_task_worth.py.
+TASK_WORTH_INPUT_MUTATIONS = [
+    ("short items: the bank is not counted",
+     "    stock.update(state.bank_items or {})\n",
+     "    pass\n"),
+    ("short items: worn gear still needs its closure",
+     "    stack = [(code, 1) for code in ctx.target_gear | ctx.near_term_targets if code not in worn]\n",
+     "    stack = [(code, 1) for code in ctx.target_gear | ctx.near_term_targets]\n"),
+    ("task worth: fight gold is not counted in the task's rate",
+     "        task_rate = (reward + remaining * fight_gold) / (remaining * per_kill)\n",
+     "        task_rate = reward / (remaining * per_kill)\n"),
+    ("task worth: drops are read for the grind target, not the task monster",
+     "        drop_aligned = any(item in short for item, *_ in game_data.monster_drops(code))\n",
+     "        drop_aligned = False\n"),
+    ("task worth: the gold-short fact is ignored",
+     "        gold_short=ctx.gold_short,\n",
+     "        gold_short=True,\n"),
+    ("cancel: a coinless task's worth is read and cancelled",
+     "    if state.inventory.get(TASKS_COIN_CODE, 0) < 1:\n        return False\n    worth",
+     "    worth"),
+    ("cancel: a met task is cancelled",
+     "    if not state.task_code or state.task_progress >= state.task_total:\n        return False\n",
+     "    if not state.task_code:\n        return False\n"),
+]
+CLOSURE_GOLD_DEMAND_MUTATIONS = [
+    ("closure gold: the root's recipe closure is not expanded",
+     "               for leaf in _classify_leaves(chain, state, game_data)\n",
+     "               for leaf in _classify_leaves(needed, state, game_data)\n"),
+    ("closure gold: an owned copy is not spent first",
+     "    return sum(max(0, leaf.qty - leaf.owned) * leaf.gold_price\n",
+     "    return sum(leaf.qty * leaf.gold_price\n"),
+]
+GOLD_SHORT_MUTATIONS = [
+    ("gold short: the root's purchases are not counted",
+     "        need = max(progression_reserve(self.state, self.game_data), root_need)\n",
+     "        need = progression_reserve(self.state, self.game_data)\n"),
+    ("gold short: equal gold reads as short",
+     "        return account_gold(self.state) < need\n",
+     "        return account_gold(self.state) <= need\n"),
 ]
 
 # NO COIN, NO PROPOSAL. `TaskCancelAction.is_applicable` refuses without a POCKET
@@ -5015,7 +5060,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
-    REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
+    REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
     ROOT_DECISION_SRC, GATHER_DEMAND_SRC,
     OBTAIN_ITEM_ROUTING_SRC, EQUIP_VALUE_SRC,
     GEAR_VALUE_CORE_SRC,
@@ -7338,8 +7383,9 @@ TASK_ACCEPT_MUTATIONS = [
 # The task objective (Phase 5-2c-iii-c-1). Killed by
 # tests/test_ai/test_task_objective.py.
 TASK_ROOT_MUTATIONS = [
-    ("root: a pursued items task is never offered (c-2 pursue fold)",
-     "    if state.task_type == \"items\" and _route.task_worth_pursuing(state, game_data, history):\n",
+    ("root: a held items task is never offered (c-2 pursue fold)",
+     "    if (state.task_type == \"items\" and state.task_code\n"
+     "            and state.task_progress < state.task_total):\n",
      "    if False:\n"),
     ("root: an owed draw never offers the task objective (c-2 accept fold)",
      "    if not state.task_code and accept_due(state, ctx):\n",
@@ -7350,8 +7396,8 @@ TASK_ROOT_MUTATIONS = [
     ("root: earned coins never offer the task objective (c-2 exchange fold)",
      "    if tasks_coin_total(state) >= ctx.task_exchange_min_coins:\n        # c-2 #2",
      "    if False:\n        # c-2 #2"),
-    ("root: a poor task is never offered for its cancel (c-2 low-yield fold)",
-     "    if state.task_code and _route.task_pays_less(state, game_data, history):\n",
+    ("root: a worthless task is never offered for its cancel (c-2 cancel fold)",
+     "    if state.task_code and _route.task_cancel_due(state, game_data, ctx, history):\n",
      "    if False:\n"),
     ("root: the task objective is never offered",
      "    if task is not None:\n        ordered.append(task)\n",
@@ -7365,7 +7411,7 @@ TASK_ROOT_MUTATIONS = [
 ]
 TASK_STEP_MUTATIONS = [
     ("step: an items task is never worked (c-2 pursue fold)",
-     "            return _pursue_goal(state, game_data) if pursue_due(state, game_data, history) else None\n",
+     "            return _pursue_goal(state, game_data)\n",
      "            return None\n"),
     ("step: an owed draw is never taken (c-2 accept fold)",
      "        if step.task_code is None and accept_due(state, ctx):\n",
@@ -7373,8 +7419,8 @@ TASK_STEP_MUTATIONS = [
     ("step: earned coins are never exchanged (c-2 exchange fold)",
      "        if tasks_coin_total(state) >= ctx.task_exchange_min_coins:\n            # c-2 #2",
      "        if False:\n            # c-2 #2"),
-    ("step: a poor task is worked, not cancelled (c-2 low-yield fold)",
-     "        if low_yield_cancel_fires(state, game_data, history):\n            return LowYieldCancelGoal()\n",
+    ("step: a worthless task is worked, not cancelled (c-2 cancel fold)",
+     "        if task_cancel_due(state, game_data, ctx, history):\n            return TaskCancelGoal()\n",
      ""),
     ("step: the task objective maps to no goal",
      "        return TaskKillsGoal(step.task_code, state.task_progress)\n",
@@ -7388,9 +7434,10 @@ TASK_RESERVATION_GUARD_MUTATIONS = [
      "        if needed is not None and consumes_reserved(needed, state, game_data):\n"
      "            return None\n        return step_goal\n",
      "        return step_goal\n"),
-    ("reservation: the guard runs while the task is not being worked",
-     "        if step_goal is None or not pursue_due(state, game_data, self._history):\n",
-     "        if step_goal is None:\n"),
+    # ("reservation: the guard runs while the task is not being worked") was
+    # retired with `pursue_due` (c-2 #5): its successor, dropping the
+    # `task_progress >= task_total` arm, is EQUIVALENT — a met task reserves
+    # nothing (`task_reserved_demand`), so the guard passes the step anyway.
 ]
 TASK_KILLS_MUTATIONS = [
     ("task kills: one kill does not satisfy it",
@@ -9183,7 +9230,13 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_decisions_root.py", survivors)
     run_group(CATALOGUE_SCOPE_SRC, CATALOGUE_SCOPE_PURGE_MUTATIONS,
               "tests/test_ai/test_catalogue_scope.py", survivors)
-    run_group(MEANS_SRC, MEANS_TASK_HORIZON_MUTATIONS,
+    run_group(TASK_WORTH_SRC, TASK_WORTH_INPUT_MUTATIONS,
+              "tests/test_ai/test_task_worth.py", survivors)
+    run_group(CURRENCY_DEMAND_SRC, CLOSURE_GOLD_DEMAND_MUTATIONS,
+              "tests/test_ai/test_craft_vs_buy_wiring.py", survivors)
+    run_group(PLAYER_SRC, GOLD_SHORT_MUTATIONS,
+              "tests/test_ai/test_task_worth.py", survivors)
+    run_group(TASK_WORTH_SRC, TASK_WORTH_HORIZON_MUTATIONS,
               "tests/test_ai/test_tiers_means.py", survivors)
     run_group(TASK_CANCEL_GOAL_SRC, TASK_CANCEL_GOAL_COIN_MUTATIONS,
               "tests/test_ai/test_goals.py", survivors)

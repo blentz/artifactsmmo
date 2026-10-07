@@ -124,7 +124,6 @@ open Formal.Liveness.CycleStep
 #print axioms _fires_claimPending_implies_claimPending_positive
 #print axioms _fires_completeTask_implies_completeTask_positive
 #print axioms _fires_sellPressured_implies_sellInventory_positive
-#print axioms _fires_taskCancel_implies_taskCancel_positive
 #print axioms _fires_sellIdle_implies_sellInventory_positive
 #print axioms _fires_bankExpand_implies_expandBank_positive
 #print axioms _fires_wait_implies_wait_positive
@@ -140,7 +139,6 @@ open Formal.Liveness.CycleStep
 #print axioms plan_exists_for_hpCritical
 #print axioms plan_exists_for_claimPending
 #print axioms plan_exists_for_completeTask
-#print axioms plan_exists_for_taskCancel
 #print axioms plan_exists_for_bankExpand
 #print axioms plan_exists_for_wait
 
@@ -197,7 +195,7 @@ open Formal.Liveness.CumulativeProgress
 -- The OLD `cumulative_progress_lifecycle_axiom` has been DELETED; the
 -- unrestricted headline `cumulative_progress_under_no_wait` now depends on
 -- the smaller decomposed axioms in `Formal.Liveness.LIV003Decomposition`:
---   • LIV-003a — THEOREM `taskAccepted_implies_cancelOrStepFires`
+--   • LIV-003a — THEOREM `taskAccepted_implies_stepFires`
 --     (provable; no axiom)
 --   • LIV-003b — `lowYieldSampleThreshold`, `_pos`,
 --     `inProgress_decides_within_threshold`
@@ -206,9 +204,9 @@ open Formal.Liveness.CumulativeProgress
 --     composition residual replacing the fat axiom)
 -- See `Formal/Liveness/LIV003Decomposition.lean` for the full disclosure.
 open Formal.Liveness.LIV003Decomposition
-#print axioms taskAccepted_implies_cancelOrStepFires
-#print axioms taskInProgress_implies_cancelOrStepFires
-#print axioms taskActive_implies_cancelOrStepFires
+#print axioms taskAccepted_implies_stepFires
+#print axioms taskInProgress_implies_stepFires
+#print axioms taskActive_implies_stepFires
 -- LIV-003b (lowYieldSampleThreshold, inProgress_decides_within_threshold) retired
 -- with the LOW_YIELD_CANCEL rung, Phase 5-2c-iii-c-2.
 #print axioms taskPoolFinite
@@ -217,18 +215,19 @@ open Formal.Liveness.LIV003Decomposition
 -- axioms DELETED; the bridge axiom discharged as
 -- lifecycle_progress_from_bounds_proven (LifecycleBound7).
 -- cumulative_progress_under_no_wait also deleted (axiom-using wrapper).
-#print axioms accepted_state_decides_cancel_or_step
+#print axioms accepted_state_decides_step
 
 -- Phase 23d-3 — LIV-003a STRONG FORM: feasibility-grounded bridge.
 -- `taskInfeasible` packages a Phase-13 feasibility witness with the
--- gating phase condition; the structural bridge to `taskCancelFires`
+-- gating phase condition; the structural bridge to `objectiveStepFires`
+-- (`taskCancelFires` until the TASK_CANCEL rung retired, Phase 5-2c-iii-c-2 #5)
 -- requires NO new axioms. The decision-level companions compose
 -- Phase-13 `TaskDecision.combat_or_no_history_pivots` at the Liveness
 -- abstraction. See `Formal/Liveness/TaskInfeasibility.lean` for the
 -- full disclosure.
 open Formal.Liveness.TaskInfeasibility
-#print axioms taskInfeasible_implies_taskCancelFires
-#print axioms taskInfeasible_implies_taskCancelFires_headline
+#print axioms taskInfeasible_implies_stepFires
+#print axioms taskInfeasible_implies_stepFires_headline
 #print axioms combatGate_implies_pivot_decision
 #print axioms noHistory_implies_pivot_decision
 #print axioms vpc_below_threshold_implies_pivot
@@ -536,7 +535,6 @@ open Formal.Liveness.BlockerQuieting
 #print axioms claimPending_quiet_after_firing
 #print axioms sellPressured_quiet_after_firing
 #print axioms completeTask_quiet_after_firing
-#print axioms taskCancel_quiet_after_firing
 #print axioms restForCombat_quiet_after_firing
 #print axioms hpCritical_quiet_after_firing
 #print axioms bankUnlock_quiet_after_firing

@@ -331,6 +331,23 @@ def _admit_gold_leaves(
     return admitted
 
 
+def closure_gold_demand(needed: dict[str, int], state: WorldState,
+                        game_data: GameData) -> int:
+    """The gold `needed`'s recipe closure will spend at vendors: every
+    still-unowned gold-buy leaf at its cheapest permanent gold price.
+
+    The task worth's "chosen root's purchases" (USER 2026-10-07, "Both, the
+    larger"): `task_worth` reads gold as short when account gold is below the
+    larger of this and the progression reserve. Vendor (NPC) leaves only — a
+    leaf bought on the Grand Exchange is in the progression reserve
+    (`progression_reserve.buy_price` takes the GE's best order)."""
+    chain = dict(demand_set(
+        game_data.requirement_graph.graph(), list(needed), needed).quantities)
+    return sum(max(0, leaf.qty - leaf.owned) * leaf.gold_price
+               for leaf in _classify_leaves(chain, state, game_data)
+               if leaf.gold_price is not None)
+
+
 def analyze_currency_leaves(
     needed: dict[str, int], state: WorldState, game_data: GameData
 ) -> CurrencyLeafAnalysis:

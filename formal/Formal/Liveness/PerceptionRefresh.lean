@@ -257,9 +257,4 @@ theorem perceptionRefresh_fires_sellPressured (s : State) :
     fires .sellPressured (perceptionRefresh s) = fires .sellPressured s := by
   unfold perceptionRefresh; split <;> rfl
 
-/-- `perceptionRefresh` preserves the taskCancel fire. -/
-theorem perceptionRefresh_fires_taskCancel (s : State) :
-    fires .taskCancel (perceptionRefresh s) = fires .taskCancel s := by
-  unfold perceptionRefresh; split <;> rfl
-
 end Formal.Liveness.PerceptionRefresh

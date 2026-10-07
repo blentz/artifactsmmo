@@ -409,7 +409,6 @@ def planForC : MeansKind → State → Plan
   | .claimPending     , _ => [.claimPendingItem]
   | .completeTask     , _ => [.completeTask]
   | .sellPressured    , _ => [.npcSell]
-  | .taskCancel       , _ => [.taskCancel]
   | .objectiveStep    , s =>
       -- O5.2 (2026-06-16): a combat/char-leveling objective dispatches a
       -- Fight-led plan (production `ReachCharLevel` meta-goal + monster-task /

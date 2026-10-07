@@ -9,8 +9,9 @@ load-bearing invariants:
      PURSUE_TASK rung must fire. Since Phase 5-2c-iii-c-2 #4 the rung is
      retired: a held, unmet task fires the OBJECTIVE_STEP rung on its phase
      alone (`production_ladder.fires`; Lean `objectiveStepFires … ||
-     phaseActive`), and the pursuit predicate is `task_pursue.pursue_due`,
-     read by the task objective's step. This file now pins that phase arm
+     phaseActive`). Since #5 a held, unmet items task is always worked by the
+     task objective's step unless its worth cancels it (`_task_root`; the
+     `pursue_due` PIVOT gate is gone). This file now pins that phase arm
      (`test_objective_step_fires_when_items_task_in_progress_history_none`).
 
 This file is the bug-finder. It generates diverse WorldState shapes with
@@ -43,9 +44,7 @@ from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.decisions.root import _task_root
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.task_accept import accept_due
-from artifactsmmo_cli.ai.task_pursue import pursue_due
 from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import COLLECT_REWARD_ORDER, INTERRUPT_MEANS, MeansKind
 from artifactsmmo_cli.ai.tiers.means import _fires as _means_fires
@@ -192,11 +191,11 @@ def _arbitrary_states(draw: st.DrawFn) -> WorldState:
 
 @st.composite
 def _items_task_in_progress(draw: st.DrawFn) -> WorldState:
-    """Adversarial: items-task in progress, history=None (so `pursue_due` is
-    False — the pursuit verdict needs history). The state where the retired
-    Phase 20c-v2 `pursueFiresWhenInProgress` invariant was falsified under
-    faithful production semantics; the objective step's task-phase arm must
-    carry it now."""
+    """Adversarial: items-task in progress, history=None (the retired
+    PURSUE_TASK rung needed history, so it never fired here). The state where
+    the retired Phase 20c-v2 `pursueFiresWhenInProgress` invariant was
+    falsified under faithful production semantics; the objective step's
+    task-phase arm must carry it now."""
     task_total = draw(st.integers(min_value=1, max_value=20))
     task_progress = draw(st.integers(min_value=0, max_value=task_total - 1))
     return _base_world(
@@ -218,8 +217,8 @@ def _items_task_in_progress(draw: st.DrawFn) -> WorldState:
 
 @st.composite
 def _monsters_task_in_progress(draw: st.DrawFn) -> WorldState:
-    """Adversarial: monsters-task in progress. The production pursuit
-    predicate (`pursue_due`) only holds for `task_type == "items"` — for a
+    """Adversarial: monsters-task in progress. The production items-task
+    arm of `_task_root` only holds for `task_type == "items"` — for a
     monsters-task, what fires? If nothing, this is a deadlock witness."""
     task_total = draw(st.integers(min_value=1, max_value=20))
     task_progress = draw(st.integers(min_value=0, max_value=task_total - 1))
@@ -256,6 +255,14 @@ def _ctx(draw: st.DrawFn) -> SelectionContext:
     )
 
 
+def _items_task_unmet(state: WorldState) -> bool:
+    """A held, unmet items task — the task objective works it unless its worth
+    cancels it (production `decisions/root._task_root`'s items arm; the
+    retired PURSUE_TASK rung's successor since Phase 5-2c-iii-c-2 #5)."""
+    return (state.task_type == "items" and bool(state.task_code)
+            and state.task_progress < state.task_total)
+
+
 def _empty_gd() -> GameData:
     """GameData with no monsters, no NPC buyers, no recipes. Keeps the
     differential focused on STATE-driven `_fires` branches; the data-driven
@@ -281,9 +288,9 @@ def test_phantomTask_state_is_a_real_deadlock_shape(
     if perceive.py ever produced such a state, production would deadlock
     on the discretionary tier alone. This test demonstrates the deadlock
     shape EXPLICITLY by constructing it and showing COMPLETE_TASK does not
-    fire, the production pursuit predicate `pursue_due` (the task objective's
-    work since PURSUE_TASK was retired; given a real, empty store so the
-    `history is not None` conjunct is not why it fails) does not hold, the
+    fire, the held-unmet-items-task test `_items_task_unmet` (the task
+    objective's work since PURSUE_TASK was retired, mirroring `_task_root`)
+    does not hold, the
     OBJECTIVE_STEP rung's task-phase arm does not fire (a phantom task's
     lifecycle phase is NONE), and no draw can be taken (`accept_due`, the task
     objective's accept since ACCEPT_TASK was retired).
@@ -297,14 +304,14 @@ def test_phantomTask_state_is_a_real_deadlock_shape(
     gd = _empty_gd()
     if state.task_code is not None and state.task_total <= 0:
         complete = _means_fires(MeansKind.COMPLETE_TASK, state, gd, None, ctx)
-        pursue = pursue_due(state, gd, LearningStore(":memory:", "diff"))
+        worked = _items_task_unmet(state)
         step_phase = production_fires(LadderMeans.OBJECTIVE_STEP, state, gd,
                                       None, ctx, False)
         accept = accept_due(state, ctx)
-        assert not (complete or pursue or step_phase or accept), (
+        assert not (complete or worked or step_phase or accept), (
             f"Phantom-task state but a task means fires anyway — "
             f"production semantics changed; revisit Lean invariant taskValid. "
-            f"complete={complete} pursue={pursue} step_phase={step_phase} "
+            f"complete={complete} worked={worked} step_phase={step_phase} "
             f"accept={accept}"
         )
         COUNTERS.task_valid_violations.append(
@@ -334,14 +341,16 @@ def test_objective_step_fires_when_items_task_in_progress_history_none(
     production semantics (production survived only on the opaque
     objective-step flag). Since Phase 5-2c-iii-c-2 #4 a held, unmet task fires
     OBJECTIVE_STEP on its lifecycle phase alone, with the opaque flag OFF and
-    no history. Pin both halves: the production pursuit predicate `pursue_due`
-    is still False here (no history ⇒ no PURSUE verdict), AND the ladder's
-    OBJECTIVE_STEP phase arm fires anyway, so the ladder is not left to WAIT on
-    an in-progress items task. A violation is recorded and FAILS.
+    no history. Pin both halves: production's `_task_root` offers the task
+    objective for it with no history (since #5 a held, unmet items task is
+    worked unless its worth cancels it — no coin here, so no cancel), AND the
+    ladder's OBJECTIVE_STEP phase arm fires, so the ladder is not left to WAIT
+    on an in-progress items task. A violation is recorded and FAILS.
     """
     gd = _empty_gd()
     history = None
-    assert pursue_due(state, gd, history) is False
+    assert _items_task_unmet(state)
+    assert _task_root(state, gd, ctx, history) == ReachTaskOutcome(state.task_code)
     step_fires = production_fires(LadderMeans.OBJECTIVE_STEP, state, gd,
                                   history, ctx, False)
     if not step_fires:
@@ -363,7 +372,7 @@ def test_objective_step_fires_when_items_task_in_progress_history_none(
 def test_monster_task_in_progress_some_means_fires(
     state: WorldState, ctx: SelectionContext
 ) -> None:
-    """Adversarial: the production pursuit predicate (`pursue_due`) only
+    """Adversarial: the production items-task arm of `_task_root` only
     holds for items tasks. For a monsters-task in progress with history=None
     and no other pressure, does any means fire? In production a monsters-task is handled by the
     OBJECTIVE_STEP tier (StrategyArbiter materialises a FightMonster
@@ -462,7 +471,7 @@ def test_ladder_entry_count_matches_lean() -> None:
     + GE_BID (discretionary reactive buy-post, above DRAIN_BANK_JUNK)
     + SUPPLY_BANK (2026-08-01 human ruling, produce for a sibling; PROMOTED out
     of DISCRETIONARY_ORDER into COLLECT_REWARD_ORDER, so it sits LAST in the
-    collect group — after TASK_CANCEL, above OBJECTIVE_STEP)
+    collect group — above OBJECTIVE_STEP)
     + CURRENCY_TURNIN (2026-08-16, fleet-currency-turn-in epic Task 6; sits
     directly below SUPPLY_BANK in COLLECT_REWARD_ORDER, still above
     OBJECTIVE_STEP).
@@ -471,8 +480,10 @@ def test_ladder_entry_count_matches_lean() -> None:
     5-2c-iii-c-2: the task objective's step).
     − PURSUE_TASK (retired in Phase 5-2c-iii-c-2 #4: the task objective's
     step; OBJECTIVE_STEP fires on a held, unmet task's phase).
+    − TASK_CANCEL (retired in Phase 5-2c-iii-c-2 #5: the task objective's
+    step cancels a worthless task).
     Lean side mirrors via MeansKind.allInLadderOrder."""
-    assert len(ALL_IN_LADDER_ORDER) == 26
+    assert len(ALL_IN_LADDER_ORDER) == 25
 
 
 def test_the_ladder_interrupt_prefix_is_what_production_runs_as_interrupts() -> None:
@@ -539,16 +550,17 @@ def test_completed_task_state_completeTask_fires() -> None:
     assert res is LadderMeans.COMPLETE_TASK, f"expected COMPLETE_TASK, got {res!r}"
 
 
-def test_history_None_makes_pursue_inert() -> None:
-    """REGRESSION DOCUMENTATION: the production pursuit predicate
-    `task_pursue.pursue_due` (the retired PURSUE_TASK rung's predicate, now
-    read by the task objective's step) is False when `history is None` — a
-    fresh bot with no learning history has no PURSUE verdict. The ladder does
-    NOT depend on it: OBJECTIVE_STEP fires on the in-progress task's phase
-    alone (opaque flag OFF), which is what makes the retired Lean invariant
-    `pursueFiresWhenInProgress` unnecessary. If the first assert flips, the
-    pursuit got cheaper to establish; if the second flips, the phase arm
-    regressed and an in-progress items task can stall."""
+def test_history_None_items_task_is_still_worked() -> None:
+    """REGRESSION DOCUMENTATION: a fresh bot with no learning history still
+    works a held, unmet items task. The retired PURSUE_TASK rung (and its
+    successor predicate `pursue_due`, gone in Phase 5-2c-iii-c-2 #5) needed a
+    PURSUE verdict and so was False when `history is None`; production's
+    `_task_root` now offers the task objective for it whenever its worth does
+    not cancel it. The ladder fires OBJECTIVE_STEP on the in-progress task's
+    phase alone (opaque flag OFF), which is what makes the retired Lean
+    invariant `pursueFiresWhenInProgress` unnecessary. If the first asserts
+    flip, the task objective stopped working items tasks; if the last flips,
+    the phase arm regressed and an in-progress items task can stall."""
     gd = _empty_gd()
     ctx = SelectionContext(
         bank_accessible=True,
@@ -564,9 +576,8 @@ def test_history_None_makes_pursue_inert() -> None:
         hp=100, max_hp=100, inventory_used=0, inventory_max=100,
         bank_items=None, pending=None, level=1, xp=0, gold=0,
     )
-    assert not pursue_due(state, gd, None), (
-        "Production `pursue_due` should be False when history is None."
-    )
+    assert _items_task_unmet(state)
+    assert _task_root(state, gd, ctx, None) == ReachTaskOutcome("task_x")
     assert production_ladder(state, gd, None, ctx, objective_step_fires=False) \
         is LadderMeans.OBJECTIVE_STEP
 

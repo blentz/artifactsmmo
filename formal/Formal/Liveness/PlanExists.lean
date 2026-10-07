@@ -104,17 +104,6 @@ theorem plan_exists_for_completeTask :
   simp [planAchieves, applyActionKind, fires,
         completeTaskFires]
 
-/-- `[.taskCancel]` clears `taskCancel`. The opaque Bool
-    `taskCancelFires` is reset to `false` by the apply, mirroring
-    production's post-cancel state observation. -/
-theorem plan_exists_for_taskCancel :
-    ∀ s, fires .taskCancel s = true →
-      ∃ p : Plan, planAchieves p s .taskCancel := by
-  intro s h
-  refine ⟨[.taskCancel], ?_⟩
-  simp [planAchieves, applyActionKind, fires,
-        ProductionLadder.taskCancelFires]
-
 /-- `[.buyBankExpansion]` clears `bankExpand` PROVIDED the added 20
     slots suffice to drop the fill ratio below the 0.75 threshold.
 

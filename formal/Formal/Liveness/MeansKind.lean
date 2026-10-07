@@ -95,7 +95,7 @@ inductive MeansKind where
   | completeTask        -- COMPLETE_TASK,      means.py:72
   | sellPressured       -- SELL_PRESSURED,     means.py:76
   -- (lowYieldCancel retired: Phase 5-2c-iii-c-2)
-  | taskCancel          -- TASK_CANCEL,        means.py:82
+  -- (taskCancel retired: Phase 5-2c-iii-c-2 #5)
   | supplyBank          -- SUPPLY_BANK,        means.py (2026-08-01 human ruling):
                         --                     produce a material a SIBLING declared
                         --                     on the demand board and BANK it.
@@ -105,7 +105,7 @@ inductive MeansKind where
                         --                     step it was unreachable, because a
                         --                     character essentially always has one.
                         --                     LAST within the collect group: the
-                        --                     other five rungs are one-or-few-action
+                        --                     other rungs are one-or-few-action
                         --                     bookings of an already-earned outcome
                         --                     and self-quiet, whereas this one is an
                         --                     open-ended production run. Gated on
@@ -181,7 +181,7 @@ def allInLadderOrder : List MeansKind :=
    -- collect rung from its 2026-09-13 promotion out of the discretionary group,
    -- where it fired against a 50/50 bank and was selected zero times.)
    .bankExpand,
-   .completeTask, .taskCancel,
+   .completeTask,
    .supplyBank,
    .currencyTurnIn,
    .objectiveStep,
@@ -189,11 +189,11 @@ def allInLadderOrder : List MeansKind :=
    .sellIdle, .recycleSurplus, .geBid, .drainBankJunk,
    .wait]
 
-/-- Sanity: 26 rungs (one per constructor). GEAR_REVIEW was retired in Phase
+/-- Sanity: 25 rungs (one per constructor). GEAR_REVIEW was retired in Phase
     4-3b: its one arm never fired in recorded history. LOW_YIELD_CANCEL,
-    TASK_EXCHANGE, ACCEPT_TASK and PURSUE_TASK were retired in Phase
-    5-2c-iii-c-2: the task objective's step owns the cancel, the exchange, the
-    accept and the items-task pursuit. -/
-example : allInLadderOrder.length = 26 := by decide
+    TASK_EXCHANGE, ACCEPT_TASK, PURSUE_TASK and TASK_CANCEL were retired in
+    Phase 5-2c-iii-c-2: the task objective's step owns the cancels, the
+    exchange, the accept and the items-task pursuit. -/
+example : allInLadderOrder.length = 25 := by decide
 
 end Formal.Liveness.MeansKind

@@ -1,18 +1,20 @@
 /-
   Formal.Liveness.TaskInfeasibility
 
-  Phase 23d-3 — Feasibility-grounded bridge to `taskCancelFires`.
+  Phase 23d-3 — Feasibility-grounded bridge to the ladder (`objectiveStepFires`
+  since Phase 5-2c-iii-c-2 #5 retired the TASK_CANCEL rung into the task
+  objective's step; it was `taskCancelFires`).
 
   ## Goal
 
   Convert LIV-003a from a weak phase-only theorem (Phase 23d-1's
   `taskAccepted_implies_cancelOrPursueFires`) into a *feasibility-grounded*
   theorem: an *unbridgeable* skill-gap or combat-task gate STRUCTURALLY
-  forces `taskCancelFires` to fire.
+  forces the objective step (which cancels it) to fire.
 
   ```
-  theorem taskInfeasible_implies_taskCancelFires :
-      ∀ s, taskInfeasible s → taskCancelFires s = true
+  theorem taskInfeasible_implies_stepFires :
+      ∀ s, taskInfeasible s → objectiveStepFires s = true
   ```
 
   ## Production grounding
@@ -41,13 +43,13 @@
 
   This module provides TWO theorems:
 
-  ### Theorem A — `taskInfeasible_implies_taskCancelFires` (LIV-003a strong form)
+  ### Theorem A — `taskInfeasible_implies_stepFires` (LIV-003a strong form)
 
   Structural bridge at the Liveness abstraction level. `taskInfeasible s`
   PACKAGES the feasibility witness (`taskInfeasibleWitness`) together with
   the gating phase condition (`s.taskLifecyclePhase ∈ {.accepted,
-  .inProgress}`). The implication to `taskCancelFires s = true` is then
-  immediate by definition unfolding (taskCancelFires IS the same phase
+  .inProgress}`). The implication to `objectiveStepFires s = true` is then
+  immediate by definition unfolding (objectiveStepFires CONTAINS the same phase
   predicate at the Liveness layer).
 
   ### Theorem B — `taskInfeasible_implies_pivot_decision` (decision-level)
@@ -72,7 +74,7 @@
       `objectiveStepFires`). NOT an axiom: no `axiom` keyword is
       introduced in this module.
 
-    • The Liveness `taskCancelFires` is purely phase-based at this
+    • The Liveness `objectiveStepFires` is purely phase-based (on a held task) at this
       abstraction layer (see `ProductionLadder.lean` Phase 23c-3b honest
       disclosure). Production's stricter `task_decision == PIVOT` check
       is the load-bearing arithmetic content captured by Theorem B; the
@@ -180,22 +182,28 @@ def taskInfeasible (s : State) : Prop :=
   -- (production: task_decision == PIVOT). Mirrors the refined
   -- taskCancelFires definition.
 
-/-! ## Theorem A — Structural bridge to `taskCancelFires` -/
+/-! ## Theorem A — Structural bridge to the objective step -/
 
-/-- LIV-003a (Phase 23d-3) — **THEOREM**, NOT an axiom.
+/-- LIV-003a (Phase 23d-3; RESTATED Phase 5-2c-iii-c-2 #5) — **THEOREM**,
+    NOT an axiom.
 
     **Strong form** of LIV-003a, replacing the weak phase-only form
     `taskAccepted_implies_cancelOrPursueFires` (Phase 23d-1). An
-    *infeasible* active task structurally forces `taskCancelFires` to
-    fire at the Liveness abstraction.
+    *infeasible* active task structurally forces the ladder's
+    `objectiveStepFires` to fire at the Liveness abstraction — the task
+    objective's step, which is where the cancel lives since the TASK_CANCEL
+    rung was retired (#5). The conclusion was `taskCancelFires s = true`;
+    that predicate went with its rung, and the objective step carries the
+    same active-phase test (the coverage `objectiveStepFires` took over from
+    PURSUE_TASK in #4).
 
     Proof: `taskInfeasible s` requires `s.taskLifecyclePhase ∈
-    {.accepted, .inProgress}`, which is exactly the phase predicate
-    `taskCancelFires` checks (`ProductionLadder.lean`, Phase 23c-3b).
+    {.accepted, .inProgress}`, which is a disjunct of the predicate
+    `objectiveStepFires` checks (`ProductionLadder.lean`).
     The implication is immediate by definition unfolding.
 
     Caveats (honest disclosure):
-      - `taskCancelFires` at the Liveness layer is PHASE-only; the
+      - `objectiveStepFires` at the Liveness layer is PHASE-only here; the
         stricter production `task_decision == PIVOT` check is the
         load-bearing arithmetic content captured by Theorem B
         (`taskInfeasible_implies_pivot_decision`).
@@ -204,14 +212,14 @@ def taskInfeasible (s : State) : Prop :=
         the opaque-Bool fields on `State` (a diff harness asserts the
         witness matches `task_requirement`'s output). NO axiom keyword
         used here. -/
-theorem taskInfeasible_implies_taskCancelFires
+theorem taskInfeasible_implies_stepFires
     (s : State) (h : taskInfeasible s) :
-    taskCancelFires s = true := by
-  obtain ⟨_, hPhase, hFeas⟩ := h
-  unfold taskCancelFires
+    objectiveStepFires s = true := by
+  obtain ⟨_, hPhase, _⟩ := h
+  unfold objectiveStepFires
   cases hPhase with
-  | inl ha => rw [ha, hFeas]; simp
-  | inr hi => rw [hi, hFeas]; simp
+  | inl ha => rw [ha]; simp
+  | inr hi => rw [hi]; simp
 
 /-! ## Theorem B — Decision-level bridge
 
@@ -222,7 +230,7 @@ theorem taskInfeasible_implies_taskCancelFires
   This is the *arithmetic* content of the bridge — Theorem A is its
   *structural* phase-level companion. Together they show that the
   feasibility-grounded PIVOT decision the production planner makes IS
-  reflected in the Liveness `taskCancelFires` predicate, in the
+  reflected in the Liveness `objectiveStepFires` predicate, in the
   necessary-condition direction (production fires ⇒ Liveness fires). -/
 
 /-- Cycles-clamp invariant: the Phase 23d-2 production fix at
@@ -243,7 +251,7 @@ def cyclesClampInvariant (skillCycles gap : Nat) : Prop := skillCycles ≥ gap
 
     Combat-task infeasibility: when the witness is `combatGate`, the
     Phase-13 `taskDecisionPure` returns `PIVOT` unconditionally via
-    `combat_or_no_history_pivots`. The Liveness `taskCancelFires`
+    `combat_or_no_history_pivots`. The Liveness `objectiveStepFires`
     follows from Theorem A.
 
     The arithmetic content here is in the Phase-13 module
@@ -311,15 +319,16 @@ theorem vpc_below_threshold_implies_pivot
 
 /-- LIV-003a HEADLINE (Phase 23d-3) — **THEOREM**, NOT an axiom.
 
-    `taskInfeasible_implies_taskCancelFires` is the STRUCTURAL bridge
+    `taskInfeasible_implies_stepFires` is the STRUCTURAL bridge
     from feasibility-grounded infeasibility to the Liveness
-    `taskCancelFires` predicate. This headline restates Theorem A as
+    `objectiveStepFires` predicate (the task objective's step, which owns
+    the cancel). This headline restates Theorem A as
     the LIV-003a strong form for export to LIV003Decomposition /
     LivenessAudit.
 
     Composition (over the two theorems in this module):
       - Theorem A (this headline): `taskInfeasible s →
-        taskCancelFires s = true` — phase-level, structural.
+        objectiveStepFires s = true` — phase-level, structural.
       - Theorem B (`combatGate_implies_pivot_decision`,
         `noHistory_implies_pivot_decision`,
         `vpc_below_threshold_implies_pivot`): the Phase-13
@@ -327,13 +336,13 @@ theorem vpc_below_threshold_implies_pivot
         infeasible inputs.
 
     Together they pin LIV-003a as a non-axiomatic claim: an infeasible
-    active task structurally forces the Liveness cancel-firing
-    predicate, AND the Phase-13 decision core matches in the
+    active task structurally forces the Liveness objective-step
+    predicate (whose step cancels it), AND the Phase-13 decision core matches in the
     necessary-condition direction. -/
-theorem taskInfeasible_implies_taskCancelFires_headline
+theorem taskInfeasible_implies_stepFires_headline
     (s : State) (h : taskInfeasible s) :
-    taskCancelFires s = true :=
-  taskInfeasible_implies_taskCancelFires s h
+    objectiveStepFires s = true :=
+  taskInfeasible_implies_stepFires s h
 
 /-! ## Non-vacuity witnesses -/
 

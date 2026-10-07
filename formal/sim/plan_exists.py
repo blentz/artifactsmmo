@@ -35,7 +35,6 @@ WITNESS: dict[LadderMeans, list[str]] = {
     LadderMeans.CLAIM_PENDING: ["claimPendingItem"],
     LadderMeans.COMPLETE_TASK: ["completeTask"],
     LadderMeans.SELL_PRESSURED: ["npcSell"],
-    LadderMeans.TASK_CANCEL: ["taskCancel"],
     # OBJECTIVE_STEP: synthetic — skipped in the operational differential.
     LadderMeans.SELL_IDLE: ["npcSell"],
     LadderMeans.BANK_EXPAND: ["buyBankExpansion"],

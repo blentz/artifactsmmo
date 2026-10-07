@@ -886,31 +886,6 @@ theorem descendsE_craftPotions (s : State)
       perceptionRefreshE_level, perceptionRefreshE_xp]
 
 
-theorem descendsE_taskCancel (s : State)
-    (hk : productionLadder (perceptionRefreshE s) = some .taskCancel) :
-    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, taskCancelFires, Bool.and_eq_true, Bool.or_eq_true,
-    decide_eq_true_eq, refreshE_phase] at hfire
-  have hphase : s.taskLifecyclePhase ≠ .none := by
-    rcases hfire.1 with h | h <;> (rw [h]; intro hc; cases hc)
-  rw [cycleStepE_some s hk]
-  have hcs : cycleStep (perceptionRefreshE s) =
-      applyActionKind .taskCancel (perceptionRefreshE s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  apply eLt_of_phasePresent_dec <;>
-    simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-      applyActionKind, hphase,
-      refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
-      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
-      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
-      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
-      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
-      refreshE_gearGap, refreshE_adequate,
-      perceptionRefreshE_level, perceptionRefreshE_xp]
-
-
 theorem descendsE_completeTask (s : State)
     (hk : productionLadder (perceptionRefreshE s) = some .completeTask) :
     eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
@@ -1030,7 +1005,6 @@ private def gearScanPrefix : List MeansKind :=
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
    .discardHigh, .craftPotions, .sellPressured, .claimPending, .bankExpand,
    .completeTask,
-   .taskCancel,
    .supplyBank, .currencyTurnIn]
 
 private theorem blockerPrefix_split :

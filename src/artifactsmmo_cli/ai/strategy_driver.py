@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.decision import Decision, resolve_node
 from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog, search_detail
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.decisions.obtain_item import obtain_item_decision
+from artifactsmmo_cli.ai.decisions.route import task_cancel_due
 from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
 from artifactsmmo_cli.ai.equipment.bank_tool_fills import bank_tool_fills
 from artifactsmmo_cli.ai.equipment.empty_slot_fills import empty_slot_rank_fills
@@ -50,7 +51,6 @@ from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
-from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.maintain_consumables import MaintainConsumablesGoal
 from artifactsmmo_cli.ai.goals.participate_raid import ParticipateRaidGoal
 from artifactsmmo_cli.ai.goals.post_buy_bid import PostBuyBidGoal
@@ -71,7 +71,6 @@ from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
 from artifactsmmo_cli.ai.intention_progress import rotate
-from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner
@@ -84,7 +83,6 @@ from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_coins import tasks_coin_total
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
-from artifactsmmo_cli.ai.task_pursue import pursue_due
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.tiers.guards import (
@@ -392,8 +390,6 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
                                  snapshot=drain_snapshot(state, game_data, ctx))
     if kind is MeansKind.GE_BID:
         return PostBuyBidGoal(game_data=game_data, ctx=ctx)
-    if kind is MeansKind.TASK_CANCEL:
-        return TaskCancelGoal()
     if kind is MeansKind.BANK_EXPAND:
         return ExpandBankGoal(
             bank_accessible=ctx.bank_accessible,
@@ -605,12 +601,12 @@ def objective_step_goal(
         # CanICraftCurrentTier` does for a skill-gated craft one layer down.
         return ReachSkillGoal(skill_name=step.skill, target_level=step.level)
     if isinstance(step, ReachTaskOutcome):
-        # Phase 5-2c-iii-c: the task objective's step. A data-confirmed poor task
-        # is cancelled (c-2: this was the LOW_YIELD_CANCEL collect rung); else
-        # one more kill of its monster, at the count it has now; a met or
-        # dropped task has none.
-        if low_yield_cancel_fires(state, game_data, history):
-            return LowYieldCancelGoal()
+        # Phase 5-2c-iii-c: the task objective's step. A worthless task with a
+        # pocket coin is cancelled (c-2 #5: was the TASK_CANCEL rung); else one
+        # more kill of its monster, at the count it has now; a met or dropped
+        # task has none.
+        if task_cancel_due(state, game_data, ctx, history):
+            return TaskCancelGoal()
         if step.task_code is None and accept_due(state, ctx):
             # c-2 #3 (was the ACCEPT_TASK collect rung): take the owed draw on
             # the task's turn. Synergy Wave 4: steer the task DISTRIBUTION toward
@@ -632,9 +628,8 @@ def objective_step_goal(
         if step.task_code is None or step.is_satisfied(state, game_data):
             return None
         if state.task_type == "items":
-            # c-2 #4 (was the PURSUE_TASK rung): work the items task the
-            # projection says to pursue.
-            return _pursue_goal(state, game_data) if pursue_due(state, game_data, history) else None
+            # c-2 #4/#5: a held items task not cancelled for its worth is worked.
+            return _pursue_goal(state, game_data)
         return TaskKillsGoal(step.task_code, state.task_progress)
     return None
 
@@ -649,7 +644,7 @@ def _pursue_goal(state: WorldState, game_data: GameData) -> Goal:
         # Route the task-skill grind through the planner-native LevelSkill
         # action (via ReachSkillGoal).
         return ReachSkillGoal(skill_name=req.skill, target_level=target)
-    assert state.task_code is not None  # pursue_due guarantees an active task
+    assert state.task_code is not None  # the step arm runs only for a held task
     return PursueTaskGoal(task_code=state.task_code,
                           initial_progress=state.task_progress,
                           batch=task_batch_size(state, game_data))
@@ -1099,12 +1094,14 @@ class StrategyArbiter:
         re-evaluated every cycle (defer, not ban). Covers GatherMaterials AND a
         committed UpgradeEquipment whose craft consumes reserved inputs.
 
-        Only while the task is being worked (`pursue_due`). Phase 5-2c-iii-c-2
+        Only while an items task is held and unmet — the task objective works
+        every such task not cancelled for its worth (c-2 #5). Phase 5-2c-iii-c-2
         #4 (USER) kept this guard and deleted the two that only existed to let
         the retired PURSUE_TASK rung win positionally — dropping a step the task
         chain already produced, and deferring fallback gathering of a held task
         item — since the task objective now has its own turns."""
-        if step_goal is None or not pursue_due(state, game_data, self._history):
+        if (step_goal is None or state.task_type != "items" or not state.task_code
+                or state.task_progress >= state.task_total):
             return step_goal
         needed = _reservation_consumption(step_goal, state, game_data)
         if needed is not None and consumes_reserved(needed, state, game_data):

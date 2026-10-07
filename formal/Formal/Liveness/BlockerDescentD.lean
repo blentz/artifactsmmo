@@ -607,31 +607,6 @@ theorem descendsD_craftPotions (s : State)
 
 /-! ## Task-lifecycle rows — slot 3 (`phasePresent`). -/
 
-/-- `taskCancel` (→ `.taskCancel`) strictly descends at `phasePresent`. -/
-theorem descendsD_taskCancel (s : State)
-    (hk : productionLadder (perceptionRefreshD s) = some .taskCancel) :
-    dMeasureLt (dMeasure (cycleStepD s)) (dMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, taskCancelFires, Bool.and_eq_true, Bool.or_eq_true,
-    decide_eq_true_eq, refreshD_phase] at hfire
-  have hphase : s.taskLifecyclePhase ≠ .none := by
-    rcases hfire.1 with h | h <;> (rw [h]; intro hc; cases hc)
-  rw [cycleStepD_some s hk]
-  have hcs : cycleStep (perceptionRefreshD s) =
-      applyActionKind .taskCancel (perceptionRefreshD s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  apply dLt_of_phasePresent_dec <;>
-    simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
-      applyActionKind, hphase,
-      refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
-      refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions,
-      refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
-      refreshD_hp, refreshD_maxHp,
-      refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
-      perceptionRefreshD_level, perceptionRefreshD_xp]
-
 /-- `completeTask` (→ `.completeTask`): `levelDeficit` in the degenerate
     rollover branch, else `phasePresent` (the xp grant is 0). -/
 theorem descendsD_completeTask (s : State)

@@ -43,12 +43,12 @@ from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
-from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level, low_yield_cancel_fires
+from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
-from artifactsmmo_cli.ai.task_pursue import pursue_due
+from artifactsmmo_cli.ai.task_worth import held_task_cancel_due
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     META_GOAL_KINDS,
     MetaGoal,
@@ -191,22 +191,12 @@ TOTAL over `META_GOAL_KINDS` since wave 6. The two climbs return
     raise AssertionError(f"unhandled MetaGoal kind: {goal!r}")
 
 
-def task_pays_less(state: WorldState, game_data: GameData,
-                   history: LearningStore | None) -> bool:
-    """The held task is data-confirmed to pay clearly less than the best
-    alternative, and a pocket coin can cancel it (`low_yield_cancel_fires`).
-
-    A RATE COMPARISON — the task's char-XP per cycle against an alternative's —
-    so it reaches the walk through this funnel like every other price (O6), not
-    by `decisions/root.py` importing the projection itself. Phase 5-2c-iii-c-2:
-    it decides whether the task objective is offered for its cancel step."""
-    return low_yield_cancel_fires(state, game_data, history)
-
-
-def task_worth_pursuing(state: WorldState, game_data: GameData,
-                        history: LearningStore | None) -> bool:
-    """The held items task is one the projection says to PURSUE
-    (`task_pursue.pursue_due` -> `task_decision`). A rate verdict, so it reaches
-    the walk through this funnel (O6). Phase 5-2c-iii-c-2 #4: it decides whether
-    the task objective is offered for the items-task work."""
-    return pursue_due(state, game_data, history)
+def task_cancel_due(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                    history: LearningStore | None) -> bool:
+    """The held task is worthless and a pocket coin can cancel it
+    (`task_worth.held_task_cancel_due`, the proved `task_worth_core` verdict;
+    USER 2026-10-07). A value verdict, so it reaches the walk through this
+    funnel (O6). Phase 5-2c-iii-c-2 #5: it decides whether the task objective is
+    offered for its cancel step — replacing the TASK_CANCEL rung's three fixed
+    questions and the low-yield rate comparison."""
+    return held_task_cancel_due(state, game_data, ctx, history)

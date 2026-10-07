@@ -700,7 +700,7 @@ def low_yield_cancel_fires(
     """
     if history is None or not state.task_code or state.task_total <= 0:
         return False
-    # NO COIN, NO PROPOSAL — the same gate `_fires(TASK_CANCEL)` carries, asked
+    # NO COIN, NO PROPOSAL — the same gate `held_task_cancel_due` carries, asked
     # here so BOTH consumers of this predicate (`LowYieldCancelGoal.value` and
     # the LOW_YIELD_CANCEL means rung) inherit it from the single source of
     # truth. Cancelling costs one POCKET `tasks_coin`

@@ -320,7 +320,7 @@ def test_the_level_up_arm_has_real_witnesses() -> None:
 # --- one reading per cycle --------------------------------------------------
 
 def test_the_verdict_is_resolved_once_per_state(gd: GameData) -> None:
-    """The gear latch, the GEAR_REVIEW mapper and the TASK_CANCEL rung all ask
+    """The gear latch, the GEAR_REVIEW mapper and the task-worth cancel verdict all ask
     within one cycle. They must not be able to disagree, and the walk costs a
     catalogue sweep per chain step — `combat_deficit`'s own docstring says a
     per-cycle caller must memoise."""

@@ -65,6 +65,7 @@ from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_figh
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.task_horizon import (
     HORIZON_GEAR,
     HORIZON_LEVEL_UP,
@@ -72,6 +73,7 @@ from artifactsmmo_cli.ai.task_horizon import (
     resolve_task_horizon,
 )
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
+from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 
@@ -363,26 +365,31 @@ def test_the_task_triple_moves_the_gear_review_target(gd: GameData) -> None:
 # guard's LEVEL_UP arm was one until Phase 4-3b deleted it: it never fired).
 
 
-def test_the_open_task_is_cancelled_end_to_end_with_a_coin(gd: GameData) -> None:
-    """The whole ladder, from a held task to a first action.
+def test_the_open_task_is_offered_for_its_cancel_with_a_coin(gd: GameData) -> None:
+    """The whole walk, from a held task to the cancel step.
 
-    Measured on this exact cell at HEAD~ (a `tasks_coin` added to the pocket so
-    the rung's S-052 gate is satisfied): the bot planned
+    Measured on this exact cell at HEAD~ of the horizon change (a `tasks_coin`
+    added to the pocket so S-052 is satisfied): the bot planned
     `GatherMaterials(flying_wing, {flying_wing:6})` with a first action of
     `Fight(flying_snake)` — it kept the dead lich task and went and did something
     else, forever, because `task_feasibility`'s level proxy reported a level-30
-    monster feasible for a level-32 character. Cell 2 already cancelled before
-    this change and still does, but for S-048's reason (an ogre pays a level-32
-    character no XP), which is why it cannot stand in for cell 3."""
+    monster feasible for a level-32 character.
+
+    Until Phase 5-2c-iii-c-2 #5 the TASK_CANCEL collect rung fired here above
+    every root, so `plan_from_state` selected `TaskCancel` outright. The rung is
+    retired: an out-of-reach task is worthless (`task_worth`), so the walk OFFERS
+    the task objective and its step is the cancel — taken on the task's turn,
+    not ahead of the trunk."""
     state = _state(TRIPLE_OPEN, gd)
     state = dataclasses.replace(
         state, inventory={**state.inventory, TASKS_COIN_CODE: 1})
-    player = GamePlayer(character=TRIPLE_OPEN, history=None)
-    player.seed_offline(state, gd)
-    report = player.plan_from_state()
-
-    assert repr(report.selected_goal) == "TaskCancel"
-    assert repr(report.plan[0]) == "TaskCancel"
+    assert state.task_code is not None
+    task = ReachTaskOutcome(state.task_code)
+    res = resolve_root(state, gd, _obj(gd), NO_PROFILE_CONTEXT, None)
+    assert task in [res.root, *res.alternatives]
+    goal = objective_step_goal(task, state, gd, NO_PROFILE_CONTEXT, history=None)
+    assert repr(goal) == "TaskCancel"
+    assert goal.value(state, gd, None) > 0.0
 
 
 # --- the STANDING ARM, end to end -------------------------------------------

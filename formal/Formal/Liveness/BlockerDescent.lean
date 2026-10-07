@@ -421,23 +421,6 @@ theorem descends_completeTask (s : State)
     · simp [fMeasure, pressureDelta, applyActionKind]
     · simp [fMeasure, pressureDelta, hph, hphase]
 
-/-- `taskCancel` (→ `.taskCancel`) strictly descends at `phasePresent`. -/
-theorem descends_taskCancel (s : State)
-    (hk : productionLadder (perceptionRefresh s) = some .taskCancel) :
-    fMeasureLt (fMeasure (cycleStepF s)) (fMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, taskCancelFires, Bool.and_eq_true, Bool.or_eq_true,
-    decide_eq_true_eq] at hfire
-  have hphase : (perceptionRefresh s).taskLifecyclePhase ≠ .none := by
-    rcases hfire.1 with h | h <;> (rw [h]; intro hc; cases hc)
-  rw [cycleStepF_some s hk, ← fMeasure_perceptionRefresh s]
-  have hcs : cycleStep (perceptionRefresh s) =
-      applyActionKind .taskCancel (perceptionRefresh s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  apply fLt_of_phasePresent_dec <;>
-    simp [fMeasure, pressureDelta, applyActionKind, hphase]
-
 /-! ## Fight rows — slots 1/2, the `LevelingDescent.cycleStepF_fight_descends`
 rollover/accumulate split re-proved against the richer tuple. -/
 

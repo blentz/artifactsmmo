@@ -168,7 +168,7 @@ def resolve_task_horizon(state: WorldState, game_data: GameData) -> TaskHorizon 
 
     ONE READING PER CYCLE, SHARED. Memoised on the IDENTITY of `(state, game_data)`
     (`per_state_memo`, the pattern the keep authority uses): every caller within
-    one cycle (the `TASK_CANCEL` means rung among them) must not be able to
+    one cycle (the task-worth cancel verdict among them) must not be able to
     disagree, and the walk costs a catalogue sweep per
     chain step. `combat_deficit`'s own docstring says a per-cycle caller must
     memoise; this is that caller.

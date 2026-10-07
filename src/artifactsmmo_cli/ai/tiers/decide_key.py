@@ -56,7 +56,6 @@ _MEANS_REPR: dict[MeansKind, str] = {
     MeansKind.SELL_PRESSURED: "SellInventory",
     MeansKind.SELL_IDLE: "SellInventory",
     MeansKind.RECYCLE_SURPLUS: "RecycleSurplus",
-    MeansKind.TASK_CANCEL: "TaskCancel",
     MeansKind.BANK_EXPAND: "ExpandBank",
     MeansKind.WAIT: "Wait",
     MeansKind.MAINTAIN_CONSUMABLES: "MaintainConsumables",

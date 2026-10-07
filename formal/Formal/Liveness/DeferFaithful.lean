@@ -98,7 +98,6 @@ theorem cycleStepD_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | claimPending    => exact descendsD_claimPending s hk
     | completeTask    => exact descendsD_completeTask s hk
     | sellPressured   => exact descendsD_sellPressured s hk
-    | taskCancel      => exact descendsD_taskCancel s hk
     | objectiveStep   =>
         by_cases hisF : (perceptionRefreshD s).objectiveStepIsFight = true
         · exact descendsD_fight s hlvl (Or.inr (Or.inr ⟨hk, hisF⟩))

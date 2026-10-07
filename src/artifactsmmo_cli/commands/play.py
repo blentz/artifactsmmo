@@ -127,8 +127,8 @@ def play(
         print(f"Tracing to {path}")
 
     # An in-memory LearningStore is always constructed when --learn is absent so
-    # that history-gated tier predicates (PURSUE_TASK, TASK_CANCEL,
-    # LOW_YIELD_CANCEL) remain evaluable. With history=None they short-circuit
+    # that history-gated predicates (the task objective's worth verdict among
+    # them) remain evaluable. With history=None they short-circuit
     # to False; an items task + no winnable monster then leaves the discretionary
     # tier empty and the bot stalls indefinitely on "No plan found — waiting 5s".
     # The ephemeral SQLite store has zero observations, so history-gated

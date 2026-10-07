@@ -56,7 +56,6 @@ class LadderMeans(Enum):
     CLAIM_PENDING = "claim_pending"
     COMPLETE_TASK = "complete_task"
     SELL_PRESSURED = "sell_pressured"
-    TASK_CANCEL = "task_cancel"
     SUPPLY_BANK = "supply_bank"
     CURRENCY_TURNIN = "currency_turnin"
     OBJECTIVE_STEP = "objective_step"
@@ -88,7 +87,6 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     # `Formal.Liveness.MeansKind.allInLadderOrder`.
     LadderMeans.BANK_EXPAND,
     LadderMeans.COMPLETE_TASK,
-    LadderMeans.TASK_CANCEL,
     LadderMeans.SUPPLY_BANK,
     LadderMeans.CURRENCY_TURNIN,
     LadderMeans.OBJECTIVE_STEP,
@@ -120,7 +118,6 @@ _MEANS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.CLAIM_PENDING: MeansKind.CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK: MeansKind.COMPLETE_TASK,
     LadderMeans.SELL_PRESSURED: MeansKind.SELL_PRESSURED,
-    LadderMeans.TASK_CANCEL: MeansKind.TASK_CANCEL,
     LadderMeans.MAINTAIN_CONSUMABLES: MeansKind.MAINTAIN_CONSUMABLES,
     LadderMeans.SUPPLY_BANK: MeansKind.SUPPLY_BANK,
     LadderMeans.CURRENCY_TURNIN: MeansKind.CURRENCY_TURNIN,
@@ -154,7 +151,6 @@ assert COLLECT_REWARD_ORDER == (
     MeansKind.CLAIM_PENDING,
     MeansKind.BANK_EXPAND,
     MeansKind.COMPLETE_TASK,
-    MeansKind.TASK_CANCEL,
     MeansKind.SUPPLY_BANK,
     MeansKind.CURRENCY_TURNIN,
 ), "COLLECT_REWARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"

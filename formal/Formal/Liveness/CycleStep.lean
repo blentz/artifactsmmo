@@ -115,7 +115,6 @@ noncomputable def planFor : MeansKind → State → Plan
   | .claimPending     , _ => [.claimPendingItem]
   | .completeTask     , _ => [.completeTask]
   | .sellPressured    , _ => [.npcSell]
-  | .taskCancel       , _ => [.taskCancel]
   | .objectiveStep    , s =>
       -- O5.2 (2026-06-16): a combat/char-leveling objective dispatches a
       -- Fight-led plan (production `ReachCharLevel` meta-goal + monster-task /
@@ -517,27 +516,6 @@ theorem cycleStep_progress_or_waits
       have : (applyActionKind .npcSell s).sellableInventoryNonempty = false := hpost
       rw [heq] at this; exact this
     rw [hpre] at hpre'; cases hpre'
-  | taskCancel =>
-    left
-    have hcs : cycleStep s = applyActionKind .taskCancel s := by
-      unfold cycleStep; rw [hk]; rfl
-    rw [hcs]
-    simp only [fires, ProductionLadder.taskCancelFires, Bool.and_eq_true,
-               Bool.or_eq_true, Bool.not_eq_true', decide_eq_true_eq] at hfires
-    -- Item 1d: refined taskCancelFires now has additional
-    -- `&& !taskFeasibleProjected` conjunct. hfires structure:
-    -- ((phase = .accepted ∨ phase = .inProgress) ∧ taskFeasibleProjected = false)
-    obtain ⟨hfPhase, _⟩ := hfires
-    intro heq
-    have hpost : (applyActionKind .taskCancel s).taskLifecyclePhase
-                  = TaskLifecyclePhase.TaskLifecyclePhase.none := by
-      simp [applyActionKind]
-    have hpre' : s.taskLifecyclePhase
-                  = TaskLifecyclePhase.TaskLifecyclePhase.none := by
-      rw [heq] at hpost; exact hpost
-    cases hfPhase with
-    | inl h => rw [h] at hpre'; cases hpre'
-    | inr h => rw [h] at hpre'; cases hpre'
   | objectiveStep =>
     left
     by_cases hisf : s.objectiveStepIsFight = true

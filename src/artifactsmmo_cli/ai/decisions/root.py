@@ -609,8 +609,8 @@ class IsAFightBlockingMe(Decision[MetaGoal]):
     through to the tier arm, and that is a decision with a reason on each side:
 
       * `HORIZON_OUT_OF_REACH` — no chain closes the fight at this level, so
-        there is nothing to build for it. `tiers/means.py:277-278` fires
-        `TASK_CANCEL` on exactly this verdict; this node must not compete.
+        there is nothing to build for it. `task_worth.task_worth_for` reads
+        this verdict as infeasible (a cancel); this node must not compete.
       * `HORIZON_LEVEL_UP` — one level would close it, and this node only fires
         when `ctx.combat_monster is None`, i.e. with NO monster worth fighting.
         A level goal here would have no beatable monster in its
@@ -947,14 +947,15 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
     * no gear closes the gap: None. The task waits, inert, for a coin to cancel
       it (S-052).
 
-    * a data-confirmed poor task (any type, a pocket coin to cancel it with):
-      the task itself, whose step is the cancel (c-2: this was the
-      LOW_YIELD_CANCEL collect rung).
+    * a WORTHLESS task (no XP, no GOLD, no DROPS reason — `task_worth_core`)
+      with a pocket coin to cancel it: the task itself, whose step is the
+      cancel (c-2 #5, USER 2026-10-07: this was the TASK_CANCEL rung and, before
+      it, the LOW_YIELD_CANCEL rung). Without a coin it is worked to clear it.
 
-    * a held items task the projection says to pursue
-      (`route.task_worth_pursuing`): the task itself (c-2 #4: this was the
-      PURSUE_TASK rung)."""
-    if state.task_code and _route.task_pays_less(state, game_data, history):
+    * a held, unmet items task: the task itself, worked (c-2 #4 was the
+      PURSUE_TASK rung; #5 drops its PIVOT gate — a task is cancelled by its
+      worth or worked)."""
+    if state.task_code and _route.task_cancel_due(state, game_data, ctx, history):
         return ReachTaskOutcome(state.task_code)
     if not state.task_code and accept_due(state, ctx):
         # c-2 #3 (was the ACCEPT_TASK collect rung): an owed draw is taken on
@@ -964,9 +965,10 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
         # c-2 #2 (was the TASK_EXCHANGE rung): earned coins are the task
         # objective's to exchange, task held or not.
         return ReachTaskOutcome(state.task_code or None)
-    if state.task_type == "items" and _route.task_worth_pursuing(state, game_data, history):
-        # c-2 #4 (was the PURSUE_TASK rung): the items task the projection says
-        # to pursue is worked on the task objective's turn.
+    if (state.task_type == "items" and state.task_code
+            and state.task_progress < state.task_total):
+        # c-2 #4/#5: a held items task not cancelled for its worth is worked on
+        # the task objective's turn.
         return ReachTaskOutcome(state.task_code)
     if (state.task_type != "monsters" or not state.task_code
             or state.task_progress >= state.task_total):

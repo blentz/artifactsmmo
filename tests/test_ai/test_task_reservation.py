@@ -8,7 +8,7 @@ worth-suppressed for items tasks — it only runs via the bypass pass), and
 Craft(copper_helmet) ate 6 bars. Task restarted from zero, forever.
 """
 
-from unittest.mock import patch
+import dataclasses
 
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -182,9 +182,8 @@ def _arbiter() -> StrategyArbiter:
 
 
 def _suppress(goal, state):  # type: ignore[no-untyped-def]
-    """The guard while the held items task is being worked (`pursue_due`)."""
-    with patch("artifactsmmo_cli.ai.strategy_driver.pursue_due", return_value=True):
-        return _arbiter()._suppress_step_for_task(goal, state, _gd())
+    """The guard while the held items task is unmet (c-2 #5: it is worked)."""
+    return _arbiter()._suppress_step_for_task(goal, state, _gd())
 
 
 def test_suppress_task_complete_allows_step():
@@ -255,9 +254,9 @@ def test_non_consuming_goal_type_passes():
 
 
 
-def test_no_guard_while_the_task_is_not_being_worked():
-    """`pursue_due` False (no history here): the step passes untouched."""
-    state = _task_state()
+def test_no_guard_without_a_held_items_task():
+    """A monsters task reserves nothing: the step passes untouched."""
+    state = dataclasses.replace(_task_state(), task_type="monsters")
     goal = UpgradeEquipmentGoal(initial_equipment=state.equipment,
                                 committed_target=("copper_helmet", "helmet_slot"))
     assert _arbiter()._suppress_step_for_task(goal, state, _gd()) is goal

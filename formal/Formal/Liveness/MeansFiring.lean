@@ -359,16 +359,6 @@ theorem _fires_sellPressured_implies_sellInventory_positive (s : State) :
   have : usedFractionRat s * 100 ≥ 85 := by linarith
   linarith
 
-/-- TASK_CANCEL: opaque-gated; the Phase-18 value at
-    `satisfied=false, pivots=true` is unconditionally 12 > 0. -/
-theorem _fires_taskCancel_implies_taskCancel_positive
-    (s : State) :
-    fires .taskCancel s = true →
-    taskCancelValue (satisfied := false) (pivots := true) > 0 := by
-  intro _
-  unfold taskCancelValue
-  simp
-
 /-! ### Objective step — DISCLOSED GAP (no lemma) -/
 
 /-! ### Discretionary tier -/

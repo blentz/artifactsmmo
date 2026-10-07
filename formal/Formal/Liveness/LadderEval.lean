@@ -264,7 +264,6 @@ def meansKindName : MeansKind → String
   | .claimPending        => "claimPending"
   | .completeTask        => "completeTask"
   | .sellPressured       => "sellPressured"
-  | .taskCancel          => "taskCancel"
   | .objectiveStep       => "objectiveStep"
   | .maintainConsumables => "maintainConsumables"
   | .supplyBank          => "supplyBank"

@@ -47,10 +47,6 @@ scope; the Lean lemmas cover them separately):
     an NPC in `_npc_sell_prices` that buys an inventory item. Constructible
     but adds a per-test fixture rebuild; the Lean lemma covers single-step
     plan-existence; the diff would only re-pin Action-menu shape.
-  * LOW_YIELD_CANCEL / TASK_CANCEL — firing requires a populated
-    LearningStore with sufficient observations for the projection /
-    task_decision module to fire. Constructible but moves the differential
-    onto learning-store conformance, not planner conformance.
   * BANK_EXPAND — firing requires `game_data._bank_capacity > 0` AND
     `state.bank_items` populated to >= 95% AND `state.gold >=
     _next_expansion_cost`. Constructible but adds bank-fixture overhead;
@@ -81,6 +77,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
+from artifactsmmo_cli.ai.decisions.root import _task_root
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
@@ -89,7 +86,6 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.strategy_driver import map_guard, map_means, objective_step_goal
-from artifactsmmo_cli.ai.task_pursue import pursue_due
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
 from artifactsmmo_cli.ai.tiers.guards import _fires as _guard_fires
 from artifactsmmo_cli.ai.tiers.means import MeansKind
@@ -455,10 +451,9 @@ def test_planner_finds_plan_for_task_phase_objective_step() -> None:
     objective's step. An items task in progress fires OBJECTIVE_STEP on its
     phase (Lean `objectiveStepFires … || phaseActive`), and Lean
     `planFor .objectiveStep` dispatches `.taskTrade` when the opaque flag is
-    unset. The production half: `pursue_due` holds on this state (task_code
-    unknown to game_data ⇒ `task_requirement` None ⇒ `task_decision` PURSUE
-    via the req_is_none branch; the in-memory store satisfies the
-    `history is not None` conjunct), `objective_step_goal(ReachTaskOutcome)`
+    unset. The production half: `_task_root` offers the task objective for
+    this held, unmet items task (no pocket coin, so its worth cannot cancel
+    it — Phase 5-2c-iii-c-2 #5), `objective_step_goal(ReachTaskOutcome)`
     materialises the pursuit goal, and the REAL planner over the REAL action
     menu returns a non-empty plan containing the TaskTradeAction witness."""
     gd = _base_game_data()
@@ -472,7 +467,8 @@ def test_planner_finds_plan_for_task_phase_objective_step() -> None:
     )
     ctx = _ctx()
     history = LearningStore(":memory:", "diff")
-    assert pursue_due(state, gd, history), "pursue_due firing precondition not met"
+    assert _task_root(state, gd, ctx, history) == ReachTaskOutcome("task_x"), (
+        "the task objective is not offered for the held items task")
     player = _build_player_with_data(
         gd, state,
         bank_accessible=ctx.bank_accessible,

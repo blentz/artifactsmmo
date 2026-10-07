@@ -14,14 +14,14 @@ from artifactsmmo_cli.ai.arbiter_select import (
     BAND_STEP,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.projections import Yield, low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.strategy_driver import map_means
 from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
-from artifactsmmo_cli.ai.task_pursue import pursue_due
+from artifactsmmo_cli.ai.task_worth import held_task_cancel_due
 from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import (
     COLLECT_REWARD_ORDER,
@@ -325,100 +325,63 @@ def test_low_yield_cancel_fires_with_seeded_history(tmp_path):
     store.close()
 
 
-def test_task_cancel_absent_when_no_history():
-    """TASK_CANCEL requires history; absent when history is None."""
-    state = make_state(task_code="small_health_potion", task_type="items",
-                       task_total=5, task_progress=0,
-                       skills={"alchemy": 1, "mining": 1, "woodcutting": 1,
-                               "fishing": 1, "weaponcrafting": 1, "gearcrafting": 1,
-                               "jewelrycrafting": 1, "cooking": 1})
-    gd = GameData()
-    gd._item_stats = {}
-    gd._crafting_recipes = {}
-    collect, _ = active_means(state, gd, None, _ctx())
-    assert MeansKind.TASK_CANCEL not in collect
+# ---------------------------------------------------------------------------
+# The held task's CANCEL verdict (`task_worth.held_task_cancel_due`): the
+# TASK_CANCEL rung's question until Phase 5-2c-iii-c-2 #5 retired the rung into
+# the task objective's step. Its S-048 arm (no XP, no other reason) and its
+# PIVOT arm are now the worth verdict; the coin gate and the horizon carried over.
+# ---------------------------------------------------------------------------
 
 
 def test_task_cancel_discards_a_task_that_advances_nothing():
-    """S-048. A grey draw is dead work and goes back, and the rung needs no
-    learning store to know it — greyness is a fact about game data and the
-    character, not about observed rates."""
+    """A grey draw with no gold or drop reason is worthless and goes back, and
+    the verdict needs no learning store to know it."""
     gd = GameData()
     gd._monster_level = {"chicken": 1}
     fill_monster_stat_defaults(gd)
+    gd._task_gold_rewards = {"chicken": 150}
     state = make_state(level=30, task_code="chicken", task_type="monsters",
                        task_total=10, task_progress=0,
                        inventory={"tasks_coin": 1})
-    collect, _ = active_means(state, gd, None, _ctx())
-    assert MeansKind.TASK_CANCEL in collect
+    assert held_task_cancel_due(state, gd, _ctx(), None) is True
 
 
 def test_a_paying_task_is_not_discarded():
-    """S-048's negative arm: the chicken pays XP at level 1, so it is kept.
+    """The negative arm: the chicken pays XP at level 1, so it is kept.
 
-    `attack` is REQUIRED here and was not before. A character's base combat stats
-    are zero (the server reports totals = base 0 + gear), so a state with no
-    attack loses to EVERY monster — and since the one-level horizon
-    (`ai/task_horizon.py`) reads the fight rather than the monster's level, a
-    zero-attack fixture now reads OUT OF REACH and would be discarded for a reason
-    that has nothing to do with what the test is asserting. Same vacuity the
-    scenario harness records for `derive_combat_stats`."""
+    `attack` is REQUIRED here. A character's base combat stats are zero (the
+    server reports totals = base 0 + gear), so a state with no attack loses to
+    EVERY monster — and since the one-level horizon (`ai/task_horizon.py`) reads
+    the fight rather than the monster's level, a zero-attack fixture reads OUT OF
+    REACH and would be discarded for a reason that has nothing to do with what
+    the test is asserting."""
     gd = GameData()
     gd._monster_level = {"chicken": 1}
     fill_monster_stat_defaults(gd)
+    gd._task_gold_rewards = {"chicken": 150}
     state = make_state(level=1, attack={"earth": 5}, task_code="chicken",
                        task_type="monsters",
                        task_total=10, task_progress=0,
                        inventory={"tasks_coin": 1})
-    collect, _ = active_means(state, gd, None, _ctx())
-    assert MeansKind.TASK_CANCEL not in collect
+    assert held_task_cancel_due(state, gd, _ctx(), None) is False
 
 
 def test_without_a_coin_a_grey_task_is_worked_not_discarded():
     """S-052, the USER's resolution of the bootstrap: discarding costs a coin and
     coins come only from COMPLETING tasks, so the first draw of a character's life
-    is undiscardable. It is worked. Firing here would also be a rung with nothing
-    to do — `TaskCancelAction.is_applicable` spends a POCKET coin."""
+    is undiscardable. It is worked. `TaskCancelAction.is_applicable` spends a
+    POCKET coin."""
     gd = GameData()
     gd._monster_level = {"chicken": 1}
     fill_monster_stat_defaults(gd)
+    gd._task_gold_rewards = {"chicken": 150}
     grey = dict(level=30, task_code="chicken", task_type="monsters",
                 task_total=10, task_progress=0)
-    assert MeansKind.TASK_CANCEL not in active_means(
-        make_state(**grey, inventory={}), gd, None, _ctx())[0]
+    assert held_task_cancel_due(make_state(**grey, inventory={}), gd, _ctx(), None) is False
     # A BANKED coin is not spendable at the taskmaster either.
-    assert MeansKind.TASK_CANCEL not in active_means(
+    assert held_task_cancel_due(
         make_state(**grey, inventory={}, bank_items={"tasks_coin": 9}),
-        gd, None, _ctx())[0]
-
-
-def test_task_cancel_fires_when_pivot(tmp_path):
-    """task_decision returns PIVOT for a combat-gated task → TASK_CANCEL fires."""
-    store = LearningStore(db_path=str(tmp_path / "tc.db"), character="hero")
-    gd = GameData()
-    # combat-type task: task_requirement returns a combat req → PIVOT immediately
-    gd._item_stats = {}
-    gd._crafting_recipes = {}
-    gd._monster_level = {"cyclops": 20}
-    # State: task is monsters type — task_requirement returns None (no skill gap) → PURSUE
-    # To get PIVOT we need a skill-gated items task with no feasible path.
-    # Use a task that requires alchemy level 5 but character only has level 1.
-    gd._item_stats["small_health_potion"] = ItemStats(
-        code="small_health_potion", level=1, type_="utility",
-        crafting_skill="alchemy", crafting_level=5,
-    )
-    gd._crafting_recipes["small_health_potion"] = {"sunflower": 3}
-    state = make_state(
-        task_code="small_health_potion", task_type="items",
-        task_total=29, task_progress=0,
-        inventory={"tasks_coin": 1},   # S-052: no coin, no discard
-        skills={"alchemy": 1, "mining": 1, "woodcutting": 1,
-                "fishing": 1, "weaponcrafting": 1, "gearcrafting": 1,
-                "jewelrycrafting": 1, "cooking": 1},
-    )
-    collect, _ = active_means(state, gd, store, _ctx())
-    assert MeansKind.TASK_CANCEL in collect
-    store.close()
+        gd, _ctx(), None) is False
 
 
 def test_complete_task_not_in_collect_when_incomplete():
@@ -586,44 +549,6 @@ def test_best_alternative_repr_returns_none_when_all_goals_none(tmp_path):
     store.close()
 
 
-class TestPursueDue:
-    """The held items task's PURSUE verdict (`task_pursue.pursue_due`; the
-    PURSUE_TASK rung's predicate until Phase 5-2c-iii-c-2 #4)."""
-
-    def test_true_for_items_task_on_pursue(self):
-        state = make_state(task_code="copper_bar", task_type="items",
-                           task_total=20, task_progress=0)
-        store = LearningStore(db_path=":memory:", character="hero")
-        with patch("artifactsmmo_cli.ai.task_pursue.task_decision", return_value="pursue"):
-            assert pursue_due(state, GameData(), store) is True
-
-    def test_false_for_monster_task(self):
-        state = make_state(task_code="chicken", task_type="monsters",
-                           task_total=20, task_progress=0)
-        store = LearningStore(db_path=":memory:", character="hero")
-        with patch("artifactsmmo_cli.ai.task_pursue.task_decision", return_value="pursue"):
-            assert pursue_due(state, GameData(), store) is False
-
-    def test_false_on_pivot(self):
-        state = make_state(task_code="copper_bar", task_type="items",
-                           task_total=20, task_progress=0)
-        store = LearningStore(db_path=":memory:", character="hero")
-        with patch("artifactsmmo_cli.ai.task_pursue.task_decision", return_value="pivot"):
-            assert pursue_due(state, GameData(), store) is False
-
-    def test_false_when_full(self):
-        state = make_state(task_code="copper_bar", task_type="items",
-                           task_total=20, task_progress=20)
-        store = LearningStore(db_path=":memory:", character="hero")
-        with patch("artifactsmmo_cli.ai.task_pursue.task_decision", return_value="pursue"):
-            assert pursue_due(state, GameData(), store) is False
-
-    def test_false_without_history(self):
-        state = make_state(task_code="copper_bar", task_type="items",
-                           task_total=20, task_progress=0)
-        assert pursue_due(state, GameData(), None) is False
-
-
 def test_low_yield_cancel_absent_when_alt_repr_found_but_no_yield(tmp_path):
     """alt_repr is found but expected_yield_per_cycle returns 0 samples for it → no fire."""
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
@@ -711,9 +636,10 @@ def test_bank_expand_fill_gate_fires_on_an_exact_tie():
 
 
 # ---------------------------------------------------------------------------
-# THE ONE-LEVEL PLANNING HORIZON (USER 2026-08-25) on the TASK_CANCEL rung.
+# THE ONE-LEVEL PLANNING HORIZON (USER 2026-08-25) in the held task's cancel
+# verdict (the TASK_CANCEL rung's until Phase 5-2c-iii-c-2 #5).
 #
-# The rung's combat arm was `task_decision(...) == PIVOT`, and `task_decision`'s
+# The old rung's combat arm was `task_decision(...) == PIVOT`, and `task_decision`'s
 # combat arm is `task_feasibility`'s LEVEL PROXY: a monster more than
 # MONSTER_LEVEL_MARGIN (2) levels above the character. A level proxy is the wrong
 # question in both directions — measured on the scenario corpus,
@@ -743,6 +669,7 @@ def _horizon_world() -> GameData:
     gd._monster_hp = {"rat": 60}
     gd._monster_attack = {"rat": {"earth": 6}}
     gd._monster_resistance = {"rat": {}}
+    gd._task_gold_rewards = {"rat": 150}
     return gd
 
 
@@ -758,8 +685,7 @@ def test_task_cancel_fires_for_a_fight_outside_the_one_level_horizon():
                        task_code="rat", task_type="monsters",
                        task_total=10, task_progress=0,
                        inventory={"tasks_coin": 1})
-    collect, _ = active_means(state, gd, None, _ctx())
-    assert MeansKind.TASK_CANCEL in collect
+    assert held_task_cancel_due(state, gd, _ctx(), None) is True
 
 
 def test_an_out_of_horizon_task_is_carried_inert_without_a_coin():
@@ -770,23 +696,22 @@ def test_an_out_of_horizon_task_is_carried_inert_without_a_coin():
     the coinless character does not cancel, and does not gear-review for the
     fight either (`RegearEdge`); it carries the task and does other work. USER
     again: "we can attempt cancel_task iff we have a task_coin, but if we have
-    no coins we shouldn't waste the cycles" — a rung that fired here would put a
-    goal in front of the planner that `TaskCancelAction.is_applicable` refuses,
+    no coins we shouldn't waste the cycles" — a verdict that held here would put
+    a goal in front of the planner that `TaskCancelAction.is_applicable` refuses,
     which is a planning budget spent to rediscover what the bag already said."""
     gd = _horizon_world()
     bare = dict(level=1, hp=20, max_hp=20, attack={"earth": 1},
                 task_code="rat", task_type="monsters",
                 task_total=10, task_progress=0)
-    assert MeansKind.TASK_CANCEL not in active_means(
-        make_state(**bare, inventory={}), gd, None, _ctx())[0]
+    assert held_task_cancel_due(make_state(**bare, inventory={}), gd, _ctx(), None) is False
     # A BANKED coin cannot be spent at the taskmaster either.
-    assert MeansKind.TASK_CANCEL not in active_means(
+    assert held_task_cancel_due(
         make_state(**bare, inventory={}, bank_items={"tasks_coin": 9}),
-        gd, None, _ctx())[0]
+        gd, _ctx(), None) is False
 
 
 def test_a_fight_gear_closes_is_kept_however_far_above_the_character_it_is():
-    """Clause 1 from the rung's side, and the direction the LEVEL PROXY got wrong.
+    """Clause 1 from the verdict's side, and the direction the LEVEL PROXY got wrong.
 
     The rat is nine levels above this character, so `task_feasibility` reports a
     combat requirement and `task_decision` answers PIVOT — the old arm discarded
@@ -800,15 +725,14 @@ def test_a_fight_gear_closes_is_kept_however_far_above_the_character_it_is():
                        task_code="rat", task_type="monsters",
                        task_total=10, task_progress=0,
                        inventory={"tasks_coin": 1})
-    collect, _ = active_means(state, gd, None, _ctx())
-    assert MeansKind.TASK_CANCEL not in collect
+    assert held_task_cancel_due(state, gd, _ctx(), None) is False
 
 
-def test_the_rung_and_the_goal_it_emits_report_the_same_answer():
+def test_the_verdict_and_the_goal_it_emits_report_the_same_answer():
     """ONE PRODUCER OF THE CANCEL REASON.
 
-    `_fires(TASK_CANCEL)` has three independent reasons to fire — S-048, the
-    one-level horizon, and `task_decision == PIVOT` for the items arm — and
+    The retired TASK_CANCEL rung had three independent reasons to fire — S-048,
+    the one-level horizon, and `task_decision == PIVOT` for the items arm — and
     `TaskCancelGoal.value` used to re-derive only the third. So a rung that fired
     for either of the first two emitted a goal reporting `0.0`, which is what the
     arbiter records as the trace's `goal_rank` and what both TUI consumers of
@@ -830,10 +754,8 @@ def test_the_rung_and_the_goal_it_emits_report_the_same_answer():
                        task_total=10, task_progress=0,
                        inventory={"tasks_coin": 1})
     assert task_decision(state, gd, None) == PURSUE
-    collect, _ = active_means(state, gd, None, _ctx())
-    assert MeansKind.TASK_CANCEL in collect
-    goal = map_means(MeansKind.TASK_CANCEL, gd, _ctx(), state, None)
-    assert goal.value(state, gd, None) > 0.0
+    assert held_task_cancel_due(state, gd, _ctx(), None) is True
+    assert TaskCancelGoal().value(state, gd, None) > 0.0
 
 
 def test_bank_expand_fires_on_account_gold_not_pocket_alone():

@@ -95,7 +95,6 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.CLAIM_PENDING:      "claimPendingItem",
     LadderMeans.COMPLETE_TASK:      "completeTask",
     LadderMeans.SELL_PRESSURED:     "npcSell",
-    LadderMeans.TASK_CANCEL:        "taskCancel",
     LadderMeans.OBJECTIVE_STEP:     "objectiveStep",
     LadderMeans.MAINTAIN_CONSUMABLES: "craft",  # PLAN #6a: cook/brew a heal
     # 2026-08-01: SupplyBankGoal plans produce-then-deposit; the witness is the
@@ -135,7 +134,6 @@ MIRROR_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.CLAIM_PENDING,
     LadderMeans.BANK_EXPAND,
     LadderMeans.COMPLETE_TASK,
-    LadderMeans.TASK_CANCEL,
     LadderMeans.OBJECTIVE_STEP,
     LadderMeans.SELL_IDLE,
     LadderMeans.WAIT,
@@ -244,7 +242,6 @@ def fires_mirror(k: LadderMeans, s: CycleState) -> bool:
     if k is LadderMeans.CLAIM_PENDING:      return s.pending_items_nonempty
     if k is LadderMeans.COMPLETE_TASK:      return _complete_task_fires(s)
     if k is LadderMeans.SELL_PRESSURED:     return _sell_pressured_fires(s)
-    if k is LadderMeans.TASK_CANCEL:        return s.task_cancel_fires
     if k is LadderMeans.OBJECTIVE_STEP:
         # A held, unmet task's work is the task objective's step (c-2 #4;
         # mirrors the Lean `objectiveStepFires || phaseActive`).

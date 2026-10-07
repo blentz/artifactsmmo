@@ -43,6 +43,12 @@ class SelectionContext:
     #
     # Defaults False so a caller that does not manage it gets no draw.
     draw_owed: bool = False
+    # Account gold (pocket + bank) is below the larger of the progression
+    # reserve and the gold the previous cycle's chosen root will spend at
+    # vendors (set by the player, `GamePlayer._gold_short`). A task's GOLD
+    # reason needs it (`task_worth`; USER 2026-10-07: "Both, the larger").
+    # False for a caller that does not compute it.
+    gold_short: bool = False
     # Long-term gear and tool codes — fed by player from the
     # CharacterObjective so the CRAFT_RELIEF guard can score gear/tool
     # craft candidates alongside the active task item. Empty fallback

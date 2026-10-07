@@ -21,15 +21,12 @@ from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
-from artifactsmmo_cli.ai.task_alignment import task_advances_progression
-from artifactsmmo_cli.ai.task_decision import PIVOT, task_decision
-from artifactsmmo_cli.ai.task_horizon import HORIZON_OUT_OF_REACH, resolve_task_horizon
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import (
     SelectionContext,
     used_fraction,
 )
-from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
+from artifactsmmo_cli.ai.world_state import WorldState
 
 # Semantic name for this module's sell-pressure gate, bound to the SHARED
 # single-source constant (thresholds.py pressure ladder). It used to be a
@@ -107,7 +104,6 @@ class MeansKind(Enum):
     CLAIM_PENDING = "claim_pending"
     COMPLETE_TASK = "complete_task"
     SELL_PRESSURED = "sell_pressured"
-    TASK_CANCEL = "task_cancel"
     SELL_IDLE = "sell_idle"
     RECYCLE_SURPLUS = "recycle_surplus"
     BANK_EXPAND = "bank_expand"
@@ -154,7 +150,9 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     # LOW_YIELD_CANCEL was retired here in Phase 5-2c-iii-c-2: a data-confirmed
     # poor task is the task objective's own step (`ReachTaskOutcome`), taken on
     # the task's turn, not a collect rung above every root.
-    MeansKind.TASK_CANCEL,
+    # TASK_CANCEL was retired here in Phase 5-2c-iii-c-2 #5: a task worth less
+    # than its cancel is the task objective's own step (`ReachTaskOutcome`),
+    # judged by `task_worth.held_task_cancel_due`, on the task's turn.
     # 2026-08-01, human ruling: SUPPLY_BANK is promoted out of
     # DISCRETIONARY_ORDER to here, ABOVE the objective step, so a character can
     # pause its own chain to serve a sibling's declared, SUBSTANTIAL request
@@ -163,10 +161,10 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     # always has an objective step, and the traced four-character run selected
     # SUPPLY_BANK zero times in 48 cycles despite the rung being armed.
     #
-    # POSITION: LAST in this group, deliberately. The other five rungs are
+    # POSITION: LAST in this group, deliberately. The other rungs are
     # one-or-few-action bookings of an already-earned outcome (claim the pending
-    # items, hand in a finished task, shed under space pressure, cut a losing
-    # task) and each self-quiets after firing, so letting them go first costs
+    # items, hand in a finished task, shed under space pressure, buy a bank
+    # slot) and each self-quiets after firing, so letting them go first costs
     # SUPPLY_BANK at most a cycle. SUPPLY_BANK is the opposite shape — an
     # open-ended gather-then-bank production run — and putting it first would
     # park a completed task's reward, or a >=85%-full bag, behind a chain of
@@ -234,55 +232,6 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # has a located buyer" test. See `sellable_tradeable_now`.
         return (used_fraction(state) >= SELL_PRESSURE_FRACTION
                 and sellable_tradeable_now(state, game_data))
-
-    if kind is MeansKind.TASK_CANCEL:
-        if not state.task_code:
-            return False
-        # S-052: no coin, no discard. The task then stays INERT — carried, not
-        # worked and (since the gear latch's standing arm now reads the horizon)
-        # not gear-reviewed either — while the character does other work. USER
-        # 2026-08-25: "It is a known condition that Tasks might be uncancelable
-        # until we get a coin. Tasks can remain inert until that condition is met."
-        # POCKET only, matching `TaskCancelAction.is_applicable`: a banked coin
-        # cannot be spent at the taskmaster and firing on one would be a rung with
-        # nothing to do, the shape this ladder has already been bitten by twice.
-        if state.inventory.get(TASKS_COIN_CODE, 0) < 1:
-            return False
-        # S-048: a draw whose target advances neither the character's level nor a
-        # skill is dead work. Asked BEFORE the pivot rule and without `history`,
-        # because it is a fact about game data and the character, not about
-        # observed rates — a character with no learning store still knows a grey
-        # task when it sees one.
-        if not task_advances_progression(state, game_data):
-            return True
-        if state.task_type == "monsters":
-            # THE ONE-LEVEL HORIZON (USER 2026-08-25), replacing `task_decision`'s
-            # combat arm for this rung. That arm is `req_is_combat -> PIVOT` over
-            # `task_feasibility`'s level proxy — a monster more than
-            # MONSTER_LEVEL_MARGIN (2) levels above the character — and a level
-            # proxy is the wrong question twice over: it discards a high-level
-            # monster the character's gear already beats, and it keeps an in-band
-            # one no gear in the catalogue can beat. `task_horizon` asks the fight
-            # itself. `task_decision` is untouched (it is the formalisation target
-            # of `Formal/TaskDecision.lean` and still serves PURSUE_TASK and the
-            # items arm below).
-            #
-            # THIS FUNCTION IS THE ONLY PRODUCER OF THE CANCEL REASON, across all
-            # three arms (S-048 above, the horizon here, `task_decision` below).
-            # `TaskCancelGoal` — the goal `map_means` builds once this returns
-            # True — used to re-derive the third arm on its own and report the
-            # answer as its `value`, so a rung that fired for either of the other
-            # two emitted a goal reporting 0.0. Measured on the offline corpus,
-            # that was three of three cells where the arbiter actually SELECTS it.
-            # The goal now reports the scalar and asks nothing;
-            # `test_the_rung_and_the_goal_it_emits_report_the_same_answer` is what
-            # fails if a second reader is ever added back.
-            horizon = resolve_task_horizon(state, game_data)
-            return horizon is not None and horizon.verdict == HORIZON_OUT_OF_REACH
-        return (history is not None
-                and task_decision(state, game_data, history) == PIVOT)
-
-
 
     if kind is MeansKind.SELL_IDLE:
         return (used_fraction(state) < SELL_PRESSURE_FRACTION

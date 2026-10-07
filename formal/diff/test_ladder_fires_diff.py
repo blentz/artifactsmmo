@@ -109,21 +109,9 @@ the teeth bite per slot:
                           in production (binding the per-slot arg) and assert
                           `selected` agrees at the higher winner (acceptTask at
                           phase none) — a real Lean-model finding, reported.
-  * taskCancel — phase-derived
-                          OVER-APPROXIMATIONS: Lean computes them from
-                          `taskLifecyclePhase` / `actionsAttempted` /
-                          `taskFeasibleProjected` (no LearningStore concept),
-                          whereas production reads a REAL `LearningStore` +
-                          `task_decision`. In the SWEEP both stay False
-                          (history=None, taskFeasibleProjected=True, phase ∈
-                          {none, complete}). The DRIVE tests (4c) thread an
-                          actual (non-mock) `LearningStore` through production,
-                          set the Lean phase inputs consistent with production's
-                          history verdict, and run a SELECTION CONTEST. They may
-                          diverge per-slot on a NON-driven phase slot by design,
-                          so `drive_and_contest` asserts per-slot only for
-                          `ASSERTED_SLOTS ∪ {driven}` while still asserting the
-                          WINNER.
+  * (taskCancel — retired in Phase 5-2c-iii-c-2 #5: a worthless task's cancel
+                          is the task objective's step, so the DRIVE tests (4c)
+                          now pin only the objective step's task-phase arm.)
 
 The SWEEP keeps `selected` comparable by constraining every generated scenario
 so the 7 slots above are FALSE on BOTH sides (phase ∈ {none, complete},
@@ -148,9 +136,8 @@ The Lean phase-based predicates (`completeTask`/`acceptTask`/…)
 are deliberate over-approximations of production's richer task-economy checks.
 For completeTask/acceptTask they coincide EXACTLY with production under empty
 target_gear (acceptTask) and the canonical complete condition (completeTask),
-which is why those two are asserted, not deferred. taskCancel does NOT
-coincide (production reads `history`/`task_decision`),
-which is precisely why they are deferred and their phases excluded above.
+which is why those two are asserted, not deferred. (taskCancel, which did NOT
+coincide — production read `history`/`task_decision` — is retired.)
 """
 from __future__ import annotations
 
@@ -163,6 +150,7 @@ from artifactsmmo_cli.ai.accumulation_sell import sellable_tradeable_now
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.cancel_selection import cancel_targets
+from artifactsmmo_cli.ai.decisions.root import _task_root
 from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
@@ -173,9 +161,9 @@ from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
-from artifactsmmo_cli.ai.task_pursue import pursue_due
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.means import SUPPLY_DEMAND_MIN
+from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.diff.oracle_client import run_oracle
 from formal.sim.production_ladder import (
@@ -196,7 +184,6 @@ DEFERRED_SLOTS: frozenset[LadderMeans] = frozenset({
     LadderMeans.CRAFT_RELIEF,
     LadderMeans.RECYCLE_RELIEF,  # opaque passthrough: bank-full + recyclableSurplusNonempty
     LadderMeans.MAINTAIN_CONSUMABLES,
-    LadderMeans.TASK_CANCEL,
     LadderMeans.RECYCLE_SURPLUS,
 })
 
@@ -217,7 +204,6 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.CLAIM_PENDING: "claimPending",
     LadderMeans.COMPLETE_TASK: "completeTask",
     LadderMeans.SELL_PRESSURED: "sellPressured",
-    LadderMeans.TASK_CANCEL: "taskCancel",
     LadderMeans.OBJECTIVE_STEP: "objectiveStep",
     LadderMeans.MAINTAIN_CONSUMABLES: "maintainConsumables",
     LadderMeans.SUPPLY_BANK: "supplyBank",
@@ -401,8 +387,7 @@ def _production_answers(
 _PHASE_INT = {"none": 0, "accepted": 1, "inProgress": 2, "complete": 3}
 
 
-def _oracle_args(scn: Scenario, w: WorldState,
-                 task_cancel_fires: bool = False) -> list[int]:
+def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
     """Build the oracle arg array (the `runLadder` docstring layout,
     Oracle.lean) reading the STRUCTURAL facts off the
     same constructed `WorldState` production reads (coin total, bank item
@@ -442,13 +427,9 @@ def _oracle_args(scn: Scenario, w: WorldState,
         1 if scn.has_pending else 0,             # 21 pendingItemsNonempty
         1 if scn.item_sellable and scn.junk_qty > 0 else 0,  # 22 sellableInventoryNonempty
         0,                                       # 23 recyclableSurplusNonempty (deferred)
-        # Fed from production's own verdict, the way 23/25/27 are fed in
-        # `_rich_oracle_args`. It was a hardcoded 1 that DEFERRED taskCancel, and
-        # S-048 gave production a second way to fire it (a task advancing nothing
-        # is dead work), so the deferral stopped being true. Deriving it keeps the
-        # two in lockstep whatever the rule becomes; the ladder ORDERING is what
-        # this harness tests, and that is unaffected.
-        0 if task_cancel_fires else 1,           # 24 taskFeasibleProjected
+        # No ladder rung reads it since the TASK_CANCEL rung (its only reader)
+        # was retired in Phase 5-2c-iii-c-2 #5; the State field stays.
+        1,                                       # 24 taskFeasibleProjected
         0,                                       # 25 restForCombatReady (deferred TRUE path)
         0,                                       # 26 reserved (was gearReviewFires)
         0,                                       # 27 craftReliefFires (deferred)
@@ -586,10 +567,9 @@ def _deposit_nonempty(scn: Scenario) -> bool:
     return scn.junk_qty > 0
 
 
-def _lean_answers(scn: Scenario, w: WorldState, task_cancel_fires: bool = False
+def _lean_answers(scn: Scenario, w: WorldState
                   ) -> tuple[dict[LadderMeans, bool], LadderMeans | None]:
-    res = run_oracle("ladder_fires",
-                     [_oracle_args(scn, w, task_cancel_fires)])[0]
+    res = run_oracle("ladder_fires", [_oracle_args(scn, w)])[0]
     per_slot = {k: bool(res[_ORACLE_KEY[k]]) for k in ALL_IN_LADDER_ORDER}
     selected_name = res["selected"]
     selected = None
@@ -659,7 +639,7 @@ def test_ladder_fires_matches_production(scn: Scenario) -> None:
     Lean ladder oracle and real production `_guard_fires`/`_means_fires`."""
     w = _make_world(scn)
     prod, prod_sel = _production_answers(scn, w)
-    lean, lean_sel = _lean_answers(scn, w, prod[LadderMeans.TASK_CANCEL])
+    lean, lean_sel = _lean_answers(scn, w)
     for k in ASSERTED_SLOTS:
         assert prod[k] == lean[k], (
             f"SLOT DIVERGENCE {k.name}: production={prod[k]} lean={lean[k]}\n"
@@ -706,7 +686,7 @@ def _base_scn(**overrides) -> Scenario:
 def _assert_full_agreement(scn: Scenario) -> None:
     w = _make_world(scn)
     prod, prod_sel = _production_answers(scn, w)
-    lean, lean_sel = _lean_answers(scn, w, prod[LadderMeans.TASK_CANCEL])
+    lean, lean_sel = _lean_answers(scn, w)
     for k in ASSERTED_SLOTS:
         assert prod[k] == lean[k], (k.name, prod[k], lean[k], scn)
     assert prod_sel == lean_sel, (prod_sel, lean_sel, scn)
@@ -914,7 +894,6 @@ def _rich_oracle_args(
     objective_step: bool,
     *,
     actions_attempted: int = 0,
-    task_feasible_projected: bool = True,
 ) -> list[int]:
     """Build the oracle arg array (the `runLadder` docstring layout,
     Oracle.lean) for a RICH hand-built fixture.
@@ -928,13 +907,10 @@ def _rich_oracle_args(
     and `bankItemsCount` come from the bank-visible view (`w.bank_items` is
     `None` until perception loads it), never from raw bank contents.
 
-    `actions_attempted` (arg[11]) and `task_feasible_projected` (arg[24]) are
-    the Lean-side equivalents of the history/feasibility inputs that production
-    reads from a `LearningStore` + `task_decision`. 4a/4b never touch them
-    (defaults 0 / True reproduce the old constants); Brick 4c sets them
-    consistent with the driven history-gated slot's production verdict —
-    `lowYieldCancel` (arg[11]>=lowYieldSampleThreshold) and `taskCancel`
-    (arg[24]=0 when production PIVOTs)."""
+    `actions_attempted` (arg[11]) is the Lean-side equivalent of a history
+    input production reads from a `LearningStore`. `taskFeasibleProjected`
+    (arg[24]) is fed 1: its only ladder reader, the TASK_CANCEL rung, was
+    retired in Phase 5-2c-iii-c-2 #5."""
     coins_total = w.inventory.get(TASKS_COIN_CODE, 0) + (
         (w.bank_items or {}).get(TASKS_COIN_CODE, 0))
     bank_items_count = len(w.bank_items) if w.bank_items is not None else 0
@@ -967,11 +943,7 @@ def _rich_oracle_args(
         1 if w.pending_items else 0,                 # 21 pendingItemsNonempty
         1 if sellable_tradeable_now(w, gd) else 0,   # 22 sellableInventoryNonempty
         1 if prod[LadderMeans.RECYCLE_SURPLUS] else 0,   # 23 recyclableSurplusNonempty
-        # PURSUE iff the caller says feasible AND production is not cancelling.
-        # S-048 and S-052 both changed when production cancels, and a hand-set
-        # constant cannot track that.
-        1 if (task_feasible_projected
-              and not prod[LadderMeans.TASK_CANCEL]) else 0,  # 24 taskFeasibleProjected
+        1,                                           # 24 taskFeasibleProjected (no rung reads it)
         1 if prod[LadderMeans.REST_FOR_COMBAT] else 0,   # 25 restForCombatReady
         0,                                        # 26 reserved (was gearReviewFires)
         1 if prod[LadderMeans.CRAFT_RELIEF] else 0,  # 27 craftReliefFires
@@ -1034,7 +1006,6 @@ def drive_and_contest(
     assert_selection: bool = True,
     history: LearningStore | None = None,
     actions_attempted: int = 0,
-    task_feasible_projected: bool = True,
 ) -> tuple[dict[LadderMeans, bool], LadderMeans | None,
            dict[LadderMeans, bool], LadderMeans | None]:
     """Run the REAL production ladder on a rich fixture, feed its per-slot
@@ -1042,11 +1013,7 @@ def drive_and_contest(
 
     Per-slot agreement is asserted for the NON-DEFERRED slots (`ASSERTED_SLOTS`)
     plus the explicitly `driven` opaque slots (the slot(s) this fixture stands
-    up production's real machinery for). The OTHER deferred slot (taskCancel)
-    is a deliberate phase-based Lean over-approximation of a history-gated
-    production predicate — it can diverge by design whenever the fixture's
-    phase is accepted/inProgress, and is NOT asserted per-slot here (that is
-    Brick 4c's job). The objectiveStep slot's task-phase arm (Phase
+    up production's real machinery for). The objectiveStep slot's task-phase arm (Phase
     5-2c-iii-c-2 #4, the retired pursueTask's work) is phase-based on BOTH
     sides, so it is asserted like any other slot.
 
@@ -1060,12 +1027,10 @@ def drive_and_contest(
     callers can additionally assert WHICH slot fired/was selected.
 
     `history` (default None) is threaded into production's `fires` /
-    `production_ladder` so the history-gated slot (taskCancel) reaches its
-    real `LearningStore` path. The Lean side has no history concept —
-    `actions_attempted` (arg[11]) and `task_feasible_projected` (arg[24]) carry
-    the Lean-side equivalent and MUST be set consistent with production's
-    history verdict for the driven scenario. 4a/4b pass history=None
-    and the defaults, so their behaviour is unchanged.
+    `production_ladder` so a history-reading slot reaches its real
+    `LearningStore` path. The Lean side has no history concept —
+    `actions_attempted` (arg[11]) carries the Lean-side equivalent. 4a/4b pass
+    history=None and the defaults, so their behaviour is unchanged.
 
     Shared scaffold for Brick 4 (4a uses it for craftRelief/recycleSurplus;
     4b/4c reuse it for the remaining opaque slots)."""
@@ -1077,8 +1042,7 @@ def drive_and_contest(
     res = run_oracle("ladder_fires",
                      [_rich_oracle_args(
                          w, gd, ctx, prod, objective_step,
-                         actions_attempted=actions_attempted,
-                         task_feasible_projected=task_feasible_projected)])[0]
+                         actions_attempted=actions_attempted)])[0]
     lean = {k: bool(res[_ORACLE_KEY[k]]) for k in ALL_IN_LADDER_ORDER}
     lean_sel_name = res["selected"]
     lean_sel = None
@@ -1721,35 +1685,21 @@ def test_maintain_consumables_near_miss_no_combat() -> None:
 
 
 # ===========================================================================
-# Brick 4c — the HISTORY-GATED phase slot taskCancel, and the task-phase arm
-# of objectiveStep that replaced the retired pursueTask (Phase 5-2c-iii-c-2 #4).
+# Brick 4c — the task-phase arm of objectiveStep that replaced the retired
+# pursueTask (Phase 5-2c-iii-c-2 #4) and taskCancel (#5) rungs.
 #
-# UNLIKE 4a/4b's passthrough slots, taskCancel is Lean phase-derived
-# OVER-APPROXIMATIONS: Lean computes them from `taskLifecyclePhase` (arg[16]),
-# `actionsAttempted` (arg[11]), and `taskFeasibleProjected` (arg[24]) — it has
-# NO `LearningStore` concept — whereas production reads a real `LearningStore`
-# history + `task_decision`. So Lean and production CAN diverge per-slot in
-# general. To get an apples-to-apples SELECTION contest, each scenario below is
-# driven so BOTH sides fire the driven slot (the Lean phase is set consistent
-# with production's real history verdict) AND so the slots ABOVE the driven one
-# are quiet on both ladders. `drive_and_contest` asserts per-slot agreement for
-# ASSERTED_SLOTS ∪ {driven} only — the OTHER history-gated phase slots that are
-# not driven are deliberately skipped per-slot (a known over-approximation on a
-# non-driven phase-slot must not spuriously fail), but selection is still
-# asserted, so any divergence that changes the WINNER is caught.
-#
-# Real production `LearningStore` (not a mock) is threaded through
-# `drive_and_contest(history=...)`; taskCancel and the production `pursue_due`
-# take an essentially EMPTY store (their PIVOT/PURSUE verdicts short-circuit
-# before reading aggregates).
+# The history-gated phase slot taskCancel is retired: a worthless task's cancel
+# is the task objective's own step (`objective_step_goal` returns
+# `TaskCancelGoal` when `route.task_cancel_due` holds), so the ladder no longer
+# chooses between cancelling and working a task — the objective step fires on
+# the held task's phase and its goal decides. Real production `LearningStore`
+# (not a mock) is still threaded through `drive_and_contest(history=...)`.
 # ===========================================================================
 
 
 def _empty_history() -> LearningStore:
     """A started-but-unpopulated in-memory LearningStore. Non-None (so the
-    history-gated production predicates engage) but holding no Cycle rows —
-    sufficient for taskCancel (PIVOT on a combat req short-circuits before any
-    aggregate read) and `pursue_due` (PURSUE on a req-None items task likewise)."""
+    history-reading production predicates engage) but holding no Cycle rows."""
     store = LearningStore(db_path=":memory:", character="hero")
     store.start_session()
     return store
@@ -1791,34 +1741,6 @@ def _yield_history(
     return store
 
 
-# ---------------------------------------------------------------------------
-# Slot 1 — taskCancel (Lean idx 13).  Production `_means_fires(TASK_CANCEL)`
-# (means.py ~101): `state.task_code` set AND `history is not None` AND
-# `task_decision(...) == PIVOT`. The cheapest PIVOT: a monsters-task whose
-# monster is too hard — `task_requirement` returns SkillRequirement("combat")
-# (monster_level > level + 2), and `task_decision_pure` PIVOTs on a combat req
-# regardless of yield aggregates, so an EMPTY history suffices.
-#
-# Lean `taskCancelFires` (ProductionLadder.lean ~215): phase ∈ {accepted,
-# inProgress} AND `!taskFeasibleProjected`. We drive phase=accepted (progress 0)
-# — which keeps lowYieldCancel (idx 12, needs inProgress) QUIET — and feed
-# taskFeasibleProjected=0 (the task is NOT feasible, matching the PIVOT). With
-# everything above idx 13 quiet, taskCancel WINS selection on both ladders.
-# ---------------------------------------------------------------------------
-
-
-def _too_hard_monsters_gd() -> GameData:
-    """A monsters-task target `hard_mob` at level 40 — far above the level-5
-    character (gap 35 > MONSTER_LEVEL_MARGIN 2) so `task_requirement` yields a
-    combat SkillRequirement and `task_decision` PIVOTs."""
-    gd = GameData()
-    gd._monster_level = {"hard_mob": 40}
-    gd._item_stats = {}
-    gd._crafting_recipes = {}
-    fill_monster_stat_defaults(gd)  # craft_potions_fires→unlock_boost_target→predict_win needs full stats
-    return gd
-
-
 def _plain_ctx(*, combat_monster: str | None = None,
                draw_owed: bool = True) -> SelectionContext:
     """`draw_owed` defaults FALSE, which keeps ACCEPT_TASK quiet.
@@ -1836,14 +1758,11 @@ def _plain_ctx(*, combat_monster: str | None = None,
 
 def _monsters_task_world(*, task_code: str, progress: int, total: int,
                          coins: int = 0) -> WorldState:
-    # level 5; full hp, empty bag, no bank/pending so every slot above
-    # taskCancel(13)/lowYieldCancel(12) stays quiet.
+    # level 5; full hp, empty bag, no bank/pending so every slot above the
+    # objective step stays quiet.
     #
-    # `coins` is opt-in per fixture, NOT a default. S-052 works a task it cannot
-    # discard and `TaskCancelAction.is_applicable` spends a POCKET coin, so the
-    # cancel-driving fixtures need one — but handing every caller a coin changes
-    # what the SUPPLY_BANK fixtures are testing, which is how the first attempt
-    # at this broke four unrelated tests.
+    # `coins` is opt-in per fixture, NOT a default: handing every caller a coin
+    # changes what the SUPPLY_BANK fixtures are testing.
     return WorldState(
         character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
         gold=0, skills={}, x=0, y=0,
@@ -1854,84 +1773,16 @@ def _monsters_task_world(*, task_code: str, progress: int, total: int,
         task_progress=progress, task_total=total)
 
 
-def test_task_cancel_drives_and_selects() -> None:
-    """TRUE fixture: monsters-task `hard_mob` (lvl 40) vs level-5 char ->
-    `task_requirement` = combat req -> `task_decision` PIVOTs -> production
-    TASK_CANCEL fires with a non-None (empty) history. phase=accepted keeps the
-    higher lowYieldCancel quiet; taskFeasibleProjected=0 makes Lean taskCancel
-    fire. taskCancel is the highest firing slot and WINS selection on BOTH
-    ladders. A wrong Lean priority for taskCancel would break selection here."""
-    w = _monsters_task_world(task_code="hard_mob", progress=0, total=5, coins=1)
-    gd = _too_hard_monsters_gd()
-    hist = _empty_history()
-    prod, prod_sel, lean, lean_sel = drive_and_contest(
-        w, gd, _plain_ctx(),
-        driven=frozenset({LadderMeans.TASK_CANCEL}),
-        history=hist, task_feasible_projected=False)
-    # Production REALLY PIVOTs (not faked):
-    assert prod[LadderMeans.TASK_CANCEL] is True
-    assert lean[LadderMeans.TASK_CANCEL] is True
-    # Strong selection teeth: taskCancel wins on both ladders.
-    assert prod_sel is LadderMeans.TASK_CANCEL
-    assert lean_sel is LadderMeans.TASK_CANCEL
-
-
-def test_task_cancel_near_miss_feasible_task() -> None:
-    """Near-miss: a FEASIBLE monsters-task (`easy_mob` lvl 5 == char level, gap
-    3 <= margin) -> `task_requirement` None -> `task_decision` PURSUE (not
-    PIVOT) -> production TASK_CANCEL does NOT fire. Lean is fed
-    taskFeasibleProjected=1 (matching feasibility) so Lean taskCancel is also
-    quiet — the per-slot taskCancel contest is the point.
-
-    Selection IS asserted: since Phase 5-2c-iii-c-2 #4 a held, unmet task fires
-    the objective step on its phase on BOTH ladders (production `fires` reads
-    `task_lifecycle_phase`; Lean `objectiveStepFires … || phaseActive`), so the
-    accepted monsters-task selects OBJECTIVE_STEP on both. (Before, production
-    PURSUE_TASK was items-only and fell through to WAIT while Lean
-    `pursueTaskFires` fired for any accepted task — that divergence is gone.)"""
-    w = _monsters_task_world(task_code="easy_mob", progress=0, total=5)
-    gd = GameData()
-    gd._monster_level = {"easy_mob": 5}
-    gd._item_stats = {}
-    gd._crafting_recipes = {}
-    fill_monster_stat_defaults(gd)  # craft_potions_fires→unlock_boost_target→predict_win needs full stats
-    prod, prod_sel, lean, lean_sel = drive_and_contest(
-        w, gd, _plain_ctx(),
-        driven=frozenset({LadderMeans.TASK_CANCEL}),
-        history=_empty_history(), task_feasible_projected=True)
-    assert prod[LadderMeans.TASK_CANCEL] is False
-    assert lean[LadderMeans.TASK_CANCEL] is False
-    assert prod_sel is LadderMeans.OBJECTIVE_STEP
-    assert lean_sel is LadderMeans.OBJECTIVE_STEP
-
-
-def test_task_cancel_near_miss_no_history() -> None:
-    """Near-miss: history=None -> production TASK_CANCEL short-circuits to False
-    even though the task is infeasible. (Pins the `history is not None`
-    conjunct.) Lean is NOT asserted per-slot here — with history=None the model
-    has no equivalent input, so we only assert the production side and skip the
-    selection contest."""
-    w = _monsters_task_world(task_code="hard_mob", progress=0, total=5)
-    gd = _too_hard_monsters_gd()
-    prod, _, _, _ = drive_and_contest(
-        w, gd, _plain_ctx(),
-        driven=frozenset({LadderMeans.TASK_CANCEL}),
-        history=None, task_feasible_projected=True, assert_selection=False)
-    assert prod[LadderMeans.TASK_CANCEL] is False
-
-
 # ---------------------------------------------------------------------------
-# Slot 2 — objectiveStep's TASK-PHASE arm (Phase 5-2c-iii-c-2 #4: the retired
-# pursueTask rung's work is now the task objective's step). Both ladders fire
-# OBJECTIVE_STEP on a held, unmet task's phase alone: production
+# objectiveStep's TASK-PHASE arm (Phase 5-2c-iii-c-2 #4/#5: the retired
+# pursueTask and taskCancel rungs' work is now the task objective's step). Both
+# ladders fire OBJECTIVE_STEP on a held, unmet task's phase alone: production
 # `production_ladder.fires` reads `task_lifecycle_phase in {ACCEPTED,
 # IN_PROGRESS}`, Lean `objectiveStepFires := s.objectiveStepFires ||
-# phaseActive`. Neither conjoins the PURSUE verdict — a documented
-# over-approximation (the same one the old Lean `pursueTaskFires` carried);
-# whether the step has WORK is production's `pursue_due` (task_pursue.py),
-# read by `objective_step_goal`, not the ladder. We drive phase=accepted with
-# objective_step=False (the opaque flag OFF, so only the phase arm can fire)
-# and taskFeasibleProjected=1 so the HIGHER taskCancel stays QUIET.
+# phaseActive`. Neither reads the task's worth — whether the step cancels or
+# works the task is `objective_step_goal`'s question (`route.task_cancel_due`),
+# not the ladder's. We drive phase=accepted with objective_step=False (the
+# opaque flag OFF, so only the phase arm can fire).
 # ---------------------------------------------------------------------------
 
 
@@ -1961,45 +1812,39 @@ def _items_task_world(*, progress: int, total: int) -> WorldState:
 
 
 def test_task_phase_drives_objective_step_and_selects() -> None:
-    """TRUE fixture: feasible items-task `widget` 0/5 (phase accepted), empty
-    catalog -> `task_decision` PURSUE, so production `pursue_due` holds (the
-    step has work). With the opaque objective_step flag OFF, OBJECTIVE_STEP
-    fires on the task phase alone on BOTH ladders; taskFeasibleProjected=1
-    keeps taskCancel quiet; OBJECTIVE_STEP is the highest firing slot and WINS
-    selection on BOTH ladders (what PURSUE_TASK used to win)."""
+    """TRUE fixture: items-task `widget` 0/5 (phase accepted), held and unmet,
+    so production's `_task_root` items arm offers the task objective (the step
+    has work). With the opaque objective_step flag OFF, OBJECTIVE_STEP fires on
+    the task phase alone on BOTH ladders; OBJECTIVE_STEP is the highest firing
+    slot and WINS selection on BOTH ladders (what PURSUE_TASK used to win)."""
     w = _items_task_world(progress=0, total=5)
     gd = _feasible_items_gd()
     hist = _empty_history()
     prod, prod_sel, lean, lean_sel = drive_and_contest(
         w, gd, _plain_ctx(),
         driven=frozenset({LadderMeans.OBJECTIVE_STEP}),
-        history=hist, task_feasible_projected=True,
-        objective_step=False)
-    # Production REALLY has the pursuit to do (not faked):
-    assert pursue_due(w, gd, hist) is True
+        history=hist, objective_step=False)
+    # Production REALLY has the task to work (not faked):
+    assert _task_root(w, gd, _plain_ctx(), hist) == ReachTaskOutcome("widget")
     assert prod[LadderMeans.OBJECTIVE_STEP] is True
     assert lean[LadderMeans.OBJECTIVE_STEP] is True
-    # The slot above the step that could contest is quiet on both ladders.
-    assert prod[LadderMeans.TASK_CANCEL] is False
-    assert lean[LadderMeans.TASK_CANCEL] is False
     # Strong selection teeth: the objective step wins on both ladders.
     assert prod_sel is LadderMeans.OBJECTIVE_STEP
     assert lean_sel is LadderMeans.OBJECTIVE_STEP
 
 
-def test_task_phase_near_miss_too_hard() -> None:
-    """Near-miss: an items-task whose deliverable needs an out-of-reach crafting
-    skill (`gizmo` requires weaponcrafting 30, char has none) ->
-    `task_requirement` is a non-combat skill gap -> `task_decision` PIVOTs (the
-    unobserved-gap margin rejects a default reward) -> production `pursue_due`
-    is False. The objective step's task-phase arm still fires on BOTH ladders
-    (it does not read the verdict — the documented over-approximation), but
-    the PIVOT fires taskCancel ABOVE it on both (taskFeasibleProjected=0,
-    accepted phase), so both ladders agree on selecting TASK_CANCEL."""
+def test_task_phase_selects_objective_step_for_an_out_of_reach_items_task() -> None:
+    """An items-task whose deliverable needs an out-of-reach crafting skill
+    (`gizmo` requires weaponcrafting 30, char has none), with a pocket coin.
+    Until Phase 5-2c-iii-c-2 #5 `task_decision` PIVOTed here and the
+    TASK_CANCEL rung fired ABOVE the objective step on both ladders. That rung
+    is retired: the objective step's task-phase arm fires on BOTH ladders and
+    is selected on both; whether its step cancels the task is the task
+    objective's worth verdict, not a ladder rung."""
     w = WorldState(
         character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
-        # A pocket coin: this fixture DRIVES taskCancel, and S-052 refuses to
-        # discard without one.
+        # A pocket coin: the coin that once let the retired TASK_CANCEL rung
+        # fire here (S-052); no rung reads it now.
         gold=0, skills={}, x=0, y=0, inventory={"tasks_coin": 1}, inventory_max=20,
         inventory_slots_max=20,
         equipment={}, cooldown_expires=None, bank_items=None, bank_gold=None,
@@ -2014,17 +1859,12 @@ def test_task_phase_near_miss_too_hard() -> None:
     hist = _empty_history()
     prod, prod_sel, lean, lean_sel = drive_and_contest(
         w, gd, _plain_ctx(),
-        driven=frozenset({LadderMeans.TASK_CANCEL, LadderMeans.OBJECTIVE_STEP}),
-        history=hist, task_feasible_projected=False)
-    assert pursue_due(w, gd, hist) is False
-    # The infeasible items-task PIVOTs, so production taskCancel fires; the Lean
-    # side (taskFeasibleProjected=0, accepted phase) fires taskCancel too.
-    assert prod[LadderMeans.TASK_CANCEL] is True
-    assert lean[LadderMeans.TASK_CANCEL] is True
+        driven=frozenset({LadderMeans.OBJECTIVE_STEP}),
+        history=hist)
     assert prod[LadderMeans.OBJECTIVE_STEP] is True
     assert lean[LadderMeans.OBJECTIVE_STEP] is True
-    assert prod_sel is LadderMeans.TASK_CANCEL
-    assert lean_sel is LadderMeans.TASK_CANCEL
+    assert prod_sel is LadderMeans.OBJECTIVE_STEP
+    assert lean_sel is LadderMeans.OBJECTIVE_STEP
 
 
 # ---------------------------------------------------------------------------
