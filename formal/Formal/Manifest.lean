@@ -491,6 +491,21 @@ open Formal.PriorityBand
 #check @Formal.TurnRotation.below_lt            -- potential < n
 #check @Formal.TurnRotation.rotation_fair       -- picked within `below g` turns
 #check @Formal.TurnRotation.rotation_fair_bound -- picked within n - 1 turns
+
+-- TaskWorth (Phase 5-2c-iii-c-2 #5: keep, draw and cancel a task by its worth,
+-- `ai/task_worth_core.py`; USER 2026-10-07):
+#check @Formal.TaskWorth.cancelDue_iff                 -- cancel ⇔ worthless ∧ coin ∧ ¬met
+#check @Formal.TaskWorth.worthy_never_cancelled        -- a worthy task is never cancelled
+#check @Formal.TaskWorth.no_coin_no_cancel             -- no coin ⇒ worked, not cancelled
+#check @Formal.TaskWorth.infeasible_worthless          -- OUT_OF_REACH ⇒ worthless
+#check @Formal.TaskWorth.xp_task_kept                  -- feasible ∧ XP ⇒ kept
+#check @Formal.TaskWorth.gold_iff                      -- GOLD ⇔ feasible ∧ short ∧ faster
+#check @Formal.TaskWorth.drops_alone_worthy            -- drops alone count
+#check @Formal.TaskWorth.drawOwed_iff                  -- draw owed ⇔ a pool task is worthy
+#check @Formal.TaskWorth.dominates_irrefl
+#check @Formal.TaskWorth.dominates_trans
+#check @Formal.TaskWorth.gold_and_drops_dominate_drops
+#check @Formal.TaskWorth.worthy_dominates_worthless
 -- RealizableLoadout required roles (the multi-slot pick_loadout bug fix):
 #check @Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership -- contract: realizability ⇔ per-code demand ≤ ownership
 #check @Formal.RealizableLoadout.apply_cur_ge_1                        -- apply assert: realizable ⇒ cur ≥ 1 at every decrement

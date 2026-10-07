@@ -1908,6 +1908,17 @@ def runTurnRotationPick (args : Array Json) : Json :=
   | some g => Json.mkObj [("pick", Json.num (Int.ofNat g))]
   | none => Json.mkObj [("pick", Json.num (-1))]
 
+/-- A task's worth and the keep/cancel verdict (`Formal.TaskWorth`). Args:
+`[feasible, xpPositive, goldShort, taskNum, taskDen, otherNum, otherDen,
+dropAligned, coin, met]`, Bools as 0/1. Emits the three reasons and `cancel`. -/
+def runTaskWorth (args : Array Json) : Json :=
+  let b : Nat → Bool := fun k => intArg args k != 0
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let w := Formal.TaskWorth.worth ⟨b 0, b 1, b 2, n 3, n 4, n 5, n 6, b 7⟩
+  Json.mkObj [("xp", Json.bool w.xp), ("gold", Json.bool w.gold),
+              ("drops", Json.bool w.drops),
+              ("cancel", Json.bool (Formal.TaskWorth.cancelDue w (b 8) (b 9)))]
+
 /-- Compute one inventory_chain_safe result. Single shared dispatcher for the
 four chain_safe instantiations and the TaskCancel coin step.
 
@@ -3000,6 +3011,8 @@ def runOne (item : Json) : Json :=
     runGatherCost args
   else if kind == "turn_rotation_pick" then
     runTurnRotationPick args
+  else if kind == "task_worth" then
+    runTaskWorth args
   else if kind == "inventory_chain_safe" then
     runInventoryChainSafe args
   else if kind == "inventory_profile" then

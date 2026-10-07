@@ -50,6 +50,7 @@ import Formal.GatherApply
 import Formal.GatherSelection
 import Formal.GatherCost
 import Formal.TurnRotation
+import Formal.TaskWorth
 import Formal.ShoppingList
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
@@ -3439,3 +3440,21 @@ example : ∀ (t : Nat → Nat) (p : Nat → Bool) (l : List Nat) (h : Nat),
     Formal.TurnRotation.pickL t p l = some h →
       h ∈ l ∧ p h = true ∧ ∀ j ∈ l, p j = true → j ≠ h → Formal.TurnRotation.before t h j = true :=
   @Formal.TurnRotation.pickL_spec
+
+/-! ### TaskWorth contracts (keep, draw and cancel by worth). -/
+
+example : ∀ (w : Formal.TaskWorth.Worth) (coin met : Bool),
+    Formal.TaskWorth.cancelDue w coin met = true ↔ w.any = false ∧ coin = true ∧ met = false :=
+  @Formal.TaskWorth.cancelDue_iff
+
+example : ∀ (i : Formal.TaskWorth.Inputs),
+    (Formal.TaskWorth.worth i).gold = true ↔
+      i.feasible = true ∧ i.goldShort = true ∧ i.otherNum * i.taskDen < i.taskNum * i.otherDen :=
+  @Formal.TaskWorth.gold_iff
+
+example : ∀ (pool : List Formal.TaskWorth.Worth),
+    Formal.TaskWorth.drawOwed pool = true ↔ ∃ w ∈ pool, w.any = true :=
+  @Formal.TaskWorth.drawOwed_iff
+
+example : ∀ (i : Formal.TaskWorth.Inputs), i.feasible = false → (Formal.TaskWorth.worth i).any = false :=
+  @Formal.TaskWorth.infeasible_worthless

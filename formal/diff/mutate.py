@@ -351,6 +351,7 @@ CURRENCY_AFFORD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / 
 REFUSAL_FACT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "refusal_fact_core.py"
 TASK_KILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "task_kills.py"
 STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
+TASK_WORTH_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth_core.py"
 FIGHT_UPKEEP_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "fight_upkeep_core.py"
 BAND_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "band_target.py"
 TASK_ACCEPT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_accept.py"
@@ -7223,6 +7224,36 @@ FIGHT_APPLICABILITY_MUTATIONS = [
 ]
 
 
+# A task's worth (Phase 5-2c-iii-c-2 #5, Formal.TaskWorth). Killed by
+# tests/test_ai/test_task_worth_core.py (and the task_worth differential).
+TASK_WORTH_CORE_MUTATIONS = [
+    ("worth: an infeasible task keeps its reasons",
+     "    if not inputs.feasible:\n        return WORTHLESS\n",
+     "    if False:\n        return WORTHLESS\n"),
+    ("worth: equal gold rates count as faster",
+     "inputs.task_gold_rate > inputs.other_gold_rate",
+     "inputs.task_gold_rate >= inputs.other_gold_rate"),
+    ("worth: gold needs no shortfall",
+     "gold=inputs.gold_short and inputs.task_gold_rate",
+     "gold=True and inputs.task_gold_rate"),
+    ("worth: drops are not a reason",
+     "                     drops=inputs.drop_aligned)\n",
+     "                     drops=False)\n"),
+    ("cancel: a coinless worthless task is cancelled",
+     "    return not worth.any() and coin and not met\n",
+     "    return not worth.any() and not met\n"),
+    ("cancel: a met task is cancelled",
+     "    return not worth.any() and coin and not met\n",
+     "    return not worth.any() and coin\n"),
+    ("draw: owed with no worthy task",
+     "    return any(worth.any() for worth in pool)\n",
+     "    return True\n"),
+    ("dominates: equal sets dominate",
+     "    return sub and ((a.xp and not b.xp)",
+     "    return sub or ((a.xp and not b.xp)"),
+]
+
+
 # The band target ranks by XP per action, upkeep included (USER 2026-10-07).
 # Killed by tests/test_ai/test_fight_upkeep.py.
 FIGHT_UPKEEP_CORE_MUTATIONS = [
@@ -9024,6 +9055,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_no_combat_deadlock.py", survivors)
     run_group(APPLY_FIGHT_SRC, TASK_FIGHT_BYPASS_MUTATIONS,
               "tests/test_ai/test_grey_farm.py", survivors)
+    run_group(TASK_WORTH_CORE_SRC, TASK_WORTH_CORE_MUTATIONS,
+              "tests/test_ai/test_task_worth_core.py", survivors)
     run_group(FIGHT_UPKEEP_CORE_SRC, FIGHT_UPKEEP_CORE_MUTATIONS,
               "tests/test_ai/test_fight_upkeep.py", survivors)
     run_group(LEARNING_STORE_SRC, FIGHT_UPKEEP_STORE_MUTATIONS,
