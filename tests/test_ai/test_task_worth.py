@@ -86,8 +86,8 @@ class TestTaskWorthFor:
         assert not task_worth_for("wolf", "monsters", 10, make_state(), _gd(),
                                   NO_PROFILE_CONTEXT, None).any()
         monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: TaskHorizon("wolf", HORIZON_GEAR, None))
-        assert task_worth_for("wolf", "monsters", 10, make_state(), _gd(),
-                              NO_PROFILE_CONTEXT, None).xp
+        demanded = dataclasses.replace(NO_PROFILE_CONTEXT, level_demanded=True)
+        assert task_worth_for("wolf", "monsters", 10, make_state(), _gd(), demanded, None).xp
 
     def test_an_items_task_earns_its_reward_over_its_actions(self, monkeypatch) -> None:
         monkeypatch.setattr(mod, "acquisition_actions", lambda *a, **k: 20)
@@ -150,3 +150,33 @@ class TestPlayerGoldShort:
     def test_a_root_that_buys_nothing_needs_only_the_reserve(self, monkeypatch) -> None:
         monkeypatch.setattr("artifactsmmo_cli.ai.player.progression_reserve", lambda s, g: 100)
         assert self._player(50, 0, ReachCharLevel(40))._gold_short()
+
+
+class TestXpDemanded:
+    """USER 2026-10-07: the seesaw is emergent — a task's XP is a reason only
+    when the goal-action DAG demands it (`ctx.skill_demand`/`level_demanded`)."""
+
+    def test_character_xp_counts_only_when_level_is_demanded(self, monkeypatch) -> None:
+        monkeypatch.setattr(mod, "task_advances_progression", lambda s, g: True)
+        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: None)
+        state = make_state(level=30)
+        demanded = dataclasses.replace(NO_PROFILE_CONTEXT, level_demanded=True)
+        assert task_worth_for("wolf", "monsters", 10, state, _gd(), demanded, None).xp
+        assert not task_worth_for("wolf", "monsters", 10, state, _gd(), NO_PROFILE_CONTEXT, None).xp
+
+    def test_skill_xp_counts_only_for_a_demanded_skill(self, monkeypatch) -> None:
+        monkeypatch.setattr(mod, "task_advances_progression", lambda s, g: True)
+        gd = _gd()
+        monkeypatch.setattr(GameData, "producing_requirement",
+                            lambda self, code: {"copper_bar": ("mining", 1)}.get(code))
+        mining = dataclasses.replace(NO_PROFILE_CONTEXT, skill_demand=frozenset({"mining"}))
+        fishing = dataclasses.replace(NO_PROFILE_CONTEXT, skill_demand=frozenset({"fishing"}))
+        assert task_worth_for("copper_bar", "items", 10, make_state(), gd, mining, None).xp
+        assert not task_worth_for("copper_bar", "items", 10, make_state(), gd, fishing, None).xp
+        assert not task_worth_for("mystery", "items", 10, make_state(), gd, mining, None).xp
+
+    def test_unpaid_xp_is_no_reason_however_demanded(self, monkeypatch) -> None:
+        monkeypatch.setattr(mod, "task_advances_progression", lambda s, g: False)
+        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: None)
+        demanded = dataclasses.replace(NO_PROFILE_CONTEXT, level_demanded=True)
+        assert not task_worth_for("wolf", "monsters", 10, make_state(), _gd(), demanded, None).xp

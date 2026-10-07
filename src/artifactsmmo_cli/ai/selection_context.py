@@ -52,6 +52,18 @@ class SelectionContext:
     # reason needs it (`task_worth`; USER 2026-10-07: "Both, the larger").
     # False for a caller that does not compute it.
     gold_short: bool = False
+    # The XP the goal-action DAG still demands (`xp_demand`, set by the
+    # player): skills above their current level, and whether character level
+    # is demanded. A task's XP is a reason only for demanded XP (USER
+    # 2026-10-07: the seesaw is emergent, never a phase rule).
+    skill_demand: frozenset[str] = frozenset()
+    level_demanded: bool = False
+    # The fleet consumable floor's shortfall: (consumable, fleet deficit) per
+    # class below its floor (`consumable_floor.supply_shortfall`, set by the
+    # player). DAG demand like the gear targets: it seeds `demand_roots` and
+    # `task_worth.short_items` (USER 2026-10-07: "Fishing feeds Cooking ...
+    # the fleet can collectively maintain a minimum supply in the bank").
+    supply_shortfall: tuple[tuple[str, int], ...] = ()
     # Long-term gear and tool codes — fed by player from the
     # CharacterObjective so the CRAFT_RELIEF guard can score gear/tool
     # craft candidates alongside the active task item. Empty fallback

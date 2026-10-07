@@ -197,6 +197,7 @@ import Formal.Liveness.WitnessAcquirable
 import Formal.RefusalFact
 import Formal.TurnRotation
 import Formal.TaskWorth
+import Formal.ConsumableFloor
 import Formal.CurrencyAffordFastFail
 import Formal.PlanModel
 import Formal.LeafAttainable

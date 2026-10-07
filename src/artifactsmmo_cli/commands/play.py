@@ -147,6 +147,7 @@ def play(
         tracer=tracer, history=store,
         game_data_ttl_minutes=config.game_data_ttl_minutes,
         refresh_game_data=refresh_game_data,
+        fleet_size=fleet_size if fleet_size is not None else 1,
     )
     # The budget is the WHOLE per-IP budget, and the governors police it
     # fleet-wide through a request log in the shared coordination DB -- so a

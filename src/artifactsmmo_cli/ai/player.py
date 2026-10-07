@@ -64,6 +64,8 @@ from artifactsmmo_cli.ai.constants import (
     GE_ORDER_REFRESH_INTERVAL_SECONDS,
     STUCK_DETECTOR_WINDOW,
 )
+from artifactsmmo_cli.ai.consumable_floor import consumable_holdings, supply_shortfall
+from artifactsmmo_cli.ai.consumable_floor_core import publish_share
 from artifactsmmo_cli.ai.craft_plan_gen import decompose, hands_off_to_search
 from artifactsmmo_cli.ai.currency_turnin import TurnIn, fleet_total_pure, turn_in_ready_pure
 from artifactsmmo_cli.ai.cycle_snapshot import (
@@ -168,6 +170,7 @@ from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
+from artifactsmmo_cli.ai.xp_demand import demand_roots, xp_demand
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
@@ -232,8 +235,18 @@ class GamePlayer:
         cycle_observer: "Callable[[CycleSnapshot], None] | None" = None,
         game_data_ttl_minutes: int = 30,
         refresh_game_data: bool = False,
+        fleet_size: int = 1,
     ) -> None:
         self.character = character
+        # The characters sharing the account's bank (`play --all`), which the
+        # fleet consumable floor is sized by (USER 2026-10-07: "Fleet size ×
+        # per-char target"). One for a lone character.
+        self._fleet_size = fleet_size
+        # Siblings' published heal holdings, read with the coordination block,
+        # and this cycle's consumable shortfall (`consumable_floor`), published
+        # as this character's share on the demand board.
+        self._sibling_consumables: dict[str, int] = {}
+        self._supply_shortfall: tuple[tuple[str, int], ...] = ()
         self.verbose = verbose
         self.dry_run = dry_run
         self._game_data_ttl_minutes = game_data_ttl_minutes
@@ -3285,6 +3298,7 @@ class GamePlayer:
             self._recall = None
             self._asymmetric_demand = frozenset()
             self._sibling_skills = {}
+            self._sibling_consumables = {}
             return
         role_before = self._role
         now = datetime.now(tz=timezone.utc)
@@ -3293,7 +3307,11 @@ class GamePlayer:
         # so every sibling's `sibling_holdings` read sees THIS cycle's total
         # rather than a stale one. Costs nothing extra: same local SQLite
         # write path as `publish_demand` just above/below.
-        self._coordination.publish_holdings(dual_role_holdings(state, game_data), now)
+        holdings = dual_role_holdings(state, game_data)
+        for code, qty in consumable_holdings(state, game_data).items():
+            holdings[code] = holdings.get(code, 0) + qty
+        self._coordination.publish_holdings(holdings, now)
+        self._sibling_consumables = self._coordination.sibling_holdings(now)
         # Our crafting levels, so a sibling that CANNOT make something can see
         # that we can and price asking as a route rather than as unobtainable.
         # Same write path and same TTL as the holdings publish directly above.
@@ -3316,6 +3334,12 @@ class GamePlayer:
         # so a requester and its servers never disagree about what "can
         # produce" means.
         own_demand = self._own_unmet_demand(state, game_data)
+        # The fleet consumable floor's shortfall (USER 2026-10-07: filled "via
+        # SupplyBank"): each character publishes its SHARE, because the board
+        # sums rows across characters (`consumable_floor_core.publish_share`).
+        for code, deficit in self._supply_shortfall:
+            own_demand[code] = max(own_demand.get(code, 0),
+                                   publish_share(deficit, self._fleet_size))
         own_skill_of_item, own_level_of_item = self._producing_split(own_demand, game_data)
         # A code with NO producing skill at all IS self-servable. `self_servable`
         # means "the asker can obtain this without help", and for a vendor-only
@@ -3729,6 +3753,15 @@ class GamePlayer:
             sibling_skills=self._sibling_skills,
             fight_monster=self._committed_fight_monster(),
         )
+        self._supply_shortfall = supply_shortfall(
+            self.state, self.game_data, self.history, ctx.fight_monster, self._fleet_size,
+            self._sibling_consumables)
+        ctx = replace(ctx, supply_shortfall=self._supply_shortfall)
+        skills, level = xp_demand(
+            demand_roots(self._last_decision.chosen_root if self._last_decision is not None else None,
+                         self.state, ctx),
+            self.state, self.game_data, ctx)
+        ctx = replace(ctx, skill_demand=skills, level_demanded=level)
         if not self._draws_enabled:
             return ctx
         # Phase 5-2c-iii-c-2 #5 (USER 2026-10-07): a draw is owed by the

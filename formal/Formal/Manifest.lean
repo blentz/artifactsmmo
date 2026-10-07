@@ -510,6 +510,16 @@ open Formal.PriorityBand
 #check @Formal.TaskWorth.drawDue_none                  -- no worthy task ⇒ no draw
 #check @Formal.TaskWorth.drawDue_mono                  -- more worthy tasks never revoke it
 #check @Formal.TaskWorth.drawDue_refines_drawOwed      -- a due draw names a worthy task
+
+-- ConsumableFloor (c-2 #5 §10: the fleet's consumable floor; USER 2026-10-07,
+-- `ai/consumable_floor_core.py`):
+#check @Formal.ConsumableFloor.tierPick_eligible       -- the pick is usable and restores
+#check @Formal.ConsumableFloor.tierPick_optimal        -- nothing eligible beats it
+#check @Formal.ConsumableFloor.fleetDeficit_zero_iff   -- no deficit ⇔ stock ≥ floor
+#check @Formal.ConsumableFloor.fleetDeficit_antitone   -- more stock never raises it
+#check @Formal.ConsumableFloor.publishShare_covers     -- the fleet's shares cover it
+#check @Formal.ConsumableFloor.publishShare_le         -- no share exceeds it
+#check @Formal.ConsumableFloor.publishShare_one        -- alone, the whole deficit
 -- RealizableLoadout required roles (the multi-slot pick_loadout bug fix):
 #check @Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership -- contract: realizability ⇔ per-code demand ≤ ownership
 #check @Formal.RealizableLoadout.apply_cur_ge_1                        -- apply assert: realizable ⇒ cur ≥ 1 at every decrement

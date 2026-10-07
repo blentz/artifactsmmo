@@ -117,3 +117,18 @@ class TestPlayerContext:
         player._draws_enabled = False
         ctx = player._selection_context()
         assert ctx.draw_owed is False and ctx.draw_master is None
+
+    def test_the_dag_xp_demand_reaches_the_selection_context(self, monkeypatch) -> None:
+        """c-2 #5 increment 4: the pool scan reads which XP the DAG demands."""
+        player = self._player(monkeypatch)
+        monkeypatch.setattr(player_mod, "xp_demand", lambda *a: (frozenset({"mining"}), True))
+        seen = {}
+
+        def draw(state, gd, ctx, history):  # type: ignore[no-untyped-def]
+            seen.update(skills=ctx.skill_demand, level=ctx.level_demanded)
+            return False, None
+
+        monkeypatch.setattr(player_mod, "pool_draw", draw)
+        ctx = player._selection_context()
+        assert ctx.skill_demand == {"mining"} and ctx.level_demanded is True
+        assert seen == {"skills": {"mining"}, "level": True}

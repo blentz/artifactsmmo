@@ -2297,3 +2297,75 @@ def test_both_roots_are_published_not_one_or_the_other():
     p._last_blocked_target = "copper_dagger"
     assert p._own_unmet_demand(make_state(), gd) == {
         "iron_dagger": 1, "iron_bar": 3, "copper_dagger": 1, "copper_bar": 2}
+
+
+# ---------------------------------------------------------------------------
+# The fleet consumable floor (c-2 #5 §10; USER 2026-10-07: "the fleet can
+# collectively maintain a minimum supply in the bank")
+# ---------------------------------------------------------------------------
+
+def test_update_coordination_publishes_heals_and_reads_the_siblings(tmp_path):
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero", fleet_size=5)
+    p.state = make_state(inventory={"cooked_bass": 3})
+    p.game_data = _make_planner_gd()
+    p.game_data._item_stats["cooked_bass"] = ItemStats(
+        code="cooked_bass", level=30, type_="consumable", hp_restore=200)
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="HAL")
+    p.set_coordination_store(store)
+    now = datetime.now(tz=timezone.utc)
+    try:
+        sibling.publish_holdings({"cooked_bass": 7}, now)
+        p._update_coordination(p.state, p.game_data)
+        assert p._sibling_consumables == {"cooked_bass": 7}
+        assert sibling.sibling_holdings(datetime.now(tz=timezone.utc)) == {"cooked_bass": 3}
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_update_coordination_publishes_its_share_of_the_shortfall(tmp_path):
+    """The board SUMS rows across characters, so each publishes ⌈deficit/5⌉."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero", fleet_size=5)
+    p.state = make_state()
+    p.game_data = _make_planner_gd()
+    p._supply_shortfall = (("cooked_bass", 23),)
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="HAL")
+    p.set_coordination_store(store)
+    try:
+        p._update_coordination(p.state, p.game_data)
+        assert sibling.sibling_demand(datetime.now(tz=timezone.utc)).get("cooked_bass") == 5
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_without_a_store_no_sibling_heals_are_counted():
+    p = GamePlayer(character="hero")
+    p.state = make_state()
+    p.game_data = _make_planner_gd()
+    p._sibling_consumables = {"cooked_bass": 9}
+    p._update_coordination(p.state, p.game_data)
+    assert p._sibling_consumables == {}
+
+
+def test_the_shortfall_reaches_the_selection_context(monkeypatch):
+    p = GamePlayer(character="hero", fleet_size=3)
+    p.state = make_state()
+    p.game_data = _make_planner_gd()
+    p._sibling_consumables = {"cooked_bass": 4}
+    seen = {}
+
+    def shortfall(state, gd, history, monster, fleet, siblings):  # type: ignore[no-untyped-def]
+        seen.update(fleet=fleet, siblings=siblings)
+        return (("cooked_bass", 11),)
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.supply_shortfall", shortfall)
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))
+    ctx = p._selection_context(combat_monster=None)
+    assert ctx.supply_shortfall == (("cooked_bass", 11),)
+    assert p._supply_shortfall == (("cooked_bass", 11),)
+    assert seen == {"fleet": 3, "siblings": {"cooked_bass": 4}}

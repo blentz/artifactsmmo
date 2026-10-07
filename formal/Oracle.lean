@@ -1924,6 +1924,22 @@ def runTaskDrawDue (args : Array Json) : Json :=
   let n : Nat → Nat := fun k => (intArg args k).toNat
   Json.mkObj [("due", Json.bool (Formal.TaskWorth.drawDue (n 0) (n 1) (n 2)))]
 
+/-- The fleet's consumable floor (`Formal.ConsumableFloor`). Args:
+`[charLevel, n, level_0, restore_0, … , target, fleet, stock]`. Emits the
+tier pick (-1 for none), the deficit and the published share. -/
+def runConsumableFloor (args : Array Json) : Json :=
+  let k : Nat → Nat := fun i => (intArg args i).toNat
+  let n := k 1
+  let cands := (List.range n).map fun i => (k (2 + 2 * i), k (3 + 2 * i))
+  let base := 2 + 2 * n
+  let deficit := Formal.ConsumableFloor.fleetDeficit (k base) (k (base + 1)) (k (base + 2))
+  let pick : Int := match Formal.ConsumableFloor.tierPick (k 0) cands with
+    | some j => Int.ofNat j
+    | none => -1
+  Json.mkObj [("pick", Json.num pick), ("deficit", Json.num (Int.ofNat deficit)),
+              ("share", Json.num (Int.ofNat (Formal.ConsumableFloor.publishShare deficit
+                (k (base + 1)))))]
+
 /-- Compute one inventory_chain_safe result. Single shared dispatcher for the
 four chain_safe instantiations and the TaskCancel coin step.
 
@@ -3020,6 +3036,8 @@ def runOne (item : Json) : Json :=
     runTaskWorth args
   else if kind == "task_draw_due" then
     runTaskDrawDue args
+  else if kind == "consumable_floor" then
+    runConsumableFloor args
   else if kind == "inventory_chain_safe" then
     runInventoryChainSafe args
   else if kind == "inventory_profile" then

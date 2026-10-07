@@ -347,7 +347,8 @@ def test_task_cancel_discards_a_task_that_advances_nothing():
 
 
 def test_a_paying_task_is_not_discarded():
-    """The negative arm: the chicken pays XP at level 1, so it is kept.
+    """The negative arm: the chicken pays XP at level 1, and character level is
+    demanded (c-2 #5: the XP must be DAG-demanded), so it is kept.
 
     `attack` is REQUIRED here. A character's base combat stats are zero (the
     server reports totals = base 0 + gear), so a state with no attack loses to
@@ -363,7 +364,7 @@ def test_a_paying_task_is_not_discarded():
                        task_type="monsters",
                        task_total=10, task_progress=0,
                        inventory={"tasks_coin": 1})
-    assert held_task_cancel_due(state, gd, _ctx(), None) is False
+    assert held_task_cancel_due(state, gd, _ctx(level_demanded=True), None) is False
 
 
 def test_without_a_coin_a_grey_task_is_worked_not_discarded():
@@ -725,7 +726,7 @@ def test_a_fight_gear_closes_is_kept_however_far_above_the_character_it_is():
                        task_code="rat", task_type="monsters",
                        task_total=10, task_progress=0,
                        inventory={"tasks_coin": 1})
-    assert held_task_cancel_due(state, gd, _ctx(), None) is False
+    assert held_task_cancel_due(state, gd, _ctx(level_demanded=True), None) is False
 
 
 def test_the_verdict_and_the_goal_it_emits_report_the_same_answer():

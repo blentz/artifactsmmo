@@ -51,6 +51,7 @@ import Formal.GatherSelection
 import Formal.GatherCost
 import Formal.TurnRotation
 import Formal.TaskWorth
+import Formal.ConsumableFloor
 import Formal.ShoppingList
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
@@ -3463,3 +3464,15 @@ example : ∀ (worthy size coinReward : Nat),
     Formal.TaskWorth.drawDue worthy size coinReward = true ↔
       0 < worthy ∧ size - worthy ≤ coinReward * worthy :=
   @Formal.TaskWorth.drawDue_iff
+
+/-! ### ConsumableFloor contracts. -/
+
+example : ∀ (charLevel : Nat) (cands : List (Nat × Nat)) (j : Nat) (b : Nat × Nat),
+    Formal.ConsumableFloor.tierPickAux charLevel cands 0 none = some (j, b) →
+      ∀ c ∈ cands, Formal.ConsumableFloor.eligible charLevel c = true →
+        Formal.ConsumableFloor.better c b = false :=
+  @Formal.ConsumableFloor.tierPick_optimal
+
+example : ∀ (deficit fleet : Nat), 0 < fleet →
+    deficit ≤ Formal.ConsumableFloor.publishShare deficit fleet * fleet :=
+  @Formal.ConsumableFloor.publishShare_covers

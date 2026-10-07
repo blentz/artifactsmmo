@@ -353,6 +353,9 @@ TASK_KILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "task_kill
 STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
 TASK_WORTH_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth_core.py"
 CURRENCY_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_demand.py"
+XP_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "xp_demand.py"
+CONSUMABLE_FLOOR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor_core.py"
+CONSUMABLE_FLOOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor.py"
 TASK_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth.py"
 FIGHT_UPKEEP_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "fight_upkeep_core.py"
 BAND_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "band_target.py"
@@ -5035,12 +5038,101 @@ POOL_DRAW_MUTATIONS = [
      "task_worth_for(task.code, master, task.min_quantity,"),
 ]
 DRAW_CONTEXT_MUTATIONS = [
+    ("draw ctx: the DAG's XP demand never reaches the context",
+     "        ctx = replace(ctx, skill_demand=skills, level_demanded=level)\n",
+     ""),
     ("draw ctx: an offline scenario draws",
      "        if not self._draws_enabled:\n            return ctx\n",
      ""),
     ("draw ctx: the pool verdict never reaches the context",
      "        return replace(ctx, draw_owed=due, draw_master=master)",
      "        return ctx"),
+]
+XP_DEMAND_MUTATIONS = [
+    ("xp demand: gather skills are not demanded",
+     "    skills.update(gather_demand(roots, state, game_data, ctx))\n",
+     "    pass\n"),
+    ("xp demand: a met skill root still demands its skill",
+     "        if isinstance(root, ReachSkillLevel) and state.skills.get(root.skill, 1) < root.level:\n",
+     "        if isinstance(root, ReachSkillLevel):\n"),
+    ("xp demand: a met level root still demands level",
+     "        elif isinstance(root, ReachCharLevel) and state.level < root.level:\n",
+     "        elif isinstance(root, ReachCharLevel):\n"),
+    ("xp demand: gear above the character demands no level",
+     "            if stats is not None and stats.level > state.level:\n",
+     "            if False:\n"),
+    ("xp demand: worn targets are still demanded",
+     "for code in sorted(ctx.target_gear | ctx.near_term_targets) if code not in worn)",
+     "for code in sorted(ctx.target_gear | ctx.near_term_targets))"),
+]
+TASK_XP_DEMANDED_MUTATIONS = [
+    ("task xp: character XP counts without level demand",
+     "        return ctx.level_demanded\n",
+     "        return True\n"),
+    ("task xp: any skill's XP counts",
+     "    return requirement is not None and requirement[0] in ctx.skill_demand\n",
+     "    return requirement is not None\n"),
+    ("task xp: unpaid XP counts",
+     "    if not task_advances_progression(probe, game_data):\n        return False\n    if task_type",
+     "    if task_type"),
+]
+# The fleet consumable floor (c-2 #5 §10). Killed by
+# tests/test_ai/test_consumable_floor.py / test_player_coordination.py.
+CONSUMABLE_FLOOR_CORE_MUTATIONS = [
+    ("floor: a tier above the character is picked",
+     "        if level > char_level or restore <= 0:\n",
+     "        if restore <= 0:\n"),
+    ("floor: a tie goes to the lower level",
+     "        if best is None or (restore, level) > (best[1][1], best[1][0]):\n",
+     "        if best is None or restore > best[1][1]:\n"),
+    ("floor: the fleet size is ignored",
+     "    return max(0, target * fleet - stock)\n",
+     "    return max(0, target - stock)\n"),
+    ("floor: the share rounds down",
+     "    return -(-deficit // fleet)\n",
+     "    return deficit // fleet\n"),
+]
+CONSUMABLE_FLOOR_MUTATIONS = [
+    ("floor: the utility slots are not counted",
+     "        if worn is not None and qty > 0:\n",
+     "        if False:\n"),
+    ("floor: siblings' heals are not counted",
+     "        stock = own.get(code, 0) + siblings.get(code, 0) + bank.get(code, 0)\n",
+     "        stock = own.get(code, 0) + bank.get(code, 0)\n"),
+    ("floor: the potion floor ignores the fight ahead",
+     "else heal_stock_target(state, game_data, history, fight_monster, code))",
+     "else heal_stock_target(state, game_data, history, None, code))"),
+    ("floor: a met floor still reports a shortfall",
+     "        if deficit > 0:\n            out.append((code, deficit))\n",
+     "        out.append((code, deficit))\n"),
+]
+CONSUMABLE_DEMAND_MUTATIONS = [
+    ("floor demand: the shortfall seeds no DAG root",
+     "    roots.extend(ObtainItem(code, qty) for code, qty in ctx.supply_shortfall)\n",
+     ""),
+]
+CONSUMABLE_SHORT_MUTATIONS = [
+    ("floor demand: the shortfall's ingredients are never short",
+     "    stack.extend(ctx.supply_shortfall)\n",
+     ""),
+]
+CONSUMABLE_PLAYER_MUTATIONS = [
+    ("floor player: heals are not published",
+     "        for code, qty in consumable_holdings(state, game_data).items():\n"
+     "            holdings[code] = holdings.get(code, 0) + qty\n",
+     ""),
+    ("floor player: siblings' heals are not read",
+     "        self._sibling_consumables = self._coordination.sibling_holdings(now)\n",
+     ""),
+    ("floor player: the whole deficit is published by every character",
+     "                                   publish_share(deficit, self._fleet_size))\n",
+     "                                   deficit)\n"),
+    ("floor player: stale sibling heals survive a detached store",
+     "            self._sibling_consumables = {}\n            return\n",
+     "            return\n"),
+    ("floor player: the shortfall never reaches the context",
+     "        ctx = replace(ctx, supply_shortfall=self._supply_shortfall)\n",
+     ""),
 ]
 GOLD_SHORT_MUTATIONS = [
     ("gold short: the root's purchases are not counted",
@@ -9270,6 +9362,20 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_draw_owed.py", survivors)
     run_group(PLAYER_SRC, DRAW_CONTEXT_MUTATIONS,
               "tests/test_ai/test_draw_owed.py", survivors)
+    run_group(XP_DEMAND_SRC, XP_DEMAND_MUTATIONS,
+              "tests/test_ai/test_xp_demand.py", survivors)
+    run_group(TASK_WORTH_SRC, TASK_XP_DEMANDED_MUTATIONS,
+              "tests/test_ai/test_task_worth.py", survivors)
+    run_group(CONSUMABLE_FLOOR_CORE_SRC, CONSUMABLE_FLOOR_CORE_MUTATIONS,
+              "tests/test_ai/test_consumable_floor.py", survivors)
+    run_group(CONSUMABLE_FLOOR_SRC, CONSUMABLE_FLOOR_MUTATIONS,
+              "tests/test_ai/test_consumable_floor.py", survivors)
+    run_group(XP_DEMAND_SRC, CONSUMABLE_DEMAND_MUTATIONS,
+              "tests/test_ai/test_consumable_floor.py", survivors)
+    run_group(TASK_WORTH_SRC, CONSUMABLE_SHORT_MUTATIONS,
+              "tests/test_ai/test_consumable_floor.py", survivors)
+    run_group(PLAYER_SRC, CONSUMABLE_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
     run_group(PLAYER_SRC, GOLD_SHORT_MUTATIONS,
               "tests/test_ai/test_task_worth.py", survivors)
     run_group(TASK_WORTH_SRC, TASK_WORTH_HORIZON_MUTATIONS,

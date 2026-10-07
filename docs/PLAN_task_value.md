@@ -287,3 +287,173 @@ are untouched; the residual stays a residual.
 - **Recording draws** (USER "record each accepted draw"): the `cycles` rows
   already hold each `AcceptTask` and the next cycle's `task_code`, so no new
   table is needed.
+
+## 9. Increment 4 plan: the XP reason comes from DAG demand
+
+### 9.1 USER principle (2026-10-07, verbatim)
+
+"the seesaw was describing emergent behavior. architecturally, the planner
+should be GOAP and A* oriented to produce the emergent seesaw behaviors through
+complete definition of goal-action based batch-aware, deduped-actions DAG".
+
+Answers to the questions put:
+- Skill XP: "Skills the chain needs".
+- GE bypass: "No, buying bypasses it".
+
+So XP has NO phase rule. A task's XP is a reason exactly when the goal-action
+DAG has unmet demand for it.
+
+### 9.2 Today's defect
+
+`task_advances_progression` reads "pays the character ANY XP, or ANY skill
+XP". Live, items tasks were worthy for any producing skill (16/27), so the
+fleet would draw items tasks whether or not a chain needs those skills.
+
+### 9.3 Rule
+
+- **Demand:** the unmet requirements of the decomposition of the chosen root,
+  the unmet target gear and the near-term targets. It is the same walk the
+  objective uses (`RequirementGraph` / `ObtainModel.walk`), batch-aware and
+  deduplicated:
+  - a SKILL demand is `skill → highest unmet level` (the existing
+    `craft_demand` / `gather_demand` walks);
+  - a CHARACTER-LEVEL demand is an unmet level gate in that DAG, or the root
+    itself being `ReachCharLevel`.
+- **XP reason:**
+  - a monsters task counts when its kill pays character XP AND the DAG demands
+    character level;
+  - an items task counts when its producing skill pays XP AND the DAG demands
+    that skill above its current level.
+- **GE/NPC bypass:** a node the walk can BUY and afford is a leaf. Its craft
+  subtree, and the skill demand under it, are not walked, so buying bypasses
+  the grind. If gold is short, the purchase is gold demand (the GOLD reason).
+
+### 9.4 Dependency (ask before building)
+
+The obtain walk's route order is WITHDRAW, RECYCLE, CRAFT, GATHER, BUY,
+GE_FILL. CRAFT comes before BUY, so today an affordable purchase does NOT
+prune the craft subtree. "Buying bypasses it" needs the walk to prefer an
+affordable buy over a craft whose skill gate is unmet. That changes the
+obtain model itself, not just task worth, and affects every acquisition, not
+only tasks.
+
+### 9.5 Formal
+
+- `TaskWorthInputs.xp_positive` becomes `xp_demanded`. The Lean verdict and its
+  theorems are unchanged: it is still a Bool input.
+- The new proof obligation is in the demand walk: a skill or level is demanded
+  only if some unmet DAG node requires it. This needs a Lean model of the
+  demand closure if the existing `RequirementGraph` proofs do not already
+  cover it (to check).
+
+### 9.6 Step 1 built (2026-10-07; USER "Two steps")
+
+- `ai/xp_demand.py`: `demand_roots` (the chosen root, then the unworn target
+  and near-term gear) and `xp_demand` (skills from `craft_demand` ∪
+  `gather_demand` ∪ an unmet `ReachSkillLevel` root; character level from an
+  unmet `ReachCharLevel` root or an `ObtainItem` whose level is above the
+  character).
+- `ctx.skill_demand` / `ctx.level_demanded` are set by the player before
+  `pool_draw`. It lives in the player-side module because `task_worth` sits
+  under `route` (import cycle).
+- `task_worth._xp_demanded`: XP is a reason only when it is paid AND
+  demanded.
+- **Live probe (scratch DB):**
+  - fishing and cooking items tasks are no longer worthy (shrimp, trout, bass,
+    cooked fish), because no chain demands those skills;
+  - C3P0: monsters 9/21 against items 10/27, so it draws at monsters;
+  - Lor: 7/21 against 8/27, so monsters;
+  - Robby (L35): 9/25 against 12/31, so items.
+- **Step 2 (next, separate):** the obtain walk prices craft against an
+  affordable buy and takes the cheaper ("buying bypasses it"). It touches
+  every acquisition, so it gets its own census and witness.
+
+## 10. Consumable supply is DAG demand (fleet bank minimum)
+
+### 10.1 USER (2026-10-07, verbatim)
+
+"Fishing feeds Cooking, Cooking feeds HP recovery or provides stat bonuses.
+Both cases require pre-emptive crafting of an available supply. The fleet can
+collectively maintain a minimum supply in the bank."
+
+### 10.2 Gap (mapped 2026-10-07)
+
+- Consumable stock is per character and bag-only. The heal food floor is a flat
+  5 (`consumable_supply.HEAL_STOCK_FLOOR`). Potions are counted equipped against
+  `potion_supply.heal_stock_target`. The bank is only a withdraw source.
+- Nothing keeps a fleet or bank MINIMUM of any item.
+- The fleet demand board publishes only the crafting/blocked-target closure
+  (`_own_unmet_demand`). Consumables never reach `SupplyBank`.
+- `xp_demand` is seeded only from the chosen root and target gear. Cooking,
+  fishing and alchemy XP is demanded only when gear leads there, so step 1 would
+  call a fishing/cooking task worthless while the fleet's heal supply needs it.
+- No catalogue `consumable` (food) carries a buff today; buffs are on `utility`
+  potions only. A buff-food arm is a shape to model, not live data.
+
+### 10.3 Design
+
+- **Fleet floor per consumable class** (heal food, heal potion, boost
+  potion): `floor = fleet_size × per-character target` (§10.4 Q1).
+  - Stock = bank + every character's bag and equipped slots. The bags come from
+    the holdings ledger (`publish_holdings`); the slots need publishing too.
+- **The consumable the floor is FOR:** the tier-appropriate one (§10.4 Q2). If
+  that is the best heal whose ITEM level ≤ the character's level, regardless of
+  current cooking skill, its recipe closure demands cooking and fishing above
+  their current level. That makes the seesaw's skill demand emerge from the
+  DAG.
+- **Shortfall as DAG demand:**
+  - `demand_roots` adds `ObtainItem(consumable, deficit)`, so `xp_demand`
+    names its skills;
+  - `short_items` adds its closure, so a task monster dropping its meat counts
+    as DROPS.
+- **Fleet maintenance:** publish the shortfall on the existing demand board, so
+  `SUPPLY_BANK` (one claimed producer, bank-deposited) fills it (§10.4 Q3).
+- **Formal:** the floor and deficit as a pure core with a Lean model and a
+  differential (stock, floor and deficit monotone; no deficit at or above the
+  floor).
+
+### 10.4 USER answers (2026-10-07)
+
+1. Floor: "Fleet size × per-char target".
+2. Tier: "Tier-appropriate" (item level ≤ character level, even if a
+   skill cannot make it yet; the skill demand that creates is the seesaw).
+3. Fill: "Yes, via SupplyBank", in the same increment.
+4. Step 1: "Hold, ship with supply". Step 1 stays uncommitted (gate91 was
+   green) and ships with the supply roots.
+
+### 10.5 The questions as asked
+
+1. Floor size.
+2. Which consumable tier.
+3. Whether the fleet fills it through SupplyBank now or only counts it as
+   demand.
+4. Commit step 1 now or hold it.
+
+### 10.6 Built (2026-10-07; ships with §9 step 1)
+
+- **Core:** `ai/consumable_floor_core.py` (`tier_pick`, `fleet_deficit`,
+  `publish_share`).
+- **Lean:** `Formal/ConsumableFloor.lean` — `tierPick_eligible`,
+  `tierPick_optimal` (nothing eligible beats it), `fleetDeficit_zero_iff`,
+  `fleetDeficit_antitone`, `publishShare_covers`, `publishShare_le`,
+  `publishShare_one`, plus witnesses. Oracle `consumable_floor`, differential.
+- **`ai/consumable_floor.py`:**
+  - two classes: heal food (`consumable`, target `HEAL_STOCK_FLOOR`) and heal
+    potion (`utility`, `potion_supply.heal_stock_target` against the fight
+    ahead);
+  - stock = bank + own bag and utility slots + siblings' published holdings.
+- **`GamePlayer(fleet_size=…)`** (from `play --fleet-size`, 1 alone):
+  - publishes heal holdings with the dual-role ones and reads siblings';
+  - sets `ctx.supply_shortfall` and publishes ⌈deficit / fleet⌉ on the demand
+    board, so `SUPPLY_BANK`'s claimed producer (fisher/alchemist role) fills it.
+- **The shortfall is DAG demand:** it seeds `demand_roots` (skill / level
+  demand) and `short_items` (DROPS).
+- **Live probe (scratch DB, L30-31):**
+  - the tier food is `cooked_rat_meat`; the fleet holds 0 of 25;
+  - C3P0's cooking is demanded (cooked_trout and cooked_bass tasks count
+    again);
+  - rat and wolf tasks count as DROPS;
+  - fishing is not demanded at this tier because the best food is meat — the
+    DAG's answer, not a rule.
+- **Residual:** boost potions are sized per monster by the potion guard and
+  not floored. No catalogue food carries a buff.

@@ -5,7 +5,8 @@
 * feasible: the task's fight is won, or gear or one level closes it
   (`resolve_task_horizon`; only OUT_OF_REACH is infeasible). An items task is
   feasible: its producing chain is the objective walk's to find.
-* XP: `task_alignment.task_advances_progression`.
+* XP: paid (`task_alignment.task_advances_progression`) AND demanded by the
+  goal-action DAG (`ctx.skill_demand` / `ctx.level_demanded`, `xp_demand`).
 * GOLD short: `ctx.gold_short` — account gold (pocket + bank) below the
   larger of the progression reserve and the gold the chosen root will spend at
   vendors (USER "Both, the larger"; computed by the player, which owns both).
@@ -54,6 +55,7 @@ def short_items(state: WorldState, game_data: GameData, ctx: SelectionContext) -
     short: set[str] = set()
     worn = {code for code in state.equipment.values() if code is not None}
     stack = [(code, 1) for code in ctx.target_gear | ctx.near_term_targets if code not in worn]
+    stack.extend(ctx.supply_shortfall)
     while stack:
         code, qty = stack.pop()
         have = min(stock[code], qty)
@@ -87,6 +89,20 @@ def _task_gold_rate(code: str, task_type: str | None, remaining: int, state: Wor
     return Fraction(reward, max(1, actions))
 
 
+def _xp_demanded(code: str, task_type: str | None, probe: WorldState,
+                 game_data: GameData, ctx: SelectionContext) -> bool:
+    """The task pays XP the goal-action DAG demands (USER 2026-10-07: the
+    seesaw is emergent — no phase rule). A monsters task's character XP counts
+    when character level is demanded; an items task's skill XP when its
+    producing skill is (`ctx.skill_demand`, from `xp_demand`)."""
+    if not task_advances_progression(probe, game_data):
+        return False
+    if task_type == "monsters":
+        return ctx.level_demanded
+    requirement = game_data.producing_requirement(code)
+    return requirement is not None and requirement[0] in ctx.skill_demand
+
+
 def task_worth_for(code: str, task_type: str | None, remaining: int, state: WorldState,
                    game_data: GameData, ctx: SelectionContext,
                    history: LearningStore | None) -> TaskWorth:
@@ -110,7 +126,7 @@ def task_worth_for(code: str, task_type: str | None, remaining: int, state: Worl
             other = _fight_gold_rate(state, game_data, ctx.combat_monster)
     return task_worth(TaskWorthInputs(
         feasible=feasible,
-        xp_positive=task_advances_progression(probe, game_data),
+        xp_positive=_xp_demanded(code, task_type, probe, game_data, ctx),
         gold_short=ctx.gold_short,
         task_gold_rate=task_rate,
         other_gold_rate=other,
