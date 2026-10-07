@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.intention_progress import (
     BUDGET_CYCLES,
     EXIT_CYCLES,
@@ -70,6 +71,22 @@ def test_an_intention_that_spends_its_budget_ends_and_its_turn_is_recorded(tmp_p
     assert player.history.load_turns() == {repr(goal): 1}
     assert (Mechanism.INTENTION_BUDGET, repr(goal), f"budget:{BUDGET_CYCLES}") \
         in player._arbiter.events.drain()
+
+
+def test_guard_cycles_under_the_commitment_spend_its_turn():
+    """USER 2026-10-06: the guards run for the intention, so their cycles spend
+    its turn. Live, Lor's death_knight grind was ~20% of its cycles (the rest
+    potions and rest for it): one turn lasted ~6h and the task never got one."""
+    goal = GrindCharacterXPGoal("vampire")
+    player = _player()
+    player._arbiter._committed_repr = repr(goal)
+    state = make_state()
+    for _ in range(BUDGET_CYCLES - 1):
+        player._track_intention(RestoreHPGoal(), state, state, ok=True)
+    assert player._arbiter._committed_repr == repr(goal)
+    player._track_intention(goal, state, state, ok=True)
+    assert player._arbiter._committed_repr is None
+    assert player._turns == {repr(goal): 1}
 
 
 def test_progress_does_not_reset_the_budget():

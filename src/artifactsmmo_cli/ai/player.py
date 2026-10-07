@@ -2248,28 +2248,34 @@ class GamePlayer:
         against the last-resort exit (Phase 4-3c: `EXIT_CYCLES` committed cycles
         with no progress across intentions raise `StuckExit`).
 
-        Only a cycle that ran the COMMITTED goal counts: a guard interrupting
-        it (RestoreHP between fights) is neither progress nor stall. Two facts
-        end an intention, each named:
+        A guard interrupting it (RestoreHP between fights) is neither progress
+        nor stall: only a cycle that ran the COMMITTED goal moves the stall
+        count. But every cycle under the commitment spends its TURN, the
+        guard's included (USER 2026-10-06): the guards run for the intention,
+        so an upkeep-heavy one must not hold the turn longer. Live, Lor's
+        death_knight grind ran ~20% of its cycles, the rest potions and rest
+        for it; one turn lasted ~6h and the task objective's turn never came.
+        Two facts end an intention, each named:
 
-        * a stall — `STALL_CYCLES` committed cycles without progress
+        * a stall — `STALL_CYCLES` cycles of the committed goal without progress
           (`intention_progress.progressed`; progress resets this count);
-        * a spent budget — `BUDGET_CYCLES` committed cycles, progress or not
-          (fairness: the committed goal's turn is recorded, `_turns`, and goal
-          choice serves every other plannable goal before it runs again).
+        * a spent budget — `BUDGET_CYCLES` cycles under the commitment, progress
+          or not (fairness: the committed goal's turn is recorded, `_turns`, and
+          goal choice serves every other plannable goal before it runs again).
 
         A new commitment starts its own counts."""
         committed = self._arbiter._committed_repr
         if committed != self._intention_counted:
             self._intention_counted = committed
             self._intention_stall = self._intention_cycles = 0
-        if committed is None or goal is None or repr(goal) != committed:
+        if committed is None or goal is None:
             return
         self._intention_cycles += 1
-        if progressed(progress_measure(goal, before), progress_measure(goal, after), ok):
+        own = repr(goal) == committed
+        if own and progressed(progress_measure(goal, before), progress_measure(goal, after), ok):
             self._intention_stall = 0
             self._cycles_without_progress = 0
-        else:
+        elif own:
             self._intention_stall += 1
             self._cycles_without_progress += 1
             if self._cycles_without_progress >= EXIT_CYCLES:

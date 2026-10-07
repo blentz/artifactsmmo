@@ -4660,9 +4660,14 @@ INTENTION_BUDGET_MUTATIONS = [
     # Progress resets the budget too: an intention that keeps making progress
     # never spends it, so a root that progresses slowly holds the fleet forever.
     ("budget: progress resets the cycle budget as well as the stall count",
-     "            self._intention_stall = 0\n            self._cycles_without_progress = 0\n        else:\n",
+     "            self._intention_stall = 0\n            self._cycles_without_progress = 0\n        elif own:\n",
      "            self._intention_stall = self._intention_cycles = 0\n"
-     "            self._cycles_without_progress = 0\n        else:\n"),
+     "            self._cycles_without_progress = 0\n        elif own:\n"),
+    # A guard's cycle spends no turn: an upkeep-heavy intention holds the turn
+    # (Lor's death_knight grind, ~6h a turn, 2026-10-07; USER: count them).
+    ("budget: a guard cycle under the commitment does not spend its turn",
+     "        self._intention_cycles += 1\n        own = repr(goal) == committed\n",
+     "        own = repr(goal) == committed\n        self._intention_cycles += own\n"),
     # The budget is never spent: no intention ever yields, the ring2 shape.
     ("budget: the cycle budget is never spent",
      "        elif self._intention_cycles >= BUDGET_CYCLES:\n",
