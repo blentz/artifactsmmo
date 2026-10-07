@@ -613,6 +613,11 @@ def objective_step_goal(
             # the master whose pool best serves the ACTIVE LINK's demand
             # (`link_demand(needs)`, not the whole gear sheet, which makes every
             # master look equally useful); None means the default master.
+            if ctx.draw_master is not None:
+                # c-2 #5 (USER "Higher worthy share"): the master whose pool is
+                # the more worth drawing from.
+                return AcceptTaskGoal(taskmaster_location=game_data.taskmaster_tiles[ctx.draw_master],
+                                      taskmaster_code=ctx.draw_master)
             chosen = choose_taskmaster(state, game_data, link_demand(needs))
             if chosen is None:
                 return AcceptTaskGoal()

@@ -1918,6 +1918,12 @@ def runTaskWorth (args : Array Json) : Json :=
               ("drops", Json.bool w.drops),
               ("cancel", Json.bool (Formal.TaskWorth.cancelDue w (b 8) (b 9)))]
 
+/-- Whether a task draw is due (`Formal.TaskWorth.drawDue`). Args:
+`[worthy, size, coinReward]`. -/
+def runTaskDrawDue (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  Json.mkObj [("due", Json.bool (Formal.TaskWorth.drawDue (n 0) (n 1) (n 2)))]
+
 /-- Compute one inventory_chain_safe result. Single shared dispatcher for the
 four chain_safe instantiations and the TaskCancel coin step.
 
@@ -3012,6 +3018,8 @@ def runOne (item : Json) : Json :=
     runTurnRotationPick args
   else if kind == "task_worth" then
     runTaskWorth args
+  else if kind == "task_draw_due" then
+    runTaskDrawDue args
   else if kind == "inventory_chain_safe" then
     runInventoryChainSafe args
   else if kind == "inventory_profile" then

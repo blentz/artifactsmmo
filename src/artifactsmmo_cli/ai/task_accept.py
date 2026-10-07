@@ -9,9 +9,10 @@ from artifactsmmo_cli.ai.world_state import WorldState
 def accept_due(state: WorldState, ctx: SelectionContext) -> bool:
     """No task held, and a draw owed.
 
-    S-051 + the no-immediate-redraw rule: a draw must be OWED
-    (`ctx.draw_owed`, set when the course changes and cleared once a task is
-    held), so a discarded draw is not taken back at once.
+    A draw is OWED when the master's pool is worth drawing from
+    (`task_worth.pool_draw`, USER 2026-10-07: rerolls cost at most the coins a
+    completion pays), so a cancelled worthless draw is redrawn only while the
+    pool's economics allow.
 
     USER 2026-10-06: no gear-chain deferral. The accept used to wait while any
     target gear was owned-unequipped or craftable at the current skill level —

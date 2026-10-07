@@ -368,7 +368,8 @@ class TestArbiterSelection:
         and won outright.)"""
         player = self._with_strategy(make_game_data_mock(), level=3,
                                      task_type=None, task_code=None)
-        ctx = player._selection_context()
+        with patch("artifactsmmo_cli.ai.player.pool_draw", return_value=(True, None)):
+            ctx = player._selection_context()
         decision = player._strategy.decide(player.state, player.game_data, ctx=ctx)
         actions = player._build_actions()
         goal, _plan, _tried = player._arbiter.select(
@@ -382,14 +383,11 @@ class TestArbiterSelection:
 
     def test_idle_no_task_selects_xp_grind_once_no_draw_is_owed(self):
         """The other half: with the draw spent, the objective step is what runs.
-        A taskless character does not sit accepting — it takes ONE draw per
-        course (the USER's no-immediate-redraw rule) and then gets on with it."""
+        A taskless character with no draw owed (its pool not worth drawing
+        from, c-2 #5) gets on with the objective."""
         player = self._with_strategy(make_game_data_mock(), level=3,
                                      task_type=None, task_code=None)
-        player._draw_owed = False
-        # Same course as the tracker already holds, so nothing re-arms the draw.
-        # `_last_decision` is None here, and the tracker stores that as None too.
-        player._draw_course = None
+        player._draws_enabled = False
         decision = player._strategy.decide(player.state, player.game_data)
         actions = player._build_actions()
         goal, _plan, _tried = player._arbiter.select(

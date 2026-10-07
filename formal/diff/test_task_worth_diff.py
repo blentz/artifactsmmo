@@ -6,7 +6,7 @@ from fractions import Fraction
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.task_worth_core import TaskWorthInputs, cancel_due, task_worth
+from artifactsmmo_cli.ai.task_worth_core import TaskWorthInputs, cancel_due, draw_due, task_worth
 from formal.diff.oracle_client import run_oracle
 
 _rate = st.builds(Fraction, st.integers(min_value=0, max_value=500),
@@ -34,3 +34,19 @@ def test_equal_rates_are_not_faster():
     assert not task_worth(inputs).gold
     lean = run_oracle("task_worth", [[1, 0, 1, 7, 3, 7, 3, 0, 1, 0]])[0]
     assert lean["gold"] is False and lean["cancel"] is True
+
+
+@settings(max_examples=500, deadline=None)
+@given(size=st.integers(min_value=0, max_value=40), data=st.data(),
+       reward=st.integers(min_value=0, max_value=10))
+def test_draw_due_matches_lean(size, data, reward):
+    worthy = data.draw(st.integers(min_value=0, max_value=size))
+    lean = run_oracle("task_draw_due", [[worthy, size, reward]])[0]
+    assert lean["due"] == draw_due(worthy, size, reward), (worthy, size, reward)
+
+
+def test_the_live_pools_owe_a_draw():
+    """2026-10-07, level 30-32: 9/21 and 7/21 worthy, 4 coins a completion."""
+    assert draw_due(9, 21, 4) and draw_due(7, 21, 4)
+    assert run_oracle("task_draw_due", [[7, 21, 4]])[0]["due"] is True
+    assert not draw_due(4, 21, 4)  # 17 rerolls > 4 * 4

@@ -144,4 +144,42 @@ example : cancelDue ⟨false, false, false⟩ true false = true := by decide
 example : (worth ⟨true, false, true, 3, 1, 1, 1, false⟩).gold = true := by decide
 example : drawOwed [⟨false, false, false⟩, ⟨false, false, true⟩] = true := by decide
 
+/-! ## The draw (increment 3, USER 2026-10-07: "Rerolls ≤ completion coins")
+
+A worthless draw is cancelled for one coin, so with `worthy` of `size` pool
+tasks worth working the expected coins spent before a worthy draw is
+`(size - worthy) / worthy`. A draw is due when that is at most the coins a
+completion pays, cross-multiplied so the model never divides. -/
+
+def drawDue (worthy size coinReward : Nat) : Bool :=
+  decide (0 < worthy) && decide (size - worthy ≤ coinReward * worthy)
+
+theorem drawDue_iff (worthy size coinReward : Nat) :
+    drawDue worthy size coinReward = true ↔ 0 < worthy ∧ size - worthy ≤ coinReward * worthy := by
+  simp [drawDue]
+
+/-- A pool with no worthy task never owes a draw. -/
+theorem drawDue_none (size coinReward : Nat) : drawDue 0 size coinReward = false := by
+  simp [drawDue]
+
+/-- More worthy tasks in the same pool never revoke a due draw. -/
+theorem drawDue_mono (w w' size coinReward : Nat) (h : drawDue w size coinReward = true)
+    (hw : w ≤ w') : drawDue w' size coinReward = true := by
+  rw [drawDue_iff] at h ⊢
+  refine ⟨Nat.lt_of_lt_of_le h.1 hw, ?_⟩
+  calc size - w' ≤ size - w := Nat.sub_le_sub_left hw size
+    _ ≤ coinReward * w := h.2
+    _ ≤ coinReward * w' := Nat.mul_le_mul_left coinReward hw
+
+/-- A due draw names a worthy task in the pool: it refines `drawOwed`. -/
+theorem drawDue_refines_drawOwed (pool : List Worth) (r : Nat)
+    (h : drawDue (pool.countP Worth.any) pool.length r = true) : drawOwed pool = true := by
+  rw [drawDue_iff] at h
+  rw [drawOwed_iff]
+  have := List.countP_pos_iff.mp h.1
+  simpa using this
+
+example : drawDue 9 21 4 = true := by decide
+example : drawDue 1 21 4 = false := by decide
+
 end Formal.TaskWorth

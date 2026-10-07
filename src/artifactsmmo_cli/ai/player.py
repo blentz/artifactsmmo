@@ -150,6 +150,7 @@ from artifactsmmo_cli.ai.strategy_driver import (
 )
 from artifactsmmo_cli.ai.supply_batch_target import supply_batch_target_pure
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
+from artifactsmmo_cli.ai.task_worth import pool_draw
 from artifactsmmo_cli.ai.tiers import (
     CharacterObjective,
     ObtainItem,
@@ -260,11 +261,9 @@ class GamePlayer:
         # decision; `StrategyEngine.decide` delegates to `decide_tree`, so
         # what's stashed here is what drove arbiter/select this cycle.
         self._last_decision: StrategyDecision | None = None
-        # A task DRAW is owed for the course in flight (S-051 + the USER's
-        # no-immediate-redraw rule). True at the start: a fresh character owes
-        # its first draw. See `_draw_owed_for_course`.
-        self._draw_owed: bool = True
-        self._draw_course: str | None = None
+        # Task draws are judged by pool worth (`task_worth.pool_draw`) unless
+        # an offline scenario turns them off (`seed_offline`).
+        self._draws_enabled: bool = True
         self.state: WorldState | None = None
         self.game_data: GameData | None = None
         # Generic blocker registry — replaces what used to be ~5 bank-specific
@@ -846,15 +845,11 @@ class GamePlayer:
         blockers ARE seeded from game_data so scenario plans see the same
         near-future gates the live bot does.
 
-        NO DRAW IS OWED (2026-08-19). A course owes a task draw when the
-        objective's chosen root CHANGES, and an offline scenario carries no
-        course history — there is no previous cycle for the change to be
-        relative to. Leaving the flag up would put ACCEPT_TASK, a collect rung
-        above the objective step, first in every taskless scenario and mask the
-        routing those scenarios exist to pin. A scenario that means to exercise
-        the accept sets `_draw_owed` explicitly."""
+        NO DRAW IS OWED (2026-08-19). A taskless scenario would otherwise offer
+        a draw in every cell and mask the routing those scenarios exist to pin.
+        A scenario that means to exercise the accept sets `_draws_enabled`."""
         self.game_data = game_data
-        self._draw_owed = False
+        self._draws_enabled = False
         # Mirror the live per-cycle event overlay (_fetch_world_state sets
         # game_data.active_event_codes from the freshly-fetched active
         # events): an offline state that declares active events must surface
@@ -3649,32 +3644,6 @@ class GamePlayer:
         need = max(progression_reserve(self.state, self.game_data), root_need)
         return account_gold(self.state) < need
 
-    def _draw_owed_for_course(self) -> bool:
-        """Whether a task DRAW is owed right now — ACCEPT_TASK's gate.
-
-        Two rules, and between them they are the USER's no-immediate-redraw
-        decision:
-
-        * A NEW COURSE owes a draw. The course is the objective's chosen root;
-          when it changes, the character may take one task for it. Read off
-          `_last_decision`, so this is the course the PREVIOUS cycle settled on —
-          the ctx is built before `decide` runs, and a one-cycle lag costs
-          nothing since the flag only gates a one-action booking.
-        * HOLDING a task means the draw has been taken. That is what makes a
-          discard non-re-arming: S-048 sends a dead draw back, `task_code` goes
-          None, and the flag stays down until the course itself changes. Without
-          that, accept and discard would spin at a coin a cycle. (Since Phase
-          5-2c-iii-c-2 #3 the accept is the task objective's step, taken on its
-          turn — `task_accept.accept_due` reads this flag.)
-        """
-        root = repr(self._last_decision.chosen_root) if self._last_decision else None
-        if root != self._draw_course:
-            self._draw_course = root
-            self._draw_owed = True
-        if self.state is not None and self.state.task_code:
-            self._draw_owed = False
-        return self._draw_owed
-
     def _committed_fight_monster(self) -> str | None:
         """The monster the committed intention fights next, or None when it
         fights nothing (2026-10-06). The CRAFT_POTIONS guard sizes its stock for
@@ -3714,7 +3683,7 @@ class GamePlayer:
                 self._objective.near_term_gear(self.state).values()) | target_tools
         gear_keep = self._active_gear_keep(combat_monster, near_term_targets)
         bank_blocker = self._blockers.get("bank")
-        return SelectionContext(
+        ctx = SelectionContext(
             bank_accessible=bank_blocker is None,
             bank_required_level=bank_blocker.required_level if bank_blocker else 0,
             bank_unlock_monster=bank_blocker.unlock_monster if bank_blocker else None,
@@ -3725,7 +3694,6 @@ class GamePlayer:
             # applies the full progression-reserve floor (same call the goal
             # makes inside should_expand_bank's inputs).
             gold_reserve=reserve_floor(self.state, self.game_data, None),
-            draw_owed=self._draw_owed_for_course(),
             gold_short=self._gold_short(),
             target_gear=target_gear,
             target_tools=target_tools,
@@ -3761,6 +3729,13 @@ class GamePlayer:
             sibling_skills=self._sibling_skills,
             fight_monster=self._committed_fight_monster(),
         )
+        if not self._draws_enabled:
+            return ctx
+        # Phase 5-2c-iii-c-2 #5 (USER 2026-10-07): a draw is owed by the
+        # master's pool worth, not by a change of course. Read off the
+        # context it needs (gold need, grind target, target gear).
+        due, master = pool_draw(self.state, self.game_data, ctx, self.history)
+        return replace(ctx, draw_owed=due, draw_master=master)
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:
         assert self.state is not None

@@ -3458,3 +3458,8 @@ example : ∀ (pool : List Formal.TaskWorth.Worth),
 
 example : ∀ (i : Formal.TaskWorth.Inputs), i.feasible = false → (Formal.TaskWorth.worth i).any = false :=
   @Formal.TaskWorth.infeasible_worthless
+
+example : ∀ (worthy size coinReward : Nat),
+    Formal.TaskWorth.drawDue worthy size coinReward = true ↔
+      0 < worthy ∧ size - worthy ≤ coinReward * worthy :=
+  @Formal.TaskWorth.drawDue_iff

@@ -76,3 +76,11 @@ def dominates(a: TaskWorth, b: TaskWorth) -> bool:
     just drops")."""
     sub = ((not b.xp or a.xp) and (not b.gold or a.gold) and (not b.drops or a.drops))
     return sub and ((a.xp and not b.xp) or (a.gold and not b.gold) or (a.drops and not b.drops))
+
+
+def draw_due(worthy: int, size: int, coin_reward: int) -> bool:
+    """A draw from a pool of `size` tasks, `worthy` of them worth working, is
+    due when the coins expected to be spent rerolling worthless draws,
+    `(size - worthy) / worthy`, are at most what a completion pays (USER
+    2026-10-07: "Rerolls ≤ completion coins"). Cross-multiplied, as in Lean."""
+    return worthy > 0 and size - worthy <= coin_reward * worthy

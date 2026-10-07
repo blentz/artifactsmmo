@@ -4996,14 +4996,15 @@ TASK_WORTH_INPUT_MUTATIONS = [
      "    stack = [(code, 1) for code in ctx.target_gear | ctx.near_term_targets if code not in worn]\n",
      "    stack = [(code, 1) for code in ctx.target_gear | ctx.near_term_targets]\n"),
     ("task worth: fight gold is not counted in the task's rate",
-     "        task_rate = (reward + remaining * fight_gold) / (remaining * per_kill)\n",
-     "        task_rate = reward / (remaining * per_kill)\n"),
+     "        return (reward + remaining * fight_gold) / (remaining * per_kill)\n",
+     "        return reward / (remaining * per_kill)\n"),
     ("task worth: drops are read for the grind target, not the task monster",
      "        drop_aligned = any(item in short for item, *_ in game_data.monster_drops(code))\n",
      "        drop_aligned = False\n"),
-    ("task worth: the gold-short fact is ignored",
-     "        gold_short=ctx.gold_short,\n",
-     "        gold_short=True,\n"),
+    # No "gold_short ignored" mutant: the rates are read only when
+    # `ctx.gold_short` (an obtain walk per items task otherwise), so forcing the
+    # input True leaves both rates 0 and GOLD False — equivalent. The verdict's
+    # own use of gold_short is pinned by the task_worth differential.
     ("cancel: a coinless task's worth is read and cancelled",
      "    if state.inventory.get(TASKS_COIN_CODE, 0) < 1:\n        return False\n    worth",
      "    worth"),
@@ -5018,6 +5019,28 @@ CLOSURE_GOLD_DEMAND_MUTATIONS = [
     ("closure gold: an owned copy is not spent first",
      "    return sum(max(0, leaf.qty - leaf.owned) * leaf.gold_price\n",
      "    return sum(leaf.qty * leaf.gold_price\n"),
+]
+POOL_DRAW_MUTATIONS = [
+    ("pool draw: a draw is due while a task is held",
+     "    if state.task_code:\n        return False, None\n    shares",
+     "    shares"),
+    ("pool draw: the lower worthy share is chosen",
+     "    best = max(share for share, _ in shares)\n",
+     "    best = min(share for share, _ in shares)\n"),
+    ("pool draw: a tie still names a master",
+     "    return True, (top[0] if len(top) == 1 else None)\n",
+     "    return True, top[0]\n"),
+    ("pool draw: tasks are scored at their minimum quantity",
+     "task_worth_for(task.code, master, (task.min_quantity + task.max_quantity) // 2,",
+     "task_worth_for(task.code, master, task.min_quantity,"),
+]
+DRAW_CONTEXT_MUTATIONS = [
+    ("draw ctx: an offline scenario draws",
+     "        if not self._draws_enabled:\n            return ctx\n",
+     ""),
+    ("draw ctx: the pool verdict never reaches the context",
+     "        return replace(ctx, draw_owed=due, draw_master=master)",
+     "        return ctx"),
 ]
 GOLD_SHORT_MUTATIONS = [
     ("gold short: the root's purchases are not counted",
@@ -7272,6 +7295,12 @@ FIGHT_APPLICABILITY_MUTATIONS = [
 # A task's worth (Phase 5-2c-iii-c-2 #5, Formal.TaskWorth). Killed by
 # tests/test_ai/test_task_worth_core.py (and the task_worth differential).
 TASK_WORTH_CORE_MUTATIONS = [
+    ("draw: the reroll bound is strict",
+     "    return worthy > 0 and size - worthy <= coin_reward * worthy\n",
+     "    return worthy > 0 and size - worthy < coin_reward * worthy\n"),
+    ("draw: a pool with no worthy task is drawn from",
+     "    return worthy > 0 and size - worthy <= coin_reward * worthy\n",
+     "    return size - worthy <= coin_reward * worthy\n"),
     ("worth: an infeasible task keeps its reasons",
      "    if not inputs.feasible:\n        return WORTHLESS\n",
      "    if False:\n        return WORTHLESS\n"),
@@ -7410,6 +7439,9 @@ TASK_ROOT_MUTATIONS = [
      "            ):\n        return None\n"),
 ]
 TASK_STEP_MUTATIONS = [
+    ("step: the draw ignores the chosen master",
+     "            if ctx.draw_master is not None:\n",
+     "            if False:\n"),
     ("step: an items task is never worked (c-2 pursue fold)",
      "            return _pursue_goal(state, game_data)\n",
      "            return None\n"),
@@ -9234,6 +9266,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_task_worth.py", survivors)
     run_group(CURRENCY_DEMAND_SRC, CLOSURE_GOLD_DEMAND_MUTATIONS,
               "tests/test_ai/test_craft_vs_buy_wiring.py", survivors)
+    run_group(TASK_WORTH_SRC, POOL_DRAW_MUTATIONS,
+              "tests/test_ai/test_draw_owed.py", survivors)
+    run_group(PLAYER_SRC, DRAW_CONTEXT_MUTATIONS,
+              "tests/test_ai/test_draw_owed.py", survivors)
     run_group(PLAYER_SRC, GOLD_SHORT_MUTATIONS,
               "tests/test_ai/test_task_worth.py", survivors)
     run_group(TASK_WORTH_SRC, TASK_WORTH_HORIZON_MUTATIONS,

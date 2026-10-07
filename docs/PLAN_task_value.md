@@ -262,3 +262,28 @@ are untouched; the residual stays a residual.
    too few to fit anything.
 3. **The master:** choose by worthy share as 8.3, or keep `choose_taskmaster`'s
    link-demand synergy and only gate the draw?
+
+### 8.9 Increment 3 built (2026-10-07)
+
+- **Lean:** `drawDue` + `drawDue_iff` / `_none` / `_mono` /
+  `_refines_drawOwed`, manifest and contract pins, oracle `task_draw_due`,
+  differential.
+- **Core:** `task_worth_core.draw_due`.
+- **`task_worth.pool_draw`:** each master's pool, tasks at mean quantity; due
+  per `draw_due` at `min_task_coin_reward`; the higher worthy share wins; a tie
+  gives None, which leaves the choice to `choose_taskmaster`.
+- **Gold rates** are read only when `ctx.gold_short`; otherwise a pool scan ran
+  an obtain walk per items task.
+- **Player:** `ctx.draw_owed`/`ctx.draw_master` come from `pool_draw`. The
+  course rule (`_draw_owed_for_course`, `_draw_course`) is deleted.
+  `seed_offline` sets `_draws_enabled = False`, so offline scenarios still draw
+  nothing.
+- **Step:** `AcceptTaskGoal` goes to `ctx.draw_master`'s tile.
+- **Live probe (scratch DB, C3P0/Lor, L30-31):** a draw is due at the ITEMS
+  master. Items 16/27 worthy (0.59) against monsters 9/21 (0.43). Items tasks
+  are worthy through the producing skill's XP (`task_advances_progression`
+  counts a skill). This is a fleet-wide shift toward items tasks. It follows
+  the rule as ruled, and is flagged to the USER. `pool_draw` takes 45-91 ms.
+- **Recording draws** (USER "record each accepted draw"): the `cycles` rows
+  already hold each `AcceptTask` and the next cycle's `task_code`, so no new
+  table is needed.

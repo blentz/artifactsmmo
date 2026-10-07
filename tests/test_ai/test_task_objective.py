@@ -235,6 +235,15 @@ class TestAcceptFold:
         assert root_mod._task_root(make_state(level=12), _gd(), owed, None) == ReachTaskOutcome(None)
         assert root_mod._task_root(make_state(level=12), _gd(), NO_PROFILE_CONTEXT, None) is None
 
+    def test_the_draw_goes_to_the_chosen_master(self) -> None:
+        """c-2 #5 (USER "Higher worthy share"): the master `pool_draw` chose."""
+        gd = _gd()
+        gd.world.taskmaster_tiles = {"monsters": (1, 2), "items": (4, 5)}
+        owed = dataclasses.replace(NO_PROFILE_CONTEXT, draw_owed=True, draw_master="items")
+        goal = objective_step_goal(ReachTaskOutcome(None), make_state(level=12), gd, owed)
+        assert isinstance(goal, AcceptTaskGoal)
+        assert (goal._taskmaster_code, goal._taskmaster_location) == ("items", (4, 5))
+
     def test_its_step_is_the_accept_ahead_of_the_exchange(self) -> None:
         owed = dataclasses.replace(NO_PROFILE_CONTEXT, draw_owed=True, task_exchange_min_coins=1)
         rich = dataclasses.replace(make_state(level=12), inventory={"tasks_coin": 3})

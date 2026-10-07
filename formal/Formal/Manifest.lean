@@ -506,6 +506,10 @@ open Formal.PriorityBand
 #check @Formal.TaskWorth.dominates_trans
 #check @Formal.TaskWorth.gold_and_drops_dominate_drops
 #check @Formal.TaskWorth.worthy_dominates_worthless
+#check @Formal.TaskWorth.drawDue_iff                   -- due ⇔ worthy>0 ∧ rerolls ≤ reward
+#check @Formal.TaskWorth.drawDue_none                  -- no worthy task ⇒ no draw
+#check @Formal.TaskWorth.drawDue_mono                  -- more worthy tasks never revoke it
+#check @Formal.TaskWorth.drawDue_refines_drawOwed      -- a due draw names a worthy task
 -- RealizableLoadout required roles (the multi-slot pick_loadout bug fix):
 #check @Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership -- contract: realizability ⇔ per-code demand ≤ ownership
 #check @Formal.RealizableLoadout.apply_cur_ge_1                        -- apply assert: realizable ⇒ cur ≥ 1 at every decrement

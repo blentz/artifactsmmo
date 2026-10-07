@@ -1,83 +1,119 @@
-"""`GamePlayer._draw_owed_for_course` — ACCEPT_TASK's gate, and the USER's
-no-immediate-redraw rule expressed in the one place that persists across cycles.
+"""A task draw is owed by the master's POOL WORTH (Phase 5-2c-iii-c-2 #5,
+increment 3; USER 2026-10-07, `docs/PLAN_task_value.md` §8).
 
-The rung sits above the objective step (S-051), so an ungated redraw would spin
-accept/discard there at a coin a cycle. These pin the two rules that stop it: a new
-course owes a draw, and holding a task means the draw has been taken.
-"""
+It used to be owed only when the chosen root changed (S-051 + the
+no-immediate-redraw rule): after a turn-in or a cancel the next draw waited for
+an unrelated root change — C3P0 5h+, R2D2 after its 13:28 turn-in. The brake
+on an accept/cancel spin is now the economics: a pool is drawn from only while
+the coins expected to be spent rerolling its worthless draws are at most what a
+completion pays (`task_worth_core.draw_due`)."""
 
 from types import SimpleNamespace
 
 import pytest
 
+import artifactsmmo_cli.ai.player as player_mod
+import artifactsmmo_cli.ai.task_worth as mod
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.task_worth import pool_draw
+from artifactsmmo_cli.ai.task_worth_core import WORTHLESS, TaskWorth
 from tests.test_ai.fixtures import make_state
+
+_WORTHY = TaskWorth(xp=True, gold=False, drops=False)
+
+
+def _task(code: str, master: str, level: int = 1):  # type: ignore[no-untyped-def]
+    return SimpleNamespace(code=code, type_=master, level=level, min_quantity=10, max_quantity=20)
+
+
+def _gd(pools: dict[str, list[str]]) -> GameData:
+    gd = GameData()
+    gd.world.taskmaster_tiles = {master: (i, 0) for i, master in enumerate(pools)}
+    gd._tasks = [_task(code, master) for master, codes in pools.items() for code in codes]
+    gd._task_coin_rewards = {"any": 4}
+    return gd
 
 
 @pytest.fixture
-def player():
-    p = GamePlayer(character="probe", history=None)
-    p.state = make_state(task_code=None, task_total=0)
-    return p
+def worthy(monkeypatch):  # type: ignore[no-untyped-def]
+    """Worth by code: a code in the returned set is worthy, any other worthless."""
+    codes: set[str] = set()
+    seen: list[tuple[str, str, int]] = []
+
+    def fake(code, task_type, remaining, *rest):  # type: ignore[no-untyped-def]
+        seen.append((code, task_type, remaining))
+        return _WORTHY if code in codes else WORTHLESS
+
+    monkeypatch.setattr(mod, "task_worth_for", fake)
+    return SimpleNamespace(codes=codes, seen=seen)
 
 
-def _decision(root: str | None):
-    return SimpleNamespace(chosen_root=root)
+def test_nothing_is_due_while_a_task_is_held(worthy) -> None:
+    worthy.codes.add("wolf")
+    held = make_state(level=30, task_code="pig", task_type="monsters", task_total=5)
+    assert pool_draw(held, _gd({"monsters": ["wolf"]}), NO_PROFILE_CONTEXT, None) == (False, None)
 
 
-def test_a_fresh_character_owes_its_first_draw(player):
-    assert player._draw_owed_for_course() is True
+def test_a_pool_whose_rerolls_pay_is_due(worthy) -> None:
+    """Live 2026-10-07: 9 of 21 worthy, 4 coins a completion — 12 ≤ 36."""
+    worthy.codes.update(f"w{i}" for i in range(9))
+    pool = [f"w{i}" for i in range(9)] + [f"g{i}" for i in range(12)]
+    assert pool_draw(make_state(level=30), _gd({"monsters": pool}), NO_PROFILE_CONTEXT, None) \
+        == (True, "monsters")
+    assert ("w0", "monsters", 15) in worthy.seen  # each task at its mean quantity
 
 
-def test_holding_a_task_means_the_draw_was_taken(player):
-    player.state = make_state(task_code="chicken", task_type="monsters",
-                              task_total=10, task_progress=0)
-    assert player._draw_owed_for_course() is False
+def test_a_pool_too_poor_for_its_rerolls_is_not_due(worthy) -> None:
+    """4 of 21: 17 rerolls cost more than 4 coins x 4 worthy draws pay."""
+    worthy.codes.update(f"w{i}" for i in range(4))
+    pool = [f"w{i}" for i in range(4)] + [f"g{i}" for i in range(17)]
+    assert pool_draw(make_state(level=30), _gd({"monsters": pool}), NO_PROFILE_CONTEXT, None) \
+        == (False, None)
 
 
-def test_a_discard_does_not_re_arm_the_draw(player):
-    """THE RULE. S-048 sends a dead draw back and `task_code` goes None — and the
-    flag stays DOWN until the course itself changes. Re-arming here is exactly
-    the accept/discard spin the promotion would otherwise open."""
-    player._last_decision = _decision("ObtainItem(staff)")
-    player.state = make_state(task_code="chicken", task_type="monsters",
-                              task_total=10)
-    assert player._draw_owed_for_course() is False          # draw taken
-    player.state = make_state(task_code=None, task_total=0)  # discarded
-    assert player._draw_owed_for_course() is False, "a discard must not redraw"
+def test_the_master_with_the_higher_worthy_share(worthy) -> None:
+    worthy.codes.update({"wolf", "copper", "iron"})
+    gd = _gd({"monsters": ["wolf", "sheep"], "items": ["copper", "iron", "tin"]})
+    assert pool_draw(make_state(level=30), gd, NO_PROFILE_CONTEXT, None) == (True, "items")
 
 
-def test_a_new_course_owes_a_fresh_draw(player):
-    player._last_decision = _decision("ObtainItem(staff)")
-    player.state = make_state(task_code="chicken", task_type="monsters",
-                              task_total=10)
-    assert player._draw_owed_for_course() is False
-    player.state = make_state(task_code=None, task_total=0)
-    assert player._draw_owed_for_course() is False
-    # the objective moves on — one draw is owed for the new course
-    player._last_decision = _decision("ReachCharLevel(30)")
-    assert player._draw_owed_for_course() is True
+def test_a_tie_leaves_the_master_to_the_synergy_choice(worthy) -> None:
+    worthy.codes.update({"wolf", "copper"})
+    gd = _gd({"monsters": ["wolf", "sheep"], "items": ["copper", "tin"]})
+    assert pool_draw(make_state(level=30), gd, NO_PROFILE_CONTEXT, None) == (True, None)
 
 
-def test_the_same_course_owes_only_one_draw(player):
-    """Idempotent across cycles: re-asking within a course must not re-arm after
-    the draw has been taken and given back."""
-    player._last_decision = _decision("ReachCharLevel(30)")
-    assert player._draw_owed_for_course() is True
-    player.state = make_state(task_code="pig", task_type="monsters", task_total=5)
-    assert player._draw_owed_for_course() is False
-    player.state = make_state(task_code=None, task_total=0)
-    for _ in range(3):
-        assert player._draw_owed_for_course() is False
+def test_an_empty_or_out_of_level_pool_is_never_drawn(worthy) -> None:
+    gd = _gd({"monsters": []})
+    assert pool_draw(make_state(level=30), gd, NO_PROFILE_CONTEXT, None) == (False, None)
+    worthy.codes.add("lich")
+    gd = _gd({"monsters": []})
+    gd._tasks = [_task("lich", "monsters", level=40)]
+    assert pool_draw(make_state(level=30), gd, NO_PROFILE_CONTEXT, None) == (False, None)
 
 
-def test_the_gate_reaches_the_selection_context(player, monkeypatch):
-    """Runtime wiring, not just the helper: the flag must arrive on the ctx the
-    means predicate reads, or the rung stays dormant however correct this is."""
-    player.game_data = GameData()
-    monkeypatch.setattr(player, "_winnable_farm_target", lambda: None)
-    monkeypatch.setattr(player, "_draw_owed_for_course", lambda: True)
-    assert player._selection_context().draw_owed is True
-    monkeypatch.setattr(player, "_draw_owed_for_course", lambda: False)
-    assert player._selection_context().draw_owed is False
+class TestPlayerContext:
+    def _player(self, monkeypatch) -> GamePlayer:  # type: ignore[no-untyped-def]
+        player = GamePlayer(character="probe", history=None)
+        player.state = make_state(task_code=None, task_total=0)
+        player.game_data = GameData()
+        monkeypatch.setattr(player, "_winnable_farm_target", lambda: None)
+        return player
+
+    def test_the_pool_verdict_reaches_the_selection_context(self, monkeypatch) -> None:
+        player = self._player(monkeypatch)
+        monkeypatch.setattr(player_mod, "pool_draw", lambda *a: (True, "items"))
+        ctx = player._selection_context()
+        assert ctx.draw_owed is True and ctx.draw_master == "items"
+        monkeypatch.setattr(player_mod, "pool_draw", lambda *a: (False, None))
+        ctx = player._selection_context()
+        assert ctx.draw_owed is False and ctx.draw_master is None
+
+    def test_an_offline_scenario_draws_nothing(self, monkeypatch) -> None:
+        player = self._player(monkeypatch)
+        monkeypatch.setattr(player_mod, "pool_draw", lambda *a: (True, "items"))
+        player._draws_enabled = False
+        ctx = player._selection_context()
+        assert ctx.draw_owed is False and ctx.draw_master is None

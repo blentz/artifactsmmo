@@ -43,6 +43,9 @@ class SelectionContext:
     #
     # Defaults False so a caller that does not manage it gets no draw.
     draw_owed: bool = False
+    # The master to draw at when a draw is owed (`task_worth.pool_draw`: the due
+    # master with the higher worthy share). None = let `choose_taskmaster` pick.
+    draw_master: str | None = None
     # Account gold (pocket + bank) is below the larger of the progression
     # reserve and the gold the previous cycle's chosen root will spend at
     # vendors (set by the player, `GamePlayer._gold_short`). A task's GOLD

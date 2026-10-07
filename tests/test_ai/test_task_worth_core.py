@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.task_worth_core import (
     TaskWorthInputs,
     cancel_due,
     dominates,
+    draw_due,
     draw_owed,
     task_worth,
 )
@@ -58,3 +59,13 @@ def test_a_strict_superset_dominates() -> None:
     assert not dominates(drops, gold_drops)
     assert not dominates(drops, drops)
     assert not dominates(TaskWorth(True, False, False), drops)
+
+
+def test_a_draw_is_due_when_rerolls_cost_at_most_a_completion() -> None:
+    """USER 2026-10-07 "Rerolls ≤ completion coins": (size - worthy) / worthy
+    expected coins against a completion's reward, cross-multiplied."""
+    assert draw_due(9, 21, 4)        # 12 <= 36
+    assert draw_due(4, 20, 4)        # 16 <= 16: the boundary is due
+    assert not draw_due(4, 21, 4)    # 17 > 16
+    assert not draw_due(0, 21, 4)    # nothing worth drawing
+    assert not draw_due(0, 0, 4)

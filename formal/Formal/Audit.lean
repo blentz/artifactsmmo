@@ -407,6 +407,10 @@ open Formal.PriorityBand
 #print axioms Formal.TaskWorth.dominates_trans
 #print axioms Formal.TaskWorth.gold_and_drops_dominate_drops
 #print axioms Formal.TaskWorth.worthy_dominates_worthless
+#print axioms Formal.TaskWorth.drawDue_iff
+#print axioms Formal.TaskWorth.drawDue_none
+#print axioms Formal.TaskWorth.drawDue_mono
+#print axioms Formal.TaskWorth.drawDue_refines_drawOwed
 #print axioms Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership
 #print axioms Formal.RealizableLoadout.apply_cur_ge_1
 #print axioms Formal.RealizableLoadout.ownership_counts_equipped
