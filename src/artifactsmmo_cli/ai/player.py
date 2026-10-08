@@ -1166,7 +1166,6 @@ class GamePlayer:
                 predicted = executed_action.cost(prev_state_for_learning, game_data, self.history)
                 cycles_to_satisfy = None
                 self._learn_task_exchange_cost(action, prev_state_for_learning, new_state, outcome)
-                self._forget_absent_monster(action, new_state, outcome)
                 self._record_task_reward_if_completed(
                     prev_state_for_learning, new_state, type(action).__name__, outcome
                 )
@@ -3775,16 +3774,6 @@ class GamePlayer:
         assert self.state is not None
         suffix = f"  [{_format_plan(plan[1:])}]" if len(plan) > 1 else ""
         print(f"[{self._now()}] → {action!r}{suffix}  (goal: {goal!r})")
-
-    def _forget_absent_monster(self, action: Action, new_state: WorldState, outcome: str) -> None:
-        """A fight refused with HTTP 598 ("content not found at this location")
-        names a tile the cached map still lists for the monster: forget it
-        (`GameData.forget_monster_tile`), so the next fight goes elsewhere. The
-        fight is attempted where the character stands after its move."""
-        if outcome != "error:HTTP_598" or not isinstance(action, FightAction):
-            return
-        assert self.game_data is not None
-        self.game_data.forget_monster_tile(action.monster_code, (new_state.x, new_state.y))
 
     def _exchange_min_coins(self) -> int:
         """The minimum tasks_coin worth attempting a taskmaster exchange.

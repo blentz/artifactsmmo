@@ -13,7 +13,10 @@ Covers:
 
 import dataclasses
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import patch
+
+import pytest
 
 import artifactsmmo_cli.ai.craft_plan_gen as cpg
 from artifactsmmo_cli.ai import craft_plan_gen
@@ -1941,3 +1944,150 @@ class _Lands(Action):
 
     def __repr__(self) -> str:
         return f"Lands({self._code}x{self._qty})"
+
+
+class _Leg(Action):
+    """A leg acting in `region`; applying it changes nothing."""
+
+    tags = frozenset()
+
+    def __init__(self, name: str, region: str) -> None:
+        self._name, self.travel_region = name, region
+
+    def is_applicable(self, state, game_data):  # type: ignore[no-untyped-def]
+        return True
+
+    def apply(self, state, game_data):  # type: ignore[no-untyped-def]
+        return state
+
+    def cost(self, state, game_data):  # type: ignore[no-untyped-def]
+        return 1.0
+
+    def execute(self, client, state, game_data):  # type: ignore[no-untyped-def]
+        raise AssertionError("never executed")
+
+    def __repr__(self) -> str:
+        return self._name
+
+
+class _Edge(_Leg):
+    """A region crossing from `src` (its travel region) to `dst` (a layer)."""
+
+    tags = frozenset({"movement"})
+
+    def __init__(self, src: str, dst: str) -> None:
+        super().__init__(f"Edge({src}->{dst})", src)
+        self._dst = dst
+
+    def apply(self, state, game_data):  # type: ignore[no-untyped-def]
+        return dataclasses.replace(state, layer=self._dst)
+
+
+class TestBridgeRegions:
+    """The walk's legs carry `travel_region`, which it ignored. Live
+    2026-10-08: rat lives on the interior layer and SupplyBank's
+    [Fight(rat), Craft] from the overworld drew 51 HTTP 598s."""
+
+    @pytest.fixture(autouse=True)
+    def _layer_is_region(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr(GameData, "state_region", lambda self, state: state.layer)
+
+    def test_a_crossing_in_and_back_out(self) -> None:
+        fight, craft = _Leg("Fight(rat)", "interior"), _Leg("Craft", "overworld")
+        edges = [_Edge("overworld", "interior"), _Edge("interior", "overworld")]
+        plan = cpg._bridge_regions([fight, craft], make_state(layer="overworld"), GameData(),
+                                   [*edges, fight], [])
+        assert [repr(a) for a in plan] == ["Edge(overworld->interior)", "Fight(rat)",
+                                           "Edge(interior->overworld)", "Craft"]
+
+    def test_a_plan_in_one_region_is_untouched(self) -> None:
+        legs = [_Leg("Fight(chicken)", "overworld"), _Leg("Craft", "overworld")]
+        assert cpg._bridge_regions(legs, make_state(layer="overworld"), GameData(),
+                                   [_Edge("overworld", "interior")], []) == legs
+
+    def test_no_crossing_declines_by_name(self) -> None:
+        declined: list[str] = []
+        fight = _Leg("Fight(rat)", "interior")
+        assert cpg._bridge_regions([fight], make_state(layer="overworld"), GameData(),
+                                   [_Edge("overworld", "sanctum")], declined) is None
+        assert declined == ["region:overworld->interior:Fight(rat)"]
+
+    def test_a_leg_that_crosses_itself_needs_no_second_crossing(self) -> None:
+        own = _Edge("overworld", "interior")
+        fight = _Leg("Fight(rat)", "interior")
+        plan = cpg._bridge_regions([own, fight], make_state(layer="overworld"), GameData(),
+                                   [_Edge("overworld", "interior")], [])
+        assert [repr(a) for a in plan] == ["Edge(overworld->interior)", "Fight(rat)"]
+
+    def test_decompose_bridges_every_plan_it_returns(self, monkeypatch) -> None:
+        fight = _Leg("Fight(rat)", "interior")
+        monkeypatch.setattr(cpg, "_walk_plan", lambda *a: [fight])
+        gd = GameData()
+        gd.world.bank_tile = (4, 0)
+        gd._bank_capacity = 100
+        plan = cpg.decompose(SupplyBankGoal("cooked_rat_meat", 10, 20),
+                             make_state(layer="overworld", bank_items={}), gd,
+                             [_Edge("overworld", "interior")], NO_PROFILE_CONTEXT, [])
+        assert plan is not None and [repr(a) for a in plan] == ["Edge(overworld->interior)",
+                                                                 "Fight(rat)"]
+
+    def test_two_crossings_when_one_does_not_reach(self) -> None:
+        fight = _Leg("Fight(lich)", "tomb")
+        edges = [_Edge("overworld", "mine"), _Edge("mine", "tomb")]
+        plan = cpg._bridge_regions([fight], make_state(layer="overworld"), GameData(), edges, [])
+        assert [repr(a) for a in plan] == ["Edge(overworld->mine)", "Edge(mine->tomb)",
+                                           "Fight(lich)"]
+
+    def test_crossings_give_up_past_the_bound(self) -> None:
+        chain = [_Edge(f"r{i}", f"r{i + 1}") for i in range(cpg.MAX_CROSSINGS + 1)]
+        assert cpg._crossings(make_state(layer="r0"), f"r{cpg.MAX_CROSSINGS + 1}", chain,
+                              GameData()) is None
+        assert cpg._crossings(make_state(layer="r0"), f"r{cpg.MAX_CROSSINGS}", chain,
+                              GameData()) is not None
+
+    def test_a_region_reached_twice_is_expanded_once(self) -> None:
+        """Two edges into `mine`: the second is not a new frontier entry."""
+        edges = [_Edge("overworld", "mine"), _Edge("overworld", "mine"), _Edge("mine", "tomb")]
+        route = cpg._crossings(make_state(layer="overworld"), "tomb", edges, GameData())
+        assert [repr(a) for a in route] == ["Edge(overworld->mine)", "Edge(mine->tomb)"]
+
+    def test_decompose_declines_a_plan_it_cannot_bridge(self, monkeypatch) -> None:
+        monkeypatch.setattr(cpg, "_walk_plan", lambda *a: [_Leg("Fight(rat)", "interior")])
+        gd = GameData()
+        gd.world.bank_tile = (4, 0)
+        gd._bank_capacity = 100
+        declined: list[str] = []
+        assert cpg.decompose(SupplyBankGoal("cooked_rat_meat", 10, 20),
+                             make_state(layer="overworld", bank_items={}), gd, [],
+                             NO_PROFILE_CONTEXT, declined) is None
+        assert declined == ["region:overworld->interior:Fight(rat)"]
+
+
+class TestGatherInTheCharactersRegion:
+    """One resource can grow in several regions, one action each; the walk
+    takes the one in the character's own region (census 2026-10-08: palm_tree
+    on the mainland AND on Sandwhisper Isle, the first match was the isle)."""
+
+    @pytest.fixture(autouse=True)
+    def _layer_is_region(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr(GameData, "state_region", lambda self, state: state.layer)
+
+    def _action(self, pool, layer):  # type: ignore[no-untyped-def]
+        graph = SimpleNamespace(sources={"palm_wood": [SimpleNamespace(kind=SourceKind.GATHER,
+                                                                         via="palm_tree")]})
+        return cpg._action_for(Act("palm_wood", 0, 3, 3), graph, [], pool, make_state(layer=layer),
+                               GameData(), True, lambda _item: False)
+
+    def test_the_home_region_copy_wins(self) -> None:
+        isle = GatherAction(resource_code="palm_tree", locations=frozenset({(-4, 18)}),
+                            drop_item_override="palm_wood", travel_region="isle")
+        home = GatherAction(resource_code="palm_tree", locations=frozenset({(1, 0)}),
+                            drop_item_override="palm_wood", travel_region="overworld")
+        got = self._action([isle, home], "overworld")
+        assert got.travel_region == "overworld" and got.quantity == 3
+
+    def test_another_regions_copy_is_the_fallback(self) -> None:
+        isle = GatherAction(resource_code="palm_tree", locations=frozenset({(-4, 18)}),
+                            drop_item_override="palm_wood", travel_region="isle")
+        assert self._action([isle], "overworld").travel_region == "isle"
+        assert self._action([], "overworld") is None

@@ -356,7 +356,9 @@ CURRENCY_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "curr
 XP_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "xp_demand.py"
 CONSUMABLE_FLOOR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor_core.py"
 CONSUMABLE_FLOOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor.py"
-GAME_DATA_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
+FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
+CRAFT_COMPLETENESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_completeness.py"
+CRAFT_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_census.py"
 TASK_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth.py"
 FIGHT_UPKEEP_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "fight_upkeep_core.py"
 BAND_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "band_target.py"
@@ -5135,6 +5137,60 @@ CONSUMABLE_PLAYER_MUTATIONS = [
      "        ctx = replace(ctx, supply_shortfall=self._supply_shortfall)\n",
      ""),
 ]
+REGION_SPLIT_MUTATIONS = [
+    ("factory: a legacy fight keeps the default region",
+     "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),\n"
+     "                                       travel_region=region))\n",
+     "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles)))\n"),
+    ("factory: the layered path emits a second copy",
+     "            if region == \"overworld\" or (code, region) in emitted:\n",
+     "            if region == \"overworld\":\n"),
+    ("factory: a gather keeps the default region",
+     "    actions.append(GatherAction(resource_code=resource_code, locations=frozenset(tiles),\n"
+     "                                travel_region=region))\n",
+     "    actions.append(GatherAction(resource_code=resource_code, locations=frozenset(tiles)))\n"),
+    ("factory: tiles are not split by region",
+     "        out.setdefault(game_data.region_of(x, y, \"overworld\"), []).append((x, y))\n",
+     "        out.setdefault(\"overworld\", []).append((x, y))\n"),
+]
+GATHER_REGION_MUTATIONS = [
+    ("walk: the first gather wins whatever its region",
+     "        gather = next((a for a in gathers if a.travel_region == here), next(iter(gathers), None))\n",
+     "        gather = next(iter(gathers), None)\n"),
+]
+CROSSINGS_MUTATIONS = [
+    ("crossings: one hop only",
+     "                if region not in seen:\n                    seen.add(region)\n                    nxt.append(",
+     "                if False:\n                    seen.add(region)\n                    nxt.append("),
+    # No "a region reached twice is expanded twice" mutant: `seen` only bounds
+    # the work — breadth-first, the first route to the target is the same with
+    # or without it, so no output can tell them apart.
+]
+CENSUS_CROSSING_MUTATIONS = [
+    ("census: a crossing is judged as the plan's work",
+     "    return next((leg for leg in plan if REGION_EDGE_TAG not in leg.tags), None)\n",
+     "    return next(iter(plan), None)\n"),
+    ("census: an unaffordable crossing is a planner bug",
+     "    return any(reason.startswith(\"region:\") for reason in declined)\n",
+     "    return False\n"),
+    ("census: a world without transitions is still asked",
+     "    if not game_data.world.transition_edges:\n        return False\n",
+     ""),
+]
+REGION_BRIDGE_MUTATIONS = [
+    ("region bridge: decompose emits legs in another region unbridged",
+     "    plan = _bridge_regions(plan, state, game_data, actions, declined)\n",
+     ""),
+    ("region bridge: a crossing need not land in the leg's region",
+     "                if region == target:\n",
+     "                if True:\n"),
+    ("region bridge: an unreachable leg is emitted anyway",
+     "            if route is None:\n                return _decline(",
+     "            if False:\n                return _decline("),
+    ("region bridge: the plan's position never advances",
+     "        if leg.is_applicable(at, game_data):\n            at = leg.apply(at, game_data)\n    return bridged\n",
+     "    return bridged\n"),
+]
 SUPPLY_DECOMPOSE_MUTATIONS = [
     ("supply decompose: SupplyBank goes back to the search",
      "    if isinstance(goal, SupplyBankGoal):\n        return _decompose_supply(",
@@ -5151,22 +5207,6 @@ SUPPLY_DECOMPOSE_MUTATIONS = [
     ("supply decompose: the deposit joins before the batch lands",
      "    return [*legs, deposit] if deposit.is_applicable(landed, game_data) else legs\n",
      "    return [*legs, deposit]\n"),
-]
-ABSENT_TILE_MUTATIONS = [
-    ("absent tile: the stale tile is kept",
-     "        kept = [t for t in tiles if t != tile]\n",
-     "        kept = list(tiles)\n"),
-    ("absent tile: a monster with no tile stays on the map",
-     "        else:\n            del self.monsters.locations[code]\n",
-     "        else:\n            self.monsters.locations[code] = kept\n"),
-]
-ABSENT_TILE_PLAYER_MUTATIONS = [
-    ("absent tile: a 598 is never learned",
-     "        self.game_data.forget_monster_tile(action.monster_code, (new_state.x, new_state.y))\n",
-     "        pass\n"),
-    ("absent tile: any failure forgets the tile",
-     "        if outcome != \"error:HTTP_598\" or not isinstance(action, FightAction):\n",
-     "        if not isinstance(action, FightAction):\n"),
 ]
 GOLD_SHORT_MUTATIONS = [
     ("gold short: the root's purchases are not counted",
@@ -8557,8 +8597,9 @@ PLAN_EXISTS_BUILD_ACTIONS_MUTATIONS = [
     # actuator; planner returns []; test_planner_finds_plan_for_firing_means[
     # BANK_UNLOCK] fires (the only fight-rooted in-scope means).
     ("plan_exists: drop FightAction from _build_actions",
-     "        actions.append(FightAction(monster_code=monster_code, locations=frozenset(locs)))",
-     "        pass  # mutation: dropped FightAction append"),
+     "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),\n"
+     "                                       travel_region=region))\n",
+     "            pass  # mutation: dropped FightAction append\n"),
     # Disable the items-task TaskTradeAction insertion block (BOTH the
     # quantity=k primary and the quantity=1 fallback). PURSUE_TASK then has
     # no trade actuator; planner returns []; test_planner_finds_plan_for_firing_means[
@@ -9410,12 +9451,18 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_consumable_floor.py", survivors)
     run_group(PLAYER_SRC, CONSUMABLE_PLAYER_MUTATIONS,
               "tests/test_ai/test_player_coordination.py", survivors)
+    run_group(FACTORY_SRC, REGION_SPLIT_MUTATIONS,
+              "tests/test_ai/test_factory_regions.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, GATHER_REGION_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, CROSSINGS_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(CRAFT_COMPLETENESS_SRC, CENSUS_CROSSING_MUTATIONS,
+              "tests/test_audit/test_craft_completeness.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, REGION_BRIDGE_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, SUPPLY_DECOMPOSE_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
-    run_group(GAME_DATA_SRC, ABSENT_TILE_MUTATIONS,
-              "tests/test_ai/test_absent_monster_tile.py", survivors)
-    run_group(PLAYER_SRC, ABSENT_TILE_PLAYER_MUTATIONS,
-              "tests/test_ai/test_absent_monster_tile.py", survivors)
     run_group(PLAYER_SRC, GOLD_SHORT_MUTATIONS,
               "tests/test_ai/test_task_worth.py", survivors)
     run_group(TASK_WORTH_SRC, TASK_WORTH_HORIZON_MUTATIONS,

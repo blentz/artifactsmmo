@@ -17,6 +17,7 @@ from artifactsmmo_cli.audit.craft_completeness import (
     classify_gap,
     craft_cell_verdict,
     craft_grid,
+    first_work_leg,
     plan_craft,
 )
 
@@ -47,8 +48,10 @@ def run_cell(recipe: str, cell: CraftCell, game_data: GameData) -> CellResult:
     state = census_state(recipe, cell, game_data)
     plan = plan_craft(recipe, state, game_data)
     verdict = craft_cell_verdict(recipe, plan, game_data)
-    if not verdict.passed and plan and (advances_a_closure_grind(recipe, plan[0], state, game_data)
-                                        or advances_a_heal_prep(plan[0], plan, state, game_data)):
+    work = first_work_leg(plan)
+    if not verdict.passed and work is not None and (
+            advances_a_closure_grind(recipe, work, state, game_data)
+            or advances_a_heal_prep(work, plan, state, game_data)):
         verdict = CraftVerdict(True, "")
     gap = None if verdict.passed else classify_gap(recipe, cell, game_data).value
     return CellResult(

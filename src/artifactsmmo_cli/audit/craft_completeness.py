@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
@@ -25,6 +26,7 @@ from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
+from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
@@ -243,6 +245,14 @@ def _advances_closure(action: Action, closure_items: frozenset[str],
     return False
 
 
+def first_work_leg(plan: list[Action]) -> Action | None:
+    """The first leg that is not a region crossing. A crossing
+    (`region_edges.REGION_EDGE_TAG`) is travel that serves the leg after it
+    (`craft_plan_gen._bridge_regions`), so the verdict judges that leg: a plan
+    `[Transition(mine), Gather(gold_rocks), ...]` is judged by its gather."""
+    return next((leg for leg in plan if REGION_EDGE_TAG not in leg.tags), None)
+
+
 def craft_cell_verdict(recipe: str, plan: list[Action],
                        game_data: GameData) -> CraftVerdict:
     """PASS iff `plan` is non-empty AND its FIRST action advances `recipe`'s
@@ -252,9 +262,10 @@ def craft_cell_verdict(recipe: str, plan: list[Action],
     `WaitAction`, i.e. nothing else was applicable), or
     "unrelated:<repr(plan[0])>" (a plannable first leg that does not touch
     `recipe`'s closure or skill — e.g. a stray Rest or an off-closure Gather)."""
-    if not plan:
+    work = first_work_leg(plan)
+    if work is None:
         return CraftVerdict(False, "empty")
-    first = plan[0]
+    first = work
     if isinstance(first, WaitAction):
         return CraftVerdict(False, "wait")
     stats = game_data.item_stats(recipe)
@@ -363,6 +374,14 @@ class GapClass(Enum):
     (Fight/Task -> earn currency -> NpcBuy -> craft). The planner does not yet
     plan recursive currency purchases; it is the tracked npc_purchase_acquisition
     Phase 2-4 feature, a known scoped gap rather than an unexplained bug."""
+    CROSSING_UNAFFORDABLE = "crossing_unaffordable"
+    """A closure leaf grows or spawns only in a region reached through a
+    crossing whose fee (gold or a key) the census character cannot pay — the
+    1000-gold Sandwhisper Isle boat at the census's zero gold. The decomposition
+    names it (`region:<from>-><to>:<leg>`); a funded character plans the round
+    trip (boat in, gather, boat out, craft). Before 2026-10-08 these cells
+    PASSED only because island content was mislabelled "overworld" and the walk
+    ignored regions: a live character could not have run that plan."""
     PLANNER_BUG = "planner_bug"
     """The residual: every closure leaf is reachable AND the skill is
     grindable at the cell, yet the planner still produced no directional plan.
@@ -599,6 +618,22 @@ def census_state(recipe: str, cell: CraftCell, game_data: GameData) -> WorldStat
     return scenario_state(sc, game_data)
 
 
+def _crossing_unaffordable(recipe: str, state: WorldState, game_data: GameData) -> bool:
+    """The production decomposition declines `recipe` for a region crossing it
+    cannot make from `state` (`craft_plan_gen._bridge_regions`). A world with
+    no transitions has no crossing to fail."""
+    if not game_data.world.transition_edges:
+        return False
+    actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
+                            bank_accessible=True, task_exchange_min_coins=0)
+    ctx = SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
+                           initial_xp=0, task_exchange_min_coins=0, combat_monster=None)
+    declined: list[str] = []
+    decompose(GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}), state, game_data,
+              actions, ctx, declined)
+    return any(reason.startswith("region:") for reason in declined)
+
+
 def classify_gap(recipe: str, cell: CraftCell,
                  game_data: GameData) -> GapClass:
     """Classify a FAIL cell's root cause as an ORDERED cascade over `recipe`'s
@@ -607,7 +642,7 @@ def classify_gap(recipe: str, cell: CraftCell,
     equipped with a plausible near-term loadout). Pure over
     (`recipe`, `cell`, `game_data`).
 
-    Precedence — EVENT_GATED → COMBAT_BLOCKED → MATERIAL_UNREACHABLE →
+    Precedence — CROSSING_UNAFFORDABLE → EVENT_GATED → COMBAT_BLOCKED → MATERIAL_UNREACHABLE →
     GREY_FARM_SUPPRESSED → PURCHASE_RECURSION → SKILL_UNREACHABLE →
     PLANNER_BUG — runs most-specific-first. The first five are leaf-level (a
     specific closure leaf blocks); SKILL_UNREACHABLE is recipe-level (the
@@ -637,6 +672,12 @@ def classify_gap(recipe: str, cell: CraftCell,
     A leaf's own status is decided by `_leaf_status`; the cascade then ranks
     the leaf statuses by the precedence above."""
     state = census_state(recipe, cell, game_data)
+    if _crossing_unaffordable(recipe, state, game_data):
+        # FIRST, because it is direct evidence: the production decomposition
+        # found every source and declined only for a crossing fee (the island
+        # boat, the Enchanted Forest's 5000-gold exit). A leaf-level reading of
+        # the same cell calls those sources event-gated or unreachable.
+        return GapClass.CROSSING_UNAFFORDABLE
     statuses = {_leaf_status(leaf, state, game_data)
                 for leaf in _closure_leaves(recipe, game_data)}
     for gap in (GapClass.EVENT_GATED, GapClass.COMBAT_BLOCKED,

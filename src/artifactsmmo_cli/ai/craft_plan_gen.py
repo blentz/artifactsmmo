@@ -63,7 +63,7 @@ from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, Policy
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkGraph
 from artifactsmmo_cli.ai.obtain_sources import SourceKind
 from artifactsmmo_cli.ai.potion_supply import POTION_POLICY
-from artifactsmmo_cli.ai.region_edges import admit_region_edges
+from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG, admit_region_edges
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -133,11 +133,79 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     plan = _dispatch(goal, state, game_data, actions, ctx, declined, subtasks, policy)
     if plan is None:
         return None
+    plan = _bridge_regions(plan, state, game_data, actions, declined)
+    if plan is None:
+        return None
     peak_qty, peak_slots = plan_bag_peak(plan, state, game_data)
     if peak_qty > state.inventory_max or peak_slots > state.inventory_slots_max:
         return _decline(declined, f"bag_overflow:qty={peak_qty}/{state.inventory_max}"
                                   f":slots={peak_slots}/{state.inventory_slots_max}")
     return plan
+
+
+def _bridge_regions(plan: list[Action], state: WorldState, game_data: GameData,
+                    actions: list[Action], declined: list[str] | None) -> list[Action] | None:
+    """`plan` with a region crossing before every leg that acts in another
+    region than the one the plan has reached, or None (a named decline) when no
+    single crossing from the pool gets there.
+
+    The walk names WHAT to do, not WHERE it is reachable from: its legs carry
+    their `travel_region`, which the search filters on and the walk did not.
+    Live 2026-10-08, `SupplyBank(cooked_rat_meatx10)`: rat lives on the interior
+    layer of the Abandoned House (`interior:-3,12` / `-2,12`), its plan was
+    [Fight(rat), Craft(...)] from the overworld, and 51 fights came back HTTP 598
+    "Monster not found on this map" on the identically-numbered overworld tile.
+    The crossing is a `MapTransitionAction` (`region_edges.REGION_EDGE_TAG`, the
+    edge the search admits for the same reason), chosen applicable where the
+    plan stands and landing in the leg's region; the way back out is the same
+    question asked of the next leg."""
+    edges = [edge for edge in actions if REGION_EDGE_TAG in edge.tags]
+    bridged: list[Action] = []
+    at = state
+    for leg in plan:
+        here = game_data.state_region(at)
+        if leg.travel_region != here:
+            route = _crossings(at, leg.travel_region, edges, game_data)
+            if route is None:
+                return _decline(declined, f"region:{here}->{leg.travel_region}:{leg!r}")
+            for crossing in route:
+                bridged.append(crossing)
+                at = crossing.apply(at, game_data)
+        bridged.append(leg)
+        if leg.is_applicable(at, game_data):
+            at = leg.apply(at, game_data)
+    return bridged
+
+
+MAX_CROSSINGS = 4
+"""The most region crossings `_crossings` chains. The live map's farthest
+content (the island, the desert) is two or three hops out; the bound keeps a
+missing edge from searching the whole edge graph."""
+
+
+def _crossings(state: WorldState, target: str, edges: list[Action],
+               game_data: GameData) -> list[Action] | None:
+    """The fewest applicable crossings from `state`'s region into `target`,
+    breadth-first over the region edges, or None. Each crossing is applied, so
+    a key or fee the first one spends is not available to the second."""
+    frontier: list[tuple[WorldState, list[Action]]] = [(state, [])]
+    seen = {game_data.state_region(state)}
+    for _ in range(MAX_CROSSINGS):
+        nxt: list[tuple[WorldState, list[Action]]] = []
+        for at, route in frontier:
+            here = game_data.state_region(at)
+            for edge in edges:
+                if edge.travel_region != here or not edge.is_applicable(at, game_data):
+                    continue
+                landed = edge.apply(at, game_data)
+                region = game_data.state_region(landed)
+                if region == target:
+                    return [*route, edge]
+                if region not in seen:
+                    seen.add(region)
+                    nxt.append((landed, [*route, edge]))
+        frontier = nxt
+    return None
 
 
 def _dispatch(goal: Goal, state: WorldState, game_data: GameData, actions: list[Action],
@@ -398,8 +466,15 @@ def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool:
                                       accessible=bank_accessible)
         return dataclasses.replace(found, quantity=step.amount)
     if route.kind is SourceKind.GATHER:
-        gather = next((a for a in candidates if isinstance(a, GatherAction)
-                       and a.resource_code == route.via and a.drop_item(game_data) == step.item), None)
+        # One resource can grow in several regions, one action each. The one in
+        # the character's own region needs no crossing; another region's is the
+        # fallback (`_bridge_regions` crosses to it). Census 2026-10-08:
+        # palm_tree grows on the mainland AND in `overworld:-4,17`, the first
+        # match was the latter, and no modelled edge leads back to the workshop.
+        here = game_data.state_region(state)
+        gathers = [a for a in candidates if isinstance(a, GatherAction)
+                   and a.resource_code == route.via and a.drop_item(game_data) == step.item]
+        gather = next((a for a in gathers if a.travel_region == here), next(iter(gathers), None))
         return None if gather is None else dataclasses.replace(gather, quantity=step.runs)
     if route.kind is SourceKind.CRAFT:
         craft = next((a for a in candidates if isinstance(a, CraftAction) and a.code == step.item), None)

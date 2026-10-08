@@ -81,16 +81,16 @@
 | l40_band_entry | alchemy | 25 | earns | Gather(nettle×1) → Gather(trout_spot×1) → Craft(forest_bank_potion×1) |
 | l40_band_entry | cooking | 35 | earns | Gather(bass_spot×1) → Craft(cooked_bass×1) |
 | l40_band_entry | fishing | 35 | earns | Gather(bass_spot×1) |
-| l40_band_entry | gearcrafting | 35 | earns | Gather(bass_spot×5) → Craft(cooked_bass×5) → Gather(gold_rocks×80) → Craft(gold_bar×8) → Fight(skeleton) → Fight(wolf) → Fight(pig) → Gather(iron_rocks×12) → Gather(coal_rocks×28) → Craft(steel_bar×4) → Craft(skeleton_armor×1) → Fight(death_knight) → Fight(imp) → Craft(royal_skeleton_armor×1) |
+| l40_band_entry | gearcrafting | 35 | earns | Gather(bass_spot×5) → Craft(cooked_bass×5) → Transition((5,-3,overworld)->(5,-3,underground)) → Gather(gold_rocks×80) → Transition((5,-3,underground)->(5,-3,overworld)) → Craft(gold_bar×8) → Fight(skeleton) → Fight(wolf) → Fight(pig) → Gather(iron_rocks×12) → Gather(coal_rocks×28) → Craft(steel_bar×4) → Craft(skeleton_armor×1) → Fight(death_knight) → Fight(imp) → Craft(royal_skeleton_armor×1) |
 | l40_band_entry | jewelrycrafting | 25 | earns | Gather(bass_spot×5) → Craft(cooked_bass×5) → Gather(iron_rocks×50) → Craft(iron_bar×5) → Fight(green_slime) → Fight(flying_snake) → Craft(air_ring×1) |
-| l40_band_entry | mining | 38 | earns | Gather(gold_rocks×10) → Craft(gold_bar×1) |
+| l40_band_entry | mining | 38 | earns | Transition((5,-3,overworld)->(5,-3,underground)) → Gather(gold_rocks×10) → Transition((5,-3,underground)->(5,-3,overworld)) → Craft(gold_bar×1) |
 | l40_band_entry | weaponcrafting | 35 | declined |  |
 | l40_band_entry | woodcutting | 38 | earns | Gather(ash_tree×5) → Gather(spruce_tree×5) → Gather(dead_tree×5) → Craft(sap×1) |
 | l48_capstone_approach | alchemy | 35 | earns | Gather(nettle×2) → Gather(sunflower_field×1) → Gather(gudgeon_spot->algae×1) → Craft(health_splash_potion×1) |
 | l48_capstone_approach | cooking | 42 | earns | Gather(salmon_spot×1) → Craft(cooked_salmon×1) |
 | l48_capstone_approach | fishing | 42 | earns | Gather(salmon_spot×1) |
 | l48_capstone_approach | gearcrafting | 42 | declined |  |
-| l48_capstone_approach | jewelrycrafting | 35 | earns | Gather(salmon_spot×5) → Craft(cooked_salmon×5) → Gather(gold_rocks×80) → Craft(gold_bar×8) → Gather(dead_tree×30) → Craft(dead_wood_plank×3) → Fight(wolf) → Fight(vampire) → Fight(skeleton) → Craft(gold_ring×1) |
+| l48_capstone_approach | jewelrycrafting | 35 | earns | Gather(salmon_spot×5) → Craft(cooked_salmon×5) → Transition((5,-3,overworld)->(5,-3,underground)) → Gather(gold_rocks×80) → Transition((5,-3,underground)->(5,-3,overworld)) → Craft(gold_bar×8) → Gather(dead_tree×30) → Craft(dead_wood_plank×3) → Fight(wolf) → Fight(vampire) → Fight(skeleton) → Craft(gold_ring×1) |
 | l48_capstone_approach | mining | 46 | earns | Withdraw(mithril_ore×10) → Craft(mithril_bar×1) |
 | l48_capstone_approach | weaponcrafting | 42 | declined |  |
 | l48_capstone_approach | woodcutting | 46 | earns | Gather(maple_tree×15) → Craft(maple_sap×1) |
@@ -98,7 +98,7 @@
 | l48_band_adequate | cooking | 42 | earns | Gather(salmon_spot×1) → Craft(cooked_salmon×1) |
 | l48_band_adequate | fishing | 42 | earns | Gather(salmon_spot×1) |
 | l48_band_adequate | gearcrafting | 42 | declined |  |
-| l48_band_adequate | jewelrycrafting | 35 | earns | Gather(salmon_spot×5) → Craft(cooked_salmon×5) → Gather(gold_rocks×80) → Craft(gold_bar×8) → Gather(dead_tree×30) → Craft(dead_wood_plank×3) → Fight(wolf) → Fight(vampire) → Fight(skeleton) → Craft(gold_ring×1) |
+| l48_band_adequate | jewelrycrafting | 35 | earns | Gather(salmon_spot×5) → Craft(cooked_salmon×5) → Transition((5,-3,overworld)->(5,-3,underground)) → Gather(gold_rocks×80) → Transition((5,-3,underground)->(5,-3,overworld)) → Craft(gold_bar×8) → Gather(dead_tree×30) → Craft(dead_wood_plank×3) → Fight(wolf) → Fight(vampire) → Fight(skeleton) → Craft(gold_ring×1) |
 | l48_band_adequate | mining | 46 | earns | Withdraw(mithril_ore×10) → Craft(mithril_bar×1) |
 | l48_band_adequate | weaponcrafting | 42 | declined |  |
 | l48_band_adequate | woodcutting | 46 | earns | Gather(maple_tree×15) → Craft(maple_sap×1) |
@@ -106,7 +106,7 @@
 | l48_raid_active | cooking | 42 | earns | Gather(salmon_spot×1) → Craft(cooked_salmon×1) |
 | l48_raid_active | fishing | 42 | earns | Gather(salmon_spot×1) |
 | l48_raid_active | gearcrafting | 42 | declined |  |
-| l48_raid_active | jewelrycrafting | 35 | earns | Gather(salmon_spot×5) → Craft(cooked_salmon×5) → Gather(gold_rocks×80) → Craft(gold_bar×8) → Gather(dead_tree×30) → Craft(dead_wood_plank×3) → Fight(wolf) → Fight(vampire) → Fight(skeleton) → Craft(gold_ring×1) |
+| l48_raid_active | jewelrycrafting | 35 | earns | Gather(salmon_spot×5) → Craft(cooked_salmon×5) → Transition((5,-3,overworld)->(5,-3,underground)) → Gather(gold_rocks×80) → Transition((5,-3,underground)->(5,-3,overworld)) → Craft(gold_bar×8) → Gather(dead_tree×30) → Craft(dead_wood_plank×3) → Fight(wolf) → Fight(vampire) → Fight(skeleton) → Craft(gold_ring×1) |
 | l48_raid_active | mining | 46 | earns | Withdraw(mithril_ore×10) → Craft(mithril_bar×1) |
 | l48_raid_active | weaponcrafting | 42 | declined |  |
 | l48_raid_active | woodcutting | 46 | earns | Gather(maple_tree×15) → Craft(maple_sap×1) |
@@ -114,7 +114,7 @@
 | l48_event_active | cooking | 42 | earns | Gather(salmon_spot×1) → Craft(cooked_salmon×1) |
 | l48_event_active | fishing | 42 | earns | Gather(salmon_spot×1) |
 | l48_event_active | gearcrafting | 42 | declined |  |
-| l48_event_active | jewelrycrafting | 35 | earns | Gather(salmon_spot×5) → Craft(cooked_salmon×5) → Gather(gold_rocks×80) → Craft(gold_bar×8) → Gather(dead_tree×30) → Craft(dead_wood_plank×3) → Fight(wolf) → Fight(vampire) → Fight(skeleton) → Craft(gold_ring×1) |
+| l48_event_active | jewelrycrafting | 35 | earns | Gather(salmon_spot×5) → Craft(cooked_salmon×5) → Transition((5,-3,overworld)->(5,-3,underground)) → Gather(gold_rocks×80) → Transition((5,-3,underground)->(5,-3,overworld)) → Craft(gold_bar×8) → Gather(dead_tree×30) → Craft(dead_wood_plank×3) → Fight(wolf) → Fight(vampire) → Fight(skeleton) → Craft(gold_ring×1) |
 | l48_event_active | mining | 46 | earns | Withdraw(mithril_ore×10) → Craft(mithril_bar×1) |
 | l48_event_active | weaponcrafting | 42 | declined |  |
 | l48_event_active | woodcutting | 46 | earns | Gather(maple_tree×15) → Craft(maple_sap×1) |
@@ -307,7 +307,7 @@
 | l47_depth3_amulet | fishing | 20 | earns | Gather(trout_spot×1) |
 | l47_depth3_amulet | gearcrafting | 40 | earns | Fight(skeleton) → Fight(wolf) → Fight(pig) → Gather(iron_rocks×12) → Gather(coal_rocks×28) → Craft(steel_bar×4) → Craft(skeleton_armor×1) → Fight(imp) → Craft(royal_skeleton_armor×1) |
 | l47_depth3_amulet | jewelrycrafting | 40 | earns | Gather(ash_tree×24) → Gather(birch_tree×36) → Craft(hardwood_plank×6) → Craft(dreadful_amulet×1) → Craft(greater_dreadful_amulet×1) |
-| l47_depth3_amulet | mining | 40 | earns | Gather(mithril_rocks×10) → Craft(mithril_bar×1) |
+| l47_depth3_amulet | mining | 40 | earns | Transition((-2,6,overworld)->(-2,6,underground)) → Gather(mithril_rocks×10) → Transition((-2,6,underground)->(-2,6,overworld)) → Craft(mithril_bar×1) |
 | l47_depth3_amulet | weaponcrafting | 40 | declined |  |
 | l47_depth3_amulet | woodcutting | 40 | earns | Gather(maple_tree×15) → Craft(maple_sap×1) |
 | l20_relief_full_bank | alchemy | 10 | earns | Withdraw(algae×1) → Craft(earth_boost_potion×1) |

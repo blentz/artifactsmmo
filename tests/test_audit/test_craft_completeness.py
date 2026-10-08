@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import is_winnable
@@ -29,6 +30,7 @@ from artifactsmmo_cli.audit.craft_completeness import (
     classify_gap,
     craft_cell_verdict,
     craft_grid,
+    first_work_leg,
     plan_craft,
 )
 
@@ -921,3 +923,42 @@ def test_a_heal_prep_leg_before_a_grind_fight_is_directional() -> None:
     with patch.object(craft_completeness, "heal_prep_goal", return_value=None):
         assert not advances_a_heal_prep(plan[0], plan, state, gd)
     assert run_cell("iron_boots", CraftCell(8, "gearcrafting", 5), gd).passed
+
+
+def test_the_verdict_judges_the_first_leg_that_is_not_a_crossing() -> None:
+    """2026-10-08: decomposed plans now open with a region crossing
+    (`craft_plan_gen._bridge_regions`); the crossing serves the leg after it."""
+    from_mine = MapTransitionAction(portal_x=5, portal_y=-3, dest_x=5, dest_y=-3,
+                                    dest_layer="underground")
+    gather = GatherAction(resource_code="copper_rocks", locations=frozenset({(1, 1)}))
+    assert first_work_leg([from_mine, gather]) is gather
+    assert first_work_leg([from_mine]) is None
+    assert first_work_leg([]) is None
+
+
+def test_a_crossing_the_census_character_cannot_pay_is_its_own_gap(monkeypatch) -> None:
+    """The decomposition names a crossing decline (`region:...`) when the census
+    character (zero gold) cannot pay the island boat: CROSSING_UNAFFORDABLE,
+    ahead of every leaf reading — and nothing at all without transitions."""
+    gd = GameData()
+    gd._item_stats = {"palm_plank": ItemStats(code="palm_plank", level=1, type_="resource",
+                                              crafting_skill="woodcutting", crafting_level=1)}
+    cell = CraftCell(char_level=48, skill_name="woodcutting", skill_level=50)
+    monkeypatch.setattr(craft_completeness, "census_state", lambda r, c, g: object())
+    assert craft_completeness._crossing_unaffordable("palm_plank", object(), gd) is False
+    gd.world.transition_edges = {(2, 16, "overworld"): (-2, 21, "overworld", (("gold", "cost", 1000),))}
+    monkeypatch.setattr(craft_completeness, "build_actions", lambda *a, **k: [])
+
+    def declined_on_crossing(goal, state, game_data, actions, ctx, declined):  # type: ignore[no-untyped-def]
+        declined.append("region:overworld->overworld:-4,17:Gather(palm_tree x10)")
+        return None
+
+    monkeypatch.setattr(craft_completeness, "decompose", declined_on_crossing)
+    assert classify_gap("palm_plank", cell, gd) is GapClass.CROSSING_UNAFFORDABLE
+
+    def declined_otherwise(goal, state, game_data, actions, ctx, declined):  # type: ignore[no-untyped-def]
+        declined.append("infeasible:palm_plank:no_route:palm_wood")
+        return None
+
+    monkeypatch.setattr(craft_completeness, "decompose", declined_otherwise)
+    assert craft_completeness._crossing_unaffordable("palm_plank", object(), gd) is False

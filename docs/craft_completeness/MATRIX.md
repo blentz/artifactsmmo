@@ -5,9 +5,9 @@
 > Census drives the REAL planner over the committed bundle. Cells whose plan hits the 10 s wall-clock budget (~16% of cells) can vary between regens; treat their verdict as approximate.
 
 
-321 recipes, 1758 cells; PASS 301 (17%); nominal-at-skill PASS 58/321; gaps: event_gated 866, combat_blocked 570, material_unreachable 21, skill_unreachable 0, grey_farm_suppressed 0, purchase_recursion 0, planner_bug 0
+321 recipes, 1758 cells; PASS 283 (16%); nominal-at-skill PASS 52/321; gaps: event_gated 864, combat_blocked 570, material_unreachable 21, skill_unreachable 0, grey_farm_suppressed 1, purchase_recursion 0, crossing_unaffordable 19, planner_bug 0
 
-Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unreachable, GF=grey_farm_suppressed, PR=purchase_recursion, PB=planner_bug.
+Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unreachable, GF=grey_farm_suppressed, PR=purchase_recursion, XU=crossing_unaffordable, PB=planner_bug.
 
 ## alchemy — tier 1
 
@@ -42,7 +42,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 |---|---|---|
 | air_res_potion | 40 | 38/35 PASS · 38/40 PASS · 40/35 PASS · 40/40 PASS · 42/35 PASS · 42/40 PASS |
 | earth_res_potion | 40 | 38/35 PASS · 38/40 PASS · 40/35 PASS · 40/40 PASS · 42/35 PASS · 42/40 PASS |
-| enchanted_potion | 40 | 38/35 PASS · 38/40 PASS · 40/35 PASS · 40/40 PASS · 42/35 PASS · 42/40 PASS |
+| enchanted_potion | 40 | 38/35 PASS · 38/40 XU · 40/35 PASS · 40/40 XU · 42/35 PASS · 42/40 XU |
 | enhanced_boost_potion | 40 | 38/35 EG · 38/40 EG · 40/35 EG · 40/40 EG · 42/35 EG · 42/40 EG |
 | fire_res_potion | 40 | 38/35 PASS · 38/40 PASS · 40/35 PASS · 40/40 PASS · 42/35 PASS · 42/40 PASS |
 | greater_health_potion | 40 | 38/35 PASS · 38/40 PASS · 40/35 PASS · 40/40 PASS · 42/35 PASS · 42/40 PASS |
@@ -56,8 +56,8 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | enhanced_antidote | 45 | 48/40 EG · 48/45 EG · 50/40 EG · 50/45 EG |
 | enhanced_health_potion | 45 | 48/40 EG · 48/45 EG · 50/40 EG · 50/45 EG |
 | enhanced_health_splash_potion | 50 | 48/45 EG · 48/50 EG · 50/45 EG · 50/50 EG |
-| lava_underground_potion | 50 | 48/45 PASS · 48/50 PASS · 50/45 PASS · 50/50 PASS |
-| sandwhisper_potion | 50 | 48/45 PASS · 48/50 PASS · 50/45 PASS · 50/50 PASS |
+| lava_underground_potion | 50 | 48/45 XU · 48/50 XU · 50/45 XU · 50/50 XU |
+| sandwhisper_potion | 50 | 48/45 XU · 48/50 XU · 50/45 XU · 50/50 XU |
 
 ## cooking — tier 1
 
@@ -65,7 +65,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 |---|---|---|
 | cheese | 10 | 8/5 CB · 8/10 CB · 10/5 CB · 10/10 CB · 12/5 CB · 12/10 CB |
 | cooked_beef | 5 | 1/1 CB · 1/5 CB · 8/1 CB · 8/5 CB · 12/1 CB · 12/5 CB |
-| cooked_chicken | 1 | 1/1 PASS · 8/1 PASS · 12/1 PASS |
+| cooked_chicken | 1 | 1/1 PASS · 8/1 PASS · 12/1 GF |
 | cooked_gudgeon | 1 | 1/1 PASS · 8/1 PASS · 12/1 PASS |
 | cooked_shrimp | 10 | 8/5 PASS · 8/10 PASS · 10/5 PASS · 10/10 PASS · 12/5 PASS · 12/10 PASS |
 | cookie | 10 | 8/5 CB · 8/10 CB · 10/5 CB · 10/10 CB · 12/5 CB · 12/10 CB |
@@ -102,7 +102,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
 | cooked_desert_scorpion_meat | 50 | 48/45 CB · 48/50 CB · 50/45 CB · 50/50 CB |
-| cooked_swordfish | 50 | 48/45 PASS · 48/50 PASS · 50/45 PASS · 50/50 PASS |
+| cooked_swordfish | 50 | 48/45 PASS · 48/50 XU · 50/45 PASS · 50/50 XU |
 
 ## gearcrafting — tier 1
 
@@ -372,8 +372,8 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
-| adamantite_bar | 50 | 48/45 PASS · 48/50 PASS · 50/45 PASS · 50/50 PASS |
-| alexandrite | 50 | 48/45 PASS · 48/50 EG · 50/45 PASS · 50/50 EG |
+| adamantite_bar | 50 | 48/45 PASS · 48/50 XU · 50/45 PASS · 50/50 XU |
+| alexandrite | 50 | 48/45 PASS · 48/50 XU · 50/45 PASS · 50/50 XU |
 
 ## weaponcrafting — tier 1
 
@@ -503,5 +503,5 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
-| palm_plank | 50 | 48/45 PASS · 48/50 PASS · 50/45 PASS · 50/50 PASS |
+| palm_plank | 50 | 48/45 PASS · 48/50 XU · 50/45 PASS · 50/50 XU |
 

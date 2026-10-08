@@ -78,9 +78,19 @@ def build_actions(
         ClaimPendingItemAction(),
     ]
 
-    # Fight and gather actions carry their own locations — no separate move actions needed
+    # Fight and gather actions carry their own locations — no separate move actions needed.
+    # ONE ACTION PER REGION of its tiles, carrying that region (`travel_region`):
+    # the legacy maps hold every overworld-LAYER tile, and a disconnected island
+    # is overworld-layer too. Census 2026-10-08: palm_tree's legacy gather sat on
+    # Sandwhisper Isle (`overworld:-4,17`, reached by a 1000-gold boat) labelled
+    # "overworld", so the walk planned it from the mainland with no crossing.
+    # `emitted` keeps the layered (P5b) block below from emitting a second copy.
+    emitted: set[tuple[str, str]] = set()
     for monster_code, locs in game_data.all_monster_locations.items():
-        actions.append(FightAction(monster_code=monster_code, locations=frozenset(locs)))
+        for region, tiles in _by_region(locs, game_data).items():
+            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),
+                                       travel_region=region))
+            emitted.add((monster_code, region))
         actions.append(OptimizeLoadoutAction(target_monster_code=monster_code, game_data=game_data))
 
     # Raid bosses have NO monster-type map tile, so the loop above never sees
@@ -99,19 +109,9 @@ def build_actions(
                                                  game_data=game_data))
 
     for resource_code, locs in game_data.all_resource_locations.items():
-        actions.append(GatherAction(resource_code=resource_code, locations=frozenset(locs)))
-        # P1: one targeted gather per NON-primary drop (rare multi-drops —
-        # gems from rocks, pearls from fishing). The planner simulates the
-        # secondary yield directly (see GatherAction.drop_item_override), so
-        # gem-ingredient recipe chains are plannable at last.
-        primary = game_data.resource_drop_item(resource_code)
-        seen: set[str] = set()
-        for drop_item, _rate, _mn, _mx in game_data.resource_drop_table(resource_code):
-            if drop_item != primary and drop_item not in seen:
-                seen.add(drop_item)
-                actions.append(GatherAction(
-                    resource_code=resource_code, locations=frozenset(locs),
-                    drop_item_override=drop_item))
+        for region, tiles in _by_region(locs, game_data).items():
+            _gathers(actions, game_data, resource_code, tiles, region)
+            emitted.add((resource_code, region))
 
     # One gather-loadout optimizer per gathering skill — lets the planner re-arm
     # with the best tool before a gather session (mirrors the per-monster combat
@@ -333,7 +333,7 @@ def build_actions(
     for code, layered_tiles in game_data.world.layered_content.items():
         for (tx, ty, tlayer) in layered_tiles:
             region = game_data.region_of(tx, ty, tlayer)
-            if region == "overworld":
+            if region == "overworld" or (code, region) in emitted:
                 continue
             layered_extra.setdefault((code, region), []).append((tx, ty))
     for (code, region), region_tiles in sorted(layered_extra.items()):
@@ -344,9 +344,7 @@ def build_actions(
             actions.append(OptimizeLoadoutAction(
                 target_monster_code=code, game_data=game_data))
         elif game_data.resource_skill_level(code) is not None:
-            actions.append(GatherAction(
-                resource_code=code, locations=frozenset(region_tiles),
-                travel_region=region))
+            _gathers(actions, game_data, code, region_tiles, region)
 
     # Phase B: bank expansion, transitions, gold management
     actions.append(BuyBankExpansionAction(bank_location=bank, accessible=bank_accessible))
@@ -378,3 +376,28 @@ def build_actions(
             actions.append(TaskTradeAction(code=task_code, quantity=1, taskmaster_location=taskmaster))
 
     return actions
+
+
+def _by_region(tiles: list[tuple[int, int]], game_data: GameData) -> dict[str, list[tuple[int, int]]]:
+    """Overworld-layer `tiles` grouped by access region, in tile order."""
+    out: dict[str, list[tuple[int, int]]] = {}
+    for x, y in tiles:
+        out.setdefault(game_data.region_of(x, y, "overworld"), []).append((x, y))
+    return out
+
+
+def _gathers(actions: list[Action], game_data: GameData, resource_code: str,
+             tiles: list[tuple[int, int]], region: str) -> None:
+    """The gathers of one resource in one region: the primary drop, then one
+    targeted gather per NON-primary drop (P1: rare multi-drops — gems from
+    rocks, pearls from fishing; the planner simulates the secondary yield via
+    `GatherAction.drop_item_override`, so gem-ingredient chains plan)."""
+    actions.append(GatherAction(resource_code=resource_code, locations=frozenset(tiles),
+                                travel_region=region))
+    primary = game_data.resource_drop_item(resource_code)
+    seen: set[str] = set()
+    for drop_item, _rate, _mn, _mx in game_data.resource_drop_table(resource_code):
+        if drop_item != primary and drop_item not in seen:
+            seen.add(drop_item)
+            actions.append(GatherAction(resource_code=resource_code, locations=frozenset(tiles),
+                                        drop_item_override=drop_item, travel_region=region))

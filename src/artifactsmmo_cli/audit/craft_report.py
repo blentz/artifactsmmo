@@ -15,6 +15,7 @@ GAP_ABBREV: dict[str, str] = {
     "skill_unreachable": "SU",
     "grey_farm_suppressed": "GF",
     "purchase_recursion": "PR",
+    "crossing_unaffordable": "XU",
     "planner_bug": "PB",
 }
 
