@@ -5246,6 +5246,20 @@ POTION_NEED_MUTATIONS = [
      "    if learned is not None:\n        return max(0, int(learned))\n    return damage\n",
      "    return damage\n"),
 ]
+FIGHT_READY_MUTATIONS = [
+    ("fight ready: a cached fight is reused whatever the hp",
+     "        return predict_win(state, game_data, step.monster_code)\n",
+     "        return True\n"),
+    ("fight ready: the cached step's readiness is not asked",
+     "        step_applicable = (step is not None and step.is_applicable(state, game_data)\n"
+     "                           and self._fight_ready(step, state, game_data))\n",
+     "        step_applicable = (step is not None and step.is_applicable(state, game_data))\n"),
+]
+REST_FIGHT_AHEAD_MUTATIONS = [
+    ("rest guard: asks about the grind target, not the fight ahead",
+     "        monster = ctx.fight_monster or ctx.combat_monster\n",
+     "        monster = ctx.combat_monster\n"),
+]
 GOLD_SHORT_MUTATIONS = [
     ("gold short: the root's purchases are not counted",
      "        need = max(progression_reserve(self.state, self.game_data), root_need)\n",
@@ -9511,6 +9525,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_supply_reserved.py", survivors)
     run_group(POTION_SUPPLY_SRC, POTION_NEED_MUTATIONS,
               "tests/test_ai/test_craft_potions.py", survivors)
+    run_group(PLAYER_SRC, FIGHT_READY_MUTATIONS,
+              "tests/test_ai/test_plan_or_reuse.py", survivors)
+    run_group(GUARDS_SRC, REST_FIGHT_AHEAD_MUTATIONS,
+              "tests/test_ai/test_tiers_guards.py", survivors)
     run_group(PLAYER_SRC, GOLD_SHORT_MUTATIONS,
               "tests/test_ai/test_task_worth.py", survivors)
     run_group(TASK_WORTH_SRC, TASK_WORTH_HORIZON_MUTATIONS,

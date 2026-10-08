@@ -897,3 +897,15 @@ def test_craft_potions_goal_sizes_from_the_monster_the_guard_fired_on():
     # A guard that fired must not emit a goal the arbiter throws away unread.
     assert goal.is_satisfied(state) is False
     assert goal.value(state, gd) > 0.0
+
+
+def test_rest_for_combat_asks_about_the_fight_ahead():
+    """Live 2026-10-08: R2D2's supply intention fought rat while its grind
+    target was another monster; the guard must ask about the fight AHEAD
+    (`ctx.fight_monster`) when there is one."""
+    state = make_state(hp=12, max_hp=100, attack={"fire": 8}, initiative=5)
+    gd = _combat_gd(monster_hp=40, monster_attack={"fire": 10})
+    assert _fires(GuardKind.REST_FOR_COMBAT, state, gd, None,
+                  _ctx(combat_monster=None, fight_monster="mob")) is True
+    assert _fires(GuardKind.REST_FOR_COMBAT, state, gd, None,
+                  _ctx(combat_monster=None, fight_monster=None)) is False

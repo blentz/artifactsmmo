@@ -700,7 +700,8 @@ class GamePlayer:
         cache = self._plan_cache
         step = cache.current() if cache is not None else None
         goal_satisfied = cache is not None and cache.selected_goal.is_satisfied(state)
-        step_applicable = step is not None and step.is_applicable(state, game_data)
+        step_applicable = (step is not None and step.is_applicable(state, game_data)
+                           and self._fight_ready(step, state, game_data))
         if should_replan(
             cache, self._last_outcome, state.level,
             goal_satisfied, step_applicable, BANK_REFRESH_INTERVAL,
@@ -744,6 +745,19 @@ class GamePlayer:
         self.state = replace(state, crafting_target=cache.crafting_target)
         self._notify_planning(False)
         return cache.selected_goal, cache.plan[cache.cursor:], [], False
+
+    @staticmethod
+    def _fight_ready(step: Action, state: WorldState, game_data: GameData) -> bool:
+        """A cached Fight step still wins at the CURRENT hp (`predict_win`). A
+        drop farm's fight leg repeats "until N drops", and reusing it skipped
+        every guard: live 2026-10-08, R2D2's supply fights against rat ran the
+        second fight at 335/695 hp (rat hits for ~360) and lost, 9 in 70
+        minutes — the potions that used to carry it were (correctly) no longer
+        stocked for a fight it wins from full. An unready fight is a replan,
+        where the rest-for-combat guard rests first."""
+        if not isinstance(step, FightAction):
+            return True
+        return predict_win(state, game_data, step.monster_code)
 
     def _resume_plan_cache(self, state: WorldState, game_data: GameData | None) -> None:
         """Restore a persisted commitment iff the goal rehydrates and every remaining

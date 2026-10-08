@@ -187,13 +187,18 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
         #   (d) predict_win at max_hp is True (i.e. resting MEANS we can
         #       then win — otherwise this isn't a hp problem, it's a gear
         #       problem and the picker should have rejected the target).
-        if ctx.combat_monster is None:
+        # The fight AHEAD first (`ctx.fight_monster`, the committed intention's
+        # next Fight), else the grind target. Live 2026-10-08: R2D2's supply
+        # intention fought rat while its grind target was another monster, so
+        # the guard asked about the wrong fight and never rested.
+        monster = ctx.fight_monster or ctx.combat_monster
+        if monster is None:
             return False
         if state.hp >= state.max_hp:
             return False
-        if predict_win(state, game_data, ctx.combat_monster):
+        if predict_win(state, game_data, monster):
             return False
-        return predict_win(replace(state, hp=state.max_hp), game_data, ctx.combat_monster)
+        return predict_win(replace(state, hp=state.max_hp), game_data, monster)
     if kind is GuardKind.BANK_UNLOCK:
         if ctx.bank_unlock_monster is None or ctx.bank_accessible:
             return False

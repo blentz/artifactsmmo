@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state, one_equippable_item_page
@@ -150,3 +151,26 @@ def test_advance_with_history_persists_cursor(tmp_path):
     # then line 641 updates it to cursor=1 after advance().
     assert loaded is not None
     assert loaded.cursor == 1
+
+
+def test_a_cached_fight_that_would_now_be_lost_is_replanned(monkeypatch):
+    """Live 2026-10-08: R2D2's drop-farm leg reran Fight(rat) at 335/695 hp from
+    the cache, past every guard, and lost 9 times in 70 minutes. An unready
+    cached fight is a replan (where the rest-for-combat guard rests first)."""
+    fight = FightAction(monster_code="rat", locations=frozenset({(0, 0)}))
+    goal = _Goal()
+    player, calls = _player_with_stub_plan([fight, fight], goal)
+    monkeypatch.setattr(FightAction, "is_applicable", lambda self, s, g: True)
+    wins = {"now": True}
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.predict_win", lambda s, g, m: wins["now"])
+    state = make_state()
+    player._plan_or_reuse(state, None, [], None)
+    player._plan_or_reuse(state, None, [], None)
+    assert calls["n"] == 1  # a ready fight is reused
+    wins["now"] = False
+    player._plan_or_reuse(state, None, [], None)
+    assert calls["n"] == 2  # an unready one replans
+
+
+def test_a_non_fight_step_needs_no_fight_check():
+    assert GamePlayer._fight_ready(_Act(), make_state(), None) is True
