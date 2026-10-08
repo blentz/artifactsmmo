@@ -162,24 +162,28 @@ def projected_heal_need_per_fight(state: WorldState, game_data: GameData,
                                   history: LearningStore | None) -> int:
     """In-combat healing needed per fight against ``monster``, in HP.
 
-    Learned consumption first: `hp_healed_per_fight` is what the character has
-    ACTUALLY drunk in won fights. With no history, marginality decides whether
-    there is any need at all -- a comfortably-winnable monster returns 0, because
-    a fight won without drinking needs no stock.
+    MARGINALITY FIRST, ALWAYS. A fight the character wins comfortably (it ends
+    above the fight-HP floor, `fight_is_marginal_pure`) needs no stock: resting
+    refills to full between fights for `max(3, ceil(missing%))` seconds, so
+    damage the bot rests off is not evidence that a potion was needed.
 
-    Deliberately NOT raw expected damage as the primary driver: resting refills to
-    full between fights for `max(3, ceil(missing%))` seconds, so damage the bot
-    simply rests off is not evidence that a potion was needed. Expected damage is
-    used only to SIZE a need that marginality has already established.
+    Only a MARGINAL fight has a need, and the learned consumption
+    (`hp_healed_per_fight`, what the character drank in won fights) sizes it,
+    else the expected damage. Learned consumption used to decide the need on
+    its own, and that was a loop: a potion in the utility slot is drunk
+    whenever HP dips, in a fight that needed it or not, so stocking produced
+    drinking and drinking read as need. Live 2026-10-08: C3P0 (L30, 665 hp)
+    drank potions in 19 of 36 cow fights and 15 of 23 wolf fights (expected
+    damage 140 and 210, comfortably won), and the potion guard ran 198-352
+    cycles a character in 8 hours.
     """
+    damage = max(0, expected_damage_per_fight(state, game_data, monster))
+    if not fight_is_marginal_pure(damage, state.max_hp):
+        return 0
     learned = history.hp_healed_per_fight(monster, game_data.hp_restore_of) \
         if history is not None else None
     if learned is not None:
         return max(0, int(learned))
-    # No history: only a fight that is NOT comfortably won justifies stock.
-    damage = max(0, expected_damage_per_fight(state, game_data, monster))
-    if not fight_is_marginal_pure(damage, state.max_hp):
-        return 0
     return damage
 
 

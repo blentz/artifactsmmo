@@ -50,3 +50,26 @@ def test_the_layered_path_adds_no_second_copy() -> None:
                             task_exchange_min_coins=1)
     assert len([a for a in actions if isinstance(a, FightAction) and a.monster_code == "crab"
                 and a.travel_region == "overworld:5,5"]) == 1
+
+
+def _task_actions(state):  # type: ignore[no-untyped-def]
+    gd = _gd()
+    gd.world.taskmaster_tiles = {"monsters": (1, 0), "items": (4, 13)}
+    gd._item_stats = {}
+    actions = build_actions(gd, state, None, bank_accessible=True, task_exchange_min_coins=1)
+    return {type(a).__name__: a.taskmaster_location for a in actions
+            if type(a).__name__ in ("TaskCancelAction", "CompleteTaskAction", "TaskTradeAction")}
+
+
+def test_a_held_task_is_handled_at_the_master_that_issued_it() -> None:
+    """Live 2026-10-08: Robby drew `ash_plank` at the items master (4, 13) and
+    its cancel walked to the monsters master — HTTP 598, 180 times."""
+    held = make_state(task_code="ash_plank", task_type="items", task_progress=0, task_total=22)
+    assert _task_actions(held) == {"TaskCancelAction": (4, 13), "CompleteTaskAction": (4, 13),
+                                   "TaskTradeAction": (4, 13)}
+
+
+def test_without_a_known_issuer_the_default_master_stays() -> None:
+    assert _task_actions(make_state()) == {"TaskCancelAction": (1, 0), "CompleteTaskAction": (1, 0)}
+    odd = make_state(task_code="x", task_type="raids", task_progress=0, task_total=1)
+    assert _task_actions(odd) == {"TaskCancelAction": (1, 0), "CompleteTaskAction": (1, 0)}

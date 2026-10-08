@@ -65,6 +65,15 @@ def build_actions(
     # at "any Tasks Master").
     taskmaster = game_data.taskmaster_location()
     accept_master = LocationCatalog.TASKMASTER_DEFAULT_ORDER[0]
+    # The held task is completed, cancelled and traded at the master that
+    # ISSUED it, keyed by its type (the master's content code). Live
+    # 2026-10-08: draws go to the master with the worthier pool (c-2 #5), Robby
+    # drew `ash_plank` at the items master (4, 13), and its cancel walked to the
+    # default monsters master (1, 2) — HTTP 598 "Tasks Master not found on this
+    # map", 180 times. Only a type with no discovered master keeps the default.
+    held_type = state.task_type if state is not None else None
+    held_master = (game_data.taskmaster_tiles.get(held_type, taskmaster)
+                   if held_type is not None else taskmaster)
 
     actions: list[Action] = [
         RestAction(),
@@ -72,9 +81,9 @@ def build_actions(
         UseGoldBagAction(_item_stats=game_data.all_item_stats),
         DepositAllAction(bank_location=bank, accessible=bank_accessible, game_data=game_data),
         AcceptTaskAction(taskmaster_location=taskmaster, taskmaster_code=accept_master),
-        CompleteTaskAction(taskmaster_location=taskmaster),
+        CompleteTaskAction(taskmaster_location=held_master),
         TaskExchangeAction(taskmaster_location=taskmaster, min_coins=task_exchange_min_coins),
-        TaskCancelAction(taskmaster_location=taskmaster),
+        TaskCancelAction(taskmaster_location=held_master),
         ClaimPendingItemAction(),
     ]
 
@@ -371,9 +380,9 @@ def build_actions(
         if workshop is not None and k > 1:
             actions.append(CraftAction(code=task_code, quantity=k, workshop_location=workshop,
                                        craft_skill=stats.crafting_skill if stats else None))
-        actions.append(TaskTradeAction(code=task_code, quantity=k, taskmaster_location=taskmaster))
+        actions.append(TaskTradeAction(code=task_code, quantity=k, taskmaster_location=held_master))
         if k > 1:
-            actions.append(TaskTradeAction(code=task_code, quantity=1, taskmaster_location=taskmaster))
+            actions.append(TaskTradeAction(code=task_code, quantity=1, taskmaster_location=held_master))
 
     return actions
 

@@ -5154,6 +5154,11 @@ REGION_SPLIT_MUTATIONS = [
      "        out.setdefault(game_data.region_of(x, y, \"overworld\"), []).append((x, y))\n",
      "        out.setdefault(\"overworld\", []).append((x, y))\n"),
 ]
+HELD_MASTER_MUTATIONS = [
+    ("factory: a held task is handled at the default master",
+     "    held_master = (game_data.taskmaster_tiles.get(held_type, taskmaster)\n",
+     "    held_master = (taskmaster\n"),
+]
 GATHER_REGION_MUTATIONS = [
     ("walk: the first gather wins whatever its region",
      "        gather = next((a for a in gathers if a.travel_region == here), next(iter(gathers), None))\n",
@@ -5232,6 +5237,14 @@ SUPPLY_RESERVED_PLAYER_MUTATIONS = [
     ("supply reserved: the player reserves only the target",
      "                self.game_data.requirement_graph.graph(), [self._supply_target[0]]))\n",
      "                self.game_data.requirement_graph.graph(), []) | {self._supply_target[0]})\n"),
+]
+POTION_NEED_MUTATIONS = [
+    ("potion need: a comfortable fight's drinking is need again",
+     "    if not fight_is_marginal_pure(damage, state.max_hp):\n        return 0\n    learned",
+     "    learned"),
+    ("potion need: a marginal fight ignores what it drank",
+     "    if learned is not None:\n        return max(0, int(learned))\n    return damage\n",
+     "    return damage\n"),
 ]
 GOLD_SHORT_MUTATIONS = [
     ("gold short: the root's purchases are not counted",
@@ -9476,6 +9489,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_consumable_floor.py", survivors)
     run_group(PLAYER_SRC, CONSUMABLE_PLAYER_MUTATIONS,
               "tests/test_ai/test_player_coordination.py", survivors)
+    run_group(FACTORY_SRC, HELD_MASTER_MUTATIONS,
+              "tests/test_ai/test_factory_regions.py", survivors)
     run_group(FACTORY_SRC, REGION_SPLIT_MUTATIONS,
               "tests/test_ai/test_factory_regions.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, GATHER_REGION_MUTATIONS,
@@ -9494,6 +9509,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_supply_reserved.py", survivors)
     run_group(PLAYER_SRC, SUPPLY_RESERVED_PLAYER_MUTATIONS,
               "tests/test_ai/test_supply_reserved.py", survivors)
+    run_group(POTION_SUPPLY_SRC, POTION_NEED_MUTATIONS,
+              "tests/test_ai/test_craft_potions.py", survivors)
     run_group(PLAYER_SRC, GOLD_SHORT_MUTATIONS,
               "tests/test_ai/test_task_worth.py", survivors)
     run_group(TASK_WORTH_SRC, TASK_WORTH_HORIZON_MUTATIONS,

@@ -15,6 +15,7 @@ import dataclasses
 
 from sqlmodel import Session as SqlSession
 
+import artifactsmmo_cli.ai.potion_supply as potion_supply
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
@@ -214,7 +215,34 @@ def _mk_store_with_fights(tmp_path, monster: str, consumables_json: str,
     return store
 
 
-def test_baseline_follows_learned_combat_demand(tmp_path):
+def _marginal(monkeypatch, state) -> None:  # type: ignore[no-untyped-def]
+    """The boss's expected damage is the character's whole max HP: a marginal
+    fight, the only kind learned consumption may size (2026-10-08)."""
+    monkeypatch.setattr(potion_supply, "expected_damage_per_fight", lambda s, g, m: state.max_hp)
+
+
+def test_a_comfortable_fight_needs_no_stock_whatever_was_drunk(tmp_path, monkeypatch):
+    """Live 2026-10-08: C3P0 drank potions in 19 of 36 cow fights it won
+    comfortably; a potion in the slot is drunk whenever HP dips, so drinking is
+    not need. A comfortable fight's learned drinking stocks nothing."""
+    gd = _gd_potion(hp_restore=30)
+    state = make_state(level=45)
+    monkeypatch.setattr(potion_supply, "expected_damage_per_fight", lambda s, g, m: 1)
+    store = _mk_store_with_fights(tmp_path, "cow", '{"small_health_potion": 3}')
+    goal = CraftPotionsGoal(combat_monster="cow", game_data=gd, history=store)
+    result = goal._baseline(state.level, state, gd, store)
+    store.close()
+    assert result == 0
+
+
+def test_a_marginal_fight_without_history_is_sized_by_its_damage(monkeypatch):
+    gd = _gd_potion(hp_restore=30)
+    state = make_state(level=45)
+    _marginal(monkeypatch, state)
+    assert potion_supply.projected_heal_need_per_fight(state, gd, "hard_boss", None) == state.max_hp
+
+
+def test_baseline_follows_learned_combat_demand(tmp_path, monkeypatch):
     """Learned in-combat consumption DRIVES the target; the level ramp only caps it.
 
     level=45 → level_baseline=100 (the cap). 5 fight rows each expend 1 potion ×
@@ -226,6 +254,7 @@ def test_baseline_follows_learned_combat_demand(tmp_path):
     _MONSTER = "hard_boss"
     gd = _gd_potion(hp_restore=30)
     state = make_state(level=45)
+    _marginal(monkeypatch, state)
     store = _mk_store_with_fights(tmp_path, _MONSTER, '{"small_health_potion": 1}')
     goal = CraftPotionsGoal(combat_monster=_MONSTER, game_data=gd, history=store)
     result = goal._baseline(state.level, state, gd, store)
@@ -233,7 +262,7 @@ def test_baseline_follows_learned_combat_demand(tmp_path):
     assert result == 10
 
 
-def test_baseline_capped_by_level_ramp(tmp_path):
+def test_baseline_capped_by_level_ramp(tmp_path, monkeypatch):
     """The level ramp is a CAP on speculation, never a floor.
 
     level=1 → level_baseline=5. 5 fight rows each expend 10 potions × 30 HP, so
@@ -244,6 +273,7 @@ def test_baseline_capped_by_level_ramp(tmp_path):
     _MONSTER = "hard_boss"
     gd = _gd_potion(hp_restore=30)
     state = make_state(level=1)
+    _marginal(monkeypatch, state)
     store = _mk_store_with_fights(tmp_path, _MONSTER, '{"small_health_potion": 10}')
     goal = CraftPotionsGoal(combat_monster=_MONSTER, game_data=gd, history=store)
     result = goal._baseline(state.level, state, gd, store)
