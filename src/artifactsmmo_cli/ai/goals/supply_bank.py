@@ -155,6 +155,18 @@ class SupplyBankGoal(Goal):
         return GatherMaterialsGoal(target_item=self._item_code,
                                    needed={self._item_code: max(1, self._deficit(state))})
 
+    @property
+    def item_code(self) -> str:
+        return self._item_code
+
+    def production(self, state: WorldState) -> tuple[WorldState, GatherMaterialsGoal, int]:
+        """The decomposition's question (`craft_plan_gen._decompose_supply`):
+        the state minus the target's own banked copies (`_production_state`),
+        the obtain goal for the units still to produce (`_production_goal`),
+        and how many units the closing deposit banks (`_deficit`)."""
+        return (self._production_state(state), self._production_goal(state),
+                self._deficit(state))
+
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:
         """Scope the search to the target's craft/gather closure + the deposit,

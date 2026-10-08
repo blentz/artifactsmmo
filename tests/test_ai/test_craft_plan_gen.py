@@ -15,7 +15,9 @@ import dataclasses
 from datetime import UTC, datetime
 from unittest.mock import patch
 
+import artifactsmmo_cli.ai.craft_plan_gen as cpg
 from artifactsmmo_cli.ai import craft_plan_gen
+from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
@@ -30,6 +32,7 @@ from artifactsmmo_cli.ai.decompose_core import Act
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.route import Route
@@ -426,7 +429,7 @@ class TestMissingItemStatsOrWorkshopFallsBack:
         gd._resource_drops = {"copper_rocks": "copper_ore"}
         gd._resource_locations = {"copper_rocks": [(0, 1)]}
         gd._workshop_locations = {"jewelrycrafting": (3, 1)}
-        gd._bank_location = (4, 0)
+        gd.world.bank_tile = (4, 0)
         gd._taskmaster_location = (1, 2)
         fill_monster_stat_defaults(gd)
 
@@ -506,7 +509,7 @@ class TestSharedIntermediateClosure:
         gd._resource_drops = {"copper_rocks": "copper_ore"}
         gd._resource_locations = {"copper_rocks": [(0, 1)]}
         gd._workshop_locations = {"mining": (1, 5), "jewelrycrafting": (3, 1)}
-        gd._bank_location = (4, 0)
+        gd.world.bank_tile = (4, 0)
         gd._taskmaster_location = (1, 2)
         fill_monster_stat_defaults(gd)
 
@@ -1669,7 +1672,7 @@ class TestSecondaryDropGather:
         gd._resource_skill = {"bass_spot": ("fishing", 1)}
         gd._resource_locations = {"bass_spot": [(0, 1)]}
         gd._workshop_locations = {"jewelrycrafting": (3, 1)}
-        gd._bank_location = (4, 0)
+        gd.world.bank_tile = (4, 0)
         gd._taskmaster_location = (1, 2)
         return gd
 
@@ -1856,3 +1859,85 @@ class TestACommittedUpgradeDecomposes:
         goal = self._goal(state, ("copper_ring", "no_such_slot"))
         assert decompose(goal, state, gd, _copper_ring_actions(), _ctx(), declined) is None
         assert declined == ["upgrade:equip_inapplicable:Equip(copper_ring->no_such_slot)"]
+
+
+class TestDecomposeSupply:
+    """SupplyBank as an obtain plan (c-2 #5 fleet floor). Live 2026-10-07:
+    `SupplyBank(cooked_rat_meatx10)` went to A* alone — 200k-1M nodes per
+    attempt, timed out, plan_len 0."""
+
+    def _gd(self) -> GameData:
+        gd = GameData()
+        gd.world.bank_tile = (4, 0)
+        gd._bank_capacity = 100
+        return gd
+
+    def test_the_walk_then_the_deposit_once_it_lands(self, monkeypatch) -> None:
+        seen = {}
+
+        def walk(goal, state, gd, actions, ctx, declined, subtasks, grinding, policy):  # type: ignore[no-untyped-def]
+            seen.update(target=goal._target_item, needed=dict(goal.needed), subtasks=subtasks,
+                        bank=dict(state.bank_items or {}))
+            return [_Lands("cooked_rat_meat", 4)]
+
+        monkeypatch.setattr(cpg, "_walk_plan", walk)
+        goal = SupplyBankGoal("cooked_rat_meat", 10, 20)
+        state = make_state(bank_items={"cooked_rat_meat": 6, "raw_rat_meat": 2})
+        plan = cpg.decompose(goal, state, self._gd(), [], NO_PROFILE_CONTEXT, [])
+        assert plan is not None and [type(a).__name__ for a in plan] == ["_Lands", "DepositItemAction"]
+        assert (plan[1].code, plan[1].quantity) == ("cooked_rat_meat", 4)
+        # asked against the bank minus the target's own copies, no sub-grinds
+        assert seen == {"target": "cooked_rat_meat", "needed": {"cooked_rat_meat": 4},
+                        "subtasks": False, "bank": {"raw_rat_meat": 2}}
+
+    def test_no_deposit_into_an_inaccessible_bank(self, monkeypatch) -> None:
+        monkeypatch.setattr(cpg, "_walk_plan", lambda *a: [_Lands("cooked_rat_meat", 4)])
+        goal = SupplyBankGoal("cooked_rat_meat", 10, 20)
+        gated = dataclasses.replace(NO_PROFILE_CONTEXT, bank_accessible=False)
+        plan = cpg.decompose(goal, make_state(bank_items={"cooked_rat_meat": 6}), self._gd(), [],
+                             gated, [])
+        assert plan is not None and [type(a).__name__ for a in plan] == ["_Lands"]
+
+    def test_legs_alone_while_they_have_not_landed_the_batch(self, monkeypatch) -> None:
+        monkeypatch.setattr(cpg, "_walk_plan", lambda *a: [_Lands("cooked_rat_meat", 1)])
+        goal = SupplyBankGoal("cooked_rat_meat", 10, 20)
+        plan = cpg.decompose(goal, make_state(bank_items={}), self._gd(), [], NO_PROFILE_CONTEXT, [])
+        assert plan is not None and [type(a).__name__ for a in plan] == ["_Lands"]
+
+    def test_declines(self, monkeypatch) -> None:
+        goal = SupplyBankGoal("cooked_rat_meat", 10, 20)
+        declined: list[str] = []
+        assert cpg.decompose(goal, make_state(bank_items={"cooked_rat_meat": 10}), self._gd(),
+                             [], NO_PROFILE_CONTEXT, declined) is None
+        assert declined == ["satisfied"]
+        declined = []
+        assert cpg.decompose(goal, make_state(bank_items={}), GameData(), [],
+                             NO_PROFILE_CONTEXT, declined) is None
+        assert declined == ["supply:no_bank"]
+        monkeypatch.setattr(cpg, "_walk_plan", lambda *a: None)
+        assert cpg.decompose(goal, make_state(bank_items={}), self._gd(), [],
+                             NO_PROFILE_CONTEXT, []) is None
+
+
+class _Lands(Action):
+    """A leg that lands `qty` of `code` in the bag."""
+
+    def __init__(self, code: str, qty: int) -> None:
+        self._code, self._qty = code, qty
+
+    def is_applicable(self, state, game_data):  # type: ignore[no-untyped-def]
+        return True
+
+    def apply(self, state, game_data):  # type: ignore[no-untyped-def]
+        inv = dict(state.inventory)
+        inv[self._code] = inv.get(self._code, 0) + self._qty
+        return dataclasses.replace(state, inventory=inv)
+
+    def cost(self, state, game_data):  # type: ignore[no-untyped-def]
+        return 1.0
+
+    def execute(self, client, state, game_data):  # type: ignore[no-untyped-def]
+        raise AssertionError("never executed")
+
+    def __repr__(self) -> str:
+        return f"Lands({self._code}x{self._qty})"

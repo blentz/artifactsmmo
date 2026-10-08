@@ -5134,6 +5134,23 @@ CONSUMABLE_PLAYER_MUTATIONS = [
      "        ctx = replace(ctx, supply_shortfall=self._supply_shortfall)\n",
      ""),
 ]
+SUPPLY_DECOMPOSE_MUTATIONS = [
+    ("supply decompose: SupplyBank goes back to the search",
+     "    if isinstance(goal, SupplyBankGoal):\n        return _decompose_supply(",
+     "    if False:\n        return _decompose_supply("),
+    ("supply decompose: the walk withdraws what it banks",
+     "    legs = _walk_plan(obtain, production_state, game_data, actions, ctx, declined, False,\n",
+     "    legs = _walk_plan(obtain, state, game_data, actions, ctx, declined, False,\n"),
+    ("supply decompose: a supply opens skill gates as sub-grinds",
+     "    legs = _walk_plan(obtain, production_state, game_data, actions, ctx, declined, False,\n",
+     "    legs = _walk_plan(obtain, production_state, game_data, actions, ctx, declined, True,\n"),
+    ("supply decompose: the deposit ignores bank access",
+     "                                accessible=ctx.bank_accessible)\n",
+     "                                accessible=True)\n"),
+    ("supply decompose: the deposit joins before the batch lands",
+     "    return [*legs, deposit] if deposit.is_applicable(landed, game_data) else legs\n",
+     "    return [*legs, deposit]\n"),
+]
 GOLD_SHORT_MUTATIONS = [
     ("gold short: the root's purchases are not counted",
      "        need = max(progression_reserve(self.state, self.game_data), root_need)\n",
@@ -9376,6 +9393,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_consumable_floor.py", survivors)
     run_group(PLAYER_SRC, CONSUMABLE_PLAYER_MUTATIONS,
               "tests/test_ai/test_player_coordination.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, SUPPLY_DECOMPOSE_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(PLAYER_SRC, GOLD_SHORT_MUTATIONS,
               "tests/test_ai/test_task_worth.py", survivors)
     run_group(TASK_WORTH_SRC, TASK_WORTH_HORIZON_MUTATIONS,

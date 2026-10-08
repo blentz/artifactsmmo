@@ -37,6 +37,7 @@ from datetime import UTC, datetime
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
@@ -52,6 +53,7 @@ from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
+from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
 from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY, heal_prep_goal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
@@ -149,9 +151,44 @@ def _dispatch(goal: Goal, state: WorldState, game_data: GameData, actions: list[
                                 declined, frozenset())
     if isinstance(goal, UpgradeEquipmentGoal):
         return _decompose_upgrade(goal, state, game_data, actions, ctx, declined, subtasks)
+    if isinstance(goal, SupplyBankGoal):
+        return _decompose_supply(goal, state, game_data, actions, ctx, declined, policy)
     if not isinstance(goal, GatherMaterialsGoal):
         return None
     return _walk_plan(goal, state, game_data, actions, ctx, declined, subtasks, frozenset(), policy)
+
+
+def _decompose_supply(goal: SupplyBankGoal, state: WorldState, game_data: GameData,
+                      actions: list[Action], ctx: SelectionContext,
+                      declined: list[str] | None, policy: Policy) -> list[Action] | None:
+    """A supply request as an obtain plan: the walk's plan for the units still
+    to produce, then the deposit that banks them.
+
+    It used to go to A* alone. Live 2026-10-07, the first fleet consumable
+    floor request (`SupplyBank(cooked_rat_meatx10)`, rat drops then cooking):
+    200k-1M nodes per attempt, timed out, plan_len 0, on every attempt by
+    three characters — the batch-aware walk is the planner for "obtain N of X".
+    No skill gate opens as a sub-task: the producer was chosen because its role
+    already serves the item (`serves_item`). The walk is asked against the bank
+    minus the target's own copies (`SupplyBankGoal.production`), so it never
+    withdraws what it is banking."""
+    if goal.is_satisfied(state):
+        return _decline(declined, "satisfied")
+    bank_location = game_data.bank_location_or_none
+    if bank_location is None:
+        return _decline(declined, "supply:no_bank")
+    production_state, obtain, deficit = goal.production(state)
+    legs = _walk_plan(obtain, production_state, game_data, actions, ctx, declined, False,
+                      frozenset(), policy)
+    if legs is None:
+        return None
+    deposit = DepositItemAction(code=goal.item_code, quantity=deficit, bank_location=bank_location,
+                                accessible=ctx.bank_accessible)
+    landed = state
+    for leg in legs:
+        if leg.is_applicable(landed, game_data):
+            landed = leg.apply(landed, game_data)
+    return [*legs, deposit] if deposit.is_applicable(landed, game_data) else legs
 
 
 def _decompose_upgrade(goal: UpgradeEquipmentGoal, state: WorldState, game_data: GameData,
