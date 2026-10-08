@@ -131,6 +131,7 @@ from artifactsmmo_cli.ai.recovery import (
     StuckSignal,
 )
 from artifactsmmo_cli.ai.refusal_facts import RefusalFacts
+from artifactsmmo_cli.ai.requirement_projections import requirement_closure
 from artifactsmmo_cli.ai.role_catalog import (
     ROLE_CATALOG,
     ROLES_BY_NAME,
@@ -3729,6 +3730,11 @@ class GamePlayer:
             # sibling demand. Set by `_update_coordination`, called once per
             # cycle in `run()` before selection.
             supply_target=self._supply_target,
+            # The live supply claim's batch and its inputs are reserved from
+            # healing (USER 2026-10-08: "Reserve the claimed batch").
+            supply_reserved=(frozenset(requirement_closure(
+                self.game_data.requirement_graph.graph(), [self._supply_target[0]]))
+                if self._supply_target is not None else frozenset()),
             # Bank stock siblings have committed to withdrawing, same source
             # and same lifecycle as `supply_target`: set by
             # `_update_coordination`, empty on every single-character run.

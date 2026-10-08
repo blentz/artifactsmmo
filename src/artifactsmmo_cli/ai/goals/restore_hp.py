@@ -1,6 +1,10 @@
 """RestoreHPGoal: restore HP to full, with urgency that spikes when HP is low."""
 
+import dataclasses
+
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
+from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -24,6 +28,12 @@ class RestoreHPGoal(Goal):
     """
 
     preemptive = True  # HP-critical may interrupt a committed goal when it outranks it
+
+    def __init__(self, reserved: frozenset[str] = frozenset()) -> None:
+        """`reserved`: items a live supply claim is producing, and their recipe
+        closure (`ctx.supply_reserved`). Healing may neither cook nor eat them
+        (USER 2026-10-08: "Reserve the claimed batch")."""
+        self._reserved = reserved
 
     CRITICAL_HP_FRACTION = CRITICAL_HP_FRACTION  # from thresholds (module global)
     CRITICAL_HP_VALUE = _HP_CRITICAL
@@ -51,7 +61,21 @@ class RestoreHPGoal(Goal):
         BELOW it strictly smaller, so the narrowing is still sound and the
         cheap-pass argument still holds a fortiori. Kept, with the stale
         'cost-10' framing removed rather than the conclusion."""
-        return [a for a in actions if a.tags & {"recovery", "craft", "movement"}]
+        pool = [a for a in actions if a.tags & {"recovery", "craft", "movement"}]
+        if not self._reserved:
+            return pool
+        kept: list[Action] = []
+        for action in pool:
+            if isinstance(action, CraftAction):
+                recipe = game_data.crafting_recipe(action.code) or {}
+                if action.code in self._reserved or self._reserved & recipe.keys():
+                    continue
+            elif isinstance(action, UseConsumableAction):
+                action = dataclasses.replace(action, _item_stats={
+                    code: stats for code, stats in action._item_stats.items()
+                    if code not in self._reserved})
+            kept.append(action)
+        return kept
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"hp": state.max_hp}

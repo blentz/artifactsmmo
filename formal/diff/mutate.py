@@ -359,6 +359,7 @@ CONSUMABLE_FLOOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_fl
 FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 CRAFT_COMPLETENESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_completeness.py"
 CRAFT_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_census.py"
+RESTORE_HP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "restore_hp.py"
 TASK_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth.py"
 FIGHT_UPKEEP_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "fight_upkeep_core.py"
 BAND_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "band_target.py"
@@ -5208,6 +5209,30 @@ SUPPLY_DECOMPOSE_MUTATIONS = [
      "    return [*legs, deposit] if deposit.is_applicable(landed, game_data) else legs\n",
      "    return [*legs, deposit]\n"),
 ]
+SUPPLY_RESERVED_MUTATIONS = [
+    ("supply reserved: healing cooks the claimed batch",
+     "                if action.code in self._reserved or self._reserved & recipe.keys():\n",
+     "                if self._reserved & recipe.keys():\n"),
+    ("supply reserved: healing cooks from the claimed inputs",
+     "                if action.code in self._reserved or self._reserved & recipe.keys():\n",
+     "                if action.code in self._reserved:\n"),
+    ("supply reserved: healing eats the claimed batch",
+     "                    if code not in self._reserved})\n",
+     "                    })\n"),
+]
+SUPPLY_RESERVED_DRIVER_MUTATIONS = [
+    ("supply reserved: the HP guard ignores the reservation",
+     "    if kind is GuardKind.HP_CRITICAL:\n        return RestoreHPGoal(reserved=ctx.supply_reserved)\n",
+     "    if kind is GuardKind.HP_CRITICAL:\n        return RestoreHPGoal()\n"),
+    ("supply reserved: the rest-for-combat guard ignores the reservation",
+     "    if kind is GuardKind.REST_FOR_COMBAT:\n        return RestoreHPGoal(reserved=ctx.supply_reserved)\n",
+     "    if kind is GuardKind.REST_FOR_COMBAT:\n        return RestoreHPGoal()\n"),
+]
+SUPPLY_RESERVED_PLAYER_MUTATIONS = [
+    ("supply reserved: the player reserves only the target",
+     "                self.game_data.requirement_graph.graph(), [self._supply_target[0]]))\n",
+     "                self.game_data.requirement_graph.graph(), []) | {self._supply_target[0]})\n"),
+]
 GOLD_SHORT_MUTATIONS = [
     ("gold short: the root's purchases are not counted",
      "        need = max(progression_reserve(self.state, self.game_data), root_need)\n",
@@ -9463,6 +9488,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, SUPPLY_DECOMPOSE_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(RESTORE_HP_SRC, SUPPLY_RESERVED_MUTATIONS,
+              "tests/test_ai/test_supply_reserved.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, SUPPLY_RESERVED_DRIVER_MUTATIONS,
+              "tests/test_ai/test_supply_reserved.py", survivors)
+    run_group(PLAYER_SRC, SUPPLY_RESERVED_PLAYER_MUTATIONS,
+              "tests/test_ai/test_supply_reserved.py", survivors)
     run_group(PLAYER_SRC, GOLD_SHORT_MUTATIONS,
               "tests/test_ai/test_task_worth.py", survivors)
     run_group(TASK_WORTH_SRC, TASK_WORTH_HORIZON_MUTATIONS,

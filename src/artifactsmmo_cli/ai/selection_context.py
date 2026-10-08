@@ -64,6 +64,11 @@ class SelectionContext:
     # `task_worth.short_items` (USER 2026-10-07: "Fishing feeds Cooking ...
     # the fleet can collectively maintain a minimum supply in the bank").
     supply_shortfall: tuple[tuple[str, int], ...] = ()
+    # The item this character's live supply claim is producing and its recipe
+    # closure (set by the player). Reserved from healing: RestoreHP may neither
+    # cook nor eat them (USER 2026-10-08: "Reserve the claimed batch"; live,
+    # R2D2 ate the cooked_rat_meat its SupplyBank claim made, 4 of 4).
+    supply_reserved: frozenset[str] = frozenset()
     # Long-term gear and tool codes — fed by player from the
     # CharacterObjective so the CRAFT_RELIEF guard can score gear/tool
     # craft candidates alongside the active task item. Empty fallback

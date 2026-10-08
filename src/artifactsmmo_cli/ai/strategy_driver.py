@@ -265,9 +265,9 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
     the active grind goal's own wooden_shield), so predicate and goal stay
     coherent."""
     if kind is GuardKind.HP_CRITICAL:
-        return RestoreHPGoal()
+        return RestoreHPGoal(reserved=ctx.supply_reserved)
     if kind is GuardKind.REST_FOR_COMBAT:
-        return RestoreHPGoal()
+        return RestoreHPGoal(reserved=ctx.supply_reserved)
     if kind is GuardKind.DISCARD_CRITICAL or kind is GuardKind.DISCARD_HIGH:
         # The goal sheds `discard_surplus.discardable_surplus` copies, so it needs the
         # SAME ctx the firing predicate used — its `step_profile` is the
