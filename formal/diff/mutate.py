@@ -356,6 +356,7 @@ CURRENCY_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "curr
 XP_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "xp_demand.py"
 CONSUMABLE_FLOOR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor_core.py"
 CONSUMABLE_FLOOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor.py"
+GAME_DATA_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
 TASK_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth.py"
 FIGHT_UPKEEP_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "fight_upkeep_core.py"
 BAND_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "band_target.py"
@@ -5151,6 +5152,22 @@ SUPPLY_DECOMPOSE_MUTATIONS = [
      "    return [*legs, deposit] if deposit.is_applicable(landed, game_data) else legs\n",
      "    return [*legs, deposit]\n"),
 ]
+ABSENT_TILE_MUTATIONS = [
+    ("absent tile: the stale tile is kept",
+     "        kept = [t for t in tiles if t != tile]\n",
+     "        kept = list(tiles)\n"),
+    ("absent tile: a monster with no tile stays on the map",
+     "        else:\n            del self.monsters.locations[code]\n",
+     "        else:\n            self.monsters.locations[code] = kept\n"),
+]
+ABSENT_TILE_PLAYER_MUTATIONS = [
+    ("absent tile: a 598 is never learned",
+     "        self.game_data.forget_monster_tile(action.monster_code, (new_state.x, new_state.y))\n",
+     "        pass\n"),
+    ("absent tile: any failure forgets the tile",
+     "        if outcome != \"error:HTTP_598\" or not isinstance(action, FightAction):\n",
+     "        if not isinstance(action, FightAction):\n"),
+]
 GOLD_SHORT_MUTATIONS = [
     ("gold short: the root's purchases are not counted",
      "        need = max(progression_reserve(self.state, self.game_data), root_need)\n",
@@ -9395,6 +9412,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_player_coordination.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, SUPPLY_DECOMPOSE_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(GAME_DATA_SRC, ABSENT_TILE_MUTATIONS,
+              "tests/test_ai/test_absent_monster_tile.py", survivors)
+    run_group(PLAYER_SRC, ABSENT_TILE_PLAYER_MUTATIONS,
+              "tests/test_ai/test_absent_monster_tile.py", survivors)
     run_group(PLAYER_SRC, GOLD_SHORT_MUTATIONS,
               "tests/test_ai/test_task_worth.py", survivors)
     run_group(TASK_WORTH_SRC, TASK_WORTH_HORIZON_MUTATIONS,

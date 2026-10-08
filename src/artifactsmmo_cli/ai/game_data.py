@@ -1437,6 +1437,24 @@ class GameData:
         """item_code -> ItemStats for every known item."""
         return self.items.stats
 
+    def forget_monster_tile(self, code: str, tile: tuple[int, int]) -> None:
+        """The server says `code` is not on `tile` (HTTP 598, "content not
+        found at this location"): drop the tile from its static spawns until
+        the next game-data refresh rebuilds the map. A monster left with no
+        tile has no `FightAction` (the factory builds one per located monster).
+
+        Live 2026-10-08: spawns moved under a cached map (`(-3, 12)` turned
+        spider, `(-2, 12)` empty) and R2D2's supply fights hit `(-2, 12)` 40
+        times, HTTP 598 each, with nothing learning from it."""
+        tiles = self.monsters.locations.get(code)
+        if tiles is None or tile not in tiles:
+            return
+        kept = [t for t in tiles if t != tile]
+        if kept:
+            self.monsters.locations[code] = kept
+        else:
+            del self.monsters.locations[code]
+
     @property
     def all_monster_locations(self) -> Mapping[str, list[tuple[int, int]]]:
         """monster_code -> spawn tiles for every known monster, with active event
