@@ -1,7 +1,9 @@
 """TaskCancelGoal: report the urgency of the cancel the task objective's step asked for."""
 
+from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.goals.complete_task_goal import BOOKING_TAGS
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
@@ -45,6 +47,15 @@ class TaskCancelGoal(Goal):
 
     def is_satisfied(self, state: WorldState) -> bool:
         return not state.task_code or state.task_total == 0
+
+    def relevant_actions(self, actions: list[Action], state: WorldState,
+                         game_data: GameData) -> list[Action]:
+        """The booking's own pool: the task actions and movement (the pocket
+        coin is already a precondition of proposing it). Over the whole pool
+        the h = 0 search expanded every sequence cheaper than the cancel's walk
+        and timed out — live C3P0 2026-10-09, 30 of 35 cancel searches
+        (232,181 nodes), 26 cycles of `Wait`."""
+        return [a for a in actions if a.tags & BOOKING_TAGS]
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"task_code": None, "task_total": 0}

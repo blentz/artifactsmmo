@@ -415,6 +415,14 @@ open Formal.PriorityBand
 #print axioms Formal.FailureRecovery.structural_blocked_after_ticks
 #print axioms Formal.FailureRecovery.structural_blocks_iff
 #print axioms Formal.FailureRecovery.transport_expires
+#print axioms Formal.FightOutcome.closedWin_eq_predictWin
+#print axioms Formal.FightOutcome.fightOutcome_noStock_win
+#print axioms Formal.FightOutcome.walk_left_le
+#print axioms Formal.FightOutcome.used_le_stock
+#print axioms Formal.FightOutcome.hpEnd_le_max
+#print axioms Formal.FightOutcome.stock_mono
+#print axioms Formal.FightOutcome.turns_le_roundsToKill
+#print axioms Formal.FightOutcome.win_turns_stock_indep
 #print axioms Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership
 #print axioms Formal.RealizableLoadout.apply_cur_ge_1
 #print axioms Formal.RealizableLoadout.ownership_counts_equipped

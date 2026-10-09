@@ -7,6 +7,10 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
+BOOKING_TAGS = frozenset({"task", "movement"})
+"""What a task booking (turn-in, cancel) can need: the task actions and the
+walk to the master."""
+
 
 class CompleteTaskGoal(Goal):
     """Turn in the current task at the taskmaster once it's fully progressed.
@@ -54,8 +58,16 @@ class CompleteTaskGoal(Goal):
         cancel reachable whenever the arithmetic shifted; making it
         unreachable from this goal states the intent. The action itself is
         untouched, so the abandon route stays alive for its own goal.
+
+        AND ONLY THE BOOKING'S OWN POOL: the task actions and movement (the
+        region bridge adds crossings). A turn-in is one action at the master,
+        and the planner is Dijkstra with h = 0: over the whole pool (~1,900
+        actions) it expands every cheaper sequence before popping it. Since walks
+        are priced in seconds (c7b2573f) the turn-in's walk is 5x dearer and the
+        full-pool search timed out live (C3P0 425,814 nodes, Robby 140,384).
         """
-        return [a for a in actions if not isinstance(a, TaskCancelAction)]
+        return [a for a in actions
+                if a.tags & BOOKING_TAGS and not isinstance(a, TaskCancelAction)]
 
     def __repr__(self) -> str:
         return "CompleteTask"

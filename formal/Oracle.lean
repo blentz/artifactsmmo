@@ -1873,6 +1873,33 @@ def runConsumableFloor (args : Array Json) : Json :=
               ("share", Json.num (Int.ofNat (Formal.ConsumableFloor.publishShare deficit
                 (k (base + 1)))))]
 
+/-- A fight's expected-value outcome with restore potions (`Formal.FightOutcome`).
+Args: `[rawPlayer, killStep, monsterHp, recon, dieStep, playerFirst, hp, maxHp,
+restore, stock]`, playerFirst as 0/1. Emits the walk's outcome and the
+closed-form verdict over the same terms. -/
+def runFightOutcome (args : Array Json) : Json :=
+  let i : Nat → Int := fun k => intArg args k
+  let t : Formal.FightOutcome.Terms := ⟨i 0, i 1, i 2, i 3, i 4, i 5 != 0⟩
+  let o := Formal.FightOutcome.fightOutcome t (i 6) (i 7) (i 8).toNat (i 9).toNat
+  Json.mkObj [("win", Json.bool o.win), ("turns", Json.num o.turns),
+              ("hp_end", Json.num o.hpEnd), ("used", Json.num (Int.ofNat o.used)),
+              ("closed_win", Json.bool (Formal.FightOutcome.closedWin t (i 6) (i 7)))]
+
+/-- `predict_win` at a CURRENT hp (`Formal.FightOutcome.closedWin` over the
+`PredictWin.killStepNet` / `PredictWin.dieStep` terms). Args: the 46-int
+`runPredictWin` layout, then `[46]` = the player's current hp. -/
+def runPredictWinHp (g : Nat → Int) : Json :=
+  let rawPlayer := rawHit (g 0) (g 1) (g 2) (g 3) (g 4) (g 5)
+    (g 6) (g 7) (g 8) (g 9) (g 10) (g 11)
+  let rawMonster := rawHit (g 14) (g 15) (g 16) (g 17) (g 18) (g 19)
+    (g 20) (g 21) (g 22) (g 23) (g 24) (g 25)
+  let ks := killStepNet rawPlayer (g 12) (g 26) (g 31) (g 32) (g 13) (g 36) (g 27) (g 38)
+    (g 41) (g 43)
+  let ds := dieStep rawMonster (g 26) (g 12) (g 29) (g 30) (g 33) (g 35) (g 27) (g 38)
+    (g 39) (g 40) (g 42) rawPlayer (g 44) (g 45)
+  let t : Formal.FightOutcome.Terms := ⟨rawPlayer, ks, g 13 + g 34, g 37, ds, g 28 != 0⟩
+  Json.mkObj [("win", Json.bool (Formal.FightOutcome.closedWin t (g 46) (g 27)))]
+
 /-- The failure block table after `ticks` ticks (`Formal.FailureRecovery`).
 Args: `[premise, ticks, n, key_0, left_0, premise_0, ...]`, a premise of -1
 meaning a transport block. Emits the keys blocked under `premise`. -/
@@ -2993,6 +3020,10 @@ def runOne (item : Json) : Json :=
     runLossRisk args
   else if kind == "failure_recovery" then
     runFailureRecovery args
+  else if kind == "fight_outcome" then
+    runFightOutcome args
+  else if kind == "predict_win_hp" then
+    runPredictWinHp (fun i => intArg args i)
   else if kind == "inventory_chain_safe" then
     runInventoryChainSafe args
   else if kind == "inventory_profile" then

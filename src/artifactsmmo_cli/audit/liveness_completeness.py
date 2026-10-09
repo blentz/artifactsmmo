@@ -149,8 +149,26 @@ WITNESS_BASELINE: dict[str, int] = {
     # returns `Transition((-3,12,interior)->(-3,12,overworld)) ->
     # UseConsumable` in 4 nodes where it returned nothing before. If a restart
     # disagrees, this number is wrong and the alarm is right.
-    "WaitGoal": 134,
-    "WaitAction": 134,
+    # 2026-10-09, +177 (134 -> 311). C3P0 alone, 20:11-21:25 UTC, between bag
+    # chores, until the fleet was stopped. One cause, a regression of c7b2573f
+    # (walks priced in seconds) — every one of the 177 Wait cycles carries a
+    # timed-out TaskCancel search in the same cycle:
+    #   x177, the task objective's step was `TaskCancel` (a worthless iron_bar
+    #              items task, 3 pocket coins). `TaskCancelGoal` planned over
+    #              the WHOLE pool (1,877 actions); the planner is Dijkstra with
+    #              h = 0, and the cancel's 13-tile walk now costs 65 instead of
+    #              13, so every cheaper sequence was expanded first: 30 of 35
+    #              cancel searches timed out (232,181 nodes), the budget was
+    #              spent, and the arbiter fell to Wait. `CompleteTaskGoal` had
+    #              the same shape (C3P0 425,814 nodes, Robby 140,384). FIXED by
+    #              narrowing both bookings to task + movement actions.
+    #
+    # NO RESTART YET, but the fleet is STOPPED (the 2026-08-19 justification),
+    # so the count cannot grow; and C3P0 was re-planned from its LIVE state on
+    # the fix: `[TaskCancel]` in 17 nodes where it timed out at 295,500. If a
+    # restart disagrees, this number is wrong and the alarm is right.
+    "WaitGoal": 311,
+    "WaitAction": 311,
 }
 
 #: form "unreachable: ..." is a DEFECT that is being tracked, not an excuse —

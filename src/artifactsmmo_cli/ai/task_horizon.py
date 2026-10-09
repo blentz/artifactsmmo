@@ -98,7 +98,7 @@ def next_level_state(state: WorldState) -> WorldState:
       2. `equipment/loadout_picker` skips owned items at `state.level < stats.level`
          — gear already in the bag but level-gated becomes WEARABLE, which changes
          the fight with no acquisition at all.
-      3. `max_hp` grows, which is what `combat._effective_player_hp` divides into
+      3. `max_hp` grows, which is what `fight_terms_core.effective_player_hp` divides into
          `rounds_to_die`.
 
     The HP grant is `learning.rung_state_core.projected_max_hp`, the same published

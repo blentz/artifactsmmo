@@ -52,6 +52,7 @@ import Formal.TaskWorth
 import Formal.ConsumableFloor
 import Formal.LossRisk
 import Formal.FailureRecovery
+import Formal.FightOutcome
 import Formal.ShoppingList
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
@@ -3415,3 +3416,65 @@ example : ∀ (charLevel : Nat) (cands : List (Nat × Nat)) (j : Nat) (b : Nat �
 example : ∀ (deficit fleet : Nat), 0 < fleet →
     deficit ≤ Formal.ConsumableFloor.publishShare deficit fleet * fleet :=
   @Formal.ConsumableFloor.publishShare_covers
+
+/-! ### FightOutcome contracts. -/
+
+example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
+    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn
+    monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy
+    monsterBubble playerAntipoison monsterSunShield monsterGreed monsterEnchantedMirror : Int)
+    (playerFirst : Bool), 1 ≤ playerMaxHp →
+    Formal.PredictWin.predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn
+      monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy
+      monsterBubble playerAntipoison monsterSunShield monsterGreed monsterEnchantedMirror
+      playerFirst
+    = Formal.FightOutcome.closedWin ⟨rawPlayer,
+        Formal.PredictWin.killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp
+          monsterHealing playerMaxHp monsterVoidDrain monsterBubble monsterSunShield,
+        monsterHp + monsterBarrier, monsterReconstitution,
+        Formal.PredictWin.dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison
+          monsterBurn playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison
+          rawPlayer monsterGreed monsterEnchantedMirror,
+        playerFirst⟩ playerMaxHp playerMaxHp :=
+  @Formal.FightOutcome.closedWin_eq_predictWin
+
+example : ∀ (t : Formal.FightOutcome.Terms) (hp maxHp : Int) (restore : Nat),
+    (Formal.FightOutcome.fightOutcome t hp maxHp restore 0).win
+      = Formal.FightOutcome.closedWin t hp maxHp :=
+  @Formal.FightOutcome.fightOutcome_noStock_win
+
+example : ∀ (pf : Bool) (ds maxPool rPool : Int) (n : Nat) (r pool : Int) (k : Nat),
+    (Formal.FightOutcome.walk pf ds maxPool rPool n r pool k).left ≤ k :=
+  @Formal.FightOutcome.walk_left_le
+
+example : ∀ (t : Formal.FightOutcome.Terms) (hp maxHp : Int) (restore stock : Nat),
+    (Formal.FightOutcome.fightOutcome t hp maxHp restore stock).used ≤ stock :=
+  @Formal.FightOutcome.used_le_stock
+
+example : ∀ (t : Formal.FightOutcome.Terms) (hp maxHp : Int) (restore stock : Nat),
+    0 ≤ maxHp →
+    (Formal.FightOutcome.fightOutcome t hp maxHp restore stock).hpEnd
+      ≤ maxHp * Formal.FightOutcome.scale :=
+  @Formal.FightOutcome.hpEnd_le_max
+
+example : ∀ (t : Formal.FightOutcome.Terms) (hp maxHp : Int) (restore s s' : Nat), s ≤ s' →
+    ((Formal.FightOutcome.fightOutcome t hp maxHp restore s).win = true →
+        (Formal.FightOutcome.fightOutcome t hp maxHp restore s').win = true)
+      ∧ (Formal.FightOutcome.fightOutcome t hp maxHp restore s).hpEnd
+          ≤ (Formal.FightOutcome.fightOutcome t hp maxHp restore s').hpEnd
+      ∧ (Formal.FightOutcome.fightOutcome t hp maxHp restore s).turns
+          ≤ (Formal.FightOutcome.fightOutcome t hp maxHp restore s').turns :=
+  @Formal.FightOutcome.stock_mono
+
+example : ∀ (t : Formal.FightOutcome.Terms) (hp maxHp : Int) (restore stock : Nat),
+    (Formal.FightOutcome.fightOutcome t hp maxHp restore stock).turns
+      ≤ (Formal.FightOutcome.roundsToKill t).toNat :=
+  @Formal.FightOutcome.turns_le_roundsToKill
+
+example : ∀ (t : Formal.FightOutcome.Terms) (hp maxHp : Int) (restore s s' : Nat),
+    (Formal.FightOutcome.fightOutcome t hp maxHp restore s).win = true →
+    (Formal.FightOutcome.fightOutcome t hp maxHp restore s').win = true →
+    (Formal.FightOutcome.fightOutcome t hp maxHp restore s).turns
+      = (Formal.FightOutcome.fightOutcome t hp maxHp restore s').turns :=
+  @Formal.FightOutcome.win_turns_stock_indep

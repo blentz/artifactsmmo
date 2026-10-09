@@ -517,6 +517,16 @@ open Formal.PriorityBand
 #check @Formal.FailureRecovery.structural_blocked_after_ticks  -- it still blocks while the premise holds
 #check @Formal.FailureRecovery.structural_blocks_iff           -- blocks iff the premise holds
 #check @Formal.FailureRecovery.transport_expires               -- a transport block expires
+-- FightOutcome (consumable utility increment 1, `ai/fight_terms_core.py`,
+-- `ai/fight_outcome_core.py`):
+#check @Formal.FightOutcome.closedWin_eq_predictWin    -- the extracted terms ARE predict_win
+#check @Formal.FightOutcome.fightOutcome_noStock_win   -- no stock: the walk is the closed form
+#check @Formal.FightOutcome.walk_left_le               -- the walk never mints stock
+#check @Formal.FightOutcome.used_le_stock              -- never more potions than held
+#check @Formal.FightOutcome.hpEnd_le_max               -- the ending HP never exceeds max
+#check @Formal.FightOutcome.stock_mono                 -- more stock: no lost win, no lower HP
+#check @Formal.FightOutcome.turns_le_roundsToKill      -- never past the kill round
+#check @Formal.FightOutcome.win_turns_stock_indep      -- a win takes the same rounds
 -- RealizableLoadout required roles (the multi-slot pick_loadout bug fix):
 #check @Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership -- contract: realizability ⇔ per-code demand ≤ ownership
 #check @Formal.RealizableLoadout.apply_cur_ge_1                        -- apply assert: realizable ⇒ cur ≥ 1 at every decrement

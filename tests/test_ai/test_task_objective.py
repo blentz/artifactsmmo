@@ -13,7 +13,11 @@ import pytest
 
 from artifactsmmo_cli.ai import strategy_driver as driver_mod
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.decisions import root as root_mod
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
@@ -280,3 +284,24 @@ class TestItemsTaskIsWorked:
         goal = objective_step_goal(ReachTaskOutcome("chicken"), _held(task_type="items"),
                                    _gd(), NO_PROFILE_CONTEXT)
         assert repr(goal) == "PursueTask(chicken)"
+
+
+class TestBookingPools:
+    """A booking plans over its own pool (live C3P0 2026-10-09: the cancel's
+    full-pool h = 0 search timed out 30 of 35 times once walks were priced in
+    seconds, and the character waited)."""
+
+    def _pool(self):  # type: ignore[no-untyped-def]
+        return [TaskCancelAction(taskmaster_location=(4, 13)),
+                CompleteTaskAction(taskmaster_location=(4, 13)),
+                MoveAction(x=1, y=1), RestAction(),
+                GatherAction(resource_code="ash_tree", locations=frozenset({(2, 0)}))]
+
+    def test_the_cancel_plans_over_task_and_movement_actions(self) -> None:
+        pool = TaskCancelGoal().relevant_actions(self._pool(), _held(3), _gd())
+        assert [type(a).__name__ for a in pool] == [
+            "TaskCancelAction", "CompleteTaskAction", "MoveAction"]
+
+    def test_the_turn_in_plans_over_task_and_movement_actions_but_never_the_cancel(self) -> None:
+        pool = CompleteTaskGoal().relevant_actions(self._pool(), _held(10, 10), _gd())
+        assert [type(a).__name__ for a in pool] == ["CompleteTaskAction", "MoveAction"]

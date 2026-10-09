@@ -10,20 +10,15 @@ import math
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
+from artifactsmmo_cli.ai.fight_terms_core import LOSE_MARGIN as LOSE_MARGIN
+from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS as MAX_TURNS
+from artifactsmmo_cli.ai.fight_terms_core import WIN_MARGIN as WIN_MARGIN
+from artifactsmmo_cli.ai.fight_terms_core import FightTerms, fight_terms, terms_margin, terms_win
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import combat_key
 from artifactsmmo_cli.ai.world_state import WorldState
-
-MAX_TURNS = 100
-"""A fight unresolved by turn 100 is a loss (documented combat cap)."""
-
-WIN_MARGIN = MAX_TURNS + 1
-"""Sentinel margin for the die_step<=0 (out-sustain) win branch of `combat_margin`."""
-
-LOSE_MARGIN = -(MAX_TURNS + 1)
-"""Sentinel margin for all losing / unkillable branches of `combat_margin`."""
 
 GREED_MAX_STACKS = 9
 """Max `greed` stacks the closed-form model assumes (conservative upper bound).
@@ -135,11 +130,6 @@ def _die_step(
             + monster_enchanted_mirror * raw_player * (200 + p_crit) // 2)
 
 
-def _effective_player_hp(hp: int, max_hp: int) -> int:
-    """Player HP at fight start: current HP capped at max_hp, or 0 if already dead."""
-    return min(hp, max_hp) if hp > 0 else 0
-
-
 def fight_loadout(state: WorldState, game_data: GameData, monster_code: str) -> dict[str, str]:
     """The loadout a fight against `monster_code` is fought in: the best on-hand
     combat loadout (`pick_loadout_cached`), which `FightAction` requires be
@@ -182,9 +172,11 @@ def fight_records(state: WorldState, game_data: GameData,
     return tuple(records)
 
 
-def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bool:
-    """True if the documented formula says the player beats the monster using the
-    best on-hand loadout (inventory + equipped) for it.
+def combat_terms(state: WorldState, game_data: GameData, monster_code: str) -> FightTerms:
+    """The closed form's per-turn terms for a fight against `monster_code` in the
+    best on-hand loadout (inventory + equipped) for it: `predict_win` and
+    `combat_margin` read their verdict from these, and the consumable turn walk
+    (`fight_outcome_core`) walks them.
 
     Uses CURRENT hp (state.hp), not projected max_hp. Prior version used
     p.max_hp which over-predicted wins when the player was already damaged
@@ -208,15 +200,13 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
         _element_damage(p.attack.get(e, 0), p.dmg + p.dmg_elements.get(e, 0), m_resist.get(e, 0))
         for e in ELEMENTS
     )
-    if raw_player <= 0:
-        return False
     # Monster lifesteal heals it on ITS crit, lowering our NET kill rate.
     m_attack = game_data.monster_attack(monster_code)
     m_atk_sum = sum(m_attack.values())
     # Monster healing is per-turn regen (a % of its HP every 3 turns), modeled
     # conservatively as the full per-3-turn amount EVERY turn (3× upper bound):
     # subtract it from the net kill step. A monster we can't out-damage out-heals
-    # itself ⇒ kill_step <= 0 ⇒ unkillable (the guard below).
+    # itself ⇒ kill_step <= 0 ⇒ unkillable (the UNKILLABLE exit).
     # Void drain (every 4 turns the monster drains a % of player HP to heal itself,
     # modeled conservatively as the full per-4-turn amount EVERY turn) heals the
     # monster ⇒ subtract its per-turn self-heal from the net kill step.
@@ -241,20 +231,9 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
         game_data.monster_protective_bubble(monster_code),
         game_data.monster_sun_shield(monster_code),
     )
-    if kill_step <= 0:
-        return False  # the monster out-damages/out-heals/out-resists us — unkillable
     # Barrier is an absorbing shield: model it conservatively as extra effective HP
     # the player must chew through (per-5-turn refresh deferred — first cut flat add).
     effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)
-    rounds_to_kill = -(-(effective_monster_hp * 10000) // kill_step)  # ceil
-    if rounds_to_kill > MAX_TURNS:
-        return False
-    # Reconstitution: the monster regains ALL HP every N turns. If we can't kill it
-    # strictly faster than that period, it fully heals before dying ⇒ unwinnable
-    # (conservative: win needs rounds_to_kill < period).
-    reconstitution = game_data.monster_reconstitution(monster_code)
-    if 0 < reconstitution <= rounds_to_kill:
-        return False
     raw_monster = sum(
         _element_damage(m_attack.get(e, 0), 0, p.resistance.get(e, 0)) for e in ELEMENTS
     )
@@ -302,14 +281,19 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
         game_data.monster_greed(monster_code),
         game_data.monster_enchanted_mirror(monster_code),
     )
-    if die_step <= 0:
-        return True  # we out-sustain the monster's damage (poison-inclusive)
-    effective_hp = _effective_player_hp(state.hp, p.max_hp)
-    if effective_hp <= 0:
-        return False
-    rounds_to_die = -(-(effective_hp * 10000) // die_step)  # ceil
-    player_first = p.initiative >= game_data.monster_initiative(monster_code)
-    return rounds_to_kill <= rounds_to_die if player_first else rounds_to_kill < rounds_to_die
+    return fight_terms(
+        raw_player, kill_step, effective_monster_hp,
+        game_data.monster_reconstitution(monster_code), die_step,
+        state.hp, p.max_hp,
+        p.initiative >= game_data.monster_initiative(monster_code),
+    )
+
+
+def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bool:
+    """True if the documented formula says the player beats the monster using the
+    best on-hand loadout (inventory + equipped) for it: the closed-form verdict
+    (`fight_terms_core.terms_win`) over `combat_terms`."""
+    return terms_win(combat_terms(state, game_data, monster_code))
 
 
 def combat_margin(state: WorldState, game_data: GameData, monster_code: str) -> int:
@@ -317,7 +301,8 @@ def combat_margin(state: WorldState, game_data: GameData, monster_code: str) -> 
 
     Invariant: ``predict_win(...) == (combat_margin(...) > 0)`` for all inputs.
 
-    Mirrors `predict_win`'s exact control flow, returning int sentinels or the
+    Read from the same `combat_terms` as `predict_win`
+    (`fight_terms_core.terms_margin`), returning int sentinels or the
     round-cushion at each exit:
     * ``raw_player <= 0``                        → ``LOSE_MARGIN``
     * ``kill_step <= 0``                         → ``LOSE_MARGIN``
@@ -329,76 +314,7 @@ def combat_margin(state: WorldState, game_data: GameData, monster_code: str) -> 
 
     Mirrors Lean ``Formal.PredictWin.combatMargin`` (PredictWin.lean).
     """
-    loadout = pick_loadout_cached(
-        Combat(game_data.monster_attack(monster_code),
-               game_data.monster_resistance(monster_code), dict(state.attack)),
-        state, game_data,
-    )
-    p = project_loadout_stats(state, loadout, game_data)
-    m_resist = game_data.monster_resistance(monster_code)
-    m_crit = game_data.monster_critical_strike(monster_code)
-    raw_player = sum(
-        _element_damage(p.attack.get(e, 0), p.dmg + p.dmg_elements.get(e, 0), m_resist.get(e, 0))
-        for e in ELEMENTS
-    )
-    if raw_player <= 0:
-        return LOSE_MARGIN
-    m_attack = game_data.monster_attack(monster_code)
-    m_atk_sum = sum(m_attack.values())
-    kill_step = _kill_step_net(
-        raw_player, p.critical_strike, m_crit,
-        game_data.monster_lifesteal(monster_code), m_atk_sum,
-        game_data.monster_hp(monster_code),
-        game_data.monster_healing(monster_code),
-        p.max_hp,
-        game_data.monster_void_drain(monster_code),
-        game_data.monster_protective_bubble(monster_code),
-        game_data.monster_sun_shield(monster_code),
-    )
-    if kill_step <= 0:
-        return LOSE_MARGIN
-    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)
-    rounds_to_kill = -(-(effective_monster_hp * 10000) // kill_step)  # ceil
-    if rounds_to_kill > MAX_TURNS:
-        return LOSE_MARGIN
-    reconstitution = game_data.monster_reconstitution(monster_code)
-    if 0 < reconstitution <= rounds_to_kill:
-        return LOSE_MARGIN
-    raw_monster = sum(
-        _element_damage(m_attack.get(e, 0), 0, p.resistance.get(e, 0)) for e in ELEMENTS
-    )
-    final_equip = dict(state.equipment)
-    final_equip.update(loadout)
-    player_lifesteal = sum(
-        st.lifesteal for code in final_equip.values()
-        if code and (st := game_data.item_stats(code)) is not None
-    )
-    player_antipoison = sum(
-        st.antipoison for code in final_equip.values()
-        if code and (st := game_data.item_stats(code)) is not None
-    )
-    p_atk_sum = sum(p.attack.values())
-    die_step = _die_step(
-        raw_monster, m_crit, p.critical_strike, player_lifesteal,
-        p_atk_sum,
-        game_data.monster_poison(monster_code),
-        game_data.monster_burn(monster_code),
-        p.max_hp,
-        game_data.monster_void_drain(monster_code),
-        game_data.monster_berserker_rage(monster_code),
-        game_data.monster_frenzy(monster_code),
-        player_antipoison, raw_player,
-        game_data.monster_greed(monster_code),
-        game_data.monster_enchanted_mirror(monster_code),
-    )
-    if die_step <= 0:
-        return WIN_MARGIN
-    effective_hp = _effective_player_hp(state.hp, p.max_hp)
-    if effective_hp <= 0:
-        return LOSE_MARGIN
-    rounds_to_die = -(-(effective_hp * 10000) // die_step)  # ceil
-    player_first = p.initiative >= game_data.monster_initiative(monster_code)
-    return rounds_to_die - rounds_to_kill + (1 if player_first else 0)
+    return terms_margin(combat_terms(state, game_data, monster_code))
 
 
 def is_winnable(

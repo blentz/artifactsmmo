@@ -354,6 +354,8 @@ CURRENCY_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "curr
 XP_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "xp_demand.py"
 CONSUMABLE_FLOOR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor_core.py"
 LOSS_RISK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loss_risk_core.py"
+FIGHT_TERMS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_terms_core.py"
+FIGHT_OUTCOME_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_outcome_core.py"
 FAILURE_RECOVERY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "failure_recovery_core.py"
 ACTION_BASE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "base.py"
 REST_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "rest.py"
@@ -677,10 +679,6 @@ INVENTORY_PROFILE_MUTATIONS = [
 
 # predict_win mutations -- old strings matched to current combat.py text.
 PREDICT_WIN_MUTATIONS = [
-    # initiative tiebreak: flip the player-first `<=` to a strict `<` (combat.py:79).
-    ("predict_win: tiebreak <= -> < (player-first)",
-     "    return rounds_to_kill <= rounds_to_die if player_first else rounds_to_kill < rounds_to_die",
-     "    return rounds_to_kill < rounds_to_die if player_first else rounds_to_kill < rounds_to_die"),
     # drop the expected critical-strike contribution from the (exact-integer) kill rate.
     # Anchor lives in _kill_step_net helper body after helper extraction.
     ("predict_win: drop crit term in killStep (200+crit -> 200)",
@@ -690,6 +688,22 @@ PREDICT_WIN_MUTATIONS = [
     ("predict_win: round_half_up off-by-one (+0.5 -> +1.5)",
      "    return math.floor(value + 0.5)",
      "    return math.floor(value + 1.5)"),
+]
+
+# The verdict's ladder lives in `fight_terms_core` since the consumable-utility
+# extraction (increment 1): predict_win and combat_margin both read it, so each
+# guard is ONE site. The initiative tiebreak is killed by the predict_win diff.
+FIGHT_TERMS_PREDICT_MUTATIONS = [
+    ("predict_win: tiebreak <= -> < (player-first)",
+     "        return terms.rounds_to_kill <= terms.rounds_to_die",
+     "        return terms.rounds_to_kill < terms.rounds_to_die"),
+]
+
+# Killed by tests/test_ai/test_combat.py (the reconstitution and dead-start cases).
+FIGHT_TERMS_LADDER_MUTATIONS = [
+    ("predict_win: drop reconstitution turn-cap guard",
+     "    if 0 < reconstitution <= rounds_to_kill:",
+     "    if 0 < reconstitution <= 0:"),
 ]
 
 # Lifesteal terms (heal-on-crit) and poison term (per-turn DoT). Killed by the
@@ -740,23 +754,11 @@ PREDICT_WIN_LIFESTEAL_MUTATIONS = [
     ("predict_win: drop monster enchanted_mirror reflect term in dieStep",
      "            + monster_enchanted_mirror * raw_player * (200 + p_crit) // 2)",
      "            + monster_enchanted_mirror * 0 * raw_player * (200 + p_crit) // 2)"),
-    # NOTE: combat_margin duplicates both of the following computations verbatim.
-    # Until the anchor check landed, these two anchors matched BOTH sites and
-    # str.replace(..., 1) silently mutated whichever came first in the file --
-    # predict_win, by luck of ordering. The trailing `return False` is what pins
-    # them here; the combat_margin twins are mutated by COMBAT_MARGIN_MUTATIONS.
+    # combat_terms computes effective HP ONCE for predict_win and combat_margin
+    # (the two duplicated sites became one in the consumable-utility extraction).
     ("predict_win: drop monster barrier term in effective HP",
-     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)\n"
-     "    rounds_to_kill = -(-(effective_monster_hp * 10000) // kill_step)  # ceil\n"
-     "    if rounds_to_kill > MAX_TURNS:\n"
-     "        return False",
-     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code) * 0\n"
-     "    rounds_to_kill = -(-(effective_monster_hp * 10000) // kill_step)  # ceil\n"
-     "    if rounds_to_kill > MAX_TURNS:\n"
-     "        return False"),
-    ("predict_win: drop reconstitution turn-cap guard",
-     "    if 0 < reconstitution <= rounds_to_kill:\n        return False",
-     "    if 0 < reconstitution <= 0:\n        return False"),
+     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)\n",
+     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code) * 0\n"),
 ]
 
 # combat_margin mutations -- old strings matched to current combat.py text.
@@ -764,45 +766,61 @@ PREDICT_WIN_LIFESTEAL_MUTATIONS = [
 COMBAT_MARGIN_MUTATIONS = [
     # tiebreak: drop the +1 player-first adjustment → margin=0 at tie (was win, now not>0).
     ("combat_margin: tiebreak +1 -> +0 (player-first)",
-     "    return rounds_to_die - rounds_to_kill + (1 if player_first else 0)",
-     "    return rounds_to_die - rounds_to_kill + 0"),
+     "    return terms.rounds_to_die - terms.rounds_to_kill + (1 if terms.player_first else 0)",
+     "    return terms.rounds_to_die - terms.rounds_to_kill + 0"),
     # sentinel flip: die_step<=0 branch returns LOSE_MARGIN instead of WIN_MARGIN.
     ("combat_margin: WIN_MARGIN sentinel -> LOSE_MARGIN (die_step<=0 branch)",
      "        return WIN_MARGIN",
      "        return LOSE_MARGIN"),
     # arithmetic flip: negate the cushion sign (win looks like loss and vice versa).
     ("combat_margin: flip round-cushion arithmetic (die-kill -> kill-die)",
-     "    return rounds_to_die - rounds_to_kill + (1 if player_first else 0)",
-     "    return rounds_to_kill - rounds_to_die + (1 if player_first else 0)"),
-    # The combat_margin twins of the two predict_win mutations above. combat.py
-    # computes effective HP and the reconstitution guard identically in both
-    # functions; before the anchor check these lines were never mutated here,
-    # because the predict_win anchors matched this site too and lost the race to
-    # file order. Pinned by the trailing `return LOSE_MARGIN`.
-    ("combat_margin: drop monster barrier term in effective HP",
-     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)\n"
-     "    rounds_to_kill = -(-(effective_monster_hp * 10000) // kill_step)  # ceil\n"
-     "    if rounds_to_kill > MAX_TURNS:\n"
-     "        return LOSE_MARGIN",
-     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code) * 0\n"
-     "    rounds_to_kill = -(-(effective_monster_hp * 10000) // kill_step)  # ceil\n"
-     "    if rounds_to_kill > MAX_TURNS:\n"
-     "        return LOSE_MARGIN"),
-    ("combat_margin: drop reconstitution turn-cap guard",
-     "    if 0 < reconstitution <= rounds_to_kill:\n        return LOSE_MARGIN",
-     "    if 0 < reconstitution <= 0:\n        return LOSE_MARGIN"),
+     "    return terms.rounds_to_die - terms.rounds_to_kill + (1 if terms.player_first else 0)",
+     "    return terms.rounds_to_kill - terms.rounds_to_die + (1 if terms.player_first else 0)"),
 ]
 
-# effective-hp guard mutation -- the effective_hp<=0 branch in combat_margin.
-# The differential test never exercises hp=0 (state.hp = randint(1, 2000) >= 1),
-# so this mutation is vacuous against test_combat_margin_diff.py. It IS killed by
-# test_combat_margin_sign_matches_predict_win (Case F: hp=0 → predict_win=False →
-# combat_margin must be LOSE_MARGIN<=0; mutation returns WIN_MARGIN=101>0 → sign
-# mismatch → killed). Bound to that unit test, not the differential.
+# effective-hp guard mutation -- the effective_hp<=0 (DEAD) exit of the ladder
+# in fight_terms_core. The full-hp differentials never exercise hp=0 (state.hp =
+# max_hp), so this mutation is vacuous against them. It IS killed by
+# test_combat.py (Case F: hp=0 → predict_win=False; the mutant reads it as the
+# out-sustain win). Bound to that unit test, not the differential.
 COMBAT_MARGIN_HP_MUTATIONS = [
-    ("combat_margin: effective_hp<=0 guard LOSE_MARGIN -> WIN_MARGIN",
-     "    if effective_hp <= 0:\n        return LOSE_MARGIN\n    rounds_to_die",
-     "    if effective_hp <= 0:\n        return WIN_MARGIN\n    rounds_to_die"),
+    ("combat_margin: effective_hp<=0 guard DEAD -> OUT_SUSTAIN (a win)",
+     "    if effective_hp <= 0:\n        return FightTerms(FightExit.DEAD,",
+     "    if effective_hp <= 0:\n        return FightTerms(FightExit.OUT_SUSTAIN,"),
+]
+
+# fight_outcome_core: the consumable turn walk (consumable utility increment 1).
+# Killed by formal/diff/test_fight_outcome_diff.py (exact agreement with the
+# proved Formal.FightOutcome.fightOutcome).
+FIGHT_OUTCOME_MUTATIONS = [
+    ("fight_outcome: drink at exactly half (< -> <=)",
+     "    if 2 * pool < max_pool and stock > 0:",
+     "    if 2 * pool <= max_pool and stock > 0:"),
+    ("fight_outcome: drink with no stock",
+     "    if 2 * pool < max_pool and stock > 0:",
+     "    if 2 * pool < max_pool and stock >= 0:"),
+    ("fight_outcome: a drink is not capped at max hp",
+     "        return min(pool + restore_pool, max_pool), stock - 1",
+     "        return pool + restore_pool, stock - 1"),
+    ("fight_outcome: first-mover order inverted",
+     "        if terms.player_first:",
+     "        if not terms.player_first:"),
+    ("fight_outcome: the second mover survives at exactly 0 HP",
+     "            pool -= terms.die_step\n            if pool <= 0:\n"
+     "                return FightOutcome(False, round_no, 0, stock - left)\n"
+     "            pool, left = _drink(",
+     "            pool -= terms.die_step\n            if pool < 0:\n"
+     "                return FightOutcome(False, round_no, 0, stock - left)\n"
+     "            pool, left = _drink("),
+    ("fight_outcome: the out-sustain win reports 0 rounds",
+     "        return FightOutcome(True, terms.rounds_to_kill, pool, 0)",
+     "        return FightOutcome(True, 0, pool, 0)"),
+    ("fight_outcome: a DEAD terms exit is not walked",
+     "    if terms.exit not in (FightExit.NONE, FightExit.DEAD) or pool <= 0:",
+     "    if terms.exit is not FightExit.NONE or pool <= 0:"),
+    ("fight_outcome: the restore is not scaled",
+     "    restore_pool = restore * SCALE",
+     "    restore_pool = restore"),
 ]
 
 
@@ -5067,6 +5085,18 @@ CONSUMABLE_FLOOR_CORE_MUTATIONS = [
 # the player wiring by tests/test_ai/test_player_recovery.py.
 # Rest anywhere (USER 2026-10-09). Killed by tests/test_ai/test_goals.py's
 # interior witness.
+# Task bookings plan over their own pool (2026-10-09 C3P0 Wait regression).
+# Killed by tests/test_ai/test_task_objective.py.
+TASK_CANCEL_POOL_MUTATIONS = [
+    ("bookings: the cancel plans over the whole pool again",
+     "        return [a for a in actions if a.tags & BOOKING_TAGS]\n",
+     "        return list(actions)\n"),
+]
+COMPLETE_TASK_POOL_MUTATIONS = [
+    ("bookings: the turn-in plans over the whole pool again",
+     "                if a.tags & BOOKING_TAGS and not isinstance(a, TaskCancelAction)]\n",
+     "                if not isinstance(a, TaskCancelAction)]\n"),
+]
 ANY_REGION_MUTATIONS = [
     ("regions: an any-region action is bound to its literal region again",
      "    return action.travel_region in (ANY_REGION, region)\n",
@@ -5352,6 +5382,8 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 _ALL_SRCS = [
     LOSS_RISK_CORE_SRC, FAILURE_RECOVERY_CORE_SRC, ACTION_BASE_SRC, REST_ACTION_SRC,
+    TASK_CANCEL_GOAL_SRC, COMPLETE_TASK_GOAL_SRC,
+    FIGHT_TERMS_CORE_SRC, FIGHT_OUTCOME_CORE_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
     ROOT_DECISION_SRC, GATHER_DEMAND_SRC,
     OBTAIN_ITEM_ROUTING_SRC, EQUIP_VALUE_SRC,
@@ -8607,8 +8639,8 @@ COMPLETE_TASK_GOAL_MUTATIONS = [
 # a forfeit (live HAL 2026-09-19: skeleton 362/362 cancelled).
 COMPLETE_TASK_CANCEL_FILTER_MUTATIONS = [
     ("complete_task: readmit the cancel to the turn-in goal",
-     "        return [a for a in actions if not isinstance(a, TaskCancelAction)]",
-     "        return actions"),
+     "                if a.tags & BOOKING_TAGS and not isinstance(a, TaskCancelAction)]",
+     "                if a.tags & BOOKING_TAGS]"),
 ]
 
 REACH_UNLOCK_LEVEL_GOAL_MUTATIONS = [
@@ -8943,10 +8975,16 @@ def _collect_all_groups() -> None:
               "formal/diff/test_predict_win_diff.py", survivors)
     run_group(COMBAT_SRC, PREDICT_WIN_LIFESTEAL_MUTATIONS,
               "tests/test_ai/test_combat.py", survivors)
-    run_group(COMBAT_SRC, COMBAT_MARGIN_MUTATIONS,
-              "formal/diff/test_combat_margin_diff.py", survivors)
-    run_group(COMBAT_SRC, COMBAT_MARGIN_HP_MUTATIONS,
+    run_group(FIGHT_TERMS_CORE_SRC, FIGHT_TERMS_PREDICT_MUTATIONS,
+              "formal/diff/test_predict_win_diff.py", survivors)
+    run_group(FIGHT_TERMS_CORE_SRC, FIGHT_TERMS_LADDER_MUTATIONS,
               "tests/test_ai/test_combat.py", survivors)
+    run_group(FIGHT_TERMS_CORE_SRC, COMBAT_MARGIN_MUTATIONS,
+              "formal/diff/test_combat_margin_diff.py", survivors)
+    run_group(FIGHT_TERMS_CORE_SRC, COMBAT_MARGIN_HP_MUTATIONS,
+              "tests/test_ai/test_combat.py", survivors)
+    run_group(FIGHT_OUTCOME_CORE_SRC, FIGHT_OUTCOME_MUTATIONS,
+              "formal/diff/test_fight_outcome_diff.py", survivors)
     run_group(PROJECTION_SRC, PROJECTION_MUTATIONS,
               "formal/diff/test_loadout_projection_diff.py", survivors)
     run_group(SCORING_SRC, SCORING_MUTATIONS,
@@ -9626,6 +9664,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_failure_recovery_core.py", survivors)
     run_group(ACTION_BASE_SRC, ANY_REGION_MUTATIONS,
               "tests/test_ai/test_goals.py", survivors)
+    run_group(TASK_CANCEL_GOAL_SRC, TASK_CANCEL_POOL_MUTATIONS,
+              "tests/test_ai/test_task_objective.py", survivors)
+    run_group(COMPLETE_TASK_GOAL_SRC, COMPLETE_TASK_POOL_MUTATIONS,
+              "tests/test_ai/test_task_objective.py", survivors)
     run_group(REST_ACTION_SRC, REST_REGION_MUTATIONS,
               "tests/test_ai/test_goals.py", survivors)
     run_group(PLAYER_SRC, FAILURE_RECOVERY_PLAYER_MUTATIONS,

@@ -183,3 +183,13 @@ class TestWithdrawGoldAction:
                    return_value=None):
             with pytest.raises(RuntimeError):
                 a.execute(state, client)
+
+
+def test_deposit_gold_prices_its_walk_in_seconds() -> None:
+    """2.0 plus 5 s a tile to the bank (`travel_seconds`); none when already
+    there or with no bank tile known."""
+    state = make_state(x=0, y=0)
+    assert DepositGoldAction(quantity=100, bank_location=(4, 0), accessible=True).cost(
+        state, GameData()) == 2.0 + 20
+    assert DepositGoldAction(quantity=100, bank_location=None, accessible=True).cost(
+        state, GameData()) == 2.0
