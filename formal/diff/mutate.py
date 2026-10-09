@@ -354,6 +354,7 @@ CURRENCY_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "curr
 XP_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "xp_demand.py"
 CONSUMABLE_FLOOR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor_core.py"
 LOSS_RISK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loss_risk_core.py"
+FAILURE_RECOVERY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "failure_recovery_core.py"
 CONSUMABLE_FLOOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor.py"
 FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 CRAFT_COMPLETENESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_completeness.py"
@@ -5038,6 +5039,40 @@ CONSUMABLE_FLOOR_CORE_MUTATIONS = [
 # A fight's learned loss risk, priced (USER 2026-10-08, "Price the loss
 # risk"; `docs/PLAN_loss_risk.md`). Killed by tests/test_ai/test_loss_risk.py,
 # except the empty-record filter (tests/test_ai/test_combat.py).
+# Failure classes (USER 2026-10-09, "Classify by HTTP code";
+# `Formal.FailureRecovery`). Killed by tests/test_ai/test_failure_recovery_core.py,
+# the player wiring by tests/test_ai/test_player_recovery.py.
+FAILURE_RECOVERY_CORE_MUTATIONS = [
+    ("failure recovery: a structural block counts down like a retry",
+     "        if premise is not None:\n            out[key] = (left, premise)\n",
+     "        if premise is not None and left > 1:\n            out[key] = (left - 1, premise)\n"),
+    ("failure recovery: a structural block ignores its premise",
+     "                     if recorded is None or recorded == premise)\n",
+     "                     if True)\n"),
+    ("failure recovery: 598 is a transport failure again",
+     "        if code in STRUCTURAL_CODES:\n            return STRUCTURAL\n",
+     "        if code in STRUCTURAL_CODES:\n            return TRANSPORT\n"),
+    ("failure recovery: a state mismatch is retried instead of refreshed",
+     "        if code in STATE_CODES:\n            return STATE\n",
+     "        if code in STATE_CODES:\n            return TRANSPORT\n"),
+    ("failure recovery: a lost fight is blocked as transport",
+     "    if outcome in (\"error:fight_lost\", \"error:already_equipped\"):\n",
+     "    if outcome in (\"error:already_equipped\",):\n"),
+    ("failure recovery: a categorical refusal is blocked as transport",
+     "        if code in CATEGORICAL_REJECTIONS:\n            return LEARNED\n",
+     "        if code in CATEGORICAL_REJECTIONS:\n            return TRANSPORT\n"),
+    ("failure recovery: a transport retry never expires",
+     "        elif left > 1:\n",
+     "        elif left > 0:\n"),
+]
+FAILURE_RECOVERY_PLAYER_MUTATIONS = [
+    ("failure recovery: a state mismatch is not refreshed",
+     "            if refresh:\n                self._full_refresh(client)\n",
+     "            if False:\n                self._full_refresh(client)\n"),
+    ("failure recovery: the class is read off the first failure, not the latest",
+     "                    latest[r.action_key] = r.outcome\n",
+     "                    latest.setdefault(r.action_key, r.outcome)\n"),
+]
 LOSS_RISK_CORE_MUTATIONS = [
     ("loss risk: the warmup boundary fight is not evidence",
      "    if samples < min_samples:\n",
@@ -5281,6 +5316,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
+    LOSS_RISK_CORE_SRC, FAILURE_RECOVERY_CORE_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
     ROOT_DECISION_SRC, GATHER_DEMAND_SRC,
     OBTAIN_ITEM_ROUTING_SRC, EQUIP_VALUE_SRC,
@@ -9539,6 +9575,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_consumable_floor.py", survivors)
     run_group(LOSS_RISK_CORE_SRC, LOSS_RISK_CORE_MUTATIONS,
               "tests/test_ai/test_loss_risk.py", survivors)
+    run_group(FAILURE_RECOVERY_CORE_SRC, FAILURE_RECOVERY_CORE_MUTATIONS,
+              "tests/test_ai/test_failure_recovery_core.py", survivors)
+    run_group(PLAYER_SRC, FAILURE_RECOVERY_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player_recovery.py", survivors)
     run_group(FIGHT_LOOP_COST_SRC, LOSS_RISK_COST_MUTATIONS,
               "tests/test_ai/test_loss_risk.py", survivors)
     run_group(ACQUISITION_COST_SRC, LOSS_RISK_ACQUISITION_MUTATIONS,

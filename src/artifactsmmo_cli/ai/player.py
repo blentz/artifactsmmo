@@ -80,6 +80,14 @@ from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
+from artifactsmmo_cli.ai.failure_recovery_core import (
+    STATE,
+    Block,
+    blocked,
+    failure_class,
+    record_failure,
+    tick,
+)
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
@@ -305,9 +313,11 @@ class GamePlayer:
         # planning list, so a GUARD/interrupt-driven action is routed around
         # instead of spun on (live 476 deadlock: the RestoreHP guard looped
         # UseConsumable). The goal suppressions beside it went in Phase 4-3c;
-        # this countdown stays until Phase 5 moves guards into the interrupt
-        # layer (user decision 2026-10-05). Decays per cycle.
-        self._failed_action_backoff: dict[str, int] = {}
+        # Since Phase 5 (USER 2026-10-09, "Classify by HTTP code") the block is
+        # by failure CLASS (`failure_recovery_core`): a transport failure blocks
+        # for a short retry, a structural one (HTTP 598) while its premise (the
+        # active-event set) holds — no countdown re-admits it.
+        self._failure_blocks: dict[str, Block] = {}
         # Actions the SERVER has categorically refused (`ai/action_rejection`):
         # 473 "invalid item for recycling" and friends say the item is not
         # eligible for the action at all. Kept as FLEET-WIDE model facts
@@ -1070,6 +1080,7 @@ class GamePlayer:
                         planned_depth=0,
                         planner_timed_out=self.planner.last_stats.timed_out,
                         succeeded=False,
+                        outcome="no_plan",
                     ))
                     # Surface the last planner stats AND the per-goal attempts
                     # so a no_plan cycle is debuggable from trace alone.
@@ -1250,6 +1261,7 @@ class GamePlayer:
                     planned_depth=len(plan),
                     planner_timed_out=self.planner.last_stats.timed_out if replanned else False,
                     succeeded=outcome_for_stuck,
+                    outcome=outcome,
                 ))
                 self._actions_since_full_refresh += 1
                 self._decrement_suppressions()
@@ -2077,13 +2089,18 @@ class GamePlayer:
         return None
 
     def _decrement_suppressions(self) -> None:
-        """Decrement each action-block counter; prune zero entries."""
-        self._failed_action_backoff = {
-            name: n - 1 for name, n in self._failed_action_backoff.items() if n > 1
-        }
+        """One cycle later: transport blocks count down; structural ones stay."""
+        self._failure_blocks = tick(self._failure_blocks)
+
+    def _failure_premise(self) -> frozenset[str]:
+        """The premise a structural block is recorded under: the active-event
+        set, the only in-process change to what stands on a tile."""
+        assert self.game_data is not None
+        return frozenset(self.game_data.active_event_codes)
 
     def _make_cycle_record(self, goal_name: str, action: Action | None,
-                           planned_depth: int, planner_timed_out: bool, succeeded: bool) -> CycleRecord:
+                           planned_depth: int, planner_timed_out: bool, succeeded: bool,
+                           outcome: str) -> CycleRecord:
         """Build a CycleRecord from current state and the cycle's ACTION.
 
         Takes the action itself, not a pre-formatted pair of strings, so the two
@@ -2102,6 +2119,7 @@ class GamePlayer:
             planned_depth=planned_depth,
             planner_timed_out=planner_timed_out,
             succeeded=succeeded,
+            outcome=outcome,
         )
 
     def _fight_of(self, action: object | None) -> FightRecord | None:
@@ -2378,11 +2396,12 @@ class GamePlayer:
     def _handle_stuck(self, signal: StuckSignal, client: AuthenticatedClient) -> None:
         """Apply recovery for a stuck signal, noting every action backoff it
         sets (Phase 0b)."""
-        actions_before = dict(self._failed_action_backoff)
+        actions_before = dict(self._failure_blocks)
         self._apply_stuck_recovery(signal, client)
-        for key, cycles in self._failed_action_backoff.items():
-            if actions_before.get(key) != cycles:
-                self._events.note(Mechanism.SUPPRESS, key, f"action cycles={cycles} signal={signal.name}")
+        for key, (left, premise) in self._failure_blocks.items():
+            if actions_before.get(key) != (left, premise):
+                how = f"cycles={left}" if premise is None else "until the active events change"
+                self._events.note(Mechanism.SUPPRESS, key, f"action {how} signal={signal.name}")
 
     def _apply_stuck_recovery(self, signal: StuckSignal, client: AuthenticatedClient) -> None:
         """Apply recovery action for a stuck signal at its current escalation level."""
@@ -2438,21 +2457,31 @@ class GamePlayer:
             # silent inaccuracy.
             window = list(self._detector._history)[-REPEATED_ACTION_WINDOW:]
             fail_counts: dict[str, int] = {}
+            latest: dict[str, str] = {}
             for r in window:
                 if not r.succeeded and r.action_key != "<no_plan>":
                     fail_counts[r.action_key] = fail_counts.get(r.action_key, 0) + 1
-            repeated_actions = {
+                    latest[r.action_key] = r.outcome
+            repeated_actions = [
                 a for a, c in fail_counts.items()
                 if c >= REPEATED_ACTION_FAILURE_THRESHOLD
-            }
-            # Block the failing ACTION(S): a guard/interrupt-driven action has
-            # no intention to stall, so the action-level block is what breaks
-            # a guard spin.
-            block_cycles = 10 if level == 1 else 30
+            ]
+            # BY FAILURE CLASS (USER 2026-10-09, "Classify by HTTP code"), on
+            # each key's latest failure: a transport failure blocks for a short
+            # retry; a structural one (598) while the active-event set it failed
+            # under holds; a state mismatch (404/478/497) forces a full refresh
+            # instead of a block; a learned one (a lost fight, a categorical
+            # refusal) is already a model fact elsewhere.
+            refresh = False
             for a in repeated_actions:
-                self._failed_action_backoff[a] = block_cycles
-            print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE L{level}: "
-                  f"blocking {repeated_actions} for {block_cycles} cycles")
+                cls = failure_class(latest[a])
+                refresh = refresh or cls == STATE
+                self._failure_blocks = record_failure(
+                    self._failure_blocks, a, cls, self._failure_premise())
+                print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE L{level}: "
+                      f"{a} failed {cls} ({latest[a]})")
+            if refresh:
+                self._full_refresh(client)
 
         self._detector.acknowledge(signal)
 
@@ -2491,9 +2520,9 @@ class GamePlayer:
         # pool — `RecycleSurplusGoal` does, and filtering here alone let C3P0's
         # refused recycle through untouched (live 2026-08-23 12:43Z). One rule,
         # one site; a second filter here would be duplication that can drift.
-        if self._failed_action_backoff:
-            return [a for a in built
-                    if a.learning_key() not in self._failed_action_backoff]
+        if self._failure_blocks:
+            blocked_keys = blocked(self._failure_blocks, self._failure_premise())
+            return [a for a in built if a.learning_key() not in blocked_keys]
         return built
 
     def _is_categorically_refused(self, action: Action) -> bool:

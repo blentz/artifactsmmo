@@ -497,8 +497,7 @@ def test_run_calls_handle_stuck_in_no_plan_path():
             action_key="<no_plan>",
             planned_depth=0,
             planner_timed_out=False,
-            succeeded=False,
-        ))
+            succeeded=False, outcome="error:network"))
 
     # Stopped from the top-of-iteration hook — a no-plan cycle never reaches
     # _wait_for_cooldown.
@@ -548,8 +547,7 @@ def test_run_calls_handle_stuck_after_successful_action():
             action_key="Rest",
             planned_depth=1,
             planner_timed_out=False,
-            succeeded=True,
-        ))
+            succeeded=True, outcome="ok"))
 
     call_count = [0]
 
@@ -918,8 +916,7 @@ def test_run_records_post_action_cooldown_and_handles_stuck():
         player._detector.record(CycleRecord(
             state_key=frozen_key, goal_name="StubGoal()", action_name="Rest",
             action_key="Rest",
-            planned_depth=1, planner_timed_out=False, succeeded=True,
-        ))
+            planned_depth=1, planner_timed_out=False, succeeded=True, outcome="ok"))
 
     with patch.object(ClientManager_mock := MagicMock(), "client", client):
         with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):

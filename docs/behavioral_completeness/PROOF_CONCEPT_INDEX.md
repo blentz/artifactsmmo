@@ -35,6 +35,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | EscrowConservation | grandexchange | conservation, liveness |
 | EventWindow | events | totality, safety, dominance, monotonicity, reachability |
 | Extracted.Bridges | core | validity |
+| FailureRecovery | recovery, failures | safety, liveness, totality |
 | FallbackChain | core, planner | totality, dominance |
 | GameDataAccessors | core | safety |
 | GatherApply | resources, items | safety |

@@ -54,6 +54,7 @@ def _record(state: int, goal: int, no_plan: bool, ok: bool | None = None,
         planned_depth=0,
         planner_timed_out=False,
         succeeded=succeeded,
+        outcome="ok" if succeeded else ("no_plan" if no_plan else "error:network"),
     )
 
 

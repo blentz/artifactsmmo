@@ -1,9 +1,10 @@
 """Player-loop integration tests for stuck-state recovery."""
-
+import pytest
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.failure_recovery_core import TRANSPORT_RETRY_CYCLES, blocked
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import (
@@ -19,12 +20,12 @@ def _cycle(goal: str = "GoalA", action: str = "X", succeeded: bool = True,
            state_key: tuple = (0, 0, 5, (), (), None, 0, False)) -> CycleRecord:
     return CycleRecord(
         state_key=state_key, goal_name=goal, action_name=action, action_key=action,
-        planned_depth=1, planner_timed_out=False, succeeded=succeeded,
-    )
+        planned_depth=1, planner_timed_out=False, succeeded=succeeded, outcome=("ok" if succeeded else "error:network"))
 
 
 def test_player_has_detector_after_init():
     player = GamePlayer(character="testchar")
+    player.game_data = GameData()
     assert isinstance(player._detector, StuckDetector)
     assert player._cycles_without_progress == 0
     assert player._actions_since_full_refresh == 0
@@ -33,6 +34,7 @@ def test_player_has_detector_after_init():
 def test_detector_record_helper_creates_cycle_record():
     """The helper _make_cycle_record should produce a CycleRecord with state_key from planner."""
     player = GamePlayer(character="testchar")
+    player.game_data = GameData()
     player.state = make_state(x=4, y=2)
     record = player._make_cycle_record(
         goal_name="FarmMonster(chicken)",
@@ -40,6 +42,7 @@ def test_detector_record_helper_creates_cycle_record():
         planned_depth=2,
         planner_timed_out=False,
         succeeded=True,
+        outcome="ok",
     )
     assert isinstance(record, CycleRecord)
     assert record.goal_name == "FarmMonster(chicken)"
@@ -50,15 +53,17 @@ def test_detector_record_helper_creates_cycle_record():
     assert record.action_key == "Fight(chicken)"
     assert record.planned_depth == 2
     assert record.succeeded is True
+    assert record.outcome == "ok"
 
 
 def test_make_cycle_record_keys_a_gather_without_its_quantity():
     """The one action whose repr and key diverge — the reason `action_key` exists."""
     player = GamePlayer(character="testchar")
+    player.game_data = GameData()
     player.state = make_state()
     record = player._make_cycle_record(
         goal_name="GatherMaterials(copper_dagger)", action=_sized_gather(47),
-        planned_depth=1, planner_timed_out=False, succeeded=False,
+        planned_depth=1, planner_timed_out=False, succeeded=False, outcome="error:HTTP_598",
     )
     assert record.action_name == "Gather(copper_rocks×47)"
     assert record.action_key == "Gather(copper_rocks)"
@@ -68,10 +73,11 @@ def test_make_cycle_record_no_plan_sentinel():
     """No action means no plan: both fields carry the sentinel the stuck rules
     exclude, so a no-plan flood cannot masquerade as a repeated action."""
     player = GamePlayer(character="testchar")
+    player.game_data = GameData()
     player.state = make_state()
     record = player._make_cycle_record(
         goal_name="<none>", action=None, planned_depth=0,
-        planner_timed_out=True, succeeded=False,
+        planner_timed_out=True, succeeded=False, outcome="no_plan",
     )
     assert record.action_name == "<no_plan>"
     assert record.action_key == "<no_plan>"
@@ -84,7 +90,8 @@ def test_handle_stuck_acknowledges_signal():
     player.state = make_state()
     # Record some cycles to populate detector internal counter
     record = player._make_cycle_record(goal_name="GoalA", action=RestAction(),
-                                        planned_depth=1, planner_timed_out=False, succeeded=True)
+                                        planned_depth=1, planner_timed_out=False, succeeded=True,
+                                        outcome="ok")
     player._detector.record(record)
     initial_ack = player._detector._ack_index.get(StuckSignal.STATE_FROZEN)
     player._fetch_world_state = lambda c: player.state  # type: ignore
@@ -157,73 +164,102 @@ def test_handle_stuck_no_progress_never_exits():
 
 
 def _wedge(player: GamePlayer, *, goal: str = "GatherMaterials", fails: int = 10,
-           use_record_cycle: bool = False) -> None:
+           use_record_cycle: bool = False, outcome: str = "error:network") -> None:
     """Record a 20-cycle window where `Withdraw(ash_plank)` (driven by `goal`)
-    fails `fails` times amid succeeding `Move` cycles, state varying each cycle."""
+    fails `fails` times with `outcome` amid succeeding `Move` cycles, state
+    varying each cycle."""
+    if player.game_data is None:
+        player.game_data = GameData()
     for i in range(20):
         if i % 2 == 0 and i < fails * 2:
             rec = CycleRecord(
                 state_key=(i, 0, 5, (), (), None, 0, False), goal_name=goal,
                 action_name="Withdraw(ash_plank)", action_key="Withdraw(ash_plank)", planned_depth=1,
-                planner_timed_out=False, succeeded=False)
+                planner_timed_out=False, succeeded=False, outcome=outcome)
         else:
             rec = CycleRecord(
                 state_key=(i, 0, 5, (), (), None, 0, False), goal_name=goal,
                 action_name="Move", action_key="Move", planned_depth=1,
-                planner_timed_out=False, succeeded=True)
+                planner_timed_out=False, succeeded=True, outcome="ok")
         if use_record_cycle:
             player._record_cycle(rec)
         else:
             player._detector.record(rec)
 
 
-def test_handle_stuck_repeated_action_level1_blocks_for_ten_cycles():
-    """REPEATED_ACTION_FAILURE L1 blocks the failing action for 10 cycles and
-    acknowledges the signal. It suppresses no goal (Phase 4-3c)."""
+def test_a_transport_failure_blocks_for_a_short_retry():
+    """REPEATED_ACTION_FAILURE on a transport failure blocks the action for
+    TRANSPORT_RETRY_CYCLES and acknowledges the signal. It suppresses no goal
+    (Phase 4-3c)."""
     player = GamePlayer(character="testchar")
+    player.game_data = GameData()
     _wedge(player, goal="GatherMaterials", fails=10)
     player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
-    assert player._failed_action_backoff.get("Withdraw(ash_plank)") == 10
+    assert player._failure_blocks.get("Withdraw(ash_plank)") == (TRANSPORT_RETRY_CYCLES, None)
     assert player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] == 1
     assert player._detector._ack_index.get(StuckSignal.REPEATED_ACTION_FAILURE) is not None
 
 
-def test_handle_stuck_repeated_action_level2_blocks_longer():
+def test_a_transport_retry_never_escalates():
+    """USER 2026-10-09: the 10 -> 30 escalation is gone; a retry is a retry, at
+    any recovery level, and L3 still raises nothing (the only exit is the
+    intention one, Phase 4-3c)."""
     player = GamePlayer(character="testchar")
-    player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 1
-    _wedge(player, goal="GatherMaterials", fails=10)
-    player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
-    assert player._failed_action_backoff.get("Withdraw(ash_plank)") == 30
-    assert player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] == 2
-
-
-def test_handle_stuck_repeated_action_level3_keeps_blocking_and_never_exits():
-    """L3 used to raise StuckExit; since Phase 4-3c the only exit is the
-    intention one, so L3 keeps the 30-cycle block."""
-    player = GamePlayer(character="testchar")
+    player.game_data = GameData()
     _wedge(player, goal="GatherMaterials", fails=10, use_record_cycle=True)
     player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
     player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
-    assert player._failed_action_backoff.get("Withdraw(ash_plank)") == 30
+    assert player._failure_blocks.get("Withdraw(ash_plank)") == (TRANSPORT_RETRY_CYCLES, None)
     assert player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] == 3
 
 
-def test_handle_stuck_repeated_action_blocks_failing_action():
-    """REPEATED_ACTION_FAILURE recovery must also BLOCK the repeatedly-failing
-    ACTION (by repr), not only suppress the driving goal. A GUARD/interrupt-driven
-    action (e.g. RestoreHP -> UseConsumable) bypasses goal suppression, so without
-    an action-level block the recovery could not break a guard spin — the live 476
-    deadlock (2026-07-02: RestoreHP guard looped UseConsumable on utility potions)."""
+def test_a_structural_failure_blocks_until_the_active_events_change():
+    """HTTP 598 (content not at the tile): no tick lifts the block; a change of
+    the active-event set (the premise) does. Live 2026-10-08 the countdown
+    re-admitted Robby's wrong-master TaskCancel every 10/30 cycles."""
     player = GamePlayer(character="testchar")
-    _wedge(player, goal="GatherMaterials", fails=10)
+    player.game_data = GameData()
+    _wedge(player, fails=10, outcome="error:HTTP_598")
     player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
-    assert player._failed_action_backoff.get("Withdraw(ash_plank)", 0) > 0
+    assert player._failure_blocks.get("Withdraw(ash_plank)") == (0, frozenset())
+    for _ in range(100):
+        player._decrement_suppressions()
+    assert "Withdraw(ash_plank)" in player._failure_blocks
+    assert blocked(player._failure_blocks, player._failure_premise()) == {"Withdraw(ash_plank)"}
+    player.game_data.active_event_codes = {"lich_raid"}
+    assert blocked(player._failure_blocks, player._failure_premise()) == frozenset()
 
 
-def test_build_actions_excludes_backoff_blocked_action():
-    """A repr in _failed_action_backoff is filtered out of the planning action
-    list, so the planner (and any guard) routes around the doomed action."""
+def test_a_state_failure_refreshes_instead_of_blocking(monkeypatch):
+    """A sibling took the bank stock (HTTP 404): the belief is stale, so the
+    answer is a full refresh, not a block."""
     player = GamePlayer(character="testchar")
+    player.game_data = GameData()
+    refreshed = []
+    monkeypatch.setattr(player, "_full_refresh", lambda client: refreshed.append(client))
+    _wedge(player, fails=10, outcome="error:HTTP_404")
+    player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
+    assert player._failure_blocks == {}
+    assert refreshed == [None]
+
+
+def test_a_learned_failure_adds_no_block(monkeypatch):
+    """A lost fight is the learned-loss veto's and the loss price's."""
+    player = GamePlayer(character="testchar")
+    player.game_data = GameData()
+    monkeypatch.setattr(player, "_full_refresh", lambda client: pytest.fail("no refresh"))
+    _wedge(player, fails=10, outcome="error:fight_lost")
+    player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
+    assert player._failure_blocks == {}
+
+
+def test_build_actions_excludes_a_blocked_action():
+    """A key in the block table is filtered out of the planning action list, so
+    the planner (and any guard) routes around the doomed action — the live 476
+    deadlock (2026-07-02: RestoreHP guard looped UseConsumable) is why the block
+    is action-level."""
+    player = GamePlayer(character="testchar")
+    player.game_data = GameData()
     gd = GameData()
     gd._bank_location = (4, 0)
     gd._taskmaster_location = (1, 2)
@@ -231,9 +267,9 @@ def test_build_actions_excludes_backoff_blocked_action():
     player.state = make_state()
     unblocked = [repr(a) for a in player._build_actions()]
     assert "Rest" in unblocked  # baseline: Rest is always built
-    player._failed_action_backoff = {"Rest": 5}
-    blocked = [repr(a) for a in player._build_actions()]
-    assert "Rest" not in blocked
+    player._failure_blocks = {"Rest": (5, None)}
+    blocked_now = [repr(a) for a in player._build_actions()]
+    assert "Rest" not in blocked_now
 
 
 def _sized_gather(qty: int) -> GatherAction:
@@ -256,6 +292,7 @@ def test_repeated_action_failure_tallies_across_varying_batch_sizes():
     overrides to be quantity-free.
     """
     player = GamePlayer(character="testchar")
+    player.game_data = GameData()
     quantities = [60, 47, 31, 22, 18, 13, 9, 6, 4, 2]
     assert len({repr(_sized_gather(q)) for q in quantities}) == len(quantities), \
         "fixture is vacuous: the reprs must all differ for this to discriminate"
@@ -269,13 +306,14 @@ def test_repeated_action_failure_tallies_across_varying_batch_sizes():
             goal_name="GatherMaterials(copper_dagger)",
             action=_sized_gather(qty),
             planned_depth=1, planner_timed_out=False, succeeded=False,
+            outcome="error:network",
         ))
 
     assert player._detector.detect() is StuckSignal.REPEATED_ACTION_FAILURE
     player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
     # Blocked under the quantity-free identity — unreachable if the tally
     # fragmented.
-    assert player._failed_action_backoff.get("Gather(copper_rocks)", 0) > 0
+    assert "Gather(copper_rocks)" in player._failure_blocks
 
 
 def test_backoff_blocks_a_gather_built_at_a_different_quantity():
@@ -283,6 +321,7 @@ def test_backoff_blocks_a_gather_built_at_a_different_quantity():
     factory's unsized one, so a repr-keyed filter can never match. Filtering on
     `learning_key()` makes the two halves agree."""
     player = GamePlayer(character="testchar")
+    player.game_data = GameData()
     gd = GameData()
     gd._resource_locations = {"copper_rocks": [(2, 0)]}
     gd._bank_location = (4, 0)
@@ -296,19 +335,22 @@ def test_backoff_blocks_a_gather_built_at_a_different_quantity():
     assert all(repr(a) != "Gather(copper_rocks)" for a in unblocked), \
         "fixture is vacuous: the built repr must differ from the blocked key"
 
-    player._failed_action_backoff = {"Gather(copper_rocks)": 5}
+    player._failure_blocks = {"Gather(copper_rocks)": (5, None)}
     blocked = [a for a in player._build_actions()
                if isinstance(a, GatherAction) and a.resource_code == "copper_rocks"]
     assert blocked == []
 
 
-def test_action_backoff_decrements_per_cycle():
-    """The per-action block decays each cycle (like goal suppression) so the
-    block is temporary — a transient failure is not blocked forever."""
+def test_a_transport_block_decrements_per_cycle():
+    """A transport block decays each cycle, so a transient failure is not
+    blocked forever; a structural one does not decay."""
     player = GamePlayer(character="testchar")
-    player._failed_action_backoff = {"Withdraw(ash_plank)": 3, "UseConsumable": 1}
+    player.game_data = GameData()
+    player._failure_blocks = {"Withdraw(ash_plank)": (3, None), "UseConsumable": (1, None),
+                              "TaskCancel": (0, frozenset())}
     player._decrement_suppressions()
-    assert player._failed_action_backoff == {"Withdraw(ash_plank)": 2}  # 1 pruned at zero
+    assert player._failure_blocks == {"Withdraw(ash_plank)": (2, None),
+                                      "TaskCancel": (0, frozenset())}
 
 
 class TestEscalationDecay:
@@ -332,6 +374,7 @@ class TestEscalationDecay:
     def test_productive_run_resets_escalation(self):
         """L2, then 20+ productive cycles, then a fire → L1, not L3."""
         player = GamePlayer(character="testchar")
+        player.game_data = GameData()
         player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
         for i in range(22):  # 22 consecutive productive cycles >= window 20
             player._record_cycle(_cycle(
@@ -345,6 +388,7 @@ class TestEscalationDecay:
         """Trace-locked: the 67 productive cycles between L2 and L3 in the
         2026-06-10 session must clear escalation history."""
         player = GamePlayer(character="testchar")
+        player.game_data = GameData()
         player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
         for i in range(67):
             player._record_cycle(_cycle(
@@ -358,6 +402,7 @@ class TestEscalationDecay:
         """A genuine livelock refill window (all failures) provides no
         counter-evidence: L2 escalates to L3."""
         player = GamePlayer(character="testchar")
+        player.game_data = GameData()
         player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
         self._flap_window(player, start=0)  # refill is itself the evidence
         player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
@@ -367,6 +412,7 @@ class TestEscalationDecay:
         """Fewer than window-size consecutive successes is not a full window
         of counter-evidence — escalation history is kept."""
         player = GamePlayer(character="testchar")
+        player.game_data = GameData()
         player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
         for i in range(19):  # one short of the 20-cycle window
             player._record_cycle(_cycle(
@@ -380,6 +426,7 @@ class TestEscalationDecay:
         """The counter-evidence run must be CONSECUTIVE: successes split by a
         failure never reach the window size, so no decay."""
         player = GamePlayer(character="testchar")
+        player.game_data = GameData()
         player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
         for i in range(40):  # 4 ok, 1 fail, repeated: max streak 4 < 20
             player._record_cycle(_cycle(
@@ -394,6 +441,7 @@ class TestEscalationDecay:
         the NEXT fire without counter-evidence unless a fresh full window
         accumulates."""
         player = GamePlayer(character="testchar")
+        player.game_data = GameData()
         player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
         for i in range(22):
             player._record_cycle(_cycle(
@@ -411,6 +459,7 @@ class TestEscalationDecay:
         """NO_PROGRESS counter-evidence is 'a real plan existed', regardless
         of outcome: 4+ consecutive planned cycles reset its escalation."""
         player = GamePlayer(character="testchar")
+        player.game_data = GameData()
         player._recovery_level[StuckSignal.NO_PROGRESS] = 2
         for i in range(4):  # planned but FAILED cycles still refute no-plan
             player._record_cycle(_cycle(
@@ -425,6 +474,7 @@ class TestEscalationDecay:
         """STATE_FROZEN counter-evidence is a CHANGED state key — succeeding
         actions that leave the state frozen prove nothing, so no decay."""
         player = GamePlayer(character="testchar")
+        player.game_data = GameData()
         player._recovery_level[StuckSignal.STATE_FROZEN] = 1
         frozen_key = (1, 1, 5, (), (), None, 0, False)
         for _ in range(12):  # succeeded=True but the state never changes
@@ -472,8 +522,7 @@ def test_cooldown_outcome_does_not_count_as_failure_for_stuck_detection():
             planned_depth=2,
             planner_timed_out=False,
             succeeded=True,  # post-fix mapping: cooldown -> succeeded
-            state_key=(0, 0, 0, _),
-        ))
+            state_key=(0, 0, 0, _), outcome="ok"))
     # No stuck signal should fire from these records — succeeded=True
     # means the detector treats them as healthy.
     history = list(detector._history)
@@ -481,3 +530,19 @@ def test_cooldown_outcome_does_not_count_as_failure_for_stuck_detection():
         "post-fix mapping: cooldown rejections record as succeeded=True so "
         "the stuck detector doesn't escalate to suppression"
     )
+
+
+def test_a_repeating_key_is_classified_by_its_latest_failure():
+    """Nine network blips then a 598: what the action fails with NOW decides."""
+    player = GamePlayer(character="testchar")
+    player.game_data = GameData()
+    for i in range(20):
+        failing = i % 2 == 0
+        outcome = ("error:HTTP_598" if i == 18 else "error:network") if failing else "ok"
+        player._detector.record(CycleRecord(
+            state_key=(i, 0, 5, (), (), None, 0, False), goal_name="G",
+            action_name="TaskCancel" if failing else "Move",
+            action_key="TaskCancel" if failing else "Move", planned_depth=1,
+            planner_timed_out=False, succeeded=not failing, outcome=outcome))
+    player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
+    assert player._failure_blocks == {"TaskCancel": (0, frozenset())}

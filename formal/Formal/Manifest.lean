@@ -512,6 +512,11 @@ open Formal.PriorityBand
 #check @Formal.LossRisk.expected_losses                -- (1/p - 1) x loss cost
 #check @Formal.LossRisk.antitone_wins                  -- more wins never dearer
 #check @Formal.LossRisk.mono_cost                      -- a dearer loss, a dearer surcharge
+-- FailureRecovery (USER 2026-10-09 "Classify by HTTP code", `ai/failure_recovery_core.py`):
+#check @Formal.FailureRecovery.structural_survives_ticks       -- no tick lifts a structural block
+#check @Formal.FailureRecovery.structural_blocked_after_ticks  -- it still blocks while the premise holds
+#check @Formal.FailureRecovery.structural_blocks_iff           -- blocks iff the premise holds
+#check @Formal.FailureRecovery.transport_expires               -- a transport block expires
 -- RealizableLoadout required roles (the multi-slot pick_loadout bug fix):
 #check @Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership -- contract: realizability ⇔ per-code demand ≤ ownership
 #check @Formal.RealizableLoadout.apply_cur_ge_1                        -- apply assert: realizable ⇒ cur ≥ 1 at every decrement

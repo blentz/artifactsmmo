@@ -411,6 +411,10 @@ open Formal.PriorityBand
 #print axioms Formal.LossRisk.expected_losses
 #print axioms Formal.LossRisk.antitone_wins
 #print axioms Formal.LossRisk.mono_cost
+#print axioms Formal.FailureRecovery.structural_survives_ticks
+#print axioms Formal.FailureRecovery.structural_blocked_after_ticks
+#print axioms Formal.FailureRecovery.structural_blocks_iff
+#print axioms Formal.FailureRecovery.transport_expires
 #print axioms Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership
 #print axioms Formal.RealizableLoadout.apply_cur_ge_1
 #print axioms Formal.RealizableLoadout.ownership_counts_equipped

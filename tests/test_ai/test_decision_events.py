@@ -147,17 +147,20 @@ class TestPlayer:
 
     def test_stuck_recovery_notes_every_action_block_it_sets(self) -> None:
         player = GamePlayer(character="hero")
-        player._failed_action_backoff = {"Old": 3}
+        player._failure_blocks = {"Old": (3, None)}
 
         def recover(signal: StuckSignal, client: object) -> None:
-            player._failed_action_backoff["Old"] = 3  # unchanged: not a new block
-            player._failed_action_backoff["Gather(ash_tree)"] = 5
+            player._failure_blocks["Old"] = (3, None)  # unchanged: not a new block
+            player._failure_blocks["Gather(ash_tree)"] = (5, None)
+            player._failure_blocks["TaskCancel"] = (0, frozenset())
 
         with patch.object(player, "_apply_stuck_recovery", side_effect=recover):
             player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, MagicMock())
         assert player._events.drain() == [
             (Mechanism.SUPPRESS, "Gather(ash_tree)",
-             "action cycles=5 signal=REPEATED_ACTION_FAILURE")]
+             "action cycles=5 signal=REPEATED_ACTION_FAILURE"),
+            (Mechanism.SUPPRESS, "TaskCancel",
+             "action until the active events change signal=REPEATED_ACTION_FAILURE")]
 
     def test_the_cycle_row_carries_its_events_into_the_store(self, tmp_path: Path) -> None:
         store = LearningStore(str(tmp_path / "l.db"), character="hero")

@@ -196,6 +196,7 @@ import Formal.TurnRotation
 import Formal.TaskWorth
 import Formal.ConsumableFloor
 import Formal.LossRisk
+import Formal.FailureRecovery
 import Formal.CurrencyAffordFastFail
 import Formal.PlanModel
 import Formal.LeafAttainable

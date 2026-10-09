@@ -51,6 +51,7 @@ import Formal.TurnRotation
 import Formal.TaskWorth
 import Formal.ConsumableFloor
 import Formal.LossRisk
+import Formal.FailureRecovery
 import Formal.ShoppingList
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
@@ -3375,6 +3376,15 @@ example : ∀ (worthy size coinReward : Nat),
     Formal.TaskWorth.drawDue worthy size coinReward = true ↔
       0 < worthy ∧ size - worthy ≤ coinReward * worthy :=
   @Formal.TaskWorth.drawDue_iff
+
+/-! ### FailureRecovery contracts. -/
+
+example : ∀ (n : Nat) (t : List (Nat × Formal.FailureRecovery.Block)) (k left p : Nat),
+    (k, (left, some p)) ∈ t → (k, (left, some p)) ∈ Formal.FailureRecovery.tickN n t :=
+  @Formal.FailureRecovery.structural_survives_ticks
+
+example : ∀ (n k : Nat), Formal.FailureRecovery.tickN (n + 1) [(k, (n + 1, none))] = [] :=
+  @Formal.FailureRecovery.transport_expires
 
 /-! ### LossRisk contracts. -/
 

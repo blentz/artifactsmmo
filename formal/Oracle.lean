@@ -1872,6 +1872,20 @@ def runConsumableFloor (args : Array Json) : Json :=
               ("share", Json.num (Int.ofNat (Formal.ConsumableFloor.publishShare deficit
                 (k (base + 1)))))]
 
+/-- The failure block table after `ticks` ticks (`Formal.FailureRecovery`).
+Args: `[premise, ticks, n, key_0, left_0, premise_0, ...]`, a premise of -1
+meaning a transport block. Emits the keys blocked under `premise`. -/
+def runFailureRecovery (args : Array Json) : Json :=
+  let i : Nat → Int := fun k => intArg args k
+  let n := (i 2).toNat
+  let table : List (Nat × Formal.FailureRecovery.Block) := (List.range n).map fun j =>
+    let p := i (5 + 3 * j)
+    ((i (3 + 3 * j)).toNat, ((i (4 + 3 * j)).toNat, if p < 0 then none else some p.toNat))
+  let after := Formal.FailureRecovery.tickN (i 1).toNat table
+  let keys := (after.filter fun e =>
+      Formal.FailureRecovery.blocksNow (i 0).toNat e.2).map fun e => Json.num (Int.ofNat e.1)
+  Json.mkObj [("blocked", Json.arr keys.toArray)]
+
 /-- A fight's loss surcharge per win (`Formal.LossRisk`). Args:
 `[samples, wins, minSamples, costNum, costDen]`. -/
 def runLossRisk (args : Array Json) : Json :=
@@ -2976,6 +2990,8 @@ def runOne (item : Json) : Json :=
     runConsumableFloor args
   else if kind == "loss_risk" then
     runLossRisk args
+  else if kind == "failure_recovery" then
+    runFailureRecovery args
   else if kind == "inventory_chain_safe" then
     runInventoryChainSafe args
   else if kind == "inventory_profile" then

@@ -81,6 +81,10 @@ class CycleRecord:
     planned_depth: int
     planner_timed_out: bool
     succeeded: bool
+    outcome: str
+    """The cycle's outcome string (`ok`, `no_plan`, `error:HTTP_598`, ...): what
+    REPEATED_ACTION_FAILURE classifies a repeating failure by
+    (`failure_recovery_core.failure_class`)."""
 
 
 class StuckDetector:

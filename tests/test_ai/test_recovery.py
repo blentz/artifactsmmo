@@ -14,7 +14,7 @@ def make_record(state_key=(0, 0, 5, (), (), None, 0, False),
         state_key=state_key, goal_name=goal_name, action_name=action_name,
         action_key=action_name if action_key is None else action_key,
         planned_depth=planned_depth, planner_timed_out=planner_timed_out, succeeded=succeeded,
-    )
+        outcome="ok" if succeeded else "error:network")
 
 
 class TestStuckDetectorBasics:
