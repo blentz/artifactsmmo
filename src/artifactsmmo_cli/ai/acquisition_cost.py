@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.acquisition_cost_core import (
     acquisition_cost,
     bundle_acquisition_cost,
 )
+from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
 from artifactsmmo_cli.ai.combat_deficit import combat_deficit
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
@@ -41,8 +42,9 @@ from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Rank
-from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
+from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill, loss_cost
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.loss_risk_core import loss_surcharge
 from artifactsmmo_cli.ai.monster_drop_selection import (
     MonsterDropCandidate,
     expected_kills,
@@ -127,9 +129,29 @@ def _expected_kills_per_unit(item: str, monster_code: str, rate: int, min_q: int
         max_quantity=max_q, distance=0)) * _prospecting_relief(prospecting)
 
 
+def _loss_surcharge(monster_code: str, max_hp: int,
+                    records: Sequence[tuple[str, int, int]]) -> float:
+    """Fight-equivalents the learned losses add to one win against
+    `monster_code` (`loss_risk_core`, proved in `Formal.LossRisk`). USER
+    2026-10-08, "Price the loss risk": expected fights per win is `1/p`, and
+    each loss is charged its death plus recovery (`fight_loop_cost.loss_cost`).
+    A monster absent from `records` has never been lost to here: no surcharge.
+
+    Live R2D2 2026-10-08 fought king_slime 22 times at L30 for 14 wins (64%)
+    for its jewelrycrafting rung's `king_slimeball`; the veto (< 40%) never
+    fired, and the rung was priced as if every fight were a win."""
+    cost = loss_cost(max_hp)
+    for monster, samples, wins in records:
+        if monster == monster_code:
+            return float(loss_surcharge(samples, wins, MIN_WIN_SAMPLES,
+                                        cost.numerator, cost.denominator))
+    return 0.0
+
+
 def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: int,
                   state: WorldState, game_data: GameData,
-                  store: LearningStore | None) -> int:
+                  store: LearningStore | None,
+                  records: Sequence[tuple[str, int, int]] = ()) -> int:
     """Whole-loop actions to farm ONE unit off `monster_code`.
 
     Two proved pieces, multiplied, and neither is restated here:
@@ -140,6 +162,9 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
     would price the farm at roughly half its real cost, which is the defect
     `fight_loop_cost` was written to fix.
 
+    Each kill also carries the learned loss surcharge (`_loss_surcharge`): a
+    kill is a WIN, and the losses expected per win are paid with it.
+
     Rounded UP: a fractional action is still an action the character spends, and
     the objective is an exact integer (S-013)."""
     projected = project_loadout_stats(
@@ -148,6 +173,7 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
                                      projected.prospecting, store)
     per_kill = cycles_per_kill(
         expected_damage_per_fight(state, game_data, monster_code), state.max_hp)
+    per_kill += _loss_surcharge(monster_code, state.max_hp, records)
     return max(1, ceil(float(kills) * per_kill))
 
 
@@ -167,7 +193,8 @@ def _gather_rate(item: str, resource: str, game_data: GameData) -> tuple[int, in
 
 def _priced(item: str, source: Source, state: WorldState,
             game_data: GameData,
-            store: LearningStore | None = None) -> RouteOption:
+            store: LearningStore | None = None,
+            records: Sequence[tuple[str, int, int]] = ()) -> RouteOption:
     """One `Source` plus its venue and action count.
 
     `Source.code` already means a different thing per kind (the resource, the
@@ -230,7 +257,8 @@ def _priced(item: str, source: Source, state: WorldState,
         return RouteOption(
             kind=source.kind.value, venue=source.code,
             actions_per_application=_drop_actions(item, source.code, rate, min_q,
-                                                  max_q, state, game_data, store),
+                                                  max_q, state, game_data, store,
+                                                  records),
             yield_per=source.yield_per, capacity=source.capacity)
     # DROP is now an EXPLICIT branch rather than the fallthrough it used to be.
     # As the fallthrough it silently swallowed every unclassified kind: adding
@@ -556,6 +584,8 @@ def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
         if unlock_actions >= UNOBTAINABLE_PER_UNIT:
             continue
         rate, min_q, max_q = _drop_table(item, monster, game_data)
+        # No loss surcharge: the learned record is about the loadout this gear
+        # chain replaces, and a different loadout is a different fight.
         option = RouteOption(
             kind=SourceKind.DROP.value, venue=monster,
             actions_per_application=_drop_actions(
@@ -582,7 +612,7 @@ def route_options(item: str, state: WorldState, game_data: GameData,
     exactly. Neither deferred route can be priced without the store: a gated
     craft needs an observed grind rate, and a sibling craft needs the observed
     cost of a fleet supply request."""
-    routes = [_priced(item, s, state, game_data, store)
+    routes = [_priced(item, s, state, game_data, store, ctx.fight_records)
               for s in obtain_sources(item, state, game_data, ctx, policy=policy)]
     model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc))
     if store is not None:

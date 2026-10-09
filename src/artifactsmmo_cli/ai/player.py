@@ -49,7 +49,7 @@ from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
-from artifactsmmo_cli.ai.combat import is_winnable, predict_win
+from artifactsmmo_cli.ai.combat import fight_records, is_winnable, predict_win
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.constants import (
     BANK_REFRESH_FORCE_SENTINEL,
@@ -3772,6 +3772,10 @@ class GamePlayer:
             # `acquisition_cost._sibling_craft_option`.
             sibling_skills=self._sibling_skills,
             fight_monster=self._committed_fight_monster(),
+            # The learned loss rates a fight's price carries (USER 2026-10-08,
+            # "Price the loss risk"); none without history.
+            fight_records=(fight_records(self.state, self.game_data, self.history)
+                           if self.history is not None else ()),
         )
         self._supply_shortfall = supply_shortfall(
             self.state, self.game_data, self.history, ctx.fight_monster, self._fleet_size,

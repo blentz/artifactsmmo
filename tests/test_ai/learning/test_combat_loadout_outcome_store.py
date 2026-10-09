@@ -106,3 +106,27 @@ def test_a_table_from_before_the_level_column_gains_it(tmp_path):
     store.record_combat_outcome("combat:pig", {}, True, True, 30)
     assert store.combat_record("combat:pig", 30, {}) == (1, 1)
     store.close()
+
+
+def test_the_lost_keys_are_level_scoped_in_first_loss_order(tmp_path):
+    """The fights a price must carry a loss rate for (USER 2026-10-08, "Price
+    the loss risk"): every key lost at exactly this level, first loss first."""
+    store = LearningStore(db_path=tmp_path / "t.db", character="R2D2")
+    other = LearningStore(db_path=tmp_path / "t.db", character="HAL")
+    store.record_combat_outcome("combat:rat", {}, True, True, 30)
+    store.record_combat_outcome("combat:king_slime", {}, True, False, 30)
+    store.record_combat_outcome("combat:rat", {}, True, False, 30)
+    store.record_combat_outcome("combat:king_slime", {}, True, False, 30)
+    store.record_combat_outcome("combat:pig", {}, True, False, 29)
+    other.record_combat_outcome("combat:ogre", {}, True, False, 30)
+    assert store.lost_task_keys(30) == ["combat:king_slime", "combat:rat"]
+    assert store.lost_task_keys(29) == ["combat:pig"]
+    assert store.lost_task_keys(31) == []
+    store.close()
+    other.close()
+
+
+def test_the_lost_keys_read_as_empty_on_error(tmp_path):
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="hero")
+    _break_engine(store)
+    assert store.lost_task_keys(30) == []

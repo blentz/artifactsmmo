@@ -65,6 +65,8 @@ improved. The rest term is measured, gear-sensitive, and policy-free; the potion
 term is none of the three.
 """
 
+from fractions import Fraction
+
 from artifactsmmo_cli.ai.rest_cooldown_core import rest_cooldown_seconds
 from artifactsmmo_cli.ai.thresholds import CRITICAL_HP_FRACTION
 
@@ -171,3 +173,14 @@ def cycles_per_kill(expected_damage: int, max_hp: int) -> float:
     30-second cooldown named cycles until 2026-08-07, and the projection ran ~80x
     high)."""
     return FIGHT_ACTIONS_PER_KILL + rest_actions_per_fight(expected_damage, max_hp)
+
+
+def loss_cost(max_hp: int) -> Fraction:
+    """What one LOST fight costs, in Fight-equivalents: the Fight itself plus
+    the recovery from the 1 hp a loss leaves (live 2026-10-08: every
+    `error:fight_lost` row ends at the respawn tile with `hp = 1`), priced as
+    the published Rest for `max_hp - 1` missing hit points — the policy-free
+    recovery, as `rest_actions_per_fight` prices it. The walk back from the
+    respawn tile is not priced (`docs/PLAN_loss_risk.md` residual)."""
+    seconds = int(TYPICAL_FIGHT_COOLDOWN_SECONDS)
+    return Fraction(seconds + rest_cooldown_seconds(max_hp - 1, max_hp), seconds)

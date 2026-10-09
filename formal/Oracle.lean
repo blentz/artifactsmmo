@@ -1940,6 +1940,13 @@ def runConsumableFloor (args : Array Json) : Json :=
               ("share", Json.num (Int.ofNat (Formal.ConsumableFloor.publishShare deficit
                 (k (base + 1)))))]
 
+/-- A fight's loss surcharge per win (`Formal.LossRisk`). Args:
+`[samples, wins, minSamples, costNum, costDen]`. -/
+def runLossRisk (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let r := Formal.LossRisk.lossSurcharge (n 0) (n 1) (n 2) (n 3) (n 4)
+  Json.mkObj [("num", Json.num (Int.ofNat r.1)), ("den", Json.num (Int.ofNat r.2))]
+
 /-- Compute one inventory_chain_safe result. Single shared dispatcher for the
 four chain_safe instantiations and the TaskCancel coin step.
 
@@ -3038,6 +3045,8 @@ def runOne (item : Json) : Json :=
     runTaskDrawDue args
   else if kind == "consumable_floor" then
     runConsumableFloor args
+  else if kind == "loss_risk" then
+    runLossRisk args
   else if kind == "inventory_chain_safe" then
     runInventoryChainSafe args
   else if kind == "inventory_profile" then

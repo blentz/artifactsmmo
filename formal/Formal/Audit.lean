@@ -418,6 +418,12 @@ open Formal.PriorityBand
 #print axioms Formal.ConsumableFloor.publishShare_covers
 #print axioms Formal.ConsumableFloor.publishShare_le
 #print axioms Formal.ConsumableFloor.publishShare_one
+#print axioms Formal.LossRisk.cold_zero
+#print axioms Formal.LossRisk.lossless_zero
+#print axioms Formal.LossRisk.den_pos
+#print axioms Formal.LossRisk.expected_losses
+#print axioms Formal.LossRisk.antitone_wins
+#print axioms Formal.LossRisk.mono_cost
 #print axioms Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership
 #print axioms Formal.RealizableLoadout.apply_cur_ge_1
 #print axioms Formal.RealizableLoadout.ownership_counts_equipped

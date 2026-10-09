@@ -1410,6 +1410,23 @@ class LearningStore:
         except SQLAlchemyError:
             return 0, 0
 
+    def lost_task_keys(self, level: int) -> list[str]:
+        """Every `task_key` this character has LOST a fight against at exactly
+        `level`, in the order of its first loss — the fights whose learned loss
+        rate a price must carry (`combat.fight_records`). [] on a DB error."""
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(
+                    select(CombatLoadoutOutcome.task_key)
+                    .where(CombatLoadoutOutcome.character == self._character,
+                           CombatLoadoutOutcome.level == level,
+                           col(CombatLoadoutOutcome.actual_win).is_(False))
+                    .group_by(CombatLoadoutOutcome.task_key)
+                    .order_by(func.min(CombatLoadoutOutcome.id)))
+                return list(rows)
+        except SQLAlchemyError:
+            return []
+
     def combat_loadout_outcomes(self) -> list[CombatLoadoutOutcomeRow]:
         """All recorded fight outcome rows for this character, insertion order.
         Best-effort: returns [] on SQLAlchemyError."""

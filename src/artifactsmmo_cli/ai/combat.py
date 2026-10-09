@@ -152,6 +152,36 @@ def fight_loadout(state: WorldState, game_data: GameData, monster_code: str) -> 
     return {slot: code for slot, code in loadout.items() if code is not None}
 
 
+def fight_record(state: WorldState, game_data: GameData, monster_code: str,
+                 history: LearningStore) -> tuple[int, int]:
+    """(fights, wins) against `monster_code` at this level in the loadout the
+    fight is fought in — the one reader of the learned record, for the
+    learned-loss veto (`is_winnable`) and the loss-risk price
+    (`fight_records`). USER 2026-10-05: "Old losses are gear-specific and
+    level-specific"."""
+    return history.combat_record(
+        combat_key(monster_code), state.level, fight_loadout(state, game_data, monster_code))
+
+
+def fight_records(state: WorldState, game_data: GameData,
+                  history: LearningStore) -> tuple[tuple[str, int, int], ...]:
+    """(monster, fights, wins) for every monster this character has lost to at
+    its level, in that fight's loadout: the learned loss rates a fight's price
+    carries (`SelectionContext.fight_records`; USER 2026-10-08, "Price the loss
+    risk"). A monster never lost to has no surcharge and is absent, and so is
+    one lost to only in ANOTHER loadout: no fight in this one is no record."""
+    prefix = combat_key("")
+    records: list[tuple[str, int, int]] = []
+    for key in history.lost_task_keys(state.level):
+        if not key.startswith(prefix):
+            continue
+        monster = key[len(prefix):]
+        samples, wins = fight_record(state, game_data, monster, history)
+        if samples > 0:
+            records.append((monster, samples, wins))
+    return tuple(records)
+
+
 def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bool:
     """True if the documented formula says the player beats the monster using the
     best on-hand loadout (inventory + equipped) for it.
@@ -405,8 +435,7 @@ def is_winnable(
         # level 30 the stats win and the veto still refused, holding the task
         # inert. Evidence about another level or another loadout is evidence
         # about a different fight.
-        samples, wins = history.combat_record(
-            combat_key(monster_code), state.level, fight_loadout(state, game_data, monster_code))
+        samples, wins = fight_record(state, game_data, monster_code, history)
         if samples >= MIN_WIN_SAMPLES and wins < WIN_RATE_THRESHOLD * samples:
             return False
         if _won_at_or_above_level(history, game_data, monster_code):

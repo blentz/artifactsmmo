@@ -50,6 +50,24 @@ its death plus recovery.
 5. **Witness**: a probe on a learning.db scratch copy. R2D2's
    jewelrycrafting rung price before and after; check whether the rung changes.
 
+## Status (2026-10-08): implemented
+
+Probe on a learning.db scratch copy, R2D2 at L30, max_hp 695. Records:
+king_slime 8/16, rat 45/80, ogre 6/7, spider 89/89. Prices with vs without the
+records:
+
+| Item | Without | With |
+|---|---|---|
+| `raw_rat_meat` | 8 | 14 |
+| `slime_shield` | 130 | 258 |
+| `king_slime_sword` | 207 | 335 |
+| `ring_of_chance` | 179 | 243 |
+| `steel_legs_armor` | 114 | 146 |
+
+The chosen rungs did not change: R2D2 holds `king_slimeball`, so
+`skull_amulet` prices at 19 either way. The proof of the effect is the price;
+the rung changes live when the held stock runs out.
+
 ## Residuals
 
 - Respawn walk-back is not priced.

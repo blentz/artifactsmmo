@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.combat import (
     _round_half_up,
     combat_margin,
     fight_loadout,
+    fight_records,
     is_winnable,
     predict_win,
 )
@@ -781,3 +782,19 @@ def test_combat_margin_lose_when_reconstitution_triggers_before_kill():
     assert combat_margin(state, gd_no, "mob") > 0
     gd_rec = _gd(hp=100, attack={"fire": 5}, initiative=10, reconstitution=2)
     assert combat_margin(state, gd_rec, "mob") == LOSE_MARGIN
+
+
+def test_fight_records_are_this_loadouts_record_of_each_monster_lost_to(tmp_path):
+    """USER 2026-10-08, "Price the loss risk": the records a fight's price
+    reads. A monster lost to only in ANOTHER loadout has no record in this one
+    and is absent; a non-combat key is not a fight."""
+    state = make_state(level=30, max_hp=100, attack={"fire": 30}, initiative=50)
+    gd = _gd(hp=30, attack={"fire": 5}, initiative=10)
+    gd._monster_attack["other"] = {"fire": 5}
+    gd._monster_resistance["other"] = {}
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
+    _record_outcomes(store, state, gd, "mob", wins=6, losses=4)
+    store.record_combat_outcome(combat_key("other"), {"weapon_slot": "stick"}, True, False, 30)
+    store.record_combat_outcome("gather:mining", {}, True, False, 30)
+    assert fight_records(state, gd, store) == (("mob", 10, 6),)
+    store.close()

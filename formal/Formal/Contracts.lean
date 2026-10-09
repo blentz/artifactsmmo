@@ -52,6 +52,7 @@ import Formal.GatherCost
 import Formal.TurnRotation
 import Formal.TaskWorth
 import Formal.ConsumableFloor
+import Formal.LossRisk
 import Formal.ShoppingList
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
@@ -3464,6 +3465,24 @@ example : ∀ (worthy size coinReward : Nat),
     Formal.TaskWorth.drawDue worthy size coinReward = true ↔
       0 < worthy ∧ size - worthy ≤ coinReward * worthy :=
   @Formal.TaskWorth.drawDue_iff
+
+/-! ### LossRisk contracts. -/
+
+example : ∀ (samples wins minSamples costNum costDen : Nat), 0 < wins → minSamples ≤ samples →
+    Formal.LossRisk.lossSurcharge samples wins minSamples costNum costDen
+      = ((samples - wins) * costNum, wins * costDen) :=
+  @Formal.LossRisk.expected_losses
+
+example : ∀ (samples w w' minSamples costNum costDen : Nat), w ≤ w' →
+    (Formal.LossRisk.lossSurcharge samples w' minSamples costNum costDen).1
+        * (Formal.LossRisk.lossSurcharge samples w minSamples costNum costDen).2
+      ≤ (Formal.LossRisk.lossSurcharge samples w minSamples costNum costDen).1
+        * (Formal.LossRisk.lossSurcharge samples w' minSamples costNum costDen).2 :=
+  @Formal.LossRisk.antitone_wins
+
+example : ∀ (samples wins minSamples costNum costDen : Nat), samples < minSamples →
+    (Formal.LossRisk.lossSurcharge samples wins minSamples costNum costDen).1 = 0 :=
+  @Formal.LossRisk.cold_zero
 
 /-! ### ConsumableFloor contracts. -/
 

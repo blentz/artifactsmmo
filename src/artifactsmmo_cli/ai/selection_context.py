@@ -64,6 +64,12 @@ class SelectionContext:
     # `task_worth.short_items` (USER 2026-10-07: "Fishing feeds Cooking ...
     # the fleet can collectively maintain a minimum supply in the bank").
     supply_shortfall: tuple[tuple[str, int], ...] = ()
+    # (monster, fights, wins) at the character's level in that fight's loadout,
+    # for every monster it has lost to (`combat.fight_records`, set by the
+    # player). A fight's price carries its learned loss rate
+    # (`loss_risk_core`; USER 2026-10-08, "Price the loss risk"). Empty for a
+    # caller without history: the prediction alone prices the fight.
+    fight_records: tuple[tuple[str, int, int], ...] = ()
     # The item this character's live supply claim is producing and its recipe
     # closure (set by the player). Reserved from healing: RestoreHP may neither
     # cook nor eat them (USER 2026-10-08: "Reserve the claimed batch"; live,

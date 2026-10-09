@@ -138,7 +138,7 @@ def is_obtainable(code: str, model: ObtainModel) -> bool:
 
 _CacheKey = tuple[str, int, tuple[tuple[str, str | None], ...],
                   tuple[tuple[str, int], ...], tuple[tuple[str, int], ...],
-                  tuple[tuple[str, int], ...]]
+                  tuple[tuple[str, int], ...], tuple[tuple[str, int, int], ...]]
 
 CACHE_MAX_ENTRIES = 4096
 """Per-GameData LRU bound, mirroring `equipment/loadout_cache`: comfortably holds
@@ -150,7 +150,8 @@ GameData is an eq-dataclass and so unhashable, and that module owns the reason a
 bare `id()` key is unsound on its own."""
 
 
-def _cache_key(skill: str, state: WorldState) -> "_CacheKey":
+def _cache_key(skill: str, state: WorldState,
+               fight_records: tuple[tuple[str, int, int], ...]) -> "_CacheKey":
     """The determinants of a candidate list, and nothing else.
 
     `level` and `equipment` drive `is_winnable` (hence obtainability and the DROP
@@ -172,7 +173,11 @@ def _cache_key(skill: str, state: WorldState) -> "_CacheKey":
     `test_the_memo_key_notices_a_changed_inventory` calls "worse than no memo".
     The drop gates (`obtain_model/drop_routes.py`) evaluate winnability at
     RESTORABLE hp (since 2026-08-18), so the chain no longer reads `state.hp` at
-    all and the key is complete as written."""
+    all and the key is complete as written.
+
+    `fight_records` (`ctx.fight_records`) drive the DROP route's loss surcharge
+    (USER 2026-10-08, "Price the loss risk"), so a new fight outcome reprices
+    the rungs that farm that monster. They change only when a fight resolves."""
     return (
         skill,
         state.level,
@@ -180,6 +185,7 @@ def _cache_key(skill: str, state: WorldState) -> "_CacheKey":
         tuple(sorted(state.inventory.items())),
         tuple(sorted((state.bank_items or {}).items())),
         tuple(sorted(state.skills.items())),
+        fight_records,
     )
 
 
@@ -271,7 +277,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     `recipe_closure` is built ONCE per call and shared across candidates, so the
     added cost is one closure walk per rung rather than one per material."""
     cache = _CACHES.cache_for(game_data)
-    key = _cache_key(skill, state)
+    key = _cache_key(skill, state, ctx.fight_records)
     hit = cache.get(key)
     if hit is not None:
         cache.move_to_end(key)
@@ -280,6 +286,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     # One model for the whole sweep: its routes are memoised per item, and the
     # rungs of one skill share most of their materials.
     model = grind_model(state, game_data)
+    pricing_ctx = replace(NO_PROFILE_CONTEXT, fight_records=ctx.fight_records)
     # The SAME `current_level` `skill_grind_target` hands the selection core.
     current_level = state.skills.get(skill, 0)
     for code, stats in game_data.all_item_stats.items():
@@ -300,9 +307,12 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
         # grind cycles — while `sticky_dagger`/`fire_staff` sat at 59 unchosen.
         # `next_grind_goal`'s DESCENT already used this projection; the
         # selection did not. Same helper, so the two cannot drift apart.
+        # Context-free but for the learned fight records: a rung that farms a
+        # monster this character keeps losing to carries the losses
+        # (USER 2026-10-08, "Price the loss risk").
         acquire_steps = acquisition_actions(
             code, 1, grind_probe_state(state, code), game_data,
-            NO_PROFILE_CONTEXT, equip=False, policy=GRIND_PRICING)
+            pricing_ctx, equip=False, policy=GRIND_PRICING)
         candidates.append(GrindCandidate(
             code=code,
             craft_skill=stats.crafting_skill,

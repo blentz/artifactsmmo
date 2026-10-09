@@ -355,6 +355,7 @@ TASK_WORTH_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth_cor
 CURRENCY_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_demand.py"
 XP_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "xp_demand.py"
 CONSUMABLE_FLOOR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor_core.py"
+LOSS_RISK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loss_risk_core.py"
 CONSUMABLE_FLOOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor.py"
 FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 CRAFT_COMPLETENESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_completeness.py"
@@ -1511,14 +1512,14 @@ SKILL_GRIND_TARGET_MUTATIONS = [
     ("skill_grind_target: acquire_steps back to counting recipe lines",
      "        acquire_steps = acquisition_actions(\n"
      "            code, 1, grind_probe_state(state, code), game_data,\n"
-     "            NO_PROFILE_CONTEXT, equip=False, policy=GRIND_PRICING)\n",
+     "            pricing_ctx, equip=False, policy=GRIND_PRICING)\n",
      "        acquire_steps = len(recipe)\n"),
     # Cost-blind: every rung ties, so the selection falls through to craft_level
     # and the cheapest chain stops mattering at all.
     ("skill_grind_target: acquire_steps stops costing anything",
      "        acquire_steps = acquisition_actions(\n"
      "            code, 1, grind_probe_state(state, code), game_data,\n"
-     "            NO_PROFILE_CONTEXT, equip=False, policy=GRIND_PRICING)\n",
+     "            pricing_ctx, equip=False, policy=GRIND_PRICING)\n",
      "        acquire_steps = 0\n"),
     # DELETED 2026-08-15: "acquire_steps caps the unobtainable bound", which
     # replaced the hoist with `min(999, acquisition_actions(...))` on the theory
@@ -5059,6 +5060,55 @@ CONSUMABLE_FLOOR_CORE_MUTATIONS = [
      "    return -(-deficit // fleet)\n",
      "    return deficit // fleet\n"),
 ]
+# A fight's learned loss risk, priced (USER 2026-10-08, "Price the loss
+# risk"; `docs/PLAN_loss_risk.md`). Killed by tests/test_ai/test_loss_risk.py,
+# except the empty-record filter (tests/test_ai/test_combat.py).
+LOSS_RISK_CORE_MUTATIONS = [
+    ("loss risk: the warmup boundary fight is not evidence",
+     "    if samples < min_samples:\n",
+     "    if samples <= min_samples:\n"),
+    ("loss risk: every fight is charged as a loss",
+     "    losses = max(samples - wins, 0)\n",
+     "    losses = samples\n"),
+    ("loss risk: the losses are spread per FIGHT, not per win",
+     "    return Fraction(losses * cost_num, max(wins, 1) * cost_den)\n",
+     "    return Fraction(losses * cost_num, max(samples, 1) * cost_den)\n"),
+]
+LOSS_RISK_COST_MUTATIONS = [
+    ("loss risk: a loss costs only its recovery, not the lost fight",
+     "    return Fraction(seconds + rest_cooldown_seconds(max_hp - 1, max_hp), seconds)\n",
+     "    return Fraction(rest_cooldown_seconds(max_hp - 1, max_hp), seconds)\n"),
+]
+LOSS_RISK_ACQUISITION_MUTATIONS = [
+    ("loss risk: the drop price ignores the learned losses",
+     "    per_kill += _loss_surcharge(monster_code, state.max_hp, records)\n",
+     "    per_kill += 0.0\n"),
+    ("loss risk: the routes drop the context's records",
+     "    routes = [_priced(item, s, state, game_data, store, ctx.fight_records)\n",
+     "    routes = [_priced(item, s, state, game_data, store)\n"),
+    ("loss risk: the surcharge reads any monster's record",
+     "        if monster == monster_code:\n",
+     "        if True:\n"),
+]
+LOSS_RISK_GRIND_MUTATIONS = [
+    ("loss risk: the grind rungs are priced without the records",
+     "    pricing_ctx = replace(NO_PROFILE_CONTEXT, fight_records=ctx.fight_records)\n",
+     "    pricing_ctx = NO_PROFILE_CONTEXT\n"),
+    ("loss risk: the grind memo ignores the records",
+     "        fight_records,\n    )\n",
+     "        (),\n    )\n"),
+]
+LOSS_RISK_COMBAT_MUTATIONS = [
+    ("loss risk: a monster lost to only in another loadout keeps an empty record",
+     "        if samples > 0:\n            records.append((monster, samples, wins))\n",
+     "        records.append((monster, samples, wins))\n"),
+]
+LOSS_RISK_PLAYER_MUTATIONS = [
+    ("loss risk: the player never sets the records",
+     "            fight_records=(fight_records(self.state, self.game_data, self.history)\n"
+     "                           if self.history is not None else ()),\n",
+     "            fight_records=(),\n"),
+]
 CONSUMABLE_FLOOR_MUTATIONS = [
     ("floor: the utility slots are not counted",
      "        if worn is not None and qty > 0:\n",
@@ -7668,8 +7718,9 @@ TASK_KILLS_MUTATIONS = [
 # tests/test_ai/test_combat.py.
 COMBAT_RECORD_SCOPE_MUTATIONS = [
     ("combat_record: losses at any level count",
+     "                    CombatLoadoutOutcome.task_key == task_key,\n"
      "                    CombatLoadoutOutcome.level == level,\n",
-     ""),
+     "                    CombatLoadoutOutcome.task_key == task_key,\n"),
     ("combat_record: losses in any loadout count",
      "                    CombatLoadoutOutcome.loadout == encoded)))\n",
      "                    CombatLoadoutOutcome.loadout == CombatLoadoutOutcome.loadout)))\n"),
@@ -7678,9 +7729,11 @@ LOSS_VETO_MUTATIONS = [
     ("is_winnable: the learned-loss veto never fires",
      "        if samples >= MIN_WIN_SAMPLES and wins < WIN_RATE_THRESHOLD * samples:\n",
      "        if False:\n"),
+    # The record now lives in `fight_record`, the one reader the veto and the
+    # loss-risk price share (2026-10-08).
     ("is_winnable: the veto asks about the level-1 fight",
-     "            combat_key(monster_code), state.level, fight_loadout(state, game_data, monster_code))\n",
-     "            combat_key(monster_code), 1, fight_loadout(state, game_data, monster_code))\n"),
+     "        combat_key(monster_code), state.level, fight_loadout(state, game_data, monster_code))\n",
+     "        combat_key(monster_code), 1, fight_loadout(state, game_data, monster_code))\n"),
 ]
 
 
@@ -9460,6 +9513,18 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_consumable_floor.py", survivors)
     run_group(CONSUMABLE_FLOOR_SRC, CONSUMABLE_FLOOR_MUTATIONS,
               "tests/test_ai/test_consumable_floor.py", survivors)
+    run_group(LOSS_RISK_CORE_SRC, LOSS_RISK_CORE_MUTATIONS,
+              "tests/test_ai/test_loss_risk.py", survivors)
+    run_group(FIGHT_LOOP_COST_SRC, LOSS_RISK_COST_MUTATIONS,
+              "tests/test_ai/test_loss_risk.py", survivors)
+    run_group(ACQUISITION_COST_SRC, LOSS_RISK_ACQUISITION_MUTATIONS,
+              "tests/test_ai/test_loss_risk.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, LOSS_RISK_GRIND_MUTATIONS,
+              "tests/test_ai/test_loss_risk.py", survivors)
+    run_group(COMBAT_SRC, LOSS_RISK_COMBAT_MUTATIONS,
+              "tests/test_ai/test_combat.py", survivors)
+    run_group(PLAYER_SRC, LOSS_RISK_PLAYER_MUTATIONS,
+              "tests/test_ai/test_loss_risk.py", survivors)
     run_group(XP_DEMAND_SRC, CONSUMABLE_DEMAND_MUTATIONS,
               "tests/test_ai/test_consumable_floor.py", survivors)
     run_group(TASK_WORTH_SRC, CONSUMABLE_SHORT_MUTATIONS,
