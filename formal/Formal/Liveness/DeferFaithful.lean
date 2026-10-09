@@ -102,8 +102,6 @@ theorem cycleStepD_descends_below_fifty (s : State) (hlvl : s.level < 50) :
         · exact descendsD_fight s hlvl (Or.inr (Or.inr ⟨hk, hisF⟩))
         · exact descendsD_placeholder s hlvl hk (Bool.eq_false_iff.mpr hisF)
     | maintainConsumables => exact absurd hmem (by decide)
-    | supplyBank      => exact descendsD_supplyBank s hk
-    | currencyTurnIn  => exact descendsD_currencyTurnIn s hk
     | sellIdle        => exact absurd hmem (by decide)
     | recycleSurplus  => exact absurd hmem (by decide)
     | bankExpand      => exact descendsD_bankExpand s hk

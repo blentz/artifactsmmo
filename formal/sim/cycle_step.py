@@ -95,14 +95,6 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.SELL_PRESSURED:     "npcSell",
     LadderMeans.OBJECTIVE_STEP:     "objectiveStep",
     LadderMeans.MAINTAIN_CONSUMABLES: "craft",  # PLAN #6a: cook/brew a heal
-    # 2026-08-01: SupplyBankGoal plans produce-then-deposit; the witness is the
-    # HEAD produce step (the demand board routes each item to the role that
-    # produces it). Mirrors Lean `planFor .supplyBank = [.gather]`.
-    LadderMeans.SUPPLY_BANK:        "gather",
-    # 2026-08-16 (fleet-currency-turn-in epic Task 6): both branches — the
-    # elected buyer's NpcBuy and a losing candidate's surrender — collapse to
-    # the single witness. Mirrors Lean `planFor .currencyTurnIn = [.npcBuy]`.
-    LadderMeans.CURRENCY_TURNIN:    "npcBuy",
     LadderMeans.SELL_IDLE:          "npcSell",
     LadderMeans.RECYCLE_SURPLUS:    "recycle",
     LadderMeans.DRAIN_BANK_JUNK:    "withdrawItem",
@@ -373,6 +365,9 @@ def cycle_step_mirror(s: CycleState) -> CycleState:
         # the retired COMPLETE_TASK rung dispatched), else its work is the
         # task's (c-2 #4; the `.taskTrade` arm, what the retired PURSUE_TASK
         # rung dispatched).
+        # (Phase 5-2c-iv: the fleet arms — Lean's `.npcBuy` / `.gather` on
+        # phase `.none` — cannot arise here: `CycleState` carries no fleet
+        # Bools, i.e. they are always False in this mirror's scope.)
         action = "completeTask" if _task_met(s) else "taskTrade"
     if action is None:
         return s

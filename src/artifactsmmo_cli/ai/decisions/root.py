@@ -93,6 +93,13 @@ from artifactsmmo_cli.ai.decision import Decision, resolve_node
 # of `route_price` raises ImportError when `decisions.route` is the entry.
 from artifactsmmo_cli.ai.decisions import route as _route
 from artifactsmmo_cli.ai.drop_evidence import drop_evidence
+from artifactsmmo_cli.ai.fleet_work import (
+    FLEET_SUPPLY,
+    FLEET_TURN_IN,
+    fleet_work_code,
+    supply_due,
+    turn_in_due,
+)
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -103,6 +110,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
+    ReachFleetOutcome,
     ReachSkillLevel,
     ReachTaskOutcome,
     StepDecline,
@@ -862,6 +870,16 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
     return ObtainItem(code, 1, slot=slot)
 
 
+def _fleet_roots(ctx: SelectionContext) -> list[ReachFleetOutcome]:
+    """The fleet work the context names, in a fixed order: the turn-in (a
+    resolved election waits on this character) before the supply run."""
+    roots: list[ReachFleetOutcome] = []
+    for kind, due in ((FLEET_TURN_IN, turn_in_due), (FLEET_SUPPLY, supply_due)):
+        if due(ctx):
+            roots.append(ReachFleetOutcome(kind, fleet_work_code(kind, ctx)))
+    return roots
+
+
 def resolve_root(state: WorldState, game_data: GameData,
                  objective: CharacterObjective, ctx: SelectionContext,
                  history: LearningStore | None,
@@ -917,6 +935,11 @@ def resolve_root(state: WorldState, game_data: GameData,
     task = _task_root(state, game_data, ctx, history)
     if task is not None:
         ordered.append(task)
+    # THE FLEET OBJECTIVE (Phase 5-2c-iv), beside the task objective: work the
+    # coordination tables name for this character, offered only while they do,
+    # served on its rotation turn (was the SUPPLY_BANK / CURRENCY_TURNIN
+    # collect rungs, above every root).
+    ordered.extend(_fleet_roots(ctx))
     offered = [g for g in (root, *ordered) if g is not None]
     ordered.extend(_orphan_skill_roots(state, game_data, offered, ctx))
 

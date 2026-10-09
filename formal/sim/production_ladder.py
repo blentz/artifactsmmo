@@ -19,6 +19,7 @@ ladder fallthrough).
 from collections.abc import Callable
 from enum import Enum
 
+from artifactsmmo_cli.ai.fleet_work import supply_due, turn_in_due
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
@@ -55,8 +56,6 @@ class LadderMeans(Enum):
     CRAFT_POTIONS = "craft_potions"
     CLAIM_PENDING = "claim_pending"
     SELL_PRESSURED = "sell_pressured"
-    SUPPLY_BANK = "supply_bank"
-    CURRENCY_TURNIN = "currency_turnin"
     OBJECTIVE_STEP = "objective_step"
     MAINTAIN_CONSUMABLES = "maintain_consumables"
     SELL_IDLE = "sell_idle"
@@ -85,8 +84,6 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     # Phase 5-2c-ii: an interrupt (the deposit sink), mirroring
     # `Formal.Liveness.MeansKind.allInLadderOrder`.
     LadderMeans.BANK_EXPAND,
-    LadderMeans.SUPPLY_BANK,
-    LadderMeans.CURRENCY_TURNIN,
     LadderMeans.OBJECTIVE_STEP,
     LadderMeans.MAINTAIN_CONSUMABLES,
     LadderMeans.SELL_IDLE,
@@ -116,8 +113,6 @@ _MEANS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.CLAIM_PENDING: MeansKind.CLAIM_PENDING,
     LadderMeans.SELL_PRESSURED: MeansKind.SELL_PRESSURED,
     LadderMeans.MAINTAIN_CONSUMABLES: MeansKind.MAINTAIN_CONSUMABLES,
-    LadderMeans.SUPPLY_BANK: MeansKind.SUPPLY_BANK,
-    LadderMeans.CURRENCY_TURNIN: MeansKind.CURRENCY_TURNIN,
     LadderMeans.SELL_IDLE: MeansKind.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS: MeansKind.RECYCLE_SURPLUS,
     LadderMeans.DRAIN_BANK_JUNK: MeansKind.DRAIN_BANK_JUNK,
@@ -147,8 +142,6 @@ assert COLLECT_REWARD_ORDER == (
     MeansKind.SELL_PRESSURED,
     MeansKind.CLAIM_PENDING,
     MeansKind.BANK_EXPAND,
-    MeansKind.SUPPLY_BANK,
-    MeansKind.CURRENCY_TURNIN,
 ), "COLLECT_REWARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 assert DISCRETIONARY_ORDER == (
@@ -191,7 +184,11 @@ def fires(
         # phaseActive s || phase = complete` — the same phase-based
         # over-approximations the retired PURSUE_TASK / COMPLETE_TASK rungs'
         # Lean predicates carried.
-        return objective_step_fires or state.task_lifecycle_phase in _HELD_PHASES
+        # Phase 5-2c-iv: fleet work the context names is the fleet objective
+        # (`ReachFleetOutcome`), so the production due-predicates are the
+        # Lean `supplyBankFires || currencyTurnInFires` disjuncts.
+        return (objective_step_fires or state.task_lifecycle_phase in _HELD_PHASES
+                or supply_due(ctx) or turn_in_due(ctx))
     if k in _GUARD_MAP:
         return _guard_fires(_GUARD_MAP[k], state, game_data, history, ctx)
     return _means_fires(_MEANS_MAP[k], state, game_data, history, ctx)

@@ -290,42 +290,6 @@ theorem descendsD_geCancel (s : State)
       refreshD_geCancel, refreshD_supplyDemand,
       perceptionRefreshD_level, perceptionRefreshD_xp]
 
-/-- `supplyBank` (→ `.gather`) strictly descends at `supplyDemandSlot`
-    (2026-08-01). The promoted rung is selectable below the cap here too; its
-    `.gather` apply discharges one unit of the outstanding sibling request and
-    touches no higher slot. Strictness comes from the firing gate
-    `supplyDemand ≥ SUPPLY_DEMAND_MIN` together with `SUPPLY_DEMAND_MIN_pos`;
-    the asymmetry arm (2026-08-16) carries its own `supplyDemand > 0` conjunct
-    for the same reason (see `supplyBankFires`'s doc comment), so `hpos`
-    follows in either firing branch. -/
-theorem descendsD_supplyBank (s : State)
-    (hk : productionLadder (perceptionRefreshD s) = some .supplyBank) :
-    dMeasureLt (dMeasure (cycleStepD s)) (dMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, supplyBankFires, Bool.or_eq_true, Bool.and_eq_true,
-    decide_eq_true_eq, refreshD_supplyDemand, refreshD_supplyAsymmetric] at hfire
-  have hpos : s.supplyDemand > 0 := by
-    rcases hfire with hbulk | ⟨_, hasym⟩
-    · have := SUPPLY_DEMAND_MIN_pos; omega
-    · exact hasym
-  rw [cycleStepD_some s hk]
-  have hcs : cycleStep (perceptionRefreshD s) =
-      applyActionKind .gather (perceptionRefreshD s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  apply dLt_of_supplyDemand_dec <;>
-    simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
-      applyActionKind, grantSkillXp, refreshD_supplyDemand,
-      refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
-      refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions,
-      refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
-      refreshD_hp, refreshD_maxHp,
-      refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
-      refreshD_geCancel, refreshD_supplyDemand,
-      perceptionRefreshD_level, perceptionRefreshD_xp] <;>
-    omega
-
 set_option maxRecDepth 8000 in
 /-- `bankExpand` (→ `.buyBankExpansion`) strictly descends at `bankExpandSlot`
     (2026-09-13). Bottom-of-cascade, above `objectiveStepFlag` which
@@ -360,33 +324,6 @@ theorem descendsD_bankExpand (s : State)
       refreshD_bankItemsCount, refreshD_bankCapacity,
       perceptionRefreshD_level, perceptionRefreshD_xp] <;>
     omega
-
-/-- `currencyTurnIn` (→ `.npcBuy`) strictly descends at `currencyTurnInFlag`
-    (2026-08-16), the fire-and-lose CURRENCY_TURNIN rung directly below
-    `supplyBank`. `.npcBuy` clears only `currencyTurnInActive`; the slot sits
-    ABOVE `objectiveStepFlag`, so no perception-raised slot is below the
-    strict decrease. -/
-theorem descendsD_currencyTurnIn (s : State)
-    (hk : productionLadder (perceptionRefreshD s) = some .currencyTurnIn) :
-    dMeasureLt (dMeasure (cycleStepD s)) (dMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, currencyTurnInFires, refreshD_currencyTurnIn] at hfire
-  rw [cycleStepD_some s hk]
-  have hcs : cycleStep (perceptionRefreshD s) =
-      applyActionKind .npcBuy (perceptionRefreshD s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  apply dLt_of_currencyTurnIn_dec <;>
-    simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
-      applyActionKind, hfire,
-      refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
-      refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
-      refreshD_craftRelief, refreshD_craftPotions,
-      refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
-      refreshD_hp, refreshD_maxHp,
-      refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
-      refreshD_geCancel, refreshD_supplyDemand, refreshD_currencyTurnIn,
-      perceptionRefreshD_level, perceptionRefreshD_xp]
 
 /-- `depositFull` (→ `.depositAll`) strictly descends. -/
 theorem descendsD_depositFull (s : State)
@@ -718,7 +655,7 @@ theorem descendsD_placeholder (s : State) (hlvl : s.level < 50)
     have hcs : cycleStep s = applyActionKind .taskTrade s := by
       unfold cycleStep
       rw [hk0]
-      simp [planFor, his0, hof', hnc]
+      simp [planFor, his0, hof', hnc, hphase]
     rw [hcs]
     have hmint : ∀ st, rearmOnMint .objectiveStep s st = st := fun st => by
       simp [rearmOnMint, dispatchesFight, his0, turnInRearm_of_not_turnIn st (Or.inr hnc)]

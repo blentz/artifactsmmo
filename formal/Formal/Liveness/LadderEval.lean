@@ -104,7 +104,8 @@ def inertLadderState : State where
   npcStock := []
   eventSpawns := []
 
-/-- Non-vacuity witness for the SUPPLY_BANK rung (2026-08-01): its firing
+/-- Non-vacuity witness for the SUPPLY_BANK predicate (2026-08-01; the fleet
+    objective's supply arm since Phase 5-2c-iv): its firing
     predicate is satisfiable — the inert state carrying an at-threshold sibling
     demand fires it. -/
 example :
@@ -163,7 +164,7 @@ example :
 /-- …and the `&& s.supplyDemand > 0` conjunct on the asymmetry arm (added over
     the brief's literal `|| s.supplyAsymmetric` — see `supplyBankFires`'s doc
     comment) is EXCLUDED at the point of definition, not merely load-bearing
-    three modules away in `BlockerDescent.descends_supplyBank`: at
+    in `CycleStep.cycleStep_progress_or_waits`'s fleet-supply branch: at
     `inertLadderState`'s default `supplyDemand := 0`, `supplyAsymmetric :=
     true` alone does NOT fire the rung. Delete the conjunct and this witness
     flips to `true`, disagreeing — the pair with the `supplyDemand := 1`
@@ -172,26 +173,24 @@ example :
     Formal.Liveness.ProductionLadder.supplyBankFires
       { inertLadderState with supplyAsymmetric := true } = false := rfl
 
-/-- The promotion is REAL in the model, not just in a list literal: with every
-    guard and collect-reward rung quiet, an at-threshold supply demand is
-    SELECTED even though the objective step is armed. Before 2026-08-01
-    `supplyBank` sat below `objectiveStep` and this state selected
-    `objectiveStep`. -/
+/-- Phase 5-2c-iv: the supply demand is the FLEET OBJECTIVE's, not a rung's —
+    with every guard and interrupt quiet, no task held and the opaque objective
+    Bool unarmed, an at-threshold supply demand fires (and selects) the
+    objective step. (2026-08-01 to Phase 5-2c-iv it selected the SUPPLY_BANK
+    rung above the step.) -/
 example :
     Formal.Liveness.ProductionLadder.productionLadder
       { inertLadderState with
-        supplyDemand := Formal.Liveness.ProductionLadder.SUPPLY_DEMAND_MIN,
-        objectiveStepFires := true }
-      = some MeansKind.supplyBank := rfl
-
-/-- …and the gate decides WHICH of the two wins: one unit below the threshold,
-    the same state selects the objective step. -/
-example :
-    Formal.Liveness.ProductionLadder.productionLadder
-      { inertLadderState with
-        supplyDemand := Formal.Liveness.ProductionLadder.SUPPLY_DEMAND_MIN - 1,
-        objectiveStepFires := true }
+        supplyDemand := Formal.Liveness.ProductionLadder.SUPPLY_DEMAND_MIN }
       = some MeansKind.objectiveStep := rfl
+
+/-- …and the gate still decides: one unit below the threshold the same state
+    leaves the objective step quiet. -/
+example :
+    Formal.Liveness.ProductionLadder.objectiveStepFires
+      { inertLadderState with
+        supplyDemand := Formal.Liveness.ProductionLadder.SUPPLY_DEMAND_MIN - 1 }
+      = false := rfl
 
 /-- …and guards still outrank supply, at any demand: an hp-critical state with a
     huge sibling demand rests rather than produces. -/
@@ -200,7 +199,7 @@ example :
       { inertLadderState with supplyDemand := 120, hp := 1, maxHp := 100 }
       = some MeansKind.hpCritical := rfl
 
-/-- Non-vacuity witness for the CURRENCY_TURNIN rung (2026-08-16, fleet-
+/-- Non-vacuity witness for the CURRENCY_TURNIN predicate (2026-08-16, fleet-
     currency-turn-in epic Task 6): its firing predicate is SATISFIABLE — the
     inert state with `currencyTurnInActive := true` fires it. This is the same
     shape as `supplyBankFires`'s witness above: `ctx.turn_in`/`ctx.recall` are
@@ -217,24 +216,13 @@ example :
 example :
     Formal.Liveness.ProductionLadder.currencyTurnInFires inertLadderState = false := rfl
 
-/-- The promotion is real in the model: with every guard and collect-reward
-    rung quiet, a resolved election is SELECTED even though the objective step
-    is armed — mirroring `supplyBank`'s selection witness above, one rung
-    later in COLLECT_REWARD_ORDER. -/
+/-- Phase 5-2c-iv: a resolved election is the fleet objective's too — with
+    every guard and interrupt quiet, no task held and the opaque objective Bool
+    unarmed, it fires (and selects) the objective step. -/
 example :
     Formal.Liveness.ProductionLadder.productionLadder
-      { inertLadderState with
-        currencyTurnInActive := true, objectiveStepFires := true }
-      = some MeansKind.currencyTurnIn := rfl
-
-/-- …and `supplyBank` still outranks it when BOTH are live (its position is
-    directly above `currencyTurnIn` in COLLECT_REWARD_ORDER). -/
-example :
-    Formal.Liveness.ProductionLadder.productionLadder
-      { inertLadderState with
-        supplyDemand := Formal.Liveness.ProductionLadder.SUPPLY_DEMAND_MIN,
-        currencyTurnInActive := true, objectiveStepFires := true }
-      = some MeansKind.supplyBank := rfl
+      { inertLadderState with currencyTurnInActive := true }
+      = some MeansKind.objectiveStep := rfl
 
 /-- …and guards still outrank it, at any resolved election: an hp-critical
     state with a live turn-in rests rather than transacting. -/
@@ -263,8 +251,6 @@ def meansKindName : MeansKind → String
   | .sellPressured       => "sellPressured"
   | .objectiveStep       => "objectiveStep"
   | .maintainConsumables => "maintainConsumables"
-  | .supplyBank          => "supplyBank"
-  | .currencyTurnIn      => "currencyTurnIn"
   | .sellIdle            => "sellIdle"
   | .recycleSurplus      => "recycleSurplus"
   | .drainBankJunk       => "drainBankJunk"

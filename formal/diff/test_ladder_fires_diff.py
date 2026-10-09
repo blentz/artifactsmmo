@@ -153,6 +153,7 @@ from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.cancel_selection import cancel_targets
 from artifactsmmo_cli.ai.decisions.root import _task_root
 from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
+from artifactsmmo_cli.ai.fleet_work import SUPPLY_DEMAND_MIN
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
@@ -162,7 +163,6 @@ from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.means import SUPPLY_DEMAND_MIN
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.diff.oracle_client import run_oracle
@@ -205,8 +205,6 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.SELL_PRESSURED: "sellPressured",
     LadderMeans.OBJECTIVE_STEP: "objectiveStep",
     LadderMeans.MAINTAIN_CONSUMABLES: "maintainConsumables",
-    LadderMeans.SUPPLY_BANK: "supplyBank",
-    LadderMeans.CURRENCY_TURNIN: "currencyTurnIn",
     LadderMeans.SELL_IDLE: "sellIdle",
     LadderMeans.RECYCLE_SURPLUS: "recycleSurplus",
     LadderMeans.DRAIN_BANK_JUNK: "drainBankJunk",
@@ -455,7 +453,7 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         0,
         # 36 supplyDemand: `_make_ctx` leaves `supply_target` at its None
         # default (the Scenario models no coordination board), which is exactly
-        # what production's `_fires(SUPPLY_BANK, …)` reads — so SUPPLY_BANK is
+        # what production's `fleet_work.supply_due` reads — so its supply arm is
         # False on BOTH sides of the poor path. Read off the SAME ctx production
         # reads rather than hard-coded, so a Scenario that ever grows a supply
         # target drives both sides together. The Lean slot is the UNMET DEMAND
@@ -466,14 +464,14 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         _supply_demand(_make_ctx(scn)),
         # 37 currencyTurnInActive: `_make_ctx` leaves `turn_in`/`recall` at their
         # None defaults (the Scenario models no fleet coordination), which is
-        # exactly what production's `_fires(CURRENCY_TURNIN, …)` reads — so
-        # CURRENCY_TURNIN is False on BOTH sides of the poor path. Read off the
+        # exactly what production's `fleet_work.turn_in_due` reads — so
+        # its turn-in arm is False on BOTH sides of the poor path. Read off the
         # SAME ctx production reads rather than hard-coded, so a Scenario that
         # ever grows a turn-in/recall drives both sides together.
         _currency_turn_in_active(_make_ctx(scn)),
         # 38 supplyAsymmetric: `_make_ctx` leaves `asymmetric_demand` at its
         # empty-frozenset default (the Scenario models no coordination store),
-        # which is exactly what production's `_fires(SUPPLY_BANK, …)` second
+        # which is exactly what production's `fleet_work.supply_due` second
         # arm reads — so the asymmetric disjunct is False on BOTH sides of the
         # poor path, same shape as 36/37 above. Read off the SAME ctx
         # production reads rather than hard-coded, so a Scenario that ever
@@ -497,8 +495,8 @@ def _supply_demand(ctx: SelectionContext) -> int:
     """The Lean `State.supplyDemand` slot read off production's own ctx: the
     UNMET demand component of `ctx.supply_target`, or 0 when there is no target.
 
-    One value, two sides — the SAME field `tiers/means.py::_fires(SUPPLY_BANK,
-    …)` compares against `SUPPLY_DEMAND_MIN`, so the threshold cannot drift
+    One value, two sides — the SAME field `fleet_work.py::supply_due`
+    compares against `SUPPLY_DEMAND_MIN`, so the threshold cannot drift
     between the oracle and production."""
     if ctx.supply_target is None:
         return 0
@@ -510,7 +508,7 @@ def _currency_turn_in_active(ctx: SelectionContext) -> int:
     ctx: `ctx.turn_in is not None or ctx.recall is not None`.
 
     One value, two sides — the SAME condition
-    `tiers/means.py::_fires(CURRENCY_TURNIN, …)` tests, so the two flags cannot
+    `fleet_work.py::turn_in_due` tests, so the two flags cannot
     drift between the oracle and production."""
     return 1 if (ctx.turn_in is not None or ctx.recall is not None) else 0
 
@@ -518,11 +516,11 @@ def _currency_turn_in_active(ctx: SelectionContext) -> int:
 def _supply_asymmetric(ctx: SelectionContext) -> int:
     """The Lean `State.supplyAsymmetric` slot read off production's own ctx:
     `ctx.supply_target is not None and ctx.supply_target[0] in
-    ctx.asymmetric_demand` — the SECOND arm of `_fires(SUPPLY_BANK, …)`
+    ctx.asymmetric_demand` — the SECOND arm of `supply_due`
     (role-driven-supply epic Task 4, 2026-08-16).
 
     One value, two sides — the SAME membership test
-    `tiers/means.py::_fires(SUPPLY_BANK, …)` reads, so the flag cannot drift
+    `fleet_work.py::supply_due` reads, so the flag cannot drift
     between the oracle and production. Mirrors `_supply_demand` above (both
     read the same `ctx.supply_target`); guarded by `target is not None` the
     same way, since `ctx.asymmetric_demand` membership is only meaningful for
@@ -964,17 +962,17 @@ def _rich_oracle_args(
         # needed_items = step_profile codes; the ladder call threads no step_profile,
         # so needed_items is empty here (matching production) and this is TTL-driven.
         1 if cancel_targets(w, gd, 0, frozenset()) else 0,  # 35 geCancelTargetsNonempty
-        # 36 supplyDemand: production's `_fires(SUPPLY_BANK, …)` reads
+        # 36 supplyDemand: production's `fleet_work.supply_due` reads
         # `ctx.supply_target`'s UNMET-demand component and compares it against
         # `SUPPLY_DEMAND_MIN`, so thread that number itself — one value, two
         # sides, exact lockstep.
         _supply_demand(ctx),  # 36 supplyDemand
-        # 37 currencyTurnInActive: production's `_fires(CURRENCY_TURNIN, …)` is
+        # 37 currencyTurnInActive: production's `fleet_work.turn_in_due` is
         # exactly `ctx.turn_in is not None or ctx.recall is not None`, so thread
         # that condition itself — one value, two sides, exact lockstep (like
         # supplyDemand at 36).
         _currency_turn_in_active(ctx),  # 37 currencyTurnInActive
-        # 38 supplyAsymmetric: production's `_fires(SUPPLY_BANK, …)` second arm
+        # 38 supplyAsymmetric: production's `fleet_work.supply_due` second arm
         # is exactly `ctx.supply_target[0] in ctx.asymmetric_demand`, so thread
         # that membership test itself — one value, two sides, exact lockstep
         # (like supplyDemand at 36). 2026-08-16 review fix: previously omitted,
@@ -1723,8 +1721,7 @@ def _monsters_task_world(*, task_code: str, progress: int, total: int,
     # level 5; full hp, empty bag, no bank/pending so every slot above the
     # objective step stays quiet.
     #
-    # `coins` is opt-in per fixture, NOT a default: handing every caller a coin
-    # changes what the SUPPLY_BANK fixtures are testing.
+    # `coins` is opt-in per fixture, NOT a default.
     return WorldState(
         character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
         gold=0, skills={}, x=0, y=0,
@@ -1830,115 +1827,89 @@ def test_task_phase_selects_objective_step_for_an_out_of_reach_items_task() -> N
 
 
 # ---------------------------------------------------------------------------
-# SUPPLY_BANK demand threshold — Python/Lean lockstep (2026-08-01 promotion).
+# The FLEET OBJECTIVE's arms of the objective step — Python/Lean lockstep
+# (Phase 5-2c-iv: the SUPPLY_BANK and CURRENCY_TURNIN rungs retired into the
+# fleet objective, `ReachFleetOutcome`). Production `production_ladder.fires`
+# reads `fleet_work.supply_due` / `turn_in_due`; Lean `objectiveStepFires`
+# carries `supplyBankFires || currencyTurnInFires`. Every fixture holds NO task
+# and leaves the opaque objective flag OFF, so only a fleet arm can fire it.
 # ---------------------------------------------------------------------------
 
 
-def _supply_ctx(demand: int) -> SelectionContext:
+def _no_task_world() -> WorldState:
+    """Level 5, full hp, empty bag, no bank/pending and NO task held: every
+    slot above the objective step is quiet and the task-phase arm cannot fire
+    it either."""
+    return WorldState(
+        character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
+        gold=0, skills={}, x=0, y=0, inventory={}, inventory_max=20,
+        inventory_slots_max=20,
+        equipment={}, cooldown_expires=None, bank_items=None, bank_gold=None,
+        pending_items=None, task_code=None, task_type=None,
+        task_progress=0, task_total=0)
+
+
+def _supply_ctx(demand: int, *, asymmetric: bool = False) -> SelectionContext:
     """A ctx carrying a live sibling supply target with the given UNMET demand.
     `quantity` (the absolute banked target) is deliberately set far above the
-    threshold so the test can only pass by reading the DEMAND component."""
-    return SelectionContext(
-        bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
-        initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(), target_tools=frozenset(),
-        supply_target=("copper_ore", 999, demand),
-        draw_owed=True)
-
-
-def test_supply_bank_threshold_at_boundary_agrees_and_wins_over_objective() -> None:
-    """At exactly `SUPPLY_DEMAND_MIN` the rung fires on BOTH sides, and — the
-    teeth of the 2026-08-01 promotion — it WINS selection against an armed
-    objective step, on both ladders. A Lean ladder that still ranked supplyBank
-    below `objectiveStep` would disagree on `selected` here."""
-    w = _monsters_task_world(task_code="chicken", progress=0, total=1)
-    gd = _feasible_items_gd()
-    prod, prod_sel, lean, lean_sel = drive_and_contest(
-        w, gd, _supply_ctx(SUPPLY_DEMAND_MIN),
-        objective_step=True,
-        driven=frozenset({LadderMeans.SUPPLY_BANK}))
-    assert prod[LadderMeans.SUPPLY_BANK] is True
-    assert lean[LadderMeans.SUPPLY_BANK] is True
-    assert prod_sel is LadderMeans.SUPPLY_BANK
-    assert lean_sel is LadderMeans.SUPPLY_BANK
-
-
-def test_supply_bank_threshold_one_below_agrees_and_yields_to_objective() -> None:
-    """One unit below the threshold the rung is quiet on BOTH sides and the
-    objective step wins. This is the pair that pins the CONSTANT itself in
-    lockstep: raise or lower `SUPPLY_DEMAND_MIN` on either side alone and one of
-    these two tests disagrees."""
-    w = _monsters_task_world(task_code="chicken", progress=0, total=1)
-    gd = _feasible_items_gd()
-    prod, prod_sel, lean, lean_sel = drive_and_contest(
-        w, gd, _supply_ctx(SUPPLY_DEMAND_MIN - 1),
-        objective_step=True,
-        driven=frozenset({LadderMeans.SUPPLY_BANK}))
-    assert prod[LadderMeans.SUPPLY_BANK] is False
-    assert lean[LadderMeans.SUPPLY_BANK] is False
-    assert prod_sel is LadderMeans.OBJECTIVE_STEP
-    assert lean_sel is LadderMeans.OBJECTIVE_STEP
-
-
-# ---------------------------------------------------------------------------
-# SUPPLY_BANK asymmetry arm — Python/Lean lockstep (role-driven-supply epic
-# Task 4/6, 2026-08-16).
-# ---------------------------------------------------------------------------
-
-
-def _supply_ctx_asymmetric(demand: int, *, asymmetric: bool) -> SelectionContext:
-    """Like `_supply_ctx`, but for the ASYMMETRY arm: the live-shape `demand`
-    every published request today actually carries (quantity 1 — see
-    `supplyAsymmetric`'s doc comment on `State`), with the requested code
-    placed in `ctx.asymmetric_demand` iff `asymmetric`."""
+    threshold so the test can only pass by reading the DEMAND component; the
+    requested code is placed in `ctx.asymmetric_demand` iff `asymmetric`."""
     return SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
         supply_target=("copper_ore", 999, demand),
         asymmetric_demand=frozenset({"copper_ore"}) if asymmetric else frozenset(),
-        draw_owed=True)
+        draw_owed=False)
 
 
-def test_supply_bank_asymmetric_fires_below_threshold_and_wins_over_objective() -> None:
-    """The teeth of Task 4: a quantity-1 request — below `SUPPLY_DEMAND_MIN`,
-    so the bulk arm alone would leave this quiet — fires on BOTH sides when
-    the requested code is asymmetric, and WINS selection against an armed
-    objective step. This is the live case: every published request today is
-    quantity 1, so before this arm existed SUPPLY_BANK could never fire.
-
-    This is also the differential's actual coverage of `supplyAsymmetric`:
-    `_oracle_args`/`_rich_oracle_args` thread arg[38] from the SAME
-    `ctx.asymmetric_demand` production's `_fires(SUPPLY_BANK, …)` reads, so a
-    Lean ladder missing the `|| (supplyAsymmetric && …)` disjunct — or one
-    whose oracle wiring silently hard-wires the slot to `false` — disagrees
-    with `prod` here, not just with a hand-written Lean `rfl`."""
-    w = _monsters_task_world(task_code="chicken", progress=0, total=1)
-    gd = _feasible_items_gd()
+def _assert_objective_step(ctx: SelectionContext, *, fires: bool) -> None:
+    """Drive the no-task world under `ctx` and assert the objective step's
+    verdict (and, when it fires, its selection) on BOTH ladders."""
     prod, prod_sel, lean, lean_sel = drive_and_contest(
-        w, gd, _supply_ctx_asymmetric(1, asymmetric=True),
-        objective_step=True,
-        driven=frozenset({LadderMeans.SUPPLY_BANK}))
-    assert prod[LadderMeans.SUPPLY_BANK] is True
-    assert lean[LadderMeans.SUPPLY_BANK] is True
-    assert prod_sel is LadderMeans.SUPPLY_BANK
-    assert lean_sel is LadderMeans.SUPPLY_BANK
+        _no_task_world(), _feasible_items_gd(), ctx,
+        driven=frozenset({LadderMeans.OBJECTIVE_STEP}))
+    assert prod[LadderMeans.OBJECTIVE_STEP] is fires
+    assert lean[LadderMeans.OBJECTIVE_STEP] is fires
+    if fires:
+        assert prod_sel is LadderMeans.OBJECTIVE_STEP
+        assert lean_sel is LadderMeans.OBJECTIVE_STEP
 
 
-def test_supply_bank_asymmetric_false_at_same_demand_yields_to_objective() -> None:
-    """Same quantity-1 demand, same everything else — only `asymmetric_demand`
-    drops the code — and the rung goes quiet on BOTH sides, yielding to the
-    objective step. This is the pair that pins the asymmetry arm ITSELF in
-    lockstep against production, the way `test_supply_bank_threshold_*` pins
-    the bulk arm: flip the membership test on either side alone and one of
-    these two tests disagrees."""
-    w = _monsters_task_world(task_code="chicken", progress=0, total=1)
-    gd = _feasible_items_gd()
-    prod, prod_sel, lean, lean_sel = drive_and_contest(
-        w, gd, _supply_ctx_asymmetric(1, asymmetric=False),
-        objective_step=True,
-        driven=frozenset({LadderMeans.SUPPLY_BANK}))
-    assert prod[LadderMeans.SUPPLY_BANK] is False
-    assert lean[LadderMeans.SUPPLY_BANK] is False
-    assert prod_sel is LadderMeans.OBJECTIVE_STEP
-    assert lean_sel is LadderMeans.OBJECTIVE_STEP
+def test_supply_threshold_at_boundary_fires_objective_step() -> None:
+    """At exactly `SUPPLY_DEMAND_MIN` the fleet supply arm fires (and selects)
+    the objective step on BOTH sides."""
+    _assert_objective_step(_supply_ctx(SUPPLY_DEMAND_MIN), fires=True)
+
+
+def test_supply_threshold_one_below_leaves_objective_step_quiet() -> None:
+    """One unit below the threshold the step is quiet on BOTH sides. With the
+    boundary test above, this pins the CONSTANT in lockstep: raise or lower
+    `SUPPLY_DEMAND_MIN` on either side alone and one of the two disagrees."""
+    _assert_objective_step(_supply_ctx(SUPPLY_DEMAND_MIN - 1), fires=False)
+
+
+def test_supply_asymmetric_fires_objective_step_below_threshold() -> None:
+    """A quantity-1 request — below `SUPPLY_DEMAND_MIN` — fires the step on
+    BOTH sides when the requested code is asymmetric. The differential's
+    coverage of `supplyAsymmetric`: arg[38] is threaded from the SAME
+    `ctx.asymmetric_demand` production's `supply_due` reads."""
+    _assert_objective_step(_supply_ctx(1, asymmetric=True), fires=True)
+
+
+def test_supply_asymmetric_false_at_same_demand_leaves_objective_step_quiet() -> None:
+    """Same quantity-1 demand, only `asymmetric_demand` drops the code: quiet
+    on BOTH sides. Pins the asymmetry arm itself in lockstep."""
+    _assert_objective_step(_supply_ctx(1, asymmetric=False), fires=False)
+
+
+def test_currency_recall_fires_objective_step() -> None:
+    """A holder asked to surrender (`ctx.recall` set) fires the fleet turn-in
+    arm on BOTH sides (arg[37] `currencyTurnInActive` read off the same ctx
+    `turn_in_due` reads)."""
+    ctx = SelectionContext(
+        bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
+        initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
+        target_gear=frozenset(), target_tools=frozenset(),
+        recall=("lich_race_medal", 2), draw_owed=False)
+    _assert_objective_step(ctx, fires=True)

@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
+    ReachFleetOutcome,
     ReachSkillLevel,
     ReachTaskOutcome,
 )
@@ -75,6 +76,8 @@ def _label(node: MetaGoal) -> tuple[str, str]:
         return f"{node.skill} → {node.level}", "skill"
     if isinstance(node, ReachTaskOutcome):
         return f"task {node.task_code or '(coins)'}", "task"
+    if isinstance(node, ReachFleetOutcome):
+        return f"fleet {node.kind} {node.code}", "fleet"
     return short_root(repr(node)), "obtain"
 
 

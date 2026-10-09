@@ -112,6 +112,7 @@ APPLY_TELEPORT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "tel
 APPLY_USE_GOLD_BAG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "use_gold_bag.py"
 CONSUMABLE_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_supply.py"
 MEANS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means.py"
+FLEET_WORK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_work.py"
 GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "guards.py"
 THRESHOLDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "thresholds.py"
 WITHDRAW_ITEM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "withdraw_item.py"
@@ -5313,7 +5314,7 @@ _ALL_SRCS = [
     TASK_TRADE_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
     APPLY_REST_SRC, APPLY_FIGHT_SRC, APPLY_BANK_EXPANSION_SRC, APPLY_TELEPORT_SRC,
-    CONSUMABLE_SUPPLY_SRC, MEANS_SRC, GUARDS_SRC, THRESHOLDS_SRC,
+    CONSUMABLE_SUPPLY_SRC, MEANS_SRC, FLEET_WORK_SRC, GUARDS_SRC, THRESHOLDS_SRC,
     WITHDRAW_ITEM_SRC, UNEQUIP_SRC, TASK_EXCHANGE_SRC, TASK_CANCEL_SRC,
     GATHERING_APPLY_SRC,
     MONSTER_CATALOG_SRC,
@@ -7130,20 +7131,109 @@ LADDER_MEANS_FIRES_MUTATIONS = [
 ]
 
 
-# Task 7 (role-driven supply, mutation coverage): the asymmetric arm added to
-# SUPPLY_BANK's fire predicate — a request its own asker cannot fill itself
-# now fires the rung regardless of size (real published demand is always
-# quantity 1, so without this arm the rung never fired live). OWN run_group:
-# unit-killed by test_a_single_unit_request_the_asker_cannot_make_now_fires
-# (tests/test_ai/test_tiers_means.py), which sets a quantity-1 target with
-# the code present in `ctx.asymmetric_demand` and asserts `_fires` is True —
-# deleting this arm makes it False and the mutant survives undetected by
-# every OTHER SUPPLY_BANK test (they all use symmetric demand).
-SUPPLY_BANK_ASYMMETRIC_FIRES_MUTATIONS = [
+# Phase 5-2c-iv (fleet objective): the SUPPLY_BANK / CURRENCY_TURNIN rungs'
+# `_fires` arms moved to the leaf `ai/fleet_work.py` as `supply_due` /
+# `turn_in_due`, which gate the fleet objective (`ReachFleetOutcome`). The
+# asymmetric arm (role-driven supply Task 7) moved with it: real published
+# demand is quantity 1, so without it a skill-gated asker is never served.
+# Unit-killed by tests/test_ai/test_fleet_objective.py (boundary demand
+# exactly SUPPLY_DEMAND_MIN, a quantity-1 asymmetric request, and each
+# turn-in field alone).
+FLEET_WORK_MUTATIONS = [
     (
-        "means/_fires: SUPPLY_BANK asymmetric-request arm deleted",
-        "        return target[2] >= SUPPLY_DEMAND_MIN or target[0] in ctx.asymmetric_demand",
-        "        return target[2] >= SUPPLY_DEMAND_MIN",
+        "fleet_work/supply_due: SUPPLY_BANK asymmetric-request arm deleted",
+        "    return target[2] >= SUPPLY_DEMAND_MIN or target[0] in ctx.asymmetric_demand",
+        "    return target[2] >= SUPPLY_DEMAND_MIN",
+    ),
+    (
+        "fleet_work/supply_due: demand threshold >= weakened to >",
+        "    return target[2] >= SUPPLY_DEMAND_MIN or target[0] in ctx.asymmetric_demand",
+        "    return target[2] > SUPPLY_DEMAND_MIN or target[0] in ctx.asymmetric_demand",
+    ),
+    (
+        "fleet_work/turn_in_due: the buyer's turn_in field ignored",
+        "    return ctx.turn_in is not None or ctx.recall is not None",
+        "    return ctx.recall is not None",
+    ),
+    (
+        "fleet_work/turn_in_due: the holder's recall field ignored",
+        "    return ctx.turn_in is not None or ctx.recall is not None",
+        "    return ctx.turn_in is not None",
+    ),
+]
+
+
+# Phase 5-2c-iv: `resolve_root` offers the fleet objective after the task root,
+# turn-in before supply, only while the context names the work.
+FLEET_ROOT_MUTATIONS = [
+    (
+        "root/_fleet_roots: supply offered before the turn-in",
+        "    for kind, due in ((FLEET_TURN_IN, turn_in_due), (FLEET_SUPPLY, supply_due)):",
+        "    for kind, due in ((FLEET_SUPPLY, supply_due), (FLEET_TURN_IN, turn_in_due)):",
+    ),
+    (
+        "root/_fleet_roots: the supply run never offered",
+        "    for kind, due in ((FLEET_TURN_IN, turn_in_due), (FLEET_SUPPLY, supply_due)):",
+        "    for kind, due in ((FLEET_TURN_IN, turn_in_due),):",
+    ),
+    (
+        "root/_fleet_roots: the turn-in never offered",
+        "    for kind, due in ((FLEET_TURN_IN, turn_in_due), (FLEET_SUPPLY, supply_due)):",
+        "    for kind, due in ((FLEET_SUPPLY, supply_due),):",
+    ),
+    (
+        "root/resolve_root: the fleet objective never offered",
+        "    ordered.extend(_fleet_roots(ctx))",
+        "    ordered.extend([])",
+    ),
+]
+
+
+# Phase 5-2c-iv: the fleet objective's step (`_fleet_step_goal`, was the
+# SUPPLY_BANK / CURRENCY_TURNIN `map_means` arms). (Dropping the
+# `turn_in_due` gate is an EQUIVALENT mutant — with neither `turn_in` nor
+# `recall` set `_turn_in_goal` already returns None — so it has no entry.)
+FLEET_STEP_MUTATIONS = [
+    (
+        "strategy_driver/_fleet_step_goal: supply target code mismatch ignored",
+        "        if not supply_due(ctx) or target is None or target[0] != step.code:",
+        "        if not supply_due(ctx) or target is None:",
+    ),
+    (
+        "strategy_driver/_fleet_step_goal: supply due gate dropped",
+        "        if not supply_due(ctx) or target is None or target[0] != step.code:",
+        "        if target is None or target[0] != step.code:",
+    ),
+    (
+        "strategy_driver/_fleet_step_goal: a satisfied step goal still returned",
+        "    if goal is None or goal.is_satisfied(state):",
+        "    if goal is None:",
+    ),
+    (
+        "strategy_driver/_turn_in_goal: buyer identity test inverted",
+        "    if t is not None and t.buyer == state.character:",
+        "    if t is not None and t.buyer != state.character:",
+    ),
+    (
+        "strategy_driver/_turn_in_goal: buyer identity test dropped",
+        "    if t is not None and t.buyer == state.character:",
+        "    if t is not None:",
+    ),
+]
+
+
+# Phase 5-2c-iv: `route_price` of the fleet objective — a supply run costs the
+# unmet demand's ObtainItem price; anything else is one booking.
+FLEET_ROUTE_MUTATIONS = [
+    (
+        "route/route_price: supply run priced as one booking",
+        "        if goal.kind == FLEET_SUPPLY and target is not None and target[0] == goal.code:",
+        "        if False:",
+    ),
+    (
+        "route/route_price: supply target code mismatch ignored",
+        "        if goal.kind == FLEET_SUPPLY and target is not None and target[0] == goal.code:",
+        "        if goal.kind == FLEET_SUPPLY and target is not None:",
     ),
 ]
 
@@ -8975,9 +9065,15 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_raid_participation.py", survivors)
     run_group(MEANS_SRC, LADDER_MEANS_FIRES_MUTATIONS,
               "formal/diff/test_ladder_fires_diff.py", survivors)
-    # Task 7 (role-driven supply): own run_group, unit-killed.
-    run_group(MEANS_SRC, SUPPLY_BANK_ASYMMETRIC_FIRES_MUTATIONS,
-              "tests/test_ai/test_tiers_means.py", survivors)
+    # Phase 5-2c-iv (fleet objective): own run_groups, unit-killed.
+    run_group(FLEET_WORK_SRC, FLEET_WORK_MUTATIONS,
+              "tests/test_ai/test_fleet_objective.py", survivors)
+    run_group(ROOT_DECISION_SRC, FLEET_ROOT_MUTATIONS,
+              "tests/test_ai/test_fleet_objective.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, FLEET_STEP_MUTATIONS,
+              "tests/test_ai/test_fleet_objective.py", survivors)
+    run_group(ROUTE_SRC, FLEET_ROUTE_MUTATIONS,
+              "tests/test_ai/test_fleet_objective.py", survivors)
     run_group(COORDINATION_STORE_SRC, SIBLING_DEMAND_ASYMMETRIC_OWN_FILTER_MUTATIONS,
               "tests/test_ai/test_coordination_store.py", survivors)
     run_group(PLAYER_SRC, PICK_SUPPLY_TARGET_ASYMMETRIC_ORDER_MUTATIONS,

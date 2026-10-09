@@ -32,35 +32,11 @@ class TestDispatcherExhaustiveness:
         assert isinstance(r, str) and r
 
 
-def test_currency_turnin_is_the_last_enum_variant() -> None:
-    """2026-08-16, fleet-currency-turn-in Task 6: CURRENCY_TURNIN is appended
-    LAST, after SUPPLY_BANK (which held this spot from 2026-08-01 until now) —
-    enum identity must stay stable for the DecideKey oracle, so new variants
-    only ever append."""
-    assert list(MeansKind)[-1] is MeansKind.CURRENCY_TURNIN
-
-
-def test_supply_bank_has_a_dispatch_repr() -> None:
-    assert _MEANS_REPR[MeansKind.SUPPLY_BANK] == "SupplyBank"
-
-
-def test_currency_turnin_has_a_dispatch_repr() -> None:
-    assert _MEANS_REPR[MeansKind.CURRENCY_TURNIN] == "CurrencyTurnIn"
-
-
-def test_currency_turnin_is_last_in_the_collect_reward_band() -> None:
-    """2026-08-16 Task 6: CURRENCY_TURNIN is slotted into COLLECT_REWARD_ORDER
-    immediately after SUPPLY_BANK — same band, same reasoning (see
-    tiers/means.py's comment on both): ABOVE the objective step so a resolved
-    fleet election is not left to rot behind whatever gear `J` is chasing, and
-    LAST among the collect-reward rungs so it never parks a pending reward
-    claim or a >=85%-full bag behind it."""
-    assert MeansKind.CURRENCY_TURNIN not in DISCRETIONARY_ORDER
-    assert (COLLECT_REWARD_ORDER.index(MeansKind.SUPPLY_BANK)
-            < COLLECT_REWARD_ORDER.index(MeansKind.CURRENCY_TURNIN))
-    # ACCEPT_TASK held the last slot from 2026-08-19 until Phase 5-2c-iii-c-2
-    # #3 retired it into the task objective's step; the turn-in is now last.
-    assert COLLECT_REWARD_ORDER[-1] is MeansKind.CURRENCY_TURNIN
-    for cheap in (MeansKind.CLAIM_PENDING, MeansKind.SELL_PRESSURED):
-        assert (COLLECT_REWARD_ORDER.index(cheap)
-                < COLLECT_REWARD_ORDER.index(MeansKind.CURRENCY_TURNIN))
+def test_the_retired_fleet_rungs_are_no_means() -> None:
+    """Phase 5-2c-iv: SUPPLY_BANK and CURRENCY_TURNIN left the ladder for the
+    fleet objective (`ReachFleetOutcome`), so neither value names a means and
+    no dispatch repr remains for them."""
+    values = {kind.value for kind in MeansKind}
+    assert "supply_bank" not in values and "currency_turnin" not in values
+    assert set(_MEANS_REPR) == set(MeansKind)
+    assert set(COLLECT_REWARD_ORDER) | set(DISCRETIONARY_ORDER) <= set(MeansKind)

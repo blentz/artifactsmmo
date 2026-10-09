@@ -362,7 +362,8 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
   -- order removes it from the cancel-target set next cycle. Clears the geCancel
   -- target signal — mirrors `applyActionKind .geCancelOrder`. Fire-and-lose.
   | .geCancelOrder, s => { s with geCancelTargetsNonempty := false }
-  -- NpcBuyAction (npc_buy.py) used by CURRENCY_TURNIN (2026-08-16): resolves
+  -- NpcBuyAction (npc_buy.py) used by the fleet turn-in step (2026-08-16; the
+  -- CURRENCY_TURNIN rung until Phase 5-2c-iv): resolves
   -- the fleet election. Clears the currencyTurnIn signal — mirrors
   -- `applyActionKind .npcBuy`. Fire-and-lose.
   | .npcBuy, s => { s with currencyTurnInActive := false }
@@ -401,13 +402,14 @@ def planForC : MeansKind → State → Plan
       -- placeholder clears `objectiveStepFires` (legacy default: isFight=false).
       -- Phase 5-2c-iii-c-2 #4: fired only by a held task ⇒ the task work.
       -- Phase 5-2c-iii-c-2 #6: a met held task ⇒ its turn-in.
+      -- Phase 5-2c-iv: no task held ⇒ the fleet step (turn-in, else supply).
       if s.objectiveStepIsFight then [.fight]
       else if s.objectiveStepFires then [.objectiveStep]
       else if s.taskLifecyclePhase = .complete then [.completeTask]
+      else if s.taskLifecyclePhase = .none then
+        (if s.currencyTurnInActive then [.npcBuy] else [.gather])
       else [.taskTrade]
   | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
-  | .supplyBank       , _ => [.gather]  -- 2026-08-01: produce for a sibling
-  | .currencyTurnIn   , _ => [.npcBuy]  -- 2026-08-16: fleet-currency turn-in
   | .sellIdle         , _ => [.npcSell]
   | .recycleSurplus   , _ => [.recycle]
   | .drainBankJunk    , _ => [.withdrawItem]

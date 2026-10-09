@@ -22,7 +22,9 @@
   Five `_fires` predicates depend on goal-internal or out-of-model logic the
   Lean model does not reproduce literally:
     - `objectiveStep`  (the StrategyArbiter's objective candidate)
-    - `supplyBank`     (`ctx.supply_target`/`ctx.asymmetric_demand`, computed
+    - `supplyBank`     (a disjunct of `objectiveStep` since Phase 5-2c-iv —
+                       the fleet objective's supply arm, `fleet_work.supply_due`;
+                       `ctx.supply_target`/`ctx.asymmetric_demand`, computed
                        from the cross-character coordination DB — outside this
                        single-character model. Carried as the opaque Nat
                        `supplyDemand` plus the opaque Bool `supplyAsymmetric`
@@ -30,7 +32,9 @@
                        rung is gated on that demand clearing
                        `SUPPLY_DEMAND_MIN` OR (since 2026-08-16) the requested
                        item being asymmetric — not merely on a target existing)
-    - `currencyTurnIn` (`ctx.turn_in`/`ctx.recall`, computed from the fleet
+    - `currencyTurnIn` (a disjunct of `objectiveStep` since Phase 5-2c-iv —
+                       the fleet objective's turn-in arm,
+                       `fleet_work.turn_in_due`; `ctx.turn_in`/`ctx.recall`, computed from the fleet
                        coordination DB and the per-cycle election in
                        `GamePlayer._resolve_turn_in` — outside this
                        single-character model. Carried as the opaque Bool
@@ -222,65 +226,10 @@ def sellPressuredFires (s : State) : Bool :=
               ≥ SELL_PRESSURE_NUM * s.inventoryMax)
   && s.sellableInventoryNonempty
 
-/-- OBJECTIVE_STEP. The opaque Bool — the StrategyArbiter's objective tier
-    yields a plannable StepGoal — OR a held task in an active phase.
-
-    A held task's work is the task objective's step (Phase 5-2c-iii-c-2 #4);
-    this carries the SAME phase-based over-approximation the retired
-    `pursueTaskFires` carried (it ignores production's PURSUE verdict /
-    winnability), so no theorem rests on anything weaker than before. The
-    phase test is inlined (it is `Plan.phaseActive`) to keep the import graph
-    acyclic.
-
-    Phase 5-2c-iii-c-2 #6: a MET held task (phase `.complete`, i.e. task code
-    set ∧ 0 < total ≤ progress) is the task objective's root too
-    (`decisions/root._task_root` offers `ReachTaskOutcome(code)`, and
-    `strategy_driver.objective_step_goal` returns `CompleteTaskGoal`), so the
-    phase test the retired COMPLETE_TASK rung (`completeTaskFires`) carried is
-    a fourth disjunct here. -/
-def objectiveStepFires (s : State) : Bool :=
-  s.objectiveStepFires
-  || decide (s.taskLifecyclePhase = .accepted)
-  || decide (s.taskLifecyclePhase = .inProgress)
-  || decide (s.taskLifecyclePhase = .complete)
-
-/-- SELL_IDLE. Mirrors `means.py:98-99`:
-      used/max < 0.85 ∧ has_sellable -/
-def sellIdleFires (s : State) : Bool :=
-  (decide (s.inventoryMax = 0)
-   || decide (SELL_PRESSURE_DEN * s.inventoryUsed
-               < SELL_PRESSURE_NUM * s.inventoryMax))
-  && s.sellableInventoryNonempty
-
-/-- RECYCLE_SURPLUS. Mirrors `means.py::_fires(RECYCLE_SURPLUS, …)`:
-      used/max < 0.85 ∧ recyclable_surplus nonempty -/
-def recycleSurplusFires (s : State) : Bool :=
-  (decide (s.inventoryMax = 0)
-   || decide (SELL_PRESSURE_DEN * s.inventoryUsed
-               < SELL_PRESSURE_NUM * s.inventoryMax))
-  && s.recyclableSurplusNonempty
-
-/-- DRAIN_BANK_JUNK. Mirrors `means.py::_fires(DRAIN_BANK_JUNK, …)`:
-      used/max < 0.85 ∧ bank_drain_excess nonempty -/
-def drainBankJunkFires (s : State) : Bool :=
-  (decide (s.inventoryMax = 0)
-   || decide (SELL_PRESSURE_DEN * s.inventoryUsed
-               < SELL_PRESSURE_NUM * s.inventoryMax))
-  && s.bankJunkNonempty
-
-/-- GE_BID. Mirrors `means.py::_fires(GE_BID, …)`: `bool(ge_bid_candidates(...))`.
-    NO pressure gate — the Python guard fires purely on the candidate set being
-    nonempty (the opaque `geBidCandidateNonempty` signal). -/
-def geBidFires (s : State) : Bool :=
-  s.geBidCandidateNonempty
-
-/-- MAINTAIN_CONSUMABLES (PLAN #6a). Mirrors `means.py::_fires(MAINTAIN_CONSUMABLES, …)`:
-    combat-active ∧ heal-stock < floor ∧ a better heal is craftable. Opaque
-    State-carried Bool (see `Measure.State.maintainConsumablesFires`). -/
-def maintainConsumablesFires (s : State) : Bool := s.maintainConsumablesFires
-
 /-- SUPPLY_BANK demand gate (2026-08-01 human ruling). Mirrors
-    `means.py::SUPPLY_DEMAND_MIN`. The rung was promoted out of
+    `fleet_work.py::SUPPLY_DEMAND_MIN` (Phase 5-2c-iv moved it there from
+    `tiers/means.py` when the rung became the fleet objective). The rung was
+    promoted out of
     DISCRETIONARY_ORDER into COLLECT_REWARD_ORDER, i.e. ABOVE `objectiveStep`;
     this threshold is what keeps that promotion from letting a fleet of siblings
     serve each other's every request instead of levelling. Derived from data,
@@ -289,7 +238,7 @@ def maintainConsumablesFires (s : State) : Bool := s.maintainConsumablesFires
     craftable roots in `formal/sim/game_data_snapshot.json` no root's LARGEST
     base-material closure demand lands on 8 or 9 — an empty band, so any
     threshold in 8..10 partitions the roots identically (53 below, 268 at or
-    above). See the constant's comment block in `tiers/means.py` for the full
+    above). See the constant's comment block in `ai/fleet_work.py` for the full
     distribution and for what the gate buys and gives up. -/
 def SUPPLY_DEMAND_MIN : Nat := 10
 
@@ -300,7 +249,8 @@ def SUPPLY_DEMAND_MIN : Nat := 10
 theorem SUPPLY_DEMAND_MIN_pos : SUPPLY_DEMAND_MIN > 0 := by decide
 
 /-- SUPPLY_BANK (2026-08-01, asymmetry arm added 2026-08-16 role-driven-supply
-    epic Task 4). Mirrors `means.py::_fires(SUPPLY_BANK, …)` =
+    epic Task 4; a disjunct of `objectiveStepFires` since Phase 5-2c-iv, when
+    the rung became the fleet objective). Mirrors `fleet_work.py::supply_due` =
     `ctx.supply_target is not None and (ctx.supply_target[2] >=
     SUPPLY_DEMAND_MIN or ctx.supply_target[0] in ctx.asymmetric_demand)`: fires
     when some unexpired sibling demand is servable by this character's role AND
@@ -314,7 +264,7 @@ theorem SUPPLY_DEMAND_MIN_pos : SUPPLY_DEMAND_MIN > 0 := by decide
     `objectiveStep` gets.
 
     The asymmetry arm carries an extra `s.supplyDemand > 0` conjunct that
-    `_fires`'s Python `target[0] in ctx.asymmetric_demand` does not: NOT a
+    `supply_due`'s Python `target[0] in ctx.asymmetric_demand` does not: NOT a
     behavioural deviation — production's own data never yields a target with
     demand 0 (`supplyDemand`'s doc comment on `State`; the guarantee is
     enforced on the WRITE side, `coordination_store.py::publish_demand`'s
@@ -330,15 +280,16 @@ theorem SUPPLY_DEMAND_MIN_pos : SUPPLY_DEMAND_MIN > 0 := by decide
     `supplyDemand := 0`) production never emits. Without the conjunct that
     junk state would fire the rung while `.gather`'s saturating
     `supplyDemand - 1` apply (`Plan.lean`) makes zero progress, falsifying
-    `BlockerDescent.descends_supplyBank`'s hypothesis-free descent over ALL
+    `CycleStep.cycleStep_progress_or_waits`'s fleet-supply branch over ALL
     states. The conjunct closes that Lean-only gap without touching any
     observable behaviour on a real trace. -/
 def supplyBankFires (s : State) : Bool :=
   decide (s.supplyDemand ≥ SUPPLY_DEMAND_MIN) ||
     (s.supplyAsymmetric && decide (s.supplyDemand > 0))
 
-/-- CURRENCY_TURNIN (2026-08-16, fleet-currency-turn-in epic Task 6). Mirrors
-    `means.py::_fires(CURRENCY_TURNIN, …)` = `ctx.turn_in is not None or
+/-- CURRENCY_TURNIN (2026-08-16, fleet-currency-turn-in epic Task 6; a
+    disjunct of `objectiveStepFires` since Phase 5-2c-iv). Mirrors
+    `fleet_work.py::turn_in_due` = `ctx.turn_in is not None or
     ctx.recall is not None`: fires for BOTH sides of a resolved fleet election
     — the elected buyer or a losing candidate asked to surrender. No demand
     threshold (unlike `supplyBankFires`): `turn_in_ready_pure` already requires
@@ -397,6 +348,73 @@ def geCancelFires (s : State) : Bool := s.geCancelTargetsNonempty
 def recycleReliefFires (s : State) : Bool :=
   !(bankHasRoom s) && s.recyclableSurplusNonempty
 
+/-- OBJECTIVE_STEP. The opaque Bool — the StrategyArbiter's objective tier
+    yields a plannable StepGoal — OR a held task in an active phase.
+
+    A held task's work is the task objective's step (Phase 5-2c-iii-c-2 #4);
+    this carries the SAME phase-based over-approximation the retired
+    `pursueTaskFires` carried (it ignores production's PURSUE verdict /
+    winnability), so no theorem rests on anything weaker than before. The
+    phase test is inlined (it is `Plan.phaseActive`) to keep the import graph
+    acyclic.
+
+    Phase 5-2c-iii-c-2 #6: a MET held task (phase `.complete`, i.e. task code
+    set ∧ 0 < total ≤ progress) is the task objective's root too
+    (`decisions/root._task_root` offers `ReachTaskOutcome(code)`, and
+    `strategy_driver.objective_step_goal` returns `CompleteTaskGoal`), so the
+    phase test the retired COMPLETE_TASK rung (`completeTaskFires`) carried is
+    a fourth disjunct here.
+
+    Phase 5-2c-iv: fleet work the coordination tables name for this character
+    is the fleet objective (`decisions/root._fleet_roots` offers
+    `ReachFleetOutcome`, gated by `ai/fleet_work.supply_due` /
+    `turn_in_due`), whose step (`strategy_driver._fleet_step_goal`) is the
+    `SupplyBankGoal` / turn-in goal the retired SUPPLY_BANK and
+    CURRENCY_TURNIN rungs mapped to — so their firing predicates
+    (`supplyBankFires`, `currencyTurnInFires`) are the last two disjuncts. -/
+def objectiveStepFires (s : State) : Bool :=
+  s.objectiveStepFires
+  || decide (s.taskLifecyclePhase = .accepted)
+  || decide (s.taskLifecyclePhase = .inProgress)
+  || decide (s.taskLifecyclePhase = .complete)
+  || supplyBankFires s
+  || currencyTurnInFires s
+
+/-- SELL_IDLE. Mirrors `means.py:98-99`:
+      used/max < 0.85 ∧ has_sellable -/
+def sellIdleFires (s : State) : Bool :=
+  (decide (s.inventoryMax = 0)
+   || decide (SELL_PRESSURE_DEN * s.inventoryUsed
+               < SELL_PRESSURE_NUM * s.inventoryMax))
+  && s.sellableInventoryNonempty
+
+/-- RECYCLE_SURPLUS. Mirrors `means.py::_fires(RECYCLE_SURPLUS, …)`:
+      used/max < 0.85 ∧ recyclable_surplus nonempty -/
+def recycleSurplusFires (s : State) : Bool :=
+  (decide (s.inventoryMax = 0)
+   || decide (SELL_PRESSURE_DEN * s.inventoryUsed
+               < SELL_PRESSURE_NUM * s.inventoryMax))
+  && s.recyclableSurplusNonempty
+
+/-- DRAIN_BANK_JUNK. Mirrors `means.py::_fires(DRAIN_BANK_JUNK, …)`:
+      used/max < 0.85 ∧ bank_drain_excess nonempty -/
+def drainBankJunkFires (s : State) : Bool :=
+  (decide (s.inventoryMax = 0)
+   || decide (SELL_PRESSURE_DEN * s.inventoryUsed
+               < SELL_PRESSURE_NUM * s.inventoryMax))
+  && s.bankJunkNonempty
+
+/-- GE_BID. Mirrors `means.py::_fires(GE_BID, …)`: `bool(ge_bid_candidates(...))`.
+    NO pressure gate — the Python guard fires purely on the candidate set being
+    nonempty (the opaque `geBidCandidateNonempty` signal). -/
+def geBidFires (s : State) : Bool :=
+  s.geBidCandidateNonempty
+
+/-- MAINTAIN_CONSUMABLES (PLAN #6a). Mirrors `means.py::_fires(MAINTAIN_CONSUMABLES, …)`:
+    combat-active ∧ heal-stock < floor ∧ a better heal is craftable. Opaque
+    State-carried Bool (see `Measure.State.maintainConsumablesFires`). -/
+def maintainConsumablesFires (s : State) : Bool := s.maintainConsumablesFires
+
 /-- SELL_RELIEF. Mirrors `tiers/guards.py::_fires(SELL_RELIEF, …)`:
     bank full (not bankHasRoom) AND sellable inventory nonempty. -/
 def sellReliefFires (s : State) : Bool :=
@@ -424,8 +442,6 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .sellPressured    => sellPressuredFires s
   | .objectiveStep    => objectiveStepFires s
   | .maintainConsumables => maintainConsumablesFires s
-  | .supplyBank       => supplyBankFires s
-  | .currencyTurnIn   => currencyTurnInFires s
   | .sellIdle         => sellIdleFires s
   | .recycleSurplus   => recycleSurplusFires s
   | .drainBankJunk    => drainBankJunkFires s

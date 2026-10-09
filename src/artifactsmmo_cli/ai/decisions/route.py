@@ -41,6 +41,7 @@ from math import ceil
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
@@ -54,6 +55,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
+    ReachFleetOutcome,
     ReachSkillLevel,
     ReachTaskOutcome,
 )
@@ -188,6 +190,13 @@ TOTAL over `META_GOAL_KINDS` since wave 6. The two climbs return
         per_kill = cycles_per_kill(
             expected_damage_per_fight(state, game_data, goal.task_code), state.max_hp)
         return ceil((state.task_total - state.task_progress) * per_kill)
+    if isinstance(goal, ReachFleetOutcome):
+        # A supply run costs what obtaining the unmet demand costs; a turn-in
+        # or surrender is one booking.
+        target = ctx.supply_target
+        if goal.kind == FLEET_SUPPLY and target is not None and target[0] == goal.code:
+            return route_price(ObtainItem(goal.code, target[2]), state, game_data, ctx, history)
+        return 1
     assert not isinstance(goal, META_GOAL_KINDS), (
         f"{goal!r} is in META_GOAL_KINDS but route_price has no arm for it")
     raise AssertionError(f"unhandled MetaGoal kind: {goal!r}")

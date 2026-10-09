@@ -591,12 +591,43 @@ retired with the PURSUE_TASK rung, Phase 5-2c-iii-c-2 #4):
     `.objectiveStep` placeholder").
 -/
 
-/-- `[.objectiveStep, .completeTask]` clears `objectiveStep`. The Phase 21d-1
+/-- A plan is a fold, so a concatenated plan runs its halves in order. -/
+private theorem applyPlan_append (p q : Plan) (s : State) :
+    applyPlan (p ++ q) s = applyPlan q (applyPlan p s) := by
+  simp [applyPlan, List.foldl_append]
+
+/-- `n` gathers discharge `n` units of the supply demand (Phase 5-2c-iv: the
+    fleet objective's supply arm) and leave the opaque objective flag, the task
+    phase and the turn-in flag alone. -/
+private theorem applyPlan_gathers (n : Nat) : ∀ s : State,
+    (applyPlan (List.replicate n .gather) s).supplyDemand = s.supplyDemand - n
+    ∧ (applyPlan (List.replicate n .gather) s).objectiveStepFires = s.objectiveStepFires
+    ∧ (applyPlan (List.replicate n .gather) s).taskLifecyclePhase = s.taskLifecyclePhase
+    ∧ (applyPlan (List.replicate n .gather) s).currencyTurnInActive
+        = s.currencyTurnInActive := by
+  induction n with
+  | zero => intro s; simp
+  | succ n ih =>
+    intro s
+    rw [List.replicate_succ, applyPlan_cons]
+    obtain ⟨h1, h2, h3, h4⟩ := ih (applyActionKind .gather s)
+    refine ⟨?_, ?_, ?_, ?_⟩
+    · rw [h1]; simp [applyActionKind, grantSkillXp]; omega
+    · rw [h2]; simp [applyActionKind, grantSkillXp]
+    · rw [h3]; simp [applyActionKind, grantSkillXp]
+    · rw [h4]; simp [applyActionKind, grantSkillXp]
+
+/-- `[.objectiveStep, .completeTask, .npcBuy] ++ supplyDemand × .gather` clears
+    `objectiveStep`. The Phase 21d-1
     synthetic placeholder ActionKind flips the opaque `objectiveStepFires` Bool
     to `false`; since Phase 5-2c-iii-c-2 #4 the step also fires on a held
     active-phase task, and since #6 on a met (`.complete`) one, both of which
     `.completeTask` clears (it sets the phase to `.none`, as in the retired
-    `plan_exists_for_pursueTask` / `plan_exists_for_completeTask` witnesses). Honest disclosure: `.objectiveStep` is NOT a production
+    `plan_exists_for_pursueTask` / `plan_exists_for_completeTask` witnesses).
+    Since Phase 5-2c-iv it also fires on the fleet Bools (the retired
+    SUPPLY_BANK / CURRENCY_TURNIN rungs' predicates): `.npcBuy` clears the
+    turn-in flag and one `.gather` per outstanding unit discharges the supply
+    demand. Honest disclosure: `.objectiveStep` is NOT a production
     Action subclass — it is a tier-dispatch tag. Production composes the
     sub-goal's plan from ordinary Action subclasses; Phase 22 (Cycle
     Loop) will refine this composition. The existential claim "the
@@ -604,9 +635,15 @@ retired with the PURSUE_TASK rung, Phase 5-2c-iii-c-2 #4):
 theorem plan_exists_for_objectiveStep :
     ∀ s, fires .objectiveStep s = true →
       ∃ p : Plan, planAchieves p s .objectiveStep := by
-  intro s h
-  refine ⟨[.objectiveStep, .completeTask], ?_⟩
-  simp [planAchieves, applyActionKind, fires,
-        ProductionLadder.objectiveStepFires, applyPlan]
+  intro s _h
+  refine ⟨[.objectiveStep, .completeTask, .npcBuy]
+            ++ List.replicate s.supplyDemand .gather, ?_⟩
+  unfold planAchieves
+  rw [applyPlan_append]
+  obtain ⟨h1, h2, h3, h4⟩ :=
+    applyPlan_gathers s.supplyDemand (applyPlan [.objectiveStep, .completeTask, .npcBuy] s)
+  simp only [fires, ProductionLadder.objectiveStepFires, ProductionLadder.supplyBankFires,
+    ProductionLadder.currencyTurnInFires, h1, h2, h3, h4]
+  simp [applyActionKind, applyPlan, ProductionLadder.SUPPLY_DEMAND_MIN]
 
 end Formal.Liveness.PlanExists

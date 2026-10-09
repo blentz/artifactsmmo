@@ -28,6 +28,7 @@ from artifactsmmo_cli.ai.actions.ge_cancel_order import GeCancelOrderAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RoleChange
+from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY, SUPPLY_DEMAND_MIN, supply_due
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.learning.coordination_store import (
@@ -45,10 +46,10 @@ from artifactsmmo_cli.ai.role_selection import (
     decide_role,
     demand_by_role,
 )
-from artifactsmmo_cli.ai.strategy_driver import map_means
+from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.supply_batch_target import supply_batch_target_pure
 from artifactsmmo_cli.ai.thresholds import SUPPLY_BATCH
-from artifactsmmo_cli.ai.tiers.means import SUPPLY_DEMAND_MIN, MeansKind, _fires
+from artifactsmmo_cli.ai.tiers.meta_goal import ReachFleetOutcome
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
 from tests.test_ai.fixtures import coordination_now, make_state
 from tests.test_ai.test_actions_execute import (
@@ -782,7 +783,7 @@ def test_note_supply_servability_breaks_the_run_on_a_real_plan():
 def test_note_supply_servability_leaves_the_run_alone_when_the_goal_was_not_tried():
     """Absence of evidence. A guard preempted selection, or the cached plan was
     reused (`goals_tried` is empty on a cache hit), or the demand is below
-    `SUPPLY_DEMAND_MIN` so the means never fired — none of those is a statement
+    `SUPPLY_DEMAND_MIN` so the fleet work was never due — none of those is a statement
     about whether this character CAN serve the role, so neither extending nor
     clearing the run would be honest."""
     p = GamePlayer(character="hero")
@@ -1157,11 +1158,12 @@ def test_update_coordination_clears_the_role_change_without_a_store():
 
 # ---------------------------------------------------------------------------
 # End-to-end: a coordinated SelectionContext must reach a real SupplyBankGoal
-# through the arbiter's actual dispatch (`active_means`/`map_means` — the
-# same two functions `StrategyArbiter.select` calls internally). Tasks 9/10
-# already unit-test `_fires`/`map_means` against a HAND-BUILT ctx; this test
-# is the missing link proving the player's REAL `_update_coordination` output
-# is what those two functions see — the feature is not inert.
+# through the fleet objective's actual seam (`supply_due` gates the
+# `ReachFleetOutcome` root `resolve_root` offers; `objective_step_goal` builds
+# its step — Phase 5-2c-iv). tests/test_ai/test_fleet_objective.py unit-tests
+# both against a HAND-BUILT ctx; this test is the missing link proving the
+# player's REAL `_update_coordination` output is what they see — the feature is
+# not inert.
 # ---------------------------------------------------------------------------
 
 def test_a_coordinated_supply_target_reaches_a_real_supply_bank_goal(tmp_path):
@@ -1194,10 +1196,11 @@ def test_a_coordinated_supply_target_reaches_a_real_supply_bank_goal(tmp_path):
                                      supply_batch_target_pure(2, SUPPLY_DEMAND_MIN + 2),
                                      SUPPLY_DEMAND_MIN + 2)
 
-        # The last two links: _fires (the means predicate) and map_means (the
-        # goal factory) — exactly what StrategyArbiter.select calls.
-        assert _fires(MeansKind.SUPPLY_BANK, p.state, gd, None, ctx) is True
-        goal = map_means(MeansKind.SUPPLY_BANK, gd, ctx, p.state)
+        # The last two links: supply_due (the fleet root's gate) and the fleet
+        # objective's step (the goal factory).
+        assert supply_due(ctx) is True
+        goal = objective_step_goal(ReachFleetOutcome(FLEET_SUPPLY, "copper_ore"),
+                                   p.state, gd, ctx)
         assert isinstance(goal, SupplyBankGoal)
         assert goal._item_code == "copper_ore"
         assert goal._quantity == supply_batch_target_pure(2, SUPPLY_DEMAND_MIN + 2)
@@ -1211,12 +1214,12 @@ def test_a_coordinated_supply_target_reaches_a_real_supply_bank_goal(tmp_path):
 def test_a_sub_threshold_coordinated_demand_is_targeted_but_never_fires(tmp_path):
     """End-to-end read-back of the 2026-08-01 gate: coordination still computes
     a supply target for a small sibling request (the board is unchanged), but
-    `_fires` declines it, so the character keeps working its own objective
+    `supply_due` declines it, so the character keeps working its own objective
     instead of pausing for a handful of units the sibling can gather itself.
 
     `self_servable={"copper_ore"}` on the publish is the point of this fixture
     (Task 4): the sibling CAN mine copper_ore itself, so this demand is
-    symmetric and must NOT trip the asymmetry arm `_fires` added — only the
+    symmetric and must NOT trip the asymmetry arm `supply_due` carries — only the
     bulk-threshold arm applies here, and it declines a sub-threshold request."""
     db = str(tmp_path / "coord.db")
     gd = _make_planner_gd()
@@ -1244,7 +1247,7 @@ def test_a_sub_threshold_coordinated_demand_is_targeted_but_never_fires(tmp_path
         assert ctx.supply_target == ("copper_ore",
                                      supply_batch_target_pure(2, SUPPLY_DEMAND_MIN - 1),
                                      SUPPLY_DEMAND_MIN - 1)
-        assert _fires(MeansKind.SUPPLY_BANK, p.state, gd, None, ctx) is False
+        assert supply_due(ctx) is False
     finally:
         store.close()
         sibling.close()

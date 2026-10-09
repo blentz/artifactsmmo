@@ -127,33 +127,26 @@ noncomputable def planFor : MeansKind → State → Plan
       -- Phase 5-2c-iii-c-2 #6: a MET held task (phase `.complete`) is the task
       -- objective's root, whose step is `CompleteTaskGoal` — `.completeTask`,
       -- the plan the retired COMPLETE_TASK rung dispatched.
+      -- Phase 5-2c-iv: with no task held (phase `.none`) the step fired on the
+      -- fleet Bools alone — the fleet objective's step, the plans the retired
+      -- CURRENCY_TURNIN (`.npcBuy`) and SUPPLY_BANK (`.gather`) rungs
+      -- dispatched, the turn-in first (`decisions/root._fleet_roots` order).
       if s.objectiveStepIsFight then [.fight]
       else if s.objectiveStepFires then [.objectiveStep]
       else if s.taskLifecyclePhase = .complete then [.completeTask]
+      else if s.taskLifecyclePhase = .none then
+        (if s.currencyTurnInActive then [.npcBuy] else [.gather])
       else [.taskTrade]
+  -- (The fleet arms' honest disclosures, from the retired rungs:
+  -- SUPPLY_BANK: `SupplyBankGoal.desired_state` targets a BANKED quantity, so
+  -- production plans a produce-then-deposit chain; the witness is its HEAD —
+  -- the production step — and one `.gather` discharges ONE unit of
+  -- `supplyDemand` per cycle (Plan.lean), so the run is a finite excursion.
+  -- CURRENCY_TURNIN: the elected buyer's NpcBuy and a holder's surrender both
+  -- collapse to the single `.npcBuy` witness, which clears
+  -- `currencyTurnInActive` (Plan.lean) — an over-approximation of the same
+  -- fire-and-lose shape as `.deleteItem` / `.geCancelOrder`.)
   | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
-  -- SUPPLY_BANK (2026-08-01): `SupplyBankGoal.desired_state` targets a BANKED
-  -- quantity, so production plans a produce-then-deposit chain. The witness is
-  -- its HEAD — the production step — because the demand board routes each item
-  -- to the role that PRODUCES it (`ai/role_selection.py`, by producing skill).
-  -- Honest disclosure: one `.gather` does NOT clear the demand — production's
-  -- target persists until the BANKED quantity is met, which takes several
-  -- cycles. The model reproduces that shape rather than a fire-and-lose clear:
-  -- `applyActionKind .gather` discharges ONE unit of `supplyDemand` per cycle
-  -- (Plan.lean), so the rung self-quiets only after the request is worked off —
-  -- which is what makes the supply run a finite, measure-descending excursion
-  -- rather than a starvation hole above the objective step (FMeasure slot 15,
-  -- `BlockerDescent.descends_supplyBank`).
-  | .supplyBank       , _ => [.gather]
-  -- CURRENCY_TURNIN (2026-08-16): both branches — the elected buyer's
-  -- NpcBuy and a losing candidate's unequip+deposit surrender — collapse to
-  -- the single `.npcBuy` witness. This is a HONEST OVER-approximation, same
-  -- shape as the other fire-and-lose chores (`.deleteItem` clears the whole
-  -- overstock latch, `.geCancelOrder` the whole cancel latch): `.npcBuy`
-  -- clears `currencyTurnInActive` (Plan.lean), so the rung self-quiets in one
-  -- cycle on both real branches even though only the buyer branch literally
-  -- performs an NpcBuy in production.
-  | .currencyTurnIn   , _ => [.npcBuy]
   | .sellIdle         , _ => [.npcSell]
   | .recycleSurplus   , _ => [.recycle]
   | .drainBankJunk    , _ => [.withdrawItem]
@@ -164,7 +157,7 @@ noncomputable def planFor : MeansKind → State → Plan
 /-- `planFor k s` is always non-empty (single-element). -/
 theorem planFor_ne_nil (k : MeansKind) (s : State) : planFor k s ≠ [] := by
   cases k <;> simp only [planFor]
-  case objectiveStep => split <;> (try split) <;> (try split) <;> simp
+  case objectiveStep => split <;> (try split) <;> (try split) <;> (try split) <;> (try split) <;> simp
   all_goals simp
 
 /-! ## cycleStep — one cycle's pure transition -/
@@ -400,45 +393,6 @@ theorem cycleStep_progress_or_waits
     have hpre' : s.craftableSlots = s.craftableSlots + 1 := by
       rw [heq] at hpost; exact hpost
     exact Nat.succ_ne_self _ hpre'.symm
-  | supplyBank =>
-    -- SUPPLY_BANK (2026-08-01) plans `.gather` (produce the material a sibling
-    -- asked for). Unlike the fire-and-lose means this does NOT quiet its own
-    -- firing flag — production's supply target persists until the BANKED
-    -- quantity is met — so progress is witnessed by the gather itself:
-    -- it discharges one unit of the outstanding demand, which firing
-    -- requires to be positive, so the state changes. (It used to witness
-    -- progress by the skill level rising by one per gather, a fiction retired
-    -- in Phase 2d-L2: a leg pays XP.)
-    left
-    have hcs : cycleStep s = applyActionKind .gather s := by
-      unfold cycleStep; rw [hk]; rfl
-    rw [hcs]
-    intro heq
-    have hdem : 0 < s.supplyDemand := by
-      simp only [fires, supplyBankFires, Bool.or_eq_true, decide_eq_true_eq, Bool.and_eq_true] at hfires
-      rcases hfires with h | ⟨_, h⟩
-      · have : 0 < SUPPLY_DEMAND_MIN := by decide
-        omega
-      · exact h
-    have hpost : (applyActionKind .gather s).supplyDemand = s.supplyDemand - 1 := rfl
-    rw [heq] at hpost
-    omega
-  | currencyTurnIn =>
-    -- CURRENCY_TURNIN (2026-08-16) plans `.npcBuy`, which clears
-    -- `currencyTurnInActive`. Fire-and-lose, like geCancel/discardCritical:
-    -- the post-state (false) differs from the pre-state (true).
-    left
-    have hcs : cycleStep s = applyActionKind .npcBuy s := by
-      unfold cycleStep; rw [hk]; rfl
-    rw [hcs]
-    simp only [fires, currencyTurnInFires] at hfires
-    intro heq
-    have hpost : ({s with currencyTurnInActive := false} : State).currencyTurnInActive
-                  = false := rfl
-    have hpre' : s.currencyTurnInActive = false := by
-      have : (applyActionKind .npcBuy s).currencyTurnInActive = false := hpost
-      rw [heq] at this; exact this
-    rw [hfires] at hpre'; cases hpre'
   | depositFull =>
     left
     have hcs : cycleStep s = applyActionKind .depositAll s := by
@@ -559,9 +513,41 @@ theorem cycleStep_progress_or_waits
                         = TaskLifecyclePhase.TaskLifecyclePhase.none := by
             rw [heq] at hpost; exact hpost
           rw [hct] at hpre'; cases hpre'
+        by_cases hpn : s.taskLifecyclePhase = .none
+        · -- Fleet branch (Phase 5-2c-iv): no task held, so the step fired on
+          -- the fleet Bools alone (the retired CURRENCY_TURNIN / SUPPLY_BANK
+          -- rungs' arms).
+          by_cases hcur : s.currencyTurnInActive = true
+          · -- `.npcBuy` clears `currencyTurnInActive` (fire-and-lose).
+            have hcs : cycleStep s = applyActionKind .npcBuy s := by
+              unfold cycleStep; rw [hk]; simp [planFor, hisf', hof', hpn, hcur]
+            rw [hcs]
+            intro heq
+            have hpre' : s.currencyTurnInActive = false := by
+              have : (applyActionKind .npcBuy s).currencyTurnInActive = false := rfl
+              rw [heq] at this; exact this
+            rw [hcur] at hpre'; cases hpre'
+          · -- `.gather` discharges one unit of the outstanding demand, which
+            -- firing (on `supplyBankFires` alone here) requires to be positive.
+            have hcur' : s.currencyTurnInActive = false := Bool.eq_false_iff.mpr hcur
+            have hcs : cycleStep s = applyActionKind .gather s := by
+              unfold cycleStep; rw [hk]; simp [planFor, hisf', hof', hpn, hcur']
+            rw [hcs]
+            intro heq
+            have hdem : 0 < s.supplyDemand := by
+              simp only [fires, objectiveStepFires, supplyBankFires, currencyTurnInFires,
+                hof', hpn, hcur', Bool.or_eq_true, decide_eq_true_eq, Bool.and_eq_true,
+                Bool.false_eq_true, false_or, or_false, reduceCtorEq] at hfires
+              rcases hfires with h | ⟨_, h⟩
+              · have : 0 < SUPPLY_DEMAND_MIN := by decide
+                omega
+              · exact h
+            have hpost : (applyActionKind .gather s).supplyDemand = s.supplyDemand - 1 := rfl
+            rw [heq] at hpost
+            omega
         -- Task-work branch: `.taskTrade` advances taskProgress by +1.
         have hcs : cycleStep s = applyActionKind .taskTrade s := by
-          unfold cycleStep; rw [hk]; simp [planFor, hisf', hof', hct]
+          unfold cycleStep; rw [hk]; simp [planFor, hisf', hof', hct, hpn]
         rw [hcs]
         intro heq
         have hpost : (applyActionKind .taskTrade s).taskProgress

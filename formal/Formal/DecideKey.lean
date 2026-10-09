@@ -71,24 +71,8 @@ inductive MeansKind where
                    -- (oracle index 13) to keep earlier index dispatch stable.
   | geBid  -- 2026-07-24: post a discretionary GE buy order for a slow-to-craft
            -- item. Appended LAST (oracle index 14) to keep earlier dispatch stable.
-  | supplyBank  -- 2026-08-01: produce a material a SIBLING declared on the demand
-                -- board and bank it. Appended LAST (oracle index 15) to keep
-                -- earlier dispatch stable; its DISCRETIONARY_ORDER priority slot
-                -- (between MAINTAIN_CONSUMABLES and SELL_IDLE) is independent of
-                -- this constructor position and lives in
-                -- `Formal.Liveness.MeansKind.allInLadderOrder`.
-  | currencyTurnIn  -- 2026-08-16, fleet-currency-turn-in epic Task 6: spend or
-                    -- surrender a fleet-wide dual-role currency holding.
-                    -- Appended LAST (oracle index 16) to keep earlier dispatch
-                    -- stable; its COLLECT_REWARD_ORDER priority slot (directly
-                    -- below SUPPLY_BANK) is independent of this constructor
-                    -- position and lives in
-                    -- `Formal.Liveness.MeansKind.allInLadderOrder`. Dispatches
-                    -- to ONE of two production Goal classes depending on
-                    -- `ctx.recall`/`ctx.turn_in` (`strategy_driver.py::map_means`)
-                    -- — `goalReprOfMeans` mirrors `decide_key.py`'s single
-                    -- short-name table entry ("CurrencyTurnIn"), not either
-                    -- Goal's raw `__repr__`; see that module's `_MEANS_REPR`.
+  -- (supplyBank and currencyTurnIn retired: Phase 5-2c-iv — fleet work is
+  --  the fleet objective's step, `tiers/meta_goal.ReachFleetOutcome`)
 deriving Repr, DecidableEq
 
 /-- TOTAL `match`: every `GuardKind` variant maps to a non-empty repr string.
@@ -120,8 +104,6 @@ def goalReprOfMeans : MeansKind → String
   | .maintainConsumables => "MaintainConsumables"
   | .drainBankJunk   => "DrainBankJunk"
   | .geBid           => "PostBuyBid"
-  | .supplyBank      => "SupplyBank"
-  | .currencyTurnIn  => "CurrencyTurnIn"
 
 /-! ### Exhaustiveness intent theorems (totality witnesses). -/
 
@@ -146,7 +128,6 @@ example : goalReprOfGuard .depositFull = "DepositInventory" := rfl
 
 /-- Every means variant likewise. -/
 example : goalReprOfMeans .sellIdle = "SellInventory" := rfl
-example : goalReprOfMeans .supplyBank = "SupplyBank" := rfl
-example : goalReprOfMeans .currencyTurnIn = "CurrencyTurnIn" := rfl
+example : goalReprOfMeans .geBid = "PostBuyBid" := rfl
 
 end Formal.DecideKey

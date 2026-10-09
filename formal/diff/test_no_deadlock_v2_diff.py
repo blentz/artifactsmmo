@@ -482,8 +482,10 @@ def test_ladder_entry_count_matches_lean() -> None:
     step cancels a worthless task).
     − COMPLETE_TASK (retired in Phase 5-2c-iii-c-2 #6: the task objective's
     step turns a met task in; OBJECTIVE_STEP fires on its complete phase).
+    − SUPPLY_BANK, CURRENCY_TURNIN (retired in Phase 5-2c-iv: the fleet
+    objective's step; OBJECTIVE_STEP fires on `supply_due` / `turn_in_due`).
     Lean side mirrors via MeansKind.allInLadderOrder."""
-    assert len(ALL_IN_LADDER_ORDER) == 24
+    assert len(ALL_IN_LADDER_ORDER) == 22
 
 
 def test_the_ladder_interrupt_prefix_is_what_production_runs_as_interrupts() -> None:

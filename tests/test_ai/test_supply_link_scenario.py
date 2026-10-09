@@ -22,12 +22,12 @@ made was the one item never asked for.
 So the walk now records the target its skill gate rejected
 (`RootWalk.blocked_target`) and the player publishes it. `serves_item` marks it
 NOT self-servable — the asker's own gate is what blocked it — which is exactly
-what makes the request ASYMMETRIC, and `SUPPLY_BANK`'s second arm fires on any
+what makes the request ASYMMETRIC, and `fleet_work.supply_due`'s second arm is due on any
 size of asymmetric demand.
 
 This file drives BOTH halves through production code on the committed bundle:
 `resolve_root` for the ask, `_update_coordination` for the publish, and the real
-means ladder plus `map_means` for the answer. The unit tests either side of it
+fleet objective (`_fleet_roots` plus `objective_step_goal`) for the answer. The unit tests either side of it
 (`test_decisions_root`, `test_player_coordination`) pin the halves; this pins
 that they meet.
 """
@@ -35,6 +35,8 @@ that they meet.
 from dataclasses import replace
 from pathlib import Path
 
+from artifactsmmo_cli.ai.decisions.root import _fleet_roots
+from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY, supply_due
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -43,8 +45,8 @@ from artifactsmmo_cli.ai.scenario import (
     load_bundle_game_data,
     scenario_state,
 )
-from artifactsmmo_cli.ai.strategy_driver import map_means
-from artifactsmmo_cli.ai.tiers.means import MeansKind, _fires
+from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
+from artifactsmmo_cli.ai.tiers.meta_goal import ReachFleetOutcome
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import coordination_now
 
@@ -97,7 +99,7 @@ def _supplier(db: str, gd) -> GamePlayer:
 
 def test_the_blocked_ask_reaches_a_sibling_who_can_serve_it(tmp_path) -> None:
     """THE WHOLE CHAIN: ask -> board -> asymmetry -> role -> supply target ->
-    the rung fires -> a goal that produces the thing.
+    the fleet work is due -> a goal that produces the thing.
 
     Each assertion is a link that was intact but unreachable before the ask
     existed, so a break anywhere reports at the link that broke rather than as
@@ -114,7 +116,7 @@ def test_the_blocked_ask_reaches_a_sibling_who_can_serve_it(tmp_path) -> None:
 
     # LINK 2 — and it is published as ASYMMETRIC. `serves_item` fails on the
     # asker's own gate, so the code is absent from `self_servable`, which is the
-    # only thing that makes `SUPPLY_BANK`'s second arm reachable at quantity 1.
+    # only thing that makes `supply_due`'s second arm reachable at quantity 1.
     board = CoordinationStore(db_path=db, character="Reader")
     assert ASKED in board.sibling_demand(coordination_now())
     assert ASKED in board.sibling_demand_asymmetric(coordination_now())
@@ -130,15 +132,18 @@ def test_the_blocked_ask_reaches_a_sibling_who_can_serve_it(tmp_path) -> None:
     assert supplier._supply_target is not None
     assert supplier._supply_target[0] == ASKED
 
-    # LINK 5 — the rung fires at quantity 1, which the bulk gate alone would
-    # have refused (SUPPLY_DEMAND_MIN is 10 and every live request is 1).
+    # LINK 5 — the work is due at quantity 1, which the bulk gate alone would
+    # have refused (SUPPLY_DEMAND_MIN is 10 and every live request is 1), so
+    # the walk offers the fleet objective for it (Phase 5-2c-iv).
     ctx = supplier._selection_context(None)
     assert ctx.supply_target is not None
     assert ctx.supply_target[2] < 10
-    assert _fires(MeansKind.SUPPLY_BANK, supplier.state, gd, None, ctx)
+    assert supply_due(ctx)
+    fleet = ReachFleetOutcome(FLEET_SUPPLY, ASKED)
+    assert fleet in _fleet_roots(ctx)
 
-    # LINK 6 — and the goal it maps to is the one that banks the item.
-    goal = map_means(MeansKind.SUPPLY_BANK, gd, ctx, supplier.state, None, None)
+    # LINK 6 — and its step is the goal that banks the item.
+    goal = objective_step_goal(fleet, supplier.state, gd, ctx)
     assert isinstance(goal, SupplyBankGoal)
     assert ASKED in repr(goal)
 
@@ -149,7 +154,7 @@ def test_a_sibling_without_the_skill_is_not_recruited(tmp_path) -> None:
     `serves_item` is the ONE level gate, read by the asker's self-servable
     computation and by `_pick_supply_target` alike — so a sibling at the asker's
     own level answers no better than the asker does, and must not be handed the
-    request. Without this the rung would fire on a character that cannot craft
+    request. Without this the fleet work would be due on a character that cannot craft
     the item, which is the same stall by a longer route."""
     db = str(tmp_path / "coord.db")
     gd = _game_data()

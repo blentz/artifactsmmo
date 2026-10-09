@@ -36,68 +36,6 @@ from artifactsmmo_cli.ai.world_state import WorldState
 # the shared should_expand_bank core — no local constant.)
 SELL_PRESSURE_FRACTION = PRESSURE_HIGH_FRACTION
 
-# Minimum UNMET sibling demand (units of one material) that justifies pausing
-# this character's own objective step to produce for a sibling. Read by
-# `_fires(SUPPLY_BANK, …)` off `ctx.supply_target`'s third component — the
-# still-unmet quantity `_pick_supply_target` computed, already net of what the
-# requester holds and of what the shared bank already stocks.
-#
-# WHY A THRESHOLD AT ALL. 2026-08-01: SUPPLY_BANK moved OUT of
-# DISCRETIONARY_ORDER (below the objective step, where it never won a single
-# cycle of the traced four-character run) and INTO COLLECT_REWARD_ORDER, above
-# the step. Unconditional promotion was considered and DECLINED: with five
-# characters each publishing their root's closure demand every cycle, a
-# fires-on-any-demand rung would have them serving each other most cycles and
-# levelling slowly. This constant is the whole of what prevents that — it is
-# load-bearing, not decoration.
-#
-# WHY 10, DERIVED NOT INVENTED. Two sources agree:
-#   (a) Live traces. Across the 44 `play-trace-*.jsonl` runs on hand, every
-#       non-null `supply_target` carried demand exactly 10 (copper_ore x10 twice,
-#       ash_wood x10 once). A `>=` test at 10 therefore keeps firing on every
-#       real request observed so far — the promotion is not made inert by its
-#       own gate.
-#   (b) The recipe graph. Running `recipe_closure.closure_demand(root, 1, …)`
-#       over all 321 craftable roots in `formal/sim/game_data_snapshot.json` and
-#       taking, per root, the LARGEST base-material quantity (the quantity
-#       `_pick_supply_target` maximises over) gives this distribution:
-#         1:25  2:6  3:1  4:3  5:9  6:8  7:1  |  10:12  12:2  15:11  20:2
-#         24:15  28:5  30:6  32:2  35:3  36:12  40:8  42:11  48:13  49:9
-#         50:25  54:4  56:1  60:15  66:1  70:15  80:50  100:29  110:1  120:14
-#         192:2
-#       There is an EMPTY BAND at 8 and 9: no root's peak base demand lands
-#       there. So every threshold in 8..10 partitions the roots identically —
-#       53 roots (16.5%) below, 268 (83.5%) at or above. The cut is a real gap
-#       in the data, not a knife edge, and 10 is the value in that gap that also
-#       matches (a) exactly.
-#
-# WHAT THIS BUYS: a character pauses its own chain only for a request of
-# genuinely bulk size — the 24/50/80/120-unit asks that dominate the recipe
-# graph and cost the requester hours of self-gathering. 83.5% of roots' peak
-# requests still preempt the objective step.
-#
-# WHAT IT GIVES UP: sub-threshold demand no longer reaches SUPPLY_BANK AT ALL,
-# because the rung left DISCRETIONARY_ORDER — there is no low-priority fallback
-# slot any more. A sibling wanting <10 units, or wanting the last few units of a
-# request already mostly filled, is told (by silence) to gather them itself:
-# 1-9 units of one material is a handful of gather actions, cheaper to self-serve
-# than to route through the bank. The measured cost of that loss is small — in
-# the traced runs SUPPLY_BANK was selected zero times from the discretionary
-# band, because the objective step outranked it on every cycle a step existed.
-#
-# THE SECOND ARM (ctx.asymmetric_demand, Task 4). The rationale above assumes
-# the asker CAN self-serve — that a sub-threshold request is a handful of
-# gather actions the asker itself could run. That assumption breaks whenever
-# the requested code is skill-gated out of the asker's own reach:
-# `sibling_demand_asymmetric` (Task 2) already did the work of proving the
-# asker cannot make it, at ANY quantity, this side of a level-up. A request
-# like that is never a cheaper self-serve alternative — it is simply blocked —
-# so it is worth a sibling's cycle even at the observed live size of 1. That
-# asymmetry (one role can fill a gap another role structurally cannot) is the
-# whole point of holding a role at all, and it is a SEPARATE gate from bulk
-# size: `ctx.asymmetric_demand` fires regardless of SUPPLY_DEMAND_MIN, it does
-# not raise or lower the bulk threshold above.
-SUPPLY_DEMAND_MIN = 10
 
 
 class MeansKind(Enum):
@@ -113,8 +51,6 @@ class MeansKind(Enum):
     MAINTAIN_CONSUMABLES = "maintain_consumables"
     DRAIN_BANK_JUNK = "drain_bank_junk"  # 2026-06-24: drain over-cap bank junk.
     GE_BID = "ge_bid"  # 2026-07-24: post a discretionary GE buy order for a slow-to-craft item.
-    SUPPLY_BANK = "supply_bank"  # 2026-08-01: produce a material a SIBLING needs.
-    CURRENCY_TURNIN = "currency_turnin"  # 2026-08-16: spend/surrender a dual-role currency.
 
 
 INTERRUPT_MEANS: frozenset[MeansKind] = frozenset({
@@ -154,47 +90,10 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     # TASK_CANCEL was retired here in Phase 5-2c-iii-c-2 #5: a task worth less
     # than its cancel is the task objective's own step (`ReachTaskOutcome`),
     # judged by `task_worth.held_task_cancel_due`, on the task's turn.
-    # 2026-08-01, human ruling: SUPPLY_BANK is promoted out of
-    # DISCRETIONARY_ORDER to here, ABOVE the objective step, so a character can
-    # pause its own chain to serve a sibling's declared, SUBSTANTIAL request
-    # (`SUPPLY_DEMAND_MIN` is what makes "substantial" mean something — see its
-    # comment block). Below the step it was unreachable: a character essentially
-    # always has an objective step, and the traced four-character run selected
-    # SUPPLY_BANK zero times in 48 cycles despite the rung being armed.
-    #
-    # POSITION: LAST in this group, deliberately. The other rungs are
-    # one-or-few-action bookings of an already-earned outcome (claim the pending
-    # items, hand in a finished task, shed under space pressure, buy a bank
-    # slot) and each self-quiets after firing, so letting them go first costs
-    # SUPPLY_BANK at most a cycle. SUPPLY_BANK is the opposite shape — an
-    # open-ended gather-then-bank production run — and putting it first would
-    # park a completed task's reward, or a >=85%-full bag, behind a chain of
-    # dozens of actions. Ordering it last keeps the promotion (it still outranks
-    # the objective step, which is the entire point) without letting production
-    # preempt reward collection or pressure relief.
-    MeansKind.SUPPLY_BANK,
-    # 2026-08-16, fleet-currency-turn-in epic (Task 6): a fleet-wide dual-role
-    # holding (an item that is BOTH worn and a vendor's payment currency, e.g.
-    # `lich_race_medal`, currency for `lich_race_trophy` @ archaeologist) has
-    # already been resolved into a per-cycle decision for THIS character by
-    # Task 5's `GamePlayer._resolve_turn_in`: either it is the elected buyer
-    # (`ctx.turn_in.buyer == self`) or it lost the election and owes the
-    # winner its whole holding (`ctx.recall`). Both branches are threaded onto
-    # `SelectionContext` as DATA — this means only asks "is one of them set",
-    # the same seam `SUPPLY_BANK` uses for `ctx.supply_target`.
-    #
-    # POSITION: immediately after SUPPLY_BANK, same reasoning as SUPPLY_BANK's
-    # own position comment directly above — ABOVE the objective step (so a
-    # completed election is not left to rot behind whatever gear `J` is
-    # chasing, which per the Evidence section it never resolves to a turn-in
-    # purchase on its own) and LAST among the one-or-few-action collect-reward
-    # rungs (so a pending reward claim or a >=85%-full bag is never parked
-    # behind it). Unlike SUPPLY_BANK this means carries NO demand-size gate:
-    # `turn_in_ready_pure` (ai/currency_turnin.py) already requires the FULL
-    # vendor price be reachable before Task 5 ever sets `ctx.turn_in`, so
-    # every firing cycle is one the fleet can actually complete — there is no
-    # sub-threshold case to filter the way SUPPLY_DEMAND_MIN filters SUPPLY_BANK.
-    MeansKind.CURRENCY_TURNIN,
+    # SUPPLY_BANK and CURRENCY_TURNIN were retired here in Phase 5-2c-iv: fleet
+    # work the coordination tables name is the fleet objective
+    # (`ReachFleetOutcome`, gated by `ai/fleet_work`), served on its rotation
+    # turn rather than above the step.
     # ACCEPT_TASK was retired here in Phase 5-2c-iii-c-2 #3: taking a draw is the
     # task objective's own step (`ReachTaskOutcome`), on its turn — the USER's
     # ruling that no task is drawn until the objective has its turn.
@@ -263,45 +162,6 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # three-way venue verdict of GE_POST. Fire-and-lose: posting creates an
         # open order that suppresses the item next cycle.
         return bool(ge_bid_candidates(state, game_data, ctx, TTL_CYCLES))
-
-    if kind is MeansKind.SUPPLY_BANK:
-        # ctx.supply_target is None whenever there is no live sibling demand
-        # this character's role can serve — which is every cycle of a
-        # single-character run, so this means is inert without `--all`.
-        #
-        # DEMAND GATE (2026-08-01): this rung now sits ABOVE the objective step,
-        # so firing it costs the character its own progress for the length of a
-        # production run. It fires only for a request of at least
-        # SUPPLY_DEMAND_MIN still-unmet units — see that constant for the
-        # derivation and for what the gate buys and gives up. The third tuple
-        # component is the UNMET demand (`_pick_supply_target`), not the goal's
-        # absolute banked target (the second), which already includes stock the
-        # bank holds and so would clear any threshold on inventory the fleet
-        # already owns.
-        #
-        # ASYMMETRY GATE (Task 4): OR'd with the bulk gate, not a replacement
-        # for it. A request whose item code is in `ctx.asymmetric_demand`
-        # fires at ANY unmet-demand size, because that set (Task 2/3) only
-        # ever holds codes at least one sibling is skill-gated out of making
-        # for itself — see SUPPLY_DEMAND_MIN's comment for why that breaks the
-        # self-serve-is-cheaper assumption the bulk threshold relies on.
-        target = ctx.supply_target
-        if target is None:
-            return False
-        return target[2] >= SUPPLY_DEMAND_MIN or target[0] in ctx.asymmetric_demand
-
-    if kind is MeansKind.CURRENCY_TURNIN:
-        # Fires for BOTH sides of a resolved election: the buyer and every
-        # holder asked to surrender. `ctx.turn_in` is set on both (a loser
-        # carries the SAME turn-in with the winner named as `buyer`, plus its
-        # own `ctx.recall` — the two are not mutually exclusive), so WHICH
-        # side this character is on is decided by identity in
-        # `strategy_driver.map_means` (`turn_in.buyer == state.character`),
-        # never by the presence or absence of a recall. Neither field is set
-        # on an uninvolved character: Task 5's `_resolve_turn_in` writes them
-        # only for a character that itself qualified as a candidate buyer or
-        # currently holds the currency a live claim is waiting on.
-        return ctx.turn_in is not None or ctx.recall is not None
 
     if kind is MeansKind.MAINTAIN_CONSUMABLES:
         # Only when combat is the active means (a target is selected): keep a

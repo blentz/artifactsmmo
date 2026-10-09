@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
+    ReachFleetOutcome,
     ReachSkillLevel,
     ReachTaskOutcome,
 )
@@ -117,6 +118,9 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData,
     if isinstance(node, ReachTaskOutcome):
         # The task's kills are its own step (`TaskKillsGoal`); an unwinnable
         # task monster is offered as its gear root instead, never as this.
+        return []
+    if isinstance(node, ReachFleetOutcome):
+        # Fleet work is its own step (`SupplyBankGoal` / the turn-in goals).
         return []
     # Fail loudly rather than silently reporting "no prerequisites" for a kind
     # this dispatch does not know (fix-round-1, task 2 review): the trailing

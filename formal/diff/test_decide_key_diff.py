@@ -43,7 +43,8 @@ _MEANS_INDEX = {
     MeansKind.CLAIM_PENDING: 0,
     # TASK_CANCEL (Phase 5-2c-iii-c-2 #5) and COMPLETE_TASK (#6) were retired:
     # the Lean inductive loses each constructor, so every later index shifts
-    # down.
+    # down. SUPPLY_BANK and CURRENCY_TURNIN (indices 9, 10) were retired in
+    # Phase 5-2c-iv: fleet work is the fleet objective's step.
     MeansKind.SELL_PRESSURED: 1,
     MeansKind.SELL_IDLE: 2,
     MeansKind.RECYCLE_SURPLUS: 3,  # 2026-06-14: proactive recycle surplus gear.
@@ -52,16 +53,6 @@ _MEANS_INDEX = {
     MeansKind.MAINTAIN_CONSUMABLES: 6,  # PLAN #6a: cook/brew heals (combat-active).
     MeansKind.DRAIN_BANK_JUNK: 7,  # 2026-06-24: drain over-cap bank junk.
     MeansKind.GE_BID: 8,  # 2026-07-24: post a discretionary GE buy order.
-    # 2026-08-01: produce a material a sibling declared. 9 is the position of
-    # `supplyBank` in the LEAN `Formal.DecideKey.MeansKind` inductive (appended
-    # last, like every variant since `wait`), which is what the oracle's index
-    # dispatch reads — NOT the Python enum's declaration ordinal.
-    MeansKind.SUPPLY_BANK: 9,
-    # 2026-08-16 (fleet-currency-turn-in epic Task 6): 10 is the position of
-    # `currencyTurnIn` in the LEAN `Formal.DecideKey.MeansKind` inductive
-    # (appended last, like `supplyBank` above it) — the oracle's index dispatch
-    # reads this, NOT the Python enum's declaration ordinal.
-    MeansKind.CURRENCY_TURNIN: 10,
 }
 
 

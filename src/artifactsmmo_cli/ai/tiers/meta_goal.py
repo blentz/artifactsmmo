@@ -120,8 +120,30 @@ class ReachTaskOutcome:
         return state.task_code != self.task_code
 
 
+@dataclass(frozen=True)
+class ReachFleetOutcome:
+    """Fleet work the coordination tables name for this character (Phase
+    5-2c-iv): `kind` "supply" — bank `code` for the sibling request this role
+    serves (`ctx.supply_target`) — or "turn_in" — the resolved election for
+    item `code`: buy it as the elected buyer, else surrender the currency
+    (`ctx.turn_in` / `ctx.recall`).
+
+    A root ALTERNATIVE, offered by `resolve_root` only while the context names
+    the work (`ai/fleet_work`), so the rotation gives it its own turns (it was
+    the SUPPLY_BANK and CURRENCY_TURNIN collect rungs, above every root). Never
+    satisfied itself, like `ReachTaskOutcome(None)`: its step goal's own
+    satisfaction is the one test, and a satisfied step is no step.
+    """
+
+    kind: str
+    code: str
+
+    def is_satisfied(self, state: WorldState, game_data: GameData) -> bool:
+        return False
+
+
 META_GOAL_KINDS: tuple[type, ...] = (ObtainItem, ReachCharLevel, ReachSkillLevel,
-                                     ReachTaskOutcome)
+                                     ReachTaskOutcome, ReachFleetOutcome)
 """The complete set of concrete MetaGoal variants, as a runtime-checkable
 isinstance tuple. `MetaGoal` is a Protocol — it cannot be isinstance-tested
 directly — so this is the single place a fourth variant must be registered.

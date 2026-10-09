@@ -199,8 +199,6 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
         · exact descendsE_fight s hlvl (Or.inr (Or.inr ⟨hk, hisF⟩))
         · exact descendsE_placeholder s hArms hGear hlvl hk (Bool.eq_false_iff.mpr hisF)
     | maintainConsumables => exact absurd hmem (by decide)
-    | supplyBank      => exact descendsE_supplyBank s hk
-    | currencyTurnIn  => exact descendsE_currencyTurnIn s hk
     | sellIdle        => exact absurd hmem (by decide)
     | recycleSurplus  => exact absurd hmem (by decide)
     | bankExpand      => exact descendsE_bankExpand s hk

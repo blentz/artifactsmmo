@@ -10,15 +10,10 @@
                                                      DEPOSIT_FULL; GEAR_REVIEW
                                                      then CRAFT_POTIONS last
                                                      (lowest-priority guards)
-    ++ COLLECT_REWARD_ORDER (from `tiers/means.py`) -- SUPPLY_BANK then
-                                                     CURRENCY_TURNIN LAST in this
-                                                     group (2026-08-01 ruling
-                                                     promoted SUPPLY_BANK above the
-                                                     objective step, gated on
-                                                     demand; 2026-08-16 fleet-
-                                                     currency-turn-in epic added
-                                                     CURRENCY_TURNIN directly below
-                                                     it, no demand gate)
+    ++ COLLECT_REWARD_ORDER (from `tiers/means.py`) -- SUPPLY_BANK and
+                                                     CURRENCY_TURNIN left it in
+                                                     Phase 5-2c-iv (the fleet
+                                                     objective's step)
     ++ [OBJECTIVE_STEP]
     ++ DISCRETIONARY_ORDER (from `tiers/means.py`) -- incl MAINTAIN_CONSUMABLES
                                                      and WAIT
@@ -96,50 +91,9 @@ inductive MeansKind where
   -- (completeTask retired: Phase 5-2c-iii-c-2 #6)
   -- (lowYieldCancel retired: Phase 5-2c-iii-c-2)
   -- (taskCancel retired: Phase 5-2c-iii-c-2 #5)
-  | supplyBank          -- SUPPLY_BANK,        means.py (2026-08-01 human ruling):
-                        --                     produce a material a SIBLING declared
-                        --                     on the demand board and BANK it.
-                        --                     PROMOTED out of DISCRETIONARY_ORDER
-                        --                     into COLLECT_REWARD_ORDER, so it now
-                        --                     outranks `objectiveStep` — below the
-                        --                     step it was unreachable, because a
-                        --                     character essentially always has one.
-                        --                     LAST within the collect group: the
-                        --                     other rungs are one-or-few-action
-                        --                     bookings of an already-earned outcome
-                        --                     and self-quiet, whereas this one is an
-                        --                     open-ended production run. Gated on
-                        --                     `supplyDemand >= SUPPLY_DEMAND_MIN`
-                        --                     (ProductionLadder) — the gate is what
-                        --                     stops a fleet of siblings serving each
-                        --                     other instead of levelling. OR'd
-                        --                     (2026-08-16, role-driven-supply epic
-                        --                     Task 4) with `supplyAsymmetric` --
-                        --                     fires at ANY demand when at least one
-                        --                     sibling asking for the item is
-                        --                     skill-gated out of making it itself.
-  | currencyTurnIn      -- CURRENCY_TURNIN,    means.py (2026-08-16, fleet-currency-
-                        --                     turn-in epic Task 6): spend/surrender a
-                        --                     fleet-wide dual-role holding (worn AND
-                        --                     a vendor's payment currency, e.g.
-                        --                     `lich_race_medal`). Fires for BOTH the
-                        --                     elected buyer (`ctx.turn_in` set) and a
-                        --                     losing candidate asked to surrender
-                        --                     (`ctx.recall` set); `_resolve_turn_in`
-                        --                     sets at most one per cycle, and only for
-                        --                     a character that itself qualified.
-                        --                     LAST in COLLECT_REWARD_ORDER, directly
-                        --                     below `supplyBank`: same "above the
-                        --                     objective step" reasoning (a resolved
-                        --                     election must not rot behind whatever
-                        --                     gear `J` is chasing), placed after
-                        --                     supplyBank because both are open-ended
-                        --                     collect rungs and this one is the
-                        --                     NEWEST addition to the group. Unlike
-                        --                     supplyBank there is no demand-size gate
-                        --                     — `turn_in_ready_pure` already requires
-                        --                     the full vendor price be reachable
-                        --                     before `ctx.turn_in` is ever set.
+  -- (supplyBank and currencyTurnIn retired: Phase 5-2c-iv — fleet work is the
+  --  fleet objective, `ReachFleetOutcome`; their firing predicates are
+  --  disjuncts of `objectiveStepFires`)
   -- Objective step (StrategyArbiter inserts a single objective StepGoal here)
   | objectiveStep       -- OBJECTIVE_STEP
   -- Discretionary (DISCRETIONARY_ORDER, means.py:42)
@@ -181,19 +135,18 @@ def allInLadderOrder : List MeansKind :=
    -- collect rung from its 2026-09-13 promotion out of the discretionary group,
    -- where it fired against a 50/50 bank and was selected zero times.)
    .bankExpand,
-   .supplyBank,
-   .currencyTurnIn,
    .objectiveStep,
    .maintainConsumables,
    .sellIdle, .recycleSurplus, .geBid, .drainBankJunk,
    .wait]
 
-/-- Sanity: 24 rungs (one per constructor). GEAR_REVIEW was retired in Phase
+/-- Sanity: 22 rungs (one per constructor). GEAR_REVIEW was retired in Phase
     4-3b: its one arm never fired in recorded history. LOW_YIELD_CANCEL,
     TASK_EXCHANGE, ACCEPT_TASK, PURSUE_TASK, TASK_CANCEL and COMPLETE_TASK
     were retired in Phase 5-2c-iii-c-2: the task objective's step owns the
     cancels, the exchange, the accept, the items-task pursuit and the
-    turn-in of a met task. -/
-example : allInLadderOrder.length = 24 := by decide
+    turn-in of a met task. SUPPLY_BANK and CURRENCY_TURNIN were retired in
+    Phase 5-2c-iv: fleet work is the fleet objective's step. -/
+example : allInLadderOrder.length = 22 := by decide
 
 end Formal.Liveness.MeansKind

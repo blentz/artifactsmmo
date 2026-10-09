@@ -158,20 +158,6 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
       show (applyActionKind .craft s).level = s.level
             ∧ (applyActionKind .craft s).xp = s.xp
       exact ⟨rfl, rfl⟩
-    | supplyBank =>
-      -- 2026-08-01: planFor .supplyBank = [.gather]; applyActionKind .gather
-      -- preserves character level and xp (it bumps trackedSkillLevel,
-      -- inventoryItems and skillXpDelta only).
-      show (applyActionKind .gather s).level = s.level
-            ∧ (applyActionKind .gather s).xp = s.xp
-      exact ⟨rfl, rfl⟩
-    | currencyTurnIn =>
-      -- 2026-08-16: planFor .currencyTurnIn = [.npcBuy]; applyActionKind
-      -- .npcBuy preserves character level and xp (it clears
-      -- currencyTurnInActive only).
-      show (applyActionKind .npcBuy s).level = s.level
-            ∧ (applyActionKind .npcBuy s).xp = s.xp
-      exact ⟨rfl, rfl⟩
     | depositFull =>
       show (applyActionKind .depositAll s).level = s.level
             ∧ (applyActionKind .depositAll s).xp = s.xp
@@ -198,11 +184,15 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
       show (match (if s.objectiveStepIsFight then [ActionKind.fight]
                     else if s.objectiveStepFires then [ActionKind.objectiveStep]
                     else if s.taskLifecyclePhase = TaskLifecyclePhase.TaskLifecyclePhase.complete then [ActionKind.completeTask]
+                    else if s.taskLifecyclePhase = TaskLifecyclePhase.TaskLifecyclePhase.none then
+                      (if s.currencyTurnInActive then [ActionKind.npcBuy] else [ActionKind.gather])
                     else [ActionKind.taskTrade]) with
               | [] => s | a :: _ => applyActionKind a s).level = s.level
             ∧ (match (if s.objectiveStepIsFight then [ActionKind.fight]
                     else if s.objectiveStepFires then [ActionKind.objectiveStep]
                     else if s.taskLifecyclePhase = TaskLifecyclePhase.TaskLifecyclePhase.complete then [ActionKind.completeTask]
+                    else if s.taskLifecyclePhase = TaskLifecyclePhase.TaskLifecyclePhase.none then
+                      (if s.currencyTurnInActive then [ActionKind.npcBuy] else [ActionKind.gather])
                     else [ActionKind.taskTrade]) with
               | [] => s | a :: _ => applyActionKind a s).xp = s.xp
       rw [if_neg (by simp [hisf'])]
@@ -213,7 +203,15 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
           rcases hnct with h | h
           · exact absurd h hosf
           · exact h
-        rw [if_neg hnc]; exact ⟨rfl, rfl⟩
+        -- Phase 5-2c-iv: the fleet step's `.npcBuy` / `.gather` preserve
+        -- character level and xp, like the task work's `.taskTrade`.
+        rw [if_neg hnc]
+        by_cases hpn : s.taskLifecyclePhase = .none
+        · rw [if_pos hpn]
+          by_cases hcur : s.currencyTurnInActive = true
+          · rw [if_pos hcur]; exact ⟨rfl, rfl⟩
+          · rw [if_neg hcur]; exact ⟨rfl, rfl⟩
+        · rw [if_neg hpn]; exact ⟨rfl, rfl⟩
     | sellIdle =>
       show (applyActionKind .npcSell s).level = s.level
             ∧ (applyActionKind .npcSell s).xp = s.xp

@@ -222,63 +222,9 @@ theorem descends_geCancel (s : State)
   apply fLt_of_geCancel_dec <;>
     simp [fMeasure, pressureDelta, applyActionKind, hfire]
 
-/-- `supplyBank` (→ `.gather`) strictly descends at `supplyDemandSlot`
-    (2026-08-01). The rung was promoted above `.objectiveStep`, so it is now
-    selectable below the cap and owes its own descent. `.gather` bumps only
-    `trackedSkillLevel` / `inventoryItems` / `skillXpDelta` — none of them tuple
-    slots — and discharges ONE unit of the outstanding sibling request, so every
-    higher slot is unchanged and the bottom slot strictly drops.
-
-    The strictness is exactly where the human ruling's demand threshold earns
-    its keep: `supplyBankFires`'s bulk arm requires `supplyDemand ≥
-    SUPPLY_DEMAND_MIN`, and `SUPPLY_DEMAND_MIN_pos` turns that into
-    `supplyDemand > 0`, which is what makes the saturating `Nat` decrement a
-    real decrease. Without the gate a zero-demand target could select this
-    rung forever and the cycle would not descend at all. The asymmetry arm
-    (2026-08-16) carries its own `supplyDemand > 0` conjunct for the same
-    reason — see `supplyBankFires`'s doc comment — so `hpos` follows in
-    EITHER firing branch, not just the bulk one. -/
-theorem descends_supplyBank (s : State)
-    (hk : productionLadder (perceptionRefresh s) = some .supplyBank) :
-    fMeasureLt (fMeasure (cycleStepF s)) (fMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, supplyBankFires, Bool.or_eq_true, Bool.and_eq_true,
-    decide_eq_true_eq] at hfire
-  have hpos : (perceptionRefresh s).supplyDemand > 0 := by
-    rcases hfire with hbulk | ⟨_, hasym⟩
-    · have := SUPPLY_DEMAND_MIN_pos; omega
-    · exact hasym
-  rw [cycleStepF_some s hk, ← fMeasure_perceptionRefresh s]
-  have hcs : cycleStep (perceptionRefresh s) =
-      applyActionKind .gather (perceptionRefresh s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  apply fLt_of_supplyDemand_dec <;>
-    simp only [fMeasure, pressureDelta, applyActionKind] <;>
-    first
-      | rfl
-      | omega
-
-/-- `currencyTurnIn` (→ `.npcBuy`) strictly descends at `currencyTurnInFlag`
-    (2026-08-16). Fire-and-lose, like `geCancel`: `.npcBuy` clears only
-    `currencyTurnInActive`, so every higher slot is unchanged and the bottom
-    slot strictly drops. -/
-theorem descends_currencyTurnIn (s : State)
-    (hk : productionLadder (perceptionRefresh s) = some .currencyTurnIn) :
-    fMeasureLt (fMeasure (cycleStepF s)) (fMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, currencyTurnInFires] at hfire
-  rw [cycleStepF_some s hk, ← fMeasure_perceptionRefresh s]
-  have hcs : cycleStep (perceptionRefresh s) =
-      applyActionKind .npcBuy (perceptionRefresh s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  apply fLt_of_currencyTurnIn_dec <;>
-    simp [fMeasure, pressureDelta, applyActionKind, hfire]
-
 set_option maxRecDepth 8000 in
 /-- `bankExpand` (→ `.buyBankExpansion`) strictly descends at `bankExpandSlot`
-    (2026-09-13). Bottom of the cascade, like `geCancel` and `currencyTurnIn`:
+    (2026-09-13). Bottom of the cascade, like `geCancel`:
     `.buyBankExpansion` changes only `gold` (down) and `bankCapacity` (up), and
     neither appears in the FMeasure tuple above this slot.
 

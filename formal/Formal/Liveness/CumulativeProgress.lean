@@ -631,12 +631,6 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | maintainConsumables =>
       show (applyActionKind .craft s).level ≥ s.level
       simp [applyActionKind]
-    | supplyBank =>
-      show (applyActionKind .gather s).level ≥ s.level
-      simp [applyActionKind, grantSkillXp]
-    | currencyTurnIn =>
-      show (applyActionKind .npcBuy s).level ≥ s.level
-      simp [applyActionKind]
     | depositFull =>
       show (applyActionKind .depositAll s).level ≥ s.level
       simp [applyActionKind]
@@ -659,6 +653,8 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
       · show (match (if s.objectiveStepIsFight then [ActionKind.fight]
                       else if s.objectiveStepFires then [ActionKind.objectiveStep]
                       else if s.taskLifecyclePhase = TaskLifecyclePhase.TaskLifecyclePhase.complete then [ActionKind.completeTask]
+                      else if s.taskLifecyclePhase = TaskLifecyclePhase.TaskLifecyclePhase.none then
+                        (if s.currencyTurnInActive then [ActionKind.npcBuy] else [ActionKind.gather])
                       else [ActionKind.taskTrade]) with
                 | [] => s | a :: _ => applyActionKind a s).level ≥ s.level
         rw [if_pos hisf]
@@ -667,6 +663,8 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
       · show (match (if s.objectiveStepIsFight then [ActionKind.fight]
                       else if s.objectiveStepFires then [ActionKind.objectiveStep]
                       else if s.taskLifecyclePhase = TaskLifecyclePhase.TaskLifecyclePhase.complete then [ActionKind.completeTask]
+                      else if s.taskLifecyclePhase = TaskLifecyclePhase.TaskLifecyclePhase.none then
+                        (if s.currencyTurnInActive then [ActionKind.npcBuy] else [ActionKind.gather])
                       else [ActionKind.taskTrade]) with
                 | [] => s | a :: _ => applyActionKind a s).level ≥ s.level
         rw [if_neg hisf]
@@ -687,8 +685,20 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
                     else s.level) ≥ s.level)
             split <;> omega
           · rw [if_neg hct]
-            show (applyActionKind .taskTrade s).level ≥ s.level
-            simp [applyActionKind]
+            -- Phase 5-2c-iv: the fleet step's `.npcBuy` / `.gather` keep the
+            -- level, like the task work's `.taskTrade`.
+            by_cases hpn : s.taskLifecyclePhase = .none
+            · rw [if_pos hpn]
+              by_cases hcur : s.currencyTurnInActive = true
+              · rw [if_pos hcur]
+                show (applyActionKind .npcBuy s).level ≥ s.level
+                simp [applyActionKind]
+              · rw [if_neg hcur]
+                show (applyActionKind .gather s).level ≥ s.level
+                simp [applyActionKind, grantSkillXp]
+            · rw [if_neg hpn]
+              show (applyActionKind .taskTrade s).level ≥ s.level
+              simp [applyActionKind]
     | sellIdle =>
       show (applyActionKind .npcSell s).level ≥ s.level
       simp [applyActionKind]
@@ -732,7 +742,14 @@ private theorem fires_of_ladder {s : State} {k : MeansKind}
     hypothesis makes that a `taskCycles` descent too, or the turn-in rolls
     the level over.) The ladder's phase test does not
     imply `taskProgress < taskTotal` on an arbitrary (phase-inconsistent)
-    `State`, so that fact is a hypothesis of this branch alone. -/
+    `State`, so that fact is a hypothesis of this branch alone.
+
+    RESTATED Phase 5-2c-iv: the objective step also fires on the fleet Bools
+    alone (no task held, phase `.none`) and then dispatches the fleet step's
+    `.npcBuy` / `.gather`, which move no `ExtMeasure` slot — the retired
+    SUPPLY_BANK / CURRENCY_TURNIN rungs were OUT of `progressMeans` for exactly
+    that reason. The fleet case is folded into the objectiveStep conjunct: the
+    branch's hypothesis also excludes phase `.none`. -/
 theorem progressMeans_decreases_extMeasure_or_advances_level
     (s : State) (k : MeansKind)
     (hk : productionLadder s = some k)
@@ -742,7 +759,9 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
               ∨ (k = .objectiveStep ∧ s.objectiveStepIsFight = true) →
               s.xp < xpToNextLevel s.level ∧ s.level < 50)
     (htask : k = .objectiveStep → s.objectiveStepIsFight = false →
-              s.objectiveStepFires = false → s.taskProgress < s.taskTotal) :
+              s.objectiveStepFires = false →
+              s.taskProgress < s.taskTotal
+              ∧ s.taskLifecyclePhase ≠ TaskLifecyclePhase.TaskLifecyclePhase.none) :
     (cycleStep s).level > s.level
     ∨ ((cycleStep s).level = s.level
         ∧ extMeasureLt (extMeasure (cycleStep s)) (extMeasure s)) := by
@@ -1019,7 +1038,7 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
       by_cases hof : s.objectiveStepFires = true
       swap
       · have hof' : s.objectiveStepFires = false := Bool.eq_false_iff.mpr hof
-        have hprog := htask rfl hisf' hof'
+        obtain ⟨hprog, hpn⟩ := htask rfl hisf' hof'
         by_cases hct : s.taskLifecyclePhase = .complete
         · -- Met-task branch (Phase 5-2c-iii-c-2 #6): the turn-in rolls the
           -- level over, or clears the task — `taskCycles` drops to 0 from
@@ -1047,7 +1066,7 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
         -- `taskCycles` given work remains (`htask`).
         right
         have hcs : cycleStep s = applyActionKind .taskTrade s := by
-          unfold cycleStep; rw [hk]; simp [planFor, hisf', hof', hct]
+          unfold cycleStep; rw [hk]; simp [planFor, hisf', hof', hct, hpn]
         rw [hcs]
         refine ⟨by simp [applyActionKind], ?_⟩
         refine Or.inr (Or.inr (Or.inl ⟨?_, ?_, ?_⟩))
@@ -1139,17 +1158,6 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   | recycleRelief   => exfalso; revert hmem; unfold progressMeans; decide
   | sellRelief      => exfalso; revert hmem; unfold progressMeans; decide
   | maintainConsumables => exfalso; revert hmem; unfold progressMeans; decide
-  -- SUPPLY_BANK (2026-08-01) is OUT of `progressMeans` scope, like
-  -- maintainConsumables/recycleSurplus: its `.gather` step advances
-  -- `trackedSkillLevel`, which is not an `ExtMeasure` slot, so no
-  -- measure-decrease commitment is made for it here. Its per-cycle progress
-  -- is carried by `CycleStep.cycleStep_progress_or_waits`.
-  | supplyBank      => exfalso; revert hmem; unfold progressMeans; decide
-  -- CURRENCY_TURNIN (2026-08-16) is likewise OUT of `progressMeans` scope:
-  -- its `.npcBuy` step clears `currencyTurnInActive`, which is not an
-  -- `ExtMeasure` slot. Per-cycle progress is carried by
-  -- `CycleStep.cycleStep_progress_or_waits`.
-  | currencyTurnIn  => exfalso; revert hmem; unfold progressMeans; decide
   -- restForCombat is a guard OUT of `progressMeans` scope: no
   -- measure-decrease commitment is made for them here; their progress is
   -- carried by `CycleStep.cycleStep_progress_or_waits`.

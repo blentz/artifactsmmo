@@ -3,23 +3,16 @@
 
 
 from artifactsmmo_cli.ai.accumulation_sell import sell_targets
-from artifactsmmo_cli.ai.arbiter_select import (
-    BAND_COLLECT,
-    BAND_DISCRETIONARY,
-    BAND_GUARD,
-    BAND_STEP,
-)
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.task_worth import held_task_cancel_due
-from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
+from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.means import (
     COLLECT_REWARD_ORDER,
     DISCRETIONARY_ORDER,
     INTERRUPT_MEANS,
-    SUPPLY_DEMAND_MIN,
     MeansKind,
     active_means,
     means_fires,
@@ -142,111 +135,6 @@ def test_band_order_matches_declared_order():
     collect, discretionary = active_means(state, GameData(), None, _ctx())
     assert collect == [m for m in COLLECT_REWARD_ORDER if m in collect]
     assert discretionary == [m for m in DISCRETIONARY_ORDER if m in discretionary]
-
-
-def test_supply_bank_silent_when_no_supply_target():
-    # ctx.supply_target is None on every single-character run — the means must
-    # stay inert, not raise on the None case. A character with no supply target
-    # is completely unaffected by the 2026-08-01 promotion: neither band lists
-    # SUPPLY_BANK as firing.
-    state = make_state()
-    collect, discretionary = active_means(
-        state, GameData(), None, _ctx(supply_target=None))
-    assert MeansKind.SUPPLY_BANK not in collect
-    assert MeansKind.SUPPLY_BANK not in discretionary
-
-
-def test_supply_bank_fires_in_the_collect_band_at_the_threshold():
-    """At exactly SUPPLY_DEMAND_MIN the rung fires — and it fires in the
-    COLLECT band, which sits above the objective step."""
-    state = make_state()
-    collect, discretionary = active_means(
-        state, GameData(), None,
-        _ctx(supply_target=("iron_ore", 10, SUPPLY_DEMAND_MIN)))
-    assert MeansKind.SUPPLY_BANK in collect
-    assert MeansKind.SUPPLY_BANK not in discretionary
-
-
-def test_supply_bank_silent_one_unit_below_the_threshold():
-    """The gate is a THRESHOLD, not a presence test. One unit short and the
-    character keeps working its own chain — this is the clause that stops five
-    siblings serving each other's every trivial request instead of levelling."""
-    state = make_state()
-    collect, discretionary = active_means(
-        state, GameData(), None,
-        _ctx(supply_target=("iron_ore", 10, SUPPLY_DEMAND_MIN - 1)))
-    assert MeansKind.SUPPLY_BANK not in collect
-    assert MeansKind.SUPPLY_BANK not in discretionary
-
-
-def test_supply_bank_fires_well_above_the_threshold():
-    """The bulk requests that dominate the recipe graph (24/50/80/120 units)
-    clear the gate comfortably."""
-    state = make_state()
-    collect, _ = active_means(
-        state, GameData(), None, _ctx(supply_target=("iron_ore", 80, 80)))
-    assert MeansKind.SUPPLY_BANK in collect
-
-
-def test_supply_bank_outranks_the_objective_step_and_loses_to_guards():
-    """The whole point of the 2026-08-01 promotion, checked on the structures
-    `StrategyArbiter._build_candidates` actually walks: guards first
-    (BAND_GUARD), then COLLECT_REWARD_ORDER (BAND_COLLECT), then the objective
-    step (BAND_STEP), then DISCRETIONARY_ORDER (BAND_DISCRETIONARY), with
-    `select_pure` taking the first plannable candidate in that order.
-
-    SUPPLY_BANK now lives in the collect band, so it precedes the objective
-    step; every guard still precedes it."""
-    assert MeansKind.SUPPLY_BANK in COLLECT_REWARD_ORDER
-    assert BAND_GUARD < BAND_COLLECT < BAND_STEP < BAND_DISCRETIONARY
-
-    # The literal preordered candidate walk, means-side.
-    ladder = ([("guard", g) for g in GUARD_ORDER]
-              + [("collect", m) for m in COLLECT_REWARD_ORDER]
-              + [("step", None)]
-              + [("discretionary", m) for m in DISCRETIONARY_ORDER])
-    supply_at = ladder.index(("collect", MeansKind.SUPPLY_BANK))
-    step_at = ladder.index(("step", None))
-    assert supply_at < step_at
-    assert all(i < supply_at for i, (band, _) in enumerate(ladder)
-               if band == "guard")
-
-
-def test_supply_bank_reads_unmet_demand_not_the_banked_target():
-    """The gate reads the tuple's THIRD component (still-unmet demand), not the
-    second (the absolute banked target, which already counts stock the fleet
-    owns). A nearly-filled request must not fire on the strength of what is
-    already in the bank."""
-    state = make_state()
-    collect, _ = active_means(
-        state, GameData(), None,
-        _ctx(supply_target=("iron_ore", 200, SUPPLY_DEMAND_MIN - 1)))
-    assert MeansKind.SUPPLY_BANK not in collect
-
-
-def test_bulk_demand_still_fires_the_supply_rung():
-    ctx = _ctx(supply_target=("copper_ore", 40, 12), asymmetric_demand=frozenset())
-    assert _fires(MeansKind.SUPPLY_BANK, make_state(), _gd(), ctx) is True
-
-
-def test_a_single_unit_request_the_asker_cannot_make_now_fires():
-    """The live case: every published row is quantity 1, so before this the
-    rung never fired at all."""
-    ctx = _ctx(supply_target=("greater_wooden_staff", 1, 1),
-               asymmetric_demand=frozenset({"greater_wooden_staff"}))
-    assert _fires(MeansKind.SUPPLY_BANK, make_state(), _gd(), ctx) is True
-
-
-def test_a_small_request_the_asker_can_make_itself_still_does_not_fire():
-    """The bar's original rationale, preserved: a few units of an ore you can
-    gather yourself is cheaper to self-serve than to route through the bank."""
-    ctx = _ctx(supply_target=("copper_ore", 3, 3), asymmetric_demand=frozenset())
-    assert _fires(MeansKind.SUPPLY_BANK, make_state(), _gd(), ctx) is False
-
-
-def test_no_supply_target_never_fires():
-    ctx = _ctx(supply_target=None, asymmetric_demand=frozenset({"greater_wooden_staff"}))
-    assert _fires(MeansKind.SUPPLY_BANK, make_state(), _gd(), ctx) is False
 
 
 # ---------------------------------------------------------------------------

@@ -530,44 +530,6 @@ theorem descendsE_geCancel (s : State)
       perceptionRefreshE_level, perceptionRefreshE_xp]
 
 
-/-- `supplyBank` (→ `.gather`) strictly descends at `supplyDemandSlot`
-    (2026-08-01) — the promoted rung, above `objectiveStepFlag` (the slot the
-    refresh can raise). Strictness comes from the firing gate
-    `supplyDemand ≥ SUPPLY_DEMAND_MIN` plus `SUPPLY_DEMAND_MIN_pos`; the
-    asymmetry arm (2026-08-16) carries its own `supplyDemand > 0` conjunct for
-    the same reason (see `supplyBankFires`'s doc comment), so `hpos` follows in
-    either firing branch. -/
-theorem descendsE_supplyBank (s : State)
-    (hk : productionLadder (perceptionRefreshE s) = some .supplyBank) :
-    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, supplyBankFires, Bool.or_eq_true, Bool.and_eq_true,
-    decide_eq_true_eq, refreshE_supplyDemand, refreshE_supplyAsymmetric] at hfire
-  have hpos : s.supplyDemand > 0 := by
-    rcases hfire with hbulk | ⟨_, hasym⟩
-    · have := SUPPLY_DEMAND_MIN_pos; omega
-    · exact hasym
-  rw [cycleStepE_some s hk]
-  have hcs : cycleStep (perceptionRefreshE s) =
-      applyActionKind .gather (perceptionRefreshE s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  apply eLt_of_supplyDemand_dec <;>
-    simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-      applyActionKind, grantSkillXp,
-      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
-      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
-      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
-      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
-      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
-      refreshE_gearGap, refreshE_adequate, refreshE_geCancel, refreshE_supplyDemand,
-      perceptionRefreshE_level, perceptionRefreshE_xp] <;>
-    omega
-
-/-- `currencyTurnIn` (→ `.npcBuy`) strictly descends at `currencyTurnInFlag`
-    (2026-08-16) — directly below `supplyBank`, above `objectiveStepFlag` (the
-    slot the refresh can raise). Fire-and-lose:
-    `.npcBuy` clears only `currencyTurnInActive`. -/
 private theorem refreshE_bankItemsCount (s : State) :
     (perceptionRefreshE s).bankItemsCount = s.bankItemsCount := by
   unfold perceptionRefreshE
@@ -615,27 +577,6 @@ theorem descendsE_bankExpand (s : State)
       refreshE_bankItemsCount, refreshE_bankCapacity,
       perceptionRefreshE_level, perceptionRefreshE_xp] <;>
     omega
-
-theorem descendsE_currencyTurnIn (s : State)
-    (hk : productionLadder (perceptionRefreshE s) = some .currencyTurnIn) :
-    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, currencyTurnInFires, refreshE_currencyTurnIn] at hfire
-  rw [cycleStepE_some s hk]
-  have hcs : cycleStep (perceptionRefreshE s) =
-      applyActionKind .npcBuy (perceptionRefreshE s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  apply eLt_of_currencyTurnIn_dec <;>
-    simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-      applyActionKind, hfire,
-      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
-      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
-      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
-      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
-      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
-      refreshE_gearGap, refreshE_adequate, refreshE_geCancel, refreshE_supplyDemand,
-      perceptionRefreshE_level, perceptionRefreshE_xp]
 
 /-- `craftRelief` (→ `.craft`) strictly descends. -/
 theorem descendsE_craftRelief (s : State)
@@ -953,8 +894,7 @@ private def gearScanPrefix : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
-   .discardHigh, .craftPotions, .sellPressured, .claimPending, .bankExpand,
-   .supplyBank, .currencyTurnIn]
+   .discardHigh, .craftPotions, .sellPressured, .claimPending, .bankExpand]
 
 private theorem blockerPrefix_split :
     Formal.Liveness.UnconditionalDescent.blockerPrefix
@@ -1019,7 +959,7 @@ theorem descendsE_taskWork (s : State) (hArms : AdequateArmsFightAt s)
   have htot : s.taskTotal ≠ 0 := by omega
   rw [cycleStepE_some s hk, heq]
   have hcs : cycleStep s = applyActionKind .taskTrade s := by
-    unfold cycleStep; rw [hk0]; simp [planFor, his0, hof0, hnc]
+    unfold cycleStep; rw [hk0]; simp [planFor, his0, hof0, hnc, hphase]
   rw [hcs]
   have hpost : (applyActionKind .taskTrade s).taskLifecyclePhase ≠ .none := by
     simp only [applyActionKind]

@@ -35,6 +35,7 @@ from artifactsmmo_cli.ai.equipment.bank_tool_fills import bank_tool_fills
 from artifactsmmo_cli.ai.equipment.empty_slot_fills import empty_slot_rank_fills
 from artifactsmmo_cli.ai.event_plan_window import plan_fits_event_window
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY, supply_due, turn_in_due
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -102,6 +103,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
+    ReachFleetOutcome,
     ReachSkillLevel,
     ReachTaskOutcome,
 )
@@ -401,44 +403,6 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
         )
     if kind is MeansKind.MAINTAIN_CONSUMABLES:
         return MaintainConsumablesGoal(game_data=game_data)
-    if kind is MeansKind.SUPPLY_BANK:
-        assert ctx.supply_target is not None  # _fires guarantees a target
-        item_code, quantity, demand = ctx.supply_target
-        return SupplyBankGoal(item_code=item_code, quantity=quantity, demand=demand)
-    if kind is MeansKind.CURRENCY_TURNIN:
-        # KEYED ON IDENTITY, never on the absence of a recall (fix-round-3,
-        # CRITICAL — a double-spend). `ctx.turn_in.buyer` is the character the
-        # exclusive `claim_turn_in` election named, and `state.character` is
-        # who this is: exactly one character in the fleet can match, so
-        # exactly one can be handed the buyer goal.
-        #
-        # The bug this replaces read "recall is None" as "I am the buyer".
-        # `_resolve_turn_in` sets `recall` only when the loser actually HOLDS
-        # units (`if surrender > 0`), so a level-20+ character that qualified,
-        # lost the claim and holds ZERO units ends its cycle with `turn_in`
-        # set and `recall` None — indistinguishable from the winner under that
-        # test. It would then withdraw a SECOND full price and buy a SECOND
-        # copy of the item, with the exclusive claim bypassed entirely: the
-        # fleet spends twice for one wanted item. Its own trace even labels it
-        # `role: "holder"` (player.py's `_turn_in_trace`), which is how the
-        # inconsistency was caught. Latent only while one character is above
-        # the item's level; live the moment a second one reaches it.
-        t = ctx.turn_in
-        if t is not None and t.buyer == state.character:
-            return CurrencyTurnInGoal(item_code=t.item_code, npc_code=t.npc_code,
-                                      price=t.price, currency=t.currency)
-        # Everyone else surrenders (SurrenderCurrencyGoal — see its module
-        # docstring for why `units` is trusted as-given, not re-derived here).
-        if ctx.recall is not None:
-            currency, units = ctx.recall
-            return SurrenderCurrencyGoal(currency=currency, units=units)
-        # A non-buyer with nothing to surrender: the means still fires on
-        # `turn_in` alone (tiers/means.py), so it needs a goal, and the honest
-        # one is a surrender of zero units — already satisfied under
-        # `SurrenderCurrencyGoal.is_satisfied`'s per-character test, so the
-        # arbiter skips it and the character gets on with its own objective.
-        assert t is not None  # _fires guarantees one of turn_in/recall
-        return SurrenderCurrencyGoal(currency=t.currency, units=0)
     if kind is MeansKind.WAIT:
         return WaitGoal()
     raise ValueError(f"Unknown MeansKind: {kind!r}")
@@ -639,6 +603,62 @@ def objective_step_goal(
             # c-2 #4/#5: a held items task not cancelled for its worth is worked.
             return _pursue_goal(state, game_data)
         return TaskKillsGoal(step.task_code, state.task_progress)
+    if isinstance(step, ReachFleetOutcome):
+        return _fleet_step_goal(step, state, ctx)
+    return None
+
+
+def _fleet_step_goal(step: ReachFleetOutcome, state: WorldState,
+                     ctx: SelectionContext) -> Goal | None:
+    """The fleet objective's step (Phase 5-2c-iv: was the SUPPLY_BANK and
+    CURRENCY_TURNIN collect rungs' `map_means` arms), built from the context
+    that names the work; None when it no longer does, or the step is already
+    met (the arbiter would skip a satisfied goal anyway)."""
+    goal: Goal | None
+    if step.kind == FLEET_SUPPLY:
+        target = ctx.supply_target
+        if not supply_due(ctx) or target is None or target[0] != step.code:
+            return None
+        item_code, quantity, demand = target
+        goal = SupplyBankGoal(item_code=item_code, quantity=quantity, demand=demand)
+    else:
+        if not turn_in_due(ctx):
+            return None
+        goal = _turn_in_goal(state, ctx)
+    if goal is None or goal.is_satisfied(state):
+        return None
+    return goal
+
+
+def _turn_in_goal(state: WorldState, ctx: SelectionContext) -> Goal | None:
+    """The elected buyer's purchase, else this holder's surrender."""
+    # KEYED ON IDENTITY, never on the absence of a recall (fix-round-3,
+    # CRITICAL — a double-spend). `ctx.turn_in.buyer` is the character the
+    # exclusive `claim_turn_in` election named, and `state.character` is
+    # who this is: exactly one character in the fleet can match, so
+    # exactly one can be handed the buyer goal.
+    #
+    # The bug this replaces read "recall is None" as "I am the buyer".
+    # `_resolve_turn_in` sets `recall` only when the loser actually HOLDS
+    # units (`if surrender > 0`), so a level-20+ character that qualified,
+    # lost the claim and holds ZERO units ends its cycle with `turn_in`
+    # set and `recall` None — indistinguishable from the winner under that
+    # test. It would then withdraw a SECOND full price and buy a SECOND
+    # copy of the item, with the exclusive claim bypassed entirely: the
+    # fleet spends twice for one wanted item. Its own trace even labels it
+    # `role: "holder"` (player.py's `_turn_in_trace`), which is how the
+    # inconsistency was caught. Latent only while one character is above
+    # the item's level; live the moment a second one reaches it.
+    t = ctx.turn_in
+    if t is not None and t.buyer == state.character:
+        return CurrencyTurnInGoal(item_code=t.item_code, npc_code=t.npc_code,
+                                  price=t.price, currency=t.currency)
+    # Everyone else surrenders (SurrenderCurrencyGoal — see its module
+    # docstring for why `units` is trusted as-given, not re-derived here).
+    if ctx.recall is not None:
+        currency, units = ctx.recall
+        return SurrenderCurrencyGoal(currency=currency, units=units)
+    # A non-buyer with nothing to surrender has no step.
     return None
 
 
