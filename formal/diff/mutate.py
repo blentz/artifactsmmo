@@ -3784,20 +3784,20 @@ EMPTY_SLOT_FILLS_MUTATIONS = [
      "        if state.equipment.get(slot) is None and code is not None"),
 ]
 
-# (c) band placement: the EquipOwnedGoal candidate must sit in the COLLECT band
-# (above the step/grind tier). Flipping it to DISCRETIONARY sinks it below the
-# step — killed by the arbiter-ordering test's `equip.band == BAND_COLLECT`
-# assertion (tests/test_ai/test_equip_owned_arbiter.py).
+# (c) band placement: the EquipOwnedGoal candidate is an INTERRUPT (band 0,
+# USER 2026-10-09). Flipping it to DISCRETIONARY sinks it below the step —
+# killed by the arbiter-ordering test's `equip.band == BAND_GUARD` assertion
+# (tests/test_ai/test_equip_owned_arbiter.py).
 EQUIP_OWNED_BAND_MUTATIONS = [
-    ("strategy_driver: EquipOwnedGoal band COLLECT->DISCRETIONARY (sinks below step)",
-     "candidates.append(Candidate(goal=eq_goal, repr_=repr(eq_goal), band=BAND_COLLECT))",
+    ("strategy_driver: EquipOwnedGoal band GUARD->DISCRETIONARY (sinks below step)",
+     "candidates.append(Candidate(goal=eq_goal, repr_=repr(eq_goal), band=BAND_GUARD))",
      "candidates.append(Candidate(goal=eq_goal, repr_=repr(eq_goal), band=BAND_DISCRETIONARY))"),
 ]
 
 
 # Withdraw-tools ferry (2026-07-05 bare-handed-mining fix). The banked-tool fill
 # must be strictly better than every OWNED candidate, respect the level/reserved
-# gates, and land in the COLLECT band; each conjunct is killed by a dedicated
+# gates, and land in the interrupt band; each conjunct is killed by a dedicated
 # unit test (tests/test_ai/test_bank_tool_fills.py / test_withdraw_tools_arbiter.py).
 BANK_TOOL_FILLS_MUTATIONS = [
     ("bank_tool_fills: strict-better -> better-or-equal (withdraw ping-pong)",
@@ -3815,8 +3815,8 @@ BANK_TOOL_FILLS_MUTATIONS = [
 ]
 
 WITHDRAW_TOOLS_BAND_MUTATIONS = [
-    ("strategy_driver: WithdrawToolsGoal band COLLECT->DISCRETIONARY (sinks below step)",
-     "candidates.append(Candidate(goal=wt_goal, repr_=repr(wt_goal), band=BAND_COLLECT))",
+    ("strategy_driver: WithdrawToolsGoal band GUARD->DISCRETIONARY (sinks below step)",
+     "candidates.append(Candidate(goal=wt_goal, repr_=repr(wt_goal), band=BAND_GUARD))",
      "candidates.append(Candidate(goal=wt_goal, repr_=repr(wt_goal), band=BAND_DISCRETIONARY))"),
     ("strategy_driver: drop bank-accessible gate on WithdrawTools",
      "        if ctx.bank_accessible and bank_tile is not None:",
@@ -4694,9 +4694,11 @@ TURN_ROTATION_DIFF_MUTATIONS = [
 # SELL_PRESSURED is an interrupt (Phase 5-2b): built at BAND_GUARD so it runs
 # before the means. Unit-killed by tests/test_ai/test_strategy_driver.py.
 SELL_PRESSURED_INTERRUPT_MUTATIONS = [
-    ("strategy_driver: the chore means are collect means again, not interrupts",
-     "            band = BAND_GUARD if mk in INTERRUPT_MEANS else BAND_COLLECT\n",
-     "            band = BAND_COLLECT\n"),
+    ("strategy_driver: the chore means are step-band means again, not interrupts",
+     "            # objective bookings that were collect rungs left with 5-2c-iii/iv.\n"
+     "            candidates.append(Candidate(goal=g, repr_=repr(g), band=BAND_GUARD))\n",
+     "            # objective bookings that were collect rungs left with 5-2c-iii/iv.\n"
+     "            candidates.append(Candidate(goal=g, repr_=repr(g), band=BAND_STEP))\n"),
 ]
 
 # CLAIM_PENDING is a chore (Phase 5-2c-i). Unit-killed by

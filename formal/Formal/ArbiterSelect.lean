@@ -8,7 +8,7 @@ Formal model of the `select_interrupt` / `select_pure` PURE CORE from
 
 `StrategyArbiter.select` builds an ordered candidate list
 
-    candidates = guards ++ collect ++ step? ++ raids ++ fallbacks ++ discretionary
+    candidates = interrupts ++ step? ++ raids ++ fallbacks ++ discretionary
 
 and `_arbitrate` splits it (Phase 5-2a of docs/PLAN_decision_architecture_redesign.md):
 
@@ -41,9 +41,10 @@ Lean core only — no mathlib.
 
 namespace Formal.ArbiterSelect
 
-/-- A candidate is `(id, band)`. `band` is the priority band (guards 0, collect
-1, step 2, raid 3, fallback step 4, discretionary 5); lower band = higher
-priority. Band-0 candidates are interrupts. -/
+/-- A candidate is `(id, band)`. `band` is the priority band (guards and
+interrupt chores 0, step 2, raid 3, fallback step 4, discretionary 5; band 1,
+the collect band, was emptied in Phase 5); lower band = higher priority.
+Band-0 candidates are interrupts. -/
 structure Candidate where
   id : Nat
   band : Int

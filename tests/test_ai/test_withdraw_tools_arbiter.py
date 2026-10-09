@@ -8,7 +8,7 @@ actions with copper_dagger equipped while copper_pickaxe sat in the bank;
 pick_loadout scans only inventory+equipped, so no path ever withdrew the tool.
 """
 
-from artifactsmmo_cli.ai.arbiter_select import BAND_COLLECT, BAND_STEP
+from artifactsmmo_cli.ai.arbiter_select import BAND_GUARD, BAND_STEP
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
@@ -95,8 +95,8 @@ def test_withdraw_tools_candidate_in_collect_band() -> None:
     wt = withdraws[0]
     assert wt.goal.fills == {"mining": "copper_pickaxe"}
     assert wt.goal.bank_location == (4, 1)
-    assert wt.band == BAND_COLLECT
-    assert BAND_COLLECT < BAND_STEP
+    assert wt.band == BAND_GUARD
+    assert BAND_GUARD < BAND_STEP
 
 
 def test_withdraw_tools_precedes_step_goal() -> None:

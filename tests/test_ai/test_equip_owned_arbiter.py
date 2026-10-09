@@ -3,10 +3,10 @@ COLLECT band (outranking the step/grind tier) when owned positive-Rank gear can
 fill an empty slot.
 
 Locks the band placement the mutation gate perturbs (mutant (c): flipping the
-`band=BAND_COLLECT` literal is killed by `test_equip_owned_candidate_in_collect_band`).
+`band=BAND_GUARD` literal is killed by `test_equip_owned_candidate_in_collect_band`).
 """
 
-from artifactsmmo_cli.ai.arbiter_select import BAND_COLLECT, BAND_STEP
+from artifactsmmo_cli.ai.arbiter_select import BAND_GUARD, BAND_STEP
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
@@ -85,8 +85,8 @@ def test_equip_owned_candidate_in_collect_band() -> None:
     equip = equips[0]
     assert equip.goal.fills == {"artifact1_slot": "novice_guide"}
     # Band placement (mutant (c)): must be COLLECT, strictly above the step tier.
-    assert equip.band == BAND_COLLECT
-    assert BAND_COLLECT < BAND_STEP
+    assert equip.band == BAND_GUARD
+    assert BAND_GUARD < BAND_STEP
 
 
 def test_equip_owned_precedes_step_goal() -> None:

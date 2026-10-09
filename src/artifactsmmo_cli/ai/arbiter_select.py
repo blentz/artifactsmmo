@@ -34,7 +34,9 @@ from artifactsmmo_cli.ai.goals.base import Goal
 # tier and is EXEMPT from band preemption: committed income tasks stay governed
 # by the semantic worth gate, not this structural rule (see the worth-gate epic).
 BAND_GUARD = 0
-BAND_COLLECT = 1
+# Band 1 was BAND_COLLECT, the objective bookings above the step. Phase 5
+# emptied it: its chores became interrupts (band 0) and its bookings the task
+# and fleet objectives (root alternatives). The numbering is kept.
 BAND_STEP = 2
 BAND_RAID = 3
 """Open raid windows. RENUMBERED IN 2026-08-23 (wave 3a fix-round 1) from
@@ -63,8 +65,8 @@ BAND_DISCRETIONARY = 5
 class Candidate:
     """A (goal, repr, band) triple — the unit the pure selectors walk.
 
-    `band` is the priority tier the candidate was built in (0 guards, 1 collect,
-    2 top objective step, 3 open raid windows, 4 fallback steps,
+    `band` is the priority tier the candidate was built in (0 guards and
+    interrupt chores, 2 top objective step, 3 open raid windows, 4 fallback steps,
     5 discretionary). Band-0 candidates are interrupts (`select_interrupt`);
     every other band is a means walked by `select_pure`. Sticky commitment may
     defend the committed goal within-or-below its own band but must never

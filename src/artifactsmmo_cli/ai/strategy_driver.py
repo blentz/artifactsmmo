@@ -12,7 +12,6 @@ from artifactsmmo_cli.ai.accumulation_sell import bank_sellable_surplus, sell_ta
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.arbiter_select import (
-    BAND_COLLECT,
     BAND_DISCRETIONARY,
     BAND_FALLBACK_STEP,
     BAND_GUARD,
@@ -94,7 +93,6 @@ from artifactsmmo_cli.ai.tiers.guards import (
     used_fraction,
 )
 from artifactsmmo_cli.ai.tiers.means import (
-    INTERRUPT_MEANS,
     SELL_PRESSURE_FRACTION,
     MeansKind,
     active_means,
@@ -1044,7 +1042,8 @@ class StrategyArbiter:
         # a goal only when its `try_plan` came back NON-EMPTY, and the dedupe
         # above keeps each goal's LAST attempt — so `first["plan_len"] == 0`
         # already proves `first` is not what ran.
-        # COLLECT-BAND ATTEMPTS ARE SKIPPED. This field means "the objective the
+        # INTERRUPT ATTEMPTS ARE SKIPPED (band 0; the collect band they replaced
+        # since Phase 5). This field means "the objective the
         # arbiter was pursuing and abandoned", and it used to read
         # `goals_tried[0]` because nothing cheap preceded the step. ACCEPT_TASK
         # was promoted into the collect band on 2026-08-19 (S-051), so the first
@@ -1052,13 +1051,13 @@ class StrategyArbiter:
         # objective — and labelling THAT the abandoned objective would make the
         # 31-hour silence this field exists to break unreadable in a new way.
         # ...EXCEPT one the arbiter was COMMITTED to. A sticky commitment is
-        # probed before the ranked walk, so a committed collect goal that stops
-        # planning IS the objective this cycle abandoned — which is the case the
-        # field was added to name.
-        collect_reprs = {c.repr_ for c in candidates
-                         if c.band == BAND_COLLECT and c.repr_ != prev_committed}
+        # probed before the ranked walk, so a committed goal that stops planning
+        # IS the objective this cycle abandoned — which is the case the field
+        # was added to name.
+        interrupt_reprs = {c.repr_ for c in candidates
+                           if c.band == BAND_GUARD and c.repr_ != prev_committed}
         first = next((g for g in self.goals_tried
-                      if g["goal"] not in collect_reprs), None)
+                      if g["goal"] not in interrupt_reprs), None)
         if first is not None and not first["plan_len"] and chosen is not None:
             self.objective_unplannable = dict(first)
         return chosen, plan, self.goals_tried
@@ -1151,21 +1150,22 @@ class StrategyArbiter:
         chosen_root: MetaGoal | None = None,
         needs: NeedSet | None = None,
     ) -> list[Candidate]:
-        """Candidate ordering: guards, collect, step + fallback-step chain, discretionary."""
+        """Candidate ordering: guards and interrupt chores, step + fallback-step
+        chain, discretionary."""
         candidates: list[Candidate] = []
         for gk in guard_kinds:
             g = map_guard(gk, game_data, ctx, state, step_profile, self._history)
             candidates.append(Candidate(goal=g, repr_=repr(g), band=BAND_GUARD))
         for mk in collect_kinds:
             g = map_means(mk, game_data, ctx, state, self._history, needs)
-            # The chores among the means are interrupts (`INTERRUPT_MEANS`,
-            # Phase 5-2b/5-2c-i), which `_arbitrate` runs before the means.
-            band = BAND_GUARD if mk in INTERRUPT_MEANS else BAND_COLLECT
-            candidates.append(Candidate(goal=g, repr_=repr(g), band=band))
-        # Equip-owned-gear (COLLECT band): a first-class objective that equips
-        # already-OWNED positive-Rank gear into currently-EMPTY slots, so free
-        # gear is worn before the bot grinds for more (COLLECT outranks the
-        # step/grind tier). Materialized directly here — like the objective
+            # Every collect means is a chore interrupt (`INTERRUPT_MEANS`, Phase
+            # 5-2b/5-2c-i/ii), which `_arbitrate` runs before the means: the
+            # objective bookings that were collect rungs left with 5-2c-iii/iv.
+            candidates.append(Candidate(goal=g, repr_=repr(g), band=BAND_GUARD))
+        # Equip-owned-gear (an INTERRUPT since Phase 5 closed the collect band,
+        # USER 2026-10-09: "Interrupts"): equips already-OWNED positive-Rank
+        # gear into currently-EMPTY slots, so free gear is worn before the bot
+        # grinds for more, and the intention resumes after. Materialized directly here — like the objective
         # step_goal below and unlike the `active_means` MeansKinds — so it stays
         # OUT of `COLLECT_REWARD_ORDER` and the liveness ladder it mirrors: this
         # candidate is a bounded, one-action, self-satisfying equip (fires only
@@ -1186,8 +1186,8 @@ class StrategyArbiter:
             frozenset(task_reserved_demand(state, game_data)) | turn_in_reserved)
         if equip_fills:
             eq_goal = EquipOwnedGoal(fills=equip_fills)
-            candidates.append(Candidate(goal=eq_goal, repr_=repr(eq_goal), band=BAND_COLLECT))
-        # Withdraw-tools (COLLECT band): same materialized-here contract as
+            candidates.append(Candidate(goal=eq_goal, repr_=repr(eq_goal), band=BAND_GUARD))
+        # Withdraw-tools (an interrupt, as EquipOwned): same materialized-here contract as
         # EquipOwnedGoal — bounded, self-satisfying, never a blocker. Ferries a
         # strictly-better BANKED gathering tool into the bag; the proven gather
         # re-arm (GATHER_LOADOUT_PENALTY + OptimizeLoadout(Gather)) equips it,
@@ -1202,7 +1202,7 @@ class StrategyArbiter:
             if tool_fills:
                 wt_goal = WithdrawToolsGoal(fills=tool_fills, bank_location=bank_tile,
                                             accessible=ctx.bank_accessible)
-                candidates.append(Candidate(goal=wt_goal, repr_=repr(wt_goal), band=BAND_COLLECT))
+                candidates.append(Candidate(goal=wt_goal, repr_=repr(wt_goal), band=BAND_GUARD))
         # THE URGENT CHORES ARE INTERRUPTS (Phase 5-2b): the recycle, sell and
         # drain hoists below are built at BAND_GUARD, so `_arbitrate` runs them
         # before the means and the intention resumes after them. Their idle

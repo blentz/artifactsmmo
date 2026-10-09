@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from artifactsmmo_cli.ai.arbiter_select import (
-    BAND_COLLECT,
     BAND_DISCRETIONARY,
     BAND_FALLBACK_STEP,
     BAND_GUARD,
@@ -119,12 +118,12 @@ def test_a_served_fallback_goes_behind_its_peers():
 
 
 def test_a_served_means_stays_in_its_band():
-    """A collect-band means goes behind its band peers only, never behind a
-    lower priority band."""
-    cands = [_cand(YIELDED, BAND_COLLECT), _cand("Equip", BAND_COLLECT),
-             _cand("Step", BAND_STEP)]
+    """A served means goes behind its band peers only, never behind a lower
+    priority band."""
+    cands = [_cand(YIELDED, BAND_RAID), _cand("Raid", BAND_RAID),
+             _cand("Idle", BAND_DISCRETIONARY)]
     assert _order(rotate(cands, {YIELDED: 1})) == [
-        ("Equip", BAND_COLLECT), (YIELDED, BAND_COLLECT), ("Step", BAND_STEP)]
+        ("Raid", BAND_RAID), (YIELDED, BAND_RAID), ("Idle", BAND_DISCRETIONARY)]
 
 
 def test_a_served_goal_with_no_peer_still_runs():

@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/arbiter_select.py (sha256: 1bbfa91510a8f72a4eba98a629aeb540406f6ceb457f35d4d04ae1016c006dde) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/arbiter_select.py (sha256: 4cd3f7806edb69b871d5b30a09315a3f6ecda1bccd9d35974793d71fc364e4a4) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.ArbiterSelect
@@ -32,13 +32,13 @@ def _findSome {α β : Type} (f : α → Option β) (xs : List α) : Option β :
     | some r => some r
     | none => _findSome f rest
 
-/-- Extracted from `@dataclass Candidate` (line 63). -/
+/-- Extracted from `@dataclass Candidate` (line 65). -/
 structure Candidate (Goal : Type) where
   goal : Goal
   repr_ : String
   band : Int
 
-/-- Extracted from `_precedes` (line 79). -/
+/-- Extracted from `_precedes` (line 81). -/
 def _precedes {Goal : Type} (candidates : List (Candidate Goal)) (a_repr : String) (b_repr : String) :
     Bool :=
   let a_idx := (_findIdx (fun (c : Candidate Goal) => (decide ((c.repr_) = a_repr))) candidates)
@@ -53,7 +53,7 @@ def _precedes {Goal : Type} (candidates : List (Candidate Goal)) (a_repr : Strin
     | some b_idx_2 =>
       (decide (a_idx_1 < b_idx_2))))
 
-/-- Extracted from `select_interrupt` (line 88). -/
+/-- Extracted from `select_interrupt` (line 90). -/
 def select_interrupt {Goal : Type} {Action : Type} (interrupts : List (Candidate Goal)) (try_plan : (Goal → (List Action))) (is_satisfied : (Goal → Bool)) :
     ((Option Goal) × (List Action)) :=
   (match (_findSome
@@ -73,7 +73,7 @@ def select_interrupt {Goal : Type} {Action : Type} (interrupts : List (Candidate
   | none =>
     (none, []))
 
-/-- Extracted from `select_pure` (line 104). -/
+/-- Extracted from `select_pure` (line 106). -/
 def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal)) (committed_repr : Option String) (try_plan : (Goal → (List Action))) (is_satisfied : (Goal → Bool)) :
     ((Option Goal) × (List Action) × (Option String)) :=
   let tried_repr : Option String := none
@@ -198,7 +198,7 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
     | none =>
       (none, [], none)))
 
-/-- Extracted from `arbitrate` (line 163). -/
+/-- Extracted from `arbitrate` (line 165). -/
 def arbitrate {Goal : Type} {Action : Type} (interrupts : List (Candidate Goal)) (candidates : List (Candidate Goal)) (committed_repr : Option String) (try_plan : (Goal → (List Action))) (is_satisfied : (Goal → Bool)) :
     ((Option Goal) × (List Action) × (Option String)) :=
   let interrupt := (select_interrupt interrupts try_plan is_satisfied)
