@@ -90,12 +90,6 @@ def _cycle(idx: int, goal: str, *, delta_xp: int = 0, delta_gold: int = 0,
     )
 
 
-def test_complete_task_in_collect_reward_when_task_done():
-    state = make_state(task_code="cyclops", task_type="monsters", task_total=5, task_progress=5)
-    collect, _ = active_means(state, GameData(), None, _ctx())
-    assert MeansKind.COMPLETE_TASK in collect
-
-
 def test_accept_task_is_due_when_a_draw_is_owed():
     """It left the discretionary band on 2026-08-19 (S-051): below the objective
     step it was unreachable, and the fleet held a task in 0 of 63,310 cycles."""
@@ -383,12 +377,6 @@ def test_without_a_coin_a_grey_task_is_worked_not_discarded():
     assert held_task_cancel_due(
         make_state(**grey, inventory={}, bank_items={"tasks_coin": 9}),
         gd, _ctx(), None) is False
-
-
-def test_complete_task_not_in_collect_when_incomplete():
-    state = make_state(task_code="cyclops", task_type="monsters", task_total=5, task_progress=3)
-    collect, _ = active_means(state, GameData(), None, _ctx())
-    assert MeansKind.COMPLETE_TASK not in collect
 
 
 def test_accept_task_not_in_discretionary_when_task_held():

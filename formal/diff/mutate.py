@@ -7142,11 +7142,9 @@ LADDER_THRESHOLD_VALUE_MUTATIONS = [
 
 
 LADDER_MEANS_FIRES_MUTATIONS = [
-    (
-        "ladder/means: COMPLETE_TASK progress comparator >= -> > (boundary progress==total leaks)",
-        "                and state.task_progress >= state.task_total)",
-        "                and state.task_progress > state.task_total)",
-    ),
+    # ("ladder/means: COMPLETE_TASK progress comparator >= -> >") retired with
+    # the rung (Phase 5-2c-iii-c-2 #6); the progress==total boundary moved to
+    # the task root and step (TASK_ROOT_MUTATIONS / TASK_STEP_MUTATIONS).
     (
         "ladder/means: SELL_PRESSURED fill comparator >= -> > (boundary 0.85 leaks)",
         "        return (used_fraction(state) >= SELL_PRESSURE_FRACTION",
@@ -7668,6 +7666,12 @@ TASK_ROOT_MUTATIONS = [
     ("root: a met task is still offered",
      "            or state.task_progress >= state.task_total):\n        return None\n",
      "            ):\n        return None\n"),
+    ("root: met-task comparator <= -> < (boundary progress==total, was the COMPLETE_TASK rung's)",
+     "    if state.task_code and 0 < state.task_total <= state.task_progress:\n",
+     "    if state.task_code and 0 < state.task_total < state.task_progress:\n"),
+    ("root: a met task is never offered for its turn-in (c-2 complete fold)",
+     "    if state.task_code and 0 < state.task_total <= state.task_progress:\n",
+     "    if False:\n"),
 ]
 TASK_STEP_MUTATIONS = [
     ("step: the draw ignores the chosen master",
@@ -7685,6 +7689,12 @@ TASK_STEP_MUTATIONS = [
     ("step: a worthless task is worked, not cancelled (c-2 cancel fold)",
      "        if task_cancel_due(state, game_data, ctx, history):\n            return TaskCancelGoal()\n",
      ""),
+    ("step: met-task comparator <= -> < (boundary progress==total, c-2 complete fold)",
+     "                and 0 < state.task_total <= state.task_progress):\n",
+     "                and 0 < state.task_total < state.task_progress):\n"),
+    ("step: a met task is never turned in (c-2 complete fold)",
+     "            return CompleteTaskGoal()\n",
+     "            return None\n"),
     ("step: the task objective maps to no goal",
      "        return TaskKillsGoal(step.task_code, state.task_progress)\n",
      "        return None\n"),

@@ -53,10 +53,10 @@
   the firing predicates no longer consume them. The phase-based forms
   are simplifications in the direction "production fires ⇒ phase
   predicate fires": the lifecycle phase is a necessary gating condition
-  for each, but PIVOT/PURSUE decisions are collapsed. (Of these only
-  `completeTask` is still a rung: Phase 5-2c-iii-c-2 retired the others into
-  the task objective's step, whose `objectiveStepFires` carries the
-  active-phase test.)
+  for each, but PIVOT/PURSUE decisions are collapsed. (None of these is a
+  rung any more: Phase 5-2c-iii-c-2 retired them all into the task
+  objective's step, whose `objectiveStepFires` carries the active-phase and
+  complete-phase tests — #6 retired `completeTask` last.)
 
   Liveness namespace — Mathlib axioms allowed; see
   `formal/Formal/Liveness/README.md`.
@@ -214,14 +214,6 @@ def craftPotionsFires (s : State) : Bool := s.craftPotionsFires
 /-- CLAIM_PENDING. Mirrors `means.py:67-68`. -/
 def claimPendingFires (s : State) : Bool := s.pendingItemsNonempty
 
-/-- COMPLETE_TASK. Phase 23c-3b: faithful phase-based predicate.
-    Production source: `means.py:70-72` checks
-      task_code present ∧ task_total > 0 ∧ task_progress ≥ task_total
-    which is precisely the canonical condition for
-    `TaskLifecyclePhase.complete`. -/
-def completeTaskFires (s : State) : Bool :=
-  decide (s.taskLifecyclePhase = .complete)
-
 /-- SELL_PRESSURED. Mirrors `means.py:74-75`:
       used/max ≥ 0.85 ∧ has_sellable -/
 def sellPressuredFires (s : State) : Bool :=
@@ -238,11 +230,19 @@ def sellPressuredFires (s : State) : Bool :=
     `pursueTaskFires` carried (it ignores production's PURSUE verdict /
     winnability), so no theorem rests on anything weaker than before. The
     phase test is inlined (it is `Plan.phaseActive`) to keep the import graph
-    acyclic. -/
+    acyclic.
+
+    Phase 5-2c-iii-c-2 #6: a MET held task (phase `.complete`, i.e. task code
+    set ∧ 0 < total ≤ progress) is the task objective's root too
+    (`decisions/root._task_root` offers `ReachTaskOutcome(code)`, and
+    `strategy_driver.objective_step_goal` returns `CompleteTaskGoal`), so the
+    phase test the retired COMPLETE_TASK rung (`completeTaskFires`) carried is
+    a fourth disjunct here. -/
 def objectiveStepFires (s : State) : Bool :=
   s.objectiveStepFires
   || decide (s.taskLifecyclePhase = .accepted)
   || decide (s.taskLifecyclePhase = .inProgress)
+  || decide (s.taskLifecyclePhase = .complete)
 
 /-- SELL_IDLE. Mirrors `means.py:98-99`:
       used/max < 0.85 ∧ has_sellable -/
@@ -421,7 +421,6 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .discardHigh      => discardHighFires s
   | .craftPotions     => craftPotionsFires s
   | .claimPending     => claimPendingFires s
-  | .completeTask     => completeTaskFires s
   | .sellPressured    => sellPressuredFires s
   | .objectiveStep    => objectiveStepFires s
   | .maintainConsumables => maintainConsumablesFires s

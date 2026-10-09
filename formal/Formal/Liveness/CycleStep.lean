@@ -113,7 +113,6 @@ noncomputable def planFor : MeansKind → State → Plan
   | .discardHigh      , _ => [.deleteItem]
   | .craftPotions     , _ => [.craft]
   | .claimPending     , _ => [.claimPendingItem]
-  | .completeTask     , _ => [.completeTask]
   | .sellPressured    , _ => [.npcSell]
   | .objectiveStep    , s =>
       -- O5.2 (2026-06-16): a combat/char-leveling objective dispatches a
@@ -125,8 +124,13 @@ noncomputable def planFor : MeansKind → State → Plan
       -- PROTOTYPE (Phase 5-2c-iii-c-2 #4): when the step fires only because a
       -- task is held (the opaque Bool is unarmed), the step IS the task work —
       -- `.taskTrade`, the plan the retired PURSUE_TASK rung dispatched.
+      -- Phase 5-2c-iii-c-2 #6: a MET held task (phase `.complete`) is the task
+      -- objective's root, whose step is `CompleteTaskGoal` — `.completeTask`,
+      -- the plan the retired COMPLETE_TASK rung dispatched.
       if s.objectiveStepIsFight then [.fight]
-      else if s.objectiveStepFires then [.objectiveStep] else [.taskTrade]
+      else if s.objectiveStepFires then [.objectiveStep]
+      else if s.taskLifecyclePhase = .complete then [.completeTask]
+      else [.taskTrade]
   | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
   -- SUPPLY_BANK (2026-08-01): `SupplyBankGoal.desired_state` targets a BANKED
   -- quantity, so production plans a produce-then-deposit chain. The witness is
@@ -160,7 +164,7 @@ noncomputable def planFor : MeansKind → State → Plan
 /-- `planFor k s` is always non-empty (single-element). -/
 theorem planFor_ne_nil (k : MeansKind) (s : State) : planFor k s ≠ [] := by
   cases k <;> simp only [planFor]
-  case objectiveStep => split <;> (try split) <;> simp
+  case objectiveStep => split <;> (try split) <;> (try split) <;> simp
   all_goals simp
 
 /-! ## cycleStep — one cycle's pure transition -/
@@ -487,21 +491,6 @@ theorem cycleStep_progress_or_waits
       have : (applyActionKind .claimPendingItem s).pendingItemsNonempty = false := hpost
       rw [heq] at this; exact this
     rw [hfires] at hpre'; cases hpre'
-  | completeTask =>
-    left
-    have hcs : cycleStep s = applyActionKind .completeTask s := by
-      unfold cycleStep; rw [hk]; rfl
-    rw [hcs]
-    simp only [fires, completeTaskFires, decide_eq_true_eq] at hfires
-    -- hfires : s.taskLifecyclePhase = .complete
-    intro heq
-    have hpost : (applyActionKind .completeTask s).taskLifecyclePhase
-                  = TaskLifecyclePhase.TaskLifecyclePhase.none := by
-      simp [applyActionKind]
-    have hpre' : s.taskLifecyclePhase
-                  = TaskLifecyclePhase.TaskLifecyclePhase.none := by
-      rw [heq] at hpost; exact hpost
-    rw [hfires] at hpre'; cases hpre'
   | sellPressured =>
     left
     have hcs : cycleStep s = applyActionKind .npcSell s := by
@@ -555,10 +544,24 @@ theorem cycleStep_progress_or_waits
           have : (applyActionKind .objectiveStep s).objectiveStepFires = false := hpost
           rw [heq] at this; exact this
         rw [hof] at hpre'; cases hpre'
-      · -- Task-work branch: `.taskTrade` advances taskProgress by +1.
-        have hof' : s.objectiveStepFires = false := Bool.eq_false_iff.mpr hof
+      · have hof' : s.objectiveStepFires = false := Bool.eq_false_iff.mpr hof
+        by_cases hct : s.taskLifecyclePhase = .complete
+        · -- Met-task branch (Phase 5-2c-iii-c-2 #6, the retired COMPLETE_TASK
+          -- rung's arm): `.completeTask` resets the phase to `.none`.
+          have hcs : cycleStep s = applyActionKind .completeTask s := by
+            unfold cycleStep; rw [hk]; simp [planFor, hisf', hof', hct]
+          rw [hcs]
+          intro heq
+          have hpost : (applyActionKind .completeTask s).taskLifecyclePhase
+                        = TaskLifecyclePhase.TaskLifecyclePhase.none := by
+            simp [applyActionKind]
+          have hpre' : s.taskLifecyclePhase
+                        = TaskLifecyclePhase.TaskLifecyclePhase.none := by
+            rw [heq] at hpost; exact hpost
+          rw [hct] at hpre'; cases hpre'
+        -- Task-work branch: `.taskTrade` advances taskProgress by +1.
         have hcs : cycleStep s = applyActionKind .taskTrade s := by
-          unfold cycleStep; rw [hk]; simp [planFor, hisf', hof']
+          unfold cycleStep; rw [hk]; simp [planFor, hisf', hof', hct]
         rw [hcs]
         intro heq
         have hpost : (applyActionKind .taskTrade s).taskProgress

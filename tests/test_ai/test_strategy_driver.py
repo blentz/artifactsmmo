@@ -14,7 +14,6 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.arbiter_select import (
-    BAND_COLLECT,
     BAND_FALLBACK_STEP,
     BAND_GUARD,
     BAND_STEP,
@@ -27,7 +26,6 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.cancel_orders import CancelOrdersGoal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
-from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
@@ -685,10 +683,6 @@ def test_task_recipe_inputs_walks_chain_and_dedupes_shared_material():
 
 def test_map_means_claim_pending():
     assert isinstance(map_means(MeansKind.CLAIM_PENDING, GameData(), _ctx(), make_state()), ClaimPendingGoal)
-
-
-def test_map_means_complete_task():
-    assert isinstance(map_means(MeansKind.COMPLETE_TASK, GameData(), _ctx(), make_state()), CompleteTaskGoal)
 
 
 def test_map_means_sell_pressured():
@@ -2351,7 +2345,7 @@ def test_event_is_cleared_on_the_next_healthy_cycle():
 def test_the_chore_means_are_built_as_interrupts():
     """Phase 5-2b/5-2c-i: SELL_PRESSURED (the bag at the pressure threshold) and
     CLAIM_PENDING (one action, no objective) are chores, built as interrupts
-    (band 0); COMPLETE_TASK is still a collect means."""
+    (band 0)."""
     arbiter = StrategyArbiter(GOAPPlanner(), history=None)
     cands = arbiter._build_candidates(
         [], [MeansKind.SELL_PRESSURED, MeansKind.CLAIM_PENDING, MeansKind.BANK_EXPAND],
@@ -2360,7 +2354,3 @@ def test_the_chore_means_are_built_as_interrupts():
     assert bands["SellInventory"] == BAND_GUARD
     assert bands["ClaimPending"] == BAND_GUARD  # Phase 5-2c-i
     assert bands["ExpandBank"] == BAND_GUARD    # Phase 5-2c-ii
-    complete = arbiter._build_candidates(
-        [], [MeansKind.COMPLETE_TASK], [], None, [], [],
-        make_state(), _make_planner_gd(), _ctx())
-    assert [c.band for c in complete] == [BAND_COLLECT]

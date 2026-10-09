@@ -52,7 +52,7 @@ theorem objectiveStepD_fires_below_fifty (s : State) (hlvl : s.level < 50) :
     have hact := hg.1.2
     simp only [Formal.Liveness.Plan.phaseActive] at hact
     simp only [fires, ProductionLadder.objectiveStepFires, Bool.or_assoc, hact,
-      Bool.or_true]
+      Bool.or_true, Bool.true_or]
   · have hg : deferGate s = false := Bool.eq_false_iff.mpr hgate
     have hcondT : (decide (s.level < 50) && !(deferGate s)) = true := by
       simp [hlvl, hg]
@@ -96,7 +96,6 @@ theorem cycleStepD_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | discardHigh     => exact descendsD_discardHigh s hk
     | craftPotions    => exact descendsD_craftPotions s hk
     | claimPending    => exact descendsD_claimPending s hk
-    | completeTask    => exact descendsD_completeTask s hk
     | sellPressured   => exact descendsD_sellPressured s hk
     | objectiveStep   =>
         by_cases hisF : (perceptionRefreshD s).objectiveStepIsFight = true

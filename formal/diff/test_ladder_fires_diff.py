@@ -56,14 +56,15 @@ computes from the supplied inputs under an empty-catalog `GameData`:
                           inventory item exists (select_bank_deposits nonempty).
   * discardHigh         — overstock AND fill >= 0.85.
   * claimPending        — bool(pending_items).
-  * completeTask        — task set AND total>0 AND progress>=total
-                          (≡ TaskLifecyclePhase.complete).
   * sellPressured       — fill>=0.85 AND a sellable item (NPC buyer present).
   * sellIdle            — fill<0.85 AND a sellable item.
   * taskExchange        — tasks_coin total (inv+bank) >= ctx.min_coins.
   * acceptTask          — no task_code (≡ phase none); empty target_gear keeps
                           production's predicate == `not task_code`.
-  * objectiveStep       — opaque Bool passed identically to both sides.
+  * objectiveStep       — opaque Bool passed identically to both sides, OR a
+                          held task in phase accepted / inProgress (c-2 #4)
+                          / complete (c-2 #6: the retired completeTask rung's
+                          task set AND total>0 AND progress>=total).
   * bankExpand          — bank_accessible AND bank_items known AND capacity>0
                           AND fill>=0.95 AND gold>=cost.
   * wait                — unconditional True.
@@ -125,18 +126,18 @@ conjunct of each numeric `_fires` predicate (groups
 `LADDER_GUARD_FIRES_MUTATIONS` / `LADDER_MEANS_FIRES_MUTATIONS`, bound to THIS
 file). The boundary witnesses below KILL every such mutant, so the differential
 is provably non-vacuous on hpCritical / bankUnlock / reachUnlockLevel /
-discardCritical / depositFull / discardHigh / completeTask / sellPressured /
+discardCritical / depositFull / discardHigh / sellPressured /
 sellIdle / taskExchange / bankExpand. The opaque passthrough slots carry no
 threshold in the firing predicate itself (their truth is computed by separate,
 separately-anchored machinery), so they are not mutation targets HERE.
 
 ## Model-fidelity note
 
-The Lean phase-based predicates (`completeTask`/`acceptTask`/…)
+The Lean phase-based predicates (the objective step's task-phase disjuncts)
 are deliberate over-approximations of production's richer task-economy checks.
-For completeTask/acceptTask they coincide EXACTLY with production under empty
-target_gear (acceptTask) and the canonical complete condition (completeTask),
-which is why those two are asserted, not deferred. (taskCancel, which did NOT
+The complete-phase disjunct (the retired completeTask rung's, c-2 #6)
+coincides EXACTLY with production's canonical complete condition, which is
+why it is asserted, not deferred. (taskCancel, which did NOT
 coincide — production read `history`/`task_decision` — is retired.)
 """
 from __future__ import annotations
@@ -202,7 +203,6 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.DISCARD_HIGH: "discardHigh",
     LadderMeans.CRAFT_POTIONS: "craftPotions",
     LadderMeans.CLAIM_PENDING: "claimPending",
-    LadderMeans.COMPLETE_TASK: "completeTask",
     LadderMeans.SELL_PRESSURED: "sellPressured",
     LadderMeans.OBJECTIVE_STEP: "objectiveStep",
     LadderMeans.MAINTAIN_CONSUMABLES: "maintainConsumables",
@@ -839,10 +839,11 @@ def test_claim_pending_witness() -> None:
 
 
 def test_wait_fallthrough() -> None:
-    # complete-phase, no coins, nothing else -> only completeTask & wait;
-    # selection is completeTask. A pure fallthrough to wait needs phase that
-    # fires nothing above it: not reachable with only {none,complete}, so this
-    # pins that completeTask wins when present.
+    # complete-phase, no coins, nothing else -> only objectiveStep (its
+    # complete-phase disjunct, the retired completeTask rung's — c-2 #6) &
+    # wait; selection is objectiveStep. A pure fallthrough to wait needs phase
+    # that fires nothing above it: not reachable with only {none,complete}, so
+    # this pins that the met task's objective step wins when present.
     _assert_full_agreement(_base_scn(task_phase="complete",
                                      task_exchange_min_coins=10))
 
@@ -1159,7 +1160,7 @@ def test_craft_relief_near_miss_zero_net_relief() -> None:
 # SELECTION NOTE (a real Lean-model finding, reported): recycleSurplus sits
 # below the lifecycle slots, and for EVERY phase some higher slot fires on the
 # Lean ladder — acceptTask(none) / objectiveStep(accepted|inProgress, the
-# retired pursueTask's task-phase arm) / completeTask(complete). So
+# retired pursueTask's task-phase arm; complete, the retired completeTask's). So
 # recycleSurplus can NEVER be the Lean SELECTION; it can only fire-and-lose.
 # The contest here therefore drives recycleSurplus TRUE (the per-slot
 # agreement that binds arg[23]) under phase=none, where BOTH ladders select
@@ -1599,9 +1600,9 @@ def test_rest_for_combat_near_miss_full_hp() -> None:
 #
 # SELECTION NOTE (a real Lean-model finding, reported — mirrors recycleSurplus
 # in 4a): maintainConsumables is ladder idx 18, BELOW the lifecycle slots
-# acceptTask(16)/objectiveStep/completeTask. For EVERY phase some higher slot
-# fires on the Lean ladder (acceptTask at phase none, completeTask at complete,
-# objectiveStep's task-phase arm at accepted/inProgress), so maintainConsumables can NEVER be the
+# acceptTask(16)/objectiveStep. For EVERY phase some higher slot fires on the
+# Lean ladder (acceptTask at phase none, objectiveStep's task-phase arm at
+# accepted/inProgress/complete), so maintainConsumables can NEVER be the
 # Lean SELECTION — it can only fire-and-lose. The contest drives it TRUE (the
 # per-slot agreement binding arg[29]) at phase NONE, where BOTH ladders select
 # acceptTask; selection agreement holds at that winner.

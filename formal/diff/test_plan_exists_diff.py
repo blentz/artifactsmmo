@@ -19,7 +19,11 @@ In scope (single-action plans, mirroring Lean PlanExists):
   * BANK_UNLOCK          → witness [FightAction(target_monster)]
   * DEPOSIT_FULL         → witness [DepositAllAction]
   * CLAIM_PENDING        → witness [ClaimPendingItemAction]
-  * COMPLETE_TASK        → witness [CompleteTaskAction]
+  * (COMPLETE_TASK retired in Phase 5-2c-iii-c-2 #6: a met held task is the
+    task objective's step — pinned separately by
+    `test_planner_finds_plan_for_met_task_objective_step`, witness
+    [CompleteTaskAction], the production half of the Lean
+    `planFor .objectiveStep` `.completeTask` arm)
   * (ACCEPT_TASK retired in Phase 5-2c-iii-c-2 #3: the task objective's step)
   * (TASK_EXCHANGE retired in Phase 5-2c-iii-c-2: the task objective's step)
   * (PURSUE_TASK retired in Phase 5-2c-iii-c-2 #4: the held items task is
@@ -79,6 +83,7 @@ from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.decisions.root import _task_root
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
@@ -160,7 +165,7 @@ def _base_game_data() -> GameData:
     gd._npc_stock = {}
     gd._npc_sell_prices = {}
     # CompleteTaskAction.apply calls task_coin_reward(task_code) → min_task_coin_reward()
-    # when the code is unknown; seed a minimal reward so COMPLETE_TASK fixtures don't raise.
+    # when the code is unknown; seed a minimal reward so met-task (turn-in) fixtures don't raise.
     gd._task_coin_rewards = {"task_done": 1}
     gd._task_reward_item_codes = frozenset({"tasks_coin"})
     return gd
@@ -267,20 +272,6 @@ def _state_CLAIM_PENDING():
     return state, ctx, gd, ClaimPendingItemAction, LadderMeans.CLAIM_PENDING
 
 
-def _state_COMPLETE_TASK():
-    gd = _base_game_data()
-    state = _base_state(
-        task_code="task_done",
-        task_type="items",
-        task_progress=5,
-        task_total=5,
-    )
-    ctx = _ctx()
-    assert _means_fires(MeansKind.COMPLETE_TASK, state, gd, None, ctx), \
-        "COMPLETE_TASK firing precondition not met"
-    return state, ctx, gd, CompleteTaskAction, LadderMeans.COMPLETE_TASK
-
-
 def _state_WAIT():
     gd = _base_game_data()
     state = _base_state()
@@ -296,7 +287,6 @@ IN_SCOPE_CASES: dict[LadderMeans, Callable] = {
     LadderMeans.BANK_UNLOCK: _state_BANK_UNLOCK,
     LadderMeans.DEPOSIT_FULL: _state_DEPOSIT_FULL,
     LadderMeans.CLAIM_PENDING: _state_CLAIM_PENDING,
-    LadderMeans.COMPLETE_TASK: _state_COMPLETE_TASK,
     LadderMeans.WAIT: _state_WAIT,
 }
 
@@ -309,7 +299,6 @@ GUARD_KINDS_MAP: dict[LadderMeans, GuardKind] = {
 
 MEANS_KINDS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.CLAIM_PENDING: MeansKind.CLAIM_PENDING,
-    LadderMeans.COMPLETE_TASK: MeansKind.COMPLETE_TASK,
     LadderMeans.WAIT: MeansKind.WAIT,
 }
 
@@ -490,6 +479,48 @@ def test_planner_finds_plan_for_task_phase_objective_step() -> None:
     )
 
 
+def test_planner_finds_plan_for_met_task_objective_step() -> None:
+    """Phase 5-2c-iii-c-2 #6: the retired COMPLETE_TASK rung's turn-in is the
+    task objective's step. A met held task fires OBJECTIVE_STEP on its phase
+    (Lean `objectiveStepFires … || phase = complete`), and Lean
+    `planFor .objectiveStep` dispatches `.completeTask` when the opaque flag
+    is unset. The production half: `_task_root` offers the task objective for
+    the met task, `objective_step_goal(ReachTaskOutcome)` materialises
+    `CompleteTaskGoal`, and the REAL planner over the REAL action menu returns
+    a non-empty plan containing the CompleteTaskAction witness."""
+    gd = _base_game_data()
+    state = _base_state(
+        task_code="task_done",
+        task_type="items",
+        task_progress=5,
+        task_total=5,
+    )
+    ctx = _ctx()
+    history = LearningStore(":memory:", "diff")
+    assert _task_root(state, gd, ctx, history) == ReachTaskOutcome("task_done"), (
+        "the task objective is not offered for the met task")
+    player = _build_player_with_data(
+        gd, state,
+        bank_accessible=ctx.bank_accessible,
+        task_exchange_min_coins=ctx.task_exchange_min_coins,
+    )
+    actions = _build_actions(player)
+    goal = objective_step_goal(ReachTaskOutcome("task_done"), state, gd, ctx,
+                               history=history)
+    assert isinstance(goal, CompleteTaskGoal), goal
+    plan = GOAPPlanner().plan(state, goal, actions, gd, history)
+    assert plan, (
+        "PLAN-EXISTS BUG: planner returned empty plan for the met-task "
+        f"objective step.\n  goal: {goal!r}"
+    )
+    assert any(isinstance(a, CompleteTaskAction) for a in plan), (
+        "PLAN-EXISTS BUG: the met-task objective step planned without the "
+        "CompleteTaskAction witness (Lean `planFor .objectiveStep` = "
+        "[.completeTask]).\n"
+        f"  plan: {[type(a).__name__ for a in plan]}"
+    )
+
+
 def test_objective_step_honestly_skipped() -> None:
     """The opaque-flag arm of OBJECTIVE_STEP is the synthetic tier-dispatch ActionKind (Phase
     21d-1). Production materialises a sub-goal (UpgradeEquipmentGoal,
@@ -505,13 +536,15 @@ def test_objective_step_honestly_skipped() -> None:
     of objective-tier plan-existence is therefore (a) opaquely proven in
     Lean and (b) operationally demonstrated by the 20d-v2 differential. The
     TASK-PHASE arm (what PURSUE_TASK was) is pinned by
-    `test_planner_finds_plan_for_task_phase_objective_step`, outside the
+    `test_planner_finds_plan_for_task_phase_objective_step`, and the MET-TASK
+    arm (what COMPLETE_TASK was) by
+    `test_planner_finds_plan_for_met_task_objective_step`, both outside the
     flat-means registry."""
     assert LadderMeans.OBJECTIVE_STEP not in IN_SCOPE_CASES
 
 
-def test_in_scope_covers_at_least_6_means() -> None:
-    """Regression: don't accidentally narrow scope. The 6 means below
+def test_in_scope_covers_at_least_5_means() -> None:
+    """Regression: don't accidentally narrow scope. The 5 means below
     correspond 1:1 to Lean PlanExists single-action lemmas (excluding the
     `.objectiveStep` synthetic and the multi-step `.reachUnlockLevel` /
     `.fight^N` lemma, which is honestly skipped per module docstring)."""
@@ -520,7 +553,6 @@ def test_in_scope_covers_at_least_6_means() -> None:
         LadderMeans.BANK_UNLOCK,
         LadderMeans.DEPOSIT_FULL,
         LadderMeans.CLAIM_PENDING,
-        LadderMeans.COMPLETE_TASK,
         LadderMeans.WAIT,
     }
     assert required.issubset(IN_SCOPE_CASES.keys()), (

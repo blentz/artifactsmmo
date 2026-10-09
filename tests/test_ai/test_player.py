@@ -348,14 +348,24 @@ class TestArbiterSelection:
             decision, player.state, player.game_data, actions, player._selection_context())
         assert goal is not None and repr(goal) == "DepositInventory"
 
-    def test_done_task_selects_complete_task(self):
+    def test_a_done_task_is_turned_in_on_the_task_objectives_turn(self):
+        """UPDATED Phase 5-2c-iii-c-2 #6: the turn-in is the task objective's
+        step (`ReachTaskOutcome`), no longer a collect rung above every root.
+        The objective step runs first; once its turn is spent, the turn-in."""
         player = self._with_strategy(make_game_data_mock(), level=3,
                                      task_type="monsters", task_code="chicken",
                                      task_total=5, task_progress=5)
-        decision = player._strategy.decide(player.state, player.game_data)
+        player._draws_enabled = False
+        ctx = player._selection_context()
+        decision = player._strategy.decide(player.state, player.game_data, ctx=ctx)
         actions = player._build_actions()
         goal, _plan, _tried = player._arbiter.select(
-            decision, player.state, player.game_data, actions, player._selection_context())
+            decision, player.state, player.game_data, actions, ctx)
+        assert goal is not None and repr(goal) == "GrindCharacterXP(cow)"
+        player._arbiter._committed_repr = None
+        goal, _plan, _tried = player._arbiter.select(
+            decision, player.state, player.game_data, actions, ctx,
+            turns={"GrindCharacterXP(cow)": 1})
         assert goal is not None and repr(goal) == "CompleteTask"
 
     def test_idle_no_task_takes_its_owed_draw_on_the_task_objectives_turn(self):

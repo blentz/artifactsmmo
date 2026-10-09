@@ -81,7 +81,7 @@ theorem objectiveStepE_fires_in_window (s : State) (hgate : deferGate s = true) 
   have hact := hg.1.2
   simp only [Formal.Liveness.Plan.phaseActive] at hact
   simp only [fires, ProductionLadder.objectiveStepFires, Bool.or_assoc, hact,
-    Bool.or_true]
+    Bool.or_true, Bool.true_or]
 
 /-- Below the cap the ladder always selects something: inside the defer window
     the objective step fires on the held task; outside it the refresh arms the
@@ -193,7 +193,6 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
     | discardHigh     => exact descendsE_discardHigh s hk
     | craftPotions    => exact descendsE_craftPotions s hk
     | claimPending    => exact descendsE_claimPending s hk
-    | completeTask    => exact descendsE_completeTask s hk
     | sellPressured   => exact descendsE_sellPressured s hk
     | objectiveStep   =>
         by_cases hisF : (perceptionRefreshE s).objectiveStepIsFight = true

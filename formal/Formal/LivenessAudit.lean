@@ -122,7 +122,6 @@ open Formal.Liveness.CycleStep
 #print axioms _fires_depositFull_implies_depositInventory_positive
 #print axioms _fires_discardHigh_implies_discardOverstock_positive
 #print axioms _fires_claimPending_implies_claimPending_positive
-#print axioms _fires_completeTask_implies_completeTask_positive
 #print axioms _fires_sellPressured_implies_sellInventory_positive
 #print axioms _fires_sellIdle_implies_sellInventory_positive
 #print axioms _fires_bankExpand_implies_expandBank_positive
@@ -138,7 +137,6 @@ open Formal.Liveness.CycleStep
 -- Phase 21a: plan-existence lemmas for trivial firing means.
 #print axioms plan_exists_for_hpCritical
 #print axioms plan_exists_for_claimPending
-#print axioms plan_exists_for_completeTask
 #print axioms plan_exists_for_bankExpand
 #print axioms plan_exists_for_wait
 
@@ -534,7 +532,6 @@ open Formal.Liveness.BlockerQuieting
 #print axioms depositFull_quiet_after_firing
 #print axioms claimPending_quiet_after_firing
 #print axioms sellPressured_quiet_after_firing
-#print axioms completeTask_quiet_after_firing
 #print axioms restForCombat_quiet_after_firing
 #print axioms hpCritical_quiet_after_firing
 #print axioms bankUnlock_quiet_after_firing
@@ -652,7 +649,6 @@ open Formal.Liveness.FMeasure
 open Formal.Liveness.BlockerDescent
 #print axioms fMeasure_perceptionRefresh
 #print axioms descends_fight
-#print axioms descends_completeTask
 #print axioms descends_claimPending
 open Formal.Liveness.UnconditionalDescent
 #print axioms ladder_mem_blockerPrefix
@@ -677,7 +673,7 @@ open Formal.Liveness.DMeasure
 open Formal.Liveness.BlockerDescentD
 #print axioms descendsD_fight
 #print axioms descendsD_placeholder
-#print axioms descendsD_completeTask
+#print axioms Formal.Liveness.CycleStepD.turnInRearm_of_not_turnIn
 open Formal.Liveness.DeferFaithful
 #print axioms perceptionRefreshD_window
 #print axioms objectiveStepD_fires_below_fifty

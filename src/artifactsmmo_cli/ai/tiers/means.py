@@ -102,7 +102,6 @@ SUPPLY_DEMAND_MIN = 10
 
 class MeansKind(Enum):
     CLAIM_PENDING = "claim_pending"
-    COMPLETE_TASK = "complete_task"
     SELL_PRESSURED = "sell_pressured"
     SELL_IDLE = "sell_idle"
     RECYCLE_SURPLUS = "recycle_surplus"
@@ -146,7 +145,9 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     # USER 2026-09-13: "expanding the bank is good to do whenever we have the
     # money for it.")
     MeansKind.BANK_EXPAND,
-    MeansKind.COMPLETE_TASK,
+    # COMPLETE_TASK was retired here in Phase 5-2c-iii-c-2 #6: a met task is
+    # turned in as the task objective's own step (`ReachTaskOutcome`), on the
+    # task's turn.
     # LOW_YIELD_CANCEL was retired here in Phase 5-2c-iii-c-2: a data-confirmed
     # poor task is the task objective's own step (`ReachTaskOutcome`), taken on
     # the task's turn, not a collect rung above every root.
@@ -222,10 +223,6 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
            history: LearningStore | None, ctx: SelectionContext) -> bool:
     if kind is MeansKind.CLAIM_PENDING:
         return bool(state.pending_items)
-
-    if kind is MeansKind.COMPLETE_TASK:
-        return (bool(state.task_code) and state.task_total > 0
-                and state.task_progress >= state.task_total)
 
     if kind is MeansKind.SELL_PRESSURED:
         # A buyer that can take it NOW — never the window-blind "some held code

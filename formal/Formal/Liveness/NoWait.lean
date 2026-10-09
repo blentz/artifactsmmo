@@ -10,9 +10,13 @@ there is satisfied by WAITING, which is no progress at all. The real obligation 
 
 It holds while a task is in flight or the objective has a step: every held
 task is covered —
-  `objectiveStepFires ⊇ (phase ∈ {accepted, inProgress})`
-  `completeTaskFires  = (phase = complete)`
-and both sit before `.wait` in `allInLadderOrder`.
+  `objectiveStepFires ⊇ (phase ∈ {accepted, inProgress, complete})`
+and `.objectiveStep` sits before `.wait` in `allInLadderOrder`.
+
+THE MET CASE MOVED into `.objectiveStep` too (Phase 5-2c-iii-c-2 #6): a met
+held task is the task objective's root and its step is the turn-in, so
+`objectiveStepFires` carries the `phase = complete` test the retired
+`completeTaskFires` was.
 
 THE IN-FLIGHT CASE MOVED into `.objectiveStep` (Phase 5-2c-iii-c-2 #4): a held
 task's work is the task objective's step, so the ladder's
@@ -35,18 +39,19 @@ open Formal.Liveness.Measure
 open Formal.Liveness.MeansKind
 open Formal.Liveness.ProductionLadder
 
-/-- Phase-totality over a HELD task: complete or the objective step fires, or
-    the character holds no task. RESTATED Phase 5-2c-iii-c-2 #4: the
-    `pursueTask` disjunct became `objectiveStep`, whose ladder predicate now
-    includes the active-phase test `pursueTaskFires` was. (Until #3 an
+/-- Phase-totality over a HELD task: the objective step fires, or the
+    character holds no task. RESTATED Phase 5-2c-iii-c-2 #4: the `pursueTask`
+    disjunct became `objectiveStep`, whose ladder predicate now includes the
+    active-phase test `pursueTaskFires` was; RESTATED #6: the `completeTask`
+    disjunct folded into `objectiveStep` the same way (its `phase = complete`
+    test is now an `objectiveStepFires` disjunct). (Until #3 an
     `acceptTask` disjunct also covered the taskless state with a draw owed;
     that draw is now the task objective's step too — see the module
     docstring.) -/
 theorem task_means_always_fires (s : State) :
-    fires .completeTask s = true
-      ∨ fires .objectiveStep s = true
+    fires .objectiveStep s = true
       ∨ s.taskLifecyclePhase = .none := by
-  simp only [fires, objectiveStepFires, completeTaskFires]
+  simp only [fires, objectiveStepFires]
   cases h : s.taskLifecyclePhase <;> simp
 
 /-- Generic: a member whose body is `some` makes `findSome?` non-`none`. -/
@@ -80,8 +85,7 @@ theorem productionLadder_ne_wait (s : State)
     productionLadder s ≠ some .wait := by
   -- A task means fires AND lives in the init (before .wait).
   have hinit_fires : ∃ k ∈ allInLadderOrder.dropLast, fires k s = true := by
-    rcases task_means_always_fires s with h | h | hnone
-    · exact ⟨.completeTask, by decide, h⟩
+    rcases task_means_always_fires s with h | hnone
     · exact ⟨.objectiveStep, by decide, h⟩
     · rcases hlive with hph | hstep
       · exact absurd hnone hph

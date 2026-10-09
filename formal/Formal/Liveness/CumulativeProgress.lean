@@ -649,17 +649,6 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | claimPending =>
       show (applyActionKind .claimPendingItem s).level ≥ s.level
       simp [applyActionKind]
-    | completeTask =>
-      -- Item 1f: completeTask now has level rollover. New level is
-      -- either s.level (no rollover) or s.level + 1 (rollover). Either
-      -- way, ≥ s.level.
-      show (applyActionKind .completeTask s).level ≥ s.level
-      show ((if (decide (s.xp + Formal.Liveness.Measure.taskCompleteXpEstimate
-                          ≥ xpToNextLevel s.level)
-                  && decide (s.level < 50))
-              then s.level + 1
-              else s.level) ≥ s.level)
-      split <;> omega
     | sellPressured =>
       show (applyActionKind .npcSell s).level ≥ s.level
       simp [applyActionKind]
@@ -669,6 +658,7 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
       by_cases hisf : s.objectiveStepIsFight = true
       · show (match (if s.objectiveStepIsFight then [ActionKind.fight]
                       else if s.objectiveStepFires then [ActionKind.objectiveStep]
+                      else if s.taskLifecyclePhase = TaskLifecyclePhase.TaskLifecyclePhase.complete then [ActionKind.completeTask]
                       else [ActionKind.taskTrade]) with
                 | [] => s | a :: _ => applyActionKind a s).level ≥ s.level
         rw [if_pos hisf]
@@ -676,6 +666,7 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
         simp only [applyActionKind]; split <;> omega
       · show (match (if s.objectiveStepIsFight then [ActionKind.fight]
                       else if s.objectiveStepFires then [ActionKind.objectiveStep]
+                      else if s.taskLifecyclePhase = TaskLifecyclePhase.TaskLifecyclePhase.complete then [ActionKind.completeTask]
                       else [ActionKind.taskTrade]) with
                 | [] => s | a :: _ => applyActionKind a s).level ≥ s.level
         rw [if_neg hisf]
@@ -684,8 +675,20 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
           show (applyActionKind .objectiveStep s).level ≥ s.level
           simp [applyActionKind]
         · rw [if_neg hof]
-          show (applyActionKind .taskTrade s).level ≥ s.level
-          simp [applyActionKind]
+          by_cases hct : s.taskLifecyclePhase = .complete
+          · -- Met-task turn-in (Phase 5-2c-iii-c-2 #6; the retired
+            -- COMPLETE_TASK rung's arm): level rolls over or stays.
+            rw [if_pos hct]
+            show (applyActionKind .completeTask s).level ≥ s.level
+            show ((if (decide (s.xp + Formal.Liveness.Measure.taskCompleteXpEstimate
+                                ≥ xpToNextLevel s.level)
+                        && decide (s.level < 50))
+                    then s.level + 1
+                    else s.level) ≥ s.level)
+            split <;> omega
+          · rw [if_neg hct]
+            show (applyActionKind .taskTrade s).level ≥ s.level
+            simp [applyActionKind]
     | sellIdle =>
       show (applyActionKind .npcSell s).level ≥ s.level
       simp [applyActionKind]
@@ -724,7 +727,10 @@ private theorem fires_of_ladder {s : State} {k : MeansKind}
 
     `htask` (Phase 5-2c-iii-c-2 #4): the objective step now also fires on a
     held active-phase task and then dispatches `.taskTrade`, which descends
-    `taskCycles` only while work remains. The ladder's phase test does not
+    `taskCycles` only while work remains. (Since #6 it also fires on a met
+    task and dispatches `.completeTask`, which clears the task: the same
+    hypothesis makes that a `taskCycles` descent too, or the turn-in rolls
+    the level over.) The ladder's phase test does not
     imply `taskProgress < taskTotal` on an arbitrary (phase-inconsistent)
     `State`, so that fact is a hypothesis of this branch alone. -/
 theorem progressMeans_decreases_extMeasure_or_advances_level
@@ -1006,25 +1012,49 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
           rw [hlvl_eq, hxp]
           omega
     · -- Placeholder branch (isFight = false): objectiveStepFires slot decreases.
-      right
       have hisf' : s.objectiveStepIsFight = false := by
         cases h : s.objectiveStepIsFight with
         | true => exact absurd h hisf
         | false => rfl
       by_cases hof : s.objectiveStepFires = true
       swap
-      · -- Task-work branch (Phase 5-2c-iii-c-2 #4): `.taskTrade` descends
-        -- `taskCycles` given work remains (`htask`).
-        have hof' : s.objectiveStepFires = false := Bool.eq_false_iff.mpr hof
+      · have hof' : s.objectiveStepFires = false := Bool.eq_false_iff.mpr hof
         have hprog := htask rfl hisf' hof'
+        by_cases hct : s.taskLifecyclePhase = .complete
+        · -- Met-task branch (Phase 5-2c-iii-c-2 #6): the turn-in rolls the
+          -- level over, or clears the task — `taskCycles` drops to 0 from
+          -- the positive remainder `htask` certifies (xp grant is 0).
+          have hcs : cycleStep s = applyActionKind .completeTask s := by
+            unfold cycleStep; rw [hk]; simp [planFor, hisf', hof', hct]
+          rw [hcs]
+          by_cases hwill : (decide (s.xp + taskCompleteXpEstimate ≥
+              xpToNextLevel s.level) && decide (s.level < 50)) = true
+          · left
+            have hfl : (applyActionKind .completeTask s).level = s.level + 1 := by
+              simp only [applyActionKind]; rw [if_pos hwill]
+            rw [hfl]; omega
+          · right
+            have hfl : (applyActionKind .completeTask s).level = s.level := by
+              simp only [applyActionKind]; rw [if_neg hwill]
+            have hfx : (applyActionKind .completeTask s).xp = s.xp := by
+              simp only [applyActionKind]; rw [if_neg hwill]
+              simp [taskCompleteXpEstimate]
+            refine ⟨hfl, Or.inr (Or.inr (Or.inl ⟨?_, ?_, ?_⟩))⟩
+            · simp only [extMeasure, hfl]
+            · simp only [extMeasure, hfl, hfx]
+            · simp only [extMeasure]; simp only [applyActionKind]; omega
+        -- Task-work branch (Phase 5-2c-iii-c-2 #4): `.taskTrade` descends
+        -- `taskCycles` given work remains (`htask`).
+        right
         have hcs : cycleStep s = applyActionKind .taskTrade s := by
-          unfold cycleStep; rw [hk]; simp [planFor, hisf', hof']
+          unfold cycleStep; rw [hk]; simp [planFor, hisf', hof', hct]
         rw [hcs]
         refine ⟨by simp [applyActionKind], ?_⟩
         refine Or.inr (Or.inr (Or.inl ⟨?_, ?_, ?_⟩))
         · simp [extMeasure, applyActionKind]
         · simp [extMeasure, applyActionKind]
         · simp only [extMeasure, applyActionKind]; omega
+      right
       have hcs : cycleStep s = applyActionKind .objectiveStep s := by
         unfold cycleStep; rw [hk]; simp [planFor, hisf', hof]
       rw [hcs]
@@ -1102,7 +1132,6 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
       show s.gold - s.nextExpansionCost < s.gold
       omega
   -- Out-of-scope kinds: ruled out by hmem.
-  | completeTask    => exfalso; revert hmem; unfold progressMeans; decide
   | recycleSurplus  => exfalso; revert hmem; unfold progressMeans; decide
   | drainBankJunk   => exfalso; revert hmem; unfold progressMeans; decide
   | geBid           => exfalso; revert hmem; unfold progressMeans; decide
@@ -1121,8 +1150,7 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   -- `ExtMeasure` slot. Per-cycle progress is carried by
   -- `CycleStep.cycleStep_progress_or_waits`.
   | currencyTurnIn  => exfalso; revert hmem; unfold progressMeans; decide
-  -- restForCombat is a guard OUT of `progressMeans` scope
-  -- (same as completeTask above): no
+  -- restForCombat is a guard OUT of `progressMeans` scope: no
   -- measure-decrease commitment is made for them here; their progress is
   -- carried by `CycleStep.cycleStep_progress_or_waits`.
   | restForCombat   => exfalso; revert hmem; unfold progressMeans; decide

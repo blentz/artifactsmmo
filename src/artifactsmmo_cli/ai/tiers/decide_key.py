@@ -52,7 +52,6 @@ _GUARD_REPR: dict[GuardKind, str] = {
 
 _MEANS_REPR: dict[MeansKind, str] = {
     MeansKind.CLAIM_PENDING: "ClaimPending",
-    MeansKind.COMPLETE_TASK: "CompleteTask",
     MeansKind.SELL_PRESSURED: "SellInventory",
     MeansKind.SELL_IDLE: "SellInventory",
     MeansKind.RECYCLE_SURPLUS: "RecycleSurplus",

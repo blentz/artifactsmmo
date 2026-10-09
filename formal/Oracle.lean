@@ -1182,17 +1182,16 @@ def runDecideKey (args : Array Json) : Json :=
     let idx := (intArg args 1).toNat
     let k : Formal.DecideKey.MeansKind := match idx with
       | 0 => .claimPending
-      | 1 => .completeTask
-      | 2 => .sellPressured
-      | 3 => .sellIdle
-      | 4 => .recycleSurplus
-      | 5 => .bankExpand
-      | 6 => .wait
-      | 7 => .maintainConsumables
-      | 8 => .drainBankJunk
-      | 9 => .geBid
-      | 10 => .supplyBank
-      | _ => .currencyTurnIn  -- index 11 (lowYieldCancel, taskExchange, acceptTask, pursueTask, taskCancel retired, Phase 5-2c-iii-c-2)
+      | 1 => .sellPressured
+      | 2 => .sellIdle
+      | 3 => .recycleSurplus
+      | 4 => .bankExpand
+      | 5 => .wait
+      | 6 => .maintainConsumables
+      | 7 => .drainBankJunk
+      | 8 => .geBid
+      | 9 => .supplyBank
+      | _ => .currencyTurnIn  -- index 10 (lowYieldCancel, taskExchange, acceptTask, pursueTask, taskCancel, completeTask retired, Phase 5-2c-iii-c-2)
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfMeans k))]
 
 /-- progression_reserve: args layout (all Nat ≥ 0):

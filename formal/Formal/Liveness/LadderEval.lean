@@ -262,7 +262,6 @@ def meansKindName : MeansKind → String
   | .discardHigh         => "discardHigh"
   | .craftPotions        => "craftPotions"
   | .claimPending        => "claimPending"
-  | .completeTask        => "completeTask"
   | .sellPressured       => "sellPressured"
   | .objectiveStep       => "objectiveStep"
   | .maintainConsumables => "maintainConsumables"

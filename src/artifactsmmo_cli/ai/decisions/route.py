@@ -177,12 +177,14 @@ TOTAL over `META_GOAL_KINDS` since wave 6. The two climbs return
     if isinstance(goal, ReachTaskOutcome):
         # The remaining kills, each at the whole-loop `cycles_per_kill` a drop
         # farm and a level grind are both quoted in (`acquisition_cost.
-        # _drop_actions`): a fight plus its forced rests. A task that is no
-        # longer held or already met costs nothing more.
+        # _drop_actions`): a fight plus its forced rests. A task no longer
+        # held costs nothing more; a met one costs its turn-in (c-2 #6).
         if goal.task_code is None:
             return 1  # no task held: the step is one exchange
         if goal.is_satisfied(state, game_data):
             return 0
+        if state.task_progress >= state.task_total:
+            return 1  # met: the step is the turn-in
         per_kill = cycles_per_kill(
             expected_damage_per_fight(state, game_data, goal.task_code), state.max_hp)
         return ceil((state.task_total - state.task_progress) * per_kill)

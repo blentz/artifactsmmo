@@ -360,8 +360,6 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
     against what the active link actually wants."""
     if kind is MeansKind.CLAIM_PENDING:
         return ClaimPendingGoal()
-    if kind is MeansKind.COMPLETE_TASK:
-        return CompleteTaskGoal()
     if kind is MeansKind.SELL_PRESSURED or kind is MeansKind.SELL_IDLE:
         # No `relief`: a bank route still exists (SELL_RELIEF is the guard that
         # fires when it does not), so only the RATIO-gated hoards are sold —
@@ -602,11 +600,16 @@ def objective_step_goal(
         return ReachSkillGoal(skill_name=step.skill, target_level=step.level)
     if isinstance(step, ReachTaskOutcome):
         # Phase 5-2c-iii-c: the task objective's step. A worthless task with a
-        # pocket coin is cancelled (c-2 #5: was the TASK_CANCEL rung); else one
-        # more kill of its monster, at the count it has now; a met or dropped
-        # task has none.
+        # pocket coin is cancelled (c-2 #5: was the TASK_CANCEL rung); a met
+        # task is turned in (c-2 #6); else one more kill of its monster, at the
+        # count it has now; a dropped task has none.
         if task_cancel_due(state, game_data, ctx, history):
             return TaskCancelGoal()
+        if (step.task_code is not None and state.task_code == step.task_code
+                and 0 < state.task_total <= state.task_progress):
+            # c-2 #6 (was the COMPLETE_TASK collect rung): turn the met task
+            # in at its issuing master, on the task's turn.
+            return CompleteTaskGoal()
         if step.task_code is None and accept_due(state, ctx):
             # c-2 #3 (was the ACCEPT_TASK collect rung): take the owed draw on
             # the task's turn. Synergy Wave 4: steer the task DISTRIBUTION toward

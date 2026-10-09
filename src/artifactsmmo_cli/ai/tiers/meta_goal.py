@@ -104,11 +104,12 @@ class ReachTaskOutcome:
 
     A root ALTERNATIVE, offered by `resolve_root` after the trunk when it has a
     step, so the turn order (`rotate`) gives the task its own turns. Its step
-    (`objective_step_goal`): cancel a data-confirmed poor task, exchange coins,
-    else one more kill (`TaskKillsGoal`). A held task is satisfied the moment
-    it is no longer this one or its count is met — the turn-in is the
-    COMPLETE_TASK rung's until c-2 folds it in. With no task held it is never
-    satisfied: it is offered only while its exchange is due.
+    (`objective_step_goal`): cancel a worthless task, turn a met one in,
+    exchange coins, else one more kill (`TaskKillsGoal`). A held task is
+    satisfied the moment it is no longer held — turned in, cancelled or
+    replaced; a MET task is not, since its turn-in is this objective's step
+    (c-2 #6, was the COMPLETE_TASK rung). With no task held it is never
+    satisfied: it is offered only while a draw or its exchange is due.
     """
 
     task_code: str | None
@@ -116,7 +117,7 @@ class ReachTaskOutcome:
     def is_satisfied(self, state: WorldState, game_data: GameData) -> bool:
         if self.task_code is None:
             return False
-        return state.task_code != self.task_code or state.task_progress >= state.task_total
+        return state.task_code != self.task_code
 
 
 META_GOAL_KINDS: tuple[type, ...] = (ObtainItem, ReachCharLevel, ReachSkillLevel,

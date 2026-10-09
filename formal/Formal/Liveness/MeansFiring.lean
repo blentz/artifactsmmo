@@ -101,13 +101,6 @@ def discardOverstockSatisfied (s : State) : Bool := !s.hasOverstockItems
 /-- `ClaimPendingGoal.is_satisfied` — no pending items. -/
 def claimPendingSatisfied (s : State) : Bool := !s.pendingItemsNonempty
 
-/-- `CompleteTaskGoal.is_satisfied` — no task or task_total = 0. -/
-def completeTaskSatisfied (s : State) : Bool :=
-  s.taskCode.isNone || decide (s.taskTotal = 0)
-
-/-- `CompleteTaskGoal` progressFull witness for Phase-18 routing. -/
-def completeTaskProgressFull (s : State) : Bool := decide (s.taskProgress ≥ s.taskTotal)
-
 /-! ## ProductionInvariants — load-bearing opaque-Bool connections. -/
 
 /-- Phase 23c-3b: `ProductionInvariants` was previously a load-bearing
@@ -278,56 +271,6 @@ theorem _fires_claimPending_implies_claimPending_positive (s : State) :
   unfold claimPendingValue claimPendingSatisfied
   rw [h]
   simp
-
-/-- COMPLETE_TASK: Phase 23c-3b phase-based form. `_fires .completeTask s`
-    means `taskLifecyclePhase = .complete`. Under the consistency
-    predicate `taskPhaseConsistent`, this back-implies the original
-    `(taskCode set, taskTotal > 0, taskProgress ≥ taskTotal)` conditions
-    necessary for `completeTaskValue` to be 90.
-
-    The proof now takes `taskPhaseConsistent s` as an extra hypothesis
-    (the structural consistency invariant on canonical-constructor
-    states; see Measure.lean). -/
-theorem _fires_completeTask_implies_completeTask_positive (s : State)
-    (hcons : taskPhaseConsistent s) :
-    fires .completeTask s = true →
-    completeTaskValue (completeTaskSatisfied s) (completeTaskProgressFull s) > 0 := by
-  intro h
-  unfold fires completeTaskFires at h
-  simp only [decide_eq_true_eq] at h
-  -- h : s.taskLifecyclePhase = .complete
-  obtain ⟨hderive, _hnonemp, _htotpos⟩ := hcons
-  rw [h] at hderive
-  unfold Formal.Liveness.TaskLifecyclePhase.deriveTaskLifecyclePhase at hderive
-  -- Case on taskCode.
-  cases hc : s.taskCode with
-  | none => rw [hc] at hderive; cases hderive
-  | some code =>
-    rw [hc] at hderive
-    by_cases hemp : code = ""
-    · simp [hemp] at hderive
-    · simp [hemp] at hderive
-      by_cases htot0 : s.taskTotal = 0
-      · simp [htot0] at hderive
-      · simp [htot0] at hderive
-        by_cases hprog : s.taskProgress ≥ s.taskTotal
-        · -- complete branch matches; we get hprog
-          unfold completeTaskValue completeTaskSatisfied completeTaskProgressFull
-          have htot_ne : ¬ s.taskTotal = 0 := htot0
-          have hcode_isNone : s.taskCode.isNone = false := by rw [hc]; rfl
-          have hsat_false :
-              (s.taskCode.isNone || decide (s.taskTotal = 0)) = false := by
-            simp [hcode_isNone, htot_ne]
-          rw [hsat_false]
-          have hprog_not_lt : ¬ s.taskProgress < s.taskTotal := Nat.not_lt.mpr hprog
-          simp [hprog_not_lt]
-        · -- hprog : ¬ taskProgress ≥ taskTotal. The derive yields accepted/inProgress,
-          -- contradicting hderive saying .complete.
-          have hlt : s.taskProgress < s.taskTotal := Nat.lt_of_not_le hprog
-          have hderive' := hderive hlt
-          by_cases hp0 : s.taskProgress = 0
-          · simp [hp0] at hderive'
-          · simp [hp0] at hderive'
 
 /-- SELL_PRESSURED: `_fires .sellPressured s` ⇒
     `sellInventoryValue > 0` (bankAccessible=false, activeWindow=false

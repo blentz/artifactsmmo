@@ -87,12 +87,35 @@ def choreRearm (st : State) : State :=
             depositDebt := DEBT_CAP,
             sellDebt := DEBT_CAP }
 
+/-- The met-task turn-in's mint re-arm (Phase 5-2c-iii-c-2 #6): the objective
+    step dispatches `.completeTask` exactly when its Bool is unarmed and the
+    held task is met (`planFor .objectiveStep`, non-fight branch), and the
+    task reward then re-arms every chore latch — what the retired
+    COMPLETE_TASK rung's `rearmOnMint` row did. -/
+def turnInRearm (r st : State) : State :=
+  if !r.objectiveStepFires && decide (r.taskLifecyclePhase = .complete)
+  then choreRearm st else st
+
+/-- No turn-in, no re-arm: a stale-armed Bool or a non-met phase leaves the
+    objective step's post-state untouched by `turnInRearm`. -/
+theorem turnInRearm_of_not_turnIn {r : State} (st : State)
+    (h : r.objectiveStepFires = true ∨ r.taskLifecyclePhase ≠ .complete) :
+    turnInRearm r st = st := by
+  unfold turnInRearm
+  rcases h with h | h
+  · simp [h]
+  · simp [h]
+
 /-- Phase-A1 mint re-arm map. Fight dispatches re-arm EVERYTHING (worst case of
     loot). The two MINTING chores re-arm the flags lex-BELOW their own descent
     slot: `claimPending` (descends `pendingFlag`, slot 5) re-arms the 6 other
     chore latches — the formerly disclosed claim→overstock cross-arm, now
-    modelled; `completeTask` (descends slot 1/3) re-arms everything incl.
-    `pendingFlag` (task rewards mint pending items). -/
+    modelled; the met-task turn-in (`.completeTask`, descends slot 1/3)
+    re-arms everything incl. `pendingFlag` (task rewards mint pending items).
+    Phase 5-2c-iii-c-2 #6: that turn-in is no longer a rung of its own — it is
+    the objective step's dispatch when the step fired on a met held task alone
+    (`planFor .objectiveStep`: Bool unarmed, phase `.complete`), so the re-arm
+    is keyed on that dispatch. -/
 def rearmOnMint (k : MeansKind) (r st : State) : State :=
   if dispatchesFight k r then choreRearm st
   else
@@ -107,7 +130,7 @@ def rearmOnMint (k : MeansKind) (r st : State) : State :=
                   overstockDebt := DEBT_CAP,
                   depositDebt := DEBT_CAP,
                   sellDebt := DEBT_CAP }
-    | .completeTask => choreRearm st
+    | .objectiveStep => turnInRearm r st
     | _ => st
 
 /-- Dispatch-keyed inventory pressure: fight loot on actual fight dispatch;
@@ -184,15 +207,15 @@ theorem perceptionRefreshD_xp (s : State) :
 
 theorem rearmOnMint_level (k : MeansKind) (r st : State) :
     (rearmOnMint k r st).level = st.level := by
-  unfold rearmOnMint choreRearm; split
+  unfold rearmOnMint turnInRearm choreRearm; split
   · rfl
-  · cases k <;> rfl
+  · cases k <;> first | rfl | (dsimp only; split <;> rfl)
 
 theorem rearmOnMint_xp (k : MeansKind) (r st : State) :
     (rearmOnMint k r st).xp = st.xp := by
-  unfold rearmOnMint choreRearm; split
+  unfold rearmOnMint turnInRearm choreRearm; split
   · rfl
-  · cases k <;> rfl
+  · cases k <;> first | rfl | (dsimp only; split <;> rfl)
 
 theorem partialClear_level (k : MeansKind) (st : State) :
     (partialClear k st).level = st.level := by

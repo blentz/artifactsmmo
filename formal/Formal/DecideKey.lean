@@ -57,7 +57,6 @@ deriving Repr, DecidableEq
 /-- Mirror of `src/artifactsmmo_cli/ai/tiers/means.py::MeansKind`. -/
 inductive MeansKind where
   | claimPending
-  | completeTask
   | sellPressured
   | sellIdle
   | recycleSurplus  -- 2026-06-14: proactive recycle of surplus craftable gear
@@ -113,7 +112,6 @@ def goalReprOfGuard : GuardKind → String
 /-- TOTAL `match`: every `MeansKind` variant maps to a non-empty repr string. -/
 def goalReprOfMeans : MeansKind → String
   | .claimPending    => "ClaimPending"
-  | .completeTask    => "CompleteTask"
   | .sellPressured   => "SellInventory"
   | .sellIdle        => "SellInventory"
   | .recycleSurplus  => "RecycleSurplus"

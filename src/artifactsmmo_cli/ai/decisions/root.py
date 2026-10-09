@@ -823,7 +823,13 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
 
     * a held, unmet items task: the task itself, worked (c-2 #4 was the
       PURSUE_TASK rung; #5 drops its PIVOT gate — a task is cancelled by its
-      worth or worked)."""
+      worth or worked).
+
+    * a held, MET task: the task itself, whose step is the turn-in (c-2 #6:
+      this was the COMPLETE_TASK collect rung). Turned in on the task
+      objective's turn, as a draw is taken."""
+    if state.task_code and 0 < state.task_total <= state.task_progress:
+        return ReachTaskOutcome(state.task_code)
     if state.task_code and _route.task_cancel_due(state, game_data, ctx, history):
         return ReachTaskOutcome(state.task_code)
     if not state.task_code and accept_due(state, ctx):

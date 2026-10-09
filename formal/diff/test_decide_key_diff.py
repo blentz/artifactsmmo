@@ -41,27 +41,27 @@ _GUARD_INDEX = {
 
 _MEANS_INDEX = {
     MeansKind.CLAIM_PENDING: 0,
-    MeansKind.COMPLETE_TASK: 1,
-    MeansKind.SELL_PRESSURED: 2,
-    # 3 was TASK_CANCEL, retired in Phase 5-2c-iii-c-2 #5 (the Lean inductive
-    # loses the constructor, so every later index shifts down by one).
-    MeansKind.SELL_IDLE: 3,
-    MeansKind.RECYCLE_SURPLUS: 4,  # 2026-06-14: proactive recycle surplus gear.
-    MeansKind.BANK_EXPAND: 5,
-    MeansKind.WAIT: 6,  # Phase 20e-v2 step 1: always-firing sentinel.
-    MeansKind.MAINTAIN_CONSUMABLES: 7,  # PLAN #6a: cook/brew heals (combat-active).
-    MeansKind.DRAIN_BANK_JUNK: 8,  # 2026-06-24: drain over-cap bank junk.
-    MeansKind.GE_BID: 9,  # 2026-07-24: post a discretionary GE buy order.
-    # 2026-08-01: produce a material a sibling declared. 10 is the position of
+    # TASK_CANCEL (Phase 5-2c-iii-c-2 #5) and COMPLETE_TASK (#6) were retired:
+    # the Lean inductive loses each constructor, so every later index shifts
+    # down.
+    MeansKind.SELL_PRESSURED: 1,
+    MeansKind.SELL_IDLE: 2,
+    MeansKind.RECYCLE_SURPLUS: 3,  # 2026-06-14: proactive recycle surplus gear.
+    MeansKind.BANK_EXPAND: 4,
+    MeansKind.WAIT: 5,  # Phase 20e-v2 step 1: always-firing sentinel.
+    MeansKind.MAINTAIN_CONSUMABLES: 6,  # PLAN #6a: cook/brew heals (combat-active).
+    MeansKind.DRAIN_BANK_JUNK: 7,  # 2026-06-24: drain over-cap bank junk.
+    MeansKind.GE_BID: 8,  # 2026-07-24: post a discretionary GE buy order.
+    # 2026-08-01: produce a material a sibling declared. 9 is the position of
     # `supplyBank` in the LEAN `Formal.DecideKey.MeansKind` inductive (appended
     # last, like every variant since `wait`), which is what the oracle's index
     # dispatch reads — NOT the Python enum's declaration ordinal.
-    MeansKind.SUPPLY_BANK: 10,
-    # 2026-08-16 (fleet-currency-turn-in epic Task 6): 11 is the position of
+    MeansKind.SUPPLY_BANK: 9,
+    # 2026-08-16 (fleet-currency-turn-in epic Task 6): 10 is the position of
     # `currencyTurnIn` in the LEAN `Formal.DecideKey.MeansKind` inductive
     # (appended last, like `supplyBank` above it) — the oracle's index dispatch
     # reads this, NOT the Python enum's declaration ordinal.
-    MeansKind.CURRENCY_TURNIN: 11,
+    MeansKind.CURRENCY_TURNIN: 10,
 }
 
 

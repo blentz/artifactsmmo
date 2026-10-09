@@ -367,60 +367,6 @@ theorem descends_claimPending (s : State)
   apply fLt_of_pending_dec <;>
     simp [fMeasure, pressureDelta, applyActionKind, hfire]
 
-/-! ## Task-lifecycle rows — slot 3 (`phasePresent`): the fires require a
-non-`.none` phase, the applies all reset it to `.none`. `completeTask` grants
-NO xp (`taskCompleteXpEstimate = 0`, server-verified — `Measure.lean:440`), so
-its rollover branch fires only from an already-over-threshold xp state; both
-branches are handled. -/
-
-/-- `completeTask` (→ `.completeTask`) strictly descends: at `levelDeficit` in
-    the (degenerate, `xp` already ≥ threshold) rollover branch, else at
-    `phasePresent` (`.complete → .none`, level/xp unchanged since the xp grant
-    is zero). -/
-theorem descends_completeTask (s : State)
-    (hk : productionLadder (perceptionRefresh s) = some .completeTask) :
-    fMeasureLt (fMeasure (cycleStepF s)) (fMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, completeTaskFires, decide_eq_true_eq] at hfire
-  rw [cycleStepF_some s hk, ← fMeasure_perceptionRefresh s]
-  have hcs : cycleStep (perceptionRefresh s) =
-      applyActionKind .completeTask (perceptionRefresh s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  by_cases hwill : (decide ((perceptionRefresh s).xp + taskCompleteXpEstimate ≥
-      xpToNextLevel (perceptionRefresh s).level)
-      && decide ((perceptionRefresh s).level < 50)) = true
-  · -- Rollover: level + 1 with level < 50 — slot 1 strict.
-    have hlvl : (perceptionRefresh s).level < 50 := by
-      have := hwill
-      simp only [Bool.and_eq_true, decide_eq_true_eq] at this
-      exact this.2
-    have hfl : (applyActionKind .completeTask (perceptionRefresh s)).level
-        = (perceptionRefresh s).level + 1 := by
-      simp only [applyActionKind]; rw [if_pos hwill]
-    apply fLt_of_levelDeficit_dec
-    simp only [fMeasure, pressureDelta, hfl]
-    omega
-  · -- No rollover: level/xp unchanged (xp grant is 0) — slot 3 strict.
-    have hphase : (perceptionRefresh s).taskLifecyclePhase ≠ .none := by
-      rw [hfire]; intro h; cases h
-    have hfl : (applyActionKind .completeTask (perceptionRefresh s)).level
-        = (perceptionRefresh s).level := by
-      simp only [applyActionKind]; rw [if_neg hwill]
-    have hfx : (applyActionKind .completeTask (perceptionRefresh s)).xp
-        = (perceptionRefresh s).xp := by
-      simp only [applyActionKind]; rw [if_neg hwill]
-      simp [taskCompleteXpEstimate]
-    have hph : (applyActionKind .completeTask (perceptionRefresh s)).taskLifecyclePhase
-        = .none := by
-      simp only [applyActionKind]
-    apply fLt_of_phasePresent_dec
-    · simp only [fMeasure, pressureDelta, hfl]
-    · simp only [fMeasure, pressureDelta, hfl, hfx]
-    -- slot 3 (`drawOwedFlag`) is untouched by `.completeTask`
-    · simp [fMeasure, pressureDelta, applyActionKind]
-    · simp [fMeasure, pressureDelta, hph, hphase]
-
 /-! ## Fight rows — slots 1/2, the `LevelingDescent.cycleStepF_fight_descends`
 rollover/accumulate split re-proved against the richer tuple. -/
 

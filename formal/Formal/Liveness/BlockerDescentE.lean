@@ -211,15 +211,21 @@ private theorem rearmE_eq_mint_of_no_levelup {k : MeansKind} {r st : State}
 
 private theorem rearmOnMint_level (k : MeansKind) (r st : State) :
     (rearmOnMint k r st).level = st.level := by
-  cases k <;> simp [rearmOnMint, choreRearm, dispatchesFight, apply_ite]
+  unfold rearmOnMint turnInRearm choreRearm; split
+  · rfl
+  · cases k <;> first | rfl | (dsimp only; split <;> rfl)
 
 private theorem rearmOnMint_gearGap (k : MeansKind) (r st : State) :
     (rearmOnMint k r st).gearGap = st.gearGap := by
-  cases k <;> simp [rearmOnMint, choreRearm, dispatchesFight, apply_ite]
+  unfold rearmOnMint turnInRearm choreRearm; split
+  · rfl
+  · cases k <;> first | rfl | (dsimp only; split <;> rfl)
 
 private theorem rearmOnMint_adequate (k : MeansKind) (r st : State) :
     (rearmOnMint k r st).loadoutAdequate = st.loadoutAdequate := by
-  cases k <;> simp [rearmOnMint, choreRearm, dispatchesFight, apply_ite]
+  unfold rearmOnMint turnInRearm choreRearm; split
+  · rfl
+  · cases k <;> first | rfl | (dsimp only; split <;> rfl)
 
 -- WAVE 4 RE-HOME: `gearProgress` runs on the non-combat OBJECTIVE STEP, so
 -- "this step makes no gear progress" is "the rung is not the objective step, OR
@@ -886,56 +892,6 @@ theorem descendsE_craftPotions (s : State)
       perceptionRefreshE_level, perceptionRefreshE_xp]
 
 
-theorem descendsE_completeTask (s : State)
-    (hk : productionLadder (perceptionRefreshE s) = some .completeTask) :
-    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, completeTaskFires, decide_eq_true_eq, refreshE_phase] at hfire
-  rw [cycleStepE_some s hk]
-  have hcs : cycleStep (perceptionRefreshE s) =
-      applyActionKind .completeTask (perceptionRefreshE s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  by_cases hwill : (decide ((perceptionRefreshE s).xp + taskCompleteXpEstimate ≥
-      xpToNextLevel (perceptionRefreshE s).level)
-      && decide ((perceptionRefreshE s).level < 50)) = true
-  · have hlvl : s.level < 50 := by
-      have := hwill
-      simp only [Bool.and_eq_true, decide_eq_true_eq, perceptionRefreshE_level] at this
-      exact this.2
-    have hfl : (applyActionKind .completeTask (perceptionRefreshE s)).level
-        = (perceptionRefreshE s).level + 1 := by
-      simp only [applyActionKind]; rw [if_pos hwill]
-    apply eLt_of_levelDeficit_dec
-    simp only [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-      if_false, Bool.false_eq_true, Bool.false_and, reduceIte, hfl,
-      perceptionRefreshE_level]
-    omega
-  · have hphase : s.taskLifecyclePhase ≠ .none := by
-      rw [hfire]; intro h; cases h
-    have hfl : (applyActionKind .completeTask (perceptionRefreshE s)).level
-        = (perceptionRefreshE s).level := by
-      simp only [applyActionKind]; rw [if_neg hwill]
-    have hfx : (applyActionKind .completeTask (perceptionRefreshE s)).xp
-        = (perceptionRefreshE s).xp := by
-      simp only [applyActionKind]; rw [if_neg hwill]
-      simp [taskCompleteXpEstimate]
-    have hph : (applyActionKind .completeTask (perceptionRefreshE s)).taskLifecyclePhase
-        = .none := by
-      simp only [applyActionKind]
-    have hwillP : ¬(xpToNextLevel s.level ≤ s.xp ∧ s.level < 50) := by
-      simpa [Bool.and_eq_true, decide_eq_true_eq, ge_iff_le, taskCompleteXpEstimate,
-        perceptionRefreshE_level, perceptionRefreshE_xp] using hwill
-    apply eLt_of_phasePresent_dec <;>
-      simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD, applyActionKind, hwillP, hphase, taskCompleteXpEstimate,
-        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
-      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
-      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
-      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
-      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
-      refreshE_gearGap, refreshE_adequate,
-      perceptionRefreshE_level, perceptionRefreshE_xp]
-
 /-! ## The fight row. -/
 
 
@@ -1004,7 +960,6 @@ private def gearScanPrefix : List MeansKind :=
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
    .discardHigh, .craftPotions, .sellPressured, .claimPending, .bankExpand,
-   .completeTask,
    .supplyBank, .currencyTurnIn]
 
 private theorem blockerPrefix_split :
@@ -1062,10 +1017,15 @@ theorem descendsE_taskWork (s : State) (hArms : AdequateArmsFightAt s)
     simp only [Formal.Liveness.Plan.phaseActive, Bool.or_eq_true,
       decide_eq_true_eq] at hactive
     rcases hactive with h | h <;> (rw [h]; intro hc; cases hc)
+  -- The gate's active phase is not `.complete`: no met-task turn-in here.
+  have hnc : s.taskLifecyclePhase ≠ .complete := by
+    simp only [Formal.Liveness.Plan.phaseActive, Bool.or_eq_true,
+      decide_eq_true_eq] at hactive
+    rcases hactive with h | h <;> (rw [h]; intro hc; cases hc)
   have htot : s.taskTotal ≠ 0 := by omega
   rw [cycleStepE_some s hk, heq]
   have hcs : cycleStep s = applyActionKind .taskTrade s := by
-    unfold cycleStep; rw [hk0]; simp [planFor, his0, hof0]
+    unfold cycleStep; rw [hk0]; simp [planFor, his0, hof0, hnc]
   rw [hcs]
   have hpost : (applyActionKind .taskTrade s).taskLifecyclePhase ≠ .none := by
     simp only [applyActionKind]
@@ -1090,7 +1050,8 @@ theorem descendsE_taskWork (s : State) (hArms : AdequateArmsFightAt s)
     rw [hid]
     have hmint : rearmOnMint .objectiveStep s (applyActionKind .taskTrade s)
         = applyActionKind .taskTrade s := by
-      simp [rearmOnMint, dispatchesFight, his0]
+      simp [rearmOnMint, dispatchesFight, his0,
+        turnInRearm_of_not_turnIn (applyActionKind .taskTrade s) (Or.inr hnc)]
     rw [hmint]
     apply eLt_of_taskCycles_dec
     · simp [eMeasure, applyActionKind]
@@ -1237,7 +1198,8 @@ theorem descendsE_placeholder (s : State) (hArms : AdequateArmsFightAt s)
     apply eLt_of_objectiveStepFlag_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight,
         fightLoss, partialClear, pressureDeltaD,
-        applyActionKind, his0, hfire, refreshE_geCancel]
+        applyActionKind, his0, hfire, refreshE_geCancel,
+        turnInRearm_of_not_turnIn _ (Or.inl hfire)]
   · -- A gap closed: slot 2.
     rw [cycleStepE_some s hk, hcs, rearmE_eq_mint_of_no_levelup hLV]
     apply eLt_of_gearGap_dec

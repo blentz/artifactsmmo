@@ -247,11 +247,6 @@ theorem perceptionRefresh_fires_claimPending (s : State) :
     fires .claimPending (perceptionRefresh s) = fires .claimPending s := by
   unfold perceptionRefresh; split <;> rfl
 
-/-- `perceptionRefresh` preserves the completeTask fire. -/
-theorem perceptionRefresh_fires_completeTask (s : State) :
-    fires .completeTask (perceptionRefresh s) = fires .completeTask s := by
-  unfold perceptionRefresh; split <;> rfl
-
 /-- `perceptionRefresh` preserves the sellPressured fire. -/
 theorem perceptionRefresh_fires_sellPressured (s : State) :
     fires .sellPressured (perceptionRefresh s) = fires .sellPressured s := by

@@ -56,7 +56,6 @@ def blockerPrefix : List MeansKind :=
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
    .discardHigh, .craftPotions, .sellPressured, .claimPending, .bankExpand,
-   .completeTask,
    .supplyBank, .currencyTurnIn,
    .objectiveStep]
 
@@ -142,7 +141,6 @@ theorem cycleStepF_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | discardHigh     => exact descends_discardHigh s hk
     | craftPotions    => exact descends_craftPotions s hk
     | claimPending    => exact descends_claimPending s hk
-    | completeTask    => exact descends_completeTask s hk
     | sellPressured   => exact descends_sellPressured s hk
     | supplyBank      => exact descends_supplyBank s hk
     | currencyTurnIn  => exact descends_currencyTurnIn s hk

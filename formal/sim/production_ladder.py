@@ -54,7 +54,6 @@ class LadderMeans(Enum):
     DISCARD_HIGH = "discard_high"
     CRAFT_POTIONS = "craft_potions"
     CLAIM_PENDING = "claim_pending"
-    COMPLETE_TASK = "complete_task"
     SELL_PRESSURED = "sell_pressured"
     SUPPLY_BANK = "supply_bank"
     CURRENCY_TURNIN = "currency_turnin"
@@ -86,7 +85,6 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     # Phase 5-2c-ii: an interrupt (the deposit sink), mirroring
     # `Formal.Liveness.MeansKind.allInLadderOrder`.
     LadderMeans.BANK_EXPAND,
-    LadderMeans.COMPLETE_TASK,
     LadderMeans.SUPPLY_BANK,
     LadderMeans.CURRENCY_TURNIN,
     LadderMeans.OBJECTIVE_STEP,
@@ -116,7 +114,6 @@ _GUARD_MAP: dict[LadderMeans, GuardKind] = {
 
 _MEANS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.CLAIM_PENDING: MeansKind.CLAIM_PENDING,
-    LadderMeans.COMPLETE_TASK: MeansKind.COMPLETE_TASK,
     LadderMeans.SELL_PRESSURED: MeansKind.SELL_PRESSURED,
     LadderMeans.MAINTAIN_CONSUMABLES: MeansKind.MAINTAIN_CONSUMABLES,
     LadderMeans.SUPPLY_BANK: MeansKind.SUPPLY_BANK,
@@ -150,7 +147,6 @@ assert COLLECT_REWARD_ORDER == (
     MeansKind.SELL_PRESSURED,
     MeansKind.CLAIM_PENDING,
     MeansKind.BANK_EXPAND,
-    MeansKind.COMPLETE_TASK,
     MeansKind.SUPPLY_BANK,
     MeansKind.CURRENCY_TURNIN,
 ), "COLLECT_REWARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
@@ -165,7 +161,13 @@ assert DISCRETIONARY_ORDER == (
 ), "DISCRETIONARY_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 
-_ACTIVE_PHASES = frozenset({TaskLifecyclePhase.ACCEPTED, TaskLifecyclePhase.IN_PROGRESS})
+# Phase 5-2c-iii-c-2 #4 (active phases) and #6 (a met task, the retired
+# COMPLETE_TASK rung's phase): every held-task phase fires the objective step.
+_HELD_PHASES = frozenset({
+    TaskLifecyclePhase.ACCEPTED,
+    TaskLifecyclePhase.IN_PROGRESS,
+    TaskLifecyclePhase.COMPLETE,
+})
 
 
 def fires(
@@ -184,11 +186,12 @@ def fires(
     """
     if k is LadderMeans.OBJECTIVE_STEP:
         # A held, unmet task's work is the task objective's step (Phase
-        # 5-2c-iii-c-2 #4), mirroring the Lean ladder's
-        # `objectiveStepFires := s.objectiveStepFires || phaseActive s` — the
-        # same phase-based over-approximation the retired PURSUE_TASK rung's
-        # Lean predicate carried.
-        return objective_step_fires or state.task_lifecycle_phase in _ACTIVE_PHASES
+        # 5-2c-iii-c-2 #4), and so is a met task's turn-in (#6), mirroring the
+        # Lean ladder's `objectiveStepFires := s.objectiveStepFires ||
+        # phaseActive s || phase = complete` — the same phase-based
+        # over-approximations the retired PURSUE_TASK / COMPLETE_TASK rungs'
+        # Lean predicates carried.
+        return objective_step_fires or state.task_lifecycle_phase in _HELD_PHASES
     if k in _GUARD_MAP:
         return _guard_fires(_GUARD_MAP[k], state, game_data, history, ctx)
     return _means_fires(_MEANS_MAP[k], state, game_data, history, ctx)

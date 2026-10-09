@@ -407,7 +407,6 @@ def planForC : MeansKind → State → Plan
   | .discardHigh      , _ => [.deleteItem]
   | .craftPotions     , _ => [.craft]
   | .claimPending     , _ => [.claimPendingItem]
-  | .completeTask     , _ => [.completeTask]
   | .sellPressured    , _ => [.npcSell]
   | .objectiveStep    , s =>
       -- O5.2 (2026-06-16): a combat/char-leveling objective dispatches a
@@ -417,8 +416,11 @@ def planForC : MeansKind → State → Plan
       -- model's faithful general leveling path. Otherwise the synthetic
       -- placeholder clears `objectiveStepFires` (legacy default: isFight=false).
       -- Phase 5-2c-iii-c-2 #4: fired only by a held task ⇒ the task work.
+      -- Phase 5-2c-iii-c-2 #6: a met held task ⇒ its turn-in.
       if s.objectiveStepIsFight then [.fight]
-      else if s.objectiveStepFires then [.objectiveStep] else [.taskTrade]
+      else if s.objectiveStepFires then [.objectiveStep]
+      else if s.taskLifecyclePhase = .complete then [.completeTask]
+      else [.taskTrade]
   | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
   | .supplyBank       , _ => [.gather]  -- 2026-08-01: produce for a sibling
   | .currencyTurnIn   , _ => [.npcBuy]  -- 2026-08-16: fleet-currency turn-in

@@ -46,8 +46,7 @@ from artifactsmmo_cli.ai.decisions.root import _task_root
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
-from artifactsmmo_cli.ai.tiers.means import COLLECT_REWARD_ORDER, INTERRUPT_MEANS, MeansKind
-from artifactsmmo_cli.ai.tiers.means import _fires as _means_fires
+from artifactsmmo_cli.ai.tiers.means import COLLECT_REWARD_ORDER, INTERRUPT_MEANS
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.sim.fake_server import FakeServer
@@ -287,13 +286,14 @@ def test_phantomTask_state_is_a_real_deadlock_shape(
     The Phase 20c-v2 Lean invariant `taskValid` is therefore LOAD-BEARING:
     if perceive.py ever produced such a state, production would deadlock
     on the discretionary tier alone. This test demonstrates the deadlock
-    shape EXPLICITLY by constructing it and showing COMPLETE_TASK does not
-    fire, the held-unmet-items-task test `_items_task_unmet` (the task
-    objective's work since PURSUE_TASK was retired, mirroring `_task_root`)
-    does not hold, the
-    OBJECTIVE_STEP rung's task-phase arm does not fire (a phantom task's
-    lifecycle phase is NONE), and no draw can be taken (`accept_due`, the task
-    objective's accept since ACCEPT_TASK was retired).
+    shape EXPLICITLY by constructing it and showing the
+    held-unmet-items-task test `_items_task_unmet` (the task objective's work
+    since PURSUE_TASK was retired, mirroring `_task_root`) does not hold, the
+    OBJECTIVE_STEP rung's task-phase arms do not fire (a phantom task's
+    lifecycle phase is NONE — this covers the met-task turn-in too, the
+    retired COMPLETE_TASK rung's, c-2 #6), and no draw can be taken
+    (`accept_due`, the task objective's accept since ACCEPT_TASK was
+    retired).
 
     The assertion is the documentation: when this shape occurs, the
     discretionary tier is empty. Production survives only via the opaque
@@ -303,16 +303,14 @@ def test_phantomTask_state_is_a_real_deadlock_shape(
     COUNTERS.samples += 1
     gd = _empty_gd()
     if state.task_code is not None and state.task_total <= 0:
-        complete = _means_fires(MeansKind.COMPLETE_TASK, state, gd, None, ctx)
         worked = _items_task_unmet(state)
         step_phase = production_fires(LadderMeans.OBJECTIVE_STEP, state, gd,
                                       None, ctx, False)
         accept = accept_due(state, ctx)
-        assert not (complete or worked or step_phase or accept), (
+        assert not (worked or step_phase or accept), (
             f"Phantom-task state but a task means fires anyway — "
             f"production semantics changed; revisit Lean invariant taskValid. "
-            f"complete={complete} worked={worked} step_phase={step_phase} "
-            f"accept={accept}"
+            f"worked={worked} step_phase={step_phase} accept={accept}"
         )
         COUNTERS.task_valid_violations.append(
             f"phantom-task: code={state.task_code!r} total={state.task_total}"
@@ -482,8 +480,10 @@ def test_ladder_entry_count_matches_lean() -> None:
     step; OBJECTIVE_STEP fires on a held, unmet task's phase).
     − TASK_CANCEL (retired in Phase 5-2c-iii-c-2 #5: the task objective's
     step cancels a worthless task).
+    − COMPLETE_TASK (retired in Phase 5-2c-iii-c-2 #6: the task objective's
+    step turns a met task in; OBJECTIVE_STEP fires on its complete phase).
     Lean side mirrors via MeansKind.allInLadderOrder."""
-    assert len(ALL_IN_LADDER_ORDER) == 25
+    assert len(ALL_IN_LADDER_ORDER) == 24
 
 
 def test_the_ladder_interrupt_prefix_is_what_production_runs_as_interrupts() -> None:
@@ -528,9 +528,12 @@ def test_no_task_state_with_a_draw_owed_offers_the_task_objective() -> None:
     assert res is LadderMeans.OBJECTIVE_STEP, f"expected OBJECTIVE_STEP, got {res!r}"
 
 
-def test_completed_task_state_completeTask_fires() -> None:
-    """Baseline: task at progress==total ⇒ COMPLETE_TASK fires
-    (means.py:70-72). Second of three Lean witness branches."""
+def test_completed_task_state_objective_step_fires() -> None:
+    """Baseline: task at progress==total ⇒ the task objective is offered for
+    it (`_task_root`) and OBJECTIVE_STEP fires on its complete phase alone
+    (opaque flag OFF). Phase 5-2c-iii-c-2 #6: this was the COMPLETE_TASK
+    rung; the turn-in is now the task objective's step. Second of three Lean
+    witness branches."""
     gd = _empty_gd()
     ctx = SelectionContext(
         bank_accessible=True,
@@ -546,8 +549,9 @@ def test_completed_task_state_completeTask_fires() -> None:
         hp=100, max_hp=100, inventory_used=0, inventory_max=100,
         bank_items={}, pending=None, level=1, xp=0, gold=0,
     )
+    assert _task_root(state, gd, ctx, None) == ReachTaskOutcome("task_done")
     res = production_ladder(state, gd, None, ctx, objective_step_fires=False)
-    assert res is LadderMeans.COMPLETE_TASK, f"expected COMPLETE_TASK, got {res!r}"
+    assert res is LadderMeans.OBJECTIVE_STEP, f"expected OBJECTIVE_STEP, got {res!r}"
 
 
 def test_history_None_items_task_is_still_worked() -> None:

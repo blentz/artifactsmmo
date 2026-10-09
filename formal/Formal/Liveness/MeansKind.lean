@@ -92,8 +92,8 @@ inductive MeansKind where
                         --                     fires on craft_potions_fires)
   -- Collect-reward (COLLECT_REWARD_ORDER, means.py:35)
   | claimPending        -- CLAIM_PENDING,      means.py:69
-  | completeTask        -- COMPLETE_TASK,      means.py:72
   | sellPressured       -- SELL_PRESSURED,     means.py:76
+  -- (completeTask retired: Phase 5-2c-iii-c-2 #6)
   -- (lowYieldCancel retired: Phase 5-2c-iii-c-2)
   -- (taskCancel retired: Phase 5-2c-iii-c-2 #5)
   | supplyBank          -- SUPPLY_BANK,        means.py (2026-08-01 human ruling):
@@ -181,7 +181,6 @@ def allInLadderOrder : List MeansKind :=
    -- collect rung from its 2026-09-13 promotion out of the discretionary group,
    -- where it fired against a 50/50 bank and was selected zero times.)
    .bankExpand,
-   .completeTask,
    .supplyBank,
    .currencyTurnIn,
    .objectiveStep,
@@ -189,11 +188,12 @@ def allInLadderOrder : List MeansKind :=
    .sellIdle, .recycleSurplus, .geBid, .drainBankJunk,
    .wait]
 
-/-- Sanity: 25 rungs (one per constructor). GEAR_REVIEW was retired in Phase
+/-- Sanity: 24 rungs (one per constructor). GEAR_REVIEW was retired in Phase
     4-3b: its one arm never fired in recorded history. LOW_YIELD_CANCEL,
-    TASK_EXCHANGE, ACCEPT_TASK, PURSUE_TASK and TASK_CANCEL were retired in
-    Phase 5-2c-iii-c-2: the task objective's step owns the cancels, the
-    exchange, the accept and the items-task pursuit. -/
-example : allInLadderOrder.length = 25 := by decide
+    TASK_EXCHANGE, ACCEPT_TASK, PURSUE_TASK, TASK_CANCEL and COMPLETE_TASK
+    were retired in Phase 5-2c-iii-c-2: the task objective's step owns the
+    cancels, the exchange, the accept, the items-task pursuit and the
+    turn-in of a met task. -/
+example : allInLadderOrder.length = 24 := by decide
 
 end Formal.Liveness.MeansKind

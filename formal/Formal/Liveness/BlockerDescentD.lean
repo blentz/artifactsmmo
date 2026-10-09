@@ -605,57 +605,6 @@ theorem descendsD_craftPotions (s : State)
       perceptionRefreshD_level, perceptionRefreshD_xp]
 
 
-/-! ## Task-lifecycle rows — slot 3 (`phasePresent`). -/
-
-/-- `completeTask` (→ `.completeTask`): `levelDeficit` in the degenerate
-    rollover branch, else `phasePresent` (the xp grant is 0). -/
-theorem descendsD_completeTask (s : State)
-    (hk : productionLadder (perceptionRefreshD s) = some .completeTask) :
-    dMeasureLt (dMeasure (cycleStepD s)) (dMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, completeTaskFires, decide_eq_true_eq, refreshD_phase] at hfire
-  rw [cycleStepD_some s hk]
-  have hcs : cycleStep (perceptionRefreshD s) =
-      applyActionKind .completeTask (perceptionRefreshD s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  by_cases hwill : (decide ((perceptionRefreshD s).xp + taskCompleteXpEstimate ≥
-      xpToNextLevel (perceptionRefreshD s).level)
-      && decide ((perceptionRefreshD s).level < 50)) = true
-  · have hlvl : s.level < 50 := by
-      have := hwill
-      simp only [Bool.and_eq_true, decide_eq_true_eq, perceptionRefreshD_level] at this
-      exact this.2
-    have hfl : (applyActionKind .completeTask (perceptionRefreshD s)).level
-        = (perceptionRefreshD s).level + 1 := by
-      simp only [applyActionKind]; rw [if_pos hwill]
-    apply dLt_of_levelDeficit_dec
-    simp only [dMeasure, rearmOnMint, dispatchesFight, choreRearm, partialClear, pressureDeltaD,
-      if_false, Bool.false_eq_true, reduceIte, hfl, perceptionRefreshD_level]
-    omega
-  · have hphase : s.taskLifecyclePhase ≠ .none := by
-      rw [hfire]; intro h; cases h
-    have hfl : (applyActionKind .completeTask (perceptionRefreshD s)).level
-        = (perceptionRefreshD s).level := by
-      simp only [applyActionKind]; rw [if_neg hwill]
-    have hfx : (applyActionKind .completeTask (perceptionRefreshD s)).xp
-        = (perceptionRefreshD s).xp := by
-      simp only [applyActionKind]; rw [if_neg hwill]
-      simp [taskCompleteXpEstimate]
-    have hph : (applyActionKind .completeTask (perceptionRefreshD s)).taskLifecyclePhase
-        = .none := by
-      simp only [applyActionKind]
-    apply dLt_of_phasePresent_dec
-    · simp [dMeasure, rearmOnMint, dispatchesFight, choreRearm, partialClear, pressureDeltaD, hfl,
-        perceptionRefreshD_level]
-    · simp [dMeasure, rearmOnMint, dispatchesFight, choreRearm, partialClear, pressureDeltaD, hfl, hfx,
-        perceptionRefreshD_level, perceptionRefreshD_xp]
-    -- slot 3 (`drawOwedFlag`) is untouched by `.completeTask`
-    · simp [dMeasure, rearmOnMint, dispatchesFight, choreRearm, partialClear,
-        pressureDeltaD, applyActionKind, refreshD_drawOwed]
-    · simp [dMeasure, rearmOnMint, dispatchesFight, choreRearm, partialClear, pressureDeltaD, hph, hphase]
-
-
 /-! ## Fight row — slots 1/2 dominate the worst-case re-arm, the loot fill,
 and the armed flag. -/
 
@@ -742,6 +691,9 @@ theorem descendsD_placeholder (s : State) (hlvl : s.level < 50)
       rw [hk0]
       simp [planFor, his0, hof]
     rw [hcs]
+    have hmint : ∀ st, rearmOnMint .objectiveStep s st = st := fun st => by
+      simp [rearmOnMint, dispatchesFight, his0, turnInRearm_of_not_turnIn st (Or.inl hof)]
+    rw [hmint]
     apply dLt_of_objectiveStepFlag_dec <;>
       simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
         applyActionKind, his0, hof, refreshD_geCancel]
@@ -758,12 +710,20 @@ theorem descendsD_placeholder (s : State) (hlvl : s.level < 50)
       simp only [Formal.Liveness.Plan.phaseActive, Bool.or_eq_true,
         decide_eq_true_eq] at hactive
       rcases hactive with h | h <;> (rw [h]; intro hc; cases hc)
+    -- The gate's active phase is not `.complete`: no met-task turn-in here.
+    have hnc : s.taskLifecyclePhase ≠ .complete := by
+      simp only [Formal.Liveness.Plan.phaseActive, Bool.or_eq_true,
+        decide_eq_true_eq] at hactive
+      rcases hactive with h | h <;> (rw [h]; intro hc; cases hc)
     have htot : s.taskTotal ≠ 0 := by omega
     have hcs : cycleStep s = applyActionKind .taskTrade s := by
       unfold cycleStep
       rw [hk0]
-      simp [planFor, his0, hof']
+      simp [planFor, his0, hof', hnc]
     rw [hcs]
+    have hmint : ∀ st, rearmOnMint .objectiveStep s st = st := fun st => by
+      simp [rearmOnMint, dispatchesFight, his0, turnInRearm_of_not_turnIn st (Or.inr hnc)]
+    rw [hmint]
     have hpost : (applyActionKind .taskTrade s).taskLifecyclePhase ≠ .none := by
       simp only [applyActionKind]
       rw [if_neg htot]

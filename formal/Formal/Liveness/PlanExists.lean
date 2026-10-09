@@ -94,16 +94,6 @@ theorem plan_exists_for_claimPending :
   simp [planAchieves, applyActionKind, fires,
         claimPendingFires]
 
-/-- `[.completeTask]` clears `completeTask` (post-state has
-    `taskCode = none`, so `taskCode.isSome = false`). -/
-theorem plan_exists_for_completeTask :
-    ∀ s, fires .completeTask s = true →
-      ∃ p : Plan, planAchieves p s .completeTask := by
-  intro s h
-  refine ⟨[.completeTask], ?_⟩
-  simp [planAchieves, applyActionKind, fires,
-        completeTaskFires]
-
 /-- `[.buyBankExpansion]` clears `bankExpand` PROVIDED the added 20
     slots suffice to drop the fill ratio below the 0.75 threshold.
 
@@ -604,8 +594,9 @@ retired with the PURSUE_TASK rung, Phase 5-2c-iii-c-2 #4):
 /-- `[.objectiveStep, .completeTask]` clears `objectiveStep`. The Phase 21d-1
     synthetic placeholder ActionKind flips the opaque `objectiveStepFires` Bool
     to `false`; since Phase 5-2c-iii-c-2 #4 the step also fires on a held
-    active-phase task, which `.completeTask` clears (it sets the phase to
-    `.none`, as in the retired `plan_exists_for_pursueTask` witness). Honest disclosure: `.objectiveStep` is NOT a production
+    active-phase task, and since #6 on a met (`.complete`) one, both of which
+    `.completeTask` clears (it sets the phase to `.none`, as in the retired
+    `plan_exists_for_pursueTask` / `plan_exists_for_completeTask` witnesses). Honest disclosure: `.objectiveStep` is NOT a production
     Action subclass — it is a tier-dispatch tag. Production composes the
     sub-goal's plan from ordinary Action subclasses; Phase 22 (Cycle
     Loop) will refine this composition. The existential claim "the

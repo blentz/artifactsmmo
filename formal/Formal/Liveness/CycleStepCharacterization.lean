@@ -81,10 +81,16 @@ theorem cycleStep_eq_fight_when_fightCycleFires (s : State)
   · exact cycleStep_eq_fight_when_reachUnlockLevel s h
   · exact cycleStep_eq_fight_when_objectiveStepFight s h hf
 
-/-- When ladder doesn't fire `.bankUnlock`/`.reachUnlockLevel`/`.completeTask`
-    (and any firing `.objectiveStep` is NOT a combat step), `cycleStep s`
-    preserves both `level` and `xp`. Uses the planFor table: every other ladder
-    slot maps to an ActionKind that's not `.fight` and not `.completeTask`.
+/-- When ladder doesn't fire `.bankUnlock`/`.reachUnlockLevel` (and any firing
+    `.objectiveStep` is neither a combat step nor a met task's turn-in),
+    `cycleStep s` preserves both `level` and `xp`. Uses the planFor table: every
+    other ladder slot maps to an ActionKind that's not `.fight` and not
+    `.completeTask`.
+
+    RESTATED Phase 5-2c-iii-c-2 #6: the `≠ some .completeTask` conjunct went
+    with the COMPLETE_TASK rung; the turn-in it excluded is now the objective
+    step's dispatch on a met task alone (Bool unarmed, phase `.complete`), so
+    the `.objectiveStep` conjunct excludes that dispatch instead.
 
     O5.2 (2026-06-16): the `objectiveStep`-is-fight guard is now explicit — a
     combat objective DOES advance level/xp (the faithful general leveling path),
@@ -92,12 +98,13 @@ theorem cycleStep_eq_fight_when_fightCycleFires (s : State)
 theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
     (h : productionLadder s ≠ some .bankUnlock
          ∧ productionLadder s ≠ some .reachUnlockLevel
-         ∧ productionLadder s ≠ some .completeTask
          ∧ (productionLadder s = some .objectiveStep →
-              s.objectiveStepIsFight = false)) :
+              s.objectiveStepIsFight = false
+              ∧ (s.objectiveStepFires = true
+                 ∨ s.taskLifecyclePhase ≠ .complete))) :
     (cycleStep s).level = s.level ∧ (cycleStep s).xp = s.xp := by
   unfold cycleStep
-  obtain ⟨hbu, hru, hct, hof⟩ := h
+  obtain ⟨hbu, hru, hof⟩ := h
   -- Case-split on productionLadder s; rule out the fight-driving cases.
   cases hpl : productionLadder s with
   | none => exact ⟨rfl, rfl⟩
@@ -182,25 +189,31 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
       show (applyActionKind .claimPendingItem s).level = s.level
             ∧ (applyActionKind .claimPendingItem s).xp = s.xp
       exact ⟨rfl, rfl⟩
-    | completeTask => rw [hpl] at hct; exact absurd rfl hct
     | sellPressured =>
       show (applyActionKind .npcSell s).level = s.level
             ∧ (applyActionKind .npcSell s).xp = s.xp
       exact ⟨rfl, rfl⟩
     | objectiveStep =>
-      have hisf' : s.objectiveStepIsFight = false := hof hpl
+      obtain ⟨hisf', hnct⟩ := hof hpl
       show (match (if s.objectiveStepIsFight then [ActionKind.fight]
                     else if s.objectiveStepFires then [ActionKind.objectiveStep]
+                    else if s.taskLifecyclePhase = TaskLifecyclePhase.TaskLifecyclePhase.complete then [ActionKind.completeTask]
                     else [ActionKind.taskTrade]) with
               | [] => s | a :: _ => applyActionKind a s).level = s.level
             ∧ (match (if s.objectiveStepIsFight then [ActionKind.fight]
                     else if s.objectiveStepFires then [ActionKind.objectiveStep]
+                    else if s.taskLifecyclePhase = TaskLifecyclePhase.TaskLifecyclePhase.complete then [ActionKind.completeTask]
                     else [ActionKind.taskTrade]) with
               | [] => s | a :: _ => applyActionKind a s).xp = s.xp
       rw [if_neg (by simp [hisf'])]
       by_cases hosf : s.objectiveStepFires = true
       · rw [if_pos hosf]; exact ⟨rfl, rfl⟩
-      · rw [if_neg hosf]; exact ⟨rfl, rfl⟩
+      · rw [if_neg hosf]
+        have hnc : s.taskLifecyclePhase ≠ .complete := by
+          rcases hnct with h | h
+          · exact absurd h hosf
+          · exact h
+        rw [if_neg hnc]; exact ⟨rfl, rfl⟩
     | sellIdle =>
       show (applyActionKind .npcSell s).level = s.level
             ∧ (applyActionKind .npcSell s).xp = s.xp

@@ -18,9 +18,10 @@ exclusion, was retired in Phase 4-3b.)
 
 These are the building blocks for the full `BlockersQuietInfinitelyOften`: combined
 with flag-monotonicity (no `applyActionKind` re-arms the opaque flags / `hp` / `level`
-/ `bankAccessible`) they bound total blocker firings. The task-phase blockers
-(`completeTask`, `taskCancel`, `lowYieldCancel`) re-arm only via the task lifecycle,
-which a persistent combat objective preempts (`pursueTask` sits after `objectiveStep`).
+/ `bankAccessible`) they bound total blocker firings. (The task-phase blockers
+`completeTask`, `taskCancel`, `lowYieldCancel` and `pursueTask` were all retired in
+Phase 5-2c-iii-c-2: a held task is now worked, cancelled or turned in by the task
+objective's step.)
 
 NO new axioms (standard set + LIV-001 via the fight branch).
 -/
@@ -95,15 +96,6 @@ theorem sellPressured_quiet_after_firing (s : State)
   have hcs : cycleStep s = applyActionKind .npcSell s := by
     unfold cycleStep; rw [h]; rfl
   rw [hcs]; simp [fires, sellPressuredFires, applyActionKind]
-
-/-- `completeTask` dispatches `completeTask`, resetting the lifecycle phase to
-    `.none` (so the `.complete` firing condition fails). -/
-theorem completeTask_quiet_after_firing (s : State)
-    (h : productionLadder s = some .completeTask) :
-    fires .completeTask (cycleStep s) = false := by
-  have hcs : cycleStep s = applyActionKind .completeTask s := by
-    unfold cycleStep; rw [h]; rfl
-  rw [hcs]; simp [fires, completeTaskFires, applyActionKind]
 
 /-- `restForCombat` dispatches `rest`, restoring `hp := maxHp` (the `hp < maxHp`
     firing condition fails). -/

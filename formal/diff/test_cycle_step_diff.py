@@ -230,7 +230,7 @@ def _base_gd() -> GameData:
     gd._npc_stock = {}
     gd._npc_sell_prices = {}
     # CompleteTaskAction.apply calls task_coin_reward(task_code) → min_task_coin_reward()
-    # when the code is unknown; seed a minimal reward so COMPLETE_TASK fixtures don't raise.
+    # when the code is unknown; seed a minimal reward so met-task (turn-in) fixtures don't raise.
     gd._task_coin_rewards = {"task_done": 1}
     gd._task_reward_item_codes = frozenset({"tasks_coin"})
     return gd
@@ -264,14 +264,22 @@ def _fix_CLAIM_PENDING():
     return cs, w, gd, ctx, ClaimPendingItemAction(), LadderMeans.CLAIM_PENDING
 
 
-def _fix_COMPLETE_TASK():
+def _fix_OBJECTIVE_STEP_TASK_MET():
+    """A MET held task with the opaque `objective_step_fires` flag FALSE:
+    OBJECTIVE_STEP fires on the task phase alone on BOTH ladders (production
+    `fires` reads `task_lifecycle_phase` = COMPLETE; the mirror reads
+    task_code/total), and the mirror dispatches `completeTask` — the Lean
+    `planFor .objectiveStep` arm for a met task (c-2 #6, what the retired
+    COMPLETE_TASK rung dispatched). Production applies CompleteTaskAction,
+    clearing the task on both sides."""
     gd = _base_gd()
     w = _base_world(task_code="task_done", task_type="items",
                     task_progress=5, task_total=5)
     ctx = _ctx()
     cs = _world_to_cycle(w, ctx=ctx, gd=gd, overrides={})
+    assert cs.objective_step_fires is False
     return cs, w, gd, ctx, CompleteTaskAction(taskmaster_location=(1, 2)), \
-           LadderMeans.COMPLETE_TASK
+           LadderMeans.OBJECTIVE_STEP
 
 
 def _fix_OBJECTIVE_STEP_TASK_PHASE():
@@ -331,13 +339,17 @@ def _fix_BUY_BANK_EXPANSION():
            LadderMeans.BANK_EXPAND
 
 
-FIXTURES: dict[LadderMeans, callable] = {
-    LadderMeans.HP_CRITICAL:    _fix_HP_CRITICAL,
-    LadderMeans.CLAIM_PENDING:  _fix_CLAIM_PENDING,
-    LadderMeans.COMPLETE_TASK:  _fix_COMPLETE_TASK,
-    LadderMeans.OBJECTIVE_STEP: _fix_OBJECTIVE_STEP_TASK_PHASE,
-    LadderMeans.WAIT:           _fix_WAIT,
-    LadderMeans.BANK_EXPAND:    _fix_BUY_BANK_EXPANSION,
+# Keyed by fixture name, not by `LadderMeans`: since c-2 #6 two fixtures
+# select OBJECTIVE_STEP (the met task's turn-in and the unmet task's work),
+# so the means alone no longer names a fixture. Each fixture returns its
+# expected means.
+FIXTURES: dict[str, callable] = {
+    "HP_CRITICAL":             _fix_HP_CRITICAL,
+    "CLAIM_PENDING":           _fix_CLAIM_PENDING,
+    "OBJECTIVE_STEP_TASK_MET": _fix_OBJECTIVE_STEP_TASK_MET,
+    "OBJECTIVE_STEP":          _fix_OBJECTIVE_STEP_TASK_PHASE,
+    "WAIT":                    _fix_WAIT,
+    "BANK_EXPAND":             _fix_BUY_BANK_EXPANSION,
 }
 
 
@@ -364,27 +376,27 @@ def drive_one_cycle(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("means", list(FIXTURES.keys()), ids=lambda m: m.name)
-def test_mirror_picks_same_means_as_production(means: LadderMeans) -> None:
+@pytest.mark.parametrize("means", list(FIXTURES.keys()))
+def test_mirror_picks_same_means_as_production(means: str) -> None:
     """Mirror's `mirror_production_ladder` MUST pick the same MeansKind as
     real `production_ladder` for every in-scope fixture."""
     cs, w, gd, ctx, _action, expected = FIXTURES[means]()
     mirror_pick = mirror_production_ladder(cs)
     assert mirror_pick is expected, (
-        f"MIRROR LADDER DRIFT for {means.name}:\n"
+        f"MIRROR LADDER DRIFT for {means}:\n"
         f"  mirror picked: {mirror_pick}\n"
         f"  expected:      {expected}"
     )
     prod_pick = production_ladder(w, gd, None, ctx, False)
     assert prod_pick is expected, (
-        f"PRODUCTION LADDER DRIFT for {means.name}:\n"
+        f"PRODUCTION LADDER DRIFT for {means}:\n"
         f"  production picked: {prod_pick}\n"
         f"  expected:          {expected}"
     )
 
 
-@pytest.mark.parametrize("means", list(FIXTURES.keys()), ids=lambda m: m.name)
-def test_cycle_step_projection_matches_production(means: LadderMeans) -> None:
+@pytest.mark.parametrize("means", list(FIXTURES.keys()))
+def test_cycle_step_projection_matches_production(means: str) -> None:
     """Mirror's `cycle_step_mirror` must produce the same TRACKED_FIELDS
     projection as production's `drive_one_cycle` (real production_ladder +
     action.apply) on every in-scope firing state."""
@@ -401,7 +413,7 @@ def test_cycle_step_projection_matches_production(means: LadderMeans) -> None:
                 deltas.append(f"  {f}: mirror={mv!r} prod={pv!r}")
         diff_lines = "\n".join(deltas)
         pytest.fail(
-            f"CYCLE-STEP PROJECTION DIVERGENCE for {means.name}:\n"
+            f"CYCLE-STEP PROJECTION DIVERGENCE for {means}:\n"
             f"{diff_lines}\n"
             f"  mirror_post.{tuple(f for f in TRACKED_FIELDS)} = "
             f"{tuple(getattr(mirror_proj, f) for f in TRACKED_FIELDS)}\n"
@@ -461,16 +473,17 @@ def test_hypothesis_wait_cycle_byte_equivalent(state) -> None:
 
 # ---------------------------------------------------------------------------
 # Regression: the in-scope coverage MUST include the 4 mutation-killing
-# means (HP_CRITICAL, COMPLETE_TASK, WAIT, BANK_EXPAND).
+# fixtures (HP_CRITICAL, the met task's turn-in — the retired COMPLETE_TASK
+# rung's, c-2 #6 — WAIT, BANK_EXPAND).
 # ---------------------------------------------------------------------------
 
 def test_scope_includes_mutation_targets() -> None:
     """Don't accidentally narrow the diff so mutations slip through."""
     required = {
-        LadderMeans.HP_CRITICAL,
-        LadderMeans.COMPLETE_TASK,
-        LadderMeans.WAIT,
-        LadderMeans.BANK_EXPAND,
+        "HP_CRITICAL",
+        "OBJECTIVE_STEP_TASK_MET",
+        "WAIT",
+        "BANK_EXPAND",
     }
     assert required.issubset(FIXTURES.keys()), (
         f"scope narrowed; missing: {required - FIXTURES.keys()}"

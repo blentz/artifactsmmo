@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.decisions import root as root_mod
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
+from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.task_kills import PRIORITY, TaskKillsGoal
@@ -82,11 +83,12 @@ class TestTaskKillsGoal:
 
 
 class TestReachTaskOutcome:
-    def test_satisfied_when_met_or_not_this_task(self) -> None:
+    def test_satisfied_only_when_no_longer_held(self) -> None:
+        """c-2 #6: a MET task is not satisfied — its turn-in is the step."""
         gd = _gd()
         node = ReachTaskOutcome("chicken")
         assert not node.is_satisfied(_held(3), gd)
-        assert node.is_satisfied(_held(10, 10), gd)
+        assert not node.is_satisfied(_held(10, 10), gd)
         assert node.is_satisfied(_held(3, task_code="cow"), gd)
 
     def test_every_meta_goal_dispatch_has_an_arm(self) -> None:
@@ -98,7 +100,8 @@ class TestReachTaskOutcome:
     def test_its_price_is_the_remaining_kills(self) -> None:
         gd = _gd()
         node = ReachTaskOutcome("chicken")
-        assert route_price(node, _held(10, 10), gd, NO_PROFILE_CONTEXT, None) == 0
+        assert route_price(node, _held(10, 10), gd, NO_PROFILE_CONTEXT, None) == 1  # the turn-in
+        assert route_price(node, _held(3, task_code="cow"), gd, NO_PROFILE_CONTEXT, None) == 0
         one = route_price(node, _held(9, 10), gd, NO_PROFILE_CONTEXT, None)
         seven = route_price(node, _held(3, 10), gd, NO_PROFILE_CONTEXT, None)
         assert 1 <= one <= seven
@@ -109,14 +112,28 @@ class TestReachTaskOutcome:
         node = ReachTaskOutcome("chicken")
         goal = objective_step_goal(node, _held(3), gd, NO_PROFILE_CONTEXT)
         assert isinstance(goal, TaskKillsGoal) and repr(goal) == "TaskKills(chicken)"
-        assert objective_step_goal(node, _held(10, 10), gd, NO_PROFILE_CONTEXT) is None
+
+    def test_a_met_task_is_turned_in_on_its_turn(self) -> None:
+        """c-2 #6 (was the COMPLETE_TASK collect rung)."""
+        gd = _gd()
+        node = ReachTaskOutcome("chicken")
+        assert isinstance(objective_step_goal(node, _held(10, 10), gd, NO_PROFILE_CONTEXT),
+                          CompleteTaskGoal)
+        assert objective_step_goal(node, _held(3, task_code="cow"), gd, NO_PROFILE_CONTEXT) is None
 
 
 class TestTaskRoot:
-    def test_no_root_without_an_unmet_task(self) -> None:
+    def test_no_root_without_a_task(self) -> None:
         gd = _gd()
         assert root_mod._task_root(make_state(level=12), gd, NO_PROFILE_CONTEXT, None) is None
-        assert root_mod._task_root(_held(10, 10), gd, NO_PROFILE_CONTEXT, None) is None
+
+    def test_a_met_task_is_its_own_root(self) -> None:
+        """c-2 #6: the turn-in is the task objective's step, whatever the type."""
+        gd = _gd()
+        assert root_mod._task_root(_held(10, 10), gd, NO_PROFILE_CONTEXT, None) \
+            == ReachTaskOutcome("chicken")
+        met_items = _held(10, 10, task_type="items")
+        assert root_mod._task_root(met_items, gd, NO_PROFILE_CONTEXT, None) == ReachTaskOutcome("chicken")
 
     def test_a_winnable_task_is_its_own_root(self) -> None:
         with patch.object(root_mod, "is_winnable", return_value=True):
@@ -258,8 +275,6 @@ class TestItemsTaskIsWorked:
     def test_a_held_items_task_offers_the_objective(self) -> None:
         held = _held(task_type="items")
         assert root_mod._task_root(held, _gd(), NO_PROFILE_CONTEXT, None) == ReachTaskOutcome("chicken")
-        met = _held(10, 10, task_type="items")
-        assert root_mod._task_root(met, _gd(), NO_PROFILE_CONTEXT, None) is None
 
     def test_its_step_is_the_pursuit(self) -> None:
         goal = objective_step_goal(ReachTaskOutcome("chicken"), _held(task_type="items"),
