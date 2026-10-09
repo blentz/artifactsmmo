@@ -18,9 +18,12 @@ Brick D2 of `docs/PLAN_residual_closure.md`. Three refinements over
    PURSUE_TASK descent needed; that rung is retired.)
 2. **Mint-driven chore re-arm** (`choreRearm` / `rearmOnMint`, Phase A1): EVERY
    cycle that dispatches a `.fight` re-arms ALL 7 chore latches (worst case of
-   loot), and the two MINTING chores re-arm the latches lex-below their own
-   descent slot (claim → the 7 non-pending flags; completeTask → everything).
-   Reach-50 still holds — each row's strict slot lex-dominates its re-arms.
+   loot), and the two MINTS re-arm the latches lex-below their descent slot:
+   the claimPending rung re-arms the 7 non-pending flags, and the objective
+   step's met-task turn-in (`turnInRearm`, the `.completeTask` dispatch that
+   replaced the retired COMPLETE_TASK rung in Phase 5-2c-iii-c-2 #6) re-arms
+   every chore latch. Reach-50 still holds — each row's strict slot
+   lex-dominates its re-arms.
 3. **Dispatch-keyed loot** (`pressureDeltaD`): the inventory fill applies iff
    the cycle actually dispatches a `.fight` — the synthetic
    `.objectiveStep` placeholder (a stale-armed Bool inside the defer window)

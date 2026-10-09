@@ -307,13 +307,6 @@ open Formal.PriorityBand
 #check @Formal.ProgressionReserve.nonreserved_full                 -- discretionary buy protects full reserve
 #check @Formal.ProgressionReserve.total_le_append                  -- monotone: more targets never lowers the floor
 #check @Formal.ProgressionReserve.affordable_antitone_floor        -- higher floor never makes a buy affordable
--- CyclesForProgress required roles:
-#check @Formal.CyclesForProgress.cyclesForProgressPure_eq_median_concat   -- contract: pure = median(strict ++ satisfy)
-#check @Formal.CyclesForProgress.warmup_blocks                           -- warm-up gate: < W intervals ⇒ none
-#check @Formal.CyclesForProgress.empty_none                              -- empty input ⇒ none
-#check @Formal.CyclesForProgress.satisfyIntervals_pos                    -- positivity: every satisfy interval > 0 (the > 0 gate)
-#check @Formal.CyclesForProgress.strictIntervals_pos                     -- positivity: every strict-increase interval > 0 (monotone cycleIndex)
-#check @Formal.CyclesForProgress.allIntervals_pos                        -- positivity: every appended interval > 0 ⇒ median > 0 (seals or-15 fallback)
 -- GatherApply required roles:
 #check @Formal.GatherApply.is_applicable_imp_free_ge   -- is_applicable lower bound: passing check ⇒ at least k free slots
 #check @Formal.GatherApply.apply_inventory_safe        -- per-step safety: is_applicable ∧ k ≥ 1 ⇒ post.used ≤ cap
@@ -1101,22 +1094,13 @@ open Formal.PriorityBand
 #check @Extracted.Bridges.chain_pin_ash                               -- ash_plank→ash_wood 1:1 trace pin (10)
 
 -- Extracted-model bridges (mechanical extraction P3c): the exact-Fraction
--- learning cores — cycles_for_progress (dual-signal median) and the scalar
--- yield, generated from src/artifactsmmo_cli/ai/learning/
--- {cycles_for_progress_core, scalar_core}.py and proved against the hand
--- models (Formal/Extracted/Bridges5.lean). The Python float wrappers convert
--- to Fraction EXACTLY and round ONCE at the boundary — that conversion is the
--- documented trusted seam OUTSIDE these bridges (sampled by the diff suites).
--- P2c-class fidelity finding fixed this wave: the hand strictIntervalsAux now
--- RESETS on a `none` task_progress reading (the Python semantics).
-#check @Extracted.Bridges.cycles_for_progress_bridge                  -- extracted = hand, ∀ streams/warm-ups
-#check @Extracted.Bridges.cycles_median_bridge                        -- exact sorted-median = hand medianQ, ∀ lists
-#check @Extracted.Bridges.cycles_sort_bridge                          -- emitted insertion sort = hand insSortInt
-#check @Extracted.Bridges.cycles_nth_bridge                           -- emitted nth = hand nthInt (default 0)
-#check @Extracted.Bridges.cycles_strict_fold_bridge                   -- strict fold = hand stream (None RESETS)
-#check @Extracted.Bridges.cycles_satisfy_fold_bridge                  -- satisfy fold = hand stream (> 0 gate)
-#check @Extracted.Bridges.cycles_median_concat_extracted              -- verdict-(b) dual-signal contract (transferred)
-#check @Extracted.Bridges.cycles_warmup_blocks_extracted              -- warm-up gate ⇒ none (transferred)
+-- learning core — the scalar yield, generated from
+-- src/artifactsmmo_cli/ai/learning/scalar_core.py and proved against the hand
+-- model (Formal/Extracted/Bridges5.lean). The Python float wrapper converts
+-- to Fraction EXACTLY and rounds ONCE at the boundary — that conversion is the
+-- documented trusted seam OUTSIDE these bridges (sampled by the diff suite).
+-- (The cycles_for_progress core and its bridges were deleted in the Phase
+-- 5-2c-iii cleanup: its only production caller went with the low-yield cancel.)
 #check @Extracted.Bridges.scalar_yield_bridge                         -- extracted = hand scalarYield, ∀ rational inputs
 #check @Extracted.Bridges.scalar_yield_mono_gold_extracted            -- gold monotonicity (transferred)
 #check @Extracted.Bridges.coins_spent_bridge                          -- extracted = hand coinsSpent (rfl)

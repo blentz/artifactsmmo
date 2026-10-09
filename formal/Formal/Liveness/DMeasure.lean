@@ -5,12 +5,12 @@ import Mathlib.Data.Prod.Lex
 /-! # DMeasure — the cycleStepD-tailored lex measure (residual closure)
 
 Bricks D1 + Phase-A1 + Phase-A2 of `docs/PLAN_residual_closure.md` /
-`docs/PLAN_c2_composed_liveness.md`. 18-slot lex measure under which the
+`docs/PLAN_c2_composed_liveness.md`. 21-slot lex measure under which the
 defer-faithful, MINT-RE-ARMING, PARTIAL-CLEARING cycle (`cycleStepD`) descends
 on every below-50 cycle.
 
 Phase-A1: `pendingFlag` (slot 5) sits above the other chore latches, so the
-claim mint (and the completeTask reward mint) honestly RE-ARM the flags below
+claim mint honestly RE-ARMS the flags below
 it. Phase-A2: the three multi-batch chores (discard / deposit / sell) carry an
 opaque DEBT counter directly ABOVE their latch — one apply either clears the
 latch (debt exhausted) or re-arms it and decrements the debt, so the
@@ -21,19 +21,24 @@ batches is modelled step for step.
 |---|------|--------------|---------------------------|
 | 1 | `levelDeficit`  | fight rollover | — |
 | 2 | `xpDeficit`     | fight accumulate | rollover (1) |
-| 3 | `phasePresent`  | completeTask, taskCancel, lowYieldCancel | acceptTask/taskTrade — unreachable below 50 |
-| 4 | `taskCycles`    | pursueTask (gate supplies `progress < total`) | acceptTask — unreachable |
-| 5 | `pendingFlag`   | claimPending | fight re-arm (1/2), completeTask mint (1/3) |
-| 6 | `overstockDebt` | discardCritical/High while debt > 0 | mints (1/2, 5, 1/3) |
+| 3 | `phasePresent`  | — no below-50 row since Phase 5-2c-iii (the task-lifecycle rungs completeTask, taskCancel, lowYieldCancel, acceptTask, pursueTask retired into the objective step) | — (the task-work step keeps the phase present) |
+| 4 | `taskCycles`    | the objective step's task work (`.taskTrade` when the step fired on the active phase; the defer gate supplies `progress < total`) | — |
+| 5 | `pendingFlag`   | claimPending | fight re-arm (1/2) |
+| 6 | `overstockDebt` | discardCritical/High while debt > 0 | mints (1/2, 5) |
 | 7 | `overstockFlag` | discardCritical/High at debt 0 | mints; partial clears (6) |
 | 8 | `depositDebt`   | depositFull while debt > 0 | mints |
 | 9 | `selectBankDepositsFlag` | depositFull at debt 0 | mints; partial clears (8) |
 | 10 | `sellDebt`     | sellPressured/sellRelief while debt > 0 | mints |
 | 11 | `sellableFlag` | sellPressured/sellRelief at debt 0 | mints; partial clears (10) |
 | 12-14 | recyclable / craftRelief / craftPotions latches | their rows | mints |
-| 16 | `bankPressure` | reducers | fight loot (1/2), claim mint (5) |
-| 17 | `hpDeficit`    | hpCritical / restForCombat | — |
-| 18 | `objectiveStepFlag` | synthetic placeholder | `perceptionRefreshD` arming — every other row descends a slot ≤ 17 |
+| 15 | `bankPressure` | reducers | fight loot (1/2), claim mint (5) |
+| 16 | `hpDeficit`    | hpCritical / restForCombat | — |
+| 17-20 | geCancel / supplyDemand / currencyTurnIn / bankExpand | their rows (fire-and-lose or counted) | — |
+| 21 | `objectiveStepFlag` | synthetic placeholder | `perceptionRefreshD` arming — every other row descends a slot ≤ 20 |
+
+The `drawOwedFlag` slot (2026-08-19, ACCEPT_TASK's descent above
+`phasePresent`) was removed in the Phase 5-2c-iii cleanup: the rung retired in
+c-2 #3 and the slot had no descent caller after it.
 
 Honesty: no quiescence claim; theorem is about the model; offline perimeter in
 `docs/LEVEL_FIFTY_RESIDUALS.md`. Debt values are opaque worst-case bounds
@@ -49,13 +54,10 @@ namespace Formal.Liveness.DMeasure
 open Formal.Liveness.Measure
 open Formal.Liveness.CumulativeProgress (b2n)
 
-/-- The 18-slot lex measure for the defer-faithful cycle. -/
+/-- The 21-slot lex measure for the defer-faithful cycle. -/
 structure DMeasure where
   levelDeficit           : Nat
   xpDeficit              : Nat
-  -- 2026-08-19: mirrors `FMeasure.drawOwedFlag`. `.acceptTask` RAISES
-  -- `phasePresent`, so it can only descend at a slot ABOVE it.
-  drawOwedFlag           : Nat
   phasePresent           : Nat
   taskCycles             : Nat
   pendingFlag            : Nat
@@ -103,7 +105,6 @@ structure DMeasure where
 noncomputable def dMeasure (s : State) : DMeasure :=
   { levelDeficit           := 50 - s.level
     xpDeficit              := xpToNextLevel s.level - s.xp
-    drawOwedFlag           := b2n s.drawOwed
     phasePresent           := b2n (decide (s.taskLifecyclePhase ≠ .none))
     taskCycles             := s.taskTotal - s.taskProgress
     pendingFlag            := b2n s.pendingItemsNonempty
@@ -126,19 +127,19 @@ noncomputable def dMeasure (s : State) : DMeasure :=
         - ProductionLadder.BANK_EXPAND_FILL_NUM * s.bankCapacity
     objectiveStepFlag      := b2n s.objectiveStepFires }
 
-/-- Right-associated 22-tuple of `Nat`. Widened on 2026-09-13 for
-    `bankExpandSlot`. (The name is historical and several widenings behind by
-    construction; the arity is the tuple below, not the name.) -/
+/-- Right-associated 21-tuple of `Nat`. Widened on 2026-09-13 for
+    `bankExpandSlot`; narrowed in the Phase 5-2c-iii cleanup (`drawOwedFlag`
+    removed). (The name is historical; the arity is the tuple below, not the
+    name.) -/
 abbrev LexNineteenD :=
-  Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
+  Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
     Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
     Nat ×ₗ Nat
 
-/-- Embed a `DMeasure` into the right-associated lex 22-tuple. -/
+/-- Embed a `DMeasure` into the right-associated lex 21-tuple. -/
 def toLexD (m : DMeasure) : LexNineteenD :=
   toLex (m.levelDeficit,
       toLex (m.xpDeficit,
-      toLex (m.drawOwedFlag,
       toLex (m.phasePresent,
       toLex (m.taskCycles,
       toLex (m.pendingFlag,
@@ -156,7 +157,7 @@ def toLexD (m : DMeasure) : LexNineteenD :=
       toLex (m.geCancelFlag,
       toLex (m.supplyDemandSlot,
       toLex (m.currencyTurnInFlag,
-      toLex (m.bankExpandSlot, m.objectiveStepFlag)))))))))))))))))))))
+      toLex (m.bankExpandSlot, m.objectiveStepFlag))))))))))))))))))))
 
 /-- Strict lex order on `DMeasure` — via the Mathlib lex embedding. -/
 def dMeasureLt (m₁ m₂ : DMeasure) : Prop :=
@@ -186,60 +187,47 @@ theorem dLt_of_xpDeficit_dec {m₁ m₂ : DMeasure}
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
   exact Or.inr ⟨h1, Or.inl h⟩
 
-theorem dLt_of_drawOwed_dec {m₁ m₂ : DMeasure}
+theorem dLt_of_phasePresent_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (h : m₁.drawOwedFlag < m₂.drawOwedFlag) : dMeasureLt m₁ m₂ := by
+    (h : m₁.phasePresent < m₂.phasePresent) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
   exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inl h⟩⟩
 
-theorem dLt_of_phasePresent_dec {m₁ m₂ : DMeasure}
-    (h1 : m₁.levelDeficit = m₂.levelDeficit)
-    (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
-    (h : m₁.phasePresent < m₂.phasePresent) : dMeasureLt m₁ m₂ := by
-  apply lex_intro
-  simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inl h⟩⟩⟩
-
 theorem dLt_of_taskCycles_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h : m₁.taskCycles < m₂.taskCycles) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inl h⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inl h⟩⟩⟩
 
 theorem dLt_of_pending_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h : m₁.pendingFlag < m₂.pendingFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inl h⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inl h⟩⟩⟩⟩
 
 theorem dLt_of_overstockDebt_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
     (h : m₁.overstockDebt < m₂.overstockDebt) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inl h⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inl h⟩⟩⟩⟩⟩
 
 theorem dLt_of_overstock_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
@@ -247,12 +235,11 @@ theorem dLt_of_overstock_dec {m₁ m₂ : DMeasure}
     (h : m₁.overstockFlag < m₂.overstockFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inl h⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inl h⟩⟩⟩⟩⟩⟩
 
 theorem dLt_of_depositDebt_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
@@ -261,12 +248,11 @@ theorem dLt_of_depositDebt_dec {m₁ m₂ : DMeasure}
     (h : m₁.depositDebt < m₂.depositDebt) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inl h⟩⟩⟩⟩⟩⟩⟩
 
 theorem dLt_of_selectBankDeposits_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
@@ -276,12 +262,11 @@ theorem dLt_of_selectBankDeposits_dec {m₁ m₂ : DMeasure}
     (h : m₁.selectBankDepositsFlag < m₂.selectBankDepositsFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem dLt_of_sellDebt_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
@@ -292,12 +277,11 @@ theorem dLt_of_sellDebt_dec {m₁ m₂ : DMeasure}
     (h : m₁.sellDebt < m₂.sellDebt) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem dLt_of_sellable_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
@@ -309,12 +293,11 @@ theorem dLt_of_sellable_dec {m₁ m₂ : DMeasure}
     (h : m₁.sellableFlag < m₂.sellableFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem dLt_of_recyclable_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
@@ -327,12 +310,11 @@ theorem dLt_of_recyclable_dec {m₁ m₂ : DMeasure}
     (h : m₁.recyclableFlag < m₂.recyclableFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem dLt_of_craftRelief_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
@@ -346,12 +328,11 @@ theorem dLt_of_craftRelief_dec {m₁ m₂ : DMeasure}
     (h : m₁.craftReliefFlag < m₂.craftReliefFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem dLt_of_craftPotions_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
@@ -366,12 +347,11 @@ theorem dLt_of_craftPotions_dec {m₁ m₂ : DMeasure}
     (h : m₁.craftPotionsFlag < m₂.craftPotionsFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem dLt_of_hpDeficit_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
@@ -388,12 +368,11 @@ theorem dLt_of_hpDeficit_dec {m₁ m₂ : DMeasure}
     (h : m₁.hpDeficit < m₂.hpDeficit) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem dLt_of_objectiveStepFlag_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
@@ -415,13 +394,12 @@ theorem dLt_of_objectiveStepFlag_dec {m₁ m₂ : DMeasure}
     (h : m₁.objectiveStepFlag < m₂.objectiveStepFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Slot 21 (`bankExpandSlot`, 2026-09-13) decrease with slots 1-20 equal. -/
 theorem dLt_of_bankExpand_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
@@ -442,12 +420,11 @@ theorem dLt_of_bankExpand_dec {m₁ m₂ : DMeasure}
     (h : m₁.bankExpandSlot < m₂.bankExpandSlot) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem dLt_of_geCancel_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
@@ -465,7 +442,7 @@ theorem dLt_of_geCancel_dec {m₁ m₂ : DMeasure}
     (h : m₁.geCancelFlag < m₂.geCancelFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Slot 19 (`supplyDemandSlot`, 2026-08-01) decrease with slots 1-18 equal.
     The SUPPLY_BANK rung's `.gather` apply touches no higher slot; strictness
@@ -474,7 +451,6 @@ theorem dLt_of_geCancel_dec {m₁ m₂ : DMeasure}
 theorem dLt_of_supplyDemand_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
@@ -493,7 +469,7 @@ theorem dLt_of_supplyDemand_dec {m₁ m₂ : DMeasure}
     (h : m₁.supplyDemandSlot < m₂.supplyDemandSlot) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Slot 20 (`currencyTurnInFlag`, 2026-08-16) decrease with slots 1-19 equal.
     The CURRENCY_TURNIN rung's `.npcBuy` apply touches no higher slot;
@@ -503,7 +479,6 @@ theorem dLt_of_supplyDemand_dec {m₁ m₂ : DMeasure}
 theorem dLt_of_currencyTurnIn_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
-    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.taskCycles = m₂.taskCycles)
     (h5 : m₁.pendingFlag = m₂.pendingFlag)
@@ -523,7 +498,7 @@ theorem dLt_of_currencyTurnIn_dec {m₁ m₂ : DMeasure}
     (h : m₁.currencyTurnInFlag < m₂.currencyTurnInFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-! ## The engine — reach 50 from per-cycle DMeasure descent. -/
 

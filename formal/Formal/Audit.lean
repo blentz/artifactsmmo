@@ -242,12 +242,6 @@ open Formal.PriorityBand
 #print axioms Formal.ProgressionReserve.nonreserved_full
 #print axioms Formal.ProgressionReserve.total_le_append
 #print axioms Formal.ProgressionReserve.affordable_antitone_floor
-#print axioms Formal.CyclesForProgress.cyclesForProgressPure_eq_median_concat
-#print axioms Formal.CyclesForProgress.warmup_blocks
-#print axioms Formal.CyclesForProgress.empty_none
-#print axioms Formal.CyclesForProgress.satisfyIntervals_pos
-#print axioms Formal.CyclesForProgress.strictIntervals_pos
-#print axioms Formal.CyclesForProgress.allIntervals_pos
 #print axioms Formal.GatherApply.is_applicable_imp_free_ge
 #print axioms Formal.GatherApply.apply_inventory_safe
 #print axioms Formal.GatherApply.apply_inventory_safe_prod
@@ -884,14 +878,6 @@ open Formal.PriorityBand
 #print axioms Extracted.Bridges.chain_demand_visited_blocked
 #print axioms Extracted.Bridges.chain_pin_cycle
 #print axioms Extracted.Bridges.chain_pin_ash
-#print axioms Extracted.Bridges.cycles_for_progress_bridge
-#print axioms Extracted.Bridges.cycles_median_bridge
-#print axioms Extracted.Bridges.cycles_sort_bridge
-#print axioms Extracted.Bridges.cycles_nth_bridge
-#print axioms Extracted.Bridges.cycles_strict_fold_bridge
-#print axioms Extracted.Bridges.cycles_satisfy_fold_bridge
-#print axioms Extracted.Bridges.cycles_median_concat_extracted
-#print axioms Extracted.Bridges.cycles_warmup_blocks_extracted
 #print axioms Extracted.Bridges.scalar_yield_bridge
 #print axioms Extracted.Bridges.scalar_yield_mono_gold_extracted
 #print axioms Extracted.Bridges.coins_spent_bridge

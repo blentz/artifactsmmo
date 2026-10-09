@@ -26,7 +26,6 @@ import Formal.ObjectiveStepFight
 import Formal.DecideKey
 import Formal.DominancePareto
 import Formal.ProgressionReserve
-import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
 import Formal.ShoppingList
@@ -53,7 +52,6 @@ import Formal.Extracted.TaskReservation
 import Formal.Extracted.Thresholds
 import Formal.Extracted.CostCore
 import Formal.Extracted.InventoryCaps
-import Formal.Extracted.CyclesForProgress
 import Formal.Extracted.ScalarCore
 import Formal.Extracted.MinGathers
 import Formal.Extracted.GatherFloor

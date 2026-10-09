@@ -60,7 +60,6 @@ class CycleState:
     sellable_inventory_nonempty: bool
     task_coins_total: int
     task_exchange_min_coins: int
-    task_cancel_fires: bool
     objective_step_fires: bool
     bank_items_known: bool
     bank_items_count: int
@@ -312,7 +311,6 @@ def apply_action_kind_mirror(action: str, s: CycleState) -> CycleState:
     if action == "taskCancel":
         return dataclasses.replace(
             s,
-            task_cancel_fires=False,
             task_code=None,
             task_total=0,
             task_progress=0,

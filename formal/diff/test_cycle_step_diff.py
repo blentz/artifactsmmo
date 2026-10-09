@@ -32,7 +32,7 @@ model claims.
 ## Honest disclosure: TRACKED_FIELDS
 
 The Lean `State` has 32 fields, many opaque Bools (`objectiveStepFires`,
-`taskCancelFires`, …) whose post-cycle value in production is determined
+`craftReliefFires`, …) whose post-cycle value in production is determined
 by the next perception refresh (not the action's `.apply`).  We compare
 ONLY the fields whose mutation rules are equivalent across:
   * Lean `applyActionKind` (Plan.lean lines 103-255)
@@ -194,7 +194,6 @@ def _world_to_cycle(w: WorldState, *, ctx: SelectionContext, gd: GameData,
         sellable_inventory_nonempty=False,
         task_coins_total=w.inventory.get(TASKS_COIN_CODE, 0),
         task_exchange_min_coins=ctx.task_exchange_min_coins,
-        task_cancel_fires=False,
         objective_step_fires=False,
         bank_items_known=(w.bank_items is not None),
         bank_items_count=(len(w.bank_items) if w.bank_items is not None else 0),

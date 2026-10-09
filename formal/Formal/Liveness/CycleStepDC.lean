@@ -83,10 +83,7 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
       { s with taskCode := some newCode,
                taskTotal := 1,
                taskProgress := 0,
-               taskLifecyclePhase := .accepted,
-               -- mirrors `Plan.applyActionKind`; `applyActionKindC_eq` is what
-               -- forces the two to move together.
-               drawOwed := false }
+               taskLifecyclePhase := .accepted }
   -- TaskExchangeAction.apply (task_exchange.py:44+): consumes `min_coins`
   -- task coins from inventory, grants reward. The Lean model abstracts the
   -- coin counter via `taskCoinsTotal`; the conservative single-action
@@ -94,12 +91,7 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
   | .taskExchange, s =>
       { s with taskCoinsTotal := s.taskCoinsTotal - s.taskExchangeMinCoins }
   -- TaskCancelAction.apply (task_cancel.py:35+): clears task; consumes
-  -- one task coin. The Lean model has OPAQUE Bools `taskCancelFires`,
-  -- `lowYieldCancelFires`, and `pursueTaskFires` which production resets
-  -- after the cancel (no task ⇒ none of these can fire) — the
-  -- conservative single-action semantics flips all three to `false`.
-  -- Phase 21b: also covers `.lowYieldCancel` whose firing predicate
-  -- reads `s.lowYieldCancelFires`.
+  -- one task coin. The task (and its lifecycle phase) is cleared.
   | .taskCancel, s =>
       -- Item 1g-A2: push the cancelled code onto `taskCodesSeen` so the
       -- pigeonhole bound (cancels ≤ |taskPool|) holds along any cycleStep
@@ -109,9 +101,7 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
       let newSeen : List String := match s.taskCode with
         | some c => c :: s.taskCodesSeen
         | none => s.taskCodesSeen
-      { s with taskCancelFires := false,
-               pursueTaskFires := false,
-               taskCode := none,
+      { s with taskCode := none,
                taskTotal := 0,
                taskProgress := 0,
                taskLifecyclePhase := .none,
@@ -208,13 +198,8 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
                actionsAttempted := newAttempts }
   -- TaskTradeAction.apply (task_trade.py): delivers one or more units of
   -- the items-task item to the task NPC. The Lean model collapses a
-  -- multi-trade delivery into a single step: it advances `taskProgress`
-  -- to `taskTotal` (task complete) and resets the opaque
-  -- `pursueTaskFires` Bool to `false`. Production firing predicate is
-  -- the opaque `pursueTaskFires` (means.py:85-90, all gating folded in
-  -- including `task_type == "items"` and progress < total); flipping it
-  -- to `false` mirrors the post-delivery state where the task is fully
-  -- satisfied (production would route to CompleteTaskGoal next cycle).
+  -- multi-trade delivery into a single step that advances `taskProgress`
+  -- (see the Phase 23d-5 note below).
   --
   -- Honest disclosure: production may need multiple TaskTrade calls if
   -- the per-call delivery quantity is bounded by inventory; the Lean
@@ -240,8 +225,7 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
         if s.taskTotal = 0 then s.taskLifecyclePhase
         else if newProgress ≥ s.taskTotal then .complete
         else .inProgress
-      { s with pursueTaskFires := false,
-               taskProgress := newProgress,
+      { s with taskProgress := newProgress,
                taskLifecyclePhase := newPhase,
                actionsAttempted := newAttempts }
   -- Phase 21d-1 synthetic placeholder. See PlanAction.lean docstring

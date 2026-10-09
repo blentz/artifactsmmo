@@ -172,15 +172,6 @@ structure State where
   taskCoinsTotal : Nat
   /-- ctx — `SelectionContext.task_exchange_min_coins` (guards.py:30). -/
   taskExchangeMinCoins : Nat
-  /-- OPAQUE: `task_decision(state, game_data, history) == PIVOT`, with
-      gating `bool(state.task_code) and history is not None` already
-      folded in (means.py:80-83). -/
-  taskCancelFires : Bool
-  /-- OPAQUE: production's PURSUE_TASK predicate (means.py:85-90), with
-      all gating folded in (`task_type == "items"`, `task_code`,
-      `task_progress < task_total`, `history is not None`,
-      `task_decision == PURSUE`). -/
-  pursueTaskFires : Bool
   /-- OPAQUE: production's objective-step firing predicate (the
       StrategyArbiter inserts the StepGoal candidate iff the objective
       tier yields a plannable step). -/
@@ -370,7 +361,7 @@ structure State where
       when production would decide PIVOT (lifecycle exits via cancel).
       Required to prove `accept_cancel_loop_bound` structurally — the
       .accepted → cycleStep transition only proceeds toward .complete
-      when this is true; otherwise taskCancelFires would trigger early
+      when this is true; otherwise a cancel would trigger early
       and re-enter the .none → .accepted cycle indefinitely. -/
   taskFeasibleProjected : Bool
   /-- Item 1g-A1: model the API's task-code pool. The server's
@@ -383,16 +374,6 @@ structure State where
       The discharge of `accept_cancel_loop_bound` (Item 1g-A2) requires
       callers to populate `taskPool` from `GameDataFixture`. -/
   taskPool : List String
-  /-- 2026-08-19 (S-051 + the USER's no-immediate-redraw rule): a draw is OWED
-      for the course in flight. `.acceptTask` fires only when this is set and
-      CLEARS it, which is what lets an accept descend `fMeasure` despite raising
-      `phasePresent` — the flag sits one slot above it. Nothing in the ladder sets
-      it; a course boundary does, and a boundary also decreases `xpDeficit`, which
-      is earlier still, so the measure descends there too.
-
-      Defaults false so legacy fixtures keep their meaning: no draw owed, so
-      `.acceptTask` stays quiet exactly where it used to. -/
-  drawOwed : Bool := false
   /-- Item 1g-A1: codes the bot has already cancelled. Each
       `.taskCancel` apply pushes the current `taskCode` onto this list
       (subject to extension in Item 1g-A2). Pigeonhole: when

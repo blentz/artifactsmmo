@@ -68,8 +68,6 @@ def inertLadderState : State where
   geCancelTargetsNonempty := false
   taskCoinsTotal := 0
   taskExchangeMinCoins := 0
-  taskCancelFires := false
-  pursueTaskFires := false
   objectiveStepFires := false
   objectiveStepIsFight := false
   craftReliefFires := false

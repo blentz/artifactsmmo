@@ -372,14 +372,6 @@ MODULES: tuple[ModuleSpec, ...] = (
         constants=("EQUIPPABLE_KEEP", "CONSUMABLE_KEEP"),
     ),
     ModuleSpec(
-        source="src/artifactsmmo_cli/ai/learning/cycles_for_progress_core.py",
-        output=f"{GENERATED_DIR}/CyclesForProgress.lean",
-        core_name="CyclesForProgress",
-        functions=("_strict_step", "_satisfy_step", "_median_exact",
-                   "cycles_for_progress_exact"),
-        structures=("CycleRow",),
-    ),
-    ModuleSpec(
         source="src/artifactsmmo_cli/ai/learning/scalar_core.py",
         output=f"{GENERATED_DIR}/ScalarCore.lean",
         core_name="ScalarCore",

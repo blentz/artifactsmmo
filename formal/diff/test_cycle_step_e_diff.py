@@ -167,12 +167,12 @@ def test_defer_window_outranks_gear_arming() -> None:
     v = _base_vector()
     v[16] = 2          # phase inProgress
     v[34] = 1          # itemsTaskDeferActive
-    # deferGate needs pursueTaskFires: phase active + progress < total
+    # deferGate needs an active phase + progress < total
     v_total = list(v)
     v_total[38] = 0
     v_total[39] = 4
     # taskProgress/taskTotal are not in the vector head; the D entry models
-    # them via phase alone — pursueTask fires on the phase. If the gate does
+    # them via phase alone — the task work fires on the phase. If the gate does
     # not hold the refresh arms the gear objective step instead, and a
     # productive gear step closes one unit of the gap; when the gap is intact
     # the selected rung was not that gear step.

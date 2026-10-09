@@ -15,7 +15,6 @@ open Formal.BankSelection Formal.PriorityBand Formal.OwnedCount Formal.UpgradeSe
 open Formal.Scalarizer
 open Formal.TaskDecision
 open Formal.DecideKey
-open Formal.CyclesForProgress
 open Formal.GatherApply
 open Formal.ActionCostNonneg
 open Formal.InventoryChainSafe
@@ -1203,41 +1202,6 @@ def runProgressionReserveMulti (args : Array Json) : Json :=
   Json.mkObj [
     ("floor_multi",
       Json.num (Int.ofNat (Formal.ProgressionReserve.effectiveFloorMulti reserved buying)))]
-
-/-- Compute one cycles_for_progress result using the SAME proved
-`cyclesForProgressPure`.
-
-args layout (all Ints):
-* `[0]`        warmupMinSamples (Nat)
-* `[1]`        nRows
-* per row (5 Ints, repeated nRows times starting at index 2):
-  `[cycleIndex, hasTaskProgress(0/1), taskProgress, hasCyclesToSatisfy(0/1),
-    cyclesToSatisfy]`
-
-Rows are passed newest-first (as `recent_goal_cycles` returns them).
-
-Emits the result as `{"present": Bool, "num": Int, "den": Int}`. When
-`present = false`, num/den are 0. -/
-def runCyclesForProgress (args : Array Json) : Json :=
-  let warmup := (intArg args 0).toNat
-  let n := (intArg args 1).toNat
-  let rows : List Formal.CyclesForProgress.CycleRow :=
-    (List.range n).map (fun k =>
-      let base := 2 + 5 * k
-      let cyc := intArg args base
-      let tpPresent := intArg args (base + 1) != 0
-      let tp : Option Int := if tpPresent then some (intArg args (base + 2)) else none
-      let csPresent := intArg args (base + 3) != 0
-      let cs : Option Int := if csPresent then some (intArg args (base + 4)) else none
-      { cycleIndex := cyc, taskProgress := tp, cyclesToSatisfy := cs })
-  match Formal.CyclesForProgress.cyclesForProgressPure rows warmup with
-  | some r =>
-    Json.mkObj [("present", Json.bool true),
-                ("num", Json.num r.num),
-                ("den", Json.num (Int.ofNat r.den))]
-  | none =>
-    Json.mkObj [("present", Json.bool false),
-                ("num", Json.num 0), ("den", Json.num 1)]
 
 /-- Compute one gather_apply result.
 
@@ -2507,6 +2471,9 @@ ARG LAYOUT (flat ints; index → field):
 * `[30]` bankItemsKnown               (Bool 0/1)
 * `[31]` bankJunkNonempty             (Bool 0/1)
 * `[32]` craftPotionsFires            (Bool 0/1)
+* `[39]` reserved — was drawOwed, retired with ACCEPT_TASK's slot in Phase
+                                        5-2c-iii; callers send 0 and it is
+                                        ignored, so `[40]` keeps its position.
 * `[40]` bankGold                     (Nat — WorldState.bank_gold or 0; the
                                         account balance is `[12] + [40]`)
 * `[33]` goldReserve                  (Nat — reserve_floor(state, gd, None);
@@ -2573,9 +2540,7 @@ def runLadder (args : Array Json) : Json :=
     goldReserve := n 33, geBidCandidateNonempty := b 34,
     geCancelTargetsNonempty := b 35, supplyDemand := n 36,
     currencyTurnInActive := b 37, supplyAsymmetric := b 38,
-    -- [39] drawOwed (2026-08-19): ACCEPT_TASK's gate, and the slot the accept
-    -- descends. Appended, so every existing caller keeps its indices.
-    drawOwed := b 39,
+    -- [39] reserved (was drawOwed, retired in Phase 5-2c-iii).
     -- [40] bankGold (2026-09-13): the BANKED half of the account balance, for
     -- BANK_EXPAND's account-scoped reserve gate. Appended, so every existing
     -- caller keeps its indices.
@@ -2949,8 +2914,6 @@ def runOne (item : Json) : Json :=
     runProgressionReserve args
   else if kind == "progression_reserve_multi" then
     runProgressionReserveMulti args
-  else if kind == "cycles_for_progress" then
-    runCyclesForProgress args
   else if kind == "gather_apply" then
     runGatherApply args
   else if kind == "inventory_room" then

@@ -44,7 +44,6 @@ import Formal.TaskDecision
 import Formal.ObjectiveStepFight
 import Formal.DecideKey
 import Formal.ProgressionReserve
-import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
 import Formal.GatherCost
@@ -1534,39 +1533,6 @@ example : ∀ (r extra : Formal.ProgressionReserve.Reserved),
   @Formal.ProgressionReserve.total_le_append
 example : ∀ (gold price f1 f2 : Nat), f1 ≤ f2 → gold ≥ price + f2 → gold ≥ price + f1 :=
   @Formal.ProgressionReserve.affordable_antitone_floor
-
-/-! ### CyclesForProgress role contracts. -/
-
-example : ∀ (rows : List Formal.CyclesForProgress.CycleRow) (W : Nat),
-    rows ≠ [] →
-    ¬ (Formal.CyclesForProgress.allIntervals
-          (Formal.CyclesForProgress.revList rows)).length < W →
-    Formal.CyclesForProgress.cyclesForProgressPure rows W
-      = some (Formal.CyclesForProgress.medianQ
-          (Formal.CyclesForProgress.strictIntervals
-            (Formal.CyclesForProgress.revList rows)
-           ++ Formal.CyclesForProgress.satisfyIntervals
-            (Formal.CyclesForProgress.revList rows))) :=
-  @Formal.CyclesForProgress.cyclesForProgressPure_eq_median_concat
-example : ∀ (rows : List Formal.CyclesForProgress.CycleRow) (W : Nat),
-    (Formal.CyclesForProgress.allIntervals
-        (Formal.CyclesForProgress.revList rows)).length < W →
-    Formal.CyclesForProgress.cyclesForProgressPure rows W = none :=
-  @Formal.CyclesForProgress.warmup_blocks
-example : ∀ (W : Nat),
-    Formal.CyclesForProgress.cyclesForProgressPure [] W = none :=
-  @Formal.CyclesForProgress.empty_none
-example : ∀ (rows : List Formal.CyclesForProgress.CycleRow),
-    ∀ x ∈ Formal.CyclesForProgress.satisfyIntervals rows, 0 < x :=
-  @Formal.CyclesForProgress.satisfyIntervals_pos
-example : ∀ (rows : List Formal.CyclesForProgress.CycleRow),
-    Formal.CyclesForProgress.monoChrono rows →
-    ∀ x ∈ Formal.CyclesForProgress.strictIntervals rows, 0 < x :=
-  @Formal.CyclesForProgress.strictIntervals_pos
-example : ∀ (rows : List Formal.CyclesForProgress.CycleRow),
-    Formal.CyclesForProgress.monoChrono rows →
-    ∀ x ∈ Formal.CyclesForProgress.allIntervals rows, 0 < x :=
-  @Formal.CyclesForProgress.allIntervals_pos
 
 /-! ### GatherApply role contracts. -/
 

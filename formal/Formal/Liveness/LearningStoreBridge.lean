@@ -1,15 +1,15 @@
 import Formal.TaskDecision
-import Formal.Liveness.Plan
-import Formal.Liveness.Measure
-import Formal.Liveness.ProductionLadder
 import Mathlib.Tactic
 
 /-! # LearningStoreBridge — Item 6a/6b
 
 Bridges the safety-side `Formal.TaskDecision.taskDecisionPure` model
 (Phase 13: PURSUE/PIVOT decision over learning-store observations)
-into the Liveness side's opaque firing predicates
-(`taskCancelFires`, `pursueTaskFires`).
+to the Liveness layer. The opaque firing predicates it once connected
+(`taskCancelFires`, `pursueTaskFires`) left the model with the
+TASK_CANCEL and PURSUE_TASK rungs (Phase 5-2c-iii); the
+`State.taskCancelFires` connection lemmas went with them, and the
+re-exports below remain.
 
   • 6a — `LearningStore` mirror structure: the inputs to
     `taskDecisionPure` as they would be packaged at the perception
@@ -18,19 +18,14 @@ into the Liveness side's opaque firing predicates
     on Liveness `State` is deferred; for 6a we ship the BRIDGE
     structure and document the connection.
 
-  • 6b — connection theorem: under the assumption that the
-    perception layer wires the opaque `taskCancelFires` to
-    `taskDecisionPure ... = .PIVOT`, the Liveness-side cancel
-    selection mirrors the safety-side PIVOT decision exactly.
+  • 6b — re-exports of the PIVOT/PURSUE verdicts at the Liveness
+    layer over a bundled `LearningStore`.
 
 NO new axioms.
 -/
 
 namespace Formal.Liveness.LearningStoreBridge
 
-open Formal.Liveness.Plan
-open Formal.Liveness.Measure
-open Formal.Liveness.ProductionLadder
 open Formal.TaskDecision
 
 /-- Item 6a: bundled inputs to `taskDecisionPure`. Mirrors what the
@@ -50,43 +45,6 @@ structure LearningStore where
 def decide (ls : LearningStore) : Decision :=
   taskDecisionPure ls.reqIsNone ls.reqIsCombat ls.historyPresent
     ls.skillUpVpc ls.baseline ls.margin ls.confidence
-
-/-! ## Item 6b — Connection bridge
-
-The Liveness-side `taskCancelFires : Bool` is OPAQUE in the model
-(`Formal.Liveness.Measure.taskCancelFires := s.taskCancelFires`).
-The perception layer is INTENDED to populate this field with
-`decide ls = .PIVOT` for the cycle's learning store `ls`. The bridge
-condition makes that explicit: if the perception layer respects
-this contract, the safety-side PIVOT semantics carry over.
--/
-
-/-- Bridge condition: state's opaque taskCancelFires reflects the
-    PIVOT decision of the bundled learning store. -/
-def taskCancelMirrorsPivot (s : State) (ls : LearningStore) : Prop :=
-  s.taskCancelFires = (decide ls == Decision.PIVOT)
-
-/-- When the bridge holds and the learning store decides PIVOT, the
-    Liveness-side taskCancelFires is true (so the ladder will fire
-    `.taskCancel` per `means.py:80-83`). -/
-theorem taskCancelFires_when_PIVOT (s : State) (ls : LearningStore)
-    (hBridge : taskCancelMirrorsPivot s ls)
-    (hPivot : decide ls = Decision.PIVOT) :
-    s.taskCancelFires = true := by
-  unfold taskCancelMirrorsPivot at hBridge
-  rw [hBridge, hPivot]
-  rfl
-
-/-- When the bridge holds and the learning store decides PURSUE, the
-    Liveness-side taskCancelFires is false (so the ladder skips
-    `.taskCancel` and proceeds to `.pursueTask`). -/
-theorem taskCancelFires_false_when_PURSUE (s : State) (ls : LearningStore)
-    (hBridge : taskCancelMirrorsPivot s ls)
-    (hPursue : decide ls = Decision.PURSUE) :
-    s.taskCancelFires = false := by
-  unfold taskCancelMirrorsPivot at hBridge
-  rw [hBridge, hPursue]
-  rfl
 
 /-! ## Re-export: combat-or-no-history pivots (Phase 13 → Liveness) -/
 

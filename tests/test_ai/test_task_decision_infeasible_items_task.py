@@ -3,8 +3,9 @@
 A task whose `task_requirement` returns a 49-level skill gap (current=1,
 required=50) must PIVOT — no character can plausibly skill from 1 to 50 to
 complete a single items task. This test pins down what production currently
-does so the Lean bridge proof (`taskInfeasible → taskCancelFires`) can rest on
-a verified premise.
+does so the Lean bridge proof (`taskInfeasible_implies_stepFires`, which
+concluded `taskCancelFires` until the TASK_CANCEL rung retired) can rest on a
+verified premise.
 """
 
 from pathlib import Path

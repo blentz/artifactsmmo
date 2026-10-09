@@ -6,9 +6,11 @@ import Formal.Liveness.UnconditionalDescent
 
 Brick D3 of `docs/PLAN_residual_closure.md`: the `BlockerDescent` per-means
 descent re-proved over the defer-faithful, adversarially-re-arming cycle
-(`cycleStepD`), against the 15-slot `DMeasure`. New rows vs the F-tower:
-the synthetic `.objectiveStep` placeholder (slot 15). (The `pursueTask` row,
-slot 4, defer window, retired with PURSUE_TASK in Phase 5-2c-iii-c-2 #4.)
+(`cycleStepD`), against the 21-slot `DMeasure`. New rows vs the F-tower:
+the synthetic `.objectiveStep` placeholder — `objectiveStepFlag` (slot 21) when
+stale-armed, or the held task's work (`taskCycles`, slot 4) inside the defer
+window, the slot the retired `pursueTask` row (Phase 5-2c-iii-c-2 #4)
+descended.
 The fight row absorbs the worst-case chore re-arm
 (slots 5-12 raises are dominated by slots 1/2).
 
@@ -57,9 +59,6 @@ private theorem cycleStepD_some (s : State) {k : MeansKind}
 
 /-! ## perceptionRefreshD field bridges — only the two objective Bools move. -/
 
-private theorem refreshD_drawOwed (s : State) :
-    (perceptionRefreshD s).drawOwed = s.drawOwed := by
-  unfold perceptionRefreshD; split <;> rfl
 private theorem refreshD_phase (s : State) :
     (perceptionRefreshD s).taskLifecyclePhase = s.taskLifecyclePhase := by
   unfold perceptionRefreshD; split <;> rfl
@@ -154,7 +153,7 @@ theorem descendsD_hpCritical (s : State)
   apply dLt_of_hpDeficit_dec <;>
     simp only [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
       applyActionKind, if_false, Bool.false_eq_true, reduceIte,
-      refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+      refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
       refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_hp, refreshD_maxHp,
@@ -180,7 +179,7 @@ theorem descendsD_restForCombat (s : State)
   apply dLt_of_hpDeficit_dec <;>
     simp only [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
       applyActionKind, if_false, Bool.false_eq_true, reduceIte,
-      refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+      refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
       refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_hp, refreshD_maxHp,
@@ -207,7 +206,7 @@ theorem descendsD_discardCritical (s : State)
     apply dLt_of_overstock_dec <;>
       simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
         applyActionKind, hfire.1.1, hdebt,
-        refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+        refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
         refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -218,7 +217,7 @@ theorem descendsD_discardCritical (s : State)
     apply dLt_of_overstockDebt_dec <;>
       simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
         applyActionKind, hfire.1.1, hdebt,
-        refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+        refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
         refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -244,7 +243,7 @@ theorem descendsD_discardHigh (s : State)
     apply dLt_of_overstock_dec <;>
       simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
         applyActionKind, hfire.1.1, hdebt,
-        refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+        refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
         refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -255,7 +254,7 @@ theorem descendsD_discardHigh (s : State)
     apply dLt_of_overstockDebt_dec <;>
       simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
         applyActionKind, hfire.1.1, hdebt,
-        refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+        refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
         refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -282,7 +281,7 @@ theorem descendsD_geCancel (s : State)
   apply dLt_of_geCancel_dec <;>
     simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
       applyActionKind, hfire,
-      refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+      refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
       refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -317,7 +316,7 @@ theorem descendsD_supplyBank (s : State)
   apply dLt_of_supplyDemand_dec <;>
     simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
       applyActionKind, grantSkillXp, refreshD_supplyDemand,
-      refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+      refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
       refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -351,7 +350,7 @@ theorem descendsD_bankExpand (s : State)
     simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
       applyActionKind, bankExpansionSlots,
       ProductionLadder.BANK_EXPAND_FILL_DEN, ProductionLadder.BANK_EXPAND_FILL_NUM,
-      refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+      refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
       refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -380,7 +379,7 @@ theorem descendsD_currencyTurnIn (s : State)
   apply dLt_of_currencyTurnIn_dec <;>
     simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
       applyActionKind, hfire,
-      refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+      refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
       refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -405,7 +404,7 @@ theorem descendsD_depositFull (s : State)
     apply dLt_of_selectBankDeposits_dec <;>
       simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
         applyActionKind, hfire.2, hdebt,
-        refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+        refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
         refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -416,7 +415,7 @@ theorem descendsD_depositFull (s : State)
     apply dLt_of_depositDebt_dec <;>
       simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
         applyActionKind, hfire.2, hdebt,
-        refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+        refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
         refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -442,7 +441,7 @@ theorem descendsD_sellPressured (s : State)
     apply dLt_of_sellable_dec <;>
       simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
         applyActionKind, hfire.2, hdebt,
-        refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+        refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
         refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -453,7 +452,7 @@ theorem descendsD_sellPressured (s : State)
     apply dLt_of_sellDebt_dec <;>
       simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
         applyActionKind, hfire.2, hdebt,
-        refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+        refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
         refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -479,7 +478,7 @@ theorem descendsD_sellRelief (s : State)
     apply dLt_of_sellable_dec <;>
       simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
         applyActionKind, hfire.2, hdebt,
-        refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+        refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
         refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -490,7 +489,7 @@ theorem descendsD_sellRelief (s : State)
     apply dLt_of_sellDebt_dec <;>
       simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
         applyActionKind, hfire.2, hdebt,
-        refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+        refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
         refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
         refreshD_craftRelief, refreshD_craftPotions,
         refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -514,7 +513,7 @@ theorem descendsD_recycleRelief (s : State)
   apply dLt_of_recyclable_dec <;>
     simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
       applyActionKind, hfire.2,
-      refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+      refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
       refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -537,7 +536,7 @@ theorem descendsD_craftRelief (s : State)
   apply dLt_of_craftRelief_dec <;>
     simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
       applyActionKind, hfire,
-      refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+      refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
       refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -560,7 +559,7 @@ theorem descendsD_claimPending (s : State)
   apply dLt_of_pending_dec <;>
     simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
       applyActionKind, hfire,
-      refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+      refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
       refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -585,7 +584,7 @@ theorem descendsD_craftPotions (s : State)
   · apply dLt_of_craftRelief_dec <;>
       simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
         applyActionKind, hrelief,
-        refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+        refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
       refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -596,7 +595,7 @@ theorem descendsD_craftPotions (s : State)
     apply dLt_of_craftPotions_dec <;>
       simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
         applyActionKind, hrelief, hfire,
-        refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+        refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
       refreshD_craftRelief, refreshD_craftPotions,
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
@@ -733,9 +732,6 @@ theorem descendsD_placeholder (s : State) (hlvl : s.level < 50)
         applyActionKind, his0]
     · simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
         applyActionKind, his0]
-    -- slot 3 (`drawOwedFlag`): `.taskTrade` does not touch it
-    · simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
-        applyActionKind, refreshD_drawOwed, his0]
     · simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD, hpost,
         hphase, his0]
     · simp only [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,

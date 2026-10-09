@@ -68,7 +68,6 @@ ARBITER_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "arbiter_select.
 TASK_DECISION_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_decision_core.py"
 OBJECTIVE_STEP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "objective_step_fight_core.py"
 DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_key.py"
-CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "cycles_for_progress_core.py"
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
 SHOPPING_LIST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "shopping_list.py"
@@ -5294,7 +5293,6 @@ _ALL_SRCS = [
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
     PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC,
     OBJECTIVE_STEP_FIGHT_CORE_SRC, DECIDE_KEY_SRC,
-    CYCLES_FOR_PROGRESS_SRC,
     GATHER_APPLY_SRC,
     INVENTORY_ROOM_SRC,
     INVENTORY_KEEP_SRC,
@@ -5414,40 +5412,6 @@ CHEAPEST_PATH_MUTATIONS = [
      "                       max_hp=projected_max_hp(state.max_hp, state.level, sim_level),\n"
      "                       hp=projected_max_hp(state.max_hp, state.level, sim_level))",
      "        rung = rested"),
-]
-
-
-# cycles_for_progress mutations -- old strings matched to current cycles_for_progress_core.py text.
-CYCLES_FOR_PROGRESS_MUTATIONS = [
-    # Drop the SATISFY append loop entirely: only strict-increase intervals
-    # contribute. The verdict-(b) intentional-both-signal contract breaks;
-    # `test_satisfy_only_branch` and `test_both_on_single_cycle_intentional_double_signal`
-    # fire (the satisfy interval would no longer appear in the median).
-    ("cycles_for_progress: drop the satisfy append loop",
-     "    for cycle in chrono:\n"
-     "        intervals = _satisfy_step(intervals, cycle)\n",
-     ""),
-    # Flip the satisfy gate's None check: the recorded `cycles_to_satisfy`
-    # values are SKIPPED (returned untouched) and the (sparse) None-rows fall
-    # through to the `<= 0` comparison (TypeError). Hypothesis quickly
-    # produces a row with `cycles_to_satisfy = None` AND a positive reading.
-    ("cycles_for_progress: satisfy gate is None -> is not None",
-     "    cts = cycle.cycles_to_satisfy\n"
-     "    if cts is None:\n"
-     "        return intervals",
-     "    cts = cycle.cycles_to_satisfy\n"
-     "    if cts is not None:\n"
-     "        return intervals"),
-    # Off-by-one on the strict-increase predicate (P3c: the inverted early
-    # return `tp <= prev` weakens to `tp < prev`, the same semantic mutant as
-    # the historical `>` -> `>=`). A flat `task_progress` row now also counts
-    # as a strict increase, inflating the interval count. The general diff
-    # test fires whenever progress holds steady for any chronological pair.
-    ("cycles_for_progress: strict-increase > -> >= (off-by-one predicate)",
-     "    if tp <= prev_progress:\n"
-     "        return (intervals, last_progress_at, tp)",
-     "    if tp < prev_progress:\n"
-     "        return (intervals, last_progress_at, tp)"),
 ]
 
 
@@ -8882,8 +8846,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_progression_reserve_diff.py", survivors)
     run_group(PROGRESSION_RESERVE_CORE_SRC, PROGRESSION_RESERVE_MULTI_MUTATIONS,
               "formal/diff/test_progression_reserve_multi_diff.py", survivors)
-    run_group(CYCLES_FOR_PROGRESS_SRC, CYCLES_FOR_PROGRESS_MUTATIONS,
-              "formal/diff/test_cycles_for_progress_diff.py", survivors)
     run_group(GATHER_APPLY_SRC, GATHER_APPLY_MUTATIONS,
               "formal/diff/test_gather_apply_diff.py", survivors)
     run_group(INVENTORY_ROOM_SRC, INVENTORY_ROOM_MUTATIONS,

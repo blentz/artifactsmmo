@@ -482,9 +482,7 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         # oracle args always hard-wired `supplyAsymmetric := false` and the
         # differential never actually compared the new arm against Python).
         _supply_asymmetric(_make_ctx(scn)),
-        # 39 drawOwed (2026-08-19): ACCEPT_TASK's gate. Read off the SAME
-        # ctx production reads, so neither side can drift on it.
-        1 if _make_ctx(scn).draw_owed else 0,
+        0,  # 39 reserved (was drawOwed, retired in Phase 5-2c-iii)
         # 40 bankGold (2026-09-13): the BANKED half of the account balance.
         # The BANK_EXPAND reserve gate is account-scoped
         # (`progression_reserve.can_spend`: one bank, one balance) while the
@@ -983,7 +981,7 @@ def _rich_oracle_args(
         # which hard-wired the Lean side to `false` and made the differential
         # unable to catch a Lean/Python disagreement on this arm.
         _supply_asymmetric(ctx),  # 38 supplyAsymmetric
-        1 if ctx.draw_owed else 0,               # 39 drawOwed
+        0,                                        # 39 reserved (was drawOwed)
         # 40 bankGold: the BANKED half of the account, read through the SAME
         # `account_gold` production's BANK_EXPAND reserve gate asks. This slot
         # was missing: the runner reads slot 40, so every rich call made the

@@ -49,8 +49,8 @@
   `acceptTask`, `lowYieldCancel`, `taskCancel`, `pursueTask`) are now
   PHASE-BASED, derived from `state.taskLifecyclePhase`. The opaque Bool
   fields `pursueTaskFires`, `taskCancelFires`, `lowYieldCancelFires`
-  remain on `State` for legacy callers (CycleStep, PlanExists, Plan) but
-  the firing predicates no longer consume them. The phase-based forms
+  that once carried them are gone from `State` (Phase 5-2c-iii
+  cleanup). The phase-based forms
   are simplifications in the direction "production fires ⇒ phase
   predicate fires": the lifecycle phase is a necessary gating condition
   for each, but PIVOT/PURSUE decisions are collapsed. (None of these is a
