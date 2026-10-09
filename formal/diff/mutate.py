@@ -356,6 +356,10 @@ CONSUMABLE_FLOOR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumab
 LOSS_RISK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loss_risk_core.py"
 FIGHT_TERMS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_terms_core.py"
 FIGHT_OUTCOME_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_outcome_core.py"
+CONSUMABLE_PRICE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price_core.py"
+CONSUMABLE_PRICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price.py"
+LOOP_RATE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate_core.py"
+LOOP_RATE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate.py"
 FAILURE_RECOVERY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "failure_recovery_core.py"
 ACTION_BASE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "base.py"
 REST_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "rest.py"
@@ -821,6 +825,91 @@ FIGHT_OUTCOME_MUTATIONS = [
     ("fight_outcome: the restore is not scaled",
      "    restore_pool = restore * SCALE",
      "    restore_pool = restore"),
+]
+
+# consumable_price_core: the build/buy price (consumable utility increment 2).
+# Killed by formal/diff/test_consumable_price_diff.py (exact agreement with the
+# proved Formal.ConsumablePrice.consumablePrice).
+CONSUMABLE_PRICE_CORE_MUTATIONS = [
+    ("consumable_price: nothing held is free too (> 0 -> >= 0)",
+     "    if held > 0:\n        return Fraction(0)",
+     "    if held >= 0:\n        return Fraction(0)"),
+    ("consumable_price: a zero gold rate still buys (<= 0 -> < 0)",
+     "    if buy_gold is None or gold_per_second <= 0:",
+     "    if buy_gold is None or gold_per_second < 0:"),
+    ("consumable_price: gold times the rate, not over it",
+     "    return Fraction(buy_gold) / gold_per_second",
+     "    return Fraction(buy_gold) * gold_per_second"),
+    ("consumable_price: the dearer side wins",
+     "    return make_seconds if make_seconds <= buy else buy",
+     "    return buy if make_seconds <= buy else make_seconds"),
+    ("consumable_price: make-only is unpriceable",
+     "    if buy is None:\n        return make_seconds",
+     "    if buy is None:\n        return None"),
+]
+
+# consumable_price: the reader (increment 2). OWN run_group: unit-killed by
+# tests/test_ai/test_consumable_price.py.
+CONSUMABLE_PRICE_READER_MUTATIONS = [
+    ("consumable_price reader: utility-slot stock is not held",
+     "    return owned_total(state, frozenset({code})) + worn",
+     "    return owned_total(state, frozenset({code}))"),
+    ("consumable_price reader: an unobtainable walk is a make side (>= -> >)",
+     "    if actions >= UNOBTAINABLE_PER_UNIT:",
+     "    if actions > UNOBTAINABLE_PER_UNIT:"),
+    ("consumable_price reader: any currency is a gold price",
+     "            if currency == GOLD_CODE:",
+     "            if currency:"),
+    ("consumable_price reader: a GE order is ignored",
+     "            prices.append(ge_price_of(code, source.code, game_data))",
+     "            prices.extend(())"),
+    ("consumable_price reader: gold per cycle read as gold per second",
+     "    return fight_gold_rate(state, game_data, ctx.combat_monster) / FIGHT_SECONDS",
+     "    return fight_gold_rate(state, game_data, ctx.combat_monster)"),
+]
+
+# loop_rate_core: recovery and the XP rate (consumable utility increment 3).
+# Killed by formal/diff/test_loop_rate_diff.py (exact agreement with the proved
+# Formal.LoopRate.recovery / xpRate).
+LOOP_RATE_CORE_MUTATIONS = [
+    ("loop_rate: a zero remainder pays the three-second Rest floor",
+     "    return 0 if missing <= 0 else rest_cooldown_seconds(missing, max_hp)",
+     "    return rest_cooldown_seconds(max(0, missing), max_hp)"),
+    ("loop_rate: the count bound floors instead of ceiling",
+     "    return -(-missing // restore)",
+     "    return missing // restore"),
+    ("loop_rate: the count bound loses its last count",
+     "                        for k in range(count_bound(missing, restore) + 1))",
+     "                        for k in range(count_bound(missing, restore)))"),
+    ("loop_rate: the eat cooldown charged per unit, not per use",
+     "            value = min((eat_seconds if k > 0 else Fraction(0)) + k * price",
+     "            value = min(k * (eat_seconds + price)"),
+    ("loop_rate: the rate ignores recovery",
+     "    return Fraction(xp_per_kill) / (fight_seconds + recovery + consumed_price_seconds)",
+     "    return Fraction(xp_per_kill) / (fight_seconds + consumed_price_seconds)"),
+]
+
+# loop_rate: the reader (increment 3). OWN run_group: unit-killed by
+# tests/test_ai/test_loop_rate.py.
+LOOP_RATE_READER_MUTATIONS = [
+    ("loop_rate reader: a boost is not consumed",
+     "    used = tuple((code, outcome.used if code == restore_code else 1) for code, _ in loadout)",
+     "    used = tuple((code, outcome.used if code == restore_code else 0) for code, _ in loadout)"),
+    ("loop_rate reader: recovery from a full bar whatever the fight left",
+     "    recovery = recovery_seconds(max_hp - hp_end, max_hp, food, EAT_SECONDS)",
+     "    recovery = recovery_seconds(max_hp, max_hp, food, EAT_SECONDS)"),
+    ("loop_rate reader: a loss earns the kill's XP",
+     "    xp = game_data.xp_per_kill(monster, state.level, state.wisdom) if outcome.win else 0",
+     "    xp = game_data.xp_per_kill(monster, state.level, state.wisdom)"),
+    ("loop_rate reader: the restore's stock is not walked",
+     "                            max_hp, max_hp, restore_hp, restore_stock)",
+     "                            max_hp, max_hp, restore_hp, 0)"),
+    ("loop_rate reader: a splash potion is walked as a self restore",
+     "        if SPLASH_RESTORE in game_data.effect_codes(code):",
+     "        if False:"),
+    ("loop_rate reader: held foods are ignored",
+     "    for code in held_foods(state, game_data):",
+     "    for code in held_foods(state, game_data)[:0]:"),
 ]
 
 
@@ -5384,6 +5473,7 @@ _ALL_SRCS = [
     LOSS_RISK_CORE_SRC, FAILURE_RECOVERY_CORE_SRC, ACTION_BASE_SRC, REST_ACTION_SRC,
     TASK_CANCEL_GOAL_SRC, COMPLETE_TASK_GOAL_SRC,
     FIGHT_TERMS_CORE_SRC, FIGHT_OUTCOME_CORE_SRC,
+    CONSUMABLE_PRICE_CORE_SRC, CONSUMABLE_PRICE_SRC, LOOP_RATE_CORE_SRC, LOOP_RATE_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
     ROOT_DECISION_SRC, GATHER_DEMAND_SRC,
     OBTAIN_ITEM_ROUTING_SRC, EQUIP_VALUE_SRC,
@@ -8985,6 +9075,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_combat.py", survivors)
     run_group(FIGHT_OUTCOME_CORE_SRC, FIGHT_OUTCOME_MUTATIONS,
               "formal/diff/test_fight_outcome_diff.py", survivors)
+    run_group(CONSUMABLE_PRICE_CORE_SRC, CONSUMABLE_PRICE_CORE_MUTATIONS,
+              "formal/diff/test_consumable_price_diff.py", survivors)
+    run_group(CONSUMABLE_PRICE_SRC, CONSUMABLE_PRICE_READER_MUTATIONS,
+              "tests/test_ai/test_consumable_price.py", survivors)
+    run_group(LOOP_RATE_CORE_SRC, LOOP_RATE_CORE_MUTATIONS,
+              "formal/diff/test_loop_rate_diff.py", survivors)
+    run_group(LOOP_RATE_SRC, LOOP_RATE_READER_MUTATIONS,
+              "tests/test_ai/test_loop_rate.py", survivors)
     run_group(PROJECTION_SRC, PROJECTION_MUTATIONS,
               "formal/diff/test_loadout_projection_diff.py", survivors)
     run_group(SCORING_SRC, SCORING_MUTATIONS,

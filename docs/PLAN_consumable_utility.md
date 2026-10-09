@@ -103,3 +103,59 @@ price.
 - Calibration (777 replayable `small_health_potion` fights): potions used exact
   48.8%, within ±1 87.3%; win verdict 765/777. The model over-predicts use
   (inherits the closed form's pessimistic monster bounds).
+
+## Increments 2-3 — design (2026-10-09)
+
+- **Gold → seconds:** the grind target's fight gold per loop cycle
+  (`task_worth.fight_gold_rate` over `ctx.combat_monster` — the rate the USER
+  ruled for task worth, "The grind target's gold") divided by
+  `TYPICAL_FIGHT_COOLDOWN_SECONDS`. One converter, so a consumable's buy price
+  and a task's gold cannot disagree. No grind target or zero rate: buying is
+  unpriceable (infinite), making is the price.
+- **Make → seconds:** `acquisition_actions(code, 1, …)` × 
+  `TYPICAL_FIGHT_COOLDOWN_SECONDS` (the walk's unit is fight-equivalents, as
+  `fight_loop_cost` declares).
+- **Price:** 0 when held (bag, bank or utility slots); else min(make, buy).
+- **Loop rate:** XP per kill ÷ (fight seconds + recovery seconds + Σ price of
+  what the fight consumed), recovery from the fight's predicted `hp_end`
+  (`fight_outcome`) as the cheaper of Rest (`rest_cooldown_seconds`) and eating
+  (eat cooldown + the food's price), per HP missing.
+
+## Increments 2-3 — built (2026-10-09)
+
+Not wired into any decision.
+
+- `ai/consumable_price_core.consumable_price(held, make_seconds, buy_gold,
+  gold_per_second)`: 0 when held, else the cheaper available side (`make` on a
+  tie), None when neither. `Formal/ConsumablePrice.lean` (pairs compared by
+  cross-multiplication): `held_free`, `le_make`, `le_buy`, `price_mem`,
+  `none_iff`, `mono_make`, `mono_gold`, `qle_trans`.
+- `ai/consumable_price.consumable_price_of`: held = bag + bank + wearing utility
+  slots; make = `acquisition_actions(code, 1)` × 30 s (None at
+  `UNOBTAINABLE_PER_UNIT`); buy = cheapest gold `BUY` / `GE_FILL` source
+  (`acquisition_cost.npc_price_of` / `ge_price_of`, made public); gold rate =
+  `task_worth.fight_gold_rate` (made public) over `ctx.combat_monster` ÷ 30.
+- `ai/loop_rate_core`: `recovery_seconds` (exact DP over (food, HP missing),
+  per-food count bound ⌈m / restore⌉; one use of k units costs the FLAT eat
+  cooldown + k × price — the published "flat, whatever the quantity" rule, not
+  k × cooldown; a zero remainder rests 0 s, not the 3 s floor) and
+  `xp_per_second`. `Formal/LoopRate.lean`: `recovery_le_rest`,
+  `recovery_mono_missing`, `add_food_le`, `price_mono`, `free_food_le`,
+  `countBound_covers`, `xpRate_zero`, `xpRate_den_pos`, `xpRate_antitone`,
+  `rate_antitone_missing`.
+- `ai/loop_rate.loop_rate(state, game_data, ctx, monster, loadout)`: utility
+  slots projected to exactly the loadout (`project_equip` gained a `slot` and an
+  empty-slot `None`), `fight_outcome` from the projected max HP
+  (`combat.fight_max_hp`), fight = one 30 s cooldown, consumed = restores drunk
+  + one per boost, priced; recovery over held foods; a `splash_restore` potion
+  (heals ANOTHER character, API text) is refused (`GameData.effect_codes`).
+
+Probe 2026-10-09 22:0xZ (live state, scratch DB copy), see the session report.
+Findings for increment 4:
+- A held food is free AND unbounded in the core (no per-food count): every
+  recovery collapses to one 3 s use. Priced at replacement (stock removed) every
+  food costs 60-450 s a unit and Rest wins every recovery.
+- Unheld potions cost 120-1,268,160 s a unit (the walk includes skill grinds);
+  at those prices every potion loadout loses to no potions wherever no potions
+  wins. Only C3P0 vs vampire needs one (no potions loses; small_health_potion x5
+  wins at 0.031 XP/s).

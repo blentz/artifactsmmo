@@ -20,6 +20,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | CommittedLoop | core, planner | termination, sufficiency |
 | CompleteTaskIncome | core, tasks | monotonicity |
 | ConsumableFloor | consumables, fleet, supply | safety, dominance, totality |
+| ConsumablePrice | consumables, cost | validity, monotonicity, totality |
 | ConsumableSelection | items | dominance, monotonicity, totality, safety |
 | CraftVsBuy | crafting, npcs | dominance, monotonicity, totality, safety |
 | CurrencyAffordFastFail | core, planner | safety, totality |
@@ -62,6 +63,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | Liveness.ItemsTaskTermination | tasks, crafting, bank | safety, totality |
 | LivenessChain | combat, monsters | reachability, no-deadlock |
 | LoadoutProfiles | gear | validity, monotonicity, totality, safety |
+| LoopRate | consumables, combat, cost | monotonicity, dominance, validity |
 | LossRisk | combat, cost | monotonicity, safety, totality |
 | MonsterDropApply | combat, planner | liveness, safety |
 | MonsterDropSelection | monsters | dominance, monotonicity, totality, reachability |

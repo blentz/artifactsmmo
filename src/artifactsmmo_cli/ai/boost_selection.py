@@ -19,8 +19,10 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
-def project_equip(state: WorldState, code: str, game_data: GameData) -> WorldState:
-    """Return a state with ``code`` force-equipped in utility1_slot.
+def project_equip(state: WorldState, code: str | None, game_data: GameData,
+                  slot: str = "utility1_slot") -> WorldState:
+    """Return a state with ``code`` force-equipped in ``slot`` (utility1_slot
+    unless a caller names the other utility slot; ``code`` None empties it).
 
     Pre-applies the stat delta from swapping utility1_slot to ``code`` into
     the state's raw stat fields (attack, resistance, dmg_elements, dmg,
@@ -39,9 +41,9 @@ def project_equip(state: WorldState, code: str, game_data: GameData) -> WorldSta
     project_loadout_stats sees no delta for that slot, and the projected
     stats equal the pre-applied modified_state fields.
     """
-    old_code = state.equipment.get("utility1_slot")
+    old_code = state.equipment.get(slot)
     old_s = game_data.item_stats(old_code) if old_code else None
-    new_s = game_data.item_stats(code)
+    new_s = game_data.item_stats(code) if code else None
     resistance = {
         e: state.resistance.get(e, 0)
            + (new_s.resistance.get(e, 0) if new_s else 0)
@@ -60,7 +62,7 @@ def project_equip(state: WorldState, code: str, game_data: GameData) -> WorldSta
            - (old_s.dmg_elements.get(e, 0) if old_s else 0)
         for e in ELEMENTS
     }
-    equipment = {**state.equipment, "utility1_slot": code}
+    equipment = {**state.equipment, slot: code}
     # Strip competing utility items from inventory: their presence would let
     # pick_loadout (inside combat_margin) replace ``code`` with a
     # higher-combat-score utility item, defeating forced-equip semantics.

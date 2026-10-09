@@ -9,7 +9,7 @@ import math
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
-from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
+from artifactsmmo_cli.ai.equipment.projection import ProjectedStats, project_loadout_stats
 from artifactsmmo_cli.ai.fight_terms_core import LOSE_MARGIN as LOSE_MARGIN
 from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS as MAX_TURNS
 from artifactsmmo_cli.ai.fight_terms_core import WIN_MARGIN as WIN_MARGIN
@@ -172,6 +172,24 @@ def fight_records(state: WorldState, game_data: GameData,
     return tuple(records)
 
 
+def _fight_projection(state: WorldState, game_data: GameData,
+                      monster_code: str) -> tuple[dict[str, str | None], ProjectedStats]:
+    """The best on-hand loadout for a fight against `monster_code`, and the stats
+    it projects: what `combat_terms` resolves and `fight_max_hp` reads."""
+    loadout = pick_loadout_cached(
+        Combat(game_data.monster_attack(monster_code),
+               game_data.monster_resistance(monster_code), dict(state.attack)),
+        state, game_data,
+    )
+    return loadout, project_loadout_stats(state, loadout, game_data)
+
+
+def fight_max_hp(state: WorldState, game_data: GameData, monster_code: str) -> int:
+    """The max HP a fight against `monster_code` is fought at: the projected
+    loadout's, the same `max_hp` `combat_terms` builds the terms over."""
+    return _fight_projection(state, game_data, monster_code)[1].max_hp
+
+
 def combat_terms(state: WorldState, game_data: GameData, monster_code: str) -> FightTerms:
     """The closed form's per-turn terms for a fight against `monster_code` in the
     best on-hand loadout (inventory + equipped) for it: `predict_win` and
@@ -184,12 +202,7 @@ def combat_terms(state: WorldState, game_data: GameData, monster_code: str) -> F
     predicted to win a chicken fight, fought, lost. The fight starts at
     state.hp, not max_hp; project_loadout_stats may raise max_hp via
     equipment but doesn't refill current hp."""
-    loadout = pick_loadout_cached(
-        Combat(game_data.monster_attack(monster_code),
-               game_data.monster_resistance(monster_code), dict(state.attack)),
-        state, game_data,
-    )
-    p = project_loadout_stats(state, loadout, game_data)
+    loadout, p = _fight_projection(state, game_data, monster_code)
     m_resist = game_data.monster_resistance(monster_code)
     m_crit = game_data.monster_critical_strike(monster_code)
     # EXACT INTEGER arithmetic mirroring Formal/PredictWin.lean (×10000 scale, so the

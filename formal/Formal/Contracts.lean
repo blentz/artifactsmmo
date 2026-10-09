@@ -53,6 +53,8 @@ import Formal.ConsumableFloor
 import Formal.LossRisk
 import Formal.FailureRecovery
 import Formal.FightOutcome
+import Formal.ConsumablePrice
+import Formal.LoopRate
 import Formal.ShoppingList
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
@@ -3478,3 +3480,94 @@ example : ∀ (t : Formal.FightOutcome.Terms) (hp maxHp : Int) (restore s s' : N
     (Formal.FightOutcome.fightOutcome t hp maxHp restore s).turns
       = (Formal.FightOutcome.fightOutcome t hp maxHp restore s').turns :=
   @Formal.FightOutcome.win_turns_stock_indep
+
+/-! ### ConsumablePrice contracts. -/
+
+example : ∀ (held : Nat) (make : Option Formal.ConsumablePrice.Q) (gold : Option Nat) (n d : Nat),
+    0 < held → Formal.ConsumablePrice.consumablePrice held make gold n d = some (0, 1) :=
+  @Formal.ConsumablePrice.held_free
+
+example : ∀ (held : Nat) (make : Option Formal.ConsumablePrice.Q) (gold : Option Nat) (n d : Nat),
+    Formal.ConsumablePrice.optLe (Formal.ConsumablePrice.consumablePrice held make gold n d) make :=
+  @Formal.ConsumablePrice.le_make
+
+example : ∀ (held : Nat) (make : Option Formal.ConsumablePrice.Q) (gold : Option Nat) (n d : Nat),
+    Formal.ConsumablePrice.optLe (Formal.ConsumablePrice.consumablePrice held make gold n d)
+      (Formal.ConsumablePrice.buySeconds gold n d) :=
+  @Formal.ConsumablePrice.le_buy
+
+example : ∀ (held : Nat) (make : Option Formal.ConsumablePrice.Q) (gold : Option Nat) (n d : Nat)
+    (r : Formal.ConsumablePrice.Q),
+    Formal.ConsumablePrice.consumablePrice held make gold n d = some r →
+    (0 < held ∧ r = (0, 1)) ∨ make = some r ∨ Formal.ConsumablePrice.buySeconds gold n d = some r :=
+  @Formal.ConsumablePrice.price_mem
+
+example : ∀ (held : Nat) (make : Option Formal.ConsumablePrice.Q) (gold : Option Nat) (n d : Nat),
+    Formal.ConsumablePrice.consumablePrice held make gold n d = none
+      ↔ held = 0 ∧ make = none ∧ (gold = none ∨ n = 0) :=
+  @Formal.ConsumablePrice.none_iff
+
+example : ∀ (held : Nat) (make make' : Option Formal.ConsumablePrice.Q) (gold : Option Nat)
+    (n d : Nat), Formal.ConsumablePrice.posDen make' → Formal.ConsumablePrice.optLe make' make →
+    Formal.ConsumablePrice.optLe (Formal.ConsumablePrice.consumablePrice held make' gold n d)
+      (Formal.ConsumablePrice.consumablePrice held make gold n d) :=
+  @Formal.ConsumablePrice.mono_make
+
+example : ∀ (held : Nat) (make : Option Formal.ConsumablePrice.Q) (gold gold' : Option Nat)
+    (n d : Nat), Formal.ConsumablePrice.goldLe gold' gold →
+    Formal.ConsumablePrice.optLe (Formal.ConsumablePrice.consumablePrice held make gold' n d)
+      (Formal.ConsumablePrice.consumablePrice held make gold n d) :=
+  @Formal.ConsumablePrice.mono_gold
+
+example : ∀ (a b c : Formal.ConsumablePrice.Q), 0 < b.2 →
+    Formal.ConsumablePrice.qle a b → Formal.ConsumablePrice.qle b c →
+    Formal.ConsumablePrice.qle a c :=
+  @Formal.ConsumablePrice.qle_trans
+
+/-! ### LoopRate contracts. -/
+
+example : ∀ (scale eat maxHp : Nat) (fs : List (Nat × Nat)) (m : Nat),
+    Formal.LoopRate.recovery scale eat maxHp fs m ≤ scale * Formal.LoopRate.restPart m maxHp :=
+  @Formal.LoopRate.recovery_le_rest
+
+example : ∀ (scale eat maxHp : Nat) (fs : List (Nat × Nat)), (∀ f ∈ fs, 0 < f.1) →
+    ∀ (m m' : Nat), m ≤ m' →
+      Formal.LoopRate.recovery scale eat maxHp fs m ≤ Formal.LoopRate.recovery scale eat maxHp fs m' :=
+  @Formal.LoopRate.recovery_mono_missing
+
+example : ∀ (scale eat maxHp r p : Nat) (fs : List (Nat × Nat)) (m : Nat),
+    Formal.LoopRate.recovery scale eat maxHp ((r, p) :: fs) m
+      ≤ Formal.LoopRate.recovery scale eat maxHp fs m :=
+  @Formal.LoopRate.add_food_le
+
+example : ∀ (scale eat maxHp r p p' : Nat) (post : List (Nat × Nat)), p' ≤ p →
+    ∀ (pre : List (Nat × Nat)) (m : Nat),
+      Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p') :: post) m
+        ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p) :: post) m :=
+  @Formal.LoopRate.price_mono
+
+example : ∀ (scale eat maxHp r p : Nat) (pre post : List (Nat × Nat)) (m : Nat),
+    Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, 0) :: post) m
+      ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p) :: post) m :=
+  @Formal.LoopRate.free_food_le
+
+example : ∀ (m r : Nat), 0 < r → m ≤ Formal.LoopRate.countBound m r * r :=
+  @Formal.LoopRate.countBound_covers
+
+example : ∀ (scale f r c : Nat), (Formal.LoopRate.xpRate 0 scale f r c).1 = 0 :=
+  @Formal.LoopRate.xpRate_zero
+
+example : ∀ (xp scale f r c : Nat), 0 < f → 0 < (Formal.LoopRate.xpRate xp scale f r c).2 :=
+  @Formal.LoopRate.xpRate_den_pos
+
+example : ∀ (xp scale f f' r r' c c' : Nat), f ≤ f' → r ≤ r' → c ≤ c' →
+    Formal.ConsumablePrice.qle (Formal.LoopRate.xpRate xp scale f' r' c')
+      (Formal.LoopRate.xpRate xp scale f r c) :=
+  @Formal.LoopRate.xpRate_antitone
+
+example : ∀ (xp scale eat maxHp f c : Nat) (fs : List (Nat × Nat)), (∀ g ∈ fs, 0 < g.1) →
+    ∀ (m m' : Nat), m ≤ m' →
+      Formal.ConsumablePrice.qle
+        (Formal.LoopRate.xpRate xp scale f (Formal.LoopRate.recovery scale eat maxHp fs m') c)
+        (Formal.LoopRate.xpRate xp scale f (Formal.LoopRate.recovery scale eat maxHp fs m) c) :=
+  @Formal.LoopRate.rate_antitone_missing

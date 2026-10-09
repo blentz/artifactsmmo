@@ -1900,6 +1900,33 @@ def runPredictWinHp (g : Nat → Int) : Json :=
   let t : Formal.FightOutcome.Terms := ⟨rawPlayer, ks, g 13 + g 34, g 37, ds, g 28 != 0⟩
   Json.mkObj [("win", Json.bool (Formal.FightOutcome.closedWin t (g 46) (g 27)))]
 
+/-- The price of one consumable (`Formal.ConsumablePrice.consumablePrice`).
+Args: `[held, makeTag, makeNum, makeDen, goldTag, gold, gpsNum, gpsDen]`, a tag of
+0 meaning the side is absent. Emits `none` and, when present, `num` / `den`. -/
+def runConsumablePrice (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let make : Option Formal.ConsumablePrice.Q := if n 1 = 0 then none else some (n 2, n 3)
+  let gold : Option Nat := if n 4 = 0 then none else some (n 5)
+  match Formal.ConsumablePrice.consumablePrice (n 0) make gold (n 6) (n 7) with
+  | none => Json.mkObj [("none", Json.bool true)]
+  | some (a, b) => Json.mkObj [("none", Json.bool false), ("num", Json.num (Int.ofNat a)),
+                               ("den", Json.num (Int.ofNat b))]
+
+/-- The cheapest recovery (`Formal.LoopRate.recovery`), scaled seconds. Args:
+`[scale, eat, maxHp, missing, count, restore_0, price_0, ...]`. -/
+def runLoopRecovery (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let foods := (List.range (n 4)).map (fun i => (n (5 + 2 * i), n (6 + 2 * i)))
+  Json.mkObj [("recovery", Json.num (Int.ofNat
+    (Formal.LoopRate.recovery (n 0) (n 1) (n 2) foods (n 3))))]
+
+/-- XP per second (`Formal.LoopRate.xpRate`). Args: `[xp, scale, fight, recovery,
+consumed]`, all scaled. Emits `num` / `den`. -/
+def runLoopXpRate (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let r := Formal.LoopRate.xpRate (n 0) (n 1) (n 2) (n 3) (n 4)
+  Json.mkObj [("num", Json.num (Int.ofNat r.1)), ("den", Json.num (Int.ofNat r.2))]
+
 /-- The failure block table after `ticks` ticks (`Formal.FailureRecovery`).
 Args: `[premise, ticks, n, key_0, left_0, premise_0, ...]`, a premise of -1
 meaning a transport block. Emits the keys blocked under `premise`. -/
@@ -3022,6 +3049,12 @@ def runOne (item : Json) : Json :=
     runFailureRecovery args
   else if kind == "fight_outcome" then
     runFightOutcome args
+  else if kind == "consumable_price" then
+    runConsumablePrice args
+  else if kind == "loop_recovery" then
+    runLoopRecovery args
+  else if kind == "loop_xp_rate" then
+    runLoopXpRate args
   else if kind == "predict_win_hp" then
     runPredictWinHp (fun i => intArg args i)
   else if kind == "inventory_chain_safe" then

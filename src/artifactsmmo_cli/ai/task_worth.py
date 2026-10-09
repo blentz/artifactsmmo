@@ -35,7 +35,7 @@ from artifactsmmo_cli.ai.task_worth_core import TaskWorth, TaskWorthInputs, canc
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 
-def _fight_gold_rate(state: WorldState, game_data: GameData, monster: str) -> Fraction:
+def fight_gold_rate(state: WorldState, game_data: GameData, monster: str) -> Fraction:
     """Mean fight gold per cycle of farming `monster`."""
     gold = Fraction(game_data.monster_min_gold(monster) + game_data.monster_max_gold(monster), 2)
     per_kill = Fraction(cycles_per_kill(expected_damage_per_fight(state, game_data, monster),
@@ -123,7 +123,7 @@ def task_worth_for(code: str, task_type: str | None, remaining: int, state: Worl
     if ctx.gold_short:
         task_rate = _task_gold_rate(code, task_type, remaining, state, game_data, ctx, history)
         if ctx.combat_monster is not None:
-            other = _fight_gold_rate(state, game_data, ctx.combat_monster)
+            other = fight_gold_rate(state, game_data, ctx.combat_monster)
     return task_worth(TaskWorthInputs(
         feasible=feasible,
         xp_positive=_xp_demanded(code, task_type, probe, game_data, ctx),

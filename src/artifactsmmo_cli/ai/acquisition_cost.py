@@ -239,12 +239,12 @@ def _priced(item: str, source: Source, state: WorldState,
                            actions_per_application=1, yield_per=price,
                            capacity=source.capacity, inputs={source.code: 1})
     if source.kind is SourceKind.BUY:
-        price, currency = _price_of(item, source.code, game_data)
+        price, currency = npc_price_of(item, source.code, game_data)
         return RouteOption(kind=source.kind.value, venue=source.code,
                            actions_per_application=1, yield_per=source.yield_per,
                            capacity=source.capacity, inputs={currency: price})
     if source.kind is SourceKind.GE_FILL:
-        price = _ge_price_of(item, source.code, game_data)
+        price = ge_price_of(item, source.code, game_data)
         # `Source.code` is the ORDER id, not an item — the venue token is the
         # order because that is what `GeFillSellOrderAction` fills. Cost is gold
         # at the order's own price, which is what makes it REALIZABLE: we never
@@ -271,10 +271,10 @@ def _priced(item: str, source: Source, state: WorldState,
         "letting it fall through to another kind's arm")
 
 
-def _ge_price_of(item: str, order_id: str, game_data: GameData) -> int:
+def ge_price_of(item: str, order_id: str, game_data: GameData) -> int:
     """The gold price of the standing GE sell order `obtain_sources` named.
 
-    Re-read for the same reason `_price_of` re-reads `npc_purchases`: `Source`
+    Re-read for the same reason `npc_price_of` re-reads `npc_purchases`: `Source`
     carries only the order id. A missing row means the order book changed between
     two reads inside one decision, which cannot happen — so this raises rather
     than defaulting, per the API-data rule (CLAUDE.md: use only API data or fail).
@@ -285,7 +285,7 @@ def _ge_price_of(item: str, order_id: str, game_data: GameData) -> int:
     return order[1]
 
 
-def _price_of(item: str, npc_code: str, game_data: GameData) -> tuple[int, str]:
+def npc_price_of(item: str, npc_code: str, game_data: GameData) -> tuple[int, str]:
     """`(price, currency)` this NPC charges for this item.
 
     `obtain_sources` produced the BUY source from the same `npc_purchases` table,
@@ -303,7 +303,7 @@ def _sale_of(item: str, state: WorldState,
              game_data: GameData) -> tuple[str, int]:
     """`(npc, price)` for the best tradeable buyer of `item`.
 
-    Same contract as `_price_of`, and the gates must be the SAME ones
+    Same contract as `npc_price_of`, and the gates must be the SAME ones
     `ObtainModel._sell` applied — price, known location, and
     `event_npc_tradeable` — or the two would pick different buyers for one
     source and the venue would name an NPC the model never admitted. That is why
@@ -325,7 +325,7 @@ def _sale_of(item: str, state: WorldState,
 def _drop_table(item: str, monster_code: str,
                 game_data: GameData) -> tuple[int, int, int]:
     """`(rate, min_quantity, max_quantity)` for this monster's drop of `item`.
-    Same contract as `_price_of`: the row exists because `obtain_sources` built
+    Same contract as `npc_price_of`: the row exists because `obtain_sources` built
     the DROP source from it."""
     for code, rate, min_q, max_q in game_data.monsters_dropping(item):
         if code == monster_code:

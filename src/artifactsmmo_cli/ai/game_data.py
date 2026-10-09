@@ -816,6 +816,12 @@ class GameData:
             return 0
         return stats.hp_restore
 
+    def effect_codes(self, code: str) -> tuple[str, ...]:
+        """The API effect codes item ``code`` carries (empty when it has none).
+        `hp_restore` folds `heal`, `restore` and `splash_restore` into one number;
+        this tells them apart (a `splash_restore` heals ANOTHER character)."""
+        return tuple(self._consumable_effect_codes.get(code, ()))
+
     def max_recipe_demand(self, item_code: str) -> int:
         """Largest TRANSITIVE quantity of `item_code` consumed to produce any
         single end-item, recursively across the crafting chain. Used by the

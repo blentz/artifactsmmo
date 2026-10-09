@@ -27,7 +27,6 @@ import pytest
 from artifactsmmo_cli.ai.acquisition_cost import (
     BANK_VENUE,
     _drop_table,
-    _price_of,
     _priced,
     _prospecting_relief,
     _sale_of,
@@ -35,6 +34,7 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     acquisition_actions,
     acquisition_options,
     bundle_acquisition_actions,
+    npc_price_of,
     route_options,
 )
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
@@ -263,7 +263,7 @@ def test_ge_fill_without_a_standing_order_raises_rather_than_defaulting(
 
     `obtain_sources` produced the source from the same order book, so the row
     exists; if it does not, the two reads disagreed inside one decision and a
-    default would price a route that is not there. Same contract as `_price_of`.
+    default would price a route that is not there. Same contract as `npc_price_of`.
     """
     gd = game_data
     gd._ge_sell_orders = {}
@@ -459,11 +459,11 @@ def test_price_of_refuses_to_invent_a_missing_row(state, game_data) -> None:
     row means the two reads disagreed about game data inside one decision. That
     raises rather than defaulting — 'use only API data or fail with an error'."""
     with pytest.raises(KeyError):
-        _price_of("backpack", "a_vendor_that_does_not_exist", game_data)
+        npc_price_of("backpack", "a_vendor_that_does_not_exist", game_data)
 
 
 def test_sale_of_refuses_to_invent_a_missing_row(state, game_data) -> None:
-    """Same contract as `_price_of`, for the sell side: `_sell_sources` built the
+    """Same contract as `npc_price_of`, for the sell side: `_sell_sources` built the
     SELL source from this table under these gates, so no row means the two reads
     disagreed inside one decision."""
     with pytest.raises(KeyError):

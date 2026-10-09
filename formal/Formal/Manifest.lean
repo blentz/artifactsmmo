@@ -527,6 +527,26 @@ open Formal.PriorityBand
 #check @Formal.FightOutcome.stock_mono                 -- more stock: no lost win, no lower HP
 #check @Formal.FightOutcome.turns_le_roundsToKill      -- never past the kill round
 #check @Formal.FightOutcome.win_turns_stock_indep      -- a win takes the same rounds
+-- ConsumablePrice (consumable utility increment 2, `ai/consumable_price_core.py`):
+#check @Formal.ConsumablePrice.held_free          -- held stock is free
+#check @Formal.ConsumablePrice.le_make            -- never dearer than making it
+#check @Formal.ConsumablePrice.le_buy             -- never dearer than buying it
+#check @Formal.ConsumablePrice.price_mem          -- the price IS one of the sides
+#check @Formal.ConsumablePrice.none_iff           -- unpriceable iff nothing serves it
+#check @Formal.ConsumablePrice.mono_make          -- a cheaper make never raises the price
+#check @Formal.ConsumablePrice.mono_gold          -- a cheaper gold price never raises it
+#check @Formal.ConsumablePrice.qle_trans          -- the cross-multiplied order is transitive
+-- LoopRate (consumable utility increment 3, `ai/loop_rate_core.py`):
+#check @Formal.LoopRate.recovery_le_rest          -- never worse than resting it all off
+#check @Formal.LoopRate.recovery_mono_missing     -- more HP missing never recovers faster
+#check @Formal.LoopRate.add_food_le               -- another food never slows recovery
+#check @Formal.LoopRate.price_mono                -- a cheaper food never slows recovery
+#check @Formal.LoopRate.free_food_le              -- a free food never slows recovery
+#check @Formal.LoopRate.countBound_covers         -- the count bound covers the deficit
+#check @Formal.LoopRate.xpRate_zero               -- no XP, no rate
+#check @Formal.LoopRate.xpRate_den_pos            -- a positive fight keeps the rate defined
+#check @Formal.LoopRate.xpRate_antitone           -- longer in any term is slower
+#check @Formal.LoopRate.rate_antitone_missing     -- more HP lost never raises the rate
 -- RealizableLoadout required roles (the multi-slot pick_loadout bug fix):
 #check @Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership -- contract: realizability ⇔ per-code demand ≤ ownership
 #check @Formal.RealizableLoadout.apply_cur_ge_1                        -- apply assert: realizable ⇒ cur ≥ 1 at every decrement
