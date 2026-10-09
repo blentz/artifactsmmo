@@ -10,7 +10,7 @@ from artifactsmmo_api_client.api.my_characters.action_delete_item_my_name_action
 )
 from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
-from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.base import ANY_REGION, Action
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -19,6 +19,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 @dataclass
 class DeleteItemAction(Action):
     """Delete an item from inventory — frees quantity when bank is inaccessible."""
+
+    travel_region = ANY_REGION  # no folded movement: plannable in any region
 
     tags: ClassVar[frozenset[str]] = frozenset({"cleanup"})
 

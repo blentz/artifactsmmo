@@ -382,7 +382,16 @@ class TestCoLocatedPortal:
         makes for `skills`.
         """
         gd = self._gd()
-        rest = RestAction()
+
+        class OverworldRest(RestAction):
+            """An overworld-bound recovery. Rest itself is plannable in every
+            region since 2026-10-09; the prune needs an action only the other
+            side of the co-located crossing can take, as Rest was in the live
+            case."""
+
+            travel_region = "overworld"
+
+        rest = OverworldRest()
         state = make_state(x=-3, y=12, layer="interior", hp=179, max_hp=710)
         # Region naming comes from the walkable-tile model, which this minimal
         # fixture does not populate — read it rather than hard-coding a live

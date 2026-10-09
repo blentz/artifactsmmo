@@ -9,7 +9,7 @@ from artifactsmmo_api_client.api.my_characters.action_equip_item_my_name_action_
 from artifactsmmo_api_client.models.equip_schema import EquipSchema
 from artifactsmmo_api_client.models.item_slot import ItemSlot
 
-from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.base import ANY_REGION, Action
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOT as ITEM_TYPE_TO_SLOT
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS as ITEM_TYPE_TO_SLOTS
@@ -51,6 +51,8 @@ DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset({"ring"})
 @dataclass
 class EquipAction(Action):
     """Equip an item from the inventory into its equipment slot."""
+
+    travel_region = ANY_REGION  # no folded movement: plannable in any region
 
     tags: ClassVar[frozenset[str]] = frozenset({"equip"})
 

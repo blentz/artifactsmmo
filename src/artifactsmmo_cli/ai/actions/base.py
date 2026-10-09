@@ -14,6 +14,17 @@ from artifactsmmo_cli.ai.world_state import WorldState
 T = TypeVar("T")
 
 
+ANY_REGION = "*"
+"""`Action.travel_region` of an action with no folded movement: plannable in
+every region (live 2026-10-09: R2D2 left the interior before each of 92 rests,
+because Rest inherited the overworld default)."""
+
+
+def serves_region(action: "Action", region: str) -> bool:
+    """Can `action` be taken by a character standing in `region`?"""
+    return action.travel_region in (ANY_REGION, region)
+
+
 class Action(ABC):
     """Abstract base class for all GOAP actions."""
 
@@ -35,7 +46,10 @@ class Action(ABC):
         """Return True if this action can be taken from the given state."""
 
     travel_region: str = "overworld"
-    """Access region this action's folded movement stays inside (P5b).
+    """Access region this action's folded movement stays inside (P5b), or
+    `ANY_REGION` for an action that folds in no movement at all (Rest, eat,
+    equip, delete, wait — the server serves them wherever the character
+    stands; USER 2026-10-09: "Fix resting anywhere").
     Every action folds move-to-target into cost/execute, which is only valid
     WITHIN one access region (same layer, no restricted boundary). The
     planner rejects actions whose region differs from the character's

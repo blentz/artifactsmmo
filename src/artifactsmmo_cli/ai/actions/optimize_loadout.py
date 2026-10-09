@@ -7,7 +7,7 @@ from typing import ClassVar
 from artifactsmmo_api_client import AuthenticatedClient
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
-from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.base import ANY_REGION, Action
 from artifactsmmo_cli.ai.actions.cooldown_wait import wait_out_cooldown
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, EquipAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
@@ -32,6 +32,8 @@ class OptimizeLoadoutAction(Action):
     damage reduction (armor) against the monster's element profile for combat,
     or picks the best gather tool for the skill.
     """
+
+    travel_region = ANY_REGION  # no folded movement: plannable in any region
 
     tags: ClassVar[frozenset[str]] = frozenset({"equip"})
 

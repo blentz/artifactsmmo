@@ -13,7 +13,7 @@ from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 
-from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.base import ANY_REGION, Action
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -26,6 +26,8 @@ applicable."""
 
 class WaitAction(Action):
     """No-op last-resort action. State unchanged; no API call."""
+
+    travel_region = ANY_REGION  # no folded movement: plannable in any region
 
     tags: ClassVar[frozenset[str]] = frozenset({"cleanup"})
 

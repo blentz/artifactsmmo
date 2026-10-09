@@ -6,7 +6,7 @@ from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 
-from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.base import Action, serves_region
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -313,8 +313,7 @@ class GOAPPlanner:
                     continue
 
                 for action in relevant:
-                    if getattr(action, "travel_region", "overworld") != \
-                            game_data.state_region(node.state):
+                    if not serves_region(action, game_data.state_region(node.state)):
                         continue
                     if not action.is_applicable(node.state, game_data):
                         continue

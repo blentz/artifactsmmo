@@ -45,7 +45,7 @@ than of the full pool (the pool always carries all 48 off-region actions, so
 asking it would gate on nothing).
 """
 
-from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.base import Action, serves_region
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -75,7 +75,7 @@ def admit_region_edges(relevant: list[Action], actions: list[Action],
     runs once per plan attempt over the whole pool (1,932 actions live).
     """
     here = game_data.state_region(state)
-    if not any(a.travel_region != here and REGION_EDGE_TAG not in a.tags
+    if not any(not serves_region(a, here) and REGION_EDGE_TAG not in a.tags
                for a in relevant):
         return relevant
     seen = {id(a) for a in relevant}

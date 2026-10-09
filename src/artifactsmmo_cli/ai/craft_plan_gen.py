@@ -34,7 +34,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 
-from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.base import Action, serves_region
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
@@ -164,7 +164,7 @@ def _bridge_regions(plan: list[Action], state: WorldState, game_data: GameData,
     at = state
     for leg in plan:
         here = game_data.state_region(at)
-        if leg.travel_region != here:
+        if not serves_region(leg, here):
             route = _crossings(at, leg.travel_region, edges, game_data)
             if route is None:
                 return _decline(declined, f"region:{here}->{leg.travel_region}:{leg!r}")

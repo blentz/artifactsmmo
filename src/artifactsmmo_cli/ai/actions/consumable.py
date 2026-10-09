@@ -9,7 +9,7 @@ from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_use_item_my_name_action_use_post import sync as action_use_item
 from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
-from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.base import ANY_REGION, Action
 from artifactsmmo_cli.ai.actions.cost_core import (
     CONSUMABLE_COOLDOWN_SECONDS,
     OVERHEAL_CONSUMABLE_COST,
@@ -44,6 +44,8 @@ class UseConsumableAction(Action):
     gudgeon looked like it closed a 178-hp deficit and craft+eat beat Rest
     where four rounds were really dearer.
     """
+
+    travel_region = ANY_REGION  # no folded movement: plannable in any region
 
     tags: ClassVar[frozenset[str]] = frozenset({"recovery"})
 

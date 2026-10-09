@@ -97,11 +97,10 @@ class TestRestoreHPGoal:
         With every walk priced in seconds (`travel_seconds`, 5 s a tile) the
         cheese detour costs 75 s of walking alone, and the plan is the rest.
 
-        The `Transition` in front of the `Rest` is NOT a walk the cost change
-        could remove: `RestAction` keeps `Action.travel_region`'s class default
-        ("overworld"), and the planner only expands actions whose region is the
-        character's, so no `Rest` is ever applicable inside an interior. The
-        portal is the character's own tile, so it costs only its flat 3."""
+        And it rests WHERE IT STANDS (USER 2026-10-09, "Fix resting anywhere"):
+        `Rest` folds in no movement, so it is `ANY_REGION`. It used to inherit
+        the overworld default, and R2D2 stepped out of the interior before each
+        of 92 rests."""
         gd = bundle_game_data
         base = scenario_state(SCENARIOS["l20_relief_full_bank"], gd)
         state = dataclasses.replace(
@@ -122,9 +121,8 @@ class TestRestoreHPGoal:
         plan = planner.plan(state, RestoreHPGoal(), list(player._build_actions()), gd,
                             history=None, budget_seconds=math.inf, max_nodes=60_000)
         assert not planner.last_stats.node_capped, planner.last_stats
-        assert [type(a).__name__ for a in plan] == ["MapTransitionAction", "RestAction"], plan
-        assert plan[0].cost(state, gd) == 3.0
-        assert plan[1].cost(plan[0].apply(state, gd), gd) == 47.0
+        assert [type(a).__name__ for a in plan] == ["RestAction"], plan
+        assert plan[0].cost(state, gd) == 47.0
 
     def test_value_half_hp_is_critical(self):
         """At 50% HP (below the 0.75 rest threshold) RestoreHP returns its ceiling."""

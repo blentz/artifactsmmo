@@ -68,3 +68,11 @@ it planned the cheese detour (34, really ~170 s).
 New residual: `RestAction` (and other location-free actions) inherit
 `travel_region = "overworld"` (`actions/base.py`), so the planner cannot Rest
 inside an interior — the witness's leading Transition is that region lock.
+
+## Rest anywhere (2026-10-09, USER "Fix resting anywhere")
+
+`actions/base.ANY_REGION` marks an action that folds in no movement (Rest,
+UseConsumable, Equip, Unequip, OptimizeLoadout, Delete, Wait); `serves_region`
+is the one predicate the planner, the decomposition's region bridge and the
+region-edge admission ask. Live R2D2 had stepped out of the interior before
+each of 92 rests; the witness now plans `[Rest]` (47) in the interior.

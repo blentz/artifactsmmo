@@ -355,6 +355,8 @@ XP_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "xp_demand.py"
 CONSUMABLE_FLOOR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor_core.py"
 LOSS_RISK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loss_risk_core.py"
 FAILURE_RECOVERY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "failure_recovery_core.py"
+ACTION_BASE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "base.py"
+REST_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "rest.py"
 CONSUMABLE_FLOOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor.py"
 FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 CRAFT_COMPLETENESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_completeness.py"
@@ -1258,7 +1260,7 @@ GATHERING_CURRENCY_BATCH_MUTATIONS = [
 
 REGION_EDGE_MUTATIONS = [
     ("region_edges: admit the edges unconditionally (the 41x regression)",
-     "    if not any(a.travel_region != here and REGION_EDGE_TAG not in a.tags\n"
+     "    if not any(not serves_region(a, here) and REGION_EDGE_TAG not in a.tags\n"
      "               for a in relevant):\n"
      "        return relevant",
      "    if False:\n"
@@ -5063,6 +5065,18 @@ CONSUMABLE_FLOOR_CORE_MUTATIONS = [
 # Failure classes (USER 2026-10-09, "Classify by HTTP code";
 # `Formal.FailureRecovery`). Killed by tests/test_ai/test_failure_recovery_core.py,
 # the player wiring by tests/test_ai/test_player_recovery.py.
+# Rest anywhere (USER 2026-10-09). Killed by tests/test_ai/test_goals.py's
+# interior witness.
+ANY_REGION_MUTATIONS = [
+    ("regions: an any-region action is bound to its literal region again",
+     "    return action.travel_region in (ANY_REGION, region)\n",
+     "    return action.travel_region == region\n"),
+]
+REST_REGION_MUTATIONS = [
+    ("regions: Rest is overworld-bound again",
+     "    travel_region = ANY_REGION  # no folded movement: plannable in any region\n",
+     "    travel_region = \"overworld\"\n"),
+]
 FAILURE_RECOVERY_CORE_MUTATIONS = [
     ("failure recovery: a structural block counts down like a retry",
      "        if premise is not None:\n            out[key] = (left, premise)\n",
@@ -5337,7 +5351,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
-    LOSS_RISK_CORE_SRC, FAILURE_RECOVERY_CORE_SRC,
+    LOSS_RISK_CORE_SRC, FAILURE_RECOVERY_CORE_SRC, ACTION_BASE_SRC, REST_ACTION_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
     ROOT_DECISION_SRC, GATHER_DEMAND_SRC,
     OBTAIN_ITEM_ROUTING_SRC, EQUIP_VALUE_SRC,
@@ -9610,6 +9624,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_loss_risk.py", survivors)
     run_group(FAILURE_RECOVERY_CORE_SRC, FAILURE_RECOVERY_CORE_MUTATIONS,
               "tests/test_ai/test_failure_recovery_core.py", survivors)
+    run_group(ACTION_BASE_SRC, ANY_REGION_MUTATIONS,
+              "tests/test_ai/test_goals.py", survivors)
+    run_group(REST_ACTION_SRC, REST_REGION_MUTATIONS,
+              "tests/test_ai/test_goals.py", survivors)
     run_group(PLAYER_SRC, FAILURE_RECOVERY_PLAYER_MUTATIONS,
               "tests/test_ai/test_player_recovery.py", survivors)
     run_group(FIGHT_LOOP_COST_SRC, LOSS_RISK_COST_MUTATIONS,
