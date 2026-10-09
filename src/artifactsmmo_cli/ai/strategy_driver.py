@@ -693,7 +693,7 @@ class StrategyArbiter:
         # root the walk last resolved and never ran (~15% of C3P0's rows).
         #
         # A `last_fires["guards"]` entry is NOT the same fact: a guard can fire
-        # and still lose the walk (satisfied, suppressed, or no plan), and
+        # and still lose the walk (satisfied, or no plan), and
         # crediting the cycle to it would be the same misattribution pointed the
         # other way. Matched by OBJECT IDENTITY against the candidate list, not
         # by repr, because one repr can appear in two bands.
@@ -1007,7 +1007,7 @@ class StrategyArbiter:
         # short-circuits to the sticky-committed goal before walking the ranked
         # list, so under a live commitment the first attempt is the committed
         # objective — which is precisely the objective the arbiter was pursuing
-        # and abandoned. A SATISFIED or SUPPRESSED candidate never reaches
+        # and abandoned. A SATISFIED candidate never reaches
         # `try_plan`, so it never appears here: it was not attempted, so it was
         # not abandoned.
         #
@@ -1416,11 +1416,7 @@ class StrategyArbiter:
         chosen, plan, new_committed = arbitrate(
             interrupts=interrupts, candidates=non_wait,
             committed_repr=self._committed_repr,
-            try_plan=try_plan, is_satisfied=satisfied,
-            # The worth gate (the hook's only producer) was retired with
-            # PURSUE_TASK in Phase 5-2c-iii-c-2 #4: the task objective has its
-            # own turns, so nothing is suppressed for serving no need.
-            is_suppressed=lambda _goal: False)
+            try_plan=try_plan, is_satisfied=satisfied)
         if chosen is None:
             # Last resort: Wait (special-cased to a single WaitAction).
             wait = next((c for c in candidates if isinstance(c.goal, WaitGoal)), None)
@@ -1431,12 +1427,6 @@ class StrategyArbiter:
 
     def _dedupe_goals_tried(self) -> list[dict[str, object]]:
         """Telemetry: one record per goal (the LAST attempt wins, first-seen order kept)."""
-        # KEPT after the two-pass walk was deleted, because a goal can still be
-        # probed twice in one cycle: when nothing plans AND the worth gate
-        # suppressed something, `_arbitrate` re-runs the walk without the gate,
-        # and every candidate is asked again on the re-run, appending a second
-        # record.
-        #
         # dict insertion order keeps the FIRST-SEEN position of each goal while
         # the VALUE is the last attempt — `select`'s `objective_unplannable`
         # depends on both halves of that.

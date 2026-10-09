@@ -14,7 +14,7 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 # Inlined from LevelSkillGoal.PRIORITY_WHEN_FIRING (level_skill.py:32) so arbiter
 # ordering is UNCHANGED when the PURSUE_TASK skill grind routes here instead:
-# beats FarmItems(35)/UpgradeEquipment(35-50), loses to LowYieldCancelGoal(70).
+# beats FarmItems(35)/UpgradeEquipment(35-50), stays under 70.
 PRIORITY_WHEN_FIRING = 55.0
 
 

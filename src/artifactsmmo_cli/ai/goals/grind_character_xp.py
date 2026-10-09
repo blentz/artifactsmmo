@@ -23,11 +23,11 @@ PRIORITY_FLOOR = 30.0
 """Minimum priority when active. Matches existing FarmMonster default so the
 goal doesn't regress behavior in the cold-start case."""
 
-# Upper bound — stays under LowYieldCancelGoal(70) and ReachSkillGoal(55).
+# Upper bound — stays under ReachSkillGoal(55).
 PRIORITY_CEILING = 45.0
-"""Cap on the projected-scalar contribution. Stays under LowYieldCancelGoal(70),
-ReachSkillGoal(55) (the skill-grind priority, formerly LevelSkillGoal), and
-ensures survival/bank goals always dominate."""
+"""Cap on the projected-scalar contribution. Stays under ReachSkillGoal(55)
+(the skill-grind priority, formerly LevelSkillGoal), and ensures survival/bank
+goals always dominate."""
 
 SCALAR_TO_PRIORITY_GAIN = 5.0
 """Per scalar-yield unit, how much extra priority. Tuned so a goal pulling

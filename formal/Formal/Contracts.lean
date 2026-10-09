@@ -41,7 +41,6 @@ import Formal.Scalarizer
 import Formal.PlannerAdmissibility
 import Formal.PlannerDepthBound
 import Formal.TaskDecision
-import Formal.LowYieldCancel
 import Formal.ObjectiveStepFight
 import Formal.DecideKey
 import Formal.ProgressionReserve
@@ -1464,61 +1463,6 @@ example : ∀ (v v' baseline margin confidence : Rat),
     Formal.TaskDecision.taskDecisionPure false false true v' baseline margin confidence
       = Formal.TaskDecision.Decision.PURSUE :=
   @Formal.TaskDecision.decision_pursue_vpc_monotone
-
-/-! ### LowYieldCancel role contracts. -/
--- shell-safety: ¬hasTask ⇒ never fires (unconditional).
-example : ∀ (currentXp altXp confidence margin minConfidence : Rat)
-    (farmSamples altSamples : Nat),
-    Formal.LowYieldCancel.lowYieldFiresPure false currentXp altXp confidence
-        farmSamples altSamples margin minConfidence = false :=
-  @Formal.LowYieldCancel.no_task_never_fires
--- sample-gate: farm=0 ∨ alt=0 ⇒ never fires.
-example : ∀ (currentXp altXp confidence margin minConfidence : Rat)
-    (farmSamples altSamples : Nat),
-    farmSamples = 0 ∨ altSamples = 0 →
-    Formal.LowYieldCancel.lowYieldFiresPure true currentXp altXp confidence
-        farmSamples altSamples margin minConfidence = false :=
-  @Formal.LowYieldCancel.no_samples_blocks
--- margin-monotone: under positive currentXp and confidence ≥ gate, raising altXp
--- preserves a fire.
-example : ∀ (currentXp alt alt' confidence margin minConfidence : Rat)
-    (farmSamples altSamples : Nat),
-    farmSamples ≠ 0 → altSamples ≠ 0 →
-    currentXp > 0 → confidence ≥ minConfidence → alt ≤ alt' →
-    Formal.LowYieldCancel.lowYieldFiresPure true currentXp alt confidence
-        farmSamples altSamples margin minConfidence = true →
-    Formal.LowYieldCancel.lowYieldFiresPure true currentXp alt' confidence
-        farmSamples altSamples margin minConfidence = true :=
-  @Formal.LowYieldCancel.fires_monotone_in_alt
--- zero-fast-path: currentXp = 0 ∧ altXp > 0 ⇒ fires regardless of confidence/sample count
--- (beyond > 0). INTENTIONAL — Robby gudgeon scenario; see LowYieldCancel.lean header.
-example : ∀ (altXp confidence margin minConfidence : Rat)
-    (farmSamples altSamples : Nat),
-    farmSamples ≠ 0 → altSamples ≠ 0 → altXp > 0 →
-    Formal.LowYieldCancel.lowYieldFiresPure true 0 altXp confidence
-        farmSamples altSamples margin minConfidence = true :=
-  @Formal.LowYieldCancel.zero_fast_path_fires_unconditionally
--- zero-fast-path concrete witness: confidence = 0 (< 1/2 gate) AND alt_samples = 1
--- AND fires. Pins the bypass as the intended contract.
-example :
-    Formal.LowYieldCancel.lowYieldFiresPure true 0 1 0 1 1 (3/2) (1/2) = true :=
-  Formal.LowYieldCancel.zero_fast_path_fires_with_low_confidence_witness
--- margin soundness: positive currentXp ∧ fires ⇒ altXp ≥ currentXp * margin.
-example : ∀ (currentXp altXp confidence margin minConfidence : Rat)
-    (farmSamples altSamples : Nat),
-    currentXp > 0 →
-    Formal.LowYieldCancel.lowYieldFiresPure true currentXp altXp confidence
-        farmSamples altSamples margin minConfidence = true →
-    altXp ≥ currentXp * margin :=
-  @Formal.LowYieldCancel.positive_current_fires_implies_margin
--- confidence soundness: positive currentXp ∧ fires ⇒ confidence ≥ minConfidence.
-example : ∀ (currentXp altXp confidence margin minConfidence : Rat)
-    (farmSamples altSamples : Nat),
-    currentXp > 0 →
-    Formal.LowYieldCancel.lowYieldFiresPure true currentXp altXp confidence
-        farmSamples altSamples margin minConfidence = true →
-    confidence ≥ minConfidence :=
-  @Formal.LowYieldCancel.positive_current_fires_implies_confidence
 
 /-! ### ObjectiveStepFight role contracts (O5.4 perception binding). -/
 -- characterization: fires ⇔ ReachCharLevel ∧ combat monster ∧ ¬long-haul-defer.
@@ -3334,21 +3278,21 @@ statement is STRICTLY STRONGER (a weaker hypothesis admits the fallback band 4,
 where the freeze actually occurred). -/
 example : ∀ (cs : List Formal.ArbiterSelect.Candidate) (cid : Nat)
     (c d : Formal.ArbiterSelect.Candidate)
-    (plannable satisfied suppressed : Nat → Bool),
+    (plannable satisfied : Nat → Bool),
     Formal.ArbiterSelect.findCommitted cs cid = some c →
     d ∈ cs →
     d.band < c.band →
     c.band < 5 →
     Formal.ArbiterSelect.precedes cs d.id cid = true →
-    (Formal.ArbiterSelect.stickyOutcome cs (some cid) plannable satisfied suppressed).1 = none :=
+    (Formal.ArbiterSelect.stickyOutcome cs (some cid) plannable satisfied).1 = none :=
   @Formal.ArbiterSelect.select_pure_no_sticky_preempt_lower_band
 -- Interrupt safety (Phase 5-2a): a plannable, unsatisfied interrupt wins the
 -- arbitration regardless of the commitment, which it keeps.
 example : ∀ (is cs : List Formal.ArbiterSelect.Candidate) (committed : Option Nat)
-    (g : Formal.ArbiterSelect.Candidate) (plannable satisfied suppressed : Nat → Bool),
+    (g : Formal.ArbiterSelect.Candidate) (plannable satisfied : Nat → Bool),
     g ∈ is → plannable g.id = true → satisfied g.id = false →
     ∃ r, r ∈ is ∧ Formal.ArbiterSelect.arbitrate is cs committed
-      plannable satisfied suppressed = (some r, committed) :=
+      plannable satisfied = (some r, committed) :=
   @Formal.ArbiterSelect.arbitrate_interrupt_wins
 
 /-! ### InventoryKeep role contracts (the single keep authority's COMBINATOR).

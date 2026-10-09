@@ -22,7 +22,6 @@ import Formal.PlannerAdmissibility
 import Formal.PlannerDepthBound
 import Formal.ArbiterSelect
 import Formal.TaskDecision
-import Formal.LowYieldCancel
 import Formal.ObjectiveStepFight
 import Formal.DecideKey
 import Formal.DominancePareto

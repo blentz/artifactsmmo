@@ -1410,31 +1410,10 @@ def test_select_pure_skips_satisfied_candidate():
     def is_satisfied(g):
         return g is sat_goal  # the first candidate is satisfied
 
-    def is_suppressed(g):
-        return False
-
     goal, plan, committed = select_pure(
-        [sat, nxt], None, try_plan, is_satisfied, is_suppressed)
+        [sat, nxt], None, try_plan, is_satisfied)
     assert goal is next_goal
     assert plan
-    assert committed == "Next"
-
-
-def test_select_pure_skips_suppressed_candidate():
-    """A suppressed candidate is skipped (line 90-91) before the satisfied/plan
-    checks, so a later candidate wins."""
-    supp_goal = AcceptTaskGoal()
-    next_goal = AcceptTaskGoal()
-    supp = Candidate(goal=supp_goal, repr_="Suppressed", band=2)
-    nxt = Candidate(goal=next_goal, repr_="Next", band=2)
-
-    goal, _plan, committed = select_pure(
-        [supp, nxt], None,
-        try_plan=lambda g: [object()],
-        is_satisfied=lambda g: False,
-        is_suppressed=lambda g: g is supp_goal,
-    )
-    assert goal is next_goal
     assert committed == "Next"
 
 
@@ -1445,7 +1424,6 @@ def test_select_pure_returns_none_when_nothing_plans():
         [g], None,
         try_plan=lambda goal: [],
         is_satisfied=lambda goal: False,
-        is_suppressed=lambda goal: False,
     )
     assert result == (None, [], None)
 

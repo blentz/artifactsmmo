@@ -11,7 +11,6 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -108,19 +107,6 @@ class TestExpandBankGaps:
         gd = self._gd(capacity=30)
         goal = ExpandBankGoal(bank_accessible=True, game_data=gd)
         assert goal.desired_state(make_state(), gd) == {"bank_capacity": 31}
-
-
-# --- LowYieldCancelGoal ---------------------------------------------------
-
-class TestLowYieldCancelGaps:
-    def test_desired_state_clears_task(self):
-        goal = LowYieldCancelGoal()
-        assert goal.desired_state(make_state(), GameData()) == {
-            "task_code": None, "task_total": 0
-        }
-
-    def test_repr(self):
-        assert repr(LowYieldCancelGoal()) == "LowYieldCancel"
 
 
 # --- ReachUnlockLevelGoal -------------------------------------------------

@@ -12,7 +12,7 @@ derived from those same objects, and assert bit-exact agreement under
 
 Modeled goals:
   Constant       : AcceptTask, ClaimPending, TaskExchange, TaskCancel,
-                   ExpandBank, CompleteTask, ReachUnlockLevel, LowYieldCancel
+                   ExpandBank, CompleteTask, ReachUnlockLevel
   Branching      : UnlockBank, DiscardOverstock, UpgradeEquipment
   Computed       : RestoreHP, DepositInventory, SellInventory
 
@@ -30,10 +30,6 @@ from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
-from artifactsmmo_cli.ai.goals.low_yield_cancel import (
-    LOW_YIELD_CANCEL,
-    LowYieldCancelGoal,
-)
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import (
     MAX_ACHIEVABLE_GAP,
@@ -110,10 +106,6 @@ def reach_unlock_level_value_model(satisfied: bool, target_level: int, gap: int)
     if gap > MAX_ACHIEVABLE_GAP:
         return Fraction(0)
     return Fraction(int(PRIORITY_WHEN_BLOCKER_ACTIVE))
-
-
-def low_yield_cancel_value_model(fires: bool) -> Fraction:
-    return Fraction(int(LOW_YIELD_CANCEL)) if fires else Fraction(0)
 
 
 def unlock_bank_value_model(bank_locked: bool, xp_exceeded: bool, unreachable: bool,
@@ -324,14 +316,6 @@ def test_reach_unlock_level_active_returns_85():
     assert Fraction(goal.value(s, gd)) == reach_unlock_level_value_model(False, 8, 3)
 
 
-def test_low_yield_cancel_value_matches_model():
-    gd = _gd()
-    goal = LowYieldCancelGoal()
-    # Without seeded history, low_yield_cancel_fires returns False.
-    s = make_state(task_code="copper_bar", task_total=20)
-    assert Fraction(goal.value(s, gd, history=None)) == low_yield_cancel_value_model(False)
-
-
 # ---------------------------------------------------------------------------
 # Branching goals.
 # ---------------------------------------------------------------------------
@@ -492,12 +476,6 @@ def test_reach_unlock_level_constant_is_85():
     goal = ReachUnlockLevelGoal(target_level=8)
     s = make_state(level=5)
     assert goal.value(s, gd) == 85.0
-
-
-def test_low_yield_cancel_constant_is_70_when_fires():
-    """LOW_YIELD_CANCEL constant pin. The actual decision boundary is proven
-    elsewhere; this test just guards against the value drifting from 70."""
-    assert LOW_YIELD_CANCEL == 70.0
 
 
 def test_seize_window_value_constant_is_60():

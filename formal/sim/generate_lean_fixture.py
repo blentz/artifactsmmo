@@ -385,7 +385,6 @@ def generate_lean(snapshot: dict) -> str:
         "  recyclableSurplusNonempty := false",
         "  taskCoinsTotal := 0",
         "  taskExchangeMinCoins := 1",
-        "  lowYieldCancelFires := false",
         "  taskCancelFires := false",
         "  pursueTaskFires := false",
         "  objectiveStepFires := false",

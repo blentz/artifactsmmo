@@ -229,13 +229,6 @@ open Formal.PriorityBand
 #print axioms Formal.TaskDecision.requiredVpc_antitone_in_confidence
 #print axioms Formal.TaskDecision.decision_pursue_confidence_monotone
 #print axioms Formal.TaskDecision.decision_pursue_vpc_monotone
-#print axioms Formal.LowYieldCancel.no_task_never_fires
-#print axioms Formal.LowYieldCancel.no_samples_blocks
-#print axioms Formal.LowYieldCancel.fires_monotone_in_alt
-#print axioms Formal.LowYieldCancel.zero_fast_path_fires_unconditionally
-#print axioms Formal.LowYieldCancel.zero_fast_path_fires_with_low_confidence_witness
-#print axioms Formal.LowYieldCancel.positive_current_fires_implies_margin
-#print axioms Formal.LowYieldCancel.positive_current_fires_implies_confidence
 #print axioms Formal.ObjectiveStepFight.fires_iff
 #print axioms Formal.ObjectiveStepFight.not_reach_char_level_never_fires
 #print axioms Formal.ObjectiveStepFight.no_combat_monster_never_fires
@@ -633,8 +626,6 @@ open Formal.PriorityBand
 #print axioms Formal.GoalSystem.reachUnlockLevel_cold_satisfied_zero
 #print axioms Formal.GoalSystem.reachUnlockLevel_cold_zero_target
 #print axioms Formal.GoalSystem.reachUnlockLevel_cold_gap_too_big
-#print axioms Formal.GoalSystem.lowYieldCancel_value_in_range
-#print axioms Formal.GoalSystem.lowYieldCancel_cold_returns_zero
 #print axioms Formal.GoalSystem.unlockBank_value_in_range
 #print axioms Formal.GoalSystem.unlockBank_cold_not_locked_zero
 #print axioms Formal.GoalSystem.unlockBank_cold_xp_exceeded_zero

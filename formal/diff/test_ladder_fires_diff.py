@@ -156,7 +156,6 @@ from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
-from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
@@ -1706,42 +1705,6 @@ def _empty_history() -> LearningStore:
     return store
 
 
-def _yield_history(
-    farm_items_xp: int,
-    farm_monster_xp: int,
-    *,
-    monster_repr: str = "GrindCharacterXP(chicken)",
-) -> LearningStore:
-    """A POPULATED in-memory LearningStore for the lowYieldCancel path.
-
-    Records one `PursueTask(x)` cycle yielding `farm_items_xp` char-XP and one
-    `monster_repr` cycle yielding `farm_monster_xp` char-XP.
-    `low_yield_cancel_fires` reads the task-pursuit pool for the held item's
-    taskmaster (`yield_reprs.task_pursuit_reprs_for`) as the current rate, and
-    the busiest `GrindCharacterXP(...)` as the alternative; with the current
-    rate 0 and a positive alternative the zero-fast-path
-    (`current_xp == 0 ∧ alt_xp > 0`) fires regardless of confidence.
-
-    These reprs were `FarmItems` / `FarmMonster(...)` until 2026-08-07 — goals
-    deleted on 2026-05-24, matching 0 of 22302 live cycles. This differential
-    stayed GREEN throughout, because it synthesises the rows it then reads: it
-    pinned production against the Lean model faithfully, on a repr production
-    could never actually see.
-
-    Cycle requires `ts`, `cycle_index`, `outcome` (session_id/character are
-    stamped by `record_cycle`); `selected_goal` + `delta_xp` are what the
-    projection aggregates over."""
-    store = LearningStore(db_path=":memory:", character="hero")
-    store.start_session()
-    store.record_cycle(Cycle(
-        ts="2026-06-18T00:00:00+00:00", cycle_index=0, outcome="ok",
-        selected_goal="PursueTask(x)", delta_xp=farm_items_xp))
-    store.record_cycle(Cycle(
-        ts="2026-06-18T00:00:01+00:00", cycle_index=1, outcome="ok",
-        selected_goal=monster_repr, delta_xp=farm_monster_xp))
-    return store
-
-
 def _plain_ctx(*, combat_monster: str | None = None,
                draw_owed: bool = True) -> SelectionContext:
     """`draw_owed` defaults FALSE, which keeps ACCEPT_TASK quiet.
@@ -1791,9 +1754,9 @@ def _feasible_items_gd() -> GameData:
     """Empty catalog: the items-task code has no crafting_skill stats and no
     recipe, so `task_requirement` returns None (no skill gap) -> PURSUE.
 
-    Task completion rewards are seeded for the `widget` task code so the
-    low-yield projection (`project_task_completion` -> task_gold/coin_reward)
-    reads real API amounts instead of raising on missing task-reward data."""
+    Task completion rewards are seeded for the `widget` task code so any
+    task-reward read (`task_gold_reward` / `task_coin_reward`) gets real API
+    amounts instead of raising on missing task-reward data."""
     gd = GameData()
     gd._item_stats = {}
     gd._crafting_recipes = {}

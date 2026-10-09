@@ -14,7 +14,6 @@ open Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal
 open Formal.BankSelection Formal.PriorityBand Formal.OwnedCount Formal.UpgradeSelection
 open Formal.Scalarizer
 open Formal.TaskDecision
-open Formal.LowYieldCancel
 open Formal.DecideKey
 open Formal.CyclesForProgress
 open Formal.GatherApply
@@ -1006,8 +1005,8 @@ interrupts first, then the means).
 
 args layout:
 * `[0]`          = nCands
-* per-candidate block (5 Ints, repeated nCands times starting at index 1):
-  `[id, plannable(0/1), satisfied(0/1), suppressed(0/1), band]`
+* per-candidate block (4 Ints, repeated nCands times starting at index 1):
+  `[id, plannable(0/1), satisfied(0/1), band]`
 * trailing: `[committed_present(0/1), committed_id]`
 
 Band-0 candidates are the interrupts and the rest the means, in list order —
@@ -1021,26 +1020,25 @@ def runArbiterSelect (args : Array Json) : Json :=
   let n := (intArg args 0).toNat
   let cands : List Formal.ArbiterSelect.Candidate :=
     (List.range n).map (fun k =>
-      let base := 1 + 5 * k
-      ⟨(intArg args base).toNat, intArg args (base + 4)⟩)
+      let base := 1 + 4 * k
+      ⟨(intArg args base).toNat, intArg args (base + 3)⟩)
   let lookup (offset : Nat) (id : Nat) : Bool :=
     let rec loop : Nat → Bool
       | 0 => false
       | k + 1 =>
-        let base := 1 + 5 * (n - k - 1)
+        let base := 1 + 4 * (n - k - 1)
         if (intArg args base).toNat = id then intArg args (base + offset) != 0
         else loop k
     loop n
   let plannable := lookup 1
   let satisfied := lookup 2
-  let suppressed := lookup 3
-  let commPresent := intArg args (1 + 5 * n) != 0
-  let commId := intArg args (2 + 5 * n)
+  let commPresent := intArg args (1 + 4 * n) != 0
+  let commId := intArg args (2 + 4 * n)
   let committed : Option Nat := if commPresent then some commId.toNat else none
   let interrupts := cands.filter (fun c => decide (c.band = 0))
   let means := cands.filter (fun c => decide (c.band ≠ 0))
   let (chosen, newCommitted) :=
-    Formal.ArbiterSelect.arbitrate interrupts means committed plannable satisfied suppressed
+    Formal.ArbiterSelect.arbitrate interrupts means committed plannable satisfied
   let chosenId : Int := match chosen with | some c => Int.ofNat c.id | none => -1
   let chosenIsInterrupt : Bool := match chosen with | some c => decide (c.band = 0) | none => false
   let newCommittedId : Int := match newCommitted with | some i => Int.ofNat i | none => -1
@@ -1084,33 +1082,6 @@ def runTaskDecision (args : Array Json) : Json :=
     | Decision.PURSUE => "pursue"
     | Decision.PIVOT => "pivot"
   Json.mkObj [("decision", Json.str label)]
-
-/-- Compute one low_yield_cancel result using the SAME proved
-`lowYieldFiresPure`.
-
-args layout (Ints; rationals as num/den pairs):
-* `[0]`      hasTask (0/1)
-* `[1,2]`    currentXp (num, den)
-* `[3,4]`    altXp (num, den)
-* `[5,6]`    confidence (num, den)
-* `[7]`      farmSamples (Nat)
-* `[8]`      altSamples (Nat)
-* `[9,10]`   margin (num, den)
-* `[11,12]`  minConfidence (num, den)
-
-Emits `fires` as a Bool. -/
-def runLowYieldCancel (args : Array Json) : Json :=
-  let hasTask := intArg args 0 != 0
-  let currentXp := ratArg args 1
-  let altXp := ratArg args 3
-  let confidence := ratArg args 5
-  let farmSamples := (intArg args 7).toNat
-  let altSamples := (intArg args 8).toNat
-  let margin := ratArg args 9
-  let minConfidence := ratArg args 11
-  let b := lowYieldFiresPure hasTask currentXp altXp confidence
-              farmSamples altSamples margin minConfidence
-  Json.mkObj [("fires", Json.bool b)]
 
 /-- Compute one objective_step_is_fight result using the SAME proved
 `Formal.ObjectiveStepFight.objectiveStepIsFightPure` (the O5.4 perception binding).
@@ -2966,8 +2937,6 @@ def runOne (item : Json) : Json :=
     runArbiterSelect args
   else if kind == "task_decision" then
     runTaskDecision args
-  else if kind == "low_yield_cancel" then
-    runLowYieldCancel args
   else if kind == "max_batch_from_held" then
     runMaxBatchFromHeld args
   else if kind == "objective_step_is_fight" then

@@ -58,7 +58,7 @@ class _StubGoal(Goal):
 
 def _closures(
     plannable: set[str],
-) -> tuple[Callable[[Goal], list[Action]], Callable[[Goal], bool], Callable[[Goal], bool]]:
+) -> tuple[Callable[[Goal], list[Action]], Callable[[Goal], bool]]:
     fake: list[Action] = []
 
     def try_plan(goal: Goal) -> list[Action]:
@@ -67,10 +67,7 @@ def _closures(
     def is_satisfied(goal: Goal) -> bool:
         return False
 
-    def is_suppressed(goal: Goal) -> bool:
-        return False
-
-    return try_plan, is_satisfied, is_suppressed
+    return try_plan, is_satisfied
 
 
 def _cand(tag: str, band: int) -> Candidate:
@@ -84,14 +81,13 @@ def test_committed_lower_band_grind_yields_to_higher_band_step():
     # Candidate order mirrors _build_candidates: top step (band 2) precedes the
     # fallback grind (BAND_FALLBACK_STEP).
     candidates = [step, grind]
-    try_plan, is_sat, is_sup = _closures(plannable={repr(step.goal), repr(grind.goal)})
+    try_plan, is_sat = _closures(plannable={repr(step.goal), repr(grind.goal)})
 
     chosen, plan, new_committed = select_pure(
         candidates=candidates,
         committed_repr="GatherMaterials(copper_ring)",  # the stale commit
         try_plan=try_plan,
         is_satisfied=is_sat,
-        is_suppressed=is_sup,
     )
 
     assert repr(chosen) == "GrindCharacterXP(green_slime)"
@@ -105,14 +101,13 @@ def test_committed_same_band_is_still_kept():
     first = _cand("AcceptTask", band=5)
     committed = _cand("PursueTask", band=5)
     candidates = [first, committed]  # peer precedes committed, SAME band
-    try_plan, is_sat, is_sup = _closures(plannable={"AcceptTask", "PursueTask"})
+    try_plan, is_sat = _closures(plannable={"AcceptTask", "PursueTask"})
 
     chosen, _plan, new_committed = select_pure(
         candidates=candidates,
         committed_repr="PursueTask",
         try_plan=try_plan,
         is_satisfied=is_sat,
-        is_suppressed=is_sup,
     )
 
     assert repr(chosen) == "PursueTask"
@@ -126,7 +121,7 @@ def test_committed_discretionary_task_exempt_from_band_preemption():
     step = _cand("GatherMaterials(copper_dagger)", band=2)
     task = _cand("PursueTask(cooked_gudgeon)", band=5)
     candidates = [step, task]  # band-2 step precedes the discretionary committed task
-    try_plan, is_sat, is_sup = _closures(
+    try_plan, is_sat = _closures(
         plannable={"GatherMaterials(copper_dagger)", "PursueTask(cooked_gudgeon)"})
 
     chosen, _plan, new_committed = select_pure(
@@ -134,7 +129,6 @@ def test_committed_discretionary_task_exempt_from_band_preemption():
         committed_repr="PursueTask(cooked_gudgeon)",
         try_plan=try_plan,
         is_satisfied=is_sat,
-        is_suppressed=is_sup,
     )
 
     assert repr(chosen) == "PursueTask(cooked_gudgeon)"  # committed task kept
@@ -147,14 +141,13 @@ def test_committed_higher_band_still_wins_over_lower_band_when_first():
     committed = _cand("GrindCharacterXP(green_slime)", band=2)
     grind = _cand("GatherMaterials(copper_ring)", band=4)
     candidates = [committed, grind]
-    try_plan, is_sat, is_sup = _closures(plannable={repr(committed.goal), repr(grind.goal)})
+    try_plan, is_sat = _closures(plannable={repr(committed.goal), repr(grind.goal)})
 
     chosen, _plan, new_committed = select_pure(
         candidates=candidates,
         committed_repr="GrindCharacterXP(green_slime)",
         try_plan=try_plan,
         is_satisfied=is_sat,
-        is_suppressed=is_sup,
     )
 
     assert repr(chosen) == "GrindCharacterXP(green_slime)"
@@ -166,7 +159,7 @@ def test_a_satisfied_interrupt_is_skipped_and_none_plans_runs_the_intention():
     returns the next one that plans; when none plans the intention runs."""
     met = _cand("RestoreHP", band=0)
     deposit = _cand("DepositInventory", band=0)
-    try_plan, _sat, _sup = _closures({"RestoreHP", "DepositInventory"})
+    try_plan, _sat = _closures({"RestoreHP", "DepositInventory"})
 
     def is_satisfied(goal: Goal) -> bool:
         return repr(goal) == "RestoreHP"

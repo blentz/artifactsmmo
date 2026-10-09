@@ -66,7 +66,6 @@ SCALAR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "scala
 PLANNER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "planner.py"
 ARBITER_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "arbiter_select.py"
 TASK_DECISION_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_decision_core.py"
-LOW_YIELD_BOUNDARY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "low_yield_boundary.py"
 OBJECTIVE_STEP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "objective_step_fight_core.py"
 DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_key.py"
 CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "cycles_for_progress_core.py"
@@ -142,7 +141,6 @@ TASK_EXCHANGE_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "t
 TASK_CANCEL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "task_cancel.py"
 COMPLETE_TASK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "complete_task_goal.py"
 REACH_UNLOCK_LEVEL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "reach_unlock_level.py"
-LOW_YIELD_CANCEL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "low_yield_cancel.py"
 UNLOCK_BANK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "unlock_bank.py"
 SHED_ACTIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "shed_actions.py"
 DISCARD_OVERSTOCK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "discard_overstock.py"
@@ -2461,31 +2459,6 @@ TASK_DECISION_MUTATIONS = [
      ""),
 ]
 
-
-# low_yield_boundary mutations -- old strings matched to current low_yield_boundary.py text.
-LOW_YIELD_MUTATIONS = [
-    # Flip the confidence comparator `<` → `<=`. At the exact 0.5 boundary the
-    # rule should fire (gate is `>=`); flipping to `<=` makes 0.5 reject.
-    # The `test_confidence_boundary_at` test pins this.
-    ("low_yield: confidence < -> <= (boundary flip)",
-     "    if confidence < min_confidence:\n        return False",
-     "    if confidence <= min_confidence:\n        return False"),
-    # Flip the margin comparator `>=` → `>`. At the exact margin boundary
-    # (`alt = current * margin`) the rule should fire; flipping to `>` makes
-    # it reject. The `test_margin_boundary_at` test (alt=3 == 2*1.5) catches
-    # this — strict `>` would reject equality.
-    ("low_yield: alt >= current*margin -> > (boundary flip)",
-     "    return alt_xp >= current_xp * margin",
-     "    return alt_xp > current_xp * margin"),
-    # Drop the zero-fast-path entirely. Then the Robby gudgeon scenario (and
-    # the `test_zero_fast_path_witness`, `test_zero_fast_path_fires_when_alt_positive`)
-    # would no longer fire because confidence=0 < 0.5 gate blocks.
-    ("low_yield: drop zero-fast-path",
-     "    # Zero-char-XP fast-path: any positive alternative dominates.\n"
-     "    if current_xp == 0 and alt_xp > 0:\n"
-     "        return True\n",
-     ""),
-]
 
 # objective_step_fight_core (objectiveStepIsFight perception binding) mutations.
 # Each perturbs the ReachCharLevel Fight-routing predicate so it diverges from the
@@ -5293,14 +5266,6 @@ TASK_CANCEL_GOAL_COIN_MUTATIONS = [
      ""),
 ]
 
-LOW_YIELD_CANCEL_COIN_MUTATIONS = [
-    ("low_yield_cancel_fires: propose a cancel with no coin to spend",
-     "    if state.inventory.get(TASKS_COIN_CODE, 0) < 1:\n"
-     "        return False\n",
-     ""),
-]
-
-
 def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
               survivors: list[str]) -> None:
     """Collect this group's mutation units into _UNITS (filtered by _ONLY).
@@ -5328,7 +5293,7 @@ _ALL_SRCS = [
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, KIT_SELECTION_SRC, STUCK_DETECTOR_SRC,
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
     PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC,
-    LOW_YIELD_BOUNDARY_SRC, OBJECTIVE_STEP_FIGHT_CORE_SRC, DECIDE_KEY_SRC,
+    OBJECTIVE_STEP_FIGHT_CORE_SRC, DECIDE_KEY_SRC,
     CYCLES_FOR_PROGRESS_SRC,
     GATHER_APPLY_SRC,
     INVENTORY_ROOM_SRC,
@@ -5365,7 +5330,7 @@ _ALL_SRCS = [
     # Phase-18 — value-range theorems for the remaining goals.
     ACCEPT_TASK_GOAL_SRC, CLAIM_PENDING_GOAL_SRC, TASK_EXCHANGE_GOAL_SRC,
     TASK_CANCEL_GOAL_SRC, COMPLETE_TASK_GOAL_SRC, REACH_UNLOCK_LEVEL_GOAL_SRC,
-    LOW_YIELD_CANCEL_GOAL_SRC, UNLOCK_BANK_GOAL_SRC, DISCARD_OVERSTOCK_GOAL_SRC,
+    UNLOCK_BANK_GOAL_SRC, DISCARD_OVERSTOCK_GOAL_SRC,
     PROGRESSION_GOAL_SRC, RESTORE_HP_GOAL_SRC, DEPOSIT_INVENTORY_GOAL_SRC,
     SELL_INVENTORY_GOAL_SRC,
     # Phase-19d — Tier-1 liveness measure port.
@@ -6987,7 +6952,7 @@ MEANS_MAINTAIN_MUTATIONS = [
 # (craftRelief/gearReview/maintainConsumables/recycleSurplus and the
 # history-gated phase slots) carry no threshold in the firing predicate itself —
 # their firing is computed by separate machinery (craft_relief_candidates,
-# task_decision, low_yield_cancel_fires, …) already anchored elsewhere.
+# task_decision, …) already anchored elsewhere.
 LADDER_GUARD_FIRES_MUTATIONS = [
     (
         "ladder/guards: GE_CANCEL drop cancel_targets guard (fires with no cancel target)",
@@ -8517,13 +8482,6 @@ REACH_UNLOCK_LEVEL_GOAL_MUTATIONS = [
      ""),
 ]
 
-LOW_YIELD_CANCEL_GOAL_MUTATIONS = [
-    # 70 -> 700: breaks the priority band claim.
-    ("low_yield_cancel: LOW_YIELD_CANCEL = 70.0 -> 700.0",
-     "LOW_YIELD_CANCEL = 70.0",
-     "LOW_YIELD_CANCEL = 700.0"),
-]
-
 UNLOCK_BANK_GOAL_MUTATIONS = [
     # 90 -> 900 active-branch return.
     ("unlock_bank: return 90.0 -> 900.0",
@@ -8914,8 +8872,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_arbiter_select_diff.py", survivors)
     run_group(TASK_DECISION_CORE_SRC, TASK_DECISION_MUTATIONS,
               "formal/diff/test_task_decision_diff.py", survivors)
-    run_group(LOW_YIELD_BOUNDARY_SRC, LOW_YIELD_MUTATIONS,
-              "formal/diff/test_low_yield_cancel_diff.py", survivors)
     run_group(OBJECTIVE_STEP_FIGHT_CORE_SRC, OBJECTIVE_STEP_FIGHT_MUTATIONS,
               "formal/diff/test_objective_step_is_fight_diff.py", survivors)
     run_group(PREREQUISITE_GRAPH_SRC, BOOTSTRAP_HORIZON_MUTATIONS,
@@ -9139,8 +9095,6 @@ def _collect_all_groups() -> None:
     run_group(COMPLETE_TASK_GOAL_SRC, COMPLETE_TASK_CANCEL_FILTER_MUTATIONS,
               "tests/test_ai/test_goals.py", survivors)
     run_group(REACH_UNLOCK_LEVEL_GOAL_SRC, REACH_UNLOCK_LEVEL_GOAL_MUTATIONS,
-              "formal/diff/test_goal_system_value_diff.py", survivors)
-    run_group(LOW_YIELD_CANCEL_GOAL_SRC, LOW_YIELD_CANCEL_GOAL_MUTATIONS,
               "formal/diff/test_goal_system_value_diff.py", survivors)
     run_group(UNLOCK_BANK_GOAL_SRC, UNLOCK_BANK_GOAL_MUTATIONS,
               "formal/diff/test_goal_system_value_diff.py", survivors)
@@ -9573,8 +9527,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_tiers_means.py", survivors)
     run_group(TASK_CANCEL_GOAL_SRC, TASK_CANCEL_GOAL_COIN_MUTATIONS,
               "tests/test_ai/test_goals.py", survivors)
-    run_group(PROJECTIONS_SRC, LOW_YIELD_CANCEL_COIN_MUTATIONS,
-              "tests/test_ai/test_low_yield_cancel.py", survivors)
 def _run_all_groups() -> int:
     survivors: list[str] = []
     _UNITS.clear()

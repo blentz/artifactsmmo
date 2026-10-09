@@ -1,11 +1,7 @@
 """Tests for the means bands (collect-reward + discretionary)."""
 
-from unittest.mock import patch
 
-from sqlalchemy.exc import SQLAlchemyError
-from sqlmodel import Session
 
-import artifactsmmo_cli.ai.learning.projections as projections_mod
 from artifactsmmo_cli.ai.accumulation_sell import sell_targets
 from artifactsmmo_cli.ai.arbiter_select import (
     BAND_COLLECT,
@@ -15,10 +11,6 @@ from artifactsmmo_cli.ai.arbiter_select import (
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
-from artifactsmmo_cli.ai.learning.models import Cycle
-from artifactsmmo_cli.ai.learning.models import Session as SessionModel
-from artifactsmmo_cli.ai.learning.projections import Yield, low_yield_cancel_fires
-from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.task_worth import held_task_cancel_due
@@ -53,41 +45,6 @@ def _gd() -> GameData:
 
 def _fires(kind: MeansKind, state, game_data, ctx: SelectionContext) -> bool:
     return means_fires(kind, state, game_data, None, ctx)
-
-
-def _seed_cycles(store: LearningStore, cycles: list[dict]) -> None:
-    store.start_session()
-    with Session(store._engine) as s:
-        if not s.get(SessionModel, store._session_id):
-            s.add(SessionModel(
-                session_id=store._session_id,
-                started_at="2026-05-18T00:00:00Z",
-                character="hero",
-            ))
-        for kw in cycles:
-            kw_with = dict(kw)
-            kw_with["session_id"] = store._session_id
-            s.add(Cycle(**kw_with))
-        s.commit()
-
-
-def _cycle(idx: int, goal: str, *, delta_xp: int = 0, delta_gold: int = 0,
-           task_progress: int = 0) -> dict:
-    return dict(
-        ts=f"2026-05-18T00:{idx:02d}:00Z",
-        cycle_index=idx,
-        character="hero",
-        selected_goal=goal,
-        action_repr="X",
-        action_class="X",
-        outcome="ok",
-        delta_xp=delta_xp,
-        delta_gold=delta_gold,
-        delta_hp=0,
-        delta_inv_used=0,
-        task_progress=task_progress,
-        task_total=10,
-    )
 
 
 def test_accept_task_is_due_when_a_draw_is_owed():
@@ -292,33 +249,6 @@ def test_no_supply_target_never_fires():
     assert _fires(MeansKind.SUPPLY_BANK, make_state(), _gd(), ctx) is False
 
 
-def test_low_yield_cancel_absent_when_no_history():
-    state = make_state(task_code="x", task_total=20, task_progress=5,
-                       inventory={"tasks_coin": 1})
-    assert low_yield_cancel_fires(state, GameData(), None) is False
-
-
-def _gd_task_rewards() -> GameData:
-    """GameData carrying API completion rewards for the low-yield task codes so
-    the projection reads real payouts (never a hardcoded 150/3)."""
-    gd = GameData()
-    gd._task_gold_rewards = {"x": 150, "gudgeon": 150}
-    gd._task_coin_rewards = {"x": 3, "gudgeon": 3}
-    return gd
-
-
-def test_low_yield_cancel_fires_with_seeded_history(tmp_path):
-    """Zero-char-XP FarmItems + positive FarmMonster → fires immediately (no confidence gate)."""
-    store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    cycles = [_cycle(i, "PursueTask(x)", delta_xp=0, task_progress=i) for i in range(5)]
-    cycles += [_cycle(5 + i, "GrindCharacterXP(slime)", delta_xp=15) for i in range(3)]
-    _seed_cycles(store, cycles)
-    state = make_state(task_code="gudgeon", task_type="items", task_total=347,
-                       task_progress=5, inventory={"tasks_coin": 1})
-    assert low_yield_cancel_fires(state, _gd_task_rewards(), store) is True
-    store.close()
-
-
 # ---------------------------------------------------------------------------
 # The held task's CANCEL verdict (`task_worth.held_task_cancel_due`): the
 # TASK_CANCEL rung's question until Phase 5-2c-iii-c-2 #5 retired the rung into
@@ -428,136 +358,6 @@ def test_bank_expand_absent_when_insufficient_gold():
     state = make_state(bank_items={f"item{i}": 1 for i in range(19)}, gold=5)
     _, discretionary = active_means(state, gd, None, _ctx(bank_accessible=True))
     assert MeansKind.BANK_EXPAND not in discretionary
-
-
-def test_low_yield_cancel_absent_when_no_alt_history(tmp_path):
-    """FarmItems history present but no FarmMonster data → no fire."""
-    store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    cycles = [_cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(5)]
-    _seed_cycles(store, cycles)
-    state = make_state(task_code="x", task_type="items", task_total=20, task_progress=5,
-                       inventory={"tasks_coin": 1})
-    assert low_yield_cancel_fires(state, GameData(), store) is False
-    store.close()
-
-
-def test_low_yield_cancel_absent_when_no_farmitems_history(tmp_path):
-    """FarmMonster history but no FarmItems samples → no fire."""
-    store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    cycles = [_cycle(i, "GrindCharacterXP(slime)", delta_xp=15) for i in range(3)]
-    _seed_cycles(store, cycles)
-    state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5,
-                       inventory={"tasks_coin": 1})
-    assert low_yield_cancel_fires(state, GameData(), store) is False
-    store.close()
-
-
-def test_low_yield_cancel_positive_path_fires_above_margin(tmp_path):
-    """Both current and alt positive; alt >= current * 1.5; sufficient confidence."""
-    store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    # FarmItems: 1 xp/cycle; FarmMonster: 5 xp/cycle → 5x > 1.5 margin.
-    # Need enough cycles for confidence >= 0.5 (sample_count / (10*3) >= 0.5 → >= 15 samples).
-    cycles = (
-        [_cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(35)] +
-        [_cycle(35 + i, "GrindCharacterXP(chicken)", delta_xp=5) for i in range(35)]
-    )
-    _seed_cycles(store, cycles)
-    state = make_state(task_code="x", task_type="items", task_total=50,
-                       task_progress=10, inventory={"tasks_coin": 1})
-    assert low_yield_cancel_fires(state, _gd_task_rewards(), store) is True
-    store.close()
-
-
-def test_low_yield_cancel_absent_below_confidence_threshold(tmp_path):
-    """Few FarmItems cycles → confidence < 0.5; positive current → no fire on positive path."""
-    store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    # 3 FarmItems cycles → confidence = 3/30 = 0.1 < 0.5
-    cycles = (
-        [_cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(3)] +
-        [_cycle(3 + i, "GrindCharacterXP(chicken)", delta_xp=5) for i in range(3)]
-    )
-    _seed_cycles(store, cycles)
-    state = make_state(task_code="x", task_type="items", task_total=50, task_progress=3,
-                       inventory={"tasks_coin": 1})
-    assert low_yield_cancel_fires(state, _gd_task_rewards(), store) is False
-    store.close()
-
-
-def test_low_yield_cancel_positive_path_no_fire_below_margin(tmp_path):
-    """Alt slightly better (1.2x) but below margin (1.5x) → no fire."""
-    store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    cycles = (
-        [_cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(30)] +
-        [_cycle(30 + i, "GrindCharacterXP(chicken)", delta_xp=1) for i in range(30)] +
-        [_cycle(60 + i, "GrindCharacterXP(chicken)", delta_xp=2) for i in range(6)]
-    )
-    _seed_cycles(store, cycles)
-    state = make_state(task_code="x", task_type="items", task_total=50, task_progress=10,
-                       inventory={"tasks_coin": 1})
-    assert low_yield_cancel_fires(state, _gd_task_rewards(), store) is False
-    store.close()
-
-
-def test_best_alternative_repr_returns_none_on_sqla_error(tmp_path):
-    """SQLAlchemyError inside Session context → returns None → no LOW_YIELD_CANCEL."""
-    store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    cycles = [_cycle(i, "PursueTask(x)", delta_xp=0, task_progress=i) for i in range(5)]
-    _seed_cycles(store, cycles)
-    state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5,
-                       inventory={"tasks_coin": 1})
-    with patch("artifactsmmo_cli.ai.learning.projections.Session") as mock_session:
-        mock_session.side_effect = SQLAlchemyError("db error")
-        assert low_yield_cancel_fires(state, GameData(), store) is False
-    store.close()
-
-
-def test_best_alternative_repr_returns_none_when_all_goals_none(tmp_path):
-    """All selected_goal rows are None → counts dict empty → returns None → no fire."""
-
-    store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    cycles = [_cycle(i, "PursueTask(x)", delta_xp=0, task_progress=i) for i in range(5)]
-    _seed_cycles(store, cycles)
-    state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5,
-                       inventory={"tasks_coin": 1})
-
-    class FakeSession:
-        def __init__(self, *a, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            pass
-
-        def exec(self, stmt):
-            return iter([None, None])
-
-    with patch("artifactsmmo_cli.ai.learning.projections.Session", FakeSession):
-        assert low_yield_cancel_fires(state, GameData(), store) is False
-    store.close()
-
-
-def test_low_yield_cancel_absent_when_alt_repr_found_but_no_yield(tmp_path):
-    """alt_repr is found but expected_yield_per_cycle returns 0 samples for it → no fire."""
-    store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    cycles = [_cycle(i, "PursueTask(x)", delta_xp=0, task_progress=i) for i in range(5)]
-    _seed_cycles(store, cycles)
-    state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5,
-                       inventory={"tasks_coin": 1})
-
-    def fake_best_alt(history: LearningStore) -> str | None:
-        return "GrindCharacterXP(ghost)"
-
-    def fake_yield(goal_repr: str, history: LearningStore, window: int = 100) -> Yield:
-        if goal_repr == "GrindCharacterXP(ghost)":
-            return Yield(sample_count=0)
-        return Yield(sample_count=5, char_xp=0.0)
-
-    with patch.object(projections_mod, "_best_alternative_repr", fake_best_alt):
-        with patch("artifactsmmo_cli.ai.learning.projections.expected_yield_per_cycle", fake_yield):
-            assert low_yield_cancel_fires(state, GameData(), store) is False
-    store.close()
 
 
 def test_bank_expand_absent_when_purchase_would_break_gold_reserve():

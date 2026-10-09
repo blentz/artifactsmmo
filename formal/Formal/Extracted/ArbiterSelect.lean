@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/arbiter_select.py (sha256: 16559a8b5d891028062d4dd05861efe8660ed76d35c59c0e8151cc92e7ae862f) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/arbiter_select.py (sha256: 1bbfa91510a8f72a4eba98a629aeb540406f6ceb457f35d4d04ae1016c006dde) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.ArbiterSelect
@@ -74,7 +74,7 @@ def select_interrupt {Goal : Type} {Action : Type} (interrupts : List (Candidate
     (none, []))
 
 /-- Extracted from `select_pure` (line 104). -/
-def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal)) (committed_repr : Option String) (try_plan : (Goal → (List Action))) (is_satisfied : (Goal → Bool)) (is_suppressed : (Goal → Bool)) :
+def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal)) (committed_repr : Option String) (try_plan : (Goal → (List Action))) (is_satisfied : (Goal → Bool)) :
     ((Option Goal) × (List Action) × (Option String)) :=
   let tried_repr : Option String := none
   (match committed_repr with
@@ -82,7 +82,7 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
     let committed_cand := (_find (fun (c : Candidate Goal) => (decide ((c.repr_) = committed_repr_1))) candidates)
     (match committed_cand with
     | some committed_cand_2 =>
-      (if ((!(is_satisfied (committed_cand_2.goal))) && (!(is_suppressed (committed_cand_2.goal))))
+      (if (!(is_satisfied (committed_cand_2.goal)))
        then
         let lower_band_precedes := ((decide ((committed_cand_2.band) < 5)) && (List.any candidates (fun (c : Candidate Goal) => ((decide ((c.band) < (committed_cand_2.band))) && (_precedes candidates (c.repr_) committed_repr_1)))))
         (if (!lower_band_precedes)
@@ -99,20 +99,16 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
                  then
                   none
                  else
-                  (if (is_suppressed (cand.goal))
+                  (if (is_satisfied (cand.goal))
                    then
                     none
                    else
-                    (if (is_satisfied (cand.goal))
+                    let plan := (try_plan (cand.goal))
+                    (if (decide ((Int.ofNat (List.length plan)) > 0))
                      then
-                      none
+                      (some ((some (cand.goal)), plan, (some (cand.repr_))))
                      else
-                      let plan := (try_plan (cand.goal))
-                      (if (decide ((Int.ofNat (List.length plan)) > 0))
-                       then
-                        (some ((some (cand.goal)), plan, (some (cand.repr_))))
-                       else
-                        none)))))
+                      none))))
                 candidates) with
             | some _r_3 => _r_3
             | none =>
@@ -124,20 +120,16 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
                then
                 none
                else
-                (if (is_suppressed (cand.goal))
+                (if (is_satisfied (cand.goal))
                  then
                   none
                  else
-                  (if (is_satisfied (cand.goal))
+                  let plan := (try_plan (cand.goal))
+                  (if (decide ((Int.ofNat (List.length plan)) > 0))
                    then
-                    none
+                    (some ((some (cand.goal)), plan, (some (cand.repr_))))
                    else
-                    let plan := (try_plan (cand.goal))
-                    (if (decide ((Int.ofNat (List.length plan)) > 0))
-                     then
-                      (some ((some (cand.goal)), plan, (some (cand.repr_))))
-                     else
-                      none)))))
+                    none))))
               candidates) with
           | some _r_4 => _r_4
           | none =>
@@ -149,20 +141,16 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
              then
               none
              else
-              (if (is_suppressed (cand.goal))
+              (if (is_satisfied (cand.goal))
                then
                 none
                else
-                (if (is_satisfied (cand.goal))
+                let plan := (try_plan (cand.goal))
+                (if (decide ((Int.ofNat (List.length plan)) > 0))
                  then
-                  none
+                  (some ((some (cand.goal)), plan, (some (cand.repr_))))
                  else
-                  let plan := (try_plan (cand.goal))
-                  (if (decide ((Int.ofNat (List.length plan)) > 0))
-                   then
-                    (some ((some (cand.goal)), plan, (some (cand.repr_))))
-                   else
-                    none)))))
+                  none))))
             candidates) with
         | some _r_5 => _r_5
         | none =>
@@ -174,20 +162,16 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
              then
               none
              else
-              (if (is_suppressed (cand.goal))
+              (if (is_satisfied (cand.goal))
                then
                 none
                else
-                (if (is_satisfied (cand.goal))
+                let plan := (try_plan (cand.goal))
+                (if (decide ((Int.ofNat (List.length plan)) > 0))
                  then
-                  none
+                  (some ((some (cand.goal)), plan, (some (cand.repr_))))
                  else
-                  let plan := (try_plan (cand.goal))
-                  (if (decide ((Int.ofNat (List.length plan)) > 0))
-                   then
-                    (some ((some (cand.goal)), plan, (some (cand.repr_))))
-                   else
-                    none)))))
+                  none))))
             candidates) with
         | some _r_6 => _r_6
         | none =>
@@ -199,33 +183,29 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
          then
           none
          else
-          (if (is_suppressed (cand.goal))
+          (if (is_satisfied (cand.goal))
            then
             none
            else
-            (if (is_satisfied (cand.goal))
+            let plan := (try_plan (cand.goal))
+            (if (decide ((Int.ofNat (List.length plan)) > 0))
              then
-              none
+              (some ((some (cand.goal)), plan, (some (cand.repr_))))
              else
-              let plan := (try_plan (cand.goal))
-              (if (decide ((Int.ofNat (List.length plan)) > 0))
-               then
-                (some ((some (cand.goal)), plan, (some (cand.repr_))))
-               else
-                none)))))
+              none))))
         candidates) with
     | some _r_7 => _r_7
     | none =>
       (none, [], none)))
 
-/-- Extracted from `arbitrate` (line 168). -/
-def arbitrate {Goal : Type} {Action : Type} (interrupts : List (Candidate Goal)) (candidates : List (Candidate Goal)) (committed_repr : Option String) (try_plan : (Goal → (List Action))) (is_satisfied : (Goal → Bool)) (is_suppressed : (Goal → Bool)) :
+/-- Extracted from `arbitrate` (line 163). -/
+def arbitrate {Goal : Type} {Action : Type} (interrupts : List (Candidate Goal)) (candidates : List (Candidate Goal)) (committed_repr : Option String) (try_plan : (Goal → (List Action))) (is_satisfied : (Goal → Bool)) :
     ((Option Goal) × (List Action) × (Option String)) :=
   let interrupt := (select_interrupt interrupts try_plan is_satisfied)
   (if (decide ((Int.ofNat (List.length (interrupt.2))) > 0))
    then
     ((interrupt.1), (interrupt.2), committed_repr)
    else
-    (select_pure candidates committed_repr try_plan is_satisfied is_suppressed))
+    (select_pure candidates committed_repr try_plan is_satisfied))
 
 end Extracted.ArbiterSelect

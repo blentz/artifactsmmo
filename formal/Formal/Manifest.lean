@@ -287,14 +287,6 @@ open Formal.PriorityBand
 #check @Formal.TaskDecision.requiredVpc_antitone_in_confidence   -- confidence-monotone: threshold antitone in confidence
 #check @Formal.TaskDecision.decision_pursue_confidence_monotone  -- confidence-monotone: PURSUE preserved by ↑confidence
 #check @Formal.TaskDecision.decision_pursue_vpc_monotone         -- vpc-monotone: PURSUE preserved by ↑skill_up_vpc
--- LowYieldCancel required roles:
-#check @Formal.LowYieldCancel.no_task_never_fires                              -- shell-safety: ¬hasTask ⇒ never fires
-#check @Formal.LowYieldCancel.no_samples_blocks                                -- sample-gate: farm=0 ∨ alt=0 ⇒ never fires
-#check @Formal.LowYieldCancel.fires_monotone_in_alt                            -- margin-monotone: ↑altXp preserves fire (positive currentXp, conf above gate)
-#check @Formal.LowYieldCancel.zero_fast_path_fires_unconditionally             -- zero-fast-path: currentXp = 0 ∧ altXp > 0 ⇒ fires unconditionally
-#check @Formal.LowYieldCancel.zero_fast_path_fires_with_low_confidence_witness -- zero-fast-path WITNESS (confidence < gate, alt_samples = 1)
-#check @Formal.LowYieldCancel.positive_current_fires_implies_margin            -- soundness: positive currentXp ∧ fires ⇒ altXp ≥ currentXp * margin
-#check @Formal.LowYieldCancel.positive_current_fires_implies_confidence        -- soundness: positive currentXp ∧ fires ⇒ confidence ≥ minConfidence
 -- ObjectiveStepFight required roles (O5.4 perception binding; pure ReachCharLevel
 -- Fight-routing core: src/artifactsmmo_cli/ai/objective_step_fight_core.py):
 #check @Formal.ObjectiveStepFight.fires_iff                       -- characterization: fires ⇔ ReachCharLevel ∧ monster ∧ ¬long-haul-defer
@@ -754,8 +746,6 @@ open Formal.PriorityBand
 #check @Formal.GoalSystem.reachUnlockLevel_cold_satisfied_zero
 #check @Formal.GoalSystem.reachUnlockLevel_cold_zero_target
 #check @Formal.GoalSystem.reachUnlockLevel_cold_gap_too_big
-#check @Formal.GoalSystem.lowYieldCancel_value_in_range
-#check @Formal.GoalSystem.lowYieldCancel_cold_returns_zero
 #check @Formal.GoalSystem.unlockBank_value_in_range
 #check @Formal.GoalSystem.unlockBank_cold_not_locked_zero
 #check @Formal.GoalSystem.unlockBank_cold_xp_exceeded_zero

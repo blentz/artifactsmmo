@@ -2,7 +2,7 @@
 `StrategyArbiter._arbitrate`: interrupts first, then the means) must agree with
 the Lean oracle `arbitrate`.
 
-Inputs are generated as a list of `(id, plannable, satisfied, suppressed, band)`
+Inputs are generated as a list of `(id, plannable, satisfied, band)`
 candidates plus an optional `committed_id`; band-0 candidates are the
 interrupts, the rest the means, in list order — the split `_arbitrate` makes.
 Ids are GLOBALLY unique across the list (the Python `_precedes` compares by
@@ -47,21 +47,20 @@ class _StubGoal(Goal):
 
 
 def _build_candidates_and_closures(
-    raw: list[tuple[int, bool, bool, bool, int]],
+    raw: list[tuple[int, bool, bool, int]],
 ) -> tuple[
     list[Candidate],
     Callable[[Goal], list[Action]],
     Callable[[Goal], bool],
-    Callable[[Goal], bool],
 ]:
-    """Build candidates + (try_plan, is_satisfied, is_suppressed) closures from
-    a list of (id, plannable, satisfied, suppressed, band) quintuples."""
-    tag_to_flags: dict[int, tuple[bool, bool, bool]] = {}
+    """Build candidates + (try_plan, is_satisfied) closures from a list of
+    (id, plannable, satisfied, band) quadruples."""
+    tag_to_flags: dict[int, tuple[bool, bool]] = {}
     candidates: list[Candidate] = []
-    for tag, plannable, satisfied, suppressed, band in raw:
+    for tag, plannable, satisfied, band in raw:
         goal = _StubGoal(tag)
         candidates.append(Candidate(goal=goal, repr_=repr(goal), band=band))
-        tag_to_flags[tag] = (plannable, satisfied, suppressed)
+        tag_to_flags[tag] = (plannable, satisfied)
 
     fake_action_list: list[Action] = []
 
@@ -73,31 +72,27 @@ def _build_candidates_and_closures(
         tag = int(repr(goal).removeprefix("Stub<").removesuffix(">"))
         return tag_to_flags[tag][1]
 
-    def is_suppressed(goal: Goal) -> bool:
-        tag = int(repr(goal).removeprefix("Stub<").removesuffix(">"))
-        return tag_to_flags[tag][2]
-
-    return candidates, try_plan, is_satisfied, is_suppressed
+    return candidates, try_plan, is_satisfied
 
 
 def _oracle_args(
-    raw: list[tuple[int, bool, bool, bool, int]],
+    raw: list[tuple[int, bool, bool, int]],
     committed: int | None,
 ) -> list[int]:
     args: list[int] = [len(raw)]
-    for tag, plannable, satisfied, suppressed, band in raw:
-        args.extend([tag, int(plannable), int(satisfied), int(suppressed), band])
+    for tag, plannable, satisfied, band in raw:
+        args.extend([tag, int(plannable), int(satisfied), band])
     args.extend([1 if committed is not None else 0, committed if committed is not None else 0])
     return args
 
 
 def _run_python(
-    raw: list[tuple[int, bool, bool, bool, int]],
+    raw: list[tuple[int, bool, bool, int]],
     committed: int | None,
 ) -> tuple[int, bool, int]:
     """Run the Python arbitration; return (chosen_id, chosen_is_interrupt,
     new_committed_id) with -1 sentinels for None."""
-    candidates, try_plan, is_satisfied, is_suppressed = _build_candidates_and_closures(raw)
+    candidates, try_plan, is_satisfied = _build_candidates_and_closures(raw)
     committed_repr = f"Stub<{committed}>" if committed is not None else None
     chosen, _plan, new_committed = arbitrate(
         interrupts=[c for c in candidates if c.band == 0],
@@ -105,7 +100,6 @@ def _run_python(
         committed_repr=committed_repr,
         try_plan=try_plan,
         is_satisfied=is_satisfied,
-        is_suppressed=is_suppressed,
     )
     if chosen is None:
         return -1, False, -1 if new_committed is None else int(new_committed.removeprefix("Stub<").removesuffix(">"))
@@ -116,7 +110,7 @@ def _run_python(
 
 
 def _run_lean(
-    raw: list[tuple[int, bool, bool, bool, int]],
+    raw: list[tuple[int, bool, bool, int]],
     committed: int | None,
 ) -> tuple[int, bool, int]:
     res = run_oracle("arbiter_select", [_oracle_args(raw, committed)])[0]
@@ -133,15 +127,15 @@ def _wellformed_input(draw):
     ids = draw(st.lists(st.integers(min_value=0, max_value=999),
                         min_size=n_interrupts + n_means, max_size=n_interrupts + n_means,
                         unique=True))
-    raw: list[tuple[int, bool, bool, bool, int]] = []
+    raw: list[tuple[int, bool, bool, int]] = []
     for i in range(n_interrupts):
-        raw.append((ids[i], draw(st.booleans()), draw(st.booleans()), draw(st.booleans()), 0))
+        raw.append((ids[i], draw(st.booleans()), draw(st.booleans()), 0))
     # Means bands drawn across 1..5 so the lower_band_precedes branch and its
     # band<5 discretionary exemption are both hit.
     for j in range(n_means):
         raw.append((
             ids[n_interrupts + j],
-            draw(st.booleans()), draw(st.booleans()), draw(st.booleans()),
+            draw(st.booleans()), draw(st.booleans()),
             draw(st.integers(min_value=1, max_value=5)),
         ))
     # Committed may target an existing means id, or be absent, or target an
@@ -170,8 +164,8 @@ def test_interrupt_wins_and_keeps_the_commitment():
     committed = 1 (the means). Both implementations MUST return 0.
     """
     raw = [
-        (0, True, False, False, 0),  # guard 0, plannable
-        (1, True, False, False, 2),   # means 1, plannable
+        (0, True, False, 0),  # guard 0, plannable
+        (1, True, False, 2),   # means 1, plannable
     ]
     py = _run_python(raw, committed=1)
     lean = _run_lean(raw, committed=1)
@@ -184,8 +178,8 @@ def test_sticky_idempotent_means_kept():
     """No interrupts, committed means is plannable → committed is kept.
     Pins the Python against the Lean oracle on the sticky-idempotence path."""
     raw = [
-        (1, True, False, False, 2),
-        (2, True, False, False, 2),  # committed, SAME band → kept
+        (1, True, False, 2),
+        (2, True, False, 2),  # committed, SAME band → kept
     ]
     py = _run_python(raw, committed=2)
     lean = _run_lean(raw, committed=2)
@@ -196,9 +190,9 @@ def test_sticky_idempotent_means_kept():
 def test_no_commitment_walk_returns_first_plannable():
     """No committed: the first plannable interrupt wins, before any means."""
     raw = [
-        (0, False, False, False, 0),  # guard 0, NOT plannable
-        (1, True, False, False, 0),   # guard 1, plannable → wins
-        (2, True, False, False, 2),    # means 2, plannable (skipped)
+        (0, False, False, 0),  # guard 0, NOT plannable
+        (1, True, False, 0),   # guard 1, plannable → wins
+        (2, True, False, 2),    # means 2, plannable (skipped)
     ]
     py = _run_python(raw, committed=None)
     lean = _run_lean(raw, committed=None)
@@ -214,8 +208,8 @@ def test_sticky_falls_through_when_committed_unplannable():
     AND that the next plannable means after the committed wins.
     """
     raw = [
-        (0, False, False, False, 2),  # committed means, NOT plannable
-        (1, True, False, False, 2),   # later means, plannable
+        (0, False, False, 2),  # committed means, NOT plannable
+        (1, True, False, 2),   # later means, plannable
     ]
     py = _run_python(raw, committed=0)
     lean = _run_lean(raw, committed=0)
@@ -234,8 +228,8 @@ def test_sticky_blocked_by_lower_band_step_freeze_regression():
     admits, so this exercises what changed rather than a band that was already
     covered."""
     raw = [
-        (0, True, False, False, 2),   # band-2 step (green_slime), plannable, precedes
-        (1, True, False, False, 4),   # band-4 committed fallback grind (copper_ring)
+        (0, True, False, 2),   # band-2 step (green_slime), plannable, precedes
+        (1, True, False, 4),   # band-4 committed fallback grind (copper_ring)
     ]
     py = _run_python(raw, committed=1)
     lean = _run_lean(raw, committed=1)
@@ -250,8 +244,8 @@ def test_sticky_raid_commit_is_preempted_by_a_lower_band():
     fallback band, and without this the newly-inserted band would have no
     differential coverage at all."""
     raw = [
-        (0, True, False, False, 2),   # band-2 step precedes
-        (1, True, False, False, 3),   # band-3 committed raid
+        (0, True, False, 2),   # band-2 step precedes
+        (1, True, False, 3),   # band-3 committed raid
     ]
     py = _run_python(raw, committed=1)
     lean = _run_lean(raw, committed=1)
@@ -267,8 +261,8 @@ def test_sticky_discretionary_commit_exempt_from_band_preemption():
     3. This is the OTHER side of the boundary the test above rides, so the two
     together pin exactly where the exemption starts."""
     raw = [
-        (0, True, False, False, 2),   # band-2 step precedes
-        (1, True, False, False, 5),   # band-5 committed discretionary → kept
+        (0, True, False, 2),   # band-2 step precedes
+        (1, True, False, 5),   # band-5 committed discretionary → kept
     ]
     py = _run_python(raw, committed=1)
     lean = _run_lean(raw, committed=1)

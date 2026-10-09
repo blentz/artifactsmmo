@@ -8,7 +8,6 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.projections import (
     Yield,
-    cycles_for_progress,
     expected_yield_per_cycle,
 )
 from artifactsmmo_cli.ai.learning.scalarizer import (
@@ -105,21 +104,6 @@ class TestDropsParsing:
         y = expected_yield_per_cycle("CompleteTask", store)
         store.close()
         assert y.tasks_coins == 0.0
-
-
-class TestCyclesForProgressViaSatisfyEvents:
-    def test_uses_cycles_to_satisfy_markers(self, tmp_path):
-        """When task_progress never advances but cycles_to_satisfy events are
-        recorded, those become progress intervals (line 159) and the median is
-        returned once enough samples exist."""
-        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-        _populate(store, [
-            _cycle(i, "GatherMaterials(x)", cycles_to_satisfy=4)
-            for i in range(12)
-        ])
-        result = cycles_for_progress("GatherMaterials(x)", store)
-        store.close()
-        assert result == 4
 
 
 class TestScalarCoinValueWithStore:

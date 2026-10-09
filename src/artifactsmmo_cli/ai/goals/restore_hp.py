@@ -12,7 +12,7 @@ from artifactsmmo_cli.ai.thresholds import CRITICAL_HP_FRACTION
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Value returned when HP is critically low (< CRITICAL_HP_FRACTION).
-# Beats every other goal's normal ceiling (UnlockBank=90, LowYieldCancel=70)
+# Beats every other goal's normal ceiling (UnlockBank=90)
 # so the bot heals/consumes before continuing combat.
 _HP_CRITICAL = 110.0
 
@@ -21,7 +21,7 @@ class RestoreHPGoal(Goal):
     """Restore HP to full. Urgency spikes when HP is low.
 
     Below CRITICAL_HP_FRACTION the goal returns a value above any other goal's
-    normal ceiling (UnlockBank=90, LowYieldCancel=70) so it preempts combat and
+    normal ceiling (UnlockBank=90) so it preempts combat and
     drives Rest/UseConsumable immediately. Without that, combat-driving goals
     keep running until HP bottoms out (seen post-restart on real Robby: HP=13
     while UnlockBank kept fighting chickens).

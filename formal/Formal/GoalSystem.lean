@@ -1,8 +1,8 @@
 -- @concept: core, planner @property: safety
 /-
-Phase-18: Value-range theorems for the 14 Goals in `src/artifactsmmo_cli/ai/goals/`
+Phase-18: Value-range theorems for the 13 Goals in `src/artifactsmmo_cli/ai/goals/`
 that were not already covered by Phase-1/16/17 (PriorityBand, GoalValueBands,
-LowYieldCancel, GrindCharacterXP).
+GrindCharacterXP).
 
 For each goal we model:
   * `<goal>Value`  — a pure Rat function that mirrors `<Goal>.value(...)` from
@@ -21,8 +21,6 @@ CONSTANT-VALUE (value ∈ {0, K}):
   * ExpandBank          {0, 40}
   * CompleteTask        {0, 90}
   * ReachUnlockLevel    {0, 85}
-  * LowYieldCancel      {0, 70}    (decision-only — boundary itself lives in
-                                    `Formal.LowYieldCancel`; here we pin the value)
 
 BRANCHING-CONSTANT:
   * UnlockBank          {0, 30, 90}
@@ -39,7 +37,7 @@ Disclosed gaps (HONEST DECLARATION — see CLAUDE.md / Phase-1 lesson):
   * Goals that consult game_data / LearningStore / state in ways that cannot be
     expressed as a closed-form Rat expression (e.g. UnlockBank's
     `_target_monster_is_unreachable`, DiscardOverstock's `overstocked_items`,
-    UpgradeEquipment's `_find_upgrade`, LowYieldCancel's `low_yield_cancel_fires`)
+    UpgradeEquipment's `_find_upgrade`)
     are modeled with the OPAQUE branch outcomes as Bool/decision inputs. The
     arithmetic on each branch is modeled exactly; the routing-to-branch
     *decision* is treated as a parameter (the Python tests exercise the routing
@@ -207,22 +205,6 @@ theorem reachUnlockLevel_cold_gap_too_big (s : Bool) (tl : Int) (h : 0 < tl) :
   have htl : ¬ tl ≤ 0 := by omega
   have hg : (100 : Int) > maxAchievableGap := by unfold maxAchievableGap; decide
   cases s <;> simp [htl, hg]
-
-/-! ### LowYieldCancelGoal — {0, 70}. -/
-
-def lowYieldCancelValue : Rat := 70
-
-def lowYieldCancelGoalValue (fires : Bool) : Rat :=
-  if fires then lowYieldCancelValue else 0
-
-theorem lowYieldCancel_value_in_range (f : Bool) :
-    0 ≤ lowYieldCancelGoalValue f ∧ lowYieldCancelGoalValue f ≤ 70 := by
-  unfold lowYieldCancelGoalValue lowYieldCancelValue
-  cases f <;> grind
-
-theorem lowYieldCancel_cold_returns_zero :
-    lowYieldCancelGoalValue false = 0 := by
-  unfold lowYieldCancelGoalValue; simp
 
 /-! ## Section B. Branching-constant goals. -/
 

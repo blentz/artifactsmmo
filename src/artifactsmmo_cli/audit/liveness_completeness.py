@@ -175,11 +175,11 @@ DORMANT: dict[str, str] = {
     # — so "requires a task worked to completion" is no longer a reason nobody
     # has met. It is a thing the fleet has done.
     #
-    # `LowYieldCancelGoal` STAYS: still 0 cycles, its premise unmet.
+    # 2026-10-08: `LowYieldCancelGoal` LEFT this list — the class was deleted
+    # with the retired low-yield cancel chain (Phase 5-2c-iii cleanup).
     # 2026-10-08: `PursueTaskGoal` and `TaskTradeAction` LEFT this list — the
     # task objective's held items task ran live (Robby `PursueTask(coal)`, HAL
     # `PursueTask(spruce_plank)`: 242 cycles, 16 `TaskTrade` deliveries).
-    "LowYieldCancelGoal": "conditional: requires a held task and enough samples to judge it",
     # 2026-10-06: `TaskExchangeGoal`/`TaskExchangeAction` LEFT this list — the
     # task objective's exchange (c-2 #2) ran 5 cycles live, Lor's paying out.
     # 2026-09-13: ExpandBankGoal and BuyBankExpansionAction were removed from
