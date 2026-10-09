@@ -66,8 +66,8 @@ class TestNpcSellAction:
         a = NpcSellAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(4, 0))
         gd = make_gd(npc_sell_prices={"cook": {"cooked_chicken": 5}})
         state = make_state(x=0, y=0)
-        # 1.5 + dist(4) = 5.5
-        assert a.cost(state, gd) == pytest.approx(5.5)
+        # 1.5 + 4 tiles x 5 s = 21.5
+        assert a.cost(state, gd) == pytest.approx(21.5)
 
     def test_execute_moves_then_calls_npc_sell_api(self):
         a = NpcSellAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1))

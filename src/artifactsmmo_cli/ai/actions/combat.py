@@ -11,7 +11,7 @@ from artifactsmmo_api_client.models.fight_result import FightResult
 
 from artifactsmmo_cli.ai.actions.accept_task import _PENDING_TASK
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.cost_core import learned_cost_pure
+from artifactsmmo_cli.ai.actions.cost_core import learned_cost_pure, travel_seconds
 from artifactsmmo_cli.ai.actions.gather_apply_core import (
     GatherInv,
     apply_monster_drops_pure,
@@ -203,7 +203,7 @@ class FightAction(Action):
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
         dest = nearest_or_error(state.x, state.y, self.locations, "combat")
-        dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
+        dist = travel_seconds((state.x, state.y), dest)
         static = 10.0 + dist
         if history is None:
             base = learned_cost_pure(static, 0.0, 1.0, has_history=False)

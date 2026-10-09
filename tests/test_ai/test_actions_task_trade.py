@@ -92,8 +92,8 @@ class TestTaskTradeAction:
         a = TaskTradeAction(code="iron_ore", quantity=5, taskmaster_location=(1, 2))
         gd = make_gd()
         state = make_state(x=0, y=0)
-        # 2 + dist(3) = 5
-        assert a.cost(state, gd) == pytest.approx(5.0)
+        # 2 + 3 tiles x 5 s = 17
+        assert a.cost(state, gd) == pytest.approx(17.0)
 
     def test_execute_moves_and_calls_api(self):
         a = TaskTradeAction(code="iron_ore", quantity=5, taskmaster_location=(1, 2))

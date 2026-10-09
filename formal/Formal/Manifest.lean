@@ -447,7 +447,7 @@ open Formal.PriorityBand
 #check @Formal.ActionCostNonneg.move_cost_nonneg             -- Move.cost ≥ 0
 #check @Formal.ActionCostNonneg.delete_cost_nonneg           -- DeleteItemAction.cost_weight ≥ 0 (all branches)
 #check @Formal.ActionCostNonneg.all_actions_cost_nonneg      -- headline: every concrete Action's cost ≥ 0 (seals PlannerAdmissibility)
--- GatherCost (the BATCHED GatherAction.cost static term: (base+dist)*qty +
+-- GatherCost (the BATCHED GatherAction.cost static term: base*qty + dist (walk in seconds, once) +
 -- min(banked,qty)*bankPenalty + (mismatch ? loadPenalty*qty : 0) — non-negative
 -- and monotone in qty, so the planner cannot manufacture a cheaper plan by
 -- inflating a quantity, and cost-neutral against the singleton chain):
@@ -461,8 +461,8 @@ open Formal.PriorityBand
 -- full-cost parity needs qty ≤ banked because the bank term deliberately is NOT
 -- neutral below it. Use the first for anything the re-arm depends on.
 #check @Formal.GatherCost.gather_cost_loadout_parity -- unconditional term-by-term decomposition
-#check @Formal.GatherCost.gather_cost_batch_parity  -- full-cost: qty ≤ banked ⇒ qty × singleton
--- Rated: travel + loadout charged per GATHER (qty × expected gathers per unit),
+#check @Formal.GatherCost.gather_cost_batch_parity  -- full-cost: qty ≤ banked ⇒ qty × per-gather charge + one walk
+-- Rated: base + loadout charged per GATHER (qty × expected gathers per unit), the walk once,
 -- so a 1-in-20 secondary drop costs 20 gathers a unit (the 2026-10-05 apple bug):
 #check @Formal.GatherCost.gather_cost_rated_one            -- perUnit = 1 is gatherCost exactly
 #check @Formal.GatherCost.gather_cost_rated_nonneg         -- non-negative at any rate ≥ 0

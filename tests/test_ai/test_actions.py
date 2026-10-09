@@ -1129,7 +1129,7 @@ class TestAcceptTaskAction:
     def test_cost_includes_distance(self):
         action = AcceptTaskAction(taskmaster_location=(1, 2))
         state = make_state(x=0, y=0)
-        assert action.cost(state, make_game_data()) == 1.0 + 3  # dist=3
+        assert action.cost(state, make_game_data()) == 1.0 + 5 * 3  # 3 tiles x 5 s
 
     def test_repr(self):
         assert repr(AcceptTaskAction(taskmaster_location=(1, 2))) == "AcceptTask"
@@ -1182,7 +1182,7 @@ class TestCompleteTaskAction:
     def test_cost_includes_distance(self):
         action = CompleteTaskAction(taskmaster_location=(1, 2))
         state = make_state(x=0, y=0)
-        assert action.cost(state, make_game_data()) == 1.0 + 3  # dist=3
+        assert action.cost(state, make_game_data()) == 1.0 + 5 * 3  # 3 tiles x 5 s
 
     def test_repr(self):
         assert repr(CompleteTaskAction(taskmaster_location=(1, 2))) == "CompleteTask"
@@ -1268,7 +1268,7 @@ class TestTaskExchangeAction:
     def test_cost_distant(self):
         action = TaskExchangeAction(taskmaster_location=(1, 2))
         state = make_state(x=0, y=0)
-        assert action.cost(state, make_game_data()) == 1.0 + 3  # dist=3
+        assert action.cost(state, make_game_data()) == 1.0 + 5 * 3  # 3 tiles x 5 s
 
     def test_repr(self):
         assert repr(TaskExchangeAction(taskmaster_location=(1, 2))) == "TaskExchange"

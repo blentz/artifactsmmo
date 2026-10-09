@@ -104,7 +104,7 @@ class TestTaskCancelAction:
     def test_cost_includes_distance(self):
         action = TaskCancelAction(taskmaster_location=(3, 0))
         state = make_state(x=0, y=0)
-        assert action.cost(state, make_gd()) == pytest.approx(4.0)
+        assert action.cost(state, make_gd()) == pytest.approx(16.0)  # 1 + 3 tiles x 5 s
 
     def test_execute_moves_and_calls_api(self):
         action = TaskCancelAction(taskmaster_location=(1, 2))

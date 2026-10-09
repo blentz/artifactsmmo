@@ -149,9 +149,9 @@ class TestGeFillSellOrderAction:
                                       price=10, quantity=2, ge_location=(4, 0))
         dear = GeFillSellOrderAction(order_id="ord-1", item_code="iron_ore",
                                      price=10_000, quantity=2, ge_location=(4, 0))
-        # 2.0 + dist(4), in SECONDS — filling the order takes the same time at
-        # any price.
-        assert cheap.cost(state, gd) == pytest.approx(6.0)
+        # 2.0 + 4 tiles x 5 s, in SECONDS — filling the order takes the same
+        # time at any price.
+        assert cheap.cost(state, gd) == pytest.approx(22.0)
         assert dear.cost(state, gd) == pytest.approx(cheap.cost(state, gd))
 
     def test_execute_moves_then_calls_ge_buy_api(self):

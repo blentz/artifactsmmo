@@ -11,17 +11,21 @@ where that could break, so it is proved here rather than assumed.
 ## What the shipped code actually computes
 
 ```
-static = (6.0 + dist) * quantity
+static = 6 * quantity + travel
 static += min(banked, quantity) * _BANKED_REGATHER_PENALTY
 static += GATHER_LOADOUT_PENALTY * quantity   # CONDITIONAL on tool mismatch
 ```
 
 `gatherCost` below models all three lines exactly, generalizing the literal
-`6.0` to a `base` parameter (matching the `distanceCost`/`qtyCost` convention
-in `Formal.ActionCostNonneg`). The `(6.0 + dist) * quantity` shape — travel
-distance charged once PER UNIT rather than once per trip — is deliberate, not
-a bug: it reproduces the pre-batching cost of the equivalent singleton gather
-chain exactly. It is modeled as-is, not "fixed".
+`6` to a `base` parameter (matching the `distanceCost`/`qtyCost` convention
+in `Formal.ActionCostNonneg`). `dist` is the walk to the node in SECONDS
+(`cost_core.travel_seconds`, `MOVE_SECONDS_PER_TILE` per Manhattan tile — the
+same unit `MoveAction` and `Rest` are priced in), and it is charged ONCE per
+action, because `execute` walks once and then gathers in place. Until
+2026-10-09 the term was `(base + dist) * quantity`: travel in TILES, charged
+once per gather, on the claim that this reproduced the singleton chain. It did
+not — the chain's second and later gathers start ON the node and walk nothing —
+and in tiles it was a fifth of the same walk priced as a `Move`.
 
 ## Exactly how far cost-neutrality goes
 
@@ -30,11 +34,12 @@ changes only reachability". That is true of two of the three terms and FALSE of
 the third, so it is restated here per-term rather than left as a slogan the
 theorems below do not cover:
 
-* **travel** `(base + dist) * qty` and **loadout**
-  `(mismatch ? loadPenalty * qty : 0)` — neutral UNCONDITIONALLY. A batch of
-  `qty` costs exactly `qty` singleton charges for every `banked`, `qty` and
-  `mismatch`. Proved by `gather_cost_loadout_parity` (with `loadTerm_scales`),
-  which takes NO side condition.
+* **travel** `base * qty + dist` and **loadout**
+  `(mismatch ? loadPenalty * qty : 0)` — neutral UNCONDITIONALLY against the
+  singleton chain the batch replaces: the chain pays `base` and the loadout
+  charge on every gather, and walks `dist` only before its FIRST gather (the
+  rest start on the node). Proved by `gather_cost_loadout_parity` (with
+  `loadTerm_scales`), which takes NO side condition.
 * **bank** `min(banked, qty) * bankPenalty` — neutral only on `qty ≤ banked`.
   Below that the batch is deliberately CHEAPER than the singleton chain, by
   `(qty − min(banked, qty)) * bankPenalty`: a chain would charge the penalty on
@@ -91,8 +96,8 @@ import Formal.Extracted.CostCore
 
 namespace Formal.GatherCost
 
-/-- The static term of `GatherAction.cost`: `(base + dist) * qty` (distance
-charged once per unit, per the controller ruling above), plus
+/-- The static term of `GatherAction.cost`: `base * qty + dist` (the per-gather
+base on every gather, the walk in seconds once per action), plus
 `min(banked, qty) * bankPenalty` (only the units this batch shares with the
 bank are penalized), plus `loadPenalty * qty` when the equipped loadout is
 suboptimal for the resource's skill (`mismatch`) — per unit, because a batch of
@@ -109,7 +114,7 @@ one edge disagree about its size);
 `mismatch` is the `Bool` the `pick_loadout_cached` comparison decides. -/
 def gatherCost (base dist bankPenalty loadPenalty : Rat) (qty banked : Nat)
     (mismatch : Bool) : Rat :=
-  (base + dist) * (qty : Rat) + ((min banked qty : Nat) : Rat) * bankPenalty
+  base * (qty : Rat) + dist + ((min banked qty : Nat) : Rat) * bankPenalty
     + (if mismatch then loadPenalty * (qty : Rat) else 0)
 
 /-- The conditional loadout term is non-negative on both branches. -/
@@ -138,10 +143,9 @@ theorem gather_cost_nonneg (base dist bankPenalty loadPenalty : Rat)
     (hb : 0 ≤ base) (hd : 0 ≤ dist) (hp : 0 ≤ bankPenalty) (hlp : 0 ≤ loadPenalty) :
     0 ≤ gatherCost base dist bankPenalty loadPenalty qty banked mismatch := by
   unfold gatherCost
-  have hbd : 0 ≤ base + dist := Rat.add_nonneg hb hd
   have hq : (0 : Rat) ≤ (qty : Rat) := Rat.natCast_nonneg
   have hmb : (0 : Rat) ≤ ((min banked qty : Nat) : Rat) := Rat.natCast_nonneg
-  have h1 : 0 ≤ (base + dist) * (qty : Rat) := Rat.mul_nonneg hbd hq
+  have h1 : 0 ≤ base * (qty : Rat) + dist := Rat.add_nonneg (Rat.mul_nonneg hb hq) hd
   have h2 : 0 ≤ ((min banked qty : Nat) : Rat) * bankPenalty := Rat.mul_nonneg hmb hp
   have h3 := loadTerm_nonneg loadPenalty qty mismatch hlp
   exact Rat.add_nonneg (Rat.add_nonneg h1 h2) h3
@@ -149,20 +153,21 @@ theorem gather_cost_nonneg (base dist bankPenalty loadPenalty : Rat)
 /-- Monotone in the batch size: a bigger batch is never cheaper, so the
 planner cannot manufacture a cheaper plan by inflating a quantity. All three
 summands are individually monotone in `qty` under non-negative coefficients —
-`(base + dist) ≥ 0` for the first, `min banked ·` is monotone with
+`base ≥ 0` for the first (the walk `dist` does not depend on `qty`, so `0 ≤ dist`
+is not needed here; it stays in the signature so this statement is unchanged
+from the per-gather-travel model), `min banked ·` is monotone with
 `bankPenalty ≥ 0` for the second, and `loadTerm_monotone` for the third — so
 the sum is too. -/
 theorem gather_cost_monotone (base dist bankPenalty loadPenalty : Rat)
     (q₁ q₂ banked : Nat) (mismatch : Bool)
-    (h : q₁ ≤ q₂) (hb : 0 ≤ base) (hd : 0 ≤ dist) (hp : 0 ≤ bankPenalty)
+    (h : q₁ ≤ q₂) (hb : 0 ≤ base) (_hd : 0 ≤ dist) (hp : 0 ≤ bankPenalty)
     (hlp : 0 ≤ loadPenalty) :
     gatherCost base dist bankPenalty loadPenalty q₁ banked mismatch
       ≤ gatherCost base dist bankPenalty loadPenalty q₂ banked mismatch := by
   unfold gatherCost
-  have hbd : 0 ≤ base + dist := Rat.add_nonneg hb hd
   have hqcast : (q₁ : Rat) ≤ (q₂ : Rat) := by exact_mod_cast h
-  have hterm1 : (base + dist) * (q₁ : Rat) ≤ (base + dist) * (q₂ : Rat) :=
-    Rat.mul_le_mul_of_nonneg_left hqcast hbd
+  have hterm1 : base * (q₁ : Rat) + dist ≤ base * (q₂ : Rat) + dist :=
+    Rat.add_le_add_right.mpr (Rat.mul_le_mul_of_nonneg_left hqcast hb)
   have hminnat : min banked q₁ ≤ min banked q₂ := by omega
   have hmincast : ((min banked q₁ : Nat) : Rat) ≤ ((min banked q₂ : Nat) : Rat) := by
     exact_mod_cast hminnat
@@ -170,15 +175,15 @@ theorem gather_cost_monotone (base dist bankPenalty loadPenalty : Rat)
       ≤ ((min banked q₂ : Nat) : Rat) * bankPenalty :=
     Rat.mul_le_mul_of_nonneg_right hmincast hp
   have hterm3 := loadTerm_monotone loadPenalty q₁ q₂ mismatch h hlp
-  calc (base + dist) * (q₁ : Rat) + ((min banked q₁ : Nat) : Rat) * bankPenalty
+  calc base * (q₁ : Rat) + dist + ((min banked q₁ : Nat) : Rat) * bankPenalty
         + (if mismatch then loadPenalty * (q₁ : Rat) else 0)
-      ≤ (base + dist) * (q₂ : Rat) + ((min banked q₁ : Nat) : Rat) * bankPenalty
+      ≤ base * (q₂ : Rat) + dist + ((min banked q₁ : Nat) : Rat) * bankPenalty
         + (if mismatch then loadPenalty * (q₁ : Rat) else 0) :=
         Rat.add_le_add_right.mpr (Rat.add_le_add_right.mpr hterm1)
-    _ ≤ (base + dist) * (q₂ : Rat) + ((min banked q₂ : Nat) : Rat) * bankPenalty
+    _ ≤ base * (q₂ : Rat) + dist + ((min banked q₂ : Nat) : Rat) * bankPenalty
         + (if mismatch then loadPenalty * (q₁ : Rat) else 0) :=
         Rat.add_le_add_right.mpr (Rat.add_le_add_left.mpr hterm2)
-    _ ≤ (base + dist) * (q₂ : Rat) + ((min banked q₂ : Nat) : Rat) * bankPenalty
+    _ ≤ base * (q₂ : Rat) + dist + ((min banked q₂ : Nat) : Rat) * bankPenalty
         + (if mismatch then loadPenalty * (q₂ : Rat) else 0) :=
         Rat.add_le_add_left.mpr hterm3
 
@@ -194,7 +199,7 @@ theorem gather_cost_one_is_base (base dist bankPenalty loadPenalty : Rat)
   unfold gatherCost
   have hmin : min banked 1 = 1 := by omega
   rw [hmin]
-  cases mismatch <;> simp
+  cases mismatch <;> simp [Rat.mul_one]
 
 /-- The conditional loadout term is exactly `qty` copies of the SINGLETON
 loadout charge. Unconditional in `banked` and `qty`: no side condition at all. -/
@@ -207,11 +212,12 @@ theorem loadTerm_scales (loadPenalty : Rat) (qty : Nat) (mismatch : Bool) :
 re-arm actually depends on — **for every `banked`, including `banked = 0`,
 which is the exact configuration of the live 2026-07-05 defect**.
 
-The whole static cost splits into `qty` copies of the singleton travel charge,
-the bank term, and `qty` copies of the singleton loadout charge. Rearranged
-(`Rat` subtraction is avoided so the proof stays inside Lean core):
+The whole static cost splits into `qty` copies of the singleton base charge,
+ONE walk (the singleton chain walks only before its first gather), the bank
+term, and `qty` copies of the singleton loadout charge. Rearranged (`Rat`
+subtraction is avoided so the proof stays inside Lean core):
 
-    gatherCost − qty*(base + dist) − min(banked, qty)*bankPenalty
+    gatherCost − qty*base − dist − min(banked, qty)*bankPenalty
       = qty * (mismatch ? loadPenalty : 0)
 
 THIS is the theorem the once-per-action loadout penalty violated. With a
@@ -226,7 +232,7 @@ it has none of is precisely the case that broke. -/
 theorem gather_cost_loadout_parity (base dist bankPenalty loadPenalty : Rat)
     (qty banked : Nat) (mismatch : Bool) :
     gatherCost base dist bankPenalty loadPenalty qty banked mismatch
-      = (qty : Rat) * (base + dist)
+      = (qty : Rat) * base + dist
         + ((min banked qty : Nat) : Rat) * bankPenalty
         + (qty : Rat) * (if mismatch then loadPenalty else 0) := by
   unfold gatherCost
@@ -235,8 +241,9 @@ theorem gather_cost_loadout_parity (base dist bankPenalty loadPenalty : Rat)
 
 /-- FULL-COST neutrality of batching, on the region where it actually holds:
 when the bank covers the whole batch (`qty ≤ banked`, so the `min` is `qty` and
-every term is linear in `qty`), one batched edge of size `qty` costs EXACTLY
-`qty` times the singleton edge.
+every per-gather term is linear in `qty`), one batched edge of size `qty` costs
+EXACTLY `qty` per-gather charges (base, bank, loadout) plus ONE walk — what the
+singleton chain pays, since only its first gather walks.
 
 SCOPE, stated plainly because the hypothesis is real: for `banked < qty` full
 neutrality is FALSE, and deliberately so. A chain of `qty` singleton gathers
@@ -256,20 +263,20 @@ at `banked = 0`. -/
 theorem gather_cost_batch_parity (base dist bankPenalty loadPenalty : Rat)
     (qty banked : Nat) (mismatch : Bool) (h : qty ≤ banked) :
     gatherCost base dist bankPenalty loadPenalty qty banked mismatch
-      = (qty : Rat) * ((base + dist) + bankPenalty
-                        + (if mismatch then loadPenalty else 0)) := by
+      = (qty : Rat) * (base + bankPenalty
+                        + (if mismatch then loadPenalty else 0)) + dist := by
   unfold gatherCost
   have hmin : min banked qty = qty := by omega
   rw [hmin]
   cases mismatch <;>
-    simp [Rat.mul_add, Rat.add_mul, Rat.mul_comm, Rat.add_assoc]
+    simp [Rat.mul_add, Rat.add_mul, Rat.mul_comm, Rat.add_assoc, Rat.add_comm, Rat.add_left_comm]
 
 /-- Non-vacuity check, CONSTRUCTIVE rather than prose: these only typecheck if
 `gather_cost_nonneg`/`gather_cost_monotone`'s hypotheses (`0 ≤ base/dist/
 bankPenalty/loadPenalty`, `q₁ ≤ q₂`) are jointly satisfiable — witnessed at the
 REAL production constants (`base = 6`, `bankPenalty = 100 =
 _BANKED_REGATHER_PENALTY`, `loadPenalty = 6 = GATHER_LOADOUT_PENALTY`,
-`dist = 3`), not a degenerate all-zero corner where every term of the formula
+`dist = 15`, three tiles at `MOVE_SECONDS_PER_TILE = 5`), not a degenerate all-zero corner where every term of the formula
 vanishes. `q₁ = 3 → q₂ = 9` is a real batch-size jump, and `banked = 7` sits
 strictly between `q₁` and `q₂` so the `min` term is live on both sides too.
 `mismatch = true` throughout, so the loadout term is LIVE in every witness —
@@ -281,7 +288,7 @@ rather than a hunt for a counterexample-free corner.
 Each single-literal hypothesis (`0 ≤ 6`, `0 ≤ 100`, `3 ≤ 9`, …) closes with
 `decide` — confirmed against this build. What does NOT reduce under kernel
 `decide` is a compound VALUE equality over the formula's output — e.g.
-`gatherCost 6 3 100 6 5 7 true = 575` — because computing that result routes
+`gatherCost 6 15 100 6 5 7 true = 575` — because computing that result routes
 `Rat.add`/`Rat.mul` through well-founded-recursive `Nat.gcd` normalization,
 which the kernel's `decide` evaluator gets stuck unfolding for a multi-step
 arithmetic chain (single-literal comparisons like
@@ -291,18 +298,19 @@ numeric VALUE pins — including the per-unit loadout term, whose whole point is
 that it grows with `qty` — are carried instead by the differential harness
 (`test_banked_exceeds_qty`, `test_loadout_penalty_scales_with_quantity`)
 against the live oracle. -/
-example : 0 ≤ gatherCost 6 3 100 6 5 7 true :=
-  gather_cost_nonneg 6 3 100 6 5 7 true (by decide) (by decide) (by decide) (by decide)
+example : 0 ≤ gatherCost 6 15 100 6 5 7 true :=
+  gather_cost_nonneg 6 15 100 6 5 7 true (by decide) (by decide) (by decide) (by decide)
 
-example : gatherCost 6 3 100 6 3 7 true ≤ gatherCost 6 3 100 6 9 7 true :=
-  gather_cost_monotone 6 3 100 6 3 9 7 true (by omega) (by decide) (by decide)
+example : gatherCost 6 15 100 6 3 7 true ≤ gatherCost 6 15 100 6 9 7 true :=
+  gather_cost_monotone 6 15 100 6 3 9 7 true (by omega) (by decide) (by decide)
     (by decide) (by decide)
 
 /-- Batch parity at the production constants with the loadout term LIVE: 5 units
-covered by a bank of 7 cost exactly 5 singleton edges. `qty ≤ banked` is a real
-side condition (5 ≤ 7), not a vacuous one. -/
-example : gatherCost 6 3 100 6 5 7 true = (5 : Rat) * ((6 + 3) + 100 + 6) :=
-  gather_cost_batch_parity 6 3 100 6 5 7 true (by omega)
+covered by a bank of 7 cost exactly 5 per-gather charges plus one 15 s walk — the
+singleton chain's price. `qty ≤ banked` is a real side condition (5 ≤ 7), not a
+vacuous one. -/
+example : gatherCost 6 15 100 6 5 7 true = (5 : Rat) * (6 + 100 + 6) + 15 :=
+  gather_cost_batch_parity 6 15 100 6 5 7 true (by omega)
 
 /-- The unconditional decomposition AT `banked = 0` — the corner
 `gather_cost_batch_parity` cannot reach, and the exact live configuration of the
@@ -311,44 +319,47 @@ loadout residual is `5 * 6`, not `6`: five units of batch pay five units of
 penalty, which is the whole property the re-arm rests on.
 
 These two check ELABORATION against the instantiated RHS, not a VALUE. The
-stronger `gatherCost 6 3 100 6 5 0 true = 75` does not close here, and the
+stronger `gatherCost 6 15 100 6 5 0 true = 75` does not close here, and the
 reason is the one this module's non-vacuity note gives above: `decide` gets
 stuck on `instDecidableEqRat` (confirmed against this build — reduction halts
-at `(((6 + 3) * ↑5 + ↑(min 0 5) * 100).add …).num`), `rfl` likewise, `simp`
+at `((6 * ↑5 + 15 + ↑(min 0 5) * 100).add …).num` in the
+current shape), `rfl` likewise, `simp`
 leaves the goal, and `norm_num` needs mathlib, which this file does not import.
 `native_decide` would close it and is not used: it would add
 `Lean.ofReduceBool` to the axiom set and `gate/check_axioms.sh` would (rightly)
 flag it. The value pin therefore lives in the differential harness, where
 `test_loadout_term_parity_at_an_empty_bank` asserts this same point `== 75.0`
 against the live oracle. -/
-example : gatherCost 6 3 100 6 5 0 true
-    = (5 : Rat) * (6 + 3) + ((min 0 5 : Nat) : Rat) * 100 + (5 : Rat) * 6 :=
-  gather_cost_loadout_parity 6 3 100 6 5 0 true
+example : gatherCost 6 15 100 6 5 0 true
+    = (5 : Rat) * 6 + 15 + ((min 0 5 : Nat) : Rat) * 100 + (5 : Rat) * 6 :=
+  gather_cost_loadout_parity 6 15 100 6 5 0 true
 
 /-- …and the same decomposition with NO mismatch, so the loadout residual is
 `5 * 0`. Both branches of the conditional are witnessed, so neither `example`
 is passing merely because the `if` collapsed. -/
-example : gatherCost 6 3 100 6 5 0 false
-    = (5 : Rat) * (6 + 3) + ((min 0 5 : Nat) : Rat) * 100 + (5 : Rat) * 0 :=
-  gather_cost_loadout_parity 6 3 100 6 5 0 false
+example : gatherCost 6 15 100 6 5 0 false
+    = (5 : Rat) * 6 + 15 + ((min 0 5 : Nat) : Rat) * 100 + (5 : Rat) * 0 :=
+  gather_cost_loadout_parity 6 15 100 6 5 0 false
 
 /-! ## Rare drops: the batch is `qty` UNITS but `qty * perUnit` GATHERS
 
 The planner credits one unit per simulated gather, but a secondary drop arrives
 once in `rate` gathers (`apple` off `ash_tree`: 1 in 20). Priced at one gather
 per unit, the fleet spent 554 gathers on 25 apples (live, 2026-10-05). The
-shipped `cost` therefore charges every PER-GATHER term — travel and the wrong
+shipped `cost` therefore charges every PER-GATHER term — the base and the wrong
 tool — on `qty * perUnit` gathers, where `perUnit` is
 `gather_selection.expected_gathers` (`rate / avg_quantity`, proved ordering in
 `Formal.GatherSelection`). The bank term stays per UNIT: it penalizes the units
 this batch shares with the bank, and that is a count of units, not of gathers.
+The walk stays once per action: however many gathers the batch takes, `execute`
+walks to the node once.
 -/
 
 /-- `gatherCost` with the batch's gather count `qty * perUnit` in place of `qty`
-in the travel and loadout terms. -/
+in the base and loadout terms. -/
 def gatherCostRated (base dist bankPenalty loadPenalty perUnit : Rat) (qty banked : Nat)
     (mismatch : Bool) : Rat :=
-  (base + dist) * ((qty : Rat) * perUnit) + ((min banked qty : Nat) : Rat) * bankPenalty
+  base * ((qty : Rat) * perUnit) + dist + ((min banked qty : Nat) : Rat) * bankPenalty
     + (if mismatch then loadPenalty * ((qty : Rat) * perUnit) else 0)
 
 /-- A primary drop (one unit per gather) is priced EXACTLY as before: every
@@ -368,8 +379,8 @@ theorem gather_cost_rated_nonneg (base dist bankPenalty loadPenalty perUnit : Ra
     0 ≤ gatherCostRated base dist bankPenalty loadPenalty perUnit qty banked mismatch := by
   unfold gatherCostRated
   have hg : (0 : Rat) ≤ (qty : Rat) * perUnit := Rat.mul_nonneg Rat.natCast_nonneg hu
-  have h1 : 0 ≤ (base + dist) * ((qty : Rat) * perUnit) :=
-    Rat.mul_nonneg (Rat.add_nonneg hb hd) hg
+  have h1 : 0 ≤ base * ((qty : Rat) * perUnit) + dist :=
+    Rat.add_nonneg (Rat.mul_nonneg hb hg) hd
   have h2 : 0 ≤ ((min banked qty : Nat) : Rat) * bankPenalty :=
     Rat.mul_nonneg Rat.natCast_nonneg hp
   have h3 : 0 ≤ (if mismatch then loadPenalty * ((qty : Rat) * perUnit) else 0) := by
@@ -383,32 +394,32 @@ fixed batch, raising the expected gathers per unit never lowers the price, so
 the planner cannot prefer a 1-in-20 drop over the same item at 1 in 1. -/
 theorem gather_cost_rated_monotone_rate (base dist bankPenalty loadPenalty p₁ p₂ : Rat)
     (qty banked : Nat) (mismatch : Bool)
-    (h : p₁ ≤ p₂) (hb : 0 ≤ base) (hd : 0 ≤ dist) (hlp : 0 ≤ loadPenalty) :
+    (h : p₁ ≤ p₂) (hb : 0 ≤ base) (_hd : 0 ≤ dist) (hlp : 0 ≤ loadPenalty) :
     gatherCostRated base dist bankPenalty loadPenalty p₁ qty banked mismatch
       ≤ gatherCostRated base dist bankPenalty loadPenalty p₂ qty banked mismatch := by
   unfold gatherCostRated
   have hg : (qty : Rat) * p₁ ≤ (qty : Rat) * p₂ :=
     Rat.mul_le_mul_of_nonneg_left h Rat.natCast_nonneg
-  have hterm1 : (base + dist) * ((qty : Rat) * p₁) ≤ (base + dist) * ((qty : Rat) * p₂) :=
-    Rat.mul_le_mul_of_nonneg_left hg (Rat.add_nonneg hb hd)
+  have hterm1 : base * ((qty : Rat) * p₁) + dist ≤ base * ((qty : Rat) * p₂) + dist :=
+    Rat.add_le_add_right.mpr (Rat.mul_le_mul_of_nonneg_left hg hb)
   have hterm3 : (if mismatch then loadPenalty * ((qty : Rat) * p₁) else 0)
       ≤ (if mismatch then loadPenalty * ((qty : Rat) * p₂) else 0) := by
     cases mismatch with
     | false => simp
     | true => simpa using Rat.mul_le_mul_of_nonneg_left hg hlp
-  calc (base + dist) * ((qty : Rat) * p₁) + ((min banked qty : Nat) : Rat) * bankPenalty
+  calc base * ((qty : Rat) * p₁) + dist + ((min banked qty : Nat) : Rat) * bankPenalty
         + (if mismatch then loadPenalty * ((qty : Rat) * p₁) else 0)
-      ≤ (base + dist) * ((qty : Rat) * p₂) + ((min banked qty : Nat) : Rat) * bankPenalty
+      ≤ base * ((qty : Rat) * p₂) + dist + ((min banked qty : Nat) : Rat) * bankPenalty
         + (if mismatch then loadPenalty * ((qty : Rat) * p₁) else 0) :=
         Rat.add_le_add_right.mpr (Rat.add_le_add_right.mpr hterm1)
-    _ ≤ (base + dist) * ((qty : Rat) * p₂) + ((min banked qty : Nat) : Rat) * bankPenalty
+    _ ≤ base * ((qty : Rat) * p₂) + dist + ((min banked qty : Nat) : Rat) * bankPenalty
         + (if mismatch then loadPenalty * ((qty : Rat) * p₂) else 0) :=
         Rat.add_le_add_left.mpr hterm3
 
 /-- Monotone in the batch size for any non-negative rate, as `gatherCost` is. -/
 theorem gather_cost_rated_monotone (base dist bankPenalty loadPenalty perUnit : Rat)
     (q₁ q₂ banked : Nat) (mismatch : Bool)
-    (h : q₁ ≤ q₂) (hb : 0 ≤ base) (hd : 0 ≤ dist) (hp : 0 ≤ bankPenalty)
+    (h : q₁ ≤ q₂) (hb : 0 ≤ base) (_hd : 0 ≤ dist) (hp : 0 ≤ bankPenalty)
     (hlp : 0 ≤ loadPenalty) (hu : 0 ≤ perUnit) :
     gatherCostRated base dist bankPenalty loadPenalty perUnit q₁ banked mismatch
       ≤ gatherCostRated base dist bankPenalty loadPenalty perUnit q₂ banked mismatch := by
@@ -416,8 +427,8 @@ theorem gather_cost_rated_monotone (base dist bankPenalty loadPenalty perUnit : 
   have hqcast : (q₁ : Rat) ≤ (q₂ : Rat) := by exact_mod_cast h
   have hg : (q₁ : Rat) * perUnit ≤ (q₂ : Rat) * perUnit :=
     Rat.mul_le_mul_of_nonneg_right hqcast hu
-  have hterm1 : (base + dist) * ((q₁ : Rat) * perUnit) ≤ (base + dist) * ((q₂ : Rat) * perUnit) :=
-    Rat.mul_le_mul_of_nonneg_left hg (Rat.add_nonneg hb hd)
+  have hterm1 : base * ((q₁ : Rat) * perUnit) + dist ≤ base * ((q₂ : Rat) * perUnit) + dist :=
+    Rat.add_le_add_right.mpr (Rat.mul_le_mul_of_nonneg_left hg hb)
   have hminnat : min banked q₁ ≤ min banked q₂ := by omega
   have hmincast : ((min banked q₁ : Nat) : Rat) ≤ ((min banked q₂ : Nat) : Rat) := by
     exact_mod_cast hminnat
@@ -429,30 +440,30 @@ theorem gather_cost_rated_monotone (base dist bankPenalty loadPenalty perUnit : 
     cases mismatch with
     | false => simp
     | true => simpa using Rat.mul_le_mul_of_nonneg_left hg hlp
-  calc (base + dist) * ((q₁ : Rat) * perUnit) + ((min banked q₁ : Nat) : Rat) * bankPenalty
+  calc base * ((q₁ : Rat) * perUnit) + dist + ((min banked q₁ : Nat) : Rat) * bankPenalty
         + (if mismatch then loadPenalty * ((q₁ : Rat) * perUnit) else 0)
-      ≤ (base + dist) * ((q₂ : Rat) * perUnit) + ((min banked q₁ : Nat) : Rat) * bankPenalty
+      ≤ base * ((q₂ : Rat) * perUnit) + dist + ((min banked q₁ : Nat) : Rat) * bankPenalty
         + (if mismatch then loadPenalty * ((q₁ : Rat) * perUnit) else 0) :=
         Rat.add_le_add_right.mpr (Rat.add_le_add_right.mpr hterm1)
-    _ ≤ (base + dist) * ((q₂ : Rat) * perUnit) + ((min banked q₂ : Nat) : Rat) * bankPenalty
+    _ ≤ base * ((q₂ : Rat) * perUnit) + dist + ((min banked q₂ : Nat) : Rat) * bankPenalty
         + (if mismatch then loadPenalty * ((q₁ : Rat) * perUnit) else 0) :=
         Rat.add_le_add_right.mpr (Rat.add_le_add_left.mpr hterm2)
-    _ ≤ (base + dist) * ((q₂ : Rat) * perUnit) + ((min banked q₂ : Nat) : Rat) * bankPenalty
+    _ ≤ base * ((q₂ : Rat) * perUnit) + dist + ((min banked q₂ : Nat) : Rat) * bankPenalty
         + (if mismatch then loadPenalty * ((q₂ : Rat) * perUnit) else 0) :=
         Rat.add_le_add_left.mpr hterm3
 
 /-- Non-vacuity at the live apple configuration: `perUnit = 20` (rate 20,
 quantity 1..1) against a primary drop's `1`, the loadout term live. -/
-example : gatherCostRated 6 3 100 6 1 2 0 true ≤ gatherCostRated 6 3 100 6 20 2 0 true :=
-  gather_cost_rated_monotone_rate 6 3 100 6 1 20 2 0 true (by decide) (by decide) (by decide)
+example : gatherCostRated 6 15 100 6 1 2 0 true ≤ gatherCostRated 6 15 100 6 20 2 0 true :=
+  gather_cost_rated_monotone_rate 6 15 100 6 1 20 2 0 true (by decide) (by decide) (by decide)
     (by decide)
 
-example : 0 ≤ gatherCostRated 6 3 100 6 20 2 1 true :=
-  gather_cost_rated_nonneg 6 3 100 6 20 2 1 true (by decide) (by decide) (by decide)
+example : 0 ≤ gatherCostRated 6 15 100 6 20 2 1 true :=
+  gather_cost_rated_nonneg 6 15 100 6 20 2 1 true (by decide) (by decide) (by decide)
     (by decide) (by decide)
 
-example : gatherCostRated 6 3 100 6 20 3 7 true ≤ gatherCostRated 6 3 100 6 20 9 7 true :=
-  gather_cost_rated_monotone 6 3 100 6 20 3 9 7 true (by omega) (by decide) (by decide)
+example : gatherCostRated 6 15 100 6 20 3 7 true ≤ gatherCostRated 6 15 100 6 20 9 7 true :=
+  gather_cost_rated_monotone 6 15 100 6 20 3 9 7 true (by omega) (by decide) (by decide)
     (by decide) (by decide) (by decide)
 
 end Formal.GatherCost

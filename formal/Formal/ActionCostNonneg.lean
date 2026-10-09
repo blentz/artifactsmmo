@@ -20,7 +20,8 @@ All formulas fall into a small set of structural buckets:
 * **Distance + positive const** — AcceptTask, CompleteTask, TaskCancel,
   TaskExchange, TaskTrade, DepositGold, DepositAll, WithdrawGold,
   WithdrawItem, NpcSell, Npc, BankExpansion, OptimizeLoadout. Formula
-  `base + dist` with `dist = |Δx|+|Δy| ≥ 0`.
+  `base + dist` with `dist ≥ 0` the walk's travel SECONDS
+  (`cost_core.travel_seconds` = `MOVE_SECONDS_PER_TILE · (|Δx|+|Δy|)`).
 * **Distance + per-qty** — Craft=5·qty+d, Recycle=3·qty+d. Formula
   `base + per_unit·qty + dist`.
 * **Instance-parameterized** — Delete (`cost_weight ∈ {5,25,50}` from
@@ -30,7 +31,7 @@ All formulas fall into a small set of structural buckets:
   STALE here as of the gather-batching branch: `gatherCost` below still
   models the pre-batching `6+d` shape (no `quantity`, no banked-regather
   penalty). The current static term the shipped `GatherAction.cost` actually
-  computes — `(6+dist)*quantity + min(banked,quantity)*penalty` — is proved
+  computes — `6*quantity + dist + min(banked,quantity)*penalty` — is proved
   in `Formal.GatherCost` instead; see that module and `gatherCost`'s own
   docstring below.
 

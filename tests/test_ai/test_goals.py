@@ -1,5 +1,7 @@
 """Tests for GOAP goals — pure value() and is_satisfied() functions."""
 
+import dataclasses
+import math
 import os
 import tempfile
 
@@ -30,7 +32,9 @@ from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.task_coins import tasks_coin_total
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
@@ -81,6 +85,46 @@ class TestRestoreHPGoal:
         assert fight not in relevant
         assert gather not in relevant
         assert deposit not in relevant
+
+    def test_wounded_in_an_interior_rests_rather_than_walking_to_cook(self, bundle_game_data):
+        """The live R2D2 case (2026-10-09), offline. Fighting rats inside the
+        interior at (-3,12), every fight left ~47 % HP missing, and RestoreHP
+        planned `Transition, Craft(cheese x1), UseConsumable x2, Rest`: out to
+        the overworld and 15 tiles to the cooking workshop at (1,1), priced at
+        34 against 47 for resting, because the walk folded into `Craft` cost
+        1 a tile while a `Rest` costs its real seconds. It took ~170 s.
+
+        With every walk priced in seconds (`travel_seconds`, 5 s a tile) the
+        cheese detour costs 75 s of walking alone, and the plan is the rest.
+
+        The `Transition` in front of the `Rest` is NOT a walk the cost change
+        could remove: `RestAction` keeps `Action.travel_region`'s class default
+        ("overworld"), and the planner only expands actions whose region is the
+        character's, so no `Rest` is ever applicable inside an interior. The
+        portal is the character's own tile, so it costs only its flat 3."""
+        gd = bundle_game_data
+        base = scenario_state(SCENARIOS["l20_relief_full_bank"], gd)
+        state = dataclasses.replace(
+            base, x=-3, y=12, layer="interior", hp=384, max_hp=720,
+            inventory={"milk_bucket": 4}, bank_items={},
+            skills={**base.skills, "cooking": 10})
+        # The live shape: cheese is cookable from what the bag holds, there is
+        # no food, and the cooking workshop is 15 tiles from the portal's exit.
+        assert gd.crafting_recipe("cheese") == {"milk_bucket": 1}
+        assert gd.workshop_location("cooking") == (1, 1)
+        assert gd.region_of(-3, 12, "interior") != gd.region_of(1, 1, "overworld")
+        exit_x, exit_y, exit_layer, _conditions = gd.transition_edge(-3, 12, "interior")
+        assert exit_layer == "overworld"
+        assert abs(1 - exit_x) + abs(1 - exit_y) == 15
+        player = GamePlayer(character="l20_relief_full_bank", history=None)
+        player.seed_offline(state, gd)
+        planner = GOAPPlanner()
+        plan = planner.plan(state, RestoreHPGoal(), list(player._build_actions()), gd,
+                            history=None, budget_seconds=math.inf, max_nodes=60_000)
+        assert not planner.last_stats.node_capped, planner.last_stats
+        assert [type(a).__name__ for a in plan] == ["MapTransitionAction", "RestAction"], plan
+        assert plan[0].cost(state, gd) == 3.0
+        assert plan[1].cost(plan[0].apply(state, gd), gd) == 47.0
 
     def test_value_half_hp_is_critical(self):
         """At 50% HP (below the 0.75 rest threshold) RestoreHP returns its ceiling."""

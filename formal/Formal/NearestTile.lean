@@ -19,8 +19,8 @@ bearing beyond "argmin returns a minimum":
      theorem that closes it.
 
   2. COST-MONOTONE. On the live movement model the action cost is
-     `staticGatherCost = 6 + manhattan` (a step's fixed overhead plus the tile
-     distance), monotone in distance, so the Manhattan-nearest tile IS the
+     `staticGatherCost = 6 + 5 * manhattan` (a step's fixed overhead plus the
+     walk in seconds, `cost_core.travel_seconds`), monotone in distance, so the Manhattan-nearest tile IS the
      least-cost destination — which is exactly why feeding its distance into the
      gather metric is sound. `cost_monotone_in_distance` pins this.
 
@@ -78,10 +78,10 @@ def nearestTile (ox oy : Int) : List Tile → Option Tile
   | c :: cs => some (cs.foldl (minStep ox oy) c)
 
 /-- The static per-step move/gather cost on the live single-hop model: a fixed `6`
-overhead plus the Manhattan distance. Monotone in distance, so least-cost ⇔
+overhead plus the walk, `MOVE_SECONDS_PER_TILE = 5` seconds per Manhattan tile. Monotone in distance, so least-cost ⇔
 Manhattan-nearest (the coupling that justifies feeding this distance into the gather
 metric). -/
-def staticGatherCost (ox oy : Int) (t : Tile) : Nat := 6 + manhattan ox oy t
+def staticGatherCost (ox oy : Int) (t : Tile) : Nat := 6 + 5 * manhattan ox oy t
 
 /-! ### Key lex-order facts (over `Nat` distance + `Int` x/y). -/
 
@@ -328,14 +328,14 @@ theorem nearestTile_deterministic_lexmin {ox oy : Int} {cs : List Tile} {t : Til
   · exact Or.inl hx
 
 /-- COST-MONOTONE in distance (the coupling that justifies the gather metric):
-`staticGatherCost = 6 + manhattan` is monotone in Manhattan distance, so a strictly
+`staticGatherCost = 6 + 5 * manhattan` is monotone in Manhattan distance, so a strictly
 nearer tile is strictly cheaper and the Manhattan-nearest tile IS the least-cost
 destination. -/
 theorem cost_monotone_in_distance (ox oy : Int) (a b : Tile)
     (h : manhattan ox oy a ≤ manhattan ox oy b) :
     staticGatherCost ox oy a ≤ staticGatherCost ox oy b := by
   unfold staticGatherCost
-  exact Nat.add_le_add_left h 6
+  exact Nat.add_le_add_left (Nat.mul_le_mul_left 5 h) 6
 
 /-- COST corollary: the SELECTED tile is the least-cost destination over the list
 (combines `nearestTile_min` with cost-monotonicity). -/

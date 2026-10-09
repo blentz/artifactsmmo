@@ -16,7 +16,7 @@ from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.cooldown_wait import wait_out_cooldown
-from artifactsmmo_cli.ai.actions.cost_core import qty_cost_pure
+from artifactsmmo_cli.ai.actions.cost_core import qty_cost_pure, travel_seconds
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.bank_expansion_timing import HOLD_FILL_DEN, HOLD_FILL_NUM
 from artifactsmmo_cli.ai.bank_room import bank_has_room
@@ -183,7 +183,7 @@ class DepositAllAction(Action):
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
         dest = self.bank_location
-        dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
+        dist = travel_seconds((state.x, state.y), dest)
         return qty_cost_pure(0.0, len(state.inventory), dist, 2.0)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:

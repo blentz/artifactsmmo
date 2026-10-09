@@ -58,7 +58,7 @@ class TestMapTransitionAction:
     def test_cost_folds_walk_to_portal(self):
         gd = GameData()
         assert _edge().cost(make_state(x=-4, y=9), gd) == 3.0
-        assert _edge().cost(make_state(x=0, y=9), gd) == 7.0
+        assert _edge().cost(make_state(x=0, y=9), gd) == 23.0  # 3 + 4 tiles x 5 s
 
     def test_execute_moves_then_transitions(self):
         a = _edge(conditions=())

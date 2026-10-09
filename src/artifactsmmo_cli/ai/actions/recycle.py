@@ -11,7 +11,7 @@ from artifactsmmo_api_client.api.my_characters.action_recycling_my_name_action_r
 from artifactsmmo_api_client.models.recycling_schema import RecyclingSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.cost_core import qty_cost_pure
+from artifactsmmo_cli.ai.actions.cost_core import qty_cost_pure, travel_seconds
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_room import has_room
@@ -133,7 +133,7 @@ class RecycleAction(Action):
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
         dest = self.workshop_location or (state.x, state.y)
-        dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
+        dist = travel_seconds((state.x, state.y), dest)
         return qty_cost_pure(0.0, self.quantity, dist, 3.0)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:

@@ -49,7 +49,7 @@ class TestCostAndRepr:
     def test_cost_includes_travel_distance(self):
         a = GeCancelOrderAction(order_id="o1", ge_location=(5, 1))
         state = make_state(x=0, y=0)
-        assert a.cost(state, GameData()) == 1.0 + 6
+        assert a.cost(state, GameData()) == 1.0 + 5 * 6  # 6 tiles x 5 s
 
     def test_repr(self):
         a = GeCancelOrderAction(order_id="o1", ge_location=(5, 1))

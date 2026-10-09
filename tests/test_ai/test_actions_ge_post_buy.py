@@ -91,10 +91,10 @@ class TestCost:
                                      ge_location=(5, 1))
         dear = GePostBuyOrderAction(item_code="iron_ore", quantity=3, price=9_000,
                                     ge_location=(5, 1))
-        # 2.0 + dist(6), in SECONDS. Posting the order takes the same time at
+        # 2.0 + 6 tiles x 5 s, in SECONDS. Posting the order takes the same time at
         # any price, and is_applicable already refuses to break the reserve, so
         # no shortfall remains to price at this edge.
-        assert cheap.cost(state, gd) == pytest.approx(8.0)
+        assert cheap.cost(state, gd) == pytest.approx(32.0)
         assert dear.cost(state, gd) == pytest.approx(cheap.cost(state, gd))
 
 

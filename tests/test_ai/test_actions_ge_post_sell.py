@@ -45,7 +45,7 @@ class TestCost:
     def test_cost_is_base_plus_manhattan_distance(self):
         a = GePostSellOrderAction(item_code="iron_ore", quantity=1, price=19, ge_location=(3, 4))
         state = make_state(x=0, y=0)
-        assert a.cost(state, make_gd()) == pytest.approx(2.0 + 3 + 4)
+        assert a.cost(state, make_gd()) == pytest.approx(2.0 + 5 * (3 + 4))
 
 
 class TestRepr:

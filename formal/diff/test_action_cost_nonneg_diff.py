@@ -241,7 +241,8 @@ def test_constant_actions_nonneg(x, y, dx, dy):
     assert UnequipAction(slot="weapon").cost(s, None, None) == 1.0
     # P5b: transition cost folds the walk to the portal (walk + 3.0) — no
     # longer a pinned constant, but still strictly positive for every state.
-    assert MapTransitionAction().cost(s, None, None) == float(abs(x) + abs(y)) + 3.0
+    # The walk is travel SECONDS: 5 s a Manhattan tile (cost_core.travel_seconds).
+    assert MapTransitionAction().cost(s, None, None) == float(5 * (abs(x) + abs(y))) + 3.0
     assert ClaimPendingItemAction().cost(s, None, None) == 1.0
     assert MoveTo(name="bank", destinations=frozenset({(x + dx, y + dy)})).cost(
         s, None, None
@@ -261,7 +262,7 @@ def test_constant_actions_nonneg(x, y, dx, dy):
 )
 def test_distance_actions_nonneg(sx, sy, dx, dy):
     s = _state(x=sx, y=sy)
-    dist = abs(dx - sx) + abs(dy - sy)
+    dist = 5 * (abs(dx - sx) + abs(dy - sy))  # travel seconds, 5 s a tile
     assert AcceptTaskAction(taskmaster_location=(dx, dy)).cost(s, None, None) == 1.0 + dist
     assert CompleteTaskAction(taskmaster_location=(dx, dy)).cost(s, None, None) == 1.0 + dist
     assert TaskCancelAction(taskmaster_location=(dx, dy)).cost(s, None, None) == 1.0 + dist
@@ -293,7 +294,7 @@ def test_distance_actions_nonneg(sx, sy, dx, dy):
 )
 def test_qty_actions_nonneg(qty, sx, sy, dx, dy):
     s = _state(x=sx, y=sy)
-    dist = abs(dx - sx) + abs(dy - sy)
+    dist = 5 * (abs(dx - sx) + abs(dy - sy))  # travel seconds, 5 s a tile
     craft = CraftAction(code="c", quantity=qty, workshop_location=(dx, dy)).cost(
         s, None, None
     )
@@ -317,7 +318,7 @@ def test_qty_actions_nonneg(qty, sx, sy, dx, dy):
 def test_deposit_all_nonneg(invsize, sx, sy, dx, dy):
     inv = {f"i{i}": 1 for i in range(invsize)}
     s = _state(x=sx, y=sy, inv=inv)
-    dist = abs(dx - sx) + abs(dy - sy)
+    dist = 5 * (abs(dx - sx) + abs(dy - sy))  # travel seconds, 5 s a tile
     out = DepositAllAction(bank_location=(dx, dy)).cost(s, None, None)
     assert out == len(inv) * 2.0 + dist
     assert out >= 0.0

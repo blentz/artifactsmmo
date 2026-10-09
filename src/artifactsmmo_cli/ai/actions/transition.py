@@ -10,6 +10,7 @@ from artifactsmmo_api_client.api.my_characters.action_transition_my_name_action_
 )
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cost_core import travel_seconds
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.transition_layer_error import TransitionLayerError
 from artifactsmmo_cli.ai.game_data import GameData
@@ -109,7 +110,7 @@ class MapTransitionAction(Action):
 
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
-        walk = abs(state.x - self.portal_x) + abs(state.y - self.portal_y)
+        walk = travel_seconds((state.x, state.y), (self.portal_x, self.portal_y))
         return float(walk) + 3.0
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:

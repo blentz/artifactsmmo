@@ -11,7 +11,7 @@ from artifactsmmo_api_client.api.my_characters.action_task_trade_my_name_action_
 from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure
+from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure, travel_seconds
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.task_trade_core import (
     task_trade_applicable,
@@ -69,7 +69,7 @@ class TaskTradeAction(Action):
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
         dest = self.taskmaster_location or (state.x, state.y)
-        dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
+        dist = travel_seconds((state.x, state.y), dest)
         return distance_cost_pure(2.0, dist)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:

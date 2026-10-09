@@ -328,6 +328,27 @@ class TestLearnedCostPenalty:
         self._record(store, action.learning_key(), ok_count=10, fail_count=0, cooldown=10.0)
         assert action.cost(state, gd, history=store) == pytest.approx(10.0)
 
+    def test_gather_learned_cost_charges_the_walk_once(self, store):
+        """The learned median is the cost of ONE server gather; a batch of 3
+        four tiles away is three of those plus ONE 20 s walk — the walk is not
+        folded into the per-gather figure and multiplied by the batch."""
+        action = GatherAction(resource_code="copper", quantity=3, locations=frozenset([(4, 0)]))
+        gd = make_gd(resource_locs={"copper": [(4, 0)]})
+        state = make_state(x=0, y=0)
+        self._record(store, action.learning_key(), ok_count=10, fail_count=0, cooldown=10.0)
+        assert action.cost(state, gd, history=store) == pytest.approx(3 * 10.0 + 4 * 5)
+
+    def test_gather_cost_without_samples_equals_static(self, store):
+        """Under 5 samples the per-gather `default` stands in for the learned
+        median. It is the per-gather figure WITHOUT the walk, so scaling it by
+        the batch and adding the walk once reproduces `static` exactly:
+        6 x 3 + 4 tiles x 5 s = 38."""
+        action = GatherAction(resource_code="copper", quantity=3, locations=frozenset([(4, 0)]))
+        gd = make_gd(resource_locs={"copper": [(4, 0)]})
+        state = make_state(x=0, y=0)
+        assert action.cost(state, gd, history=store) == pytest.approx(38.0)
+        assert action.cost(state, gd, history=None) == pytest.approx(38.0)
+
     def test_move_cost_penalised_by_low_success_rate(self, store):
         action = MoveAction(x=5, y=0)
         gd = make_gd()

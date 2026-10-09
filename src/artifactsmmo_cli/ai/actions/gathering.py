@@ -11,7 +11,7 @@ from artifactsmmo_api_client.api.my_characters.action_gathering_my_name_action_g
 )
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.cost_core import learned_cost_pure
+from artifactsmmo_cli.ai.actions.cost_core import learned_cost_pure, travel_seconds
 from artifactsmmo_cli.ai.actions.gather_apply_core import (
     GatherInv,
     gather_apply_batch_pure,
@@ -36,15 +36,15 @@ Per unit, not per action: the penalty prices gathering with the wrong tool, and
 a batch of N is N server gathers each paying that. Charging it once per action
 also broke the parity `Formal.GatherCost.gather_cost_loadout_parity` proves —
 this term is exactly `quantity` copies of the singleton charge, for EVERY bank
-level including an empty one — which is the same property the
-`(6.0 + dist) * quantity` shape exists to preserve. It was unscaled from
+level including an empty one — the singleton chain pays it on every gather,
+exactly as it pays the per-gather base `6`. It was unscaled from
 `52698f54` (when `quantity` was introduced but nothing ever set it above 1)
 until closure sizing landed; at `quantity == 1` the two are identical, which is
 why the defect stayed invisible until the goals started sizing.
 
 Scaled by `self.quantity`, NOT by `effective_quantity`: a `Gather(x60)` that
 only has room for 20 units still prices 60 units of penalty. That is the same
-treatment the distance term gets (`(6.0 + dist) * self.quantity`) and it is
+treatment the per-gather base gets (`6 * gathers`) and it is
 deliberate — cost is compared between EDGES at planning time, where the batch
 size is what the planner chose; the inventory bound is applied at `apply`/
 `execute` time by `effective_quantity`. Pricing one term against the projected
@@ -201,19 +201,22 @@ class GatherAction(Action):
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
         dest = nearest_or_error(state.x, state.y, self.locations, "gather")
-        dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
+        dist = travel_seconds((state.x, state.y), dest)
         # The batch is `quantity` UNITS but `gathers` SERVER GATHERS: the planner
         # credits one unit per sim-gather, while a secondary drop arrives once in
         # `rate` gathers (`apple` off `ash_tree`: 1 in 20). Every per-gather term
-        # (travel, wrong tool, learned cooldown) is charged per gather, so a rare
-        # drop is priced at what it takes to deliver it. Live 2026-10-05: priced at
+        # (base, wrong tool, learned cooldown) is charged per gather, so a rare
+        # drop is priced at what it takes to deliver it. The walk (`dist`, travel
+        # SECONDS) is charged ONCE: `execute` walks to the node once and gathers
+        # in place, exactly as the singleton chain only walks before its first
+        # gather. Live 2026-10-05: priced at
         # one gather per apple, the fleet spent 554 gathers on 25 apples. Exact
         # `Fraction` arithmetic, rounded once at the end — the proved model is
         # `Formal.GatherCost.gatherCostRated`, and a primary drop (1 per gather)
         # reduces to `gatherCost` exactly (`gather_cost_rated_one`).
         drop_item = self.drop_item(game_data)
         gathers = self.quantity * game_data.gathers_per_unit(self.resource_code, drop_item)
-        static = (6 + dist) * gathers
+        static = 6 * gathers + dist
         # Penalize re-gathering a material the bank already holds, so the
         # planner withdraws banked stock before re-gathering it (see
         # _BANKED_REGATHER_PENALTY). The penalty applies per banked unit's
@@ -232,7 +235,7 @@ class GatherAction(Action):
         # tool preference, so no penalty). Charged PER UNIT: a batch of N is N
         # server gathers, each one paying for the wrong tool, so this reproduces
         # the equivalent singleton chain exactly — the same cost-parity rule
-        # that makes the distance term `* quantity`. Once-per-action collapsed
+        # that charges the base per gather and the walk once. Once-per-action collapsed
         # the accumulator the re-arm wins by and made OptimizeLoadout
         # unprofitable at EVERY batch size (it recovers a constant 6.0 against
         # a 10.0 swap), silently killing the proven 2026-07-05 re-arm the moment
@@ -245,15 +248,15 @@ class GatherAction(Action):
                 static += Fraction(GATHER_LOADOUT_PENALTY) * gathers
         if history is None:
             return learned_cost_pure(float(static), 0.0, 1.0, has_history=False)
-        # `default` must be a PER-GATHER figure (matched against `learned`,
-        # which is the recorded cost of one server gather and is then scaled by
-        # the batch's gathers below): under 5 samples `action_cost` falls back to
-        # this default, so it must carry the same banked/loadout penalties
-        # `static` does, not just the bare `6.0 + dist`, or a low-sample
-        # quantity=1 gather would diverge from the pre-batching cost the moment
-        # it picked up any history at all.
-        learned = history.action_cost(self.learning_key(), default=float(static / gathers),
-                                      window=50) * float(gathers)
+        # `default` must be a PER-GATHER figure WITHOUT the walk (matched against
+        # `learned`, which is the recorded cost of one server gather and is then
+        # scaled by the batch's gathers below, after which the walk is added
+        # once — the same shape as `static`): under 5 samples `action_cost` falls
+        # back to this default, so it must carry the same banked/loadout
+        # penalties `static` does, not just the bare `6`, or a low-sample gather
+        # would diverge from `static` the moment it picked up any history at all.
+        learned = history.action_cost(self.learning_key(), default=float((static - dist) / gathers),
+                                      window=50) * float(gathers) + dist
         rate = history.success_rate(self.learning_key(), window=50)
         return learned_cost_pure(float(static), learned, rate, has_history=True)
 

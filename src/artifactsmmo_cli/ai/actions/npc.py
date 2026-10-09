@@ -12,7 +12,7 @@ from artifactsmmo_api_client.api.my_characters.action_npc_buy_item_my_name_actio
 from artifactsmmo_api_client.models.npc_merchant_buy_schema import NpcMerchantBuySchema
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure
+from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure, travel_seconds
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.npc_buy_core import (
     npc_buy_apply_pure,
@@ -124,7 +124,7 @@ class NpcBuyAction(Action):
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
         dest = self.npc_location or (state.x, state.y)
-        dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
+        dist = travel_seconds((state.x, state.y), dest)
         # Seconds. The purchase price is NOT added: the buy takes the same time
         # at any price, and `is_applicable` already refuses a purchase that would
         # break the gold reserve, so there is no shortfall to price here.

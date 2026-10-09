@@ -9,9 +9,13 @@ assuming it, and this harness pins the real Python against that proof.
 
 The shipped `GatherAction.cost` (history=None branch) computes:
 
-    static = (6.0 + dist) * quantity
+    static = 6 * quantity + travel       # travel = 5 s per tile, ONCE per action
     static += min(banked, quantity) * _BANKED_REGATHER_PENALTY   # 100.0
     static += GATHER_LOADOUT_PENALTY * quantity   # 6.0, CONDITIONAL on mismatch
+
+The fixtures place the node `dist` TILES from the origin; the Lean `dist`
+argument is the walk in SECONDS (`cost_core.travel_seconds`), so the oracle is
+fed `_SECONDS_PER_TILE * dist`.
 
 `base = 6.0`, `bankPenalty = _BANKED_REGATHER_PENALTY = 100.0` and
 `loadPenalty = GATHER_LOADOUT_PENALTY = 6.0` are production CONSTANTS, not free
@@ -45,7 +49,7 @@ has_history=False) == static` on that branch — exactly the static term
 `gatherCost` models. The `LearningStore`-blended branch is covered by
 `Formal.ActionCostNonneg.learnedCost_nonneg`, not here.
 
-Since every input to the formula is an integer (`base`, `dist`, `penalty` are
+Since every input to the formula is an integer (`base`, `travel`, `penalty` are
 all whole numbers in production; `quantity`/`banked` are `Nat`), the result is
 always an exact integer-valued float — so Python and Lean are compared via
 `Fraction`, which catches any drift bit-exactly rather than accepting
@@ -73,6 +77,7 @@ _DROP_ITEM = "test_ore"
 _RESOURCE = "unregistered_resource"  # absent from GameData(): resource_skill_level -> None
 _MISMATCH_RESOURCE = "mismatch_rocks"  # HAS a gather skill, so the loadout branch is reached
 _BETTER_TOOL = "good_pick"
+_SECONDS_PER_TILE = 5             # cost_core.MOVE_SECONDS_PER_TILE
 
 
 def _state(x: int, y: int, banked: int) -> WorldState:
@@ -93,7 +98,7 @@ def _state(x: int, y: int, banked: int) -> WorldState:
 
 def _lean_gather_cost(dist: int, qty: int, banked: int, mismatch: bool,
                       per_unit: Fraction = Fraction(1)) -> Fraction:
-    args = [_BASE.numerator, _BASE.denominator, dist, 1,
+    args = [_BASE.numerator, _BASE.denominator, _SECONDS_PER_TILE * dist, 1,
             _PENALTY.numerator, _PENALTY.denominator,
             _LOAD_PENALTY.numerator, _LOAD_PENALTY.denominator,
             qty, banked, 1 if mismatch else 0, per_unit.numerator, per_unit.denominator]
@@ -110,7 +115,7 @@ def _check(dist: int, qty: int, banked: int) -> float:
     lean_cost = _lean_gather_cost(dist, qty, banked, mismatch=False)
     assert Fraction(py_cost) == lean_cost, (dist, qty, banked, py_cost, lean_cost)
     # Direct formula pin, independent of the oracle.
-    assert py_cost == (6.0 + dist) * qty + min(banked, qty) * 100.0
+    assert py_cost == 6.0 * qty + 5 * dist + min(banked, qty) * 100.0
     return py_cost
 
 
@@ -143,7 +148,7 @@ def _check_mismatch(dist: int, qty: int, banked: int) -> float:
     py_cost = action.cost(state, gd, history=None)
     lean_cost = _lean_gather_cost(dist, qty, banked, mismatch=True)
     assert Fraction(py_cost) == lean_cost, (dist, qty, banked, py_cost, lean_cost)
-    assert py_cost == (6.0 + dist) * qty + min(banked, qty) * 100.0 + 6.0 * qty
+    assert py_cost == 6.0 * qty + 5 * dist + min(banked, qty) * 100.0 + 6.0 * qty
     return py_cost
 
 
@@ -165,31 +170,32 @@ def test_gather_cost_matches_lean(dist, qty, banked):
 
 def test_qty_zero():
     """A zero-quantity batch (constructible even though the planner never
-    emits one via `is_applicable`) costs exactly 0: both terms scale with qty."""
-    assert _check(dist=10, qty=0, banked=5) == 0.0
+    emits one via `is_applicable`) costs exactly its walk: every per-gather
+    term scales with qty, the walk is charged once per action."""
+    assert _check(dist=10, qty=0, banked=5) == 50.0
 
 
 def test_qty_one_no_banked():
     """The pre-batching singleton edge, no bank interaction."""
-    assert _check(dist=4, qty=1, banked=0) == 10.0  # (6+4)*1 + 0
+    assert _check(dist=4, qty=1, banked=0) == 26.0  # 6*1 + 5*4 + 0
 
 
 def test_qty_one_with_banked():
     """`gather_cost_one_is_base`'s exact hypothesis: qty=1, banked >= 1."""
-    assert _check(dist=4, qty=1, banked=3) == 110.0  # (6+4)*1 + 1*100
+    assert _check(dist=4, qty=1, banked=3) == 126.0  # 6*1 + 5*4 + 1*100
 
 
 def test_banked_zero():
     """No bank coverage at all: the penalty term is fully absent regardless
     of quantity."""
-    assert _check(dist=2, qty=20, banked=0) == 160.0  # (6+2)*20 + 0
+    assert _check(dist=2, qty=20, banked=0) == 130.0  # 6*20 + 5*2 + 0
 
 
 def test_banked_exceeds_qty():
     """`banked > qty`: the penalty term is capped at `qty` units (the whole
     batch is covered by the bank), never at `banked`."""
     py = _check(dist=1, qty=5, banked=50)
-    assert py == (6.0 + 1) * 5 + 5 * 100.0  # min(50, 5) = 5, not 50
+    assert py == 6.0 * 5 + 5 * 1 + 5 * 100.0  # min(50, 5) = 5, not 50
     assert py == 535.0
 
 
@@ -205,20 +211,20 @@ def test_banked_partial_shortfall():
     """`0 < banked < qty`: only the covered prefix is penalized, the
     remaining deficit gathers carry no penalty."""
     py = _check(dist=3, qty=10, banked=4)
-    assert py == (6.0 + 3) * 10 + 4 * 100.0  # min(4, 10) = 4
-    assert py == 490.0
+    assert py == 6.0 * 10 + 5 * 3 + 4 * 100.0  # min(4, 10) = 4
+    assert py == 475.0
 
 
 def test_large_quantity():
     """A large batch (deep into planner territory: many cycles' worth of
     material demand in one edge) still agrees bit-exactly."""
     py = _check(dist=15, qty=5000, banked=200)
-    assert py == (6.0 + 15) * 5000 + 200 * 100.0
-    assert py == 125000.0
+    assert py == 6.0 * 5000 + 5 * 15 + 200 * 100.0
+    assert py == 50075.0
 
 
 def test_zero_distance():
-    """Standing on the node already (`dist = 0`): only the base rate scales."""
+    """Standing on the node already (`dist = 0`): no walk, only the base rate."""
     assert _check(dist=0, qty=6, banked=0) == 36.0  # 6*6
 
 
@@ -258,13 +264,13 @@ def test_mismatch_branch_matches_lean(dist, qty, banked):
 
 def test_loadout_penalty_scales_with_quantity():
     """THE regression pin. A batch of 4 pays 4 x 6.0 of loadout penalty, not
-    6.0. Under the once-per-action charge this cost 42.0 and the test would
-    read `36 + 6`; the difference (18.0) is exactly what an `OptimizeLoadout`
+    6.0. Under the once-per-action charge this cost 45.0 and the test would
+    read `39 + 6`; the difference (18.0) is exactly what an `OptimizeLoadout`
     re-arm has to be able to recover, and what it could not recover while the
     term was constant."""
     py = _check_mismatch(dist=3, qty=4, banked=0)
-    assert py == (6.0 + 3) * 4 + 6.0 * 4
-    assert py == 60.0
+    assert py == 6.0 * 4 + 5 * 3 + 6.0 * 4
+    assert py == 63.0
 
 
 def test_loadout_penalty_at_qty_one_is_the_singleton_charge():
@@ -272,8 +278,8 @@ def test_loadout_penalty_at_qty_one_is_the_singleton_charge():
     scaled and the old unscaled formula COINCIDE — which is precisely why the
     defect was invisible for as long as nothing set a quantity above 1."""
     py = _check_mismatch(dist=4, qty=1, banked=0)
-    assert py == (6.0 + 4) * 1 + 6.0
-    assert py == 16.0
+    assert py == 6.0 * 1 + 5 * 4 + 6.0
+    assert py == 32.0
 
 
 def test_loadout_and_banked_penalties_compose():
@@ -281,20 +287,21 @@ def test_loadout_and_banked_penalties_compose():
     min(banked, qty) units carry the bank penalty while ALL qty units carry
     the loadout penalty."""
     py = _check_mismatch(dist=1, qty=10, banked=4)
-    assert py == (6.0 + 1) * 10 + 4 * 100.0 + 6.0 * 10
-    assert py == 530.0
+    assert py == 6.0 * 10 + 5 * 1 + 4 * 100.0 + 6.0 * 10
+    assert py == 525.0
 
 
 def test_loadout_term_vanishes_at_qty_zero():
-    """A zero-quantity batch costs 0 on this branch too — every term of the
-    formula, including the loadout term, scales with qty."""
-    assert _check_mismatch(dist=10, qty=0, banked=5) == 0.0
+    """A zero-quantity batch costs only its walk on this branch too — every
+    per-gather term, including the loadout term, scales with qty."""
+    assert _check_mismatch(dist=10, qty=0, banked=5) == 50.0
 
 
 def test_batch_parity_against_the_singleton_chain():
     """`Formal.GatherCost.gather_cost_batch_parity` at runtime: with the bank
     covering the whole batch, ONE batched edge of size qty costs EXACTLY qty
-    singleton edges.
+    singleton per-gather charges plus ONE walk — the singleton chain's price,
+    since only its first gather walks to the node.
 
     NOTE the `banked == qty` fixture — that is the theorem's real `qty <= banked`
     hypothesis, and it is why this test alone CANNOT pin the re-arm: full-cost
@@ -304,8 +311,9 @@ def test_batch_parity_against_the_singleton_chain():
     qty = 5
     batched = _check_mismatch(dist=3, qty=qty, banked=qty)
     singleton = _check_mismatch(dist=3, qty=1, banked=1)
-    assert batched == qty * singleton
-    assert batched == 5 * ((6.0 + 3) + 100.0 + 6.0)
+    walk = 5 * 3
+    assert batched == qty * (singleton - walk) + walk
+    assert batched == 5 * (6.0 + 100.0 + 6.0) + 15
 
 
 @settings(max_examples=200, deadline=None)
@@ -327,7 +335,7 @@ def test_loadout_term_parity_is_unconditional(dist, qty, banked):
     with_mismatch = _check_mismatch(dist, qty, banked)
     without = _check(dist, qty, banked)
     assert with_mismatch - without == 6.0 * qty
-    assert without == (6.0 + dist) * qty + min(banked, qty) * 100.0
+    assert without == 6.0 * qty + 5 * dist + min(banked, qty) * 100.0
 
 
 def test_loadout_term_parity_at_an_empty_bank():
@@ -339,7 +347,7 @@ def test_loadout_term_parity_at_an_empty_bank():
     batched = _check_mismatch(dist=3, qty=5, banked=0)
     unpenalized = _check(dist=3, qty=5, banked=0)
     assert batched - unpenalized == 30.0
-    assert batched == (6.0 + 3) * 5 + 0.0 + 6.0 * 5
+    assert batched == 6.0 * 5 + 5 * 3 + 0.0 + 6.0 * 5
     assert batched == 75.0
 
 
@@ -353,7 +361,7 @@ def test_history_none_is_exactly_static():
                           locations=frozenset({(3, 0)}), drop_item_override=_DROP_ITEM)
     state = _state(0, 0, banked=2)
     static = action.cost(state, GameData(), history=None)
-    assert static == (6.0 + 3) * 7 + 2 * 100.0
+    assert static == 6.0 * 7 + 5 * 3 + 2 * 100.0
 
 
 @pytest.mark.parametrize("qty,banked,dist", [(0, 0, 0), (1, 1, 1), (1000, 1000, 500)])
@@ -413,19 +421,19 @@ def test_rated_gather_cost_matches_lean(dist, qty, banked, rate, mn, extra):
 
 def test_apple_is_priced_at_twenty_gathers_a_unit():
     """The live configuration: `apple` off `ash_tree`, rate 20, one per drop.
-    Two apples are forty gathers of travel, not two."""
-    assert _check_rated(dist=3, qty=2, banked=0, rate=20, mn=1, mx=1) == (6.0 + 3) * 2 * 20
+    Two apples are forty gathers, not two — and still one walk."""
+    assert _check_rated(dist=3, qty=2, banked=0, rate=20, mn=1, mx=1) == 6.0 * 2 * 20 + 5 * 3
 
 
 def test_a_primary_drop_is_priced_as_before():
     """`gather_cost_rated_one`: rate 1, one per gather is the unrated cost."""
-    assert _check_rated(dist=4, qty=5, banked=2, rate=1, mn=1, mx=1) == (6.0 + 4) * 5 + 2 * 100.0
+    assert _check_rated(dist=4, qty=5, banked=2, rate=1, mn=1, mx=1) == 6.0 * 5 + 5 * 4 + 2 * 100.0
 
 
 def test_a_fractional_rate_is_exact():
-    """Rate 1, 1..2 per gather: 2/3 of a gather per unit, so the travel term is
+    """Rate 1, 2..3 per gather: 2/5 of a gather per unit, so the base term is
     a non-dyadic rational the float cost must still round to exactly."""
-    assert _check_rated(dist=1, qty=1, banked=0, rate=1, mn=1, mx=2) == float(Fraction(7 * 2, 3))
+    assert _check_rated(dist=1, qty=1, banked=0, rate=1, mn=2, mx=3) == float(Fraction(6 * 2, 5) + 5)
 
 
 @settings(max_examples=200, deadline=None)

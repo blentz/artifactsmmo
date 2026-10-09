@@ -130,8 +130,8 @@ class TestWithdrawGoldAction:
         a = WithdrawGoldAction(quantity=100, bank_location=(4, 0), accessible=True)
         gd = make_gd()
         state = make_state(x=0, y=0)
-        # 2.0 + dist(4) = 6.0
-        assert a.cost(state, gd) == pytest.approx(6.0)
+        # 2.0 + 4 tiles x 5 s = 22.0
+        assert a.cost(state, gd) == pytest.approx(22.0)
 
     def test_apply_moves_gold_from_bank(self):
         a = WithdrawGoldAction(quantity=100, bank_location=(4, 0), accessible=True)

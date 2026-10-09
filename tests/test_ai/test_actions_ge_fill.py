@@ -95,8 +95,8 @@ class TestGeFillBuyOrderAction:
                                  ge_location=(4, 0))
         gd = make_gd(ge_buy_orders={"iron_ore": ("ord-1", 9, 10)})
         state = make_state(x=0, y=0)
-        # 1.0 + dist(4) = 5.0
-        assert a.cost(state, gd) == pytest.approx(5.0)
+        # 1.0 + 4 tiles x 5 s = 21.0
+        assert a.cost(state, gd) == pytest.approx(21.0)
 
     def test_execute_moves_then_calls_ge_fill_api(self):
         a = GeFillBuyOrderAction(order_id="ord-1", item_code="iron_ore", price=9, quantity=2,

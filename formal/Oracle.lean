@@ -1802,8 +1802,9 @@ def runActionCostNonneg (args : Array Json) : Json :=
   loadPenNum, loadPenDen, qty, banked, mismatch, perUnitNum, perUnitDen]`
 
 `perUnit` is the expected gathers per unit of the drop
-(`gather_selection.expected_gathers`); the travel and loadout terms are charged
-on `qty * perUnit` gathers (`gatherCostRated`; `1` is `gatherCost` exactly).
+(`gather_selection.expected_gathers`); the base and loadout terms are charged
+on `qty * perUnit` gathers, the walk `dist` (travel seconds) once
+(`gatherCostRated`; `1` is `gatherCost` exactly).
 
 `mismatch` (0/1) is the `pick_loadout_cached` comparison in the shipped
 `cost`; when set, the loadout penalty is charged PER UNIT of the batch

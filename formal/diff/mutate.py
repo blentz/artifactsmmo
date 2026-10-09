@@ -4185,6 +4185,27 @@ GATHER_LOADOUT_SCALING_MUTATIONS = [
     ("gather cost: a secondary drop priced at one gather per unit (the apple bug)",
      "        gathers = self.quantity * game_data.gathers_per_unit(self.resource_code, drop_item)",
      "        gathers = Fraction(self.quantity)"),
+    # THE WALK ONCE PER ACTION (2026-10-09): `execute` walks to the node once and
+    # gathers in place, so a batch of N pays one walk. Charged per gather it is
+    # N walks — `Formal.GatherCost.gatherCost`'s old `(base + dist) * qty`.
+    # Killed by the differential pins against the Lean oracle.
+    ("gather cost: the walk charged once per GATHER again",
+     "        static = 6 * gathers + dist",
+     "        static = (6 + dist) * gathers"),
+]
+
+# The learned arm of the same walk rule: the learned median is ONE server
+# gather, so the walk is added once AFTER scaling, and the low-sample `default`
+# must be the per-gather figure WITHOUT it. OWN run_group: `history=None`
+# throughout the differential, so only the unit pins in
+# `tests/test_ai/test_coverage_gaps.py` reach this branch.
+GATHER_LEARNED_WALK_MUTATIONS = [
+    ("gather learned cost: the walk folded into the per-gather default",
+     "default=float((static - dist) / gathers),",
+     "default=float(static / gathers),"),
+    ("gather learned cost: the walk never added to the learned total",
+     "                                      window=50) * float(gathers) + dist",
+     "                                      window=50) * float(gathers)"),
 ]
 
 # THE OWNERSHIP BOUND ON A RECYCLE (whole-branch review, CRITICAL 1). The licence
@@ -8069,6 +8090,16 @@ COST_CORE_SENTINEL_MUTATIONS = [
     ("cost_core: rest_cost_pure re-divided by the phantom 10s cost unit",
      "    return float(rest_cooldown_seconds(max_hp - hp, max_hp))",
      "    return rest_cooldown_seconds(max_hp - hp, max_hp) / 10.0"),
+    # ONE TRAVEL UNIT (2026-10-09). A walk folded into an action's cost priced
+    # at a tile a second again, a fifth of the same walk taken as a `Move`: the
+    # R2D2 cheese detour (15 tiles) undercuts a Rest it takes 3.6x longer than.
+    # Killed by the travel_seconds pins in `tests/test_ai/test_cost_core.py`.
+    ("cost_core: travel_seconds counts tiles, not seconds",
+     "    return MOVE_SECONDS_PER_TILE * (abs(dest[0] - src[0]) + abs(dest[1] - src[1]))",
+     "    return abs(dest[0] - src[0]) + abs(dest[1] - src[1])"),
+    ("cost_core: a tile of walking priced at 1 s",
+     "MOVE_SECONDS_PER_TILE = 5",
+     "MOVE_SECONDS_PER_TILE = 1"),
 ]
 
 
@@ -9389,6 +9420,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_gather_rearm.py", survivors)
     run_group(GATHERING_APPLY_SRC, GATHER_LOADOUT_SCALING_MUTATIONS,
               "formal/diff/test_gather_cost_diff.py", survivors)
+    run_group(GATHERING_APPLY_SRC, GATHER_LEARNED_WALK_MUTATIONS,
+              "tests/test_ai/test_coverage_gaps.py", survivors)
     run_group(RECYCLE_ACTION_SRC, RECYCLE_OWNED_FLOOR_MUTATIONS,
               "tests/test_ai/test_actions_tier2.py", survivors)
     run_group(DESTRUCTIVE_LICENSE_SRC, DESTRUCTIVE_LICENSE_FLOOR_MUTATIONS,

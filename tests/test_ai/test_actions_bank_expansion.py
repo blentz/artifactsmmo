@@ -83,9 +83,9 @@ class TestBuyBankExpansionAction:
         a = BuyBankExpansionAction(bank_location=(4, 0), accessible=True)
         state = make_state(x=0, y=0, gold=2000)
         cheap = a.cost(state, make_gd(next_expansion_cost=1000))
-        # 5 + dist(4), in SECONDS. An edge cost is time, and buying an
+        # 5 + 4 tiles x 5 s, in SECONDS. An edge cost is time, and buying an
         # expansion takes the same time whatever it costs.
-        assert cheap == pytest.approx(9.0)
+        assert cheap == pytest.approx(25.0)
         # The published price ladder caps at 448,000 gold. Under the old
         # `+ cost / 100` term that put +4,480 SECONDS on this one edge, which
         # is what makes the price-independence the property worth pinning

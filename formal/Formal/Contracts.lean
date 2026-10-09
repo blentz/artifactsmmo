@@ -2536,7 +2536,7 @@ example : ∀ {ox oy : Int} {cs : List Formal.NearestTile.Tile} {t : Formal.Near
     ∀ u ∈ cs, Formal.NearestTile.manhattan ox oy u = Formal.NearestTile.manhattan ox oy t →
       (t.1 < u.1 ∨ (t.1 = u.1 ∧ t.2 ≤ u.2)) :=
   @Formal.NearestTile.nearestTile_deterministic_lexmin
--- cost_monotone_in_distance: MONOTONICITY — staticGatherCost = 6 + manhattan monotone.
+-- cost_monotone_in_distance: MONOTONICITY — staticGatherCost = 6 + 5 * manhattan monotone.
 example : ∀ (ox oy : Int) (a b : Formal.NearestTile.Tile),
     Formal.NearestTile.manhattan ox oy a ≤ Formal.NearestTile.manhattan ox oy b →
     Formal.NearestTile.staticGatherCost ox oy a ≤ Formal.NearestTile.staticGatherCost ox oy b :=

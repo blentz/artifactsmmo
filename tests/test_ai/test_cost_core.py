@@ -1,15 +1,42 @@
 """Coverage tests for actions/cost_core.py pure helpers."""
 
 from artifactsmmo_cli.ai.actions.cost_core import (
+    MOVE_SECONDS_PER_TILE,
     OVERHEAL_CONSUMABLE_COST,
     REST_COST_MAX,
     distance_cost_pure,
     learned_cost_pure,
     qty_cost_pure,
     rest_cost_pure,
+    travel_seconds,
 )
+from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.game_data import GameData
 from tests.test_ai.fixtures import make_state
+
+
+def test_a_tile_of_walking_is_five_seconds():
+    """The one travel unit: the 5 s a tile `MoveAction` was always priced at."""
+    assert MOVE_SECONDS_PER_TILE == 5
+
+
+def test_travel_seconds_is_manhattan_tiles_times_the_tile_price():
+    # |3 - 0| + |-4 - 0| = 7 tiles -> 35 s, in either direction.
+    assert travel_seconds((0, 0), (3, -4)) == 35
+    assert travel_seconds((3, -4), (0, 0)) == 35
+
+
+def test_travel_seconds_is_zero_on_the_spot():
+    assert travel_seconds((-3, 12), (-3, 12)) == 0
+
+
+def test_a_folded_walk_costs_what_the_same_move_costs():
+    """A walk folded into an action's cost is the walk a `MoveAction` prices:
+    the R2D2 case (15 tiles to the workshop) is 75 s either way."""
+    state = make_state(x=-3, y=12)
+    assert MoveAction(x=1, y=1).cost(state, GameData()) == float(travel_seconds((-3, 12), (1, 1)))
+    assert travel_seconds((-3, 12), (1, 1)) == 75
 
 
 def test_distance_cost_pure_sums_base_and_distance():

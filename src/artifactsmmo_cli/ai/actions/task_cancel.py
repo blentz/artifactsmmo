@@ -10,7 +10,7 @@ from artifactsmmo_api_client.api.my_characters.action_task_cancel_my_name_action
 )
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure
+from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure, travel_seconds
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -62,7 +62,7 @@ class TaskCancelAction(Action):
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
         dest = self.taskmaster_location
-        dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
+        dist = travel_seconds((state.x, state.y), dest)
         return distance_cost_pure(1.0, dist)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:

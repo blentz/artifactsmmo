@@ -344,11 +344,11 @@ class TestActionCostMethods:
         assert action.cost(state, gd) == pytest.approx(1.0)
 
     def test_gather_action_cost_includes_distance(self):
-        # At (0,0), nearest copper at (2,0): distance=2, total cost=6+2=8
+        # At (0,0), nearest copper at (2,0): 2 tiles x 5 s, total cost=6+10=16
         action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]))
         state = make_state(x=0, y=0)
         gd = make_gd()
-        assert action.cost(state, gd) == pytest.approx(8.0)
+        assert action.cost(state, gd) == pytest.approx(16.0)
 
 
 class TestGameDataUnsetContent:

@@ -186,7 +186,7 @@ class TestRecycleAction:
         action = RecycleAction(code="copper_dagger", quantity=1, workshop_location=(5, 0))
         state = make_state(x=0, y=0)
         gd = make_gd()
-        assert action.cost(state, gd) == pytest.approx(3.0 + 5)
+        assert action.cost(state, gd) == pytest.approx(3.0 + 5 * 5)  # 5 tiles x 5 s
 
     def test_execute_moves_to_workshop_then_recycles(self):
         action = RecycleAction(code="copper_dagger", quantity=1, workshop_location=(5, 0))
@@ -464,8 +464,8 @@ class TestNpcBuyAction:
                               npc_location=(4, 0))
         state = make_state(x=0, y=0)
         cheap = action.cost(state, make_gd(npc_stock={"cook": {"cooked_chicken": 100}}))
-        # 2 + dist(4), in SECONDS — the buy takes the same time at any price.
-        assert cheap == pytest.approx(6.0)
+        # 2 + 4 tiles x 5 s, in SECONDS — the buy takes the same time at any price.
+        assert cheap == pytest.approx(22.0)
         assert action.cost(
             state, make_gd(npc_stock={"cook": {"cooked_chicken": 100_000}})
         ) == pytest.approx(cheap)

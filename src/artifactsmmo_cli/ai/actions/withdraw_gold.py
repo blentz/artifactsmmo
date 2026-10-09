@@ -10,7 +10,7 @@ from artifactsmmo_api_client.api.my_characters.action_withdraw_bank_gold_my_name
 from artifactsmmo_api_client.models.deposit_withdraw_gold_schema import DepositWithdrawGoldSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure
+from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure, travel_seconds
 from artifactsmmo_cli.ai.actions.deposit_gold import _gold_apply
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
@@ -41,7 +41,7 @@ class WithdrawGoldAction(Action):
              history: LearningStore | None = None) -> float:
         dest = self.bank_location or (state.x, state.y)
         return distance_cost_pure(
-            2.0, abs(dest[0] - state.x) + abs(dest[1] - state.y))
+            2.0, travel_seconds((state.x, state.y), dest))
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         if self.bank_location and (state.x, state.y) != self.bank_location:

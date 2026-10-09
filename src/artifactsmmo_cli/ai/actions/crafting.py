@@ -11,7 +11,7 @@ from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_cr
 from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.cost_core import qty_cost_pure
+from artifactsmmo_cli.ai.actions.cost_core import qty_cost_pure, travel_seconds
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -112,7 +112,7 @@ class CraftAction(Action):
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
         dest = self.workshop_location or (state.x, state.y)
-        dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
+        dist = travel_seconds((state.x, state.y), dest)
         # Cost stays keyed to the REQUESTED quantity (not the effective batch) to
         # match the proved planner-admissibility cost model
         # (formal/Formal/PlannerAdmissibility.lean, qtyCost). A partial craft is

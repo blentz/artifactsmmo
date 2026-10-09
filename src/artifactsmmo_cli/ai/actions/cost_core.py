@@ -7,7 +7,10 @@ structural arithmetic so the Lean model in `formal/Formal/ActionCostNonneg.lean`
 can prove `cost ≥ 0` once per structural form and have it apply to every
 concrete Action that delegates here.
 
-Three structural forms cover all 26 concrete Action subclasses:
+Three structural forms cover all 26 concrete Action subclasses. Every walk an
+action folds into its cost is priced in SECONDS by `travel_seconds` — the unit
+`Move`, `Rest` and every learned edge are denominated in — so `dist` below is
+always travel seconds, never a raw tile count:
 
 1. **Constant** cost (`Equip`, `Unequip`, `Transition`, `Claim`,
    `MoveSemantic`): trivially ≥ 0 — no helper needed; the constant in the
@@ -23,13 +26,15 @@ Three structural forms cover all 26 concrete Action subclasses:
    `Recycle`, `DepositGold`, `DepositAll`, `Withdraw*`, `Npc*`,
    `TaskExchange`, `TaskCancel`, `TaskTrade`, `CompleteTask`,
    `OptimizeLoadout`, `Delete`, `Consumable`): formula is
-   `base + qty*per_unit + dist` with all non-negative inputs. Use
-   `distance_cost_pure(base, dist)` and `qty_cost_pure(base, qty, dist,
-   per_unit)`.
+   `base + qty*per_unit + dist` with all non-negative inputs, `dist` the
+   walk's travel seconds. Use `distance_cost_pure(base, dist)` and
+   `qty_cost_pure(base, qty, dist, per_unit)`.
 
 3. **History-dependent** (`Fight`, `Gather`, `Move`): formula is either the
    static fallback or `learned / max(rate, 0.1)`. Use `learned_cost_pure`,
-   which encapsulates the clamp and the rate switch.
+   which encapsulates the clamp and the rate switch. The static fallback's
+   walk is travel seconds too (`Gather` charges it once per action, not per
+   gather: `execute` walks once and gathers in place).
 
 The non-negativity contract for `learned_cost_pure`:
 * `learned ≥ 0` is guaranteed by every writer of
@@ -49,6 +54,28 @@ all branches of `player_helpers.delete_cost` return a positive constant
 """
 
 from artifactsmmo_cli.ai.rest_cooldown_core import rest_cooldown_seconds
+
+MOVE_SECONDS_PER_TILE = 5
+"""Seconds one tile of Manhattan walking is priced at — the one travel unit.
+
+`MoveAction` priced a tile at 5 s while the 21 actions that fold a walk into
+their own cost priced it at 1 and `Gather` charged it once PER GATHER, so a walk
+hidden inside an action cost a fifth of the same walk taken as a `Move`, and a
+recovery plan that left the tile (live 2026-10-09: R2D2 walking 15 tiles and a
+transition to cook cheese) undercut a `Rest` in place it took 3.6x longer than.
+Every walk now goes through `travel_seconds`, so they all agree with `Move` and
+with the seconds `Rest` and every learned edge are denominated in.
+
+The Lean cost models (`Formal.ActionCostNonneg`, `Formal.GatherCost`) take the
+walk as an argument, so they receive these seconds and need no copy of the
+constant.
+"""
+
+
+def travel_seconds(src: tuple[int, int], dest: tuple[int, int]) -> int:
+    """The walk from `src` to `dest`, in seconds: Manhattan tiles x
+    `MOVE_SECONDS_PER_TILE`. Non-negative, zero exactly when `src == dest`."""
+    return MOVE_SECONDS_PER_TILE * (abs(dest[0] - src[0]) + abs(dest[1] - src[1]))
 
 
 def rest_cost_pure(hp: int, max_hp: int) -> float:
@@ -138,6 +165,8 @@ a Python edit nor a Lean edit can move one side alone.
 
 def distance_cost_pure(base: float, dist: int) -> float:
     """Cost = base + dist. Non-negative when base >= 0 and dist >= 0.
+
+    `dist` is the walk's travel SECONDS (`travel_seconds`), not tiles.
 
     Used by every "distance + constant" action (Accept/Complete/Cancel task,
     Craft, Recycle, Deposit*, Withdraw*, Npc*, TaskExchange, TaskTrade,
