@@ -1,36 +1,15 @@
 """Which CRAFTING skills the roots on offer actually need, and to what level.
 
-The mirror of `gather_demand`, for the other half of `_orphan_skill_roots`'
-admission rule.
+One half of `_orphan_skill_roots`' admission rule; `gather_demand` is the
+other. USER 2026-10-08, "Only when demanded": a skill gets a standalone climb
+exactly when the goal-action DAG demands it — gear, the consumable floor's tier
+food, a task — and never for merely trailing the character.
 
-Conjunct 1 of that gate drops every gear-nameable skill — gearcrafting,
-weaponcrafting, jewelrycrafting — because gear is crafted BY those skills, so a
-gear root that needs one names it through the ordinary prerequisite seam and no
-standalone climb is warranted. That reasoning is sound exactly when some gear
-root is plannable, and silently wrong when none is: the skill is then excluded
-on the strength of a mechanism that has nothing to say about it.
-
-Live Robby 2026-09-13 was the silent case. weaponcrafting 11 against character
-level 30 — a gap of -19, the widest on him and twice the runner-up — with an
-OPEN rung whose next step was two chicken fights, while the cooking rung he was
-actually running asked for 55 crafted porkchops. All five of his gear roots
-resolved to `nodes=0, plan_len=0`, and the craft demand of every root on offer
-measured `{}`. Nothing asked for weaponcrafting; the conjunct that would have
-offered it a rung had excluded it on the assumption that something would.
-
-This module answers the question that conjunct was assuming: does any root on
-offer actually require this crafting skill, at a level the character has not
-reached? It reads `RequirementGraph.craft_skill`, the item -> (skill, level) map
-the requirement-model unification built, exactly as `gather_demand` reads
-`gather_skill`.
-
-ASKED ONLY OF ROOTS ALREADY ON OFFER, and that is load-bearing. `gather_demand`
-seeds a `ReachSkillLevel` through `skill_grind_target` so an orphan candidate
-can demand a gathering skill, and guards against a gathering root seeding
-itself. The polarity here is INVERTED — demand SUPPRESSES a candidate rather
-than admitting it — so a candidate that seeded itself would name its own grind
-target's craft skill and suppress exactly the rung it was asking for. There is
-no seeding here at all: a root that names no item contributes nothing.
+It reads `RequirementGraph.craft_skill`, the item -> (skill, level) map the
+requirement-model unification built, exactly as `gather_demand` reads
+`gather_skill`. Only `ObtainItem` roots are walked: a `ReachSkillLevel` names no
+item, and seeding one with its own grind target would let the climb
+manufacture the demand that admits it.
 """
 
 from collections.abc import Sequence

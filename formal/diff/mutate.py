@@ -3598,37 +3598,18 @@ ROOT_DECISION_MUTATIONS = [
      "    stats = game_data.item_stats(code)\n"
      "    if stats is None:\n"
      "        return 1\n"),
-    # THE RESTORED STANDALONE SKILL ROOT (`_orphan_skill_roots`). `ef67c1d6`
-    # deleted four standalone `ReachSkillLevel` emitters on the premise "skills
-    # are pure prerequisites now", which is false for a skill nothing equips —
-    # 33,840 live cooking XP, 99.6% of it a `RestoreHP` side effect. The rule
-    # now has THREE conjuncts plus the ordering. Conjuncts 1 and 2 and the
-    # ordering get their mutants HERE, killed by test_decisions_root.py.
-    # Conjunct 3 (the gathering-demand gate) and the two-pass demand seeding
-    # that feeds it are killed by tests/test_ai/test_orphan_gate_scenarios.py,
-    # so they live in `ORPHAN_DEMAND_GATE_MUTATIONS` below rather than in this
-    # list — a unit-killed mutant needs its own run_group.
-    # The nameability half of conjunct 1: keep the demand question but throw
-    # away the nameability test, restoring the unconditional drop that left live
-    # Robby at weaponcrafting 11 against character level 30 for two days.
-    ("root: the orphan rule ignores craft demand, restoring the unconditional"
-     " gear-nameable drop",
-     "        if (skill not in nameable or skill not in craft_named)\n",
-     "        if skill not in nameable\n"),
-    # THE DRIFT THIS MUTANT RESTORES was live: `_gear_nameable_skills` read
-    # `ITEM_TYPE_TO_SLOTS` off `all_item_stats` instead of asking the gear
-    # sheet, so alchemy's 20 `utility` potions made it "nameable" — while
-    # `objective._gear_candidates_by_type` skips `utility` outright and a gear
-    # target named alchemy in 0 of the 42 scenarios. The orphan rule declined
-    # the one skill it was written for; the O1 census's routed count was 194 of
-    # 336 instead of 236, 7 skills instead of 8.
-    ("root: _gear_nameable_skills counts utility potions as gear the sheet"
-     " ranks, so alchemy is refused a standalone root again",
-     "    nameable: set[str] = set()\n",
-     "    nameable: set[str] = {stats.crafting_skill\n"
-     "                          for stats in game_data.all_item_stats.values()\n"
-     "                          if stats.crafting_skill\n"
-     "                          and stats.type_ == \"utility\"}\n"),
+    # THE STANDALONE SKILL ROOT (`_orphan_skill_roots`). USER 2026-10-08
+    # "Only when demanded": a skill climbs only when the goal-action DAG demands
+    # it. The demand rule, the open-rung conjunct and the ordering get their
+    # mutants HERE, killed by test_decisions_root.py; the dedupe and the
+    # consumable-floor demand by test_orphan_gear_skill_admission.py; the
+    # gather-demand passes by test_orphan_gate_scenarios.py.
+    # The undemanded admission this rule replaced: cooking was the unconditional
+    # floor, and its grind target pulled fishing in (live 2026-10-08, four
+    # characters ~100 cycles each on `Gather(trout_spot)`).
+    ("root: the orphan rule admits a skill nothing demands",
+     "        if skill in demand and skill not in climbing\n",
+     "        if skill not in climbing\n"),
     ("root: the orphan rule drops the open-rung conjunct, so a skill with no"
      " XP-positive rung is routed anyway (the o1_silent_stall residual)",
      "        and _skill_grindable.skill_is_grindable(\n"
@@ -3698,19 +3679,17 @@ ROOT_DECISION_MUTATIONS = [
 # through the real `resolve_root` over the committed bundle, not by
 # test_decisions_root.py.
 ORPHAN_GEAR_ADMISSION_MUTATIONS = [
-    # 2026-09-13: conjunct 1 became CONDITIONAL — a gear-nameable skill is
-    # dropped only when a root on offer DEMANDS it. Dropping the whole conjunct
-    # gives a skill something is already climbing through the gear seam a rival
-    # standalone root, which is the churn conjunct 1 exists to prevent.
-    #
-    # ITS OWN GROUP because its kill-test is the unit suite for the new
-    # admission rule, not `test_decisions_root.py` where the rest of this
-    # rule's mutants live — bound to the wrong file it SURVIVED, which is how
-    # this group came to exist.
-    ("root: the orphan rule drops the not-nameable filter, so a skill a gear"
-     " target CAN name gets a standalone root as well",
-     "        if (skill not in nameable or skill not in craft_named)\n",
-     "        if True\n"),
+    # A skill a root on offer already climbs (the tier walk's skill-gated
+    # target) is left to that root; a second climb at another level is churn.
+    ("root: the orphan rule offers a second climb of a skill a root already"
+     " climbs",
+     "        if skill in demand and skill not in climbing\n",
+     "        if skill in demand\n"),
+    # The fleet consumable floor's tier food is DAG demand ("Cooking rises when
+    # a better tier food is due, not before").
+    ("root: the orphan demand ignores the consumable floor's shortfall",
+     "    roots = [*offered, *(ObtainItem(code, qty) for code, qty in ctx.supply_shortfall)]\n",
+     "    roots = [*offered]\n"),
 ]
 
 CRAFT_DEMAND_MUTATIONS = [
@@ -3728,37 +3707,21 @@ CRAFT_DEMAND_MUTATIONS = [
 ]
 
 ORPHAN_DEMAND_GATE_MUTATIONS = [
-    # CONJUNCT 3 NEUTERED: every candidate is an orphan again, which is exactly
-    # the pre-gate rule. Killed by `TestGatheringDemandPositiveBranch::
-    # test_once_satisfied_the_demanded_skill_disappears_while_cooking_survives`
-    # and `TestCookingDemandsFishing::
-    # test_raising_fishing_to_the_gate_removes_the_root_and_keeps_cooking` —
-    # both assert a skill NOTHING asks for is absent.
-    ("root: the orphan rule drops the demand conjunct, so every gathering"
-     " skill is routed whether or not anything asks for it",
-     "        if skill not in gathering or skill in demand]\n",
-     "        if True]\n"),
-    # THE TWO-PASS SEEDING. `offered` is `[root, *ordered]`, which by
-    # construction contains no orphan root, so a one-pass demand can never see
-    # one orphan asking for another. That is not a corner case: cooking is
-    # itself an orphan and is the ONLY route to fishing — across all 522 bundle
-    # items the only recipe naming fishing above level 1 is `cooked_shrimp`, a
-    # `consumable`, ineligible for both the gear sheet and the combat deficit,
-    # so NO gear root can ever demand fishing. Collapsing the call to
-    # `[*offered]` restores that blindness and the canonical chain `cooking rung
-    # -> cooked_shrimp -> shrimp -> fishing@10` goes invisible again. Killed by
-    # `TestCookingDemandsFishing::
-    # test_a_cooking_rung_that_needs_a_fish_gets_a_fishing_root`.
-    ("root: the demand pass sees only the gear siblings and the trunk, so an"
-     " orphan rung can never demand another skill",
-     "    demand = _gather_demand.gather_demand(\n"
-     "        [*offered,\n"
-     "         *(ReachSkillLevel(skill=skill, level=state.skills.get(skill, 1) + 1)\n"
-     "           for skill in candidates)],\n"
-     "        state, game_data, ctx)\n",
-     "    demand = _gather_demand.gather_demand(\n"
-     "        [*offered],\n"
-     "        state, game_data, ctx)\n"),
+    # GATHER demand dropped: only crafting skills are ever admitted. Killed by
+    # `TestGatheringDemandPositiveBranch` and `TestTierFoodDemandsFishing`.
+    ("root: the orphan demand skips the gather pass, so no gathering skill is"
+     " ever admitted",
+     "        demand[skill] = max(level, demand.get(skill, 0))\n",
+     "        pass\n"),
+    # THE CLIMB'S OWN RUNG. A `ReachSkillLevel` names no item, so a demanded
+    # cooking climb is invisible to the gather walk unless its grind target is
+    # seeded: `cooked_porkchop` needs no fish, the climb toward it cooks
+    # shrimp. Killed by `test_a_demanded_cooking_climb_asks_for_the_fish_its_
+    # rung_cooks`.
+    ("root: the gather pass sees only the roots, so a demanded climb's own"
+     " rung can never demand a gathering skill",
+     "            [*roots, *climbs], state, game_data, ctx).items():\n",
+     "            roots, state, game_data, ctx).items():\n"),
 ]
 
 # The demand side's own recursion guard. `_seed` turns a root into the item

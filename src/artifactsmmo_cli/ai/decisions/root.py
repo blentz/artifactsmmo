@@ -34,8 +34,9 @@ choose to raise it. Live consequence, measured on
 side effect of `Craft(cooked_*)` legs inside `RestoreHP` plans — an entire
 skill levelled by accident.
 
-`_orphan_skill_roots` restores the seam, as a rule about the CATALOGUE rather
-than about cooking, and `resolve_root` offers its roots one rank BELOW the
+`_orphan_skill_roots` restores the seam, as a rule about DAG DEMAND rather
+than about cooking (USER 2026-10-08: "Only when demanded" — a skill climbs when
+the goal-action DAG asks for it), and `resolve_root` offers its roots one rank BELOW the
 trunk. It adds no node and no argmax: a root that has to be CHOSEN against gear
 is a ranking, and deleting one is what this epic is for. `CanIClearMyTier`
 records the measurement that rejected the node.
@@ -65,7 +66,7 @@ from dataclasses import dataclass, field, replace
 # entry that imports `gather_demand` FIRST (e.g. `import
 # artifactsmmo_cli.ai.gather_demand` on its own) reaches this line while
 # `gather_demand` is only half built, and a NAME import of `gather_demand`/
-# `gathering_skills` raises ImportError. Binding the module object defers both
+# `craft_demand` raises ImportError. Binding the module object defers both
 # attribute lookups to CALL time, by which point it is complete.
 from artifactsmmo_cli.ai import craft_demand as _craft_demand
 from artifactsmmo_cli.ai import gather_demand as _gather_demand
@@ -110,7 +111,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 from artifactsmmo_cli.ai.tiers.objective import (
     CharacterObjective,
     GearTarget,
-    _gear_candidates_by_type,
 )
 from artifactsmmo_cli.ai.tiers.progression_tree_core import milestone_pure
 from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, tier_of_level
@@ -385,207 +385,76 @@ def _slot_order(item: tuple[str, GearTarget], state: WorldState,
             EQUIPMENT_SLOTS.index(slot))
 
 
-def _gear_nameable_skills(game_data: GameData) -> frozenset[str]:
-    """Every skill SOME gear target could name.
-
-    A gear target names exactly one skill — `GearTarget.blocking_skill`, which
-    `objective.classify_target` reads off the TARGET's own `crafting_skill` —
-    and a gear target is whatever `objective.gear_targets_with_blockers` hands
-    that classifier. So this asks the SHEET BUILDER, `_gear_candidates_by_type`,
-    which items can become candidates at all, capped at the catalogue's own
-    `max_character_level` because the question is about the GAME, not about this
-    cycle's tier. Nothing about the candidate rule is restated here, which is
-    the point: the previous version DID restate it, and drifted.
-
-    No `EQUIPMENT_SLOTS` re-filter, deliberately. `gear_targets_with_blockers`
-    writes `[s for s in ITEM_TYPE_TO_SLOTS[type_] if s in EQUIPMENT_SLOTS]`, but
-    that filter is a no-op by construction: `gear_taxonomy._derive_type_to_slots`
-    and `world_state.EQUIPMENT_SLOTS` are both built from the SAME
-    `CharacterSchema` `*_slot` fields, so every slot the first names is in the
-    second. Copying it here would be a branch no input can take.
-
-    THE DRIFT, AND WHAT IT COST. This function used to read
-    `ITEM_TYPE_TO_SLOTS` straight off `all_item_stats` and concluded that
-    ALCHEMY is nameable — 20 of its 25 recipes are `utility` potions and
-    `utility1_slot`/`utility2_slot` do accept them — so `_orphan_skill_roots`
-    declined it. But `_gear_candidates_by_type` skips `stats.type_ ==
-    "utility"` outright (the utility slots are served by the potion-supply
-    path — `utility_slot.utility_slot_for` plus the `EquipAction` from
-    `CraftPotionsGoal.batch_equip` — not by the gear sheet; this named
-    `objective.utility_potion_targets` until 2026-08-27, which only DESIGNATES
-    the slots — see its own docstring for what consults it), and alchemy's
-    other five recipes are `consumable`, which maps to no slot. Measured on the
-    committed bundle: a gear target named alchemy in 0 of the 42 scenarios, and
-    could not — alchemy was as orphaned as cooking was before `b39705eb`, with
-    the orphan rule refusing it on a nameability claim no code path could
-    honour. The O1 census's routed count moves 194 -> 236 of 336 cells and 7 of
-    8 skills -> 8 of 8 with this fix; residuals stay 0 because the rule's other
-    conjunct is `skill_is_grindable(S, C+1)`, the census's own predicate.
-
-    Measured on the committed bundle after the fix: gearcrafting,
-    weaponcrafting and jewelrycrafting — exactly the three skills whose output
-    the gear sheet ranks."""
-    nameable: set[str] = set()
-    for ranked in _gear_candidates_by_type(
-            game_data, game_data.max_character_level).values():
-        for _value, code in ranked:
-            skill = game_data.all_item_stats[code].crafting_skill
-            if skill:
-                nameable.add(skill)
-    return frozenset(nameable)
-
-
 def _orphan_skill_roots(state: WorldState, game_data: GameData,
                         offered: Sequence[MetaGoal],
                         ctx: SelectionContext) -> tuple[ReachSkillLevel, ...]:
     """THE RULE, and the whole of it:
 
-        a skill with an open, XP-positive rung that NO gear target can name
-        still deserves a root — UNLESS it is a gathering skill nothing asks
-        for.
+        a skill gets a standalone climb exactly when the goal-action DAG
+        DEMANDS it above its current level, and it has an open, XP-positive
+        rung.
 
-    Three conjuncts, each read from production rather than restated:
+    USER 2026-10-08, "Only when demanded": "a skill climbs only when the
+    goal-action DAG demands it (gear, the consumable floor's tier food, a
+    task). Cooking rises when a better tier food is due, not before." The
+    character-XP / skill-XP seesaw is EMERGENT from the DAG's demand
+    (`feedback_seesaw_is_emergent`), so no skill is admitted for being behind.
 
-    * "no gear target can name it" is `_gear_nameable_skills` — a property of
-      the CATALOGUE, not of this cycle's gear sheet. Deliberately not "no
-      current target names it": that would hand weaponcrafting a standalone
-      root every cycle the weapon slot happens to be satisfied, which is a
-      skill that IS a prerequisite doing prerequisite work. The orphans are the
-      skills the prerequisite seam structurally cannot reach.
-    * a gear-nameable skill is admitted only when NO root on offer demands it
-      (`craft_demand`). The exclusion assumes a plannable gear root will name
-      the skill through the prerequisite seam; when none does, the skill is
-      dropped on the strength of a mechanism that is not running. Live Robby
-      2026-09-13 sat at weaponcrafting 11 against level 30 — the widest gap on
-      him, an open rung two fights deep — grinding cooking instead for two days
-      at 0 character XP. Note the MIRRORED polarity against the third conjunct:
-      demand ADMITS a gathering skill and SUPPRESSES a gear-nameable one.
-    * "an open, XP-positive rung" is `skill_is_grindable(S, C+1)` — the
-      SAME predicate `ReachSkillGoal`'s only action offers and the same one the
-      O1 census (`audit/open_rung_completeness`) verdicts a cell on. A skill
-      with no open rung gets NO root: emitting one would be the census's
-      `o1_silent_stall` residual — an unplannable root with no node saying why —
-      which is the failure this seam is supposed to make impossible, not one it
-      may cause.
-    * a skill that gates a gathered leaf must be ASKED FOR. Conjunct 1 admits
-      every gathering skill by construction — gear is crafted by
-      gearcrafting, weaponcrafting and jewelrycrafting, so mining, woodcutting,
-      fishing and alchemy fall out as orphans whether or not anything wants
-      them. Live 2026-09-09/10 sent R2D2 and Robby to fishing for ~617 cycles
-      each at 0 character XP while neither needed a fish. `gather_demand`
-      answers whether any root on offer bottoms out in a leaf this character
-      cannot gather yet; cooking gathers nothing, never enters this conjunct,
-      and is the floor that keeps this group from emptying into `Wait`.
-      The demand is computed in TWO PASSES — conjuncts 1 and 2 decide a
-      candidate set first, and the candidates then seed demand alongside
-      `offered` — because an orphan root is exactly what `offered` cannot
-      contain, and cooking (an orphan) is fishing's only demand route. See the
-      comment on the `demand` call below.
+    THE DEMAND is read off the roots on offer plus the fleet consumable
+    shortfall (`ctx.supply_shortfall`, the floor's tier food — the same roots
+    `xp_demand.demand_roots` seeds), in two passes:
 
-    Measured on the live bundle 2026-09-10 the first two conjuncts admitted FIVE
-    skills: alchemy, cooking, fishing, mining and woodcutting — every skill
-    whose recipes produce a `consumable` or a `resource`. (An earlier revision
-    of this docstring said four and omitted alchemy.) Since 2026-09-13 conjunct
-    1 is conditional, so a gear-crafting skill joins that set whenever nothing
-    on offer demands it.
+    * CRAFT demand (`craft_demand`): every crafting skill some root's
+      requirement closure names above the character's level — the gear
+      targets, the task, the tier food.
+    * GATHER demand (`gather_demand`) over the same roots PLUS a provisional
+      climb for each craft-demanded skill. The second pass is how a demanded
+      cooking climb asks for the fish its own rungs consume: a
+      `ReachSkillLevel` names no item, so `gather_demand._seed` stands its
+      grind target in for it. A gathering skill never seeds itself
+      (`_seed`'s guard), so nothing admits itself.
 
-    THE THIRD CONJUNCT then holds the four that gather back until something asks
-    for them, leaving cooking — which gathers nothing — as the unconditional
-    floor. Measured across `ai/scenario.SCENARIOS`, cooking is admitted in 44 of
-    44 scenarios and this group is empty in 0 of 44, so the fall-through to
-    `Wait` this seam exists to prevent stays unreachable.
+    The level offered is the level ASKED FOR, never a one-rung `C+1` nudge
+    with no destination. A skill a root on offer already climbs (the tier
+    walk's skill-gated target, a supply-link climb) is left to that root.
+
+    WHAT THIS REPLACED. The old gate admitted every skill no gear target could
+    name (cooking and alchemy unconditionally) and a gear-nameable skill when
+    nothing demanded it. Live 2026-10-08 the orphan `ReachSkillLevel(cooking,
+    32)` pulled `fishing 30` in through its grind target and four characters
+    spent ~100 cycles each on `Gather(trout_spot)` with nothing asking for a
+    fish. An empty group is now legitimate: the trunk is always on offer
+    ahead of it.
+
+    "an open, XP-positive rung" is `skill_is_grindable(S, C+1)` — the SAME
+    predicate `ReachSkillGoal`'s only action offers and the O1 census
+    (`audit/open_rung_completeness`) verdicts a cell on, so no unplannable
+    root is emitted.
 
     ORDER: ONE INTEGER, `state.level - skill level` — how far the skill trails
     the character, largest first — with ties broken by `SKILL_NAMES`, the
     schema vocabulary `world_state` derives from the API's own enums (never
     `sorted()` as a decision key; see `feedback_no_alphabetical_tiebreak`).
-    The integer has a meaning: the game tiers its content by level, so the
-    skill furthest behind the character is the one whose content is furthest
-    from what the character can currently use, and it is the same "furthest
-    behind" quantity `WhichSlotIsFurthestBehind` ranks slots on.
-
-    DO NOT ADD A SECOND TERM. This epic exists to delete a flat scalar ranking
-    that multiplied four weights into one column; the pressure that produced
-    those four will apply here (wave-3 design §8 R2 says so about the sibling
-    node, and this node is the same shape). A tie-break that is not the
-    declared vocabulary, or a weight beside the gap, turns a named order into
-    an argmax again — at which point the reader is back to a number they cannot
-    follow. If the order is wrong, change WHICH integer it is, not how many.
+    DO NOT ADD A SECOND TERM: if the order is wrong, change WHICH integer it
+    is, not how many.
     """
-    nameable = _gear_nameable_skills(game_data)
-    gathering = _gather_demand.gathering_skills(game_data)
-    # CONJUNCT 1 ASKS, IT NO LONGER ASSUMES (2026-09-13). Dropping every
-    # gear-nameable skill is right exactly when the gear seam can actually name
-    # one — a plannable gear root carries the climb through the prerequisite
-    # seam, and a rival standalone root would be churn. When NOTHING on offer
-    # demands the skill, that seam has nothing to say and the exclusion rests on
-    # a mechanism that is not running.
-    #
-    # Live Robby 2026-09-13: weaponcrafting 11 against character level 30 — a
-    # gap of -19, twice the next widest — with an OPEN rung two chicken fights
-    # deep, while the cooking rung he actually ran asked for 55 crafted
-    # porkchops. All five of his gear roots resolved to `nodes=0, plan_len=0`
-    # and the measured craft demand across every root on offer was `{}`. Two
-    # days at 0 character XP.
-    #
-    # POLARITY IS THE MIRROR OF CONJUNCT 3, deliberately. A gathering skill
-    # needs demand to be ADMITTED (nothing else will ask, and grinding it
-    # speculatively is the fishing burn). A gear-nameable skill needs the
-    # ABSENCE of demand, because demand means something else already owns the
-    # climb.
-    craft_named = _craft_demand.craft_demand(offered, state, game_data, ctx)
-    # PASS 1 — conjuncts 1 and 2 only. The candidate set, before anything is
-    # asked about GATHER demand.
-    candidates = [
+    roots = [*offered, *(ObtainItem(code, qty) for code, qty in ctx.supply_shortfall)]
+    demand = _craft_demand.craft_demand(roots, state, game_data, ctx)
+    climbs = [ReachSkillLevel(skill=skill, level=level) for skill, level in demand.items()]
+    for skill, level in _gather_demand.gather_demand(
+            [*roots, *climbs], state, game_data, ctx).items():
+        demand[skill] = max(level, demand.get(skill, 0))
+    # A skill some root on offer already climbs is owned by that root: a second
+    # climb of it at another level would be churn, not a route.
+    climbing = {root.skill for root in offered if isinstance(root, ReachSkillLevel)}
+    orphans = [
         skill for skill in SKILL_NAMES
-        if (skill not in nameable or skill not in craft_named)
+        if skill in demand and skill not in climbing
         and _skill_grindable.skill_is_grindable(
             skill, state.skills.get(skill, 1) + 1, state, game_data)]
-    # PASS 2 — the candidates SEED demand too, not just the gear siblings and
-    # the trunk. `resolve_root` calls this with `offered` = [root, *ordered],
-    # which by construction cannot contain an orphan root, so a one-pass demand
-    # could never see one orphan asking for another. That is not a corner case:
-    # cooking is itself an orphan, and cooking is the ONLY route to fishing —
-    # across all 522 bundle items the only recipe naming fishing above level 1
-    # is `cooked_shrimp`, a `consumable`, which is ineligible for the gear sheet
-    # and for the combat deficit, so NO gear root can ever demand fishing. The
-    # canonical chain `cooking rung -> cooked_shrimp -> shrimp -> fishing@N` was
-    # therefore invisible and the gate removed fishing from every character,
-    # including the three (HAL, C3P0, Lor) whose cooking rung genuinely could
-    # not be served without it.
-    #
-    # This does NOT let a gathering skill admit itself: `gather_demand._seed`
-    # refuses to seed a `ReachSkillLevel` whose skill is a gathering skill
-    # (pinned by `test_a_gathering_skill_root_does_not_seed_itself`), so a
-    # fishing candidate contributes nothing to the dict that would admit it.
-    # Cooking is not a gathering skill, so it seeds legitimately through
-    # `skill_grind_target`. The provisional `C+1` level on a candidate is never
-    # read by `_seed` — `skill_grind_target` takes the SKILL, not the level.
-    demand = _gather_demand.gather_demand(
-        [*offered,
-         *(ReachSkillLevel(skill=skill, level=state.skills.get(skill, 1) + 1)
-           for skill in candidates)],
-        state, game_data, ctx)
-    orphans = [
-        skill for skill in candidates
-        # THIRD CONJUNCT: a skill that gates a gathered leaf must be ASKED FOR.
-        # Conjunct 1 admits every gathering skill by construction, which is how
-        # R2D2 and Robby came to grind fishing ~617 cycles each for 0 character
-        # XP while neither needed a fish. Keyed on "does this skill gate a
-        # gathered leaf", read from the catalogue, so no skill is named
-        # individually — cooking gathers nothing, never enters the conjunct, and
-        # is the floor that keeps this group from emptying into `Wait`.
-        if skill not in gathering or skill in demand]
     orphans.sort(key=lambda skill: (state.skills.get(skill, 1) - state.level,
                                     SKILL_NAMES.index(skill)))
-    # A demanded skill is offered the level that was ASKED FOR. `C+1` is a
-    # one-rung nudge with no destination: it completes and re-emits, which is
-    # the churn this gate exists to stop. An ungated skill keeps `C+1` because
-    # nothing named a level for it.
-    return tuple(ReachSkillLevel(
-        skill=skill,
-        level=demand.get(skill, state.skills.get(skill, 1) + 1))
-        for skill in orphans)
+    return tuple(ReachSkillLevel(skill=skill, level=demand[skill]) for skill in orphans)
 
 
 class IsAFightBlockingMe(Decision[MetaGoal]):

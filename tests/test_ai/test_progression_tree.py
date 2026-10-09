@@ -116,57 +116,26 @@ def test_fallbacks_offer_the_other_branch():
     about whether the trunk is reachable, which is the property this test is
     for.
 
-    The trunk is no longer the LAST entry: the restored standalone skill roots
-    (`decisions/root._orphan_skill_roots`) are offered behind it. The property
-    is stated as a relation now — every gear root ahead of the trunk, every
-    orphan skill root behind it — which is what `[-1]` was standing in for."""
+    Standalone skill roots (`decisions/root._orphan_skill_roots`) are offered
+    behind the trunk, but only for a skill the DAG demands (2026-10-08); this
+    board demands none, so the trunk is last."""
     d, _ = _decide("l10_weapon_upgrade")
     assert any(isinstance(r, ReachCharLevel) for r in d.fallback_roots), (
         "gear decision must carry the xp trunk as an arbiter fallback")
     trunk = d.fallback_roots.index(ReachCharLevel(level=20))
     assert all(isinstance(r, ObtainItem | ReachSkillLevel)
                for r in d.fallback_roots[:trunk])
-    assert all(isinstance(r, ReachSkillLevel)
-               for r in d.fallback_roots[trunk + 1:])
-    assert d.fallback_roots[trunk + 1:], "the orphan skill roots must be offered"
+    # USER 2026-10-08 "Only when demanded": nothing on this board demands a
+    # skill no root already climbs, so no orphan skill root follows the trunk.
+    assert d.fallback_roots[trunk + 1:] == []
 
 
-_ORPHAN_ROWS_AT_FLOOR = [
-    "ReachSkillLevel(skill='cooking', level=2)",
-    # 2026-09-13 craft-demand gate: conjunct 1 drops a gear-nameable skill only
-    # when a root on offer DEMANDS it. On an all-at-the-floor board nothing
-    # demands any of the three, so all three are offered a climb — appended
-    # behind the trunk, reordering nothing above it.
-    "ReachSkillLevel(skill='gearcrafting', level=2)",
-    "ReachSkillLevel(skill='jewelrycrafting', level=2)",
-    "ReachSkillLevel(skill='weaponcrafting', level=2)",
-]
-"""The tail every pin below grew: the restored standalone skill roots
-(`decisions/root._orphan_skill_roots`) — the skills NO gear target can name,
-because the gear sheet (`objective._gear_candidates_by_type`) ranks nothing they
-craft. They are appended after the trunk, so they extend each pinned list rather
-than reordering it, and the levels are `current + 1`; this constant is the
-all-at-the-floor case and the scenarios whose gather skills are higher spell
-their own tail out.
-
-ALCHEMY was added to this tail after `_gear_nameable_skills` was fixed to ask
-the sheet builder instead of restating its rule: alchemy's 20 `utility` potions
-DO map to `utility1_slot`/`utility2_slot`, which is why it was credited as
-gear-nameable, but the sheet builder skips `utility` outright, so a gear target
-named alchemy in 0 of the 42 scenarios. Five orphans arrived briefly, not four —
-see `tests/test_ai/scenarios/test_alchemy_rung.py`.
-
-THE GATHERING-DEMAND GATE (`decisions/root._orphan_skill_roots`'s third
-conjunct, `gather_demand.gather_demand`) then cut the tail back down to ONE:
-alchemy, fishing, mining and woodcutting are gathering skills, so `resolve_root`
-now routes them only when a gear sibling or the trunk actually demands one —
-measured on every scenario in this file (all six are drawn from the same
-committed `ai.scenario.SCENARIOS`), none of them do. Cooking gathers nothing,
-is therefore never gated, and stays the unconditional floor.
-
-`ef67c1d6` deleted the standalone `ReachSkillLevel` emitters on the premise
-"skills are pure prerequisites now"; cooking is the counter-example the epic
-measured (33,840 live XP, 99.6% of it a `RestoreHP` side effect)."""
+# THE ORPHAN TAIL (`decisions/root._orphan_skill_roots`) is empty on every pin
+# below. USER 2026-10-08 "Only when demanded": a standalone skill climb is
+# offered only for a skill the goal-action DAG demands and no root on offer
+# already climbs, and none of these scenarios demands one. The unconditional
+# cooking floor and the undemanded gear-nameable climbs that used to extend
+# each list are gone with the old admission rule.
 
 
 # --- Per-scenario behavior pins ---------------------------------------------
@@ -205,8 +174,7 @@ class TestPerScenarioPins:
             "ObtainItem(code='copper_boots', quantity=1, slot='boots_slot')",
             "ObtainItem(code='copper_ring', quantity=1, slot='ring1_slot')",
             "ObtainItem(code='copper_ring', quantity=1, slot='ring2_slot')",
-            "ReachCharLevel(level=10)",
-            *_ORPHAN_ROWS_AT_FLOOR]
+            "ReachCharLevel(level=10)"]
         assert d.ranking[0].category == (
             "IsAFightBlockingMe → IsMyGearBehindMyTier → "
             "WhichSlotIsFurthestBehind → IsThisTargetBlocked")
@@ -240,13 +208,7 @@ class TestPerScenarioPins:
         not gear targets at all. The rows are shield, the weapon slot's
         blocking material, and the trunk. This test passed under both regimes
         for different reasons, so the rows are now spelled out rather than
-        counted.
-
-        THE GATHERING-DEMAND GATE: alchemy, fishing, mining and woodcutting
-        would have gated at their own C+1 here (mining/woodcutting at 5 -> 6),
-        but nothing in this scenario's gear siblings or trunk demands any of
-        them, so only cooking — the ungated floor — survives to the tail.
-        See `_ORPHAN_ROWS_AT_FLOOR`."""
+        counted."""
         d, _ = _decide("l8_overstocked")
         assert d.chosen_root == ObtainItem(code="wooden_shield", quantity=1,
                                            slot="shield_slot")
@@ -254,8 +216,7 @@ class TestPerScenarioPins:
         assert [r.root_repr for r in d.ranking] == [
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
             "ObtainItem(code='wooden_stick', quantity=1)",
-            "ReachCharLevel(level=10)",
-            *_ORPHAN_ROWS_AT_FLOOR]
+            "ReachCharLevel(level=10)"]
 
     def test_l10_copper_adequate_pins_gear_branch_not_xp(self):
         """The scenario NAME says 'adequate', but adequacy here is Phase-2's
@@ -277,13 +238,7 @@ class TestPerScenarioPins:
         climb. The scenario is STILL not "adequate" in the tier model's sense,
         which is the point the original docstring was making, just with a
         different witness. The rows are spelled out rather than counted: the
-        old `len(...) == 3` passed under both regimes over different rows.
-
-        THE GATHERING-DEMAND GATE: cooking, fishing, alchemy, mining and
-        woodcutting would each have gated at their own C+1 (or, for alchemy at
-        5, C+1=6), but nothing in this scenario's gear siblings or trunk
-        demands any gathering skill above the floor, so only cooking — the
-        ungated floor — survives to the tail. See `_ORPHAN_ROWS_AT_FLOOR`."""
+        old `len(...) == 3` passed under both regimes over different rows."""
         d, _ = _decide("l10_copper_adequate")
         assert d.chosen_root == ReachSkillLevel(skill="jewelrycrafting", level=2)
         assert [r.root_repr for r in d.ranking] == [
@@ -292,11 +247,6 @@ class TestPerScenarioPins:
             "ObtainItem(code='water_bow', quantity=1, slot='weapon_slot')",
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
             "ReachCharLevel(level=20)",
-            "ReachSkillLevel(skill='cooking', level=2)",
-            # 2026-09-13 craft-demand gate — undemanded gear-nameable
-            # skills now get a climb, appended behind the trunk.
-            "ReachSkillLevel(skill='gearcrafting', level=11)",
-            "ReachSkillLevel(skill='weaponcrafting', level=11)",
         ]
 
     def test_l10_weapon_upgrade_pins_the_skill_gating_the_weapon(self):
@@ -311,13 +261,7 @@ class TestPerScenarioPins:
         ranking even though the two share a head.
 
         Trunk LAST (2026-07-27) survives the flip: `resolve_root` appends the
-        trunk after every sibling.
-
-        THE GATHERING-DEMAND GATE: alchemy, cooking, fishing, woodcutting and
-        mining (at 11 here) would each have gated at their own C+1, but
-        nothing in this scenario's gear siblings or trunk demands any
-        gathering skill above the floor, so only cooking — the ungated floor
-        — survives to the tail. See `_ORPHAN_ROWS_AT_FLOOR`."""
+        trunk after every sibling."""
         d, _ = _decide("l10_weapon_upgrade")
         assert d.chosen_root == ReachSkillLevel(skill="jewelrycrafting", level=2)
         assert d.chosen_step == d.chosen_root
@@ -327,17 +271,9 @@ class TestPerScenarioPins:
             "ObtainItem(code='blue_slimeball', quantity=2)",
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
             "ReachCharLevel(level=20)",
-            "ReachSkillLevel(skill='cooking', level=2)",
-            # 2026-09-13 craft-demand gate — undemanded gear-nameable
-            # skills now get a climb, appended behind the trunk.
-            "ReachSkillLevel(skill='weaponcrafting', level=11)",
         ]
-        # The trunk is no longer last — the orphan skill roots sit behind it —
-        # but it is still ahead of every one of them, which is the ordering
-        # 2026-07-27 bought and the ordering `l48_band_adequate` re-proved.
-        trunk = d.fallback_roots.index(ReachCharLevel(level=20))
-        assert all(isinstance(root, ReachSkillLevel)
-                   for root in d.fallback_roots[trunk + 1:])
+        # Trunk last: no orphan skill root is demanded here (2026-10-08).
+        assert d.fallback_roots[-1] == ReachCharLevel(level=20)
 
     def test_l3_low_hp_pins_weapon_branch(self):
         """Same target sheet as l1_fresh (the gear-target tier is 1 for both,
@@ -348,17 +284,9 @@ class TestPerScenarioPins:
         d, _ = _decide("l3_low_hp")
         assert d.chosen_root == ObtainItem(code="wooden_stick", quantity=1)
         assert d.chosen_step == d.chosen_root
-        # 7 gear/trunk rows + the ONE restored orphan skill root that survives
-        # the gathering-demand gate: cooking, the ungated floor. Alchemy,
-        # fishing, mining and woodcutting would have joined it at the floor
-        # too, but nothing in this scenario demands any of them — see
-        # `_ORPHAN_ROWS_AT_FLOOR`.
-        # 8 -> 11 on 2026-09-13: the craft-demand gate offers a climb for each
-        # of the three gear-nameable skills no root here demands. The count is
-        # spelled against the tail so the two move together.
-        assert len(d.ranking) == 8 - 1 + len(_ORPHAN_ROWS_AT_FLOOR)
-        assert ([r.root_repr for r in d.ranking[-len(_ORPHAN_ROWS_AT_FLOOR):]]
-                == _ORPHAN_ROWS_AT_FLOOR)
+        # 7 gear/trunk rows; no orphan skill root is demanded (2026-10-08).
+        assert len(d.ranking) == 7
+        assert d.ranking[-1].root_repr == "ReachCharLevel(level=10)"
 
     def test_l12_taskgated_bag_pins_iron_boots_branch(self):
         """RE-DERIVED (GAP-1 fix, 2026-07-07): this scenario has zero attack
@@ -408,10 +336,6 @@ class TestPerScenarioPins:
             "ReachSkillLevel(skill='weaponcrafting', level=2)",
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
             "ReachCharLevel(level=20)",
-            "ReachSkillLevel(skill='cooking', level=2)",
-            # 2026-09-13 craft-demand gate — undemanded gear-nameable
-            # skills now get a climb, appended behind the trunk.
-            "ReachSkillLevel(skill='gearcrafting', level=11)",
         ]
         assert not any("satchel" in r.root_repr for r in d.ranking), \
             "satchel needs jasper_crystal from an unreachable trader"
@@ -459,28 +383,6 @@ class TestStepDeclineInTheWalk:
     SHIELD = ObtainItem(code="wooden_shield", quantity=1, slot="shield_slot")
     SHIELD_STEP = ObtainItem(code="ash_wood", quantity=10)
     TRUNK = ReachCharLevel(level=20)
-    ORPHANS = [ReachSkillLevel(skill="cooking", level=2),
-               ReachSkillLevel(skill="weaponcrafting", level=11)]
-    """The restored standalone skill roots for this character
-    (`decisions/root._orphan_skill_roots`), offered BEHIND the trunk. They
-    extend every list below without reordering it, and they widen the
-    demotion walk's reach: a fully blocked gear branch now has somewhere past
-    the trunk to go.
-
-    THE GATHERING-DEMAND GATE cut this list from five down to one: alchemy,
-    fishing, mining (at 10 here) and woodcutting are gathering skills, and
-    nothing in `l10_weapon_upgrade`'s gear siblings or trunk demands any of
-    them above the floor, so only cooking — the ungated floor — is still
-    offered.
-
-    THE CRAFT-DEMAND GATE (2026-09-13) then added weaponcrafting back. Conjunct
-    1 used to drop every gear-nameable skill outright; it now drops one only
-    when a root on offer DEMANDS it. This board's gear siblings are gearcrafted
-    and jewelrycrafted, so both of those skills are demanded and stay suppressed
-    (they are already on the board as tier roots in their own right, which is
-    why they never appear here). Nothing on the board needs a WEAPONCRAFTED
-    item, so weaponcrafting has no other route and is offered one — appended
-    behind the trunk, changing no chosen root and no existing order."""
 
     def _decide_with(self, decline):
         gd = _bundle()
@@ -494,7 +396,7 @@ class TestStepDeclineInTheWalk:
         d = decide_tree(state, gd, CharacterObjective.from_game_data(gd))
         assert d.chosen_root == self.SKILL_JEWEL
         assert d.fallback_roots == [self.SKILL_GEAR, self.SLIME, self.SHIELD,
-                                    self.TRUNK, *self.ORPHANS]
+                                    self.TRUNK]
         assert d.declined == ()
 
     def test_a_declined_head_lets_the_next_gear_target_head(self):
@@ -504,7 +406,7 @@ class TestStepDeclineInTheWalk:
         d = self._decide_with(lambda root: "blocked" if root == self.SKILL_JEWEL else None)
         assert d.chosen_root == self.SKILL_GEAR
         assert d.fallback_roots == [self.SLIME, self.SHIELD, self.SKILL_JEWEL,
-                                    self.TRUNK, *self.ORPHANS]
+                                    self.TRUNK]
         assert d.declined == ((repr(self.SKILL_JEWEL), "blocked"),)
 
     def test_declined_targets_keep_their_own_order_behind_the_served(self):
@@ -512,7 +414,7 @@ class TestStepDeclineInTheWalk:
         d = self._decide_with(lambda root: "blocked" if root in declined else None)
         assert d.chosen_root == self.SKILL_GEAR
         assert d.fallback_roots == [self.SHIELD, self.SKILL_JEWEL, self.SLIME,
-                                    self.TRUNK, *self.ORPHANS]
+                                    self.TRUNK]
 
     def test_every_gear_target_declined_leaves_the_gear_arm(self):
         gear = {self.SKILL_JEWEL, self.SKILL_GEAR, self.SLIME, self.SHIELD}

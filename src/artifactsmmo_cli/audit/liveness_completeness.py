@@ -175,13 +175,13 @@ DORMANT: dict[str, str] = {
     # — so "requires a task worked to completion" is no longer a reason nobody
     # has met. It is a thing the fleet has done.
     #
-    # `PursueTaskGoal` and `LowYieldCancelGoal` STAY: still 0 cycles, and their
-    # premises are still unmet rather than merely unobserved.
-    "PursueTaskGoal": "conditional: requires a held items-task the projection says to pursue",
+    # `LowYieldCancelGoal` STAYS: still 0 cycles, its premise unmet.
+    # 2026-10-08: `PursueTaskGoal` and `TaskTradeAction` LEFT this list — the
+    # task objective's held items task ran live (Robby `PursueTask(coal)`, HAL
+    # `PursueTask(spruce_plank)`: 242 cycles, 16 `TaskTrade` deliveries).
     "LowYieldCancelGoal": "conditional: requires a held task and enough samples to judge it",
     # 2026-10-06: `TaskExchangeGoal`/`TaskExchangeAction` LEFT this list — the
     # task objective's exchange (c-2 #2) ran 5 cycles live, Lor's paying out.
-    "TaskTradeAction": "conditional: items-task delivery, requires a held items-task",
     # 2026-09-13: ExpandBankGoal and BuyBankExpansionAction were removed from
     # this table entirely. They carried `unreachable: MeansKind.BANK_EXPAND is
     # in the discretionary band` for as long as that band sat below the

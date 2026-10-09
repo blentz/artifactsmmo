@@ -1,17 +1,13 @@
 """Which gathering skills the roots on offer actually need, and to what level.
 
-The demand side of the gathering-skill grind gate. `_orphan_skill_roots` offers
-a standalone skill climb for every skill no gear target can name, which admits
-every gathering skill by construction — gear is crafted by gearcrafting,
-weaponcrafting and jewelrycrafting, so mining, woodcutting, fishing and alchemy
-fall out as orphans whether or not anything wants them. Live 2026-09-09/10 that
-sent R2D2 and Robby to fishing for ~617 cycles each at 0 character XP while
-neither needed a fish.
+The gathering half of `_orphan_skill_roots`' admission rule (USER 2026-10-08,
+"Only when demanded"); `craft_demand` is the crafting half. Live 2026-09-09/10
+an undemanded fishing climb sent R2D2 and Robby to fish ~617 cycles each at 0
+character XP while neither needed a fish.
 
-This module answers the question that gate was missing: does any root on offer
-bottom out in a leaf this character cannot gather yet? It reads
-`RequirementGraph.gather_skill`, the item -> (skill, level) map the
-requirement-model unification built and left unconsumed.
+This module answers: does any root on offer bottom out in a leaf this character
+cannot gather yet? It reads `RequirementGraph.gather_skill`, the item ->
+(skill, level) map the requirement-model unification built.
 """
 
 from collections.abc import Sequence

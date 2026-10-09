@@ -1,52 +1,23 @@
-"""ALCHEMY — the eighth skill, and the one the orphan rule wrongly declined.
+"""ALCHEMY — the eighth skill, and the one the orphan rule once wrongly declined.
 
-The coverage matrix's cells-6-12 report flagged that no cell exercises the
-alchemy path, and recorded the reason it was thought not to need one: "alchemy
-could be routed (potions are utility equippables)". `decisions/root.
-_gear_nameable_skills` said the same thing in its own docstring and
-`_orphan_skill_roots` acted on it, refusing alchemy a standalone root because a
-gear target could supposedly name it.
+No gear target can name alchemy: `objective._gear_candidates_by_type` — the
+ONLY builder of the gear sheet `classify_target` reads `blocking_skill` off —
+skips `stats.type_ == "utility"` outright, and alchemy's 25 recipes are 20
+`utility` potions and 5 `consumable`s. A gear target named alchemy in 0 of the
+committed scenarios.
 
-IT COULD NOT. Measured on the committed bundle before the fix: a gear target
-named alchemy in **0 of the 42 scenarios**, and structurally could never name
-it. `objective._gear_candidates_by_type` — the ONLY builder of the gear sheet
-`classify_target` reads `blocking_skill` off — skips `stats.type_ ==
-"utility"` outright, because the utility slots are served by
-`objective.utility_potion_targets` rather than by the gear sheet. Alchemy's
-catalogue is 25 recipes: 20 `utility` (refused by that skip) and 5 `consumable`
-(mapped to no slot at all). So the nameability claim was a restatement of
-`ITEM_TYPE_TO_SLOTS` that had drifted from the code it claimed to describe, and
-alchemy was as orphaned as cooking was before `b39705eb` — with the orphan rule
-declining it on the strength of the drift.
-
-The fix is one function: `_gear_nameable_skills` now asks
-`_gear_candidates_by_type` instead of restating its rule. The O1 census's routed
-count moves **194 -> 236 of 336 cells, 7 of 8 skills -> 8 of 8**; PASS (330),
-walled (6) and every residual (0) are unchanged, because routing decides only
-which cells the `o1_silent_stall` arm can REACH, never whether a rung is open.
-
-NO 43rd SCENARIO, AND THAT IS THE DESIGN'S OWN RULE. The matrix design's §5.4
-"what this deliberately does NOT cover" already answers "a cell per skill (8x)":
-"the O1 census already sweeps [scenarios] x 8 cells for rung openness ... adding
-skill cells would duplicate it." Cell 12 exists for its D11 x D4 PAIR (a cooking
-rung fed by a fishing gather), not because cooking is a skill. Alchemy needs no
-pair a scenario does not already carry: with the fix it is the HEAD of the
-orphan list in 31 of the 42 committed scenarios, `l15_midband` among them. A
-43rd character would exercise nothing the corpus does not already reach — which
-is the decorative cell this epic exists to refuse. This module is the witness
-instead: it names the branch, shows it reached on a committed scenario, and
-flips the dimension.
+So alchemy reaches a standalone climb only through `_orphan_skill_roots`, and
+since USER 2026-10-08 ("Only when demanded") only when the goal-action DAG
+demands it: a root on offer whose closure bottoms out in an alchemy-gated leaf.
+This module names the branch, shows it reached on a committed scenario with
+real demand, and shows the climb plans a grind.
 """
-
-import dataclasses
-import json
-from pathlib import Path
 
 import pytest
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
-from artifactsmmo_cli.ai.decisions.root import _gear_nameable_skills, _orphan_skill_roots
+from artifactsmmo_cli.ai.decisions.root import _orphan_skill_roots
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
@@ -60,8 +31,6 @@ from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
 from artifactsmmo_cli.audit.grind_cycle_census import earned_skill
 from artifactsmmo_cli.audit.open_rung_completeness import census_state, routed_skills
 
-BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
-
 SKILL = "alchemy"
 CELL = "l15_midband"
 """The committed scenario this module witnesses on: level 15, alchemy 6 — the
@@ -74,14 +43,12 @@ PLAN_BUDGET_SECONDS = 5.0
 
 _OFFERED = [ObtainItem(code=code, quantity=1) for code in
            ("nettle_leaf", "small_pearls", "birch_wood", "steel_bar")]
-"""THE THIRD CONJUNCT'S demand, one item per gathering skill, each gated
+"""The DEMAND, one item per gathering skill, each gated
 (`RequirementGraph.gather_skill`) ABOVE `l15_midband`'s own level for that
 skill (alchemy 6, fishing 10, woodcutting 12, mining 12): `nettle_leaf`
 (alchemy@20), `small_pearls` (fishing@20), `birch_wood` (woodcutting@20), and
-`steel_bar` (mining@20, via its `coal` ingredient). Without this, `offered=[]`
-would leave every gathering skill silent and this module's whole finding —
-that alchemy joins cooking, fishing, mining and woodcutting as an orphan —
-would be untestable through `_orphan_skill_roots` directly."""
+`steel_bar` (mining@20, via its `coal` ingredient). Without it nothing asks
+for alchemy and `_orphan_skill_roots` offers it nothing."""
 
 
 @pytest.fixture
@@ -116,16 +83,6 @@ def test_alchemys_whole_catalogue_is_utility_or_consumable(
     assert not ITEM_TYPE_TO_SLOTS.get("consumable")
 
 
-def test_the_gear_sheet_never_offers_an_alchemy_item(
-        bundle_game_data: GameData) -> None:
-    """The other half: `_gear_candidates_by_type` is the only builder of the
-    items `classify_target` reads `blocking_skill` off, and it yields no
-    alchemy code at any level cap. Asserted through `_gear_nameable_skills`,
-    the production answer, so the two cannot be made to disagree."""
-    assert _gear_nameable_skills(bundle_game_data) == GEAR_NAMEABLE
-    assert SKILL not in _gear_nameable_skills(bundle_game_data)
-
-
 def test_no_scenario_produces_a_gear_target_that_names_alchemy(
         bundle_game_data: GameData) -> None:
     """The measurement, over the whole corpus: 0 of 42. This is what makes the
@@ -149,32 +106,16 @@ def test_no_scenario_produces_a_gear_target_that_names_alchemy(
 
 def test_alchemy_heads_the_orphan_list_for_this_cell(
         bundle_game_data: GameData, state: WorldState) -> None:
-    """THE BRANCH: `_orphan_skill_roots` — the restored standalone producer —
-    emits `ReachSkillLevel(alchemy, C+1)`, and emits it FIRST.
-
-    First because the group's one ordering integer is `skill level - character
-    level` and alchemy at 6 trails a level-15 character further than any other
-    skill this scenario carries. That is the same rule cooking, fishing, mining
-    and woodcutting are ordered by; alchemy joins the group, it does not get a
-    seat beside it.
-
-    THE THIRD CONJUNCT: alchemy, fishing, mining and woodcutting are gathering
-    skills and need `_OFFERED`'s demand to clear the gate at all (see its own
-    docstring) — cooking is the only one of the five admitted unconditionally.
-    Not C+1 either: a demanded skill emits the level `_OFFERED`'s closure
-    asked for, 20 here for all four (`test_orphan_skill_roots_demand.
-    test_an_admitted_skill_emits_the_demanded_level` pins why).
-
-    THE CRAFT-DEMAND GATE (2026-09-13) added the three gear-nameable skills:
-    conjunct 1 now drops one only when a root on offer DEMANDS it, and
-    `_OFFERED`'s closure demands none of them here. They sort by the same one
-    integer everything else does — alchemy still heads the list, which is what
-    this test is about."""
+    """THE BRANCH: `_orphan_skill_roots` emits `ReachSkillLevel(alchemy, 20)`
+    — the level `_OFFERED`'s closure asks for, not `C+1` — and emits it FIRST:
+    the group's one ordering integer is `skill level - character level`, and
+    alchemy at 6 trails this level-15 character furthest. Only the demanded
+    skills appear (USER 2026-10-08, "Only when demanded")."""
     orphans = _orphan_skill_roots(state, bundle_game_data, _OFFERED, NO_PROFILE_CONTEXT)
     assert orphans[0] == ReachSkillLevel(skill=SKILL, level=20)
-    assert [goal.skill for goal in orphans] == [
-        SKILL, "jewelrycrafting", "cooking", "fishing", "gearcrafting",
-        "weaponcrafting", "mining", "woodcutting"]
+    assert [goal.skill for goal in orphans] == [SKILL, "fishing", "mining", "woodcutting"]
+    assert all(goal.skill != SKILL for goal in _orphan_skill_roots(
+        state, bundle_game_data, [], NO_PROFILE_CONTEXT))
 
 
 def test_the_alchemy_rung_is_open_and_is_a_potion(
@@ -208,89 +149,14 @@ def test_the_alchemy_root_plans_a_grind_cycle(
     assert plan and earned_skill(plan[-1], bundle_game_data) == SKILL, plan
 
 
-# --- flipping the dimension -------------------------------------------------
-
-def test_a_real_alchemy_EQUIPPABLE_no_longer_takes_the_root_away(
-        bundle_game_data: GameData) -> None:
-    """THE PREMISE THIS TEST WAS BUILT ON WAS RETIRED ON 2026-09-13, and the
-    test is kept — inverted — because the retirement is the point.
-
-    It used to read: the rule is "a skill NO gear target can name deserves a
-    root", so retyping one alchemy recipe from `utility` to `ring` makes alchemy
-    genuinely nameable and the orphan rule must decline it. It did.
-
-    Conjunct 1 no longer asks whether a gear target COULD name the skill; it
-    asks whether a root on offer actually DEMANDS it (`craft_demand`). Being
-    nameable in the abstract turned out to mean nothing on its own — live Robby
-    2026-09-13 sat at weaponcrafting 11 against level 30, the widest gap on him,
-    excluded as gear-nameable while every one of his gear roots resolved to
-    `nodes=0, plan_len=0` and the measured craft demand was `{}`. Two days at 0
-    character XP.
-
-    So the flip still makes alchemy nameable — asserted below, and that half is
-    unchanged — but the orphan root SURVIVES it, because `_OFFERED` still
-    demands no alchemy. The demand half is pinned by
-    `test_orphan_gear_skill_admission.test_dropped_when_a_root_does_demand_it`,
-    which is where "something asks for it, so the seam owns the climb" is now
-    tested.
-
-    Still fails if anyone deletes the `stats.type_ == "utility"` skip in
-    `_gear_candidates_by_type` — the `_gear_nameable_skills` assertion below is
-    unchanged and still carries that."""
-    flipped = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
-    flipped.all_item_stats[RUNG] = dataclasses.replace(
-        flipped.all_item_stats[RUNG], type_="ring")
-    assert SKILL in _gear_nameable_skills(flipped)
-
-    before = _orphan_skill_roots(
-        scenario_state(SCENARIOS[CELL], bundle_game_data), bundle_game_data,
-        _OFFERED, NO_PROFILE_CONTEXT)
-    after = _orphan_skill_roots(
-        scenario_state(SCENARIOS[CELL], flipped), flipped,
-        _OFFERED, NO_PROFILE_CONTEXT)
-    assert [goal.skill for goal in before] == [
-        SKILL, "jewelrycrafting", "cooking", "fishing", "gearcrafting",
-        "weaponcrafting", "mining", "woodcutting"]
-    # IDENTICAL to `before`: nameability alone no longer removes anything.
-    assert [goal.skill for goal in after] == [goal.skill for goal in before]
-
-
-def test_every_scenario_now_routes_alchemy(bundle_game_data: GameData) -> None:
-    """THE FIX AS A NUMBER, and the eighth skill closed — AS OF THE
-    NAMEABILITY FIX. All eight skills were routed once `_gear_nameable_skills`
-    stopped restating the gear sheet's candidate rule: the O1 census's routed
-    count moved 194 -> 236 of 336 cells, and 7 of 8 skills -> 8 of 8. `routed`
-    widened the reach of the `o1_silent_stall` residual and nothing else,
-    which is why PASS, walled and all three residual counts were unchanged by
-    that commit.
-
-    THE GATHERING-DEMAND GATE THEN NARROWED IT AGAIN, and that narrowing is
-    not a regression of this fix — it is a SEPARATE, later one
-    (`decisions/root._orphan_skill_roots`'s third conjunct,
-    `gather_demand.gather_demand`), and this module is not where it is pinned
-    (`test_open_rung_completeness.test_the_routing_breakdown_scopes_the_
-    residual` is). What stays true here: `_orphan_skill_roots` still admits
-    alchemy the moment something demands it —
-    `test_alchemy_heads_the_orphan_list_for_this_cell` above proves exactly
-    that, with real demand supplied. What no longer holds is that
-    `resolve_root`'s NATURAL walk (no demand injected) routes alchemy in
-    every scenario: measured on the committed 44, it is 0 — no scenario's gear
-    siblings, trunk, or CANDIDATE ORPHAN currently demand alchemy above the
-    floor. `routed` below is therefore the pre-gate three, plus cooking (the
-    unconditional floor), plus FISHING — which the two-pass demand fix put
-    back for the 4 scenarios whose cooking rung needs a fish they cannot
-    catch (`cooking -> cooked_shrimp -> shrimp -> fishing@N`). Cooking is
-    itself an orphan and `resolve_root` builds `offered` BEFORE
-    `_orphan_skill_roots` runs, so a one-pass demand could not see that chain
-    at all; `_orphan_skill_roots` now decides its candidates on conjuncts 1
-    and 2 and lets THEM seed demand as well. ALCHEMY is untouched by that
-    fix, and the per-cell `SKILL not in cell` assertion below is what says
-    so: no candidate orphan's closure bottoms out in an alchemy-gated leaf
-    either."""
+def test_no_scenario_routes_alchemy_without_demand(bundle_game_data: GameData) -> None:
+    """`resolve_root`'s natural walk (no demand injected) routes only the three
+    gear-crafting skills the tier walk names: no committed scenario's roots
+    demand alchemy, so no scenario offers it a climb (USER 2026-10-08)."""
     routed: set[str] = set()
     for scenario in SCENARIOS.values():
         cell = routed_skills(census_state(scenario, bundle_game_data),
                              bundle_game_data)
         assert SKILL not in cell, scenario.name
         routed |= cell
-    assert routed == GEAR_NAMEABLE | {"cooking", "fishing"}
+    assert routed == GEAR_NAMEABLE

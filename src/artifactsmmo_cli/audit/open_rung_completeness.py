@@ -95,7 +95,10 @@ woodcutting), and 194 -> 236 when `_gear_nameable_skills` stopped restating
 `objective._gear_candidates_by_type`'s candidate rule and started asking it —
 the restatement had drifted, claiming alchemy's `utility` potions made it
 gear-nameable when the sheet builder skips `utility` outright, so the orphan
-rule declined the one skill it was written for. The ten real walls this census
+rule declined the one skill it was written for. Since USER 2026-10-08 ("Only
+when demanded") the orphan root is offered only for a skill the goal-action DAG
+demands; no committed scenario demands one, so the routed set is back to the
+three skills the tier walk names (26 cells, `OPEN_RUNG_MATRIX.md`). The ten real walls this census
 finds (weaponcrafting 35, 40 and 42, the epic's own L38-48 territory, and
 gearcrafting 42 in the four l48 scenarios) sit outside the residual's reach
 today. The other 100 cells are still swept, still

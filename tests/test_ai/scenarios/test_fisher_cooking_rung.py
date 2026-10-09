@@ -20,13 +20,10 @@ it: a skill no gear target can name needed a producer of its own, which is what
 `ef67c1d6` deleted ("skills are pure prerequisites now") and what
 `decisions.root._orphan_skill_roots` restores.
 
-Cooking, fishing, mining and woodcutting became routable here. ALCHEMY did not,
-and this module's original text said that was correct — "its potions are
-`utility` equippables, so it really is a prerequisite skill". That was WRONG,
-and `tests/test_ai/scenarios/test_alchemy_rung.py` is the correction: the gear
-sheet (`objective._gear_candidates_by_type`) skips `utility` outright, so a
-gear target named alchemy in 0 of the 42 scenarios and could never name it. All
-eight skills are routed now.
+Since USER 2026-10-08 ("Only when demanded") that producer offers a climb only
+for a skill the goal-action DAG demands: cooking rises when the fleet floor's
+tier food (`ctx.supply_shortfall`) needs a cooking level the character lacks,
+not before.
 
 What the cell DOES close is the D11 value: a cooking rung, walked. `fisher` is
 a declared role (`role_catalog`: gather `fishing`, craft `cooking`), and the
@@ -44,7 +41,6 @@ import pytest
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
-from artifactsmmo_cli.ai.decisions.root import _gear_nameable_skills
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
@@ -189,9 +185,7 @@ def test_cooking_cannot_be_routed_by_any_GEAR_TARGET(
     for a skill nothing equips.
 
     Stated over the catalogue rather than over this one character, so it is a
-    claim about the game and not about a fixture — and it fails the day a
-    cooking-crafted equippable exists, which is exactly when cooking would stop
-    being an orphan and `_orphan_skill_roots` would stop admitting it."""
+    claim about the game and not about a fixture."""
     cooking_items = [code for code, stats
                      in bundle_game_data.all_item_stats.items()
                      if stats.crafting_skill == SKILL]
@@ -199,84 +193,21 @@ def test_cooking_cannot_be_routed_by_any_GEAR_TARGET(
     for code in cooking_items:
         stats = bundle_game_data.all_item_stats[code]
         assert not ITEM_TYPE_TO_SLOTS.get(stats.type_), code
-    assert SKILL not in _gear_nameable_skills(bundle_game_data)
 
 
-def test_every_scenario_now_routes_cooking(bundle_game_data: GameData) -> None:
-    """THE REGRESSION FIX, AS A NUMBER. This test used to read
-    `assert routed == {"jewelrycrafting", "gearcrafting", "weaponcrafting"}` —
-    the honest record that no scenario could route cooking, fishing, mining or
-    woodcutting, because the ONE producer of a `ReachSkillLevel` was a gear
-    target's crafting skill.
-
-    `decisions/root._orphan_skill_roots` restores the standalone producer for
-    the skills no gear target can name, so all four were routed. The O1
-    census's routed count moved 26 -> 194 of 336 cells with that change;
-    residuals stayed at 0 because the rule's second conjunct is
-    `skill_is_grindable(S, C+1)`, the same predicate the census verdicts a
-    cell on.
-
-    This test also used to end `assert "alchemy" not in routed`, on the claim
-    that alchemy's utility potions make it gear-nameable. They do not — see
-    `test_alchemy_rung.py` — and fixing `_gear_nameable_skills` moved the count
-    again, 194 -> 236 and 7 skills -> 8.
-
-    THE GATHERING-DEMAND GATE (`decisions/root._orphan_skill_roots`'s third
-    conjunct, `gather_demand.gather_demand`) then narrowed this AGAIN, and
-    that narrowing is this test's whole point now rather than something it
-    happens to have to accommodate: fishing, mining and woodcutting are
-    gathering skills, so `resolve_root`'s NATURAL walk (no demand injected)
-    routes them only when some root on offer actually needs one. COOKING
-    gathers nothing, is therefore never gated, and is routed unconditionally
-    — which is exactly what makes it the anti-`Wait` floor
-    `decisions/root.py`'s docstring names.
-
-    THEN THE GATE WENT TWO-PASS, and this cell is the one that had the most
-    to say about why. The claim above used to end "measured on the committed
-    44, none of them do", which was an artefact of WHERE demand was read
-    from: `resolve_root` passes `_orphan_skill_roots` its `offered` list —
-    the gear siblings and the trunk — built BEFORE the orphan group exists,
-    so no orphan could justify another orphan. Cooking IS an orphan, and
-    `cooking -> cooked_shrimp -> shrimp -> fishing@N` is the chain this whole
-    module is named for. `cooked_shrimp` is a `consumable`, so it is
-    ineligible for the gear sheet and for the combat deficit, and it is the
-    only item in the 522-item bundle that names fishing above level 1: no
-    gear root can EVER demand fishing, which is why the one-pass gate did not
-    narrow fishing so much as delete it. `_orphan_skill_roots` now decides
-    its candidate set on conjuncts 1 and 2 and lets the CANDIDATES seed
-    demand alongside `offered`.
-
-    So the two halves below are no longer the same assertion. Mining and
-    woodcutting stay absent — nothing, orphan or otherwise, asks for them —
-    and that is still the R2D2/Robby result this gate exists for. Fishing is
-    present, but only in the cells whose cooking rung genuinely cannot be
-    served without it, and never on its own: `_seed`'s recursion guard means
-    a gathering-skill root seeds nothing, so a fishing root can never
-    manufacture its own demand. The cooking-implication assertion is what
-    pins that — drop the third conjunct entirely and fishing would appear in
-    all 44, cooking-demanded or not. The exact routed set is pinned where it
-    belongs — `test_open_rung_completeness.
-    test_the_routing_breakdown_scopes_the_residual`."""
+def test_no_scenario_routes_cooking_or_fishing_undemanded(bundle_game_data: GameData) -> None:
+    """USER 2026-10-08, "Only when demanded". Cooking used to be routed in every
+    scenario as the unconditional floor, and its grind target pulled fishing in
+    (`cooking -> cooked_shrimp -> shrimp -> fishing@N`): live, four characters
+    spent ~100 cycles each on `Gather(trout_spot)` with nothing asking for a
+    fish. `resolve_root`'s natural walk (no tier food short) now routes neither,
+    nor any other gathering skill. The demanded half is pinned in
+    `test_orphan_gate_scenarios.TestTierFoodDemandsFishing` and
+    `test_decisions_root.test_cooking_climbs_when_a_better_tier_food_is_due`."""
     routed: set[str] = set()
-    fishing_cells: set[str] = set()
-    cooking_cells: set[str] = set()
     for scenario in SCENARIOS.values():
-        cell = routed_skills(census_state(scenario, bundle_game_data),
-                             bundle_game_data)
-        routed |= cell
-        if "fishing" in cell:
-            fishing_cells.add(scenario.name)
-        if SKILL in cell:
-            cooking_cells.add(scenario.name)
-    assert SKILL in routed
-    # Cooking is the unconditional floor: every scenario, no exceptions.
-    assert cooking_cells == set(SCENARIOS)
-    # Nothing demands mining or woodcutting, so the gate still declines them.
-    assert routed.isdisjoint({"mining", "woodcutting"})
-    # Fishing is back, and ONLY through cooking — a strict, non-empty subset.
-    assert fishing_cells and fishing_cells < cooking_cells
-    assert fishing_cells == {"l11_band_floor", "l19_band_edge",
-                             "l21_grey_material_grind", "l22_grey_rung_grind"}
+        routed |= routed_skills(census_state(scenario, bundle_game_data), bundle_game_data)
+    assert routed.isdisjoint({SKILL, GATHER_SKILL, "mining", "woodcutting", "alchemy"})
 
 
 def test_the_fishers_cooking_root_plans_a_cooking_grind(

@@ -463,41 +463,26 @@ def test_the_routing_breakdown_scopes_the_residual(
       scenarios where nothing names them route too. Verdicts unchanged:
       `o1_silent_stall` and `o1_unexplained` both stay 0.
 
-    The scope line still matters — 178 cells remain unrouted — but it now
-    means something different: an unrouted gathering skill is no longer a
-    census blind spot, it is the gate correctly declining to send a character
-    to grind a skill nothing needs.
+    * 170 -> 26 of 352 cells, 5 -> 3 skills, when USER 2026-10-08 ruled
+      "Only when demanded": a standalone climb is offered only for a skill the
+      goal-action DAG demands. Cooking stopped being the unconditional floor
+      (its grind target had pulled fishing in: live, four characters ~100
+      cycles each on `Gather(trout_spot)` with nothing asking for a fish), and
+      an undemanded gear-nameable skill no longer gets a climb. No committed
+      scenario's natural walk demands a skill no root already climbs, so only
+      the three skills the tier walk itself names stay routed. PASS, walled
+      and every residual unchanged — no cell changed VERDICT.
+
+    An unrouted skill is not a census blind spot: it is the gate correctly
+    declining to send a character to grind a skill nothing needs.
     """
     line = orc.routing_breakdown(results)
     routed_skills = {r.skill for r in results if r.routed}
-    assert routed_skills == {"cooking", "fishing", "gearcrafting",
-                             "jewelrycrafting", "weaponcrafting"}
+    assert routed_skills == {"gearcrafting", "jewelrycrafting", "weaponcrafting"}
     assert f"{len(routed_skills)} of {len(SKILL_NAMES)} skills" in line
     assert f"{sum(1 for r in results if r.routed)} of {len(results)} cells" in line
-    # Ordered by cell count, so the reader sees the widest arm first. The three
-    # 44-cell arms tie since 2026-09-13 (every scenario routes cooking,
-    # gearcrafting and jewelrycrafting), so the pin is on the COUNTS and on the
-    # arms that do not tie — asserting a fixed order among equals would pin a
-    # tiebreak this line never promised.
-    counts = {skill: sum(1 for r in results if r.routed and r.skill == skill)
-              for skill in routed_skills}
-    assert [line.index(s) for s in sorted(routed_skills, key=lambda k: line.index(k))] == \
-        sorted(line.index(s) for s in routed_skills)
-    ordered = sorted(routed_skills, key=lambda k: line.index(k))
-    assert [counts[k] for k in ordered] == sorted(counts.values(), reverse=True)
-    assert line.index("weaponcrafting") < line.index("fishing")
-    # Fishing is routed ONLY where cooking is — its sole demand route. A cell
-    # that routes fishing with no cooking rung open would mean some other
-    # producer started naming it, which is the thing the gate is for.
-    by_cell: dict[str, set[str]] = {}
-    for r in results:
-        if r.routed:
-            by_cell.setdefault(r.scenario, set()).add(r.skill)
-    fishing_cells = {name for name, skills in by_cell.items()
-                     if "fishing" in skills}
-    assert fishing_cells == {"l11_band_floor", "l19_band_edge",
-                             "l21_grey_material_grind", "l22_grey_rung_grind"}
-    assert all("cooking" in by_cell[name] for name in fishing_cells)
+    # Ordered by cell count, so the reader sees the widest arm first.
+    assert line.index("jewelrycrafting") < line.index("gearcrafting") < line.index("weaponcrafting")
 
 
 def test_the_committed_matrix_is_the_current_answer(

@@ -1,29 +1,23 @@
-"""The craft-demand gate on `_orphan_skill_roots`' FIRST conjunct.
+"""`_orphan_skill_roots` admits a skill ONLY WHEN THE DAG DEMANDS IT.
 
-Conjunct 1 drops every gear-nameable skill (gearcrafting, weaponcrafting,
-jewelrycrafting) on the grounds that a gear root naming one drives it through
-the ordinary prerequisite seam. That holds while some gear root is plannable and
-fails silently when none is — the skill is then excluded on the strength of a
-mechanism with nothing to say about it.
+USER 2026-10-08, "Only when demanded": "a skill climbs only when the
+goal-action DAG demands it (gear, the consumable floor's tier food, a task).
+Cooking rises when a better tier food is due, not before."
 
-Live Robby 2026-09-13: weaponcrafting 11 against character level 30, a gap of
--19 (twice the runner-up), an OPEN rung whose next step was two chicken fights,
-and all five gear roots at `nodes=0, plan_len=0`. Measured craft demand across
-every root on offer: `{}`. He ground cooking — a 55-porkchop rung, 9 levels
-behind — for two days at 0 character XP.
-
-The conjunct now ASKS instead of assuming: a gear-nameable skill is admitted
-only when no root on offer demands it. Note the polarity is the MIRROR of the
-gathering conjunct: a gathering skill needs demand to be admitted, a
-gear-nameable skill needs the ABSENCE of demand, because demand means something
-else already owns the climb.
+This replaced a rule that admitted a gear-nameable skill when nothing demanded
+it (live Robby 2026-09-13, weaponcrafting 19 behind) and cooking
+unconditionally. Live 2026-10-08 the unconditional cooking climb pulled fishing
+in through its grind target: four characters ~100 cycles each on
+`Gather(trout_spot)` with nothing asking for a fish.
 """
 
+from dataclasses import replace
+
 from artifactsmmo_cli.ai.craft_demand import craft_demand
-from artifactsmmo_cli.ai.decisions.root import _gear_nameable_skills, _orphan_skill_roots
+from artifactsmmo_cli.ai.decisions.root import _orphan_skill_roots
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_gather_demand import _gd as _gather_gd
 
@@ -36,8 +30,7 @@ def _gd() -> GameData:
     `iron_bar` <- `iron_ore` <- `iron_rocks`@mining10 — so a character at
     weaponcrafting 11 with mining past the gate has an in-level rung for the
     first and an out-of-reach gate on the second. `cooked_shrimp` gives
-    cooking an in-level rung off a fished `shrimp` — the real game shape, and
-    cooking's live role as the group's floor."""
+    cooking an in-level rung off a fished `shrimp` — the real game shape."""
     gd = _gather_gd()
     gd._item_stats = dict(gd._item_stats)
     gd._item_stats.update({
@@ -64,6 +57,15 @@ def _gd() -> GameData:
     return gd
 
 
+def _gd_with_trout() -> GameData:
+    """`_gd` plus `cooked_trout`, a cooking-25 food off the same shrimp."""
+    gd = _gd()
+    gd._item_stats["cooked_trout"] = ItemStats(code="cooked_trout", level=25, type_="consumable",
+                                               crafting_skill="cooking", crafting_level=25)
+    gd._crafting_recipes["cooked_trout"] = {"shrimp": 2}
+    return gd
+
+
 def _state():
     """Robby's shape, minimised: weaponcrafting far behind the character with an
     in-level rung, cooking nearer with one too, mining past its gate."""
@@ -72,54 +74,60 @@ def _state():
                               "mining": 25, "fishing": 25})
 
 
-def _skills(state, gd, offered):
-    return [g.skill for g in _orphan_skill_roots(state, gd, offered, NO_PROFILE_CONTEXT)]
+def _skills(state, gd, offered, ctx=NO_PROFILE_CONTEXT):
+    return [g.skill for g in _orphan_skill_roots(state, gd, offered, ctx)]
 
 
-class TestGearNameableSkillAdmittedWhenUndemanded:
-    def test_weaponcrafting_is_gear_nameable(self):
-        """Vacuity guard. If weaponcrafting stopped being gear-nameable the
-        tests below would pass for the wrong reason — they would be measuring a
-        skill conjunct 1 never excluded in the first place."""
-        assert "weaponcrafting" in _gear_nameable_skills(_gd())
-
-    def test_admitted_when_no_root_demands_it(self):
-        """Robby's shape: nothing on offer names a craft skill, so the seam that
-        owes weaponcrafting its climb has nothing to say and the orphan group
-        must offer one."""
+class TestOnlyWhenDemanded:
+    def test_an_undemanded_skill_gets_no_climb(self):
+        """Robby's shape: weaponcrafting 19 behind with an open rung, cooking
+        with one too, and nothing on offer naming either. No climb."""
         gd = _gd()
         state = _state()
         offered = [ReachCharLevel(level=40)]
         assert craft_demand(offered, state, gd, NO_PROFILE_CONTEXT) == {}
-        assert "weaponcrafting" in _skills(state, gd, offered)
+        assert _skills(state, gd, offered) == []
 
-    def test_it_sorts_ahead_of_the_cooking_floor(self):
-        """ORDER is unchanged — one integer, `skill level - character level`,
-        furthest behind first. weaponcrafting at -19 simply beats cooking at -9
-        once it is in the list at all. This is the assertion that was false
-        while the skill was excluded before the sort ever ran."""
-        gd = _gd()
-        state = _state()
-        order = _skills(state, gd, [ReachCharLevel(level=40)])
-        assert order.index("weaponcrafting") < order.index("cooking")
-
-    def test_dropped_when_a_root_does_demand_it(self):
-        """The behaviour conjunct 1 exists for, preserved. A gear root asking
-        for weaponcrafting 25 drives the climb through the prerequisite seam, so
-        a rival standalone root would be the churn the conjunct prevents."""
+    def test_a_demanded_skill_climbs_to_the_level_asked_for(self):
         gd = _gd()
         state = _state()
         offered = [ObtainItem(code="steel_sword", quantity=1)]
         assert craft_demand(offered, state, gd, NO_PROFILE_CONTEXT) == {"weaponcrafting": 25}
-        assert "weaponcrafting" not in _skills(state, gd, offered)
+        assert _orphan_skill_roots(state, gd, offered, NO_PROFILE_CONTEXT) == (
+            ReachSkillLevel(skill="weaponcrafting", level=25),)
 
-    def test_a_met_demand_does_not_suppress_it(self):
-        """Demand is UNMET demand. A gear root naming weaponcrafting at a level
-        already reached is not driving any climb, so it must not suppress one."""
+    def test_a_met_demand_is_no_demand(self):
         gd = _gd()
         state = make_state(level=30,
                            skills={"weaponcrafting": 25, "cooking": 21,
                                    "mining": 25, "fishing": 25})
         offered = [ObtainItem(code="steel_sword", quantity=1)]
         assert craft_demand(offered, state, gd, NO_PROFILE_CONTEXT) == {}
-        assert "weaponcrafting" in _skills(state, gd, offered)
+        assert _skills(state, gd, offered) == []
+
+    def test_a_skill_a_root_already_climbs_is_left_to_it(self):
+        gd = _gd()
+        state = _state()
+        offered = [ObtainItem(code="steel_sword", quantity=1),
+                   ReachSkillLevel(skill="weaponcrafting", level=12)]
+        assert _skills(state, gd, offered) == []
+
+    def test_the_consumable_floor_demands_its_tier_food(self):
+        """Cooking rises when a better tier food is due: the fleet shortfall
+        of `cooked_trout` (cooking 25) is DAG demand. The climb's rung is the
+        in-level `cooked_shrimp` (cooking 21)."""
+        gd = _gd_with_trout()
+        state = _state()
+        assert _skills(state, gd, []) == []
+        ctx = replace(NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_trout", 10),))
+        assert _orphan_skill_roots(state, gd, [], ctx) == (
+            ReachSkillLevel(skill="cooking", level=25),)
+
+    def test_furthest_behind_first(self):
+        """ORDER: one integer, `skill level - character level`. weaponcrafting
+        at -19 ahead of cooking at -9."""
+        gd = _gd_with_trout()
+        state = _state()
+        ctx = replace(NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_trout", 10),))
+        offered = [ObtainItem(code="steel_sword", quantity=1)]
+        assert _skills(state, gd, offered, ctx) == ["weaponcrafting", "cooking"]

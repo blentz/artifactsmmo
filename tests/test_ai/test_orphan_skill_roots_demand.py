@@ -1,14 +1,12 @@
-"""The gathering-skill demand gate on `_orphan_skill_roots`.
+"""Gathering-skill demand on `_orphan_skill_roots`.
 
-`_orphan_skill_roots` offers a "grind this skill" root for every skill no
-gear item can name, which admits every gathering skill whether or not
-anything wants it — two live characters ground fishing ~617 cycles each for 0
-character XP while neither needed a fish. This is the THIRD CONJUNCT: a
-gathering skill (`gather_demand.gathering_skills`) is admitted only when
-`gather_demand` names it as UNMET demand from the roots already on offer.
+A gathering skill is admitted only when `gather_demand` names it as UNMET
+demand from the roots on offer — two live characters once ground fishing ~617
+cycles each for 0 character XP while neither needed a fish. Since 2026-10-08
+("Only when demanded") the same holds for EVERY skill, cooking included.
 """
 
-from artifactsmmo_cli.ai.decisions.root import _gear_nameable_skills, _orphan_skill_roots
+from artifactsmmo_cli.ai.decisions.root import _orphan_skill_roots
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.gather_demand import gather_demand
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
@@ -30,26 +28,14 @@ def _orphan_demand(state, gd, offered):
 
 class TestGatheringSkillNeedsDemand:
     def test_dropped_when_nothing_demands_it(self):
-        """R2D2's shape: mining is past every gate anything asks for.
-
-        CONTROLLER RULING 3: the brief's own vacuity guard here
-        (`assert "mining" in _skills(state, gd, [])`) asserts the gate is
-        OFF — with the third conjunct in place, an empty `offered` is always
-        empty demand, so that line can never hold once this task is done. The
-        two conjuncts it stood in for are asserted directly instead, so this
-        test still fails if either conjunct 1 or conjunct 2 is what actually
-        removed mining, and not just the new one.
-        """
+        """R2D2's shape: mining is past every gate anything asks for."""
         gd = _gd()
         state = make_state(level=20, skills={"mining": 10, "cooking": 1})
-        # Vacuity guard, conjunct 1: no gear target can name mining in this
-        # catalogue.
-        assert "mining" not in _gear_nameable_skills(gd)
-        # Vacuity guard, conjunct 2: mining has a genuinely open, XP-positive
+        # Vacuity guard: mining has a genuinely open, XP-positive
         # rung at 10->11 — `iron_rocks` gathers at mining@10, right at the
         # character's current level.
         assert skill_is_grindable("mining", 11, state, gd) is True
-        # THE THIRD CONJUNCT: nothing demands mining, so `gather_demand` is
+        # Nothing demands mining, so `gather_demand` is
         # silent for it even with a root on offer (`iron_boots` needs
         # gearcrafting, not mining, at this character's level).
         assert _orphan_demand(state, gd, [_BOOTS]) == {}
@@ -57,10 +43,10 @@ class TestGatheringSkillNeedsDemand:
 
     def _gd_with_open_mining_floor(self):
         """`_gd()` plus a mining@1 gatherable, so `mining` at skill 1 has a
-        genuinely open rung (conjunct 2) — `_gd()`'s only mining content,
-        `iron_rocks`, gates at mining@10 and would leave conjunct 2 false at
-        skill 1, which would make the tests below pass even with the third
-        conjunct removed (the exact vacuity Ruling 3 warns against). The
+        genuinely open rung (the open-rung conjunct) — `_gd()`'s only mining content,
+        `iron_rocks`, gates at mining@10 and would leave the open-rung conjunct false at
+        skill 1, which would make the tests below pass even with the demand
+        check removed (the exact vacuity Ruling 3 warns against). The
         `_BOOTS` closure still bottoms out in `iron_ore`/mining@10 — untouched
         — so the DEMANDED level these tests check stays 10, not 1."""
         gd = _gd()
@@ -91,9 +77,9 @@ class TestGatheringSkillNeedsDemand:
         mining = next(g for g in roots if g.skill == "mining")
         assert mining.level == 10
 
-    def test_a_non_gathering_skill_is_never_gated(self):
-        """Cooking gathers nothing, so it never enters the conjunct and is the
-        anti-Wait floor. Admitted with an empty demand set."""
+    def test_an_undemanded_crafting_skill_is_not_admitted_either(self):
+        """USER 2026-10-08 "Only when demanded": cooking was the unconditional
+        floor; with an open rung and no demand it now gets no climb."""
         gd = _gd()
         # `gd._item_stats` delegates to the SAME `self.items.stats` dict
         # `all_item_stats` reads (`game_data.py`'s `_item_stats`/`all_item_stats`
@@ -104,7 +90,7 @@ class TestGatheringSkillNeedsDemand:
             crafting_skill="cooking", crafting_level=1)
         # `gudgeon` itself must be a real gatherable leaf (a fishing catch) at
         # a spawned spot, cooked at a known workshop, or `has_grind_target`'s
-        # obtainability walk refuses the recipe and cooking's conjunct-2 rung is
+        # obtainability walk refuses the recipe and cooking's rung is
         # never open — the SAME vacuity this module's other tests guard
         # against, just on the material side.
         gd._resource_drops_full["fishing_spot"] = [("gudgeon", 100, 1, 1)]
@@ -115,4 +101,4 @@ class TestGatheringSkillNeedsDemand:
         state = make_state(level=20, skills={"mining": 10, "cooking": 1})
         assert skill_is_grindable("cooking", 2, state, gd) is True
         assert _orphan_demand(state, gd, []) == {}
-        assert "cooking" in _skills(state, gd, [])
+        assert "cooking" not in _skills(state, gd, [])

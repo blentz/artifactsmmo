@@ -89,7 +89,7 @@ open — the dearest drop demand in the committed set is 6 — so a price that s
 does not move is one the item genuinely does not gate. A DETECTION grant, never
 a claim the character could get that many."""
 
-MIN_CELLS = 200
+MIN_CELLS = 165
 """Blindness floor on the grid, enforced by `gen_drop_wall.py --check` and not
 only by the suite.
 
@@ -108,8 +108,11 @@ whose gear siblings and trunk demand nothing from it, which is most of the 44
 test_the_routing_breakdown_scopes_the_residual` for the same shrink on the
 routing side. The TWO-PASS demand fix (the candidate orphans seed
 `gather_demand` too, so cooking's rung can ask for the fish it needs) put 4
-back: 251 today. 200 against 251: headroom to retire a scenario without
-flapping, far too tight for a collapsed sweep (44, one cell per scenario)."""
+back: 251. USER 2026-10-08 "Only when demanded" then removed every undemanded
+standalone skill root — the unconditional cooking climb and the undemanded
+gear-crafting climbs — leaving 208 (walls unchanged at 9). 165 against 208:
+headroom to retire a scenario without flapping, far too tight for a collapsed
+sweep (44, one cell per scenario)."""
 
 
 class DropGap(Enum):
