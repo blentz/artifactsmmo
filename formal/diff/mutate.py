@@ -5274,6 +5274,18 @@ CONSUMABLE_FLOOR_CORE_MUTATIONS = [
 # (2026-10-09 C3P0 spruce_plank Wait). Killed by tests/test_ai/test_strategy_driver.py.
 # The fight steps carry the cycle's loadout (USER 2026-10-10, "Fight steps prep
 # it"). Killed by tests/test_ai/test_strategy_driver.py.
+# A heal-prep carry is satisfied by the bag only (2026-10-10 fleet regression).
+CARRY_GOAL_MUTATIONS = [
+    ("carry: banked stock satisfies a carry again",
+     "        if self.carry:\n"
+     "            return all(state.inventory.get(mat, 0) >= qty for mat, qty in self._needed.items())\n",
+     ""),
+]
+CARRY_PREP_MUTATIONS = [
+    ("carry: heal prep emits a plain gather (bank satisfies it)",
+     "                return GatherMaterialsGoal(target_item=code, needed={code: target}, carry=True)\n",
+     "                return GatherMaterialsGoal(target_item=code, needed={code: target})\n"),
+]
 FIGHT_STEP_PREP_MUTATIONS = [
     ("fight steps: a loadout for another monster still preps",
      "    if monster is None or ctx.loadout is None or ctx.loadout.monster != monster:\n",
@@ -9940,6 +9952,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_failure_recovery_core.py", survivors)
     run_group(ACTION_BASE_SRC, ANY_REGION_MUTATIONS,
               "tests/test_ai/test_goals.py", survivors)
+    run_group(GATHERING_GOAL_SRC, CARRY_GOAL_MUTATIONS,
+              "tests/test_ai/test_strategy_driver.py", survivors)
+    run_group(GRIND_HEAL_PREP_SRC, CARRY_PREP_MUTATIONS,
+              "tests/test_ai/test_grind_heal_prep.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, FIGHT_STEP_PREP_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, PURSUE_BATCH_MUTATIONS,

@@ -189,8 +189,22 @@ WITNESS_BASELINE: dict[str, int] = {
     # dropped the step SILENTLY — no search, no decline, the character waited
     # out its turn (one cycle trace: 03:21-03:25Z, `intention_budget` at 100).
     # FIXED: the step that makes the task item is never deferred.
-    "WaitGoal": 1740,
-    "WaitAction": 1740,
+    # 2026-10-10, +230 (1740 -> 1970). R2D2 alone, 15:34-16:52 UTC on the
+    # 2dcd4583 fleet. That commit made a fight step return its loadout's heal
+    # prep, `GatherMaterials(cooked_rat_meat x20)`, ahead of the grind; but the
+    # fleet floor had BANKED the meat, and a gather goal counts banked stock,
+    # so the step was satisfied before it began: every Wait cycle's trace ends
+    # `decompose_decline SupplyBank(...) satisfied` then `wait_fallback`, with
+    # no ReachCharLevel goal tried (and no GrindCharacterXP cycle anywhere in
+    # the fleet since the restart). FIXED: the prep goal is a CARRY, satisfied
+    # by the bag only.
+    #
+    # Fleet still running at the raise, but R2D2's last Wait was 16:52 and its
+    # live state re-planned on the fix (17:00Z): `GatherMaterials(
+    # cooked_rat_meat, {cooked_rat_meat:20}, carry)` -> `[Withdraw(x12)]`. If a
+    # restart disagrees, this number is wrong and the alarm is right.
+    "WaitGoal": 1970,
+    "WaitAction": 1970,
 }
 
 #: form "unreachable: ..." is a DEFECT that is being tracked, not an excuse —

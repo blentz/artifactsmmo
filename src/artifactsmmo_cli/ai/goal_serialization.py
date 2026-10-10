@@ -31,7 +31,8 @@ def goal_from_dict(data: dict[str, object], game_data: GameData | None) -> Goal:
     if t == "GatherMaterialsGoal":
         return GatherMaterialsGoal(
             cast(str, data["target_item"]),
-            cast(dict[str, int], data["needed"]))
+            cast(dict[str, int], data["needed"]),
+            carry=cast(bool, data.get("carry", False)))
     if t == "CraftReliefGoal":
         return CraftReliefGoal(
             cast(str, data["target_item"]),

@@ -68,8 +68,16 @@ class GatherMaterialsGoal(Goal):
 
     def __init__(self, target_item: str, needed: dict[str, int],
                  skill_grind: bool = False,
-                 exclude_recycle: frozenset[str] = frozenset()) -> None:
+                 exclude_recycle: frozenset[str] = frozenset(),
+                 carry: bool = False) -> None:
         self._target_item = target_item
+        # carry: the goal is to HAVE the units IN THE BAG (heal prep: food a
+        # fight will eat), so banked copies do not satisfy it — the walk
+        # withdraws them. Without it a banked stock read as already satisfied
+        # and the arbiter skipped the step silently (live 2026-10-10: no
+        # GrindCharacterXP anywhere in the fleet, R2D2 230 Waits). Part of the
+        # goal's identity.
+        self.carry = carry
         self._needed = needed  # {material_code: quantity_needed}
         # exclude_recycle: item codes this goal must NEVER recycle-as-acquire.
         # Set by a skill-grind to the RUNG it crafts: recycling item T to source
@@ -670,6 +678,8 @@ class GatherMaterialsGoal(Goal):
         # {copper_ore: 10}) — one stray ore must not satisfy a request for
         # ten (trace 2026-06-11 18:10: the routed copper_ore goal was
         # silently skipped as satisfied all run; zero mining happened).
+        if self.carry:
+            return all(state.inventory.get(mat, 0) >= qty for mat, qty in self._needed.items())
         if (self._target_item not in self._needed
                 and state.inventory.get(self._target_item, 0)
                 + bank.get(self._target_item, 0) >= 1):
@@ -685,7 +695,8 @@ class GatherMaterialsGoal(Goal):
     def serialize(self) -> dict[str, object]:
         return {"type": "GatherMaterialsGoal",
                 "target_item": self._target_item,
-                "needed": dict(self._needed)}
+                "needed": dict(self._needed),
+                "carry": self.carry}
 
     def __repr__(self) -> str:
         # `needed` is part of the goal's IDENTITY: sticky commitment
@@ -696,4 +707,6 @@ class GatherMaterialsGoal(Goal):
         # pass then planned the 1-bar variant and the 5-bar objective
         # silently evaporated at 1/5 bars (trace 2026-06-11 18:46 cycle 15).
         needed = ",".join(f"{code}:{qty}" for code, qty in sorted(self._needed.items()))
+        if self.carry:
+            return f"GatherMaterials({self._target_item}, {{{needed}}}, carry)"
         return f"GatherMaterials({self._target_item}, {{{needed}}})"

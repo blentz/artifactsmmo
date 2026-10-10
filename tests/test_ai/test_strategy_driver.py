@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.goal_serialization import goal_from_dict as sd_goal_from_dict
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.cancel_orders import CancelOrdersGoal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
@@ -2344,3 +2345,24 @@ class TestFightStepsCarryTheirLoadout:
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: None)
         assert isinstance(objective_step_goal(ReachTaskOutcome("chicken"), state, _gd(), ctx),
                           TaskKillsGoal)
+
+
+class TestCarryGoal:
+    """A heal-prep carry is satisfied by the BAG only (live 2026-10-10: a
+    banked stock satisfied the prep, the arbiter skipped it, and no
+    GrindCharacterXP ran anywhere in the fleet)."""
+
+    GOAL = GatherMaterialsGoal(target_item="cooked_rat_meat", needed={"cooked_rat_meat": 20}, carry=True)
+
+    def test_banked_stock_does_not_satisfy_a_carry(self):
+        assert not self.GOAL.is_satisfied(make_state(bank_items={"cooked_rat_meat": 120}))
+        plain = GatherMaterialsGoal(target_item="cooked_rat_meat", needed={"cooked_rat_meat": 20})
+        assert plain.is_satisfied(make_state(bank_items={"cooked_rat_meat": 120}))
+
+    def test_the_bag_satisfies_it(self):
+        assert self.GOAL.is_satisfied(make_state(inventory={"cooked_rat_meat": 20}))
+
+    def test_carry_is_part_of_the_identity_and_survives_the_cache(self):
+        assert repr(self.GOAL) == "GatherMaterials(cooked_rat_meat, {cooked_rat_meat:20}, carry)"
+        back = sd_goal_from_dict(self.GOAL.serialize(), None)
+        assert isinstance(back, GatherMaterialsGoal) and back.carry and repr(back) == repr(self.GOAL)

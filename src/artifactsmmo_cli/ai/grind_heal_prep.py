@@ -58,7 +58,7 @@ def heal_prep_goal(state: WorldState, game_data: GameData, ctx: SelectionContext
         held = bag + (state.bank_items or {}).get(code, 0)
         for target in (carry, min(carry, held)):
             if target > bag and model.feasible(code, target, HEAL_PREP_POLICY):
-                return GatherMaterialsGoal(target_item=code, needed={code: target})
+                return GatherMaterialsGoal(target_item=code, needed={code: target}, carry=True)
     return None
 
 

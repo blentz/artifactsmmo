@@ -90,6 +90,7 @@ class TestHealPrepGoal:
         gd = _gd()
         goal = heal_prep_goal(_state(gd, {"milk": CARRY}), gd, EATS_CHEESE, "wolf")
         assert _needed(goal) == {"cheese": CARRY}
+        assert goal is not None and goal.carry  # satisfied by the BAG only (live 2026-10-10)
 
     def test_the_carry_scales_with_the_units_eaten_per_fight(self):
         gd = _gd()

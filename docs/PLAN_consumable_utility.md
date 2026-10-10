@@ -354,3 +354,16 @@ fought without food: 652 Rests against 13 eats. Now the trunk's
 (`ctx.loadout`, only when chosen against that monster). Live: R2D2
 `[Withdraw(cooked_rat_meat×20)]`, Lor `[Withdraw(cooked_rat_meat×40)]`.
 MAINTAIN_CONSUMABLES is now fully redundant (its retirement increment).
+
+### Regression of 2dcd4583: banked food satisfied the carry (fixed)
+
+Witness after the 15:08Z restart: no `GrindCharacterXP` cycle anywhere in the
+fleet for 1.8 h, fleet XP ~313, and R2D2 waited 230 cycles (15:34-16:52Z). The
+prep goal was a plain `GatherMaterials(cooked_rat_meat x20)`, and a gather goal
+counts banked stock — the floor had banked the meat, so the step was satisfied
+before it began and the arbiter (`arbitrate(..., is_satisfied=...)`) skipped
+it and fell through to Wait. The offline `plan` witness above did not catch
+it. Fix: `GatherMaterialsGoal(carry=True)` is satisfied by
+the BAG only (repr `..., carry)`, serialized); `heal_prep_goal` emits it. Live
+R2D2 re-planned: `GatherMaterials(cooked_rat_meat, {cooked_rat_meat:20}, carry)`
+→ `[Withdraw(cooked_rat_meat×12)]`. Wait baseline 1740 → 1970 with the cause.
