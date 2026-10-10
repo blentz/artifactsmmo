@@ -43,6 +43,7 @@ from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
+from artifactsmmo_cli.ai.goals.task_kills import TaskKillsGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -2306,3 +2307,40 @@ def test_the_chore_means_are_built_as_interrupts():
     assert bands["SellInventory"] == BAND_GUARD
     assert bands["ClaimPending"] == BAND_GUARD  # Phase 5-2c-i
     assert bands["ExpandBank"] == BAND_GUARD    # Phase 5-2c-ii
+
+
+class TestFightStepsCarryTheirLoadout:
+    """USER 2026-10-10, "Fight steps prep it": the trunk's grind and the task
+    kill first stock the cycle's chosen loadout food (live: 120 banked
+    cooked_rat_meat, none ever withdrawn, 652 Rests against 13 eats)."""
+
+    PREP = GatherMaterialsGoal(target_item="cooked_chicken", needed={"cooked_chicken": 20})
+
+    def _loadout(self, monster: str) -> ChosenLoadout:
+        return ChosenLoadout(monster=monster, potions=(), food=(("cooked_chicken", 1),))
+
+    def test_the_grind_preps_first(self, monkeypatch):
+        monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
+        ctx = _ctx(combat_monster="chicken", loadout=self._loadout("chicken"))
+        assert objective_step_goal(ReachCharLevel(10), make_state(), _gd(), ctx) is self.PREP
+
+    def test_a_carried_loadout_grinds(self, monkeypatch):
+        monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: None)
+        ctx = _ctx(combat_monster="chicken", loadout=self._loadout("chicken"))
+        assert isinstance(objective_step_goal(ReachCharLevel(10), make_state(), _gd(), ctx),
+                          GrindCharacterXPGoal)
+
+    def test_a_loadout_for_another_monster_does_not_prep(self, monkeypatch):
+        monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
+        ctx = _ctx(combat_monster="chicken", loadout=self._loadout("cow"))
+        assert isinstance(objective_step_goal(ReachCharLevel(10), make_state(), _gd(), ctx),
+                          GrindCharacterXPGoal)
+
+    def test_the_task_kill_preps_first(self, monkeypatch):
+        monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
+        state = make_state(task_code="chicken", task_type="monsters", task_progress=1, task_total=5)
+        ctx = _ctx(loadout=self._loadout("chicken"))
+        assert objective_step_goal(ReachTaskOutcome("chicken"), state, _gd(), ctx) is self.PREP
+        monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: None)
+        assert isinstance(objective_step_goal(ReachTaskOutcome("chicken"), state, _gd(), ctx),
+                          TaskKillsGoal)

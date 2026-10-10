@@ -341,3 +341,16 @@ with units eaten per recovery). Every consumable decision reads it:
   it; l48_event_active's band went 6.5 s → 0.27 s. Live (warm, cheapest-path
   diagnostic excluded from both sides) the cascade adds ≤ 0.9 s (C3P0) and 0 s
   where a task monster short-circuits.
+
+## Fight steps carry the loadout (2026-10-10, USER "Fight steps prep it")
+
+Witness of 36ca9aa2 (05:16-14:40Z): the fleet floor worked — R2D2 and Robby
+crafted and banked ~120 cooked_rat_meat — but nobody withdrew any: heal prep
+ran only before a skill grind's fight legs and on the MAINTAIN_CONSUMABLES rung
+(below the step, rarely fires), so the character-XP grind and the task kills
+fought without food: 652 Rests against 13 eats. Now the trunk's
+`GrindCharacterXP` step and the task objective's `TaskKills` step first return
+`heal_prep_goal` against their monster, from the cycle's ONE chosen loadout
+(`ctx.loadout`, only when chosen against that monster). Live: R2D2
+`[Withdraw(cooked_rat_meat×20)]`, Lor `[Withdraw(cooked_rat_meat×40)]`.
+MAINTAIN_CONSUMABLES is now fully redundant (its retirement increment).

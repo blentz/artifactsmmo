@@ -69,7 +69,7 @@ from artifactsmmo_cli.ai.goals.task_kills import TaskKillsGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
-from artifactsmmo_cli.ai.grind_heal_prep import maintain_consumables_goal
+from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal, maintain_consumables_goal
 from artifactsmmo_cli.ai.intention_progress import rotate
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
@@ -552,6 +552,14 @@ def objective_step_goal(
         provision = _marginal_provision_goal(ctx, state, game_data)
         if provision is not None:
             return provision
+        prep = _fight_step_prep(state, game_data, ctx, ctx.combat_monster)
+        if prep is not None:
+            # THE FIGHT STEP CARRIES ITS LOADOUT (USER 2026-10-10, "Fight steps
+            # prep it"; §3: the leaf builds what it needs). Live 05:16-14:40Z
+            # 2026-10-10: 120 cooked_rat_meat banked by the fleet floor, none
+            # ever withdrawn — only skill-grind fight legs prepped — so 652
+            # Rests against 13 eats.
+            return prep
         return GrindCharacterXPGoal(target_monster=ctx.combat_monster, initial_xp=state.xp)
     if isinstance(step, ReachSkillLevel):
         # Wave 3a THE FLIP: the root graph's `IsThisTargetBlocked` skill arm is
@@ -604,10 +612,23 @@ def objective_step_goal(
         if state.task_type == "items":
             # c-2 #4/#5: a held items task not cancelled for its worth is worked.
             return _pursue_goal(state, game_data)
+        prep = _fight_step_prep(state, game_data, ctx, step.task_code)
+        if prep is not None:
+            return prep  # the task fight carries its loadout too (see the trunk arm)
         return TaskKillsGoal(step.task_code, state.task_progress)
     if isinstance(step, ReachFleetOutcome):
         return _fleet_step_goal(step, state, ctx)
     return None
+
+
+def _fight_step_prep(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                     monster: str | None) -> Goal | None:
+    """Heal prep for a fight step (USER 2026-10-10, "Fight steps prep it"),
+    from the cycle's ONE chosen loadout (`ctx.loadout`) when it was chosen
+    against this step's monster; no loadout for it, no prep."""
+    if monster is None or ctx.loadout is None or ctx.loadout.monster != monster:
+        return None
+    return heal_prep_goal(state, game_data, ctx, monster)
 
 
 def _fleet_step_goal(step: ReachFleetOutcome, state: WorldState,

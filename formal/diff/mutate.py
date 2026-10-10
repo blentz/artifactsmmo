@@ -5272,6 +5272,19 @@ CONSUMABLE_FLOOR_CORE_MUTATIONS = [
 # Killed by tests/test_ai/test_task_objective.py.
 # An items task produces its batch through decomposition before trading it
 # (2026-10-09 C3P0 spruce_plank Wait). Killed by tests/test_ai/test_strategy_driver.py.
+# The fight steps carry the cycle's loadout (USER 2026-10-10, "Fight steps prep
+# it"). Killed by tests/test_ai/test_strategy_driver.py.
+FIGHT_STEP_PREP_MUTATIONS = [
+    ("fight steps: a loadout for another monster still preps",
+     "    if monster is None or ctx.loadout is None or ctx.loadout.monster != monster:\n",
+     "    if monster is None or ctx.loadout is None:\n"),
+    ("fight steps: the grind never preps",
+     "        prep = _fight_step_prep(state, game_data, ctx, ctx.combat_monster)\n",
+     "        prep = None\n"),
+    ("fight steps: the task kill never preps",
+     "        prep = _fight_step_prep(state, game_data, ctx, step.task_code)\n",
+     "        prep = None\n"),
+]
 PURSUE_BATCH_MUTATIONS = [
     ("pursue: the reservation defers the step that makes the task item",
      "        if isinstance(step_goal, GatherMaterialsGoal) and step_goal.target_item == state.task_code:\n",
@@ -9927,6 +9940,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_failure_recovery_core.py", survivors)
     run_group(ACTION_BASE_SRC, ANY_REGION_MUTATIONS,
               "tests/test_ai/test_goals.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, FIGHT_STEP_PREP_MUTATIONS,
+              "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, PURSUE_BATCH_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(TASK_CANCEL_GOAL_SRC, TASK_CANCEL_POOL_MUTATIONS,
