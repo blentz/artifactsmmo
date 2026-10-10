@@ -153,11 +153,6 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
       show (applyActionKind .npcSell s).level = s.level
             ∧ (applyActionKind .npcSell s).xp = s.xp
       exact ⟨rfl, rfl⟩
-    | maintainConsumables =>
-      -- PLAN #6a: planFor .maintainConsumables = [.craft], same as craftRelief.
-      show (applyActionKind .craft s).level = s.level
-            ∧ (applyActionKind .craft s).xp = s.xp
-      exact ⟨rfl, rfl⟩
     | depositFull =>
       show (applyActionKind .depositAll s).level = s.level
             ∧ (applyActionKind .depositAll s).xp = s.xp

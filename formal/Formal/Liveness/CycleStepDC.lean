@@ -409,7 +409,6 @@ def planForC : MeansKind → State → Plan
       else if s.taskLifecyclePhase = .none then
         (if s.currencyTurnInActive then [.npcBuy] else [.gather])
       else [.taskTrade]
-  | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
   | .sellIdle         , _ => [.npcSell]
   | .recycleSurplus   , _ => [.recycle]
   | .drainBankJunk    , _ => [.withdrawItem]

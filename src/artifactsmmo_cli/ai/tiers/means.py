@@ -17,7 +17,6 @@ from artifactsmmo_cli.ai.bank_expansion_timing import (
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
-from artifactsmmo_cli.ai.grind_heal_prep import maintain_consumables_goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
@@ -45,10 +44,8 @@ class MeansKind(Enum):
     RECYCLE_SURPLUS = "recycle_surplus"
     BANK_EXPAND = "bank_expand"
     WAIT = "wait"
-    # Appended LAST so the DecideKey oracle's index dispatch and the diff test's
-    # _MEANS_INDEX stay stable — enum identity is independent of the
-    # DISCRETIONARY_ORDER priority slot below (PLAN #6a).
-    MAINTAIN_CONSUMABLES = "maintain_consumables"
+    # MAINTAIN_CONSUMABLES retired 2026-10-10 (docs/PLAN_consumable_utility.md):
+    # every fight step carries its loadout's potions and food itself.
     DRAIN_BANK_JUNK = "drain_bank_junk"  # 2026-06-24: drain over-cap bank junk.
     GE_BID = "ge_bid"  # 2026-07-24: post a discretionary GE buy order for a slow-to-craft item.
 
@@ -103,7 +100,6 @@ DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     # worked by the task objective's own step (`ReachTaskOutcome`) on its turn.
     # TASK_EXCHANGE was retired here in Phase 5-2c-iii-c-2: coins are exchanged
     # by the task objective's own step (`ReachTaskOutcome`) on its turn.
-    MeansKind.MAINTAIN_CONSUMABLES,  # prep heals for combat before idle housekeeping
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
     # Opportunistic cheap acquisition: post a GE buy order for a slow-to-craft
@@ -162,15 +158,6 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # three-way venue verdict of GE_POST. Fire-and-lose: posting creates an
         # open order that suppresses the item next cycle.
         return bool(ge_bid_candidates(state, game_data, ctx, TTL_CYCLES))
-
-    if kind is MeansKind.MAINTAIN_CONSUMABLES:
-        # Only when combat is the active means (a target is selected): carry
-        # the food the chosen loadout's recovery eats (`ctx.loadout`,
-        # docs/PLAN_consumable_utility.md increment 5) — heal prep for the
-        # fight ahead. When Rest is the cheaper recovery the loadout eats
-        # nothing and the rung never fires. The goal `map_means` builds is the
-        # one this asks about.
-        return maintain_consumables_goal(state, game_data, ctx) is not None
 
     if kind is MeansKind.BANK_EXPAND:
         if not ctx.bank_accessible:

@@ -146,7 +146,6 @@ noncomputable def planFor : MeansKind → State → Plan
   -- collapse to the single `.npcBuy` witness, which clears
   -- `currencyTurnInActive` (Plan.lean) — an over-approximation of the same
   -- fire-and-lose shape as `.deleteItem` / `.geCancelOrder`.)
-  | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
   | .sellIdle         , _ => [.npcSell]
   | .recycleSurplus   , _ => [.recycle]
   | .drainBankJunk    , _ => [.withdrawItem]
@@ -379,20 +378,6 @@ theorem cycleStep_progress_or_waits
       have : (applyActionKind .npcSell s).sellableInventoryNonempty = false := hpost
       rw [heq] at this; exact this
     rw [hpre] at hpre'; cases hpre'
-  | maintainConsumables =>
-    -- PLAN #6a: MAINTAIN_CONSUMABLES plans `.craft` (cook/brew a heal), the same
-    -- shape as CRAFT_RELIEF — craftableSlots advances by +1, so the state changes.
-    left
-    have hcs : cycleStep s = applyActionKind .craft s := by
-      unfold cycleStep; rw [hk]; rfl
-    rw [hcs]
-    intro heq
-    have hpost : (applyActionKind .craft s).craftableSlots
-                  = s.craftableSlots + 1 := by
-      simp [applyActionKind]
-    have hpre' : s.craftableSlots = s.craftableSlots + 1 := by
-      rw [heq] at hpost; exact hpost
-    exact Nat.succ_ne_self _ hpre'.symm
   | depositFull =>
     left
     have hcs : cycleStep s = applyActionKind .depositAll s := by

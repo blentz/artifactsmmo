@@ -1,6 +1,5 @@
 """A fight is fought with the chosen loadout's food carried (`grind_heal_prep`,
-its hook in `craft_plan_gen._decompose_grind`, and the MAINTAIN_CONSUMABLES
-rung's goal).
+its hook in `craft_plan_gen._decompose_grind`, and every fight step's prep).
 
 Live C3P0 2026-09-28: a gearcrafting grind fed by fights cost 120 hp a fight,
 and RestoreHP bought the food back one unit at a time, `Craft(cheese×1)` + eat
@@ -25,7 +24,6 @@ from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.grind_heal_prep import (
     HEAL_PREP_POLICY,
     heal_prep_goal,
-    maintain_consumables_goal,
     potion_prep_goal,
 )
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
@@ -205,42 +203,6 @@ class TestHealPrepGoal:
             ("WithdrawItemAction", "cheese", 1),
             ("CraftAction", "cheese", CARRY - 2 - 1),
         ]
-
-
-class TestMaintainConsumablesGoal:
-    def test_no_goal_without_an_active_combat_target(self):
-        gd = _gd()
-        state = _state(gd, {"milk": CARRY})
-        assert maintain_consumables_goal(state, gd, _eats(("cheese", 1), combat_monster=None)) is None
-
-    def test_no_goal_without_a_chosen_loadout(self):
-        gd = _gd()
-        state = _state(gd, {"milk": CARRY})
-        ctx = replace(NO_PROFILE_CONTEXT, combat_monster="wolf")
-        assert maintain_consumables_goal(state, gd, ctx) is None
-
-    def test_the_goal_is_heal_prep_for_the_loadouts_monster(self):
-        """Combat active and a loadout chosen (against the fight ahead, which may
-        differ from the farm target): the goal is heal prep for that monster."""
-        gd = _gd()
-        state = _state(gd, {"milk": CARRY})
-        ctx = _eats(("cheese", 1), monster="ogre", combat_monster="wolf")
-        asked: list[str] = []
-        real = grind_heal_prep.loadout_for
-
-        def spy(s, g, c, monster: str) -> ChosenLoadout:
-            asked.append(monster)
-            return real(s, g, c, monster)
-
-        with patch.object(grind_heal_prep, "loadout_for", side_effect=spy):
-            goal = maintain_consumables_goal(state, gd, ctx)
-        assert asked == ["ogre"]
-        assert _needed(goal) == {"cheese": CARRY}
-
-    def test_no_goal_when_the_chosen_food_is_carried(self):
-        gd = _gd()
-        state = _state(gd, {"cheese": CARRY})
-        assert maintain_consumables_goal(state, gd, EATS_CHEESE) is None
 
 
 _FIGHT = FightAction(monster_code="wolf", locations=frozenset({(1, 1)}))

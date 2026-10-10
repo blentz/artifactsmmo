@@ -6,9 +6,9 @@ Brick 4 of `docs/PLAN_l50_unconditional_descent.md`. Below level 50 the
 perception refresh arms `objectiveStepFires`, so:
 
 1. the ladder can never return `none` (`.objectiveStep` always fires);
-2. the selected means always sits in the 18-element ladder prefix ending at
+2. the selected means always sits in the ladder prefix ending at
    `.objectiveStep` (`ladder_mem_blockerPrefix`) — the discretionary tail
-   (`maintainConsumables … wait`) is unreachable below the cap;
+   (`sellIdle … wait`) is unreachable below the cap;
 3. every prefix means strictly descends `FMeasure`
    (`BlockerDescent.descends_*`).
 
@@ -60,8 +60,7 @@ def blockerPrefix : List MeansKind :=
 
 /-- The discretionary tail — everything after `.objectiveStep`. -/
 def discretionaryTail : List MeansKind :=
-  [.maintainConsumables,
-   .sellIdle, .recycleSurplus, .geBid, .drainBankJunk, .wait]
+  [.sellIdle, .recycleSurplus, .geBid, .drainBankJunk, .wait]
 
 /-- `allInLadderOrder` splits at `.objectiveStep`. -/
 theorem ladder_split : allInLadderOrder = blockerPrefix ++ discretionaryTail := rfl
@@ -144,7 +143,6 @@ theorem cycleStepF_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | objectiveStep   =>
         exact descends_fight s hlvl (Or.inr (Or.inr
           ⟨hk, perceptionRefresh_objectiveStepIsFight s hlvl⟩))
-    | maintainConsumables => exact absurd hmem (by decide)
     | sellIdle        => exact absurd hmem (by decide)
     | recycleSurplus  => exact absurd hmem (by decide)
     | bankExpand      => exact descends_bankExpand s hk

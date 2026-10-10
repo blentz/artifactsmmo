@@ -14,8 +14,9 @@ increment 5). The food is the food the chosen loadout's recovery eats
 when it was chosen against this fight); when that recovery eats nothing — Rest
 is the cheaper recovery — nothing is stocked. The stock is the food's carry
 (`chosen_loadout.food_carry`: one recovery's units × `CARRY_HORIZON_FIGHTS`),
-the bag's units counting toward it. The grind's prep (`craft_plan_gen`) and the
-MAINTAIN_CONSUMABLES rung (for the fight ahead) build the SAME goal.
+the bag's units counting toward it. The grind's prep (`craft_plan_gen`) and
+every fight step (`strategy_driver._fight_step_prep`) build the SAME goal (the
+MAINTAIN_CONSUMABLES rung that also built it retired 2026-10-10).
 
 THE POTIONS TOO (`potion_prep_goal`, 2026-10-10). The chosen loadout's utility
 potions are carried the same way, ahead of its food: a potion it wears is what
@@ -90,14 +91,3 @@ def potion_prep_goal(state: WorldState, game_data: GameData, ctx: SelectionConte
                 and prep_supplies(code, needed, state, game_data, ctx)):
             return GatherMaterialsGoal(target_item=code, needed={code: needed}, carry=True)
     return None
-
-
-def maintain_consumables_goal(state: WorldState, game_data: GameData,
-                              ctx: SelectionContext) -> GatherMaterialsGoal | None:
-    """The MAINTAIN_CONSUMABLES rung's goal: heal prep for the fight ahead —
-    the monster the cycle's loadout was chosen against — while combat is the
-    active means (`ctx.combat_monster` set). None otherwise: the rung does not
-    fire."""
-    if ctx.combat_monster is None or ctx.loadout is None:
-        return None
-    return heal_prep_goal(state, game_data, ctx, ctx.loadout.monster)

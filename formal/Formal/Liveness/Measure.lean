@@ -220,12 +220,6 @@ structure State where
       harness asserts agreement with the real predicate. Cleared by the
       `.craft` apply (the CraftPotions goal crafts the baseline potion). -/
   craftPotionsFires : Bool := false
-  /-- OPAQUE: production's MAINTAIN_CONSUMABLES means firing predicate (PLAN #6a).
-      Mirrors `tiers/means.py::_fires(MAINTAIN_CONSUMABLES, …)`: fires iff combat
-      is the active means AND heal-stock < floor AND a better heal is craftable.
-      State-carried Bool (default false); the production-ladder diff asserts
-      agreement with the real predicate. -/
-  maintainConsumablesFires : Bool := false
   /-- OPAQUE: the UNMET sibling demand this character's SUPPLY_BANK rung would
       serve (2026-08-01). Mirrors the THIRD component of `ctx.supply_target` in
       `tiers/means.py::_fires(SUPPLY_BANK, …)` — the still-unmet quantity

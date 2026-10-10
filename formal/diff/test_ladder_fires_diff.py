@@ -83,7 +83,7 @@ paths are no longer unvalidated — each now has a dedicated Brick-4 DRIVE test
 predicate fires the slot and runs a SELECTION CONTEST against the oracle. How
 the teeth bite per slot:
 
-  * craftRelief / maintainConsumables / recycleSurplus / restForCombat — OPAQUE
+  * craftRelief / recycleSurplus / restForCombat — OPAQUE
                           PASSTHROUGH Bools in the Lean model
                           (`craftReliefFires := s.craftReliefFires`, …): the Lean
                           per-slot value is production's verdict fed straight
@@ -96,14 +96,14 @@ the teeth bite per slot:
                           the slot in production and the oracle must SELECT the
                           same MeansKind over the
                           firing pattern. (craftRelief: `craft_relief_candidates`
-                          non-empty; maintainConsumables: `maintain_consumables_goal`.)
+                          non-empty.)
   * restForCombat       — production folds clauses (a)/(c)/(d) into the opaque
                           `restForCombatReady` (a `predict_win` verdict). In the
                           SWEEP it stays False (combat_monster=None). The DRIVE
                           test (4b) stands up a real combat fixture so the slot
                           fires and WINS selection on both ladders (a strong
                           contest: a wrong Lean priority would fail).
-  * recycleSurplus / maintainConsumables — honest FIRE-AND-LOSE: both sit BELOW
+  * recycleSurplus — honest FIRE-AND-LOSE: it sits BELOW
                           the lifecycle slots, so for every phase a higher slot
                           fires on the Lean ladder and neither can ever BE the
                           Lean selection. The DRIVE tests (4a/4b) fire them TRUE
@@ -151,7 +151,6 @@ from artifactsmmo_cli.ai.accumulation_sell import sellable_tradeable_now
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.cancel_selection import cancel_targets
-from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.decisions.root import _task_root
 from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.fleet_work import SUPPLY_DEMAND_MIN
@@ -184,7 +183,6 @@ DEFERRED_SLOTS: frozenset[LadderMeans] = frozenset({
     LadderMeans.REST_FOR_COMBAT,
     LadderMeans.CRAFT_RELIEF,
     LadderMeans.RECYCLE_RELIEF,  # opaque passthrough: bank-full + recyclableSurplusNonempty
-    LadderMeans.MAINTAIN_CONSUMABLES,
     LadderMeans.RECYCLE_SURPLUS,
 })
 
@@ -205,7 +203,6 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.CLAIM_PENDING: "claimPending",
     LadderMeans.SELL_PRESSURED: "sellPressured",
     LadderMeans.OBJECTIVE_STEP: "objectiveStep",
-    LadderMeans.MAINTAIN_CONSUMABLES: "maintainConsumables",
     LadderMeans.SELL_IDLE: "sellIdle",
     LadderMeans.RECYCLE_SURPLUS: "recycleSurplus",
     LadderMeans.DRAIN_BANK_JUNK: "drainBankJunk",
@@ -432,7 +429,7 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         0,                                       # 26 reserved (was gearReviewFires)
         0,                                       # 27 craftReliefFires (deferred)
         1 if scn.objective_step else 0,          # 28 objectiveStepFires (passed identically)
-        0,                                       # 29 maintainConsumablesFires (deferred)
+        0,                                       # 29 reserved (was maintainConsumablesFires)
         1 if scn.bank_known else 0,              # 30 bankItemsKnown
         1 if _bank_junk_nonempty(scn) else 0,    # 31 bankJunkNonempty
         # 32 craftPotionsFires: the opaque CRAFT_POTIONS guard verdict, computed
@@ -946,13 +943,13 @@ def _rich_oracle_args(
         0,                                        # 26 reserved (was gearReviewFires)
         1 if prod[LadderMeans.CRAFT_RELIEF] else 0,  # 27 craftReliefFires
         1 if objective_step else 0,                  # 28 objectiveStepFires
-        1 if prod[LadderMeans.MAINTAIN_CONSUMABLES] else 0,  # 29 maintainConsumablesFires
+        0,                                    # 29 reserved (was maintainConsumablesFires)
         1 if w.bank_items is not None else 0,        # 30 bankItemsKnown
         # 31: derive from production's REAL bank_drain_excess helper (like 19/20/22),
         # NOT the slot verdict — the helper IS the opaque nonempty signal.
         1 if bank_drain_excess(w, gd, ctx) else 0,    # 31 bankJunkNonempty
         # 32 craftPotionsFires: opaque CRAFT_POTIONS latch — derive from the SAME
-        # production verdict (like craftRelief/maintainConsumables).
+        # production verdict (like craftRelief).
         1 if prod[LadderMeans.CRAFT_POTIONS] else 0,  # 32 craftPotionsFires
         ctx.gold_reserve,                             # 33 goldReserve (ctx-threaded)
         # 34: derive from production's REAL ge_bid_candidates helper (like 31),
@@ -1451,13 +1448,12 @@ def test_ge_bid_near_miss_no_step_demand() -> None:
 
 
 # ===========================================================================
-# Brick 4b — Cluster A (combat / predict_win): restForCombat + maintainConsumables.
+# Brick 4b — Cluster A (combat / predict_win): restForCombat.
 #
-# Both opaque slots fold a `predict_win` / combat verdict that the Lean model
-# carries as a passthrough Bool (`restForCombatReady` arg[25],
-# `maintainConsumablesFires` arg[29]). `_rich_oracle_args` already derives those
-# two args from production's per-slot verdict (`prod[REST_FOR_COMBAT]` /
-# `prod[MAINTAIN_CONSUMABLES]`), so NO scaffold extension is needed: we stand up
+# The opaque slot folds a `predict_win` / combat verdict that the Lean model
+# carries as a passthrough Bool (`restForCombatReady` arg[25]).
+# `_rich_oracle_args` already derives that arg from production's per-slot
+# verdict (`prod[REST_FOR_COMBAT]`), so NO scaffold extension is needed: we stand up
 # a real combat fixture, let production's REAL machinery fire the slot, and the
 # oracle re-evaluates `productionLadder` over the firing pattern production
 # produced. The teeth are the SELECTION contest.
@@ -1588,116 +1584,8 @@ def test_rest_for_combat_near_miss_full_hp() -> None:
     assert lean_sel is LadderMeans.WAIT
 
 
-# ---------------------------------------------------------------------------
-# Slot 2 — maintainConsumables (arg[29]).  Production `_means_fires(
-# MAINTAIN_CONSUMABLES)` (tiers/means.py) = `grind_heal_prep.
-# maintain_consumables_goal` is not None: combat_monster set AND a chosen
-# loadout (`ctx.loadout`) whose recovery eats a food short of its carry in the
-# bag that the walk can supply (docs/PLAN_consumable_utility.md increment 5;
-# was: heal_stock < HEAL_STOCK_FLOOR AND a craftable heal, a recipe whose hp_restore item the
-# player can craft now).
-#
-# SELECTION NOTE (a real Lean-model finding, reported — mirrors recycleSurplus
-# in 4a): maintainConsumables is ladder idx 18, BELOW the lifecycle slots
-# acceptTask(16)/objectiveStep. For EVERY phase some higher slot fires on the
-# Lean ladder (acceptTask at phase none, objectiveStep's task-phase arm at
-# accepted/inProgress/complete), so maintainConsumables can NEVER be the
-# Lean SELECTION — it can only fire-and-lose. The contest drives it TRUE (the
-# per-slot agreement binding arg[29]) at phase NONE, where BOTH ladders select
-# acceptTask; selection agreement holds at that winner.
-# ---------------------------------------------------------------------------
-
-
-def _maintain_gd() -> GameData:
-    gd = GameData()
-    gd._crafting_recipes = {"potion": {"herb": 1}}
-    gd._item_stats = {
-        "potion": ItemStats(code="potion", level=1, type_="consumable",
-                            crafting_skill="alchemy", crafting_level=1,
-                            hp_restore=50),
-        "herb": ItemStats(code="herb", level=1, type_="resource"),
-    }
-    gd._workshop_locations = {"alchemy": (0, 0)}
-    return gd
-
-
-def _maintain_ctx(eaten: int = 1) -> SelectionContext:
-    # The cycle's chosen loadout against the fight ahead eats `eaten` potions a
-    # recovery: its carry is `eaten` × CARRY_HORIZON_FIGHTS (20).
-    food = (("potion", eaten),) if eaten else ()
-    return SelectionContext(
-        bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
-        initial_xp=0, task_exchange_min_coins=5, combat_monster="mob",
-        target_gear=frozenset(), target_tools=frozenset(),
-        draw_owed=True, loadout=ChosenLoadout("mob", (), food))
-
-
-def _maintain_world(potion_qty: int) -> WorldState:
-    # No task (phase NONE), alchemy@1 (recipe level met), the carry's herbs in
-    # the bag, `potion_qty` potions carried.
-    inv = {"herb": 20} | ({"potion": potion_qty} if potion_qty > 0 else {})
-    return WorldState(
-        character="diff", level=10, xp=0, max_xp=999999, hp=100, max_hp=100,
-        gold=0, skills={"alchemy": 1}, x=0, y=0,
-        inventory=inv, inventory_max=100,
-        inventory_slots_max=20,
-        equipment={"weapon_slot": None}, cooldown_expires=None,
-        bank_items=None, bank_gold=None, pending_items=None,
-        task_code=None, task_type=None, task_progress=0, task_total=0)
-
-
-def test_maintain_consumables_drives_true() -> None:
-    """TRUE fixture: combat target set, the chosen loadout eats the potion and
-    the bag carries none of its 20, the herbs are held -> production
-    MAINTAIN_CONSUMABLES fires and wins selection on BOTH ladders (ACCEPT_TASK,
-    which outranked it, is retired)."""
-    w = _maintain_world(potion_qty=0)
-    gd = _maintain_gd()
-    prod, prod_sel, lean, lean_sel = drive_and_contest(
-        w, gd, _maintain_ctx(),
-        driven=frozenset({LadderMeans.MAINTAIN_CONSUMABLES}))
-    assert prod[LadderMeans.MAINTAIN_CONSUMABLES] is True
-    assert lean[LadderMeans.MAINTAIN_CONSUMABLES] is True
-    # Since ACCEPT_TASK's retirement (Phase 5-2c-iii-c-2 #3) nothing above
-    # it fires at phase NONE, so both ladders select MAINTAIN_CONSUMABLES.
-    assert prod_sel is LadderMeans.MAINTAIN_CONSUMABLES
-    assert lean_sel is LadderMeans.MAINTAIN_CONSUMABLES
-
-
-def test_maintain_consumables_near_miss_stocked() -> None:
-    """Near-miss: the bag carries the full 20 -> MAINTAIN_CONSUMABLES does NOT
-    fire (pins the carry comparison)."""
-    w = _maintain_world(potion_qty=20)
-    gd = _maintain_gd()
-    prod, _, lean, _ = drive_and_contest(
-        w, gd, _maintain_ctx(),
-        driven=frozenset({LadderMeans.MAINTAIN_CONSUMABLES}))
-    assert prod[LadderMeans.MAINTAIN_CONSUMABLES] is False
-    assert lean[LadderMeans.MAINTAIN_CONSUMABLES] is False
-
-
-def test_maintain_consumables_near_miss_rest_wins() -> None:
-    """Near-miss: the chosen loadout's recovery eats nothing (Rest is the
-    cheaper recovery) -> nothing to carry -> MAINTAIN_CONSUMABLES does NOT fire."""
-    w = _maintain_world(potion_qty=0)
-    gd = _maintain_gd()
-    prod, _, lean, _ = drive_and_contest(
-        w, gd, _maintain_ctx(eaten=0),
-        driven=frozenset({LadderMeans.MAINTAIN_CONSUMABLES}))
-    assert prod[LadderMeans.MAINTAIN_CONSUMABLES] is False
-    assert lean[LadderMeans.MAINTAIN_CONSUMABLES] is False
-
-
-def test_maintain_consumables_near_miss_no_combat() -> None:
-    """Near-miss: no combat target -> the means tier short-circuits regardless
-    of stock/craftability -> MAINTAIN_CONSUMABLES does NOT fire."""
-    w = _maintain_world(potion_qty=0)
-    gd = _maintain_gd()
-    ctx = dataclasses.replace(_maintain_ctx(), combat_monster=None)
-    prod, _, lean, _ = drive_and_contest(
-        w, gd, ctx, driven=frozenset({LadderMeans.MAINTAIN_CONSUMABLES}))
-    assert prod[LadderMeans.MAINTAIN_CONSUMABLES] is False
-    assert lean[LadderMeans.MAINTAIN_CONSUMABLES] is False
+# Slot 2 — maintainConsumables (arg[29]) retired 2026-10-10 with its rung: every
+# fight step carries its loadout's potions and food.
 
 
 # ===========================================================================

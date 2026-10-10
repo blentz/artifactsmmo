@@ -50,9 +50,10 @@ _MEANS_INDEX = {
     MeansKind.RECYCLE_SURPLUS: 3,  # 2026-06-14: proactive recycle surplus gear.
     MeansKind.BANK_EXPAND: 4,
     MeansKind.WAIT: 5,  # Phase 20e-v2 step 1: always-firing sentinel.
-    MeansKind.MAINTAIN_CONSUMABLES: 6,  # PLAN #6a: cook/brew heals (combat-active).
-    MeansKind.DRAIN_BANK_JUNK: 7,  # 2026-06-24: drain over-cap bank junk.
-    MeansKind.GE_BID: 8,  # 2026-07-24: post a discretionary GE buy order.
+    # MAINTAIN_CONSUMABLES (index 6) retired 2026-10-10: every fight step
+    # carries its loadout's potions and food.
+    MeansKind.DRAIN_BANK_JUNK: 6,  # 2026-06-24: drain over-cap bank junk.
+    MeansKind.GE_BID: 7,  # 2026-07-24: post a discretionary GE buy order.
 }
 
 

@@ -69,7 +69,7 @@ from artifactsmmo_cli.ai.goals.task_kills import TaskKillsGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
-from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal, maintain_consumables_goal, potion_prep_goal
+from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal, potion_prep_goal
 from artifactsmmo_cli.ai.intention_progress import rotate
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
@@ -398,14 +398,6 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
             # frozenset for the current-cycle gather parameter.
             gather_skills=frozenset(),
         )
-    if kind is MeansKind.MAINTAIN_CONSUMABLES:
-        # The chosen loadout's food, stocked to its carry: the SAME goal heal
-        # prep puts ahead of a grind's fight (`grind_heal_prep`), for the fight
-        # ahead. The rung fires exactly when it exists (`tiers/means.py`).
-        prep = maintain_consumables_goal(state, game_data, ctx)
-        if prep is None:
-            raise ValueError("MAINTAIN_CONSUMABLES mapped but the chosen food is stocked")
-        return prep
     if kind is MeansKind.WAIT:
         return WaitGoal()
     raise ValueError(f"Unknown MeansKind: {kind!r}")

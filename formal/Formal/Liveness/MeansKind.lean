@@ -15,7 +15,7 @@
                                                      Phase 5-2c-iv (the fleet
                                                      objective's step)
     ++ [OBJECTIVE_STEP]
-    ++ DISCRETIONARY_ORDER (from `tiers/means.py`) -- incl MAINTAIN_CONSUMABLES
+    ++ DISCRETIONARY_ORDER (from `tiers/means.py`) -- incl SELL_IDLE
                                                      and WAIT
 
   `allInLadderOrder` below is the authoritative enumeration; its length is
@@ -100,8 +100,8 @@ inductive MeansKind where
   -- (pursueTask retired: Phase 5-2c-iii-c-2 #4)
   -- (acceptTask retired: Phase 5-2c-iii-c-2 #3)
   -- (taskExchange retired: Phase 5-2c-iii-c-2 #2)
-  | maintainConsumables -- MAINTAIN_CONSUMABLES, means.py (PLAN #6a): cook/brew
-                        --                     heals when combat-active + under-stocked
+  -- (maintainConsumables retired 2026-10-10: every fight step carries its
+  --  loadout's potions and food)
   | sellIdle            -- SELL_IDLE,          means.py:100
   | recycleSurplus      -- RECYCLE_SURPLUS,    means.py (2026-06-14)
   | drainBankJunk       -- DRAIN_BANK_JUNK,    means.py (2026-06-24): withdraw
@@ -136,17 +136,18 @@ def allInLadderOrder : List MeansKind :=
    -- where it fired against a 50/50 bank and was selected zero times.)
    .bankExpand,
    .objectiveStep,
-   .maintainConsumables,
    .sellIdle, .recycleSurplus, .geBid, .drainBankJunk,
    .wait]
 
-/-- Sanity: 22 rungs (one per constructor). GEAR_REVIEW was retired in Phase
+/-- Sanity: 21 rungs (one per constructor). GEAR_REVIEW was retired in Phase
     4-3b: its one arm never fired in recorded history. LOW_YIELD_CANCEL,
     TASK_EXCHANGE, ACCEPT_TASK, PURSUE_TASK, TASK_CANCEL and COMPLETE_TASK
     were retired in Phase 5-2c-iii-c-2: the task objective's step owns the
     cancels, the exchange, the accept, the items-task pursuit and the
     turn-in of a met task. SUPPLY_BANK and CURRENCY_TURNIN were retired in
-    Phase 5-2c-iv: fleet work is the fleet objective's step. -/
-example : allInLadderOrder.length = 22 := by decide
+    Phase 5-2c-iv: fleet work is the fleet objective's step. MAINTAIN_CONSUMABLES
+    was retired 2026-10-10: every fight step carries its loadout's potions and
+    food. -/
+example : allInLadderOrder.length = 21 := by decide
 
 end Formal.Liveness.MeansKind

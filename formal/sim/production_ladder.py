@@ -57,7 +57,6 @@ class LadderMeans(Enum):
     CLAIM_PENDING = "claim_pending"
     SELL_PRESSURED = "sell_pressured"
     OBJECTIVE_STEP = "objective_step"
-    MAINTAIN_CONSUMABLES = "maintain_consumables"
     SELL_IDLE = "sell_idle"
     RECYCLE_SURPLUS = "recycle_surplus"
     DRAIN_BANK_JUNK = "drain_bank_junk"
@@ -85,7 +84,6 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     # `Formal.Liveness.MeansKind.allInLadderOrder`.
     LadderMeans.BANK_EXPAND,
     LadderMeans.OBJECTIVE_STEP,
-    LadderMeans.MAINTAIN_CONSUMABLES,
     LadderMeans.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS,
     LadderMeans.GE_BID,
@@ -112,7 +110,6 @@ _GUARD_MAP: dict[LadderMeans, GuardKind] = {
 _MEANS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.CLAIM_PENDING: MeansKind.CLAIM_PENDING,
     LadderMeans.SELL_PRESSURED: MeansKind.SELL_PRESSURED,
-    LadderMeans.MAINTAIN_CONSUMABLES: MeansKind.MAINTAIN_CONSUMABLES,
     LadderMeans.SELL_IDLE: MeansKind.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS: MeansKind.RECYCLE_SURPLUS,
     LadderMeans.DRAIN_BANK_JUNK: MeansKind.DRAIN_BANK_JUNK,
@@ -145,7 +142,6 @@ assert COLLECT_REWARD_ORDER == (
 ), "COLLECT_REWARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 assert DISCRETIONARY_ORDER == (
-    MeansKind.MAINTAIN_CONSUMABLES,
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
     MeansKind.GE_BID,

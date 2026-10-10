@@ -5,8 +5,8 @@ ONE AUTHORITY. `best_loadout.best_loadout` picks, per character and per fight,
 the utility potions and the recovery food that maximise XP per second; the
 player reads it once per cycle against the fight ahead and threads it on the
 selection context (`SelectionContext.loadout`). Every consumable decision reads
-that one value: the CRAFT_POTIONS guard brews and equips only its potions, heal
-prep and the MAINTAIN_CONSUMABLES rung stock only its food, the fleet floor's
+that one value: the CRAFT_POTIONS guard brews and equips only its potions, a
+fight step's prep carries only its potions and food, the fleet floor's
 need is its use, and the keep authority holds its carry in the bag. A potion or
 a food it does not name is never stocked by any of them.
 

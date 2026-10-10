@@ -628,9 +628,6 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | sellRelief =>
       show (applyActionKind .npcSell s).level ≥ s.level
       simp [applyActionKind]
-    | maintainConsumables =>
-      show (applyActionKind .craft s).level ≥ s.level
-      simp [applyActionKind]
     | depositFull =>
       show (applyActionKind .depositAll s).level ≥ s.level
       simp [applyActionKind]
@@ -1157,7 +1154,6 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   | geCancel        => exfalso; revert hmem; unfold progressMeans; decide
   | recycleRelief   => exfalso; revert hmem; unfold progressMeans; decide
   | sellRelief      => exfalso; revert hmem; unfold progressMeans; decide
-  | maintainConsumables => exfalso; revert hmem; unfold progressMeans; decide
   -- restForCombat is a guard OUT of `progressMeans` scope: no
   -- measure-decrease commitment is made for them here; their progress is
   -- carried by `CycleStep.cycleStep_progress_or_waits`.

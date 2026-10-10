@@ -1157,9 +1157,8 @@ def runDecideKey (args : Array Json) : Json :=
       | 3 => .recycleSurplus
       | 4 => .bankExpand
       | 5 => .wait
-      | 6 => .maintainConsumables
-      | 7 => .drainBankJunk
-      | _ => .geBid  -- index 8 (lowYieldCancel, taskExchange, acceptTask, pursueTask, taskCancel, completeTask retired, Phase 5-2c-iii-c-2; supplyBank, currencyTurnIn retired, Phase 5-2c-iv)
+      | 6 => .drainBankJunk
+      | _ => .geBid  -- index 7 (maintainConsumables retired 2026-10-10; lowYieldCancel, taskExchange, acceptTask, pursueTask, taskCancel, completeTask retired, Phase 5-2c-iii-c-2; supplyBank, currencyTurnIn retired, Phase 5-2c-iv)
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfMeans k))]
 
 /-- progression_reserve: args layout (all Nat ≥ 0):
@@ -2534,7 +2533,8 @@ ARG LAYOUT (flat ints; index → field):
                                         later index keeps its position.
 * `[27]` craftReliefFires             (Bool 0/1)
 * `[28]` objectiveStepFires           (Bool 0/1)
-* `[29]` maintainConsumablesFires     (Bool 0/1)
+* `[29]` reserved — was maintainConsumablesFires, retired 2026-10-10; callers send 0
+         and it is ignored, so every later index keeps its position
 * `[30]` bankItemsKnown               (Bool 0/1)
 * `[31]` bankJunkNonempty             (Bool 0/1)
 * `[32]` craftPotionsFires            (Bool 0/1)
@@ -2602,7 +2602,8 @@ def runLadder (args : Array Json) : Json :=
     recyclableSurplusNonempty := b 23, taskFeasibleProjected := b 24,
     restForCombatReady := b 25,
     craftReliefFires := b 27, objectiveStepFires := b 28,
-    maintainConsumablesFires := b 29, bankItemsKnown := b 30,
+    -- [29] reserved (was maintainConsumablesFires, retired 2026-10-10)
+    bankItemsKnown := b 30,
     bankJunkNonempty := b 31, craftPotionsFires := b 32,
     goldReserve := n 33, geBidCandidateNonempty := b 34,
     geCancelTargetsNonempty := b 35, supplyDemand := n 36,
@@ -2654,7 +2655,8 @@ def runCycleStepD (args : Array Json) : Json :=
     recyclableSurplusNonempty := b 23, taskFeasibleProjected := b 24,
     restForCombatReady := b 25,
     craftReliefFires := b 27, objectiveStepFires := b 28,
-    maintainConsumablesFires := b 29, bankItemsKnown := b 30,
+    -- [29] reserved (was maintainConsumablesFires, retired 2026-10-10)
+    bankItemsKnown := b 30,
     bankJunkNonempty := b 31, craftPotionsFires := b 32,
     itemsTaskDeferActive := b 34,
     overstockDebt := n 35, depositDebt := n 36, sellDebt := n 37 }
@@ -2723,7 +2725,8 @@ def runCycleStepE (args : Array Json) : Json :=
     recyclableSurplusNonempty := b 23, taskFeasibleProjected := b 24,
     restForCombatReady := b 25,
     craftReliefFires := b 27, objectiveStepFires := b 28,
-    maintainConsumablesFires := b 29, bankItemsKnown := b 30,
+    -- [29] reserved (was maintainConsumablesFires, retired 2026-10-10)
+    bankItemsKnown := b 30,
     bankJunkNonempty := b 31, craftPotionsFires := b 32,
     itemsTaskDeferActive := b 34,
     overstockDebt := n 35, depositDebt := n 36, sellDebt := n 37,

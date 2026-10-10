@@ -215,7 +215,7 @@ class SelectionContext:
     # else `combat_monster`): `best_loadout.fight_ahead_loadout`, read ONCE per
     # cycle by the player (docs/PLAN_consumable_utility.md increment 5). The
     # one authority every consumable decision reads — the CRAFT_POTIONS guard,
-    # heal prep, the MAINTAIN_CONSUMABLES rung, the fleet floor's need and the
+    # every fight step's potion and food prep, the fleet floor's need and the
     # keep authority's carry. None with no fight ahead, and on every caller
     # that does not choose one: nothing is stocked for it.
     loadout: ChosenLoadout | None = None

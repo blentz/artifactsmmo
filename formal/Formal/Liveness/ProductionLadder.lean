@@ -410,11 +410,6 @@ def drainBankJunkFires (s : State) : Bool :=
 def geBidFires (s : State) : Bool :=
   s.geBidCandidateNonempty
 
-/-- MAINTAIN_CONSUMABLES (PLAN #6a). Mirrors `means.py::_fires(MAINTAIN_CONSUMABLES, …)`:
-    combat-active ∧ heal-stock < floor ∧ a better heal is craftable. Opaque
-    State-carried Bool (see `Measure.State.maintainConsumablesFires`). -/
-def maintainConsumablesFires (s : State) : Bool := s.maintainConsumablesFires
-
 /-- SELL_RELIEF. Mirrors `tiers/guards.py::_fires(SELL_RELIEF, …)`:
     bank full (not bankHasRoom) AND sellable inventory nonempty. -/
 def sellReliefFires (s : State) : Bool :=
@@ -441,7 +436,6 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .claimPending     => claimPendingFires s
   | .sellPressured    => sellPressuredFires s
   | .objectiveStep    => objectiveStepFires s
-  | .maintainConsumables => maintainConsumablesFires s
   | .sellIdle         => sellIdleFires s
   | .recycleSurplus   => recycleSurplusFires s
   | .drainBankJunk    => drainBankJunkFires s

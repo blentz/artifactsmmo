@@ -410,3 +410,16 @@ Live C3P0 on the fix: loadout water_boost_potion, prep
 `GatherMaterials(water_boost_potion x20, carry)` ->
 `[Fight(blue_slime), Gather(sunflower_field x10), Gather(algae x4),
 Craft(water_boost_potion x10)]`.
+
+## MAINTAIN_CONSUMABLES retired (2026-10-10)
+
+Every fight step carries its loadout's potions and food
+(`strategy_driver._fight_step_prep`), so the discretionary rung that stocked
+food for the fight ahead had nothing left to do. Deleted: `MeansKind.
+MAINTAIN_CONSUMABLES` (means, decide key, map_means), `maintain_consumables_goal`
+and its tests; Lean `maintainConsumables` (MeansKind, DecideKey — later means
+indices shift down, as for every means retirement — ProductionLadder, LadderEval,
+CycleStep/DC/Characterization, CumulativeProgress, the three descent capstones,
+`State.maintainConsumablesFires`); the ladder is 21 rungs. Oracle arg [29] stays
+reserved. The rung's mutant groups retire; the decide-key group's means mutant
+moves to GE_BID.

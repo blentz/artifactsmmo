@@ -2751,10 +2751,11 @@ DECIDE_KEY_MUTATIONS = [
      "    GuardKind.HP_CRITICAL: \"RestoreHP\",",
      "    GuardKind.HP_CRITICAL: \"WRONG\","),
     # MeansKind dispatch: similar — corrupt the PURSUE_TASK mapping.
-    # PLAN #6a: the MAINTAIN_CONSUMABLES repr must match the Lean mirror.
-    ("decide_key: MAINTAIN_CONSUMABLES repr corrupted",
-     "    MeansKind.MAINTAIN_CONSUMABLES: \"MaintainConsumables\",",
-     "    MeansKind.MAINTAIN_CONSUMABLES: \"WRONG\","),
+    # The GE_BID repr must match the Lean mirror (was MAINTAIN_CONSUMABLES's,
+    # retired 2026-10-10 with its rung).
+    ("decide_key: GE_BID repr corrupted",
+     "    MeansKind.GE_BID: \"PostBuyBid\",",
+     "    MeansKind.GE_BID: \"WRONG\","),
 ]
 
 
@@ -3409,9 +3410,7 @@ GRIND_HEAL_PREP_POLICY_MUTATIONS = [
     ("grind_heal_prep: an unsuppliable carry leaves the held units in the bank",
      "        for target in (carry, min(carry, held)):",
      "        for target in (carry,):"),
-    ("grind_heal_prep: the rung stocks food with no combat ahead",
-     "    if ctx.combat_monster is None or ctx.loadout is None:",
-     "    if ctx.loadout is None:"),
+    # (the rung's no-combat-ahead mutant retired 2026-10-10 with MAINTAIN_CONSUMABLES)
     ("grind_heal_prep: the heal prep counts drops as supply",
      "HEAL_PREP_POLICY: Policy = replace(DECOMPOSE_POLICY, drop_routes=False)",
      "HEAL_PREP_POLICY: Policy = DECOMPOSE_POLICY"),
@@ -7429,20 +7428,8 @@ TELEPORT_COST_MUTATIONS = [
 ]
 
 
-# The MAINTAIN_CONSUMABLES rung fires exactly when the chosen food's carry is
-# short (increment 5). Killed by tests/test_ai/test_maintain_consumables_rung.py.
-MEANS_MAINTAIN_MUTATIONS = [
-    (
-        "means: MAINTAIN_CONSUMABLES fires whatever the chosen food's carry",
-        "        return maintain_consumables_goal(state, game_data, ctx) is not None",
-        "        return True",
-    ),
-]
-MAINTAIN_MAP_MEANS_MUTATIONS = [
-    ("map_means(MAINTAIN_CONSUMABLES): an idle goal instead of the heal prep",
-     "        return prep\n    if kind is MeansKind.WAIT:",
-     "        return WaitGoal()\n    if kind is MeansKind.WAIT:"),
-]
+# The MAINTAIN_CONSUMABLES rung's groups retired 2026-10-10 with the rung: every
+# fight step carries its loadout's potions and food (POTION_PREP / FIGHT_STEP).
 
 
 # O5.4 Brick 5 — ladder firing-predicate mutations. These perturb the NUMERIC
@@ -7457,7 +7444,7 @@ MAINTAIN_MAP_MEANS_MUTATIONS = [
 # is vacuous on that predicate (the boundary witnesses don't pin the threshold).
 #
 # Only mutation-MEANINGFUL slots are targeted: the opaque passthrough slots
-# (craftRelief/gearReview/maintainConsumables/recycleSurplus and the
+# (craftRelief/gearReview/recycleSurplus and the
 # history-gated phase slots) carry no threshold in the firing predicate itself —
 # their firing is computed by separate machinery (craft_relief_candidates,
 # task_decision, …) already anchored elsewhere.
@@ -9633,10 +9620,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(APPLY_TELEPORT_SRC, TELEPORT_COST_MUTATIONS,
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)
-    run_group(MEANS_SRC, MEANS_MAINTAIN_MUTATIONS,
-              "tests/test_ai/test_maintain_consumables_rung.py", survivors)
-    run_group(STRATEGY_DRIVER_SRC, MAINTAIN_MAP_MEANS_MUTATIONS,
-              "tests/test_ai/test_maintain_consumables_rung.py", survivors)
     # O5.4 Brick 5 — ladder firing-predicate threshold/comparator/conjunct
     # mutations, killed by the SELECT-side differential (binds the Lean ladder
     # to these `_fires` predicates through the ladder_fires oracle).

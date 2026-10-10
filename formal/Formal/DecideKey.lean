@@ -64,9 +64,8 @@ inductive MeansKind where
   | wait  -- Phase 20e-v2: always-firing sentinel sentinel (production fix
           -- src/.../tiers/means.py:WAIT). Closes the StrategyArbiter
           -- deadlock window when no other means fires.
-  | maintainConsumables  -- PLAN #6a: cook/brew heals when combat-active and
-                         -- under-stocked. Appended LAST to keep the oracle's
-                         -- index dispatch (0..11) stable.
+  -- (maintainConsumables retired 2026-10-10: every fight step carries its
+  --  loadout's potions and food; the later indices shift down by one)
   | drainBankJunk  -- 2026-06-24: withdraw over-cap bank junk. Appended LAST
                    -- (oracle index 13) to keep earlier index dispatch stable.
   | geBid  -- 2026-07-24: post a discretionary GE buy order for a slow-to-craft
@@ -101,7 +100,6 @@ def goalReprOfMeans : MeansKind → String
   | .recycleSurplus  => "RecycleSurplus"
   | .bankExpand      => "ExpandBank"
   | .wait            => "Wait"
-  | .maintainConsumables => "MaintainConsumables"
   | .drainBankJunk   => "DrainBankJunk"
   | .geBid           => "PostBuyBid"
 
