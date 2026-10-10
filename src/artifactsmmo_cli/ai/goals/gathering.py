@@ -514,7 +514,8 @@ class GatherMaterialsGoal(Goal):
                         currency_cap.get(currency, 0), batch * price)
                     result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
                                                npc_location=game_data.npc_location(npc_code),
-                                               quantity=batch))
+                                               quantity=batch,
+                                               travel_region=game_data.npc_region(npc_code)))
 
         # Craft-vs-buy: offer an NpcBuy alternative for a needed item that is
         # NPC-sold, affordable above the progression reserve floor, and strictly cheaper to buy than
@@ -544,7 +545,8 @@ class GatherMaterialsGoal(Goal):
                         currency_cap.get(currency, 0), batch * price)
                     result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
                                                npc_location=game_data.npc_location(npc_code),
-                                               quantity=batch))
+                                               quantity=batch,
+                                               travel_region=game_data.npc_region(npc_code)))
                 continue
             # Craftable AND GOLD-sold: only offer NpcBuy when buying beats crafting
             # (proved cheaper_acquisition). npcs_selling_item is gold-only, so the
@@ -558,7 +560,8 @@ class GatherMaterialsGoal(Goal):
             npc_code, npc_price = min(sellers, key=lambda np: np[1])
             result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
                                        npc_location=game_data.npc_location(npc_code),
-                                       quantity=qty))
+                                       quantity=qty,
+                                       travel_region=game_data.npc_region(npc_code)))
             # Immediate-fill GE buy source (DUAL of the discard_overstock GE
             # liquidation): when a standing GE SELL order is strictly cheaper than
             # the NPC buy price AND can supply the whole qty in one fill, also offer

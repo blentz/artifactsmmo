@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import artifactsmmo_cli.ai.loadout_win as win_mod
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.loadout_win import stockable_potions, wins_with_a_loadout
+from artifactsmmo_cli.ai.loadout_win import stockable_potions, winning_loadout, wins_with_a_loadout
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
 from artifactsmmo_cli.ai.obtain_model.gate import GateKind
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -100,3 +100,10 @@ def test_the_drop_route_is_winnable_with_a_loadout() -> None:
 
     assert not winnable(_state())
     assert winnable(_state(inventory={"heal_potion": 2}))
+
+
+def test_the_winning_loadout_is_named() -> None:
+    gd = _gd()
+    gd._npc_stock = {}
+    assert winning_loadout(_state(), gd, "ogre") is None
+    assert winning_loadout(_state(bank_items={"heal_potion": 1}), gd, "ogre") == ("heal_potion",)

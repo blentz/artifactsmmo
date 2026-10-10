@@ -85,21 +85,26 @@ def grey_farm_allowed(item_code: str, state: WorldState,
     upstream) — so instead of guessing one reference, we allow when ANY
     consumer is non-obsolete. This is the honest reading of the directive
     across every recipe the drop serves."""
+    # A drop that is the CURRENCY of an NPC purchase serves the recipes that
+    # consume what it buys (Fight×N → NpcBuy → craft): wool buys the tailor's
+    # cloth, and cloth feeds slime_shield. Before 2026-10-10 the currency
+    # demand counted only when NO recipe consumed the drop itself, so wool's
+    # own obsolete consumers (copper_armor, iron_helm, ...) suppressed the
+    # farm and steel_armor / slime_shield planned at no character level.
+    bought = {code for per_item in game_data.world.npc_buy_currency.values()
+              for code, currency in per_item.items() if currency == item_code}
     consumers = [
         stats
         for stats in game_data.all_item_stats.values()
-        if item_code in (game_data.crafting_recipe(stats.code) or {})
+        if item_code in (recipe := game_data.crafting_recipe(stats.code) or {})
+        or not bought.isdisjoint(recipe)
     ]
     if not consumers:
-        # No recipe consumes it — but a drop that is the CURRENCY of an NPC
-        # purchase serves a demand the same way (Fight×N → NpcBuy). There is
-        # no recipe tier to grind toward instead, so it is farmable outright.
-        purchase_currencies = {
-            currency
-            for per_item in game_data.world.npc_buy_currency.values()
-            for currency in per_item.values()
-        }
-        return item_code in purchase_currencies
+        # Nothing it makes or buys is a recipe input — but a purchase
+        # currency still serves the purchase (a rune bought with a coin):
+        # there is no recipe tier to grind toward instead, so it is farmable
+        # outright.
+        return bool(bought)
     for recipe_item in consumers:
         next_tier = _next_tier_level(recipe_item, game_data)
         if next_tier is None:

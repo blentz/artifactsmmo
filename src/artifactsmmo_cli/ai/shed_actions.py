@@ -77,7 +77,7 @@ def shed_actions(code: str, excess_qty: int, state: WorldState, game_data: GameD
     if npc_code is not None and npc_loc is not None:
         sell_action = NpcSellAction(
             npc_code=npc_code, item_code=code, quantity=excess_qty,
-            npc_location=npc_loc,
+            npc_location=npc_loc, travel_region=game_data.npc_region(npc_code),
         )
         result.append(sell_action)
     # Disposal fallback: whenever there is no fillable GE order AND no

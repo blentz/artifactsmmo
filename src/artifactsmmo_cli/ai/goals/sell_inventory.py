@@ -165,7 +165,8 @@ class SellInventoryGoal(Goal):
             if loc is None:
                 continue
             sale = NpcSellAction(npc_code=npc_code, item_code=code,
-                                 quantity=quantity, npc_location=loc)
+                                 quantity=quantity, npc_location=loc,
+                                 travel_region=game_data.npc_region(npc_code))
             if sale.is_applicable(landed, game_data):
                 return sale
         return None
@@ -189,7 +190,8 @@ class SellInventoryGoal(Goal):
                 if loc is None:
                     continue
                 act = NpcSellAction(npc_code=npc_code, item_code=code,
-                                    quantity=quantity, npc_location=loc)
+                                    quantity=quantity, npc_location=loc,
+                                    travel_region=game_data.npc_region(npc_code))
                 if act.is_applicable(state, game_data):
                     result.append(act)
                     break

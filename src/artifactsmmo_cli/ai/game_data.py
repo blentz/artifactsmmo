@@ -1074,6 +1074,10 @@ class GameData:
         """True if this NPC only exists during a timed event window."""
         return self.world.is_event_npc(npc_code)
 
+    def npc_region(self, npc_code: str) -> str:
+        """The access region an NPC's actions travel in (see LocationCatalog)."""
+        return self.world.npc_region(npc_code)
+
     def npc_event_code(self, npc_code: str) -> str | None:
         """Event code whose active window spawns this NPC, or None if not an event NPC."""
         return self.world.npc_event_code(npc_code)
@@ -1913,6 +1917,14 @@ class GameData:
                 )
 
             if layer != "overworld":
+                # An NPC off the overworld (the underground sorceress) has no
+                # other index: its location and layer go here, and its actions
+                # travel in its region (`LocationCatalog.npc_region`).
+                if (walkable and content_any is not None and not isinstance(content_any, Unset)
+                        and content_any.type_ == MapContentType.NPC
+                        and content_any.code not in self.world.npc_tiles):
+                    self.world.npc_tiles[content_any.code] = (tile.x, tile.y)
+                    self.world.npc_layers[content_any.code] = layer
                 continue
 
             loc = (tile.x, tile.y)

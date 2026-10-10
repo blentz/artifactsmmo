@@ -159,17 +159,22 @@ def test_full_grind_cycle_produces_a_leg(player: GamePlayer,
 def test_ordinary_gather_still_obeys_the_suppression(player: GamePlayer,
                                                      game_data: GameData,
                                                      state: WorldState) -> None:
-    """The 2026-07-06 directive is routed around, not deleted: the SAME item,
-    the SAME state, without the skill-grind flag, still finds no grey fight —
-    the policy verdict itself is untouched. The walk obeys it as the search's
-    admission did (2026-10-02: before, it fought the grey sheep for an
-    ordinary wool demand)."""
-    assert grey_farm_allowed("wool", state, game_data) is False
-    goal = GatherMaterialsGoal(target_item="wool", needed={"wool": 2})
+    """The 2026-07-06 directive is routed around, not deleted: in the SAME
+    state, without the skill-grind flag, an obsolete grey drop still finds no
+    grey fight — the policy verdict itself is untouched. The walk obeys it as
+    the search's admission did (2026-10-02: before, it fought the grey sheep
+    for an ordinary wool demand).
+
+    The item is `raw_beef` (the grey cow; cooked_beef's next tier is close)
+    since 2026-10-10: wool is the tailor's currency for `cloth`, which feeds
+    slime_shield — a recipe whose next tier is far — so the policy now farms
+    the sheep for an ordinary wool demand too."""
+    assert grey_farm_allowed("raw_beef", state, game_data) is False
+    goal = GatherMaterialsGoal(target_item="raw_beef", needed={"raw_beef": 2})
     relevant = goal.relevant_actions(player._build_actions(), state, game_data)
     assert not [a for a in relevant
-                if isinstance(a, FightAction) and a.monster_code == "sheep"]
+                if isinstance(a, FightAction) and a.monster_code == "cow"]
     declined: list[str] = []
     assert decompose(goal, state, game_data, player._build_actions(), player._last_ctx,
                      declined) is None
-    assert declined and declined[0].startswith("infeasible:wool"), declined
+    assert declined and declined[0].startswith("infeasible:raw_beef"), declined

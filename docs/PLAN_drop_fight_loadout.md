@@ -41,7 +41,8 @@ the census character (`census_state`):
 2. + every skill at the character level (brew/craft its own potions);
 3. + gold (buy potions, pay crossings);
 4. + the recipe's events live;
-5. + level 50.
+5. + the character level in steps of 5, up to 50 (the recipe's own skill stays
+   at its craft level — see increment 2's status for why).
 
 Per recipe: the first rung that plans, the gear and potion loadout the
 hardest drop fight on the plan's path uses. A recipe that fails at the top
@@ -66,3 +67,54 @@ Effect:
 - drop walls 9 -> 2.
 
 Cost: 0.62 s of a 28 s live `plan HAL`; census 40 s -> 73 s.
+
+## Increment 2 — built (2026-10-10)
+
+`audit/craft_conditions.py` + `scripts/gen_craft_conditions.py` ->
+`docs/craft_completeness/CONDITIONS.md` (gate: `--check` fails on a recipe
+whose top rung is a PLANNER_BUG). `CraftCell` gained `skills_at_level` and
+`gold`; `CellResult.fights` names what wins each fight of a passing plan
+(`bare`, the winning potion loadout, or `loses`).
+
+The first ladder ended at "level 50, every skill 50": the grey-farm policy
+(USER 2026-07-06) rightly refuses a grey drop for a recipe a near higher tier
+makes obsolete, so a skill-50 character "could not" make cooked_beef. The
+level rungs now keep the recipe's own skill at its craft level.
+
+### Planner bugs found and fixed
+
+1. **NPCs off the overworld were never indexed.** `_build_maps` kept only
+   overworld NPC tiles, so the underground `sorceress` had no location:
+   `fire_crystal` (9 recipes) could never be bought. And every NPC action
+   travelled in "overworld", so the island's `sandwhisper_trader` was priced
+   as a walk inside the main region. Now a walkable off-overworld NPC tile is
+   indexed with its layer (`npc_layers`), and every NPC buy/sell action — the
+   factory's and the four goal-built ones — travels in `npc_region`.
+2. **A purchase currency's demand was ignored when the drop had recipe
+   consumers.** `grey_farm_allowed` counted the currency arm only when no
+   recipe consumed the drop: wool's own consumers are obsolete by skill 20,
+   so the sheep was refused although wool buys the tailor's cloth for
+   slime_shield (next tier far). steel_armor / steel_helm / steel_legs_armor
+   / slime_shield planned at no character level. Live R2D2's root
+   `ObtainItem(slime_shield)` had been declined `infeasible:cloth:no_route:`;
+   on the fix it plans `[Withdraw(cloth), Withdraw(wool), Fight(sheep),
+   NpcBuy(cloth@tailor)]`. The census classifier's currency check had the
+   mirror fault (grey-blind) and called those cells PLANNER_BUG.
+
+### What the ladder leaves (166 recipes plan at no rung)
+
+- combat_blocked 110 — the census gear fixed point stalls at the level-30
+  set (death_knight_sword, royal skeleton): no tier-4 gear's materials come
+  from a monster that set + stockable potions beats. The prediction is not
+  the cause: live predicted-loss fights won 27%, predicted wins lost 2.6%.
+- material_unreachable 50 — jasper/astralyte/magical_cure/prime_fabric are
+  sold only by `tasks_trader`, on a tile gated by the `tasks_farmer`
+  achievement (0/100 on this account); enchanted_coin has no source. With
+  the achievement, the census still cannot pass them: production routes a
+  `tasks_coin` leaf to `ReachCurrencyGoal` in the obtain-item DECISION graph,
+  which the census's raw GatherMaterials plan does not walk. Residual: an
+  achievements rung, and a census verdict through the decision graph.
+- grey_farm_suppressed 4 — policy: obsolete at the level the census reaches.
+- crossing_unaffordable 2 — lava_underground_potion's enchanted_mushroom
+  grows only in the raid area; the bridge from that restricted region to the
+  underground is not modelled. Residual.

@@ -50,7 +50,7 @@ def stockable_potions(state: WorldState, game_data: GameData) -> list[str]:
     return out
 
 
-_WINS: "CatalogueScope[tuple[object, ...], bool]" = CatalogueScope(4096)
+_WINS: "CatalogueScope[tuple[object, ...], tuple[str, ...] | None]" = CatalogueScope(4096)
 
 
 def _fight_key(state: WorldState, game_data: GameData) -> tuple[object, ...]:
@@ -64,15 +64,21 @@ def _fight_key(state: WorldState, game_data: GameData) -> tuple[object, ...]:
                          and stats.type_ in ITEM_TYPE_TO_SLOTS)))
 
 
-def wins_with_a_loadout(state: WorldState, game_data: GameData, monster: str) -> bool:
-    """Some loadout of stockable potions wins the fight from full HP."""
+def winning_loadout(state: WorldState, game_data: GameData, monster: str) -> tuple[str, ...] | None:
+    """The first loadout of stockable potions, in `loadouts` order, that wins
+    the fight from full HP; None when none does."""
     stockable = stockable_potions(state, game_data)
     key = (monster, tuple(stockable), _fight_key(state, game_data))
     memo = _WINS.cache_for(game_data)
-    hit = memo.get(key)
-    if hit is None:
-        hit = any(fight_walk(state, game_data, monster,
-                             [(code, UTILITY_SLOT_MAX_STACK) for code in codes])[0].win
-                  for codes in loadouts(stockable, game_data) if codes)
-        _WINS.remember(memo, key, hit)
-    return hit
+    if key not in memo:
+        found = next((codes for codes in loadouts(stockable, game_data) if codes
+                      and fight_walk(state, game_data, monster,
+                                     [(code, UTILITY_SLOT_MAX_STACK) for code in codes])[0].win),
+                     None)
+        _WINS.remember(memo, key, found)
+    return memo[key]
+
+
+def wins_with_a_loadout(state: WorldState, game_data: GameData, monster: str) -> bool:
+    """Some loadout of stockable potions wins the fight from full HP."""
+    return winning_loadout(state, game_data, monster) is not None

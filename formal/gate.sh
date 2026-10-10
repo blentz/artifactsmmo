@@ -105,7 +105,7 @@ echo "== (c'') openapi conformance (strict) =="; ( cd "$ROOT" && uv run python f
 # worst on `ai/obtain_sources`, which ELEVEN production modules import and both
 # plan producers run through. Those comments were true when written and were
 # never revisited, which is what makes it a class rather than two incidents.
-echo "== (c''') census (--check x12, + joint-walk report) =="
+echo "== (c''') census (--check x13, + joint-walk report) =="
 ( cd "$ROOT" \
   && uv run python scripts/gen_reachability_claims.py --check \
   && uv run python scripts/gen_liveness.py --check \
@@ -114,6 +114,7 @@ echo "== (c''') census (--check x12, + joint-walk report) =="
   && uv run python scripts/gen_inventory_completeness.py --check \
   && uv run python scripts/gen_recycle_source_completeness.py --check \
   && uv run python scripts/gen_craft_completeness.py --check \
+  && uv run python scripts/gen_craft_conditions.py --check \
   && uv run python scripts/gen_obtain_parity.py --check \
   && uv run python scripts/gen_requirement_parity.py --check \
   && uv run python scripts/gen_one_cost_model.py --check \
@@ -137,6 +138,7 @@ echo "== (c''') census (--check x12, + joint-walk report) =="
 # with the richer view and this restores it. The gate VERDICT is identical
 # either way -- the undeclared/orphan arms read the source, not the store.
 ( cd "$ROOT" && git checkout -- docs/craft_completeness/MATRIX.md docs/craft_completeness/BACKLOG.md \
+                                docs/craft_completeness/CONDITIONS.md \
                                 docs/behavioral_completeness/LIVENESS_MATRIX.md )
 # The recurring 120 s `ladder_fires` oracle timeouts (2026-09-25..27) were NOT
 # memory pressure, as first suspected: the oracle was asleep, blocked writing

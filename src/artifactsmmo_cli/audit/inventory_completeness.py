@@ -851,7 +851,8 @@ def _sellable(code: str, state: WorldState, game_data: GameData) -> bool:
     is no SELL route, and slot pressure deliberately does not open the DELETE
     route — production is right to keep holding it."""
     return any(NpcSellAction(npc_code=npc, item_code=code, quantity=1,
-                             npc_location=game_data.npc_location(npc)
+                             npc_location=game_data.npc_location(npc),
+                             travel_region=game_data.npc_region(npc)
                              ).is_applicable(state, game_data)
                for npc, _price in game_data.npcs_buying_item(code))
 

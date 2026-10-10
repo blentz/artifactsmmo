@@ -1068,3 +1068,31 @@ def test_the_kill_that_earns_a_purchase_currency_is_directional() -> None:
     assert repr(plan[0]) == "Fight(cow)"
     assert craft_cell_verdict("mushmush_jacket", plan, gd).passed
     assert "cowhide" not in _closure_leaves("mushmush_jacket", gd)
+
+
+def test_a_purchase_currency_the_grey_policy_refuses_is_not_attainable() -> None:
+    """wool (from a grey sheep) buys the leaf `cloth`; every recipe cloth feeds
+    has a near next tier, so the grey-farm policy refuses the sheep: the
+    cloth is a purchase whose currency cannot be had — not a PLANNER_BUG,
+    which a grey-blind currency check called it (steel_armor, 2026-10-10)."""
+    gd = GameData()
+    gd._item_stats = {
+        "cloak": _craftable("cloak", "gearcrafting", 1),
+        "better_cloak": _craftable("better_cloak", "gearcrafting", 3),
+        "cloth": _mat("cloth"),
+        "wool": _mat("wool"),
+        "iron_blade": ItemStats(code="iron_blade", level=1, type_="weapon",
+                                subtype="", attack={"fire": 50}),
+    }
+    gd._crafting_recipes = {"cloak": {"cloth": 1}, "better_cloak": {"gem": 1}}
+    gd._resource_drops = {"blade_vein": "iron_blade"}
+    gd._resource_locations = {"blade_vein": [(2, 2)]}
+    gd.world.npc_stock = {"tailor": {"cloth": 3}}
+    gd.world.npc_tiles = {"tailor": (4, 4)}
+    gd.world.npc_buy_currency = {"tailor": {"cloth": "wool"}}
+    gd._monster_locations = {"sheep": (1, 0)}
+    gd._monster_level = {"sheep": 1}
+    gd._monster_hp = {"sheep": 5}
+    gd._monster_drops = {"sheep": [("wool", 1, 1, 1)]}
+    _fill_monster_defaults(gd)
+    assert classify_gap("cloak", _cell(char_level=30), gd) is GapClass.PURCHASE_RECURSION

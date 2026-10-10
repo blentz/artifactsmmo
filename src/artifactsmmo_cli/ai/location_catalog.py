@@ -68,6 +68,9 @@ class LocationCatalog:
     lever, not bookkeeping."""
     grand_exchange_tile: tuple[int, int] | None = None
     npc_tiles: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> (x, y)
+    npc_layers: dict[str, str] = field(default_factory=dict)
+    """npc_code -> layer, for an NPC whose tile is NOT on the overworld (the
+    underground `sorceress`); absent means overworld. See `npc_region`."""
     npc_stock: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: buy_price}
     npc_buy_currency: dict[str, dict[str, str]] = field(default_factory=dict)  # npc_code -> {item_code: currency}
     """Currency the player PAYS to buy each stocked item (`NPCItem.currency`:
@@ -297,6 +300,20 @@ class LocationCatalog:
         if loc is not None:
             return loc
         return self.event_npc_spawns.get(npc_code)
+
+    def npc_region(self, npc_code: str) -> str:
+        """The access region of the NPC's tile (its layer from `npc_layers`): the
+        region its buy and sell actions travel in, so the planner bridges a
+        crossing to reach it. An event NPC spawns on the overworld.
+
+        Before 2026-10-10 every NPC action travelled in "overworld": the
+        underground sorceress had no location at all (its fire_crystal could
+        never be bought: 9 recipes), and the island's sandwhisper_trader was
+        priced as a walk inside the main overworld."""
+        tile = self.npc_tiles.get(npc_code)
+        if tile is None:
+            return "overworld"
+        return self.region_of(tile[0], tile[1], self.npc_layers.get(npc_code, "overworld"))
 
     def is_event_npc(self, npc_code: str) -> bool:
         """True if this NPC only exists during a timed event window."""

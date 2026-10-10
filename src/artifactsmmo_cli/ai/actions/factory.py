@@ -310,6 +310,7 @@ def build_actions(
                 item_code=item_code,
                 quantity=1,
                 npc_location=npc_loc,
+                travel_region=game_data.npc_region(npc_code),
             ))
 
     # NPC sell actions: one per (npc, item) pair where the NPC buys the item. Sales
@@ -324,6 +325,7 @@ def build_actions(
                 item_code=item_code,
                 quantity=1,
                 npc_location=npc_loc,
+                travel_region=game_data.npc_region(npc_code),
             ))
 
     # P5b: region-crossing transition edges + off-region content. Fights and

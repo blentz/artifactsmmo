@@ -5,9 +5,14 @@ render-ready CellResult per cell. No decision logic lives here — it is the
 orchestration layer between the proven cores and the doc renderers."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
+from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.loadout_win import winning_loadout
+from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.craft_completeness import (
     CraftCell,
     CraftVerdict,
@@ -38,6 +43,9 @@ class CellResult:
     reason: str
     gap: str | None
     events: frozenset[str] = frozenset()
+    fights: tuple[tuple[str, str], ...] = ()
+    """On a pass, each monster the plan fights, in plan order, with what wins
+    it: `BARE`, the winning potion loadout joined by `+`, or `LOSES`."""
 
 
 def run_cell(recipe: str, cell: CraftCell, game_data: GameData) -> CellResult:
@@ -61,6 +69,7 @@ def run_cell(recipe: str, cell: CraftCell, game_data: GameData) -> CellResult:
                 or advances_a_heal_prep(work, plan, state, game_data)):
             verdict = CraftVerdict(True, "")
         gap = None if verdict.passed else classify_gap(recipe, cell, game_data).value
+        fights = fight_needs(plan, state, game_data) if verdict.passed else ()
     finally:
         game_data.active_event_codes = world_events
     return CellResult(
@@ -73,7 +82,28 @@ def run_cell(recipe: str, cell: CraftCell, game_data: GameData) -> CellResult:
         reason=verdict.reason,
         gap=gap,
         events=cell.events,
+        fights=fights,
     )
+
+
+BARE = "bare"
+LOSES = "loses"
+
+
+def fight_needs(plan: list[Action], state: WorldState,
+                game_data: GameData) -> tuple[tuple[str, str], ...]:
+    """What wins each monster `plan` fights, from full HP (see
+    `CellResult.fights`): the bare stats, else the first winning potion
+    loadout (`loadout_win.winning_loadout`, the drop gate's own answer)."""
+    rested = replace(state, hp=state.max_hp)
+    out: list[tuple[str, str]] = []
+    for monster in dict.fromkeys(a.monster_code for a in plan if isinstance(a, FightAction)):
+        if is_winnable(rested, game_data, monster):
+            out.append((monster, BARE))
+            continue
+        loadout = winning_loadout(rested, game_data, monster)
+        out.append((monster, "+".join(loadout) if loadout is not None else LOSES))
+    return tuple(out)
 
 
 def craftable_recipes(game_data: GameData) -> list[str]:

@@ -374,6 +374,9 @@ CRAFT_COMPLETENESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_co
 CRAFT_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_census.py"
 HELD_STOCK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "held_stock.py"
 FIGHT_WALK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_walk.py"
+LOCATION_CATALOG_SRC_NPC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
+GREY_FARM_SRC_CUR = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grey_farm.py"
+CRAFT_CONDITIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_conditions.py"
 LOADOUT_WIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loadout_win.py"
 RESTORE_HP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "restore_hp.py"
 TASK_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth.py"
@@ -1469,11 +1472,13 @@ GATHERING_CURRENCY_BATCH_MUTATIONS = [
      "                        currency_cap.get(currency, 0), batch * price)\n"
      "                    result.append(NpcBuyAction(npc_code=npc_code, item_code=item,\n"
      "                                               npc_location=game_data.npc_location(npc_code),\n"
-     "                                               quantity=batch))\n"
+     "                                               quantity=batch,\n"
+     "                                               travel_region=game_data.npc_region(npc_code)))\n"
      "                continue",
      "                    result.append(NpcBuyAction(npc_code=npc_code, item_code=item,\n"
      "                                               npc_location=game_data.npc_location(npc_code),\n"
-     "                                               quantity=qty))\n"
+     "                                               quantity=qty,\n"
+     "                                               travel_region=game_data.npc_region(npc_code)))\n"
      "                continue"),
     ("gathering: ferry nets the pocket a second time",
      "                quantity = shortfall if cap is None else min(shortfall, cap)",
@@ -5604,6 +5609,69 @@ LOADOUT_WIN_MUTATIONS = [
     ("loadout win: the memo ignores the fight fields",
      "    key = (monster, tuple(stockable), _fight_key(state, game_data))\n",
      "    key = (monster, tuple(stockable))\n"),
+]
+# Found by the conditions census (USER 2026-10-10, docs/PLAN_drop_fight_loadout.md).
+NPC_REGION_GAME_DATA_MUTATIONS = [
+    ("npc region: an NPC off the overworld is not indexed",
+     "                if (walkable and content_any is not None and not isinstance(content_any, Unset)\n",
+     "                if (False and content_any is not None and not isinstance(content_any, Unset)\n"),
+]
+NPC_REGION_CATALOG_MUTATIONS = [
+    ("npc region: every NPC is in the main overworld",
+     "        return self.region_of(tile[0], tile[1], self.npc_layers.get(npc_code, \"overworld\"))\n",
+     "        return \"overworld\"\n"),
+]
+NPC_REGION_FACTORY_MUTATIONS = [
+    ("npc region: the factory's buys travel in the overworld",
+     "                npc_location=npc_loc,\n"
+     "                travel_region=game_data.npc_region(npc_code),\n"
+     "            ))\n"
+     "\n"
+     "    # NPC sell actions",
+     "                npc_location=npc_loc,\n            ))\n\n    # NPC sell actions"),
+    ("npc region: the factory's sells travel in the overworld",
+     "                npc_location=npc_loc,\n"
+     "                travel_region=game_data.npc_region(npc_code),\n"
+     "            ))\n"
+     "\n"
+     "    # P5b",
+     "                npc_location=npc_loc,\n            ))\n\n    # P5b"),
+]
+NPC_REGION_GOAL_MUTATIONS = [
+    ("npc region: a goal's craft-vs-buy offer travels in the overworld",
+     "                                       quantity=qty,\n"
+     "                                       travel_region=game_data.npc_region(npc_code)))\n",
+     "                                       quantity=qty))\n"),
+]
+GREY_CURRENCY_MUTATIONS = [
+    ("grey farm: a currency serves only its own consumers",
+     "        or not bought.isdisjoint(recipe)\n",
+     "        or False\n"),
+    ("grey farm: a currency nothing consumes is not farmable",
+     "        return bool(bought)\n",
+     "        return False\n"),
+]
+CENSUS_CURRENCY_GREY_MUTATIONS = [
+    ("census: a grey currency dropper is attainable regardless of policy",
+     "               and (game_data.xp_per_kill(m, state.level) > 0\n"
+     "                    or grey_farm_allowed(currency, state, game_data))\n",
+     "\n"),
+]
+CONDITIONS_MUTATIONS = [
+    ("conditions: the skills rung grants nothing",
+     "    cell = replace(cell, skills_at_level=True)\n",
+     "    cell = replace(cell)\n"),
+    ("conditions: the gold rung grants nothing",
+     "    cell = replace(cell, gold=GOLD_GRANT)\n",
+     "    cell = replace(cell)\n"),
+]
+FIGHT_NEED_MUTATIONS = [
+    ("conditions: a fight's need is always bare",
+     "        if is_winnable(rested, game_data, monster):\n",
+     "        if True:\n"),
+    ("conditions: a fight no loadout wins reads as bare",
+     "        out.append((monster, \"+\".join(loadout) if loadout is not None else LOSES))\n",
+     "        out.append((monster, \"+\".join(loadout) if loadout is not None else BARE))\n"),
 ]
 REGION_BRIDGE_MUTATIONS = [
     ("region bridge: decompose emits legs in another region unbridged",
@@ -10087,6 +10155,22 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_loadout_win.py", survivors)
     run_group(LOADOUT_WIN_SRC, LOADOUT_WIN_MUTATIONS,
               "tests/test_ai/test_loadout_win.py", survivors)
+    run_group(GAME_DATA_PARSE_SRC, NPC_REGION_GAME_DATA_MUTATIONS,
+              "tests/test_ai/test_npc_region.py", survivors)
+    run_group(LOCATION_CATALOG_SRC_NPC, NPC_REGION_CATALOG_MUTATIONS,
+              "tests/test_ai/test_npc_region.py", survivors)
+    run_group(FACTORY_SRC, NPC_REGION_FACTORY_MUTATIONS,
+              "tests/test_ai/test_npc_region.py", survivors)
+    run_group(GATHERING_GOAL_SRC, NPC_REGION_GOAL_MUTATIONS,
+              "tests/test_ai/test_npc_region.py", survivors)
+    run_group(GREY_FARM_SRC_CUR, GREY_CURRENCY_MUTATIONS,
+              "tests/test_ai/test_grey_farm.py", survivors)
+    run_group(CRAFT_COMPLETENESS_SRC, CENSUS_CURRENCY_GREY_MUTATIONS,
+              "tests/test_audit/test_craft_completeness.py", survivors)
+    run_group(CRAFT_CONDITIONS_SRC, CONDITIONS_MUTATIONS,
+              "tests/test_audit/test_craft_conditions.py", survivors)
+    run_group(CRAFT_CENSUS_SRC, FIGHT_NEED_MUTATIONS,
+              "tests/test_audit/test_craft_conditions.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, REGION_BRIDGE_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, SUPPLY_DECOMPOSE_MUTATIONS,

@@ -30,6 +30,9 @@ class NpcSellAction(Action):
     item_code: str
     quantity: int = 1
     npc_location: tuple[int, int] | None = field(default=None, repr=False)
+    # The access region of the NPC's tile (`GameData.npc_region`): an
+    # underground or island vendor is reached through a crossing.
+    travel_region: str = field(default="overworld", repr=False)
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if self.npc_location is None:

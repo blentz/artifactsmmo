@@ -54,6 +54,12 @@ class CraftCell:
     events: frozenset[str] = frozenset()
     """Event codes live for this cell (USER 2026-10-10, "add event-active
     cells"); empty is the event-free world. See `event_cells`."""
+    skills_at_level: bool = False
+    """Every skill but the cell's own at the character's level (a character
+    whose skills kept pace), not only the recipe's gathering prerequisites.
+    The conditions census's rungs (`audit/craft_conditions`)."""
+    gold: int = 0
+    """Gold in the pocket (the census character's default is none)."""
 
 
 def tier_of(craft_level: int) -> int:
@@ -491,7 +497,13 @@ def _currency_directly_attainable(currency: str, state: WorldState,
     so a task-only currency is NOT directly attainable here."""
     if currency == GOLD or _has_located_gather_source(currency, game_data):
         return True
-    return any(is_winnable(state, game_data, m) for m in _present_droppers(currency, game_data))
+    # A grey dropper is fought only under the grey-farm policy, as for a leaf
+    # (`_leaf_status`): without this, a currency the policy refuses read as
+    # attainable and its recipe was blamed on the planner.
+    return any(is_winnable(state, game_data, m)
+               and (game_data.xp_per_kill(m, state.level) > 0
+                    or grey_farm_allowed(currency, state, game_data))
+               for m in _present_droppers(currency, game_data))
 
 
 def _permanently_buyable(leaf: str, state: WorldState,
@@ -686,16 +698,16 @@ def census_state(recipe: str, cell: CraftCell, game_data: GameData) -> WorldStat
     stats into the server-total combat stats — what a live character wearing
     it would report.
 
-    `cell.events` are live for the whole cell (`WorldState.active_events`).
+    `cell.events` are live for the whole cell (`WorldState.active_events`);
+    `cell.skills_at_level` and `cell.gold` are the conditions census's grants.
 
     Used by both `classify_gap` and `plan_craft`'s driving state, so the census
     and the classifier agree on the cell's plausible character."""
-    skills = {cell.skill_name: cell.skill_level}
-    for skill, level in _closure_gather_skills(recipe, game_data).items():
-        if skill != cell.skill_name:
-            skills[skill] = level
+    skills = ({name: cell.char_level for name in SKILL_NAMES} if cell.skills_at_level
+              else dict(_closure_gather_skills(recipe, game_data)))
+    skills[cell.skill_name] = cell.skill_level
     events = tuple(sorted(cell.events))
-    sc = ScenarioCharacter(name="craft_audit", level=cell.char_level,
+    sc = ScenarioCharacter(name="craft_audit", level=cell.char_level, gold=cell.gold,
                            skills=dict(skills),
                            equipment=census_gear(cell.char_level, cell.events, game_data),
                            derive_combat_stats=True, active_events=events)

@@ -138,6 +138,32 @@ class TestGreyFarmPolicy:
         state = make_state(level=12, skills={})
         assert grey_farm_allowed("feather", state, gd) is True
 
+    def test_a_currency_serves_the_recipes_of_what_it_buys(self) -> None:
+        """feather's own consumer (health_potion) is obsolete, but feather is
+        also the CURRENCY of `cloth`, and cloth feeds a recipe with no next
+        tier: the farm serves that demand. Live data 2026-10-10: wool buys the
+        tailor's cloth for slime_shield, while wool's own consumers
+        (copper_armor, iron_helm) are all obsolete — steel_armor and
+        slime_shield planned at no character level."""
+        gd = _gd()
+        state = make_state(level=12, skills={"alchemy": 18})
+        assert grey_farm_allowed("feather", state, gd) is False
+        gd._item_stats["cloth"] = ItemStats(code="cloth", level=1, type_="resource")
+        gd._item_stats["shield"] = ItemStats(code="shield", level=5, type_="shield",
+                                             crafting_skill="gearcrafting", crafting_level=5)
+        gd._crafting_recipes["shield"] = {"cloth": 3}
+        gd._npc_stock = {"tailor": {"cloth": 3}}
+        gd._npc_buy_currency = {"tailor": {"cloth": "feather"}}
+        assert grey_farm_allowed("feather", state, gd) is True
+        # what it buys feeds only obsolete recipes: still suppressed
+        gd._item_stats["better_shield"] = ItemStats(
+            code="better_shield", level=8, type_="shield",
+            crafting_skill="gearcrafting", crafting_level=8)
+        gd._crafting_recipes["better_shield"] = {"copper": 1}
+        assert grey_farm_allowed("feather", make_state(level=12, skills={"alchemy": 18,
+                                                                         "gearcrafting": 5}),
+                                 gd) is False
+
     def test_boundary_exactly_margin_away_is_close(self) -> None:
         """gap == margin: still 'close' (grind it), > margin: farm."""
         gd = _gd(alchemy_next_tier_level=20)
