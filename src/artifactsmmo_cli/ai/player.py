@@ -48,6 +48,7 @@ from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
 from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.best_loadout import fight_ahead_loadout
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.combat import fight_records, is_winnable, predict_win
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
@@ -3811,7 +3812,8 @@ class GamePlayer:
             fight_records=(fight_records(self.state, self.game_data, self.history)
                            if self.history is not None else ()),
         )
-        self._consumable_need = consumable_need(self.state, self.game_data, ctx, self.history)
+        ctx = replace(ctx, loadout=fight_ahead_loadout(self.state, self.game_data, ctx, self.history))
+        self._consumable_need = consumable_need(ctx.loadout)
         self._supply_shortfall = supply_shortfall(
             self.state, self._fleet_order, self.character, self._consumable_need,
             self._sibling_needs)

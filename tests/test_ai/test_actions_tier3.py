@@ -357,37 +357,6 @@ class TestDeleteItemAction:
         assert new_state.bank_gold == 100
 
 
-class TestBestConsumableHelper:
-    """Tests for the _best_consumable module-level helper in consumable.py."""
-
-    def test_skips_items_with_zero_quantity(self):
-        from artifactsmmo_cli.ai.actions.consumable import _best_consumable
-        item_stats = {"bread": ItemStats(code="bread", level=1, type_="consumable", hp_restore=30)}
-        # Inventory has bread with qty=0 — must be skipped
-        result = _best_consumable({"bread": 0}, item_stats)
-        assert result is None
-
-    def test_returns_best_consumable_when_multiple_available(self):
-        from artifactsmmo_cli.ai.actions.consumable import _best_consumable
-        item_stats = {
-            "bread": ItemStats(code="bread", level=1, type_="consumable", hp_restore=20),
-            "chicken": ItemStats(code="chicken", level=1, type_="consumable", hp_restore=50),
-        }
-        result = _best_consumable({"bread": 1, "chicken": 1}, item_stats)
-        assert result == ("chicken", 50)
-
-    def test_skips_items_without_stats_or_zero_restore(self):
-        from artifactsmmo_cli.ai.actions.consumable import _best_consumable
-        # "mystery" has no ItemStats entry; "ore" has hp_restore 0 — both skipped,
-        # leaving only "bread" as the best consumable.
-        item_stats = {
-            "ore": ItemStats(code="ore", level=1, type_="resource", hp_restore=0),
-            "bread": ItemStats(code="bread", level=1, type_="consumable", hp_restore=30),
-        }
-        result = _best_consumable({"mystery": 2, "ore": 5, "bread": 1}, item_stats)
-        assert result == ("bread", 30)
-
-
 class TestUseConsumableAction:
     def _make_item_stats_with_food(self, code: str, hp: int) -> dict[str, ItemStats]:
         return {code: ItemStats(code=code, level=1, type_="consumable", hp_restore=hp)}
@@ -412,7 +381,7 @@ class TestUseConsumableAction:
         action = UseConsumableAction(_item_stats={})
         state = make_state(hp=80, max_hp=150, inventory={})
         client = MagicMock()
-        with pytest.raises(RuntimeError, match="no consumable"):
+        with pytest.raises(RuntimeError, match="no food"):
             action.execute(state, client)
 
     def test_execute_preserves_bank_items(self):

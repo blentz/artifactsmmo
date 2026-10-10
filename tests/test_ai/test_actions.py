@@ -18,8 +18,6 @@ from artifactsmmo_cli.ai.actions.complete_task import (
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.cost_core import (
     CONSUMABLE_COOLDOWN_SECONDS,
-    OVERHEAL_CONSUMABLE_COST,
-    REST_COST_MAX,
 )
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
@@ -1035,12 +1033,23 @@ class TestUseConsumableAction:
         assert action.is_applicable(state, make_game_data()) is False
 
     def test_apply_restores_the_items_hp(self):
-        """Eating restores `hp_restore` (80), not the whole deficit (100): the
-        server's heal, and `Formal.CycleInvariants`' `min maxHp (hp + gain)`."""
+        """Eating restores `hp_restore` (80) per unit: an 80 deficit is one
+        chicken, the server's heal (`min maxHp (hp + gain)`)."""
+        action = UseConsumableAction(_item_stats=_consumable_stats())
+        state = make_state(hp=70, max_hp=150, inventory={"cooked_chicken": 2})
+        new_state = action.apply(state, make_game_data())
+        assert new_state.hp == 150
+
+    def test_k_units_are_one_use(self):
+        """USER 2026-10-10 / the docs: a fixed 3 s cooldown whatever the
+        quantity. A 100 deficit eats two chickens in ONE use (3 s) rather than
+        one and a 14 s Rest; the heal caps at max hp."""
         action = UseConsumableAction(_item_stats=_consumable_stats())
         state = make_state(hp=50, max_hp=150, inventory={"cooked_chicken": 2})
         new_state = action.apply(state, make_game_data())
-        assert new_state.hp == 130
+        assert new_state.hp == 150
+        assert "cooked_chicken" not in new_state.inventory
+        assert action.cost(state, make_game_data()) == CONSUMABLE_COOLDOWN_SECONDS
 
     def test_apply_caps_the_heal_at_max_hp(self):
         action = UseConsumableAction(_item_stats=_consumable_stats())
@@ -1049,7 +1058,7 @@ class TestUseConsumableAction:
 
     def test_apply_removes_one_food_from_inventory(self):
         action = UseConsumableAction(_item_stats=_consumable_stats())
-        state = make_state(hp=50, max_hp=150, inventory={"cooked_chicken": 2})
+        state = make_state(hp=70, max_hp=150, inventory={"cooked_chicken": 2})
         new_state = action.apply(state, make_game_data())
         assert new_state.inventory["cooked_chicken"] == 1
 
@@ -1078,6 +1087,23 @@ class TestUseConsumableAction:
         assert "cooked_beef" not in new_state.inventory
         assert new_state.inventory["apple"] == 3
 
+    def test_the_use_eats_the_first_food_the_choice_names(self):
+        """A 130 deficit with one apple (50) and one chicken (80) held: the
+        recovery eats both, as two uses. This use is the FIRST food the choice
+        names (catalogue order: the apple); the chicken is left for the next."""
+        stats = {
+            "apple": ItemStats(code="apple", level=1, type_="consumable", hp_restore=50),
+            "chicken": ItemStats(code="chicken", level=1, type_="consumable", hp_restore=80),
+        }
+        action = UseConsumableAction(_item_stats=stats)
+        state = make_state(hp=70, max_hp=200, inventory={"apple": 1, "chicken": 1})
+        first = action.apply(state, make_game_data())
+        assert first.hp == 120
+        assert first.inventory == {"chicken": 1}
+        second = action.apply(first, make_game_data())
+        assert second.hp == 200
+        assert "chicken" not in second.inventory
+
     def test_cost_is_the_published_flat_three_seconds(self):
         action = UseConsumableAction(_item_stats=_consumable_stats())
         state = make_state()
@@ -1096,14 +1122,28 @@ class TestUseConsumableAction:
         assert action.cost(state, make_game_data()) < RestAction().cost(
             state, make_game_data())
 
-    def test_consumable_expensive_when_overheal(self):
-        # deficit 10 < potion restore 50 -> overheal -> the Rest-forcing sentinel,
-        # which must outrank the dearest possible Rest rather than a literal 10.0.
+    def test_an_overheal_is_eaten_when_it_is_the_cheaper_recovery(self):
+        """Deficit 10 against a 50-hp held food: one 3 s use beats a 10 s Rest
+        (the loop model's choice); the heal caps at max hp."""
         item_stats = {"potion": ItemStats(code="potion", level=1, type_="consumable", hp_restore=50)}
         action = UseConsumableAction(_item_stats=item_stats)
         state = make_state(hp=90, max_hp=100, inventory={"potion": 3})
-        assert action.cost(state, make_game_data()) == OVERHEAL_CONSUMABLE_COST
-        assert action.cost(state, make_game_data()) > REST_COST_MAX
+        assert action.cost(state, make_game_data()) == CONSUMABLE_COOLDOWN_SECONDS
+        assert action.apply(state, make_game_data()).hp == 100
+
+    def test_rest_wins_at_the_floor_and_the_food_is_kept(self):
+        """Deficit 2 of 100: Rest at its 3 s floor ties one eat, and the tie
+        keeps the food — the action is not applicable."""
+        item_stats = {"potion": ItemStats(code="potion", level=1, type_="consumable", hp_restore=50)}
+        action = UseConsumableAction(_item_stats=item_stats)
+        assert action.is_applicable(make_state(hp=98, max_hp=100, inventory={"potion": 3}),
+                                    make_game_data()) is False
+
+    def test_a_food_above_the_level_is_not_eaten(self):
+        item_stats = {"pie": ItemStats(code="pie", level=40, type_="consumable", hp_restore=300)}
+        action = UseConsumableAction(_item_stats=item_stats)
+        assert action.is_applicable(make_state(level=10, hp=10, max_hp=400, inventory={"pie": 3}),
+                                    make_game_data()) is False
 
 
 class TestAcceptTaskAction:

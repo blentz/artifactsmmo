@@ -10,12 +10,14 @@ copies it may bank. `tiers.guards` re-exports the name, so every existing
 `from artifactsmmo_cli.ai.tiers.guards import SelectionContext` still resolves.
 
 Pure data: no behavior, so this module imports nothing else from the package —
-the one exception is `TurnIn` below, a leaf pure-data class (`ai.currency_turnin`
-imports only stdlib) that carries no cycle risk of its own.
+the exceptions are `TurnIn` below, a leaf pure-data class (`ai.currency_turnin`
+imports only stdlib), and `ChosenLoadout` (`ai.chosen_loadout`, pure data over
+`thresholds`), neither of which carries a cycle risk of its own.
 """
 
 from dataclasses import dataclass, field
 
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
 
 
@@ -208,6 +210,15 @@ class SelectionContext:
     # sunflowers in three hours for potions the server drank in cow and wolf
     # fights Lor won anyway.
     fight_monster: str | None = None
+
+    # The consumable loadout chosen against the fight ahead (`fight_monster`,
+    # else `combat_monster`): `best_loadout.fight_ahead_loadout`, read ONCE per
+    # cycle by the player (docs/PLAN_consumable_utility.md increment 5). The
+    # one authority every consumable decision reads — the CRAFT_POTIONS guard,
+    # heal prep, the MAINTAIN_CONSUMABLES rung, the fleet floor's need and the
+    # keep authority's carry. None with no fight ahead, and on every caller
+    # that does not choose one: nothing is stocked for it.
+    loadout: ChosenLoadout | None = None
 
 
 NO_PROFILE_CONTEXT = SelectionContext(

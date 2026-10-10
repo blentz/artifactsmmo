@@ -1,6 +1,7 @@
 """The best consumable loadout read from the world
 (`docs/PLAN_consumable_utility.md` increment 4)."""
 
+from dataclasses import replace
 from fractions import Fraction
 
 import pytest
@@ -10,12 +11,16 @@ import artifactsmmo_cli.ai.loop_rate as loop_mod
 from artifactsmmo_cli.ai.best_loadout import (
     best_loadout,
     candidate_potions,
+    chosen,
+    fight_ahead_loadout,
+    loadout_for,
     loadouts,
     potion_effects_usable,
     units_used,
 )
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.loop_rate import food_menu, loop_rate
+from artifactsmmo_cli.ai.loop_rate import LoopRate, food_menu, loop_rate
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -100,7 +105,7 @@ class TestBest:
         assert best.loadout == ()
         assert best.rate == best.bare
         assert best.rate.win is False
-        assert best.per_fight == ()
+        assert chosen(best, "ogre") == ChosenLoadout("ogre", (), ())
 
     def test_a_free_held_boost_wins_the_fight(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _prices(monkeypatch, {"apple": Fraction(1000)})
@@ -115,9 +120,9 @@ class TestBest:
         assert best.rate == expected
         assert best.rate.win is True
         # one boost a fight, and the held apples the recovery eats
-        assert best.per_fight[0] == ("fire_res_potion", 1)
-        assert best.per_fight[1:] == best.rate.eaten
-        assert best.rate.eaten == (("apple", 2),)
+        pick = chosen(best, "ogre")
+        assert pick.potions == (("fire_res_potion", 1),)
+        assert pick.food == best.rate.eaten == (("apple", 2),)
         assert units_used(best.rate) == 3
 
     def test_an_unpayable_restore_is_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -134,7 +139,7 @@ class TestBest:
         assert best.rate.win is True
         drunk = dict(best.rate.used)["heal_potion"]
         assert best.rate.consumed_seconds == 2 * drunk
-        assert best.per_fight == (("heal_potion", drunk),)
+        assert chosen(best, "ogre").potions == (("heal_potion", drunk),)
 
     def test_equal_rates_prefer_fewer_units(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # A water boost changes nothing for a fire attacker: fire_res + water
@@ -172,3 +177,54 @@ class TestBest:
                          food_menu(state, _gd(), _CTX), {"fire_res_potion": None})
         assert fire is not None
         assert seen == [[(best.bare.xp_per_second, bare_units), (fire.xp_per_second, 3)]]
+
+
+class TestChosen:
+    """The pick as the one value every consumable decision reads (increment 5)."""
+
+    def test_a_potion_the_fight_never_drinks_is_not_chosen(self) -> None:
+        # `chosen` keeps only the potions one fight uses: a worn restore whose
+        # walk drinks none carries no stock.
+        best = best_mod.BestLoadout(("heal_potion",), _rate(used=(("heal_potion", 0),)),
+                                    _rate(used=()))
+        assert chosen(best, "ogre") == ChosenLoadout("ogre", (), ())
+
+    def test_the_fight_ahead_comes_before_the_grind_target(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        asked: list[str] = []
+
+        def fake(state: WorldState, gd: GameData, ctx: object, monster: str,
+                 store: object = None) -> best_mod.BestLoadout:
+            asked.append(monster)
+            return best_mod.BestLoadout((), _rate(used=(), eaten=(("apple", 1),)), _rate(used=()))
+        monkeypatch.setattr(best_mod, "best_loadout", fake)
+        ctx = replace(_CTX, combat_monster="wolf", fight_monster="ogre")
+        assert fight_ahead_loadout(_state(), _gd(), ctx, None) == ChosenLoadout(
+            "ogre", (), (("apple", 1),))
+        ctx = replace(_CTX, combat_monster="wolf")
+        assert fight_ahead_loadout(_state(), _gd(), ctx, None) == ChosenLoadout(
+            "wolf", (), (("apple", 1),))
+        assert asked == ["ogre", "wolf"]
+
+    def test_no_fight_ahead_chooses_nothing(self) -> None:
+        assert fight_ahead_loadout(_state(), _gd(), _CTX, None) is None
+
+    def test_the_cycles_pick_is_reused_for_its_own_monster(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mine = ChosenLoadout("ogre", (("heal_potion", 3),), ())
+        monkeypatch.setattr(best_mod, "best_loadout", _refuse)
+        assert loadout_for(_state(), _gd(), replace(_CTX, loadout=mine), "ogre") is mine
+
+    def test_another_monster_is_chosen_now(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _prices(monkeypatch, {})
+        mine = ChosenLoadout("wolf", (("heal_potion", 3),), ())
+        got = loadout_for(_state(), _gd(), replace(_CTX, loadout=mine), "ogre")
+        assert got == chosen(best_loadout(_state(), _gd(), _CTX, "ogre"), "ogre")
+        assert loadout_for(_state(), _gd(), _CTX, "ogre") == got
+
+
+def _refuse(*_args: object, **_kw: object) -> best_mod.BestLoadout:
+    raise AssertionError("the cycle's own pick must be reused")
+
+
+def _rate(used: tuple[tuple[str, int], ...], eaten: tuple[tuple[str, int], ...] = ()) -> LoopRate:
+    return LoopRate(Fraction(0), 0, False, Fraction(30), Fraction(0), Fraction(0), 100, 0,
+                    used, eaten)

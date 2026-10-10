@@ -107,7 +107,9 @@ names `water_boost_potion` in three of the five cells). It went unseen until
 2026-09-29: the goal's search always failed there, so the arbiter fell through to
 the objective step by accident. Once decomposition served the potion batch, the
 guard preempted the step, and the census caught its own world not being what it
-declared."""
+declared. (Since docs/PLAN_consumable_utility.md increment 5 the guard stocks
+only the chosen loadout's potions, which the census context does not choose;
+the stocked slots stay so the declared world is unchanged.)"""
 
 CENSUS_BAG_QUANTITY_MAX = 100
 CENSUS_BAG_SLOTS_MAX = 20

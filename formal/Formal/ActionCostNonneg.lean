@@ -13,7 +13,7 @@ discharges this precondition for the entire concrete Action set under
 All formulas fall into a small set of structural buckets:
 
 * **Constant** — Equip=1, Unequip=1, Transition=3, MoveSemantic=1,
-  Claim=1, Consumable∈{2,100}. Trivially ≥ 0.
+  Claim=1, Consumable=3. Trivially ≥ 0.
 * **HP-deficit-dependent** — Rest = `max(3, ⌈missing_HP%⌉)/10` (real server
   cooldown scaled to the 10s cost unit; full-HP rest = 10, min 3/10). No longer
   constant; `≥ 3/10 > 0` via the `max 3` floor.
@@ -57,8 +57,6 @@ them against this Lean model.
 Lean core only — no mathlib. `Rat` literals constructed via `mkRat` so the
 `decide` reduction terminates.
 -/
-
-import Formal.Extracted.CostCore
 
 namespace Formal.ActionCostNonneg
 
@@ -178,9 +176,11 @@ def unequipCost : Nat := 1
 def transitionCost : Nat := 3
 def moveSemanticCost : Nat := 1
 def claimCost : Nat := 1
-/-- A fitting consumable costs its published flat cooldown, three seconds
-(`cost_core.CONSUMABLE_COOLDOWN_SECONDS`). Was 2 while Rest was priced in tenths
-of its real duration and had to be undercut. -/
+/-- A consumable use costs its published flat cooldown, three seconds
+(`cost_core.CONSUMABLE_COOLDOWN_SECONDS`), whatever the quantity eaten — the only
+cost `UseConsumableAction` returns. Was 2 while Rest was priced in tenths of its
+real duration and had to be undercut; an overhealing eat used to cost a separate
+sentinel, gone since the eat became `loop_rate_core.recovery_choice`. -/
 def consumableCostFit : Nat := 3
 
 /-- The dearest possible Rest, as a Nat in the same SECONDS `restCost` uses: a
@@ -188,13 +188,6 @@ full-bar recovery is 100 real seconds. `restCost_le_restCostMax` below proves
 this really is the bound. -/
 def restCostMax : Nat := 100
 
-/-- The overheal sentinel, DERIVED rather than hand-mirrored: the multiplier comes
-from `Extracted.CostCore`, generated out of the Python `OVERHEAL_REST_MULTIPLE` by
-`scripts/extract_lean.py`, and Python computes the same product as
-`OVERHEAL_REST_MULTIPLE * REST_COST_MAX`. A Python edit regenerates this side (the
-`--check` drift gate fails otherwise); a Lean edit is caught by the Oracle-backed
-differential. Value is 2 * 100 = 200. -/
-def consumableCostOverheal : Nat := Extracted.CostCore.OVERHEAL_REST_MULTIPLE.toNat * restCostMax
 def teleportCost : Nat := 20  -- PLAN #6b: flat warp cost (distance-independent); `TeleportAction.cost`
 
 theorem equip_cost_nonneg : 0 ≤ equipCost := by simp [equipCost]
@@ -204,17 +197,11 @@ theorem move_semantic_cost_nonneg : 0 ≤ moveSemanticCost := by simp [moveSeman
 theorem claim_cost_nonneg : 0 ≤ claimCost := by simp [claimCost]
 theorem teleport_cost_nonneg : 0 ≤ teleportCost := by simp [teleportCost]
 theorem consumable_cost_fit_nonneg : 0 ≤ consumableCostFit := by simp [consumableCostFit]
-theorem consumable_cost_overheal_nonneg : 0 ≤ consumableCostOverheal := by
-  simp [consumableCostOverheal]
 
-/-! ### The overheal sentinel dominates every Rest cost.
+/-! ### Every Rest cost is bounded by `restCostMax`.
 
-`UseConsumableAction` returns `consumableCostOverheal` when the only consumable it
-can pick overshoots the deficit, so that the planner Rests instead of wasting it.
-That is sound only while the sentinel strictly exceeds EVERY reachable Rest cost —
-a relationship that used to live in a Python comment, one file away from the
-formula it constrains (`cost_core.OVERHEAL_CONSUMABLE_COST`, derived there from
-`REST_COST_MAX`). Here it is kernel-checked instead, for all `hp` and `maxHp`. -/
+The Lean counterpart of `cost_core.REST_COST_MAX`, kernel-checked for all `hp` and
+`maxHp`. -/
 
 /-- The Nat ceil term inside `restCost` never exceeds 100. `missing = maxHp - hp`
 is a truncated sub, so `missing ≤ maxHp` and the numerator is at most
@@ -231,30 +218,13 @@ theorem restCost_ceil_le_100 (hp maxHp : Nat) :
       _ = 100 := by rw [Nat.div_eq_of_lt (by omega)]
 
 /-- `restCostMax` really is an upper bound on `restCost` — the Lean counterpart of
-the Python `REST_COST_MAX = rest_cost_pure(0, 1)`. Justifies deriving
-`consumableCostOverheal` as a multiple of it. -/
+the Python `REST_COST_MAX = rest_cost_pure(0, 1)`. -/
 theorem restCost_le_restCostMax (hp maxHp : Nat) :
     restCost hp maxHp ≤ (restCostMax : Rat) := by
   have hq : max 3 (((maxHp - hp) * 100 + maxHp - 1) / maxHp) ≤ 100 :=
     Nat.max_le.mpr ⟨by omega, restCost_ceil_le_100 hp maxHp⟩
   unfold restCost restCostMax
   exact_mod_cast hq
-
-/-- Rest is always strictly cheaper than the overheal sentinel, so a plan that
-overheals is never preferred to one that rests. Unconditional — it needs no
-`0 < maxHp` hypothesis, because the degenerate `maxHp = 0` state bottoms out at
-the `max 3` floor (cost `3`) rather than dividing by zero in `Nat`. -/
-theorem restCost_lt_consumableCostOverheal (hp maxHp : Nat) :
-    restCost hp maxHp < (consumableCostOverheal : Rat) := by
-  -- Deliberately routed through `restCost_le_restCostMax` and a `decide` on the
-  -- Nat side, rather than hardcoding the product as a numeral. Retuning the
-  -- Python `OVERHEAL_REST_MULTIPLE` regenerates the extracted multiplier, and
-  -- this proof still goes through for any multiple ≥ 2 -- whereas a literal
-  -- would send the gate red on a legitimate retune. A multiplier of 1 makes the
-  -- sentinel merely TIE the dearest Rest, and `decide` then fails here, which is
-  -- exactly the outcome we want.
-  have hnat : restCostMax < consumableCostOverheal := by decide
-  exact Std.lt_of_le_of_lt (restCost_le_restCostMax hp maxHp) (by exact_mod_cast hnat)
 
 -- Bucket 2: distance + constant.
 def acceptTaskCost (dist : Nat) : Nat := distanceCost 1 dist

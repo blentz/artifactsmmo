@@ -24,7 +24,7 @@ def utility_slot_quantity(state: WorldState, slot: str) -> int:
     return 0 if attr is None else int(getattr(state, attr))
 
 
-def utility_slot_for(code: str, state: WorldState) -> str:
+def utility_slot_for(code: str, state: WorldState, keep: frozenset[str] = frozenset()) -> str:
     """The utility slot `code` should be equipped into.  Three rules, in order:
 
     1. **The slot already holding `code`.**  Not a preference, a REQUIREMENT:
@@ -37,8 +37,13 @@ def utility_slot_for(code: str, state: WorldState) -> str:
        destroyed to make room for another.  Slot 1 first is deterministic and
        agrees with `ObjectiveTiers.utility_potion_targets`, which designates
        slot 1 for the primary heal and slot 2 for the secondary.
-    3. **Both occupied by OTHER codes — displace the SMALLER stack**, ties
-       broken to `utility2_slot`.  Something has to go, and quantity is the
+    3. **Both occupied by OTHER codes — displace a code not in `keep`**, and
+       among those the SMALLER stack, ties broken to `utility2_slot`.  `keep`
+       is the chosen consumable loadout's potions
+       (docs/PLAN_consumable_utility.md increment 5): equipping one chosen
+       potion never evicts the other while an unchosen stack can go, which
+       would otherwise alternate the two chosen codes through one slot.
+       With every occupant kept (or `keep` empty) the smaller stack goes.  Something has to go, and quantity is the
        honest measure of how much provisioning the displacement costs (a
        displaced stack returns to inventory, so the cost is bag pressure plus
        a re-equip, not destruction).  The tie-break keeps slot 1 — the
@@ -56,6 +61,9 @@ def utility_slot_for(code: str, state: WorldState) -> str:
         if state.equipment.get(slot) is None:
             return slot
     first, second = UTILITY_SLOTS
+    first_kept = state.equipment.get(first) in keep
+    if first_kept != (state.equipment.get(second) in keep):
+        return second if first_kept else first
     if utility_slot_quantity(state, first) < utility_slot_quantity(state, second):
         return first
     return second

@@ -21,7 +21,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
     arbitrate,
 )
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess, drain_snapshot
-from artifactsmmo_cli.ai.consumable_supply import best_held_heal
+from artifactsmmo_cli.ai.chosen_loadout import potion_carry
 from artifactsmmo_cli.ai.craft_plan_gen import decompose, hands_off_to_search
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
@@ -51,7 +51,6 @@ from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
-from artifactsmmo_cli.ai.goals.maintain_consumables import MaintainConsumablesGoal
 from artifactsmmo_cli.ai.goals.participate_raid import ParticipateRaidGoal
 from artifactsmmo_cli.ai.goals.post_buy_bid import PostBuyBidGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
@@ -70,11 +69,13 @@ from artifactsmmo_cli.ai.goals.task_kills import TaskKillsGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
+from artifactsmmo_cli.ai.grind_heal_prep import maintain_consumables_goal
 from artifactsmmo_cli.ai.intention_progress import rotate
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
+from artifactsmmo_cli.ai.potion_supply import guard_loadout
 from artifactsmmo_cli.ai.raid_participation import raid_survivable_pure
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.requirement_projections import demand_set
@@ -324,19 +325,17 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
                                  bank_accessible=ctx.bank_accessible,
                                  relief=True)
     if kind is GuardKind.CRAFT_POTIONS:
-        # `state=` seeds the goal's frozen craft target. Without it the goal
+        # `state=` seeds the goal's frozen batch. Without it the goal
         # re-resolves its target per planner node and can demand one its own
         # (seed-frozen) action set never provides — see CraftPotionsGoal.__init__.
         #
-        # `combat_monster=` IS THE GUARD'S OWN MONSTER: `ctx.fight_monster`, the
-        # one `craft_potions_fires` was asked about, so the guard and the goal
-        # cannot size for different monsters. (It was `primary_combat_target`
-        # for both until 2026-10-06 — a monster the intention might never fight;
-        # before 2026-08-25 the goal read `ctx.combat_monster`, the farm target,
-        # so a fired guard could build a goal already satisfied.)
+        # `loadout=` IS THE GUARD'S OWN LOADOUT: `guard_loadout` over the
+        # cycle's chosen loadout and the fight ahead, the value
+        # `craft_potions_fires` was asked about, so the guard and the goal
+        # cannot stock for different potions or fights.
         return CraftPotionsGoal(
-            combat_monster=ctx.fight_monster,
-            game_data=game_data, history=history, state=state)
+            loadout=guard_loadout(ctx.loadout, ctx.fight_monster),
+            game_data=game_data, state=state)
     if kind is GuardKind.GE_CANCEL:
         if state is None:
             raise ValueError("GE_CANCEL guard requires a state")
@@ -400,7 +399,13 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
             gather_skills=frozenset(),
         )
     if kind is MeansKind.MAINTAIN_CONSUMABLES:
-        return MaintainConsumablesGoal(game_data=game_data)
+        # The chosen loadout's food, stocked to its carry: the SAME goal heal
+        # prep puts ahead of a grind's fight (`grind_heal_prep`), for the fight
+        # ahead. The rung fires exactly when it exists (`tiers/means.py`).
+        prep = maintain_consumables_goal(state, game_data, ctx)
+        if prep is None:
+            raise ValueError("MAINTAIN_CONSUMABLES mapped but the chosen food is stocked")
+        return prep
     if kind is MeansKind.WAIT:
         return WaitGoal()
     raise ValueError(f"Unknown MeansKind: {kind!r}")
@@ -429,34 +434,33 @@ def monster_drop_inputs(
 
 
 def _marginal_provision_goal(ctx: SelectionContext, state: WorldState,
-                             game_data: GameData,
-                             history: LearningStore | None) -> Goal | None:
-    """Return ProvisionMarginalFightGoal sized to the learned or seeded HP-need.
+                             game_data: GameData) -> Goal | None:
+    """Equip the chosen loadout's restore potion from the bag before the grind,
+    when no utility slot holds anything (docs/PLAN_consumable_utility.md
+    increment 5: only a potion the chosen loadout wears, never the strongest
+    held heal).
 
-    Quantity = ceil(hp_need / restore), clamped to held and UTILITY_SLOT_MAX_STACK.
-    hp_need comes from the learning store when >=5 winning Fight cycles exist,
-    falling back to expected_damage_per_fight for cold-start seeding."""
+    The loadout must be the one chosen against the grind's monster
+    (`ctx.combat_monster`). The quantity is the proved
+    `potion_provision_qty_pure` over the HP the potion's carry restores
+    (`chosen_loadout.potion_carry` × its restore), so it is the carry, clamped
+    to the bag's units and a full slot. A boost restores nothing and is
+    equipped by the CRAFT_POTIONS batch instead."""
     monster = ctx.combat_monster
-    if monster is None or history is None:
+    loadout = ctx.loadout
+    if monster is None or loadout is None or loadout.monster != monster:
         return None
     if already_provisioned(state):
         return None  # already provisioned -> grind
-    heal_code = best_held_heal(state, game_data)
-    if heal_code is None:
-        return None  # no utility-slot heal held -> fight unprovisioned
-    held = state.inventory.get(heal_code, 0)
-    restore = game_data.hp_restore_of(heal_code)
-    learned = history.hp_healed_per_fight(monster, game_data.hp_restore_of) \
-        if hasattr(history, "hp_healed_per_fight") else None
-    hp_need = int(learned) if learned is not None \
-        else expected_damage_per_fight(state, game_data, monster)
-    qty = potion_provision_qty_pure(hp_need, restore, held,
-                                    utility_slot_filled=False,
-                                    max_stack=UTILITY_SLOT_MAX_STACK)
-    if qty <= 0:
-        return None
-    return ProvisionMarginalFightGoal(target_monster=monster,
-                                      heal_code=heal_code, quantity=qty)
+    for code, used in loadout.potions:
+        restore = game_data.hp_restore_of(code)
+        qty = potion_provision_qty_pure(potion_carry(used) * restore, restore,
+                                        state.inventory.get(code, 0),
+                                        utility_slot_filled=False,
+                                        max_stack=UTILITY_SLOT_MAX_STACK)
+        if qty > 0:
+            return ProvisionMarginalFightGoal(target_monster=monster, heal_code=code, quantity=qty)
+    return None
 
 
 def objective_step_goal(
@@ -545,7 +549,7 @@ def objective_step_goal(
                 task_total=state.task_total,
                 task_progress=state.task_progress):
             return None        # long-haul grind, items task active → defer
-        provision = _marginal_provision_goal(ctx, state, game_data, history)
+        provision = _marginal_provision_goal(ctx, state, game_data)
         if provision is not None:
             return provision
         return GrindCharacterXPGoal(target_monster=ctx.combat_monster, initial_xp=state.xp)
@@ -1141,6 +1145,13 @@ class StrategyArbiter:
         item — since the task objective now has its own turns."""
         if (step_goal is None or state.task_type != "items" or not state.task_code
                 or state.task_progress >= state.task_total):
+            return step_goal
+        if isinstance(step_goal, GatherMaterialsGoal) and step_goal.target_item == state.task_code:
+            # The step that MAKES the task item is the task's own work, not a
+            # rival eating its pool. Live C3P0 2026-10-10 03:21Z: once it held
+            # the spruce_wood its `GatherMaterials(spruce_plank)` had gathered,
+            # the plank craft "consumed the reserve", the step was dropped
+            # silently and the character waited out its 100-cycle turn.
             return step_goal
         needed = _reservation_consumption(step_goal, state, game_data)
         if needed is not None and consumes_reserved(needed, state, game_data):

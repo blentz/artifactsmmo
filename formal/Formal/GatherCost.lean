@@ -92,7 +92,6 @@ Lean core only — no mathlib. Rat order via `Rat.add_nonneg`, `Rat.mul_nonneg`,
 `Rat.mul_le_mul_of_nonneg_{left,right}`, `Rat.add_le_add_{left,right}`, and Nat
 `min`/cast facts, matching `Formal.ActionCostNonneg`'s house style.
 -/
-import Formal.Extracted.CostCore
 
 namespace Formal.GatherCost
 

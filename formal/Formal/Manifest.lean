@@ -381,12 +381,6 @@ open Formal.PriorityBand
 #check @Formal.NearestTile.nearestTile_deterministic_lexmin   -- determinism: lex-min closes apply/execute
 #check @Formal.NearestTile.cost_monotone_in_distance          -- monotonicity: cost = 6 + dist monotone
 #check @Formal.NearestTile.nearestTile_least_cost             -- corollary: winner is least-cost destination
--- ConsumableSelection required roles (overheal-aware consumable lex-argmin over Int):
-#check @Formal.ConsumableSelection.select_none_iff_no_usable        -- totality: none ⇔ no usable
-#check @Formal.ConsumableSelection.select_mem                       -- winner is a usable candidate
-#check @Formal.ConsumableSelection.select_is_min                    -- dominance: nothing usable beats winner
-#check @Formal.ConsumableSelection.select_no_overheal_when_fit_exists -- safety: fitter exists ⇒ winner fits
-#check @Formal.ConsumableSelection.select_dominance_monotone        -- monotonicity: larger fit not ranked worse
 -- BankExpansionTiming required roles (bank-expansion firing decision over Int):
 #check @Formal.BankExpansionTiming.expand_total                  -- totality: always true or false
 #check @Formal.BankExpansionTiming.expand_iff                    -- dominance: exact firing condition

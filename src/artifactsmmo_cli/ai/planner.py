@@ -355,12 +355,11 @@ class GOAPPlanner:
                     #     `trueRemaining` rises while `h` does not.
                     #   * `formal/diff/test_action_cost_nonneg_diff.py` pins
                     #     ~20 EXACT equalities on live `Action.cost(...)` against
-                    #     the Lean model, and `ActionCostNonneg` carries two
-                    #     UPPER bounds on Rest (`restCost_le_restCostMax`,
-                    #     `restCost_lt_consumableCostOverheal`) that keep the
-                    #     overheal sentinel dominant. A floor inside the pure
-                    #     cost cores would falsify all of them; a floor here
-                    #     leaves every published cost formula untouched.
+                    #     the Lean model, and `ActionCostNonneg` carries an
+                    #     UPPER bound on Rest (`restCost_le_restCostMax`). A
+                    #     floor inside the pure cost cores would falsify all of
+                    #     them; a floor here leaves every published cost
+                    #     formula untouched.
                     # Non-negativity — the seal on the optimality proof — is
                     # preserved trivially: `max(x, y) ≥ x ≥ 0` for `y ≥ 0`.
                     g = node.g_score + max(

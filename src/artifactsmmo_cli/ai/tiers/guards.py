@@ -19,7 +19,7 @@ from artifactsmmo_cli.ai.craft_relief import (
 from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
+from artifactsmmo_cli.ai.potion_supply import craft_potions_fires, guard_loadout
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 
 # Explicit re-export (`X as X`): `SelectionContext` lives one layer down now, but
@@ -267,7 +267,9 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                                          deposit_context(ctx, step_profile)))
                 and _quantity_fraction(state) >= DISCARD_HIGH_FRACTION)
     if kind is GuardKind.CRAFT_POTIONS:
-        return craft_potions_fires(state, game_data, history, ctx.fight_monster)
+        # Only the chosen loadout's potions, for the fight ahead
+        # (docs/PLAN_consumable_utility.md increment 5).
+        return craft_potions_fires(state, game_data, guard_loadout(ctx.loadout, ctx.fight_monster))
     if kind is GuardKind.GE_CANCEL:
         # On-need + TTL cancellation. `needed_items` is the active step's material
         # demand (`step_profile` codes — the same per-cycle demand GE_BID reads); a
@@ -289,9 +291,6 @@ def active_guards(state: WorldState, game_data: GameData,
                   step_profile: dict[str, int] | None = None) -> list[GuardKind]:
     """Triggered guards in ladder (preemption) order.
 
-    history feeds CRAFT_POTIONS, which sizes potion stocking from LEARNED in-combat
-    consumption (`hp_healed_per_fight`) and falls back to fight marginality when
-    there is no history yet.
     `step_profile` (the resolved step goal's needed map) reaches every disposal
     predicate through the ctx — see `deposit_context`.
     """

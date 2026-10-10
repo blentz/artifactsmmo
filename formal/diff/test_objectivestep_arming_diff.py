@@ -49,6 +49,7 @@ import dataclasses
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
@@ -274,15 +275,16 @@ def test_provision_branch_yields_no_fight_despite_combat_target() -> None:
     """`_marginal_provision_goal` pre-empts the grind — the arming is NOT
     implied by "a combat target exists".
 
-    `strategy_driver.py:781-783` runs BEFORE `GrindCharacterXPGoal`: with a
-    combat target, a `LearningStore`, empty utility slots and a held heal,
-    production returns `ProvisionMarginalFightGoal` — a craft/equip goal, not a
-    fight. The cycle spends itself provisioning and earns no combat xp.
+    `_marginal_provision_goal` runs BEFORE `GrindCharacterXPGoal`: with a
+    combat target, a chosen loadout (`ctx.loadout`, increment 5 of
+    docs/PLAN_consumable_utility.md) wearing a restore potion held in the bag,
+    and empty utility slots, production returns `ProvisionMarginalFightGoal` — an
+    equip goal, not a fight. The cycle spends itself provisioning and earns no
+    combat xp.
 
-    The sweep above cannot see this: it calls `objective_step_goal` with the
-    default `history=None`, and `_marginal_provision_goal` returns immediately on
-    `history is None` (`:592`). So this branch had never been exercised by the
-    arming differential at all.
+    The sweep above cannot see this: its contexts choose no loadout, and
+    `_marginal_provision_goal` returns immediately without one. So this branch
+    is exercised by the arming differential only here.
 
     This is a genuine falsifier of "combat target exists ⇒ the model may arm
     `objectiveStepIsFight`". It does not break the E-tower, because increment 2
@@ -292,7 +294,6 @@ def test_provision_branch_yields_no_fight_despite_combat_target() -> None:
     of being rediscovered later.
     """
     from artifactsmmo_cli.ai.game_data import ItemStats
-    from artifactsmmo_cli.ai.learning.store import LearningStore
 
     heal = "small_health_potion"
     gd = _make_game_data()
@@ -307,17 +308,13 @@ def test_provision_branch_yields_no_fight_despite_combat_target() -> None:
 
     scn = Scenario(level=10, target_level=11, combat_target_exists=True,
                    task_type=None, task_code=None, task_progress=0, task_total=0)
-    # The character must be able to KILL the monster and TAKE damage, or
-    # `expected_damage_per_fight` returns 0 (`expected_damage.py:42-44`), the
-    # provision quantity ceils to 0, and the branch silently does not fire.
     w = dataclasses.replace(
         _make_world(scn), inventory={heal: 5}, attack={"fire": 20},
     )
-    ctx = _make_ctx(scn)
-    history = LearningStore(db_path=":memory:", character="diff")
+    ctx = dataclasses.replace(
+        _make_ctx(scn), loadout=ChosenLoadout(COMBAT_MONSTER, ((heal, 1),), ()))
 
-    goal = objective_step_goal(ReachCharLevel(scn.target_level), w, gd, ctx,
-                               history=history)
+    goal = objective_step_goal(ReachCharLevel(scn.target_level), w, gd, ctx)
 
     assert goal is not None, "expected a provision goal, got no step at all"
     assert not isinstance(goal, GrindCharacterXPGoal), (

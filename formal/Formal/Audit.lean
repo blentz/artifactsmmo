@@ -306,11 +306,6 @@ open Formal.PriorityBand
 #print axioms Formal.NearestTile.nearestTile_deterministic_lexmin
 #print axioms Formal.NearestTile.cost_monotone_in_distance
 #print axioms Formal.NearestTile.nearestTile_least_cost
-#print axioms Formal.ConsumableSelection.select_none_iff_no_usable
-#print axioms Formal.ConsumableSelection.select_mem
-#print axioms Formal.ConsumableSelection.select_is_min
-#print axioms Formal.ConsumableSelection.select_no_overheal_when_fit_exists
-#print axioms Formal.ConsumableSelection.select_dominance_monotone
 #print axioms Formal.BankExpansionTiming.expand_total
 #print axioms Formal.BankExpansionTiming.expand_iff
 #print axioms Formal.BankExpansionTiming.expand_preserves_reserve

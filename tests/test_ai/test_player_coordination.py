@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.ge_cancel_order import GeCancelOrderAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RoleChange
 from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY, SUPPLY_DEMAND_MIN, supply_due
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -2375,24 +2376,29 @@ def test_a_lone_character_is_its_own_fleet():
 
 
 def test_the_shortfall_reaches_the_selection_context(monkeypatch):
+    """The cycle's ONE loadout pick (increment 5): chosen once against the fight
+    ahead with the learning store, carried on the context, and the need is its
+    use."""
     p = GamePlayer(character="hero", fleet_order=("HAL", "hero"))
     p.state = make_state()
     p.game_data = _make_planner_gd()
     p._sibling_needs = {"HAL": {"cooked_bass": 4}}
     seen = {}
+    pick = ChosenLoadout("chicken", (), (("cooked_bass", 1),))
 
-    def need(state, gd, ctx, store):  # type: ignore[no-untyped-def]
+    def choose(state, gd, ctx, store):  # type: ignore[no-untyped-def]
         seen.update(monster=ctx.combat_monster, store=store)
-        return {"cooked_bass": 20}
+        return pick
 
     def shortfall(state, order, me, own, siblings):  # type: ignore[no-untyped-def]
         seen.update(order=order, me=me, own=own, siblings=siblings)
         return (("cooked_bass", 11),)
 
-    monkeypatch.setattr("artifactsmmo_cli.ai.player.consumable_need", need)
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.fight_ahead_loadout", choose)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.supply_shortfall", shortfall)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))
     ctx = p._selection_context(combat_monster="chicken")
+    assert ctx.loadout is pick
     assert ctx.supply_shortfall == (("cooked_bass", 11),)
     assert p._supply_shortfall == (("cooked_bass", 11),)
     assert p._consumable_need == {"cooked_bass": 20}

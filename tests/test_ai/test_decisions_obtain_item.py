@@ -32,6 +32,7 @@ import json
 
 import pytest
 
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.decision import resolve_node
 from artifactsmmo_cli.ai.decisions.obtain_item import obtain_item_decision
 from artifactsmmo_cli.ai.decisions.root import resolve_root
@@ -55,7 +56,6 @@ from tests.test_ai.test_strategy_driver import (
     _ctx,
     _gd,
     _gd_with_utility_heal,
-    _record_fight_wins_with_consumables,
 )
 
 
@@ -331,18 +331,15 @@ def test_objective_step_goal_grinds_for_reach_char_level():
     assert isinstance(goal, GrindCharacterXPGoal)
 
 
-def test_objective_step_goal_provisions_for_reach_char_level(tmp_path):
+def test_objective_step_goal_provisions_for_reach_char_level():
     """`_marginal_provision_goal` returns a goal -> `return provision`."""
     state = make_state(level=3, inventory={"small_health_potion": 100})
     gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
-    history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
-    _record_fight_wins_with_consumables(
-        history, "green_slime", 8, json.dumps({"small_health_potion": 2}))
-    ctx = _ctx(combat_monster="green_slime")
+    ctx = _ctx(combat_monster="green_slime",
+               loadout=ChosenLoadout("green_slime", (("small_health_potion", 2),), ()))
     step = ReachCharLevel(level=5)
-    goal = objective_step_goal(step, state, gd, ctx, history=history)
+    goal = objective_step_goal(step, state, gd, ctx)
     assert isinstance(goal, ProvisionMarginalFightGoal)
-    history.close()
 
 
 # --- the unwinnable-dropper wall: gear, not a doomed gather ------------------

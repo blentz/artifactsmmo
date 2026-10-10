@@ -9,16 +9,15 @@ evaluated once, at the seed state) and a max_depth below the batch the goal's
 own ladder sized.
 
 Since Phase 2e the goal is the walk's (`craft_plan_gen._decompose_potions`, a
-decline is final), so these cases now pin that the WALK plans each shape: the
-control, a craftable boost beside the heal, a deficit larger than one gather
-batch, and a 3-unit recipe whose batch is 17 legs deep.
+decline is final), so these cases pin that the WALK plans each shape: the
+control, a second chosen potion beside the heal, a deficit larger than one
+gather batch, and a 3-unit recipe. The goal stocks the CHOSEN loadout's potions
+(docs/PLAN_consumable_utility.md increment 5).
 """
 
-import pytest
-
-from artifactsmmo_cli.ai import unlock_boost as _unlock_boost_module
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
@@ -32,14 +31,10 @@ _INGREDIENT = "sunflower"
 _RESOURCE = "sunflower_field"
 _HURTS = "biting_slime"
 
+HEAL_LOADOUT = ChosenLoadout(monster=_HURTS, potions=((_HEAL, 1),), food=())
+"""The chosen loadout against `_HURTS`: one heal a fight, a carry of 20."""
 
-@pytest.fixture(autouse=True)
-def clear_unlock_boost_cache():
-    """unlock_boost keeps a module-level single-entry cache; clear it so these
-    fixtures cannot inherit another test's verdict under an equal-shaped key."""
-    _unlock_boost_module._CACHE.clear()
-    yield
-    _unlock_boost_module._CACHE.clear()
+BOTH_LOADOUT = ChosenLoadout(monster=_HURTS, potions=((_HEAL, 1), (_BOOST, 1)), food=())
 
 
 def _gd(*, with_boost: bool, monster_level: int = 3, ingredient_qty: int = 1) -> GameData:
@@ -47,15 +42,8 @@ def _gd(*, with_boost: bool, monster_level: int = 3, ingredient_qty: int = 1) ->
     monster (so potion stocking is combat-justified), and — when `with_boost` —
     a craftable damage boost for the SAME element the monster is weak to.
 
-    `with_boost` is the only difference between the two catalogs. It is the axis
-    that flips `best_boost_potion` from None to a real code, which is what
-    activates `_active_craft`'s second clause.
-
-    The monster's attack is tuned so the fight is WON but reads MARGINAL
-    (`fight_is_marginal_pure`): a comfortably-won fight projects zero in-combat
-    consumption, so the goal would correctly have nothing to do and the test
-    would pass vacuously. `monster_level` keeps it inside the character's combat
-    band, where it is the fight the goal is built for.
+    `with_boost` is the only difference between the two catalogs: it puts a
+    second chosen potion in reach.
     """
     gd = GameData()
     stats = {
@@ -88,10 +76,7 @@ def _gd(*, with_boost: bool, monster_level: int = 3, ingredient_qty: int = 1) ->
 
 
 def _state(**overrides):
-    """Level-20 character that BEATS `biting_slime` yet takes marginal damage
-    doing it, for whom the fire boost is a strictly-positive combat-margin gain
-    — the same three-way combination live Robby sits in (wolf winnable,
-    `best_boost_potion` = fire_boost_potion, potion stocking justified).
+    """Level-20 character fighting `biting_slime`.
 
     Alchemy is high enough for BOTH the heal and the boost recipe, and every
     potion material is already in hand, so material supply can never be the
@@ -120,11 +105,11 @@ def _actions(gd: GameData) -> list:
 
 
 def test_goal_is_plannable_without_a_craftable_boost():
-    """Control. With no boost in the catalog the goal has ONE target, the frozen
-    action set covers it, and the planner finds the craft+equip plan."""
+    """Control. The loadout chooses the heal alone; the walk finds the
+    craft+equip plan."""
     gd = _gd(with_boost=False, monster_level=18)
     state = _state()
-    goal = CraftPotionsGoal(combat_monster=_HURTS, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
     plan = (decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or [])
@@ -132,17 +117,15 @@ def test_goal_is_plannable_without_a_craftable_boost():
     assert plan, "control: the heal-only goal must be plannable"
 
 
-def test_goal_stays_plannable_once_a_boost_becomes_craftable():
-    """The regression. Same fixture plus a craftable boost — the ONLY difference.
-
-    Live, this is the alchemy-10 threshold: below it `best_boost_potion` is None
-    and the goal plans; at or above it `_active_craft` re-targets the boost the
-    moment the heal deficit closes, so `is_satisfied` never goes True and the
-    planner exhausts the whole reachable space. Robby crossed it (alchemy 16).
-    """
+def test_goal_stays_plannable_with_a_second_chosen_potion():
+    """The regression. Same fixture plus a second chosen potion — the ONLY
+    difference. The goal must not re-target the boost the moment the heal's
+    deficit closes (the old `_active_craft` did, so `is_satisfied` never went
+    True and the planner exhausted the space; live Robby, alchemy 16): the seed
+    freezes ONE potion at ONE batch."""
     gd = _gd(with_boost=True, monster_level=18)
     state = _state()
-    goal = CraftPotionsGoal(combat_monster=_HURTS, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=BOTH_LOADOUT, game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
     plan = decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or []
@@ -156,15 +139,13 @@ def test_goal_stays_plannable_once_a_boost_becomes_craftable():
 def test_goal_is_plannable_when_the_deficit_exceeds_one_gather_batch():
     """The second instance of the same mismatch, independent of the boost clause.
 
-    `_ladder_runs` caps the gather path at POTION_GATHER_BATCH runs, so
-    `relevant_actions` admits an Equip sized to that BATCH — while the goal test
-    demanded the FULL deficit. The goal's own docstring states the intent is to
-    "gather a 5-potion batch and replan", so satisfying the batch must count as
-    satisfying the goal for this plan.
+    `_ladder_runs` caps the gather path at POTION_GATHER_BATCH runs, so the
+    equip is sized to that BATCH, not the carry's full deficit; satisfying the
+    batch must count as satisfying the goal for this plan.
     """
     gd = _gd(with_boost=False, monster_level=18)
     state = _state(inventory={})          # nothing held: forces the gather rung
-    goal = CraftPotionsGoal(combat_monster=_HURTS, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
     plan = decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or []
@@ -189,7 +170,7 @@ def test_goal_provisions_depth_for_the_batch_its_own_ladder_sized():
     """
     gd = _gd(with_boost=False, monster_level=18, ingredient_qty=3)
     state = _state(inventory={})          # nothing held: forces the gather rung
-    goal = CraftPotionsGoal(combat_monster=_HURTS, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
     plan = decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or []

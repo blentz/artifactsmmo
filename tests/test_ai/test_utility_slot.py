@@ -4,8 +4,9 @@ Before 2026-08-25 the answer was a hard-coded `_TARGET_SLOT = "utility1_slot"`
 in TWO modules (`craft_ladder` and `goals/provision_marginal_fight`), which is
 why `CraftPotionsGoal`'s boost-stock arm equipped its boost over the heal stack
 whose satisfaction had gated the arm. Each of the three rules below is pinned
-here, and the arm's convergence is pinned end-to-end in
-`tests/test_ai/scenarios/test_boost_stock_cell.py`.
+here, including rule 3's `keep` set (docs/PLAN_consumable_utility.md increment
+5): the chosen loadout's other potion is never the one displaced while an
+unchosen stack can go.
 """
 
 import dataclasses
@@ -121,3 +122,38 @@ def test_already_provisioned_reads_both_slots(slot1, slot2, expected):
     (None, BOOST) row — the row that survived the whole suite while
     `_marginal_provision_goal` carried its own hand-copy of this predicate."""
     assert already_provisioned(_state(slot1, 0, slot2, 0)) is expected
+
+
+# --- rule 3 with `keep`: never evict a chosen potion while an unchosen can go -
+
+def test_rule3_keep_spares_a_kept_slot1_even_when_it_is_the_smaller_stack():
+    """Slot 1 holds the chosen HEAL (3) and slot 2 an unchosen BOOST (30).
+    Quantity alone would evict slot 1; the keep rule evicts slot 2."""
+    state = _state(HEAL, 3, BOOST, 30)
+    assert utility_slot_for(OTHER, state) == "utility1_slot", "fixture: quantity alone picks slot 1"
+    assert utility_slot_for(OTHER, state, frozenset({HEAL, OTHER})) == "utility2_slot"
+
+
+def test_rule3_keep_spares_a_kept_slot2_even_when_it_is_the_smaller_stack():
+    """Mirror: the chosen BOOST (6) sits in slot 2, the unchosen HEAL (40) in
+    slot 1. Quantity alone evicts slot 2; the keep rule evicts slot 1."""
+    state = _state(HEAL, 40, BOOST, 6)
+    assert utility_slot_for(OTHER, state) == "utility2_slot", "fixture: quantity alone picks slot 2"
+    assert utility_slot_for(OTHER, state, frozenset({BOOST, OTHER})) == "utility1_slot"
+
+
+@pytest.mark.parametrize("keep", [frozenset({HEAL, BOOST}), frozenset({"unworn_potion"})])
+def test_rule3_both_or_neither_kept_falls_back_to_the_smaller_stack(keep):
+    """With both occupants kept, or neither, the keep set cannot decide and the
+    smaller stack goes, ties to slot 2, exactly as without one."""
+    assert utility_slot_for(OTHER, _state(HEAL, 3, BOOST, 30), keep) == "utility1_slot"
+    assert utility_slot_for(OTHER, _state(HEAL, 40, BOOST, 6), keep) == "utility2_slot"
+    assert utility_slot_for(OTHER, _state(HEAL, 10, BOOST, 10), keep) == "utility2_slot"
+
+
+def test_keep_never_overrides_rules_1_and_2():
+    """The keep set only orders displacement: the slot already holding the code
+    and a free slot still come first."""
+    keep = frozenset({HEAL})
+    assert utility_slot_for(BOOST, _state(HEAL, 40, BOOST, 1), keep) == "utility2_slot"
+    assert utility_slot_for(BOOST, _state(None, 0, HEAL, 40), keep) == "utility1_slot"

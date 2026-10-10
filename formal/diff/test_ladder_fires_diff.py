@@ -96,7 +96,7 @@ the teeth bite per slot:
                           the slot in production and the oracle must SELECT the
                           same MeansKind over the
                           firing pattern. (craftRelief: `craft_relief_candidates`
-                          non-empty; maintainConsumables: `maintain_consumables_fires`.)
+                          non-empty; maintainConsumables: `maintain_consumables_goal`.)
   * restForCombat       — production folds clauses (a)/(c)/(d) into the opaque
                           `restForCombatReady` (a `predict_win` verdict). In the
                           SWEEP it stays False (combat_monster=None). The DRIVE
@@ -151,6 +151,7 @@ from artifactsmmo_cli.ai.accumulation_sell import sellable_tradeable_now
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.cancel_selection import cancel_targets
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.decisions.root import _task_root
 from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.fleet_work import SUPPLY_DEMAND_MIN
@@ -299,7 +300,7 @@ def _make_game_data(scn: Scenario) -> GameData:
     gd._npc_locations = {SELLER_NPC: (1, 2)} if scn.item_sellable else {}
     gd._bank_capacity = scn.bank_capacity
     gd._next_expansion_cost = scn.next_expansion_cost
-    fill_monster_stat_defaults(gd)  # craft_potions_fires→unlock_boost_target→predict_win needs full stats
+    fill_monster_stat_defaults(gd)  # production predicates read full monster stats
     return gd
 
 
@@ -436,8 +437,9 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         1 if _bank_junk_nonempty(scn) else 0,    # 31 bankJunkNonempty
         # 32 craftPotionsFires: the opaque CRAFT_POTIONS guard verdict, computed
         # by production's REAL `craft_potions_fires` on the same (w, gd) the
-        # ladder reads (empty synthetic catalog ⇒ no target potion ⇒ False).
-        1 if craft_potions_fires(w, _make_game_data(scn)) else 0,  # 32 craftPotionsFires
+        # ladder reads, for the loadout the sweep's context chooses — none
+        # (`ctx.loadout` None, no fight ahead) ⇒ False.
+        1 if craft_potions_fires(w, _make_game_data(scn), None) else 0,  # 32 craftPotionsFires
         # 33 goldReserve: the SAME drawn reserve the production guard reads
         # via ctx.gold_reserve (should_expand_bank's safety gate, 2026-07-06)
         # — one value, two sides, exact lockstep.
@@ -1588,9 +1590,11 @@ def test_rest_for_combat_near_miss_full_hp() -> None:
 
 # ---------------------------------------------------------------------------
 # Slot 2 — maintainConsumables (arg[29]).  Production `_means_fires(
-# MAINTAIN_CONSUMABLES)` (tiers/means.py ~160) + `maintain_consumables_fires`
-# (consumable_supply.py ~74): combat_monster set AND heal_stock < HEAL_STOCK_FLOOR
-# (5) AND best_craftable_heal is not None (a recipe whose hp_restore item the
+# MAINTAIN_CONSUMABLES)` (tiers/means.py) = `grind_heal_prep.
+# maintain_consumables_goal` is not None: combat_monster set AND a chosen
+# loadout (`ctx.loadout`) whose recovery eats a food short of its carry in the
+# bag that the walk can supply (docs/PLAN_consumable_utility.md increment 5;
+# was: heal_stock < HEAL_STOCK_FLOOR AND a craftable heal, a recipe whose hp_restore item the
 # player can craft now).
 #
 # SELECTION NOTE (a real Lean-model finding, reported — mirrors recycleSurplus
@@ -1611,25 +1615,31 @@ def _maintain_gd() -> GameData:
         "potion": ItemStats(code="potion", level=1, type_="consumable",
                             crafting_skill="alchemy", crafting_level=1,
                             hp_restore=50),
+        "herb": ItemStats(code="herb", level=1, type_="resource"),
     }
+    gd._workshop_locations = {"alchemy": (0, 0)}
     return gd
 
 
-def _maintain_ctx() -> SelectionContext:
+def _maintain_ctx(eaten: int = 1) -> SelectionContext:
+    # The cycle's chosen loadout against the fight ahead eats `eaten` potions a
+    # recovery: its carry is `eaten` × CARRY_HORIZON_FIGHTS (20).
+    food = (("potion", eaten),) if eaten else ()
     return SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster="mob",
         target_gear=frozenset(), target_tools=frozenset(),
-        draw_owed=True)
+        draw_owed=True, loadout=ChosenLoadout("mob", (), food))
 
 
 def _maintain_world(potion_qty: int) -> WorldState:
-    # No task (phase NONE), alchemy@1 (recipe level met), heal stock = potion_qty.
-    inv = {"potion": potion_qty} if potion_qty > 0 else {}
+    # No task (phase NONE), alchemy@1 (recipe level met), the carry's herbs in
+    # the bag, `potion_qty` potions carried.
+    inv = {"herb": 20} | ({"potion": potion_qty} if potion_qty > 0 else {})
     return WorldState(
         character="diff", level=10, xp=0, max_xp=999999, hp=100, max_hp=100,
         gold=0, skills={"alchemy": 1}, x=0, y=0,
-        inventory=inv, inventory_max=20,
+        inventory=inv, inventory_max=100,
         inventory_slots_max=20,
         equipment={"weapon_slot": None}, cooldown_expires=None,
         bank_items=None, bank_gold=None, pending_items=None,
@@ -1637,9 +1647,10 @@ def _maintain_world(potion_qty: int) -> WorldState:
 
 
 def test_maintain_consumables_drives_true() -> None:
-    """TRUE fixture: combat target set, heal_stock 0 < 5, a craftable potion
-    (alchemy@1, hp_restore 50) -> production MAINTAIN_CONSUMABLES fires and wins
-    selection on BOTH ladders (ACCEPT_TASK, which outranked it, is retired)."""
+    """TRUE fixture: combat target set, the chosen loadout eats the potion and
+    the bag carries none of its 20, the herbs are held -> production
+    MAINTAIN_CONSUMABLES fires and wins selection on BOTH ladders (ACCEPT_TASK,
+    which outranked it, is retired)."""
     w = _maintain_world(potion_qty=0)
     gd = _maintain_gd()
     prod, prod_sel, lean, lean_sel = drive_and_contest(
@@ -1654,12 +1665,24 @@ def test_maintain_consumables_drives_true() -> None:
 
 
 def test_maintain_consumables_near_miss_stocked() -> None:
-    """Near-miss: heal_stock 5 == HEAL_STOCK_FLOOR -> NOT under-stocked ->
-    MAINTAIN_CONSUMABLES does NOT fire (pins the `heal_stock < 5` conjunct)."""
-    w = _maintain_world(potion_qty=5)
+    """Near-miss: the bag carries the full 20 -> MAINTAIN_CONSUMABLES does NOT
+    fire (pins the carry comparison)."""
+    w = _maintain_world(potion_qty=20)
     gd = _maintain_gd()
     prod, _, lean, _ = drive_and_contest(
         w, gd, _maintain_ctx(),
+        driven=frozenset({LadderMeans.MAINTAIN_CONSUMABLES}))
+    assert prod[LadderMeans.MAINTAIN_CONSUMABLES] is False
+    assert lean[LadderMeans.MAINTAIN_CONSUMABLES] is False
+
+
+def test_maintain_consumables_near_miss_rest_wins() -> None:
+    """Near-miss: the chosen loadout's recovery eats nothing (Rest is the
+    cheaper recovery) -> nothing to carry -> MAINTAIN_CONSUMABLES does NOT fire."""
+    w = _maintain_world(potion_qty=0)
+    gd = _maintain_gd()
+    prod, _, lean, _ = drive_and_contest(
+        w, gd, _maintain_ctx(eaten=0),
         driven=frozenset({LadderMeans.MAINTAIN_CONSUMABLES}))
     assert prod[LadderMeans.MAINTAIN_CONSUMABLES] is False
     assert lean[LadderMeans.MAINTAIN_CONSUMABLES] is False
@@ -1670,10 +1693,7 @@ def test_maintain_consumables_near_miss_no_combat() -> None:
     of stock/craftability -> MAINTAIN_CONSUMABLES does NOT fire."""
     w = _maintain_world(potion_qty=0)
     gd = _maintain_gd()
-    ctx = SelectionContext(
-        bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
-        initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(), target_tools=frozenset())
+    ctx = dataclasses.replace(_maintain_ctx(), combat_monster=None)
     prod, _, lean, _ = drive_and_contest(
         w, gd, ctx, driven=frozenset({LadderMeans.MAINTAIN_CONSUMABLES}))
     assert prod[LadderMeans.MAINTAIN_CONSUMABLES] is False

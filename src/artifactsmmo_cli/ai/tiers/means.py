@@ -14,10 +14,10 @@ from artifactsmmo_cli.ai.bank_expansion_timing import (
     TRIGGER_FILL_NUM,
     expansion_fires,
 )
-from artifactsmmo_cli.ai.consumable_supply import maintain_consumables_fires
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
+from artifactsmmo_cli.ai.grind_heal_prep import maintain_consumables_goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
@@ -164,15 +164,13 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         return bool(ge_bid_candidates(state, game_data, ctx, TTL_CYCLES))
 
     if kind is MeansKind.MAINTAIN_CONSUMABLES:
-        # Only when combat is the active means (a target is selected): keep a
-        # heal stockpile for MID-FIGHT drinking. NOT "instead of resting between
-        # fights" -- resting between fights is cheap since Rest went dynamic
-        # (max(3, ceil(missing%))s, refills to full), so stocking to avoid it
-        # never pays. Gated on under-stock + craftable-better-heal (the shared
-        # pure predicate). PLAN #6a.
-        if ctx.combat_monster is None:
-            return False
-        return maintain_consumables_fires(state, game_data)
+        # Only when combat is the active means (a target is selected): carry
+        # the food the chosen loadout's recovery eats (`ctx.loadout`,
+        # docs/PLAN_consumable_utility.md increment 5) — heal prep for the
+        # fight ahead. When Rest is the cheaper recovery the loadout eats
+        # nothing and the rung never fires. The goal `map_means` builds is the
+        # one this asks about.
+        return maintain_consumables_goal(state, game_data, ctx) is not None
 
     if kind is MeansKind.BANK_EXPAND:
         if not ctx.bank_accessible:

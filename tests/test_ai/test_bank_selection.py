@@ -1,8 +1,17 @@
 """Tests for select_bank_deposits — the bank keep-set + sell-value ordering."""
 
+from dataclasses import replace
+
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
+
+EATS_CHICKEN = replace(NO_PROFILE_CONTEXT, loadout=ChosenLoadout(
+    monster="chicken", potions=(), food=(("cooked_chicken", 1),)))
+"""A cycle whose chosen loadout eats `cooked_chicken`: the keep authority holds
+its carry (20) in the bag, so the heal stock is protected."""
 
 
 def _gd(**overrides) -> GameData:
@@ -112,9 +121,12 @@ def test_task_recipe_demand_scales_with_the_remaining_task_quantity():
 
 
 def test_keeps_hp_consumables():
+    """The chosen loadout's food is kept up to its carry; with no chosen
+    loadout (no fight ahead) the same heals are banked."""
     gd = _gd()
     state = make_state(inventory={"cooked_chicken": 4, "sap": 1})
-    assert select_bank_deposits(state, gd) == [("sap", 1)]
+    assert select_bank_deposits(state, gd, EATS_CHICKEN) == [("sap", 1)]
+    assert select_bank_deposits(state, gd) == [("sap", 1), ("cooked_chicken", 4)]
 
 
 def test_keeps_best_fighting_weapon_deposits_worse_one():
@@ -260,7 +272,7 @@ def test_last_resort_prefers_non_critical_then_lowest_value():
         task_code="iron_dagger", task_type="items", task_total=3, inventory_max=20,
     )
     assert state.inventory_free == 0
-    result = select_bank_deposits(state, gd)
+    result = select_bank_deposits(state, gd, EATS_CHICKEN)
     assert len(result) == 1
     code, _ = result[0]
     # recipe mats are non-critical → shed before weapon/consumable/task item;
@@ -322,7 +334,7 @@ def test_last_resort_never_sheds_the_weapon_kit_heals_or_task_item_first():
     gd._npc_sell_prices = {"merchant": {"iron_bar": 50}}  # the material is the RICH one
     state = make_state(
         inventory={"iron_dagger": 1,      # task item        (ACTIVE_TASK = 1)
-                   "cooked_chicken": 5,   # heal stock       (HEALING_CONSUMABLE = 5)
+                   "cooked_chicken": 5,   # chosen food      (HEALING_CONSUMABLE = 5)
                    "copper_dagger": 1,    # fighting weapon  (COMBAT_WEAPON = 1)
                    "copper_pickaxe": 1,   # working kit      (WORKING_KIT = 1)
                    "iron_bar": 6},        # task recipe input (COMMITTED_RECIPE = 6)
@@ -330,7 +342,7 @@ def test_last_resort_never_sheds_the_weapon_kit_heals_or_task_item_first():
         inventory_max=14,
     )
     assert state.inventory_free == 0
-    result = select_bank_deposits(state, gd)
+    result = select_bank_deposits(state, gd, EATS_CHICKEN)
     assert len(result) == 1, "nothing is bankable, so exactly one stack is shed"
     assert result[0][0] == "iron_bar", (
         "the recoverable, non-critical material sheds first — never the weapon, the "
@@ -343,7 +355,7 @@ def test_last_resort_sheds_critical_only_as_final_fallback():
     rather than stall — the lowest-value critical item is banked."""
     gd = _gd()
     # Full bag of only HP consumables + task coins, with NOTHING above its keep cap:
-    # the heal stock target is 5 and exactly 5 chickens are held, the coins are
+    # the chosen food's carry is 20 and 5 chickens are held, the coins are
     # KEEP_ALL. Every stack is hard-critical, so criticality cannot break the tie —
     # lowest sell value then code ascending picks the chicken.
     state = make_state(
@@ -351,6 +363,6 @@ def test_last_resort_sheds_critical_only_as_final_fallback():
         inventory_max=20,
     )
     assert state.inventory_free == 0
-    result = select_bank_deposits(state, gd)
+    result = select_bank_deposits(state, gd, EATS_CHICKEN)
     assert len(result) == 1  # frees a slot even though everything is critical
     assert result[0][0] == "cooked_chicken"

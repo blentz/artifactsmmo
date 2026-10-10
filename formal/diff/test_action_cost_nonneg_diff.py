@@ -21,9 +21,9 @@ from hypothesis import strategies as st
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
+from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.cost_core import (
-    OVERHEAL_CONSUMABLE_COST,
-    OVERHEAL_REST_MULTIPLE,
+    CONSUMABLE_COOLDOWN_SECONDS,
     REST_COST_MAX,
     distance_cost_pure,
     learned_cost_pure,
@@ -172,8 +172,8 @@ def test_rest_cost_pure_nonneg(max_hp, frac):
     assert rest_cost_pure(95, 200) == 53.0
 
 
-# ─── the overheal sentinel dominates Rest (mirror of ──────────────────────────
-# ─── restCost_lt_consumableCostOverheal) ──────────────────────────────────────
+# ─── every Rest cost is bounded by REST_COST_MAX (mirror of ───────────────────
+# ─── restCost_le_restCostMax) ────────────────────────────────────────────────
 
 
 @settings(max_examples=300)
@@ -181,43 +181,15 @@ def test_rest_cost_pure_nonneg(max_hp, frac):
     max_hp=st.integers(min_value=1, max_value=5000),
     frac=st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
 )
-def test_overheal_sentinel_dominates_rest_cost(max_hp, frac):
-    """Python mirror of `restCost_lt_consumableCostOverheal`, which proves
-    `restCost hp maxHp < consumableCostOverheal` for ALL hp/maxHp in the kernel.
-
-    UseConsumableAction returns this sentinel when its only pickable consumable
-    overshoots the deficit, so the planner Rests instead of wasting it -- sound
-    only while the sentinel strictly outranks every reachable Rest cost.
-
-    Agreement of the two constants is asserted separately against the Lean value
-    itself, in `test_overheal_sentinel_matches_lean`."""
+def test_rest_cost_bounded_by_rest_cost_max(max_hp, frac):
+    """Python mirror of `restCost_le_restCostMax`, which proves
+    `restCost hp maxHp ≤ restCostMax` for ALL hp/maxHp in the kernel. The bound is
+    tight at a full deficit, the supremum the Lean ceil-lemma
+    (restCost_ceil_le_100) establishes."""
     hp = round((1.0 - frac) * max_hp)
     hp = max(0, min(hp, max_hp))
-    assert rest_cost_pure(hp, max_hp) < OVERHEAL_CONSUMABLE_COST
-    # The bound is tight at a full deficit: 100.0 < 200.0, with REST_COST_MAX the
-    # supremum the Lean ceil-lemma (restCost_ceil_le_100) establishes.
+    assert rest_cost_pure(hp, max_hp) <= REST_COST_MAX
     assert rest_cost_pure(0, max_hp) == REST_COST_MAX
-    assert REST_COST_MAX < OVERHEAL_CONSUMABLE_COST
-
-
-def test_overheal_sentinel_matches_lean():
-    """The Python sentinel equals the LEAN `consumableCostOverheal`, read live from
-    the Oracle rather than hardcoded here.
-
-    This closes both drift directions, which a hand-mirrored literal could not:
-    * a Python edit to `OVERHEAL_REST_MULTIPLE` regenerates
-      `formal/Formal/Extracted/CostCore.lean`, and `extract_lean.py --check` fails
-      the gate if the checked-in file wasn't regenerated;
-    * a Lean edit to `consumableCostOverheal` or `restCostMax` changes the Oracle's
-      answer and fails THIS assertion.
-
-    Previously the mirror was by convention -- both sides asserted the literal 100 --
-    so editing the Lean constant alone was caught by nothing at all."""
-    lean_cost = run_oracle("action_cost_nonneg", [[4]])[0]["cost"]
-    assert lean_cost == OVERHEAL_CONSUMABLE_COST
-    # Both sides derive from the same extracted integer, so the product must agree
-    # factor-by-factor too, not just in total.
-    assert lean_cost == OVERHEAL_REST_MULTIPLE * REST_COST_MAX
 
 
 # ─── Per-action ≥ 0 sweep ────────────────────────────────────────────────────
@@ -251,6 +223,9 @@ def test_constant_actions_nonneg(x, y, dx, dy):
     assert TeleportAction(
         item_code="recall_potion", dest_x=x + dx, dest_y=y + dy
     ).cost(s, None, None) == 20.0
+    # One use, the published flat cooldown whatever the quantity eaten (mirrors
+    # Lean consumableCostFit=3; there is no overheal arm any more).
+    assert UseConsumableAction().cost(s, None, None) == CONSUMABLE_COOLDOWN_SECONDS == 3.0
 
 
 @settings(max_examples=200)

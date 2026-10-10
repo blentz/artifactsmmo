@@ -251,3 +251,66 @@ of it)). Shares sum exactly to max(0, Σ needs − bank) — to be proved.
   31/40/0/20/40, Σ 131 = 140 − 9. No potion is in any chosen loadout.
 - Residual: `consumable_need` costs 0.5-1.0 s per cycle (the loadout search
   prices every candidate).
+
+## Increment 5 — built (2026-10-09): one authority
+
+The player chooses ONE loadout per cycle, `best_loadout.fight_ahead_loadout`
+(against `ctx.fight_monster`, else `ctx.combat_monster`, with the learning
+store), and threads it on `SelectionContext.loadout` as plain data
+(`ai/chosen_loadout.ChosenLoadout`: potions with units drunk per fight, foods
+with units eaten per recovery). Every consumable decision reads it:
+
+- **Carry horizon:** `CARRY_HORIZON_FIGHTS = 20`. Measured over learning.db
+  2026-09-25..10-09: 1,356 runs of successful Fights between two bank actions,
+  mean 20.2 (median 5, p75 17, p90 48). The mean is the expected run a carry
+  covers; leftovers stay held (free). Equal to `REFILL_HORIZON_FIGHTS`, so each
+  character's banked share is one carry. Potion carry = used × 20, capped at a
+  utility slot (100); food carry = eaten × 20.
+- **CRAFT_POTIONS:** `potion_batch(state, gd, loadout)` — only the chosen
+  potions, each to its carry against the worn stack; bag + bank copies first,
+  then ladder-sized crafts. The guard reads `guard_loadout(ctx.loadout,
+  ctx.fight_monster)` (no fight ahead: nothing). The unlock-boost and
+  boost-stock arms, the marginal-fight sizing (`potion_stock_target`,
+  `projected_heal_need_per_fight`, `hp_healed_per_fight`) and
+  `best_boost_potion` are deleted. The equip keeps the loadout's other potion
+  (`utility_slot_for(..., keep)`).
+- **Food:** `grind_heal_prep.heal_prep_goal(state, gd, ctx, monster)` stocks
+  the chosen food (`loadout_for`: the cycle's pick when it was chosen against
+  that monster, else chosen now without the store) to its carry, bag counting;
+  an unsuppliable carry falls back to the units held (withdraw). Rest wins ⇒
+  nothing. The MAINTAIN_CONSUMABLES rung fires on, and maps to, the same goal
+  for the fight ahead (`maintain_consumables_goal`); `MaintainConsumablesGoal`
+  and `consumable_supply` are deleted. The rung itself stays: retiring it
+  renumbers `Formal.DecideKey.MeansKind` and the liveness ladder (not a pure
+  deletion).
+- **Keep:** HEALING_CONSUMABLE keeps the chosen carry in the bag (food carry;
+  potion carry less worn); nothing else.
+- **Provision:** `_marginal_provision_goal` equips only a chosen restore potion
+  from the bag, sized to its carry.
+- **RestoreHP (STOPPED):** agrees with `recovery_choice` on the fixtures in
+  `tests/test_ai/test_restore_hp_recovery_choice.py`, but the two models can
+  disagree: (a) overheal — 100 missing of 1000 with a 150-hp food held, the
+  core eats (3 s < 10 s Rest), A* rests (`UseConsumableAction.cost` prices an
+  overheal at `OVERHEAL_CONSUMABLE_COST`); (b) quantity — the core prices one
+  use of k units at one flat 3 s cooldown, the action eats one unit per request
+  (k × 3 s), so A* rests where k × 3 s > Rest. Reconciling needs a
+  UseConsumable model change (quantity per use, overheal price) — a planner
+  change, awaiting a ruling.
+
+## Rulings (2026-10-10) — eating and walls
+
+- **Eat k units in one use.** The official docs: "Using a consumable has a
+  fixed cooldown of 3 seconds, regardless of the quantity used"
+  (docs.artifactsmmo.com/concepts/resting_and_using_items). 20,819 recorded
+  eats all used quantity 1 (~2.8 s). USER: check, then choose; suspected
+  changing UseConsumable — chosen: `UseConsumableAction` eats a quantity per
+  use at one cooldown, overheal priced as the food it wastes, so RestoreHP and
+  `loop_rate_core.recovery_choice` compute the same choice.
+- **Walls: the loadout picks the monster.** USER: "loadout picks the monster,
+  but we don't pick sub-standard loadouts just because they're available. we
+  should work to improve gear over a cheaper xp-grind with substandard gear."
+  The band/combat target is the monster with the highest XP/s over its best
+  loadout (no separate unlock-boost stall-breaker); the GEAR decisions (the
+  root walk's gear roots ahead of the trunk, `combat_deficit` /
+  IsAFightBlockingMe) keep judging BARE gear, so a potion-propped win never
+  hides a gear upgrade.

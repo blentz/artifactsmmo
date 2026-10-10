@@ -1591,34 +1591,12 @@ def runNearestTile (args : Array Json) : Json :=
   | some t => Json.mkObj [("present", Json.bool true), ("x", Json.num t.1), ("y", Json.num t.2)]
   | none => Json.mkObj [("present", Json.bool false), ("x", Json.num 0), ("y", Json.num 0)]
 
-/-- Compute one consumable_selection result using the SAME proved
-`Formal.ConsumableSelection.selectConsumable`.
-
-args layout: `[deficit, N, code0, restore0, qty0, code1, restore1, qty1, ...]` —
-the deficit, then `N` candidates, each the 3 ints `[code, restore, qty]`. Builds
-the `List Candidate`, runs the overheal-aware lex-argmin, and emits the winning
-candidate's `code` (or `-1` when nothing is usable, mirroring `Option.none`). -/
-def runConsumableSelection (args : Array Json) : Json :=
-  let deficit := intArg args 0
-  let n := (intArg args 1).toNat
-  let cands : List Formal.ConsumableSelection.Candidate :=
-    (List.range n).map (fun k =>
-      let base := 2 + 3 * k
-      { code := (intArg args base).toNat,
-        restore := intArg args (base + 1),
-        qty := intArg args (base + 2) })
-  let selected : Int :=
-    match Formal.ConsumableSelection.selectConsumable deficit cands with
-    | some c => Int.ofNat c.code
-    | none => -1
-  Json.mkObj [("selected", Json.num selected)]
-
 /-- Compute one max_batch_from_held result using the SAME proved
 `Formal.MaxBatchFromHeld.maxBatchFromHeld`.
 
 args layout: `[yield, n, need_0, held_0, need_1, held_1, ...]` — the per-craft
 yield, then `n` ingredients each the 2 ints `[need, held]` (a length-prefixed
-list, mirroring `runConsumableSelection`). Builds the `List (Nat × Nat)` of
+list). Builds the `List (Nat × Nat)` of
 `(need, held)` pairs, runs the min-floor fold, and emits `{"batch": <int>}`
 matching the Python `max_batch_from_held_pure` return in the differential test. -/
 def runMaxBatchFromHeld (args : Array Json) : Json :=
@@ -1765,15 +1743,9 @@ Dispatches on `args[0]`:
 * `1`: distance cost  — `[1, base, d]`         → `{"cost": base + d}`
 * `2`: qty cost       — `[2, base, qty, d, perUnit]` → `{"cost": base + perUnit*qty + d}`
 * `3`: delete cost    — `[3, branch]`          → `{"cost": deleteCost branch}`
-* `4`: overheal sentinel — `[4]`               → `{"cost": consumableCostOverheal}`
 
 Reuses the proved Nat cores directly. The `Rat`-valued history-fraction
-core is exercised on the Python side against the structural formula.
-
-Branch 4 exists so the Python differential can read the LEAN value of the
-overheal sentinel rather than hardcoding its own copy. `consumableCostOverheal`
-derives from the extracted `OVERHEAL_REST_MULTIPLE`, so a Python edit is caught
-by the extraction drift gate and a Lean edit is caught here. -/
+core is exercised on the Python side against the structural formula. -/
 def runActionCostNonneg (args : Array Json) : Json :=
   let q := intArg args 0
   let cost : Nat :=
@@ -1786,8 +1758,6 @@ def runActionCostNonneg (args : Array Json) : Json :=
         (intArg args 3).toNat (intArg args 4).toNat
     else if q == 3 then
       Formal.ActionCostNonneg.deleteCost (intArg args 1).toNat
-    else if q == 4 then
-      Formal.ActionCostNonneg.consumableCostOverheal
     else
       0
   Json.mkObj [("cost", Json.num (Int.ofNat cost)),
@@ -3047,8 +3017,6 @@ def runOne (item : Json) : Json :=
     runChooseBuyVenue3 args
   else if kind == "nearest_tile" then
     runNearestTile args
-  else if kind == "consumable_selection" then
-    runConsumableSelection args
   else if kind == "potion_provision_qty" then
     runPotionProvisionQty args
   else if kind == "optimal_buy_mix" then

@@ -649,6 +649,11 @@ class GatherMaterialsGoal(Goal):
         total_units = sum(self._needed.values())
         return max(100, total_units * 100)
 
+    @property
+    def target_item(self) -> str:
+        """The item this goal gathers toward."""
+        return self._target_item
+
     def is_satisfied(self, state: WorldState) -> bool:
         bank = state.bank_items or {}
         # Already have the FINISHED target item (inventory + bank)? Then

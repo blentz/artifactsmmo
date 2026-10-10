@@ -13,9 +13,9 @@ loadout uses has no minimum. "Need ledger + API order": each character
 publishes its need (`ConsumableNeed`), and the bank is assigned in the
 account's `GET /my/characters` order.
 
-* NEED — `best_loadout` against the fight ahead (`ctx.fight_monster`, else the
-  grind target `ctx.combat_monster`; neither: no need): the potions one fight
-  drinks and the food its recovery eats, each × `REFILL_HORIZON_FIGHTS`.
+* NEED — the chosen loadout against the fight ahead (`ctx.loadout`,
+  `best_loadout.fight_ahead_loadout`; no fight ahead: no need): the potions one
+  fight drinks and the food its recovery eats, each × `REFILL_HORIZON_FIGHTS`.
 * STOCK — the account BANK only: the floor is a banked minimum, and units in a
   bag or a utility slot are already that character's to use.
 * SHORTFALL — per type this character needs, its share
@@ -26,23 +26,18 @@ account's `GET /my/characters` order.
 
 from collections.abc import Mapping, Sequence
 
-from artifactsmmo_cli.ai.best_loadout import best_loadout
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.consumable_floor_core import REFILL_HORIZON_FIGHTS, share
-from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
-def consumable_need(state: WorldState, game_data: GameData, ctx: SelectionContext,
-                    store: LearningStore | None) -> dict[str, int]:
-    """This character's need per consumable: its best loadout's use per fight
-    × `REFILL_HORIZON_FIGHTS`, against the fight ahead (see the module doc)."""
-    monster = ctx.fight_monster or ctx.combat_monster
-    if monster is None:
+def consumable_need(loadout: ChosenLoadout | None) -> dict[str, int]:
+    """This character's need per consumable: its chosen loadout's use per fight
+    × `REFILL_HORIZON_FIGHTS` (see the module doc)."""
+    if loadout is None:
         return {}
     need: dict[str, int] = {}
-    for code, units in best_loadout(state, game_data, ctx, monster, store).per_fight:
+    for code, units in (*loadout.potions, *loadout.food):
         need[code] = need.get(code, 0) + units * REFILL_HORIZON_FIGHTS
     return need
 

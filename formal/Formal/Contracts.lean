@@ -63,7 +63,6 @@ import Formal.LiquidationVenue
 import Formal.DisposalRoute
 import Formal.BuySourceVenue
 import Formal.NearestTile
-import Formal.ConsumableSelection
 import Formal.BankExpansionTiming
 import Formal.LoadoutProfiles
 import Formal.EventWindow
@@ -2551,39 +2550,6 @@ example : ∀ {ox oy : Int} {cs : List Formal.NearestTile.Tile} {t : Formal.Near
     ∀ u ∈ cs,
       Formal.NearestTile.staticGatherCost ox oy t ≤ Formal.NearestTile.staticGatherCost ox oy u :=
   @Formal.NearestTile.nearestTile_least_cost
-
-/-! ### ConsumableSelection role contracts (overheal-aware consumable lex-argmin). -/
-
--- select_none_iff_no_usable: TOTALITY — none ⇔ no usable consumable.
-example : ∀ (deficit : Int) (cs : List Formal.ConsumableSelection.Candidate),
-    Formal.ConsumableSelection.selectConsumable deficit cs = none ↔
-    Formal.ConsumableSelection.usableList cs = [] :=
-  @Formal.ConsumableSelection.select_none_iff_no_usable
--- select_mem: the winner is a usable candidate.
-example : ∀ (deficit : Int) {cs : List Formal.ConsumableSelection.Candidate}
-    {c : Formal.ConsumableSelection.Candidate},
-    Formal.ConsumableSelection.selectConsumable deficit cs = some c →
-    c ∈ Formal.ConsumableSelection.usableList cs :=
-  @Formal.ConsumableSelection.select_mem
--- select_is_min: DOMINANCE — nothing usable strictly beats the winner.
-example : ∀ (deficit : Int) {cs : List Formal.ConsumableSelection.Candidate}
-    {c : Formal.ConsumableSelection.Candidate},
-    Formal.ConsumableSelection.selectConsumable deficit cs = some c →
-    ∀ x ∈ Formal.ConsumableSelection.usableList cs,
-      ¬ Formal.ConsumableSelection.keyLt deficit x c :=
-  @Formal.ConsumableSelection.select_is_min
--- select_no_overheal_when_fit_exists: SAFETY — if some usable item fits, the winner fits.
-example : ∀ (deficit : Int) {cs : List Formal.ConsumableSelection.Candidate}
-    {c f : Formal.ConsumableSelection.Candidate},
-    Formal.ConsumableSelection.selectConsumable deficit cs = some c →
-    f ∈ Formal.ConsumableSelection.usableList cs → f.restore ≤ deficit →
-    c.restore ≤ deficit :=
-  @Formal.ConsumableSelection.select_no_overheal_when_fit_exists
--- select_dominance_monotone: MONOTONICITY — a larger fitting restore is never ranked worse.
-example : ∀ (deficit : Int) (a b : Formal.ConsumableSelection.Candidate),
-    a.restore ≤ deficit → b.restore ≤ deficit → a.code = b.code → b.restore ≤ a.restore →
-    ¬ Formal.ConsumableSelection.keyLt deficit b a :=
-  @Formal.ConsumableSelection.select_dominance_monotone
 
 /-! ### BankExpansionTiming role contracts (bank-expansion firing decision over Int). -/
 

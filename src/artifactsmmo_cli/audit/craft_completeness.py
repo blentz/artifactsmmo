@@ -326,14 +326,15 @@ def _advances_grind_of(item: str, first: Action, state: WorldState, game_data: G
 
 def advances_a_heal_prep(first: Action, plan: list[Action], state: WorldState,
                          game_data: GameData) -> bool:
-    """True iff `first` stocks the heals a fight in `plan` will need: the plan
-    holds a fight, and `first` advances the closure of the heal batch
-    `grind_heal_prep.heal_prep_goal` asks for. The grind's decomposition puts
+    """True iff `first` stocks the food the plan's first fight will need: the
+    plan holds a fight, and `first` advances the closure of the food carry
+    `grind_heal_prep.heal_prep_goal` asks for against that fight's monster. The grind's decomposition puts
     that batch ahead of its legs (Phase 2d-a; since 2d-L3 for a fight anywhere
     in the committed plan), so it is the first step of a directional plan."""
-    if not any(isinstance(a, FightAction) for a in plan):
+    fight = next((a for a in plan if isinstance(a, FightAction)), None)
+    if fight is None:
         return False
-    prep = heal_prep_goal(state, game_data, NO_PROFILE_CONTEXT)
+    prep = heal_prep_goal(state, game_data, NO_PROFILE_CONTEXT, fight.monster_code)
     if prep is None:
         return False
     for item in prep.needed:

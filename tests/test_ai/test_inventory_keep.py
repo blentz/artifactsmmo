@@ -1,5 +1,5 @@
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
-from artifactsmmo_cli.ai.consumable_supply import HEAL_STOCK_FLOOR
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry, potion_carry
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -117,36 +117,72 @@ def test_active_task_keeps_remaining_qty_not_the_whole_stack():
     assert reason_quantity(KeepReason.ACTIVE_TASK, "copper_bar", state, gd, ctx) == 6
 
 
-def test_healing_consumable_caps_at_stock_target_not_the_whole_stack():
-    """Instance #5 of the blanket bug, fixed: the real cap is the stock
-    target, so surplus above it is bankable rather than hoarded forever."""
+_CHOSEN = ChosenLoadout(monster="wolf", potions=(("small_health_potion", 2),),
+                        food=(("cooked_chicken", 1),))
+
+
+def test_healing_consumable_keeps_nothing_without_a_chosen_loadout():
+    """No fight ahead, no loadout: no consumable is carried, so every heal is
+    bankable (never destroyed — the owned floor is RECIPE_DEMAND's blanket)."""
     gd = _gd()
     state = make_state(level=10, inventory={"cooked_chicken": 40})
     ctx = _ctx()
     assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "cooked_chicken",
-                           state, gd, ctx) == 5
-    assert bankable("cooked_chicken", state, gd, ctx) == 35
+                           state, gd, ctx) == 0
+    assert bankable("cooked_chicken", state, gd, ctx) == 40
 
 
-def test_healing_target_is_an_aggregate_charged_to_the_best_heal_only():
-    """The stock target is an AGGREGATE across every heal code (that is what
-    `consumable_supply.heal_stock` sums), so charging it to EVERY heal code
-    would keep N x target. Only the strongest held heal carries it; the weaker
-    codes are fully bankable (never sold/deleted — in_bag cap only).
+def test_healing_consumable_keeps_the_chosen_foods_carry():
+    """The food the chosen loadout eats keeps its carry (units eaten per fight ×
+    the horizon); the surplus above it is bankable."""
+    gd = _gd()
+    state = make_state(level=10, inventory={"cooked_chicken": 40, "apple": 10})
+    ctx = _ctx(loadout=ChosenLoadout(monster="wolf", potions=(),
+                                     food=(("apple", 1), ("cooked_chicken", 2))))
+    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "cooked_chicken",
+                           state, gd, ctx) == food_carry(2) == 40
+    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "apple",
+                           state, gd, ctx) == food_carry(1) == 20
+    assert bankable("cooked_chicken", state, gd, ctx) == 0
+    ctx = _ctx(loadout=_CHOSEN)
+    assert bankable("cooked_chicken", state, gd, ctx) == 40 - food_carry(1)
 
-    The bag also holds a non-heal item and a spent (qty 0) stack: neither may
-    win the "best heal" selection."""
+
+def _wearing_potion(worn: int):
+    """A bag of 50 `small_health_potion` with `worn` more in utility1."""
+    base = make_state(level=10, inventory={"small_health_potion": 50})
+    equipment = {**base.equipment, "utility1_slot": "small_health_potion"}
+    return make_state(level=10, inventory={"small_health_potion": 50},
+                      equipment=equipment, utility1_slot_quantity=worn)
+
+
+def test_healing_consumable_keeps_a_chosen_potions_carry_less_the_worn_units():
+    """A potion the chosen loadout wears keeps its carry minus what the utility
+    slots already hold; once the slot holds the carry, the bag keeps none."""
+    gd = _gd()
+    ctx = _ctx(loadout=_CHOSEN)
+    carry = potion_carry(2)
+    assert carry == 40
+    bare = make_state(level=10, inventory={"small_health_potion": 50})
+    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "small_health_potion",
+                           bare, gd, ctx) == carry
+    worn = _wearing_potion(15)
+    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "small_health_potion",
+                           worn, gd, ctx) == carry - 15
+    full = _wearing_potion(60)
+    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "small_health_potion",
+                           full, gd, ctx) == 0
+
+
+def test_healing_consumable_keeps_nothing_the_loadout_does_not_name():
+    """A heal held but not chosen (and a non-heal) keeps 0 in the bag."""
     gd = _gd()
     state = make_state(level=10, inventory={"cooked_chicken": 10, "apple": 10,
-                                            "copper_bar": 3, "copper_ore": 0})
-    ctx = _ctx()
+                                            "copper_bar": 3})
+    ctx = _ctx(loadout=_CHOSEN)
+    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "apple", state, gd, ctx) == 0
     assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "copper_bar",
                            state, gd, ctx) == 0
-    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "cooked_chicken",
-                           state, gd, ctx) == 5
-    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "apple",
-                           state, gd, ctx) == 0
-    assert bankable("cooked_chicken", state, gd, ctx) == 5
     assert bankable("apple", state, gd, ctx) == 10
 
 
@@ -319,10 +355,10 @@ def test_reason_cap_sets_are_exactly_the_registry():
         KeepReason.EQUIPPED, KeepReason.GEAR_DEMAND, KeepReason.RECIPE_DEMAND,
     }) == OWNED_REASONS
     assert frozenset(KeepReason) == IN_BAG_REASONS | OWNED_REASONS
-    # HEALING_CONSUMABLE is the ONE bag-only reason: its quantity is the heal
-    # STOCK TARGET, so the surplus above it is BANKABLE. Its protection from
+    # HEALING_CONSUMABLE is the ONE bag-only reason: its quantity is the chosen
+    # loadout's CARRY, so the surplus above it is BANKABLE. Its protection from
     # DESTRUCTION is RECIPE_DEMAND's CONSUMABLE_KEEP blanket, not this reason —
-    # filing the target here as an owned floor would be strictly weaker.
+    # filing the carry here as an owned floor would be strictly weaker.
     assert KeepReason.HEALING_CONSUMABLE not in OWNED_REASONS
     # ...and the ownership-only reasons must never pin BAG slots.
     for owned_only in (KeepReason.EQUIPPED, KeepReason.GEAR_DEMAND,
@@ -506,51 +542,6 @@ def test_committed_recipe_counts_a_shared_root_ONCE_not_twice():
                            spent, gd, ctx) == 36
 
 
-def test_healing_target_is_GREEDILY_FILLED_across_held_heals():
-    """The aggregate target (5) may not be charged to one code that cannot
-    carry it. cooked_chicken x3 (the stronger heal) + apple x10: charging all 5
-    to the chicken keeps 3 real copies and leaves all 10 apples bankable — after
-    DepositAll the actual `heal_stock` is 3, BELOW the target, so
-    `MaintainConsumables` re-fires and crafts more. Churn.
-
-    Greedy fill, strongest first: chicken keeps its 3, apple keeps the missing
-    2, and the AGGREGATE kept is exactly the target."""
-    gd = _gd()
-    state = make_state(level=10, inventory={"cooked_chicken": 3, "apple": 10})
-    ctx = _ctx()
-    chicken = reason_quantity(KeepReason.HEALING_CONSUMABLE, "cooked_chicken",
-                              state, gd, ctx)
-    apple = reason_quantity(KeepReason.HEALING_CONSUMABLE, "apple", state, gd, ctx)
-    assert chicken == 3
-    assert apple == 2
-    assert chicken + apple == 5  # == heal_stock_target(HEAL_STOCK_FLOOR)
-    assert bankable("cooked_chicken", state, gd, ctx) == 0
-    assert bankable("apple", state, gd, ctx) == 8
-
-
-def test_healing_fill_stops_at_the_target_and_never_over_keeps():
-    """The fill is a CAP, not a floor: once the target is met the weaker heals
-    keep 0, and a heal code that is not held at all keeps 0 (no phantom fill).
-    Held heals short of the target keep everything they have — the fill never
-    invents copies."""
-    gd = _gd()
-    # Target met by the strongest alone -> the weaker heal keeps nothing.
-    met = make_state(level=10, inventory={"cooked_chicken": 5, "apple": 10})
-    ctx = _ctx()
-    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "cooked_chicken",
-                           met, gd, ctx) == 5
-    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "apple", met, gd, ctx) == 0
-
-    # Whole stock short of the target -> every held copy is kept, none invented.
-    short = make_state(level=10, inventory={"cooked_chicken": 1, "apple": 2})
-    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "cooked_chicken",
-                           short, gd, ctx) == 1
-    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "apple", short, gd, ctx) == 2
-    # A heal code that is not held keeps 0 rather than reserving a share.
-    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "cooked_chicken",
-                           make_state(level=10, inventory={"apple": 9}), gd, ctx) == 0
-
-
 class _CtxSpyArbiter(StrategyArbiter):
     """The real arbiter, recording the `SelectionContext` and step goal it hands
     the goal layer. Nothing is stubbed — `_build_candidates` delegates to the
@@ -692,7 +683,7 @@ def test_far_out_of_band_heals_are_never_destroyable():
     holding 30 `cooked_chicken` (item level 1) had `keep_owned = 5` and 25 heals
     were SELL/DELETE fodder.
 
-    The bag cap is unchanged — the heal STOCK TARGET is 5, so 25 stay BANKABLE.
+    The bag cap is unchanged — the chosen food's CARRY (20), so 10 stay BANKABLE.
     That is the whole point of the two-cap split: bankable (reversible) is not
     destroyable (not)."""
     gd = _gd()
@@ -700,9 +691,11 @@ def test_far_out_of_band_heals_are_never_destroyable():
     far = make_state(level=20, inventory={"cooked_chicken": 30})
     assert keep_owned("cooked_chicken", far, gd, ctx) == CONSUMABLE_KEEP
     assert destroyable("cooked_chicken", far, gd, ctx) == 0
-    # The surplus above the stock target is still shed to the BANK, as before.
-    assert keep_in_bag("cooked_chicken", far, gd, ctx) == HEAL_STOCK_FLOOR
-    assert bankable("cooked_chicken", far, gd, ctx) == 30 - HEAL_STOCK_FLOOR
+    # The surplus above the chosen food's carry is still shed to the BANK.
+    chosen = _ctx(loadout=ChosenLoadout(monster="wolf", potions=(),
+                                        food=(("cooked_chicken", 1),)))
+    assert keep_in_bag("cooked_chicken", far, gd, chosen) == food_carry(1)
+    assert bankable("cooked_chicken", far, gd, chosen) == 30 - food_carry(1)
 
     # ...and the in-band character (distance 4, no ceiling) always agreed: the
     # two bands now give the SAME ownership answer, which is the invariant.
@@ -785,8 +778,8 @@ def test_chain_reasons_feed_BOTH_caps():
     assert KeepReason.COMMITTED_RECIPE in OWNED_REASONS
     assert KeepReason.GOAL_MATERIALS in IN_BAG_REASONS
     assert KeepReason.GOAL_MATERIALS in OWNED_REASONS
-    # HEALING_CONSUMABLE stays bag-only ON PURPOSE: its quantity is the stock
-    # TARGET (5), which would be a strictly WEAKER owned floor than the
+    # HEALING_CONSUMABLE stays bag-only ON PURPOSE: its quantity is the chosen
+    # loadout's CARRY, which would be a strictly WEAKER owned floor than the
     # CONSUMABLE_KEEP=999 blanket RECIPE_DEMAND already gives it.
     assert KeepReason.HEALING_CONSUMABLE in IN_BAG_REASONS
     assert KeepReason.HEALING_CONSUMABLE not in OWNED_REASONS

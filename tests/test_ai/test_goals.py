@@ -17,6 +17,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -1870,8 +1871,11 @@ class TestDepositInventorySelective:
             "cooked_chicken": ItemStats(code="cooked_chicken", level=1, type_="consumable", hp_restore=25),
             "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon", attack={"fire": 12}),
         })
-        goal = DepositInventoryGoal(bank_accessible=True, game_data=gd)
-        action = DepositAllAction(bank_location=(4, 1), accessible=True, game_data=gd)
+        # The heal is protected as the food the chosen loadout eats (its carry).
+        ctx = dataclasses.replace(NO_PROFILE_CONTEXT, loadout=ChosenLoadout(
+            monster="chicken", potions=(), food=(("cooked_chicken", 1),)))
+        goal = DepositInventoryGoal(bank_accessible=True, game_data=gd, ctx=ctx)
+        action = DepositAllAction(bank_location=(4, 1), accessible=True, game_data=gd, ctx=ctx)
         state = make_state(
             x=0, y=0, inventory_max=104, bank_items={},
             inventory={"gold_ore": 5, "sap": 5, "copper_ore": 5,

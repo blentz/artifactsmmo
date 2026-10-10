@@ -36,7 +36,6 @@ import Formal.GePostPricing
 import Formal.DisposalRoute
 import Formal.BuySourceVenue
 import Formal.NearestTile
-import Formal.ConsumableSelection
 import Formal.BankExpansionTiming
 import Formal.EventWindow
 import Formal.NpcBuyInventory
@@ -50,7 +49,6 @@ import Formal.Extracted.RecipeClosure
 import Formal.Extracted.TaskBatch
 import Formal.Extracted.TaskReservation
 import Formal.Extracted.Thresholds
-import Formal.Extracted.CostCore
 import Formal.Extracted.InventoryCaps
 import Formal.Extracted.ScalarCore
 import Formal.Extracted.MinGathers

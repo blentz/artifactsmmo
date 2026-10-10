@@ -83,7 +83,6 @@ ACQUISITION_COST_CORE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai"
 KEEP_VALUATION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "keep_valuation.py"
 BUY_SOURCE_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "buy_source_venue.py"
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
-CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
 POTION_PROVISION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_provision_qty.py"
 POTION_BASELINE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_baseline.py"
 MAX_BATCH_FROM_HELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "max_batch_from_held.py"
@@ -110,7 +109,10 @@ APPLY_FIGHT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "combat
 APPLY_BANK_EXPANSION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "bank_expansion.py"
 APPLY_TELEPORT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "teleport.py"
 APPLY_USE_GOLD_BAG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "use_gold_bag.py"
-CONSUMABLE_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_supply.py"
+CHOSEN_LOADOUT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "chosen_loadout.py"
+UTILITY_SLOT_SRC_W5 = ROOT / "src" / "artifactsmmo_cli" / "ai" / "utility_slot.py"
+CRAFT_POTIONS_GOAL_SRC_W5 = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "craft_potions.py"
+CONSUMABLE_FLOOR_SRC_W5 = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor.py"
 MEANS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means.py"
 FLEET_WORK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_work.py"
 GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "guards.py"
@@ -165,7 +167,6 @@ LOCATION_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_cata
 PROGRESSION_RESERVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression_reserve_core.py"
 DECOMPOSE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decompose_core.py"
 GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxonomy_core.py"
-BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selection.py"
 POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
 PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
 PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
@@ -998,9 +999,22 @@ BEST_LOADOUT_READER_MUTATIONS = [
     ("best_loadout reader: the pick ignores the units",
      "    index = pick_best([(rate.xp_per_second, units_used(rate)) for _, rate in scored])",
      "    index = pick_best([(rate.xp_per_second, 0) for _, rate in scored])"),
-    ("best_loadout reader: the food eaten is not a per-fight use",
-     "    per_fight = tuple((code, n) for code, n in rate.used if n > 0) + rate.eaten",
-     "    per_fight = tuple((code, n) for code, n in rate.used if n > 0)"),
+    ("best_loadout reader: the chosen loadout drops the food its recovery eats",
+     "    return ChosenLoadout(monster, tuple((code, n) for code, n in best.rate.used if n > 0),\n"
+     "                         best.rate.eaten)",
+     "    return ChosenLoadout(monster, tuple((code, n) for code, n in best.rate.used if n > 0),\n"
+     "                         ())"),
+    ("best_loadout reader: a potion the fight never drinks is chosen",
+     "for code, n in best.rate.used if n > 0)",
+     "for code, n in best.rate.used if n >= 0)"),
+    ("best_loadout reader: the grind target outranks the fight ahead",
+     "    monster = ctx.fight_monster or ctx.combat_monster\n"
+     "    if monster is None:\n        return None\n    return chosen(",
+     "    monster = ctx.combat_monster or ctx.fight_monster\n"
+     "    if monster is None:\n        return None\n    return chosen("),
+    ("best_loadout reader: the cycle's pick is reused for any monster",
+     "    if ctx.loadout is not None and ctx.loadout.monster == monster:",
+     "    if ctx.loadout is not None:"),
     ("best_loadout reader: the units count only potions",
      "    return sum(n for _, n in rate.used) + sum(n for _, n in rate.eaten)",
      "    return sum(n for _, n in rate.used)"),
@@ -3194,11 +3208,11 @@ DECOMPOSE_GAP_MUTATIONS = [
 # (Phase 2d-a). Killed by tests/test_ai/test_grind_heal_prep.py.
 GRIND_PREP_MUTATIONS = [
     ("craft_plan_gen: a grind's fight leg is never prepped",
-     "    if any(isinstance(a, FightAction) for a in legs):\n        prep = heal_prep_goal(",
-     "    if False:\n        prep = heal_prep_goal("),
+     "    fight = next((a for a in legs if isinstance(a, FightAction)), None)\n    if fight is not None:",
+     "    fight = next((a for a in legs if isinstance(a, FightAction)), None)\n    if False:"),
     ("craft_plan_gen: only a leading fight is prepped (a later one runs short)",
-     "    if any(isinstance(a, FightAction) for a in legs):\n        prep = heal_prep_goal(",
-     "    if isinstance(legs[0], FightAction):\n        prep = heal_prep_goal("),
+     "    fight = next((a for a in legs if isinstance(a, FightAction)), None)",
+     "    fight = legs[0] if isinstance(legs[0], FightAction) else None"),
     ("craft_plan_gen: the heal prep is walked under its selection policy",
      "                                  subtasks=False, policy=HEAL_PREP_POLICY)",
      "                                  subtasks=False)"),
@@ -3278,11 +3292,27 @@ CRAFT_RECORD_PER_RUN_MUTATIONS = [
 # Killed by tests/test_ai/test_actions.py (TestUseConsumableAction).
 USE_CONSUMABLE_HEAL_MUTATIONS = [
     ("consumable: eating heals to full again",
-     "            hp=min(state.max_hp, state.hp + restore),",
+     "            hp=min(state.max_hp, state.hp + units * restore),",
      "            hp=state.max_hp,"),
     ("consumable: the heal is not capped at max_hp",
-     "            hp=min(state.max_hp, state.hp + restore),",
-     "            hp=state.hp + restore,"),
+     "            hp=min(state.max_hp, state.hp + units * restore),",
+     "            hp=state.hp + units * restore,"),
+]
+# `UseConsumableAction._choice`: the eat is `loop_rate_core.recovery_choice` over
+# the bag's foods usable at the character's level, k units of the FIRST food the
+# choice names in one use. Killed by tests/test_ai/test_actions.py
+# (TestUseConsumableAction).
+USE_CONSUMABLE_CHOICE_MUTATIONS = [
+    ("consumable: a food above the character's level is eaten",
+     "                 if state.inventory.get(code, 0) > 0 and stats.hp_restore > 0\n"
+     "                 and stats.level <= state.level]",
+     "                 if state.inventory.get(code, 0) > 0 and stats.hp_restore > 0]"),
+    ("consumable: the use eats the LAST food the choice names, not the first",
+     "        for code, units in zip(codes, counts, strict=True):",
+     "        for code, units in reversed(list(zip(codes, counts, strict=True))):"),
+    ("consumable: one unit a use again",
+     "                return code, units, self._item_stats[code].hp_restore",
+     "                return code, 1, self._item_stats[code].hp_restore"),
 ]
 # Killed by tests/test_ai/test_bag_peak.py.
 BAG_PEAK_MUTATIONS = [
@@ -3356,13 +3386,16 @@ POTION_DECOMPOSE_POLICY_MUTATIONS = [
      "    legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False)"),
 ]
 GRIND_HEAL_PREP_POLICY_MUTATIONS = [
-    # The apple bug (2026-10-05): the strongest feasible heal, whatever its price.
-    ("grind_heal_prep: the strongest feasible heal wins again (price ignored)",
-     "    code = min(priced, key=lambda row: row[:2])[2]",
-     "    code = priced[0][2]"),
-    ("grind_heal_prep: the heal priced per unit, not per hp",
-     "        priced.append((Fraction(actions, deficit * restore), -restore, code))",
-     "        priced.append((Fraction(actions, deficit), -restore, code))"),
+    # Increment 5: the chosen food, stocked to its carry, the bag counting.
+    ("grind_heal_prep: a carry already in the bag is stocked again",
+     "            if target > bag and model.feasible(code, target, HEAL_PREP_POLICY):",
+     "            if target >= bag and model.feasible(code, target, HEAL_PREP_POLICY):"),
+    ("grind_heal_prep: an unsuppliable carry leaves the held units in the bank",
+     "        for target in (carry, min(carry, held)):",
+     "        for target in (carry,):"),
+    ("grind_heal_prep: the rung stocks food with no combat ahead",
+     "    if ctx.combat_monster is None or ctx.loadout is None:",
+     "    if ctx.loadout is None:"),
     ("grind_heal_prep: the heal prep counts drops as supply",
      "HEAL_PREP_POLICY: Policy = replace(DECOMPOSE_POLICY, drop_routes=False)",
      "HEAL_PREP_POLICY: Policy = DECOMPOSE_POLICY"),
@@ -4608,40 +4641,6 @@ GEAR_VALUE_PARTITION_MUTATIONS = [
 ]
 
 
-# boost_selection mutations -- own group bound to the unit test (bag-slot lesson:
-# no Lean mirror, no traversal-diff group).  Each mutation perturbs one of the
-# four load-bearing decisions:
-#
-#   1. positive-gain threshold: `best_gain = 0` → `best_gain = -1` makes gain >= 0
-#      qualify (zero-gain boost selected instead of None).
-#      Killed by test_none_when_no_boost_helps (gain=0 → should be None).
-#
-#   2. craftable-now gate off-by-one: `< stats.crafting_level` → `<= stats.crafting_level`
-#      excludes items where skill == crafting_level (boundary).
-#      Killed by tests 1, 2, 5 (char alchemy=1, crafting_level=1: 1<=1 → skip → None).
-#
-#   3. argmax → zero-select: `gain > best_gain` → `gain < best_gain` makes
-#      gain < 0 the only trigger; no positive gain ever qualifies → None.
-#      Killed by tests 1, 2, 5 (expect non-None).
-#
-#   4. tiebreak: `gain > best_gain` → `gain >= best_gain` replaces on equal gain,
-#      so the LAST (alphabetically largest) code wins instead of the first.
-#      Killed by test_deterministic_tiebreak_smallest_code ("bbb_boost" returned
-#      instead of "aaa_boost").
-BOOST_SELECTION_MUTATIONS = [
-    ("boost_selection: > 0 threshold → >= 0 (zero-gain boost selected)",
-     "    best_gain = 0\n",
-     "    best_gain = -1\n"),
-    ("boost_selection: craftable-now gate off-by-one (< → <=)",
-     "        if state.skills.get(stats.crafting_skill, 0) < stats.crafting_level:",
-     "        if state.skills.get(stats.crafting_skill, 0) <= stats.crafting_level:"),
-    ("boost_selection: argmax → zero-select (> best_gain → < best_gain)",
-     "        if gain > best_gain:",
-     "        if gain < best_gain:"),
-    ("boost_selection: tiebreak flip (strict > → >=, last code wins)",
-     "        if gain > best_gain:\n            best_code = code\n            best_gain = gain",
-     "        if gain >= best_gain:\n            best_code = code\n            best_gain = gain"),
-]
 
 RECIPE_PRODUCIBLE_MUTATIONS = [
     ("potion_supply: a banked potion counts toward the batch",
@@ -5274,6 +5273,9 @@ CONSUMABLE_FLOOR_CORE_MUTATIONS = [
 # An items task produces its batch through decomposition before trading it
 # (2026-10-09 C3P0 spruce_plank Wait). Killed by tests/test_ai/test_strategy_driver.py.
 PURSUE_BATCH_MUTATIONS = [
+    ("pursue: the reservation defers the step that makes the task item",
+     "        if isinstance(step_goal, GatherMaterialsGoal) and step_goal.target_item == state.task_code:\n",
+     "        if False:\n"),
     ("pursue: trades before the batch is held (back to A*-only production)",
      "    if held < batch:\n",
      "    if False:\n"),
@@ -5379,9 +5381,9 @@ LOSS_RISK_PLAYER_MUTATIONS = [
      "            fight_records=(),\n"),
 ]
 CONSUMABLE_FLOOR_MUTATIONS = [
-    ("floor: the committed fight is ignored for the grind target",
-     "    monster = ctx.fight_monster or ctx.combat_monster\n",
-     "    monster = ctx.combat_monster\n"),
+    ("floor: the chosen food is not a need",
+     "    for code, units in (*loadout.potions, *loadout.food):",
+     "    for code, units in loadout.potions:"),
     ("floor: the need is one fight, not the refill horizon",
      "        need[code] = need.get(code, 0) + units * REFILL_HORIZON_FIGHTS\n",
      "        need[code] = need.get(code, 0) + units\n"),
@@ -5560,13 +5562,51 @@ SUPPLY_RESERVED_PLAYER_MUTATIONS = [
      "                self.game_data.requirement_graph.graph(), [self._supply_target[0]]))\n",
      "                self.game_data.requirement_graph.graph(), []) | {self._supply_target[0]})\n"),
 ]
+# Increment 5 (docs/PLAN_consumable_utility.md): the CRAFT_POTIONS batch is the
+# chosen loadout's potions, stocked to their carry. Killed by
+# tests/test_ai/test_potion_supply.py.
 POTION_NEED_MUTATIONS = [
-    ("potion need: a comfortable fight's drinking is need again",
-     "    if not fight_is_marginal_pure(damage, state.max_hp):\n        return 0\n    learned",
-     "    learned"),
-    ("potion need: a marginal fight ignores what it drank",
-     "    if learned is not None:\n        return max(0, int(learned))\n    return damage\n",
-     "    return damage\n"),
+    ("potion batch: held copies meeting the deficit still craft",
+     "    if short <= 0:\n        return (code, 0, deficit)",
+     "    if short < 0:\n        return (code, 0, deficit)"),
+    ("potion batch: a potion at its carry is stocked again",
+     "        if deficit > 0:\n            batch = _sized(",
+     "        if deficit >= 0:\n            batch = _sized("),
+    ("potion batch: the guard stocks a loadout chosen for another fight",
+     "    if loadout is None or fight_monster is None or loadout.monster != fight_monster:",
+     "    if loadout is None or fight_monster is None:"),
+]
+POTION_SLOT_KEEP_MUTATIONS = [
+    ("utility_slot_for: the chosen potion is evicted for an unchosen one",
+     "        return second if first_kept else first",
+     "        return first if first_kept else second"),
+]
+POTION_GOAL_KEEP_MUTATIONS = [
+    ("CraftPotionsGoal: the equip ignores the loadout's other potion",
+     "        return EquipAction(code=code, slot=utility_slot_for(code, state, keep), quantity=remaining)",
+     "        return EquipAction(code=code, slot=utility_slot_for(code, state, frozenset()), quantity=remaining)"),
+]
+CHOSEN_LOADOUT_MUTATIONS = [
+    ("chosen_loadout: a potion carry overfills a utility slot",
+     "    return min(used_per_fight * CARRY_HORIZON_FIGHTS, UTILITY_SLOT_MAX_STACK)",
+     "    return used_per_fight * CARRY_HORIZON_FIGHTS"),
+    ("chosen_loadout: the carry horizon is half the measured run",
+     "CARRY_HORIZON_FIGHTS = 20\n",
+     "CARRY_HORIZON_FIGHTS = 10\n"),
+]
+LOADOUT_PLAYER_MUTATIONS = [
+    ("player: the chosen loadout never reaches the context",
+     "        ctx = replace(ctx, loadout=fight_ahead_loadout(self.state, self.game_data, ctx, self.history))",
+     "        ctx = replace(ctx, loadout=None)"),
+]
+PROVISION_LOADOUT_MUTATIONS = [
+    ("provision: a loadout chosen for another monster is equipped",
+     "    if monster is None or loadout is None or loadout.monster != monster:\n"
+     "        return None\n    if already_provisioned",
+     "    if monster is None or loadout is None:\n        return None\n    if already_provisioned"),
+    ("provision: one fight's use, not the carry",
+     "        qty = potion_provision_qty_pure(potion_carry(used) * restore, restore,",
+     "        qty = potion_provision_qty_pure(used * restore, restore,"),
 ]
 FIGHT_READY_MUTATIONS = [
     ("fight ready: a cached fight is reused whatever the hp",
@@ -5642,7 +5682,6 @@ _ALL_SRCS = [
     CRAFT_VS_BUY_SRC,
     ACQUISITION_COST_CORE_SRC,
     NEAREST_TILE_SRC,
-    CONSUMABLE_SELECTION_SRC,
     POTION_PROVISION_QTY_SRC,
     MAX_BATCH_FROM_HELD_SRC,
     OPTIMAL_BUY_MIX_SRC,
@@ -5654,7 +5693,7 @@ _ALL_SRCS = [
     TASK_TRADE_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
     APPLY_REST_SRC, APPLY_FIGHT_SRC, APPLY_BANK_EXPANSION_SRC, APPLY_TELEPORT_SRC,
-    CONSUMABLE_SUPPLY_SRC, MEANS_SRC, FLEET_WORK_SRC, GUARDS_SRC, THRESHOLDS_SRC,
+    MEANS_SRC, FLEET_WORK_SRC, GUARDS_SRC, THRESHOLDS_SRC,
     WITHDRAW_ITEM_SRC, UNEQUIP_SRC, TASK_EXCHANGE_SRC, TASK_CANCEL_SRC,
     GATHERING_APPLY_SRC,
     MONSTER_CATALOG_SRC,
@@ -5904,13 +5943,16 @@ INVENTORY_KEEP_MUTATIONS = [
     ("inventory_keep: the level-distance ceiling clamps the OWNERSHIP cap",
      "                               level_ceiling=False)",
      "                               level_ceiling=True)"),
-    # HEALING_CONSUMABLE charges the whole held stack instead of its share of the
-    # aggregate stock target -- the heal-stock blanket. Killed by
-    # test_healing_consumable_caps_at_stock_target_not_the_whole_stack (5, not 40)
-    # and test_healing_target_is_GREEDILY_FILLED_across_held_heals.
-    ("inventory_keep: HEALING_CONSUMABLE keeps the whole stack (blanket)",
-     "        share = min(qty, remaining)",
-     "        share = qty"),
+    # HEALING_CONSUMABLE keeps the chosen loadout's CARRY (increment 5 of
+    # docs/PLAN_consumable_utility.md). Killed by
+    # test_healing_consumable_keeps_a_chosen_potions_carry_less_the_worn_units and
+    # test_healing_consumable_keeps_the_chosen_foods_carry.
+    ("inventory_keep: a chosen potion's worn units are kept in the bag too",
+     "            return max(0, potion_carry(used) - equipped_potion_qty(state, code))",
+     "            return potion_carry(used)"),
+    ("inventory_keep: a chosen food keeps one recovery, not its carry",
+     "            return food_carry(eaten)",
+     "            return eaten"),
     # keep_in_bag combines its reasons by SUM -- over-protects whenever two
     # reasons are live (the cap exceeds every single demand). Killed by
     # test_keep_in_bag_combines_by_MAX_not_sum (COMMITTED_RECIPE 36 +
@@ -6593,39 +6635,6 @@ NEAREST_TILE_MUTATIONS = [
 ]
 
 
-# consumable_selection mutations -- old strings matched to current
-# consumable_selection.py text. Each perturbs the overheal-aware lex key or the
-# usability filter so the Python pick diverges from the Lean `selectConsumable`
-# oracle. Killed by formal/diff/test_consumable_selection_diff.py.
-CONSUMABLE_SELECTION_MUTATIONS = [
-    # overheal-flag direction flip: `restore > deficit` -> `restore < deficit`, so a
-    # FITTING item is wrongly flagged as overheal (and vice versa); the fit-preference
-    # inverts and a big overhealer can beat a small fitter — the original bug.
-    ("consumable_selection: overheal flag direction flip (> -> <)",
-     "    overheal = restore > deficit",
-     "    overheal = restore < deficit"),
-    # waste sign flip: `restore - deficit` -> `deficit - restore`, so among
-    # overhealers the LARGEST overshoot is preferred (negative waste sorts first).
-    ("consumable_selection: waste sign flip (restore - deficit -> deficit - restore)",
-     "    waste = (restore - deficit) if overheal else 0",
-     "    waste = (deficit - restore) if overheal else 0"),
-    # coverage sign flip: `-restore` -> `restore`, so among fitters the SMALLEST
-    # restore is chosen (argmin over +restore) instead of the largest coverage.
-    ("consumable_selection: coverage sign flip (-restore -> restore)",
-     "    return (overheal_flag, waste, -restore, code)",
-     "    return (overheal_flag, waste, restore, code)"),
-    # drop the code tiebreak (constant third-from-key field): ties resolve by
-    # list order instead of code, so a smaller-code candidate appearing later loses.
-    ("consumable_selection: drop code tiebreak (constant key)",
-     "    return (overheal_flag, waste, -restore, code)",
-     '    return (overheal_flag, waste, -restore, "")'),
-    # usability filter weakening: `qty <= 0` -> `qty < 0`, so a qty==0 item becomes
-    # usable and can be (wrongly) selected — the empty-stack item the filter must skip.
-    ("consumable_selection: usability filter qty <= 0 -> < 0 (admits qty==0)",
-     "        if qty <= 0:\n            continue",
-     "        if qty < 0:\n            continue"),
-]
-
 # potion_provision_qty mutations -- old strings matched to current
 # potion_provision_qty.py text. Each perturbs the integer-ceil, one of the two
 # clamps, or the slot-filled/held/restore guard so the Python quantity diverges
@@ -7215,30 +7224,19 @@ TELEPORT_COST_MUTATIONS = [
 ]
 
 
-# PLAN #6a: heal-supply maintenance. The floor comparison and the combat-active
-# gate are the load-bearing predicates; each mutation flips a unit-test verdict.
-CONSUMABLE_SUPPLY_MUTATIONS = [
-    (
-        "consumable_supply: stock floor >= becomes > (stock == floor wrongly re-fires)",
-        "    if heal_stock(state, game_data) >= heal_stock_target(desired_stock):\n        return False",
-        "    if heal_stock(state, game_data) > heal_stock_target(desired_stock):\n        return False",
-    ),
-    (
-        "consumable_supply: weaker-heal filter < becomes <= (drops an equal-strength restock)",
-        "        if stats.hp_restore < floor_restore:\n            continue",
-        "        if stats.hp_restore <= floor_restore:\n            continue",
-    ),
-]
-
-
+# The MAINTAIN_CONSUMABLES rung fires exactly when the chosen food's carry is
+# short (increment 5). Killed by tests/test_ai/test_maintain_consumables_rung.py.
 MEANS_MAINTAIN_MUTATIONS = [
     (
-        "means: MAINTAIN_CONSUMABLES drops the combat-active gate (fires when idle)",
-        "        if ctx.combat_monster is None:\n"
-        "            return False\n"
-        "        return maintain_consumables_fires(state, game_data)",
-        "        return maintain_consumables_fires(state, game_data)",
+        "means: MAINTAIN_CONSUMABLES fires whatever the chosen food's carry",
+        "        return maintain_consumables_goal(state, game_data, ctx) is not None",
+        "        return True",
     ),
+]
+MAINTAIN_MAP_MEANS_MUTATIONS = [
+    ("map_means(MAINTAIN_CONSUMABLES): an idle goal instead of the heal prep",
+     "        return prep\n    if kind is MeansKind.WAIT:",
+     "        return WaitGoal()\n    if kind is MeansKind.WAIT:"),
 ]
 
 
@@ -7347,26 +7345,6 @@ GUARD_DISCARD_QUANTITY_MUTATIONS = [
 # into three groups by KILLER FILE — a group runs one test path, and an anchor
 # in a group whose tests never import the constant SURVIVES (the trap hit twice
 # already: a1b32dda's sentinel anchors and 7dcb0c86's plan-cost anchor).
-
-POTION_KNOB_MUTATIONS = [
-    # Collapse the lead-time window to a single fight: stocking stops being
-    # speculative, so the bot starts brewing only once already marginal — too
-    # late, given crafting has lead time. Killed by the lead-window test.
-    ("thresholds: POTION_LEAD_FIGHTS 10 -> 1 (no speculation)",
-     "POTION_LEAD_FIGHTS = 10",
-     "POTION_LEAD_FIGHTS = 1"),
-    # Move the marginal-fight fraction off the shared 3/10 fight-HP floor. At
-    # 9/10 almost every fight reads "marginal", so the combat justification
-    # degenerates back to stock-on-any-deficit.
-    ("thresholds: MARGINAL_FIGHT_HP_NUM 3 -> 9 (everything reads marginal)",
-     "MARGINAL_FIGHT_HP_NUM = 3",
-     "MARGINAL_FIGHT_HP_NUM = 9"),
-    # Denominator shift the other way: 3/100 means nothing is ever marginal, so
-    # the bot never stocks and dies mid-fight with an empty utility slot.
-    ("thresholds: MARGINAL_FIGHT_HP_DEN 10 -> 100 (nothing reads marginal)",
-     "MARGINAL_FIGHT_HP_DEN = 10",
-     "MARGINAL_FIGHT_HP_DEN = 100"),
-]
 
 CURRENCY_KNOB_MUTATIONS = [
     # Batch of 1 is exactly the `held + 1` re-arming target the milestone ladder
@@ -8339,14 +8317,10 @@ FIGHT_LOOP_COST_MUTATIONS = [
 ]
 
 
-# The overheal sentinel's domination invariant. SEPARATE GROUP because these are
-# killed by unit tests (tests/test_ai/test_cost_core.py), not by the Lean-mirror
-# differential that COST_CORE_MUTATIONS runs against — left in that group they
-# both SURVIVE, since test_action_cost_nonneg_diff.py never imports the two
-# constants.
-# NB: mutating the derivation back to a literal `100.0` would be VACUOUS — same
-# value, so nothing could kill it. These target the two ways the derivation can
-# be WRONG instead.
+# cost_core invariants killed by unit tests (tests/test_ai/test_cost_core.py),
+# not by the Lean-mirror differential that COST_CORE_MUTATIONS runs against.
+# NB: mutating REST_COST_MAX's derivation back to a literal `100.0` would be
+# VACUOUS — same value, so nothing could kill it.
 COST_CORE_SENTINEL_MUTATIONS = [
     # REST_COST_MAX: evaluate the Rest cost at the wrong extreme (full HP instead
     # of a full deficit) -> 3.0, which is a LOWER bound, not the supremum. Killed
@@ -8355,15 +8329,6 @@ COST_CORE_SENTINEL_MUTATIONS = [
     ("cost_core: REST_COST_MAX taken at full HP instead of full deficit",
      "REST_COST_MAX = rest_cost_pure(0, 1)",
      "REST_COST_MAX = rest_cost_pure(1, 1)"),
-    # Overheal sentinel: collapse the dominance margin to 1x, so the sentinel
-    # merely TIES the dearest Rest (100.0) instead of strictly exceeding it — the
-    # planner would no longer reliably prefer Rest over wasting an overhealing
-    # consumable. Killed by
-    # `test_overheal_sentinel_strictly_dominates_every_rest_cost` (strict >, which
-    # fails at hp=0) and by the derivation pin.
-    ("cost_core: overheal sentinel margin 2x -> 1x (ties, not dominates)",
-     "OVERHEAL_REST_MULTIPLE = 2",
-     "OVERHEAL_REST_MULTIPLE = 1"),
     # The unit bug itself, resurrected: divide the Rest cost by ten again, so a
     # 100-second recovery is priced at 10 against learned Fight/Gather edges that
     # are already in seconds. Killed by the formula pins in
@@ -8959,21 +8924,20 @@ DEPOSIT_INVENTORY_SPACE_FRACTION_MUTATIONS = [
 ]
 
 # UNIT-KILLED, own run_group (same reason). `map_guard(CRAFT_POTIONS)` must seed
-# the goal with the monster `craft_potions_fires` fired on, never the arbiter's
-# farm target: naming a different monster makes the goal answer
-# `is_satisfied() == True` and the fired guard is silently discarded.
+# the goal with the loadout `craft_potions_fires` fired on (`guard_loadout`),
+# never a loadout chosen for another fight.
 CRAFT_POTIONS_GUARD_MONSTER_MUTATIONS = [
-    ("map_guard(CRAFT_POTIONS): seed the FARM target instead of the guard's monster",
-     "            combat_monster=ctx.fight_monster,\n",
-     "            combat_monster=ctx.combat_monster,\n"),
+    ("map_guard(CRAFT_POTIONS): seed the cycle's loadout whatever fight it was chosen for",
+     "            loadout=guard_loadout(ctx.loadout, ctx.fight_monster),",
+     "            loadout=ctx.loadout,"),
 ]
 # The potion stock is for the fight ahead (2026-10-06, live Lor: ~258 sunflower
 # gathers for `rat`, a monster it never fought). Guard arm killed by
 # tests/test_ai/test_tiers_guards.py, player arms by tests/test_ai/test_fight_monster.py.
 POTION_FIGHT_AHEAD_GUARD_MUTATIONS = [
-    ("guards(CRAFT_POTIONS): size for no fight (the stock is never justified)",
-     "        return craft_potions_fires(state, game_data, history, ctx.fight_monster)",
-     "        return craft_potions_fires(state, game_data, history, None)"),
+    ("guards(CRAFT_POTIONS): stock the loadout without a fight ahead",
+     "guard_loadout(ctx.loadout, ctx.fight_monster))",
+     "ctx.loadout)"),
 ]
 POTION_FIGHT_AHEAD_PLAYER_MUTATIONS = [
     ("player: the fight is forgotten when an interrupt replaces the plan cache",
@@ -9350,8 +9314,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_buy_source_venue_diff.py", survivors)
     run_group(NEAREST_TILE_SRC, NEAREST_TILE_MUTATIONS,
               "formal/diff/test_nearest_tile_diff.py", survivors)
-    run_group(CONSUMABLE_SELECTION_SRC, CONSUMABLE_SELECTION_MUTATIONS,
-              "formal/diff/test_consumable_selection_diff.py", survivors)
     run_group(POTION_PROVISION_QTY_SRC, POTION_PROVISION_QTY_MUTATIONS,
               "formal/diff/test_potion_provision_qty_diff.py", survivors)
     run_group(MAX_BATCH_FROM_HELD_SRC, MAX_BATCH_FROM_HELD_MUTATIONS,
@@ -9412,10 +9374,10 @@ def _collect_all_groups() -> None:
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(APPLY_TELEPORT_SRC, TELEPORT_COST_MUTATIONS,
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)
-    run_group(CONSUMABLE_SUPPLY_SRC, CONSUMABLE_SUPPLY_MUTATIONS,
-              "tests/test_ai/test_maintain_consumables.py", survivors)
     run_group(MEANS_SRC, MEANS_MAINTAIN_MUTATIONS,
-              "tests/test_ai/test_maintain_consumables.py", survivors)
+              "tests/test_ai/test_maintain_consumables_rung.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, MAINTAIN_MAP_MEANS_MUTATIONS,
+              "tests/test_ai/test_maintain_consumables_rung.py", survivors)
     # O5.4 Brick 5 — ladder firing-predicate threshold/comparator/conjunct
     # mutations, killed by the SELECT-side differential (binds the Lean ladder
     # to these `_fires` predicates through the ladder_fires oracle).
@@ -9427,8 +9389,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/scenarios/test_slot_exhaustion.py", survivors)
     run_group(THRESHOLDS_SRC, LADDER_THRESHOLD_VALUE_MUTATIONS,
               "formal/diff/test_ladder_fires_diff.py", survivors)
-    run_group(THRESHOLDS_SRC, POTION_KNOB_MUTATIONS,
-              "tests/test_ai/test_potion_stock_target.py", survivors)
     run_group(THRESHOLDS_SRC, CURRENCY_KNOB_MUTATIONS,
               "tests/test_ai/test_currency_grind_target.py", survivors)
     run_group(THRESHOLDS_SRC, RAID_KNOB_MUTATIONS,
@@ -9626,6 +9586,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_crafting_action.py", survivors)
     run_group(USE_CONSUMABLE_SRC, USE_CONSUMABLE_HEAL_MUTATIONS,
               "tests/test_ai/test_actions.py", survivors)
+    run_group(USE_CONSUMABLE_SRC, USE_CONSUMABLE_CHOICE_MUTATIONS,
+              "tests/test_ai/test_actions.py", survivors)
     run_group(BAG_PEAK_SRC, BAG_PEAK_MUTATIONS,
               "tests/test_ai/test_bag_peak.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, BAG_OVERFLOW_DECLINE_MUTATIONS,
@@ -9801,8 +9763,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_skill_xp_positive_diff.py", survivors)
     run_group(MONSTER_CATALOG_SRC, XP_VALUE_MUTATIONS,
               "formal/diff/test_xp_value_diff.py", survivors)
-    run_group(BOOST_SELECTION_SRC, BOOST_SELECTION_MUTATIONS,
-              "tests/test_ai/test_boost_selection.py", survivors)
     run_group(POTION_SUPPLY_SRC, RECIPE_PRODUCIBLE_MUTATIONS,
               "tests/test_ai/test_potion_supply.py", survivors)
     run_group(PROGRESSION_TREE_SRC, PROGRESSION_TREE_MUTATIONS,
@@ -9966,7 +9926,17 @@ def _collect_all_groups() -> None:
     run_group(PLAYER_SRC, SUPPLY_RESERVED_PLAYER_MUTATIONS,
               "tests/test_ai/test_supply_reserved.py", survivors)
     run_group(POTION_SUPPLY_SRC, POTION_NEED_MUTATIONS,
+              "tests/test_ai/test_potion_supply.py", survivors)
+    run_group(UTILITY_SLOT_SRC_W5, POTION_SLOT_KEEP_MUTATIONS,
+              "tests/test_ai/test_utility_slot.py", survivors)
+    run_group(CRAFT_POTIONS_GOAL_SRC_W5, POTION_GOAL_KEEP_MUTATIONS,
               "tests/test_ai/test_craft_potions.py", survivors)
+    run_group(CHOSEN_LOADOUT_SRC, CHOSEN_LOADOUT_MUTATIONS,
+              "tests/test_ai/test_chosen_loadout.py", survivors)
+    run_group(PLAYER_SRC, LOADOUT_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, PROVISION_LOADOUT_MUTATIONS,
+              "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(PLAYER_SRC, FIGHT_READY_MUTATIONS,
               "tests/test_ai/test_plan_or_reuse.py", survivors)
     run_group(GUARDS_SRC, REST_FIGHT_AHEAD_MUTATIONS,

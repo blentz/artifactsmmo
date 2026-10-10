@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+from artifactsmmo_cli.ai import grind_heal_prep
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -13,6 +14,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
@@ -910,19 +912,30 @@ def test_near_term_gear_targets_both_ring_slots_for_a_ring() -> None:
 
 def test_a_heal_prep_leg_before_a_grind_fight_is_directional() -> None:
     """iron_boots at gearcrafting 5: the grind's committed plan holds a fight,
-    so the heal batch comes first (a gudgeon gather for cooked gudgeon); that
-    first leg is part of the cycle, not unrelated."""
+    and the loadout chosen against that fight eats cooked gudgeon, so the food's
+    carry comes first (a gudgeon gather); that first leg is part of the cycle,
+    not unrelated. The verdict asks heal prep about the plan's first fight's
+    monster — the one the loadout is chosen against."""
     gd = _gd()
-    state = census_state("iron_boots", CraftCell(8, "gearcrafting", 5), gd)
-    plan = plan_craft("iron_boots", state, gd)
-    assert repr(plan[0]) == "Gather(gudgeon_spot×5)"
-    assert any(isinstance(a, FightAction) for a in plan)
-    assert advances_a_heal_prep(plan[0], plan, state, gd)
-    assert not advances_a_heal_prep(plan[0], [plan[0]], state, gd)  # no fight: no prep
-    assert not advances_a_heal_prep(RestAction(), plan, state, gd)
-    with patch.object(craft_completeness, "heal_prep_goal", return_value=None):
-        assert not advances_a_heal_prep(plan[0], plan, state, gd)
-    assert run_cell("iron_boots", CraftCell(8, "gearcrafting", 5), gd).passed
+    asked: list[str] = []
+
+    def eats_gudgeon(_state, _gd, _ctx, monster: str) -> ChosenLoadout:
+        asked.append(monster)
+        return ChosenLoadout(monster=monster, potions=(), food=(("cooked_gudgeon", 1),))
+
+    with patch.object(grind_heal_prep, "loadout_for", side_effect=eats_gudgeon):
+        state = census_state("iron_boots", CraftCell(8, "gearcrafting", 5), gd)
+        plan = plan_craft("iron_boots", state, gd)
+        assert repr(plan[0]) == f"Gather(gudgeon_spot×{food_carry(1)})"
+        fight = next(a for a in plan if isinstance(a, FightAction))
+        asked.clear()
+        assert advances_a_heal_prep(plan[0], plan, state, gd)
+        assert asked == [fight.monster_code]
+        assert not advances_a_heal_prep(plan[0], [plan[0]], state, gd)  # no fight: no prep
+        assert not advances_a_heal_prep(RestAction(), plan, state, gd)
+        with patch.object(craft_completeness, "heal_prep_goal", return_value=None):
+            assert not advances_a_heal_prep(plan[0], plan, state, gd)
+        assert run_cell("iron_boots", CraftCell(8, "gearcrafting", 5), gd).passed
 
 
 def test_the_verdict_judges_the_first_leg_that_is_not_a_crossing() -> None:

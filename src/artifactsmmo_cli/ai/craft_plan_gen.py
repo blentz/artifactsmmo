@@ -310,9 +310,9 @@ def _decompose_grind(skill: str, target_level: int, state: WorldState, game_data
     dependency is infeasible rather than a loop.
 
     When the grind's plan holds a fight (anywhere: the plan is committed, so a
-    fight after a gather still runs this cycle) and the heal stock is under
-    target, the legs that stock heals come first (`grind_heal_prep`): the leaf task
-    builds what it needs. The prep never opens a grind of its own and is
+    fight after a gather still runs this cycle) and the food the chosen loadout
+    eats against its monster is short of its carry, the legs that stock it come
+    first (`grind_heal_prep`): the leaf task builds what it needs. The prep never opens a grind of its own and is
     skipped when it cannot be served, since it saves requests and must never
     block the grind (live C3P0 2026-09-28: `Craft(cheese×1)` + eat before every
     fight)."""
@@ -324,8 +324,9 @@ def _decompose_grind(skill: str, target_level: int, state: WorldState, game_data
     legs = _walk_plan(rung, state, game_data, actions, ctx, declined, True, grinding | {skill})
     if legs is None:
         return None
-    if any(isinstance(a, FightAction) for a in legs):
-        prep = heal_prep_goal(state, game_data, ctx)
+    fight = next((a for a in legs if isinstance(a, FightAction)), None)
+    if fight is not None:
+        prep = heal_prep_goal(state, game_data, ctx, fight.monster_code)
         if prep is not None:
             prep_declined: list[str] = []
             prep_legs = decompose(prep, state, game_data, actions, ctx, prep_declined,

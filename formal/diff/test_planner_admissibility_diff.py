@@ -112,8 +112,8 @@ def _instance():
     # HP 364/400 (missing 36 = 9%) anchors the demo for the DYNAMIC Rest cost
     # (rest_cost_pure = max(3, ceil(missing%)) = 9.0 seconds here), keeping Rest
     # the expensive single-step. cooked_chicken restores exactly the 36 deficit,
-    # so EatAtTile FITS (cost 3.0, not the 200.0 overheal sentinel) and one eat
-    # closes it (`UseConsumableAction.apply` heals `min(max_hp, hp + restore)`,
+    # so one EatAtTile use (the flat 3.0 s cooldown) closes it
+    # (`UseConsumableAction.apply` heals `min(max_hp, hp + units * restore)`,
     # no longer to full).
     state = make_state(hp=364, max_hp=400, inventory={"cooked_chicken": 1}, x=0, y=0)
     goal = RestoreHPGoal()

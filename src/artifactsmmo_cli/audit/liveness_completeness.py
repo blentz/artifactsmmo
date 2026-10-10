@@ -181,8 +181,16 @@ WITNESS_BASELINE: dict[str, int] = {
     #
     # Fleet STOPPED before the raise; C3P0's live state re-planned on the fix:
     # `[Gather(spruce_tree×100), Craft(spruce_plank×10)]` in 14 nodes.
-    "WaitGoal": 1089,
-    "WaitAction": 1089,
+    # 2026-10-10, +651 (1089 -> 1740). C3P0 alone, on the b6f4587f and
+    # 9eedc404 fleets, until stopped. The fix above made the items task's step
+    # `GatherMaterials(spruce_plank)`; it ran (20+ gathers) until the bag held
+    # the spruce_wood it had gathered, and then `_suppress_step_for_task`
+    # read the step's own plank craft as eating the task's reserved wood and
+    # dropped the step SILENTLY — no search, no decline, the character waited
+    # out its turn (one cycle trace: 03:21-03:25Z, `intention_budget` at 100).
+    # FIXED: the step that makes the task item is never deferred.
+    "WaitGoal": 1740,
+    "WaitAction": 1740,
 }
 
 #: form "unreachable: ..." is a DEFECT that is being tracked, not an excuse —

@@ -1757,8 +1757,11 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # ingredient so `_recipe_producible` passes and the ladder sizes 3 runs
     # from held stock rather than a 5-run gather batch.
     #
-    # THE CELL WAS A DEFECT WITNESS when it landed (55063875) and is now a
-    # CONVERGENCE witness — see tests/test_ai/scenarios/test_boost_stock_cell.py.
+    # RETIRED ARM (docs/PLAN_consumable_utility.md increment 5): the guard now
+    # stocks only the chosen loadout's potions; the boost-stock and unlock arms
+    # are deleted, with tests/test_ai/scenarios/test_boost_stock_cell.py. The
+    # cell stays as a declared world for the census sweeps.
+    # THE CELL WAS A DEFECT WITNESS when it landed (55063875):
     # As committed the arm planned `Craft(earth_boost_potion×3)` +
     # `Equip(...→utility1_slot)`, because `craft_ladder._TARGET_SLOT` was the
     # hard-coded string "utility1_slot", so the equip DISPLACED the 40-potion

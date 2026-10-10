@@ -5,7 +5,7 @@
 (Oracle keys `keep_in_bag` / `keep_owned`) on EVERY row.
 
 **What is bound, and how.** The per-reason FUNCTIONS are opaque in Lean (a
-best-tool selector, a greedy aggregate heal fill, a fuel-bounded recipe-chain
+best-tool selector, the chosen loadout's heal carry, a fuel-bounded recipe-chain
 walk — no scalar to mirror), exactly like `hasGrindRung` in
 `Formal.ActionApplicability`. So this harness calls the REAL
 `inventory_keep.reason_quantity` for every member of the REAL `IN_BAG_REASONS` /
@@ -25,6 +25,7 @@ The properties the rows exercise:
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.inventory_keep import (
     IN_BAG_REASONS,
@@ -56,7 +57,7 @@ def _gd() -> GameData:
     (`copper_dagger <- 8 copper_ore`), two heal codes of different strength, and
     a currency. That is enough for every registry reason to be non-zero on some
     row: WORKING_KIT (the axe is a woodcutting tool), COMBAT_WEAPON (the dagger),
-    HEALING_CONSUMABLE (the greedy aggregate fill across chicken/apple),
+    HEALING_CONSUMABLE (the chosen loadout's food carry),
     COMMITTED_RECIPE (the transitive chain walk over both roots), CURRENCY,
     ACTIVE_TASK, GOAL_MATERIALS, EQUIPPED, GEAR_DEMAND and RECIPE_DEMAND."""
     gd = GameData()
@@ -156,14 +157,17 @@ def test_two_live_reasons_take_the_MAX_not_the_SUM():
     assert bankable("copper_ore", state, GD, ctx) == 10
 
 
-def test_healing_greedy_fill_row_matches_lean():
-    """The aggregate heal target filled across two heal codes: the surplus above
-    it banks (it never leaves ownership -- HEALING_CONSUMABLE is bag-only)."""
+def test_healing_carry_row_matches_lean():
+    """The chosen loadout's food carry (docs/PLAN_consumable_utility.md
+    increment 5): apple is eaten 1 a recovery, so 20 are kept and all 10 held
+    stay; cooked_chicken is not chosen and banks whole (HEALING_CONSUMABLE is
+    bag-only, so it never leaves ownership)."""
     state = make_state(level=10, inventory={"cooked_chicken": 3, "apple": 10})
-    ctx = _ctx()
+    ctx = _ctx(loadout=ChosenLoadout("chicken", (), (("apple", 1),)))
     _check("cooked_chicken", state, ctx)
     _check("apple", state, ctx)
-    assert bankable("apple", state, GD, ctx) == 8
+    assert bankable("apple", state, GD, ctx) == 0
+    assert bankable("cooked_chicken", state, GD, ctx) == 3
 
 
 def test_empty_bag_row_matches_lean():

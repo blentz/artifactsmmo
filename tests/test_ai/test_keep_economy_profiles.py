@@ -20,6 +20,7 @@ import pytest
 from artifactsmmo_cli.ai.accumulation_sell import sellable_accumulation
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.inventory_caps import useful_quantity_cap
@@ -246,10 +247,13 @@ def test_nongear_protection_unchanged():
     # gear profile, and every one of them is strictly protected: task item, task
     # coins, HP consumables, and the crafting-target + task recipe materials.
     # (`gear_keep` only reroutes the EQUIPPABLE component, which the in-bag ladder
-    # does not read at all.)
+    # does not read at all.) The HP consumable is protected as the food the
+    # cycle's chosen loadout eats (its carry), the one authority on heals.
     base_ctx = SelectionContext(bank_accessible=True, bank_required_level=0,
                                 bank_unlock_monster=None, initial_xp=0,
-                                task_exchange_min_coins=0, combat_monster=None)
+                                task_exchange_min_coins=0, combat_monster=None,
+                                loadout=ChosenLoadout(monster="chicken", potions=(),
+                                                      food=(("cooked_chicken", 1),)))
     profile_ctx = replace(base_ctx, gear_keep=gear_keep)
     for code in (TASKS_COIN_CODE, "copper_helmet", "cooked_chicken",
                  "copper_ore", "copper_bar"):

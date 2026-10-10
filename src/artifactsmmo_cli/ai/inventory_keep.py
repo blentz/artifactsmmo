@@ -59,7 +59,8 @@ anywhere, and every destructive action in production answers to these two caps.
 from enum import Enum
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.consumable_supply import HEAL_STOCK_FLOOR, heal_stock_target
+from artifactsmmo_cli.ai.chosen_loadout import food_carry, potion_carry
+from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_caps import (
     EQUIPPABLE_KEEP,
@@ -73,7 +74,6 @@ from artifactsmmo_cli.ai.kit_selection import (
     best_owned_fighting_weapon,
     best_owned_gathering_tools,
 )
-from artifactsmmo_cli.ai.per_state_memo import per_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
@@ -169,76 +169,32 @@ def _active_task(code: str, state: WorldState, game_data: GameData,
     return max(0, state.task_total - state.task_progress)
 
 
-@per_state
-def _held_heals(state: WorldState, game_data: GameData) -> list[tuple[str, int, int]]:
-    """Every HELD heal code as `(code, qty, hp_restore)`, strongest first, ties
-    broken on the lexically smallest code (a stable sort over `sorted()` keys).
-
-    The population is EXACTLY the one `consumable_supply.heal_stock` sums over
-    (`state.inventory`, `qty > 0`, `hp_restore > 0`) — the keep authority must
-    range over the same set the target is measured against.
-
-    NOT `consumable_supply.best_held_heal`: that selector additionally requires
-    the heal to map to a `utility1_slot`, because its caller equips heals for
-    marginal-fight provisioning. Using the utility-filtered selector would find
-    nothing in a food-only bag and drop the ENTIRE heal stock to keep 0,
-    re-creating the "banked the healing stock, now Rest forever" livelock."""
-    held: list[tuple[str, int, int]] = []
-    for held_code in sorted(state.inventory):
-        qty = state.inventory[held_code]
-        if qty <= 0:
-            continue
-        stats = game_data.item_stats(held_code)
-        if stats is None or stats.hp_restore <= 0:
-            continue
-        held.append((held_code, qty, stats.hp_restore))
-    held.sort(key=lambda entry: -entry[2])
-    return held
-
-
 def _healing_consumable(code: str, state: WorldState, game_data: GameData,
                         ctx: SelectionContext) -> int:
-    """Real cap, not "keep all" (user ruling): the stock target
-    `consumable_supply.maintain_consumables_fires` already sizes the heal stock
-    to — `heal_stock_target(HEAL_STOCK_FLOOR)`, its default/only call-site value.
+    """The chosen loadout's CARRY of `code` (docs/PLAN_consumable_utility.md
+    increment 5): the food its recovery eats, `chosen_loadout.food_carry` units;
+    a potion it wears, `chosen_loadout.potion_carry` less the units already worn
+    (the bag holds the rest until it is equipped). Every other consumable — and
+    every one when no loadout is chosen (no fight ahead) — keeps 0 in the bag.
 
-    The target is an AGGREGATE (`heal_stock` sums across ALL heal codes), so it
-    is FILLED GREEDILY across the held heal codes, strongest first, until the
-    aggregate is met; `code`'s share is what the fill assigns it. Two failure
-    modes are avoided at once:
+    The same carry heal prep and the CRAFT_POTIONS batch stock to, so DepositAll
+    never banks what they just carried (a withdraw↔deposit loop) and never
+    keeps a food the loadout does not eat. Units past the carry stay BANKABLE.
 
-      * charging the whole target to EVERY heal code keeps N x target — over-
-        protection in the exact place this epic frees slots;
-      * charging the whole target to ONE code UNDER-fills when that code is
-        short (3 cooked_chicken held against a target of 5 keeps 3 and leaves
-        every apple bankable — after DepositAll the real `heal_stock` is 3,
-        below target, so `MaintainConsumables` re-fires and crafts more: churn).
-
-    Surplus beyond the aggregate stays BANKABLE, and it is not destroyed — but
-    NOT for the reason this docstring used to give. "Never sold or deleted,
-    because HEALING_CONSUMABLE feeds `in_bag` only" was exactly backwards:
-    feeding `in_bag` ONLY is why this reason does not protect a single copy from
-    destruction. `destroyable` reads `keep_owned`, which this reason is not in.
-
-    The heal stock's owned-side floor is `RECIPE_DEMAND` ->
-    `inventory_caps.CONSUMABLE_KEEP` (999, "consumables stack, so capping low
-    frees zero slots while throwing away survival value"). That blanket was
-    silently clamped to 5 for any heal 10+ levels below the character by
-    `level_distance_keep_ceiling` — 30 `cooked_chicken` at character level 20 gave
-    `keep_owned = 5`, `destroyable = 25`, and DISCARD/SELL were licensed to melt
-    25 heals. `_recipe_demand` now takes the cap with `level_ceiling=False`, so
-    the blanket holds at every level distance. This reason is left bag-only ON
-    PURPOSE: its quantity is the STOCK TARGET (5), and adding it to
-    `OWNED_REASONS` would be a strictly weaker owned floor than the 999 it
-    already has."""
-    remaining = heal_stock_target(HEAL_STOCK_FLOOR)
-    for held_code, qty, _restore in _held_heals(state, game_data):
-        if remaining <= 0:
-            break
-        share = min(qty, remaining)
-        if held_code == code:
-            return share
-        remaining -= share
+    Bag-only ON PURPOSE: destruction is bounded by the owned-side floor,
+    `RECIPE_DEMAND` -> `inventory_caps.CONSUMABLE_KEEP` (999, "consumables
+    stack, so capping low frees zero slots while throwing away survival
+    value"), taken with `level_ceiling=False` so it holds at every level
+    distance."""
+    loadout = ctx.loadout
+    if loadout is None:
+        return 0
+    for food, eaten in loadout.food:
+        if food == code:
+            return food_carry(eaten)
+    for potion, used in loadout.potions:
+        if potion == code:
+            return max(0, potion_carry(used) - equipped_potion_qty(state, code))
     return 0
 
 

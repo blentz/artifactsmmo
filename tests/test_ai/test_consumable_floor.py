@@ -9,8 +9,8 @@ from fractions import Fraction
 
 import pytest
 
-import artifactsmmo_cli.ai.consumable_floor as mod
-from artifactsmmo_cli.ai.best_loadout import best_loadout
+from artifactsmmo_cli.ai.best_loadout import fight_ahead_loadout
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.consumable_floor import consumable_need, supply_shortfall
 from artifactsmmo_cli.ai.consumable_floor_core import REFILL_HORIZON_FIGHTS, share
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -57,32 +57,23 @@ def test_heal_candidates_by_class_in_catalogue_order() -> None:
 
 class TestNeed:
     def test_no_fight_ahead_needs_nothing(self) -> None:
-        assert consumable_need(_state(), _ogre_gd(), NO_PROFILE_CONTEXT, None) == {}
+        assert consumable_need(None) == {}
 
-    def test_the_best_loadout_over_the_refill_horizon(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_the_chosen_loadout_over_the_refill_horizon(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A priced heal potion turns the ogre loss into a win; the need is what
         one fight drinks × 20."""
         _prices(monkeypatch, {"heal_potion": Fraction(2)})
         state, gd = _state(), _ogre_gd()
         ctx = dataclasses.replace(NO_PROFILE_CONTEXT, combat_monster="ogre")
-        best = best_loadout(state, gd, ctx, "ogre")
-        drunk = dict(best.per_fight)["heal_potion"]
+        pick = fight_ahead_loadout(state, gd, ctx, None)
+        assert pick is not None
+        drunk = dict(pick.potions)["heal_potion"]
         assert drunk > 0
-        assert consumable_need(state, gd, ctx, None) == {"heal_potion": drunk * REFILL_HORIZON_FIGHTS}
+        assert consumable_need(pick) == {"heal_potion": drunk * REFILL_HORIZON_FIGHTS}
 
-    def test_the_committed_fight_comes_before_the_grind_target(self,
-                                                               monkeypatch: pytest.MonkeyPatch) -> None:
-        seen: list[str] = []
-
-        def best(state, gd, ctx, monster, store):  # type: ignore[no-untyped-def]
-            seen.append(monster)
-            return dataclasses.make_dataclass("B", ["per_fight"])(
-                (("heal_potion", 2), ("apple", 3)))
-
-        monkeypatch.setattr(mod, "best_loadout", best)
-        ctx = dataclasses.replace(NO_PROFILE_CONTEXT, combat_monster="ogre", fight_monster="wolf")
-        assert consumable_need(_state(), _ogre_gd(), ctx, None) == {"heal_potion": 40, "apple": 60}
-        assert seen == ["wolf"]
+    def test_potions_and_food_both_count(self) -> None:
+        pick = ChosenLoadout("wolf", (("heal_potion", 2),), (("apple", 3),))
+        assert consumable_need(pick) == {"heal_potion": 40, "apple": 60}
 
 
 class TestShortfall:

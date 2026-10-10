@@ -97,7 +97,7 @@ def rest_cost_pure(hp: int, max_hp: int) -> float:
     (`rest_cooldown_core.REST_MINIMUM_SECONDS`), so at the floor the two tie and
     above it the potion wins — which is true, since it really does save the
     whole 38.9s median. Whether the bot can
-    AFFORD that potion is priced by the potion economy (`potion_stock_target`),
+    AFFORD that potion is priced by the potion economy (`best_loadout`),
     not by understating what a Rest costs.
 
     The cooldown itself comes from `rest_cooldown_core`, which is also what the
@@ -127,39 +127,6 @@ jitter accounts for the 0.2).
 Held apart from `rest_cooldown_core.REST_MINIMUM_SECONDS`, which is also three
 seconds, because the two are separate server rules that happen to coincide.
 Folding them into one name would make a future divergence silent.
-"""
-
-OVERHEAL_REST_MULTIPLE = 2
-"""How many times the dearest possible Rest the overheal sentinel must cost.
-
-Was 10 while the dearest Rest was a fictitious 10.0. Now that a Rest is priced
-in real seconds and peaks at 100.0, the same multiple would put the sentinel at
-1000 — an order of magnitude outside the range every other edge lives in. Two
-keeps it strictly dominant over the dearest Rest (200 > 100) with room for the
-rest-and-move alternative it also has to outrank, without a number that dwarfs
-whole plans.
-
-Single-name int-literal assignment ON PURPOSE: this is the exact shape the Lean
-extractor (`scripts/extract_lean.py`, `_extract_constants`) accepts, so this knob
-is generated into `formal/Formal/Extracted/CostCore.lean` and consumed by
-`ActionCostNonneg.consumableCostOverheal`. Both languages therefore derive the
-sentinel from ONE integer, and `extract_lean.py --check` fails the gate if they
-drift. Do not inline this into the expression below -- that breaks extraction.
-"""
-
-OVERHEAL_CONSUMABLE_COST = OVERHEAL_REST_MULTIPLE * REST_COST_MAX
-"""Cost `UseConsumableAction` returns when the only consumable it can pick
-overshoots the deficit (see `consumable.py`).
-
-The point is to make the planner prefer Rest over wasting an overhealing item,
-which is only sound while this STRICTLY exceeds every possible Rest cost -- so it
-is derived from `REST_COST_MAX` rather than hardcoded next to a comment asserting
-the relationship. The doubling keeps it dominant over a plausible multi-step
-rest-and-move alternative too: 200s against a 100s worst-case Rest plus travel.
-
-Value is 200.0. The Lean mirror derives the same product from the same extracted
-multiplier, and an Oracle-backed differential asserts the two agree -- so neither
-a Python edit nor a Lean edit can move one side alone.
 """
 
 

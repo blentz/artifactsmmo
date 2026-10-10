@@ -1,10 +1,4 @@
-"""Select the best craftable-now boost potion by combat-margin gain vs a monster.
-
-``best_boost_potion`` ranks utility items carrying a boost effect
-(dmg_elements, resistance, or hp_bonus > 0) that are craftable now, by
-the margin gain they yield against a specific monster.  Returns the code
-with the greatest strictly-positive gain; None when none qualifies.
-Deterministic smallest-code tie-break (sorted iteration, strict > comparison).
+"""Project a utility potion into a utility slot.
 
 ``project_equip`` constructs a modified WorldState that models ``code``
 force-equipped in utility1_slot, so that ``combat_margin`` on the returned
@@ -13,7 +7,6 @@ state reads the boosted stats without a second arithmetic path.
 
 import dataclasses
 
-from artifactsmmo_cli.ai.combat import combat_margin
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -97,41 +90,3 @@ def project_equip(state: WorldState, code: str | None, game_data: GameData,
         ),
     )
 
-
-def best_boost_potion(
-    state: WorldState, game_data: GameData, monster_code: str
-) -> str | None:
-    """Return the craftable-now boost potion that maximises combat-margin gain.
-
-    Candidate set: items with type_=="utility" carrying a boost effect
-    (dmg_elements or resistance non-empty, or hp_bonus > 0 — NOT hp_restore,
-    which is a heal) that are craftable-now (crafting_skill is not None and
-    state.skills[crafting_skill] >= crafting_level).
-
-    Ranking: gain = combat_margin(project_equip(state, code, game_data),
-    game_data, monster_code) - combat_margin(state, game_data, monster_code).
-
-    Returns the code with the greatest STRICTLY POSITIVE gain; None when none
-    qualifies.  Deterministic smallest-code tie-break: sorted() iteration with
-    a strict ``>`` comparison keeps the first (alphabetically smallest) code
-    among equals.
-    """
-    baseline = combat_margin(state, game_data, monster_code)
-    best_code: str | None = None
-    best_gain = 0
-    for code in sorted(game_data.crafting_recipes):
-        stats = game_data.item_stats(code)
-        if stats is None or stats.type_ != "utility":
-            continue
-        if not (stats.dmg_elements or stats.resistance or stats.hp_bonus > 0):
-            continue
-        if stats.crafting_skill is None:
-            continue
-        if state.skills.get(stats.crafting_skill, 0) < stats.crafting_level:
-            continue
-        projected = project_equip(state, code, game_data)
-        gain = combat_margin(projected, game_data, monster_code) - baseline
-        if gain > best_gain:
-            best_code = code
-            best_gain = gain
-    return best_code

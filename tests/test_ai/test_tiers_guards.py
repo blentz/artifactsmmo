@@ -1,18 +1,20 @@
 """Tests for the guard ladder (state-pressure interrupts + prerequisite gates)."""
 
+import dataclasses
 from unittest.mock import patch
 
-from artifactsmmo_cli.ai.combat_targets import combat_target_monsters
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
+from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
-from artifactsmmo_cli.ai.potion_supply import (
-    craft_potions_fires,
-    projected_heal_need_per_fight,
-)
 from artifactsmmo_cli.ai.strategy_driver import map_guard
-from artifactsmmo_cli.ai.thresholds import DEPOSIT_FULL_FRACTION, PRESSURE_HIGH_FRACTION
+from artifactsmmo_cli.ai.thresholds import (
+    DEPOSIT_FULL_FRACTION,
+    POTION_GATHER_BATCH,
+    PRESSURE_HIGH_FRACTION,
+)
 from artifactsmmo_cli.ai.tiers.guards import (
     GUARD_ORDER,
     GuardKind,
@@ -184,7 +186,7 @@ def test_bank_unlock_fires_when_level_meets_threshold():
     # BANK_UNLOCK: target_level returned as 5, player level=4 (>= 5-1=4) → fires.
     gd = GameData()
     gd._monster_level["goblin"] = 5
-    fill_monster_stat_defaults(gd)  # craft_potions_fires → unlock_boost_target → predict_win needs full stats
+    fill_monster_stat_defaults(gd)  # the fight guards' predict_win needs full stats
     state = make_state(hp=100, max_hp=100, xp=0, level=4)
     guards = active_guards(
         state, gd, None,
@@ -688,11 +690,6 @@ def _potion_gd() -> GameData:
     }
     gd._crafting_recipes = {"health_potion": {"red_slimeball": 2}}
     gd._resource_drops = {"red_slime": "red_slimeball"}  # ingredient is gatherable
-    # Combat pressure. Potion stocking is combat-justified (2026-07-19): the target
-    # is projected IN-COMBAT consumption, so a catalog with no winnable monster
-    # projects zero need and the guard correctly stays silent. This monster is
-    # winnable but leaves the character at/below the marginal-fight HP fraction,
-    # which is what makes stocking the right call rather than resting it off.
     gd._monster_level = {"red_slime": 3}
     gd._monster_hp = {"red_slime": 60}
     gd._monster_attack = {"red_slime": {"fire": 40}}
@@ -706,85 +703,78 @@ def _potion_gd() -> GameData:
     return gd
 
 
-def _understocked_producible(level: int = 3, equipped: int = 0):
-    """Level 3: baseline = POTION_LOW_QTY = 5; equipped=0 < 5; potion gatherable."""
-    state = make_state(level=level, skills={"alchemy": 1},
-                       utility1_slot_quantity=equipped, attack={"fire": 20})
-    return state, _potion_gd(), _ctx(fight_monster="red_slime")
+_POTION_LOADOUT = ChosenLoadout(monster="red_slime", potions=(("health_potion", 1),), food=())
+"""The loadout chosen against red_slime: one health_potion a fight, a carry of 20."""
 
 
-def _understocked_but_no_alchemy(level: int = 3, equipped: int = 0):
-    """Level 3, understocked, but no alchemy-craftable utility potion exists."""
-    gd = GameData()  # empty catalog — no potions
-    state = make_state(level=level, skills={"alchemy": 1},
-                       utility1_slot_quantity=equipped)
-    return state, gd, _ctx(fight_monster="red_slime")
+def _potion_ctx(fight_monster: str | None = "red_slime",
+                loadout: ChosenLoadout | None = _POTION_LOADOUT) -> SelectionContext:
+    return _ctx(fight_monster=fight_monster, loadout=loadout)
 
 
-def _stocked_to_baseline(level: int = 3, equipped: int = 5):
-    """Level 3: baseline=5; equipped=5 == baseline → guard quiet."""
-    eq = {
-        "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
-        "body_armor_slot": None, "leg_armor_slot": None, "boots_slot": None,
-        "ring1_slot": None, "ring2_slot": None, "amulet_slot": None,
-        "artifact1_slot": None, "artifact2_slot": None, "artifact3_slot": None,
-        "utility1_slot": "health_potion", "utility2_slot": None,
-        "bag_slot": None, "rune_slot": None,
-    }
-    state = make_state(level=level, skills={"alchemy": 1},
-                       equipment=eq, utility1_slot_quantity=equipped)
-    return state, _potion_gd(), _ctx(fight_monster="red_slime")
+def _potion_state(equipped: int = 0, **kw) -> WorldState:  # type: ignore[no-untyped-def]
+    base = make_state(level=3, skills={"alchemy": 1}, attack={"fire": 20}, **kw)
+    return dataclasses.replace(base, equipment={**base.equipment, "utility1_slot": "health_potion"},
+                               utility1_slot_quantity=equipped)
 
 
-def test_craft_potions_guard_fires_when_understocked_and_producible():
-    """Understocked (equipped=0 < baseline=5) and potion gatherable → fires."""
-    state, gd, ctx = _understocked_producible(level=3, equipped=0)
-    assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, ctx, None) is True
+def _potion_fires(state: WorldState, gd: GameData, ctx: SelectionContext) -> bool:
+    return _fires(GuardKind.CRAFT_POTIONS, state, gd, None, ctx, None)
 
 
-def test_craft_potions_guard_quiet_when_not_producible():
-    """Understocked but no alchemy-craftable utility potion in catalog → quiet."""
-    state, gd, ctx = _understocked_but_no_alchemy(level=3, equipped=0)
-    assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, ctx, None) is False
+def test_craft_potions_guard_fires_when_the_chosen_potion_is_short_and_brewable():
+    """Worn 0 of a carry of 20, the ingredient gatherable -> fires."""
+    assert _potion_fires(_potion_state(), _potion_gd(), _potion_ctx()) is True
 
 
-def test_craft_potions_guard_quiet_when_stocked_to_level_baseline():
-    """equipped == baseline(3) = 5 → guard quiet even though potion exists."""
-    state, gd, ctx = _stocked_to_baseline(level=3, equipped=5)
-    assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, ctx, None) is False
+def test_craft_potions_guard_silent_without_a_chosen_loadout():
+    assert _potion_fires(_potion_state(), _potion_gd(), _potion_ctx(loadout=None)) is False
+
+
+def test_craft_potions_guard_silent_without_a_fight_ahead():
+    """The loadout is chosen, but nothing is fought next: nothing to stock."""
+    assert _potion_fires(_potion_state(), _potion_gd(), _potion_ctx(fight_monster=None)) is False
+
+
+def test_craft_potions_guard_silent_when_the_loadout_was_chosen_for_another_fight():
+    other = ChosenLoadout(monster="blue_slime", potions=(("health_potion", 1),), food=())
+    assert _potion_fires(_potion_state(), _potion_gd(), _potion_ctx(loadout=other)) is False
+
+
+def test_craft_potions_guard_silent_when_the_worn_stack_meets_the_carry():
+    assert _potion_fires(_potion_state(equipped=20), _potion_gd(), _potion_ctx()) is False
+    assert _potion_fires(_potion_state(equipped=19), _potion_gd(), _potion_ctx()) is True
+
+
+def test_craft_potions_guard_fires_on_held_potions_alone():
+    """Nothing brews the potion (no recipe route), but the bank holds copies:
+    the held stock is equipped, so the guard fires."""
+    gd = _potion_gd()
+    gd._resource_drops = {}
+    state = _potion_state(bank_items={"health_potion": 4})
+    assert _potion_fires(state, gd, _potion_ctx()) is True
+    assert _potion_fires(_potion_state(), gd, _potion_ctx()) is False
 
 
 def test_craft_potions_guard_fires_when_ingredients_held():
-    """Understocked with all ingredients already in inventory → craft-from-held
-    producibility fires (potion_supply.py:74)."""
-    state = make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0,
-                       inventory={"red_slimeball": 2}, attack={"fire": 20})
-    assert _fires(GuardKind.CRAFT_POTIONS, state, _potion_gd(), None, _ctx(fight_monster="red_slime"), None) is True
+    state = _potion_state(inventory={"red_slimeball": 2})
+    assert _potion_fires(state, _potion_gd(), _potion_ctx()) is True
 
 
 def test_craft_potions_guard_fires_when_ingredients_buyable_for_gold():
-    """Understocked, none held, but every ingredient is NPC-buyable for gold →
-    buy-mix producibility fires (potion_supply.py:80)."""
+    """None held, not gatherable, but every ingredient is NPC-buyable for gold."""
     gd = _potion_gd()
     gd._resource_drops = {}  # not gatherable — force the buyable path
     gd._npc_stock = {"alchemist": {"red_slimeball": 3}}  # gold currency by default
     gd._npc_locations = {"alchemist": (4, 4)}
-    state = make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0,
-                       inventory={}, attack={"fire": 20})
-    assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, _ctx(fight_monster="red_slime"), None) is True
+    assert _potion_fires(_potion_state(), gd, _potion_ctx()) is True
 
 
 def test_craft_potions_guard_quiet_when_recipe_is_empty():
-    """A target utility potion whose crafting recipe is empty has no ingredient
-    path → guard stays quiet (potion_supply.py:69)."""
-    gd = GameData()
-    gd._item_stats = {
-        "health_potion": ItemStats(code="health_potion", level=1, type_="utility",
-                                   hp_restore=50, crafting_skill="alchemy", crafting_level=1),
-    }
-    gd._crafting_recipes = {"health_potion": {}}  # selected as target, but no ingredients
-    state = make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0)
-    assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, _ctx(), None) is False
+    """A chosen potion whose recipe is empty, none held: no path, quiet."""
+    gd = _potion_gd()
+    gd._crafting_recipes = {"health_potion": {}}
+    assert _potion_fires(_potion_state(), gd, _potion_ctx()) is False
 
 
 def _ge_gd() -> GameData:
@@ -852,51 +842,36 @@ def test_deposit_full_never_fires_on_a_goal_that_reports_zero_value():
     assert goal.value(state, gd) > 0.0
 
 
-def test_craft_potions_goal_sizes_from_the_monster_the_guard_fired_on():
-    """ONE MONSTER, AND `ctx.fight_monster` NAMES IT.
-
-    The guard and the goal both size for the fight the intention has ahead
-    (`ctx.fight_monster`, 2026-10-06). `map_guard` once seeded the goal with
-    `ctx.combat_monster` — the arbiter's FARM target, a different cascade — so
-    when the two named different monsters the goal sized from one the guard had
-    not fired on, reported `is_satisfied() == True`, and `select_pure` skipped it
-    (measured 2026-08-25: 14 of 294 cells). The ctx here names the farm target
-    as the OTHER monster on purpose: that divergence must not leak in.
-    """
-    gd = GameData()
-    gd._item_stats = {
-        "small_health_potion": ItemStats(code="small_health_potion", level=1,
-                                         type_="utility", hp_restore=30,
-                                         crafting_skill="alchemy", crafting_level=1),
-        "sunflower": ItemStats(code="sunflower", level=1, type_="resource"),
-    }
-    gd._crafting_recipes = {"small_health_potion": {"sunflower": 1}}
-    gd._resource_drops = {"sunflower_field": "sunflower"}
-    gd._resource_locations = {"sunflower_field": [(2, 0)]}
-    gd._workshop_locations = {"alchemy": (3, 0)}
-    gd._monster_level = {"biter": 3, "nibbler": 2}
-    gd._monster_hp = {"biter": 60, "nibbler": 50}
-    gd._monster_attack = {"biter": {"fire": 40}, "nibbler": {"fire": 30}}
-    gd._monster_resistance = {"biter": {}, "nibbler": {}}
-    gd._monster_locations = {"biter": [(1, 0)], "nibbler": [(4, 0)]}
-    fill_monster_stat_defaults(gd)
-    state = make_state(level=1, hp=150, max_hp=150, attack={"fire": 20})
-
-    fired, other = "biter", "nibbler"
-    # NON-VACUOUS: both monsters are winnable and tiled; `fired` projects 120 HP
-    # of need and `other` projects 0, so seeding the goal from `other` is what
-    # used to silence it.
-    assert combat_target_monsters(state, gd) == ["biter", "nibbler"]
-    assert projected_heal_need_per_fight(state, gd, fired, None) > 0
-    assert projected_heal_need_per_fight(state, gd, other, None) == 0
-    assert craft_potions_fires(state, gd, None, fired) is True
-    assert craft_potions_fires(state, gd, None, None) is False
-
-    goal = map_guard(GuardKind.CRAFT_POTIONS, gd,
-                     _ctx(combat_monster=other, fight_monster=fired), state, None, None)
-    # A guard that fired must not emit a goal the arbiter throws away unread.
+def test_map_guard_craft_potions_seeds_the_guards_own_loadout():
+    """ONE LOADOUT, FOR THE FIGHT AHEAD. `map_guard(CRAFT_POTIONS)` seeds the
+    goal with `guard_loadout(ctx.loadout, ctx.fight_monster)`, the value the
+    guard fired on, so a fired guard never emits a goal the arbiter throws away
+    unread. The ctx's farm target (`combat_monster`) names another monster on
+    purpose: it must not leak in."""
+    gd = _potion_gd()
+    state = _potion_state()
+    ctx = _ctx(combat_monster="blue_slime", fight_monster="red_slime", loadout=_POTION_LOADOUT)
+    assert _potion_fires(state, gd, ctx) is True
+    goal = map_guard(GuardKind.CRAFT_POTIONS, gd, ctx, state, None, None)
+    assert isinstance(goal, CraftPotionsGoal)
     assert goal.is_satisfied(state) is False
-    assert goal.value(state, gd) > 0.0
+    # Nothing held: one gather batch of the carry's 20.
+    assert goal.value(state, gd) == float(POTION_GATHER_BATCH)
+    equip = goal.batch_equip(state)
+    assert equip is not None and (equip.code, equip.quantity) == ("health_potion", POTION_GATHER_BATCH)
+
+
+def test_map_guard_craft_potions_drops_a_loadout_for_another_fight():
+    """The loadout was chosen against the farm target, not the fight ahead:
+    the goal is seeded with none and has nothing to do, like the guard."""
+    gd = _potion_gd()
+    state = _potion_state()
+    ctx = _ctx(combat_monster="red_slime", fight_monster="blue_slime", loadout=_POTION_LOADOUT)
+    assert _potion_fires(state, gd, ctx) is False
+    goal = map_guard(GuardKind.CRAFT_POTIONS, gd, ctx, state, None, None)
+    assert goal.is_satisfied(state) is True
+    assert goal.value(state, gd) == 0.0
+    assert goal.batch_equip(state) is None
 
 
 def test_rest_for_combat_asks_about_the_fight_ahead():

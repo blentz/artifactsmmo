@@ -261,3 +261,14 @@ def test_no_guard_without_a_held_items_task():
                                 committed_target=("copper_helmet", "helmet_slot"))
     assert _arbiter()._suppress_step_for_task(goal, state, _gd()) is goal
     assert _arbiter()._suppress_step_for_task(None, state, _gd()) is None
+
+
+def test_the_step_that_makes_the_task_item_is_never_deferred():
+    """Live C3P0 2026-10-10 03:21Z: `GatherMaterials(spruce_plank)` was the
+    items task's own step; once the bag held the spruce_wood it had gathered,
+    the plank craft read as eating the task's reserve, the step was dropped and
+    the character waited out its turn."""
+    state = _task_state(inventory={"copper_bar": 6})
+    task_item = state.task_code
+    goal = GatherMaterialsGoal(target_item=task_item, needed={task_item: 10})
+    assert _suppress(goal, state) is goal
