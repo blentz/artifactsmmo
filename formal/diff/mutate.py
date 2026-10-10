@@ -366,6 +366,8 @@ FAILURE_RECOVERY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "failure_
 ACTION_BASE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "base.py"
 REST_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "rest.py"
 CONSUMABLE_FLOOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor.py"
+MULTI_RUN_SRC = ROOT / "src" / "artifactsmmo_cli" / "multi" / "multi_run.py"
+PLAY_COMMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "commands" / "play.py"
 FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 CRAFT_COMPLETENESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_completeness.py"
 CRAFT_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_census.py"
@@ -5242,21 +5244,22 @@ TASK_XP_DEMANDED_MUTATIONS = [
      "    if not task_advances_progression(probe, game_data):\n        return False\n    if task_type",
      "    if task_type"),
 ]
-# The fleet consumable floor (c-2 #5 §10). Killed by
-# tests/test_ai/test_consumable_floor.py / test_player_coordination.py.
+# The fleet consumable floor, rebuilt on the chosen loadouts
+# (`docs/PLAN_consumable_utility.md` increment 4; USER 2026-10-09 "Need ledger +
+# API order"). Killed by tests/test_ai/test_consumable_floor.py.
 CONSUMABLE_FLOOR_CORE_MUTATIONS = [
-    ("floor: a tier above the character is picked",
-     "        if level > char_level or restore <= 0:\n",
-     "        if restore <= 0:\n"),
-    ("floor: a tie goes to the lower level",
-     "        if best is None or (restore, level) > (best[1][1], best[1][0]):\n",
-     "        if best is None or restore > best[1][1]:\n"),
-    ("floor: the fleet size is ignored",
-     "    return max(0, target * fleet - stock)\n",
-     "    return max(0, target - stock)\n"),
-    ("floor: the share rounds down",
-     "    return -(-deficit // fleet)\n",
-     "    return deficit // fleet\n"),
+    ("floor: the needs ahead are not netted against the bank",
+     "    ahead = sum(needs.get(name, 0) for name in order[:order.index(me)])\n",
+     "    ahead = 0\n"),
+    ("floor: the characters BEHIND count as ahead",
+     "    ahead = sum(needs.get(name, 0) for name in order[:order.index(me)])\n",
+     "    ahead = sum(needs.get(name, 0) for name in order[order.index(me) + 1:])\n"),
+    ("floor: the share ignores the bank",
+     "    return need - min(need, max(0, bank - ahead))\n",
+     "    return need\n"),
+    ("floor: an overdrawn bank raises a share past its need",
+     "    return need - min(need, max(0, bank - ahead))\n",
+     "    return need - min(need, bank - ahead)\n"),
 ]
 # A fight's learned loss risk, priced (USER 2026-10-08, "Price the loss
 # risk"; `docs/PLAN_loss_risk.md`). Killed by tests/test_ai/test_loss_risk.py,
@@ -5376,18 +5379,21 @@ LOSS_RISK_PLAYER_MUTATIONS = [
      "            fight_records=(),\n"),
 ]
 CONSUMABLE_FLOOR_MUTATIONS = [
-    ("floor: the utility slots are not counted",
-     "        if worn is not None and qty > 0:\n",
-     "        if False:\n"),
-    ("floor: siblings' heals are not counted",
-     "        stock = own.get(code, 0) + siblings.get(code, 0) + bank.get(code, 0)\n",
-     "        stock = own.get(code, 0) + bank.get(code, 0)\n"),
-    ("floor: the potion floor ignores the fight ahead",
-     "else heal_stock_target(state, game_data, history, fight_monster, code))",
-     "else heal_stock_target(state, game_data, history, None, code))"),
+    ("floor: the committed fight is ignored for the grind target",
+     "    monster = ctx.fight_monster or ctx.combat_monster\n",
+     "    monster = ctx.combat_monster\n"),
+    ("floor: the need is one fight, not the refill horizon",
+     "        need[code] = need.get(code, 0) + units * REFILL_HORIZON_FIGHTS\n",
+     "        need[code] = need.get(code, 0) + units\n"),
+    ("floor: the bag counts as banked stock",
+     "    bank = state.bank_items or {}\n    fleet = {**siblings, me: need}\n",
+     "    bank = {**(state.bank_items or {}), **state.inventory}\n    fleet = {**siblings, me: need}\n"),
+    ("floor: the siblings' needs are ignored",
+     "    fleet = {**siblings, me: need}\n",
+     "    fleet = {me: need}\n"),
     ("floor: a met floor still reports a shortfall",
-     "        if deficit > 0:\n            out.append((code, deficit))\n",
-     "        out.append((code, deficit))\n"),
+     "        if owed > 0:\n            out.append((code, owed))\n",
+     "        out.append((code, owed))\n"),
 ]
 CONSUMABLE_DEMAND_MUTATIONS = [
     ("floor demand: the shortfall seeds no DAG root",
@@ -5400,22 +5406,59 @@ CONSUMABLE_SHORT_MUTATIONS = [
      ""),
 ]
 CONSUMABLE_PLAYER_MUTATIONS = [
-    ("floor player: heals are not published",
-     "        for code, qty in consumable_holdings(state, game_data).items():\n"
-     "            holdings[code] = holdings.get(code, 0) + qty\n",
+    ("floor player: the need is not published",
+     "        self._coordination.publish_consumable_need(self._consumable_need, now)\n",
      ""),
-    ("floor player: siblings' heals are not read",
-     "        self._sibling_consumables = self._coordination.sibling_holdings(now)\n",
+    ("floor player: siblings' needs are not read",
+     "        self._sibling_needs = self._coordination.sibling_consumable_needs(now)\n",
      ""),
-    ("floor player: the whole deficit is published by every character",
-     "                                   publish_share(deficit, self._fleet_size))\n",
-     "                                   deficit)\n"),
-    ("floor player: stale sibling heals survive a detached store",
-     "            self._sibling_consumables = {}\n            return\n",
+    ("floor player: stale sibling needs survive a detached store",
+     "            self._sibling_needs = {}\n            return\n",
      "            return\n"),
+    ("floor player: the share is not published",
+     "            own_demand[code] = max(own_demand.get(code, 0), owed)\n",
+     "            own_demand[code] = own_demand.get(code, 0)\n"),
+    ("floor player: the account order is ignored",
+     "        self._fleet_order = (character,) if fleet_order is None else fleet_order\n",
+     "        self._fleet_order = (character,)\n"),
     ("floor player: the shortfall never reaches the context",
      "        ctx = replace(ctx, supply_shortfall=self._supply_shortfall)\n",
      ""),
+]
+# The consumable need board (`ConsumableNeed`). Killed by
+# tests/test_ai/test_consumable_need_ledger.py.
+CONSUMABLE_NEED_LEDGER_MUTATIONS = [
+    ("need ledger: a character reads its own need as a sibling's",
+     "                        ConsumableNeed.expires_at > stamp,\n"
+     "                        ConsumableNeed.character != self._character,\n",
+     "                        ConsumableNeed.expires_at > stamp,\n"),
+    ("need ledger: an expired need still claims the bank",
+     "                        ConsumableNeed.expires_at > stamp,\n"
+     "                        ConsumableNeed.character != self._character,\n",
+     "                        ConsumableNeed.character != self._character,\n"),
+    ("need ledger: a republish keeps the stale rows",
+     "                    select(ConsumableNeed).where(\n"
+     "                        ConsumableNeed.character == self._character\n",
+     "                    select(ConsumableNeed).where(\n"
+     "                        ConsumableNeed.character == \"\"\n"),
+    ("need ledger: a zero need is published",
+     "                    if quantity > 0:\n                        s.add(ConsumableNeed(",
+     "                    if True:\n                        s.add(ConsumableNeed("),
+]
+# The account order reaches every child. Killed by tests/test_multi/test_multi_run.py
+# and tests/test_commands/test_play_rate_budget.py.
+FLEET_ORDER_MULTI_MUTATIONS = [
+    ("fleet order: a child is told only its own name",
+     "                    argv=self.child_argv(name, limits, characters),\n",
+     "                    argv=self.child_argv(name, limits, [name]),\n"),
+]
+FLEET_ORDER_PLAY_MUTATIONS = [
+    ("fleet order: the order never reaches the player",
+     "        fleet_order=tuple(fleet_order) if fleet_order is not None else None,\n",
+     "        fleet_order=None,\n"),
+    ("fleet order: a character outside the order starts anyway",
+     "    if fleet_order is not None and character not in fleet_order:\n",
+     "    if False:\n"),
 ]
 REGION_SPLIT_MUTATIONS = [
     ("factory: a legacy fight keeps the default region",
@@ -9896,6 +9939,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_consumable_floor.py", survivors)
     run_group(PLAYER_SRC, CONSUMABLE_PLAYER_MUTATIONS,
               "tests/test_ai/test_player_coordination.py", survivors)
+    run_group(COORDINATION_STORE_SRC, CONSUMABLE_NEED_LEDGER_MUTATIONS,
+              "tests/test_ai/test_consumable_need_ledger.py", survivors)
+    run_group(MULTI_RUN_SRC, FLEET_ORDER_MULTI_MUTATIONS,
+              "tests/test_multi/test_multi_run.py", survivors)
+    run_group(PLAY_COMMAND_SRC, FLEET_ORDER_PLAY_MUTATIONS,
+              "tests/test_commands/test_play_rate_budget.py", survivors)
     run_group(FACTORY_SRC, HELD_MASTER_MUTATIONS,
               "tests/test_ai/test_factory_regions.py", survivors)
     run_group(FACTORY_SRC, REGION_SPLIT_MUTATIONS,

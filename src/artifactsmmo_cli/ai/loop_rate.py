@@ -41,11 +41,11 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.actions.cost_core import CONSUMABLE_COOLDOWN_SECONDS
 from artifactsmmo_cli.ai.boost_selection import project_equip
 from artifactsmmo_cli.ai.combat import combat_terms, fight_max_hp
-from artifactsmmo_cli.ai.consumable_floor import FOOD, POTION, heal_candidates
 from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS, held_count, replacement_price_of
 from artifactsmmo_cli.ai.fight_outcome_core import fight_outcome
 from artifactsmmo_cli.ai.fight_terms_core import SCALE
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.heal_catalog import FOOD, POTION, heal_candidates
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loop_rate_core import consumed_seconds, recovery_choice, xp_per_second
 from artifactsmmo_cli.ai.selection_context import SelectionContext

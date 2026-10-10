@@ -1,205 +1,119 @@
--- @concept: consumables, fleet, supply @property: safety, dominance, totality
+-- @concept: consumables, fleet, supply @property: safety, monotonicity, totality
 /-
-The fleet's consumable floor (Phase 5-2c-iii-c-2 #5, `docs/PLAN_task_value.md`
-§10, `src/artifactsmmo_cli/ai/consumable_floor_core.py`).
+The fleet's consumable floor, rebuilt on the chosen loadouts
+(`docs/PLAN_consumable_utility.md` increment 4,
+`src/artifactsmmo_cli/ai/consumable_floor_core.py`).
 
-USER 2026-10-07: "Fishing feeds Cooking, Cooking feeds HP recovery or provides
-stat bonuses. Both cases require pre-emptive crafting of an available supply.
-The fleet can collectively maintain a minimum supply in the bank." Rulings:
-the floor is fleet size × the per-character target; it is for the
-TIER-APPROPRIATE consumable (the best usable at the character's level, even if
-a skill cannot make it yet — that skill demand is the seesaw); the shortfall is
-filled through the demand board, each character publishing its share.
+USER (2026-10-09), "From the chosen loadouts": for every consumable type some
+character's chosen loadout uses, the fleet's minimum BANKED quantity is Σ over
+those characters of (units used per fight × `REFILL_HORIZON_FIGHTS`).
+
+USER (2026-10-09), floor shares, "Need ledger + API order": each character
+publishes its per-type need; the banked stock is assigned in the account's
+`GET /my/characters` order; each character publishes
+`need − min(need, max(0, bank − needs ahead of it))`.
 
 ## The model
 
-* `tierPick`: candidates are `(level, restore)` in catalogue order; the pick is
-  the index of an eligible candidate (`level ≤ charLevel`, `restore > 0`)
-  maximal in `(restore, level)`, the first such in catalogue order.
-* `fleetDeficit target fleet stock = target * fleet - stock` (truncated).
-* `publishShare deficit fleet = ⌈deficit / fleet⌉`: every character publishes
-  this, and the demand board sums the shares.
+Per consumable type. `share ahead need bank` is one character's share, where
+`ahead` is the summed need of the characters before it in the fleet order.
+Nat subtraction truncates, so `bank - ahead` is `max(0, bank − ahead)` and the
+outer subtraction is never negative.
+
+`fleetShares bank needs` is every character's share, the needs listed in the
+fleet order; `fleetShares_getD` says its `i`-th entry is exactly the share the
+`i`-th character computes from the needs ahead of it.
 -/
 
 namespace Formal.ConsumableFloor
 
-def eligible (charLevel : Nat) (c : Nat × Nat) : Bool :=
-  decide (c.1 ≤ charLevel) && decide (0 < c.2)
+/-- One character's share of the shortfall: its need, less the bank units left
+after every character ahead of it took its own need. -/
+def share (ahead need bank : Nat) : Nat := need - min need (bank - ahead)
 
-/-- `a` strictly beats `b` in (restore, level). -/
-def better (a b : Nat × Nat) : Bool :=
-  decide (b.2 < a.2) || (decide (a.2 = b.2) && decide (b.1 < a.1))
+/-- The shares of `needs` (in fleet order), the characters ahead of the first
+having summed need `prefix`. -/
+def sharesAux (bank : Nat) : Nat → List Nat → List Nat
+  | _, [] => []
+  | p, n :: ns => share p n bank :: sharesAux bank (p + n) ns
 
-def tierPickAux (charLevel : Nat) : List (Nat × Nat) → Nat → Option (Nat × (Nat × Nat)) →
-    Option (Nat × (Nat × Nat))
-  | [], _, best => best
-  | c :: cs, i, best =>
-    let best' :=
-      if eligible charLevel c then
-        match best with
-        | none => some (i, c)
-        | some (j, b) => if better c b then some (i, c) else some (j, b)
-      else best
-    tierPickAux charLevel cs (i + 1) best'
-
-/-- The tier-appropriate consumable's index, or none. -/
-def tierPick (charLevel : Nat) (cands : List (Nat × Nat)) : Option Nat :=
-  (tierPickAux charLevel cands 0 none).map Prod.fst
-
-def fleetDeficit (target fleet stock : Nat) : Nat := target * fleet - stock
-
-def publishShare (deficit fleet : Nat) : Nat := (deficit + fleet - 1) / fleet
+/-- Every character's share, the needs in fleet order. -/
+def fleetShares (bank : Nat) (needs : List Nat) : List Nat := sharesAux bank 0 needs
 
 /-! ## Theorems -/
 
-theorem fleetDeficit_zero_iff (target fleet stock : Nat) :
-    fleetDeficit target fleet stock = 0 ↔ target * fleet ≤ stock := by
-  unfold fleetDeficit; omega
+/-- No share exceeds its character's need (and, in `Nat`, none is negative). -/
+theorem share_le (ahead need bank : Nat) : share ahead need bank ≤ need := by
+  unfold share; omega
 
-theorem fleetDeficit_antitone (target fleet s s' : Nat) (h : s ≤ s') :
-    fleetDeficit target fleet s' ≤ fleetDeficit target fleet s := by
-  unfold fleetDeficit; omega
+/-- MONOTONE: more banked stock never raises a share. -/
+theorem share_antitone_bank (ahead need b b' : Nat) (h : b ≤ b') :
+    share ahead need b' ≤ share ahead need b := by
+  unfold share; omega
 
-/-- The shares the fleet publishes cover the deficit. -/
-theorem publishShare_covers (deficit fleet : Nat) (hf : 0 < fleet) :
-    deficit ≤ publishShare deficit fleet * fleet := by
-  unfold publishShare
-  have := Nat.div_add_mod (deficit + fleet - 1) fleet
-  have hm := Nat.mod_lt (deficit + fleet - 1) hf
-  have : (deficit + fleet - 1) / fleet * fleet = fleet * ((deficit + fleet - 1) / fleet) :=
-    Nat.mul_comm _ _
-  omega
+/-- With nothing banked every character publishes its whole need. -/
+theorem share_zero_bank (ahead need : Nat) : share ahead need 0 = need := by
+  unfold share; omega
 
-/-- No character publishes more than the whole deficit. -/
-theorem publishShare_le (deficit fleet : Nat) (hf : 0 < fleet) :
-    publishShare deficit fleet ≤ deficit := by
-  unfold publishShare
-  rcases Nat.eq_zero_or_pos deficit with h | h
-  · subst h
-    rw [Nat.div_eq_of_lt (by omega)]; exact Nat.le_refl 0
-  · obtain ⟨f, rfl⟩ : ∃ f, fleet = f + 1 := ⟨fleet - 1, by omega⟩
-    obtain ⟨d, rfl⟩ : ∃ d, deficit = d + 1 := ⟨deficit - 1, by omega⟩
-    apply Nat.div_le_of_le_mul
-    simp only [Nat.add_mul, Nat.mul_add, Nat.mul_one, Nat.one_mul]
+/-- A lone character (nothing ahead) publishes its need less the bank. -/
+theorem share_alone (need bank : Nat) : share 0 need bank = need - bank := by
+  unfold share; omega
+
+theorem sharesAux_sum (bank : Nat) :
+    ∀ (ns : List Nat) (p : Nat), (sharesAux bank p ns).sum = ns.sum - (bank - p) := by
+  intro ns
+  induction ns with
+  | nil => intro p; simp [sharesAux]
+  | cons n ns ih =>
+    intro p
+    simp only [sharesAux, List.sum_cons, ih (p + n), share]
     omega
 
-/-- A lone character publishes its whole deficit. -/
-theorem publishShare_one (deficit : Nat) : publishShare deficit 1 = deficit := by
-  simp [publishShare]
-
-theorem tierPickAux_some_eligible (charLevel : Nat) :
-    ∀ (cs : List (Nat × Nat)) (i : Nat) (best : Option (Nat × (Nat × Nat))),
-      (∀ j b, best = some (j, b) → eligible charLevel b = true) →
-      ∀ j b, tierPickAux charLevel cs i best = some (j, b) → eligible charLevel b = true := by
-  intro cs
-  induction cs with
-  | nil => intro i best hb j b h; exact hb j b h
-  | cons c cs ih =>
-    intro i best hb j b h
-    simp only [tierPickAux] at h
-    refine ih (i + 1) _ ?_ j b h
-    intro j' b' hj
-    by_cases he : eligible charLevel c = true
-    · simp only [he, if_true] at hj
-      cases best with
-      | none => simp at hj; obtain ⟨-, rfl⟩ := hj; exact he
-      | some p =>
-        obtain ⟨k, d⟩ := p
-        by_cases hbt : better c d = true
-        · simp [hbt] at hj; obtain ⟨-, rfl⟩ := hj; exact he
-        · simp [hbt] at hj; obtain ⟨rfl, rfl⟩ := hj; exact hb k d rfl
-    · simp only [Bool.not_eq_true] at he; simp only [he] at hj
-      exact hb j' b' (by simpa using hj)
-
-/-- The pick is always an eligible candidate: usable at the character's level
-and restoring something. -/
-theorem tierPick_eligible (charLevel : Nat) (cands : List (Nat × Nat)) (j : Nat)
-    (h : tierPick charLevel cands = some j) :
-    ∃ b, tierPickAux charLevel cands 0 none = some (j, b) ∧ eligible charLevel b = true := by
-  unfold tierPick at h
-  cases hx : tierPickAux charLevel cands 0 none with
-  | none => simp [hx] at h
-  | some p =>
-    obtain ⟨k, b⟩ := p
-    simp [hx] at h; subst h
-    exact ⟨b, rfl, tierPickAux_some_eligible charLevel cands 0 none (by simp) k b hx⟩
-
-theorem better_le_trans (a b c : Nat × Nat) (hab : better a b = false) (hbc : better b c = false) :
-    better a c = false := by
-  simp only [better, Bool.or_eq_false_iff, Bool.and_eq_false_iff, decide_eq_false_iff_not] at *
+/-- THE FLEET SUM: the shares sum exactly to the fleet's shortfall,
+`max(0, Σ needs − bank)` — no unit is asked for twice and none is missed. -/
+theorem fleetShares_sum (bank : Nat) (needs : List Nat) :
+    (fleetShares bank needs).sum = needs.sum - bank := by
+  unfold fleetShares
+  rw [sharesAux_sum]
   omega
 
-theorem better_lt_le (c d b : Nat × Nat) (hcd : better c d = true) (hcb : better c b = false) :
-    better d b = false := by
-  simp only [better, Bool.or_eq_false_iff, Bool.and_eq_false_iff, decide_eq_false_iff_not,
-    Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq] at *
-  omega
+theorem sharesAux_length (bank : Nat) :
+    ∀ (ns : List Nat) (p : Nat), (sharesAux bank p ns).length = ns.length := by
+  intro ns
+  induction ns with
+  | nil => intro p; rfl
+  | cons n ns ih => intro p; simp [sharesAux, ih]
 
-theorem tierPickAux_optimal (charLevel : Nat) :
-    ∀ (cs : List (Nat × Nat)) (i : Nat) (best : Option (Nat × (Nat × Nat))) (j : Nat) (b : Nat × Nat),
-      tierPickAux charLevel cs i best = some (j, b) →
-      (∀ c ∈ cs, eligible charLevel c = true → better c b = false) ∧
-      (∀ k d, best = some (k, d) → better d b = false) := by
-  intro cs
-  induction cs with
-  | nil =>
-    intro i best j b h
-    refine ⟨by simp, ?_⟩
-    intro k d hb; subst hb; simp [tierPickAux] at h; obtain ⟨-, rfl⟩ := h
-    simp [better]
-  | cons c cs ih =>
-    intro i best j b h
-    simp only [tierPickAux] at h
-    obtain ⟨hcs, hbest'⟩ := ih (i + 1) _ j b h
-    by_cases he : eligible charLevel c = true
-    · simp only [he, if_true] at hbest'
-      cases best with
-      | none =>
-        refine ⟨?_, by simp⟩
-        intro x hx hex
-        rcases List.mem_cons.mp hx with rfl | hx
-        · exact hbest' i x rfl
-        · exact hcs x hx hex
-      | some p =>
-        obtain ⟨k0, d0⟩ := p
-        by_cases hbt : better c d0 = true
-        · simp only [hbt, if_true] at hbest'
-          have hcb := hbest' i c rfl
-          refine ⟨?_, ?_⟩
-          · intro x hx hex
-            rcases List.mem_cons.mp hx with rfl | hx
-            · exact hcb
-            · exact hcs x hx hex
-          · intro k d hkd; simp at hkd; obtain ⟨rfl, rfl⟩ := hkd
-            exact better_lt_le c d0 b hbt hcb
-        · simp only [Bool.not_eq_true] at hbt; simp only [hbt] at hbest'
-          have hdb := hbest' k0 d0 (by simp)
-          refine ⟨?_, ?_⟩
-          · intro x hx hex
-            rcases List.mem_cons.mp hx with rfl | hx
-            · exact better_le_trans x d0 b hbt hdb
-            · exact hcs x hx hex
-          · intro k d hkd; simp at hkd; obtain ⟨rfl, rfl⟩ := hkd; exact hdb
-    · simp only [Bool.not_eq_true] at he; simp only [he] at hbest'
-      refine ⟨?_, fun k d hkd => hbest' k d (by simpa using hkd)⟩
-      intro x hx hex
-      rcases List.mem_cons.mp hx with rfl | hx
-      · simp [he] at hex
-      · exact hcs x hx hex
+theorem sharesAux_getD (bank : Nat) :
+    ∀ (ns : List Nat) (p i : Nat), i < ns.length →
+      (sharesAux bank p ns).getD i 0 = share (p + (ns.take i).sum) (ns.getD i 0) bank := by
+  intro ns
+  induction ns with
+  | nil => intro p i h; simp at h
+  | cons n ns ih =>
+    intro p i h
+    cases i with
+    | zero => simp [sharesAux]
+    | succ k =>
+      simp only [sharesAux, List.getD_cons_succ, List.take_succ_cons, List.sum_cons]
+      rw [ih (p + n) k (by simp at h; omega), Nat.add_assoc]
 
-/-- OPTIMALITY: no eligible candidate strictly beats the pick in (restore,
-level). -/
-theorem tierPick_optimal (charLevel : Nat) (cands : List (Nat × Nat)) (j : Nat) (b : Nat × Nat)
-    (h : tierPickAux charLevel cands 0 none = some (j, b)) :
-    ∀ c ∈ cands, eligible charLevel c = true → better c b = false :=
-  (tierPickAux_optimal charLevel cands 0 none j b h).1
+/-- The fleet's shares are the per-character shares: the `i`-th entry is what
+the `i`-th character computes from the needs ahead of it. -/
+theorem fleetShares_getD (bank : Nat) (needs : List Nat) (i : Nat) (h : i < needs.length) :
+    (fleetShares bank needs).getD i 0 = share (needs.take i).sum (needs.getD i 0) bank := by
+  unfold fleetShares
+  rw [sharesAux_getD bank needs 0 i h, Nat.zero_add]
+
+theorem fleetShares_length (bank : Nat) (needs : List Nat) :
+    (fleetShares bank needs).length = needs.length :=
+  sharesAux_length bank needs 0
 
 /-! ## Witnesses -/
 
-example : tierPick 30 [(20, 150), (30, 300), (40, 500), (25, 300)] = some 1 := by decide
-example : tierPick 10 [(20, 150), (30, 300)] = none := by decide
-example : publishShare 25 5 = 5 := by decide
-example : publishShare 23 5 = 5 := by decide
-example : fleetDeficit 5 5 30 = 0 := by decide
+example : fleetShares 25 [20, 20, 20] = [0, 15, 20] := by decide
+example : fleetShares 0 [5, 0, 7] = [5, 0, 7] := by decide
+example : fleetShares 100 [20, 20] = [0, 0] := by decide
+example : share 20 20 25 = 15 := by decide
 
 end Formal.ConsumableFloor

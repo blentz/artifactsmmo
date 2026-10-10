@@ -2238,7 +2238,7 @@ def test_refresh_sibling_reads_publishes_nothing_and_claims_nothing(tmp_path) ->
 
     engine = player._coordination._engine
     with SqlSession(engine) as s:
-        for table in ("skill_ledger", "material_demand", "holding_ledger",
+        for table in ("skill_ledger", "material_demand", "holding_ledger", "consumable_need",
                       "supply_claims", "turn_in_claims", "role_leases",
                       "bank_stock_claims", "ge_order_claims"):
             rows = s.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
@@ -2307,31 +2307,33 @@ def test_both_roots_are_published_not_one_or_the_other():
 # collectively maintain a minimum supply in the bank")
 # ---------------------------------------------------------------------------
 
-def test_update_coordination_publishes_heals_and_reads_the_siblings(tmp_path):
+def test_update_coordination_publishes_the_need_and_reads_the_siblings(tmp_path):
+    """USER 2026-10-09, "Need ledger + API order": each character publishes its
+    per-type need and reads every sibling's, per character."""
     db = str(tmp_path / "coord.db")
-    p = GamePlayer(character="hero", fleet_size=5)
-    p.state = make_state(inventory={"cooked_bass": 3})
+    p = GamePlayer(character="hero", fleet_order=("HAL", "hero"))
+    p.state = make_state()
     p.game_data = _make_planner_gd()
-    p.game_data._item_stats["cooked_bass"] = ItemStats(
-        code="cooked_bass", level=30, type_="consumable", hp_restore=200)
+    p._consumable_need = {"small_health_potion": 40}
     store = CoordinationStore(db_path=db, character="hero")
     sibling = CoordinationStore(db_path=db, character="HAL")
     p.set_coordination_store(store)
-    now = datetime.now(tz=timezone.utc)
     try:
-        sibling.publish_holdings({"cooked_bass": 7}, now)
+        sibling.publish_consumable_need({"small_health_potion": 60}, coordination_now())
         p._update_coordination(p.state, p.game_data)
-        assert p._sibling_consumables == {"cooked_bass": 7}
-        assert sibling.sibling_holdings(datetime.now(tz=timezone.utc)) == {"cooked_bass": 3}
+        assert p._sibling_needs == {"HAL": {"small_health_potion": 60}}
+        assert sibling.sibling_consumable_needs(coordination_now()) == {
+            "hero": {"small_health_potion": 40}}
     finally:
         store.close()
         sibling.close()
 
 
 def test_update_coordination_publishes_its_share_of_the_shortfall(tmp_path):
-    """The board SUMS rows across characters, so each publishes ⌈deficit/5⌉."""
+    """The shortfall already IS this character's share: the board sums rows
+    across characters to exactly the fleet's shortfall."""
     db = str(tmp_path / "coord.db")
-    p = GamePlayer(character="hero", fleet_size=5)
+    p = GamePlayer(character="hero")
     p.state = make_state()
     p.game_data = _make_planner_gd()
     p._supply_shortfall = (("cooked_bass", 23),)
@@ -2340,35 +2342,60 @@ def test_update_coordination_publishes_its_share_of_the_shortfall(tmp_path):
     p.set_coordination_store(store)
     try:
         p._update_coordination(p.state, p.game_data)
-        assert sibling.sibling_demand(datetime.now(tz=timezone.utc)).get("cooked_bass") == 5
+        assert sibling.sibling_demand(coordination_now()).get("cooked_bass") == 23
     finally:
         store.close()
         sibling.close()
 
 
-def test_without_a_store_no_sibling_heals_are_counted():
+def test_the_read_only_refresh_reads_the_siblings_needs(tmp_path):
+    """`plan <char>` reads the fleet's needs without publishing its own."""
+    player, db = _coord_player(tmp_path)
+    sibling = CoordinationStore(db_path=db, character="HAL")
+    try:
+        sibling.publish_consumable_need({"small_health_potion": 60}, coordination_now())
+        player._refresh_sibling_reads(coordination_now())
+        assert player._sibling_needs == {"HAL": {"small_health_potion": 60}}
+    finally:
+        sibling.close()
+
+
+def test_without_a_store_no_sibling_need_is_counted():
     p = GamePlayer(character="hero")
     p.state = make_state()
     p.game_data = _make_planner_gd()
-    p._sibling_consumables = {"cooked_bass": 9}
+    p._sibling_needs = {"HAL": {"cooked_bass": 9}}
     p._update_coordination(p.state, p.game_data)
-    assert p._sibling_consumables == {}
+    assert p._sibling_needs == {}
+
+
+def test_a_lone_character_is_its_own_fleet():
+    assert GamePlayer(character="hero")._fleet_order == ("hero",)
+    assert GamePlayer(character="hero", fleet_order=("HAL", "hero"))._fleet_order == ("HAL", "hero")
 
 
 def test_the_shortfall_reaches_the_selection_context(monkeypatch):
-    p = GamePlayer(character="hero", fleet_size=3)
+    p = GamePlayer(character="hero", fleet_order=("HAL", "hero"))
     p.state = make_state()
     p.game_data = _make_planner_gd()
-    p._sibling_consumables = {"cooked_bass": 4}
+    p._sibling_needs = {"HAL": {"cooked_bass": 4}}
     seen = {}
 
-    def shortfall(state, gd, history, monster, fleet, siblings):  # type: ignore[no-untyped-def]
-        seen.update(fleet=fleet, siblings=siblings)
+    def need(state, gd, ctx, store):  # type: ignore[no-untyped-def]
+        seen.update(monster=ctx.combat_monster, store=store)
+        return {"cooked_bass": 20}
+
+    def shortfall(state, order, me, own, siblings):  # type: ignore[no-untyped-def]
+        seen.update(order=order, me=me, own=own, siblings=siblings)
         return (("cooked_bass", 11),)
 
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.consumable_need", need)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.supply_shortfall", shortfall)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))
-    ctx = p._selection_context(combat_monster=None)
+    ctx = p._selection_context(combat_monster="chicken")
     assert ctx.supply_shortfall == (("cooked_bass", 11),)
     assert p._supply_shortfall == (("cooked_bass", 11),)
-    assert seen == {"fleet": 3, "siblings": {"cooked_bass": 4}}
+    assert p._consumable_need == {"cooked_bass": 20}
+    assert seen == {"monster": "chicken", "store": p.history, "order": ("HAL", "hero"),
+                    "me": "hero", "own": {"cooked_bass": 20},
+                    "siblings": {"HAL": {"cooked_bass": 4}}}

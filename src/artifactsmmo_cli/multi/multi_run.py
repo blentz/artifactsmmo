@@ -93,13 +93,17 @@ class MultiRun:
         for suffix in ("", "-wal", "-shm"):
             Path(f"{self._coordination_db}{suffix}").unlink(missing_ok=True)
 
-    def child_argv(self, character: str, budget: BucketBudgets, fleet_size: int) -> list[str]:
+    def child_argv(self, character: str, budget: BucketBudgets, fleet: list[str]) -> list[str]:
         """The command line for one child. Never `--all` (that would fork-bomb
-        the account) and never `--tui` (only the parent owns the terminal)."""
+        the account) and never `--tui` (only the parent owns the terminal).
+        `fleet` is the account's characters in `GET /my/characters` order, one
+        `--fleet-order` each: the rate budget's fair share is sized by it and
+        the consumable floor assigns the bank in it."""
         argv = [sys.executable, "-m", "artifactsmmo_cli.main", "play", character,
-                "--emit-events", "--rate-budget", budget.to_json(),
-                "--fleet-size", str(fleet_size),
-                "--coordination-db", self._coordination_db_path()]
+                "--emit-events", "--rate-budget", budget.to_json()]
+        for name in fleet:
+            argv += ["--fleet-order", name]
+        argv += ["--coordination-db", self._coordination_db_path()]
         if self._verbose:
             argv.append("--verbose")
         if self._dry_run:
@@ -128,7 +132,7 @@ class MultiRun:
             [
                 CharacterSupervisor(
                     character=name,
-                    argv=self.child_argv(name, limits, len(characters)),
+                    argv=self.child_argv(name, limits, characters),
                     on_event=self._on_event,
                     # `partial` binds `name` by VALUE right now, unlike a lambda
                     # closing over the loop variable `name` (which would report

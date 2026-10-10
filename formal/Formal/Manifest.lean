@@ -496,15 +496,16 @@ open Formal.PriorityBand
 #check @Formal.TaskWorth.drawDue_mono                  -- more worthy tasks never revoke it
 #check @Formal.TaskWorth.drawDue_refines_drawOwed      -- a due draw names a worthy task
 
--- ConsumableFloor (c-2 #5 §10: the fleet's consumable floor; USER 2026-10-07,
--- `ai/consumable_floor_core.py`):
-#check @Formal.ConsumableFloor.tierPick_eligible       -- the pick is usable and restores
-#check @Formal.ConsumableFloor.tierPick_optimal        -- nothing eligible beats it
-#check @Formal.ConsumableFloor.fleetDeficit_zero_iff   -- no deficit ⇔ stock ≥ floor
-#check @Formal.ConsumableFloor.fleetDeficit_antitone   -- more stock never raises it
-#check @Formal.ConsumableFloor.publishShare_covers     -- the fleet's shares cover it
-#check @Formal.ConsumableFloor.publishShare_le         -- no share exceeds it
-#check @Formal.ConsumableFloor.publishShare_one        -- alone, the whole deficit
+-- ConsumableFloor (consumable utility increment 4: the fleet floor from the
+-- chosen loadouts, shares in API order; USER 2026-10-09 "Need ledger + API
+-- order", `ai/consumable_floor_core.py`):
+#check @Formal.ConsumableFloor.fleetShares_sum         -- Σ shares = max(0, Σ needs − bank)
+#check @Formal.ConsumableFloor.fleetShares_getD        -- the i-th share is the i-th char's own
+#check @Formal.ConsumableFloor.fleetShares_length      -- one share per character
+#check @Formal.ConsumableFloor.share_le                -- no share exceeds its need
+#check @Formal.ConsumableFloor.share_antitone_bank     -- more bank never raises a share
+#check @Formal.ConsumableFloor.share_zero_bank         -- an empty bank: the whole need
+#check @Formal.ConsumableFloor.share_alone             -- alone: need less the bank
 -- LossRisk (USER 2026-10-08 "Price the loss risk", `ai/loss_risk_core.py`):
 #check @Formal.LossRisk.cold_zero                      -- no evidence, no surcharge
 #check @Formal.LossRisk.lossless_zero                  -- never lost, no surcharge

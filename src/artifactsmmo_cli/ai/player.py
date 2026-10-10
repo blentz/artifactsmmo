@@ -64,8 +64,7 @@ from artifactsmmo_cli.ai.constants import (
     GE_ORDER_REFRESH_INTERVAL_SECONDS,
     STUCK_DETECTOR_WINDOW,
 )
-from artifactsmmo_cli.ai.consumable_floor import consumable_holdings, supply_shortfall
-from artifactsmmo_cli.ai.consumable_floor_core import publish_share
+from artifactsmmo_cli.ai.consumable_floor import consumable_need, supply_shortfall
 from artifactsmmo_cli.ai.craft_plan_gen import decompose, hands_off_to_search
 from artifactsmmo_cli.ai.currency_turnin import TurnIn, fleet_total_pure, turn_in_ready_pure
 from artifactsmmo_cli.ai.cycle_snapshot import (
@@ -244,17 +243,20 @@ class GamePlayer:
         cycle_observer: "Callable[[CycleSnapshot], None] | None" = None,
         game_data_ttl_minutes: int = 30,
         refresh_game_data: bool = False,
-        fleet_size: int = 1,
+        fleet_order: tuple[str, ...] | None = None,
     ) -> None:
         self.character = character
-        # The characters sharing the account's bank (`play --all`), which the
-        # fleet consumable floor is sized by (USER 2026-10-07: "Fleet size ×
-        # per-char target"). One for a lone character.
-        self._fleet_size = fleet_size
-        # Siblings' published heal holdings, read with the coordination block,
-        # and this cycle's consumable shortfall (`consumable_floor`), published
-        # as this character's share on the demand board.
-        self._sibling_consumables: dict[str, int] = {}
+        # The characters sharing the account's bank in the account's
+        # `GET /my/characters` order (`play --all` passes it), in which the
+        # fleet consumable floor assigns the banked stock (USER 2026-10-09,
+        # "Need ledger + API order"). A lone character is its own fleet.
+        self._fleet_order = (character,) if fleet_order is None else fleet_order
+        # This character's consumable need (`consumable_floor.consumable_need`)
+        # and its siblings' published needs, read with the coordination block,
+        # and this cycle's consumable shortfall share (`consumable_floor`),
+        # published on the demand board.
+        self._consumable_need: dict[str, int] = {}
+        self._sibling_needs: dict[str, dict[str, int]] = {}
         self._supply_shortfall: tuple[tuple[str, int], ...] = ()
         self.verbose = verbose
         self.dry_run = dry_run
@@ -3293,7 +3295,7 @@ class GamePlayer:
         return skill_of_item, level_of_item
 
     def _refresh_sibling_reads(self, now: datetime) -> None:
-        """Re-read the four PURE-READ sibling facts the selection context needs.
+        """Re-read the five PURE-READ sibling facts the selection context needs.
 
         Split out of `_update_coordination` so the read-only planning path can
         use it too. `plan <char>` never called `_update_coordination` — it runs
@@ -3323,6 +3325,9 @@ class GamePlayer:
         self._sibling_order_claims = self._coordination.sibling_order_claims(now)
         self._asymmetric_demand = self._coordination.sibling_demand_asymmetric(now)
         self._sibling_skills = self._coordination.sibling_skill_levels(now)
+        # The siblings' consumable needs, for this character's floor share
+        # (USER 2026-10-09, "Need ledger + API order").
+        self._sibling_needs = self._coordination.sibling_consumable_needs(now)
 
     def _update_coordination(self, state: "WorldState", game_data: GameData) -> None:
         """Renew, publish, and re-decide this character's role for one cycle,
@@ -3342,7 +3347,7 @@ class GamePlayer:
             self._recall = None
             self._asymmetric_demand = frozenset()
             self._sibling_skills = {}
-            self._sibling_consumables = {}
+            self._sibling_needs = {}
             return
         role_before = self._role
         now = datetime.now(tz=timezone.utc)
@@ -3351,11 +3356,11 @@ class GamePlayer:
         # so every sibling's `sibling_holdings` read sees THIS cycle's total
         # rather than a stale one. Costs nothing extra: same local SQLite
         # write path as `publish_demand` just above/below.
-        holdings = dual_role_holdings(state, game_data)
-        for code, qty in consumable_holdings(state, game_data).items():
-            holdings[code] = holdings.get(code, 0) + qty
-        self._coordination.publish_holdings(holdings, now)
-        self._sibling_consumables = self._coordination.sibling_holdings(now)
+        self._coordination.publish_holdings(dual_role_holdings(state, game_data), now)
+        # This character's consumable need for the fleet floor (USER
+        # 2026-10-09, "Need ledger + API order"); the siblings' are read in
+        # `_refresh_sibling_reads`.
+        self._coordination.publish_consumable_need(self._consumable_need, now)
         # Our crafting levels, so a sibling that CANNOT make something can see
         # that we can and price asking as a route rather than as unobtainable.
         # Same write path and same TTL as the holdings publish directly above.
@@ -3379,11 +3384,11 @@ class GamePlayer:
         # produce" means.
         own_demand = self._own_unmet_demand(state, game_data)
         # The fleet consumable floor's shortfall (USER 2026-10-07: filled "via
-        # SupplyBank"): each character publishes its SHARE, because the board
-        # sums rows across characters (`consumable_floor_core.publish_share`).
-        for code, deficit in self._supply_shortfall:
-            own_demand[code] = max(own_demand.get(code, 0),
-                                   publish_share(deficit, self._fleet_size))
+        # SupplyBank"): each character publishes its SHARE, and the board sums
+        # rows across characters to exactly the fleet's shortfall
+        # (`Formal.ConsumableFloor.fleetShares_sum`).
+        for code, owed in self._supply_shortfall:
+            own_demand[code] = max(own_demand.get(code, 0), owed)
         own_skill_of_item, own_level_of_item = self._producing_split(own_demand, game_data)
         # A code with NO producing skill at all IS self-servable. `self_servable`
         # means "the asker can obtain this without help", and for a vendor-only
@@ -3806,9 +3811,10 @@ class GamePlayer:
             fight_records=(fight_records(self.state, self.game_data, self.history)
                            if self.history is not None else ()),
         )
+        self._consumable_need = consumable_need(self.state, self.game_data, ctx, self.history)
         self._supply_shortfall = supply_shortfall(
-            self.state, self.game_data, self.history, ctx.fight_monster, self._fleet_size,
-            self._sibling_consumables)
+            self.state, self._fleet_order, self.character, self._consumable_need,
+            self._sibling_needs)
         ctx = replace(ctx, supply_shortfall=self._supply_shortfall)
         skills, level = xp_demand(
             demand_roots(self._last_decision.chosen_root if self._last_decision is not None else None,

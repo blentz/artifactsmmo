@@ -47,27 +47,28 @@ def _rates_response(payload: dict = _RATES) -> SimpleNamespace:
 # --- child_argv --------------------------------------------------------
 
 
-def test_child_argv_carries_emit_events_the_budget_and_the_fleet_size():
+def test_child_argv_carries_emit_events_the_budget_and_the_fleet_order():
     budget = parse_rate_limits(_RATES)
-    argv = _run().child_argv("alice", budget, 5)
+    argv = _run().child_argv("alice", budget, ["bob", "alice", "carol"])
     assert "--emit-events" in argv
     assert "alice" in argv
     assert "--rate-budget" in argv
     assert budget.to_json() in argv
-    assert argv[argv.index("--fleet-size") + 1] == "5"
+    # The account order, one flag each (the consumable floor assigns the bank in it).
+    assert [argv[i + 1] for i, a in enumerate(argv) if a == "--fleet-order"] == ["bob", "alice", "carol"]
 
 
 def test_child_argv_never_passes_all_to_a_child():
     """A child spawning its own supervisor would fork-bomb the account."""
     budget = parse_rate_limits(_RATES)
-    assert "--all" not in _run().child_argv("alice", budget, 1)
+    assert "--all" not in _run().child_argv("alice", budget, ["alice"])
 
 
 def test_child_argv_propagates_the_run_flags():
     budget = parse_rate_limits(_RATES)
     argv = MultiRun(verbose=True, dry_run=True, trace=True, learn=True,
                     learn_db="/tmp/l.db", tui=False,
-                    refresh_game_data=True).child_argv("alice", budget, 1)
+                    refresh_game_data=True).child_argv("alice", budget, ["alice"])
     for flag in ("--verbose", "--dry-run", "--trace", "--learn", "--refresh-game-data"):
         assert flag in argv
     assert "/tmp/l.db" in argv
@@ -77,13 +78,13 @@ def test_child_argv_never_passes_tui_to_a_child():
     """Only the parent renders; a child TUI would fight for the terminal."""
     budget = parse_rate_limits(_RATES)
     argv = MultiRun(verbose=False, dry_run=False, trace=False, learn=False,
-                    learn_db=None, tui=True, refresh_game_data=False).child_argv("a", budget, 1)
+                    learn_db=None, tui=True, refresh_game_data=False).child_argv("a", budget, ["a"])
     assert "--tui" not in argv
 
 
 def test_child_argv_omits_learn_db_when_learn_is_off():
     budget = parse_rate_limits(_RATES)
-    argv = _run(learn=False).child_argv("a", budget, 1)
+    argv = _run(learn=False).child_argv("a", budget, ["a"])
     assert "--learn" not in argv
     assert "--learn-db" not in argv
 
@@ -91,7 +92,7 @@ def test_child_argv_omits_learn_db_when_learn_is_off():
 def test_child_argv_omits_learn_db_flag_when_learn_db_is_none():
     """--learn with no explicit DB lets the child fall back to its own default."""
     budget = parse_rate_limits(_RATES)
-    argv = _run(learn=True, learn_db=None).child_argv("a", budget, 1)
+    argv = _run(learn=True, learn_db=None).child_argv("a", budget, ["a"])
     assert "--learn" in argv
     assert "--learn-db" not in argv
 
@@ -111,7 +112,7 @@ def test_child_argv_always_carries_coordination_db():
     """Even with `--learn` off, every child gets SOME coordination path —
     this is the fix for "play --all is inert by default"."""
     budget = parse_rate_limits(_RATES)
-    argv = _run(learn=False).child_argv("a", budget, 1)
+    argv = _run(learn=False).child_argv("a", budget, ["a"])
     assert "--coordination-db" in argv
 
 
@@ -121,8 +122,8 @@ def test_child_argv_coordination_db_is_the_same_path_for_every_child():
     SAME memoized path across multiple calls on one MultiRun."""
     budget = parse_rate_limits(_RATES)
     mrun = _run(learn=False)
-    argv_a = mrun.child_argv("alice", budget, 1)
-    argv_b = mrun.child_argv("bob", budget, 1)
+    argv_a = mrun.child_argv("alice", budget, ["alice"])
+    argv_b = mrun.child_argv("bob", budget, ["bob"])
     path_a = argv_a[argv_a.index("--coordination-db") + 1]
     path_b = argv_b[argv_b.index("--coordination-db") + 1]
     assert path_a == path_b
@@ -208,7 +209,7 @@ def test_an_empty_roster_fails_loudly():
         _run().build_pool(characters=[], rates=_RATES)
 
 
-def test_every_child_gets_the_whole_budget_and_the_fleet_size():
+def test_every_child_gets_the_whole_budget_and_the_fleet_order():
     """The children police ONE budget together through the shared request log,
     so each is handed all of it, plus the head count its fair share is priced
     from."""
@@ -217,7 +218,8 @@ def test_every_child_gets_the_whole_budget_and_the_fleet_size():
     whole = parse_rate_limits(_RATES).to_json()
     for supervisor in (pool._by_name["a"], pool._by_name["b"]):
         assert whole in supervisor._argv
-        assert supervisor._argv[supervisor._argv.index("--fleet-size") + 1] == "2"
+        argv = supervisor._argv
+        assert [argv[i + 1] for i, a in enumerate(argv) if a == "--fleet-order"] == ["a", "b"]
 
 
 def test_children_are_staggered_by_the_account_buckets_own_pace():

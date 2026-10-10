@@ -30,6 +30,7 @@ from sqlmodel import SQLModel, col, create_engine, select
 
 from artifactsmmo_cli.ai.learning.models import (
     BankStockClaim,
+    ConsumableNeed,
     GeOrderClaim,
     HoldingLedger,
     MaterialDemand,
@@ -624,6 +625,61 @@ class CoordinationStore:
         for row in rows:
             totals[row.item_code] = totals.get(row.item_code, 0) + row.quantity
         return totals
+
+    def publish_consumable_need(self, need: Mapping[str, int], now: datetime) -> None:
+        """Replace this character's `ConsumableNeed` rows wholesale.
+
+        Modelled line-for-line on `publish_holdings`, and for the same reason:
+        a need is the loadout chosen RIGHT NOW, so a consumable the loadout
+        dropped must stop claiming bank stock at once. Same `DEMAND_TTL_SECONDS`
+        clock — the coordination system has exactly ONE liveness rule."""
+        _require_utc(now)
+        expiry = self._demand_expiry(now)
+        try:
+            with SqlSession(self._engine) as s:
+                stale = s.exec(
+                    select(ConsumableNeed).where(
+                        ConsumableNeed.character == self._character
+                    )
+                ).all()
+                for row in stale:
+                    s.delete(row)
+                # Flush the deletes before the inserts, exactly as
+                # `publish_holdings` must: UNIQUE(character, item_code) would
+                # reject a same-code republish whose DELETE the unit of work has
+                # not yet ordered ahead of the INSERT.
+                s.flush()
+                for item_code, quantity in need.items():
+                    if quantity > 0:
+                        s.add(ConsumableNeed(character=self._character, item_code=item_code,
+                                             quantity=quantity, expires_at=expiry))
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[coordination] publish_consumable_need failed: {e}")
+
+    def sibling_consumable_needs(self, now: datetime) -> dict[str, dict[str, int]]:
+        """Unexpired needs of every OTHER character, PER CHARACTER — not summed
+        like `sibling_holdings`, because a character's share of the bank
+        depends on which characters are ahead of it in the account order
+        (`consumable_floor_core.share`). This character's own rows are excluded:
+        the caller has its own need fresh from this cycle's loadout."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        needs: dict[str, dict[str, int]] = {}
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(
+                    select(ConsumableNeed).where(
+                        ConsumableNeed.expires_at > stamp,
+                        ConsumableNeed.character != self._character,
+                    )
+                ).all()
+        except SQLAlchemyError as e:
+            print(f"[coordination] sibling_consumable_needs failed: {e}")
+            return {}
+        for row in rows:
+            needs.setdefault(row.character, {})[row.item_code] = row.quantity
+        return needs
 
     def publish_skills(self, skills: Mapping[str, int], now: datetime) -> None:
         """Replace this character's `SkillLedger` rows wholesale.

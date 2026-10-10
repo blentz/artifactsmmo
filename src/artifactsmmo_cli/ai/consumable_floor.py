@@ -1,79 +1,62 @@
-"""The fleet's consumable floor from live data (Phase 5-2c-iii-c-2 #5,
-`docs/PLAN_task_value.md` §10). The decisions are the proved pure core
-`consumable_floor_core`; this module reads their inputs.
+"""The fleet's consumable floor from live data, rebuilt on the chosen loadouts
+(`docs/PLAN_consumable_utility.md` increment 4). The share is the proved pure
+core `consumable_floor_core.share`; this module reads its inputs.
 
 USER 2026-10-07: "Fishing feeds Cooking, Cooking feeds HP recovery or provides
 stat bonuses. Both cases require pre-emptive crafting of an available supply.
-The fleet can collectively maintain a minimum supply in the bank." Rulings:
-"Fleet size × per-char target"; "Tier-appropriate"; filled "via SupplyBank".
+The fleet can collectively maintain a minimum supply in the bank."
 
-Two classes, each with its own per-character target:
+USER 2026-10-09, "From the chosen loadouts": for every consumable type some
+character's chosen loadout uses, the minimum BANKED quantity is Σ over those
+characters of (units used per fight × `REFILL_HORIZON_FIGHTS`); a type nobody's
+loadout uses has no minimum. "Need ledger + API order": each character
+publishes its need (`ConsumableNeed`), and the bank is assigned in the
+account's `GET /my/characters` order.
 
-* heal FOOD (`type_ == "consumable"`, restores hp): `HEAL_STOCK_FLOOR`, the bag
-  floor every grind already keeps;
-* heal POTION (`type_ == "utility"`, restores hp): the per-fight projection
-  `potion_supply.heal_stock_target` against the fight ahead (0 with none).
-
-Stock is the account bank, this character's bag and utility slots, and the
-siblings' published holdings (`consumable_holdings`). No catalogue food carries
-a buff today (2026-10-07); boost potions are sized per monster by the potion
-guard and are not floored here — a residual.
+* NEED — `best_loadout` against the fight ahead (`ctx.fight_monster`, else the
+  grind target `ctx.combat_monster`; neither: no need): the potions one fight
+  drinks and the food its recovery eats, each × `REFILL_HORIZON_FIGHTS`.
+* STOCK — the account BANK only: the floor is a banked minimum, and units in a
+  bag or a utility slot are already that character's to use.
+* SHORTFALL — per type this character needs, its share
+  (`consumable_floor_core.share`) of the fleet's shortfall, when positive. The
+  demand board sums the characters' rows, and the shares sum exactly to
+  `max(0, Σ needs − bank)` (`Formal.ConsumableFloor.fleetShares_sum`).
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
-from artifactsmmo_cli.ai.consumable_floor_core import fleet_deficit, tier_pick
-from artifactsmmo_cli.ai.consumable_supply import HEAL_STOCK_FLOOR
+from artifactsmmo_cli.ai.best_loadout import best_loadout
+from artifactsmmo_cli.ai.consumable_floor_core import REFILL_HORIZON_FIGHTS, share
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.potion_supply import heal_stock_target
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
-FOOD = "consumable"
-POTION = "utility"
+
+def consumable_need(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                    store: LearningStore | None) -> dict[str, int]:
+    """This character's need per consumable: its best loadout's use per fight
+    × `REFILL_HORIZON_FIGHTS`, against the fight ahead (see the module doc)."""
+    monster = ctx.fight_monster or ctx.combat_monster
+    if monster is None:
+        return {}
+    need: dict[str, int] = {}
+    for code, units in best_loadout(state, game_data, ctx, monster, store).per_fight:
+        need[code] = need.get(code, 0) + units * REFILL_HORIZON_FIGHTS
+    return need
 
 
-def heal_candidates(game_data: GameData, type_: str) -> list[str]:
-    """Every heal of `type_`, in catalogue order (the core breaks ties on it)."""
-    return [code for code, stats in game_data.items.stats.items()
-            if stats.type_ == type_ and stats.hp_restore > 0]
-
-
-def consumable_holdings(state: WorldState, game_data: GameData) -> dict[str, int]:
-    """This character's heals, CARRIED plus in the utility slots. The bank is
-    absent: it is account-shared, so every child reads it directly (the same
-    rule as `dual_role_holdings`)."""
-    held: dict[str, int] = {}
-    for code, qty in state.inventory.items():
-        stats = game_data.item_stats(code)
-        if qty > 0 and stats is not None and stats.hp_restore > 0:
-            held[code] = held.get(code, 0) + qty
-    for slot, qty in (("utility1_slot", state.utility1_slot_quantity),
-                      ("utility2_slot", state.utility2_slot_quantity)):
-        worn = state.equipment.get(slot)
-        if worn is not None and qty > 0:
-            held[worn] = held.get(worn, 0) + qty
-    return held
-
-
-def supply_shortfall(state: WorldState, game_data: GameData, history: LearningStore | None,
-                     fight_monster: str | None, fleet_size: int,
-                     siblings: Mapping[str, int]) -> tuple[tuple[str, int], ...]:
-    """(consumable, fleet deficit) for each class below its fleet floor."""
-    own = consumable_holdings(state, game_data)
+def supply_shortfall(state: WorldState, order: Sequence[str], me: str, need: Mapping[str, int],
+                     siblings: Mapping[str, Mapping[str, int]]) -> tuple[tuple[str, int], ...]:
+    """(consumable, this character's share) for each type it needs whose share
+    of the fleet's shortfall is positive, against the banked stock only."""
     bank = state.bank_items or {}
+    fleet = {**siblings, me: need}
     out: list[tuple[str, int]] = []
-    for type_ in (FOOD, POTION):
-        codes = heal_candidates(game_data, type_)
-        pick = tier_pick(state.level, [(game_data.items.stats[code].level,
-                                        game_data.items.stats[code].hp_restore) for code in codes])
-        if pick is None:
-            continue
-        code = codes[pick]
-        target = (HEAL_STOCK_FLOOR if type_ == FOOD
-                  else heal_stock_target(state, game_data, history, fight_monster, code))
-        stock = own.get(code, 0) + siblings.get(code, 0) + bank.get(code, 0)
-        deficit = fleet_deficit(target, fleet_size, stock)
-        if deficit > 0:
-            out.append((code, deficit))
+    for code in need:
+        per_char = {name: needs.get(code, 0) for name, needs in fleet.items()}
+        owed = share(order, per_char, me, bank.get(code, 0))
+        if owed > 0:
+            out.append((code, owed))
     return tuple(out)

@@ -20,7 +20,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | CombatTargetExistence | combat, monsters | reachability, safety |
 | CommittedLoop | core, planner | termination, sufficiency |
 | CompleteTaskIncome | core, tasks | monotonicity |
-| ConsumableFloor | consumables, fleet, supply | safety, dominance, totality |
+| ConsumableFloor | consumables, fleet, supply | safety, monotonicity, totality |
 | ConsumablePrice | consumables, cost | validity, monotonicity, totality |
 | ConsumableSelection | items | dominance, monotonicity, totality, safety |
 | CraftVsBuy | crafting, npcs | dominance, monotonicity, totality, safety |

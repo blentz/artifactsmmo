@@ -72,7 +72,7 @@ class TestRateBudgetWiring:
             mock_store_cls.return_value = Mock()
 
             result = runner.invoke(app, ["hero", "--rate-budget", rate_budget_json,
-                                         "--fleet-size", "2",
+                                         "--fleet-order", "hero", "--fleet-order", "HAL",
                                          "--coordination-db", str(tmp_path / "fleet.db")])
 
         assert result.exit_code == 0, result.output
@@ -97,15 +97,44 @@ class TestRateBudgetWiring:
             == ("account", "data", "action")
         assert account_governor._log is data_governor._log is action_governor._log
         assert account_governor.sustainable_interval() == expected_account.divided_by(2).sustainable_interval()
+        # The account order reaches the player (the consumable floor assigns the bank in it).
+        assert mock_player_cls.call_args.kwargs["fleet_order"] == ("hero", "HAL")
+
+    def test_a_lone_character_is_its_own_fleet(self, runner: CliRunner) -> None:
+        with (
+            patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls,
+            patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
+        ):
+            mock_player_cls.return_value = Mock()
+            mock_store_cls.return_value = Mock()
+            result = runner.invoke(app, ["hero"])
+
+        assert result.exit_code == 0, result.output
+        assert mock_player_cls.call_args.kwargs["fleet_order"] is None
+
+    def test_a_fleet_order_without_the_character_is_refused(self, runner: CliRunner) -> None:
+        """The floor assigns the bank by the character's place in the account
+        order; a character outside it has no place, so the child refuses to start."""
+        with (
+            patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls,
+            patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
+        ):
+            mock_player_cls.return_value = Mock()
+            mock_store_cls.return_value = Mock()
+            result = runner.invoke(app, ["hero", "--fleet-order", "HAL"])
+
+        assert result.exit_code == 2
+        assert "--fleet-order does not name hero" in result.output
+        mock_player_cls.assert_not_called()
 
     @pytest.mark.parametrize("extra", [
-        ["--fleet-size", "2"],
+        ["--fleet-order", "hero", "--fleet-order", "HAL"],
         ["--coordination-db", "fleet.db"],
     ])
     def test_a_budget_the_fleet_cannot_share_is_refused(
             self, runner: CliRunner, extra: list[str]) -> None:
         """The budget is the whole per-IP budget. Without the shared DB it
-        cannot be policed fleet-wide, and without the fleet size its fair share
+        cannot be policed fleet-wide, and without the fleet order its fair share
         cannot be priced, so the child refuses to start rather than overspend."""
         rate_budget_json, _, _, _ = _rate_budget_json()
         with (
@@ -118,7 +147,7 @@ class TestRateBudgetWiring:
             result = runner.invoke(app, ["hero", "--rate-budget", rate_budget_json, *extra])
 
         assert result.exit_code == 2
-        assert "--rate-budget needs --coordination-db and --fleet-size" in result.output
+        assert "--rate-budget needs --coordination-db and --fleet-order" in result.output
 
     def test_no_rate_budget_leaves_governors_unset(self, runner: CliRunner) -> None:
         """No --rate-budget (the single-character default) must not call

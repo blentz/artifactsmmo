@@ -1,30 +1,30 @@
-"""Differential test: the live consumable floor (`ai/consumable_floor_core`)
-must agree with the proved `Formal.ConsumableFloor` (tier pick, fleet deficit,
-published share) on random catalogues and fleets."""
+"""Differential test: the live floor share (`ai/consumable_floor_core.share`)
+must agree with the proved `Formal.ConsumableFloor` on random fleets, needs and
+banks — each character's share, and their sum."""
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.consumable_floor_core import fleet_deficit, publish_share, tier_pick
+from artifactsmmo_cli.ai.consumable_floor_core import share
 from formal.diff.oracle_client import run_oracle
-
-_cand = st.tuples(st.integers(min_value=1, max_value=50), st.integers(min_value=0, max_value=600))
 
 
 @settings(max_examples=500, deadline=None)
-@given(char_level=st.integers(min_value=1, max_value=50), cands=st.lists(_cand, max_size=8),
-       target=st.integers(min_value=0, max_value=100), fleet=st.integers(min_value=1, max_value=6),
-       stock=st.integers(min_value=0, max_value=700))
-def test_consumable_floor_matches_lean(char_level, cands, target, fleet, stock):
-    args = [char_level, len(cands), *(v for c in cands for v in c), target, fleet, stock]
+@given(needs=st.lists(st.integers(min_value=0, max_value=200), min_size=1, max_size=6),
+       bank=st.integers(min_value=0, max_value=900), data=st.data())
+def test_consumable_floor_share_matches_lean(needs, bank, data):
+    order = [f"char{i}" for i in range(len(needs))]
+    me = data.draw(st.integers(min_value=0, max_value=len(needs) - 1))
+    # A character with no need may publish no row at all.
+    by_name = {name: n for name, n in zip(order, needs, strict=True) if n > 0 or name == order[me]}
+    args = [bank, me, len(needs), *needs]
     lean = run_oracle("consumable_floor", [args])[0]
-    pick = tier_pick(char_level, cands)
-    deficit = fleet_deficit(target, fleet, stock)
-    assert lean["pick"] == (-1 if pick is None else pick), args
-    assert lean["deficit"] == deficit, args
-    assert lean["share"] == publish_share(deficit, fleet), args
+    assert lean["share"] == share(order, by_name, order[me], bank), args
+    total = sum(share(order, by_name, name, bank) for name in order)
+    assert lean["total"] == total == max(0, sum(needs) - bank), args
 
 
-def test_ties_go_to_the_higher_level_then_catalogue_order():
-    cands = [(20, 300), (30, 300), (30, 300)]
-    assert tier_pick(30, cands) == 1
-    assert run_oracle("consumable_floor", [[30, 3, 20, 300, 30, 300, 30, 300, 0, 1, 0]])[0]["pick"] == 1
+def test_the_bank_goes_to_the_characters_in_api_order():
+    order = ["Robby", "C3P0", "HAL"]
+    needs = {"Robby": 20, "C3P0": 20, "HAL": 20}
+    assert [share(order, needs, name, 25) for name in order] == [0, 15, 20]
+    assert run_oracle("consumable_floor", [[25, 1, 3, 20, 20, 20]])[0] == {"share": 15, "total": 35}

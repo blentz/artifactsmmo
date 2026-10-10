@@ -61,10 +61,11 @@ def play(
         None, "--rate-budget",
         help="The whole per-IP rate budget, as JSON (set by `play --all`'s "
              "supervisor; the fleet shares it through --coordination-db)"),
-    fleet_size: int | None = typer.Option(
-        None, "--fleet-size",
-        help="How many children share --rate-budget (set by `play --all`'s "
-             "supervisor; not meant to be passed by hand)"),
+    fleet_order: list[str] | None = typer.Option(
+        None, "--fleet-order",
+        help="The account's characters in GET /my/characters order, one flag "
+             "each; they share --rate-budget and the bank (set by `play "
+             "--all`'s supervisor; not meant to be passed by hand)"),
     coordination_db: str | None = typer.Option(
         None, "--coordination-db",
         help="Cross-character coordination DB path (set by `play --all`'s "
@@ -104,6 +105,9 @@ def play(
     # independent conditions, so state the resulting invariant explicitly
     # rather than reaching for a `# type: ignore`.
     assert character is not None
+    if fleet_order is not None and character not in fleet_order:
+        print(f"--fleet-order does not name {character}")
+        raise typer.Exit(code=2)
 
     # Mutate<->play interlock: formal/diff/mutate.py live-writes mutants into
     # src/ and holds a repo-root lockfile for the whole run. Starting the bot
@@ -147,7 +151,7 @@ def play(
         tracer=tracer, history=store,
         game_data_ttl_minutes=config.game_data_ttl_minutes,
         refresh_game_data=refresh_game_data,
-        fleet_size=fleet_size if fleet_size is not None else 1,
+        fleet_order=tuple(fleet_order) if fleet_order is not None else None,
     )
     # The budget is the WHOLE per-IP budget, and the governors police it
     # fleet-wide through a request log in the shared coordination DB -- so a
@@ -156,10 +160,11 @@ def play(
     request_log: RequestLog | None = None
     account_cache: AccountReadCache | None = None
     if rate_budget is not None:
-        if coordination_db is None or fleet_size is None:
-            print("--rate-budget needs --coordination-db and --fleet-size "
+        if coordination_db is None or fleet_order is None:
+            print("--rate-budget needs --coordination-db and --fleet-order "
                   "(the fleet shares one budget through that DB)")
             raise typer.Exit(code=2)
+        fleet_size = len(fleet_order)
         budgets = BucketBudgets.from_json(rate_budget)
         request_log = RequestLog(coordination_db)
         player.set_rate_governors(

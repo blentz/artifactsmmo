@@ -3410,15 +3410,21 @@ example : ∀ (samples wins minSamples costNum costDen : Nat), samples < minSamp
 
 /-! ### ConsumableFloor contracts. -/
 
-example : ∀ (charLevel : Nat) (cands : List (Nat × Nat)) (j : Nat) (b : Nat × Nat),
-    Formal.ConsumableFloor.tierPickAux charLevel cands 0 none = some (j, b) →
-      ∀ c ∈ cands, Formal.ConsumableFloor.eligible charLevel c = true →
-        Formal.ConsumableFloor.better c b = false :=
-  @Formal.ConsumableFloor.tierPick_optimal
+example : ∀ (bank : Nat) (needs : List Nat),
+    (Formal.ConsumableFloor.fleetShares bank needs).sum = needs.sum - bank :=
+  @Formal.ConsumableFloor.fleetShares_sum
 
-example : ∀ (deficit fleet : Nat), 0 < fleet →
-    deficit ≤ Formal.ConsumableFloor.publishShare deficit fleet * fleet :=
-  @Formal.ConsumableFloor.publishShare_covers
+example : ∀ (bank : Nat) (needs : List Nat) (i : Nat), i < needs.length →
+    (Formal.ConsumableFloor.fleetShares bank needs).getD i 0 =
+      Formal.ConsumableFloor.share (needs.take i).sum (needs.getD i 0) bank :=
+  @Formal.ConsumableFloor.fleetShares_getD
+
+example : ∀ (ahead need bank : Nat), Formal.ConsumableFloor.share ahead need bank ≤ need :=
+  @Formal.ConsumableFloor.share_le
+
+example : ∀ (ahead need b b' : Nat), b ≤ b' →
+    Formal.ConsumableFloor.share ahead need b' ≤ Formal.ConsumableFloor.share ahead need b :=
+  @Formal.ConsumableFloor.share_antitone_bank
 
 /-! ### FightOutcome contracts. -/
 

@@ -350,6 +350,30 @@ class HoldingLedger(SQLModel, table=True):
     expires_at: str
 
 
+class ConsumableNeed(SQLModel, table=True):
+    """One character's need of one consumable for the fleet's banked floor:
+    units its chosen loadout uses per fight × `REFILL_HORIZON_FIGHTS`
+    (`docs/PLAN_consumable_utility.md` increment 4; USER 2026-10-09 "Need
+    ledger + API order").
+
+    Modelled on `HoldingLedger`: upsert key (character, item_code), replaced
+    wholesale because a need is a snapshot of the loadout chosen right now, and
+    the same `expires_at` liveness rule as every coordination row. Read PER
+    CHARACTER, not summed: each character's share depends on the needs of the
+    characters AHEAD of it in the account order."""
+
+    __tablename__ = "consumable_need"
+    __table_args__ = (
+        UniqueConstraint("character", "item_code", name="uq_consumable_need_holder"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    character: str = Field(index=True)
+    item_code: str = Field(index=True)
+    quantity: int
+    expires_at: str
+
+
 class SkillLedger(SQLModel, table=True):
     """One character's level in one crafting skill — the fleet's CAPABILITY board.
 

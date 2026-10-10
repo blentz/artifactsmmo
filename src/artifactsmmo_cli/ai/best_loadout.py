@@ -28,9 +28,9 @@ from dataclasses import dataclass
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.best_loadout_core import pick_best
-from artifactsmmo_cli.ai.consumable_floor import POTION
 from artifactsmmo_cli.ai.consumable_price import held_count, replacement_price_of
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.heal_catalog import POTION
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loop_rate import LoopRate, food_menu, loop_rate
 from artifactsmmo_cli.ai.selection_context import SelectionContext

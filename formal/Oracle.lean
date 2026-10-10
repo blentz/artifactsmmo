@@ -1857,21 +1857,18 @@ def runTaskDrawDue (args : Array Json) : Json :=
   let n : Nat → Nat := fun k => (intArg args k).toNat
   Json.mkObj [("due", Json.bool (Formal.TaskWorth.drawDue (n 0) (n 1) (n 2)))]
 
-/-- The fleet's consumable floor (`Formal.ConsumableFloor`). Args:
-`[charLevel, n, level_0, restore_0, … , target, fleet, stock]`. Emits the
-tier pick (-1 for none), the deficit and the published share. -/
+/-- The fleet's consumable floor shares (`Formal.ConsumableFloor`). Args:
+`[bank, me, n, need_0, … , need_{n-1}]`, the needs in fleet order. Emits the
+share of the character at index `me` (read off the fleet's share list) and the
+sum of every share. -/
 def runConsumableFloor (args : Array Json) : Json :=
   let k : Nat → Nat := fun i => (intArg args i).toNat
-  let n := k 1
-  let cands := (List.range n).map fun i => (k (2 + 2 * i), k (3 + 2 * i))
-  let base := 2 + 2 * n
-  let deficit := Formal.ConsumableFloor.fleetDeficit (k base) (k (base + 1)) (k (base + 2))
-  let pick : Int := match Formal.ConsumableFloor.tierPick (k 0) cands with
-    | some j => Int.ofNat j
-    | none => -1
-  Json.mkObj [("pick", Json.num pick), ("deficit", Json.num (Int.ofNat deficit)),
-              ("share", Json.num (Int.ofNat (Formal.ConsumableFloor.publishShare deficit
-                (k (base + 1)))))]
+  let bank := k 0
+  let n := k 2
+  let needs := (List.range n).map fun i => k (3 + i)
+  let shares := Formal.ConsumableFloor.fleetShares bank needs
+  Json.mkObj [("share", Json.num (Int.ofNat (shares.getD (k 1) 0))),
+              ("total", Json.num (Int.ofNat shares.sum))]
 
 /-- A fight's expected-value outcome with restore potions (`Formal.FightOutcome`).
 Args: `[rawPlayer, killStep, monsterHp, recon, dieStep, playerFirst, hp, maxHp,

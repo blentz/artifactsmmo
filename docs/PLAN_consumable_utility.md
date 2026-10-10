@@ -224,3 +224,30 @@ publishes each character's per-type need; the banked stock is assigned in
 the account's `GET /my/characters` order (passed by `multi_run` to each
 child); each character publishes need − min(need, max(0, bank − needs ahead
 of it)). Shares sum exactly to max(0, Σ needs − bank) — to be proved.
+
+## Increment 4 — floor rebuild built (2026-10-09)
+
+- `ai/consumable_floor_core.share(order, needs, me, bank)` =
+  `need − min(need, max(0, bank − needs ahead))`; `REFILL_HORIZON_FIGHTS = 20`.
+  `Formal/ConsumableFloor.lean` restated: `fleetShares_sum` (Σ shares =
+  `Σ needs − bank`, truncated), `fleetShares_getD` (the i-th share is the i-th
+  character's own), `share_le`, `share_antitone_bank`, `share_zero_bank`,
+  `share_alone`. Oracle `consumable_floor` + Hypothesis differential. The tier
+  pick, fleet deficit and ⌈deficit/fleet⌉ share are deleted.
+- `ai/consumable_floor`: `consumable_need` = `best_loadout` (against
+  `ctx.fight_monster or ctx.combat_monster`) per-fight use × 20;
+  `supply_shortfall` = the positive shares against BANK-only stock, feeding
+  `ctx.supply_shortfall` unchanged. `FOOD`/`POTION`/`heal_candidates` moved to
+  `ai/heal_catalog` (import cycle with `best_loadout`).
+- `ConsumableNeed` ledger (`publish_consumable_need` /
+  `sibling_consumable_needs`, per character, `DEMAND_TTL_SECONDS`); the player
+  publishes its need in `_update_coordination` and reads the siblings' in
+  `_refresh_sibling_reads`. Heals are no longer published to `HoldingLedger`.
+- Fleet order: `play --all` passes `--fleet-order <name>` per character in
+  `GET /my/characters` order (replaces `--fleet-size`; the rate governors'
+  fleet size is its length). A lone `play <char>` is its own fleet.
+- Probe (2026-10-09, scratch DB): order Robby, R2D2, C3P0, HAL, Lor; needs
+  cooked_rat_meat 40/40/0/20/40 (C3P0: no fight ahead), bank 9, shares
+  31/40/0/20/40, Σ 131 = 140 − 9. No potion is in any chosen loadout.
+- Residual: `consumable_need` costs 0.5-1.0 s per cycle (the loadout search
+  prices every candidate).
