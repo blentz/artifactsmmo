@@ -6,9 +6,12 @@ should target each cycle:
   1. `task_monster` — the active task's monster. The SUPPLIER
      (`Player._task_aligned_monster`) is what guarantees this is
      winnable; see the note below.
-  2. `path_monster` IF `path_winnable` — the cheapest-path-to-max-level
-     next-monster recommendation, accepted only when the runtime
-     beatability predictor (stat math + observed-loss veto) agrees.
+  2. `path_monster` IF `path_winnable` — the band target
+     (`tiers.band_target.band_combat_target`), accepted on the band's own
+     verdict: winnable on bare gear or on its best consumable loadout (USER
+     2026-10-10, "loadout picks the monster"), and — when nothing in the band
+     is winnable bare — only while it pays more XP per second than the
+     windowed pick (`Player._band_beats_pick`).
   3. `pick_winnable` — the highest-level monster the beatability
      predictor accepts, used both when there is no path recommendation
      and when the path recommendation failed the winnable check.

@@ -220,6 +220,15 @@ class SelectionContext:
     # that does not choose one: nothing is stocked for it.
     loadout: ChosenLoadout | None = None
 
+    # The grind target stands only on consumables (USER 2026-10-10, "loadout
+    # picks the monster"): `combat_monster` is the band's pick on its best
+    # loadout, and on BARE gear the cascade names no monster at all — no
+    # winnable task monster, nothing in the band winnable bare, no windowed
+    # pick. The gear decisions (`decisions.root.IsAFightBlockingMe`) read this
+    # and never `loadout`, so a potion-propped win never hides a gear upgrade.
+    # False (the default) whenever bare gear has a fight, or there is no target.
+    combat_propped: bool = False
+
 
 NO_PROFILE_CONTEXT = SelectionContext(
     bank_accessible=True,

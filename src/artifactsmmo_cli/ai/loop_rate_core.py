@@ -37,8 +37,9 @@ XP RATE. `xp_per_second = xp_per_kill / (fight + recovery + consumed)`, all in
 seconds; it needs a positive fight duration, which keeps the denominator
 positive."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from fractions import Fraction
+from functools import lru_cache
 
 from artifactsmmo_cli.ai.rest_cooldown_core import rest_cooldown_seconds
 
@@ -87,13 +88,20 @@ def _validate(max_hp: int, food: Sequence[Food], eat_seconds: Fraction) -> None:
                              f"price >= 0 and held >= 0")
 
 
-def recovery_choice(missing_hp: int, max_hp: int, food: Sequence[Food],
-                    eat_seconds: Fraction) -> tuple[Fraction, tuple[int, ...]]:
-    """The cheapest way, in seconds, to recover `missing_hp`, and the units of
-    each food it eats (see the module doc). Restores must be positive, prices,
-    held counts and `eat_seconds` non-negative."""
-    _validate(max_hp, food, eat_seconds)
-    foods = tuple(food)
+RECOVERY_TABLES = 64
+"""Recovery tables kept (`_recovery_table`): one per distinct `(max_hp, food
+menu, eat seconds)`, least recently used dropped first."""
+
+
+@lru_cache(maxsize=RECOVERY_TABLES, typed=True)
+def _recovery_table(max_hp: int, foods: tuple[Food, ...],
+                    eat_seconds: Fraction) -> Callable[[int, int], tuple[Fraction, int, tuple[int, ...]]]:
+    """The dynamic programme over (food index, HP still missing) for one menu.
+    Its entries depend only on `max_hp`, the menu and `eat_seconds` — never on
+    the HP a query starts from — so one table answers every query against the
+    same menu: every loadout and every monster of a cycle, and the next cycle's
+    while the menu holds (a band ranks each monster's loadouts against one
+    menu)."""
     memo: dict[tuple[int, int], tuple[Fraction, int, tuple[int, ...]]] = {}
 
     def best(index: int, missing: int) -> tuple[Fraction, int, tuple[int, ...]]:
@@ -114,7 +122,16 @@ def recovery_choice(missing_hp: int, max_hp: int, food: Sequence[Food],
         memo[key] = choice
         return choice
 
-    value, _, counts = best(0, max(0, missing_hp))
+    return best
+
+
+def recovery_choice(missing_hp: int, max_hp: int, food: Sequence[Food],
+                    eat_seconds: Fraction) -> tuple[Fraction, tuple[int, ...]]:
+    """The cheapest way, in seconds, to recover `missing_hp`, and the units of
+    each food it eats (see the module doc). Restores must be positive, prices,
+    held counts and `eat_seconds` non-negative."""
+    _validate(max_hp, food, eat_seconds)
+    value, _, counts = _recovery_table(max_hp, tuple(food), eat_seconds)(0, max(0, missing_hp))
     return value, counts
 
 

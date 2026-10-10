@@ -1000,7 +1000,7 @@ def _horizon(verdict: str | None):
     return _fake
 
 
-def _arm(monkeypatch, verdict, combat_monster, gd=None):
+def _arm(monkeypatch, verdict, combat_monster, gd=None, propped=False):
     """The CHILD `IsAFightBlockingMe` hands the walk to.
 
     Asserted on the returned node rather than on `walk.trail`: a node appends
@@ -1010,7 +1010,7 @@ def _arm(monkeypatch, verdict, combat_monster, gd=None):
     monkeypatch.setattr(_root_mod, "resolve_task_horizon", _horizon(verdict))
     node = IsAFightBlockingMe(_objective(gd), RootWalk())
     return node.resolve(make_state(level=5), gd,
-                        _ctx(combat_monster=combat_monster), None)
+                        _ctx(combat_monster=combat_monster, combat_propped=propped), None)
 
 
 def test_an_unwinnable_task_takes_the_fight_arm_without_a_loss(monkeypatch):
@@ -1032,6 +1032,41 @@ def test_a_winnable_alternative_keeps_the_walk_on_the_tier_arm(monkeypatch):
     `ctx.combat_monster` — one fact, one reader."""
     assert isinstance(_arm(monkeypatch, HORIZON_GEAR, combat_monster="chicken"),
                       IsMyGearBehindMyTier)
+
+
+def test_a_potion_propped_target_still_takes_the_fight_arm(monkeypatch):
+    """USER 2026-10-10: "we should work to improve gear over a cheaper xp-grind
+    with substandard gear". The same grind target, standing only on a potion
+    loadout (`ctx.combat_propped`: bare gear has no fight), is no winnable
+    alternative to the gear decisions — they judge bare gear — so the fight's
+    gear is still asked for."""
+    assert isinstance(_arm(monkeypatch, HORIZON_GEAR, combat_monster="chicken", propped=True),
+                      WhichSlotClosesTheFight)
+    assert isinstance(_arm(monkeypatch, HORIZON_GEAR, combat_monster="chicken", propped=False),
+                      IsMyGearBehindMyTier)
+
+
+def test_a_potion_propped_only_win_keeps_the_gear_root_ahead_of_the_trunk(monkeypatch):
+    """A character whose only win is potion-propped gets the gear root, and the
+    trunk stays behind every gear alternative — exactly the walk of a character
+    with no fight at all. Both gear arms: the tier sheet (no fight held) and the
+    fight's deficit (`HORIZON_GEAR`)."""
+    gd = _gd()
+    state = make_state(level=15)
+    propped = _ctx(combat_monster="chicken", combat_propped=True)
+    for verdict in (None, HORIZON_GEAR):
+        monkeypatch.setattr(_root_mod, "resolve_task_horizon", _horizon(verdict))
+        monkeypatch.setattr(_root_mod, "deficit_upgrade_target",
+                            lambda state, game_data, actions_of=None: ("ash_club", "weapon_slot"))
+        on_potions = resolve_root(state, gd, _objective(gd), propped, None)
+        no_fight = resolve_root(state, gd, _objective(gd), _ctx(), None)
+        assert on_potions.root == no_fight.root
+        assert on_potions.trail == no_fight.trail
+        assert isinstance(on_potions.root, (ObtainItem, ReachSkillLevel))
+        trunk = on_potions.alternatives.index(ReachCharLevel(level=20))
+        assert all(i < trunk for i, alt in enumerate(on_potions.alternatives)
+                   if isinstance(alt, ObtainItem) and alt.slot is not None)
+    assert "WhichSlotClosesTheFight" in on_potions.trail
 
 
 def test_a_futile_deficit_does_not_take_the_fight_arm(monkeypatch):

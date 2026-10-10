@@ -5103,7 +5103,7 @@ ROOT_FIGHT_ARM_MUTATIONS = [
     # against a pig is fine. but that shouldn't block us from fighting other,
     # winnable monsters."
     ("root: the fight arm ignores a winnable alternative",
-     "        if ctx.combat_monster is not None:\n"
+     "        if ctx.combat_monster is not None and not ctx.combat_propped:\n"
      "            return IsMyGearBehindMyTier(self.objective, self.walk)\n"
      "        horizon = resolve_task_horizon(state, game_data)\n",
      "        horizon = resolve_task_horizon(state, game_data)\n"),
@@ -7918,8 +7918,56 @@ FIGHT_UPKEEP_STORE_MUTATIONS = [
 ]
 BAND_UPKEEP_MUTATIONS = [
     ("band: the measured upkeep is ignored",
-     "        upkeep = history.fight_upkeep(code) if history is not None else None\n",
-     "        upkeep = None\n"),
+     "    upkeep = history.fight_upkeep(code) if history is not None else None\n",
+     "    upkeep = None\n"),
+    ("band: a measured action is not counted in fight seconds",
+     "        return xp_per_action(xp_per_kill, upkeep, price_of) / FIGHT_SECONDS\n",
+     "        return xp_per_action(xp_per_kill, upkeep, price_of)\n"),
+]
+# The loadout picks the monster (USER 2026-10-10). Killed by
+# tests/test_ai/test_band_target.py.
+BAND_LOADOUT_MUTATIONS = [
+    ("band: a potion-propped monster is no candidate",
+     "        if not bare and (not loadout().rate.win or (\n",
+     "        if not bare and (True or (\n"),
+    ("band: the learned-loss veto does not refuse a propped fight",
+     "                history is not None and loss_vetoed(rested, game_data, code, history))):\n",
+     "                False)):\n"),
+    ("band: a propped monster counts as a bare fight",
+     "        bare_fight = bare_fight or bare\n",
+     "        bare_fight = True\n"),
+    ("band: the loop's consumed price is not charged",
+     "    return rate.fight_seconds + rate.recovery_seconds + rate.consumed_seconds\n",
+     "    return rate.fight_seconds + rate.recovery_seconds\n"),
+    ("band: the model ranks on the fight alone",
+     "    return Fraction(xp_per_kill) / loop_seconds(best().rate)\n",
+     "    return Fraction(xp_per_kill) / best().rate.fight_seconds\n"),
+]
+# The band on potions against the windowed pick, and the propped flag (USER
+# 2026-10-10). Killed by tests/test_ai/test_player.py.
+BAND_PICK_MUTATIONS = [
+    ("cascade: a band on potions beats the windowed pick unpriced",
+     "        return band.rate > pick_rate\n",
+     "        return True\n"),
+    ("cascade: a band on potions ties the windowed pick",
+     "        return band.rate > pick_rate\n",
+     "        return band.rate >= pick_rate\n"),
+    ("cascade: the windowed pick is asked over a bare band",
+     "        if band.bare_fight:\n            return True\n",
+     "        if False:\n            return True\n"),
+    ("cascade: a target with no bare fight anywhere is not propped",
+     "            self._propped_target = band.monster\n",
+     "            pass\n"),
+    ("ctx: any target is the propped one",
+     "                            and combat_monster == self._propped_target),\n",
+     "                            and self._propped_target is not None),\n"),
+]
+# The gear decisions judge bare gear (USER 2026-10-10). Killed by
+# tests/test_ai/test_decisions_root.py.
+PROPPED_GEAR_MUTATIONS = [
+    ("root: a potion-propped target hides the fight's gear",
+     "        if ctx.combat_monster is not None and not ctx.combat_propped:\n",
+     "        if ctx.combat_monster is not None:\n"),
 ]
 CONSUMABLE_PRICE_MUTATIONS = [
     ("price: held copies are priced as already owned",
@@ -8074,8 +8122,8 @@ COMBAT_RECORD_SCOPE_MUTATIONS = [
 ]
 LOSS_VETO_MUTATIONS = [
     ("is_winnable: the learned-loss veto never fires",
-     "        if samples >= MIN_WIN_SAMPLES and wins < WIN_RATE_THRESHOLD * samples:\n",
-     "        if False:\n"),
+     "    return samples >= MIN_WIN_SAMPLES and wins < WIN_RATE_THRESHOLD * samples\n",
+     "    return False\n"),
     # The record now lives in `fight_record`, the one reader the veto and the
     # loss-risk price share (2026-10-08).
     ("is_winnable: the veto asks about the level-1 fight",
@@ -9733,6 +9781,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_fight_upkeep.py", survivors)
     run_group(BAND_TARGET_SRC, BAND_UPKEEP_MUTATIONS,
               "tests/test_ai/test_fight_upkeep.py", survivors)
+    run_group(BAND_TARGET_SRC, BAND_LOADOUT_MUTATIONS,
+              "tests/test_ai/test_band_target.py", survivors)
+    run_group(PLAYER_SRC, BAND_PICK_MUTATIONS,
+              "tests/test_ai/test_player.py", survivors)
+    run_group(ROOT_DECISION_SRC, PROPPED_GEAR_MUTATIONS,
+              "tests/test_ai/test_decisions_root.py", survivors)
     run_group(PLAYER_SRC, CONSUMABLE_PRICE_MUTATIONS,
               "tests/test_ai/test_fight_upkeep.py", survivors)
     run_group(TASK_ACCEPT_SRC, TASK_ACCEPT_MUTATIONS,

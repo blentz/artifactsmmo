@@ -7,22 +7,23 @@ band target ranked by XP per KILL, where upkeep is invisible."""
 from fractions import Fraction
 
 import artifactsmmo_cli.ai.tiers.band_target as band_mod
+from artifactsmmo_cli.ai.best_loadout import BestLoadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY
-from artifactsmmo_cli.ai.learning.fight_upkeep_core import NO_UPKEEP, FightUpkeep, xp_per_action
+from artifactsmmo_cli.ai.learning.fight_upkeep_core import FightUpkeep, xp_per_action
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.potion_supply import potion_level_ramp
 from artifactsmmo_cli.ai.tiers.band_target import band_combat_target
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_best_loadout, make_state
 
 POTION = "small_health_potion"
 
 
 class TestXpPerAction:
-    def test_no_upkeep_is_xp_per_kill(self) -> None:
-        assert xp_per_action(60, NO_UPKEEP, lambda _c: 99) == 60
+    def test_one_action_and_nothing_consumed_is_xp_per_kill(self) -> None:
+        assert xp_per_action(60, FightUpkeep(Fraction(1), {}), lambda _c: 99) == 60
 
     def test_actions_and_priced_consumables_divide_the_kill(self) -> None:
         """death_knight's live shape: 3 actions a kill and 3 potions at 3
@@ -92,13 +93,27 @@ def _band(monkeypatch) -> GameData:
     monkeypatch.setattr(band_mod, "normal_band", lambda g, t: ["death_knight", "imp"])
     monkeypatch.setattr(band_mod, "is_winnable", lambda s, g, c, h: True)
     monkeypatch.setattr(GameData, "xp_per_kill",
-                        lambda self, code, level: {"death_knight": 120, "imp": 50}[code])
+                        lambda self, code, level, wisdom=0: {"death_knight": 120, "imp": 50}[code])
     return gd
+
+
+def _same_loop(code: str) -> BestLoadout:
+    """The model gives every monster the same 30 s loop."""
+    return make_best_loadout()
+
+
+def _unread(code: str) -> BestLoadout:
+    raise AssertionError(f"modelled {code}, which has a measured upkeep")
+
+
+def _target(gd: GameData, history: _Measured, loadout_of=_same_loop) -> str | None:
+    target = band_combat_target(make_state(level=30), gd, history, lambda _c: 3, loadout_of)
+    return None if target is None else target.monster
 
 
 def test_without_upkeep_the_richer_kill_wins(monkeypatch) -> None:
     gd = _band(monkeypatch)
-    assert band_combat_target(make_state(level=30), gd, _Measured({}), lambda _c: 3) == "death_knight"
+    assert _target(gd, _Measured({})) == "death_knight"
 
 
 def test_upkeep_turns_the_rank(monkeypatch) -> None:
@@ -107,7 +122,20 @@ def test_upkeep_turns_the_rank(monkeypatch) -> None:
     gd = _band(monkeypatch)
     history = _Measured({"death_knight": FightUpkeep(Fraction(3), {POTION: Fraction(3)}),
                          "imp": FightUpkeep(Fraction(2), {})})
-    assert band_combat_target(make_state(level=30), gd, history, lambda _c: 3) == "imp"
+    assert _target(gd, history, _unread) == "imp"
+
+
+def test_a_measurement_is_counted_in_fight_seconds(monkeypatch) -> None:
+    """One key for both: a measured action is one fight-equivalent, 30 s.
+    death_knight measured 10 XP an action is 1/3 XP a second; imp modelled at
+    50 XP over a 30 s fight and 120 s of recovery is also 1/3 — a tie the
+    higher level takes. With 119 s of recovery imp pays more and is taken."""
+    gd = _band(monkeypatch)
+    history = _Measured({"death_knight": FightUpkeep(Fraction(3), {POTION: Fraction(3)})})
+    imp_at = {120: make_best_loadout(xp=50, win=True, recovery=120),
+              119: make_best_loadout(xp=50, win=True, recovery=119)}
+    assert _target(gd, history, lambda code: imp_at[120]) == "death_knight"
+    assert _target(gd, history, lambda code: imp_at[119]) == "imp"
 
 
 def test_the_player_prices_a_replacement_unit(monkeypatch) -> None:

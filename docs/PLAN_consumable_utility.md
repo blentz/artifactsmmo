@@ -314,3 +314,30 @@ with units eaten per recovery). Every consumable decision reads it:
   root walk's gear roots ahead of the trunk, `combat_deficit` /
   IsAFightBlockingMe) keep judging BARE gear, so a potion-propped win never
   hides a gear upgrade.
+
+## Walls: the loadout picks the monster — built (2026-10-10)
+
+- **Rank key (`tiers/band_target.rank_rate`)**: XP per second. Measured upkeep
+  where the store has it — `xp_per_action / FIGHT_SECONDS` (one
+  fight-equivalent action = 30 s, the unit the acquisition walk and the model's
+  prices already use) — else the best loadout's modelled loop
+  (`xp / (fight + recovery + consumed)`). A monster the record says is beaten
+  while the walk loses is ranked on the walk's seconds. `NO_UPKEEP` (the
+  untried 1-action prior) is deleted.
+- **Candidates**: structural gates, then `is_winnable` (bare) OR the best
+  loadout wins and `combat.loss_vetoed` (extracted from `is_winnable`) does not
+  refuse it. Each band monster is priced at its own gold rate
+  (`GamePlayer._band_loadout`).
+- **Cascade**: tier 2 takes the band on its own verdict (the `_is_winnable`
+  re-check is gone). A band with nothing winnable bare used to fall through to
+  the windowed pick; it now takes that place only with strictly more XP/s than
+  the windowed pick (`_band_beats_pick`).
+- **Gear stays bare**: `SelectionContext.combat_propped` is True when the target
+  stands only on consumables (no bare fight in the band and no windowed pick);
+  `IsAFightBlockingMe` treats it as no fight. Nothing in the gear walk reads
+  `loadout`.
+- **Cost**: `loop_rate_core.recovery_choice` shares one DP table per
+  `(max_hp, menu, eat seconds)` (LRU 64): 97% of `best_loadout` was rebuilding
+  it; l48_event_active's band went 6.5 s → 0.27 s. Live (warm, cheapest-path
+  diagnostic excluded from both sides) the cascade adds ≤ 0.9 s (C3P0) and 0 s
+  where a task monster short-circuits.

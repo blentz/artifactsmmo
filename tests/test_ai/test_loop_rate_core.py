@@ -7,6 +7,7 @@ from itertools import product
 import pytest
 
 from artifactsmmo_cli.ai.loop_rate_core import (
+    _recovery_table,
     consumed_seconds,
     count_bound,
     eat_cost,
@@ -186,3 +187,19 @@ class TestXpPerSecond:
     def test_invalid_inputs_raise(self, args: tuple, match: str) -> None:  # type: ignore[type-arg]
         with pytest.raises(ValueError, match=match):
             xp_per_second(*args)
+
+
+def test_one_table_answers_every_query_on_the_same_menu() -> None:
+    """The programme's entries depend on the menu, never on the HP a query
+    starts from, so a band's loadouts and monsters share one table: the second
+    query on the same menu builds no new table and answers exactly what a fresh
+    table answers."""
+    menu = ((30, Fraction(7), 2), (75, Fraction(40), 0), (12, None, 3))
+    _recovery_table.cache_clear()
+    first = recovery_choice(140, 300, menu, EAT)
+    shared = recovery_choice(95, 300, list(menu), EAT)
+    assert _recovery_table.cache_info().currsize == 1
+    _recovery_table.cache_clear()
+    assert recovery_choice(95, 300, menu, EAT) == shared
+    assert recovery_choice(140, 300, menu, EAT) == first
+    assert _recovery_table.cache_info().currsize == 1

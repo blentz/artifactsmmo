@@ -489,7 +489,8 @@ class IsAFightBlockingMe(Decision[MetaGoal]):
         there is nothing to build for it. `task_worth.task_worth_for` reads
         this verdict as infeasible (a cancel); this node must not compete.
       * `HORIZON_LEVEL_UP` — one level would close it, and this node only fires
-        when `ctx.combat_monster is None`, i.e. with NO monster worth fighting.
+        when bare gear has no monster worth fighting (`ctx.combat_monster` is
+        None, or stands only on consumables: `ctx.combat_propped`).
         A level goal here would have no beatable monster in its
         `relevant_actions`. That verdict is served from the EDGE instead — a
         real loss or level-up, where the cascade does find something — by
@@ -501,6 +502,12 @@ class IsAFightBlockingMe(Decision[MetaGoal]):
     `player.py` computes `_winnable_farm_target()` ONCE and hands it to
     `_selection_context`; the sibling node `IsThereACombatTarget` already reads
     `ctx`. One read.
+
+    BARE GEAR (USER 2026-10-10). The grind target may stand only on a potion
+    loadout (`band_target`: the loadout picks the monster); this node asks
+    whether BARE gear has a fight, so a target that exists only on consumables
+    (`ctx.combat_propped`) counts as none and the fight's gear acquisition is
+    still asked for. A potion-propped win never hides a gear upgrade.
 
     `has_craftable_upgrade_any_slot` is NOT re-tested here. In the latch it was
     the AND-guard that stopped the standing arm firing with nothing to build; in
@@ -524,7 +531,7 @@ class IsAFightBlockingMe(Decision[MetaGoal]):
                 ctx: SelectionContext, history: LearningStore | None
                 ) -> "Decision[MetaGoal] | MetaGoal | None":
         self.walk.trail.append(self.name)
-        if ctx.combat_monster is not None:
+        if ctx.combat_monster is not None and not ctx.combat_propped:
             return IsMyGearBehindMyTier(self.objective, self.walk)
         horizon = resolve_task_horizon(state, game_data)
         if horizon is None or horizon.verdict != HORIZON_GEAR:

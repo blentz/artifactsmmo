@@ -9,6 +9,7 @@ from contextlib import nullcontext
 from dataclasses import replace
 from datetime import datetime, timezone
 from fractions import Fraction
+from functools import partial
 from typing import Any
 
 import httpx
@@ -48,7 +49,7 @@ from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
 from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-from artifactsmmo_cli.ai.best_loadout import fight_ahead_loadout
+from artifactsmmo_cli.ai.best_loadout import BestLoadout, best_loadout, fight_ahead_loadout
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.combat import fight_records, is_winnable, predict_win
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
@@ -168,7 +169,7 @@ from artifactsmmo_cli.ai.tiers import (
     StrategyDecision,
     StrategyEngine,
 )
-from artifactsmmo_cli.ai.tiers.band_target import band_combat_target
+from artifactsmmo_cli.ai.tiers.band_target import BandTarget, band_combat_target, target_rate
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -514,6 +515,10 @@ class GamePlayer:
         # stays inert there, exactly like every other coordination field.
         self._asymmetric_demand: frozenset[str] = frozenset()
         self._sibling_skills: dict[str, int] = {}
+        # The cycle's grind target when it stands only on consumables (bare
+        # gear names no fight), set by `_winnable_farm_target`; read by
+        # `_selection_context` into `SelectionContext.combat_propped`.
+        self._propped_target: str | None = None
 
     def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
         """Allow callers (e.g. TUI host) to subscribe after construction."""
@@ -2678,12 +2683,12 @@ class GamePlayer:
             snapshot["path_blocked"] = plan.blocked
         return snapshot
 
-    def _path_aligned_monster(self) -> str | None:
-        """Return the best winnable monster in the next uncleared tier's
-        band, or None if no store, or the ladder is finished, or the band
-        holds nothing winnable (a gear wall — see `band_target`'s module
-        docstring; the two None cases are deliberately not distinguished
-        here).
+    def _path_aligned_monster(self) -> BandTarget | None:
+        """Return the band's pick — the winnable monster in the next uncleared
+        tier's band with the most XP per second over its best loadout — or
+        None if the ladder is finished, or the band holds nothing winnable (a
+        gear wall — see `band_target`'s module docstring; the two None cases
+        are deliberately not distinguished here).
 
         G-I: `cheapest_path_to_level`'s candidate filter floors at level 1,
         so its `next_action_monster` used to outrank the windowed picker at
@@ -2705,7 +2710,26 @@ class GamePlayer:
                 self.game_data.max_character_level, self.state, self.history, self.game_data,
             )
         return band_combat_target(self.state, self.game_data, self.history,
-                                  self._consumable_price)
+                                  self._consumable_price, self._band_loadout)
+
+    def _band_loadout(self, monster: str) -> BestLoadout:
+        """`best_loadout` against one band monster, for `band_combat_target`'s
+        rank (USER 2026-10-10, "loadout picks the monster").
+
+        Priced as if `monster` were the grind target: a buy is converted at
+        the grind target's gold rate (`consumable_price.gold_per_second`), and
+        the band is choosing that target, so each candidate is priced at its
+        own — the rate the cycle's loadout (`fight_ahead_loadout`) will read
+        once it is chosen. The rest of the context is `_consumable_price`'s:
+        the full selection context is not built yet (it NEEDS this cycle's
+        combat target), and the obtain walk reads only bank access and the
+        siblings' skills from it."""
+        assert self.state is not None and self.game_data is not None
+        ctx = replace(NO_PROFILE_CONTEXT,
+                      bank_accessible=self._blockers.get("bank") is None,
+                      sibling_skills=self._sibling_skills,
+                      combat_monster=monster)
+        return best_loadout(self.state, self.game_data, ctx, monster, self.history)
 
     def _consumable_price(self, code: str) -> Fraction:
         """Acquisition actions per unit to REPLACE a consumable a fight used —
@@ -2858,6 +2882,7 @@ class GamePlayer:
     def _winnable_farm_target(self) -> str | None:
         # Lazy short-circuit preserved: task wins outright; otherwise we
         # only consult the tier band target / global winnable scan.
+        self._propped_target = None
         task_monster = self._task_aligned_monster()
         if task_monster is not None:
             return winnable_farm_target_pure(CascadeInputs(
@@ -2866,17 +2891,47 @@ class GamePlayer:
                 path_winnable=False,
                 pick_winnable=None,
             ))
-        path_monster = self._path_aligned_monster()
-        path_winnable = path_monster is not None and self._is_winnable(path_monster)
-        # `pick_winnable` is only consulted when the path tier fails — match
-        # the original eager-but-short-circuited evaluation.
-        pick = self._pick_winnable_monster() if not path_winnable else None
+        band = self._path_aligned_monster()
+        # The band's own verdict is the tier-2 winnable check: bare gear, or
+        # the monster's best loadout (USER 2026-10-10). `_is_winnable` here
+        # would be a second, bare-only opinion refusing every potion-propped
+        # pick the band makes.
+        path_monster = band.monster if band is not None else None
+        # `pick_winnable` is consulted when the path tier fails, and when the
+        # band is fought only on potions: then the windowed pick is what BARE
+        # gear would fight, and whether it exists is what the gear decisions
+        # read (`SelectionContext.combat_propped`).
+        pick = (self._pick_winnable_monster()
+                if band is None or not band.bare_fight else None)
         return winnable_farm_target_pure(CascadeInputs(
             task_monster=None,
             path_monster=path_monster,
-            path_winnable=path_winnable,
+            path_winnable=band is not None and self._band_beats_pick(band, pick),
             pick_winnable=pick,
         ))
+
+    def _band_beats_pick(self, band: BandTarget, pick: str | None) -> bool:
+        """Whether the band's pick is the grind target over the windowed pick.
+
+        A band with a monster winnable on bare gear is taken outright, as it
+        always was (the windowed pick is not even asked). A band fought only on
+        potions is what the cascade used to fall through from to the windowed
+        pick, and the potions do not win that place by being available (USER
+        2026-10-10: "we don't pick sub-standard loadouts just because they're
+        available"): the band's monster is taken only when it pays strictly more
+        XP per second than the windowed pick on the same key
+        (`band_target.target_rate`); otherwise the windowed pick is fought.
+        Taken with no windowed pick at all, the target stands only on
+        consumables (`_propped_target`)."""
+        assert self.state is not None and self.game_data is not None
+        if band.bare_fight:
+            return True
+        if pick is None:
+            self._propped_target = band.monster
+            return True
+        pick_rate = target_rate(self.state, self.game_data, self.history, pick,
+                                self._consumable_price, partial(self._band_loadout, pick))
+        return band.rate > pick_rate
 
     def _step_decline(
         self, state: WorldState, game_data: GameData, ctx: SelectionContext,
@@ -3764,6 +3819,8 @@ class GamePlayer:
             initial_xp=self.state.xp,
             task_exchange_min_coins=self._exchange_min_coins(),
             combat_monster=combat_monster,
+            combat_propped=(combat_monster is not None
+                            and combat_monster == self._propped_target),
             # A bank expansion is never a reserved gear code → buying=None
             # applies the full progression-reserve floor (same call the goal
             # makes inside should_expand_bank's inputs).

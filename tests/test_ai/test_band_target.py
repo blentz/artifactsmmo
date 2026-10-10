@@ -5,21 +5,35 @@ and outranks the windowed picker, so four of five live characters were grinding
 4 to 10 levels below themselves on 2026-08-23.
 """
 import dataclasses
+from fractions import Fraction
 
 import artifactsmmo_cli.ai.tiers.band_target as mod
 import artifactsmmo_cli.ai.tiers.tier_progress as tp
 from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
+from artifactsmmo_cli.ai.best_loadout import BestLoadout
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.tiers.band_target import band_combat_target
+from artifactsmmo_cli.ai.tiers.band_target import band_combat_target, rank_rate
 from artifactsmmo_cli.ai.tiers.tier_ladder import band as raw_band
 from artifactsmmo_cli.ai.tiers.tier_ladder import normal_band as real_normal_band
-from tests.test_ai.fixtures import make_state
+from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import make_best_loadout, make_state
 
 
 def _never_priced(code: str) -> int:
     """No store, so no measured upkeep and no consumable to price."""
     raise AssertionError(f"priced {code} with no upkeep measured")
+
+
+def _bare_loop(code: str) -> BestLoadout:
+    """Every loadout's walk loses: the band is ranked on bare gear alone, one
+    30 s loop a kill, so the rank is the kill's XP."""
+    return make_best_loadout()
+
+
+def _pick(state: WorldState, gd: GameData) -> str | None:
+    target = band_combat_target(state, gd, None, _never_priced, _bare_loop)
+    return None if target is None else target.monster
 
 
 def _gd() -> GameData:
@@ -48,7 +62,7 @@ def test_the_target_comes_from_the_next_uncleared_band(monkeypatch):
         return c != "ogre"
     monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
     monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
-    assert band_combat_target(make_state(level=30), _gd(), None, _never_priced) == "spider"
+    assert _pick(make_state(level=30), _gd()) == "spider"
 
 
 def test_normal_band_is_called_not_band(monkeypatch):
@@ -109,7 +123,7 @@ def test_normal_band_is_called_not_band(monkeypatch):
         f"fixture must make the boss outrank the normal monster on XP: "
         f"other_normal={xp_other} strongboss={xp_boss}")
 
-    target = band_combat_target(state, gd, None, _never_priced)
+    target = _pick(state, gd)
     assert target == "other_normal", (
         "boss must never be the target even though it outranks the only "
         f"other winnable candidate on XP; got {target!r}")
@@ -122,7 +136,7 @@ def test_no_winnable_monster_in_the_band_yields_none(monkeypatch):
         return False
     monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
     monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
-    assert band_combat_target(make_state(level=30), _gd(), None, _never_priced) is None
+    assert _pick(make_state(level=30), _gd()) is None
 
 
 def test_a_band_that_pays_no_xp_yields_none(monkeypatch):
@@ -138,8 +152,8 @@ def test_a_band_that_pays_no_xp_yields_none(monkeypatch):
     gd = _gd()
     assert gd.xp_per_kill("spider", 30) > 0
     assert gd.xp_per_kill("spider", 31) == 0
-    assert band_combat_target(make_state(level=30), gd, None, _never_priced) == "spider"
-    assert band_combat_target(make_state(level=31), gd, None, _never_priced) is None
+    assert _pick(make_state(level=30), gd) == "spider"
+    assert _pick(make_state(level=31), gd) is None
 
 
 def test_a_monster_with_no_spawn_is_no_target(monkeypatch):
@@ -153,9 +167,9 @@ def test_a_monster_with_no_spawn_is_no_target(monkeypatch):
     monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
     monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
     gd = _gd()
-    assert band_combat_target(make_state(level=30), gd, None, _never_priced) == "spider"
+    assert _pick(make_state(level=30), gd) == "spider"
     gd._monster_locations = {k: v for k, v in gd._monster_locations.items() if k != "spider"}
-    assert band_combat_target(make_state(level=30), gd, None, _never_priced) is None
+    assert _pick(make_state(level=30), gd) is None
 
 
 def test_a_finished_ladder_yields_none(monkeypatch):
@@ -164,7 +178,7 @@ def test_a_finished_ladder_yields_none(monkeypatch):
         return True
     monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
     monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
-    assert band_combat_target(make_state(level=30), _gd(), None, _never_priced) is None
+    assert _pick(make_state(level=30), _gd()) is None
 
 
 def test_hp_does_not_affect_winnable_list(bundle_game_data):
@@ -193,7 +207,7 @@ def test_hp_does_not_affect_winnable_list(bundle_game_data):
     full_hp = scenario_state(SCENARIOS["l11_band_floor"], gd)
     assert full_hp.hp == full_hp.max_hp
 
-    full_target = band_combat_target(full_hp, gd, None, _never_priced)
+    full_target = _pick(full_hp, gd)
     assert full_target is not None, (
         "l11_band_floor must have a winnable band target at full HP for "
         "this test to say anything about HP-independence")
@@ -201,7 +215,7 @@ def test_hp_does_not_affect_winnable_list(bundle_game_data):
     damaged = dataclasses.replace(full_hp, hp=max(1, full_hp.max_hp // 3))
     assert damaged.hp != damaged.max_hp
 
-    damaged_target = band_combat_target(damaged, gd, None, _never_priced)
+    damaged_target = _pick(damaged, gd)
     assert damaged_target == full_target, (
         f"band_combat_target depends on current hp: {full_target!r} at "
         f"full hp vs {damaged_target!r} damaged")
@@ -243,7 +257,7 @@ def test_semantic_tiebreak_uses_level_not_alphabetical(monkeypatch):
         return ("zzz_low", "aaa_high")
     monkeypatch.setattr(mod, "next_uncleared_tier", fake_next_uncleared)
     monkeypatch.setattr(mod, "normal_band", fake_normal_band)
-    result = band_combat_target(state, gd, None, _never_priced)
+    result = _pick(state, gd)
     # XP is tied. max(..., code) picks zzz_low (alphabetically last).
     # max(..., monster_levels[code]) picks aaa_high (higher level).
     # Semantic tiebreak picks the higher level.
@@ -273,7 +287,7 @@ def test_xp_tiebreak_without_monkeypatched_band_derivation(monkeypatch):
     state = make_state(level=30)
     # Among the winnable monsters (spider and ogre), pick the one with higher XP
     best = max(("spider", "ogre"), key=lambda c: gd.xp_per_kill(c, state.level))
-    result = band_combat_target(state, gd, None, _never_priced)
+    result = _pick(state, gd)
     assert result == best
 
 
@@ -310,7 +324,7 @@ def test_band_bound_not_defeated_by_xp_ordering(monkeypatch):
     # band(10) = [mushmush], no other normal monsters
     # Correct (banded T10): picks mushmush (only winnable in band)
     # Mutation (unbounded): could pick spider if grey XP doesn't zero out
-    result = band_combat_target(state, gd, None, _never_priced)
+    result = _pick(state, gd)
     assert result == "mushmush"
 
 
@@ -353,4 +367,93 @@ def test_stat_winnable_but_out_of_window_yields_none(monkeypatch):
     # this test says nothing if the fixture accidentally sits inside it.
     assert gd.monster_levels["highwayman"] > state.level + FIGHT_LEVEL_GAP_CEILING
 
-    assert band_combat_target(state, gd, None, _never_priced) is None
+    assert _pick(state, gd) is None
+
+
+# ---------------------------------------------------------------------------
+# The loadout picks the monster (USER 2026-10-10)
+# ---------------------------------------------------------------------------
+
+class _Record:
+    """A store with no measured upkeep."""
+
+    def fight_upkeep(self, code: str) -> None:
+        return None
+
+
+def _spider_bare_ogre_on_potions(monkeypatch) -> GameData:
+    """T20 uncleared; spider winnable bare, ogre only on its best loadout."""
+    def fake_is_winnable(s: object, g: object, c: str, h: object) -> bool:
+        return c != "ogre"
+    monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
+    monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
+    return _gd()
+
+
+def _loops(spider_recovery: int, ogre_win: bool, ogre_consumed: int):
+    gd = _gd()
+    spider = make_best_loadout(xp=gd.xp_per_kill("spider", 30), win=True, recovery=spider_recovery)
+    ogre = make_best_loadout(("small_health_potion",), xp=gd.xp_per_kill("ogre", 30), win=ogre_win,
+                             consumed=ogre_consumed)
+    return {"spider": spider, "ogre": ogre}.__getitem__
+
+
+def test_a_potion_propped_monster_that_pays_more_is_the_target(monkeypatch):
+    """ogre loses bare and wins on a potion; at 30 s a loop it pays more per
+    second than spider's 30 s fight and 60 s rest, so the loadout picks it."""
+    gd = _spider_bare_ogre_on_potions(monkeypatch)
+    target = band_combat_target(make_state(level=30), gd, None, _never_priced,
+                                _loops(spider_recovery=60, ogre_win=True, ogre_consumed=0))
+    assert target is not None and target.monster == "ogre"
+    assert target.bare_fight is True
+    assert target.rate == Fraction(gd.xp_per_kill("ogre", 30), 30)
+
+
+def test_a_potion_that_pays_less_does_not_pick_the_monster(monkeypatch):
+    """"We don't pick sub-standard loadouts just because they're available":
+    the potion's price makes ogre's loop slower than spider's bare one."""
+    gd = _spider_bare_ogre_on_potions(monkeypatch)
+    target = band_combat_target(make_state(level=30), gd, None, _never_priced,
+                                _loops(spider_recovery=0, ogre_win=True, ogre_consumed=600))
+    assert target is not None and target.monster == "spider"
+
+
+def test_a_monster_no_loadout_beats_is_no_candidate(monkeypatch):
+    gd = _spider_bare_ogre_on_potions(monkeypatch)
+    target = band_combat_target(make_state(level=30), gd, None, _never_priced,
+                                _loops(spider_recovery=600, ogre_win=False, ogre_consumed=0))
+    assert target is not None and target.monster == "spider"
+
+
+def test_a_band_fought_only_on_potions_has_no_bare_fight(monkeypatch):
+    """Nothing in the band is winnable bare: the band still names ogre, and
+    says bare gear has no fight in it — what every gear decision reads."""
+    def fake_is_winnable(s: object, g: object, c: str, h: object) -> bool:
+        return c not in ("spider", "ogre")
+    monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
+    monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
+    target = band_combat_target(make_state(level=30), _gd(), None, _never_priced,
+                                _loops(spider_recovery=0, ogre_win=True, ogre_consumed=0))
+    assert target is not None and target.monster == "ogre" and target.bare_fight is False
+
+
+def test_the_learned_loss_veto_refuses_a_potion_propped_fight(monkeypatch):
+    """A monster lost to on the record is no target whatever a potion would do
+    in the model; the same fight unvetoed is taken."""
+    gd = _spider_bare_ogre_on_potions(monkeypatch)
+    loops = _loops(spider_recovery=60, ogre_win=True, ogre_consumed=0)
+    monkeypatch.setattr(mod, "loss_vetoed", lambda s, g, c, h: c == "ogre")
+    vetoed = band_combat_target(make_state(level=30), gd, _Record(), _never_priced, loops)
+    assert vetoed is not None and vetoed.monster == "spider"
+    monkeypatch.setattr(mod, "loss_vetoed", lambda s, g, c, h: False)
+    taken = band_combat_target(make_state(level=30), gd, _Record(), _never_priced, loops)
+    assert taken is not None and taken.monster == "ogre"
+
+
+def test_a_win_on_the_record_is_ranked_on_the_walk_seconds(monkeypatch):
+    """`is_winnable` says spider is beaten (the record) while the model's walk
+    loses: the record decides the win, the model's seconds the rate."""
+    gd = _spider_bare_ogre_on_potions(monkeypatch)
+    xp = gd.xp_per_kill("spider", 30)
+    lost_walk = make_best_loadout(xp=xp, win=False, recovery=90)
+    assert rank_rate(xp, None, lambda: lost_walk, _never_priced) == Fraction(xp, 120)

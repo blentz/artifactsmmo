@@ -364,12 +364,22 @@ def is_winnable(
         # level 30 the stats win and the veto still refused, holding the task
         # inert. Evidence about another level or another loadout is evidence
         # about a different fight.
-        samples, wins = fight_record(state, game_data, monster_code, history)
-        if samples >= MIN_WIN_SAMPLES and wins < WIN_RATE_THRESHOLD * samples:
+        if loss_vetoed(state, game_data, monster_code, history):
             return False
         if _won_at_or_above_level(history, game_data, monster_code):
             return True
     return predict_win(state, game_data, monster_code)
+
+
+def loss_vetoed(state: WorldState, game_data: GameData, monster_code: str,
+                history: LearningStore) -> bool:
+    """The LEARNED-LOSS veto (`is_winnable`'s first gate): at least
+    MIN_WIN_SAMPLES recorded fights against `monster_code` at this level in the
+    loadout the fight is fought in (`fight_record`), won below
+    WIN_RATE_THRESHOLD. Also the band target's: a fight carried by consumables
+    (`band_target.band_combat_target`) is refused on the same record."""
+    samples, wins = fight_record(state, game_data, monster_code, history)
+    return samples >= MIN_WIN_SAMPLES and wins < WIN_RATE_THRESHOLD * samples
 
 
 def _won_at_or_above_level(

@@ -1,6 +1,7 @@
 """Shared test fixtures for AI module tests."""
 
 from datetime import datetime, timezone
+from fractions import Fraction
 from unittest.mock import MagicMock
 
 import attrs
@@ -8,7 +9,9 @@ from artifactsmmo_api_client.models.character_schema import CharacterSchema
 from artifactsmmo_api_client.models.item_schema import ItemSchema
 from artifactsmmo_api_client.models.map_layer import MapLayer
 
+from artifactsmmo_cli.ai.best_loadout import BestLoadout
 from artifactsmmo_cli.ai.item_catalog import ItemStats
+from artifactsmmo_cli.ai.loop_rate import LoopRate
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -144,3 +147,21 @@ def make_state(**overrides) -> WorldState:
             defaults["task_code"], defaults["task_progress"], defaults["task_total"]
         )
     return WorldState(**defaults)
+
+
+def make_loop(*, xp: int = 0, win: bool = False, recovery: int = 0, consumed: int = 0,
+              used: tuple[tuple[str, int], ...] = ()) -> LoopRate:
+    """One modelled fight loop (`loop_rate.LoopRate`): a 30 s fight, `recovery`
+    and `consumed` seconds, `xp` per kill on a win."""
+    fight = Fraction(30)
+    seconds = fight + recovery + consumed
+    return LoopRate(xp_per_second=Fraction(xp) / seconds if win else Fraction(0),
+                    xp_per_kill=xp, win=win, fight_seconds=fight,
+                    recovery_seconds=Fraction(recovery), consumed_seconds=Fraction(consumed),
+                    max_hp=100, hp_end=50, used=used, eaten=())
+
+
+def make_best_loadout(loadout: tuple[str, ...] = (), **loop: object) -> BestLoadout:
+    """A `best_loadout.BestLoadout` whose pick is `make_loop(**loop)` wearing
+    `loadout`; its bare loop loses."""
+    return BestLoadout(loadout, make_loop(**loop), make_loop())  # type: ignore[arg-type]

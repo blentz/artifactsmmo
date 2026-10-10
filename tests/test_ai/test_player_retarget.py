@@ -1,10 +1,12 @@
 """Tests for monster-task grind retargeting in _winnable_farm_target."""
 
+from fractions import Fraction
 from unittest.mock import patch
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.tiers.band_target import BandTarget
 from tests.test_ai.fixtures import make_state
 
 
@@ -168,7 +170,7 @@ def test_an_unwinnable_task_monster_falls_through_to_the_winnable_tiers(tmp_path
         with patch.object(GamePlayer, "_is_winnable",
                           side_effect=lambda m: m != "pig"):
             with patch.object(GamePlayer, "_path_aligned_monster",
-                              return_value="chicken"):
+                              return_value=BandTarget("chicken", Fraction(1), True)):
                 result = p._winnable_farm_target()
     assert result == "chicken"
     p.history.close()
