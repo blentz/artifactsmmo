@@ -441,6 +441,16 @@ open Formal.PriorityBand
 #print axioms Formal.LoopRate.xpRate_den_pos
 #print axioms Formal.LoopRate.xpRate_antitone
 #print axioms Formal.LoopRate.rate_antitone_missing
+#print axioms Formal.LoopRate.held_free_le
+#print axioms Formal.LoopRate.priced_le_unpriced
+#print axioms Formal.LoopRate.recovery_le_planCost
+#print axioms Formal.LoopRate.eatCost_held_zero
+#print axioms Formal.LoopRate.potionCost_held_zero
+#print axioms Formal.LoopRate.consumed_held_free_le
+#print axioms Formal.BestLoadout.pick_optimal
+#print axioms Formal.BestLoadout.pick_mem
+#print axioms Formal.BestLoadout.pick_none_iff
+#print axioms Formal.BestLoadout.not_beats_iff
 #print axioms Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership
 #print axioms Formal.RealizableLoadout.apply_cur_ge_1
 #print axioms Formal.RealizableLoadout.ownership_counts_equipped

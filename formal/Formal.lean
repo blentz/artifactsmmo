@@ -200,6 +200,7 @@ import Formal.FailureRecovery
 import Formal.FightOutcome
 import Formal.ConsumablePrice
 import Formal.LoopRate
+import Formal.BestLoadout
 import Formal.CurrencyAffordFastFail
 import Formal.PlanModel
 import Formal.LeafAttainable

@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.consumable_price import (
     gold_per_second,
     held_count,
     make_seconds,
+    replacement_price_of,
 )
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_sources import UNBOUNDED_CAPACITY, Source, SourceKind
@@ -127,3 +128,14 @@ class TestPrice:
         assert walk is not None and walk > 0
         assert buy_gold("cooked_chicken", state, game_data, ctx) is None
         assert consumable_price_of("cooked_chicken", state, game_data, ctx) == walk
+
+    def test_a_held_unit_has_a_replacement_price(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Held units are free; a unit past them costs its replacement, as if
+        # none were held (USER 2026-10-09, "free until used up").
+        monkeypatch.setattr(price_mod, "acquisition_actions", lambda *a, **k: 4)   # 120 s
+        monkeypatch.setattr(price_mod, "buy_gold", lambda *a: None)
+        state = make_state(bank_items={"x": 3})
+        assert consumable_price_of("x", state, GameData(), _CTX) == 0
+        assert replacement_price_of("x", state, GameData(), _CTX) == 120
+        monkeypatch.setattr(price_mod, "acquisition_actions", lambda *a, **k: UNOBTAINABLE_PER_UNIT)
+        assert replacement_price_of("x", state, GameData(), _CTX) is None

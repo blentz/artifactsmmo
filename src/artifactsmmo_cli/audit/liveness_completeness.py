@@ -167,8 +167,22 @@ WITNESS_BASELINE: dict[str, int] = {
     # so the count cannot grow; and C3P0 was re-planned from its LIVE state on
     # the fix: `[TaskCancel]` in 17 nodes where it timed out at 295,500. If a
     # restart disagrees, this number is wrong and the alarm is right.
-    "WaitGoal": 311,
-    "WaitAction": 311,
+    # 2026-10-09/10, +778 (311 -> 1089). C3P0 alone, 22:26 UTC onward on the
+    # 7f7b18d6 fleet — the booking fix worked (iron_bar cancelled), and the
+    # NEXT draw exposed the next wall. Every one of the 778 Wait cycles carries
+    # a `PursueTask(spruce_plank)` search with plan_len 0:
+    #   x778, the items-task step was `PursueTaskGoal`, which only A* plans,
+    #              over the factory's UNSIZED single gathers. A batch of 10
+    #              planks at 10 spruce_wood each is 100 gathers + crafts +
+    #              trades, past the depth-100 cap, so it never planned. FIXED
+    #              by producing the batch through decomposition first
+    #              (`GatherMaterials(task item x batch)`: sized gathers,
+    #              banked stock withdrawn), then trading it.
+    #
+    # Fleet STOPPED before the raise; C3P0's live state re-planned on the fix:
+    # `[Gather(spruce_tree×100), Craft(spruce_plank×10)]` in 14 nodes.
+    "WaitGoal": 1089,
+    "WaitAction": 1089,
 }
 
 #: form "unreachable: ..." is a DEFECT that is being tracked, not an excuse —

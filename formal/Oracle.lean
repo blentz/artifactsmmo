@@ -1912,13 +1912,46 @@ def runConsumablePrice (args : Array Json) : Json :=
   | some (a, b) => Json.mkObj [("none", Json.bool false), ("num", Json.num (Int.ofNat a)),
                                ("den", Json.num (Int.ofNat b))]
 
+/-- The foods of a recovery row: `count` at `[4]`, then `[restore, priceTag,
+price, held]` each, a tag of 0 meaning no replacement. -/
+def loopFoods (n : Nat → Nat) : List Formal.LoopRate.Food :=
+  (List.range (n 4)).map (fun i =>
+    (n (5 + 4 * i), (if n (6 + 4 * i) = 0 then none else some (n (7 + 4 * i))), n (8 + 4 * i)))
+
 /-- The cheapest recovery (`Formal.LoopRate.recovery`), scaled seconds. Args:
-`[scale, eat, maxHp, missing, count, restore_0, price_0, ...]`. -/
+`[scale, eat, maxHp, missing, count, restore_0, priceTag_0, price_0, held_0, ...]`. -/
 def runLoopRecovery (args : Array Json) : Json :=
   let n : Nat → Nat := fun k => (intArg args k).toNat
-  let foods := (List.range (n 4)).map (fun i => (n (5 + 2 * i), n (6 + 2 * i)))
   Json.mkObj [("recovery", Json.num (Int.ofNat
-    (Formal.LoopRate.recovery (n 0) (n 1) (n 2) foods (n 3))))]
+    (Formal.LoopRate.recovery (n 0) (n 1) (n 2) (loopFoods n) (n 3))))]
+
+/-- What a count vector costs (`Formal.LoopRate.planCost`), scaled seconds. Args:
+the `runLoopRecovery` row, then one count per food. -/
+def runLoopPlanCost (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let counts := (List.range (n 4)).map (fun i => n (5 + 4 * n 4 + i))
+  Json.mkObj [("cost", Json.num (Int.ofNat
+    (Formal.LoopRate.planCost (n 0) (n 1) (n 2) (loopFoods n) counts (n 3))))]
+
+/-- The consumed price (`Formal.LoopRate.consumedPrice`), scaled seconds. Args:
+`[count, used_0, priceTag_0, price_0, held_0, ...]`. Emits `none` and `cost`. -/
+def runLoopConsumed (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let potions := (List.range (n 0)).map (fun i =>
+    (n (1 + 4 * i), (if n (2 + 4 * i) = 0 then none else some (n (3 + 4 * i))), n (4 + 4 * i)))
+  match Formal.LoopRate.consumedPrice potions with
+  | none => Json.mkObj [("none", Json.bool true)]
+  | some c => Json.mkObj [("none", Json.bool false), ("cost", Json.num (Int.ofNat c))]
+
+/-- The best loadout's pick (`Formal.BestLoadout.pick`). Args: `[count, num_0,
+den_0, units_0, ...]`. Emits the index, -1 for none. -/
+def runBestLoadoutPick (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let cands := (List.range (n 0)).map (fun i => ((n (1 + 3 * i), n (2 + 3 * i)), n (3 + 3 * i)))
+  let pick : Int := match Formal.BestLoadout.pick cands with
+    | some j => Int.ofNat j
+    | none => -1
+  Json.mkObj [("pick", Json.num pick)]
 
 /-- XP per second (`Formal.LoopRate.xpRate`). Args: `[xp, scale, fight, recovery,
 consumed]`, all scaled. Emits `num` / `den`. -/
@@ -3055,6 +3088,12 @@ def runOne (item : Json) : Json :=
     runLoopRecovery args
   else if kind == "loop_xp_rate" then
     runLoopXpRate args
+  else if kind == "loop_plan_cost" then
+    runLoopPlanCost args
+  else if kind == "loop_consumed" then
+    runLoopConsumed args
+  else if kind == "best_loadout_pick" then
+    runBestLoadoutPick args
   else if kind == "predict_win_hp" then
     runPredictWinHp (fun i => intArg args i)
   else if kind == "inventory_chain_safe" then

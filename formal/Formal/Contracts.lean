@@ -55,6 +55,7 @@ import Formal.FailureRecovery
 import Formal.FightOutcome
 import Formal.ConsumablePrice
 import Formal.LoopRate
+import Formal.BestLoadout
 import Formal.ShoppingList
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
@@ -3526,30 +3527,59 @@ example : ∀ (a b c : Formal.ConsumablePrice.Q), 0 < b.2 →
 
 /-! ### LoopRate contracts. -/
 
-example : ∀ (scale eat maxHp : Nat) (fs : List (Nat × Nat)) (m : Nat),
+example : ∀ (scale eat maxHp : Nat) (fs : List Formal.LoopRate.Food) (m : Nat),
     Formal.LoopRate.recovery scale eat maxHp fs m ≤ scale * Formal.LoopRate.restPart m maxHp :=
   @Formal.LoopRate.recovery_le_rest
 
-example : ∀ (scale eat maxHp : Nat) (fs : List (Nat × Nat)), (∀ f ∈ fs, 0 < f.1) →
+example : ∀ (scale eat maxHp : Nat) (fs : List Formal.LoopRate.Food), (∀ f ∈ fs, 0 < f.1) →
     ∀ (m m' : Nat), m ≤ m' →
       Formal.LoopRate.recovery scale eat maxHp fs m ≤ Formal.LoopRate.recovery scale eat maxHp fs m' :=
   @Formal.LoopRate.recovery_mono_missing
 
-example : ∀ (scale eat maxHp r p : Nat) (fs : List (Nat × Nat)) (m : Nat),
-    Formal.LoopRate.recovery scale eat maxHp ((r, p) :: fs) m
+example : ∀ (scale eat maxHp r h : Nat) (p : Option Nat) (fs : List Formal.LoopRate.Food) (m : Nat),
+    Formal.LoopRate.recovery scale eat maxHp ((r, p, h) :: fs) m
       ≤ Formal.LoopRate.recovery scale eat maxHp fs m :=
   @Formal.LoopRate.add_food_le
 
-example : ∀ (scale eat maxHp r p p' : Nat) (post : List (Nat × Nat)), p' ≤ p →
-    ∀ (pre : List (Nat × Nat)) (m : Nat),
-      Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p') :: post) m
-        ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p) :: post) m :=
+example : ∀ (scale eat maxHp r h p p' : Nat) (post : List Formal.LoopRate.Food), p' ≤ p →
+    ∀ (pre : List Formal.LoopRate.Food) (m : Nat),
+      Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p', h) :: post) m
+        ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p, h) :: post) m :=
   @Formal.LoopRate.price_mono
 
-example : ∀ (scale eat maxHp r p : Nat) (pre post : List (Nat × Nat)) (m : Nat),
-    Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, 0) :: post) m
-      ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p) :: post) m :=
+example : ∀ (scale eat maxHp r h p : Nat) (pre post : List Formal.LoopRate.Food) (m : Nat),
+    Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some 0, h) :: post) m
+      ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p, h) :: post) m :=
   @Formal.LoopRate.free_food_le
+
+example : ∀ (scale eat maxHp r h h' : Nat) (p : Option Nat) (post : List Formal.LoopRate.Food),
+    h ≤ h' → ∀ (pre : List Formal.LoopRate.Food) (m : Nat),
+      Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p, h') :: post) m
+        ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p, h) :: post) m :=
+  @Formal.LoopRate.held_free_le
+
+example : ∀ (scale eat maxHp r h q : Nat) (pre post : List Formal.LoopRate.Food) (m : Nat),
+    Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some q, h) :: post) m
+      ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, none, h) :: post) m :=
+  @Formal.LoopRate.priced_le_unpriced
+
+example : ∀ (scale eat maxHp : Nat) (fs : List Formal.LoopRate.Food), (∀ f ∈ fs, 0 < f.1) →
+    ∀ (ks : List Nat) (m : Nat), Formal.LoopRate.feasible fs ks →
+      Formal.LoopRate.recovery scale eat maxHp fs m ≤ Formal.LoopRate.planCost scale eat maxHp fs ks m :=
+  @Formal.LoopRate.recovery_le_planCost
+
+example : ∀ (k eat q : Nat),
+    Formal.LoopRate.eatCost k eat (some q) 0 = (if k = 0 then 0 else eat) + k * q :=
+  @Formal.LoopRate.eatCost_held_zero
+
+example : ∀ (u q : Nat), Formal.LoopRate.potionCost u 0 (some q) = some (u * q) :=
+  @Formal.LoopRate.potionCost_held_zero
+
+example : ∀ (u h h' : Nat) (p : Option Nat) (post : List (Nat × Option Nat × Nat)), h ≤ h' →
+    ∀ (pre : List (Nat × Option Nat × Nat)) (c : Nat),
+      Formal.LoopRate.consumedPrice (pre ++ (u, p, h) :: post) = some c →
+      ∃ c', Formal.LoopRate.consumedPrice (pre ++ (u, p, h') :: post) = some c' ∧ c' ≤ c :=
+  @Formal.LoopRate.consumed_held_free_le
 
 example : ∀ (m r : Nat), 0 < r → m ≤ Formal.LoopRate.countBound m r * r :=
   @Formal.LoopRate.countBound_covers
@@ -3565,9 +3595,27 @@ example : ∀ (xp scale f f' r r' c c' : Nat), f ≤ f' → r ≤ r' → c ≤ c
       (Formal.LoopRate.xpRate xp scale f r c) :=
   @Formal.LoopRate.xpRate_antitone
 
-example : ∀ (xp scale eat maxHp f c : Nat) (fs : List (Nat × Nat)), (∀ g ∈ fs, 0 < g.1) →
+example : ∀ (xp scale eat maxHp f c : Nat) (fs : List Formal.LoopRate.Food), (∀ g ∈ fs, 0 < g.1) →
     ∀ (m m' : Nat), m ≤ m' →
       Formal.ConsumablePrice.qle
         (Formal.LoopRate.xpRate xp scale f (Formal.LoopRate.recovery scale eat maxHp fs m') c)
         (Formal.LoopRate.xpRate xp scale f (Formal.LoopRate.recovery scale eat maxHp fs m) c) :=
   @Formal.LoopRate.rate_antitone_missing
+
+/-! ### BestLoadout contracts. -/
+
+example : ∀ (cs : List Formal.BestLoadout.Cand), (∀ c ∈ cs, 0 < c.1.2) →
+    ∀ (j : Nat) (b : Formal.BestLoadout.Cand), Formal.BestLoadout.pickAux cs 0 none = some (j, b) →
+      ∀ c ∈ cs, Formal.BestLoadout.beats c b = false :=
+  @Formal.BestLoadout.pick_optimal
+
+example : ∀ (cs : List Formal.BestLoadout.Cand) (j : Nat) (b : Formal.BestLoadout.Cand),
+    Formal.BestLoadout.pickAux cs 0 none = some (j, b) → cs[j]? = some b :=
+  @Formal.BestLoadout.pick_mem
+
+example : ∀ (cs : List Formal.BestLoadout.Cand), Formal.BestLoadout.pick cs = none ↔ cs = [] :=
+  @Formal.BestLoadout.pick_none_iff
+
+example : ∀ (a b : Formal.BestLoadout.Cand), Formal.BestLoadout.beats a b = false ↔
+    Formal.ConsumablePrice.qle a.1 b.1 ∧ (Formal.ConsumablePrice.qle b.1 a.1 → b.2 ≤ a.2) :=
+  @Formal.BestLoadout.not_beats_iff

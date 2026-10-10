@@ -360,6 +360,8 @@ CONSUMABLE_PRICE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumab
 CONSUMABLE_PRICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price.py"
 LOOP_RATE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate_core.py"
 LOOP_RATE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate.py"
+BEST_LOADOUT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "best_loadout_core.py"
+BEST_LOADOUT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "best_loadout.py"
 FAILURE_RECOVERY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "failure_recovery_core.py"
 ACTION_BASE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "base.py"
 REST_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "rest.py"
@@ -866,11 +868,14 @@ CONSUMABLE_PRICE_READER_MUTATIONS = [
     ("consumable_price reader: gold per cycle read as gold per second",
      "    return fight_gold_rate(state, game_data, ctx.combat_monster) / FIGHT_SECONDS",
      "    return fight_gold_rate(state, game_data, ctx.combat_monster)"),
+    ("consumable_price reader: a replacement is free while any unit is held",
+     "    return consumable_price(0, make_seconds(code, state, game_data, ctx, store),",
+     "    return consumable_price(held_count(code, state), make_seconds(code, state, game_data, ctx, store),"),
 ]
 
-# loop_rate_core: recovery and the XP rate (consumable utility increment 3).
+# loop_rate_core: recovery and the XP rate (consumable utility increments 3-4).
 # Killed by formal/diff/test_loop_rate_diff.py (exact agreement with the proved
-# Formal.LoopRate.recovery / xpRate).
+# Formal.LoopRate.recovery / planCost / consumedPrice / xpRate).
 LOOP_RATE_CORE_MUTATIONS = [
     ("loop_rate: a zero remainder pays the three-second Rest floor",
      "    return 0 if missing <= 0 else rest_cooldown_seconds(missing, max_hp)",
@@ -879,25 +884,53 @@ LOOP_RATE_CORE_MUTATIONS = [
      "    return -(-missing // restore)",
      "    return missing // restore"),
     ("loop_rate: the count bound loses its last count",
-     "                        for k in range(count_bound(missing, restore) + 1))",
-     "                        for k in range(count_bound(missing, restore)))"),
+     "            for k in range(1, food_bound(missing, restore, price, held) + 1):",
+     "            for k in range(1, food_bound(missing, restore, price, held)):"),
     ("loop_rate: the eat cooldown charged per unit, not per use",
-     "            value = min((eat_seconds if k > 0 else Fraction(0)) + k * price",
-     "            value = min(k * (eat_seconds + price)"),
+     "    return eat_seconds if price is None else eat_seconds + past * price",
+     "    return eat_seconds if price is None else units * eat_seconds + past * price"),
+    ("loop_rate: held food units are priced",
+     "    past = max(0, units - held)",
+     "    past = units"),
+    ("loop_rate: a food with no replacement is eaten past its held units",
+     "    return bound if price is not None else min(bound, held)",
+     "    return bound"),
+    ("loop_rate: held potion drinks are priced",
+     "    past = max(0, used - held)",
+     "    past = used"),
+    ("loop_rate: an unpayable drink is free",
+     "        return Fraction(0) if past == 0 else None",
+     "        return Fraction(0)"),
+    ("loop_rate: the consumed price keeps only the last potion",
+     "        total += cost",
+     "        total = cost"),
     ("loop_rate: the rate ignores recovery",
      "    return Fraction(xp_per_kill) / (fight_seconds + recovery + consumed_price_seconds)",
      "    return Fraction(xp_per_kill) / (fight_seconds + consumed_price_seconds)"),
 ]
 
-# loop_rate: the reader (increment 3). OWN run_group: unit-killed by
+# loop_rate_core: the recovery CHOICE's tie rules (fewest units, then the fewer
+# of the earlier food). Every cheapest vector costs the same, so the
+# differential cannot see them: OWN run_group, unit-killed by
+# tests/test_ai/test_loop_rate_core.py.
+LOOP_RATE_CHOICE_MUTATIONS = [
+    ("loop_rate choice: the units tiebreak is dropped",
+     "                if (value, k + tail_units) < choice[:2]:",
+     "                if value < choice[0]:"),
+    ("loop_rate choice: a full tie takes the later count",
+     "                if (value, k + tail_units) < choice[:2]:",
+     "                if (value, k + tail_units) <= choice[:2]:"),
+]
+
+# loop_rate: the reader (increments 3-4). OWN run_group: unit-killed by
 # tests/test_ai/test_loop_rate.py.
 LOOP_RATE_READER_MUTATIONS = [
     ("loop_rate reader: a boost is not consumed",
      "    used = tuple((code, outcome.used if code == restore_code else 1) for code, _ in loadout)",
      "    used = tuple((code, outcome.used if code == restore_code else 0) for code, _ in loadout)"),
     ("loop_rate reader: recovery from a full bar whatever the fight left",
-     "    recovery = recovery_seconds(max_hp - hp_end, max_hp, food, EAT_SECONDS)",
-     "    recovery = recovery_seconds(max_hp, max_hp, food, EAT_SECONDS)"),
+     "    recovery, counts = recovery_choice(max_hp - hp_end, max_hp,",
+     "    recovery, counts = recovery_choice(max_hp, max_hp,"),
     ("loop_rate reader: a loss earns the kill's XP",
      "    xp = game_data.xp_per_kill(monster, state.level, state.wisdom) if outcome.win else 0",
      "    xp = game_data.xp_per_kill(monster, state.level, state.wisdom)"),
@@ -907,9 +940,68 @@ LOOP_RATE_READER_MUTATIONS = [
     ("loop_rate reader: a splash potion is walked as a self restore",
      "        if SPLASH_RESTORE in game_data.effect_codes(code):",
      "        if False:"),
-    ("loop_rate reader: held foods are ignored",
-     "    for code in held_foods(state, game_data):",
-     "    for code in held_foods(state, game_data)[:0]:"),
+    ("loop_rate reader: the food menu is ignored",
+     "                                       [(f.restore, f.price, f.held) for f in food], EAT_SECONDS)",
+     "                                       [], EAT_SECONDS)"),
+    ("loop_rate reader: held potions are not counted",
+     "    consumed = consumed_seconds([(n, prices[code], held_count(code, state)) for code, n in used])",
+     "    consumed = consumed_seconds([(n, prices[code], 0) for code, n in used])"),
+    ("loop_rate reader: an uneaten food is reported eaten",
+     "    eaten = tuple((f.code, k) for f, k in zip(food, counts, strict=True) if k > 0)",
+     "    eaten = tuple((f.code, k) for f, k in zip(food, counts, strict=True))"),
+    ("loop_rate reader: a food above the level is on the menu",
+     "        if stats.level > state.level:\n            continue\n        held = held_count(code, state)",
+     "        held = held_count(code, state)"),
+    ("loop_rate reader: an unheld unpriced food is on the menu",
+     "        if held > 0 or price is not None:\n            menu.append(",
+     "        if True:\n            menu.append("),
+]
+
+# best_loadout_core: the pick (consumable utility increment 4). Killed by
+# formal/diff/test_best_loadout_diff.py (exact agreement with the proved
+# Formal.BestLoadout.pick).
+BEST_LOADOUT_CORE_MUTATIONS = [
+    ("best_loadout: the lower rate wins",
+     "    return a[0] > b[0] or (a[0] == b[0] and a[1] < b[1])",
+     "    return a[0] < b[0] or (a[0] == b[0] and a[1] < b[1])"),
+    ("best_loadout: more units win a rate tie",
+     "    return a[0] > b[0] or (a[0] == b[0] and a[1] < b[1])",
+     "    return a[0] > b[0] or (a[0] == b[0] and a[1] > b[1])"),
+    ("best_loadout: a full tie goes to the later candidate",
+     "        if best is None or beats(candidate, candidates[best]):",
+     "        if best is None or not beats(candidates[best], candidate):"),
+]
+
+# best_loadout: the reader (increment 4). OWN run_group: unit-killed by
+# tests/test_ai/test_best_loadout.py.
+BEST_LOADOUT_READER_MUTATIONS = [
+    ("best_loadout reader: a potion with no effect is a candidate",
+     "    return bool(codes) and all(c == RESTORE or c.startswith(BOOST_PREFIX) for c in codes)",
+     "    return all(c == RESTORE or c.startswith(BOOST_PREFIX) for c in codes)"),
+    ("best_loadout reader: a splash or antidote is a candidate",
+     "    return bool(codes) and all(c == RESTORE or c.startswith(BOOST_PREFIX) for c in codes)",
+     "    return bool(codes)"),
+    ("best_loadout reader: a potion above the level is a candidate",
+     "        if stats.type_ != POTION or stats.level > state.level:",
+     "        if stats.type_ != POTION:"),
+    ("best_loadout reader: an unheld unpriced potion is a candidate",
+     "        if held_count(code, state) > 0 or price is not None:",
+     "        if True:"),
+    ("best_loadout reader: two restores share a loadout",
+     "            if restores <= 1:",
+     "            if restores <= 2:"),
+    ("best_loadout reader: a restore is walked with one unit",
+     "                         [(code, UTILITY_SLOT_MAX_STACK) for code in codes], food, prices)",
+     "                         [(code, 1) for code in codes], food, prices)"),
+    ("best_loadout reader: the pick ignores the units",
+     "    index = pick_best([(rate.xp_per_second, units_used(rate)) for _, rate in scored])",
+     "    index = pick_best([(rate.xp_per_second, 0) for _, rate in scored])"),
+    ("best_loadout reader: the food eaten is not a per-fight use",
+     "    per_fight = tuple((code, n) for code, n in rate.used if n > 0) + rate.eaten",
+     "    per_fight = tuple((code, n) for code, n in rate.used if n > 0)"),
+    ("best_loadout reader: the units count only potions",
+     "    return sum(n for _, n in rate.used) + sum(n for _, n in rate.eaten)",
+     "    return sum(n for _, n in rate.used)"),
 ]
 
 
@@ -5176,6 +5268,16 @@ CONSUMABLE_FLOOR_CORE_MUTATIONS = [
 # interior witness.
 # Task bookings plan over their own pool (2026-10-09 C3P0 Wait regression).
 # Killed by tests/test_ai/test_task_objective.py.
+# An items task produces its batch through decomposition before trading it
+# (2026-10-09 C3P0 spruce_plank Wait). Killed by tests/test_ai/test_strategy_driver.py.
+PURSUE_BATCH_MUTATIONS = [
+    ("pursue: trades before the batch is held (back to A*-only production)",
+     "    if held < batch:\n",
+     "    if False:\n"),
+    ("pursue: a batch held exactly is produced again",
+     "    if held < batch:\n",
+     "    if held <= batch:\n"),
+]
 TASK_CANCEL_POOL_MUTATIONS = [
     ("bookings: the cancel plans over the whole pool again",
      "        return [a for a in actions if a.tags & BOOKING_TAGS]\n",
@@ -9083,6 +9185,12 @@ def _collect_all_groups() -> None:
               "formal/diff/test_loop_rate_diff.py", survivors)
     run_group(LOOP_RATE_SRC, LOOP_RATE_READER_MUTATIONS,
               "tests/test_ai/test_loop_rate.py", survivors)
+    run_group(LOOP_RATE_CORE_SRC, LOOP_RATE_CHOICE_MUTATIONS,
+              "tests/test_ai/test_loop_rate_core.py", survivors)
+    run_group(BEST_LOADOUT_CORE_SRC, BEST_LOADOUT_CORE_MUTATIONS,
+              "formal/diff/test_best_loadout_diff.py", survivors)
+    run_group(BEST_LOADOUT_SRC, BEST_LOADOUT_READER_MUTATIONS,
+              "tests/test_ai/test_best_loadout.py", survivors)
     run_group(PROJECTION_SRC, PROJECTION_MUTATIONS,
               "formal/diff/test_loadout_projection_diff.py", survivors)
     run_group(SCORING_SRC, SCORING_MUTATIONS,
@@ -9762,6 +9870,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_failure_recovery_core.py", survivors)
     run_group(ACTION_BASE_SRC, ANY_REGION_MUTATIONS,
               "tests/test_ai/test_goals.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, PURSUE_BATCH_MUTATIONS,
+              "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(TASK_CANCEL_GOAL_SRC, TASK_CANCEL_POOL_MUTATIONS,
               "tests/test_ai/test_task_objective.py", survivors)
     run_group(COMPLETE_TASK_GOAL_SRC, COMPLETE_TASK_POOL_MUTATIONS,

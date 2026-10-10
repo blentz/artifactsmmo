@@ -1,5 +1,5 @@
 """The fight loop's XP rate for one monster and one utility loadout, read from
-the world (`docs/PLAN_consumable_utility.md` increment 3). The arithmetic is
+the world (`docs/PLAN_consumable_utility.md` increments 3-4). The arithmetic is
 `loop_rate_core` (proved: `Formal.LoopRate`) and the fight is
 `fight_outcome_core.fight_outcome` (proved: `Formal.FightOutcome`); this module
 assembles their inputs. Not wired into any decision yet.
@@ -22,16 +22,19 @@ first starts where the last recovery left it, at full).
   `TYPICAL_FIGHT_COOLDOWN_SECONDS` (30 s): the code has no per-round seconds,
   and the fight cooldown it already prices is per fight.
 * CONSUMED — the restore potions the walk drank, and one of each boost (the
-  increment-0 data: one boost per fight), each at
-  `consumable_price.consumable_price_of`. A consumed item with no price makes
-  the loop unrunnable: the result is None.
-* RECOVERY — `recovery_seconds` of the missing HP (`max_hp − hp_end`, the end
-  pool floored to whole HP), over the foods held in the bag or bank, each at its
-  price (held: 0), eaten at the flat `CONSUMABLE_COOLDOWN_SECONDS`.
+  increment-0 data: one boost per fight). USER 2026-10-09, "free until used
+  up": the drinks up to the units HELD (`consumable_price.held_count`: bag,
+  bank, utility slots) are free, every further one costs its replacement
+  (`prices`, from `consumable_price.replacement_price_of`);
+  `loop_rate_core.consumed_seconds`. A drink past the held units with no
+  replacement makes the loop unrunnable: the result is None.
+* RECOVERY — `recovery_choice` of the missing HP (`max_hp − hp_end`, the end
+  pool floored to whole HP) over the FOOD MENU (`food_menu`), eaten at the flat
+  `CONSUMABLE_COOLDOWN_SECONDS`; the units it eats are the loop's `eaten`.
 * XP — `game_data.xp_per_kill` at the character's level and wisdom on a win;
   0 on a loss."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 
@@ -39,12 +42,12 @@ from artifactsmmo_cli.ai.actions.cost_core import CONSUMABLE_COOLDOWN_SECONDS
 from artifactsmmo_cli.ai.boost_selection import project_equip
 from artifactsmmo_cli.ai.combat import combat_terms, fight_max_hp
 from artifactsmmo_cli.ai.consumable_floor import FOOD, POTION, heal_candidates
-from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS, consumable_price_of, held_count
+from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS, held_count, replacement_price_of
 from artifactsmmo_cli.ai.fight_outcome_core import fight_outcome
 from artifactsmmo_cli.ai.fight_terms_core import SCALE
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.loop_rate_core import recovery_seconds, xp_per_second
+from artifactsmmo_cli.ai.loop_rate_core import consumed_seconds, recovery_choice, xp_per_second
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.utility_slot import UTILITY_SLOTS
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -59,8 +62,21 @@ wearer, so the solo loop refuses it rather than walking it as a restore."""
 
 
 @dataclass(frozen=True)
+class FoodOffer:
+    """One food on the recovery menu: its HP, its replacement price in seconds
+    (None: no route to more) and the units held."""
+
+    code: str
+    restore: int
+    price: Fraction | None
+    held: int
+
+
+@dataclass(frozen=True)
 class LoopRate:
-    """One loop's XP rate and its parts (seconds exact, HP whole)."""
+    """One loop's XP rate and its parts (seconds exact, HP whole). `used` is the
+    units of each loadout potion one fight drinks, `eaten` the units of each food
+    its recovery eats (only the foods it eats)."""
 
     xp_per_second: Fraction
     xp_per_kill: int
@@ -71,11 +87,24 @@ class LoopRate:
     max_hp: int
     hp_end: int
     used: tuple[tuple[str, int], ...]
+    eaten: tuple[tuple[str, int], ...]
 
 
-def held_foods(state: WorldState, game_data: GameData) -> list[str]:
-    """The foods held in the bag or bank, in catalogue order."""
-    return [code for code in heal_candidates(game_data, FOOD) if held_count(code, state) > 0]
+def food_menu(state: WorldState, game_data: GameData, ctx: SelectionContext,
+              store: LearningStore | None = None) -> tuple[FoodOffer, ...]:
+    """The foods the character can eat (item level at most its level: the API
+    refuses a consumable above the character's level), in catalogue order, that
+    are held (bag or bank) or have a replacement price."""
+    menu: list[FoodOffer] = []
+    for code in heal_candidates(game_data, FOOD):
+        stats = game_data.items.stats[code]
+        if stats.level > state.level:
+            continue
+        held = held_count(code, state)
+        price = replacement_price_of(code, state, game_data, ctx, store)
+        if held > 0 or price is not None:
+            menu.append(FoodOffer(code, stats.hp_restore, price, held))
+    return tuple(menu)
 
 
 def _restore_of(loadout: Sequence[tuple[str, int]], game_data: GameData) -> tuple[str | None, int, int]:
@@ -101,11 +130,13 @@ def _restore_of(loadout: Sequence[tuple[str, int]], game_data: GameData) -> tupl
     return restore
 
 
-def loop_rate(state: WorldState, game_data: GameData, ctx: SelectionContext, monster: str,
-              loadout: Sequence[tuple[str, int]],
-              store: LearningStore | None = None) -> LoopRate | None:
-    """The loop's XP per second against `monster` wearing `loadout` (see the
-    module doc); None when something the fight consumes has no price."""
+def loop_rate(state: WorldState, game_data: GameData, monster: str,
+              loadout: Sequence[tuple[str, int]], food: Sequence[FoodOffer],
+              prices: Mapping[str, Fraction | None]) -> LoopRate | None:
+    """The loop's XP per second against `monster` wearing `loadout` and
+    recovering over `food` (see the module doc); `prices` holds every loadout
+    potion's replacement price. None when a drink past the held units has no
+    replacement."""
     restore_code, restore_hp, restore_stock = _restore_of(loadout, game_data)
     codes: list[str | None] = [code for code, _ in loadout]
     codes += [None] * (len(UTILITY_SLOTS) - len(codes))
@@ -116,21 +147,13 @@ def loop_rate(state: WorldState, game_data: GameData, ctx: SelectionContext, mon
     outcome = fight_outcome(combat_terms(projected, game_data, monster),
                             max_hp, max_hp, restore_hp, restore_stock)
     used = tuple((code, outcome.used if code == restore_code else 1) for code, _ in loadout)
-    consumed = Fraction(0)
-    for code, n in used:
-        if n == 0:
-            continue
-        price = consumable_price_of(code, state, game_data, ctx, store)
-        if price is None:
-            return None
-        consumed += n * price
-    food: list[tuple[int, Fraction]] = []
-    for code in held_foods(state, game_data):
-        price = consumable_price_of(code, state, game_data, ctx, store)
-        assert price is not None  # held stock is free (`consumable_price_of`)
-        food.append((game_data.hp_restore_of(code), price))
+    consumed = consumed_seconds([(n, prices[code], held_count(code, state)) for code, n in used])
+    if consumed is None:
+        return None
     hp_end = outcome.hp_end // SCALE
-    recovery = recovery_seconds(max_hp - hp_end, max_hp, food, EAT_SECONDS)
+    recovery, counts = recovery_choice(max_hp - hp_end, max_hp,
+                                       [(f.restore, f.price, f.held) for f in food], EAT_SECONDS)
+    eaten = tuple((f.code, k) for f, k in zip(food, counts, strict=True) if k > 0)
     xp = game_data.xp_per_kill(monster, state.level, state.wisdom) if outcome.win else 0
     return LoopRate(xp_per_second(xp, FIGHT_SECONDS, recovery, consumed), xp, outcome.win,
-                    FIGHT_SECONDS, recovery, consumed, max_hp, hp_end, used)
+                    FIGHT_SECONDS, recovery, consumed, max_hp, hp_end, used, eaten)

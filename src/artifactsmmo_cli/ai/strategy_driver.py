@@ -671,9 +671,21 @@ def _pursue_goal(state: WorldState, game_data: GameData) -> Goal:
         # action (via ReachSkillGoal).
         return ReachSkillGoal(skill_name=req.skill, target_level=target)
     assert state.task_code is not None  # the step arm runs only for a held task
+    batch = task_batch_size(state, game_data)
+    held = state.inventory.get(state.task_code, 0) + (state.bank_items or {}).get(state.task_code, 0)
+    if held < batch:
+        # PRODUCE THE BATCH FIRST, through decomposition. `PursueTaskGoal` is
+        # planned by A* alone over the factory's unsized single gathers, so a
+        # crafted item whose recipe takes many units per craft cannot fit the
+        # search depth: live C3P0 2026-10-09, spruce_plank x10 = 100 single
+        # gathers + crafts + trades > depth 100, plan_len 0 every cycle, 496
+        # cycles of Wait. Decomposition sizes the gathers and withdraws banked
+        # stock; the trade follows once the batch is held.
+        return GatherMaterialsGoal(target_item=state.task_code,
+                                   needed={state.task_code: batch})
     return PursueTaskGoal(task_code=state.task_code,
                           initial_progress=state.task_progress,
-                          batch=task_batch_size(state, game_data))
+                          batch=batch)
 
 
 class StrategyArbiter:

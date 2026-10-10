@@ -1494,12 +1494,31 @@ class TestLevelLookahead:
 # ---------------------------------------------------------------------------
 
 class TestPursueTaskMapping:
-    def test_feasible_items_task_maps_to_pursue_task(self):
-        # no crafting recipe known -> task_requirement returns None -> feasible
+    def test_a_held_batch_maps_to_the_trade(self):
+        # no crafting recipe known -> task_requirement returns None -> feasible;
+        # the whole remaining task is already in the bag, so the step is the trade.
         state = make_state(task_code="copper_bar", task_type="items",
-                           task_total=20, task_progress=0)
+                           task_total=20, task_progress=0, inventory={"copper_bar": 20})
         goal = _pursue_goal(state, GameData())
         assert repr(goal) == "PursueTask(copper_bar)"
+
+    def test_a_short_batch_is_produced_through_decomposition_first(self):
+        """Live C3P0 2026-10-09: PursueTask(spruce_plank x10) needed 100
+        single gathers, past A*'s depth, and planned nothing for 496 cycles.
+        The batch is produced by the decomposed GatherMaterials, then traded."""
+        gd = GameData()
+        gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
+        gd._resource_drops = {"copper_rocks": "copper_ore"}
+        state = make_state(task_code="copper_bar", task_type="items", task_total=20,
+                           task_progress=2, inventory={"copper_bar": 1}, inventory_max=100,
+                           bank_items={"copper_bar": 1})
+        batch = task_batch_size(state, gd)
+        assert batch > 2
+        goal = _pursue_goal(state, gd)
+        assert isinstance(goal, GatherMaterialsGoal)
+        assert repr(goal) == f"GatherMaterials(copper_bar, {{copper_bar:{batch}}})"
+        held = dataclasses.replace(state, inventory={"copper_bar": batch - 1})
+        assert repr(_pursue_goal(held, gd)) == "PursueTask(copper_bar)"  # bag + bank = batch
 
     def test_skill_gated_items_task_maps_to_level_skill(self):
         gd = GameData()
@@ -1517,7 +1536,8 @@ class TestPursueTaskMapping:
         gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
         gd._resource_drops = {"copper_rocks": "copper_ore"}
         state = make_state(task_code="copper_bar", task_type="items",
-                           task_total=20, task_progress=2, inventory={}, inventory_max=100)
+                           task_total=20, task_progress=2, inventory={}, inventory_max=100,
+                           bank_items={"copper_bar": 20})
         goal = _pursue_goal(state, gd)
         expected = 2 + task_batch_size(state, gd)
         assert goal.desired_state(state, gd) == {"task_progress": expected}

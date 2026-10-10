@@ -77,6 +77,17 @@ def gold_per_second(state: WorldState, game_data: GameData, ctx: SelectionContex
     return fight_gold_rate(state, game_data, ctx.combat_monster) / FIGHT_SECONDS
 
 
+def replacement_price_of(code: str, state: WorldState, game_data: GameData,
+                         ctx: SelectionContext,
+                         store: LearningStore | None = None) -> Fraction | None:
+    """The price in seconds of a unit PAST the held stock: the cheaper of making
+    and buying it, as if none were held (USER 2026-10-09, "free until used up";
+    further units cost replacement). None when neither side is available."""
+    return consumable_price(0, make_seconds(code, state, game_data, ctx, store),
+                            buy_gold(code, state, game_data, ctx),
+                            gold_per_second(state, game_data, ctx))
+
+
 def consumable_price_of(code: str, state: WorldState, game_data: GameData,
                         ctx: SelectionContext,
                         store: LearningStore | None = None) -> Fraction | None:
@@ -84,6 +95,4 @@ def consumable_price_of(code: str, state: WorldState, game_data: GameData,
     Held stock reads nothing else: it is free whatever the other sides say."""
     if held_count(code, state) > 0:
         return Fraction(0)
-    return consumable_price(0, make_seconds(code, state, game_data, ctx, store),
-                            buy_gold(code, state, game_data, ctx),
-                            gold_per_second(state, game_data, ctx))
+    return replacement_price_of(code, state, game_data, ctx, store)

@@ -536,7 +536,7 @@ open Formal.PriorityBand
 #check @Formal.ConsumablePrice.mono_make          -- a cheaper make never raises the price
 #check @Formal.ConsumablePrice.mono_gold          -- a cheaper gold price never raises it
 #check @Formal.ConsumablePrice.qle_trans          -- the cross-multiplied order is transitive
--- LoopRate (consumable utility increment 3, `ai/loop_rate_core.py`):
+-- LoopRate (consumable utility increments 3-4, `ai/loop_rate_core.py`):
 #check @Formal.LoopRate.recovery_le_rest          -- never worse than resting it all off
 #check @Formal.LoopRate.recovery_mono_missing     -- more HP missing never recovers faster
 #check @Formal.LoopRate.add_food_le               -- another food never slows recovery
@@ -547,6 +547,17 @@ open Formal.PriorityBand
 #check @Formal.LoopRate.xpRate_den_pos            -- a positive fight keeps the rate defined
 #check @Formal.LoopRate.xpRate_antitone           -- longer in any term is slower
 #check @Formal.LoopRate.rate_antitone_missing     -- more HP lost never raises the rate
+#check @Formal.LoopRate.held_free_le              -- more held food never slows recovery
+#check @Formal.LoopRate.priced_le_unpriced        -- a replacement never slows recovery
+#check @Formal.LoopRate.recovery_le_planCost      -- recovery is the minimum over feasible plans
+#check @Formal.LoopRate.eatCost_held_zero         -- nothing held: the increment-3 eat cost
+#check @Formal.LoopRate.potionCost_held_zero      -- nothing held: every drink at its price
+#check @Formal.LoopRate.consumed_held_free_le     -- more held never raises the consumed price
+-- BestLoadout (consumable utility increment 4, `ai/best_loadout_core.py`):
+#check @Formal.BestLoadout.pick_optimal           -- no candidate beats the pick
+#check @Formal.BestLoadout.pick_mem               -- the pick is the candidate at its index
+#check @Formal.BestLoadout.pick_none_iff          -- a pick exactly when there is a candidate
+#check @Formal.BestLoadout.not_beats_iff          -- the tie rule: rate, then units
 -- RealizableLoadout required roles (the multi-slot pick_loadout bug fix):
 #check @Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership -- contract: realizability ⇔ per-code demand ≤ ownership
 #check @Formal.RealizableLoadout.apply_cur_ge_1                        -- apply assert: realizable ⇒ cur ≥ 1 at every decrement

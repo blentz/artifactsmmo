@@ -159,3 +159,68 @@ Findings for increment 4:
   at those prices every potion loadout loses to no potions wherever no potions
   wins. Only C3P0 vs vampire needs one (no potions loses; small_health_potion x5
   wins at 0.031 XP/s).
+
+## Ruling (2026-10-09) — held stock count and the fleet minimum
+
+USER: "free until used up, but there needs to be a general fleet-wide minimum
+banked quantity; if the fleet is under the minimum, one player should pick
+role/goal (whichever makes the most sense architecturally) of 'refill potions
+of X type for the fleet'."
+
+- Held units are free until the chain would use more than are held; further
+  units cost replacement (build/buy).
+- A fleet-wide minimum BANKED quantity per consumable type the fleet uses;
+  under it, ONE character takes "refill X for the fleet".
+
+USER (2026-10-09): the fleet minimum is "From the chosen loadouts": for every
+consumable type some character's chosen loadout uses, minimum BANKED =
+Σ over those characters of (units used per fight × REFILL_HORIZON_FIGHTS = 20);
+a type nobody's loadout uses has no minimum. The refill is the existing
+supply path: the shortfall is published to the demand board and the role
+holder that can make it claims it (one producer per claim).
+
+## Increment 4 — design
+- Cores: foods and potions carry a held count; held units are free, further
+  units cost replacement.
+- `best_loadout(state, monster)`: exhaustive over candidate potions (held, or
+  makeable/buyable at the character's level) for the two utility slots (≤ 1
+  restore), maximising XP/s; returns the loadout and its per-fight use.
+- The consumable floor is rebuilt on the chosen loadouts (bank-only stock),
+  replacing today's tier-food / tier-potion targets.
+- Increment 5 (separate): equip the chosen potions before the fight; RestoreHP
+  eats held food when it is the cheaper recovery.
+
+## Increment 4 — built (2026-10-09), floor rebuild STOPPED
+
+Not wired into any decision.
+
+- Held counts in the cores (`ai/loop_rate_core`, `Formal/LoopRate.lean`): a
+  food is `(restore, price, held)` — the first `held` units are free, further
+  units cost `price`, a `None` price (no replacement) caps eating at `held`; a
+  drunk potion is `(used, price, held)`, `consumed_seconds` = Σ max(0, used −
+  held) × price, None when an unpayable drink is past the held units.
+  `recovery_choice` returns the cheapest seconds AND the count vector (fewest
+  units among the cheapest). New theorems: `held_free_le`,
+  `consumed_held_free_le`, `priced_le_unpriced`, `recovery_le_planCost`
+  (optimality over every feasible count vector), `eatCost_held_zero` /
+  `potionCost_held_zero` (the increment-3 model is the held = 0 case).
+- `consumable_price.replacement_price_of`: the price past the held units.
+- `ai/loop_rate.food_menu`: foods at the character's level, held (bag + bank)
+  or priced; `loop_rate` takes the menu and the potions' replacement prices and
+  reports `eaten`.
+- `ai/best_loadout` + `best_loadout_core` (`Formal/BestLoadout.lean`,
+  `pick_optimal`): candidates = utility potions at level whose every effect is
+  `restore` / `boost_*` (splash_restore, antipoison excluded), held or priced;
+  loadouts = none, singles, pairs with ≤ 1 restore, each walked with a full
+  slot; pick = max XP/s, then fewer units per fight, then enumeration order.
+- Floor rebuild (`consumable_floor`) NOT built: the per-character share of the
+  bank needs (a) the siblings' needs (no coordination channel publishes them)
+  and (b) a per-character symmetry-breaking key (two characters with equal
+  needs and an odd bank cannot split it exactly without one). Awaiting a ruling.
+
+USER (2026-10-09), floor shares: "Need ledger + API order". A
+`ConsumableNeed` coordination ledger (like `HoldingLedger`, same TTL)
+publishes each character's per-type need; the banked stock is assigned in
+the account's `GET /my/characters` order (passed by `multi_run` to each
+child); each character publishes need − min(need, max(0, bank − needs ahead
+of it)). Shares sum exactly to max(0, Σ needs − bank) — to be proved.

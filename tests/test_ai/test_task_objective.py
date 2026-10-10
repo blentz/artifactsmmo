@@ -281,8 +281,8 @@ class TestItemsTaskIsWorked:
         assert root_mod._task_root(held, _gd(), NO_PROFILE_CONTEXT, None) == ReachTaskOutcome("chicken")
 
     def test_its_step_is_the_pursuit(self) -> None:
-        goal = objective_step_goal(ReachTaskOutcome("chicken"), _held(task_type="items"),
-                                   _gd(), NO_PROFILE_CONTEXT)
+        held = dataclasses.replace(_held(task_type="items"), inventory={"chicken": 10})
+        goal = objective_step_goal(ReachTaskOutcome("chicken"), held, _gd(), NO_PROFILE_CONTEXT)
         assert repr(goal) == "PursueTask(chicken)"
 
 
