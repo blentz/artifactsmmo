@@ -2331,11 +2331,30 @@ class TestFightStepsCarryTheirLoadout:
         assert isinstance(objective_step_goal(ReachCharLevel(10), make_state(), _gd(), ctx),
                           GrindCharacterXPGoal)
 
-    def test_a_loadout_for_another_monster_does_not_prep(self, monkeypatch):
-        monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
+    def test_a_loadout_for_another_monster_preps_for_the_steps_own(self, monkeypatch):
+        """While a potion carry is committed the cycle's loadout is chosen
+        against that carry's dropper; the grind still preps for ITS monster
+        (`loadout_for`), or the prep would hand the commitment back."""
+        asked: list[str] = []
+        monkeypatch.setattr(sd, "potion_prep_goal", lambda *a: None)
+        monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: asked.append(a[3]) or self.PREP)
         ctx = _ctx(combat_monster="chicken", loadout=self._loadout("cow"))
+        assert objective_step_goal(ReachCharLevel(10), make_state(), _gd(), ctx) is self.PREP
+        assert asked == ["chicken"]
+
+    def test_no_loadout_no_prep(self, monkeypatch):
+        monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
+        ctx = _ctx(combat_monster="chicken", loadout=None)
         assert isinstance(objective_step_goal(ReachCharLevel(10), make_state(), _gd(), ctx),
                           GrindCharacterXPGoal)
+
+    def test_the_potions_prep_before_the_food(self, monkeypatch):
+        potion = GatherMaterialsGoal(target_item="water_boost_potion",
+                                     needed={"water_boost_potion": 20}, carry=True)
+        monkeypatch.setattr(sd, "potion_prep_goal", lambda *a: potion)
+        monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
+        ctx = _ctx(combat_monster="chicken", loadout=self._loadout("chicken"))
+        assert objective_step_goal(ReachCharLevel(10), make_state(), _gd(), ctx) is potion
 
     def test_the_task_kill_preps_first(self, monkeypatch):
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)

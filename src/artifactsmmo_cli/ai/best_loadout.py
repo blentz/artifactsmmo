@@ -9,8 +9,10 @@ the decisions as a `chosen_loadout.ChosenLoadout` (increment 5).
   effect is `restore` or a `boost_*` (the increment-0 table). A
   `splash_restore` potion restores ANOTHER character and an `antipoison` only
   cleanses poison, so neither changes a solo fight's walk: both are left out.
-  A candidate must be HELD (bag, bank, utility slots) or have a replacement
-  price — exactly the potions `consumable_price.consumable_price_of` prices.
+  A candidate must be HELD (bag, bank, utility slots), or have a replacement
+  price AND be stockable (`potion_supply.potion_stockable`: the CRAFT_POTIONS
+  ladder brews it or the fight step's prep makes it). A potion priced only by a
+  route nothing stocks (a GE fill) was chosen and then fought without.
 * LOADOUTS — no potions, each candidate alone, and each pair of candidates (in
   candidate order) with at most one `restore` (the turn walk models one restore
   stock). Every potion is walked with a full slot, `UTILITY_SLOT_MAX_STACK`
@@ -39,6 +41,7 @@ from artifactsmmo_cli.ai.heal_catalog import POTION
 from artifactsmmo_cli.ai.held_stock import held_count
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loop_rate import LoopRate, food_menu, loop_rate
+from artifactsmmo_cli.ai.potion_supply import potion_stockable
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -66,7 +69,8 @@ def candidate_potions(state: WorldState, game_data: GameData, ctx: SelectionCont
         if not potion_effects_usable(game_data.effect_codes(code)):
             continue
         price = replacement_price_of(code, state, game_data, ctx, store)
-        if held_count(code, state) > 0 or price is not None:
+        if held_count(code, state) > 0 or (price is not None
+                                           and potion_stockable(code, state, game_data, ctx)):
             out[code] = price
     return out
 

@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai import craft_plan_gen, grind_heal_prep
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
-from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry, potion_carry
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.grind_heal_prep import (
     HEAL_PREP_POLICY,
     heal_prep_goal,
     maintain_consumables_goal,
+    potion_prep_goal,
 )
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
@@ -344,3 +345,33 @@ class TestGrindFightLegPreps:
         """Only a fight costs hp; a gather leg runs as planned."""
         gather = GatherAction(resource_code="milk_rocks", locations=frozenset({(3, 3)}))
         assert _grind({"milk": CARRY}, gather) == ([gather], [])
+
+
+class TestPotionPrep:
+    """The fight step carries the loadout's potions the CRAFT_POTIONS ladder
+    cannot brew (live C3P0 2026-10-10: water_boost_potion, a drop ingredient,
+    17 of 34 vampire fights lost with an empty slot)."""
+
+    LOADOUT = ChosenLoadout(monster="wolf", potions=(("boost", 1),), food=())
+
+    def _patch(self, monkeypatch, *, ladder: bool, feasible: bool) -> None:
+        monkeypatch.setattr(grind_heal_prep, "loadout_for", lambda *a: self.LOADOUT)
+        monkeypatch.setattr(grind_heal_prep, "ladder_supplies", lambda *a: ladder)
+        monkeypatch.setattr(grind_heal_prep, "prep_supplies", lambda *a: feasible)
+
+    def test_an_unbrewable_potion_is_carried_less_what_is_worn(self, monkeypatch) -> None:
+        self._patch(monkeypatch, ladder=False, feasible=True)
+        gd = _gd()
+        state = replace(_state(gd, {}), equipment={**_state(gd, {}).equipment, "utility1_slot": "boost"},
+                        utility1_slot_quantity=5)
+        goal = potion_prep_goal(state, gd, EATS_CHEESE, "wolf")
+        assert goal is not None and goal.carry and goal.needed == {"boost": potion_carry(1) - 5}
+
+    def test_on_hand_brewable_or_unsuppliable_is_no_prep(self, monkeypatch) -> None:
+        gd = _gd()
+        self._patch(monkeypatch, ladder=False, feasible=True)
+        assert potion_prep_goal(_state(gd, {"boost": potion_carry(1)}), gd, EATS_CHEESE, "wolf") is None
+        self._patch(monkeypatch, ladder=True, feasible=True)
+        assert potion_prep_goal(_state(gd, {}), gd, EATS_CHEESE, "wolf") is None
+        self._patch(monkeypatch, ladder=False, feasible=False)
+        assert potion_prep_goal(_state(gd, {}), gd, EATS_CHEESE, "wolf") is None

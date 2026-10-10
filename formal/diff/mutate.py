@@ -1005,8 +1005,8 @@ BEST_LOADOUT_READER_MUTATIONS = [
      "        if stats.type_ != POTION or stats.level > state.level:",
      "        if stats.type_ != POTION:"),
     ("best_loadout reader: an unheld unpriced potion is a candidate",
-     "        if held_count(code, state) > 0 or price is not None:",
-     "        if True:"),
+     "        if held_count(code, state) > 0 or (price is not None\n",
+     "        if True or (price is not None\n"),
     ("best_loadout reader: a restore is walked with one unit",
      "                         [(code, UTILITY_SLOT_MAX_STACK) for code in codes], food, prices)",
      "                         [(code, 1) for code in codes], food, prices)"),
@@ -5303,9 +5303,6 @@ CARRY_PREP_MUTATIONS = [
      "                return GatherMaterialsGoal(target_item=code, needed={code: target})\n"),
 ]
 FIGHT_STEP_PREP_MUTATIONS = [
-    ("fight steps: a loadout for another monster still preps",
-     "    if monster is None or ctx.loadout is None or ctx.loadout.monster != monster:\n",
-     "    if monster is None or ctx.loadout is None:\n"),
     ("fight steps: the grind never preps",
      "        prep = _fight_step_prep(state, game_data, ctx, ctx.combat_monster)\n",
      "        prep = None\n"),
@@ -5672,6 +5669,48 @@ FIGHT_NEED_MUTATIONS = [
     ("conditions: a fight no loadout wins reads as bare",
      "        out.append((monster, \"+\".join(loadout) if loadout is not None else LOSES))\n",
      "        out.append((monster, \"+\".join(loadout) if loadout is not None else BARE))\n"),
+]
+# The fight step carries the potions the CRAFT_POTIONS ladder cannot brew (2026-10-10).
+POTION_PREP_MUTATIONS = [
+    ("potion prep: a potion the ladder brews is carried twice",
+     "                and not ladder_supplies(code, needed, state, game_data)\n",
+     "\n"),
+    ("potion prep: the worn units are carried again",
+     "        needed = potion_carry(used) - equipped_potion_qty(state, code)\n",
+     "        needed = potion_carry(used)\n"),
+    ("potion prep: an unsuppliable carry is a goal",
+     "                and prep_supplies(code, needed, state, game_data, ctx)):\n",
+     "                ):\n"),
+]
+FIGHT_STEP_POTION_MUTATIONS = [
+    ("fight step: food before the potions",
+     "    return (potion_prep_goal(state, game_data, ctx, monster)\n"
+     "            or heal_prep_goal(state, game_data, ctx, monster))\n",
+     "    return (heal_prep_goal(state, game_data, ctx, monster)\n"
+     "            or potion_prep_goal(state, game_data, ctx, monster))\n"),
+    ("fight step: no loadout still preps",
+     "    if monster is None or ctx.loadout is None:\n",
+     "    if monster is None:\n"),
+]
+LADDER_SUPPLIES_MUTATIONS = [
+    ("ladder supplies: every potion is the ladder's",
+     "    return _sized(code, deficit, state, game_data) is not None\n",
+     "    return True\n"),
+    ("prep supplies: greys are never admitted",
+     "                      grey_ok=lambda item: grey_farm_allowed(item, state, game_data)).feasible\n",
+     "                      grey_ok=lambda item: False).feasible\n"),
+    ("potion stockable: a held potion is not stockable",
+     "    return (held_count(code, state) > 0 or ladder_supplies(code, 1, state, game_data)\n",
+     "    return (ladder_supplies(code, 1, state, game_data)\n"),
+    ("potion stockable: the prep never stocks",
+     "            or prep_supplies(code, 1, state, game_data, ctx))\n",
+     "            or False)\n"),
+]
+BEST_LOADOUT_STOCKABLE_MUTATIONS = [
+    ("best loadout: a priced potion nothing stocks is a candidate",
+     "        if held_count(code, state) > 0 or (price is not None\n"
+     "                                           and potion_stockable(code, state, game_data, ctx)):\n",
+     "        if held_count(code, state) > 0 or price is not None:\n"),
 ]
 REGION_BRIDGE_MUTATIONS = [
     ("region bridge: decompose emits legs in another region unbridged",
@@ -10155,6 +10194,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_loadout_win.py", survivors)
     run_group(LOADOUT_WIN_SRC, LOADOUT_WIN_MUTATIONS,
               "tests/test_ai/test_loadout_win.py", survivors)
+    run_group(GRIND_HEAL_PREP_SRC, POTION_PREP_MUTATIONS,
+              "tests/test_ai/test_grind_heal_prep.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, FIGHT_STEP_POTION_MUTATIONS,
+              "tests/test_ai/test_strategy_driver.py", survivors)
+    run_group(POTION_SUPPLY_SRC, LADDER_SUPPLIES_MUTATIONS,
+              "tests/test_ai/test_potion_supply.py", survivors)
+    run_group(BEST_LOADOUT_SRC, BEST_LOADOUT_STOCKABLE_MUTATIONS,
+              "tests/test_ai/test_best_loadout.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, NPC_REGION_GAME_DATA_MUTATIONS,
               "tests/test_ai/test_npc_region.py", survivors)
     run_group(LOCATION_CATALOG_SRC_NPC, NPC_REGION_CATALOG_MUTATIONS,

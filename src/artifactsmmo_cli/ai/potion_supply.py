@@ -11,13 +11,15 @@ from datetime import UTC, datetime
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, potion_carry
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
 from artifactsmmo_cli.ai.held_for_crafting import held_for_crafting
+from artifactsmmo_cli.ai.held_stock import held_count
 from artifactsmmo_cli.ai.max_batch_from_held import max_batch_from_held_pure
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
-from artifactsmmo_cli.ai.obtain_model.policy import Policy
+from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, Policy
 from artifactsmmo_cli.ai.optimal_buy_mix import optimal_buy_mix_pure
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.thresholds import (
     POTION_GATHER_BATCH,
     POTION_HIGH_LEVEL,
@@ -207,6 +209,37 @@ def potion_level_ramp(level: int) -> int:
     amortizes a consumable's replacement over."""
     return potion_baseline_pure(level, POTION_LOW_LEVEL, POTION_LOW_QTY,
                                 POTION_HIGH_LEVEL, POTION_HIGH_QTY)
+
+
+def prep_supplies(code: str, qty: int, state: WorldState, game_data: GameData,
+                  ctx: SelectionContext) -> bool:
+    """The fight step's prep can make `qty` of `code` from here: the
+    decomposition's own walk (`DECOMPOSE_POLICY`, greys as the grey-farm
+    directive admits them, no skill grind opened), so a potion judged
+    suppliable is one `GatherMaterials` plans. Plain `feasible` under the
+    policy disagreed with the walk on a grey ingredient: it refused C3P0's
+    blue_slimeball that the decomposition fights for (2026-10-10)."""
+    model = ObtainModel(state, game_data, ctx, datetime.now(UTC))
+    return model.walk(code, qty, DECOMPOSE_POLICY, keep=frozenset({code}),
+                      grey_ok=lambda item: grey_farm_allowed(item, state, game_data)).feasible
+
+
+def potion_stockable(code: str, state: WorldState, game_data: GameData,
+                     ctx: SelectionContext) -> bool:
+    """A potion a loadout may wear because something will stock it: held, the
+    CRAFT_POTIONS ladder brews it, or the fight step's prep makes it. A
+    loadout's potion that nothing stocks is fought without (live C3P0
+    2026-10-10: a GE-priced health_potion it could not brew at alchemy 17)."""
+    return (held_count(code, state) > 0 or ladder_supplies(code, 1, state, game_data)
+            or prep_supplies(code, 1, state, game_data, ctx))
+
+
+def ladder_supplies(code: str, deficit: int, state: WorldState, game_data: GameData) -> bool:
+    """The CRAFT_POTIONS guard can stock `deficit` more of `code` worn from
+    here (`potion_batch`'s own sizing): held copies, or a run the ladder can
+    supply. A loadout potion it cannot is the fight step's prep
+    (`grind_heal_prep.potion_prep_goal`) — one stocker per potion."""
+    return _sized(code, deficit, state, game_data) is not None
 
 
 def _sized(code: str, deficit: int, state: WorldState,

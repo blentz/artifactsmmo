@@ -16,17 +16,26 @@ is the cheaper recovery — nothing is stocked. The stock is the food's carry
 (`chosen_loadout.food_carry`: one recovery's units × `CARRY_HORIZON_FIGHTS`),
 the bag's units counting toward it. The grind's prep (`craft_plan_gen`) and the
 MAINTAIN_CONSUMABLES rung (for the fight ahead) build the SAME goal.
+
+THE POTIONS TOO (`potion_prep_goal`, 2026-10-10). The chosen loadout's utility
+potions are carried the same way, ahead of its food: a potion it wears is what
+WINS the fight. Live C3P0 2026-10-10: the band chose vampire on a
+water_boost_potion loadout, the CRAFT_POTIONS ladder could not brew one (its
+blue_slimeball is a drop, and the ladder emits no fight), and C3P0 fought
+vampire with an empty slot — 17 of 34 lost.
 """
 
 from dataclasses import replace
 from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.best_loadout import loadout_for
-from artifactsmmo_cli.ai.chosen_loadout import food_carry
+from artifactsmmo_cli.ai.chosen_loadout import food_carry, potion_carry
+from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, Policy
+from artifactsmmo_cli.ai.potion_supply import ladder_supplies, prep_supplies
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -59,6 +68,27 @@ def heal_prep_goal(state: WorldState, game_data: GameData, ctx: SelectionContext
         for target in (carry, min(carry, held)):
             if target > bag and model.feasible(code, target, HEAL_PREP_POLICY):
                 return GatherMaterialsGoal(target_item=code, needed={code: target}, carry=True)
+    return None
+
+
+def potion_prep_goal(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                     monster: str) -> GatherMaterialsGoal | None:
+    """The goal that carries the chosen loadout's utility potions into fights
+    against `monster`: the first potion whose carry (`chosen_loadout.
+    potion_carry`) is not on hand — worn or in the bag — and that the
+    CRAFT_POTIONS guard cannot stock (`potion_supply.ladder_supplies`: its
+    ladder brews without fights), as a bag carry of what is not worn, when the
+    decomposition's walk can make it (`potion_supply.prep_supplies`: fights
+    included — unlike food, the potion decides the fight, and the pick priced
+    its drops' fights, USER 2026-10-09). None when every potion is on hand (the
+    guard equips it from the bag), the guard's to stock, or cannot be
+    supplied."""
+    for code, used in loadout_for(state, game_data, ctx, monster).potions:
+        needed = potion_carry(used) - equipped_potion_qty(state, code)
+        if (needed > state.inventory.get(code, 0)
+                and not ladder_supplies(code, needed, state, game_data)
+                and prep_supplies(code, needed, state, game_data, ctx)):
+            return GatherMaterialsGoal(target_item=code, needed={code: needed}, carry=True)
     return None
 
 

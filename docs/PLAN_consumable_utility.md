@@ -367,3 +367,46 @@ it. Fix: `GatherMaterialsGoal(carry=True)` is satisfied by
 the BAG only (repr `..., carry)`, serialized); `heal_prep_goal` emits it. Live
 R2D2 re-planned: `GatherMaterials(cooked_rat_meat, {cooked_rat_meat:20}, carry)`
 → `[Withdraw(cooked_rat_meat×12)]`. Wait baseline 1740 → 1970 with the cause.
+
+## Increment 6 — witness (2026-10-10, fleet on f261ab4d, 3.3 h)
+
+Rests per won fight, before (10-07..10-09, ~61 h) vs after:
+
+| Char | Before | After | Eats after |
+|---|---|---|---|
+| C3P0 | 0.69 | 0.09 | 64 |
+| R2D2 | 0.58 | 0.16 | 87 |
+| Lor | 0.74 | 0.66 | 10 |
+| HAL, Robby | 0.63, 0.55 | items tasks (no fights) | — |
+
+0 Waits. Lor rests where its bank held no cooked_trout: producing it cost more
+than resting, so its loadout ate nothing (the ruling's build-vs-rest), and it
+ate again once the bank held 35.
+
+### Found: a loadout potion nothing stocked (fixed)
+
+C3P0 lost 17 of 34 vampire fights. Its band target stood on a
+water_boost_potion loadout; the CRAFT_POTIONS ladder cannot brew it (its
+blue_slimeball is a drop, and the ladder emits no fight), so after the one
+banked unit C3P0 fought vampire with an empty slot. On a later state the pick
+chose health_potion — GE-priced, unbrewable at alchemy 17 — and nothing could
+stock that either.
+
+- A loadout's potion must be stockable (`potion_supply.potion_stockable`):
+  held, brewed by the ladder (`ladder_supplies`), or made by the fight step's
+  prep (`prep_supplies`: the decomposition's own walk, greys as the directive
+  admits them — plain `feasible` refused the grey blue_slimeball the
+  decomposition fights for). The price stays the pick's cost.
+- The fight step carries its potions before its food
+  (`grind_heal_prep.potion_prep_goal`): a potion the ladder cannot brew is a
+  bag carry the decomposition makes, fights included (the potion decides the
+  fight; food keeps its no-fight policy). The guard stays the one stocker for
+  what its ladder brews, and equips the carried units from the bag.
+- The step preps from the loadout against ITS monster (`loadout_for`), not
+  only when the cycle's matches: while a potion carry is committed the fight
+  ahead is the carry's own dropper.
+
+Live C3P0 on the fix: loadout water_boost_potion, prep
+`GatherMaterials(water_boost_potion x20, carry)` ->
+`[Fight(blue_slime), Gather(sunflower_field x10), Gather(algae x4),
+Craft(water_boost_potion x10)]`.

@@ -69,7 +69,7 @@ from artifactsmmo_cli.ai.goals.task_kills import TaskKillsGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
-from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal, maintain_consumables_goal
+from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal, maintain_consumables_goal, potion_prep_goal
 from artifactsmmo_cli.ai.intention_progress import rotate
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
@@ -623,12 +623,17 @@ def objective_step_goal(
 
 def _fight_step_prep(state: WorldState, game_data: GameData, ctx: SelectionContext,
                      monster: str | None) -> Goal | None:
-    """Heal prep for a fight step (USER 2026-10-10, "Fight steps prep it"),
-    from the cycle's ONE chosen loadout (`ctx.loadout`) when it was chosen
-    against this step's monster; no loadout for it, no prep."""
-    if monster is None or ctx.loadout is None or ctx.loadout.monster != monster:
+    """The fight step's prep (USER 2026-10-10, "Fight steps prep it"): the
+    loadout's potions, then its food, from the loadout against this step's
+    monster (`best_loadout.loadout_for`: the cycle's own when it was chosen
+    against it). Not only when the cycle's loadout matches: while a potion
+    carry is committed, the fight ahead is the carry's own (its ingredient's
+    dropper), and a prep that switched off then would hand the commitment back
+    to the bare fight. No loadout this cycle (no fight ahead) is no prep."""
+    if monster is None or ctx.loadout is None:
         return None
-    return heal_prep_goal(state, game_data, ctx, monster)
+    return (potion_prep_goal(state, game_data, ctx, monster)
+            or heal_prep_goal(state, game_data, ctx, monster))
 
 
 def _fleet_step_goal(step: ReachFleetOutcome, state: WorldState,

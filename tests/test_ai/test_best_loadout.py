@@ -71,6 +71,8 @@ def _prices(monkeypatch: pytest.MonkeyPatch, prices: dict[str, Fraction | None])
         return prices.get(code)
     monkeypatch.setattr(best_mod, "replacement_price_of", price)
     monkeypatch.setattr(loop_mod, "replacement_price_of", price)
+    # a priced potion is one something stocks (`potion_stockable`)
+    monkeypatch.setattr(best_mod, "potion_stockable", lambda *a: True)
 
 
 class TestCandidates:
@@ -228,3 +230,12 @@ def _refuse(*_args: object, **_kw: object) -> best_mod.BestLoadout:
 def _rate(used: tuple[tuple[str, int], ...], eaten: tuple[tuple[str, int], ...] = ()) -> LoopRate:
     return LoopRate(Fraction(0), 0, False, Fraction(30), Fraction(0), Fraction(0), 100, 0,
                     used, eaten)
+
+
+def test_a_priced_potion_nothing_stocks_is_no_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live C3P0 2026-10-10: health_potion priced by a GE fill, unbrewable at
+    alchemy 17 — chosen, and fought without."""
+    _prices(monkeypatch, {"heal_potion": Fraction(9)})
+    monkeypatch.setattr(best_mod, "potion_stockable", lambda *a: False)
+    assert candidate_potions(_state(), _gd(), _CTX) == {}
+    assert candidate_potions(_state(bank_items={"heal_potion": 1}), _gd(), _CTX) == {"heal_potion": Fraction(9)}
