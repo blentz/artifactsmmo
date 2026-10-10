@@ -30,7 +30,7 @@ from pathlib import Path
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.audit.craft_census import CellResult, craftable_recipes, run_cell
-from artifactsmmo_cli.audit.craft_completeness import CraftCell, craft_grid
+from artifactsmmo_cli.audit.craft_completeness import CraftCell, craft_grid, event_cells
 from artifactsmmo_cli.audit.craft_report import (
     render_backlog,
     render_matrix,
@@ -64,7 +64,8 @@ def main() -> None:
     gd = GameData.from_cache_bundle(bundle_dict)
     recipes = craftable_recipes(gd)
     work: list[tuple[str, CraftCell]] = [
-        (recipe, cell) for recipe in recipes for cell in craft_grid(recipe, gd)
+        (recipe, cell) for recipe in recipes
+        for cell in craft_grid(recipe, gd) + event_cells(recipe, gd)
     ]
     start = time.monotonic()
     print(f"census: {len(recipes)} recipes / {len(work)} cells on {max_workers} workers",

@@ -5532,6 +5532,42 @@ CENSUS_CROSSING_MUTATIONS = [
      "    if not game_data.world.transition_edges:\n        return False\n",
      ""),
 ]
+# Census fidelity (USER 2026-10-10: "fix both faults", "add event-active cells").
+CENSUS_FIDELITY_MUTATIONS = [
+    ("census: an underground rock is not a gather source",
+     "                and game_data.resource_spawn_known(resource)):\n"
+     "            return True\n"
+     "    return any(drop == leaf and game_data.resource_spawn_known(resource)\n",
+     "                and resource in game_data.all_resource_locations):\n"
+     "            return True\n"
+     "    return any(drop == leaf and resource in game_data.all_resource_locations\n"),
+    ("census: the loadout is one bare pick, not a fixed point",
+     "            gear.update(upgrades)  # strict per-slot improvements: terminates\n",
+     "            gear.update(upgrades)  # strict per-slot improvements: terminates\n            break\n"),
+    ("census: a live event monster is not a present dropper",
+     "            or (game_data.is_event_monster(m) and _event_live(content.get(m), game_data))]\n",
+     "            ]\n"),
+    ("census: a live event vendor is not present",
+     "        return _event_live(game_data.npc_event_code(npc), game_data)\n",
+     "        return False\n"),
+    ("census: a purchase currency is off the closure",
+     "    return members | currencies\n",
+     "    return members\n"),
+    ("census: no event-active cells",
+     "    return [replace(cell, events=events) for cell in craft_grid(recipe, game_data)]\n",
+     "    return []\n"),
+    ("census: an event leaf with a permanent source still waits on its event",
+     "            or permanent_drop or permanent_vendor):\n",
+     "            and permanent_drop and permanent_vendor):\n"),
+]
+CENSUS_RUN_EVENT_MUTATIONS = [
+    ("census: an event cell runs in the event-free world",
+     "    game_data.active_event_codes = set(cell.events)\n",
+     "    game_data.active_event_codes = set()\n"),
+    ("census: an event cell leaves its events live",
+     "        game_data.active_event_codes = world_events\n",
+     "        pass\n"),
+]
 REGION_BRIDGE_MUTATIONS = [
     ("region bridge: decompose emits legs in another region unbridged",
      "    plan = _bridge_regions(plan, state, game_data, actions, declined)\n",
@@ -10000,6 +10036,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_COMPLETENESS_SRC, CENSUS_CROSSING_MUTATIONS,
               "tests/test_audit/test_craft_completeness.py", survivors)
+    run_group(CRAFT_COMPLETENESS_SRC, CENSUS_FIDELITY_MUTATIONS,
+              "tests/test_audit/test_craft_completeness.py", survivors)
+    run_group(CRAFT_CENSUS_SRC, CENSUS_RUN_EVENT_MUTATIONS,
+              "tests/test_audit/test_craft_census.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, REGION_BRIDGE_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, SUPPLY_DECOMPOSE_MUTATIONS,

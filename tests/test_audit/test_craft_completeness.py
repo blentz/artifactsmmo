@@ -25,13 +25,19 @@ from artifactsmmo_cli.audit.craft_completeness import (
     CraftCell,
     CraftVerdict,
     GapClass,
+    _closure_leaves,
+    _leaf_events,
     _leaf_status,
+    _present_droppers,
+    _present_vendor,
     advances_a_closure_grind,
     advances_a_heal_prep,
+    census_gear,
     census_state,
     classify_gap,
     craft_cell_verdict,
     craft_grid,
+    event_cells,
     first_work_leg,
     plan_craft,
 )
@@ -975,3 +981,89 @@ def test_a_crossing_the_census_character_cannot_pay_is_its_own_gap(monkeypatch) 
 
     monkeypatch.setattr(craft_completeness, "decompose", declined_otherwise)
     assert craft_completeness._crossing_unaffordable("palm_plank", object(), gd) is False
+
+
+# --- Census fidelity (USER 2026-10-10: "fix both faults", "add event-active
+# cells"; docs/PLAN_census_fidelity.md) ---
+
+
+def test_an_underground_rock_is_a_gather_source() -> None:
+    """gold_rocks grow only underground. The overworld index does not hold
+    them, and the leaf check asked only it, so every gold recipe was blamed
+    on `event_gated`. The leaf asks `resource_spawn_known`, as production does."""
+    gd = _gd()
+    assert "gold_rocks" not in gd.all_resource_locations
+    state = census_state("gold_bar", CraftCell(30, "mining", 30), gd)
+    assert _leaf_status("gold_ore", state, gd) is None
+
+
+def test_the_census_loadout_is_a_fixed_point() -> None:
+    """One `near_term_gear` pick from a bare character is copper (a bare
+    character beats nothing that drops better materials); wearing it and
+    picking again reaches iron and a body armour. The planning state keeps
+    the cell's skills."""
+    gd = _gd()
+    bare = scenario_state(ScenarioCharacter(name="b", level=12), gd)
+    single = CharacterObjective.from_game_data(gd).near_term_gear(bare)
+    assert single["weapon_slot"] == "copper_dagger"
+    assert "body_armor_slot" not in single
+    gear = census_gear(12, frozenset(), gd)
+    assert gear["weapon_slot"] == "iron_sword"
+    assert gear["body_armor_slot"] == "adventurer_vest"
+    state = census_state("cheese", CraftCell(12, "cooking", 10), gd)
+    assert state.equipment["weapon_slot"] == "iron_sword"
+    assert state.skills["cooking"] == 10
+    assert state.skills["gearcrafting"] == 1
+    assert is_winnable(state, gd, "cow")
+
+
+def test_the_census_loadout_memo_is_per_catalogue_and_copied() -> None:
+    gd = _gd()
+    first = census_gear(12, frozenset(), gd)
+    first["weapon_slot"] = "spoiled"
+    assert census_gear(12, frozenset(), gd)["weapon_slot"] == "iron_sword"
+    other = GameData()
+    assert census_gear(12, frozenset(), other) == {}
+    assert census_gear(12, frozenset(), gd)["weapon_slot"] == "iron_sword"
+
+
+def test_a_leaf_waits_on_its_events_only_without_a_permanent_source() -> None:
+    gd = _gd()
+    assert _leaf_events("demon_horn", gd) == {"portal_demon"}
+    # an event resource and an event vendor both source it
+    assert _leaf_events("strange_ore", gd) == {"strange_apparition", "gemstone_merchant"}
+    assert _leaf_events("cowhide", gd) == frozenset()  # the cow is permanent
+    # the corrupted ogre (an event) drops ogre_eye too, but the ogre is permanent
+    assert _leaf_events("ogre_eye", gd) == frozenset()
+
+
+def test_event_cells_repeat_the_grid_with_the_events_live() -> None:
+    gd = _gd()
+    assert event_cells("cheese", gd) == []
+    cells = event_cells("conjurer_cloak", gd)
+    grid = craft_grid("conjurer_cloak", gd)
+    assert [(c.char_level, c.skill_level) for c in cells] == [
+        (c.char_level, c.skill_level) for c in grid]
+    assert all("portal_demon" in c.events for c in cells)
+    assert all(not c.events for c in grid)
+
+
+def test_a_live_event_monster_and_vendor_are_present_sources() -> None:
+    gd = _gd()
+    assert "demon" not in _present_droppers("demon_horn", gd)
+    assert not _present_vendor("gemstone_merchant", gd)
+    assert _present_vendor("tailor", gd)
+    gd.active_event_codes = {"portal_demon", "gemstone_merchant"}
+    assert _present_droppers("demon_horn", gd) == ["demon"]
+    assert _present_vendor("gemstone_merchant", gd)
+
+
+def test_the_kill_that_earns_a_purchase_currency_is_directional() -> None:
+    """The tailor sells mushmush_jacket's hard_leather for cowhide, so the
+    plan opens with the cow. cowhide is a closure CURRENCY, not a leaf."""
+    gd = _gd()
+    state = census_state("mushmush_jacket", CraftCell(20, "gearcrafting", 15), gd)
+    plan = plan_craft("mushmush_jacket", state, gd)
+    assert repr(plan[0]) == "Fight(cow)"
+    assert craft_cell_verdict("mushmush_jacket", plan, gd).passed
+    assert "cowhide" not in _closure_leaves("mushmush_jacket", gd)

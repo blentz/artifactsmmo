@@ -50,7 +50,7 @@ while IFS= read -r f; do
       print line
     }
   ' "$f")
-  if echo "$body" | grep -qwE 'sorry|admit|native_decide'; then
+  if grep -qwE 'sorry|admit|native_decide' <<<"$body"; then
     violations+=("$f")
   fi
 done < <(find Formal -name "*.lean" -type f)

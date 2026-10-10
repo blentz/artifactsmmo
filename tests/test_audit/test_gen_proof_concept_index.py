@@ -1,5 +1,6 @@
 from artifactsmmo_cli.audit.proof_tags import (
     IndexRow,
+    liveness_audit_names,
     manifest_audit_names,
     manifest_open_lines,
     render_audit_lean,
@@ -66,3 +67,14 @@ def test_render_index_lists_modules_concepts_properties():
     assert "PlannerDepthBound" in md
     assert "planner, core" in md
     assert "safety, reachability" in md
+
+
+def test_liveness_audit_names_are_the_liveness_scan():
+    text = ("import Formal.Liveness.GrindCycles\n"
+            "#print axioms Formal.Liveness.GrindCycles.prep_keeps_skill\n"
+            "-- #print axioms Formal.NotScanned.x\n"
+            "#print axioms Formal.Liveness.Measure.measureLt_wellFounded\n")
+    assert liveness_audit_names(text) == {
+        "Formal.Liveness.GrindCycles.prep_keeps_skill",
+        "Formal.Liveness.Measure.measureLt_wellFounded",
+    }

@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 from artifactsmmo_cli.audit.proof_tags import (
+    liveness_audit_names,
     manifest_audit_names,
     manifest_open_lines,
     render_audit_lean,
@@ -18,11 +19,13 @@ from artifactsmmo_cli.audit.proof_tags import (
 
 MANIFEST = Path("formal/Formal/Manifest.lean")
 AUDIT = Path("formal/Formal/Audit.lean")
+LIVENESS_AUDIT = Path("formal/Formal/LivenessAudit.lean")
 
 
 def main(check: bool) -> int:
     manifest = MANIFEST.read_text()
-    names = manifest_audit_names(manifest)
+    liveness = liveness_audit_names(LIVENESS_AUDIT.read_text())
+    names = [n for n in manifest_audit_names(manifest) if n not in liveness]
     rendered = render_audit_lean(names, manifest_open_lines(manifest))
     if check:
         if AUDIT.read_text() != rendered:

@@ -57,7 +57,11 @@ echo "$OUT_RAW"
 # `depends on axioms:` parent so the bracket is one token.
 OUT="$(printf '%s\n' "$OUT_RAW" | python3 -c 'import sys, re; print(re.sub(r"\n\s+", " ", sys.stdin.read()))')"
 
-if echo "$OUT" | grep -Eiq 'sorryAx|sorry'; then
+# Here-strings, never `echo | grep -q`: under pipefail a `grep -q` that exits
+# on its first match SIGPIPEs the writer, the pipeline fails, and the `if`
+# reads a FOUND as not found (the safety scan passed that way while it held a
+# non-standard axiom, 2026-09-30..2026-10-10).
+if grep -Eiq 'sorryAx|sorry' <<<"$OUT"; then
   echo "GATE FAIL (liveness): sorry detected"; exit 1
 fi
 
@@ -77,8 +81,10 @@ MANIFEST="gate/liveness_axioms.manifest"
 echo "wrote $MANIFEST"
 
 # Every `depends on axioms: [...]` bracket must be a subset of the allow-list.
-if echo "$OUT" | grep -E 'depends on axioms' \
-   | grep -Evq "\\[${ALLOWED_RE}(, ${ALLOWED_RE})*\\]"; then
+BAD="$(grep -E 'depends on axioms' <<<"$OUT" \
+   | grep -Ev "\\[${ALLOWED_RE}(, ${ALLOWED_RE})*\\]" || true)"
+if [ -n "$BAD" ]; then
+  echo "$BAD"
   echo "GATE FAIL (liveness): axiom outside allow-list"; exit 1
 fi
 

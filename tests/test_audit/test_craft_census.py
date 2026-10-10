@@ -3,6 +3,7 @@ Phase-1 pure cores over every recipe cell and records a flat CellResult."""
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -106,3 +107,31 @@ def test_run_census_multiple_recipes_no_progress() -> None:
     results = run_census(gd, ["copper_bar", "copper_helmet"])
     recipes_in = {r.recipe for r in results}
     assert recipes_in == {"copper_bar", "copper_helmet"}
+
+
+def test_an_event_cell_runs_with_its_events_live_and_restores_the_world() -> None:
+    """The cell's events are live in GameData for its whole run (state,
+    plan, classification), and the event-free world comes back after."""
+    gd = _gd()
+    seen: list[set[str]] = []
+
+    def plan(_recipe: str, _state: object, game_data: GameData) -> list[object]:
+        seen.append(set(game_data.active_event_codes))
+        return []
+
+    cell = CraftCell(char_level=30, skill_name="gearcrafting", skill_level=30,
+                     events=frozenset({"portal_demon"}))
+    with patch("artifactsmmo_cli.audit.craft_census.plan_craft", plan):
+        result = run_cell("conjurer_cloak", cell, gd)
+    assert seen == [{"portal_demon"}]
+    assert gd.active_event_codes == set()
+    assert result.events == {"portal_demon"}
+    assert not result.passed
+
+
+def test_run_census_adds_the_event_cells() -> None:
+    gd = _gd()
+    with patch("artifactsmmo_cli.audit.craft_census.plan_craft", return_value=[]):
+        results = run_census(gd, ["conjurer_cloak"])
+    assert any(r.events for r in results)
+    assert any(not r.events for r in results)

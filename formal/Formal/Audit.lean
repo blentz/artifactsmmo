@@ -5,6 +5,8 @@
 -- scanned here. The two lists were hand-maintained and had drifted apart in
 -- BOTH directions (216 traced-but-unscanned, 112 scanned-but-untraced);
 -- deriving this file from Manifest.lean makes that divergence impossible.
+-- A declaration `Formal/LivenessAudit.lean` scans is left to the liveness
+-- gate, whose allow-list holds the approved liveness axioms.
 import Formal
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 open Formal.PriorityBand
@@ -1003,8 +1005,6 @@ open Formal.PriorityBand
 #print axioms Formal.CommittedLoop.execAll_dom
 #print axioms Formal.CommittedLoop.committed_loop_delivers
 #print axioms Formal.CommittedLoop.schedule_exists
-#print axioms Formal.Liveness.GrindCycles.prep_keeps_skill
-#print axioms Formal.Liveness.GrindCycles.grind_cycles_reach_target
 #print axioms Formal.CompleteTaskIncome.applyComplete_adds
 #print axioms Formal.CompleteTaskIncome.applyComplete_monotone
 #print axioms Formal.Liveness.CurrencyFunding.fundingCycles_sufficient

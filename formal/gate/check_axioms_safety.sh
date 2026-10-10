@@ -13,10 +13,16 @@ echo "$OUT_RAW"
 # bracket `[ propext, Classical.choice, Quot.sound ]` becomes a single
 # token for the regex below.
 OUT="$(printf '%s\n' "$OUT_RAW" | python3 -c 'import sys, re; print(re.sub(r"\n\s+", " ", sys.stdin.read()))')"
-if echo "$OUT" | grep -Eiq 'sorryAx|sorry'; then echo "GATE FAIL: sorry detected"; exit 1; fi
+# Here-strings, never `echo | grep -q`: under pipefail a `grep -q` that exits
+# on its first match SIGPIPEs the writer, the pipeline fails, and the `if`
+# reads a FOUND as not found (the safety scan passed that way while it held a
+# non-standard axiom, 2026-09-30..2026-10-10).
+if grep -Eiq 'sorryAx|sorry' <<<"$OUT"; then echo "GATE FAIL: sorry detected"; exit 1; fi
 # every 'depends on axioms: [...]' bracket must be a subset of the allowed three
-if echo "$OUT" | grep -E 'depends on axioms' \
-   | grep -Evq '\[(propext|Classical\.choice|Quot\.sound)(, (propext|Classical\.choice|Quot\.sound))*\]'; then
+BAD="$(grep -E 'depends on axioms' <<<"$OUT" \
+   | grep -Ev '\[(propext|Classical\.choice|Quot\.sound)(, (propext|Classical\.choice|Quot\.sound))*\]' || true)"
+if [ -n "$BAD" ]; then
+  echo "$BAD"
   echo "GATE FAIL (safety): non-standard axiom present"; exit 1
 fi
 echo "safety axiom check OK"

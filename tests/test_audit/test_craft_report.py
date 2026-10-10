@@ -104,3 +104,21 @@ def test_cell_token_fail_branch_when_gap_is_none() -> None:
     results = [CellResult("mystery_item", "mining", 1, 1, 1, False, "empty", None)]
     md = render_matrix(results)
     assert "1/1 FAIL" in md
+
+
+def test_event_cells_are_marked_and_a_recipe_passes_in_either_world() -> None:
+    """An event-active cell renders `+ev` after the event-free ones; a recipe
+    counts toward `recipes PASS` and the nominal ratio when any of its cells
+    passes, event-active included."""
+    ev = frozenset({"portal_demon"})
+    results = [
+        _fail("gold_helm", "gearcrafting", 30, 30, 30, "event_gated"),
+        CellResult("gold_helm", "gearcrafting", 30, 30, 30, True, "", None, ev),
+        _fail("iron_boots", "gearcrafting", 10, 10, 10, "combat_blocked"),
+    ]
+    line = summary_line(results)
+    assert "recipes PASS 1/2" in line
+    assert "nominal-at-skill PASS 1/2" in line
+    matrix = render_matrix(results)
+    assert "30/30 EG · 30/30+ev PASS" in matrix
+    assert "+ev = the cell with the recipe's sourcing events active" in matrix

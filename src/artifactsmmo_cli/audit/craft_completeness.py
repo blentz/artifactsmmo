@@ -6,7 +6,7 @@ level/skill grid and classifies whether it can produce a directional plan.
 Pure cores (grid/verdict/classifier) + a thin planner harness (`plan_craft`);
 the generator/docs live in scripts/gen_craft_completeness.py."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -35,7 +35,7 @@ from artifactsmmo_cli.ai.tiers.objective import (
     GOLD,
     CharacterObjective,
 )
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 
 CRAFT_AUDIT_BUDGET_SECONDS = 10.0
 """Per-cell planner budget — the arbiter's cheap first-pass value; keeps the
@@ -51,6 +51,9 @@ class CraftCell:
     char_level: int
     skill_name: str
     skill_level: int
+    events: frozenset[str] = frozenset()
+    """Event codes live for this cell (USER 2026-10-10, "add event-active
+    cells"); empty is the event-free world. See `event_cells`."""
 
 
 def tier_of(craft_level: int) -> int:
@@ -164,7 +167,23 @@ def _closure_item_set(recipe: str, needed_resources: set[str],
       `resource_drops`/`resource_drops_full` don't feed `recipe_closure`'s
       visited-set computation, only which resources get flagged `needed`) —
       kept anyway for an explicit, literal reading of the spec.
+    - the non-gold CURRENCY of every vendor selling a closure member: the
+      kill that earns `cowhide` advances `mushmush_jacket` because the tailor
+      sells its `hard_leather` for cowhide. Hidden until 2026-10-10, when the
+      census character first could beat the cow. (`_closure_members` is the
+      set without them: a currency is not a recipe LEAF — `_leaf_status`
+      judges the purchase through `_permanently_buyable`.)
     """
+    members = _closure_members(recipe, needed_resources, craftable_mats, game_data)
+    currencies = {currency for item in members
+                  for _npc, _price, currency in game_data.npc_purchases(item)
+                  if currency != GOLD}
+    return members | currencies
+
+
+def _closure_members(recipe: str, needed_resources: set[str],
+                     craftable_mats: set[str], game_data: GameData) -> frozenset[str]:
+    """`_closure_item_set` without the purchase currencies."""
     closure_mats = frozenset(craftable_mats) | {recipe}
     ingredients: set[str] = set()
     for mat in closure_mats:
@@ -389,19 +408,76 @@ class GapClass(Enum):
     THE actionable class — each is a systematic-debug fix (like GAP-9)."""
 
 
+def _leaf_events(leaf: str, game_data: GameData) -> frozenset[str]:
+    """The events that would source `leaf` when it has NO permanent source:
+    the event codes of its event droppers, event vendors and event resources.
+    Empty when any permanent source exists (a located gather, a task reward, a
+    permanent spawn-known dropper or a permanent located vendor) — the event
+    is then not what the recipe waits on."""
+    permanent_drop = any(game_data.monster_spawn_known(m) and not game_data.is_event_monster(m)
+                         for m, _r, _mn, _mx in game_data.monsters_dropping(leaf))
+    permanent_vendor = any(not game_data.is_event_npc(npc) and game_data.npc_location(npc) is not None
+                           for npc, _price, _currency in game_data.npc_purchases(leaf))
+    if (_has_located_gather_source(leaf, game_data) or game_data.is_task_earnable(leaf)
+            or permanent_drop or permanent_vendor):
+        return frozenset()
+    content = game_data.world.event_code_of_content
+    codes = {content[m] for m, _r, _mn, _mx in game_data.monsters_dropping(leaf) if m in content}
+    codes |= {content[r] for r, table in game_data.resource_drops_full.items()
+              if r in content and any(item == leaf for item, _rate, _mn, _mx in table)}
+    codes |= {code for npc, _price, _currency in game_data.npc_purchases(leaf)
+              if (code := game_data.npc_event_code(npc)) is not None}
+    return frozenset(codes)
+
+
+def event_cells(recipe: str, game_data: GameData) -> list[CraftCell]:
+    """The event-active cells for `recipe` (USER 2026-10-10, "add
+    event-active cells"): its `craft_grid` again with every event live that
+    sources an event-only closure leaf — all at once, since a recipe needing
+    two event leaves banks one window's haul for the other's. Empty when no
+    leaf waits on an event. The event-free cells stay: they answer "not now"."""
+    events = frozenset().union(*(_leaf_events(leaf, game_data)
+                                 for leaf in _closure_leaves(recipe, game_data)))
+    if not events:
+        return []
+    return [replace(cell, events=events) for cell in craft_grid(recipe, game_data)]
+
+
 def _closure_leaves(recipe: str, game_data: GameData) -> frozenset[str]:
     """The NON-craftable base materials of `recipe`'s full recipe tree — the
     items that must be sourced externally (gathered, dropped, bought, or
-    task-earned) rather than crafted. Reuses `_closure_item_set` (the same
+    task-earned) rather than crafted. Reuses `_closure_members` (the same
     plan[0]-target widening `craft_cell_verdict` uses, so a monster-only leaf
     like `feather` is visible) and keeps only the members with no crafting
     recipe: crafting a craftable member is always the planner's job, so only a
     base leaf can be a genuine acquisition dead end."""
     needed_resources, craftable_mats = recipe_closure(game_data, [recipe])
-    closure_items = _closure_item_set(recipe, needed_resources,
-                                      craftable_mats, game_data)
+    closure_items = _closure_members(recipe, needed_resources,
+                                     craftable_mats, game_data)
     return frozenset(item for item in closure_items
                      if not game_data.crafting_recipe(item))
+
+
+def _event_live(content_code: str | None, game_data: GameData) -> bool:
+    """`content_code` (an event monster or resource, or an event NPC's event)
+    belongs to an event live in this cell's world."""
+    return content_code is not None and content_code in game_data.active_event_codes
+
+
+def _present_droppers(leaf: str, game_data: GameData) -> list[str]:
+    """The droppers of `leaf` present in this cell's world: a permanent
+    spawn-known monster, or an event monster whose event is live."""
+    content = game_data.world.event_code_of_content
+    return [m for m, _r, _mn, _mx in game_data.monsters_dropping(leaf)
+            if (game_data.monster_spawn_known(m) and not game_data.is_event_monster(m))
+            or (game_data.is_event_monster(m) and _event_live(content.get(m), game_data))]
+
+
+def _present_vendor(npc: str, game_data: GameData) -> bool:
+    """A located permanent vendor, or an event vendor whose event is live."""
+    if game_data.is_event_npc(npc):
+        return _event_live(game_data.npc_event_code(npc), game_data)
+    return game_data.npc_location(npc) is not None
 
 
 def _currency_directly_attainable(currency: str, state: WorldState,
@@ -415,20 +491,18 @@ def _currency_directly_attainable(currency: str, state: WorldState,
     so a task-only currency is NOT directly attainable here."""
     if currency == GOLD or _has_located_gather_source(currency, game_data):
         return True
-    permanent = [m for m, _r, _mn, _mx in game_data.monsters_dropping(currency)
-                 if game_data.monster_spawn_known(m)
-                 and not game_data.is_event_monster(m)]
-    return any(is_winnable(state, game_data, m) for m in permanent)
+    return any(is_winnable(state, game_data, m) for m in _present_droppers(currency, game_data))
 
 
 def _permanently_buyable(leaf: str, state: WorldState,
                          game_data: GameData) -> bool:
-    """`leaf` is purchasable from a PERMANENT, reachable vendor for gold or a
+    """`leaf` is purchasable from a PRESENT vendor (permanent and located, or
+    an event vendor whose event is live in the cell) for gold or a
     currency the planner can DIRECTLY acquire (`_currency_directly_attainable`),
     restricted to non-event, located NPCs (an event vendor is handled by the
     EVENT_GATED arm; a task-only-currency vendor by the PURCHASE_RECURSION arm)."""
     for npc, _price, currency in game_data.npc_purchases(leaf):
-        if game_data.is_event_npc(npc) or game_data.npc_location(npc) is None:
+        if not _present_vendor(npc, game_data):
             continue
         if _currency_directly_attainable(currency, state, game_data):
             return True
@@ -454,7 +528,11 @@ def _sold_only_by_event_npc(leaf: str, game_data: GameData) -> bool:
 
 
 def _has_located_gather_source(leaf: str, game_data: GameData) -> bool:
-    """True iff some PLACED resource drops `leaf`. `gatherable_drop_items()`
+    """True iff some PLACED resource drops `leaf` — placed on ANY layer in a
+    reachable region (`resource_spawn_known`, the production predicate).
+    Asking only the overworld index (`all_resource_locations`) called the
+    underground gold/mithril/adamantite rocks unsourced and blamed 204 cells
+    on `event_gated` (2026-10-10). `gatherable_drop_items()`
     alone is theoretical — it counts a drop even when its resource has no
     location: `strange_rocks` (diamond_stone's sole source) carries a skill and
     a drop table but is UNPLACED in the bundle, so diamond_stone cannot actually
@@ -464,10 +542,10 @@ def _has_located_gather_source(leaf: str, game_data: GameData) -> bool:
     upstream by `census_state` (it grants the recipe's prerequisite gathering
     skills), so LOCATION is the remaining check here."""
     for resource, table in game_data.resource_drops_full.items():
-        if (resource in game_data.all_resource_locations
-                and any(item == leaf for item, _rate, _mn, _mx in table)):
+        if (any(item == leaf for item, _rate, _mn, _mx in table)
+                and game_data.resource_spawn_known(resource)):
             return True
-    return any(drop == leaf and resource in game_data.all_resource_locations
+    return any(drop == leaf and game_data.resource_spawn_known(resource)
                for resource, drop in game_data.resource_drops.items())
 
 
@@ -483,7 +561,9 @@ def _leaf_status(leaf: str, state: WorldState,
     COMBAT_BLOCKED (a strength limit at a real, always-present source), whereas
     a leaf whose only dropper is an event monster is EVENT_GATED (the source
     itself is absent in the event-free audit). A leaf with neither a reachable
-    source nor an event source is MATERIAL_UNREACHABLE."""
+    source nor an event source is MATERIAL_UNREACHABLE. In an event-active cell
+    a live event's monster and vendor are present sources like permanent ones
+    (`_present_droppers`, `_present_vendor`)."""
     if _has_located_gather_source(leaf, game_data):
         return None
     if game_data.is_task_earnable(leaf):
@@ -491,10 +571,8 @@ def _leaf_status(leaf: str, state: WorldState,
     if _permanently_buyable(leaf, state, game_data):
         return None
     droppers = game_data.monsters_dropping(leaf)
-    permanent = [m for m, _r, _mn, _mx in droppers
-                 if game_data.monster_spawn_known(m)
-                 and not game_data.is_event_monster(m)]
-    winnable = [m for m in permanent if is_winnable(state, game_data, m)]
+    present = _present_droppers(leaf, game_data)
+    winnable = [m for m in present if is_winnable(state, game_data, m)]
     if winnable:
         # A winnable dropper only makes the leaf reachable if the planner would
         # actually FIGHT it. An xp-positive dropper always qualifies; a GREY
@@ -507,7 +585,7 @@ def _leaf_status(leaf: str, state: WorldState,
                 or grey_farm_allowed(leaf, state, game_data)):
             return None
         return GapClass.GREY_FARM_SUPPRESSED
-    if permanent:
+    if present:
         return GapClass.COMBAT_BLOCKED
     if any(game_data.is_event_monster(m) for m, _r, _mn, _mx in droppers):
         return GapClass.EVENT_GATED
@@ -595,12 +673,20 @@ def census_state(recipe: str, cell: CraftCell, game_data: GameData) -> WorldStat
     level is the tested dimension (under- vs at-skill), so it stays exactly
     `cell.skill_level` even if the recipe also gathers with that skill.
 
-    Gear source: a bare state at the cell seeds `CharacterObjective
-    .near_term_gear`, which picks the best attainable-now item per equipment
-    slot at `cell.char_level` (empty-slot baseline). That `{slot: code}` loadout
-    is equipped with `derive_combat_stats=True`, which sums the equipped items'
-    catalog stats into the server-total combat stats — what a live character
-    wearing this loadout would report.
+    Gear source: a FIXED POINT of `CharacterObjective.near_term_gear` (the
+    best attainable-now item per slot at `cell.char_level`): wear the pick,
+    pick again, until no slot improves — a character progresses into the gear
+    its gear lets it win. The gear is chosen for a character whose skills are
+    all at its level (crafting kept pace); the returned PLANNING state keeps
+    the cell's skills, the tested dimension. Before 2026-10-10 the pick ran
+    ONCE from a bare character with every other skill at 1, so a level-30
+    census character wore a copper dagger and lost to a level-8 cow — 570
+    `combat_blocked` cells, most of them that loadout. The loadout is equipped
+    with `derive_combat_stats=True`, which sums the equipped items' catalog
+    stats into the server-total combat stats — what a live character wearing
+    it would report.
+
+    `cell.events` are live for the whole cell (`WorldState.active_events`).
 
     Used by both `classify_gap` and `plan_craft`'s driving state, so the census
     and the classifier agree on the cell's plausible character."""
@@ -608,15 +694,47 @@ def census_state(recipe: str, cell: CraftCell, game_data: GameData) -> WorldStat
     for skill, level in _closure_gather_skills(recipe, game_data).items():
         if skill != cell.skill_name:
             skills[skill] = level
-    bare = scenario_state(
-        ScenarioCharacter(name="census_bare", level=cell.char_level,
-                          skills=dict(skills)),
-        game_data)
-    gear = CharacterObjective.from_game_data(game_data).near_term_gear(bare)
+    events = tuple(sorted(cell.events))
     sc = ScenarioCharacter(name="craft_audit", level=cell.char_level,
                            skills=dict(skills),
-                           equipment=gear, derive_combat_stats=True)
+                           equipment=census_gear(cell.char_level, cell.events, game_data),
+                           derive_combat_stats=True, active_events=events)
     return scenario_state(sc, game_data)
+
+
+_GEAR_MEMO: list[tuple[GameData, dict[tuple[int, frozenset[str]], dict[str, str]]]] = []
+"""One slot: the catalogue the memo was built on (HELD, so its identity cannot
+be reused) and its loadouts. A census worker plans every cell over one
+catalogue; a different catalogue replaces the slot."""
+
+
+def census_gear(char_level: int, events: frozenset[str],
+                game_data: GameData) -> dict[str, str]:
+    """The census character's loadout at `char_level` with `events` live: the
+    fixed point of `near_term_gear` for a character whose skills are all at
+    its level (see `census_state`). Depends on nothing else, so it is
+    memoized per catalogue."""
+    if not _GEAR_MEMO or _GEAR_MEMO[0][0] is not game_data:
+        _GEAR_MEMO[:] = [(game_data, {})]
+    memo = _GEAR_MEMO[0][1]
+    key = (char_level, events)
+    if key not in memo:
+        objective = CharacterObjective.from_game_data(game_data)
+        skills = {name: char_level for name in SKILL_NAMES}
+        live = tuple(sorted(events))
+        gear: dict[str, str] = {}
+        while True:
+            worn = scenario_state(
+                ScenarioCharacter(name="census_gear", level=char_level, skills=skills,
+                                  equipment=dict(gear), derive_combat_stats=True,
+                                  active_events=live),
+                game_data)
+            upgrades = objective.near_term_gear(worn)
+            if not upgrades:
+                break
+            gear.update(upgrades)  # strict per-slot improvements: terminates
+        memo[key] = gear
+    return dict(memo[key])
 
 
 def _crossing_unaffordable(recipe: str, state: WorldState, game_data: GameData) -> bool:

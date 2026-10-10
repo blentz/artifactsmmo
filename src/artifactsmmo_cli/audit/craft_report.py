@@ -30,21 +30,25 @@ _GENERATED_HEADER = (
 
 def _cell_token(r: CellResult) -> str:
     verdict = "PASS" if r.passed else GAP_ABBREV[r.gap] if r.gap else "FAIL"
-    return f"{r.char_level}/{r.skill_level} {verdict}"
+    world = "+ev" if r.events else ""
+    return f"{r.char_level}/{r.skill_level}{world} {verdict}"
 
 
 def summary_line(results: list[CellResult]) -> str:
     """One-line completeness metric: recipe/cell totals, overall PASS%, the
-    at-skill nominal PASS ratio (the realistic cell per recipe), and per-gap
-    counts."""
+    recipes that PASS in some cell (the target is every recipe), the recipes
+    whose at-skill nominal cell (the realistic cell per recipe) PASSES in the
+    event-free or its event-active world, and per-gap counts."""
     recipes = {r.recipe for r in results}
     total = len(results)
     passed = sum(1 for r in results if r.passed)
+    recipes_pass = len({r.recipe for r in results if r.passed})
     nominal_cells = [
         r for r in results
         if r.char_level == nominal_char_level(r.craft_level) and r.skill_level == r.craft_level
     ]
-    nominal_pass = sum(1 for r in nominal_cells if r.passed)
+    nominal_recipes = {r.recipe for r in nominal_cells}
+    nominal_pass = len({r.recipe for r in nominal_cells if r.passed})
     pct = 100 * passed / total if total else 0.0
     gap_counts = {v: 0 for v in GAP_ABBREV}
     for r in results:
@@ -54,7 +58,8 @@ def summary_line(results: list[CellResult]) -> str:
     return (
         f"{len(recipes)} recipes, {total} cells; "
         f"PASS {passed} ({pct:.0f}%); "
-        f"nominal-at-skill PASS {nominal_pass}/{len(nominal_cells)}; "
+        f"recipes PASS {recipes_pass}/{len(recipes)}; "
+        f"nominal-at-skill PASS {nominal_pass}/{len(nominal_recipes)}; "
         f"gaps: {gaps}"
     )
 
@@ -67,7 +72,7 @@ def render_matrix(results: list[CellResult]) -> str:
     for r in results:
         by_recipe[r.recipe].append(r)
     for recipe in sorted(by_recipe):
-        cells = sorted(by_recipe[recipe], key=lambda r: (r.char_level, r.skill_level))
+        cells = sorted(by_recipe[recipe], key=lambda r: (bool(r.events), r.char_level, r.skill_level))
         head = cells[0]
         tokens = " · ".join(_cell_token(c) for c in cells)
         row = f"| {recipe} | {head.craft_level} | {tokens} |"
@@ -79,7 +84,8 @@ def render_matrix(results: list[CellResult]) -> str:
         "",
         summary_line(results),
         "",
-        "Legend: " + ", ".join(f"{v}={k}" for k, v in GAP_ABBREV.items()) + ".",
+        "Legend: " + ", ".join(f"{v}={k}" for k, v in GAP_ABBREV.items())
+        + "; +ev = the cell with the recipe's sourcing events active.",
         "",
     ]
     for skill, tier in sorted(groups):

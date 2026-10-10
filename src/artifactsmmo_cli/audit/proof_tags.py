@@ -94,6 +94,7 @@ def render_index_markdown(rows: list[IndexRow]) -> str:
 #: example in prose) must not become an audited declaration — it would name
 #: something that may not exist and the audit file would stop compiling.
 _CHECK_RE = re.compile(r"^#check @([A-Za-z0-9_.']+)", re.M)
+_PRINT_AXIOMS_RE = re.compile(r"^#print axioms ([A-Za-z0-9_.']+)", re.M)
 _OPEN_RE = re.compile(r"^open .+$", re.M)
 
 #: Header of the generated audit file. `import Formal` pulls in every module, so
@@ -106,6 +107,8 @@ _AUDIT_HEADER = (
     "-- scanned here. The two lists were hand-maintained and had drifted apart in\n"
     "-- BOTH directions (216 traced-but-unscanned, 112 scanned-but-untraced);\n"
     "-- deriving this file from Manifest.lean makes that divergence impossible.\n"
+    "-- A declaration `Formal/LivenessAudit.lean` scans is left to the liveness\n"
+    "-- gate, whose allow-list holds the approved liveness axioms.\n"
     "import Formal\n"
 )
 
@@ -117,6 +120,15 @@ def manifest_audit_names(manifest_text: str) -> list[str]:
     for name in _CHECK_RE.findall(manifest_text):
         seen.setdefault(name, None)
     return list(seen)
+
+
+def liveness_audit_names(liveness_audit_text: str) -> set[str]:
+    """The declarations `Formal/LivenessAudit.lean` scans. The liveness gate
+    checks them against ITS allow-list (the approved LIV axioms), so the safety
+    scan leaves them out: `GrindCycles` cites the approved `xpToNextLevel` and
+    sat in the safety scan from 2026-09-30, passing only when its `grep -q`
+    pipeline lost a SIGPIPE race."""
+    return set(_PRINT_AXIOMS_RE.findall(liveness_audit_text))
 
 
 def manifest_open_lines(manifest_text: str) -> list[str]:

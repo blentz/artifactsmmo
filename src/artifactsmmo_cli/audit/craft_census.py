@@ -17,6 +17,7 @@ from artifactsmmo_cli.audit.craft_completeness import (
     classify_gap,
     craft_cell_verdict,
     craft_grid,
+    event_cells,
     first_work_leg,
     plan_craft,
 )
@@ -36,6 +37,7 @@ class CellResult:
     passed: bool
     reason: str
     gap: str | None
+    events: frozenset[str] = frozenset()
 
 
 def run_cell(recipe: str, cell: CraftCell, game_data: GameData) -> CellResult:
@@ -45,15 +47,22 @@ def run_cell(recipe: str, cell: CraftCell, game_data: GameData) -> CellResult:
     stats = game_data.item_stats(recipe)
     if stats is None or not stats.crafting_skill:
         raise ValueError(f"{recipe} is not a craftable recipe")
-    state = census_state(recipe, cell, game_data)
-    plan = plan_craft(recipe, state, game_data)
-    verdict = craft_cell_verdict(recipe, plan, game_data)
-    work = first_work_leg(plan)
-    if not verdict.passed and work is not None and (
-            advances_a_closure_grind(recipe, work, state, game_data)
-            or advances_a_heal_prep(work, plan, state, game_data)):
-        verdict = CraftVerdict(True, "")
-    gap = None if verdict.passed else classify_gap(recipe, cell, game_data).value
+    # The cell's events surface their spawns for the whole cell, as
+    # `seed_offline` does live, and the event-free world comes back after.
+    world_events = game_data.active_event_codes
+    game_data.active_event_codes = set(cell.events)
+    try:
+        state = census_state(recipe, cell, game_data)
+        plan = plan_craft(recipe, state, game_data)
+        verdict = craft_cell_verdict(recipe, plan, game_data)
+        work = first_work_leg(plan)
+        if not verdict.passed and work is not None and (
+                advances_a_closure_grind(recipe, work, state, game_data)
+                or advances_a_heal_prep(work, plan, state, game_data)):
+            verdict = CraftVerdict(True, "")
+        gap = None if verdict.passed else classify_gap(recipe, cell, game_data).value
+    finally:
+        game_data.active_event_codes = world_events
     return CellResult(
         recipe=recipe,
         skill=cell.skill_name,
@@ -63,6 +72,7 @@ def run_cell(recipe: str, cell: CraftCell, game_data: GameData) -> CellResult:
         passed=verdict.passed,
         reason=verdict.reason,
         gap=gap,
+        events=cell.events,
     )
 
 
@@ -90,11 +100,12 @@ def run_census(
 ) -> list[CellResult]:
     """Run the census over `recipes`: for each, every grid cell. The caller
     supplies the recipe list (the generator passes `craftable_recipes(gd)`;
-    tests pass a tiny explicit list). `progress(done, total, recipe)` is called
+    tests pass a tiny explicit list). Event-active cells follow the
+    event-free grid (`event_cells`). `progress(done, total, recipe)` is called
     after each recipe if supplied."""
     results: list[CellResult] = []
     for i, recipe in enumerate(recipes):
-        for cell in craft_grid(recipe, game_data):
+        for cell in craft_grid(recipe, game_data) + event_cells(recipe, game_data):
             results.append(run_cell(recipe, cell, game_data))
         if progress is not None:
             progress(i + 1, len(recipes), recipe)
