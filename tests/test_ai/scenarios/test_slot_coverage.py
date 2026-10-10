@@ -912,12 +912,19 @@ def test_l30_rune_candidate_armed() -> None:
     """The GOOD half: near_term_gear covers rune_slot. With 25000 gold
     against the permanent rune_vendor's 20000 lifesteal_rune, the
     gold-purchase leaf opens and the empty rune slot gets its candidate —
-    the tree-level slot coverage the fixed-point loadout isolates (every
-    other slot is already at its argmax, so the rune is the sole target)."""
+    the tree-level slot coverage the fixed-point loadout isolates.
+
+    Since 2026-10-10 the drop gate wears a potion loadout
+    (docs/PLAN_drop_fight_loadout.md), so three more slots have a near-term
+    candidate from a drop this character now wins (the death_knight_sword,
+    slime_shield and dreadful_amulet the live fleet wears at level 30); the
+    rune is still the rune slot's."""
     gd = _bundle()
     state = _state("l30_rune_fill", gd)
     objective = CharacterObjective.from_game_data(gd)
-    assert objective.near_term_gear(state) == {"rune_slot": "lifesteal_rune"}
+    assert objective.near_term_gear(state) == {
+        "rune_slot": "lifesteal_rune", "weapon_slot": "death_knight_sword",
+        "shield_slot": "slime_shield", "amulet_slot": "dreadful_amulet"}
     assert is_attainable_now("lifesteal_rune", state, gd)
 
 

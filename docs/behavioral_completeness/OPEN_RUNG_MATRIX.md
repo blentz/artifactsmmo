@@ -8,7 +8,7 @@
 >
 > Every field `classify_gap` reads is a column here, so a verdict can be reconstructed from the row alone: `g-in`/`g-above` are the in-range and above-range resource counts and `g-xp+` is whether the HIGHEST in-range resource still pays XP — the three that separate `wall_all_rungs_grey` from `wall_below_first_rung`.
 
-352 cells over 92 distinct (skill, level) pairs; PASS 342; routed 26; walled 10; o1_silent_stall 0; o1_unexplained 0; skill_catalogue_empty 0
+352 cells over 92 distinct (skill, level) pairs; PASS 343; routed 26; walled 9; o1_silent_stall 0; o1_unexplained 0; skill_catalogue_empty 0
 
 residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 15, gearcrafting 9, weaponcrafting 2. A closure in an unrouted skill can only be an explained wall.
 
@@ -33,10 +33,10 @@ residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l10_copper_adequate | alchemy | 5 | 6 | PASS | - | 2 | 2 | 2 | 23 | 1 | 4 | yes | `sunflower` |
 | l10_copper_adequate | cooking | 1 | 2 | PASS | - | 2 | 2 | 2 | 18 | 0 | 0 | - | `None` |
 | l10_copper_adequate | fishing | 1 | 2 | PASS | - | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
-| l10_copper_adequate | gearcrafting | 10 | 11 | PASS | - | 18 | 18 | 6 | 114 | 0 | 0 | - | `None` |
+| l10_copper_adequate | gearcrafting | 10 | 11 | PASS | - | 18 | 18 | 17 | 114 | 0 | 0 | - | `None` |
 | l10_copper_adequate | jewelrycrafting | 1 | 2 | PASS | yes | 1 | 1 | 1 | 49 | 0 | 0 | - | `None` |
 | l10_copper_adequate | mining | 10 | 11 | PASS | - | 2 | 2 | 2 | 12 | 2 | 5 | yes | `iron_ore` |
-| l10_copper_adequate | weaponcrafting | 10 | 11 | PASS | - | 18 | 18 | 11 | 51 | 0 | 0 | - | `None` |
+| l10_copper_adequate | weaponcrafting | 10 | 11 | PASS | - | 18 | 18 | 13 | 51 | 0 | 0 | - | `None` |
 | l10_copper_adequate | woodcutting | 10 | 11 | PASS | - | 2 | 2 | 2 | 9 | 2 | 5 | yes | `spruce_wood` |
 | l10_weapon_upgrade | alchemy | 1 | 2 | PASS | - | 0 | 0 | 0 | 25 | 1 | 4 | yes | `sunflower` |
 | l10_weapon_upgrade | cooking | 1 | 2 | PASS | - | 2 | 2 | 2 | 18 | 0 | 0 | - | `None` |
@@ -65,7 +65,7 @@ residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l15_midband | alchemy | 6 | 7 | PASS | - | 2 | 2 | 2 | 23 | 1 | 4 | yes | `sunflower` |
 | l15_midband | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
 | l15_midband | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
-| l15_midband | gearcrafting | 10 | 11 | PASS | - | 18 | 18 | 16 | 114 | 0 | 0 | - | `None` |
+| l15_midband | gearcrafting | 10 | 11 | PASS | - | 18 | 18 | 17 | 114 | 0 | 0 | - | `None` |
 | l15_midband | jewelrycrafting | 6 | 7 | PASS | yes | 2 | 2 | 2 | 48 | 0 | 0 | - | `None` |
 | l15_midband | mining | 12 | 13 | PASS | - | 2 | 1 | 1 | 12 | 2 | 5 | yes | `iron_ore` |
 | l15_midband | weaponcrafting | 10 | 11 | PASS | - | 18 | 18 | 13 | 51 | 0 | 0 | - | `None` |
@@ -84,12 +84,12 @@ residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l30_band_entry | gearcrafting | 25 | 26 | PASS | - | 47 | 29 | 5 | 85 | 0 | 0 | - | `None` |
 | l30_band_entry | jewelrycrafting | 18 | 19 | PASS | yes | 11 | 9 | 7 | 39 | 0 | 0 | - | `None` |
 | l30_band_entry | mining | 28 | 29 | PASS | - | 7 | 5 | 5 | 7 | 3 | 4 | yes | `coal` |
-| l30_band_entry | weaponcrafting | 25 | 26 | PASS | - | 34 | 16 | 3 | 35 | 0 | 0 | - | `None` |
+| l30_band_entry | weaponcrafting | 25 | 26 | PASS | - | 34 | 16 | 6 | 35 | 0 | 0 | - | `None` |
 | l30_band_entry | woodcutting | 28 | 29 | PASS | - | 3 | 1 | 1 | 8 | 3 | 4 | yes | `birch_wood` |
 | l40_band_entry | alchemy | 25 | 26 | PASS | - | 9 | 3 | 3 | 16 | 2 | 3 | yes | `nettle_leaf` |
 | l40_band_entry | cooking | 35 | 36 | PASS | - | 14 | 2 | 2 | 6 | 0 | 0 | - | `None` |
 | l40_band_entry | fishing | 35 | 36 | PASS | - | 0 | 0 | 0 | 0 | 4 | 3 | yes | `bass` |
-| l40_band_entry | gearcrafting | 35 | 36 | PASS | - | 74 | 36 | 1 | 58 | 0 | 0 | - | `None` |
+| l40_band_entry | gearcrafting | 35 | 36 | PASS | - | 74 | 36 | 2 | 58 | 0 | 0 | - | `None` |
 | l40_band_entry | jewelrycrafting | 25 | 26 | PASS | - | 21 | 16 | 5 | 29 | 0 | 0 | - | `None` |
 | l40_band_entry | mining | 38 | 39 | PASS | - | 11 | 4 | 2 | 3 | 5 | 2 | yes | `strange_ore` |
 | l40_band_entry | weaponcrafting | 35 | 36 | **wall_rungs_unobtainable** | - | 48 | 17 | 0 | 21 | 0 | 0 | - | `None` |
@@ -145,18 +145,18 @@ residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l35_artifact_fill | alchemy | 20 | 21 | PASS | - | 9 | 7 | 7 | 16 | 2 | 3 | yes | `nettle_leaf` |
 | l35_artifact_fill | cooking | 30 | 31 | PASS | - | 14 | 5 | 5 | 6 | 0 | 0 | - | `None` |
 | l35_artifact_fill | fishing | 30 | 31 | PASS | - | 0 | 0 | 0 | 0 | 4 | 3 | yes | `bass` |
-| l35_artifact_fill | gearcrafting | 30 | 31 | PASS | - | 63 | 40 | 3 | 69 | 0 | 0 | - | `None` |
-| l35_artifact_fill | jewelrycrafting | 20 | 21 | PASS | - | 17 | 15 | 7 | 33 | 0 | 0 | - | `None` |
-| l35_artifact_fill | mining | 32 | 33 | PASS | - | 9 | 2 | 1 | 5 | 4 | 3 | yes | `gold_ore` |
-| l35_artifact_fill | weaponcrafting | 30 | 31 | PASS | - | 43 | 22 | 3 | 26 | 0 | 0 | - | `None` |
+| l35_artifact_fill | gearcrafting | 30 | 31 | PASS | - | 63 | 40 | 5 | 69 | 0 | 0 | - | `None` |
+| l35_artifact_fill | jewelrycrafting | 20 | 21 | PASS | - | 17 | 15 | 8 | 33 | 0 | 0 | - | `None` |
+| l35_artifact_fill | mining | 32 | 33 | PASS | - | 9 | 2 | 2 | 5 | 4 | 3 | yes | `gold_ore` |
+| l35_artifact_fill | weaponcrafting | 30 | 31 | PASS | - | 43 | 22 | 6 | 26 | 0 | 0 | - | `None` |
 | l35_artifact_fill | woodcutting | 32 | 33 | PASS | - | 5 | 2 | 2 | 6 | 4 | 3 | yes | `dead_wood` |
 | l35_boots_drop_farm | alchemy | 20 | 21 | PASS | - | 9 | 7 | 7 | 16 | 2 | 3 | yes | `nettle_leaf` |
 | l35_boots_drop_farm | cooking | 30 | 31 | PASS | - | 14 | 5 | 5 | 6 | 0 | 0 | - | `None` |
 | l35_boots_drop_farm | fishing | 30 | 31 | PASS | - | 0 | 0 | 0 | 0 | 4 | 3 | yes | `bass` |
-| l35_boots_drop_farm | gearcrafting | 30 | 31 | PASS | - | 63 | 40 | 3 | 69 | 0 | 0 | - | `None` |
-| l35_boots_drop_farm | jewelrycrafting | 20 | 21 | PASS | - | 17 | 15 | 7 | 33 | 0 | 0 | - | `None` |
-| l35_boots_drop_farm | mining | 32 | 33 | PASS | - | 9 | 2 | 1 | 5 | 4 | 3 | yes | `gold_ore` |
-| l35_boots_drop_farm | weaponcrafting | 30 | 31 | PASS | - | 43 | 22 | 5 | 26 | 0 | 0 | - | `None` |
+| l35_boots_drop_farm | gearcrafting | 30 | 31 | PASS | - | 63 | 40 | 5 | 69 | 0 | 0 | - | `None` |
+| l35_boots_drop_farm | jewelrycrafting | 20 | 21 | PASS | - | 17 | 15 | 8 | 33 | 0 | 0 | - | `None` |
+| l35_boots_drop_farm | mining | 32 | 33 | PASS | - | 9 | 2 | 2 | 5 | 4 | 3 | yes | `gold_ore` |
+| l35_boots_drop_farm | weaponcrafting | 30 | 31 | PASS | - | 43 | 22 | 6 | 26 | 0 | 0 | - | `None` |
 | l35_boots_drop_farm | woodcutting | 32 | 33 | PASS | - | 5 | 2 | 2 | 6 | 4 | 3 | yes | `dead_wood` |
 | l30_rune_fill | alchemy | 25 | 26 | PASS | - | 9 | 3 | 3 | 16 | 2 | 3 | yes | `nettle_leaf` |
 | l30_rune_fill | cooking | 25 | 26 | PASS | - | 12 | 5 | 5 | 8 | 0 | 0 | - | `None` |
@@ -164,7 +164,7 @@ residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l30_rune_fill | gearcrafting | 25 | 26 | PASS | - | 47 | 29 | 5 | 85 | 0 | 0 | - | `None` |
 | l30_rune_fill | jewelrycrafting | 18 | 19 | PASS | yes | 11 | 9 | 7 | 39 | 0 | 0 | - | `None` |
 | l30_rune_fill | mining | 28 | 29 | PASS | - | 7 | 5 | 5 | 7 | 3 | 4 | yes | `coal` |
-| l30_rune_fill | weaponcrafting | 25 | 26 | PASS | - | 34 | 16 | 3 | 35 | 0 | 0 | - | `None` |
+| l30_rune_fill | weaponcrafting | 25 | 26 | PASS | - | 34 | 16 | 6 | 35 | 0 | 0 | - | `None` |
 | l30_rune_fill | woodcutting | 28 | 29 | PASS | - | 3 | 1 | 1 | 8 | 3 | 4 | yes | `birch_wood` |
 | l20_dual_utility | alchemy | 20 | 21 | PASS | - | 9 | 7 | 7 | 16 | 2 | 3 | yes | `nettle_leaf` |
 | l20_dual_utility | cooking | 15 | 16 | PASS | - | 9 | 7 | 7 | 11 | 0 | 0 | - | `None` |
@@ -183,9 +183,9 @@ residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l20_dual_utility_one_stocked | weaponcrafting | 15 | 16 | PASS | - | 21 | 15 | 8 | 48 | 0 | 0 | - | `None` |
 | l20_dual_utility_one_stocked | woodcutting | 18 | 19 | PASS | - | 2 | 1 | 1 | 9 | 2 | 5 | yes | `spruce_wood` |
 | l13_drop_recipe_grind | alchemy | 16 | 17 | PASS | - | 6 | 4 | 4 | 19 | 1 | 4 | - | `None` |
-| l13_drop_recipe_grind | cooking | 5 | 6 | PASS | - | 4 | 4 | 3 | 16 | 0 | 0 | - | `None` |
+| l13_drop_recipe_grind | cooking | 5 | 6 | PASS | - | 4 | 4 | 4 | 16 | 0 | 0 | - | `None` |
 | l13_drop_recipe_grind | fishing | 3 | 4 | PASS | - | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
-| l13_drop_recipe_grind | gearcrafting | 10 | 11 | PASS | - | 18 | 18 | 9 | 114 | 0 | 0 | - | `None` |
+| l13_drop_recipe_grind | gearcrafting | 10 | 11 | PASS | - | 18 | 18 | 17 | 114 | 0 | 0 | - | `None` |
 | l13_drop_recipe_grind | jewelrycrafting | 5 | 6 | PASS | - | 2 | 2 | 2 | 48 | 0 | 0 | - | `None` |
 | l13_drop_recipe_grind | mining | 12 | 13 | PASS | - | 2 | 1 | 1 | 12 | 2 | 5 | yes | `iron_ore` |
 | l13_drop_recipe_grind | weaponcrafting | 5 | 6 | PASS | - | 10 | 10 | 9 | 59 | 0 | 0 | - | `None` |
@@ -226,7 +226,7 @@ residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l22_grey_rung_grind | cooking | 12 | 13 | PASS | - | 7 | 5 | 5 | 13 | 0 | 0 | - | `None` |
 | l22_grey_rung_grind | fishing | 5 | 6 | PASS | - | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
 | l22_grey_rung_grind | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
-| l22_grey_rung_grind | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 4 | 39 | 0 | 0 | - | `None` |
+| l22_grey_rung_grind | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 8 | 39 | 0 | 0 | - | `None` |
 | l22_grey_rung_grind | mining | 21 | 22 | PASS | - | 7 | 5 | 5 | 7 | 3 | 4 | yes | `coal` |
 | l22_grey_rung_grind | weaponcrafting | 10 | 11 | PASS | - | 18 | 18 | 13 | 51 | 0 | 0 | - | `None` |
 | l22_grey_rung_grind | woodcutting | 15 | 16 | PASS | - | 2 | 1 | 1 | 9 | 2 | 5 | yes | `spruce_wood` |
@@ -305,7 +305,7 @@ residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l12_ge_book_adequate | alchemy | 5 | 6 | PASS | - | 2 | 2 | 2 | 23 | 1 | 4 | yes | `sunflower` |
 | l12_ge_book_adequate | cooking | 5 | 6 | PASS | - | 4 | 4 | 4 | 16 | 0 | 0 | - | `None` |
 | l12_ge_book_adequate | fishing | 5 | 6 | PASS | - | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
-| l12_ge_book_adequate | gearcrafting | 10 | 11 | PASS | - | 18 | 18 | 16 | 114 | 0 | 0 | - | `None` |
+| l12_ge_book_adequate | gearcrafting | 10 | 11 | PASS | - | 18 | 18 | 17 | 114 | 0 | 0 | - | `None` |
 | l12_ge_book_adequate | jewelrycrafting | 5 | 6 | PASS | yes | 2 | 2 | 2 | 48 | 0 | 0 | - | `None` |
 | l12_ge_book_adequate | mining | 10 | 11 | PASS | - | 2 | 2 | 2 | 12 | 2 | 5 | yes | `iron_ore` |
 | l12_ge_book_adequate | weaponcrafting | 10 | 11 | PASS | - | 18 | 18 | 13 | 51 | 0 | 0 | - | `None` |
@@ -316,12 +316,12 @@ residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l47_depth3_amulet | gearcrafting | 40 | 41 | PASS | - | 98 | 51 | 2 | 34 | 0 | 0 | - | `None` |
 | l47_depth3_amulet | jewelrycrafting | 40 | 41 | PASS | - | 44 | 23 | 4 | 6 | 0 | 0 | - | `None` |
 | l47_depth3_amulet | mining | 40 | 41 | PASS | - | 12 | 5 | 3 | 2 | 6 | 1 | yes | `mithril_ore` |
-| l47_depth3_amulet | weaponcrafting | 40 | 41 | **wall_rungs_unobtainable** | - | 56 | 22 | 0 | 13 | 0 | 0 | - | `None` |
+| l47_depth3_amulet | weaponcrafting | 40 | 41 | PASS | - | 56 | 22 | 4 | 13 | 0 | 0 | - | `None` |
 | l47_depth3_amulet | woodcutting | 40 | 41 | PASS | - | 10 | 7 | 5 | 1 | 6 | 1 | yes | `maple_wood` |
 | l20_relief_full_bank | alchemy | 10 | 11 | PASS | - | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
 | l20_relief_full_bank | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
 | l20_relief_full_bank | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
-| l20_relief_full_bank | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 14 | 109 | 0 | 0 | - | `None` |
+| l20_relief_full_bank | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
 | l20_relief_full_bank | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 8 | 39 | 0 | 0 | - | `None` |
 | l20_relief_full_bank | mining | 20 | 21 | PASS | - | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
 | l20_relief_full_bank | weaponcrafting | 15 | 16 | PASS | - | 21 | 15 | 8 | 48 | 0 | 0 | - | `None` |
@@ -329,7 +329,7 @@ residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l20_bag_critical_empty_bank | alchemy | 10 | 11 | PASS | - | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
 | l20_bag_critical_empty_bank | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
 | l20_bag_critical_empty_bank | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
-| l20_bag_critical_empty_bank | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 13 | 109 | 0 | 0 | - | `None` |
+| l20_bag_critical_empty_bank | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
 | l20_bag_critical_empty_bank | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 8 | 39 | 0 | 0 | - | `None` |
 | l20_bag_critical_empty_bank | mining | 20 | 21 | PASS | - | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
 | l20_bag_critical_empty_bank | weaponcrafting | 15 | 16 | PASS | - | 21 | 15 | 8 | 48 | 0 | 0 | - | `None` |
@@ -337,7 +337,7 @@ residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l22_rest_for_combat | alchemy | 10 | 11 | PASS | - | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
 | l22_rest_for_combat | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
 | l22_rest_for_combat | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
-| l22_rest_for_combat | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 13 | 109 | 0 | 0 | - | `None` |
+| l22_rest_for_combat | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
 | l22_rest_for_combat | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 8 | 39 | 0 | 0 | - | `None` |
 | l22_rest_for_combat | mining | 20 | 21 | PASS | - | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
 | l22_rest_for_combat | weaponcrafting | 15 | 16 | PASS | - | 21 | 15 | 8 | 48 | 0 | 0 | - | `None` |
@@ -345,13 +345,13 @@ residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l25_currency_leaf_unfunded | alchemy | 10 | 11 | PASS | - | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
 | l25_currency_leaf_unfunded | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
 | l25_currency_leaf_unfunded | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
-| l25_currency_leaf_unfunded | gearcrafting | 20 | 21 | PASS | - | 38 | 31 | 13 | 94 | 0 | 0 | - | `None` |
-| l25_currency_leaf_unfunded | jewelrycrafting | 20 | 21 | PASS | - | 17 | 15 | 7 | 33 | 0 | 0 | - | `None` |
+| l25_currency_leaf_unfunded | gearcrafting | 20 | 21 | PASS | - | 38 | 31 | 16 | 94 | 0 | 0 | - | `None` |
+| l25_currency_leaf_unfunded | jewelrycrafting | 20 | 21 | PASS | - | 17 | 15 | 8 | 33 | 0 | 0 | - | `None` |
 | l25_currency_leaf_unfunded | mining | 20 | 21 | PASS | - | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
-| l25_currency_leaf_unfunded | weaponcrafting | 20 | 21 | PASS | - | 31 | 21 | 5 | 38 | 0 | 0 | - | `None` |
+| l25_currency_leaf_unfunded | weaponcrafting | 20 | 21 | PASS | - | 31 | 21 | 7 | 38 | 0 | 0 | - | `None` |
 | l25_currency_leaf_unfunded | woodcutting | 20 | 21 | PASS | - | 3 | 2 | 2 | 8 | 3 | 4 | yes | `birch_wood` |
 | l24_fisher_cooking_rung | alchemy | 5 | 6 | PASS | - | 2 | 2 | 2 | 23 | 1 | 4 | yes | `sunflower` |
-| l24_fisher_cooking_rung | cooking | 21 | 22 | PASS | - | 12 | 5 | 3 | 8 | 0 | 0 | - | `None` |
+| l24_fisher_cooking_rung | cooking | 21 | 22 | PASS | - | 12 | 5 | 5 | 8 | 0 | 0 | - | `None` |
 | l24_fisher_cooking_rung | fishing | 25 | 26 | PASS | - | 0 | 0 | 0 | 0 | 3 | 4 | yes | `trout` |
 | l24_fisher_cooking_rung | gearcrafting | 5 | 6 | PASS | yes | 7 | 7 | 6 | 125 | 0 | 0 | - | `None` |
 | l24_fisher_cooking_rung | jewelrycrafting | 5 | 6 | PASS | yes | 2 | 2 | 2 | 48 | 0 | 0 | - | `None` |
@@ -361,7 +361,7 @@ residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l20_boost_stock | alchemy | 10 | 11 | PASS | - | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
 | l20_boost_stock | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
 | l20_boost_stock | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
-| l20_boost_stock | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 13 | 109 | 0 | 0 | - | `None` |
+| l20_boost_stock | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
 | l20_boost_stock | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 8 | 39 | 0 | 0 | - | `None` |
 | l20_boost_stock | mining | 20 | 21 | PASS | - | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
 | l20_boost_stock | weaponcrafting | 15 | 16 | PASS | - | 21 | 15 | 8 | 48 | 0 | 0 | - | `None` |

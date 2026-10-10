@@ -8,9 +8,9 @@
 >
 > The crossing is a differential on production's own pricer — the candidate priced as it stands, then again with the walled items granted. No closure is re-derived here; obligation O6 forbids a second cost model and this census must not be one.
 
-208 candidate cells over 44 scenarios; gate opens 2 of 9 walls (store-less); obtainable 79; not_drop_walled 118; walled 9 (9 on ALTERNATIVES); closes 9; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
+208 candidate cells over 44 scenarios; gate opens 1 of 2 walls (store-less); obtainable 85; not_drop_walled 119; walled 2 (2 on ALTERNATIVES); closes 2; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
 
-argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only the argmax sees those 0 and misses 9 — an infinite price is a veto, so a walled candidate never becomes the argmax.
+argmax blindness: 0 of 2 walls sit on a RESOLVED root. A census that prices only the argmax sees those 0 and misses 2 — an infinite price is a veto, so a walled candidate never becomes the argmax.
 
 | Scenario | Candidate | Root? | Verdict | base | granted | gated | item | droppers | live tiles | closes | chain |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -25,7 +25,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l8_overstocked | ObtainItem(code='wooden_stick', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l8_overstocked | ReachCharLevel(level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_copper_adequate | ReachSkillLevel(skill='jewelrycrafting', level=2) | argmax | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l10_copper_adequate | ObtainItem(code='cowhide', quantity=5) | alt | PASS | 5000000 | 0 | 217 | cowhide | 1 | 1 | 1 | iron_sword |
+| l10_copper_adequate | ObtainItem(code='jasper_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_copper_adequate | ObtainItem(code='water_bow', quantity=1, slot='weapon_slot') | alt | PASS | 143 | 143 | 143 | - | - | - | - | - |
 | l10_copper_adequate | ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot') | alt | PASS | 71 | 71 | 71 | - | - | - | - | - |
 | l10_copper_adequate | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -80,15 +80,15 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l35_artifact_fill | ObtainItem(code='perfect_pearl', quantity=1, slot='artifact2_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_artifact_fill | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_artifact_fill | ObtainItem(code='astralyte_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l35_artifact_fill | ObtainItem(code='king_slimeball', quantity=2) | alt | PASS | 2000000 | 0 | 2000000 | king_slimeball | 1 | 1 | 1 | cursed_sceptre |
+| l35_artifact_fill | ObtainItem(code='dreadful_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 330 | 330 | 330 | - | - | - | - | - |
 | l35_artifact_fill | ReachCharLevel(level=40) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l35_boots_drop_farm | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_boots_drop_farm | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_boots_drop_farm | ObtainItem(code='astralyte_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l35_boots_drop_farm | ObtainItem(code='king_slimeball', quantity=2) | alt | PASS | 2000000 | 0 | 2000000 | king_slimeball | 1 | 1 | 1 | cursed_sceptre |
+| l35_boots_drop_farm | ObtainItem(code='dreadful_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 330 | 330 | 330 | - | - | - | - | - |
 | l35_boots_drop_farm | ReachCharLevel(level=40) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l30_rune_fill | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | argmax | PASS | 3 | 3 | 3 | - | - | - | - | - |
-| l30_rune_fill | ObtainItem(code='king_slimeball', quantity=6) | alt | PASS | 6000000 | 0 | 6000000 | king_slimeball | 1 | 1 | 1 | death_knight_sword |
+| l30_rune_fill | ObtainItem(code='slime_shield', quantity=1, slot='shield_slot') | alt | PASS | 378 | 378 | 378 | - | - | - | - | - |
 | l30_rune_fill | ObtainItem(code='astralyte_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l30_rune_fill | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l30_rune_fill | ReachSkillLevel(skill='jewelrycrafting', level=19) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -185,7 +185,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l12_ge_book_adequate | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l12_ge_book_adequate | ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot') | alt | PASS | 11 | 11 | 11 | - | - | - | - | - |
 | l12_ge_book_adequate | ReachSkillLevel(skill='jewelrycrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l12_ge_book_adequate | ObtainItem(code='mushroom', quantity=4) | alt | PASS | 5 | 5 | 5 | - | - | - | - | - |
+| l12_ge_book_adequate | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 219 | 219 | 219 | - | - | - | - | - |
 | l12_ge_book_adequate | ObtainItem(code='adventurer_vest', quantity=1, slot='body_armor_slot') | alt | PASS | 135 | 135 | 135 | - | - | - | - | - |
 | l12_ge_book_adequate | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l47_depth3_amulet | ObtainItem(code='greater_dreadful_amulet', quantity=1, slot='amulet_slot') | argmax | PASS | 73 | 73 | 73 | - | - | - | - | - |
@@ -203,12 +203,12 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l20_relief_full_bank | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_bag_critical_empty_bank | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l20_bag_critical_empty_bank | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 107 | 107 | 107 | - | - | - | - | - |
-| l20_bag_critical_empty_bank | ObtainItem(code='mushroom', quantity=4) | alt | PASS | 4000000 | 0 | 4000000 | mushroom | 1 | 1 | 1 | forest_whip |
+| l20_bag_critical_empty_bank | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 216 | 216 | 216 | - | - | - | - | - |
 | l20_bag_critical_empty_bank | ObtainItem(code='adventurer_vest', quantity=1, slot='body_armor_slot') | alt | PASS | 149 | 149 | 149 | - | - | - | - | - |
 | l20_bag_critical_empty_bank | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l22_rest_for_combat | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l22_rest_for_combat | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 64 | 64 | 64 | - | - | - | - | - |
-| l22_rest_for_combat | ObtainItem(code='mushroom', quantity=4) | alt | PASS | 4000000 | 0 | 4000000 | mushroom | 1 | 1 | 1 | forest_whip |
+| l22_rest_for_combat | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 253 | 253 | 253 | - | - | - | - | - |
 | l22_rest_for_combat | ObtainItem(code='adventurer_vest', quantity=1, slot='body_armor_slot') | alt | PASS | 200 | 200 | 200 | - | - | - | - | - |
 | l22_rest_for_combat | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l25_currency_leaf_unfunded | ObtainItem(code='king_slime_sword', quantity=1, slot='weapon_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
@@ -219,7 +219,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l24_fisher_cooking_rung | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_boost_stock | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l20_boost_stock | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 107 | 107 | 107 | - | - | - | - | - |
-| l20_boost_stock | ObtainItem(code='mushroom', quantity=4) | alt | PASS | 4000000 | 0 | 4000000 | mushroom | 1 | 1 | 1 | forest_whip |
+| l20_boost_stock | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 253 | 253 | 253 | - | - | - | - | - |
 | l20_boost_stock | ObtainItem(code='adventurer_vest', quantity=1, slot='body_armor_slot') | alt | PASS | 163 | 163 | 163 | - | - | - | - | - |
 | l20_boost_stock | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 

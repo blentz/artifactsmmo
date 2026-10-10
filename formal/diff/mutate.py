@@ -372,6 +372,9 @@ PLAY_COMMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "commands" / "play.py"
 FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 CRAFT_COMPLETENESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_completeness.py"
 CRAFT_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_census.py"
+HELD_STOCK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "held_stock.py"
+FIGHT_WALK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_walk.py"
+LOADOUT_WIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loadout_win.py"
 RESTORE_HP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "restore_hp.py"
 TASK_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth.py"
 FIGHT_UPKEEP_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "fight_upkeep_core.py"
@@ -856,9 +859,6 @@ CONSUMABLE_PRICE_CORE_MUTATIONS = [
 # consumable_price: the reader (increment 2). OWN run_group: unit-killed by
 # tests/test_ai/test_consumable_price.py.
 CONSUMABLE_PRICE_READER_MUTATIONS = [
-    ("consumable_price reader: utility-slot stock is not held",
-     "    return owned_total(state, frozenset({code})) + worn",
-     "    return owned_total(state, frozenset({code}))"),
     ("consumable_price reader: an unobtainable walk is a make side (>= -> >)",
      "    if actions >= UNOBTAINABLE_PER_UNIT:",
      "    if actions > UNOBTAINABLE_PER_UNIT:"),
@@ -879,6 +879,32 @@ CONSUMABLE_PRICE_READER_MUTATIONS = [
 # loop_rate_core: recovery and the XP rate (consumable utility increments 3-4).
 # Killed by formal/diff/test_loop_rate_diff.py (exact agreement with the proved
 # Formal.LoopRate.recovery / planCost / consumedPrice / xpRate).
+# Moved 2026-10-10 with the code they mutate (held_stock / fight_walk split
+# out of consumable_price / loop_rate / best_loadout for the drop gate).
+HELD_STOCK_MUTATIONS = [
+    ("held_stock: utility-slot stock is not held",
+     "    return owned_total(state, frozenset({code})) + worn",
+     "    return owned_total(state, frozenset({code}))"),
+]
+FIGHT_WALK_LOOP_MUTATIONS = [
+    ("fight_walk: the restore's stock is not walked",
+     "                            max_hp, max_hp, restore_hp, restore_stock)",
+     "                            max_hp, max_hp, restore_hp, 0)"),
+    ("fight_walk: a splash potion is walked as a self restore",
+     "        if SPLASH_RESTORE in game_data.effect_codes(code):",
+     "        if False:"),
+]
+FIGHT_WALK_LOADOUT_MUTATIONS = [
+    ("fight_walk: a potion with no effect is a candidate",
+     "    return bool(codes) and all(c == RESTORE or c.startswith(BOOST_PREFIX) for c in codes)",
+     "    return all(c == RESTORE or c.startswith(BOOST_PREFIX) for c in codes)"),
+    ("fight_walk: a splash or antidote is a candidate",
+     "    return bool(codes) and all(c == RESTORE or c.startswith(BOOST_PREFIX) for c in codes)",
+     "    return bool(codes)"),
+    ("fight_walk: two restores share a loadout",
+     "            if restores <= 1:",
+     "            if restores <= 2:"),
+]
 LOOP_RATE_CORE_MUTATIONS = [
     ("loop_rate: a zero remainder pays the three-second Rest floor",
      "    return 0 if missing <= 0 else rest_cooldown_seconds(missing, max_hp)",
@@ -937,12 +963,6 @@ LOOP_RATE_READER_MUTATIONS = [
     ("loop_rate reader: a loss earns the kill's XP",
      "    xp = game_data.xp_per_kill(monster, state.level, state.wisdom) if outcome.win else 0",
      "    xp = game_data.xp_per_kill(monster, state.level, state.wisdom)"),
-    ("loop_rate reader: the restore's stock is not walked",
-     "                            max_hp, max_hp, restore_hp, restore_stock)",
-     "                            max_hp, max_hp, restore_hp, 0)"),
-    ("loop_rate reader: a splash potion is walked as a self restore",
-     "        if SPLASH_RESTORE in game_data.effect_codes(code):",
-     "        if False:"),
     ("loop_rate reader: the food menu is ignored",
      "                                       [(f.restore, f.price, f.held) for f in food], EAT_SECONDS)",
      "                                       [], EAT_SECONDS)"),
@@ -978,21 +998,12 @@ BEST_LOADOUT_CORE_MUTATIONS = [
 # best_loadout: the reader (increment 4). OWN run_group: unit-killed by
 # tests/test_ai/test_best_loadout.py.
 BEST_LOADOUT_READER_MUTATIONS = [
-    ("best_loadout reader: a potion with no effect is a candidate",
-     "    return bool(codes) and all(c == RESTORE or c.startswith(BOOST_PREFIX) for c in codes)",
-     "    return all(c == RESTORE or c.startswith(BOOST_PREFIX) for c in codes)"),
-    ("best_loadout reader: a splash or antidote is a candidate",
-     "    return bool(codes) and all(c == RESTORE or c.startswith(BOOST_PREFIX) for c in codes)",
-     "    return bool(codes)"),
     ("best_loadout reader: a potion above the level is a candidate",
      "        if stats.type_ != POTION or stats.level > state.level:",
      "        if stats.type_ != POTION:"),
     ("best_loadout reader: an unheld unpriced potion is a candidate",
      "        if held_count(code, state) > 0 or price is not None:",
      "        if True:"),
-    ("best_loadout reader: two restores share a loadout",
-     "            if restores <= 1:",
-     "            if restores <= 2:"),
     ("best_loadout reader: a restore is walked with one unit",
      "                         [(code, UTILITY_SLOT_MAX_STACK) for code in codes], food, prices)",
      "                         [(code, 1) for code in codes], food, prices)"),
@@ -3096,14 +3107,14 @@ OBTAIN_MODEL_GATE_MUTATIONS = [
 # drop_obtainability). Split by the test file that kills each.
 OBTAIN_MODEL_DROP_MUTATIONS = [
     ("drop_routes: ignore winnability",
-     "    winnable = (live or known) and is_winnable(rested.get(), game_data, monster)",
-     "    winnable = True"),
+     "    winnable = (live or known) and (\n",
+     "    winnable = True or (\n"),
     ("drop_routes: every monster has a routable spawn",
      "Gate(GateKind.SPAWN_KNOWN, monster, known)",
      "Gate(GateKind.SPAWN_KNOWN, monster, True)"),
     ("drop_routes: ask winnability only for a live monster",
-     "    winnable = (live or known) and is_winnable(rested.get(), game_data, monster)",
-     "    winnable = live and is_winnable(rested.get(), game_data, monster)"),
+     "    winnable = (live or known) and (\n",
+     "    winnable = live and (\n"),
     ("drop_routes: a monster that pays no gold is a gold route",
      "        if top <= 0:\n            continue",
      "        if top < 0:\n            continue"),
@@ -5567,6 +5578,32 @@ CENSUS_RUN_EVENT_MUTATIONS = [
     ("census: an event cell leaves its events live",
      "        game_data.active_event_codes = world_events\n",
      "        pass\n"),
+]
+# The drop route's WINNABLE gate wears a potion loadout (USER 2026-10-10).
+DROP_LOADOUT_GATE_MUTATIONS = [
+    ("drop gate: bare stats only",
+     "        or wins_with_a_loadout(rested.get(), game_data, monster))\n",
+     "        )\n"),
+]
+LOADOUT_WIN_MUTATIONS = [
+    ("loadout win: a potion at the skill level is not brewable",
+     "                     and state.skills.get(stats.crafting_skill, 0) >= stats.crafting_level)\n",
+     "                     and state.skills.get(stats.crafting_skill, 0) > stats.crafting_level)\n"),
+    ("loadout win: an event vendor stocks a potion",
+     "        sold = any(currency == GOLD_CODE and not game_data.is_event_npc(npc)\n",
+     "        sold = any(currency == GOLD_CODE\n"),
+    ("loadout win: an unlocated vendor stocks a potion",
+     "                   and game_data.npc_location(npc) is not None\n",
+     "\n"),
+    ("loadout win: a held potion is not stockable",
+     "        if held_count(code, state) > 0 or craftable or sold:\n",
+     "        if craftable or sold:\n"),
+    ("loadout win: a potion above the level is stockable",
+     "        if stats.type_ != POTION or stats.level > state.level:\n",
+     "        if stats.type_ != POTION:\n"),
+    ("loadout win: the memo ignores the fight fields",
+     "    key = (monster, tuple(stockable), _fight_key(state, game_data))\n",
+     "    key = (monster, tuple(stockable))\n"),
 ]
 REGION_BRIDGE_MUTATIONS = [
     ("region bridge: decompose emits legs in another region unbridged",
@@ -9307,6 +9344,12 @@ def _collect_all_groups() -> None:
               "formal/diff/test_best_loadout_diff.py", survivors)
     run_group(BEST_LOADOUT_SRC, BEST_LOADOUT_READER_MUTATIONS,
               "tests/test_ai/test_best_loadout.py", survivors)
+    run_group(HELD_STOCK_SRC, HELD_STOCK_MUTATIONS,
+              "tests/test_ai/test_consumable_price.py", survivors)
+    run_group(FIGHT_WALK_SRC, FIGHT_WALK_LOOP_MUTATIONS,
+              "tests/test_ai/test_loop_rate.py", survivors)
+    run_group(FIGHT_WALK_SRC, FIGHT_WALK_LOADOUT_MUTATIONS,
+              "tests/test_ai/test_best_loadout.py", survivors)
     run_group(PROJECTION_SRC, PROJECTION_MUTATIONS,
               "formal/diff/test_loadout_projection_diff.py", survivors)
     run_group(SCORING_SRC, SCORING_MUTATIONS,
@@ -10040,6 +10083,10 @@ def _collect_all_groups() -> None:
               "tests/test_audit/test_craft_completeness.py", survivors)
     run_group(CRAFT_CENSUS_SRC, CENSUS_RUN_EVENT_MUTATIONS,
               "tests/test_audit/test_craft_census.py", survivors)
+    run_group(OBTAIN_MODEL_DROP_SRC, DROP_LOADOUT_GATE_MUTATIONS,
+              "tests/test_ai/test_loadout_win.py", survivors)
+    run_group(LOADOUT_WIN_SRC, LOADOUT_WIN_MUTATIONS,
+              "tests/test_ai/test_loadout_win.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, REGION_BRIDGE_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, SUPPLY_DECOMPOSE_MUTATIONS,

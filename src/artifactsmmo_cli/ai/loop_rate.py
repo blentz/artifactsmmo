@@ -23,7 +23,7 @@ first starts where the last recovery left it, at full).
   and the fight cooldown it already prices is per fight.
 * CONSUMED — the restore potions the walk drank, and one of each boost (the
   increment-0 data: one boost per fight). USER 2026-10-09, "free until used
-  up": the drinks up to the units HELD (`consumable_price.held_count`: bag,
+  up": the drinks up to the units HELD (`held_stock.held_count`: bag,
   bank, utility slots) are free, every further one costs its replacement
   (`prices`, from `consumable_price.replacement_price_of`);
   `loop_rate_core.consumed_seconds`. A drink past the held units with no
@@ -39,26 +39,20 @@ from dataclasses import dataclass
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.cost_core import CONSUMABLE_COOLDOWN_SECONDS
-from artifactsmmo_cli.ai.boost_selection import project_equip
-from artifactsmmo_cli.ai.combat import combat_terms, fight_max_hp
-from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS, held_count, replacement_price_of
-from artifactsmmo_cli.ai.fight_outcome_core import fight_outcome
+from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS, replacement_price_of
 from artifactsmmo_cli.ai.fight_terms_core import SCALE
+from artifactsmmo_cli.ai.fight_walk import fight_walk
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.heal_catalog import FOOD, POTION, heal_candidates
+from artifactsmmo_cli.ai.heal_catalog import FOOD, heal_candidates
+from artifactsmmo_cli.ai.held_stock import held_count
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loop_rate_core import consumed_seconds, recovery_choice, xp_per_second
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.utility_slot import UTILITY_SLOTS
 from artifactsmmo_cli.ai.world_state import WorldState
 
 EAT_SECONDS = Fraction(CONSUMABLE_COOLDOWN_SECONDS)
 """One use of a food, whatever the quantity, exact."""
 
-SPLASH_RESTORE = "splash_restore"
-"""The API effect of a splash potion: "Restores X HP at the start of the turn to
-another character" — `hp_restore` carries its value too, but it never heals the
-wearer, so the solo loop refuses it rather than walking it as a restore."""
 
 
 @dataclass(frozen=True)
@@ -107,29 +101,6 @@ def food_menu(state: WorldState, game_data: GameData, ctx: SelectionContext,
     return tuple(menu)
 
 
-def _restore_of(loadout: Sequence[tuple[str, int]], game_data: GameData) -> tuple[str | None, int, int]:
-    """`(code, restore HP, stock)` of the loadout's restore potion, `(None, 0, 0)`
-    without one. Raises on a loadout the slots cannot wear."""
-    if len(loadout) > len(UTILITY_SLOTS):
-        raise ValueError(f"{len(loadout)} utility potions for {len(UTILITY_SLOTS)} slots")
-    if len({code for code, _ in loadout}) != len(loadout):
-        raise ValueError(f"one code per utility slot: {loadout}")
-    restore: tuple[str | None, int, int] = (None, 0, 0)
-    for code, stock in loadout:
-        stats = game_data.item_stats(code)
-        if stats is None or stats.type_ != POTION:
-            raise ValueError(f"{code} is not a utility potion")
-        if stock < 1:
-            raise ValueError(f"{code} needs a stock of at least 1, got {stock}")
-        if SPLASH_RESTORE in game_data.effect_codes(code):
-            raise ValueError(f"{code} restores ANOTHER character: no effect in a solo fight")
-        if stats.hp_restore > 0:
-            if restore[0] is not None:
-                raise ValueError(f"two restore potions {restore[0]}, {code}: the walk models one")
-            restore = (code, stats.hp_restore, stock)
-    return restore
-
-
 def loop_rate(state: WorldState, game_data: GameData, monster: str,
               loadout: Sequence[tuple[str, int]], food: Sequence[FoodOffer],
               prices: Mapping[str, Fraction | None]) -> LoopRate | None:
@@ -137,15 +108,7 @@ def loop_rate(state: WorldState, game_data: GameData, monster: str,
     recovering over `food` (see the module doc); `prices` holds every loadout
     potion's replacement price. None when a drink past the held units has no
     replacement."""
-    restore_code, restore_hp, restore_stock = _restore_of(loadout, game_data)
-    codes: list[str | None] = [code for code, _ in loadout]
-    codes += [None] * (len(UTILITY_SLOTS) - len(codes))
-    projected = state
-    for slot, code in zip(UTILITY_SLOTS, codes, strict=True):
-        projected = project_equip(projected, code, game_data, slot=slot)
-    max_hp = fight_max_hp(projected, game_data, monster)
-    outcome = fight_outcome(combat_terms(projected, game_data, monster),
-                            max_hp, max_hp, restore_hp, restore_stock)
+    outcome, max_hp, restore_code = fight_walk(state, game_data, monster, loadout)
     used = tuple((code, outcome.used if code == restore_code else 1) for code, _ in loadout)
     consumed = consumed_seconds([(n, prices[code], held_count(code, state)) for code, n in used])
     if consumed is None:

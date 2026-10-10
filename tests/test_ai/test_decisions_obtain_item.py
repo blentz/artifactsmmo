@@ -436,20 +436,24 @@ def test_a_material_with_a_route_is_untouched(bundle_game_data) -> None:
 
 def test_an_unreachable_closing_chain_keeps_the_honest_wall(
         bundle_game_data) -> None:
-    """`mushroom` is the case, and it is the circularity the 2026-08-09 audit
-    feared rather than a hypothetical: `mushmush` is closed by `forest_whip`,
-    whose recipe wants `king_slimeball` — guarded by `king_slime`, a monster this
-    character also cannot beat. Pricing that needs a FIXED POINT, so the price
-    says unobtainable and the node declines."""
+    """`king_slimeball` is the case: `king_slime` is beaten by no loadout this
+    character can wear, so the price says unobtainable and the node declines.
+
+    It was `mushroom` until 2026-10-10, walled behind `mushmush`, whose closing
+    gear wants `king_slimeball`. The drop gate now wears a potion loadout
+    (docs/PLAN_drop_fight_loadout.md): the 40 `small_health_potion` this
+    character wears beat `mushmush`, so `mushroom` has a drop route and the wall
+    is gone."""
     gd = bundle_game_data
     state = _with_skill_xp(scenario_state(SCENARIOS["l20_boost_stock"], gd))
-    step = ObtainItem(code="mushroom", quantity=4)
+    step = ObtainItem(code="king_slimeball", quantity=4)
     store = _grind_store()
     try:
-        assert not obtain_sources("mushroom", state, gd, NO_PROFILE_CONTEXT)
+        assert [s.code for s in obtain_sources("mushroom", state, gd, NO_PROFILE_CONTEXT)] == ["mushmush"]
+        assert not obtain_sources("king_slimeball", state, gd, NO_PROFILE_CONTEXT)
         goal = resolve_node(obtain_item_decision(step, step), state, gd,
                             NO_PROFILE_CONTEXT, store)
-        assert repr(goal) == "GatherMaterials(mushroom, {mushroom:4})"
+        assert repr(goal) == "GatherMaterials(king_slimeball, {king_slimeball:4})"
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -459,11 +463,14 @@ def test_where_the_wall_is_reached_and_why_no_cycle_acts_on_it(
         bundle_game_data) -> None:
     """CORPUS-WIDE, and it pins the limit as hard as the feature.
 
-    Ten cells over the committed scenarios reach a drop-walled material as a
-    step. Where the closing gear is priceable the node answers with it; where it
-    is not, the honest wall stays.
+    Two cells over the committed scenarios reach a drop-walled material as a
+    step (`l10_weapon_upgrade`, `l12_deep_chain_grind`). Where the closing gear
+    is priceable the node answers with it; where it is not, the honest wall
+    stays. There were ten until 2026-10-10: the drop gate now wears a potion
+    loadout (docs/PLAN_drop_fight_loadout.md), and eight walls were fights a
+    held or brewable potion wins.
 
-    ⚠️ ALL TEN REACH IT AS AN *ALTERNATIVE*, never as the chosen root, so no
+    ⚠️ BOTH REACH IT AS AN *ALTERNATIVE*, never as the chosen root, so no
     cycle in the committed corpus acts on this node: `_servable_promotion` walks
     the alternatives only when the CHOSEN root is unservable, and the root walk
     always has another servable rung — a blocked gear target returns a skill
@@ -492,7 +499,7 @@ def test_where_the_wall_is_reached_and_why_no_cycle_acts_on_it(
     finally:
         store.end_session(exit_reason="normal")
         store.close()
-    assert len(reached) >= 10, (
+    assert len(reached) >= 2, (
         f"only {len(reached)} walled steps reached — the fixture set moved and "
         "this test now measures less than it claims")
     assert not any(is_chosen for _name, is_chosen in reached), (

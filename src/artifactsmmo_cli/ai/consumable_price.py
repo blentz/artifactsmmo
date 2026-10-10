@@ -25,26 +25,18 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, ge_price_of, npc_price_of
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
-from artifactsmmo_cli.ai.bank_drain import owned_total
 from artifactsmmo_cli.ai.consumable_price_core import consumable_price
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.held_stock import held_count
 from artifactsmmo_cli.ai.learning.fight_loop_cost import TYPICAL_FIGHT_COOLDOWN_SECONDS
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.task_worth import fight_gold_rate
-from artifactsmmo_cli.ai.utility_slot import UTILITY_SLOTS, utility_slot_quantity
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 FIGHT_SECONDS = Fraction(TYPICAL_FIGHT_COOLDOWN_SECONDS)
 """Seconds in one fight-equivalent action, exact."""
-
-
-def held_count(code: str, state: WorldState) -> int:
-    """Units of `code` held: bag + bank + every utility slot wearing it."""
-    worn = sum(utility_slot_quantity(state, slot) for slot in UTILITY_SLOTS
-               if state.equipment.get(slot) == code)
-    return owned_total(state, frozenset({code})) + worn
 
 
 def make_seconds(code: str, state: WorldState, game_data: GameData, ctx: SelectionContext,

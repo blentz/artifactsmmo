@@ -136,8 +136,8 @@ def test_the_zero_stat_harness_would_measure_the_fixture(
     then unreachable, so cells wall for a reason that belongs to the harness.
 
     Three counts, pinned exactly because `open_rung_completeness`'s module
-    docstring quotes them: 62 closed with the flag off everywhere, 21 closed
-    on the scenarios AS COMMITTED (34 of the 44 opt in), 10 with the census's
+    docstring quotes them: 62 closed with the flag off everywhere, 20 closed
+    on the scenarios AS COMMITTED (34 of the 44 opt in), 9 with the census's
     forced-on states. The as-committed number is the one that matters — it is
     what this census would report if `census_state` were `scenario_state`.
 
@@ -154,12 +154,16 @@ def test_the_zero_stat_harness_would_measure_the_fixture(
     obtain model: a material held or banked in full now counts (with bags and banks
     emptied, all-off is 77 again), and the l48 gearcrafting 42 rung needs a
     `diamond_stone` whose only resource has no tile anywhere.
+
+    21 -> 20 / 10 -> 9 when the drop gate began wearing a potion loadout
+    (2026-10-10, docs/PLAN_drop_fight_loadout.md): l47_depth3_amulet's
+    weaponcrafting 40 rung descends into a drop a potion now wins.
     """
     all_off = _closed_cells(bundle_game_data, derive_combat_stats=False)
     as_committed = _closed_cells(bundle_game_data, derive_combat_stats=None)
     derived = _closed_cells(bundle_game_data, derive_combat_stats=True)
-    assert (all_off, as_committed, derived) == (62, 21, 10), \
-        "update the module docstring's 62/21/10 note"
+    assert (all_off, as_committed, derived) == (62, 20, 9), \
+        "update the module docstring's 62/20/9 note"
     # The opt-in count is PINNED, not merely restated. Both docstrings quote it,
     # and it silently rotted from 11 to 20 as scenarios were added — caught only
     # by a coverage audit, months later. A quoted number with no assertion behind
@@ -325,17 +329,18 @@ def test_weaponcrafting_ten_has_an_open_rung(
 def test_the_only_walls_today_are_high_weaponcrafting(
         results: list[orc.RungResult]) -> None:
     """Today's whole residual-free wall set, pinned as a finding rather than a
-    success: ten cells, `weaponcrafting` at 35, 40 or 42 and `gearcrafting`
+    success: nine cells, `weaponcrafting` at 35, 40 or 42 and `gearcrafting`
     at 42 (the four l48 scenarios, whose one rung needs a `diamond_stone` from
     the tile-less `strange_rocks`), each with XP-positive rungs in reach and NOT
-    ONE with a reachable material set.
+    ONE with a reachable material set. (Ten until 2026-10-10: the drop gate's
+    potion loadout opened l47_depth3_amulet's weaponcrafting 40.)
 
     A change that opens them is a fix and should update this test; a change
     that silently empties `results` of walls is the census going blind, which
     `test_the_sweep_sees_the_whole_grid`'s floor also catches.
     """
     walls = [r for r in results if not r.passed]
-    assert len(walls) == 10
+    assert len(walls) == 9
     assert sum(wall.skill == "gearcrafting" for wall in walls) == 4
     for wall in walls:
         assert (wall.skill, wall.level) in {("weaponcrafting", 35), ("weaponcrafting", 40),
@@ -386,7 +391,7 @@ def test_the_summary_reports_both_residuals_and_the_pair_count(
     assert "o1_silent_stall 0" in line
     assert "o1_unexplained 0" in line
     assert "skill_catalogue_empty 0" in line
-    assert "walled 10" in line
+    assert "walled 9" in line
 
 
 def test_the_routing_breakdown_scopes_the_residual(

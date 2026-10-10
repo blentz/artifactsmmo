@@ -27,27 +27,21 @@ The player reads the pick once per cycle against the fight ahead
 (`fight_ahead_loadout`) and threads it on the selection context; every
 consumable decision reads it there (`chosen_loadout`, increment 5)."""
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.best_loadout_core import pick_best
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
-from artifactsmmo_cli.ai.consumable_price import held_count, replacement_price_of
+from artifactsmmo_cli.ai.consumable_price import replacement_price_of
+from artifactsmmo_cli.ai.fight_walk import loadouts, potion_effects_usable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.heal_catalog import POTION
+from artifactsmmo_cli.ai.held_stock import held_count
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loop_rate import LoopRate, food_menu, loop_rate
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.world_state import WorldState
-
-RESTORE = "restore"
-"""The API effect of a self-heal utility potion (increment-0 table)."""
-
-BOOST_PREFIX = "boost_"
-"""The API effects of a stat-buff utility potion (`boost_dmg_*`, `boost_res_*`,
-`boost_hp`)."""
 
 
 @dataclass(frozen=True)
@@ -59,11 +53,6 @@ class BestLoadout:
     loadout: tuple[str, ...]
     rate: LoopRate
     bare: LoopRate
-
-
-def potion_effects_usable(codes: Sequence[str]) -> bool:
-    """Every effect changes the wearer's own fight: a `restore` or a boost."""
-    return bool(codes) and all(c == RESTORE or c.startswith(BOOST_PREFIX) for c in codes)
 
 
 def candidate_potions(state: WorldState, game_data: GameData, ctx: SelectionContext,
@@ -79,18 +68,6 @@ def candidate_potions(state: WorldState, game_data: GameData, ctx: SelectionCont
         price = replacement_price_of(code, state, game_data, ctx, store)
         if held_count(code, state) > 0 or price is not None:
             out[code] = price
-    return out
-
-
-def loadouts(candidates: Sequence[str], game_data: GameData) -> list[tuple[str, ...]]:
-    """No potions, each candidate, then each pair with at most one restore."""
-    out: list[tuple[str, ...]] = [()]
-    out += [(code,) for code in candidates]
-    for i, first in enumerate(candidates):
-        for second in candidates[i + 1:]:
-            restores = sum(RESTORE in game_data.effect_codes(c) for c in (first, second))
-            if restores <= 1:
-                out.append((first, second))
     return out
 
 

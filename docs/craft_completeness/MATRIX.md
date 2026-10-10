@@ -5,7 +5,7 @@
 > Census drives the REAL planner over the committed bundle. Cells whose plan hits the 10 s wall-clock budget (~16% of cells) can vary between regens; treat their verdict as approximate.
 
 
-321 recipes, 2418 cells; PASS 565 (23%); recipes PASS 114/321; nominal-at-skill PASS 103/321; gaps: event_gated 660, combat_blocked 1078, material_unreachable 87, skill_unreachable 0, grey_farm_suppressed 1, purchase_recursion 0, crossing_unaffordable 27, planner_bug 0
+321 recipes, 2418 cells; PASS 642 (27%); recipes PASS 133/321; nominal-at-skill PASS 122/321; gaps: event_gated 660, combat_blocked 894, material_unreachable 187, skill_unreachable 0, grey_farm_suppressed 1, purchase_recursion 0, crossing_unaffordable 34, planner_bug 0
 
 Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unreachable, GF=grey_farm_suppressed, PR=purchase_recursion, XU=crossing_unaffordable, PB=planner_bug; +ev = the cell with the recipe's sourcing events active.
 
@@ -42,8 +42,8 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 |---|---|---|
 | air_res_potion | 40 | 38/35 PASS · 38/40 PASS · 40/35 PASS · 40/40 PASS · 42/35 PASS · 42/40 PASS |
 | earth_res_potion | 40 | 38/35 PASS · 38/40 PASS · 40/35 PASS · 40/40 PASS · 42/35 PASS · 42/40 PASS |
-| enchanted_potion | 40 | 38/35 PASS · 38/40 XU · 40/35 PASS · 40/40 XU · 42/35 PASS · 42/40 XU |
-| enhanced_boost_potion | 40 | 38/35 EG · 38/40 EG · 40/35 EG · 40/40 EG · 42/35 EG · 42/40 EG · 38/35+ev CB · 38/40+ev CB · 40/35+ev CB · 40/40+ev CB · 42/35+ev CB · 42/40+ev CB |
+| enchanted_potion | 40 | 38/35 XU · 38/40 XU · 40/35 XU · 40/40 XU · 42/35 XU · 42/40 XU |
+| enhanced_boost_potion | 40 | 38/35 EG · 38/40 EG · 40/35 EG · 40/40 EG · 42/35 EG · 42/40 EG · 38/35+ev CB · 38/40+ev CB · 40/35+ev CB · 40/40+ev XU · 42/35+ev CB · 42/40+ev XU |
 | fire_res_potion | 40 | 38/35 PASS · 38/40 PASS · 40/35 PASS · 40/40 PASS · 42/35 PASS · 42/40 PASS |
 | greater_health_potion | 40 | 38/35 PASS · 38/40 PASS · 40/35 PASS · 40/40 PASS · 42/35 PASS · 42/40 PASS |
 | health_boost_potion | 40 | 38/35 PASS · 38/40 PASS · 40/35 PASS · 40/40 PASS · 42/35 PASS · 42/40 PASS |
@@ -53,7 +53,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
-| enhanced_antidote | 45 | 48/40 EG · 48/45 EG · 50/40 EG · 50/45 EG · 48/40+ev CB · 48/45+ev CB · 50/40+ev CB · 50/45+ev CB |
+| enhanced_antidote | 45 | 48/40 EG · 48/45 EG · 50/40 EG · 50/45 EG · 48/40+ev CB · 48/45+ev XU · 50/40+ev CB · 50/45+ev XU |
 | enhanced_health_potion | 45 | 48/40 EG · 48/45 EG · 50/40 EG · 50/45 EG · 48/40+ev XU · 48/45+ev XU · 50/40+ev XU · 50/45+ev XU |
 | enhanced_health_splash_potion | 50 | 48/45 EG · 48/50 EG · 50/45 EG · 50/50 EG · 48/45+ev XU · 48/50+ev XU · 50/45+ev XU · 50/50+ev XU |
 | lava_underground_potion | 50 | 48/45 XU · 48/50 XU · 50/45 XU · 50/50 XU |
@@ -86,7 +86,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
 | cooked_bass | 30 | 28/25 PASS · 28/30 PASS · 30/25 PASS · 30/30 PASS · 32/25 PASS · 32/30 PASS |
-| cooked_rat_meat | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
+| cooked_rat_meat | 30 | 28/25 CB · 28/30 CB · 30/25 PASS · 30/30 PASS · 32/25 PASS · 32/30 PASS |
 
 ## cooking — tier 4
 
@@ -108,7 +108,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
-| adventurer_helmet | 10 | 8/5 CB · 8/10 CB · 10/5 CB · 10/10 CB · 12/5 CB · 12/10 CB |
+| adventurer_helmet | 10 | 8/5 CB · 8/10 CB · 10/5 PASS · 10/10 PASS · 12/5 PASS · 12/10 PASS |
 | adventurer_vest | 10 | 8/5 CB · 8/10 CB · 10/5 PASS · 10/10 PASS · 12/5 PASS · 12/10 PASS |
 | copper_armor | 5 | 1/1 CB · 1/5 CB · 8/1 PASS · 8/5 PASS · 12/1 PASS · 12/5 PASS |
 | copper_boots | 1 | 1/1 PASS · 8/1 PASS · 12/1 PASS |
@@ -157,30 +157,30 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
 | conjurer_cloak | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
-| conjurer_skirt | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
-| flying_boots | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
-| gold_boots | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
+| conjurer_skirt | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev PASS · 30/30+ev PASS · 32/25+ev PASS · 32/30+ev PASS |
+| flying_boots | 30 | 28/25 CB · 28/30 CB · 30/25 MU · 30/30 MU · 32/25 MU · 32/30 MU |
+| gold_boots | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev MU · 30/30+ev MU · 32/25+ev MU · 32/30+ev MU |
 | gold_helm | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
 | gold_mask | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
-| gold_platebody | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
-| gold_platelegs | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
+| gold_platebody | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev PASS · 32/30+ev PASS |
+| gold_platelegs | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev PASS · 30/30+ev PASS · 32/25+ev PASS · 32/30+ev PASS |
 | gold_shield | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
-| lizard_boots | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
-| lizard_skin_armor | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev CB · 30/25+ev CB · 32/20+ev CB · 32/25+ev CB |
-| lizard_skin_legs_armor | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev CB · 30/25+ev CB · 32/20+ev CB · 32/25+ev CB |
-| obsidian_armor | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
-| obsidian_helmet | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
-| obsidian_legs_armor | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
-| piggy_armor | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev CB · 30/25+ev CB · 32/20+ev CB · 32/25+ev CB |
-| piggy_helmet | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev CB · 30/25+ev CB · 32/20+ev CB · 32/25+ev CB |
+| lizard_boots | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev MU · 30/30+ev MU · 32/25+ev MU · 32/30+ev MU |
+| lizard_skin_armor | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev MU · 30/25+ev MU · 32/20+ev MU · 32/25+ev MU |
+| lizard_skin_legs_armor | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev MU · 30/25+ev MU · 32/20+ev MU · 32/25+ev MU |
+| obsidian_armor | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev PASS · 30/30+ev PASS · 32/25+ev PASS · 32/30+ev PASS |
+| obsidian_helmet | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev PASS · 30/30+ev PASS · 32/25+ev PASS · 32/30+ev PASS |
+| obsidian_legs_armor | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev PASS · 30/30+ev PASS · 32/25+ev PASS · 32/30+ev PASS |
+| piggy_armor | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev MU · 30/25+ev MU · 32/20+ev MU · 32/25+ev MU |
+| piggy_helmet | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev PASS · 30/25+ev PASS · 32/20+ev PASS · 32/25+ev PASS |
 | piggy_pants | 25 | 28/20 MU · 28/25 MU · 30/20 MU · 30/25 MU · 32/20 MU · 32/25 MU |
-| royal_skeleton_armor | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
-| royal_skeleton_helmet | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
-| royal_skeleton_pants | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
-| snakeskin_armor | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev CB · 30/25+ev CB · 32/20+ev CB · 32/25+ev CB |
+| royal_skeleton_armor | 30 | 28/25 CB · 28/30 CB · 30/25 PASS · 30/30 PASS · 32/25 PASS · 32/30 PASS |
+| royal_skeleton_helmet | 30 | 28/25 CB · 28/30 CB · 30/25 PASS · 30/30 PASS · 32/25 PASS · 32/30 PASS |
+| royal_skeleton_pants | 30 | 28/25 CB · 28/30 CB · 30/25 PASS · 30/30 PASS · 32/25 PASS · 32/30 PASS |
+| snakeskin_armor | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev MU · 30/25+ev MU · 32/20+ev MU · 32/25+ev MU |
 | snakeskin_legs_armor | 25 | 28/20 PASS · 28/25 PASS · 30/20 PASS · 30/25 PASS · 32/20 PASS · 32/25 PASS |
-| stormforged_armor | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev CB · 30/25+ev CB · 32/20+ev CB · 32/25+ev CB |
-| stormforged_pants | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev CB · 30/25+ev CB · 32/20+ev CB · 32/25+ev CB |
+| stormforged_armor | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev MU · 30/25+ev MU · 32/20+ev MU · 32/25+ev MU |
+| stormforged_pants | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev MU · 30/25+ev MU · 32/20+ev MU · 32/25+ev MU |
 
 ## gearcrafting — tier 4
 
@@ -208,10 +208,10 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | mithril_boots | 40 | 38/35 EG · 38/40 EG · 40/35 EG · 40/40 EG · 42/35 EG · 42/40 EG · 38/35+ev CB · 38/40+ev CB · 40/35+ev CB · 40/40+ev CB · 42/35+ev CB · 42/40+ev CB |
 | mithril_helm | 40 | 38/35 EG · 38/40 EG · 40/35 EG · 40/40 EG · 42/35 EG · 42/40 EG · 38/35+ev CB · 38/40+ev CB · 40/35+ev CB · 40/40+ev CB · 42/35+ev CB · 42/40+ev CB |
 | mithril_platebody | 40 | 38/35 EG · 38/40 EG · 40/35 EG · 40/40 EG · 42/35 EG · 42/40 EG · 38/35+ev CB · 38/40+ev CB · 40/35+ev CB · 40/40+ev CB · 42/35+ev CB · 42/40+ev CB |
-| mithril_platelegs | 40 | 38/35 EG · 38/40 EG · 40/35 EG · 40/40 EG · 42/35 EG · 42/40 EG · 38/35+ev CB · 38/40+ev CB · 40/35+ev CB · 40/40+ev CB · 42/35+ev CB · 42/40+ev CB |
+| mithril_platelegs | 40 | 38/35 EG · 38/40 EG · 40/35 EG · 40/40 EG · 42/35 EG · 42/40 EG · 38/35+ev PASS · 38/40+ev PASS · 40/35+ev PASS · 40/40+ev PASS · 42/35+ev PASS · 42/40+ev PASS |
 | mithril_shield | 40 | 38/35 EG · 38/40 EG · 40/35 EG · 40/40 EG · 42/35 EG · 42/40 EG · 38/35+ev CB · 38/40+ev CB · 40/35+ev CB · 40/40+ev CB · 42/35+ev CB · 42/40+ev CB |
 | strangold_armor | 35 | 38/30 EG · 38/35 EG · 40/30 EG · 40/35 EG · 42/30 EG · 42/35 EG · 38/30+ev CB · 38/35+ev CB · 40/30+ev CB · 40/35+ev CB · 42/30+ev CB · 42/35+ev CB |
-| strangold_helmet | 35 | 38/30 EG · 38/35 EG · 40/30 EG · 40/35 EG · 42/30 EG · 42/35 EG · 38/30+ev CB · 38/35+ev CB · 40/30+ev CB · 40/35+ev CB · 42/30+ev CB · 42/35+ev CB |
+| strangold_helmet | 35 | 38/30 EG · 38/35 EG · 40/30 EG · 40/35 EG · 42/30 EG · 42/35 EG · 38/30+ev MU · 38/35+ev MU · 40/30+ev MU · 40/35+ev MU · 42/30+ev MU · 42/35+ev MU |
 | strangold_legs_armor | 35 | 38/30 EG · 38/35 EG · 40/30 EG · 40/35 EG · 42/30 EG · 42/35 EG · 38/30+ev CB · 38/35+ev CB · 40/30+ev CB · 40/35+ev CB · 42/30+ev CB · 42/35+ev CB |
 | water_shield | 40 | 38/35 EG · 38/40 EG · 40/35 EG · 40/40 EG · 42/35 EG · 42/40 EG · 38/35+ev CB · 38/40+ev CB · 40/35+ev CB · 40/40+ev CB · 42/35+ev CB · 42/40+ev CB |
 | white_knight_armor | 40 | 38/35 CB · 38/40 CB · 40/35 CB · 40/40 CB · 42/35 CB · 42/40 CB |
@@ -293,18 +293,18 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
 | emerald_amulet | 25 | 28/20 MU · 28/25 MU · 30/20 MU · 30/25 MU · 32/20 MU · 32/25 MU |
-| emerald_ring | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
-| gold_ring | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
-| greater_dreadful_amulet | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
-| lost_amulet | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
-| prospecting_amulet | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
-| royal_skeleton_ring | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
+| emerald_ring | 30 | 28/25 CB · 28/30 CB · 30/25 MU · 30/30 MU · 32/25 MU · 32/30 MU |
+| gold_ring | 30 | 28/25 CB · 28/30 CB · 30/25 PASS · 30/30 PASS · 32/25 PASS · 32/30 PASS |
+| greater_dreadful_amulet | 30 | 28/25 CB · 28/30 CB · 30/25 PASS · 30/30 PASS · 32/25 PASS · 32/30 PASS |
+| lost_amulet | 30 | 28/25 CB · 28/30 CB · 30/25 PASS · 30/30 PASS · 32/25 PASS · 32/30 PASS |
+| prospecting_amulet | 30 | 28/25 CB · 28/30 CB · 30/25 MU · 30/30 MU · 32/25 MU · 32/30 MU |
+| royal_skeleton_ring | 30 | 28/25 CB · 28/30 CB · 30/25 PASS · 30/30 PASS · 32/25 PASS · 32/30 PASS |
 | ruby_amulet | 25 | 28/20 MU · 28/25 MU · 30/20 MU · 30/25 MU · 32/20 MU · 32/25 MU |
-| ruby_ring | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
+| ruby_ring | 30 | 28/25 CB · 28/30 CB · 30/25 MU · 30/30 MU · 32/25 MU · 32/30 MU |
 | sapphire_amulet | 25 | 28/20 MU · 28/25 MU · 30/20 MU · 30/25 MU · 32/20 MU · 32/25 MU |
-| sapphire_ring | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
+| sapphire_ring | 30 | 28/25 CB · 28/30 CB · 30/25 MU · 30/30 MU · 32/25 MU · 32/30 MU |
 | topaz_amulet | 25 | 28/20 MU · 28/25 MU · 30/20 MU · 30/25 MU · 32/20 MU · 32/25 MU |
-| topaz_ring | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
+| topaz_ring | 30 | 28/25 CB · 28/30 CB · 30/25 MU · 30/30 MU · 32/25 MU · 32/30 MU |
 
 ## jewelrycrafting — tier 4
 
@@ -320,7 +320,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | greater_ruby_amulet | 40 | 38/35 CB · 38/40 CB · 40/35 CB · 40/40 CB · 42/35 CB · 42/40 CB |
 | greater_sapphire_amulet | 40 | 38/35 CB · 38/40 CB · 40/35 CB · 40/40 CB · 42/35 CB · 42/40 CB |
 | greater_topaz_amulet | 40 | 38/35 CB · 38/40 CB · 40/35 CB · 40/40 CB · 42/35 CB · 42/40 CB |
-| malefic_ring | 35 | 38/30 EG · 38/35 EG · 40/30 EG · 40/35 EG · 42/30 EG · 42/35 EG · 38/30+ev CB · 38/35+ev CB · 40/30+ev CB · 40/35+ev CB · 42/30+ev CB · 42/35+ev CB |
+| malefic_ring | 35 | 38/30 EG · 38/35 EG · 40/30 EG · 40/35 EG · 42/30 EG · 42/35 EG · 38/30+ev CB · 38/35+ev CB · 40/30+ev MU · 40/35+ev MU · 42/30+ev MU · 42/35+ev MU |
 | masterful_necklace | 35 | 38/30 EG · 38/35 EG · 40/30 EG · 40/35 EG · 42/30 EG · 42/35 EG · 38/30+ev CB · 38/35+ev CB · 40/30+ev CB · 40/35+ev CB · 42/30+ev CB · 42/35+ev CB |
 | mithril_ring | 40 | 38/35 EG · 38/40 EG · 40/35 EG · 40/40 EG · 42/35 EG · 42/40 EG · 38/35+ev CB · 38/40+ev CB · 40/35+ev CB · 40/40+ev CB · 42/35+ev CB · 42/40+ev CB |
 | sacred_ring | 40 | 38/35 EG · 38/40 EG · 40/35 EG · 40/40 EG · 42/35 EG · 42/40 EG · 38/35+ev CB · 38/40+ev CB · 40/35+ev CB · 40/40+ev CB · 42/35+ev CB · 42/40+ev CB |
@@ -358,7 +358,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
 | gold_bar | 30 | 28/25 PASS · 28/30 PASS · 30/25 PASS · 30/30 PASS · 32/25 PASS · 32/30 PASS |
-| obsidian_bar | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
+| obsidian_bar | 30 | 28/25 CB · 28/30 CB · 30/25 PASS · 30/30 PASS · 32/25 PASS · 32/30 PASS |
 
 ## mining — tier 4
 
@@ -420,18 +420,18 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
-| dreadful_staff | 25 | 28/20 CB · 28/25 CB · 30/20 CB · 30/25 CB · 32/20 CB · 32/25 CB |
-| elderwood_staff | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
-| gold_axe | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
-| gold_fishing_rod | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
+| dreadful_staff | 25 | 28/20 CB · 28/25 CB · 30/20 MU · 30/25 MU · 32/20 MU · 32/25 MU |
+| elderwood_staff | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev PASS · 30/30+ev PASS · 32/25+ev PASS · 32/30+ev PASS |
+| gold_axe | 30 | 28/25 CB · 28/30 CB · 30/25 MU · 30/30 MU · 32/25 MU · 32/30 MU |
+| gold_fishing_rod | 30 | 28/25 CB · 28/30 CB · 30/25 MU · 30/30 MU · 32/25 MU · 32/30 MU |
 | gold_pickaxe | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
 | gold_sword | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
-| golden_gloves | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
-| greater_dreadful_staff | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
-| obsidian_battleaxe | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
+| golden_gloves | 30 | 28/25 CB · 28/30 CB · 30/25 MU · 30/30 MU · 32/25 MU · 32/30 MU |
+| greater_dreadful_staff | 30 | 28/25 CB · 28/30 CB · 30/25 MU · 30/30 MU · 32/25 MU · 32/30 MU |
+| obsidian_battleaxe | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev PASS · 30/30+ev PASS · 32/25+ev PASS · 32/30+ev PASS |
 | perfect_bow | 30 | 28/25 EG · 28/30 EG · 30/25 EG · 30/30 EG · 32/25 EG · 32/30 EG · 28/25+ev CB · 28/30+ev CB · 30/25+ev CB · 30/30+ev CB · 32/25+ev CB · 32/30+ev CB |
-| skull_wand | 25 | 28/20 CB · 28/25 CB · 30/20 CB · 30/25 CB · 32/20 CB · 32/25 CB |
-| vampire_bow | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev CB · 30/25+ev CB · 32/20+ev CB · 32/25+ev CB |
+| skull_wand | 25 | 28/20 CB · 28/25 CB · 30/20 MU · 30/25 MU · 32/20 MU · 32/25 MU |
+| vampire_bow | 25 | 28/20 EG · 28/25 EG · 30/20 EG · 30/25 EG · 32/20 EG · 32/25 EG · 28/20+ev CB · 28/25+ev CB · 30/20+ev MU · 30/25+ev MU · 32/20+ev MU · 32/25+ev MU |
 
 ## weaponcrafting — tier 4
 
@@ -442,7 +442,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | diamond_sword | 35 | 38/30 EG · 38/35 EG · 40/30 EG · 40/35 EG · 42/30 EG · 42/35 EG · 38/30+ev CB · 38/35+ev CB · 40/30+ev CB · 40/35+ev CB · 42/30+ev CB · 42/35+ev CB |
 | dreadful_battleaxe | 35 | 38/30 EG · 38/35 EG · 40/30 EG · 40/35 EG · 42/30 EG · 42/35 EG · 38/30+ev CB · 38/35+ev CB · 40/30+ev CB · 40/35+ev CB · 42/30+ev CB · 42/35+ev CB |
 | lightning_sword | 40 | 38/35 CB · 38/40 CB · 40/35 CB · 40/40 CB · 42/35 CB · 42/40 CB |
-| magic_bow | 35 | 38/30 EG · 38/35 EG · 40/30 EG · 40/35 EG · 42/30 EG · 42/35 EG · 38/30+ev CB · 38/35+ev CB · 40/30+ev CB · 40/35+ev CB · 42/30+ev CB · 42/35+ev CB |
+| magic_bow | 35 | 38/30 EG · 38/35 EG · 40/30 EG · 40/35 EG · 42/30 EG · 42/35 EG · 38/30+ev MU · 38/35+ev MU · 40/30+ev MU · 40/35+ev MU · 42/30+ev MU · 42/35+ev MU |
 | mithril_axe | 40 | 38/35 CB · 38/40 CB · 40/35 CB · 40/40 CB · 42/35 CB · 42/40 CB |
 | mithril_fishing_rod | 40 | 38/35 CB · 38/40 CB · 40/35 CB · 40/40 CB · 42/35 CB · 42/40 CB |
 | mithril_gloves | 40 | 38/35 CB · 38/40 CB · 40/35 CB · 40/40 CB · 42/35 CB · 42/40 CB |

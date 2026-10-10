@@ -7,7 +7,7 @@ means five things:
 
 * it must sweep the CANDIDATES, not the argmax — `test_the_sweep_prices_the_
   alternatives_and_not_only_the_argmax` pins that the grid is wider than the
-  scenario count, because a resolved-root-only sweep sees ZERO of the nine walls
+  scenario count, because a resolved-root-only sweep sees ZERO of the two walls
   in the committed set and would report a clean grid;
 * its detector must be production's — `test_the_crossing_is_the_pricers_own_
   answer` cross-reads the differential against `route_price` directly;
@@ -115,11 +115,13 @@ def test_only_the_closes_arm_is_exercised_and_the_matrix_says_so(
     """PINNED COUNTS, so the day a fixture changes them this FAILS rather than
     rotting.
 
-    9 CLOSES / 0 OUT_OF_REACH on the committed bundle. The zero is asserted
+    2 CLOSES / 0 OUT_OF_REACH on the committed bundle (9 until the drop gate
+    wore a potion loadout, 2026-10-10: seven walls were fights a held or
+    brewable potion wins, docs/PLAN_drop_fight_loadout.md). The zero is asserted
     deliberately: `WALL_DROPPER_OUT_OF_REACH` classifies nothing here, which is a
     fact about the fixture set and not a success, and the arm is kept honest by a
     positive control below rather than by this grid."""
-    assert sum(1 for r in results if r.gap == CLOSES) == 9
+    assert sum(1 for r in results if r.gap == CLOSES) == 2
     assert sum(1 for r in results if r.gap == OUT_OF_REACH) == 0
     assert all(not r.is_resolved_root for r in _walls(results))
 
@@ -178,7 +180,7 @@ def test_the_crossing_is_the_pricers_own_answer(results: list[DropResult]) -> No
 def test_the_walled_set_negates_the_drop_source_conjuncts() -> None:
     """`unwinnable_drop_items` must read the same three facts
     `obtain_sources._drop_sources` gates on — and must not be empty on a
-    fixture set where the wall has nine witnesses."""
+    fixture set where the wall has two witnesses."""
     cache: dict[tuple[bool, tuple[str, ...]], GameData] = {}
     scenario = SCENARIOS["l10_copper_adequate"]
     game_data = declared_world(scenario, BUNDLE, cache)
@@ -298,8 +300,8 @@ def test_a_root_the_walk_cannot_resolve_is_a_visible_row(
 def test_the_summary_reports_the_arm_counts(results: list[DropResult]) -> None:
     line = summary_line(results)
     assert "candidate cells" in line
-    assert "gate opens 2 of 9 walls (store-less)" in line
-    assert "closes 9" in line
+    assert "gate opens 1 of 2 walls (store-less)" in line
+    assert "closes 2" in line
     assert "out_of_reach 0" in line
     assert "on ALTERNATIVES" in line
 
@@ -350,12 +352,12 @@ def test_the_census_keeps_counting_a_wall_the_gate_now_prices(
     `gate_price` reports separately which walls the gate opens.
 
     Store-less, so this is the floor rather than the live figure: every unlock in
-    the committed set is gear whose own craft is skill-gated, and with an
-    observed grind rate the gate opens 3 of the 9 rather than 2."""
+    the committed set is gear whose own craft is skill-gated. 2 walls, 1 opened,
+    since the drop gate wore a potion loadout (2026-10-10; 9 and 2 before)."""
     walls = _walls(results)
-    assert len(walls) == 9
+    assert len(walls) == 2
     opened = [w for w in walls if w.gate_price < UNOBTAINABLE_PER_UNIT]
-    assert len(opened) == 2
+    assert len(opened) == 1
     for wall in opened:
         assert wall.base_price >= UNOBTAINABLE_PER_UNIT
         assert wall.gate_price < wall.base_price

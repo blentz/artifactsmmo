@@ -81,7 +81,7 @@
 | l40_band_entry | alchemy | 25 | earns | Gather(nettle×1) → Gather(trout_spot×1) → Craft(forest_bank_potion×1) |
 | l40_band_entry | cooking | 35 | earns | Gather(bass_spot×1) → Craft(cooked_bass×1) |
 | l40_band_entry | fishing | 35 | earns | Gather(bass_spot×1) |
-| l40_band_entry | gearcrafting | 35 | earns | Transition((5,-3,overworld)->(5,-3,underground)) → Gather(gold_rocks×80) → Transition((5,-3,underground)->(5,-3,overworld)) → Craft(gold_bar×8) → Fight(skeleton) → Fight(wolf) → Fight(pig) → Gather(iron_rocks×12) → Gather(coal_rocks×28) → Craft(steel_bar×4) → Craft(skeleton_armor×1) → Fight(death_knight) → Fight(imp) → Craft(royal_skeleton_armor×1) |
+| l40_band_entry | gearcrafting | 35 | earns | Transition((5,-3,overworld)->(5,-3,underground)) → Gather(gold_rocks×80) → Transition((5,-3,underground)->(5,-3,overworld)) → Craft(gold_bar×8) → Fight(wolf) → Fight(skeleton) → Fight(wolf) → Gather(ash_tree×70) → Craft(ash_plank×7) → Craft(skeleton_pants×1) → Fight(owlbear) → Fight(vampire) → Craft(royal_skeleton_pants×1) |
 | l40_band_entry | jewelrycrafting | 25 | earns | Gather(iron_rocks×50) → Craft(iron_bar×5) → Fight(green_slime) → Fight(flying_snake) → Craft(air_ring×1) |
 | l40_band_entry | mining | 38 | earns | Transition((5,-3,overworld)->(5,-3,underground)) → Gather(gold_rocks×10) → Transition((5,-3,underground)->(5,-3,overworld)) → Craft(gold_bar×1) |
 | l40_band_entry | weaponcrafting | 35 | declined |  |

@@ -269,7 +269,7 @@ def classify(candidate: MetaGoal, state: WorldState, game_data: GameData,
     THE ORDER OF THE TWO PROBES IS LOAD-BEARING. The collective grant is asked
     FIRST and the per-item attribution only on a candidate that crossed: pricing
     every walled item individually against every unobtainable candidate is 371 x
-    68 walks for an answer that is `NOT_DROP_WALLED` in all but nine of them.
+    68 walks for an answer that is `NOT_DROP_WALLED` in all but two of them.
     Asking the cheap question first is also what makes `DROP_WALL_UNATTRIBUTED`
     expressible — it is precisely "the collective probe crossed and no single one
     did", which a per-item-only sweep could not distinguish from a clean pass."""

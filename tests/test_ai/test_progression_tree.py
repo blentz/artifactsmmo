@@ -238,12 +238,18 @@ class TestPerScenarioPins:
         climb. The scenario is STILL not "adequate" in the tier model's sense,
         which is the point the original docstring was making, just with a
         different witness. The rows are spelled out rather than counted: the
-        old `len(...) == 3` passed under both regimes over different rows."""
+        old `len(...) == 3` passed under both regimes over different rows.
+
+        RE-DERIVED 2026-10-10 (docs/PLAN_drop_fight_loadout.md): the drop gate
+        wears a potion loadout, and the `small_health_potion` this character
+        brews at alchemy 5 beats the cow, so `cowhide` is no blocker; the gear
+        target's next one is `jasper_crystal`, sold only for `tasks_coin` behind
+        the achievement-locked tasks_trader tile."""
         d, _ = _decide("l10_copper_adequate")
         assert d.chosen_root == ReachSkillLevel(skill="jewelrycrafting", level=2)
         assert [r.root_repr for r in d.ranking] == [
             "ReachSkillLevel(skill='jewelrycrafting', level=2)",
-            "ObtainItem(code='cowhide', quantity=5)",
+            "ObtainItem(code='jasper_crystal', quantity=1)",
             "ObtainItem(code='water_bow', quantity=1, slot='weapon_slot')",
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
             "ReachCharLevel(level=20)",

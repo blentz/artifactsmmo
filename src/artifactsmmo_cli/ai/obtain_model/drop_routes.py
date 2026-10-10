@@ -16,7 +16,12 @@ The gates on a fight, whatever it pays:
 - `WINNABLE`: asked at RESTORABLE hp (route existence is not an hp question;
   resting is an action the planner has), cold (no LearningStore), and only for
   a monster that spawns under either predicate: one that spawns nowhere has no
-  FightAction to serve it, so its verdict could never be used.
+  FightAction to serve it, so its verdict could never be used. The bare stats,
+  or failing them some runnable utility-potion loadout
+  (`loadout_win.wins_with_a_loadout`, USER 2026-10-10: "judge drop fights with
+  the chosen loadout"): live C3P0 beat vampire 77/117 with a water boost while
+  the bare gate called it unwinnable. Both drop paths read this one gate; the
+  committed fight's own loadout is stocked by the CRAFT_POTIONS guard.
 - `XP_POSITIVE`: `xp_per_kill` at the character's level. It reads the ORIGINAL
   state: grey is about level, which a rested copy shares.
 """
@@ -25,6 +30,7 @@ from dataclasses import dataclass, replace
 
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.loadout_win import wins_with_a_loadout
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.source_kind import SourceKind
@@ -49,7 +55,9 @@ def _fight_gates(monster: str, state: WorldState, game_data: GameData,
                  rested: _Rested) -> tuple[Gate, ...]:
     live = bool(game_data.all_monster_locations.get(monster))
     known = game_data.monster_spawn_known(monster)
-    winnable = (live or known) and is_winnable(rested.get(), game_data, monster)
+    winnable = (live or known) and (
+        is_winnable(rested.get(), game_data, monster)
+        or wins_with_a_loadout(rested.get(), game_data, monster))
     return (
         Gate(GateKind.SPAWN_LIVE, monster, live),
         Gate(GateKind.SPAWN_KNOWN, monster, known),
