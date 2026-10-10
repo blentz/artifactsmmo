@@ -2038,12 +2038,13 @@ class TestBridgeRegions:
         assert [repr(a) for a in plan] == ["Edge(overworld->mine)", "Edge(mine->tomb)",
                                            "Fight(lich)"]
 
-    def test_crossings_give_up_past_the_bound(self) -> None:
-        chain = [_Edge(f"r{i}", f"r{i + 1}") for i in range(cpg.MAX_CROSSINGS + 1)]
-        assert cpg._crossings(make_state(layer="r0"), f"r{cpg.MAX_CROSSINGS + 1}", chain,
-                              GameData()) is None
-        assert cpg._crossings(make_state(layer="r0"), f"r{cpg.MAX_CROSSINGS}", chain,
-                              GameData()) is not None
+    def test_a_long_chain_of_crossings_is_found(self) -> None:
+        """The island to the sonnengott cavern is 5 crossings; a cap of 4
+        declined it (2026-10-10). The search ends on exhausted regions."""
+        chain = [_Edge(f"r{i}", f"r{i + 1}") for i in range(6)]
+        route = cpg._crossings(make_state(layer="r0"), "r6", chain, GameData())
+        assert route is not None and len(route) == 6
+        assert cpg._crossings(make_state(layer="r0"), "nowhere", chain, GameData()) is None
 
     def test_a_region_reached_twice_is_expanded_once(self) -> None:
         """Two edges into `mine`: the second is not a new frontier entry."""

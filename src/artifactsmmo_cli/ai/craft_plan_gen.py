@@ -177,20 +177,18 @@ def _bridge_regions(plan: list[Action], state: WorldState, game_data: GameData,
     return bridged
 
 
-MAX_CROSSINGS = 4
-"""The most region crossings `_crossings` chains. The live map's farthest
-content (the island, the desert) is two or three hops out; the bound keeps a
-missing edge from searching the whole edge graph."""
-
-
 def _crossings(state: WorldState, target: str, edges: list[Action],
                game_data: GameData) -> list[Action] | None:
     """The fewest applicable crossings from `state`'s region into `target`,
     breadth-first over the region edges, or None. Each crossing is applied, so
-    a key or fee the first one spends is not available to the second."""
+    a key or fee the first one spends is not available to the second. Each
+    region is entered once (`seen`), so the search ends when the reachable
+    regions are exhausted. It was capped at 4 crossings: the island to the
+    sonnengott cavern, and that cavern to the raid area, are 5 (the conditions
+    census, 2026-10-10: red_dragon_boots, medic_armor declined)."""
     frontier: list[tuple[WorldState, list[Action]]] = [(state, [])]
     seen = {game_data.state_region(state)}
-    for _ in range(MAX_CROSSINGS):
+    while frontier:
         nxt: list[tuple[WorldState, list[Action]]] = []
         for at, route in frontier:
             here = game_data.state_region(at)

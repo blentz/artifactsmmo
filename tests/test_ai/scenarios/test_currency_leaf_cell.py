@@ -147,7 +147,9 @@ def test_the_step_graph_routes_to_funding_not_to_gathering(
     goal = objective_step_goal(ObtainItem(code=LEAF, quantity=1), state,
                                unlocked, NO_PROFILE_CONTEXT, root=_root(),
                                history=None)
-    assert repr(goal) == f"ReachCurrency({TASKS_COIN_CODE}, {LEAF_PRICE})"
+    # one task loop's coins at a time (`funding_step_goal`), toward the price
+    step = min(LEAF_PRICE, unlocked.min_task_coin_reward())
+    assert repr(goal) == f"ReachCurrency({TASKS_COIN_CODE}, {step})"
 
 
 def test_holding_the_coins_flips_the_arm_and_the_goal(

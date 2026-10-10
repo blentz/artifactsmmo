@@ -1,8 +1,9 @@
 """Generate docs/craft_completeness/CONDITIONS.md: under which conditions each
 recipe plans and what wins each of its fights (`audit/craft_conditions.py`;
-docs/PLAN_drop_fight_loadout.md increment 2). `--check` fails on a recipe
-whose top rung is a PLANNER_BUG: a level-50 character with every skill, gold
-and the events, every leaf reachable, and still no plan."""
+docs/PLAN_drop_fight_loadout.md). `--check` fails on a recipe that plans
+under no condition of the ladder (USER 2026-10-10 acceptance: "a complete
+crafting census that identifies conditions required to successfully plan every
+item")."""
 
 import json
 import os
@@ -20,16 +21,19 @@ BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
 OUT = Path("docs/craft_completeness/CONDITIONS.md")
 
 _GD: GameData | None = None
+_ACHIEVED: GameData | None = None
 
 
 def _init_worker(bundle_dict: dict[str, Any]) -> None:
-    global _GD
+    global _GD, _ACHIEVED
     _GD = GameData.from_cache_bundle(bundle_dict)
+    _ACHIEVED = GameData.from_cache_bundle(bundle_dict, completed_achievements=frozenset(
+        str(a["code"]) for a in bundle_dict["achievements"]))
 
 
 def _climb(recipe: str) -> ConditionsResult:
-    assert _GD is not None  # set by _init_worker in every pool worker
-    return climb(recipe, _GD)
+    assert _GD is not None and _ACHIEVED is not None  # set by _init_worker in every pool worker
+    return climb(recipe, _GD, _ACHIEVED)
 
 
 def main() -> None:
@@ -44,11 +48,13 @@ def main() -> None:
     print(f"conditions done in {time.monotonic() - start:.0f}s", file=sys.stderr)
     print(summary_line(results))
     if check:
-        bugs = [r.recipe for r in results if r.rung is None and r.result.gap == "planner_bug"]
-        if bugs:
-            print(f"CONDITIONS NOT CLEAN: {len(bugs)} PLANNER_BUG recipe(s): {bugs}", file=sys.stderr)
+        # USER 2026-10-10 acceptance: a condition for EVERY recipe
+        unplanned = [f"{r.recipe} ({r.result.gap})" for r in results if r.rung is None]
+        if unplanned:
+            print(f"CONDITIONS NOT COMPLETE: {len(unplanned)} recipe(s) plan under no condition: "
+                  f"{unplanned}", file=sys.stderr)
             sys.exit(1)
-        print("CONDITIONS CLEAN: 0 PLANNER_BUG recipes.", file=sys.stderr)
+        print("CONDITIONS COMPLETE: every recipe plans under a named condition.", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -115,7 +115,7 @@ def test_an_event_cell_runs_with_its_events_live_and_restores_the_world() -> Non
     gd = _gd()
     seen: list[set[str]] = []
 
-    def plan(_recipe: str, _state: object, game_data: GameData) -> list[object]:
+    def plan(_recipe: str, _state: object, game_data: GameData, *_grants: object) -> list[object]:
         seen.append(set(game_data.active_event_codes))
         return []
 

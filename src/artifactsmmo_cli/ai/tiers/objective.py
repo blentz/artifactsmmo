@@ -418,6 +418,22 @@ class CharacterObjective:
             _game_data=game_data,
         )
 
+    def catalogue_best_gear(self, state: WorldState) -> dict[str, str]:
+        """The best suppliable item per equipment slot at `state.level`,
+        however it would be obtained: `near_term_gear`'s ranking and slot
+        assignment without its attainable-now filter. The conditions census's
+        `gear` rung (docs/PLAN_drop_fight_loadout.md): it names the gear a
+        recipe needs when the gear the census character can reach does not
+        win its fights."""
+        targets: dict[str, str] = {}
+        for type_, ranked in _gear_candidates_by_type(self._game_data, state.level).items():
+            slots = [s for s in ITEM_TYPE_TO_SLOTS[type_] if s in EQUIPMENT_SLOTS]
+            suppliable = [(value, code) for (value, code) in ranked
+                          if is_suppliable(code, state, self._game_data)]
+            for slot, _value, code in _slot_assignments(type_, slots, suppliable):
+                targets[slot] = code
+        return targets
+
     def near_term_gear(self, state: WorldState) -> dict[str, str]:
         """Best usable-NOW upgrade per equipment slot: highest pursuit_value
         attainable item with `stats.level <= state.level` that strictly beats

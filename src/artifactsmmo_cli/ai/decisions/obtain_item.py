@@ -38,7 +38,7 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal
+from artifactsmmo_cli.ai.goals.reach_currency import funding_step_goal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_item_routing import (
@@ -81,7 +81,7 @@ class CanIAffordTheCurrencyLeaf(Decision[Goal]):
             {self.step.code: self.step.quantity}, state, game_data)
         if analysis.funding_target is not None:
             currency, amount = analysis.funding_target
-            return ReachCurrencyGoal(currency=currency, target=amount)
+            return funding_step_goal(currency, amount, state, game_data)
         return CanIFightWhatDropsThis(self.step, self.root)
 
 

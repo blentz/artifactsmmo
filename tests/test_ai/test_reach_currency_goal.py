@@ -1,15 +1,20 @@
 """Tests for ReachCurrencyGoal (C3 Task 4)."""
 
 import dataclasses
+import json
+from pathlib import Path
 
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
+from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal
+from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal, funding_step_goal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
-from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
+from artifactsmmo_cli.audit.craft_completeness import CraftCell, census_state
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -31,16 +36,16 @@ def test_satisfied_counts_bank_items():
 
 
 def test_max_depth_is_property_sufficient_for_worst_case():
-    # worst case on_hand=0, floor=1 -> 8 cycles * 3 actions = 24
-    # `max_depth` is a PROPERTY (no args), matching Goal.max_depth.
+    # worst case on_hand=0, floor=1 -> 8 cycles * 4 actions (accept, fight,
+    # complete, a rest) = 32. `max_depth` is a PROPERTY, matching Goal.max_depth.
     g = ReachCurrencyGoal(TASKS_COIN_CODE, 8)
-    assert g.max_depth == 8 * 3
+    assert g.max_depth == 8 * 4
 
 
 def test_max_depth_at_least_actions_per_cycle():
-    # target=0 → funding_cycles_pure(0,0,1)=0; max still ≥ ACTIONS_PER_CYCLE=3
+    # target=0 → funding_cycles_pure(0,0,1)=0; max still ≥ ACTIONS_PER_CYCLE=4
     g = ReachCurrencyGoal(TASKS_COIN_CODE, 0)
-    assert g.max_depth >= 3
+    assert g.max_depth >= 4
 
 
 def test_relevant_actions_keeps_task_lifecycle_and_progress():
@@ -244,3 +249,38 @@ def test_no_swap_when_loadout_already_optimal():
     assert reprs, "ReachCurrency funding cycle planned empty from the optimal-loadout baseline"
     assert "Fight(chicken)" in reprs, reprs
     assert not any("OptimizeLoadout" in r for r in reprs), reprs
+
+
+
+def test_a_funding_step_rests_a_worn_character() -> None:
+    """The loop's fights wear HP down (a modelled fight costs a fifth of max
+    HP), so the goal admits recovery: from 1 HP the step rests, then fights
+    (2026-10-10: no recovery admitted, the 24-coin search died at depth 14)."""
+    gd = _bundle_achieved()
+    state = dataclasses.replace(_census_state(gd), hp=1)
+    goal = funding_step_goal(TASKS_COIN_CODE, 24, state, gd)
+    actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
+                            bank_accessible=True, task_exchange_min_coins=0)
+    plan = GOAPPlanner().plan(state, goal, goal.relevant_actions(actions, state, gd), gd,
+                              budget_seconds=30)
+    assert plan and "Rest" in [repr(a) for a in plan]
+
+def _bundle_achieved() -> GameData:
+    """The committed catalogue with every achievement unlocked (tasks_trader)."""
+    bundle = json.loads(Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json").read_text())
+    return GameData.from_cache_bundle(bundle, completed_achievements=frozenset(
+        str(a["code"]) for a in bundle["achievements"]))
+
+
+def _census_state(gd: GameData) -> WorldState:
+    return census_state("steel_axe", CraftCell(25, "weaponcrafting", 20, skills_at_level=True,
+                                               gold=1_000_000), gd)
+
+
+def test_the_funding_step_is_one_task_loop_past_the_coins_on_hand() -> None:
+    gd = _bundle_achieved()
+    floor = gd.min_task_coin_reward()
+    state = make_state(inventory={TASKS_COIN_CODE: 3})
+    step = funding_step_goal(TASKS_COIN_CODE, 24, state, gd)
+    assert repr(step) == f"ReachCurrency({TASKS_COIN_CODE}, {min(24, 3 + floor)})"
+    assert repr(funding_step_goal(TASKS_COIN_CODE, 4, state, gd)) == f"ReachCurrency({TASKS_COIN_CODE}, 4)"

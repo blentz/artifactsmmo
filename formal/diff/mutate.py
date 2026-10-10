@@ -377,6 +377,7 @@ FIGHT_WALK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_walk.py"
 LOCATION_CATALOG_SRC_NPC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 GREY_FARM_SRC_CUR = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grey_farm.py"
 CRAFT_CONDITIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_conditions.py"
+REACH_CURRENCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "reach_currency.py"
 LOADOUT_WIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loadout_win.py"
 RESTORE_HP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "restore_hp.py"
 TASK_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth.py"
@@ -3386,8 +3387,8 @@ UPGRADE_GREY_EXEMPT_MUTATIONS = [
 # Killed by tests/test_ai/scenarios/test_grind_grey_material.py.
 WALK_GREY_POLICY_MUTATIONS = [
     ("policy: the walk allows every grey dropper again",
-     "DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False, allow_grey=False)",
-     "DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False)"),
+     "DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False, allow_grey=False,",
+     "DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False,"),
 ]
 WALK_GRAPH_GREY_MUTATIONS = [
     ("obtain_model: grey_ok is ignored",
@@ -5535,8 +5536,8 @@ CROSSINGS_MUTATIONS = [
 ]
 CENSUS_CROSSING_MUTATIONS = [
     ("census: a crossing is judged as the plan's work",
-     "    return next((leg for leg in plan if REGION_EDGE_TAG not in leg.tags), None)\n",
-     "    return next(iter(plan), None)\n"),
+     "    return next((leg for leg in plan if REGION_EDGE_TAG not in leg.tags\n",
+     "    return next((leg for leg in plan if True\n"),
     ("census: an unaffordable crossing is a planner bug",
      "    return any(reason.startswith(\"region:\") for reason in declined)\n",
      "    return False\n"),
@@ -5710,6 +5711,66 @@ BEST_LOADOUT_STOCKABLE_MUTATIONS = [
      "        if held_count(code, state) > 0 or (price is not None\n"
      "                                           and potion_stockable(code, state, game_data, ctx)):\n",
      "        if held_count(code, state) > 0 or price is not None:\n"),
+]
+# Conditions census increment 3 (USER 2026-10-10 acceptance: a condition for
+# every recipe) and the planner bugs it found.
+CONDITIONS_INC3_COND_MUTATIONS = [
+    ("census: a task-coin leaf is not funded",
+     "    if funding is None:\n        return []\n",
+     "    return []\n"),
+    ("census: the armory holds the recipe it is asked to make",
+     "               if code not in closure} if cell.geared else {})\n",
+     "               } if cell.geared else {})\n"),
+    ("census: the keys cell holds a recipe that is a key",
+     "        armory.update({code: KEYS_HELD for code in crossing_keys(game_data) if code not in closure})\n",
+     "        armory.update({code: KEYS_HELD for code in crossing_keys(game_data)})\n"),
+    ("census: a grey cell still reports grey leaves unreachable",
+     "        licensed = {GapClass.GREY_FARM_SUPPRESSED} if cell.grey else set()\n",
+     "        licensed = set()\n"),
+]
+CONDITIONS_INC3_MUTATIONS = [
+    ("census: a recycle yielding closure bars is unrelated",
+     "        return any(item in closure_items\n"
+     "                   for item in (game_data.crafting_recipe(action.code) or {}))\n",
+     "        return False\n"),
+    ("census: a loadout swap is judged as the work leg",
+     "                 and not isinstance(leg, OptimizeLoadoutAction)), None)\n",
+     "                 ), None)\n"),
+    ("census: the classifier asks the bare stats only",
+     "    return is_winnable(rested, game_data, monster) or wins_with_a_loadout(rested, game_data, monster)\n",
+     "    return is_winnable(rested, game_data, monster)\n"),
+]
+CONDITIONS_HELD_MUTATIONS = [
+    ("conditions: no held-leaves resort",
+     "    if leaves:\n        granted = run_cell(recipe, replace(top, held=leaves), achieved)\n",
+     "    if False:\n        granted = run_cell(recipe, replace(top, held=leaves), achieved)\n"),
+    ("conditions: the achievements rung plays the plain world",
+     "    rungs.append((\"achievements\", cell, True))\n",
+     "    rungs.append((\"achievements\", cell, False))\n"),
+]
+CROSSING_CAP_MUTATIONS = [
+    ("region bridge: the crossing search is capped at 4",
+     "    while frontier:\n",
+     "    for _ in range(4):\n"),
+]
+FUNDING_STEP_MUTATIONS = [
+    ("funding: the whole target as one goal",
+     "    return ReachCurrencyGoal(currency, min(target, goal.on_hand(state)\n"
+     "                                           + game_data.min_task_coin_reward()))\n",
+     "    return goal\n"),
+    ("funding: the loop admits no recovery",
+     "                or RECOVERY_TAG in a.tags\n",
+     "                or False\n"),
+]
+DECOMPOSE_EVENT_VENDOR_MUTATIONS = [
+    ("decompose policy: a live event vendor is refused",
+     "                           event_vendors=True)\n",
+     "                           event_vendors=False)\n"),
+]
+BEST_GEAR_MUTATIONS = [
+    ("best gear: a fixed-supply item is worn",
+     "            for slot, _value, code in _slot_assignments(type_, slots, suppliable):\n",
+     "            for slot, _value, code in _slot_assignments(type_, slots, ranked):\n"),
 ]
 REGION_BRIDGE_MUTATIONS = [
     ("region bridge: decompose emits legs in another region unbridged",
@@ -10177,6 +10238,20 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_loadout_win.py", survivors)
     run_group(LOADOUT_WIN_SRC, LOADOUT_WIN_MUTATIONS,
               "tests/test_ai/test_loadout_win.py", survivors)
+    run_group(CRAFT_COMPLETENESS_SRC, CONDITIONS_INC3_MUTATIONS,
+              "tests/test_audit/test_craft_completeness.py", survivors)
+    run_group(CRAFT_COMPLETENESS_SRC, CONDITIONS_INC3_COND_MUTATIONS,
+              "tests/test_audit/test_craft_conditions.py", survivors)
+    run_group(CRAFT_CONDITIONS_SRC, CONDITIONS_HELD_MUTATIONS,
+              "tests/test_audit/test_craft_conditions.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, CROSSING_CAP_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(REACH_CURRENCY_SRC, FUNDING_STEP_MUTATIONS,
+              "tests/test_ai/test_reach_currency_goal.py", survivors)
+    run_group(OBTAIN_MODEL_POLICY_SRC, DECOMPOSE_EVENT_VENDOR_MUTATIONS,
+              "tests/test_ai/test_obtain_model.py", survivors)
+    run_group(OBJECTIVE_SRC, BEST_GEAR_MUTATIONS,
+              "tests/test_audit/test_craft_conditions.py", survivors)
     run_group(GRIND_HEAL_PREP_SRC, POTION_PREP_MUTATIONS,
               "tests/test_ai/test_grind_heal_prep.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, FIGHT_STEP_POTION_MUTATIONS,

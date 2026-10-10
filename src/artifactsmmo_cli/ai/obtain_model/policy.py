@@ -122,9 +122,17 @@ fight or gather for it and the planner reaches it through a transition
 (`Transition(->underground)`, then `Gather(gold_rocks)`)."""
 
 
-DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False, allow_grey=False)
-"""The walk's readiness: LEGACY (what the executor can serve now) with three
+DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False, allow_grey=False,
+                           event_vendors=True)
+"""The walk's readiness: LEGACY (what the executor can serve now) with four
 switches.
+
+- An event vendor counts while it is tradeable now (`VENDOR_TRADEABLE`: its
+  event live, the walk and the window allow the trade), as the action pool's
+  NpcBuy does. LEGACY refused every event NPC (D-F: one was not reliably
+  reachable); with its event live the conditions census found the walk
+  declining what the executor could buy: demoniac_dagger's piece_of_obsidian
+  from the live gemstone_merchant (2026-10-10).
 
 - Every resource that drops an item is offered (D-B), ranked by the proved
   gather-source order. LEGACY's primary-only gather hid a workable spot behind a

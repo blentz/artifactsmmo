@@ -18,10 +18,15 @@ from artifactsmmo_cli.ai.goals.funding_core import funding_cycles_pure
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
-ACTIONS_PER_CYCLE = 3
+ACTIONS_PER_CYCLE = 4
 """Planning nodes per funding cycle: AcceptTask + one progress action
-(Fight/Craft) + CompleteTask. This is EXACT for the planning `apply` model, not
-optimistic: movement is FOLDED INTO each action's `apply` (AcceptTaskAction.apply
+(Fight/Craft) + CompleteTask + the recovery a fight's damage may need (a
+modelled fight costs a fifth of max HP, so one Rest at most every few cycles;
+one per cycle is the worst case). Before 2026-10-10 this was 3 and the goal
+admitted no recovery: after four fights nothing could fight, so a target past
+about 8 coins (steel_axe's 24, for two astralyte_crystal) never planned. The
+counting is exact for the planning `apply` model, not optimistic: movement is
+FOLDED INTO each action's `apply` (AcceptTaskAction.apply
 sets x,y directly — no separate MoveAction node), and the in-model `task_total`
 is 1 so a SINGLE progress action satisfies CompleteTaskAction's
 `task_progress >= task_total` gate. If either assumption ever changes — movement
@@ -29,7 +34,24 @@ de-folded into its own planning node, or in-model `task_total` raised above 1, o
 a Craft-based task needing intermediate craft nodes — the real per-cycle node
 count exceeds 3 and `max_depth` UNDER-provisions, silently reintroducing the
 planner timeout this goal exists to prevent. Re-derive this constant if so."""
+RECOVERY_TAG = "recovery"
+"""The tag of a recovery action (`RestAction`): the loop's fights wear HP down."""
+
 PRIORITY_WHEN_NEEDED = 1.0  # placeholder ranking; demand routing is C4
+
+
+def funding_step_goal(currency: str, target: int, state: WorldState,
+                      game_data: GameData) -> "ReachCurrencyGoal":
+    """The next funding step toward `target`: the coins ONE task loop earns
+    past what is on hand (`min_task_coin_reward`, the floor the model credits),
+    capped at the target. The decision re-derives it every cycle, so the loop
+    advances one task at a time — the first chain step, not the whole chain.
+    The whole target as one goal is a search over every interleaving of the
+    loop's interchangeable fights: live data 2026-10-10, 8 coins planned in 2 s,
+    16 and 24 timed out at 60 s (steel_axe's two astralyte_crystal)."""
+    goal = ReachCurrencyGoal(currency, target)
+    return ReachCurrencyGoal(currency, min(target, goal.on_hand(state)
+                                           + game_data.min_task_coin_reward()))
 
 
 class ReachCurrencyGoal(Goal):
@@ -39,7 +61,7 @@ class ReachCurrencyGoal(Goal):
         self._currency = currency
         self._target = target
 
-    def _on_hand(self, state: WorldState) -> int:
+    def on_hand(self, state: WorldState) -> int:
         bank = state.bank_items or {}
         return state.inventory.get(self._currency, 0) + bank.get(self._currency, 0)
 
@@ -50,7 +72,7 @@ class ReachCurrencyGoal(Goal):
         return PRIORITY_WHEN_NEEDED
 
     def is_satisfied(self, state: WorldState) -> bool:
-        return self._on_hand(state) >= self._target
+        return self.on_hand(state) >= self._target
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"inventory": {self._currency: self._target}}
@@ -101,6 +123,7 @@ class ReachCurrencyGoal(Goal):
                 target_monster_code=fight.monster_code, game_data=game_data))
         return [a for a in actions
                 if isinstance(a, (AcceptTaskAction, CompleteTaskAction))
+                or RECOVERY_TAG in a.tags
                 ] + fight_actions + swap_actions
 
     @property

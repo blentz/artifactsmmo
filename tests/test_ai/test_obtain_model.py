@@ -18,7 +18,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
-from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
+from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, LEGACY, Policy
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -526,3 +526,14 @@ class TestGatedBy:
         model = self._model(world, fill)
         assert model.gated_by("x", LEGACY, GateKind.GE_LOCATED) == (fill,)
         assert model.gated_by("x", replace(LEGACY, ge_routes=False), GateKind.GE_LOCATED) == ()
+
+
+def test_the_decomposition_buys_from_a_live_event_vendor() -> None:
+    """DECOMPOSE_POLICY asks VENDOR_TRADEABLE (the event live, the trade
+    reachable), not VENDOR_PERMANENT: demoniac_dagger's piece_of_obsidian at
+    the live gemstone_merchant (2026-10-10)."""
+    assert DECOMPOSE_POLICY.event_vendors
+    buy = Route("x", SourceKind.BUY, "fair", 1, 1, (
+        Gate(GateKind.VENDOR_PERMANENT, "fair", False),
+        Gate(GateKind.VENDOR_TRADEABLE, "fair", True)))
+    assert DECOMPOSE_POLICY.ready(buy)

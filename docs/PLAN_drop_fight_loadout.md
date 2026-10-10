@@ -118,3 +118,75 @@ level rungs now keep the recipe's own skill at its craft level.
 - crossing_unaffordable 2 — lava_underground_potion's enchanted_mushroom
   grows only in the raid area; the bridge from that restricted region to the
   underground is not modelled. Residual.
+
+## Acceptance criteria (USER 2026-10-10)
+
+"acceptance criteria for this epic is a complete crafting census that
+identifies conditions required to successfully plan every item."
+
+Every one of the 321 recipes ends the ladder at a rung that PLANS. A recipe no
+rung plans is either a condition the ladder does not yet grant (add the rung)
+or a planner bug (fix it); "a game limit" is not an end state unless the
+catalogue itself has no source (name it).
+
+## Increment 3 — tasks_coin routing, achievements, gear, raid (2026-10-10)
+
+- Census verdict follows production's funding decision: an empty gather plan
+  asks `analyze_currency_leaves` (what `CanIAffordTheCurrencyLeaf` asks) and
+  plans its `ReachCurrencyGoal` — the task loop that earns tasks_coin.
+- `achievements` rung: the catalogue with every achievement unlocked
+  (tasks_trader). 176/321 plan with it.
+- Next: a `gear` rung (the catalogue's best gear for the level, worn), a `raid`
+  rung (restricted areas open), then the residue.
+
+## Increment 3 — built (2026-10-10): every recipe has its conditions
+
+`gen_craft_conditions.py --check` fails unless EVERY recipe plans under a
+named condition; it passes: **321/321**.
+
+| First rung that plans | Recipes |
+|---|---|
+| cell (as the census character is) | 108 |
+| achievements (tasks_trader; tasks_coin funding) | 111 |
+| events | 21 |
+| skills (every skill at the level) | 15 |
+| gear (owns the catalogue's gear for its level) | 13 |
+| level sweep (-10 .. +30) | 16 |
+| gold | 6 |
+| grey (the grey-farm policy licenses the drop) | 11 |
+| keys (holds the map's crossing keys) | 3 |
+| held: enchanted_fabric (bought with enchanted_coin, the enchanted_fairy raid reward — no acquisition route) | 9 |
+| held: duskworm_skin / adventurer_skull (no catalogue loadout beats duskworm at 50) | 7 |
+| held: wooden_stick (the starter weapon, no source) | 1 |
+
+### Planner bugs found and fixed
+
+- **tasks_coin funding never planned past ~8 coins.** `ReachCurrencyGoal`
+  admitted no recovery (a modelled fight costs a fifth of max HP: after four
+  fights nothing could fight) and planned the WHOLE target, a search over every
+  interleaving of the loop's interchangeable fights (16 and 24 coins timed out
+  at 60 s). Now the loop admits `Rest`, and the decision asks one task loop's
+  coins at a time (`funding_step_goal`, re-derived every cycle).
+- **The region bridge stopped at 4 crossings.** The island to the sonnengott
+  cavern, and that cavern to the raid area, are 5. The BFS's `seen` set
+  already bounds it; the cap is gone.
+- **The decomposition refused a live event vendor** (`DECOMPOSE_POLICY` now
+  asks `VENDOR_TRADEABLE`, as the action pool's NpcBuy does).
+
+### Census fixes on the way
+
+The verdict follows production's currency funding; a recycle yielding closure
+materials is directional; a loadout swap is not the work leg; the classifier
+asks the drop route's gate (bare or a potion loadout); the geared cell owns the
+catalogue (per-monster loadouts beat grimlet, rosenblood, red_dragon,
+flameche) but never the recipe it is asked to make; a grey cell licenses grey
+leaves.
+
+### Residuals
+
+- Raid rewards are no acquisition route: enchanted_coin (enchanted_fairy,
+  pixie: 1 coin per 5000 damage) and sonnengott_coin need a RAID_REWARD route
+  and the raid catalogue in the bundle; rewards arrive as pending items.
+- The region bridge declines a crossing whose key is not held; it does not
+  plan the key (sonnengott_key drops from baby_red_dragon).
+- duskworm (event, 48) beats every catalogue loadout at 50.

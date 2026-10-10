@@ -2,6 +2,7 @@
 REAL planner at one recipe via the production obtain-X path."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,6 +11,8 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
+from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
+from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
@@ -26,6 +29,7 @@ from artifactsmmo_cli.audit.craft_completeness import (
     CraftVerdict,
     GapClass,
     _closure_leaves,
+    _drop_winnable,
     _leaf_events,
     _leaf_status,
     _present_droppers,
@@ -1096,3 +1100,31 @@ def test_a_purchase_currency_the_grey_policy_refuses_is_not_attainable() -> None
     gd._monster_drops = {"sheep": [("wool", 1, 1, 1)]}
     _fill_monster_defaults(gd)
     assert classify_gap("cloak", _cell(char_level=30), gd) is GapClass.PURCHASE_RECURSION
+
+
+def test_a_recycle_that_yields_a_closure_material_is_directional() -> None:
+    """Recycling held copper gear for its bars advances copper_armor
+    (recycle-as-acquisition); recycling something whose recipe shares nothing
+    with the closure does not."""
+    gd = _gd()
+    assert craft_cell_verdict("copper_armor", [RecycleAction(code="copper_boots")], gd).passed
+    assert not craft_cell_verdict("copper_armor", [RecycleAction(code="ash_plank")], gd).passed
+
+
+def test_a_loadout_swap_is_not_the_work_leg() -> None:
+    gd = _gd()
+    swap = OptimizeLoadoutAction(target_skill="mining", game_data=gd)
+    gather = GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 0)}))
+    assert first_work_leg([swap, gather]) is gather
+    assert first_work_leg([swap]) is None
+
+
+def test_the_classifier_reads_the_drop_gate() -> None:
+    """A dropper a potion loadout beats is not combat-blocked
+    (`_drop_winnable` is the drop route's gate: bare OR a stockable loadout)."""
+    gd = _gd()
+    state = census_state("conjurer_cloak", CraftCell(50, "gearcrafting", 30, skills_at_level=True,
+                                                     gold=10**6, geared=True), gd)
+    assert not is_winnable(replace(state, hp=state.max_hp), gd, "grimlet")  # bare loses
+    assert _drop_winnable(state, gd, "grimlet")                              # a potion wins
+    assert not _drop_winnable(state, gd, "duskworm")

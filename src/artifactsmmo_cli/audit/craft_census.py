@@ -24,6 +24,7 @@ from artifactsmmo_cli.audit.craft_completeness import (
     craft_grid,
     event_cells,
     first_work_leg,
+    funding_plan,
     plan_craft,
 )
 
@@ -61,13 +62,21 @@ def run_cell(recipe: str, cell: CraftCell, game_data: GameData) -> CellResult:
     game_data.active_event_codes = set(cell.events)
     try:
         state = census_state(recipe, cell, game_data)
-        plan = plan_craft(recipe, state, game_data)
+        # a geared cell's armory is worn, never recycled for materials
+        keep = (frozenset(state.inventory) if cell.geared or cell.keys or cell.held
+                else frozenset())
+        plan = plan_craft(recipe, state, game_data, cell.grey, keep)
         verdict = craft_cell_verdict(recipe, plan, game_data)
         work = first_work_leg(plan)
         if not verdict.passed and work is not None and (
                 advances_a_closure_grind(recipe, work, state, game_data)
                 or advances_a_heal_prep(work, plan, state, game_data)):
             verdict = CraftVerdict(True, "")
+        if not verdict.passed and not plan:
+            # production funds a task-earned currency leaf first
+            plan = funding_plan(recipe, state, game_data)
+            if plan:
+                verdict = CraftVerdict(True, "")
         gap = None if verdict.passed else classify_gap(recipe, cell, game_data).value
         fights = fight_needs(plan, state, game_data) if verdict.passed else ()
     finally:

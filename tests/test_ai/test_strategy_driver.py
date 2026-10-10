@@ -579,14 +579,15 @@ def _satchel_currency_gd():
 
 def test_objective_step_routes_to_reach_currency_when_leaf_unaffordable():
     """0 tasks_coin: GatherMaterials(satchel) is unplannable (jasper unaffordable),
-    so the arbiter mapping returns ReachCurrencyGoal(tasks_coin, 8) to FUND the
-    coin instead — a plannable funding goal the arbiter can select."""
+    so the arbiter mapping returns ReachCurrencyGoal(tasks_coin, ...) to FUND the
+    coin instead, one task loop's coins at a time — a plannable funding goal the arbiter can select."""
     gd = _satchel_currency_gd()
     state = make_state(skills={"gearcrafting": 5}, inventory={}, bank_items={}, x=0, y=0)
     goal = objective_step_goal(ObtainItem("satchel", 1), state, gd, _ctx())
     assert isinstance(goal, ReachCurrencyGoal)
     assert goal._currency == "tasks_coin"
-    assert goal._target == 8
+    # one task loop's coins at a time (funding_step_goal): the fixture's floor
+    assert goal._target == min(8, gd.min_task_coin_reward())
 
 
 def test_objective_step_gathers_satchel_when_currency_funded():

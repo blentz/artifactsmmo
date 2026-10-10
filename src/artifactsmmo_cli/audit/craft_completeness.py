@@ -12,18 +12,24 @@ from enum import Enum
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
+from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
+from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.reach_currency import funding_step_goal
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
+from artifactsmmo_cli.ai.loadout_win import wins_with_a_loadout
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG
@@ -34,6 +40,7 @@ from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import (
     GOLD,
     CharacterObjective,
+    is_suppliable,
 )
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 
@@ -60,6 +67,29 @@ class CraftCell:
     The conditions census's rungs (`audit/craft_conditions`)."""
     gold: int = 0
     """Gold in the pocket (the census character's default is none)."""
+    geared: bool = False
+    """Own the catalogue's gear for the level: wear its best set
+    (`CharacterObjective.catalogue_best_gear`) and hold every other suppliable
+    equippable at the level (`_armory`), so each fight is fought in the loadout
+    the planner picks for that monster — not the gear the census character can
+    reach (`census_gear`). One generic set lost to grimlet, rosenblood,
+    red_dragon and flameche, which their own loadouts beat."""
+    keys: bool = False
+    """Hold the items the map's crossings ask for (`crossing_keys`: a
+    sonnengott_key into the flameche/fennec cavern, a priestess_hideout_key,
+    ...). The region bridge declines a crossing whose key is not held — it does
+    not plan the key's own acquisition."""
+    held: frozenset[str] = frozenset()
+    """Leaves granted in the bag (`HELD_LEAF_QTY` each): the conditions
+    census's last resort, naming what no route produces — a raid reward
+    (enchanted_coin), a starter item (wooden_stick), the drop of a monster no
+    catalogue loadout beats (duskworm)."""
+    grey: bool = False
+    """The grey-farm policy licenses every grey drop of the plan (the recipe is
+    planned as a skill grind's material is: `GatherMaterialsGoal.skill_grind`).
+    The conditions census's last grant: it names a recipe the policy keeps
+    unplannable at every level (air_shield's green_slimeball is grey above 15,
+    its rosenblood_elixir beatable only far higher)."""
 
 
 def tier_of(craft_level: int) -> int:
@@ -104,8 +134,8 @@ def craft_grid(recipe: str, game_data: GameData) -> list[CraftCell]:
             for cl in char_levels for sl in skill_levels]
 
 
-def plan_craft(recipe: str, state: WorldState,
-               game_data: GameData) -> list[Action]:
+def plan_craft(recipe: str, state: WorldState, game_data: GameData, grey: bool = False,
+               keep: frozenset[str] = frozenset()) -> list[Action]:
     """The plan the REAL production planner produces for obtaining `recipe`
     from `state`.
 
@@ -124,7 +154,8 @@ def plan_craft(recipe: str, state: WorldState,
     actions = build_actions(
         game_data, state, objective,
         bank_accessible=True, task_exchange_min_coins=0)
-    goal = GatherMaterialsGoal(target_item=recipe, needed={recipe: 1})
+    goal = GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}, skill_grind=grey,
+                               exclude_recycle=keep)
     arbiter = StrategyArbiter(GOAPPlanner(), None)
     ctx = SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
@@ -132,6 +163,29 @@ def plan_craft(recipe: str, state: WorldState,
     )
     return arbiter._plans(goal, state, game_data, actions, ctx,
                           budget_seconds=CRAFT_AUDIT_BUDGET_SECONDS)
+
+
+def funding_plan(recipe: str, state: WorldState, game_data: GameData) -> list[Action]:
+    """The plan production makes when `recipe` waits on a task-earned
+    currency: the obtain decision routes an unaffordable currency-buy leaf of
+    its closure to `ReachCurrencyGoal` (`decisions/obtain_item.
+    CanIAffordTheCurrencyLeaf`, over the same `analyze_currency_leaves`), and
+    the arbiter plans that goal. Empty when no leaf needs funding. The census
+    planned only the raw gather, which declines such a leaf
+    (`no_route:tasks_coin`), so jasper's recipes read as purchase recursion
+    while production ran the task loop (2026-10-10)."""
+    funding = analyze_currency_leaves({recipe: 1}, state, game_data).funding_target
+    if funding is None:
+        return []
+    currency, amount = funding
+    goal = funding_step_goal(currency, amount, state, game_data)
+    actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
+                            bank_accessible=True, task_exchange_min_coins=0)
+    ctx = SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
+                           initial_xp=0, task_exchange_min_coins=0, combat_monster=None)
+    return StrategyArbiter(GOAPPlanner(), None)._plans(
+        goal, state, game_data, actions, ctx,
+        budget_seconds=CRAFT_AUDIT_BUDGET_SECONDS)
 
 
 @dataclass(frozen=True)
@@ -230,6 +284,9 @@ def _advances_closure(action: Action, closure_items: frozenset[str],
       character/combat xp), so a Fight only ever advances `recipe` by
       dropping a closure material — which a `drop_farm`-flagged Fight
       targeting that material already satisfies via this same check.
+    - `RecycleAction`: PASS iff the recycled item's recipe inputs (what a
+      recycle yields) meet the closure — recycling held gear for its bars is a
+      production acquisition route (Recycle-as-acquisition).
     - `NpcBuyAction` / `WithdrawItemAction`: PASS iff `.item_code` /
       `.code` (respectively) is a closure member — no skill-grind arm
       (neither action produces skill xp).
@@ -263,6 +320,10 @@ def _advances_closure(action: Action, closure_items: frozenset[str],
         return any(item in closure_items
                   for item, _rate, _min_q, _max_q
                   in game_data.monster_drops(action.monster_code))
+    if isinstance(action, RecycleAction):
+        # a recycle yields the recycled item's recipe inputs
+        return any(item in closure_items
+                   for item in (game_data.crafting_recipe(action.code) or {}))
     if isinstance(action, NpcBuyAction):
         return action.item_code in closure_items
     if isinstance(action, WithdrawItemAction):
@@ -274,8 +335,11 @@ def first_work_leg(plan: list[Action]) -> Action | None:
     """The first leg that is not a region crossing. A crossing
     (`region_edges.REGION_EDGE_TAG`) is travel that serves the leg after it
     (`craft_plan_gen._bridge_regions`), so the verdict judges that leg: a plan
-    `[Transition(mine), Gather(gold_rocks), ...]` is judged by its gather."""
-    return next((leg for leg in plan if REGION_EDGE_TAG not in leg.tags), None)
+    `[Transition(mine), Gather(gold_rocks), ...]` is judged by its gather. A
+    loadout swap serves the leg after it the same way: `[OptimizeLoadout(gather:
+    mining), Gather(copper_rocks), ...]` is judged by its gather."""
+    return next((leg for leg in plan if REGION_EDGE_TAG not in leg.tags
+                 and not isinstance(leg, OptimizeLoadoutAction)), None)
 
 
 def craft_cell_verdict(recipe: str, plan: list[Action],
@@ -470,6 +534,14 @@ def _event_live(content_code: str | None, game_data: GameData) -> bool:
     return content_code is not None and content_code in game_data.active_event_codes
 
 
+def _drop_winnable(state: WorldState, game_data: GameData, monster: str) -> bool:
+    """The drop route's WINNABLE gate (`obtain_model/drop_routes`): the bare
+    stats at full HP, or a stockable potion loadout. The classifier asking the
+    bare stats alone called a potion-won dropper combat-blocked."""
+    rested = replace(state, hp=state.max_hp)
+    return is_winnable(rested, game_data, monster) or wins_with_a_loadout(rested, game_data, monster)
+
+
 def _present_droppers(leaf: str, game_data: GameData) -> list[str]:
     """The droppers of `leaf` present in this cell's world: a permanent
     spawn-known monster, or an event monster whose event is live."""
@@ -500,7 +572,7 @@ def _currency_directly_attainable(currency: str, state: WorldState,
     # A grey dropper is fought only under the grey-farm policy, as for a leaf
     # (`_leaf_status`): without this, a currency the policy refuses read as
     # attainable and its recipe was blamed on the planner.
-    return any(is_winnable(state, game_data, m)
+    return any(_drop_winnable(state, game_data, m)
                and (game_data.xp_per_kill(m, state.level) > 0
                     or grey_farm_allowed(currency, state, game_data))
                for m in _present_droppers(currency, game_data))
@@ -584,7 +656,7 @@ def _leaf_status(leaf: str, state: WorldState,
         return None
     droppers = game_data.monsters_dropping(leaf)
     present = _present_droppers(leaf, game_data)
-    winnable = [m for m in present if is_winnable(state, game_data, m)]
+    winnable = [m for m in present if _drop_winnable(state, game_data, m)]
     if winnable:
         # A winnable dropper only makes the leaf reachable if the planner would
         # actually FIGHT it. An xp-positive dropper always qualifies; a GREY
@@ -707,11 +779,72 @@ def census_state(recipe: str, cell: CraftCell, game_data: GameData) -> WorldStat
               else dict(_closure_gather_skills(recipe, game_data)))
     skills[cell.skill_name] = cell.skill_level
     events = tuple(sorted(cell.events))
+    # never the recipe or its closure: the census asks it to MAKE them
+    closure = _closure_item_set(recipe, *recipe_closure(game_data, [recipe]), game_data)
+    armory = ({code: n for code, n in _armory(cell.char_level, game_data).items()
+               if code not in closure} if cell.geared else {})
+    armory.update({leaf: HELD_LEAF_QTY for leaf in cell.held})
+    if cell.keys:
+        armory.update({code: KEYS_HELD for code in crossing_keys(game_data) if code not in closure})
     sc = ScenarioCharacter(name="craft_audit", level=cell.char_level, gold=cell.gold,
-                           skills=dict(skills),
-                           equipment=census_gear(cell.char_level, cell.events, game_data),
+                           skills=dict(skills), inventory=armory,
+                           inventory_max=ARMORY_BAG if cell.geared else 100,
+                           equipment=(_best_gear(cell.char_level, game_data) if cell.geared
+                                      else census_gear(cell.char_level, cell.events, game_data)),
                            derive_combat_stats=True, active_events=events)
     return scenario_state(sc, game_data)
+
+
+HELD_LEAF_QTY = 100
+"""Units of each granted leaf (`CraftCell.held`): more than any recipe asks."""
+
+
+def unreachable_leaves(recipe: str, cell: CraftCell, game_data: GameData) -> frozenset[str]:
+    """`recipe`'s closure leaves no route reaches at `cell` (`_leaf_status`),
+    with the cell's events live; in a grey cell a grey-suppressed leaf is
+    reachable (the cell licenses it)."""
+    world_events = game_data.active_event_codes
+    game_data.active_event_codes = set(cell.events)
+    try:
+        state = census_state(recipe, cell, game_data)
+        # a grey cell licenses the grey drops the policy would refuse
+        licensed = {GapClass.GREY_FARM_SUPPRESSED} if cell.grey else set()
+        return frozenset(leaf for leaf in _closure_leaves(recipe, game_data)
+                         if (status := _leaf_status(leaf, state, game_data)) is not None
+                         and status not in licensed)
+    finally:
+        game_data.active_event_codes = world_events
+
+
+KEYS_HELD = 10
+"""Units of each crossing key the `keys` cell holds: a crossing that costs one
+is crossed both ways on a plan, and a plan may cross more than once."""
+
+
+def crossing_keys(game_data: GameData) -> frozenset[str]:
+    """Every item a map transition asks for (`cost` or `has_item`), gold
+    aside."""
+    return frozenset(code for _x, _y, _layer, conds in game_data.world.transition_edges.values()
+                     for code, _op, _value in conds if code != GOLD)
+
+
+ARMORY_BAG = 100_000
+"""The geared cell's bag: room for the armory and every material a plan adds."""
+
+
+def _armory(char_level: int, game_data: GameData) -> dict[str, int]:
+    """Every suppliable equippable at `char_level` (two of each, for the ring
+    pair), utility potions and bags excepted: the geared cell's held gear."""
+    bare = scenario_state(ScenarioCharacter(name="census_armory", level=char_level), game_data)
+    return {code: 2 for code, stats in game_data.all_item_stats.items()
+            if stats.type_ in ITEM_TYPE_TO_SLOTS and stats.type_ not in ("utility", "bag")
+            and stats.level <= char_level and is_suppliable(code, bare, game_data)}
+
+
+def _best_gear(char_level: int, game_data: GameData) -> dict[str, str]:
+    """The catalogue's best suppliable gear at `char_level`."""
+    bare = scenario_state(ScenarioCharacter(name="census_best", level=char_level), game_data)
+    return CharacterObjective.from_game_data(game_data).catalogue_best_gear(bare)
 
 
 _GEAR_MEMO: list[tuple[GameData, dict[tuple[int, frozenset[str]], dict[str, str]]]] = []
