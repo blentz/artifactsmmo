@@ -219,3 +219,48 @@ it; a death that delays the kill past reconstitution).
 
 Duskworm (geared census cell L60, three members, each the same potion pair,
 production `party_member`): see Increment 2.
+
+## Increment 2 — design (2026-10-11)
+
+Increments 2 and 3 meet here: the census can only name a party condition the
+PLANNER plans under, so the drop route's WINNABLE gate gains a party arm.
+
+- `WorldState.party`: the characters able to join this one's boss fight (their
+  states). Empty by default, so production is unchanged until Increment 4
+  fills it from the fleet; the census fills it with copies of the census
+  character.
+- `party_win.wins_as_a_party(state, game_data, monster)`: only for a `boss` or
+  `raid_boss` with a non-empty `party`. For each utility-potion loadout the
+  character can stock (`fight_walk.loadouts`, as the solo gate) and each set of
+  one or two of `party` (the server's limit), every member wears that loadout
+  if it can stock it (else none), at full HP, and `group_fight_core.
+  group_outcome` decides. Memoized per catalogue on what it reads (as
+  `loadout_win`).
+- WINNABLE = bare `is_winnable` OR a potion loadout OR a party. One function
+  (`drop_routes.drop_fight_winnable`) serves the gate and the census
+  classifier, which mirrored it by hand.
+- Census: `CraftCell.party` = siblings granted (2 = a party of three); rungs
+  `party` and `party@L<n>` after the grey rungs, before `held:`. Acceptance:
+  the 7 duskworm recipes plan under a party rung.
+- Not here: execution (`FightAction.participants`, Increment 5) — under a
+  non-empty `party` the planner may plan a fight the executor still fights
+  alone; production never sets `party` before Increment 4/5.
+
+## Increment 2 — built (2026-10-11)
+
+As designed. `WorldState.party`; `party_win.winning_party` /
+`wins_as_a_party`; `drop_routes.drop_fight_winnable` (bare, potion loadout or
+party) serves the WINNABLE gate and the census classifier; `fight_walk.wear`
+projects a utility loadout for both arms; census `CraftCell.party`, rungs
+`party` / `party@L<n>`, and `fight_needs` names a party win
+`party<size>:<loadout>`.
+
+Conditions census: still **321/321**, and the seven duskworm recipes
+(adamantite_ring, adamantite_sword, dust_amulet, dust_sword, eternal_red_ring,
+heart_amulet, desert_whip) move from `held:duskworm_skin` /
+`held:adventurer_skull` to `party`: duskworm falls to
+`party3:water_res_potion+enhanced_health_potion`. The held last resort now
+names only enchanted_fabric (raid reward, 9) and wooden_stick (starter, 1).
+
+Production is unchanged: `party` is empty until Increment 4 fills it from the
+fleet; Increment 5 makes the executor fight with `participants`.

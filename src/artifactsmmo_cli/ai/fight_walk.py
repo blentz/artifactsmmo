@@ -79,17 +79,26 @@ def _restore_of(loadout: Sequence[tuple[str, int]], game_data: GameData) -> tupl
     return restore
 
 
-def fight_walk(state: WorldState, game_data: GameData, monster: str,
-               loadout: Sequence[tuple[str, int]]) -> tuple[FightOutcome, int, str | None]:
-    """The fight from full HP wearing `loadout` (see the module doc's THE
-    LOADOUT and THE FIGHT): its outcome, the projected max HP, and the
-    loadout's restore potion (None without one)."""
+def wear(state: WorldState, game_data: GameData,
+         loadout: Sequence[tuple[str, int]]) -> tuple[WorldState, str | None, int, int]:
+    """`state` wearing `loadout` in the utility slots (see the module doc's THE
+    LOADOUT): the projected state and the loadout's restore potion, its HP and
+    its stock (`(None, 0, 0)` without one)."""
     restore_code, restore_hp, restore_stock = _restore_of(loadout, game_data)
     codes: list[str | None] = [code for code, _ in loadout]
     codes += [None] * (len(UTILITY_SLOTS) - len(codes))
     projected = state
     for slot, code in zip(UTILITY_SLOTS, codes, strict=True):
         projected = project_equip(projected, code, game_data, slot=slot)
+    return projected, restore_code, restore_hp, restore_stock
+
+
+def fight_walk(state: WorldState, game_data: GameData, monster: str,
+               loadout: Sequence[tuple[str, int]]) -> tuple[FightOutcome, int, str | None]:
+    """The fight from full HP wearing `loadout` (see the module doc's THE
+    LOADOUT and THE FIGHT): its outcome, the projected max HP, and the
+    loadout's restore potion (None without one)."""
+    projected, restore_code, restore_hp, restore_stock = wear(state, game_data, loadout)
     max_hp = fight_max_hp(projected, game_data, monster)
     outcome = fight_outcome(combat_terms(projected, game_data, monster),
                             max_hp, max_hp, restore_hp, restore_stock)

@@ -380,6 +380,7 @@ GREY_FARM_SRC_CUR = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grey_farm.py"
 CRAFT_CONDITIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_conditions.py"
 REACH_CURRENCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "reach_currency.py"
 LOADOUT_WIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loadout_win.py"
+PARTY_WIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "party_win.py"
 RESTORE_HP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "restore_hp.py"
 TASK_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth.py"
 FIGHT_UPKEEP_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "fight_upkeep_core.py"
@@ -3209,14 +3210,14 @@ OBTAIN_MODEL_GATE_MUTATIONS = [
 # drop_obtainability). Split by the test file that kills each.
 OBTAIN_MODEL_DROP_MUTATIONS = [
     ("drop_routes: ignore winnability",
-     "    winnable = (live or known) and (\n",
-     "    winnable = True or (\n"),
+     "    winnable = (live or known) and drop_fight_winnable(",
+     "    winnable = True or drop_fight_winnable("),
     ("drop_routes: every monster has a routable spawn",
      "Gate(GateKind.SPAWN_KNOWN, monster, known)",
      "Gate(GateKind.SPAWN_KNOWN, monster, True)"),
     ("drop_routes: ask winnability only for a live monster",
-     "    winnable = (live or known) and (\n",
-     "    winnable = live and (\n"),
+     "    winnable = (live or known) and drop_fight_winnable(",
+     "    winnable = live and drop_fight_winnable("),
     ("drop_routes: a monster that pays no gold is a gold route",
      "        if top <= 0:\n            continue",
      "        if top < 0:\n            continue"),
@@ -5679,8 +5680,43 @@ CENSUS_RUN_EVENT_MUTATIONS = [
 # The drop route's WINNABLE gate wears a potion loadout (USER 2026-10-10).
 DROP_LOADOUT_GATE_MUTATIONS = [
     ("drop gate: bare stats only",
-     "        or wins_with_a_loadout(rested.get(), game_data, monster))\n",
-     "        )\n"),
+     "            or wins_with_a_loadout(rested, game_data, monster)\n",
+     "            or False\n"),
+]
+# The party arm of the drop gate (docs/PLAN_group_fights.md increment 2). OWN
+# run_groups: unit-killed by tests/test_ai/test_party_win.py and the census's
+# tests/test_audit/test_craft_conditions.py.
+DROP_PARTY_GATE_MUTATIONS = [
+    ("drop gate: no party arm",
+     "            or wins_as_a_party(rested, game_data, monster))\n",
+     "            or False)\n"),
+]
+PARTY_WIN_MUTATIONS = [
+    ("party win: any monster takes a party",
+     "    if not state.party or game_data.monsters.types.get(monster) not in PARTY_MONSTER_TYPES:\n",
+     "    if not state.party:\n"),
+    ("party win: one joiner at most",
+     "MAX_JOINERS = 2\n",
+     "MAX_JOINERS = 1\n"),
+    ("party win: a joiner wears what it cannot stock",
+     "    worn = codes if all(code in stockable for code in codes) else ()\n",
+     "    worn = codes\n"),
+    ("party win: a member starts at its current hp",
+     "    return PartyMember(member.raw, member.net, member.hit, member.area, member.max_hp,\n",
+     "    return PartyMember(member.raw, member.net, member.hit, member.area, member.hp,\n"),
+    ("party win: the memo ignores the members",
+     "    key = (monster, tuple((tuple(s), fight_key(m, game_data)) for m, s in zip(members, stockable,\n",
+     "    key = (monster, tuple((0,) for m, s in zip(members, stockable,\n"),
+]
+CONDITIONS_PARTY_MUTATIONS = [
+    ("conditions: the party rung brings one joiner",
+     "PARTY_JOINERS = 2\n",
+     "PARTY_JOINERS = 1\n"),
+]
+CENSUS_PARTY_STATE_MUTATIONS = [
+    ("census: the party cell brings nobody",
+     "    return replace(state, party=(state,) * cell.party) if cell.party else state\n",
+     "    return state\n"),
 ]
 LOADOUT_WIN_MUTATIONS = [
     ("loadout win: a potion at the skill level is not brewable",
@@ -5699,7 +5735,7 @@ LOADOUT_WIN_MUTATIONS = [
      "        if stats.type_ != POTION or stats.level > state.level:\n",
      "        if stats.type_ != POTION:\n"),
     ("loadout win: the memo ignores the fight fields",
-     "    key = (monster, tuple(stockable), _fight_key(state, game_data))\n",
+     "    key = (monster, tuple(stockable), fight_key(state, game_data))\n",
      "    key = (monster, tuple(stockable))\n"),
 ]
 # Found by the conditions census (USER 2026-10-10, docs/PLAN_drop_fight_loadout.md).
@@ -5762,8 +5798,11 @@ FIGHT_NEED_MUTATIONS = [
      "        if is_winnable(rested, game_data, monster):\n",
      "        if True:\n"),
     ("conditions: a fight no loadout wins reads as bare",
-     "        out.append((monster, \"+\".join(loadout) if loadout is not None else LOSES))\n",
-     "        out.append((monster, \"+\".join(loadout) if loadout is not None else BARE))\n"),
+     "                    if party is not None else LOSES))\n",
+     "                    if party is not None else BARE))\n"),
+    ("conditions: a party is named by its joiners, not its size",
+     "        out.append((monster, f\"{PARTY}{party[1] + 1}:",
+     "        out.append((monster, f\"{PARTY}{party[1]}:"),
 ]
 # The fight step carries the potions the CRAFT_POTIONS ladder cannot brew (2026-10-10).
 POTION_PREP_MUTATIONS = [
@@ -5831,9 +5870,9 @@ CONDITIONS_INC3_MUTATIONS = [
     ("census: a loadout swap is judged as the work leg",
      "                 and not isinstance(leg, OptimizeLoadoutAction)), None)\n",
      "                 ), None)\n"),
-    ("census: the classifier asks the bare stats only",
-     "    return is_winnable(rested, game_data, monster) or wins_with_a_loadout(rested, game_data, monster)\n",
-     "    return is_winnable(rested, game_data, monster)\n"),
+    ("census: the classifier calls every dropper unwinnable",
+     "    return drop_fight_winnable(replace(state, hp=state.max_hp), game_data, monster)\n",
+     "    return False\n"),
 ]
 CONDITIONS_HELD_MUTATIONS = [
     ("conditions: a level outside 1..60 is accepted",
@@ -10340,6 +10379,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_loadout_win.py", survivors)
     run_group(LOADOUT_WIN_SRC, LOADOUT_WIN_MUTATIONS,
               "tests/test_ai/test_loadout_win.py", survivors)
+    run_group(OBTAIN_MODEL_DROP_SRC, DROP_PARTY_GATE_MUTATIONS,
+              "tests/test_ai/test_party_win.py", survivors)
+    run_group(PARTY_WIN_SRC, PARTY_WIN_MUTATIONS,
+              "tests/test_ai/test_party_win.py", survivors)
+    run_group(CRAFT_CONDITIONS_SRC, CONDITIONS_PARTY_MUTATIONS,
+              "tests/test_audit/test_craft_conditions.py", survivors)
+    run_group(CRAFT_COMPLETENESS_SRC, CENSUS_PARTY_STATE_MUTATIONS,
+              "tests/test_audit/test_craft_conditions.py", survivors)
     run_group(CRAFT_COMPLETENESS_SRC, CONDITIONS_INC3_MUTATIONS,
               "tests/test_audit/test_craft_completeness.py", survivors)
     run_group(CRAFT_COMPLETENESS_SRC, CONDITIONS_INC3_COND_MUTATIONS,

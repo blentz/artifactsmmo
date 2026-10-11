@@ -29,17 +29,18 @@ condition over the census character (`craft_completeness.census_state`):
    only below 30, piggy_helmet's nominal level;
 8. `keys`, then `keys@L<n>` — the sweep holding every crossing's key
    (`CraftCell.keys`): the region bridge does not plan a key's acquisition;
-10. `held:<leaves>` — the last resort: the leaves still unreachable at the
-   top rung granted in the bag (`CraftCell.held`), naming what no route
-   produces (a raid reward, a starter item, an unbeatable boss's drop);
 9. `grey`, then `grey@L<n>` — the same sweep with the grey-farm policy licensing
    every grey drop (`CraftCell.grey`): the policy (USER 2026-07-06) refuses a
    grey drop for a recipe a near higher tier makes obsolete, and where the
    dropper is grey at every level the recipe's other fights need, only this
-   names what plans it. Raising that skill too would make the recipe obsolete: the
-   grey-farm policy (USER 2026-07-06, `grey_farm.py`) rightly refuses to farm a
-   grey monster for a recipe a near higher tier replaces, so a level-50
-   character with every skill at 50 "cannot" make `cooked_beef`.
+   names what plans it (a level-50 character with every skill at 50 "cannot"
+   make `cooked_beef` without it);
+10. `party`, then `party@L<n>` — the grey sweep with two copies of the census
+   character able to join its boss fights (`CraftCell.party`): duskworm falls
+   to a party of three no single loadout beats (docs/PLAN_group_fights.md);
+11. `held:<leaves>` — the last resort: the leaves still unreachable at the
+   top rung granted in the bag (`CraftCell.held`), naming what no route
+   produces (a raid reward, a starter item).
 
 The recipe's answer is the first rung whose cell PASSES, with the plan's fights
 (`craft_census.fight_needs`). A recipe that passes no rung carries its top
@@ -68,6 +69,10 @@ inside them."""
 
 LEVEL_STEP = 5
 """Levels between the level rungs."""
+
+PARTY_JOINERS = 2
+"""The `party` rungs' joiners: copies of the census character, a party of
+three (the server's limit; docs/PLAN_group_fights.md increment 2)."""
 
 
 @dataclass(frozen=True)
@@ -111,6 +116,9 @@ def ladder(recipe: str, game_data: GameData) -> list[tuple[str, CraftCell, bool]
     grey = replace(keyed, grey=True)
     rungs.append(("grey", grey, True))
     rungs += [(f"grey@L{level}", replace(grey, char_level=level), True) for level in levels]
+    party = replace(grey, party=PARTY_JOINERS)
+    rungs.append(("party", party, True))
+    rungs += [(f"party@L{level}", replace(party, char_level=level), True) for level in levels]
     for name, rung, _ in rungs:
         if not MIN_LEVEL <= rung.char_level <= MAX_LEVEL:
             raise ValueError(f"{recipe} rung {name} at level {rung.char_level}: outside "

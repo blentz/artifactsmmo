@@ -11,7 +11,7 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.audit.craft_census import BARE, LOSES, CellResult, fight_needs, run_cell
+from artifactsmmo_cli.audit.craft_census import BARE, LOSES, PARTY, CellResult, fight_needs, run_cell
 from artifactsmmo_cli.audit.craft_completeness import (
     ARMORY_BAG,
     HELD_LEAF_QTY,
@@ -28,6 +28,7 @@ from artifactsmmo_cli.audit.craft_completeness import (
 )
 from artifactsmmo_cli.audit.craft_conditions import (
     GOLD_GRANT,
+    PARTY_JOINERS,
     ConditionsResult,
     climb,
     ladder,
@@ -49,7 +50,8 @@ def test_the_ladder_grants_one_condition_per_rung() -> None:
     assert names[:5] == ["cell", "skills", "gold", "achievements", "gear"]
     sweep = [10, 15, 25, 30, 35, 40, 45, 50, 55, 60]  # 1..60 (USER 2026-10-10), the nominal 20 aside
     assert names[5:] == ([f"L{n}" for n in sweep] + ["keys"] + [f"keys@L{n}" for n in sweep]
-                         + ["grey"] + [f"grey@L{n}" for n in sweep])
+                         + ["grey"] + [f"grey@L{n}" for n in sweep]
+                         + ["party"] + [f"party@L{n}" for n in sweep])
     assert all(1 <= c.char_level <= 60 for _, c, _ in rungs)
     cell, skills, gold, achieved, geared = (c for _, c, _ in rungs[:5])
     assert cell == CraftCell(20, "gearcrafting", 20)
@@ -61,6 +63,8 @@ def test_the_ladder_grants_one_condition_per_rung() -> None:
     assert all(c.skill_level == 20 and c.geared for _, c, _ in rungs[5:])
     assert all(c.keys for _, c, _ in rungs[15:]) and not any(c.keys for _, c, _ in rungs[:15])
     assert all(c.grey for _, c, _ in rungs[26:]) and not any(c.grey for _, c, _ in rungs[:26])
+    assert all(c.party == PARTY_JOINERS for _, c, _ in rungs[37:])
+    assert not any(c.party for _, c, _ in rungs[:37])
     # an event-only leaf adds the events rung
     names = [name for name, _, _ in ladder("conjurer_cloak", gd)]
     assert names[3] == "events"
@@ -193,6 +197,24 @@ def test_unreachable_leaves_and_the_held_grant() -> None:
     top = ladder("cultist_cloak", gd)[-1][1]
     assert "red_cloth" in unreachable_leaves("cultist_cloak", replace(top, grey=False), gd)
     assert "red_cloth" not in unreachable_leaves("cultist_cloak", top, gd)
+
+
+def test_a_party_cell_brings_copies_of_the_census_character() -> None:
+    gd = _gd()
+    cell = CraftCell(60, "weaponcrafting", 50, skills_at_level=True, geared=True, party=2)
+    state = census_state("adamantite_sword", cell, gd)
+    assert len(state.party) == 2
+    assert all(m == replace(state, party=()) for m in state.party)
+    assert census_state("adamantite_sword", replace(cell, party=0), gd).party == ()
+
+
+def test_duskworm_recipes_plan_under_a_party() -> None:
+    """adamantite_sword's duskworm_skin: no loadout beats duskworm alone; three
+    census characters wearing a water-resistance and a health potion do
+    (docs/PLAN_group_fights.md increment 2)."""
+    result = climb("adamantite_sword", _gd(), _achieved())
+    assert result.rung == "party" and result.result.passed
+    assert dict(result.result.fights)["duskworm"] == f"{PARTY}3:water_res_potion+enhanced_health_potion"
 
 
 def test_a_recipe_no_rung_plans_is_named_by_its_held_leaves() -> None:

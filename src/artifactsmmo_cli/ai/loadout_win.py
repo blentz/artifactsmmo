@@ -53,7 +53,7 @@ def stockable_potions(state: WorldState, game_data: GameData) -> list[str]:
 _WINS: "CatalogueScope[tuple[object, ...], tuple[str, ...] | None]" = CatalogueScope(4096)
 
 
-def _fight_key(state: WorldState, game_data: GameData) -> tuple[object, ...]:
+def fight_key(state: WorldState, game_data: GameData) -> tuple[object, ...]:
     """The state fields the fight walk reads (see the module doc)."""
     return (state.level, state.max_hp, state.critical_strike, state.initiative,
             state.dmg, state.wisdom, state.prospecting,
@@ -68,7 +68,7 @@ def winning_loadout(state: WorldState, game_data: GameData, monster: str) -> tup
     """The first loadout of stockable potions, in `loadouts` order, that wins
     the fight from full HP; None when none does."""
     stockable = stockable_potions(state, game_data)
-    key = (monster, tuple(stockable), _fight_key(state, game_data))
+    key = (monster, tuple(stockable), fight_key(state, game_data))
     memo = _WINS.cache_for(game_data)
     if key not in memo:
         found = next((codes for codes in loadouts(stockable, game_data) if codes

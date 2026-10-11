@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.loadout_win import winning_loadout
+from artifactsmmo_cli.ai.party_win import winning_party
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.craft_completeness import (
     CraftCell,
@@ -97,13 +98,16 @@ def run_cell(recipe: str, cell: CraftCell, game_data: GameData) -> CellResult:
 
 BARE = "bare"
 LOSES = "loses"
+PARTY = "party"
 
 
 def fight_needs(plan: list[Action], state: WorldState,
                 game_data: GameData) -> tuple[tuple[str, str], ...]:
     """What wins each monster `plan` fights, from full HP (see
     `CellResult.fights`): the bare stats, else the first winning potion
-    loadout (`loadout_win.winning_loadout`, the drop gate's own answer)."""
+    loadout (`loadout_win.winning_loadout`), else the first winning party
+    (`party_win.winning_party`, `party<size>:<loadout>`) — the drop gate's own
+    answers, in its order."""
     rested = replace(state, hp=state.max_hp)
     out: list[tuple[str, str]] = []
     for monster in dict.fromkeys(a.monster_code for a in plan if isinstance(a, FightAction)):
@@ -111,7 +115,12 @@ def fight_needs(plan: list[Action], state: WorldState,
             out.append((monster, BARE))
             continue
         loadout = winning_loadout(rested, game_data, monster)
-        out.append((monster, "+".join(loadout) if loadout is not None else LOSES))
+        if loadout is not None:
+            out.append((monster, "+".join(loadout)))
+            continue
+        party = winning_party(rested, game_data, monster)
+        out.append((monster, f"{PARTY}{party[1] + 1}:{'+'.join(party[0]) or BARE}"
+                    if party is not None else LOSES))
     return tuple(out)
 
 

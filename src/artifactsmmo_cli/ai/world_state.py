@@ -128,6 +128,13 @@ class WorldState:
     """Live raid snapshot. Per-cycle, from GET /raids. Defaults empty so
     constructions that don't supply it keep working (visibility only —
     no planner consumer in this task)."""
+    party: tuple["WorldState", ...] = ()
+    """The characters able to join this one's boss fight, as their states
+    (docs/PLAN_group_fights.md increment 2). The drop route's WINNABLE gate asks
+    whether a party of this character and one or two of them wins
+    (`party_win.wins_as_a_party`). Empty by default: production fills it from
+    the fleet in increment 4; the conditions census fills it with copies of
+    the census character."""
     crafting_target: str | None = None
     """Item the bot is currently working to craft/upgrade toward (the committed
     UpgradeEquipment target). Set per cycle by the player. Lets

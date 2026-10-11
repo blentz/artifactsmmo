@@ -20,7 +20,6 @@ from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
@@ -29,7 +28,7 @@ from artifactsmmo_cli.ai.goals.reach_currency import funding_step_goal
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
-from artifactsmmo_cli.ai.loadout_win import wins_with_a_loadout
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG
@@ -90,6 +89,11 @@ class CraftCell:
     The conditions census's last grant: it names a recipe the policy keeps
     unplannable at every level (air_shield's green_slimeball is grey above 15,
     its rosenblood_elixir beatable only far higher)."""
+    party: int = 0
+    """Copies of the census character able to join its boss fights
+    (`WorldState.party`; 2 = a party of three, the server's limit): a boss no
+    single loadout beats may fall to a party (`party_win`,
+    docs/PLAN_group_fights.md increment 2)."""
 
 
 def tier_of(craft_level: int) -> int:
@@ -535,11 +539,10 @@ def _event_live(content_code: str | None, game_data: GameData) -> bool:
 
 
 def _drop_winnable(state: WorldState, game_data: GameData, monster: str) -> bool:
-    """The drop route's WINNABLE gate (`obtain_model/drop_routes`): the bare
-    stats at full HP, or a stockable potion loadout. The classifier asking the
-    bare stats alone called a potion-won dropper combat-blocked."""
-    rested = replace(state, hp=state.max_hp)
-    return is_winnable(rested, game_data, monster) or wins_with_a_loadout(rested, game_data, monster)
+    """The drop route's WINNABLE gate (`drop_routes.drop_fight_winnable`) at
+    full HP. The classifier asking the bare stats alone called a potion-won
+    dropper combat-blocked."""
+    return drop_fight_winnable(replace(state, hp=state.max_hp), game_data, monster)
 
 
 def _present_droppers(leaf: str, game_data: GameData) -> list[str]:
@@ -792,7 +795,8 @@ def census_state(recipe: str, cell: CraftCell, game_data: GameData) -> WorldStat
                            equipment=(_best_gear(cell.char_level, game_data) if cell.geared
                                       else census_gear(cell.char_level, cell.events, game_data)),
                            derive_combat_stats=True, active_events=events)
-    return scenario_state(sc, game_data)
+    state = scenario_state(sc, game_data)
+    return replace(state, party=(state,) * cell.party) if cell.party else state
 
 
 HELD_LEAF_QTY = 100

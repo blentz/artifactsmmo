@@ -4,7 +4,7 @@
 >
 > Each recipe climbs the ladder of `audit/craft_conditions.py` (cell, every skill at the character level, gold, its events, then the character level in steps of 5); the first rung that plans is its condition. A fight's need is `bare` (the stats win), the potion loadout that wins it, or `loses`.
 
-321 recipes; planned 321 (cell 108, events 21, gold 6, grey 6, L40 4, L6 5, skills 15, gear 13, achievements 111, L25 3, grey@L45 4, held:enchanted_fabric 9, grey@L50 1, L30 2, L45 2, keys 3, held:duskworm_skin 5, held:wooden_stick 1, held:adventurer_skull 2); unplanned 0 ()
+321 recipes; planned 321 (cell 108, events 21, gold 6, grey 6, L40 4, L6 5, skills 15, gear 13, achievements 111, L25 3, grey@L45 4, held:enchanted_fabric 9, grey@L50 1, L30 2, L45 2, keys 3, party 7, held:wooden_stick 1); unplanned 0 ()
 
 | Recipe | Skill | Craft lvl | Plans at | Char lvl | Fights (what wins) |
 |---|---|---|---|---|---|
@@ -230,10 +230,10 @@
 | mithril_ring | jewelrycrafting | 40 | grey | 40 | bandit_lizard: bare, goblin_wolfrider: small_health_potion, cultist_alchemist: earth_boost_potion+health_potion, bat: bare |
 | sacred_ring | jewelrycrafting | 40 | achievements | 40 | goblin: bare |
 | hell_ring | jewelrycrafting | 45 | L40 | 40 | grimlet: minor_health_potion, efreet_sultan: greater_health_potion, bat: bare |
-| adamantite_ring | jewelrycrafting | 50 | held:duskworm_skin | 60 | cultist_acolyte: bare, sand_snake: bare, sandwarden: greater_health_potion, desert_scorpion: bare |
-| dust_amulet | jewelrycrafting | 50 | held:duskworm_skin | 60 | cultist_alchemist: bare, fennec: enhanced_health_potion, imp: bare, sandwarden: greater_health_potion |
-| eternal_red_ring | jewelrycrafting | 50 | held:duskworm_skin | 60 | sand_snake: bare, fennec: enhanced_health_potion, desert_scorpion: bare |
-| heart_amulet | jewelrycrafting | 50 | held:duskworm_skin | 60 | cultist_acolyte: bare, grimlet: bare, sandwarden: greater_health_potion, goblin: bare |
+| adamantite_ring | jewelrycrafting | 50 | party | 50 | cultist_acolyte: bare, sand_snake: bare, duskworm: party3:water_res_potion+enhanced_health_potion, sandwarden: greater_health_potion, desert_scorpion: bare |
+| dust_amulet | jewelrycrafting | 50 | party | 50 | cultist_alchemist: bare, duskworm: party3:water_res_potion+enhanced_health_potion, fennec: enhanced_health_potion, imp: bare, sandwarden: greater_health_potion |
+| eternal_red_ring | jewelrycrafting | 50 | party | 50 | sand_snake: bare, duskworm: party3:water_res_potion+enhanced_health_potion, fennec: enhanced_health_potion, desert_scorpion: bare |
+| heart_amulet | jewelrycrafting | 50 | party | 50 | cultist_acolyte: bare, grimlet: small_health_potion, duskworm: party3:water_res_potion+enhanced_health_potion, sandwarden: greater_health_potion, goblin: bare |
 | skullforged_ring | jewelrycrafting | 50 | achievements | 50 | goblin_wolfrider: health_potion |
 | copper_bar | mining | 1 | cell | 1 | - |
 | iron_bar | mining | 10 | cell | 10 | - |
@@ -314,9 +314,9 @@
 | adamantite_fishing_rod | weaponcrafting | 50 | achievements | 50 | goblin_wolfrider: health_potion |
 | adamantite_gloves | weaponcrafting | 50 | achievements | 50 | goblin_wolfrider: health_potion |
 | adamantite_pickaxe | weaponcrafting | 50 | achievements | 50 | goblin_wolfrider: health_potion |
-| adamantite_sword | weaponcrafting | 50 | held:adventurer_skull | 60 | dusk_beetle: bare, bat: bare, sea_marauder: bare, goblin_wolfrider: bare |
-| desert_whip | weaponcrafting | 50 | held:duskworm_skin | 60 | sand_snake: bare, efreet_sultan: bare, desert_scorpion: bare, solar_desert_scorpion: greater_health_potion |
-| dust_sword | weaponcrafting | 50 | held:adventurer_skull | 60 | sea_marauder: bare, cultist_alchemist: bare, sandwarden: greater_health_potion, goblin_wolfrider: bare |
+| adamantite_sword | weaponcrafting | 50 | party | 50 | duskworm: party3:water_res_potion+enhanced_health_potion, dusk_beetle: bare, bat: bare, sea_marauder: bare, goblin_wolfrider: bare |
+| desert_whip | weaponcrafting | 50 | party | 50 | sand_snake: bare, efreet_sultan: bare, duskworm: party3:water_res_potion+enhanced_health_potion, desert_scorpion: bare, solar_desert_scorpion: greater_health_potion |
+| dust_sword | weaponcrafting | 50 | party | 50 | sea_marauder: bare, duskworm: party3:water_res_potion+enhanced_health_potion, cultist_alchemist: bare, sandwarden: greater_health_potion, goblin_wolfrider: bare |
 | moonlight_staff | weaponcrafting | 50 | L45 | 45 | - |
 | ash_plank | woodcutting | 1 | cell | 1 | - |
 | spruce_plank | woodcutting | 10 | cell | 10 | - |
