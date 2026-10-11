@@ -47,19 +47,20 @@ def test_the_ladder_grants_one_condition_per_rung() -> None:
     rungs = ladder("steel_armor", gd)  # gearcrafting 20, no event leaf
     names = [name for name, _, _ in rungs]
     assert names[:5] == ["cell", "skills", "gold", "achievements", "gear"]
-    sweep = ["-10", "-5", "+5", "+10", "+15", "+20", "+25", "+30"]
-    assert names[5:] == ([f"level{k}" for k in sweep] + ["keys"] + [f"keys{k}" for k in sweep]
-                         + ["grey"] + [f"grey{k}" for k in sweep])
+    sweep = [10, 15, 25, 30, 35, 40, 45, 50, 55, 60]  # 1..60 (USER 2026-10-10), the nominal 20 aside
+    assert names[5:] == ([f"L{n}" for n in sweep] + ["keys"] + [f"keys@L{n}" for n in sweep]
+                         + ["grey"] + [f"grey@L{n}" for n in sweep])
+    assert all(1 <= c.char_level <= 60 for _, c, _ in rungs)
     cell, skills, gold, achieved, geared = (c for _, c, _ in rungs[:5])
     assert cell == CraftCell(20, "gearcrafting", 20)
     assert skills.skills_at_level and not cell.skills_at_level
     assert gold.gold == GOLD_GRANT and skills.gold == 0
     assert achieved == gold and geared.geared and not achieved.geared
     assert [unlocked for _, _, unlocked in rungs] == [False] * 3 + [True] * (len(rungs) - 3)
-    assert [c.char_level for _, c, _ in rungs[5:13]] == [10, 15, 25, 30, 35, 40, 45, 50]
+    assert [c.char_level for _, c, _ in rungs[5:15]] == sweep
     assert all(c.skill_level == 20 and c.geared for _, c, _ in rungs[5:])
-    assert all(c.keys for _, c, _ in rungs[13:]) and not any(c.keys for _, c, _ in rungs[:13])
-    assert all(c.grey for _, c, _ in rungs[22:]) and not any(c.grey for _, c, _ in rungs[:22])
+    assert all(c.keys for _, c, _ in rungs[15:]) and not any(c.keys for _, c, _ in rungs[:15])
+    assert all(c.grey for _, c, _ in rungs[26:]) and not any(c.grey for _, c, _ in rungs[:26])
     # an event-only leaf adds the events rung
     names = [name for name, _, _ in ladder("conjurer_cloak", gd)]
     assert names[3] == "events"
@@ -93,7 +94,7 @@ def test_the_climb_stops_at_the_first_rung_that_plans() -> None:
 
     with patch("artifactsmmo_cli.audit.craft_conditions.run_cell", never):
         result = climb("steel_armor", gd, gd)
-        assert result.rung is None and result.result.char_level == 50
+        assert result.rung is None and result.result.char_level == 60
 
 
 def test_fight_needs_name_what_wins() -> None:
@@ -221,3 +222,12 @@ def test_the_catalogue_best_gear_is_suppliable_and_level_capped() -> None:
     assert gear["weapon_slot"] == "death_knight_sword"
     assert all(gd.item_stats(code).level <= 30 for code in gear.values())
     assert "novice_guide" not in gear.values()  # fixed supply, not suppliable
+
+
+def test_a_rung_outside_levels_1_to_60_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """USER 2026-10-10: "anything that cannot plan between levels 1 and 60 is
+    invalid"."""
+    monkeypatch.setattr("artifactsmmo_cli.audit.craft_conditions.nominal_char_level",
+                        lambda _level: 70)
+    with pytest.raises(ValueError, match=r"cell at level 70: outside 1\.\.60"):
+        ladder("steel_armor", _gd())

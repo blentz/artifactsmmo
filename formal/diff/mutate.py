@@ -5741,6 +5741,9 @@ CONDITIONS_INC3_MUTATIONS = [
      "    return is_winnable(rested, game_data, monster)\n"),
 ]
 CONDITIONS_HELD_MUTATIONS = [
+    ("conditions: a level outside 1..60 is accepted",
+     "        if not MIN_LEVEL <= rung.char_level <= MAX_LEVEL:\n",
+     "        if False:\n"),
     ("conditions: no held-leaves resort",
      "    if leaves:\n        granted = run_cell(recipe, replace(top, held=leaves), achieved)\n",
      "    if False:\n        granted = run_cell(recipe, replace(top, held=leaves), achieved)\n"),

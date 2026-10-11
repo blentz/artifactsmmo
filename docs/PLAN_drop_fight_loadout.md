@@ -151,7 +151,7 @@ named condition; it passes: **321/321**.
 | events | 21 |
 | skills (every skill at the level) | 15 |
 | gear (owns the catalogue's gear for its level) | 13 |
-| level sweep (-10 .. +30) | 16 |
+| a level sweep, absolute levels 1..60 (`L<n>`) | 16 |
 | gold | 6 |
 | grey (the grey-farm policy licenses the drop) | 11 |
 | keys (holds the map's crossing keys) | 3 |
@@ -190,3 +190,10 @@ leaves.
 - The region bridge declines a crossing whose key is not held; it does not
   plan the key (sonnengott_key drops from baby_red_dragon).
 - duskworm (event, 48) beats every catalogue loadout at 50.
+
+USER 2026-10-10: "a character level of -10 is not possible. anything that
+cannot plan between levels 1 and 60 is invalid." The level rungs were named by
+their offset from the nominal level (`level-10` = 10 below it, never below
+level 1); they are now named by the absolute level (`L35`, `keys@L35`,
+`grey@L35`), sweep 1..60 (`MIN_LEVEL`, `MAX_LEVEL`), and the ladder raises on a
+rung outside them. Still 321/321.

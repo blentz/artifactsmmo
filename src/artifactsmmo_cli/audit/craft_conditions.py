@@ -21,17 +21,18 @@ condition over the census character (`craft_completeness.census_state`):
 6. `gear` — the catalogue's best suppliable gear for the level, worn
    (`CharacterObjective.catalogue_best_gear`): the gear that wins a fight the
    reachable gear (`census_gear`) loses;
-7. `level±k` — every grant kept, the character `LEVEL_STEP` levels apart each
-   rung from `craft level − 10` (at least 1) to 50, every other skill with it;
+7. `L<n>` — every grant kept, the character at level n, `LEVEL_STEP` apart from
+   `craft level − 10` (at least `MIN_LEVEL`) to `MAX_LEVEL`, every other skill
+   with it;
    the recipe's own skill stays at its craft level. LOWER levels count: a drop
    is grey ≥ 11 levels above its monster, so pig_skin (pig, 19) is farmable
    only below 30, piggy_helmet's nominal level;
-8. `keys`, then `keys±k` — the sweep holding every crossing's key
+8. `keys`, then `keys@L<n>` — the sweep holding every crossing's key
    (`CraftCell.keys`): the region bridge does not plan a key's acquisition;
 10. `held:<leaves>` — the last resort: the leaves still unreachable at the
    top rung granted in the bag (`CraftCell.held`), naming what no route
    produces (a raid reward, a starter item, an unbeatable boss's drop);
-9. `grey`, then `grey±k` — the same sweep with the grey-farm policy licensing
+9. `grey`, then `grey@L<n>` — the same sweep with the grey-farm policy licensing
    every grey drop (`CraftCell.grey`): the policy (USER 2026-07-06) refuses a
    grey drop for a recipe a near higher tier makes obsolete, and where the
    dropper is grey at every level the recipe's other fights need, only this
@@ -42,7 +43,7 @@ condition over the census character (`craft_completeness.census_state`):
 
 The recipe's answer is the first rung whose cell PASSES, with the plan's fights
 (`craft_census.fight_needs`). A recipe that passes no rung carries its top
-rung's gap: a game limit names what even a level-50 character with every skill,
+rung's gap: a game limit names what even a level-60 character with every skill,
 gold and the events cannot reach; `planner_bug` there is a planner bug."""
 
 from dataclasses import dataclass, replace
@@ -59,8 +60,11 @@ from artifactsmmo_cli.audit.craft_completeness import (
 GOLD_GRANT = 1_000_000
 """The `gold` rung's pocket: more than any vendor price or crossing fee."""
 
-TOP_LEVEL = 50
-"""The game's level cap: the last level rung's character level."""
+MIN_LEVEL = 1
+MAX_LEVEL = 60
+"""The character levels a condition may name (USER 2026-10-10: "anything that
+cannot plan between levels 1 and 60 is invalid"); every rung's level is
+inside them."""
 
 LEVEL_STEP = 5
 """Levels between the level rungs."""
@@ -97,20 +101,20 @@ def ladder(recipe: str, game_data: GameData) -> list[tuple[str, CraftCell, bool]
     cell = replace(cell, geared=True)
     rungs.append(("gear", cell, True))
     nominal = cell.char_level
-    levels = range(max(1, stats.crafting_level - 10), TOP_LEVEL + 1, LEVEL_STEP)
+    swept = range(max(MIN_LEVEL, stats.crafting_level - 10), MAX_LEVEL + 1, LEVEL_STEP)
+    levels = [level for level in dict.fromkeys([*swept, MAX_LEVEL]) if level != nominal]
     for level in levels:
-        if level != nominal:
-            rungs.append((f"level{level - nominal:+d}", replace(cell, char_level=level), True))
+        rungs.append((f"L{level}", replace(cell, char_level=level), True))
     keyed = replace(cell, keys=True)
     rungs.append(("keys", keyed, True))
-    for level in levels:
-        if level != nominal:
-            rungs.append((f"keys{level - nominal:+d}", replace(keyed, char_level=level), True))
+    rungs += [(f"keys@L{level}", replace(keyed, char_level=level), True) for level in levels]
     grey = replace(keyed, grey=True)
     rungs.append(("grey", grey, True))
-    for level in levels:
-        if level != nominal:
-            rungs.append((f"grey{level - nominal:+d}", replace(grey, char_level=level), True))
+    rungs += [(f"grey@L{level}", replace(grey, char_level=level), True) for level in levels]
+    for name, rung, _ in rungs:
+        if not MIN_LEVEL <= rung.char_level <= MAX_LEVEL:
+            raise ValueError(f"{recipe} rung {name} at level {rung.char_level}: outside "
+                             f"{MIN_LEVEL}..{MAX_LEVEL}")
     return rungs
 
 
