@@ -38,6 +38,12 @@ jobs:
       # unbuffered output makes the post-mortem log show which mutation group
       # was running when the runner is killed.
       PYTHONUNBUFFERED: "1"
+      # The kill-tests run the same stubbed suite as pytest.yml, so they need the
+      # same dummy token: `play`'s init reads one. Without it the mutation gate's
+      # baseline found tests/test_commands/test_play_rate_budget.py red
+      # unmutated (2026-10-11, "No authentication token found"), and before the
+      # baseline its two fleet-order mutants counted as kills.
+      ARTIFACTSMMO_TOKEN: "ci-dummy-token"
     steps:
       - uses: actions/checkout@v6
       # THE ORACLE MUST BE BUILT HERE. 127 of the 221 run_groups bind a
