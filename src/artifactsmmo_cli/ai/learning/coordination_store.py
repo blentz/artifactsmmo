@@ -34,6 +34,8 @@ from artifactsmmo_cli.ai.learning.models import (
     GeOrderClaim,
     HoldingLedger,
     MaterialDemand,
+    PartyCard,
+    PartyLeaseRow,
     RoleLease,
     SkillLedger,
     SupplyClaim,
@@ -44,6 +46,7 @@ from artifactsmmo_cli.ai.learning.schema_init import (
     exclusive_schema_lock,
     schema_lock_connect_args,
 )
+from artifactsmmo_cli.ai.party_lease_core import PartyLease
 
 LEASE_TTL_SECONDS = 600
 """Seconds a lease survives without renewal. Renewed every cycle, so this only
@@ -51,6 +54,12 @@ has to exceed the longest LEGITIMATE gap between cycles — not the action
 cooldown, but a capped Retry-After backoff or a long planner search. Ten
 minutes clears both, and costs at most ten minutes of an unworked role against
 sessions that run for hours."""
+
+PARTY_LEASE_TTL_SECONDS = 300
+"""Seconds a party lease survives without the leader's renewal: the bound on
+how long a member holds on the boss tile for a leader that stopped wanting the
+fight (docs/PLAN_group_fights.md increment 4). Shorter than the snapshot
+clock: a hold costs every member its own work."""
 
 DEMAND_TTL_SECONDS = 600
 """Seconds a published demand row survives without republication. Same clock as
@@ -1155,6 +1164,116 @@ class CoordinationStore:
                 s.commit()
         except SQLAlchemyError as e:
             print(f"[coordination] release_supply failed: {e}")
+
+    def publish_party_card(self, card_json: str, now: datetime) -> None:
+        """Replace this character's party card (`party_card.card_json`),
+        the `publish_skills` shape on the one liveness clock."""
+        _require_utc(now)
+        try:
+            with SqlSession(self._engine) as s:
+                for row in s.exec(select(PartyCard).where(
+                        PartyCard.character == self._character)).all():
+                    s.delete(row)
+                s.flush()  # UNIQUE(character): the delete before the insert
+                s.add(PartyCard(character=self._character, card_json=card_json,
+                                expires_at=self._demand_expiry(now)))
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[coordination] publish_party_card failed: {e}")
+
+    def sibling_party_cards(self, now: datetime) -> list[str]:
+        """Every OTHER character's live party card, by character name."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(select(PartyCard).where(
+                    PartyCard.expires_at > stamp,
+                    PartyCard.character != self._character,
+                ).order_by(col(PartyCard.character))).all()
+        except SQLAlchemyError as e:
+            print(f"[coordination] sibling_party_cards failed: {e}")
+            return []
+        return [row.card_json for row in rows]
+
+    def _live_leases(self, s: SqlSession, stamp: str) -> list[PartyLeaseRow]:
+        return list(s.exec(select(PartyLeaseRow).where(PartyLeaseRow.expires_at > stamp)).all())
+
+    def claim_party(self, boss: str, members: tuple[str, ...], tile: tuple[str, int, int],
+                    now: datetime) -> bool:
+        """Elect THIS character to lead a party of `members` against `boss`,
+        meeting on `tile` (layer, x, y), and report whether it holds the lease
+        afterwards (docs/PLAN_group_fights.md increment 4).
+
+        `PartyLeaseRow` is UNIQUE on the boss (one party per boss), so the
+        `claim_supply` shape: a live lease on the boss led by ANOTHER
+        character refuses the claim; an expired one, or this character's own,
+        is taken over / renewed in place with the members and tile given. A
+        character is in at most one party: the claim is also refused while a
+        live lease on ANOTHER boss names the leader or any member."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        expiry = (now + timedelta(seconds=PARTY_LEASE_TTL_SECONDS)).isoformat()
+        party = {self._character, *members}
+        layer, x, y = tile
+        try:
+            with SqlSession(self._engine) as s:
+                for live in self._live_leases(s, stamp):
+                    if live.boss == boss:
+                        if live.leader != self._character:
+                            return False
+                    elif party & {live.leader, *live.members.split(",")}:
+                        return False
+                found = s.exec(select(PartyLeaseRow).where(PartyLeaseRow.boss == boss)).first()
+                row = found if found is not None else PartyLeaseRow(
+                    boss=boss, leader=self._character, members="", layer=layer, x=x, y=y,
+                    claimed_at=stamp, expires_at=expiry)
+                row.leader = self._character
+                row.members = ",".join(members)
+                row.layer, row.x, row.y = layer, x, y
+                row.claimed_at = stamp
+                row.expires_at = expiry
+                s.add(row)
+                s.commit()
+                return True
+        except IntegrityError:
+            return False
+        except SQLAlchemyError as e:
+            print(f"[coordination] claim_party failed: {e}")
+            return False
+
+    def party_lease_for(self, now: datetime) -> PartyLease | None:
+        """The live lease naming THIS character, as leader or member; None
+        when none does. Never writes."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        try:
+            with SqlSession(self._engine) as s:
+                rows = self._live_leases(s, stamp)
+        except SQLAlchemyError as e:
+            print(f"[coordination] party_lease_for failed: {e}")
+            return None
+        for row in sorted(rows, key=lambda r: r.boss):
+            members = tuple(m for m in row.members.split(",") if m)
+            if self._character == row.leader or self._character in members:
+                return PartyLease(row.boss, row.leader, members, row.layer, row.x, row.y)
+        return None
+
+    def release_party(self, boss: str) -> None:
+        """Drop THIS character's lease on `boss`. No-op if it leads none,
+        including when a sibling leads it (own-row-only, as `release_supply`)."""
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(select(PartyLeaseRow).where(
+                    PartyLeaseRow.boss == boss,
+                    PartyLeaseRow.leader == self._character,
+                )).first()
+                if row is None:
+                    return
+                s.delete(row)
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[coordination] release_party failed: {e}")
 
     def close(self) -> None:
         self._engine.dispose()

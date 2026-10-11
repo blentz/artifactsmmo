@@ -318,3 +318,68 @@ behind the executor.
   party" step is increment 4's.
 
 Still inert in production: `party` is empty until increment 4.
+
+## Increment 4 — design (2026-10-11)
+
+What production has today (survey 2026-10-11): sibling coordination lives in
+`CoordinationStore` (learning.db, `--coordination-db`, one store per
+character, every call takes `now`, TTL rows: `LEASE_TTL_SECONDS` 600 for
+snapshots, one-row claims unique on their key, renewed by re-claiming each
+cycle, released by the owner only). Fleet WORK (supply, turn-in) is a root
+alternative (`ReachFleetOutcome`), served on its rotation turn. A party hold
+cannot be that: rotation demotes a served goal, so a member on the tile would
+leave it after one turn. USER ruling 2 ("always") makes it an INTERRUPT.
+
+**4a — the data (inert).**
+- `PartyCard` (table `party_cards`, unique on character): each character
+  publishes, every cycle, the WorldState fields a party fight reads
+  (`fight_key`'s fields, hp, position, cooldown, skills, gold, bag/bank
+  potions), JSON, `LEASE_TTL_SECONDS` expiry. `sibling_cards(now)` returns the
+  live siblings' as WorldStates.
+- `PartyLease` (table `party_leases`, unique on boss: one party per boss):
+  leader, members, tile, claimed/expires. `claim_party(boss, members, tile,
+  now)` (refused while a live lease names any of them or another leader holds
+  the boss), `party_lease_for(character, now)` (the live lease naming a
+  character as leader or member), `release_party(boss)` (the leader only).
+  Expiry `PARTY_LEASE_TTL_SECONDS` = 300 (a hold costs the members their own
+  work; the leader renews while it still wants the fight).
+- `party_lease_core.py` (pure, proved if it decides anything): `assembled`
+  — every member's card fresh, on the lease tile, out of cooldown at `now`.
+
+**4b — the behaviour.**
+- The roster: `state.party` = the live siblings' cards NOT named by another
+  live lease (each a WorldState). The band (increment 3) ranks party bosses
+  over it; the drop gate (increment 2) admits them.
+- Leader: when the band target carries `joiners`, the leader claims a lease
+  for (boss, joiner names, the boss tile nearest the leader), renews it every
+  cycle while the target stays, releases it after the party fight resolves or
+  when the target changes. While its own lease is not assembled, its party
+  `FightAction` is inapplicable (participants off the tile would be HTTP 486)
+  and it holds on the tile like a member.
+- Member: a live lease naming it fires the `PARTY_JOIN` guard — the LAST
+  guard, after `CRAFT_POTIONS` (survival, bag and the fight's potions first;
+  the potion guard's fight is the lease's boss). Its goal `JoinPartyGoal`
+  plans `Move` to the tile then `HoldForPartyAction` (one short no-API pause,
+  a productive step: not Wait, which the arbiter filters and the census
+  alarms on). A member's cycle that holds records the fight's XP/gold/drops
+  when its next state read shows them.
+- Lean: `PARTY_JOIN` is a new guard rung: `GuardKind`, `allInLadderOrder`,
+  `DecideKey`, the oracle's ladder vector (appended index), the F/D/E measure
+  slot (distance to the tile, then a hold flag cleared fire-and-lose — the
+  `currencyTurnInFlag` shape: the lease's end is the world's answer, bounded
+  by its TTL), the cycle-step dispatch and its progress lemma, the sim
+  mirrors, the ladder diff tests, the census `DORMANT` entries for the new
+  goal and action, and mutants.
+- Only after 4b's Lean lands does `state.party` get filled from the cards.
+
+## Increment 4a — built (2026-10-11)
+
+`party_card.card_json` / `card_state` (a sibling's fight state, round-trip
+tested); tables `party_cards` (`PartyCard`, unique per character, the
+snapshot clock) and `party_leases` (`PartyLeaseRow`, unique per boss,
+`PARTY_LEASE_TTL_SECONDS` 300); `CoordinationStore.publish_party_card`,
+`sibling_party_cards`, `claim_party` (refused while another leader holds the
+boss or a live lease on another boss names any of the party; renews its own;
+an insert race reports False), `party_lease_for` (leader or member, read-only),
+`release_party` (the leader's own row only); `party_lease_core.PartyLease`,
+`on_tile`, `ready`, `assembled`. Inert: nothing publishes or reads them yet.

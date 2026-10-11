@@ -381,6 +381,8 @@ CRAFT_CONDITIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_cond
 REACH_CURRENCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "reach_currency.py"
 LOADOUT_WIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loadout_win.py"
 PARTY_WIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "party_win.py"
+PARTY_COORD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "coordination_store.py"
+PARTY_LEASE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "party_lease_core.py"
 PARTY_LOOP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "party_loop.py"
 BAND_TARGET_PARTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "band_target.py"
 RESTORE_HP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "restore_hp.py"
@@ -5723,6 +5725,36 @@ BAND_PARTY_MUTATIONS = [
      "    if not state.party:\n        return []\n",
      "    if False:\n        return []\n"),
 ]
+# Party cards and leases (docs/PLAN_group_fights.md increment 4a). OWN
+# run_groups: unit-killed by tests/test_ai/test_party_coordination.py.
+PARTY_LEASE_STORE_MUTATIONS = [
+    ("party lease: another leader's boss is taken",
+     "                        if live.leader != self._character:\n                            return False\n",
+     "                        if False:\n                            return False\n"),
+    ("party lease: a member already in a party joins another",
+     "                    elif party & {live.leader, *live.members.split(\",\")}:\n",
+     "                    elif False:\n"),
+    ("party lease: a sibling's lease is released",
+     "                    PartyLeaseRow.leader == self._character,\n                )).first()\n",
+     "                )).first()\n"),
+    ("party lease: a member is not told of its lease",
+     "            if self._character == row.leader or self._character in members:\n",
+     "            if self._character == row.leader:\n"),
+    ("party cards: a character reads its own card",
+     "                    PartyCard.character != self._character,\n",
+     "                    True,\n"),
+]
+PARTY_LEASE_CORE_MUTATIONS = [
+    ("party ready: a member in cooldown is ready",
+     "    return on_tile(state, lease) and (state.cooldown_expires is None\n",
+     "    return on_tile(state, lease) and (True\n"),
+    ("party ready: the layer is ignored",
+     "    return (state.layer, state.x, state.y) == (lease.layer, lease.x, lease.y)\n",
+     "    return (state.x, state.y) == (lease.x, lease.y)\n"),
+    ("party assembled: a member with no card is ready",
+     "    return all(name in cards and ready(cards[name], lease, now) for name in lease.members)\n",
+     "    return all(ready(cards[name], lease, now) for name in lease.members if name in cards)\n"),
+]
 # The party fight's execution (docs/PLAN_group_fights.md increment 5). OWN
 # run_groups: unit-killed by tests/test_ai/test_actions_execute.py,
 # tests/test_ai/test_party_win.py and tests/test_ai/test_player_learning.py.
@@ -10459,6 +10491,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_party_win.py", survivors)
     run_group(PARTY_LOOP_SRC, PARTY_LOOP_MUTATIONS,
               "tests/test_ai/test_party_loop.py", survivors)
+    run_group(PARTY_COORD_SRC, PARTY_LEASE_STORE_MUTATIONS,
+              "tests/test_ai/test_party_coordination.py", survivors)
+    run_group(PARTY_LEASE_CORE_SRC, PARTY_LEASE_CORE_MUTATIONS,
+              "tests/test_ai/test_party_coordination.py", survivors)
     run_group(APPLY_FIGHT_SRC, PARTY_FIGHT_EXECUTE_MUTATIONS,
               "tests/test_ai/test_actions_execute.py", survivors)
     run_group(PARTY_WIN_SRC, PARTY_PARTICIPANTS_MUTATIONS,

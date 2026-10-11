@@ -575,6 +575,45 @@ class SupplyClaim(SQLModel, table=True):
     expires_at: str
 
 
+class PartyCard(SQLModel, table=True):
+    """One character's party card (`party_card.card_json`): the state its
+    siblings judge a party boss fight with and read its readiness from
+    (docs/PLAN_group_fights.md increment 4a). Replaced wholesale every cycle
+    like `SkillLedger`, on the coordination system's one liveness rule
+    (`expires_at`, `DEMAND_TTL_SECONDS`): a character that stops playing
+    stops being a party candidate on the clock that frees its role."""
+
+    __tablename__ = "party_cards"
+    __table_args__ = (UniqueConstraint("character", name="uq_party_card_character"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    character: str = Field(index=True)
+    card_json: str
+    expires_at: str
+
+
+class PartyLeaseRow(SQLModel, table=True):
+    """The election of one party for one boss (docs/PLAN_group_fights.md
+    increment 4a): its leader, the members it takes along (comma-joined) and
+    the tile they meet on. UNIQUE on `boss` alone, like `SupplyClaim` on its
+    item: one party per boss, and taking the row over IS the election. The
+    leader renews it every cycle it still wants the fight; it expires on
+    `PARTY_LEASE_TTL_SECONDS`, the bound on how long a member holds."""
+
+    __tablename__ = "party_leases"
+    __table_args__ = (UniqueConstraint("boss", name="uq_party_lease_boss"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    boss: str = Field(index=True)
+    leader: str = Field(index=True)
+    members: str
+    layer: str
+    x: int
+    y: int
+    claimed_at: str
+    expires_at: str
+
+
 class PlanBodyLogBase(SQLModel):
     """One computed plan body, logged at re-plan time. Counted by the Phase-2
     macro detector."""
