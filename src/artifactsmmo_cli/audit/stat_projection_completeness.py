@@ -100,6 +100,13 @@ UNPRICED: dict[str, str] = {
         "`expected_damage_per_fight` modelling crits. Scheduled: no increment "
         "assigned."
     ),
+    "threat": (
+        "Party aggro: a boss hits the highest-threat member 90% of the time "
+        "(docs/PLAN_group_fights.md). It moves damage between party members and "
+        "changes nothing in a solo fight, so a solo loadout projection has no "
+        "delta to price; the party fight walk (`group_fight_core`) reads it. "
+        "Scheduled: group fights increment 3 (party routes rank the gear)."
+    ),
     "haste": (
         "PERMANENT EXCLUSION — not a defect. Haste reduces action COOLDOWN, "
         "which is measured in SECONDS. `J` is denominated in ACTIONS. A hasted "

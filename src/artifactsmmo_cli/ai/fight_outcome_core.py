@@ -43,7 +43,7 @@ class FightOutcome:
     used: int
 
 
-def _drink(pool: int, max_pool: int, restore_pool: int, stock: int) -> tuple[int, int]:
+def drink(pool: int, max_pool: int, restore_pool: int, stock: int) -> tuple[int, int]:
     """The restore rule at the start of a player turn: below half, drink one."""
     if 2 * pool < max_pool and stock > 0:
         return min(pool + restore_pool, max_pool), stock - 1
@@ -66,7 +66,7 @@ def fight_outcome(terms: FightTerms, hp_start: int, max_hp: int,
     left = stock
     for round_no in range(1, terms.rounds_to_kill + 1):
         if terms.player_first:
-            pool, left = _drink(pool, max_pool, restore_pool, left)
+            pool, left = drink(pool, max_pool, restore_pool, left)
             if round_no == terms.rounds_to_kill:
                 return FightOutcome(True, round_no, pool, stock - left)
             pool -= terms.die_step
@@ -76,7 +76,7 @@ def fight_outcome(terms: FightTerms, hp_start: int, max_hp: int,
             pool -= terms.die_step
             if pool <= 0:
                 return FightOutcome(False, round_no, 0, stock - left)
-            pool, left = _drink(pool, max_pool, restore_pool, left)
+            pool, left = drink(pool, max_pool, restore_pool, left)
             if round_no == terms.rounds_to_kill:
                 return FightOutcome(True, round_no, pool, stock - left)
     return FightOutcome(True, 0, pool, 0)

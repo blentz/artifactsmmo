@@ -6,6 +6,7 @@ modelled as their expected contribution (deterministic) since the planner needs
 a stable verdict, not a sampled fight."""
 
 import math
+from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
@@ -16,6 +17,7 @@ from artifactsmmo_cli.ai.fight_terms_core import WIN_MARGIN as WIN_MARGIN
 from artifactsmmo_cli.ai.fight_terms_core import FightTerms, fight_terms, terms_margin, terms_win
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat
+from artifactsmmo_cli.ai.group_fight_core import PartyBoss, PartyMember
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import combat_key
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -190,7 +192,57 @@ def fight_max_hp(state: WorldState, game_data: GameData, monster_code: str) -> i
     return _fight_projection(state, game_data, monster_code)[1].max_hp
 
 
+@dataclass(frozen=True)
+class FightNumbers:
+    """`combat_terms`' terms with what a party fight splits out of them: the
+    raw hit, the cost of one monster hit (`die_step` less every term charged
+    targeted or not), the loadout's max HP and threat."""
+
+    terms: FightTerms
+    raw_player: int
+    hit: int
+    max_hp: int
+    threat: int
+
+
 def combat_terms(state: WorldState, game_data: GameData, monster_code: str) -> FightTerms:
+    """`fight_numbers`' terms."""
+    return fight_numbers(state, game_data, monster_code).terms
+
+
+def boss_drain(game_data: GameData, monster_code: str) -> int:
+    """The kill-step terms charged once per MONSTER turn — its lifesteal on
+    crit and its healing — as a positive rate: `_kill_step_net` with no player
+    side, negated."""
+    return -_kill_step_net(
+        0, 0, game_data.monster_critical_strike(monster_code),
+        game_data.monster_lifesteal(monster_code),
+        sum(game_data.monster_attack(monster_code).values()),
+        game_data.monster_hp(monster_code), game_data.monster_healing(monster_code),
+        0, 0, 0, 0)
+
+
+def party_boss(game_data: GameData, monster_code: str) -> PartyBoss:
+    """The boss's side of a party fight (`group_fight_core`)."""
+    return PartyBoss(
+        game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code),
+        game_data.monster_reconstitution(monster_code), boss_drain(game_data, monster_code))
+
+
+def party_member(state: WorldState, game_data: GameData, monster_code: str,
+                 restore: int, stock: int) -> PartyMember:
+    """One member of a party fight against `monster_code`, in its best on-hand
+    loadout with `stock` restore potions of `restore` HP: its solo terms split
+    so that `net - boss_drain` is its `kill_step` and `hit + area` its
+    `die_step`."""
+    n = fight_numbers(state, game_data, monster_code)
+    return PartyMember(
+        raw=n.raw_player, net=n.terms.kill_step + boss_drain(game_data, monster_code),
+        hit=n.hit, area=n.terms.die_step - n.hit, hp=state.hp, max_hp=n.max_hp,
+        first=n.terms.player_first, threat=n.threat, restore=restore, stock=stock)
+
+
+def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> FightNumbers:
     """The closed form's per-turn terms for a fight against `monster_code` in the
     best on-hand loadout (inventory + equipped) for it: `predict_win` and
     `combat_margin` read their verdict from these, and the consumable turn walk
@@ -294,12 +346,24 @@ def combat_terms(state: WorldState, game_data: GameData, monster_code: str) -> F
         game_data.monster_greed(monster_code),
         game_data.monster_enchanted_mirror(monster_code),
     )
-    return fight_terms(
+    # One monster hit: `_die_step` with every term a non-target also pays zeroed.
+    hit = _die_step(
+        raw_monster, m_crit, p.critical_strike, 0, p_atk_sum, 0, 0, p.max_hp, 0,
+        game_data.monster_berserker_rage(monster_code),
+        game_data.monster_frenzy(monster_code),
+        0, 0, game_data.monster_greed(monster_code), 0,
+    )
+    threat = sum(
+        st.threat for code in final_equip.values()
+        if code and (st := game_data.item_stats(code)) is not None
+    )
+    terms = fight_terms(
         raw_player, kill_step, effective_monster_hp,
         game_data.monster_reconstitution(monster_code), die_step,
         state.hp, p.max_hp,
         p.initiative >= game_data.monster_initiative(monster_code),
     )
+    return FightNumbers(terms, raw_player, hit, p.max_hp, threat)
 
 
 def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bool:

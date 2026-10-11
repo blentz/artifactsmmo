@@ -40,6 +40,8 @@ class ItemStats:
     combat_buff: int = 0
     # removes N poison/turn (utility potion); caps monster poison in predict_win (PLAN #3b2)
     antipoison: int = 0
+    # aggro: a boss hits the highest-threat party member 90% of the time (group fights)
+    threat: int = 0
     # `teleport` effect value = destination MapSchema.map_id (0 = not a teleport item); PLAN #6b
     teleport_map_id: int = 0
     gold_value: int = 0   # +gold granted when a gold-bag consumable is used (effect `gold`)

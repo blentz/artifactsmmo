@@ -85,16 +85,17 @@ def test_haste_is_excluded_for_the_unit_reason() -> None:
     assert "ACTIONS" in UNPRICED["haste"]
 
 
-def test_the_census_prices_nine_of_twelve_worn_stats() -> None:
+def test_the_census_prices_nine_of_thirteen_worn_stats() -> None:
     """7 -> 8 when `wisdom` graduated (increment 3), 8 -> 9 when `prospecting`
     did (increment 4). Each change IS the deliverable, and this assertion is what
     makes the graduation visible rather than silent.
 
-    Of the three remaining, exactly one (`haste`) is permanent; the other two
-    wait on `WorldState` gaining a base total to project a delta from."""
+    Of the four remaining, exactly one (`haste`) is permanent; `threat` (group
+    fights) acts only in a party fight; the other two wait on `WorldState`
+    gaining a base total to project a delta from."""
     census = run_census()
     assert len(census.projected) == 9
-    assert len(census.unpriced) == 3
+    assert len(census.unpriced) == 4
     assert {"wisdom", "prospecting"} <= census.projected
     assert census.ok
 

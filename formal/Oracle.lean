@@ -1851,6 +1851,22 @@ def runFightOutcome (args : Array Json) : Json :=
               ("hp_end", Json.num o.hpEnd), ("used", Json.num (Int.ofNat o.used)),
               ("closed_win", Json.bool (Formal.FightOutcome.closedWin t (i 6) (i 7)))]
 
+/-- A party boss fight (`Formal.GroupFight.groupOutcome`). Args: `[bossHp,
+recon, drain, n]` then `n` members of `[raw, net, hit, area, hp, maxHp, first,
+threat, restore, stock]`, first as 0/1. -/
+def runGroupFight (args : Array Json) : Json :=
+  let i : Nat → Int := fun k => intArg args k
+  let b : Formal.GroupFight.Boss := ⟨i 0, i 1, i 2⟩
+  let ms := (List.range (i 3).toNat).map fun j =>
+    let o := 4 + 10 * j
+    ({ rawPlayer := i o, net := i (o + 1), hit := i (o + 2), area := i (o + 3), hp := i (o + 4),
+       maxHp := i (o + 5), first := i (o + 6) != 0, threat := i (o + 7),
+       restore := (i (o + 8)).toNat, stock := (i (o + 9)).toNat } : Formal.GroupFight.Member)
+  let o := Formal.GroupFight.groupOutcome b ms
+  Json.mkObj [("win", Json.bool o.win), ("turns", Json.num o.turns),
+              ("hp_end", Json.arr (o.hpEnd.map Json.num).toArray),
+              ("used", Json.arr (o.used.map fun u => Json.num (Int.ofNat u)).toArray)]
+
 /-- `predict_win` at a CURRENT hp (`Formal.FightOutcome.closedWin` over the
 `PredictWin.killStepNet` / `PredictWin.dieStep` terms). Args: the 46-int
 `runPredictWin` layout, then `[46]` = the player's current hp. -/
@@ -3050,6 +3066,8 @@ def runOne (item : Json) : Json :=
     runFailureRecovery args
   else if kind == "fight_outcome" then
     runFightOutcome args
+  else if kind == "group_fight" then
+    runGroupFight args
   else if kind == "consumable_price" then
     runConsumablePrice args
   else if kind == "loop_recovery" then

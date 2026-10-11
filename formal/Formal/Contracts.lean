@@ -53,6 +53,7 @@ import Formal.ConsumableFloor
 import Formal.LossRisk
 import Formal.FailureRecovery
 import Formal.FightOutcome
+import Formal.GroupFight
 import Formal.ConsumablePrice
 import Formal.LoopRate
 import Formal.BestLoadout
@@ -3453,6 +3454,28 @@ example : ∀ (t : Formal.FightOutcome.Terms) (hp maxHp : Int) (restore s s' : N
     (Formal.FightOutcome.fightOutcome t hp maxHp restore s).turns
       = (Formal.FightOutcome.fightOutcome t hp maxHp restore s').turns :=
   @Formal.FightOutcome.win_turns_stock_indep
+
+/-! ### GroupFight contracts. -/
+
+example : ∀ (b : Formal.GroupFight.Boss) (m : Formal.GroupFight.Member),
+    Formal.GroupFight.groupOutcome b [m] =
+      let s := Formal.FightOutcome.fightOutcome
+        ⟨m.rawPlayer, m.net - b.drain, b.hp, b.recon, m.hit + m.area, m.first⟩
+        m.hp m.maxHp m.restore m.stock
+      ⟨s.win, s.turns, [s.hpEnd], [s.used]⟩ :=
+  @Formal.GroupFight.groupOutcome_single
+
+example : ∀ (b : Formal.GroupFight.Boss) (ms : List Formal.GroupFight.Member)
+    (m : Formal.GroupFight.Member),
+    0 < Formal.GroupFight.killRate b ms → 0 ≤ m.net → 0 ≤ b.hp →
+    Formal.GroupFight.killRounds b (m :: ms) ≤ Formal.GroupFight.killRounds b ms :=
+  @Formal.GroupFight.killRounds_antitone
+
+example : ∀ (b : Formal.GroupFight.Boss) (ms : List Formal.GroupFight.Member),
+    (∀ m ∈ ms, 0 ≤ m.maxHp) → Formal.GroupFight.gate b ms = .none →
+    (Formal.GroupFight.groupOutcome b ms).win = true →
+    ∀ x ∈ (Formal.GroupFight.groupOutcome b ms).hpEnd, 0 < x :=
+  @Formal.GroupFight.win_alive
 
 /-! ### ConsumablePrice contracts. -/
 

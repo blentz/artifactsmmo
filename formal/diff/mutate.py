@@ -357,6 +357,7 @@ CONSUMABLE_FLOOR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumab
 LOSS_RISK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loss_risk_core.py"
 FIGHT_TERMS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_terms_core.py"
 FIGHT_OUTCOME_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_outcome_core.py"
+GROUP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "group_fight_core.py"
 CONSUMABLE_PRICE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price_core.py"
 CONSUMABLE_PRICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price.py"
 LOOP_RATE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate_core.py"
@@ -824,10 +825,10 @@ FIGHT_OUTCOME_MUTATIONS = [
     ("fight_outcome: the second mover survives at exactly 0 HP",
      "            pool -= terms.die_step\n            if pool <= 0:\n"
      "                return FightOutcome(False, round_no, 0, stock - left)\n"
-     "            pool, left = _drink(",
+     "            pool, left = drink(",
      "            pool -= terms.die_step\n            if pool < 0:\n"
      "                return FightOutcome(False, round_no, 0, stock - left)\n"
-     "            pool, left = _drink("),
+     "            pool, left = drink("),
     ("fight_outcome: the out-sustain win reports 0 rounds",
      "        return FightOutcome(True, terms.rounds_to_kill, pool, 0)",
      "        return FightOutcome(True, 0, pool, 0)"),
@@ -858,6 +859,80 @@ CONSUMABLE_PRICE_CORE_MUTATIONS = [
     ("consumable_price: make-only is unpriceable",
      "    if buy is None:\n        return make_seconds",
      "    if buy is None:\n        return None"),
+]
+
+# group_fight_core: the party boss-fight walk (group fights increment 1).
+# Killed by formal/diff/test_group_fight_diff.py (exact agreement with
+# `Formal.GroupFight.groupOutcome`).
+GROUP_FIGHT_MUTATIONS = [
+    ("group_fight: the boss's drain is not charged",
+     "    return sum(m.net for m in members) - boss.drain",
+     "    return sum(m.net for m in members)"),
+    ("group_fight: the turn cap counts rounds, not actor turns",
+     "    actor_turns = kill_rounds(boss, members) * (len(members) + 1)",
+     "    actor_turns = kill_rounds(boss, members) * 2"),
+    ("group_fight: reconstitution compared in rounds",
+     "    if boss.recon > 0 and 2 * boss.recon <= actor_turns:",
+     "    if boss.recon > 0 and boss.recon <= actor_turns:"),
+    ("group_fight: out-sustain needs only one member",
+     "    if all(m.hit + m.area <= 0 for m in members):",
+     "    if any(m.hit + m.area <= 0 for m in members):"),
+    ("group_fight: threat ignored by the target",
+     "        if (members[best].threat < members[i].threat\n"
+     "                or (members[best].threat == members[i].threat and pools[i] < pools[best])):",
+     "        if pools[i] < pools[best]:"),
+    ("group_fight: threat ties go to the highest pool",
+     "                or (members[best].threat == members[i].threat and pools[i] < pools[best])):",
+     "                or (members[best].threat == members[i].threat and pools[i] > pools[best])):"),
+    ("group_fight: the lowest-pool tie goes to the last index",
+     "        if pools[i] < pools[best]:\n            best = i\n    return best\n\n\ndef _boss_turn",
+     "        if pools[i] <= pools[best]:\n            best = i\n    return best\n\n\ndef _boss_turn"),
+    ("group_fight: the target takes the whole hit",
+     "        dmg = (m.area + (m.hit - m.hit // 10 if i == target else 0)",
+     "        dmg = (m.area + (m.hit if i == target else 0)"),
+    ("group_fight: the lowest-pool member takes no share",
+     "               + (m.hit // 10 if i == low else 0))",
+     "               + 0)"),
+    ("group_fight: a heal is not capped at max hp",
+     "        out.append(min(pool - dmg, m.max_hp * SCALE) if dmg < 0 else pool - dmg)",
+     "        out.append(pool - dmg)"),
+    ("group_fight: every member drinks first",
+     "        if m.first is first:",
+     "        if first:"),
+    ("group_fight: the all-first kill skips the boss in every round",
+     "        if all_first and round_no == rounds:",
+     "        if all_first:"),
+    ("group_fight: a member survives at exactly 0",
+     "        if any(p <= 0 for p in pools):",
+     "        if any(p < 0 for p in pools):"),
+    ("group_fight: a loss needs every member dead",
+     "        if any(p <= 0 for p in pools):",
+     "        if all(p <= 0 for p in pools):"),
+    ("group_fight: a dead start is walked",
+     "    if gate is not FightExit.NONE or any(p <= 0 for p in starts):",
+     "    if gate is not FightExit.NONE:"),
+]
+
+# combat.party_member / party_boss: the solo terms split for a party fight
+# (group fights increment 1). OWN run_group: unit-killed by
+# tests/test_ai/test_party_terms.py.
+PARTY_TERMS_MUTATIONS = [
+    ("party_terms: threat not summed from the gear",
+     "        st.threat for code in final_equip.values()",
+     "        0 for code in final_equip.values()"),
+    ("party_terms: the boss's drain left out of a member's net",
+     "        raw=n.raw_player, net=n.terms.kill_step + boss_drain(game_data, monster_code),",
+     "        raw=n.raw_player, net=n.terms.kill_step,"),
+    ("party_terms: area is the whole die step",
+     "        hit=n.hit, area=n.terms.die_step - n.hit,",
+     "        hit=n.hit, area=n.terms.die_step,"),
+    ("party_terms: the boss's barrier dropped",
+     "        game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code),",
+     "        game_data.monster_hp(monster_code),"),
+    ("party_terms: a hit carries the void drain",
+     "        raw_monster, m_crit, p.critical_strike, 0, p_atk_sum, 0, 0, p.max_hp, 0,",
+     "        raw_monster, m_crit, p.critical_strike, 0, p_atk_sum, 0, 0, p.max_hp,\n"
+     "        game_data.monster_void_drain(monster_code),"),
 ]
 
 # consumable_price: the reader (increment 2). OWN run_group: unit-killed by
@@ -5925,7 +6000,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 _ALL_SRCS = [
     LOSS_RISK_CORE_SRC, FAILURE_RECOVERY_CORE_SRC, ACTION_BASE_SRC, REST_ACTION_SRC,
     TASK_CANCEL_GOAL_SRC, COMPLETE_TASK_GOAL_SRC,
-    FIGHT_TERMS_CORE_SRC, FIGHT_OUTCOME_CORE_SRC,
+    FIGHT_TERMS_CORE_SRC, FIGHT_OUTCOME_CORE_SRC, GROUP_FIGHT_CORE_SRC,
     CONSUMABLE_PRICE_CORE_SRC, CONSUMABLE_PRICE_SRC, LOOP_RATE_CORE_SRC, LOOP_RATE_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
     ROOT_DECISION_SRC, GATHER_DEMAND_SRC,
@@ -9488,6 +9563,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_combat.py", survivors)
     run_group(FIGHT_OUTCOME_CORE_SRC, FIGHT_OUTCOME_MUTATIONS,
               "formal/diff/test_fight_outcome_diff.py", survivors)
+    run_group(GROUP_FIGHT_CORE_SRC, GROUP_FIGHT_MUTATIONS,
+              "formal/diff/test_group_fight_diff.py", survivors)
+    run_group(COMBAT_SRC, PARTY_TERMS_MUTATIONS,
+              "tests/test_ai/test_party_terms.py", survivors)
     run_group(CONSUMABLE_PRICE_CORE_SRC, CONSUMABLE_PRICE_CORE_MUTATIONS,
               "formal/diff/test_consumable_price_diff.py", survivors)
     run_group(CONSUMABLE_PRICE_SRC, CONSUMABLE_PRICE_READER_MUTATIONS,

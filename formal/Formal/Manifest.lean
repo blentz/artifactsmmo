@@ -522,6 +522,11 @@ open Formal.PriorityBand
 #check @Formal.FightOutcome.stock_mono                 -- more stock: no lost win, no lower HP
 #check @Formal.FightOutcome.turns_le_roundsToKill      -- never past the kill round
 #check @Formal.FightOutcome.win_turns_stock_indep      -- a win takes the same rounds
+-- GroupFight (group fights increment 1, `ai/group_fight_core.py`):
+#check @Formal.GroupFight.groupOutcome_single   -- one member IS the solo walk
+#check @Formal.GroupFight.killRounds_antitone   -- a member adding damage never delays the kill
+#check @Formal.GroupFight.win_alive             -- a walked win leaves every member alive
+#check @Formal.GroupFight.win_alive_witness     -- its hypotheses are satisfiable
 -- ConsumablePrice (consumable utility increment 2, `ai/consumable_price_core.py`):
 #check @Formal.ConsumablePrice.held_free          -- held stock is free
 #check @Formal.ConsumablePrice.le_make            -- never dearer than making it

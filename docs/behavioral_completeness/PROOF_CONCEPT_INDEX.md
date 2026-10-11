@@ -49,6 +49,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | GearValue | items, gear | validity, dominance |
 | GoalSystem | core, planner | safety |
 | GoalValueBands | core, planner | safety, monotonicity |
+| GroupFight | combat | validity, monotonicity, safety |
 | GuardCoverage | core | no-deadlock, safety |
 | InventoryChainSafe | bank, items | safety |
 | InventoryKeep | inventory, characters | safety, liveness |

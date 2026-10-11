@@ -128,7 +128,7 @@ _MONSTER_EFFECT_CARVEOUTS: frozenset[str] = frozenset()
 #     direction is inverted; the pattern does not transfer.
 #
 # Three groups (live /effects mechanics):
-#   - SOLO-INERT (no effect for a single-character bot, carved like `threat`):
+#   - SOLO-INERT (no effect alone; ally help left uncredited in a party fight too):
 #       guard         — redirect damage to protect a low-HP ALLY (no allies).
 #       healing_aura  — heal ALLIES, explicitly NOT the caster.
 #       vampiric_strike — on crit, heal lowest-HP ALLY, NOT the caster.
@@ -2137,11 +2137,9 @@ class GameData:
                         # can credit it; not a combat/gear stat.
                         stats.gold_value = effect.value
                     elif effect.code == "threat":
-                        # PLAN #6c carve-out: `threat` is aggro/taunt (pulls a monster's
-                        # focus off allies). Irrelevant for a SOLO bot — no allies to
-                        # protect — so it is DELIBERATELY not modeled. Handled here so it
-                        # is covered (not silently dropped); revisit if party play lands.
-                        pass
+                        # Aggro: a boss hits the highest-threat party member 90% of
+                        # the time (docs/PLAN_group_fights.md; `group_fight_core`).
+                        stats.threat = effect.value
                     elif effect.code in _RUNE_ABILITY_CARVEOUTS:
                         # Intentionally carved player-side rune abilities — solo-inert,
                         # conservatively-uncredited player buffs, or self-harm. Covered
