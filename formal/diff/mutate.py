@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from mutation_anchor import AnchorAmbiguous, AnchorNotFound, MatchKind, apply_anchor, find_anchor
+from mutation_baseline import drop_red, red_baselines
 
 ROOT = Path(__file__).resolve().parents[2]
 # Mutate<->play interlock: while this runner holds live mutants in src/, other
@@ -5788,9 +5789,15 @@ PARTY_PLAYER_MUTATIONS = [
     ("player: a party that never assembles is held for forever",
      "        if now - since >= timedelta(seconds=PARTY_ASSEMBLY_SECONDS):\n",
      "        if False:\n"),
-    ("player: a party fight keeps its lease",
-     "                    self._coordination.release_party(action.monster_code)\n",
-     "                    pass\n"),
+    ("player: a won party fight keeps its lease",
+     "                raise\n            if party_fight:\n                self._release_party(action)\n",
+     "                raise\n"),
+    ("player: a lost party fight keeps its lease",
+     "                if party_fight and str(e).startswith(\"fight_lost\"):\n",
+     "                if False:\n"),
+    ("player: a refused party fight frees its members",
+     "                if party_fight and str(e).startswith(\"fight_lost\"):\n",
+     "                if party_fight:\n"),
 ]
 # The party fight's execution (docs/PLAN_group_fights.md increment 5). OWN
 # run_groups: unit-killed by tests/test_ai/test_actions_execute.py,
@@ -10637,7 +10644,11 @@ def _run_all_groups() -> int:
     _AMBIGUOUS.clear()
     _ERRORED.clear()
     _collect_all_groups()
-    _execute(_UNITS, survivors)
+    # Every kill-test must pass unmutated first (`mutation_baseline`).
+    red = red_baselines(_UNITS, lambda test: _run_pytest(test, None), _WORKERS)
+    for test in red:
+        print(f"RED BASELINE (kill-test fails unmutated): {test}")
+    _execute(drop_red(_UNITS, red, _ERRORED, survivors), survivors)
     if survivors:
         # Break the failure down: a weak test suite, a moved anchor, an
         # undetermined anchor and a broken kill-test are four different bugs and

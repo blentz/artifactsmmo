@@ -427,3 +427,15 @@ Known limits (residuals):
   party loadout for it (the CRAFT_POTIONS guard sizes for its own fight).
 - A leader whose plan stops heading the fight stops renewing: its members
   hold until the lease's TTL (300 s).
+
+## Increment 6 — first live data (2026-10-11 13:55-14:03Z)
+
+The fleet ran 4b within the hour. C3P0 (`GatherMaterials(king_slimeball)`)
+led `Fight(king_slime+HAL)`: 26 attempts, 24 HTTP 499 (a participant in
+cooldown) and 2 HTTP 486 (off the tile), 0 fights; HAL held only 3 times.
+Cause: the leader released the lease after EVERY attempt, refusals included
+— HAL's PARTY_JOIN guard went quiet between attempts and HAL walked back to
+its task (TaskTrade, TaskCancel at the taskmaster). Fixed: a party fight
+releases its lease only when it RESOLVED (won, or `fight_lost`); a 486/499
+refusal keeps it, so the members keep holding. `JoinPartyGoal` /
+`HoldForPartyAction` left the census's dormant table (live).

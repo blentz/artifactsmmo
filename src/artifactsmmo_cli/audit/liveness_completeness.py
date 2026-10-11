@@ -242,14 +242,9 @@ DORMANT: dict[str, str] = {
     # objective step; the promotion into COLLECT_REWARD_ORDER retired the
     # reason, and Robby bought an expansion at 09:11:47 the same day (bank
     # 50 -> 70 slots, -3500 gold). They are LIVE, and the census says so.
-    # --- Group fights (docs/PLAN_group_fights.md increment 4). The PARTY_JOIN
-    # guard fires only on a live party lease naming this character as a member;
-    # no lease exists until a leader's plan heads a party fight, which needs a
-    # boss only a party wins and siblings publishing party cards.
-    "JoinPartyGoal": "conditional: fires only on a live party lease naming this "
-                     "character as a member (PARTY_JOIN)",
-    "HoldForPartyAction": "conditional: emitted by JoinPartyGoal, and by a party "
-                          "fight's leader until its party is assembled",
+    # 2026-10-11: `JoinPartyGoal` / `HoldForPartyAction` (group fights increment
+    # 4b) were declared conditional and ran live within the hour of the push —
+    # they never belonged in this table past the first fleet cycle.
     "PostBuyBidGoal": "unreachable: MeansKind.GE_BID is in the discretionary band",
     "GePostBuyOrderAction": "unreachable: emitted only by PostBuyBidGoal",
     # --- PROOF WITNESS. Never firing is this rung WORKING, not this rung dead.

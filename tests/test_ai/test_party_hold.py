@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.hold_for_party import HOLD_SECONDS, HoldForPartyAction
 from artifactsmmo_cli.ai.game_data import GameData
@@ -173,4 +174,31 @@ def test_a_party_that_never_assembles_is_given_up(tmp_path: Path) -> None:
     assert isinstance(hal._lead_party(fight), HoldForPartyAction)
     assert fight.learning_key() in hal._failure_blocks
     assert "duskworm" not in hal._party_since
+    assert lor_store.party_lease_for(datetime.now(tz=timezone.utc)) is None
+
+
+def _assembled_leader(tmp_path: Path) -> tuple[GamePlayer, CoordinationStore, FightAction]:
+    hal, _ = _player(tmp_path, "HAL")
+    lor_store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Lor")
+    lor_store.publish_party_card(card_json(make_state(character="Lor", x=3, y=-1)), T0)
+    hal._refresh_party(T0)
+    fight = FightAction(monster_code="duskworm", locations=frozenset({(3, -1)}), participants=("Lor",))
+    return hal, lor_store, fight
+
+
+def test_a_refused_party_fight_keeps_its_lease(tmp_path: Path) -> None:
+    """HTTP 499 (a member in cooldown) or 486 (off the tile) is no resolution:
+    the members keep holding (live 2026-10-11: releasing on each refusal freed
+    HAL between C3P0's 26 king_slime attempts)."""
+    hal, lor_store, fight = _assembled_leader(tmp_path)
+    fight.execute = MagicMock(side_effect=ApiActionError(499, "in cooldown"))  # type: ignore[method-assign]
+    with patch.object(hal, "_fetch_world_state", return_value=hal.state):
+        hal._execute(fight, MagicMock())
+    assert lor_store.party_lease_for(datetime.now(tz=timezone.utc)) is not None
+
+
+def test_a_won_party_fight_releases_its_lease(tmp_path: Path) -> None:
+    hal, lor_store, fight = _assembled_leader(tmp_path)
+    fight.execute = MagicMock(return_value=hal.state)  # type: ignore[method-assign]
+    hal._execute(fight, MagicMock())
     assert lor_store.party_lease_for(datetime.now(tz=timezone.utc)) is None

@@ -1429,14 +1429,21 @@ class GamePlayer:
                                    GePostBuyOrderAction)):
                 self._ge_orders_dirty = True
             self._acquire_action()
+            party_fight = (isinstance(action, FightAction) and bool(action.participants)
+                           and self._coordination is not None)
             try:
                 new_state = action.execute(self.state, client)
-            finally:
-                # A party fight resolved (won, lost or refused): the lease
-                # ends with it; a next fight claims a fresh one.
-                if (isinstance(action, FightAction) and action.participants
-                        and self._coordination is not None):
-                    self._coordination.release_party(action.monster_code)
+            except RuntimeError as e:
+                # A party fight LOST still resolved: the lease ends with it. A
+                # REFUSED one (HTTP 486 a member off the tile, 499 one in
+                # cooldown) keeps it, so the members keep holding — live
+                # 2026-10-11, releasing on every refusal freed HAL between
+                # C3P0's 26 king_slime attempts and HAL walked off to its task.
+                if party_fight and str(e).startswith("fight_lost"):
+                    self._release_party(action)
+                raise
+            if party_fight:
+                self._release_party(action)
             # Re-sync bank state after visiting bank
             # BuyBankExpansionAction is in this tuple for the SAME reason the
             # three deposit/withdraw actions are: it changes bank state the
@@ -3459,6 +3466,11 @@ class GamePlayer:
             taken = self._coordination.party_lease_names(now)
             party = tuple(c for c in cards if c.character not in taken)
         self.state = replace(self.state, party=party)
+
+    def _release_party(self, action: Action) -> None:
+        """End the lease a resolved party fight was fought under."""
+        assert isinstance(action, FightAction) and self._coordination is not None
+        self._coordination.release_party(action.monster_code)
 
     def _lead_party(self, action: FightAction) -> Action:
         """The action a party fight's leader runs this cycle (increment 4):
