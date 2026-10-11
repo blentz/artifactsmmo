@@ -204,6 +204,38 @@ def test_reach_skill_level_is_walled_without_a_measured_rate(
         store.close()
 
 
+def test_a_grind_that_gained_nothing_is_walled_whatever_the_fleet_measured(
+        gd: GameData, tmp_path) -> None:
+    """OWN evidence of 0.0 (this character ground the skill and gained nothing)
+    is EVIDENCE, not ignorance: the climb is walled even though another
+    character's grind of the same skill paid. Only a MISSING own rate falls back
+    on the fleet, or a stuck character borrows a healthy one's rate and prices a
+    grind that does nothing for it as cheap."""
+    state = dataclasses.replace(_state(gd), skill_max_xp={"weaponcrafting": 600})
+    store = _store(tmp_path, "weaponcrafting", rate=0.0)
+    # A second character on the SAME database (`record_cycle` stamps the
+    # store's own character), whose grind of the skill paid.
+    healthy = LearningStore(db_path=str(tmp_path / "route.db"), character="healthy")
+    session = healthy.start_session()
+    for i in range(12):
+        healthy.record_cycle(Cycle(
+            ts=f"2026-01-01T01:{i:02d}:00+00:00",
+            session_id=session, cycle_index=i, character="healthy",
+            action_repr="LevelSkill(weaponcrafting->9)", outcome="ok",
+            delta_skill_xp_json=json.dumps({"weaponcrafting": 10.0}),
+        ))
+    healthy.close()
+    try:
+        assert store.skill_grind_rate("weaponcrafting") == 0.0
+        fleet = store.fleet_skill_grind_rate("weaponcrafting")
+        assert fleet is not None and fleet > 0, "the fleet must have paying evidence"
+        goal = ReachSkillLevel(skill="weaponcrafting",
+                               level=state.skills.get("weaponcrafting", 1) + 2)
+        assert route_price(goal, state, gd, NO_PROFILE_CONTEXT, store) == UNOBTAINABLE_PER_UNIT
+    finally:
+        store.close()
+
+
 def test_reach_char_level_prices_or_walls_by_the_path_plan(
         gd: GameData, tmp_path) -> None:
     """`PathPlan.total_cycles` is already "CYCLES — planner actions", so this arm

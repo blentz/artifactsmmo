@@ -842,6 +842,26 @@ def test_bank_expand_witness_pocket_too_poor_to_execute() -> None:
     ))
 
 
+def test_bank_expand_witness_reserve_withholds_an_affordable_slot() -> None:
+    """The reserve conjunct itself: the pocket pays the price, but the whole
+    account (nothing banked) would fall below the progression reserve after it,
+    so the rung must NOT fire. Bare `gold >= cost` fires here.
+
+    The random sweep draws `bank_gold` up to 20000 against a reserve of at most
+    300, so `cost <= account < cost + reserve` with the pocket paying is a thin
+    slice it rarely lands in; this pins it."""
+    scn = _base_scn(
+        bank_accessible=True, bank_known=True, bank_capacity=20,
+        bank_items_count=19,
+        # pocket 380 >= cost 350; account 380 - 350 = 30 < reserve 200.
+        gold=380, bank_gold=0, next_expansion_cost=350, gold_reserve=200,
+        task_phase="complete",
+    )
+    _assert_full_agreement(scn)
+    prod, _ = _production_answers(scn, _make_world(scn))
+    assert prod[LadderMeans.BANK_EXPAND] is False
+
+
 def test_objective_step_passthrough() -> None:
     _assert_full_agreement(_base_scn(objective_step=True))
 

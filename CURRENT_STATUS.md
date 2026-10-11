@@ -59,8 +59,11 @@ trace-bug campaign in `docs/PLAN_trace_bug_fixes.md`.
   OOM-kill the 16GB runners (exit 137 miscounted as a kill) — fixed by
   a liveness guard bounding the step loop (`96fdce5`); four green runs
   followed the same day
-- **snapshot-refresh** — refreshes `formal/sim/game_data_snapshot.json`
-  from the live API
+- **snapshot-refresh** — REMOVED 2026-10-11 (USER): it never ran green (the
+  repo holds no `ARTIFACTSMMO_TOKEN` secret) and opened a PR, which this repo
+  does not use. Refresh `formal/sim/game_data_snapshot.json` by hand:
+  `uv run python formal/sim/snapshot_game_data.py`, then
+  `uv run python formal/sim/generate_lean_fixture.py`
 
 `formal/gate.sh` part structure: (pre) Mathlib cache, (a) kernel
 build, (a') orphan modules, (a'') no sorry/admit, (b) axiom lint,
@@ -344,6 +347,6 @@ typed, pure Python subset), sha256-stamped and byte-deterministic.
   path, but deep recipe chains under `--learn` are still I/O-bound.
 - **Live API snapshot drift**: the `formal/sim/game_data_snapshot.json`
   used by some diff tests can drift when the live game updates its
-  catalog. `snapshot-refresh` refreshes it; the affected fixture diff
+  catalog. Refresh it by hand (`formal/sim/snapshot_game_data.py`); the affected fixture diff
   test is excluded from the gate's bulk pytest invocation so drift
   doesn't false-fail the gate.

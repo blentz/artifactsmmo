@@ -139,6 +139,21 @@ class TestTaskRoot:
         met_items = _held(10, 10, task_type="items")
         assert root_mod._task_root(met_items, gd, NO_PROFILE_CONTEXT, None) == ReachTaskOutcome("chicken")
 
+    def test_a_phantom_task_without_a_total_is_no_root(self) -> None:
+        """The API briefly reports a task code with no total
+        (`derive_task_lifecycle_phase` reads it as NONE). The met-task arm
+        needs `0 < task_total`, so such a task falls through to the kill arm,
+        which must not offer kills of a task with nothing to count, even
+        against a monster the character beats."""
+        phantom = _held(0, 0)
+        with (patch.object(root_mod, "is_winnable", return_value=True),
+              patch.object(root_mod._route, "task_cancel_due", return_value=False)):
+            assert root_mod._task_root(phantom, _gd(), NO_PROFILE_CONTEXT, None) is None
+            # The same task with a total is worked: the phantom's total is the
+            # only reason it is refused.
+            assert root_mod._task_root(_held(0, 10), _gd(), NO_PROFILE_CONTEXT, None) \
+                == ReachTaskOutcome("chicken")
+
     def test_a_winnable_task_is_its_own_root(self) -> None:
         with patch.object(root_mod, "is_winnable", return_value=True):
             got = root_mod._task_root(_held(), _gd(), NO_PROFILE_CONTEXT, None)

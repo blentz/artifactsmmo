@@ -5050,15 +5050,26 @@ SELL_PRESSURED_INTERRUPT_MUTATIONS = [
      "            candidates.append(Candidate(goal=g, repr_=repr(g), band=BAND_STEP))\n"),
 ]
 
-# CLAIM_PENDING is a chore (Phase 5-2c-i). Unit-killed by
-# tests/test_ai/test_strategy_driver.py.
+# CLAIM_PENDING (Phase 5-2c-i) and BANK_EXPAND (5-2c-ii) are chores, each built
+# at BAND_GUARD. Since 3141e548 deleted the collect band, `_build_candidates`
+# builds EVERY collect means at band 0 and no longer reads
+# `means.INTERRUPT_MEANS` (only tests do), so these mutants attack the means
+# loop per kind: one kind sinks to the step band, the others stay interrupts.
+# Unit-killed by tests/test_ai/test_strategy_driver.py's
+# `test_the_chore_means_are_built_as_interrupts`.
 INTERRUPT_MEANS_MUTATIONS = [
     ("means: CLAIM_PENDING is no longer an interrupt",
-     "    MeansKind.CLAIM_PENDING,\n    MeansKind.BANK_EXPAND,\n})\n",
-     "    MeansKind.BANK_EXPAND,\n})\n"),
+     "            # objective bookings that were collect rungs left with 5-2c-iii/iv.\n"
+     "            candidates.append(Candidate(goal=g, repr_=repr(g), band=BAND_GUARD))\n",
+     "            # objective bookings that were collect rungs left with 5-2c-iii/iv.\n"
+     "            candidates.append(Candidate(goal=g, repr_=repr(g), band=(\n"
+     "                BAND_STEP if mk is MeansKind.CLAIM_PENDING else BAND_GUARD)))\n"),
     ("means: BANK_EXPAND is no longer an interrupt (Phase 5-2c-ii)",
-     "    MeansKind.BANK_EXPAND,\n})\n",
-     "})\n"),
+     "            # objective bookings that were collect rungs left with 5-2c-iii/iv.\n"
+     "            candidates.append(Candidate(goal=g, repr_=repr(g), band=BAND_GUARD))\n",
+     "            # objective bookings that were collect rungs left with 5-2c-iii/iv.\n"
+     "            candidates.append(Candidate(goal=g, repr_=repr(g), band=(\n"
+     "                BAND_STEP if mk is MeansKind.BANK_EXPAND else BAND_GUARD)))\n"),
 ]
 
 # The arbiter applies the yield before arbitration. Unit-killed by
@@ -5419,10 +5430,18 @@ FIGHT_STEP_PREP_MUTATIONS = [
      "        prep = _fight_step_prep(state, game_data, ctx, step.task_code)\n",
      "        prep = None\n"),
 ]
-PURSUE_BATCH_MUTATIONS = [
+# The items task's own step (GatherMaterials of the task item) is never deferred
+# by the task reservation (36ca9aa2, C3P0 2026-10-10 spruce_plank stall). Killed
+# by tests/test_ai/test_task_reservation.py's
+# `test_the_step_that_makes_the_task_item_is_never_deferred`: the unit that
+# exercises `_suppress_step_for_task` lives there, not in test_strategy_driver.py
+# (where this mutant used to be grouped, and survived).
+TASK_STEP_RESERVATION_MUTATIONS = [
     ("pursue: the reservation defers the step that makes the task item",
      "        if isinstance(step_goal, GatherMaterialsGoal) and step_goal.target_item == state.task_code:\n",
      "        if False:\n"),
+]
+PURSUE_BATCH_MUTATIONS = [
     ("pursue: trades before the batch is held (back to A*-only production)",
      "    if held < batch:\n",
      "    if False:\n"),
@@ -8608,6 +8627,10 @@ TASK_ROOT_MUTATIONS = [
     ("root: an unwinnable task is offered as itself, not asking for gear",
      "    if is_winnable(replace(state, hp=state.max_hp), game_data, state.task_code, history):\n",
      "    if True:\n"),
+    # Since c-2 #6 (86900421) a met task with a total is offered for its
+    # turn-in above, so this conjunct now refuses only a PHANTOM task (a code
+    # with `task_total == 0`). Killed by
+    # `TestTaskRoot.test_a_phantom_task_without_a_total_is_no_root`.
     ("root: a met task is still offered",
      "            or state.task_progress >= state.task_total):\n        return None\n",
      "            ):\n        return None\n"),
@@ -10437,7 +10460,7 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, SELL_PRESSURED_INTERRUPT_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)
-    run_group(MEANS_SRC, INTERRUPT_MEANS_MUTATIONS,
+    run_group(STRATEGY_DRIVER_SRC, INTERRUPT_MEANS_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(REQUIREMENT_GRAPH_MEMO_SRC, MEMO_ENRICH_MUTATIONS,
               "tests/test_ai/test_requirement_multiset_enrichment.py", survivors)
@@ -10501,6 +10524,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, PURSUE_BATCH_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, TASK_STEP_RESERVATION_MUTATIONS,
+              "tests/test_ai/test_task_reservation.py", survivors)
     run_group(TASK_CANCEL_GOAL_SRC, TASK_CANCEL_POOL_MUTATIONS,
               "tests/test_ai/test_task_objective.py", survivors)
     run_group(COMPLETE_TASK_GOAL_SRC, COMPLETE_TASK_POOL_MUTATIONS,

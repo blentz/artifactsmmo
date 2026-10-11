@@ -356,13 +356,18 @@ def test_task_cancel_fires_for_a_fight_outside_the_one_level_horizon():
     Whether a fight is winnable is a fact about game data and the character —
     the same reason S-048's grey arm above is asked without `history`. The old
     combat arm required one (`history is not None and task_decision(...)`), so a
-    fresh character could never discard an unwinnable draw at all."""
+    fresh character could never discard an unwinnable draw at all.
+
+    Character level IS demanded here, so the level-1 rat pays XP the DAG wants
+    (c-2 #5): the task would be kept for that XP if the fight were in reach. The
+    horizon is the only reason it is worthless. Without the demand it is
+    worthless anyway and the horizon would decide nothing."""
     gd = _horizon_world()
     state = make_state(level=1, hp=20, max_hp=20, attack={"earth": 1},
                        task_code="rat", task_type="monsters",
                        task_total=10, task_progress=0,
                        inventory={"tasks_coin": 1})
-    assert held_task_cancel_due(state, gd, _ctx(), None) is True
+    assert held_task_cancel_due(state, gd, _ctx(level_demanded=True), None) is True
 
 
 def test_an_out_of_horizon_task_is_carried_inert_without_a_coin():

@@ -6,8 +6,10 @@ run in tests instead of being patched out.
 """
 
 import json
+from collections.abc import Iterator
+from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 from artifactsmmo_api_client.errors import UnexpectedStatus
@@ -16,6 +18,21 @@ from artifactsmmo_api_client.models.error_schema import ErrorSchema
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.client_manager import ClientManager
+
+
+@pytest.fixture(autouse=True)
+def _no_real_mutation_lock(tmp_path: Path) -> Iterator[None]:
+    """Point `play`'s mutation-lock check at a path no run holds.
+
+    `play` refuses to start while the repo's `.mutation-run.lock` names a live
+    mutation run — and during a sweep it does, so every `play` test went red
+    under the sweep that runs it: the mutation gate's baseline check found
+    `test_play_rate_budget.py` failing unmutated in CI (2026-10-11), its two
+    mutants having counted as kills. The lock tests in `test_play.py` patch
+    the path to their own file inside this one."""
+    with patch("artifactsmmo_cli.commands.play.default_lock_path",
+               return_value=tmp_path / ".mutation-run.lock"):
+        yield
 
 
 @pytest.fixture

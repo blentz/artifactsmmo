@@ -60,9 +60,14 @@ _TILES = {"monsters": (1, 1), "items": (5, 5)}
 
 def test_one_master_no_choice():
     """Only one master discovered — no distribution to pick, fall back (None).
-    This is exactly the pre-Phase-0 world, so Phase 4 was provably inert then."""
-    gd = _FakeGameData({"monsters": (1, 1)}, {"monsters": [_FakeTask("w", "monsters")]}, {})
-    assert choose_taskmaster(make_state(), gd, frozenset()) is None
+    This is exactly the pre-Phase-0 world, so Phase 4 was provably inert then.
+
+    The demand is REAL and the lone pool is non-empty, so the master would be
+    scored and returned if the master count were not what refuses it (an empty
+    demand returns None on its own arm and would decide nothing here)."""
+    gd = _FakeGameData({"monsters": (1, 1)}, {"monsters": [_FakeTask("w", "monsters")]},
+                       {"iron_bar": {"iron_ore": 1}})
+    assert choose_taskmaster(make_state(), gd, frozenset({"iron_bar"})) is None
 
 
 def test_both_pools_empty_no_choice():
