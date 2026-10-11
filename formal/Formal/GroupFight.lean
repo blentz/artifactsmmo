@@ -14,19 +14,25 @@ monster turn. For one member `net - drain` is the solo kill step and
 
 ## The round
 
-Members with initiative drink (`FightOutcome.drink`); in the kill round, if
-every member moves first, the party wins before the monster acts. The monster
-hits its target — highest threat, ties by lowest pool, then lowest index — for
-`hit - hit / 10`, and the lowest-pool member for `hit / 10`; every member takes
-`area` (a negative total heals, capped at max HP). Any pool at or below 0 loses
-the fight. Members without initiative then drink; the kill round ends in a win.
+The walk tracks the boss's pool. Living members with initiative drink
+(`FightOutcome.drink`); if every living member moves first and their damage
+finishes the boss, the party wins before it acts. The boss hits its target
+among the living — highest threat, ties by lowest pool, then lowest index — for
+`hit - hit / 10`, and the lowest living pool for `hit / 10`; every living member
+takes `area` (a negative total heals, capped at max HP). A pool at or below 0 is
+dead: it no longer acts, drinks, is targeted or pays `area` (the 2026-10-11
+probe: a 1-HP member died on turn 3 and its partner won alone). The fight is
+lost only when every member is dead. The round's damage is each first mover
+alive before the boss's turn and each late mover alive after it, less `drain`;
+late movers then drink. The turn cap and reconstitution count actor turns
+(`N + 1` a round, the full party's: conservative once a member dies).
 
 ## Results
 
 * `groupOutcome_single` — one member IS `FightOutcome.fightOutcome` on the solo terms.
-* `killRounds_antitone` — a member adding damage never delays the kill round.
-* `used_le_stock` — no member drinks more than it holds.
-* `win_alive` — a walked win leaves every member's pool positive.
+* `killRounds_antitone` — a member adding damage never delays the full party's kill round.
+* `win_survivor` — a walked win leaves some member alive (`win_survivor_witness`:
+  one dies, the other wins).
 
 Lean core only — no Mathlib.
 -/
@@ -72,48 +78,77 @@ def gate (b : Boss) (ms : List Member) : Exit :=
   else if ms.all (fun m => decide (m.hit + m.area ≤ 0)) then .outSustain
   else .none
 
-/-- A member's pool and potions left. -/
+/-- A member's pool and potions left; a pool at or below 0 is dead. -/
 abbrev Slot := Int × Nat
 
-/-- Drink for every member whose initiative matches `pf`. -/
+/-- Drink for every LIVING member whose initiative matches `pf`. -/
 def drinkAll (pf : Bool) : List Member → List Slot → List Slot
   | m :: ms, (p, k) :: st =>
-    (if m.first = pf then drink p (m.maxHp * scale) ((m.restore : Int) * scale) k else (p, k))
-      :: drinkAll pf ms st
+    (if m.first = pf ∧ 0 < p then drink p (m.maxHp * scale) ((m.restore : Int) * scale) k
+     else (p, k)) :: drinkAll pf ms st
   | _, _ => []
 
-/-- The boss's target: highest threat, ties by lowest pool, then lowest index.
-Folds left, keeping the incumbent unless strictly beaten. -/
-def target : List Member → List Slot → Nat → Nat → Int → Int → Nat
-  | m :: ms, (p, _) :: st, i, best, bt, bp =>
-    if bt < m.threat ∨ (bt = m.threat ∧ p < bp) then target ms st (i + 1) i m.threat p
-    else target ms st (i + 1) best bt bp
-  | _, _, _, best, _, _ => best
+/-- The boss's target among the living: highest threat, ties by lowest pool,
+then lowest index (`cur` is the incumbent `(index, threat, pool)`). -/
+def target : List Member → List Slot → Nat → Option (Nat × Int × Int) → Option Nat
+  | m :: ms, (p, _) :: st, i, cur =>
+    if p ≤ 0 then target ms st (i + 1) cur
+    else match cur with
+      | none => target ms st (i + 1) (some (i, m.threat, p))
+      | some (j, bt, bp) =>
+        if bt < m.threat ∨ (bt = m.threat ∧ p < bp) then target ms st (i + 1) (some (i, m.threat, p))
+        else target ms st (i + 1) (some (j, bt, bp))
+  | _, _, _, cur => cur.map (·.1)
 
-/-- The lowest pool, ties by lowest index. -/
-def lowest : List Slot → Nat → Nat → Int → Nat
-  | (p, _) :: st, i, best, bp => if p < bp then lowest st (i + 1) i p else lowest st (i + 1) best bp
-  | _, _, best, _ => best
+/-- The lowest living pool, ties by lowest index. -/
+def lowest : List Slot → Nat → Option (Nat × Int) → Option Nat
+  | (p, _) :: st, i, cur =>
+    if p ≤ 0 then lowest st (i + 1) cur
+    else match cur with
+      | none => lowest st (i + 1) (some (i, p))
+      | some (j, bp) => if p < bp then lowest st (i + 1) (some (i, p)) else lowest st (i + 1) (some (j, bp))
+  | _, _, cur => cur.map (·.1)
 
 /-- A member's round damage: `area`, the target's 90 %, the lowest's 10 %. -/
-def damage (m : Member) (i t l : Nat) : Int :=
-  m.area + (if i = t then m.hit - m.hit / 10 else 0) + (if i = l then m.hit / 10 else 0)
+def damage (m : Member) (i : Nat) (t l : Option Nat) : Int :=
+  m.area + (if t = some i then m.hit - m.hit / 10 else 0) + (if l = some i then m.hit / 10 else 0)
 
-/-- Apply a round's damage; a negative total heals, capped at max HP. -/
-def strike (t l : Nat) : List Member → List Slot → Nat → List Slot
+/-- Apply a round's damage to the living; a negative total heals, capped at max HP. -/
+def strike (t l : Option Nat) : List Member → List Slot → Nat → List Slot
   | m :: ms, (p, k) :: st, i =>
-    (if damage m i t l < 0 then (min (p - damage m i t l) (m.maxHp * scale), k)
+    (if p ≤ 0 then (p, k)
+     else if damage m i t l < 0 then (min (p - damage m i t l) (m.maxHp * scale), k)
      else (p - damage m i t l, k)) :: strike t l ms st (i + 1)
   | _, _, _ => []
 
 /-- The boss's turn over the pools. -/
 def bossTurn (ms : List Member) (st : List Slot) : List Slot :=
-  match ms, st with
-  | m :: ms', (p, _) :: st' =>
-    strike (target ms' st' 1 0 m.threat p) (lowest st' 1 0 p) ms st 0
-  | _, _ => []
+  strike (target ms st 0 none) (lowest st 0 none) ms st 0
 
-/-- A loss reports a dead member's pool as 0. -/
+/-- A member's damage this round: a first mover acts if alive before the
+boss's turn (`pre`), a late mover if alive after it (`post`). -/
+def netSum : List Member → List Slot → List Slot → Int
+  | m :: ms, a :: as, c :: cs =>
+    (if (if m.first then 0 < a.1 else 0 < c.1) then m.net else 0) + netSum ms as cs
+  | _, _, _ => 0
+
+/-- Every living member moves before the boss. -/
+def allAliveFirst : List Member → List Slot → Bool
+  | m :: ms, (p, _) :: st => (m.first || decide (p ≤ 0)) && allAliveFirst ms st
+  | _, _ => true
+
+/-- Every member is dead. -/
+def allDead (st : List Slot) : Bool := st.all fun s => decide (s.1 ≤ 0)
+
+/-- The fight cannot reach round `r`: past the 100-turn cap, or the boss
+reconstitutes first (actor turns `N + 1` a round). -/
+def deadline (b : Boss) (ms : List Member) (r : Int) : Prop :=
+  r * ((ms.length : Int) + 1) > 2 * maxTurns ∨ (0 < b.recon ∧ 2 * b.recon ≤ r * ((ms.length : Int) + 1))
+
+instance (b : Boss) (ms : List Member) (r : Int) : Decidable (deadline b ms r) := by
+  unfold deadline; infer_instance
+
+/-- A dead member reports 0. -/
 def clamp (st : List Slot) : List Slot := st.map fun (p, k) => (max p 0, k)
 
 /-- The walk's result: verdict, resolving round, slots. -/
@@ -122,15 +157,21 @@ structure Walk where
   turns : Int
   slots : List Slot
 
-/-- The fight from round `r` with `n` rounds left until the kill. -/
-def walk (ms : List Member) : Nat → Int → List Slot → Walk
-  | 0, r, st => ⟨true, r - 1, st⟩
-  | n + 1, r, st =>
-    if ms.all (·.first) ∧ n = 0 then ⟨true, r, drinkAll true ms st⟩
-    else if (bossTurn ms (drinkAll true ms st)).any (fun s => decide (s.1 ≤ 0)) then
+/-- The fight from round `r` with the boss's pool at `hp` (`f` bounds the rounds). -/
+def walk (b : Boss) (ms : List Member) : Nat → Int → Int → List Slot → Walk
+  | 0, r, _, st => ⟨false, r - 1, clamp st⟩
+  | f + 1, r, hp, st =>
+    if deadline b ms r then ⟨false, r - 1, clamp st⟩
+    else if allAliveFirst ms (drinkAll true ms st) = true ∧
+        hp - (netSum ms (drinkAll true ms st) (drinkAll true ms st) - b.drain) ≤ 0 then
+      ⟨true, r, clamp (drinkAll true ms st)⟩
+    else if allDead (bossTurn ms (drinkAll true ms st)) = true then
       ⟨false, r, clamp (bossTurn ms (drinkAll true ms st))⟩
-    else if n = 0 then ⟨true, r, drinkAll false ms (bossTurn ms (drinkAll true ms st))⟩
-    else walk ms n (r + 1) (drinkAll false ms (bossTurn ms (drinkAll true ms st)))
+    else if hp - (netSum ms (drinkAll true ms st) (bossTurn ms (drinkAll true ms st)) - b.drain) ≤ 0
+    then ⟨true, r, clamp (drinkAll false ms (bossTurn ms (drinkAll true ms st)))⟩
+    else walk b ms f (r + 1)
+      (hp - (netSum ms (drinkAll true ms st) (bossTurn ms (drinkAll true ms st)) - b.drain))
+      (drinkAll false ms (bossTurn ms (drinkAll true ms st)))
 
 /-- A party fight's expected-value outcome (`hpEnd` ×10000, per member). -/
 structure Outcome where
@@ -142,6 +183,9 @@ structure Outcome where
 /-- Every member's starting slot. -/
 def start (ms : List Member) : List Slot := ms.map fun m => (effHp m.hp m.maxHp * scale, m.stock)
 
+/-- The rounds the walk may take: the turn cap is reached by then. -/
+def fuel : Nat := (2 * maxTurns).toNat
+
 /-- `group_fight_core.group_outcome`. -/
 def groupOutcome (b : Boss) (ms : List Member) : Outcome :=
   match gate b ms with
@@ -150,8 +194,10 @@ def groupOutcome (b : Boss) (ms : List Member) : Outcome :=
   | .none =>
     if ms.any (fun m => decide (effHp m.hp m.maxHp * scale ≤ 0)) then
       ⟨false, 0, ms.map fun _ => 0, ms.map fun _ => 0⟩
+    else if b.hp * scale ≤ 0 then
+      ⟨true, 0, ms.map (fun m => effHp m.hp m.maxHp * scale), ms.map fun _ => 0⟩
     else
-      let w := walk ms (killRounds b ms).toNat 1 (start ms)
+      let w := walk b ms fuel 1 (b.hp * scale) (start ms)
       ⟨w.win, w.turns, w.slots.map (·.1), (ms.zip w.slots).map fun (m, s) => m.stock - s.2⟩
   | _ => ⟨false, 0, ms.map fun _ => 0, ms.map fun _ => 0⟩
 
@@ -160,9 +206,6 @@ def groupOutcome (b : Boss) (ms : List Member) : Outcome :=
 /-- The solo terms of a one-member party. -/
 def soloTerms (b : Boss) (m : Member) : Terms :=
   ⟨m.rawPlayer, m.net - b.drain, b.hp, b.recon, m.hit + m.area, m.first⟩
-
-theorem damage_single (m : Member) : damage m 0 0 0 = m.hit + m.area := by
-  unfold damage; simp; omega
 
 theorem killRounds_single (b : Boss) (m : Member) :
     killRounds b [m] = Formal.FightOutcome.roundsToKill (soloTerms b m) := by
@@ -187,25 +230,152 @@ theorem gate_single (b : Boss) (m : Member) :
   have h5 : ¬ (0 < b.recon ∧ 2 * b.recon ≤ R * 2) := by omega
   simp [h1, h2, h3, h4, h5, show ¬ 2 * maxTurns < R * 2 by omega]
 
-/-- The singleton walk with the solo walk's state. -/
-theorem walk_single (m : Member) (hds : 0 < m.hit + m.area) :
-    ∀ (n : Nat) (r pool : Int) (k : Nat),
-      walk [m] n r [(pool, k)] =
+theorem drink_pos (p maxPool rPool : Int) (k : Nat) (hp : 0 < p) (hr : 0 ≤ rPool) :
+    0 < (drink p maxPool rPool k).1 := by
+  unfold drink; split
+  · rename_i h; simp only; rw [Int.min_def]; split <;> omega
+  · exact hp
+
+/-- `ceilDiv` steps down by one per kill step. -/
+theorem ceilDiv_sub (B K : Int) (hK : 0 < K) : ceilDiv (B - K) K = ceilDiv B K - 1 := by
+  unfold ceilDiv
+  have : B - K + K - 1 = (B + K - 1) + (-1) * K := by omega
+  rw [this, Int.add_mul_fdiv_right _ _ (by omega)]; omega
+
+theorem ceilDiv_le_one_iff (B K : Int) (hK : 0 < K) (hB : 0 < B) :
+    ceilDiv B K ≤ 1 ↔ B - K ≤ 0 := by
+  have h1 := Formal.PredictWin.ceilDiv_mul_ge B K hK (by omega)
+  have h2 := Formal.PredictWin.ceilDiv_pred_mul_lt B K hK (by omega)
+  constructor
+  · intro h
+    have : ceilDiv B K * K ≤ 1 * K := Int.mul_le_mul_of_nonneg_right h (by omega)
+    omega
+  · intro h
+    rcases Int.lt_or_le 1 (ceilDiv B K) with hc | hc
+    · have : 1 * K ≤ (ceilDiv B K - 1) * K := Int.mul_le_mul_of_nonneg_right (by omega) (by omega)
+      omega
+    · exact hc
+
+theorem bossTurn_single (m : Member) (p : Int) (k : Nat) (hp : 0 < p) (hd : 0 ≤ m.hit + m.area) :
+    bossTurn [m] [(p, k)] = [(p - (m.hit + m.area), k)] := by
+  have hdmg : damage m 0 (some 0) (some 0) = m.hit + m.area := by unfold damage; simp; omega
+  simp [bossTurn, target, lowest, strike, show ¬ p ≤ 0 by omega, hdmg,
+    show ¬ m.hit + m.area < 0 by omega]
+
+theorem netSum_single (m : Member) (a c : Slot) :
+    netSum [m] [a] [c] = if (if m.first then 0 < a.1 else 0 < c.1) then m.net else 0 := by
+  simp [netSum]
+
+theorem drinkAll_single (pf : Bool) (m : Member) (p : Int) (k : Nat) :
+    drinkAll pf [m] [(p, k)] =
+      [if m.first = pf ∧ 0 < p then drink p (m.maxHp * scale) ((m.restore : Int) * scale) k else (p, k)] := by
+  simp [drinkAll]
+
+theorem allAliveFirst_single (m : Member) (s : Slot) :
+    allAliveFirst [m] [s] = (m.first || decide (s.1 ≤ 0)) := by
+  obtain ⟨p, k⟩ := s; simp [allAliveFirst]
+
+theorem allDead_single (s : Slot) : allDead [s] = decide (s.1 ≤ 0) := by simp [allDead]
+
+/-- The singleton walk is the solo walk while the boss's pool is `n` kill
+steps from 0 and no deadline falls inside those rounds. -/
+theorem walk_single (b : Boss) (m : Member) (hds : 0 < m.hit + m.area)
+    (hK : 0 < m.net - b.drain) :
+    ∀ (n f : Nat) (r B pool : Int) (k : Nat), 1 ≤ n → n ≤ f → 0 < B →
+      ceilDiv B (m.net - b.drain) = n → 0 < pool → 1 ≤ r →
+      ¬ deadline b [m] (r + n - 1) →
+      walk b [m] f r B [(pool, k)] =
         let w := Formal.FightOutcome.walk m.first (m.hit + m.area) (m.maxHp * scale)
           ((m.restore : Int) * scale) n r pool k
-        ⟨w.win, w.turns, [(w.pool, w.left)]⟩ := by
+        ⟨w.win, w.turns, [(max w.pool 0, w.left)]⟩ := by
   intro n
   induction n with
-  | zero => intro r pool k; simp [walk, Formal.FightOutcome.walk]
+  | zero => intro f r B pool k h; omega
   | succ n ih =>
-    intro r pool k
-    have hd := damage_single m
-    have hnn : ¬ (m.hit + m.area < 0) := by omega
-    cases hf : m.first <;>
-      simp [walk, Formal.FightOutcome.walk, hf, drinkAll, bossTurn, target, lowest, strike, hd,
-        hnn, clamp] <;>
-      by_cases hn : n = 0 <;> simp [hn] <;>
-      split <;> rename_i hp <;> simp [ih, hf] <;> omega
+    intro f r B pool k _ hf hB hc hp hr hd
+    obtain ⟨f, rfl⟩ : ∃ f', f = f' + 1 := ⟨f - 1, by omega⟩
+    have hr0 : (0 : Int) ≤ (m.restore : Int) * scale :=
+      Int.mul_nonneg (Int.natCast_nonneg _) (by decide)
+    have hnd : ¬ deadline b [m] r := by
+      unfold deadline at hd ⊢; simp only [List.length_singleton] at hd ⊢
+      intro h; apply hd; rcases h with h | h
+      · left; have : r * ((1 : Nat) + 1 : Int) ≤ (r + (n + 1 : Nat) - 1) * ((1 : Nat) + 1 : Int) :=
+          Int.mul_le_mul_of_nonneg_right (by omega) (by omega)
+        omega
+      · right; refine ⟨h.1, ?_⟩
+        have : r * ((1 : Nat) + 1 : Int) ≤ (r + (n + 1 : Nat) - 1) * ((1 : Nat) + 1 : Int) :=
+          Int.mul_le_mul_of_nonneg_right (by omega) (by omega)
+        omega
+    have hdk : 0 < m.hit + m.area := hds
+    have hdmg : damage m 0 (some 0) (some 0) = m.hit + m.area := by
+      unfold damage; simp; omega
+    have hkill : (n = 0) ↔ B - (m.net - b.drain) ≤ 0 := by
+      rw [← ceilDiv_le_one_iff B _ hK hB]; omega
+    have hkd : ¬ B - (m.net - b.drain) ≤ 0 → 0 < B - (m.net - b.drain) := by omega
+    cases hfst : m.first
+    · -- the boss moves first
+      have hpos := fun (h : ¬ pool - (m.hit + m.area) ≤ 0) =>
+        drink_pos (pool - (m.hit + m.area)) (m.maxHp * scale) _ k (by omega) hr0
+      rw [walk, if_neg hnd]
+      simp only [drinkAll_single, hfst, Bool.false_eq_true, false_and, if_false,
+        allAliveFirst_single, Bool.false_or, bossTurn_single m pool k hp (by omega), allDead_single,
+        netSum_single, Formal.FightOutcome.walk]
+      by_cases hl : pool - (m.hit + m.area) ≤ 0
+      · simp [hl, clamp, show ¬ pool ≤ 0 by omega, Int.max_eq_right hl]
+      · have hp2 : 0 < pool - (m.hit + m.area) := by omega
+        simp only [hl, decide_false, Bool.false_eq_true, if_false, hp2, if_true,
+          show ¬ (pool ≤ 0) by omega, false_and, decide_false, and_self]
+        by_cases hn : n = 0
+        · simp [hn, hkill.mp hn, clamp, Int.max_eq_left (Int.le_of_lt (hpos hl))]
+        · have hnk : ¬ B - (m.net - b.drain) ≤ 0 := fun h => hn (hkill.mpr h)
+          simp only [hn, hnk, if_false]
+          rw [ih f (r + 1) (B - (m.net - b.drain)) _ _ (by omega) (by omega) (hkd hnk)
+            (by rw [ceilDiv_sub _ _ hK]; omega) (hpos hl) (by omega)
+            (by have : r + 1 + (n : Int) - 1 = r + ((n + 1 : Nat) : Int) - 1 := by omega
+                rw [this]; exact hd)]
+          simp [hfst]
+    · -- the member moves first
+      have hdp := drink_pos pool (m.maxHp * scale) _ k hp hr0
+      rw [walk, if_neg hnd]
+      simp only [drinkAll_single, hfst, true_and, if_pos hp, Formal.FightOutcome.walk]
+      generalize hdr : drink pool (m.maxHp * scale) ((m.restore : Int) * scale) k = d at hdp ⊢
+      obtain ⟨p1, k1⟩ := d
+      simp only at hdp
+      simp only [allAliveFirst_single, hfst, Bool.true_or, netSum_single, if_true, hdp,
+        bossTurn_single m _ k1 hdp (by omega), allDead_single]
+      by_cases hn : n = 0
+      · simp [hn, hkill.mp hn, clamp, Int.max_eq_left (Int.le_of_lt hdp)]
+      · have hnk : ¬ B - (m.net - b.drain) ≤ 0 := fun h => hn (hkill.mpr h)
+        simp only [hn, hnk, and_false, if_false, decide_eq_true_eq]
+        by_cases hl : p1 - (m.hit + m.area) ≤ 0
+        · simp [hl, clamp, Int.max_eq_right hl]
+        · have hp2 : 0 < p1 - (m.hit + m.area) := by omega
+          simp only [hl, if_false]
+          have hw := ih f (r + 1) (B - (m.net - b.drain)) _ k1 (by omega) (by omega) (hkd hnk)
+            (by rw [ceilDiv_sub _ _ hK]; omega) hp2 (by omega)
+            (by have : r + 1 + (n : Int) - 1 = r + ((n + 1 : Nat) : Int) - 1 := by omega
+                rw [this]; exact hd)
+          simp [drinkAll_single, hfst, hw]
+
+theorem gate_none_facts (t : Terms) (h : Formal.FightOutcome.gate t = .none) :
+    0 < t.killStep ∧ Formal.FightOutcome.roundsToKill t ≤ maxTurns ∧
+      ¬ (0 < t.recon ∧ t.recon ≤ Formal.FightOutcome.roundsToKill t) ∧ 0 < t.dieStep := by
+  unfold Formal.FightOutcome.gate at h
+  split at h; · cases h
+  split at h; · cases h
+  split at h; · cases h
+  split at h; · cases h
+  split at h; · cases h
+  refine ⟨by omega, by omega, by assumption, by omega⟩
+
+theorem ceilDiv_nonpos (n d : Int) (hn : n ≤ 0) (hd : 0 < d) : ceilDiv n d ≤ 0 := by
+  unfold ceilDiv
+  have h1 := Int.mul_fdiv_add_fmod (n + d - 1) d
+  have h2 := Int.fmod_nonneg_of_pos (n + d - 1) hd
+  rcases Int.lt_or_le 0 (Int.fdiv (n + d - 1) d) with hq | hq
+  · have : d * 1 ≤ d * Int.fdiv (n + d - 1) d := Int.mul_le_mul_of_nonneg_left (by omega) (by omega)
+    omega
+  · exact hq
 
 /-- One member IS the solo fight: verdict, turns, ending HP and potions. -/
 theorem groupOutcome_single (b : Boss) (m : Member) :
@@ -216,16 +386,46 @@ theorem groupOutcome_single (b : Boss) (m : Member) :
   rw [gate_single, killRounds_single]
   cases hg : Formal.FightOutcome.gate (soloTerms b m) with
   | none =>
-    have hds := Formal.FightOutcome.gate_none_dieStep _ hg
-    simp only [soloTerms] at hds
+    obtain ⟨hK, hR, hrc, hds⟩ := gate_none_facts _ hg
+    simp only [soloTerms] at hK hds
+    have hRdef : Formal.FightOutcome.roundsToKill (soloTerms b m) = ceilDiv (b.hp * scale) (m.net - b.drain) := rfl
     by_cases h0 : effHp m.hp m.maxHp * scale ≤ 0
     · simp [h0]
-    · simp [h0, start, walk_single m hds, soloTerms]
+    by_cases hb : b.hp * scale ≤ 0
+    · have hz : (Formal.FightOutcome.roundsToKill (soloTerms b m)).toNat = 0 := by
+        rw [hRdef]; have := ceilDiv_nonpos _ _ hb hK; omega
+      simp [h0, hb, hz, Formal.FightOutcome.walk]
+    · have hpos := Formal.PredictWin.ceilDiv_pos (b.hp * scale) (m.net - b.drain) hK (by omega)
+      have hw := walk_single b m hds hK (Formal.FightOutcome.roundsToKill (soloTerms b m)).toNat fuel 1
+        (b.hp * scale) (effHp m.hp m.maxHp * scale) m.stock (by rw [hRdef]; omega)
+        (by rw [hRdef]; unfold fuel; simp only [hRdef] at hR; simp [Formal.PredictWin.maxTurns] at hR ⊢; omega)
+        (by omega) (by rw [hRdef]; omega) (by omega) (by omega)
+        (by
+          unfold deadline; simp only [List.length_singleton, hRdef] at hrc hR ⊢
+          simp only [soloTerms] at hrc
+          have := hpos
+          generalize ceilDiv (b.hp * scale) (m.net - b.drain) = R at *
+          have hRn : ((R.toNat : Nat) : Int) = R := by omega
+          rw [hRn]; simp only [Formal.PredictWin.maxTurns] at hR ⊢; omega)
+      have hmax : 0 < effHp m.hp m.maxHp * scale := by omega
+      simp only [h0, hb, if_false, List.any_cons, List.any_nil, Bool.or_false, decide_eq_true_eq,
+        start, List.map_cons, List.map_nil, hw]
+      have hmaxHp : 0 ≤ m.maxHp := by
+        unfold effHp at hmax; split at hmax
+        · have := Int.min_le_right m.hp m.maxHp; simp only [scale] at hmax; omega
+        · simp at hmax
+      have hle : effHp m.hp m.maxHp * scale ≤ m.maxHp * scale := by
+        have := Formal.FightOutcome.effHp_le m.hp m.maxHp hmaxHp; simp only [scale]; omega
+      have hnn := Formal.FightOutcome.walk_pool_nonneg m.first (m.hit + m.area) (m.maxHp * scale)
+        ((m.restore : Int) * scale) hds (Int.mul_nonneg (Int.natCast_nonneg _) (by decide))
+        (Formal.FightOutcome.roundsToKill (soloTerms b m)).toNat 1 _ m.stock hmax hle
+      simp only [soloTerms] at hnn ⊢
+      simp [Int.max_eq_left hnn]
   | _ => simp
 
 /-! ### The kill round. -/
 
-/-- A member adding damage never delays the kill round. -/
+/-- A member adding damage never delays the kill round (the full party's). -/
 theorem killRounds_antitone (b : Boss) (ms : List Member) (m : Member)
     (hk : 0 < killRate b ms) (hn : 0 ≤ m.net) (hhp : 0 ≤ b.hp) :
     killRounds b (m :: ms) ≤ killRounds b ms := by
@@ -235,130 +435,117 @@ theorem killRounds_antitone (b : Boss) (ms : List Member) (m : Member)
   rw [h]
   exact ceilDiv_antitone_divisor _ _ _ (Int.mul_nonneg hhp (by decide)) hk (by omega)
 
-/-! ### A won fight leaves every member alive. -/
+/-! ### A won fight leaves a member alive. -/
 
-/-- Each pool is at most its member's max (lists of equal length). -/
-def capped : List Member → List Slot → Prop
-  | m :: ms, s :: st => s.1 ≤ m.maxHp * scale ∧ capped ms st
-  | [], [] => True
-  | _, _ => False
+/-- Some member is alive. -/
+def anyAlive (st : List Slot) : Bool := st.any fun s => decide (0 < s.1)
 
-/-- Every pool is positive. -/
-def alive (st : List Slot) : Prop := ∀ s ∈ st, 0 < s.1
-
-theorem drinkAll_capped (pf : Bool) :
-    ∀ (ms : List Member) (st : List Slot), capped ms st → capped ms (drinkAll pf ms st)
-  | m :: ms, (p, k) :: st, ⟨h, hc⟩ => by
-    refine ⟨?_, drinkAll_capped pf ms st hc⟩
-    split
-    · exact Formal.FightOutcome.drink_le_max _ _ _ _ h
-    · exact h
-  | [], [], _ => by simp [drinkAll, capped]
-  | [], _ :: _, h => h.elim
-  | _ :: _, [], h => h.elim
-
-theorem drinkAll_alive (pf : Bool) :
-    ∀ (ms : List Member) (st : List Slot), capped ms st → alive st → alive (drinkAll pf ms st)
-  | m :: ms, (p, k) :: st, ⟨h, hc⟩, ha => by
-    intro s hs
-    simp only [drinkAll, List.mem_cons] at hs
-    rcases hs with rfl | hs
-    · have hp : 0 < p := ha _ (List.mem_cons_self ..)
+theorem drinkAll_anyAlive (pf : Bool) :
+    ∀ (ms : List Member) (st : List Slot), anyAlive st = true → st.length ≤ ms.length →
+      anyAlive (drinkAll pf ms st) = true
+  | m :: ms, (p, k) :: st, ha, hl => by
+    simp only [anyAlive, List.any_cons, Bool.or_eq_true, decide_eq_true_eq] at ha
+    simp only [drinkAll, anyAlive, List.any_cons, Bool.or_eq_true, decide_eq_true_eq]
+    rcases ha with hp | ht
+    · left
       split
-      · exact Int.lt_of_lt_of_le hp
-          (Formal.FightOutcome.drink_ge _ _ _ _ (Int.mul_nonneg (Int.natCast_nonneg _) (by decide)) h)
+      · exact drink_pos _ _ _ _ hp (Int.mul_nonneg (Int.natCast_nonneg _) (by decide))
       · exact hp
-    · exact drinkAll_alive pf ms st hc (fun s hs => ha s (List.mem_cons_of_mem _ hs)) s hs
-  | [], [], _, _ => by simp [drinkAll, alive]
-  | [], _ :: _, h, _ => h.elim
-  | _ :: _, [], h, _ => h.elim
+    · right
+      have := drinkAll_anyAlive pf ms st (by simpa [anyAlive] using ht) (by simp at hl; omega)
+      simpa [anyAlive] using this
+  | [], _ :: _, _, hl => by simp at hl
+  | _, [], ha, _ => by simp [anyAlive] at ha
 
-theorem strike_capped (t l : Nat) :
-    ∀ (ms : List Member) (st : List Slot) (i : Nat), capped ms st → capped ms (strike t l ms st i)
-  | m :: ms, (p, k) :: st, i, ⟨h, hc⟩ => by
-    refine ⟨?_, strike_capped t l ms st (i + 1) hc⟩
-    split
-    · exact Int.min_le_right _ _
-    · simp only; omega
-  | [], [], _, _ => by simp [strike, capped]
-  | [], _ :: _, _, h => h.elim
-  | _ :: _, [], _, h => h.elim
+theorem drinkAll_length (pf : Bool) :
+    ∀ (ms : List Member) (st : List Slot), (drinkAll pf ms st).length ≤ ms.length
+  | m :: ms, _ :: st => by simp [drinkAll]; exact drinkAll_length pf ms st
+  | [], _ => by simp [drinkAll]
+  | _ :: _, [] => by simp [drinkAll]
 
-theorem bossTurn_capped (ms : List Member) (st : List Slot) (h : capped ms st) :
-    capped ms (bossTurn ms st) := by
-  match ms, st, h with
-  | m :: ms', (p, k) :: st', h => exact strike_capped _ _ _ _ _ h
-  | [], [], _ => simp [bossTurn, capped]
+theorem strike_length (t l : Option Nat) :
+    ∀ (ms : List Member) (st : List Slot) (i : Nat), (strike t l ms st i).length ≤ ms.length
+  | m :: ms, _ :: st, i => by simp [strike]; exact strike_length t l ms st (i + 1)
+  | [], _, _ => by simp [strike]
+  | _ :: _, [], _ => by simp [strike]
 
-theorem not_any_alive (st : List Slot) (h : ¬ st.any (fun s => decide (s.1 ≤ 0)) = true) :
-    alive st := by
-  intro s hs
-  by_cases hle : s.1 ≤ 0
-  · exact absurd (List.any_eq_true.mpr ⟨s, hs, by simp [hle]⟩) h
-  · omega
+theorem clamp_anyAlive (st : List Slot) (h : anyAlive st = true) : anyAlive (clamp st) = true := by
+  simp only [anyAlive, List.any_eq_true, decide_eq_true_eq] at h ⊢
+  obtain ⟨⟨p, k⟩, hs, hp⟩ := h
+  exact ⟨(max p 0, k), List.mem_map.mpr ⟨(p, k), hs, rfl⟩, by simp only at hp ⊢; omega⟩
 
-/-- A won walk leaves every member alive and within its max HP. -/
-theorem walk_win_alive (ms : List Member) :
-    ∀ (n : Nat) (r : Int) (st : List Slot), capped ms st → alive st →
-      (walk ms n r st).win = true →
-      capped ms (walk ms n r st).slots ∧ alive (walk ms n r st).slots := by
-  intro n
-  induction n with
-  | zero => intro r st hc ha _; exact ⟨hc, ha⟩
-  | succ n ih =>
-    intro r st hc ha hw
-    have c1 := drinkAll_capped true ms st hc
-    have a1 := drinkAll_alive true ms st hc ha
-    have c2 := bossTurn_capped ms _ c1
-    by_cases h0 : (ms.all (·.first) = true ∧ n = 0)
-    · simp only [walk, if_pos h0]; exact ⟨c1, a1⟩
-    by_cases hd : (bossTurn ms (drinkAll true ms st)).any (fun s => decide (s.1 ≤ 0)) = true
-    · simp only [walk, if_neg h0, if_pos hd] at hw; simp at hw
-    have a2 := not_any_alive _ hd
-    have c3 := drinkAll_capped false ms _ c2
-    have a3 := drinkAll_alive false ms _ c2 a2
-    by_cases hn : n = 0
-    · simp only [walk, if_neg h0, if_neg hd, if_pos hn]; exact ⟨c3, a3⟩
-    · simp only [walk, if_neg h0, if_neg hd, if_neg hn] at hw ⊢
-      exact ih _ _ c3 a3 hw
+theorem not_allDead (st : List Slot) (h : ¬ allDead st = true) : anyAlive st = true := by
+  simp only [anyAlive, List.any_eq_true, decide_eq_true_eq]
+  by_cases hx : ∃ s ∈ st, 0 < s.1
+  · exact hx
+  · exfalso; apply h
+    simp only [allDead, List.all_eq_true, decide_eq_true_eq]
+    intro s hs
+    by_cases hs' : s.1 ≤ 0
+    · exact hs'
+    · exact absurd ⟨s, hs, by omega⟩ hx
 
-theorem start_capped : ∀ ms : List Member, (∀ m ∈ ms, 0 ≤ m.maxHp) → capped ms (start ms)
-  | m :: ms, h => by
-    refine ⟨?_, start_capped ms (fun x hx => h x (List.mem_cons_of_mem _ hx))⟩
-    have := Formal.FightOutcome.effHp_le m.hp m.maxHp (h m (List.mem_cons_self ..))
-    simp only [scale]; omega
-  | [], _ => by simp [start, capped]
+/-- A won walk leaves some member alive. -/
+theorem walk_win_anyAlive (b : Boss) (ms : List Member) :
+    ∀ (f : Nat) (r hp : Int) (st : List Slot), anyAlive st = true → st.length ≤ ms.length →
+      (walk b ms f r hp st).win = true → anyAlive (walk b ms f r hp st).slots = true := by
+  intro f
+  induction f with
+  | zero => intro r hp st _ _ hw; simp [walk] at hw
+  | succ f ih =>
+    intro r hp st ha hl hw
+    have a1 := drinkAll_anyAlive true ms st ha hl
+    by_cases hd : deadline b ms r
+    · simp [walk, hd] at hw
+    by_cases he : allAliveFirst ms (drinkAll true ms st) = true ∧
+        hp - (netSum ms (drinkAll true ms st) (drinkAll true ms st) - b.drain) ≤ 0
+    · simp only [walk, if_neg hd, if_pos he]; exact clamp_anyAlive _ a1
+    by_cases hdead : allDead (bossTurn ms (drinkAll true ms st)) = true
+    · simp [walk, hd, he, hdead] at hw
+    have a2 := not_allDead _ hdead
+    have l2 : (bossTurn ms (drinkAll true ms st)).length ≤ ms.length := strike_length _ _ _ _ _
+    have a3 := drinkAll_anyAlive false ms _ a2 l2
+    by_cases hk : hp - (netSum ms (drinkAll true ms st) (bossTurn ms (drinkAll true ms st)) - b.drain) ≤ 0
+    · simp only [walk, if_neg hd, if_neg he, if_neg hdead, if_pos hk]; exact clamp_anyAlive _ a3
+    · simp only [walk, if_neg hd, if_neg he, if_neg hdead, if_neg hk] at hw ⊢
+      exact ih _ _ _ a3 (drinkAll_length _ _ _) hw
 
-/-- A walked win (no out-sustain exit) leaves every member's pool positive. -/
-theorem win_alive (b : Boss) (ms : List Member) (hmax : ∀ m ∈ ms, 0 ≤ m.maxHp)
-    (hg : gate b ms = .none) (hw : (groupOutcome b ms).win = true) :
-    ∀ x ∈ (groupOutcome b ms).hpEnd, 0 < x := by
+/-- A walked win (no out-sustain exit) leaves some member alive. -/
+theorem win_survivor (b : Boss) (ms : List Member) (hg : gate b ms = .none)
+    (hw : (groupOutcome b ms).win = true) : ∃ x ∈ (groupOutcome b ms).hpEnd, 0 < x := by
+  have hne : ms ≠ [] := by
+    intro h; subst h; simp [gate] at hg
   unfold groupOutcome at hw ⊢
   rw [hg] at hw ⊢
   simp only at hw ⊢
-  split at hw
-  · simp at hw
-  · rename_i h0
-    simp only [if_neg h0]
-    have ha : alive (start ms) := by
-      intro s hs
-      simp only [start, List.mem_map] at hs
-      obtain ⟨m, hm, rfl⟩ := hs
-      by_cases hle : effHp m.hp m.maxHp * scale ≤ 0
-      · exact absurd (List.any_eq_true.mpr ⟨m, hm, by simp [hle]⟩) h0
-      · simp only; omega
-    have := (walk_win_alive ms _ 1 _ (start_capped ms hmax) ha hw).2
-    intro x hx
-    simp only [List.mem_map] at hx
-    obtain ⟨s, hs, rfl⟩ := hx
-    exact this s hs
+  by_cases h0 : ms.any (fun m => decide (effHp m.hp m.maxHp * scale ≤ 0)) = true
+  · simp [h0] at hw
+  have hall : ∀ m ∈ ms, 0 < effHp m.hp m.maxHp * scale := by
+    intro m hm
+    by_cases hle : effHp m.hp m.maxHp * scale ≤ 0
+    · exact absurd (List.any_eq_true.mpr ⟨m, hm, by simp [hle]⟩) h0
+    · omega
+  by_cases hb : b.hp * scale ≤ 0
+  · simp only [h0, hb, if_false, if_true, Bool.false_eq_true]
+    obtain ⟨m, hm⟩ := List.exists_mem_of_ne_nil ms hne
+    exact ⟨_, List.mem_map_of_mem hm, hall m hm⟩
+  · simp only [h0, hb, if_false, Bool.false_eq_true] at hw ⊢
+    have hs : anyAlive (start ms) = true := by
+      obtain ⟨m, hm⟩ := List.exists_mem_of_ne_nil ms hne
+      simp only [anyAlive, start, List.any_map, List.any_eq_true, decide_eq_true_eq, Function.comp]
+      exact ⟨m, hm, hall m hm⟩
+    have := walk_win_anyAlive b ms fuel 1 _ (start ms) hs (by simp [start]) hw
+    simp only [anyAlive, List.any_eq_true, decide_eq_true_eq] at this
+    obtain ⟨s, hs, hp⟩ := this
+    exact ⟨s.1, List.mem_map_of_mem hs, hp⟩
 
-/-- `win_alive`'s hypotheses hold together: a walked two-member win (the
-tank takes the 90 %, the weak member the 10 %). -/
-theorem win_alive_witness : ∃ (b : Boss) (ms : List Member),
-    (∀ m ∈ ms, 0 ≤ m.maxHp) ∧ gate b ms = .none ∧ (groupOutcome b ms).win = true :=
+/-- `win_survivor`'s hypotheses hold together, and the walk is the new rule's:
+the weak member dies in round 1 and the strong one wins alone (the 2026-10-11
+probe's shape). -/
+theorem win_survivor_witness : ∃ (b : Boss) (ms : List Member),
+    gate b ms = .none ∧ (groupOutcome b ms).win = true ∧ (groupOutcome b ms).hpEnd.head? = some 0 :=
   ⟨⟨20, 0, 0⟩,
-   [⟨10, 20000, 400000, 0, 100, 100, true, 0, 0, 0⟩, ⟨10, 20000, 400000, 0, 200, 200, true, 5, 0, 0⟩],
+   [⟨10, 20000, 400000, 0, 1, 100, false, 0, 0, 0⟩, ⟨10, 20000, 100000, 0, 200, 200, true, 0, 0, 0⟩],
    by decide, by decide, by decide⟩
 
 end Formal.GroupFight

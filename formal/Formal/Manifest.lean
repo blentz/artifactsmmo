@@ -525,8 +525,8 @@ open Formal.PriorityBand
 -- GroupFight (group fights increment 1, `ai/group_fight_core.py`):
 #check @Formal.GroupFight.groupOutcome_single   -- one member IS the solo walk
 #check @Formal.GroupFight.killRounds_antitone   -- a member adding damage never delays the kill
-#check @Formal.GroupFight.win_alive             -- a walked win leaves every member alive
-#check @Formal.GroupFight.win_alive_witness     -- its hypotheses are satisfiable
+#check @Formal.GroupFight.win_survivor          -- a walked win leaves a member alive
+#check @Formal.GroupFight.win_survivor_witness  -- satisfiable: one dies, the other wins
 -- ConsumablePrice (consumable utility increment 2, `ai/consumable_price_core.py`):
 #check @Formal.ConsumablePrice.held_free          -- held stock is free
 #check @Formal.ConsumablePrice.le_make            -- never dearer than making it

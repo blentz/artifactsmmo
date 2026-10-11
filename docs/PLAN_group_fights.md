@@ -118,9 +118,24 @@ Raw responses: `docs/evidence/group_fight_probe_2026-10-11.json`.
   the same map location."
 - **C, participant in cooldown:** HTTP **499** "The character is in cooldown:
   4.83 seconds remaining."
-- **Not settled:** a participant's death mid-fight (none died); whether a
-  participant's equipped utility potions are drunk in a group fight (none
-  worn). Settle in Increment 5's first live fights.
+- **Not settled:** whether a participant's equipped utility potions are drunk
+  in a group fight (none worn). Settle in Increment 5's first live fights.
+
+## Increment 0b — a member's death (2026-10-11 02:59Z, fleet down; USER approved)
+
+Raw responses: `docs/evidence/group_fight_death_probe_2026-10-11.json`.
+
+- Lowering Lor's HP: a solo king_slime fight from 446 HP was LOST (turn 16,
+  king_slime at 333/1000); Lor respawned at (0,0) with 1 HP.
+- **D, party fight with a 1-HP member:** R2D2 (785/785) leads, Lor (1/705)
+  joins, king_slime. "Turn 3: King Slime used fire attack against Lor ...
+  Lor has been defeated!" — and the fight goes on: R2D2 alone wins on turn 24
+  with 170/785. `result: win`; Lor's entry `final_hp: 1`, gold 2 (paid
+  although dead); after the fight Lor is still on the boss tile at 1 HP — no
+  respawn walk.
+- **Settled:** a dead member leaves the fight; the rest fight on; the fight is
+  lost only when every member is dead. The Increment 1 model ("any death is a
+  loss") was wrong; Increment 1b replaces it.
 
 ## Increment 1 — design (2026-10-11)
 
@@ -187,3 +202,20 @@ may die. The plan's earlier line claiming it is withdrawn.
   lose at every N — identical members tie on threat, so the boss focuses one
   and any death is a loss. Potions and a real tank (threat) are the levers
   Increment 2's rung must try.
+
+## Increment 1b — the death rule from data (2026-10-11)
+
+`Formal.GroupFight.walk` now tracks the boss's pool: a dead member stops
+acting, drinking, being targeted and paying `area`; a round's damage is each
+first mover alive before the boss's turn and each late mover alive after it;
+the fight is lost only when every member is dead, or when a death delays the
+kill past the turn cap or reconstitution (counted in the full party's actor
+turns: conservative). `groupOutcome_single` re-proved over the new walk
+(`walk_single`: the boss's pool is `n` kill steps from 0 exactly when the solo
+walk has `n` rounds left); `win_alive` becomes `win_survivor` (a win leaves
+some member alive; witness: one dies, the other wins). 21 core mutants, all
+killed (two needed pinned parties: a dead member's lifesteal must not revive
+it; a death that delays the kill past reconstitution).
+
+Duskworm (geared census cell L60, three members, each the same potion pair,
+production `party_member`): see Increment 2.

@@ -70,21 +70,31 @@ def test_one_member_is_the_solo_walk(boss, m):
 
 def test_focus_fire_and_the_tank_against_lean():
     """Pinned parties the random draw rarely builds: equal threat focuses the
-    lowest pool; a high-threat tank takes the 90 % and the weakest the 10 %; a
-    pool of exactly 0 is dead."""
+    lowest pool; a dead member leaves and the rest fight on (the 2026-10-11
+    probe); a high-threat tank takes the 90 % and the weakest the 10 %; a pool
+    of exactly 0 is dead."""
     weak = PartyMember(10, 20_000, 400_000, 0, 100, 100, True, 0, 0, 0)
     strong = PartyMember(10, 20_000, 400_000, 0, 200, 200, True, 0, 0, 0)
     tank = PartyMember(10, 20_000, 400_000, 0, 200, 200, True, 5, 0, 0)
     exact = PartyMember(10, 20_000, 500_000, 0, 100, 100, True, 0, 0, 0)
+    leech = PartyMember(10, 20_000, 400_000, -300_000, 1, 100, True, 0, 0, 0)
     boss = PartyBoss(20, 0, 0)
     cases = {
-        # two hits empty the pool to exactly 0: a pool of 0 is dead
-        (boss, (exact, strong)): (False, 2, (0, 2_000_000), (0, 0)),
-        # equal threat: the weak member takes every hit and dies in round 3
-        (boss, (weak, strong)): (False, 3, (0, 2_000_000), (0, 0)),
+        # two hits empty the weak pool to exactly 0 (dead): the strong member
+        # fights on alone and dies in round 7, one kill step short
+        (boss, (exact, strong)): (False, 7, (0, 0), (0, 0)),
+        # equal threat: the weak member takes every hit and dies in round 3;
+        # the strong one wins alone in round 7
+        (boss, (weak, strong)): (True, 7, (0, 800_000), (0, 0)),
         # the tank takes 360k a hit, the weak 40k; all move first, so the boss
         # acts 4 times before the round-5 kill
         (boss, (weak, tank)): (True, 5, (840_000, 560_000), (0, 0)),
+        # the weak member's death delays the kill past reconstitution (20 actor
+        # turns, round 7 of three actors): lost at the end of round 6
+        (PartyBoss(20, 10, 0), (weak, strong)): (False, 6, (0, 800_000), (0, 0)),
+        # a dead member's lifesteal never revives it: the strong one fights on
+        # alone and dies in round 6
+        (boss, (leech, strong)): (False, 6, (0, 0), (0, 0)),
     }
     rows = run_oracle("group_fight", [_args(b, list(ms)) for b, ms in cases])
     for ((b, ms), expected), row in zip(cases.items(), rows, strict=True):

@@ -3472,10 +3472,10 @@ example : ∀ (b : Formal.GroupFight.Boss) (ms : List Formal.GroupFight.Member)
   @Formal.GroupFight.killRounds_antitone
 
 example : ∀ (b : Formal.GroupFight.Boss) (ms : List Formal.GroupFight.Member),
-    (∀ m ∈ ms, 0 ≤ m.maxHp) → Formal.GroupFight.gate b ms = .none →
+    Formal.GroupFight.gate b ms = .none →
     (Formal.GroupFight.groupOutcome b ms).win = true →
-    ∀ x ∈ (Formal.GroupFight.groupOutcome b ms).hpEnd, 0 < x :=
-  @Formal.GroupFight.win_alive
+    ∃ x ∈ (Formal.GroupFight.groupOutcome b ms).hpEnd, 0 < x :=
+  @Formal.GroupFight.win_survivor
 
 /-! ### ConsumablePrice contracts. -/
 

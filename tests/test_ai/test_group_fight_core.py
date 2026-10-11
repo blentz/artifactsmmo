@@ -48,10 +48,38 @@ def test_negative_stock_or_restore_is_refused():
         group_outcome(PartyBoss(20, 0, 0), [_m(restore=-1)])
 
 
-def test_equal_threat_focuses_the_lowest_pool():
-    """The weak member takes every hit (400k on a 1M pool): dead in round 3."""
+def test_equal_threat_focuses_the_lowest_pool_and_the_rest_fight_on():
+    """The weak member takes every hit (400k on a 1M pool) and dies in round
+    3; the strong one fights on alone (20k a round) and wins in round 7
+    (live probe 2026-10-11: a dead member leaves, the fight goes on)."""
     out = group_outcome(PartyBoss(20, 0, 0), [_m(hp=200, max_hp=200), _m()])
-    assert (out.win, out.turns, out.hp_end) == (False, 3, (2_000_000, 0))
+    assert (out.win, out.turns, out.hp_end) == (True, 7, (800_000, 0))
+
+
+def test_the_fight_is_lost_when_every_member_is_dead():
+    out = group_outcome(PartyBoss(40, 0, 0), [_m(hp=200, max_hp=200), _m()])
+    assert (out.win, out.hp_end) == (False, (0, 0))
+
+
+def test_a_late_mover_killed_by_the_boss_deals_no_damage_that_round():
+    """A late mover dead after the boss's turn does not act; a first mover
+    killed in the same turn already has."""
+    late = group_outcome(PartyBoss(3, 0, 0), [_m(first=False, hp=40), _m(hp=200, max_hp=200)])
+    early = group_outcome(PartyBoss(3, 0, 0), [_m(hp=40), _m(hp=200, max_hp=200)])
+    assert (late.win, late.turns) == (True, 2)
+    assert (early.win, early.turns) == (True, 1)
+
+
+def test_a_delayed_kill_meets_the_deadline():
+    """Reconstitution at 10 turns: the weak member's death pushes the kill to
+    round 7 (21 actor turns), so the fight is lost at the end of round 6."""
+    out = group_outcome(PartyBoss(20, 10, 0), [_m(hp=200, max_hp=200), _m()])
+    assert (out.win, out.turns, out.hp_end) == (False, 6, (800_000, 0))
+
+
+def test_a_zero_hp_boss_is_won_unwalked():
+    out = group_outcome(PartyBoss(0, 0, 0), [_m(hp=60)])
+    assert out == GroupOutcome(True, 0, (600_000,), (0,))
 
 
 def test_the_tank_takes_ninety_the_weakest_ten():

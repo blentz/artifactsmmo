@@ -1,0 +1,1113 @@
+{
+ "lowering_solo_fight": [
+  {
+   "step": "start",
+   "R2D2": {
+    "level": 32,
+    "hp": 785,
+    "max_hp": 785,
+    "xp": 12150,
+    "x": 3,
+    "y": -1,
+    "cooldown_expiration": "2026-10-11T01:49:28.535000+00:00"
+   },
+   "Lor": {
+    "level": 32,
+    "hp": 446,
+    "max_hp": 705,
+    "xp": 21086,
+    "x": 3,
+    "y": -1,
+    "cooldown_expiration": "2026-10-11T01:49:40.555000+00:00"
+   }
+  },
+  {
+   "step": "lower: Lor solo #0",
+   "status": 200,
+   "body": {
+    "data": {
+     "cooldown": {
+      "total_seconds": 29,
+      "remaining_seconds": 29,
+      "started_at": "2026-10-11T02:58:03.338757Z",
+      "expiration": "2026-10-11T02:58:32.284294Z",
+      "reason": "fight"
+     },
+     "fight": {
+      "result": "loss",
+      "turns": 16,
+      "opponent": "king_slime",
+      "logs": [
+       "Fight start: The monster raises a barrier of 100 HP.",
+       "Fight start: Lor HP: 446/705 vs King Slime HP: 1000/1000",
+       "Turn 1: Lor used fire attack and dealt 58 damage, fully absorbed by the barrier. King Slime HP: 1000/1000",
+       "Turn 1: The monster's barrier absorbs 58 damage. Barrier HP: 42",
+       "Turn 1: Lor used water attack and dealt 44 damage (42 absorbed, 2 through). King Slime HP: 998/1000",
+       "Turn 1: The monster's barrier absorbs 42 damage. Barrier HP: 0",
+       "Turn 1: The monster's barrier is destroyed!",
+       "Turn 2: King Slime used fire attack against Lor and dealt 12 damage. Lor HP: 434/705",
+       "Turn 2: King Slime used earth attack against Lor and dealt 12 damage. Lor HP: 422/705",
+       "Turn 2: King Slime used water attack against Lor and dealt 11 damage. Lor HP: 411/705",
+       "Turn 2: King Slime used air attack against Lor and dealt 12 damage. Lor HP: 399/705",
+       "Turn 3: Lor used fire attack and dealt 58 damage. King Slime HP: 940/1000",
+       "Turn 3: Lor used water attack and dealt 44 damage. King Slime HP: 896/1000",
+       "Turn 4: King Slime used fire attack against Lor and dealt 12 damage. Lor HP: 387/705",
+       "Turn 4: King Slime used earth attack against Lor and dealt 12 damage. Lor HP: 375/705",
+       "Turn 4: King Slime used water attack against Lor and dealt 11 damage. Lor HP: 364/705",
+       "Turn 4: King Slime used air attack against Lor and dealt 12 damage. Lor HP: 352/705",
+       "Turn 5: Lor used fire attack and dealt 87 damage (Critical strike). King Slime HP: 809/1000",
+       "Turn 5: Lor used water attack and dealt 66 damage (Critical strike). King Slime HP: 743/1000",
+       "Turn 6: King Slime used fire attack against Lor and dealt 12 damage. Lor HP: 340/705",
+       "Turn 6: King Slime used earth attack against Lor and dealt 12 damage. Lor HP: 328/705",
+       "Turn 6: King Slime used water attack against Lor and dealt 11 damage. Lor HP: 317/705",
+       "Turn 6: King Slime used air attack against Lor and dealt 12 damage. Lor HP: 305/705",
+       "Turn 7: Lor used fire attack and dealt 58 damage. King Slime HP: 685/1000",
+       "Turn 7: Lor used water attack and dealt 44 damage. King Slime HP: 641/1000",
+       "Turn 8: King Slime used fire attack against Lor and dealt 18 damage (Critical strike). Lor HP: 287/705",
+       "Turn 8: King Slime used earth attack against Lor and dealt 18 damage (Critical strike). Lor HP: 269/705",
+       "Turn 8: King Slime used water attack against Lor and dealt 17 damage (Critical strike). Lor HP: 252/705",
+       "Turn 8: King Slime used air attack against Lor and dealt 18 damage (Critical strike). Lor HP: 234/705",
+       "Turn 9: Lor used fire attack and dealt 58 damage. King Slime HP: 583/1000",
+       "Turn 9: Lor used water attack and dealt 44 damage. King Slime HP: 539/1000",
+       "Turn 10: The monster refreshes its barrier to 100 HP.",
+       "Turn 10: King Slime used fire attack against Lor and dealt 18 damage (Critical strike). Lor HP: 216/705",
+       "Turn 10: King Slime used earth attack against Lor and dealt 18 damage (Critical strike). Lor HP: 198/705",
+       "Turn 10: King Slime used water attack against Lor and dealt 17 damage (Critical strike). Lor HP: 181/705",
+       "Turn 10: King Slime used air attack against Lor and dealt 18 damage (Critical strike). Lor HP: 163/705",
+       "Turn 11: Lor used fire attack and dealt 58 damage, fully absorbed by the barrier. King Slime HP: 539/1000",
+       "Turn 11: The monster's barrier absorbs 58 damage. Barrier HP: 42",
+       "Turn 11: Lor used water attack and dealt 44 damage (42 absorbed, 2 through). King Slime HP: 537/1000",
+       "Turn 11: The monster's barrier absorbs 42 damage. Barrier HP: 0",
+       "Turn 11: The monster's barrier is destroyed!",
+       "Turn 12: King Slime used fire attack against Lor and dealt 12 damage. Lor HP: 151/705",
+       "Turn 12: King Slime used earth attack against Lor and dealt 12 damage. Lor HP: 139/705",
+       "Turn 12: King Slime used water attack against Lor and dealt 11 damage. Lor HP: 128/705",
+       "Turn 12: King Slime used air attack against Lor and dealt 12 damage. Lor HP: 116/705",
+       "Turn 13: Lor used fire attack and dealt 58 damage. King Slime HP: 479/1000",
+       "Turn 13: Lor used water attack and dealt 44 damage. King Slime HP: 435/1000",
+       "Turn 14: King Slime used fire attack against Lor and dealt 12 damage. Lor HP: 104/705",
+       "Turn 14: King Slime used earth attack against Lor and dealt 12 damage. Lor HP: 92/705",
+       "Turn 14: King Slime used water attack against Lor and dealt 11 damage. Lor HP: 81/705",
+       "Turn 14: King Slime used air attack against Lor and dealt 12 damage. Lor HP: 69/705",
+       "Turn 15: Lor used fire attack and dealt 58 damage. King Slime HP: 377/1000",
+       "Turn 15: Lor used water attack and dealt 44 damage. King Slime HP: 333/1000",
+       "Turn 16: King Slime used fire attack against Lor and dealt 18 damage (Critical strike). Lor HP: 51/705",
+       "Turn 16: King Slime used earth attack against Lor and dealt 18 damage (Critical strike). Lor HP: 33/705",
+       "Turn 16: King Slime used water attack against Lor and dealt 17 damage (Critical strike). Lor HP: 16/705",
+       "Turn 16: King Slime used air attack against Lor and dealt 18 damage (Critical strike). Lor HP: 0/705",
+       "Turn 16: Lor has been defeated!",
+       "Fight result: loss. Lor HP: 0/705 vs King Slime HP: 333/1000"
+      ],
+      "characters": [
+       {
+        "character_name": "Lor",
+        "xp": 0,
+        "gold": 0,
+        "drops": [],
+        "final_hp": 0
+       }
+      ]
+     },
+     "characters": [
+      {
+       "name": "Lor",
+       "account": "wakko666",
+       "skin": "men3",
+       "level": 32,
+       "xp": 21086,
+       "max_xp": 22700,
+       "gold": 4235,
+       "speed": 100,
+       "mining_level": 21,
+       "mining_xp": 6936,
+       "mining_max_xp": 9200,
+       "woodcutting_level": 21,
+       "woodcutting_xp": 6199,
+       "woodcutting_max_xp": 9200,
+       "fishing_level": 22,
+       "fishing_xp": 9854,
+       "fishing_max_xp": 10200,
+       "weaponcrafting_level": 21,
+       "weaponcrafting_xp": 3289,
+       "weaponcrafting_max_xp": 9200,
+       "gearcrafting_level": 20,
+       "gearcrafting_xp": 7503,
+       "gearcrafting_max_xp": 8200,
+       "jewelrycrafting_level": 19,
+       "jewelrycrafting_xp": 4947,
+       "jewelrycrafting_max_xp": 7200,
+       "cooking_level": 32,
+       "cooking_xp": 14693,
+       "cooking_max_xp": 22700,
+       "alchemy_level": 16,
+       "alchemy_xp": 137,
+       "alchemy_max_xp": 5100,
+       "hp": 1,
+       "max_hp": 705,
+       "haste": 8,
+       "critical_strike": 15,
+       "wisdom": 25,
+       "prospecting": 75,
+       "initiative": 275,
+       "threat": 0,
+       "attack_fire": 40,
+       "attack_earth": 0,
+       "attack_water": 40,
+       "attack_air": 0,
+       "dmg": 33,
+       "dmg_fire": 46,
+       "dmg_earth": 20,
+       "dmg_water": 5,
+       "dmg_air": 15,
+       "res_fire": 13,
+       "res_earth": 13,
+       "res_water": 21,
+       "res_air": 15,
+       "effects": [],
+       "x": 0,
+       "y": 0,
+       "layer": "overworld",
+       "map_id": 271,
+       "cooldown": 29,
+       "cooldown_expiration": "2026-10-11T02:58:32.284Z",
+       "weapon_slot": "elderwood_staff",
+       "rune_slot": "",
+       "shield_slot": "slime_shield",
+       "helmet_slot": "tromatising_mask",
+       "body_armor_slot": "bandit_armor",
+       "leg_armor_slot": "skeleton_pants",
+       "boots_slot": "snakeskin_boots",
+       "ring1_slot": "iron_ring",
+       "ring2_slot": "iron_ring",
+       "amulet_slot": "air_and_water_amulet",
+       "artifact1_slot": "lich_race_trophy",
+       "artifact2_slot": "lich_race_medal",
+       "artifact3_slot": "",
+       "utility1_slot": "",
+       "utility1_slot_quantity": 0,
+       "utility2_slot": "",
+       "utility2_slot_quantity": 0,
+       "bag_slot": "",
+       "task": "cyclops",
+       "task_type": "monsters",
+       "task_progress": 236,
+       "task_total": 280,
+       "inventory_max_items": 162,
+       "inventory": [
+        {
+         "slot": 1,
+         "code": "rat_hide",
+         "quantity": 6
+        },
+        {
+         "slot": 2,
+         "code": "sap",
+         "quantity": 5
+        },
+        {
+         "slot": 3,
+         "code": "tasks_coin",
+         "quantity": 1
+        },
+        {
+         "slot": 4,
+         "code": "iron_shield",
+         "quantity": 1
+        },
+        {
+         "slot": 5,
+         "code": "cooked_trout",
+         "quantity": 60
+        },
+        {
+         "slot": 6,
+         "code": "algae",
+         "quantity": 14
+        },
+        {
+         "slot": 7,
+         "code": "cyclops_eye",
+         "quantity": 2
+        },
+        {
+         "slot": 8,
+         "code": "raw_rat_meat",
+         "quantity": 4
+        },
+        {
+         "slot": 9,
+         "code": "small_pearls",
+         "quantity": 1
+        },
+        {
+         "slot": 10,
+         "code": "shrimp",
+         "quantity": 6
+        },
+        {
+         "slot": 11,
+         "code": "raw_beef",
+         "quantity": 10
+        },
+        {
+         "slot": 12,
+         "code": "cowhide",
+         "quantity": 7
+        },
+        {
+         "slot": 13,
+         "code": "shell",
+         "quantity": 1
+        },
+        {
+         "slot": 14,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 15,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 16,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 17,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 18,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 19,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 20,
+         "code": "",
+         "quantity": 0
+        }
+       ]
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "party_fight_with_a_1hp_member": [
+  {
+   "step": "start",
+   "R2D2": {
+    "level": 32,
+    "hp": 785,
+    "max_hp": 785,
+    "xp": 12150,
+    "x": 3,
+    "y": -1,
+    "cooldown_expiration": "2026-10-11T01:49:28.535000+00:00"
+   },
+   "Lor": {
+    "level": 32,
+    "hp": 1,
+    "max_hp": 705,
+    "xp": 21086,
+    "x": 0,
+    "y": 0,
+    "cooldown_expiration": "2026-10-11T02:58:32.284000+00:00"
+   }
+  },
+  {
+   "step": "move Lor",
+   "status": 200,
+   "body": {
+    "data": {
+     "cooldown": {
+      "total_seconds": 20,
+      "remaining_seconds": 20,
+      "started_at": "2026-10-11T02:58:43.992546Z",
+      "expiration": "2026-10-11T02:59:03.958204Z",
+      "reason": "movement"
+     },
+     "destination": {
+      "map_id": 229,
+      "name": "Forest",
+      "skin": "forest_kingslime1",
+      "x": 3,
+      "y": -1,
+      "layer": "overworld",
+      "access": {
+       "type": "standard",
+       "conditions": []
+      },
+      "interactions": {
+       "content": {
+        "type": "monster",
+        "code": "king_slime"
+       },
+       "transition": null
+      }
+     },
+     "path": [
+      [
+       0,
+       0
+      ],
+      [
+       0,
+       -1
+      ],
+      [
+       1,
+       -1
+      ],
+      [
+       2,
+       -1
+      ],
+      [
+       3,
+       -1
+      ]
+     ],
+     "character": {
+      "name": "Lor",
+      "account": "wakko666",
+      "skin": "men3",
+      "level": 32,
+      "xp": 21086,
+      "max_xp": 22700,
+      "gold": 4235,
+      "speed": 100,
+      "mining_level": 21,
+      "mining_xp": 6936,
+      "mining_max_xp": 9200,
+      "woodcutting_level": 21,
+      "woodcutting_xp": 6199,
+      "woodcutting_max_xp": 9200,
+      "fishing_level": 22,
+      "fishing_xp": 9854,
+      "fishing_max_xp": 10200,
+      "weaponcrafting_level": 21,
+      "weaponcrafting_xp": 3289,
+      "weaponcrafting_max_xp": 9200,
+      "gearcrafting_level": 20,
+      "gearcrafting_xp": 7503,
+      "gearcrafting_max_xp": 8200,
+      "jewelrycrafting_level": 19,
+      "jewelrycrafting_xp": 4947,
+      "jewelrycrafting_max_xp": 7200,
+      "cooking_level": 32,
+      "cooking_xp": 14693,
+      "cooking_max_xp": 22700,
+      "alchemy_level": 16,
+      "alchemy_xp": 137,
+      "alchemy_max_xp": 5100,
+      "hp": 1,
+      "max_hp": 705,
+      "haste": 8,
+      "critical_strike": 15,
+      "wisdom": 25,
+      "prospecting": 75,
+      "initiative": 275,
+      "threat": 0,
+      "attack_fire": 40,
+      "attack_earth": 0,
+      "attack_water": 40,
+      "attack_air": 0,
+      "dmg": 33,
+      "dmg_fire": 46,
+      "dmg_earth": 20,
+      "dmg_water": 5,
+      "dmg_air": 15,
+      "res_fire": 13,
+      "res_earth": 13,
+      "res_water": 21,
+      "res_air": 15,
+      "effects": [],
+      "x": 3,
+      "y": -1,
+      "layer": "overworld",
+      "map_id": 229,
+      "cooldown": 20,
+      "cooldown_expiration": "2026-10-11T02:59:03.958Z",
+      "weapon_slot": "elderwood_staff",
+      "rune_slot": "",
+      "shield_slot": "slime_shield",
+      "helmet_slot": "tromatising_mask",
+      "body_armor_slot": "bandit_armor",
+      "leg_armor_slot": "skeleton_pants",
+      "boots_slot": "snakeskin_boots",
+      "ring1_slot": "iron_ring",
+      "ring2_slot": "iron_ring",
+      "amulet_slot": "air_and_water_amulet",
+      "artifact1_slot": "lich_race_trophy",
+      "artifact2_slot": "lich_race_medal",
+      "artifact3_slot": "",
+      "utility1_slot": "",
+      "utility1_slot_quantity": 0,
+      "utility2_slot": "",
+      "utility2_slot_quantity": 0,
+      "bag_slot": "",
+      "task": "cyclops",
+      "task_type": "monsters",
+      "task_progress": 236,
+      "task_total": 280,
+      "inventory_max_items": 162,
+      "inventory": [
+       {
+        "slot": 1,
+        "code": "rat_hide",
+        "quantity": 6
+       },
+       {
+        "slot": 2,
+        "code": "sap",
+        "quantity": 5
+       },
+       {
+        "slot": 3,
+        "code": "tasks_coin",
+        "quantity": 1
+       },
+       {
+        "slot": 4,
+        "code": "iron_shield",
+        "quantity": 1
+       },
+       {
+        "slot": 5,
+        "code": "cooked_trout",
+        "quantity": 60
+       },
+       {
+        "slot": 6,
+        "code": "algae",
+        "quantity": 14
+       },
+       {
+        "slot": 7,
+        "code": "cyclops_eye",
+        "quantity": 2
+       },
+       {
+        "slot": 8,
+        "code": "raw_rat_meat",
+        "quantity": 4
+       },
+       {
+        "slot": 9,
+        "code": "small_pearls",
+        "quantity": 1
+       },
+       {
+        "slot": 10,
+        "code": "shrimp",
+        "quantity": 6
+       },
+       {
+        "slot": 11,
+        "code": "raw_beef",
+        "quantity": 10
+       },
+       {
+        "slot": 12,
+        "code": "cowhide",
+        "quantity": 7
+       },
+       {
+        "slot": 13,
+        "code": "shell",
+        "quantity": 1
+       },
+       {
+        "slot": 14,
+        "code": "",
+        "quantity": 0
+       },
+       {
+        "slot": 15,
+        "code": "",
+        "quantity": 0
+       },
+       {
+        "slot": 16,
+        "code": "",
+        "quantity": 0
+       },
+       {
+        "slot": 17,
+        "code": "",
+        "quantity": 0
+       },
+       {
+        "slot": 18,
+        "code": "",
+        "quantity": 0
+       },
+       {
+        "slot": 19,
+        "code": "",
+        "quantity": 0
+       },
+       {
+        "slot": 20,
+        "code": "",
+        "quantity": 0
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "step": "before D",
+   "R2D2": {
+    "level": 32,
+    "hp": 785,
+    "max_hp": 785,
+    "xp": 12150,
+    "x": 3,
+    "y": -1,
+    "cooldown_expiration": "2026-10-11T01:49:28.535000+00:00"
+   },
+   "Lor": {
+    "level": 32,
+    "hp": 1,
+    "max_hp": 705,
+    "xp": 21086,
+    "x": 3,
+    "y": -1,
+    "cooldown_expiration": "2026-10-11T02:59:03.958000+00:00"
+   }
+  },
+  {
+   "step": "D: group fight, weak member",
+   "status": 200,
+   "body": {
+    "data": {
+     "cooldown": {
+      "total_seconds": 45,
+      "remaining_seconds": 45,
+      "started_at": "2026-10-11T02:59:05.551550Z",
+      "expiration": "2026-10-11T02:59:50.414082Z",
+      "reason": "fight"
+     },
+     "fight": {
+      "result": "win",
+      "turns": 24,
+      "opponent": "king_slime",
+      "logs": [
+       "Fight start: The monster raises a barrier of 100 HP.",
+       "Fight start: R2D2 HP: 785/785, Lor HP: 1/705 vs King Slime HP: 1000/1000",
+       "Turn 1: R2D2 used fire attack and dealt 77 damage (Critical strike), fully absorbed by the barrier. King Slime HP: 1000/1000",
+       "Turn 1: The monster's barrier absorbs 77 damage. Barrier HP: 23",
+       "Turn 1: R2D2 used water attack and dealt 63 damage (Critical strike) (23 absorbed, 40 through). King Slime HP: 960/1000",
+       "Turn 1: The monster's barrier absorbs 23 damage. Barrier HP: 0",
+       "Turn 1: The monster's barrier is destroyed!",
+       "Turn 2: Lor used fire attack and dealt 58 damage. King Slime HP: 902/1000",
+       "Turn 2: Lor used water attack and dealt 44 damage. King Slime HP: 858/1000",
+       "Turn 3: King Slime used fire attack against Lor and dealt 12 damage. Lor HP: 0/705",
+       "Turn 3: King Slime used earth attack against Lor and dealt 12 damage. Lor HP: 0/705",
+       "Turn 3: King Slime used water attack against Lor and dealt 11 damage. Lor HP: 0/705",
+       "Turn 3: King Slime used air attack against Lor and dealt 12 damage. Lor HP: 0/705",
+       "Turn 3: Lor has been defeated!",
+       "Turn 4: R2D2 used fire attack and dealt 77 damage (Critical strike). King Slime HP: 781/1000",
+       "Turn 4: R2D2 used water attack and dealt 63 damage (Critical strike). King Slime HP: 718/1000",
+       "Turn 5: King Slime used fire attack against R2D2 and dealt 20 damage (Critical strike). R2D2 HP: 765/785",
+       "Turn 5: King Slime used earth attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 747/785",
+       "Turn 5: King Slime used water attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 729/785",
+       "Turn 5: King Slime used air attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 711/785",
+       "Turn 6: R2D2 used fire attack and dealt 77 damage (Critical strike). King Slime HP: 641/1000",
+       "Turn 6: R2D2 used water attack and dealt 63 damage (Critical strike). King Slime HP: 578/1000",
+       "Turn 7: King Slime used fire attack against R2D2 and dealt 20 damage (Critical strike). R2D2 HP: 691/785",
+       "Turn 7: King Slime used earth attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 673/785",
+       "Turn 7: King Slime used water attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 655/785",
+       "Turn 7: King Slime used air attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 637/785",
+       "Turn 8: R2D2 used fire attack and dealt 51 damage. King Slime HP: 527/1000",
+       "Turn 8: R2D2 used water attack and dealt 42 damage. King Slime HP: 485/1000",
+       "Turn 9: King Slime used fire attack against R2D2 and dealt 13 damage. R2D2 HP: 624/785",
+       "Turn 9: King Slime used earth attack against R2D2 and dealt 12 damage. R2D2 HP: 612/785",
+       "Turn 9: King Slime used water attack against R2D2 and dealt 12 damage. R2D2 HP: 600/785",
+       "Turn 9: King Slime used air attack against R2D2 and dealt 12 damage. R2D2 HP: 588/785",
+       "Turn 10: R2D2 used fire attack and dealt 51 damage. King Slime HP: 434/1000",
+       "Turn 10: R2D2 used water attack and dealt 42 damage. King Slime HP: 392/1000",
+       "Turn 11: The monster refreshes its barrier to 100 HP.",
+       "Turn 11: King Slime used fire attack against R2D2 and dealt 20 damage (Critical strike). R2D2 HP: 568/785",
+       "Turn 11: King Slime used earth attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 550/785",
+       "Turn 11: King Slime used water attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 532/785",
+       "Turn 11: King Slime used air attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 514/785",
+       "Turn 12: R2D2 used fire attack and dealt 51 damage, fully absorbed by the barrier. King Slime HP: 392/1000",
+       "Turn 12: The monster's barrier absorbs 51 damage. Barrier HP: 49",
+       "Turn 12: R2D2 used water attack and dealt 42 damage, fully absorbed by the barrier. King Slime HP: 392/1000",
+       "Turn 12: The monster's barrier absorbs 42 damage. Barrier HP: 7",
+       "Turn 13: King Slime used fire attack against R2D2 and dealt 13 damage. R2D2 HP: 501/785",
+       "Turn 13: King Slime used earth attack against R2D2 and dealt 12 damage. R2D2 HP: 489/785",
+       "Turn 13: King Slime used water attack against R2D2 and dealt 12 damage. R2D2 HP: 477/785",
+       "Turn 13: King Slime used air attack against R2D2 and dealt 12 damage. R2D2 HP: 465/785",
+       "Turn 14: R2D2 used fire attack and dealt 51 damage (7 absorbed, 44 through). King Slime HP: 348/1000",
+       "Turn 14: The monster's barrier absorbs 7 damage. Barrier HP: 0",
+       "Turn 14: The monster's barrier is destroyed!",
+       "Turn 14: R2D2 used water attack and dealt 42 damage. King Slime HP: 306/1000",
+       "Turn 15: King Slime used fire attack against R2D2 and dealt 13 damage. R2D2 HP: 452/785",
+       "Turn 15: King Slime used earth attack against R2D2 and dealt 12 damage. R2D2 HP: 440/785",
+       "Turn 15: King Slime used water attack against R2D2 and dealt 12 damage. R2D2 HP: 428/785",
+       "Turn 15: King Slime used air attack against R2D2 and dealt 12 damage. R2D2 HP: 416/785",
+       "Turn 16: R2D2 used fire attack and dealt 51 damage. King Slime HP: 255/1000",
+       "Turn 16: R2D2 used water attack and dealt 42 damage. King Slime HP: 213/1000",
+       "Turn 17: King Slime used fire attack against R2D2 and dealt 13 damage. R2D2 HP: 403/785",
+       "Turn 17: King Slime used earth attack against R2D2 and dealt 12 damage. R2D2 HP: 391/785",
+       "Turn 17: King Slime used water attack against R2D2 and dealt 12 damage. R2D2 HP: 379/785",
+       "Turn 17: King Slime used air attack against R2D2 and dealt 12 damage. R2D2 HP: 367/785",
+       "Turn 18: R2D2 used fire attack and dealt 51 damage. King Slime HP: 162/1000",
+       "Turn 18: R2D2 used water attack and dealt 42 damage. King Slime HP: 120/1000",
+       "Turn 19: King Slime used fire attack against R2D2 and dealt 20 damage (Critical strike). R2D2 HP: 347/785",
+       "Turn 19: King Slime used earth attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 329/785",
+       "Turn 19: King Slime used water attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 311/785",
+       "Turn 19: King Slime used air attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 293/785",
+       "Turn 20: R2D2 used fire attack and dealt 51 damage. King Slime HP: 69/1000",
+       "Turn 20: R2D2 used water attack and dealt 42 damage. King Slime HP: 27/1000",
+       "Turn 21: The monster refreshes its barrier to 100 HP.",
+       "Turn 21: King Slime used fire attack against R2D2 and dealt 13 damage. R2D2 HP: 280/785",
+       "Turn 21: King Slime used earth attack against R2D2 and dealt 12 damage. R2D2 HP: 268/785",
+       "Turn 21: King Slime used water attack against R2D2 and dealt 12 damage. R2D2 HP: 256/785",
+       "Turn 21: King Slime used air attack against R2D2 and dealt 12 damage. R2D2 HP: 244/785",
+       "Turn 22: R2D2 used fire attack and dealt 51 damage, fully absorbed by the barrier. King Slime HP: 27/1000",
+       "Turn 22: The monster's barrier absorbs 51 damage. Barrier HP: 49",
+       "Turn 22: R2D2 used water attack and dealt 42 damage, fully absorbed by the barrier. King Slime HP: 27/1000",
+       "Turn 22: The monster's barrier absorbs 42 damage. Barrier HP: 7",
+       "Turn 23: King Slime used fire attack against R2D2 and dealt 20 damage (Critical strike). R2D2 HP: 224/785",
+       "Turn 23: King Slime used earth attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 206/785",
+       "Turn 23: King Slime used water attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 188/785",
+       "Turn 23: King Slime used air attack against R2D2 and dealt 18 damage (Critical strike). R2D2 HP: 170/785",
+       "Turn 24: R2D2 used fire attack and dealt 51 damage (7 absorbed, 44 through). King Slime HP: 0/1000",
+       "Turn 24: The monster's barrier absorbs 7 damage. Barrier HP: 0",
+       "Turn 24: The monster's barrier is destroyed!",
+       "Turn 24: R2D2 used water attack and dealt 42 damage. King Slime HP: 0/1000",
+       "Fight result: win. R2D2 HP: 170/785, Lor HP: 0/705 vs King Slime HP: 0/1000"
+      ],
+      "characters": [
+       {
+        "character_name": "R2D2",
+        "xp": 0,
+        "gold": 4,
+        "drops": [],
+        "final_hp": 170
+       },
+       {
+        "character_name": "Lor",
+        "xp": 0,
+        "gold": 2,
+        "drops": [],
+        "final_hp": 1
+       }
+      ]
+     },
+     "characters": [
+      {
+       "name": "R2D2",
+       "account": "wakko666",
+       "skin": "men2",
+       "level": 32,
+       "xp": 12150,
+       "max_xp": 22700,
+       "gold": 6731,
+       "speed": 100,
+       "mining_level": 22,
+       "mining_xp": 2292,
+       "mining_max_xp": 10200,
+       "woodcutting_level": 22,
+       "woodcutting_xp": 4255,
+       "woodcutting_max_xp": 10200,
+       "fishing_level": 22,
+       "fishing_xp": 1249,
+       "fishing_max_xp": 10200,
+       "weaponcrafting_level": 21,
+       "weaponcrafting_xp": 2428,
+       "weaponcrafting_max_xp": 9200,
+       "gearcrafting_level": 21,
+       "gearcrafting_xp": 4604,
+       "gearcrafting_max_xp": 9200,
+       "jewelrycrafting_level": 21,
+       "jewelrycrafting_xp": 2145,
+       "jewelrycrafting_max_xp": 9200,
+       "cooking_level": 34,
+       "cooking_xp": 14962,
+       "cooking_max_xp": 25700,
+       "alchemy_level": 16,
+       "alchemy_xp": 4889,
+       "alchemy_max_xp": 5100,
+       "hp": 170,
+       "max_hp": 785,
+       "haste": 7,
+       "critical_strike": 21,
+       "wisdom": 70,
+       "prospecting": 155,
+       "initiative": 300,
+       "threat": 0,
+       "attack_fire": 40,
+       "attack_earth": 0,
+       "attack_water": 40,
+       "attack_air": 0,
+       "dmg": 29,
+       "dmg_fire": 30,
+       "dmg_earth": 30,
+       "dmg_water": 0,
+       "dmg_air": 20,
+       "res_fire": 7,
+       "res_earth": 13,
+       "res_water": 13,
+       "res_air": 13,
+       "effects": [],
+       "x": 3,
+       "y": -1,
+       "layer": "overworld",
+       "map_id": 229,
+       "cooldown": 45,
+       "cooldown_expiration": "2026-10-11T02:59:50.414Z",
+       "weapon_slot": "elderwood_staff",
+       "rune_slot": "",
+       "shield_slot": "slime_shield",
+       "helmet_slot": "hard_leather_helmet",
+       "body_armor_slot": "bandit_armor",
+       "leg_armor_slot": "hard_leather_pants",
+       "boots_slot": "old_boots",
+       "ring1_slot": "ring_of_chance",
+       "ring2_slot": "ring_of_chance",
+       "amulet_slot": "skull_amulet",
+       "artifact1_slot": "",
+       "artifact2_slot": "lich_race_medal",
+       "artifact3_slot": "",
+       "utility1_slot": "",
+       "utility1_slot_quantity": 0,
+       "utility2_slot": "",
+       "utility2_slot_quantity": 0,
+       "bag_slot": "",
+       "task": "imp",
+       "task_type": "monsters",
+       "task_progress": 29,
+       "task_total": 209,
+       "inventory_max_items": 162,
+       "inventory": [
+        {
+         "slot": 1,
+         "code": "demoniac_dust",
+         "quantity": 2
+        },
+        {
+         "slot": 2,
+         "code": "imp_tail",
+         "quantity": 1
+        },
+        {
+         "slot": 3,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 4,
+         "code": "cooked_shrimp",
+         "quantity": 116
+        },
+        {
+         "slot": 5,
+         "code": "algae",
+         "quantity": 4
+        },
+        {
+         "slot": 6,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 7,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 8,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 9,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 10,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 11,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 12,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 13,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 14,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 15,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 16,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 17,
+         "code": "tasks_coin",
+         "quantity": 1
+        },
+        {
+         "slot": 18,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 19,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 20,
+         "code": "",
+         "quantity": 0
+        }
+       ]
+      },
+      {
+       "name": "Lor",
+       "account": "wakko666",
+       "skin": "men3",
+       "level": 32,
+       "xp": 21086,
+       "max_xp": 22700,
+       "gold": 4237,
+       "speed": 100,
+       "mining_level": 21,
+       "mining_xp": 6936,
+       "mining_max_xp": 9200,
+       "woodcutting_level": 21,
+       "woodcutting_xp": 6199,
+       "woodcutting_max_xp": 9200,
+       "fishing_level": 22,
+       "fishing_xp": 9854,
+       "fishing_max_xp": 10200,
+       "weaponcrafting_level": 21,
+       "weaponcrafting_xp": 3289,
+       "weaponcrafting_max_xp": 9200,
+       "gearcrafting_level": 20,
+       "gearcrafting_xp": 7503,
+       "gearcrafting_max_xp": 8200,
+       "jewelrycrafting_level": 19,
+       "jewelrycrafting_xp": 4947,
+       "jewelrycrafting_max_xp": 7200,
+       "cooking_level": 32,
+       "cooking_xp": 14693,
+       "cooking_max_xp": 22700,
+       "alchemy_level": 16,
+       "alchemy_xp": 137,
+       "alchemy_max_xp": 5100,
+       "hp": 1,
+       "max_hp": 705,
+       "haste": 8,
+       "critical_strike": 15,
+       "wisdom": 25,
+       "prospecting": 75,
+       "initiative": 275,
+       "threat": 0,
+       "attack_fire": 40,
+       "attack_earth": 0,
+       "attack_water": 40,
+       "attack_air": 0,
+       "dmg": 33,
+       "dmg_fire": 46,
+       "dmg_earth": 20,
+       "dmg_water": 5,
+       "dmg_air": 15,
+       "res_fire": 13,
+       "res_earth": 13,
+       "res_water": 21,
+       "res_air": 15,
+       "effects": [],
+       "x": 3,
+       "y": -1,
+       "layer": "overworld",
+       "map_id": 229,
+       "cooldown": 45,
+       "cooldown_expiration": "2026-10-11T02:59:50.414Z",
+       "weapon_slot": "elderwood_staff",
+       "rune_slot": "",
+       "shield_slot": "slime_shield",
+       "helmet_slot": "tromatising_mask",
+       "body_armor_slot": "bandit_armor",
+       "leg_armor_slot": "skeleton_pants",
+       "boots_slot": "snakeskin_boots",
+       "ring1_slot": "iron_ring",
+       "ring2_slot": "iron_ring",
+       "amulet_slot": "air_and_water_amulet",
+       "artifact1_slot": "lich_race_trophy",
+       "artifact2_slot": "lich_race_medal",
+       "artifact3_slot": "",
+       "utility1_slot": "",
+       "utility1_slot_quantity": 0,
+       "utility2_slot": "",
+       "utility2_slot_quantity": 0,
+       "bag_slot": "",
+       "task": "cyclops",
+       "task_type": "monsters",
+       "task_progress": 236,
+       "task_total": 280,
+       "inventory_max_items": 162,
+       "inventory": [
+        {
+         "slot": 1,
+         "code": "rat_hide",
+         "quantity": 6
+        },
+        {
+         "slot": 2,
+         "code": "sap",
+         "quantity": 5
+        },
+        {
+         "slot": 3,
+         "code": "tasks_coin",
+         "quantity": 1
+        },
+        {
+         "slot": 4,
+         "code": "iron_shield",
+         "quantity": 1
+        },
+        {
+         "slot": 5,
+         "code": "cooked_trout",
+         "quantity": 60
+        },
+        {
+         "slot": 6,
+         "code": "algae",
+         "quantity": 14
+        },
+        {
+         "slot": 7,
+         "code": "cyclops_eye",
+         "quantity": 2
+        },
+        {
+         "slot": 8,
+         "code": "raw_rat_meat",
+         "quantity": 4
+        },
+        {
+         "slot": 9,
+         "code": "small_pearls",
+         "quantity": 1
+        },
+        {
+         "slot": 10,
+         "code": "shrimp",
+         "quantity": 6
+        },
+        {
+         "slot": 11,
+         "code": "raw_beef",
+         "quantity": 10
+        },
+        {
+         "slot": 12,
+         "code": "cowhide",
+         "quantity": 7
+        },
+        {
+         "slot": 13,
+         "code": "shell",
+         "quantity": 1
+        },
+        {
+         "slot": 14,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 15,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 16,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 17,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 18,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 19,
+         "code": "",
+         "quantity": 0
+        },
+        {
+         "slot": 20,
+         "code": "",
+         "quantity": 0
+        }
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "step": "after D",
+   "R2D2": {
+    "level": 32,
+    "hp": 170,
+    "max_hp": 785,
+    "xp": 12150,
+    "x": 3,
+    "y": -1,
+    "cooldown_expiration": "2026-10-11T02:59:50.414000+00:00"
+   },
+   "Lor": {
+    "level": 32,
+    "hp": 1,
+    "max_hp": 705,
+    "xp": 21086,
+    "x": 3,
+    "y": -1,
+    "cooldown_expiration": "2026-10-11T02:59:50.414000+00:00"
+   }
+  }
+ ]
+}
