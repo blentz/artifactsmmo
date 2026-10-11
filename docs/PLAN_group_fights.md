@@ -451,3 +451,22 @@ read HAL's card from that one hold — on the tile, out of cooldown — fired,
 and met HAL gathering again. Fixed: `should_replan` trigger 7 — a party
 lease calling this member re-decides unless the cached plan IS that lease's
 hold (`JoinParty(<boss>)`); a call is never a mere staleness refresh.
+
+## Increment 6 — why no party formed (2026-10-11 ~21:50Z)
+
+C3P0's root `ObtainItem(slime_shield)` (king_slimeball for the party fight)
+was never served after its turn 41: `GrindCharacterXP(vampire)` and its food
+`GatherMaterials(cooked_trout, carry)` swapped the commitment every 1-3
+cycles, and the intention budget counted cycles per COMMITMENT, resetting on
+every switch — neither ever filled `BUDGET_CYCLES`, neither recorded a turn,
+and rotation kept them ahead of king_slimeball (most recently served) for
+hours. Not a party bug: a rotation starvation any alternating pair causes.
+Fixed: the budget is summed per goal across commitments (`_budget_spent`).
+Also seen on the way: C3P0 lost 8 straight `Fight(rat)` (19:43-19:58,
+`SupplyBank(cooked_rat_meat)` / slime_shield chain, predicted loss, no
+utility potion worn) — the drop gate's potion-loadout arm admitted a fight
+fought without its potions. Residual, not fixed here.
+A third fix on the way (the local gate's liveness alarm, HAL 21:35Z): 12 Wait
+cycles with every plan declined `bag_overflow` at 61/164 items, 17/20 slots,
+far below DEPOSIT_FULL. An overflowing plan now banks the bag's surplus in
+front of itself when that makes it fit (`craft_plan_gen._bank_first`).

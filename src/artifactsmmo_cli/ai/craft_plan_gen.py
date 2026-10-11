@@ -37,6 +37,7 @@ from datetime import UTC, datetime
 from artifactsmmo_cli.ai.actions.base import Action, serves_region
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -126,20 +127,46 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     (Phase 2d-F).
 
     A plan whose bag would overflow at some leg (`bag_peak.plan_bag_peak`,
-    total quantity or occupied slots) declines as `bag_overflow:...`: the walk
-    counts quantities, not the bag, and the plan is committed, so a leg that
-    cannot fit would stall it mid-cycle. The deposit guard or the search then
-    serves the cycle."""
-    plan = _dispatch(goal, state, game_data, actions, ctx, declined, subtasks, policy)
-    if plan is None:
+    total quantity or occupied slots) first tries banking the bag's surplus
+    ahead of it (the pool's `DepositAllAction`): the plan is kept with the
+    deposit in front when that makes it fit. Otherwise it declines as
+    `bag_overflow:...`: the walk counts quantities, not the bag, and the plan is
+    committed, so a leg that cannot fit would stall it mid-cycle.
+
+    The deposit is the plan's, not the deposit guard's: that guard fires on
+    pressure (`DEPOSIT_FULL_FRACTION`), and a bag far below it can still be too
+    full for the plan ahead. Live HAL 2026-10-11 21:35Z: 61/164 items in 17/20
+    slots, `GatherMaterials(cooked_shrimp, 120, carry)` declined
+    `bag_overflow:qty=181/164`, no guard fired, and the bot waited 12 cycles."""
+    walked = _dispatch(goal, state, game_data, actions, ctx, declined, subtasks, policy)
+    if walked is None:
         return None
-    plan = _bridge_regions(plan, state, game_data, actions, declined)
+    plan = _bridge_regions(walked, state, game_data, actions, declined)
     if plan is None:
         return None
     peak_qty, peak_slots = plan_bag_peak(plan, state, game_data)
     if peak_qty > state.inventory_max or peak_slots > state.inventory_slots_max:
+        banked = _bank_first(walked, state, game_data, actions)
+        if banked is not None:
+            return banked
         return _decline(declined, f"bag_overflow:qty={peak_qty}/{state.inventory_max}"
                                   f":slots={peak_slots}/{state.inventory_slots_max}")
+    return plan
+
+
+def _bank_first(walked: list[Action], state: WorldState, game_data: GameData,
+                actions: list[Action]) -> list[Action] | None:
+    """`walked` with the pool's bank deposit in front, region-bridged, when the
+    deposit applies now and the plan then fits the bag; None otherwise."""
+    deposit = next((a for a in actions if isinstance(a, DepositAllAction)), None)
+    if deposit is None or not deposit.is_applicable(state, game_data):
+        return None
+    plan = _bridge_regions([deposit, *walked], state, game_data, actions, None)
+    if plan is None:
+        return None
+    peak_qty, peak_slots = plan_bag_peak(plan, state, game_data)
+    if peak_qty > state.inventory_max or peak_slots > state.inventory_slots_max:
+        return None
     return plan
 
 

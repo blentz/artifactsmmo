@@ -88,6 +88,28 @@ def test_guard_cycles_under_the_commitment_spend_its_turn():
     assert player._turns == {repr(goal): 1}
 
 
+def test_alternating_commitments_still_spend_their_turns():
+    """Live C3P0 2026-10-11: `GrindCharacterXP(vampire)` and its food
+    `GatherMaterials(cooked_trout)` swapped the commitment every 1-3 cycles;
+    a budget reset on every switch never filled, neither recorded a turn, and
+    `GatherMaterials(king_slimeball)` (turn 41) waited behind them for hours.
+    The budget is summed per goal across commitments."""
+    grind, food = GrindCharacterXPGoal("vampire"), RestoreHPGoal()
+    player = _player()
+    state = make_state()
+    for _ in range(BUDGET_CYCLES // 2 - 1):
+        for goal in (grind, food):
+            player._arbiter._committed_repr = repr(goal)
+            player._track_intention(goal, state, state, ok=True)
+            player._track_intention(goal, state, state, ok=True)
+    assert player._turns == {}
+    player._arbiter._committed_repr = repr(grind)
+    player._track_intention(grind, state, state, ok=True)
+    player._track_intention(grind, state, state, ok=True)
+    assert repr(grind) in player._turns and repr(food) not in player._turns
+    assert repr(grind) not in player._budget_spent  # a recorded turn starts afresh
+
+
 def test_progress_does_not_reset_the_budget():
     """The budget is fairness, not liveness: a grind that progresses every
     cycle still yields after its turn."""

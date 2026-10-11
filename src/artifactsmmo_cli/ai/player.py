@@ -314,7 +314,14 @@ class GamePlayer:
         # The intention's committed cycles since its progress last moved, and
         # the commitment they belong to (Phase 4-2a, `_track_intention`).
         self._intention_stall = 0
-        self._intention_cycles = 0
+        # Committed cycles spent per goal since its last recorded turn, kept
+        # ACROSS commitments: a goal that alternates with its own upkeep (a
+        # grind and its food) is served in short commitments, and a counter
+        # reset on every switch never reached the budget — live C3P0
+        # 2026-10-11, `GrindCharacterXP(vampire)` and
+        # `GatherMaterials(cooked_trout)` swapped every 1-3 cycles for hours,
+        # recorded no turn, and starved `GatherMaterials(king_slimeball)`.
+        self._budget_spent: dict[str, int] = {}
         self._intention_counted: str | None = None
         # (committed repr, the monster its plan fights next), kept across
         # interrupts that replace the plan cache (`_committed_fight_monster`).
@@ -2362,18 +2369,21 @@ class GamePlayer:
 
         * a stall — `STALL_CYCLES` cycles of the committed goal without progress
           (`intention_progress.progressed`; progress resets this count);
-        * a spent budget — `BUDGET_CYCLES` cycles under the commitment, progress
-          or not (fairness: the committed goal's turn is recorded, `_turns`, and
-          goal choice serves every other plannable goal before it runs again).
+        * a spent budget — `BUDGET_CYCLES` cycles committed to the goal since
+          its last recorded turn, progress or not, summed ACROSS commitments
+          (`_budget_spent`: a goal served in short alternating commitments
+          spends its turn like one served in a single long one); then its turn
+          is recorded (`_turns`) and goal choice serves every other plannable
+          goal before it runs again.
 
-        A new commitment starts its own counts."""
+        A new commitment starts its own stall count."""
         committed = self._arbiter._committed_repr
         if committed != self._intention_counted:
             self._intention_counted = committed
-            self._intention_stall = self._intention_cycles = 0
+            self._intention_stall = 0
         if committed is None or goal is None:
             return
-        self._intention_cycles += 1
+        spent = self._budget_spent[committed] = self._budget_spent.get(committed, 0) + 1
         own = repr(goal) == committed
         if own and progressed(progress_measure(goal, before), progress_measure(goal, after), ok):
             self._intention_stall = 0
@@ -2388,17 +2398,18 @@ class GamePlayer:
         if self._intention_stall >= STALL_CYCLES:
             self._arbiter.abandon_intention(Mechanism.INTENTION_STALLED,
                                             f"stalled:{self._intention_stall}")
-        elif self._intention_cycles >= BUDGET_CYCLES:
+        elif spent >= BUDGET_CYCLES:
+            del self._budget_spent[committed]
             self._turns = record_turn(self._turns, committed)
             if self.history is not None:
                 self.history.save_turns(self._turns)
             self._arbiter.abandon_intention(Mechanism.INTENTION_BUDGET,
-                                            f"budget:{self._intention_cycles}")
+                                            f"budget:{spent}")
         else:
             return
         self._drop_intention_plan(committed)
         self._intention_counted = None
-        self._intention_stall = self._intention_cycles = 0
+        self._intention_stall = 0
 
     def _drop_intention_plan(self, ended: str) -> None:
         """The plan belongs to the intention (Phase 4-3a): when the intention

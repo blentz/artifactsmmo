@@ -203,8 +203,17 @@ WITNESS_BASELINE: dict[str, int] = {
     # live state re-planned on the fix (17:00Z): `GatherMaterials(
     # cooked_rat_meat, {cooked_rat_meat:20}, carry)` -> `[Withdraw(x12)]`. If a
     # restart disagrees, this number is wrong and the alarm is right.
-    "WaitGoal": 1970,
-    "WaitAction": 1970,
+    # 2026-10-11, +12 (1970 -> 1982). HAL alone, 21:35:43-21:36:12 UTC on the
+    # 9585e542/d079a1ca fleet. A recycle left the bag at 61/164 items in 17/20
+    # slots: every plan declined `bag_overflow` (the shrimp carry
+    # `qty=181/164:slots=18/20`) while the bag sat far below DEPOSIT_FULL
+    # (0.90), so no relief guard fired and `wait_fallback` ran until 21:37:30.
+    # `decompose`'s docstring assumed "the deposit guard or the search then
+    # serves the cycle"; neither did. FIXED: an overflowing plan banks the
+    # bag's surplus in front of itself when that makes it fit (`_bank_first`;
+    # `test_a_plan_that_fits_after_banking_banks_first`).
+    "WaitGoal": 1982,
+    "WaitAction": 1982,
 }
 
 #: form "unreachable: ..." is a DEFECT that is being tracked, not an excuse —

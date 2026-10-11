@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai import craft_plan_gen
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
@@ -1194,6 +1195,34 @@ class TestRecycleAsASource:
         assert declined == ["bag_overflow:qty=31/20:slots=2/20"]
         roomy = dataclasses.replace(state, inventory_max=100)
         assert decompose(goal, roomy, gd, _bar_actions(), _ctx()) is not None
+
+    def test_a_plan_that_fits_after_banking_banks_first(self):
+        """Live HAL 2026-10-11: 61/164 items, a 120-unit carry declined
+        `bag_overflow`, no guard fired (far below DEPOSIT_FULL) and the bot
+        waited. Thirty ore do not fit beside 25 feathers in a 40-unit bag, but
+        do once the feathers are banked: the plan keeps the deposit in front."""
+        gd = _gd_recyclable()
+        gd._item_stats["feather"] = ItemStats(code="feather", level=1, type_="resource")
+        state = make_state(inventory={"feather": 25}, bank_items={},
+                           skills={"mining": 5, "weaponcrafting": 5}, inventory_max=40)
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
+        deposit = DepositAllAction(bank_location=(4, 0), accessible=True, game_data=gd)
+        declined: list[str] = []
+        assert decompose(goal, state, gd, _bar_actions(), _ctx(), declined) is None
+        assert declined[0].startswith("bag_overflow:qty=55/40")
+        plan = decompose(goal, state, gd, _bar_actions(deposit), _ctx())
+        assert plan is not None and isinstance(plan[0], DepositAllAction)
+        # banking cannot make room for what the bag can never hold
+        small = dataclasses.replace(state, inventory_max=28)  # 30 ore: no room even banked
+        assert decompose(goal, small, gd, _bar_actions(deposit), _ctx()) is None
+        # nothing to bank, or a bank the plan cannot reach: still a decline
+        empty = dataclasses.replace(state, inventory={}, inventory_max=20)
+        assert decompose(goal, empty, gd, _bar_actions(deposit), _ctx()) is None
+        locked = DepositAllAction(bank_location=(4, 0), accessible=False, game_data=gd)
+        assert decompose(goal, state, gd, _bar_actions(locked), _ctx()) is None
+        unreachable = DepositAllAction(bank_location=(4, 0), accessible=True, game_data=gd)
+        unreachable.travel_region = "nowhere"  # a bank in a region no crossing reaches
+        assert decompose(goal, state, gd, _bar_actions(unreachable), _ctx()) is None
 
     def test_an_unlicensed_source_is_never_recycled(self):
         """The keep authority protects the last copper_dagger, so production's

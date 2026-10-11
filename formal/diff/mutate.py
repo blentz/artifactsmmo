@@ -3451,8 +3451,10 @@ BAG_PEAK_MUTATIONS = [
 # (test_a_plan_the_bag_cannot_hold_declines).
 BAG_OVERFLOW_DECLINE_MUTATIONS = [
     ("craft_plan_gen: a plan may overflow the bag",
-     "    if peak_qty > state.inventory_max or peak_slots > state.inventory_slots_max:",
-     "    if False:"),
+     "    if peak_qty > state.inventory_max or peak_slots > state.inventory_slots_max:\n"
+     "        banked = _bank_first(",
+     "    if False:\n"
+     "        banked = _bank_first("),
 ]
 # Phase 2e: a decline of a served goal is final. Killed by
 # tests/test_ai/test_decision_events.py.
@@ -4959,16 +4961,18 @@ INTENTION_BUDGET_MUTATIONS = [
     # never spends it, so a root that progresses slowly holds the fleet forever.
     ("budget: progress resets the cycle budget as well as the stall count",
      "            self._intention_stall = 0\n            self._cycles_without_progress = 0\n        elif own:\n",
-     "            self._intention_stall = self._intention_cycles = 0\n"
+     "            self._intention_stall = 0\n            self._budget_spent[committed] = 0\n"
      "            self._cycles_without_progress = 0\n        elif own:\n"),
     # A guard's cycle spends no turn: an upkeep-heavy intention holds the turn
     # (Lor's death_knight grind, ~6h a turn, 2026-10-07; USER: count them).
     ("budget: a guard cycle under the commitment does not spend its turn",
-     "        self._intention_cycles += 1\n        own = repr(goal) == committed\n",
-     "        own = repr(goal) == committed\n        self._intention_cycles += own\n"),
+     "        spent = self._budget_spent[committed] = self._budget_spent.get(committed, 0) + 1\n"
+     "        own = repr(goal) == committed\n",
+     "        own = repr(goal) == committed\n"
+     "        spent = self._budget_spent[committed] = self._budget_spent.get(committed, 0) + own\n"),
     # The budget is never spent: no intention ever yields, the ring2 shape.
     ("budget: the cycle budget is never spent",
-     "        elif self._intention_cycles >= BUDGET_CYCLES:\n",
+     "        elif spent >= BUDGET_CYCLES:\n",
      "        elif False:\n"),
     # The budget ends the intention but records no turn: the spent goal is
     # re-chosen on the very next cycle (R2D2/HAL at the wall, 2026-10-05).
@@ -5830,6 +5834,37 @@ PARTY_PLAYER_MUTATIONS = [
      "                if party_fight and str(e).startswith(\"fight_lost\"):\n",
      "                if party_fight:\n"),
 ]
+# The intention budget summed per goal across commitments (live C3P0
+# 2026-10-11: a grind and its food alternated commitments, a per-commitment
+# counter never filled, and king_slimeball starved). OWN run_group:
+# unit-killed by tests/test_ai/test_intention_budget.py.
+INTENTION_BUDGET_PER_GOAL_MUTATIONS = [
+    ("intention budget: a commitment switch resets the goal's spend",
+     "            self._intention_counted = committed\n            self._intention_stall = 0\n",
+     "            self._intention_counted = committed\n            self._intention_stall = 0\n"
+     "            self._budget_spent.pop(committed or \"\", None)\n"),
+    ("intention budget: a recorded turn keeps its spend",
+     "            del self._budget_spent[committed]\n",
+     "            pass\n"),
+    ("intention budget: one cycle short",
+     "        elif spent >= BUDGET_CYCLES:\n",
+     "        elif spent > BUDGET_CYCLES:\n"),
+]
+# A plan that overflows the bag banks its surplus first (live HAL 2026-10-11:
+# 12 Wait cycles with every plan declined bag_overflow far below DEPOSIT_FULL).
+# OWN run_group: unit-killed by tests/test_ai/test_craft_plan_gen.py.
+BANK_FIRST_MUTATIONS = [
+    ("decompose: an overflowing plan never banks first",
+     "        banked = _bank_first(walked, state, game_data, actions)\n",
+     "        banked = None\n"),
+    ("decompose: the banked plan is not re-checked against the bag",
+     "    if peak_qty > state.inventory_max or peak_slots > state.inventory_slots_max:\n"
+     "        return None\n    return plan\n",
+     "    return plan\n"),
+    ("decompose: a deposit with nothing to bank is put in front",
+     "    if deposit is None or not deposit.is_applicable(state, game_data):\n",
+     "    if deposit is None:\n"),
+]
 # The party fight's execution (docs/PLAN_group_fights.md increment 5). OWN
 # run_groups: unit-killed by tests/test_ai/test_actions_execute.py,
 # tests/test_ai/test_party_win.py and tests/test_ai/test_player_learning.py.
@@ -6092,8 +6127,8 @@ BEST_GEAR_MUTATIONS = [
 ]
 REGION_BRIDGE_MUTATIONS = [
     ("region bridge: decompose emits legs in another region unbridged",
-     "    plan = _bridge_regions(plan, state, game_data, actions, declined)\n",
-     ""),
+     "    plan = _bridge_regions(walked, state, game_data, actions, declined)\n",
+     "    plan = walked\n"),
     ("region bridge: a crossing need not land in the leg's region",
      "                if region == target:\n",
      "                if True:\n"),
@@ -10596,6 +10631,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_party_win.py", survivors)
     run_group(FACTORY_SRC, PARTY_FACTORY_MUTATIONS,
               "tests/test_ai/test_party_win.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, BANK_FIRST_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(PLAYER_SRC, INTENTION_BUDGET_PER_GOAL_MUTATIONS,
+              "tests/test_ai/test_intention_budget.py", survivors)
     run_group(PLAYER_SRC, PARTY_RECORD_MUTATIONS,
               "tests/test_ai/test_player_learning.py", survivors)
     run_group(BAND_TARGET_PARTY_SRC, BAND_PARTY_MUTATIONS,
