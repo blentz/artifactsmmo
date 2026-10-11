@@ -5601,8 +5601,9 @@ FLEET_ORDER_PLAY_MUTATIONS = [
 REGION_SPLIT_MUTATIONS = [
     ("factory: a legacy fight keeps the default region",
      "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),\n"
-     "                                       travel_region=region))\n",
-     "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles)))\n"),
+     "                                       travel_region=region, participants=joiners))\n",
+     "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),\n"
+     "                                       participants=joiners))\n"),
     ("factory: the layered path emits a second copy",
      "            if region == \"overworld\" or (code, region) in emitted:\n",
      "            if region == \"overworld\":\n"),
@@ -5722,6 +5723,39 @@ BAND_PARTY_MUTATIONS = [
      "    if not state.party:\n        return []\n",
      "    if False:\n        return []\n"),
 ]
+# The party fight's execution (docs/PLAN_group_fights.md increment 5). OWN
+# run_groups: unit-killed by tests/test_ai/test_actions_execute.py,
+# tests/test_ai/test_party_win.py and tests/test_ai/test_player_learning.py.
+PARTY_FIGHT_EXECUTE_MUTATIONS = [
+    ("party fight: the participants are not sent",
+     "        body = (FightRequestSchema(participants=list(self.participants)) if self.participants\n",
+     "        body = (FightRequestSchema() if self.participants\n"),
+    ("party fight: the first character is read as this one",
+     "        mine = [c for c in result.data.characters if c.name == state.character]\n",
+     "        mine = list(result.data.characters)\n"),
+    ("party fight: the repr hides the party",
+     "        if self.participants:\n            return f\"Fight({self.monster_code}+",
+     "        if False:\n            return f\"Fight({self.monster_code}+"),
+]
+PARTY_PARTICIPANTS_MUTATIONS = [
+    ("party participants: a boss won alone takes the party",
+     "    if is_winnable(rested, game_data, monster) or wins_with_a_loadout(rested, game_data, monster):\n"
+     "        return ()\n",
+     "    if False:\n        return ()\n"),
+    ("party participants: every member joins",
+     "    return () if party is None else tuple(state.party[j].character for j in party[1])\n",
+     "    return () if party is None else tuple(m.character for m in state.party)\n"),
+]
+PARTY_FACTORY_MUTATIONS = [
+    ("factory: the boss fight goes alone",
+     "                                       travel_region=region, participants=joiners))\n",
+     "                                       travel_region=region))\n"),
+]
+PARTY_RECORD_MUTATIONS = [
+    ("player: a party fight feeds the solo veto",
+     "                party_combat_key(action.monster_code), loadout, True, outcome == \"ok\", state.level)\n",
+     "                combat_key(action.monster_code), loadout, True, outcome == \"ok\", state.level)\n"),
+]
 # The party arm of the drop gate (docs/PLAN_group_fights.md increment 2). OWN
 # run_groups: unit-killed by tests/test_ai/test_party_win.py and the census's
 # tests/test_audit/test_craft_conditions.py.
@@ -5732,8 +5766,9 @@ DROP_PARTY_GATE_MUTATIONS = [
 ]
 PARTY_WIN_MUTATIONS = [
     ("party win: any monster takes a party",
-     "    if not state.party or game_data.monsters.types.get(monster) not in PARTY_MONSTER_TYPES:\n",
-     "    if not state.party:\n"),
+     "    if not state.party or game_data.monsters.types.get(monster) not in PARTY_MONSTER_TYPES:\n"
+     "        return None\n",
+     "    if not state.party:\n        return None\n"),
     ("party win: one joiner at most",
      "MAX_JOINERS = 2\n",
      "MAX_JOINERS = 1\n"),
@@ -5840,8 +5875,8 @@ FIGHT_NEED_MUTATIONS = [
      "                    if party is not None else LOSES))\n",
      "                    if party is not None else BARE))\n"),
     ("conditions: a party is named by its joiners, not its size",
-     "        out.append((monster, f\"{PARTY}{party[1] + 1}:",
-     "        out.append((monster, f\"{PARTY}{party[1]}:"),
+     "        out.append((monster, f\"{PARTY}{len(party[1]) + 1}:",
+     "        out.append((monster, f\"{PARTY}{len(party[1])}:"),
 ]
 # The fight step carries the potions the CRAFT_POTIONS ladder cannot brew (2026-10-10).
 POTION_PREP_MUTATIONS = [
@@ -9479,7 +9514,7 @@ PLAN_EXISTS_BUILD_ACTIONS_MUTATIONS = [
     # BANK_UNLOCK] fires (the only fight-rooted in-scope means).
     ("plan_exists: drop FightAction from _build_actions",
      "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),\n"
-     "                                       travel_region=region))\n",
+     "                                       travel_region=region, participants=joiners))\n",
      "            pass  # mutation: dropped FightAction append\n"),
     # Disable the items-task TaskTradeAction insertion block (BOTH the
     # quantity=k primary and the quantity=1 fallback). PURSUE_TASK then has
@@ -10424,6 +10459,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_party_win.py", survivors)
     run_group(PARTY_LOOP_SRC, PARTY_LOOP_MUTATIONS,
               "tests/test_ai/test_party_loop.py", survivors)
+    run_group(APPLY_FIGHT_SRC, PARTY_FIGHT_EXECUTE_MUTATIONS,
+              "tests/test_ai/test_actions_execute.py", survivors)
+    run_group(PARTY_WIN_SRC, PARTY_PARTICIPANTS_MUTATIONS,
+              "tests/test_ai/test_party_win.py", survivors)
+    run_group(FACTORY_SRC, PARTY_FACTORY_MUTATIONS,
+              "tests/test_ai/test_party_win.py", survivors)
+    run_group(PLAYER_SRC, PARTY_RECORD_MUTATIONS,
+              "tests/test_ai/test_player_learning.py", survivors)
     run_group(BAND_TARGET_PARTY_SRC, BAND_PARTY_MUTATIONS,
               "tests/test_ai/test_band_target.py", survivors)
     run_group(CRAFT_CONDITIONS_SRC, CONDITIONS_PARTY_MUTATIONS,

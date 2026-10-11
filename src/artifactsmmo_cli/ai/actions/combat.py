@@ -85,6 +85,13 @@ class FightAction(Action):
     # CycleSnapshot.action string are unchanged. Read by GamePlayer via an
     # isinstance gate, mirroring _last_grind_expansion / LevelSkill.
     last_fight: FightRecord | None = field(default=None, compare=False, repr=False)
+    # The characters of the account this fight takes along (`participants` on
+    # the fight request; at most two, a boss or raid_boss only; all on the
+    # tile, none in cooldown: HTTP 486 / 499). Set by the action factory for
+    # a boss only a party wins (`party_win.party_participants`,
+    # docs/PLAN_group_fights.md increment 5). Part of the action's identity
+    # and repr: a party fight's learned cost and record are its own.
+    participants: tuple[str, ...] = ()
 
     _MIN_FREE_SLOTS = 1  # combat can drop loot; need at least 1 free capacity
 
@@ -230,15 +237,22 @@ class FightAction(Action):
         if (state.x, state.y) != dest:
             state = MoveAction(x=dest[0], y=dest[1]).execute(state, client)
         self.last_fight = None
-        result = action_fight(client=client, name=state.character, body=FightRequestSchema())
+        body = (FightRequestSchema(participants=list(self.participants)) if self.participants
+                else FightRequestSchema())
+        result = action_fight(client=client, name=state.character, body=body)
         result = Action._raise_for_error(result, f"Fight {self.monster_code}")
         # Capture BEFORE the loss raise below: GamePlayer catches that RuntimeError,
         # records outcome=error:fight_lost, and still reaches _notify_observer with
         # this same action object — so losses reach the TUI with no extra machinery.
         self.last_fight = FightRecord.from_fight_response(
             result.data, character=state.character, hp_before=state.hp)
+        # A party fight returns every participant's character; this one's is
+        # read by name.
+        mine = [c for c in result.data.characters if c.name == state.character]
+        if not mine:
+            raise RuntimeError(f"fight response has no character {state.character!r}")
         new_state = WorldState.from_character_schema(
-            result.data.characters[0],
+            mine[0],
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
@@ -253,4 +267,6 @@ class FightAction(Action):
         return new_state
 
     def __repr__(self) -> str:
+        if self.participants:
+            return f"Fight({self.monster_code}+{'+'.join(self.participants)})"
         return f"Fight({self.monster_code})"

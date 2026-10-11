@@ -116,6 +116,7 @@ from artifactsmmo_cli.ai.loadout_profiles import (
     active_profile_gear,
     combat_key,
     gather_key,
+    party_combat_key,
 )
 from artifactsmmo_cli.ai.loop_rate import food_menu
 from artifactsmmo_cli.ai.null_tracer import NullTracer
@@ -4037,6 +4038,12 @@ class GamePlayer:
         if outcome not in ("ok", "error:fight_lost"):
             return
         loadout = {slot: code for slot, code in state.equipment.items() if code is not None}
+        if action.participants:
+            # A party fight is its own record (the solo loss veto never reads
+            # it); the factory takes a party only where the party model wins.
+            self.history.record_combat_outcome(
+                party_combat_key(action.monster_code), loadout, True, outcome == "ok", state.level)
+            return
         predicted = predict_win(state, self.game_data, action.monster_code)
         self.history.record_combat_outcome(
             combat_key(action.monster_code), loadout, predicted, outcome == "ok", state.level)

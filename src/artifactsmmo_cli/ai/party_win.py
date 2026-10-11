@@ -15,14 +15,15 @@ The verdict is memoized per catalogue (`CatalogueScope`) on exactly what the
 walk reads: the monster, and for every member its stockable potions and its
 fight fields (`loadout_win.fight_key`)."""
 
+from dataclasses import replace
 from itertools import combinations
 
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
-from artifactsmmo_cli.ai.combat import party_boss, party_member
+from artifactsmmo_cli.ai.combat import is_winnable, party_boss, party_member
 from artifactsmmo_cli.ai.fight_walk import loadouts, wear
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.group_fight_core import PartyMember, group_outcome
-from artifactsmmo_cli.ai.loadout_win import fight_key, stockable_potions
+from artifactsmmo_cli.ai.loadout_win import fight_key, stockable_potions, wins_with_a_loadout
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -32,7 +33,7 @@ PARTY_MONSTER_TYPES = frozenset({"boss", "raid_boss"})
 MAX_JOINERS = 2
 """Characters that may join the leader's fight (`participants`, max 2)."""
 
-_WINS: "CatalogueScope[tuple[object, ...], tuple[tuple[str, ...], int] | None]" = CatalogueScope(4096)
+_WINS: "CatalogueScope[tuple[object, ...], tuple[tuple[str, ...], tuple[int, ...]] | None]" = CatalogueScope(4096)
 
 
 def member_card(state: WorldState, game_data: GameData, monster: str, codes: tuple[str, ...],
@@ -48,10 +49,11 @@ def member_card(state: WorldState, game_data: GameData, monster: str, codes: tup
 
 
 def winning_party(state: WorldState, game_data: GameData,
-                  monster: str) -> tuple[tuple[str, ...], int] | None:
-    """The first winning party: its potion loadout (`loadouts` order) and how
-    many of `state.party` join it (one before two). None when none wins, the
-    monster is no boss, or `party` is empty."""
+                  monster: str) -> tuple[tuple[str, ...], tuple[int, ...]] | None:
+    """The first winning party: its potion loadout (`loadouts` order) and its
+    joiners, as indices into `state.party` (one joiner before two, then in
+    `combinations` order). None when none wins, the monster is no boss, or
+    `party` is empty."""
     if not state.party or game_data.monsters.types.get(monster) not in PARTY_MONSTER_TYPES:
         return None
     members = (state, *state.party)
@@ -60,23 +62,38 @@ def winning_party(state: WorldState, game_data: GameData,
                                                                                   strict=True)))
     memo = _WINS.cache_for(game_data)
     if key not in memo:
-        boss = party_boss(game_data, monster)
-        found: tuple[tuple[str, ...], int] | None = None
-        for codes in loadouts(stockable[0], game_data):
-            cards = [member_card(m, game_data, monster, codes, s)
-                     for m, s in zip(members, stockable, strict=True)]
-            for size in range(1, min(MAX_JOINERS, len(state.party)) + 1):
-                if any(group_outcome(boss, [cards[0], *joined]).win
-                       for joined in combinations(cards[1:], size)):
-                    found = (codes, size)
-                    break
-            if found is not None:
-                break
-        _WINS.remember(memo, key, found)
+        _WINS.remember(memo, key, _first_win(state, game_data, monster, stockable))
     return memo[key]
+
+
+def _first_win(state: WorldState, game_data: GameData, monster: str,
+               stockable: list[list[str]]) -> tuple[tuple[str, ...], tuple[int, ...]] | None:
+    boss = party_boss(game_data, monster)
+    for codes in loadouts(stockable[0], game_data):
+        cards = [member_card(m, game_data, monster, codes, s)
+                 for m, s in zip((state, *state.party), stockable, strict=True)]
+        for size in range(1, min(MAX_JOINERS, len(state.party)) + 1):
+            for joined in combinations(range(len(state.party)), size):
+                if group_outcome(boss, [cards[0], *(cards[j + 1] for j in joined)]).win:
+                    return codes, joined
+    return None
 
 
 def wins_as_a_party(state: WorldState, game_data: GameData, monster: str) -> bool:
     """Some party of this character and one or two of `state.party`, in some
     stockable potion loadout, wins the boss fight."""
     return winning_party(state, game_data, monster) is not None
+
+
+def party_participants(state: WorldState, game_data: GameData, monster: str) -> tuple[str, ...]:
+    """The characters a fight against `monster` takes along: the first winning
+    party's joiners by name when only a party wins it (the solo arms of the
+    drop gate lose at full HP: bare stats and every stockable potion loadout),
+    else none — a fight one character wins is fought alone."""
+    if not state.party or game_data.monsters.types.get(monster) not in PARTY_MONSTER_TYPES:
+        return ()
+    rested = replace(state, hp=state.max_hp)
+    if is_winnable(rested, game_data, monster) or wins_with_a_loadout(rested, game_data, monster):
+        return ()
+    party = winning_party(rested, game_data, monster)
+    return () if party is None else tuple(state.party[j].character for j in party[1])

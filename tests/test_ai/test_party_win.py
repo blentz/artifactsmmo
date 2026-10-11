@@ -5,9 +5,11 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
+from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
-from artifactsmmo_cli.ai.party_win import winning_party, wins_as_a_party
+from artifactsmmo_cli.ai.party_win import party_participants, winning_party, wins_as_a_party
 from artifactsmmo_cli.audit.craft_completeness import CraftCell, census_state
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
@@ -36,7 +38,7 @@ def test_three_beat_duskworm_where_one_cannot() -> None:
     hero = _hero(gd)
     party = replace(hero, party=(hero, hero))
     assert not drop_fight_winnable(hero, gd, "duskworm")
-    assert winning_party(party, gd, "duskworm") == (("water_res_potion", "enhanced_health_potion"), 2)
+    assert winning_party(party, gd, "duskworm") == (("water_res_potion", "enhanced_health_potion"), (0, 1))
     assert drop_fight_winnable(party, gd, "duskworm")
     # one joiner is not enough
     assert not wins_as_a_party(replace(hero, party=(hero,)), gd, "duskworm")
@@ -84,3 +86,29 @@ def test_every_member_is_judged_rested() -> None:
     hero = _hero(gd)
     hurt = replace(hero, hp=1)
     assert winning_party(replace(hero, party=(hurt, hurt)), gd, "duskworm") is not None
+
+
+def test_the_participants_are_named_only_where_the_party_is_needed() -> None:
+    """duskworm needs two joiners, named; king_slime is won alone, so it is
+    fought alone; no party, no participants."""
+    gd = _gd()
+    hero = _hero(gd)
+    party = replace(hero, party=(replace(hero, character="R2D2"), replace(hero, character="Lor")))
+    assert party_participants(party, gd, "duskworm") == ("R2D2", "Lor")
+    # three ready: the server takes two, the first winning pair
+    crowd = replace(party, party=(*party.party, replace(hero, character="C3P0")))
+    assert party_participants(crowd, gd, "duskworm") == ("R2D2", "Lor")
+    assert party_participants(party, gd, "king_slime") == ()
+    assert party_participants(hero, gd, "duskworm") == ()
+    assert party_participants(party, gd, "cultist_emperor") == ()
+
+
+def test_the_factory_takes_the_party_to_the_boss() -> None:
+    gd = _gd()
+    hero = _hero(gd)
+    party = replace(hero, party=(replace(hero, character="R2D2"), replace(hero, character="Lor")))
+    fights = {a.monster_code: a for a in build_actions(gd, party, None, bank_accessible=True,
+                                                         task_exchange_min_coins=0)
+              if isinstance(a, FightAction)}
+    assert fights["duskworm"].participants == ("R2D2", "Lor")
+    assert fights["king_slime"].participants == ()

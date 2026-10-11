@@ -119,7 +119,7 @@ def fight_needs(plan: list[Action], state: WorldState,
             out.append((monster, "+".join(loadout)))
             continue
         party = winning_party(rested, game_data, monster)
-        out.append((monster, f"{PARTY}{party[1] + 1}:{'+'.join(party[0]) or BARE}"
+        out.append((monster, f"{PARTY}{len(party[1]) + 1}:{'+'.join(party[0]) or BARE}"
                     if party is not None else LOSES))
     return tuple(out)
 

@@ -33,6 +33,13 @@ def combat_key(monster_code: str) -> str:
     return f"combat:{monster_code}"
 
 
+def party_combat_key(monster_code: str) -> str:
+    """The task_key of a party fight against `monster_code`
+    (docs/PLAN_group_fights.md increment 5): apart from `combat_key`, so the
+    solo learned-loss veto never reads a fight the party won or lost."""
+    return f"combat-party:{monster_code}"
+
+
 def gather_key(skill: str) -> str:
     """Return the canonical task_key string for a gather task."""
     return f"gather:{skill}"

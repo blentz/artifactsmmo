@@ -35,6 +35,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
+from artifactsmmo_cli.ai.party_win import party_participants
 from artifactsmmo_cli.ai.player_helpers import delete_cost
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -96,9 +97,11 @@ def build_actions(
     # `emitted` keeps the layered (P5b) block below from emitting a second copy.
     emitted: set[tuple[str, str]] = set()
     for monster_code, locs in game_data.all_monster_locations.items():
+        # a boss only a party wins is fought with the party (increment 5)
+        joiners = party_participants(state, game_data, monster_code) if state is not None else ()
         for region, tiles in _by_region(locs, game_data).items():
             actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),
-                                       travel_region=region))
+                                       travel_region=region, participants=joiners))
             emitted.add((monster_code, region))
         actions.append(OptimizeLoadoutAction(target_monster_code=monster_code, game_data=game_data))
 

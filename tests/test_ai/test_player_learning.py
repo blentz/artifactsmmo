@@ -370,6 +370,23 @@ def test_records_combat_outcome_on_loss(tmp_path):
     store.close()
 
 
+def test_a_party_fight_is_recorded_apart_from_the_solo_veto(tmp_path):
+    """A party fight's outcome goes under `combat-party:<monster>`, never the
+    solo `combat:<monster>` key the learned-loss veto reads."""
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
+    player = GamePlayer(character="Robby", history=store)
+    player.game_data = _make_chicken_game_data()
+    action = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}),
+                         participants=("Lor",))
+
+    player._record_combat_outcome(action, make_state(), "error:fight_lost")
+
+    rows = store.combat_loadout_outcomes()
+    assert [(r.task_key, r.predicted_win, r.actual_win) for r in rows] == [
+        ("combat-party:chicken", True, False)]
+    store.close()
+
+
 def test_no_combat_outcome_on_cooldown_or_nonfight(tmp_path):
     """_record_combat_outcome is a no-op for error:cooldown outcomes or non-FightAction."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")

@@ -294,3 +294,27 @@ name a boss that `GrindCharacterXP` would fight ALONE: the executor does not
 send `participants` until increment 5. So increment 5 (execution) must land
 before increment 4 fills `party` from the live fleet, or increment 4 must ship
 behind the executor.
+
+## Increment 5 — built (2026-10-11), ahead of increment 4
+
+- `FightAction.participants`: sent as `participants` on the fight request;
+  the new state is read from this character's own entry in
+  `data.characters` (a party fight returns every participant's); part of the
+  action's identity and repr (`Fight(duskworm+R2D2+Lor)`), so a party fight's
+  learned cost and success rate are its own.
+- `party_win.party_participants`: the action factory takes a party to a boss
+  ONLY where the solo arms of the drop gate lose (bare stats and every
+  stockable potion loadout, at full HP) and a party wins; the joiners are the
+  first winning party's (`winning_party` now returns their indices). A boss
+  one character beats is fought alone.
+- The leader records a party fight under `party_combat_key`
+  (`combat-party:<monster>`), never the solo `combat:<monster>` key the
+  learned-loss veto reads.
+- HTTP 486 (a participant off the tile) and 499 (one in cooldown) fall to the
+  TRANSPORT class (a short retry) until increment 4 coordinates positions and
+  cooldowns.
+- Not here: a JOINER's own cycle. Its process sees the fight's XP, gold,
+  drops and HP on its next state read; attributing them to its "hold for the
+  party" step is increment 4's.
+
+Still inert in production: `party` is empty until increment 4.

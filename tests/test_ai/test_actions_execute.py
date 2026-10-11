@@ -265,6 +265,50 @@ class TestFightActionExecute:
         assert repr(fought) == repr(fresh)
 
 
+class TestPartyFightExecute:
+    """A boss fight with `participants` (docs/PLAN_group_fights.md increment 5)."""
+
+    def test_sends_the_participants_and_reads_its_own_character(self):
+        action = FightAction(monster_code="duskworm", locations=frozenset([(0, 0)]),
+                             participants=("R2D2", "Lor"))
+        state = make_state(x=0, y=0, hp=100, max_hp=150)
+        mate = make_char_schema(xp=999)
+        mate.name = "Lor"
+        mine = make_char_schema(xp=15)
+        response = make_fight_api_result(mine)
+        response.data.characters = [mate, mine]
+        with patch("artifactsmmo_cli.ai.actions.combat.action_fight",
+                   return_value=response) as fight:
+            new_state = action.execute(state, client=MagicMock())
+        assert fight.call_args.kwargs["body"].participants == ["R2D2", "Lor"]
+        assert new_state.xp == 15
+
+    def test_a_solo_fight_sends_no_participants(self):
+        action = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]))
+        with patch("artifactsmmo_cli.ai.actions.combat.action_fight",
+                   return_value=make_fight_api_result(make_char_schema())) as fight:
+            action.execute(make_state(x=0, y=0), client=MagicMock())
+        assert fight.call_args.kwargs["body"].to_dict() == {}
+
+    def test_a_response_without_this_character_raises(self):
+        action = FightAction(monster_code="duskworm", locations=frozenset([(0, 0)]),
+                             participants=("Lor",))
+        mate = make_char_schema()
+        mate.name = "Lor"
+        response = make_fight_api_result(make_char_schema())
+        response.data.characters = [mate]
+        with patch("artifactsmmo_cli.ai.actions.combat.action_fight", return_value=response):
+            with pytest.raises(RuntimeError, match="no character 'testchar'"):
+                action.execute(make_state(x=0, y=0), client=MagicMock())
+
+    def test_a_party_fight_is_its_own_action(self):
+        solo = FightAction(monster_code="duskworm", locations=frozenset([(0, 0)]))
+        party = FightAction(monster_code="duskworm", locations=frozenset([(0, 0)]),
+                            participants=("R2D2", "Lor"))
+        assert solo != party
+        assert (repr(solo), repr(party)) == ("Fight(duskworm)", "Fight(duskworm+R2D2+Lor)")
+
+
 class TestGatherActionExecute:
     def test_calls_api_and_returns_new_state(self):
         # Already at resource location — no move needed
