@@ -49,7 +49,7 @@ from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
 from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-from artifactsmmo_cli.ai.best_loadout import BestLoadout, best_loadout, fight_ahead_loadout
+from artifactsmmo_cli.ai.best_loadout import BestLoadout, best_loadout, candidate_potions, fight_ahead_loadout
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.combat import fight_records, is_winnable, predict_win
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
@@ -117,8 +117,10 @@ from artifactsmmo_cli.ai.loadout_profiles import (
     combat_key,
     gather_key,
 )
+from artifactsmmo_cli.ai.loop_rate import food_menu
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
+from artifactsmmo_cli.ai.party_loop import PartyLoop, best_party_loop
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.plan_tree import build_plan_tree
@@ -2710,7 +2712,7 @@ class GamePlayer:
                 self.game_data.max_character_level, self.state, self.history, self.game_data,
             )
         return band_combat_target(self.state, self.game_data, self.history,
-                                  self._consumable_price, self._band_loadout)
+                                  self._consumable_price, self._band_loadout, self._band_party)
 
     def _band_loadout(self, monster: str) -> BestLoadout:
         """`best_loadout` against one band monster, for `band_combat_target`'s
@@ -2725,11 +2727,25 @@ class GamePlayer:
         combat target), and the obtain walk reads only bank access and the
         siblings' skills from it."""
         assert self.state is not None and self.game_data is not None
-        ctx = replace(NO_PROFILE_CONTEXT,
-                      bank_accessible=self._blockers.get("bank") is None,
-                      sibling_skills=self._sibling_skills,
-                      combat_monster=monster)
-        return best_loadout(self.state, self.game_data, ctx, monster, self.history)
+        return best_loadout(self.state, self.game_data, self._band_context(monster), monster,
+                            self.history)
+
+    def _band_party(self, monster: str) -> PartyLoop | None:
+        """`best_party_loop` against one boss, for `band_combat_target`'s rank
+        (docs/PLAN_group_fights.md increment 3), priced as `_band_loadout`
+        prices a solo candidate."""
+        assert self.state is not None and self.game_data is not None
+        ctx = self._band_context(monster)
+        return best_party_loop(self.state, self.game_data, monster,
+                               candidate_potions(self.state, self.game_data, ctx, self.history),
+                               food_menu(self.state, self.game_data, ctx, self.history))
+
+    def _band_context(self, monster: str) -> SelectionContext:
+        """The pricing context of a band candidate (see `_band_loadout`)."""
+        return replace(NO_PROFILE_CONTEXT,
+                       bank_accessible=self._blockers.get("bank") is None,
+                       sibling_skills=self._sibling_skills,
+                       combat_monster=monster)
 
     def _consumable_price(self, code: str) -> Fraction:
         """Acquisition actions per unit to REPLACE a consumable a fight used —

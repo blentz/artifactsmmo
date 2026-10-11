@@ -12,12 +12,17 @@ import artifactsmmo_cli.ai.tiers.tier_progress as tp
 from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
 from artifactsmmo_cli.ai.best_loadout import BestLoadout
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.party_loop import PartyLoop
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.tiers.band_target import band_combat_target, rank_rate
+from artifactsmmo_cli.ai.tiers.band_target import band_combat_target, party_candidates, rank_rate
 from artifactsmmo_cli.ai.tiers.tier_ladder import band as raw_band
 from artifactsmmo_cli.ai.tiers.tier_ladder import normal_band as real_normal_band
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_best_loadout, make_state
+
+
+def _no_party(_code: str) -> None:
+    return None
 
 
 def _never_priced(code: str) -> int:
@@ -32,7 +37,7 @@ def _bare_loop(code: str) -> BestLoadout:
 
 
 def _pick(state: WorldState, gd: GameData) -> str | None:
-    target = band_combat_target(state, gd, None, _never_priced, _bare_loop)
+    target = band_combat_target(state, gd, None, _never_priced, _bare_loop, _no_party)
     return None if target is None else target.monster
 
 
@@ -403,7 +408,7 @@ def test_a_potion_propped_monster_that_pays_more_is_the_target(monkeypatch):
     second than spider's 30 s fight and 60 s rest, so the loadout picks it."""
     gd = _spider_bare_ogre_on_potions(monkeypatch)
     target = band_combat_target(make_state(level=30), gd, None, _never_priced,
-                                _loops(spider_recovery=60, ogre_win=True, ogre_consumed=0))
+                                _loops(spider_recovery=60, ogre_win=True, ogre_consumed=0), _no_party)
     assert target is not None and target.monster == "ogre"
     assert target.bare_fight is True
     assert target.rate == Fraction(gd.xp_per_kill("ogre", 30), 30)
@@ -414,14 +419,14 @@ def test_a_potion_that_pays_less_does_not_pick_the_monster(monkeypatch):
     the potion's price makes ogre's loop slower than spider's bare one."""
     gd = _spider_bare_ogre_on_potions(monkeypatch)
     target = band_combat_target(make_state(level=30), gd, None, _never_priced,
-                                _loops(spider_recovery=0, ogre_win=True, ogre_consumed=600))
+                                _loops(spider_recovery=0, ogre_win=True, ogre_consumed=600), _no_party)
     assert target is not None and target.monster == "spider"
 
 
 def test_a_monster_no_loadout_beats_is_no_candidate(monkeypatch):
     gd = _spider_bare_ogre_on_potions(monkeypatch)
     target = band_combat_target(make_state(level=30), gd, None, _never_priced,
-                                _loops(spider_recovery=600, ogre_win=False, ogre_consumed=0))
+                                _loops(spider_recovery=600, ogre_win=False, ogre_consumed=0), _no_party)
     assert target is not None and target.monster == "spider"
 
 
@@ -433,7 +438,7 @@ def test_a_band_fought_only_on_potions_has_no_bare_fight(monkeypatch):
     monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
     monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
     target = band_combat_target(make_state(level=30), _gd(), None, _never_priced,
-                                _loops(spider_recovery=0, ogre_win=True, ogre_consumed=0))
+                                _loops(spider_recovery=0, ogre_win=True, ogre_consumed=0), _no_party)
     assert target is not None and target.monster == "ogre" and target.bare_fight is False
 
 
@@ -443,10 +448,10 @@ def test_the_learned_loss_veto_refuses_a_potion_propped_fight(monkeypatch):
     gd = _spider_bare_ogre_on_potions(monkeypatch)
     loops = _loops(spider_recovery=60, ogre_win=True, ogre_consumed=0)
     monkeypatch.setattr(mod, "loss_vetoed", lambda s, g, c, h: c == "ogre")
-    vetoed = band_combat_target(make_state(level=30), gd, _Record(), _never_priced, loops)
+    vetoed = band_combat_target(make_state(level=30), gd, _Record(), _never_priced, loops, _no_party)
     assert vetoed is not None and vetoed.monster == "spider"
     monkeypatch.setattr(mod, "loss_vetoed", lambda s, g, c, h: False)
-    taken = band_combat_target(make_state(level=30), gd, _Record(), _never_priced, loops)
+    taken = band_combat_target(make_state(level=30), gd, _Record(), _never_priced, loops, _no_party)
     assert taken is not None and taken.monster == "ogre"
 
 
@@ -457,3 +462,49 @@ def test_a_win_on_the_record_is_ranked_on_the_walk_seconds(monkeypatch):
     xp = gd.xp_per_kill("spider", 30)
     lost_walk = make_best_loadout(xp=xp, win=False, recovery=90)
     assert rank_rate(xp, None, lambda: lost_walk, _never_priced) == Fraction(xp, 120)
+
+
+def _party_of(xp: int):  # type: ignore[no-untyped-def]
+    """A party of one joiner beats king_slime in one 30 s loop paying `xp`."""
+    def party_of(code: str) -> PartyLoop | None:
+        assert code == "king_slime"
+        return PartyLoop((), (0,), make_best_loadout(xp=xp, win=True).rate)
+    return party_of
+
+
+def test_a_party_boss_that_pays_more_is_the_target(monkeypatch):
+    """USER 2026-10-10: "use groups for boss xp, too" — king_slime as a party
+    pays more per second than the band's spider, so the band names it and
+    the joiner it needs."""
+    gd = _spider_bare_ogre_on_potions(monkeypatch)
+    state = make_state(level=30)
+    state = dataclasses.replace(state, party=(state,))
+    loops = _loops(spider_recovery=0, ogre_win=False, ogre_consumed=0)
+    spider = Fraction(gd.xp_per_kill("spider", 30), 30)
+    rich = band_combat_target(state, gd, None, _never_priced, loops,
+                              _party_of(gd.xp_per_kill("spider", 30) * 2))
+    assert rich is not None and (rich.monster, rich.joiners, rich.rate) == ("king_slime", (0,), spider * 2)
+    poor = band_combat_target(state, gd, None, _never_priced, loops, _party_of(1))
+    assert poor is not None and (poor.monster, poor.joiners) == ("spider", ())
+
+
+def test_party_candidates_are_spawning_bosses_under_the_ceiling() -> None:
+    gd = _gd()
+    alone = make_state(level=13)
+    assert party_candidates(alone, gd) == []
+    party = dataclasses.replace(alone, party=(alone,))
+    assert party_candidates(party, gd) == ["king_slime"]
+    low = dataclasses.replace(party, level=15 - FIGHT_LEVEL_GAP_CEILING - 1)
+    assert party_candidates(low, gd) == []
+    gd._monster_locations = {**gd._monster_locations, "king_slime": []}
+    assert party_candidates(party, gd) == []
+
+
+def test_a_cleared_ladder_still_farms_a_party_boss(monkeypatch):
+    monkeypatch.setattr(mod, "next_uncleared_tier", lambda s, g, h: None)
+    gd = _gd()
+    state = make_state(level=30)
+    party = dataclasses.replace(state, party=(state,))
+    target = band_combat_target(party, gd, None, _never_priced, _bare_loop, _party_of(500))
+    assert target is not None and target.monster == "king_slime"
+    assert band_combat_target(party, gd, None, _never_priced, _bare_loop, _no_party) is None

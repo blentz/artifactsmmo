@@ -264,3 +264,33 @@ names only enchanted_fabric (raid reward, 9) and wooden_stick (starter, 1).
 
 Production is unchanged: `party` is empty until Increment 4 fills it from the
 fleet; Increment 5 makes the executor fight with `participants`.
+
+## Increment 3 — built (2026-10-11)
+
+USER ruling 1: a party boss fight is ranked by XP per second like any fight.
+
+- `party_loop.best_party_loop`: the best party loop against a `boss` (a
+  `raid_boss` pays through the raid reward system, so it is no XP loop):
+  every stockable loadout × every set of one or two of `state.party`, walked
+  by `group_outcome`; this character's own XP per second — XP at the party's
+  AVERAGE level (floored, rule 3) with its own wisdom, its own drinks priced
+  as `loop_rate` prices them, its own recovery over its food menu. The fight
+  takes `SECONDS_PER_TURN` (2) per actor turn, `rounds × (N + 1)` turns: the
+  probes' cooldowns (29 s / 16 turns, 32 s / 17, 45 s / 24) are 2 s a turn
+  less haste, left uncredited. A loop paying no XP (the boss grey to the
+  party's average) is no loop.
+- `band_target.band_combat_target(..., party_of)`: party bosses
+  (`party_candidates`: spawning, under the executor's level ceiling) compete
+  with the band's normal monsters on one key; a party pick carries its
+  `joiners` (`BandTarget.joiners`). A cleared ladder still farms a party boss.
+  `GamePlayer._band_party` prices a party as `_band_loadout` prices a loop.
+- What it says (census L45, three members): duskworm 7.2 XP/s on
+  water_res + enhanced_health; rosenblood 4.2; goblin_priestess 1.9; a level-40
+  and a level-50 member earn rosenblood's XP at 45 (473, not the 680 a level-40
+  character earns alone).
+
+**Ordering constraint for what follows.** With a non-empty `party` the band may
+name a boss that `GrindCharacterXP` would fight ALONE: the executor does not
+send `participants` until increment 5. So increment 5 (execution) must land
+before increment 4 fills `party` from the live fleet, or increment 4 must ship
+behind the executor.

@@ -240,6 +240,13 @@ class TestArbiterSelection:
         assert not hasattr(player, "_select_goal")
         assert not hasattr(player, "_build_goals")
 
+    def test_band_party_prices_a_boss_party_as_the_band_prices_a_loop(self):
+        """`_band_party` hands `best_party_loop` the band's prices and food menu:
+        a character with no `party` gets no party loop."""
+        player = GamePlayer(character="hero")
+        player.seed_offline(make_state(level=5), make_game_data_mock())
+        assert player._band_party("chicken") is None
+
     def test_plan_from_state_decides_with_the_same_arguments_as_the_live_band(self):
         """Regression (runtime activation), re-pointed by wave 3a. The original
         pinned `enable_synergy=True`, a parameter the flip deleted. The RULE it

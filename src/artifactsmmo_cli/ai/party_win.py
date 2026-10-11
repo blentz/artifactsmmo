@@ -35,7 +35,7 @@ MAX_JOINERS = 2
 _WINS: "CatalogueScope[tuple[object, ...], tuple[tuple[str, ...], int] | None]" = CatalogueScope(4096)
 
 
-def _member(state: WorldState, game_data: GameData, monster: str, codes: tuple[str, ...],
+def member_card(state: WorldState, game_data: GameData, monster: str, codes: tuple[str, ...],
             stockable: list[str]) -> PartyMember:
     """`state` at full HP wearing `codes` when it can stock them all, else
     no potions."""
@@ -63,7 +63,7 @@ def winning_party(state: WorldState, game_data: GameData,
         boss = party_boss(game_data, monster)
         found: tuple[tuple[str, ...], int] | None = None
         for codes in loadouts(stockable[0], game_data):
-            cards = [_member(m, game_data, monster, codes, s)
+            cards = [member_card(m, game_data, monster, codes, s)
                      for m, s in zip(members, stockable, strict=True)]
             for size in range(1, min(MAX_JOINERS, len(state.party)) + 1):
                 if any(group_outcome(boss, [cards[0], *joined]).win

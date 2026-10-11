@@ -75,6 +75,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_upkeep_core import FightUpkeep, xp_per_action
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loop_rate import LoopRate
+from artifactsmmo_cli.ai.party_loop import PARTY_XP_TYPES, PartyLoop
 from artifactsmmo_cli.ai.tiers.tier_ladder import normal_band
 from artifactsmmo_cli.ai.tiers.tier_progress import next_uncleared_tier
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -92,6 +93,9 @@ class BandTarget:
     monster: str
     rate: Fraction
     bare_fight: bool
+    joiners: tuple[int, ...] = ()
+    """A party boss pick's joiners (indices into `state.party`); empty for a
+    solo pick."""
 
 
 def loop_seconds(rate: LoopRate) -> Fraction:
@@ -130,10 +134,23 @@ def target_rate(state: WorldState, game_data: GameData, history: LearningStore |
                      loadout, price_of)
 
 
+def party_candidates(state: WorldState, game_data: GameData) -> list[str]:
+    """The bosses a party may farm for XP now: `party_loop.PARTY_XP_TYPES`,
+    spawning, at most `FIGHT_LEVEL_GAP_CEILING` above the character (the
+    executor's ceiling); none without a `party`."""
+    if not state.party:
+        return []
+    ceiling = state.level + FIGHT_LEVEL_GAP_CEILING
+    return [code for code, kind in game_data.monsters.types.items()
+            if kind in PARTY_XP_TYPES and game_data.monster_levels[code] <= ceiling
+            and game_data.monster_locations(code)]
+
+
 def band_combat_target(state: WorldState, game_data: GameData,
                        history: LearningStore | None,
                        price_of: Callable[[str], Fraction],
-                       loadout_of: Callable[[str], BestLoadout]) -> BandTarget | None:
+                       loadout_of: Callable[[str], BestLoadout],
+                       party_of: Callable[[str], PartyLoop | None]) -> BandTarget | None:
     """Best winnable, FIGHTABLE normal monster in the next uncleared tier's
     band, by XP per SECOND over its best loadout (USER 2026-10-10), its measured
     upkeep where there is one (USER 2026-10-07: Lor's death_knight grind used
@@ -163,15 +180,13 @@ def band_combat_target(state: WorldState, game_data: GameData,
     with a measured upkeep is ranked on the measurement alone.
     """
     tier = next_uncleared_tier(state, game_data, history)
-    if tier is None:
-        return None
     rested = dataclasses.replace(state, hp=state.max_hp)
     level_ceiling = state.level + FIGHT_LEVEL_GAP_CEILING
-    fightable = [code for code in normal_band(game_data, tier)
+    fightable = [code for code in (normal_band(game_data, tier) if tier is not None else [])
                  if game_data.monster_levels[code] <= level_ceiling
                  and game_data.xp_per_kill(code, state.level) > 0
                  and game_data.monster_locations(code)]
-    scored: list[tuple[str, Fraction]] = []
+    scored: list[tuple[str, Fraction, tuple[int, ...]]] = []
     bare_fight = False
     for code in fightable:
         bare = is_winnable(rested, game_data, code, history)
@@ -180,8 +195,12 @@ def band_combat_target(state: WorldState, game_data: GameData,
                 history is not None and loss_vetoed(rested, game_data, code, history))):
             continue
         bare_fight = bare_fight or bare
-        scored.append((code, target_rate(state, game_data, history, code, price_of, loadout)))
+        scored.append((code, target_rate(state, game_data, history, code, price_of, loadout), ()))
+    for code in party_candidates(state, game_data):
+        party = party_of(code)
+        if party is not None:
+            scored.append((code, party.rate.xp_per_second, party.joiners))
     if not scored:
         return None
-    code, rate = max(scored, key=lambda item: (item[1], game_data.monster_levels[item[0]]))
-    return BandTarget(code, rate, bare_fight)
+    code, rate, joiners = max(scored, key=lambda item: (item[1], game_data.monster_levels[item[0]]))
+    return BandTarget(code, rate, bare_fight, joiners)

@@ -37,6 +37,10 @@ class TestXpPerAction:
         assert cheap > rich
 
 
+def _no_party(_code: str) -> None:
+    return None
+
+
 def _record(store: LearningStore, i: int, goal: str, action: str, outcome: str = "ok",
             consumed: str = "{}") -> None:
     store.record_cycle(Cycle(ts=f"2026-10-07T00:00:{i:02d}+00:00", session_id="s",
@@ -107,7 +111,7 @@ def _unread(code: str) -> BestLoadout:
 
 
 def _target(gd: GameData, history: _Measured, loadout_of=_same_loop) -> str | None:
-    target = band_combat_target(make_state(level=30), gd, history, lambda _c: 3, loadout_of)
+    target = band_combat_target(make_state(level=30), gd, history, lambda _c: 3, loadout_of, _no_party)
     return None if target is None else target.monster
 
 

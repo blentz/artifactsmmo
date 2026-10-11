@@ -369,7 +369,7 @@ class TestPathAlignedMonster:
             "for this test to say anything about the delegation")
 
         monkeypatch.setattr(player_mod, "band_combat_target",
-                            lambda state, game_data, history, price_of, loadout_of: None)
+                            lambda state, game_data, history, price_of, loadout_of, party_of: None)
         assert player._path_aligned_monster() is None
         store.close()
 

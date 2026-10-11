@@ -381,6 +381,8 @@ CRAFT_CONDITIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_cond
 REACH_CURRENCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "reach_currency.py"
 LOADOUT_WIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loadout_win.py"
 PARTY_WIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "party_win.py"
+PARTY_LOOP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "party_loop.py"
+BAND_TARGET_PARTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "band_target.py"
 RESTORE_HP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "restore_hp.py"
 TASK_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth.py"
 FIGHT_UPKEEP_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "fight_upkeep_core.py"
@@ -5683,6 +5685,43 @@ DROP_LOADOUT_GATE_MUTATIONS = [
      "            or wins_with_a_loadout(rested, game_data, monster)\n",
      "            or False\n"),
 ]
+# The party boss XP loop (docs/PLAN_group_fights.md increment 3). OWN
+# run_groups: unit-killed by tests/test_ai/test_party_loop.py and
+# tests/test_ai/test_band_target.py.
+PARTY_LOOP_MUTATIONS = [
+    ("party loop: the XP reads the character's own level",
+     "    xp = game_data.xp_per_kill(monster, sum(levels) // len(levels), state.wisdom)\n",
+     "    xp = game_data.xp_per_kill(monster, state.level, state.wisdom)\n"),
+    ("party loop: a grey party loop is a loop",
+     "    if xp <= 0:\n        return None\n",
+     "    if xp < 0:\n        return None\n"),
+    ("party loop: the fight counts rounds, not actor turns",
+     "    fight = Fraction(SECONDS_PER_TURN * outcome.turns * (len(levels) + 1))\n",
+     "    fight = Fraction(SECONDS_PER_TURN * outcome.turns)\n"),
+    ("party loop: a raid boss is farmed for XP",
+     "PARTY_XP_TYPES = frozenset({\"boss\"})\n",
+     "PARTY_XP_TYPES = frozenset({\"boss\", \"raid_boss\"})\n"),
+    ("party loop: an unpayable drink runs",
+     "    if consumed is None:\n        return None\n    me = cards[0]",
+     "    if consumed is None:\n        consumed = Fraction(0)\n    me = cards[0]"),
+]
+BAND_PARTY_MUTATIONS = [
+    ("band: no party candidates",
+     "    for code in party_candidates(state, game_data):\n",
+     "    for code in []:\n"),
+    ("band: a party pick drops its joiners",
+     "            scored.append((code, party.rate.xp_per_second, party.joiners))\n",
+     "            scored.append((code, party.rate.xp_per_second, ()))\n"),
+    ("band: party bosses above the ceiling",
+     "            if kind in PARTY_XP_TYPES and game_data.monster_levels[code] <= ceiling\n",
+     "            if kind in PARTY_XP_TYPES\n"),
+    ("band: party bosses that do not spawn",
+     "<= ceiling\n            and game_data.monster_locations(code)]\n",
+     "<= ceiling\n            ]\n"),
+    ("band: party candidates without a party",
+     "    if not state.party:\n        return []\n",
+     "    if False:\n        return []\n"),
+]
 # The party arm of the drop gate (docs/PLAN_group_fights.md increment 2). OWN
 # run_groups: unit-killed by tests/test_ai/test_party_win.py and the census's
 # tests/test_audit/test_craft_conditions.py.
@@ -10383,6 +10422,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_party_win.py", survivors)
     run_group(PARTY_WIN_SRC, PARTY_WIN_MUTATIONS,
               "tests/test_ai/test_party_win.py", survivors)
+    run_group(PARTY_LOOP_SRC, PARTY_LOOP_MUTATIONS,
+              "tests/test_ai/test_party_loop.py", survivors)
+    run_group(BAND_TARGET_PARTY_SRC, BAND_PARTY_MUTATIONS,
+              "tests/test_ai/test_band_target.py", survivors)
     run_group(CRAFT_CONDITIONS_SRC, CONDITIONS_PARTY_MUTATIONS,
               "tests/test_audit/test_craft_conditions.py", survivors)
     run_group(CRAFT_COMPLETENESS_SRC, CENSUS_PARTY_STATE_MUTATIONS,
