@@ -202,3 +202,24 @@ def test_a_won_party_fight_releases_its_lease(tmp_path: Path) -> None:
     fight.execute = MagicMock(return_value=hal.state)  # type: ignore[method-assign]
     hal._execute(fight, MagicMock())
     assert lor_store.party_lease_for(datetime.now(tz=timezone.utc)) is None
+
+
+def test_a_party_call_breaks_a_cached_plan_that_is_not_its_hold(tmp_path: Path) -> None:
+    """Live 2026-10-11: HAL kept its cached sunflower batches through C3P0's
+    lease. A call re-decides unless the cache IS the lease's hold."""
+    lor, _ = _player(tmp_path, "Lor")
+    seen: list[bool] = []
+
+    def spy(*args: object) -> bool:
+        seen.append(bool(args[-1]))
+        return False
+
+    lor._party_hold = PartyLease("duskworm", "HAL", ("Lor",), "overworld", 3, -1)
+    cache = MagicMock(goal_repr="GatherMaterials(sunflower)")
+    cache.selected_goal.is_satisfied.return_value = False
+    lor._plan_cache = cache
+    with patch("artifactsmmo_cli.ai.player.should_replan", side_effect=spy):
+        lor._plan_or_reuse(lor.state, lor.game_data, [], None)
+        cache.goal_repr = "JoinParty(duskworm)"
+        lor._plan_or_reuse(lor.state, lor.game_data, [], None)
+    assert seen == [True, False]

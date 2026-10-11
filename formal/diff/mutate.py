@@ -3541,6 +3541,12 @@ PLAN_CACHE_TARGET_MUTATIONS = [
 # The periodic re-decide keeps a committed plan. Killed by
 # tests/test_ai/test_should_replan.py and tests/test_ai/test_decision_events.py.
 REFRESH_ONLY_MUTATIONS = [
+    ("should_replan: a party call keeps the cached plan",
+     "    if cache is None or party_called:\n",
+     "    if cache is None:\n"),
+    ("should_replan: a party call is a mere refresh",
+     "    return (cache is not None and not party_called\n",
+     "    return (cache is not None\n"),
     ("should_replan: any stale plan counts as a refresh (a failed leg kept)",
      "            and (last_outcome is None or last_outcome == \"ok\")",
      "            and True"),
@@ -5777,6 +5783,12 @@ JOIN_PARTY_GOAL_MUTATIONS = [
      "        return False\n"),
 ]
 PARTY_PLAYER_MUTATIONS = [
+    ("player: a party call keeps a cached plan",
+     "        party_called = (self._party_hold is not None and (\n",
+     "        party_called = (False and (\n"),
+    ("player: a cached hold is broken by its own call",
+     "            cache is None or cache.goal_repr != f\"JoinParty({self._party_hold.boss})\"))\n",
+     "            True))\n"),
     ("player: the leader holds for its own lease",
      "        self._party_hold = lease if lease is not None and lease.leader != self.character else None\n",
      "        self._party_hold = lease\n"),

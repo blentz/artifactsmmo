@@ -439,3 +439,15 @@ its task (TaskTrade, TaskCancel at the taskmaster). Fixed: a party fight
 releases its lease only when it RESOLVED (won, or `fight_lost`); a 486/499
 refusal keeps it, so the members keep holding. `JoinPartyGoal` /
 `HoldForPartyAction` left the census's dormant table (live).
+
+## Increment 6 — second live data (after the 9585e542 restart, 14:30-15:10Z)
+
+The lease now held across refusals, yet still 0 fights: C3P0 held 55 times
+and fired `Fight(king_slime+HAL)` 48 times (45 HTTP 499, 3 HTTP 486); HAL
+held 9 times. HAL's PARTY_JOIN guard fired only BETWEEN its cached sunflower
+gather batches (14:39:51, 14:42:44, 14:48:38): an interrupt is consulted only
+on a re-decide, and the plan cache had no trigger for a party call. C3P0
+read HAL's card from that one hold — on the tile, out of cooldown — fired,
+and met HAL gathering again. Fixed: `should_replan` trigger 7 — a party
+lease calling this member re-decides unless the cached plan IS that lease's
+hold (`JoinParty(<boss>)`); a call is never a mere staleness refresh.

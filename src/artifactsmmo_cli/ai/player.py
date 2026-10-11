@@ -743,14 +743,18 @@ class GamePlayer:
         goal_satisfied = cache is not None and cache.selected_goal.is_satisfied(state)
         step_applicable = (step is not None and step.is_applicable(state, game_data)
                            and self._fight_ready(step, state, game_data))
+        # A party lease calling this member preempts a cached plan that is not
+        # its hold (should_replan trigger 7).
+        party_called = (self._party_hold is not None and (
+            cache is None or cache.goal_repr != f"JoinParty({self._party_hold.boss})"))
         if should_replan(
             cache, self._last_outcome, state.level,
-            goal_satisfied, step_applicable, BANK_REFRESH_INTERVAL,
+            goal_satisfied, step_applicable, BANK_REFRESH_INTERVAL, party_called,
         ):
             self._events.note(Mechanism.REPLAN, repr(cache.selected_goal) if cache else "<none>")
             refreshing = refresh_only(
                 cache, self._last_outcome, state.level,
-                goal_satisfied, step_applicable, BANK_REFRESH_INTERVAL)
+                goal_satisfied, step_applicable, BANK_REFRESH_INTERVAL, party_called)
             selected_goal, plan, goals_tried = self._decide_band(
                 state, game_data, actions, ctx_combat_monster)
             if refreshing and cache is not None and selected_goal is not None \

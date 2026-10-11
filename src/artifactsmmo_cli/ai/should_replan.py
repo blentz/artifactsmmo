@@ -12,6 +12,7 @@ def should_replan(
     goal_satisfied: bool,
     step_applicable: bool,
     replan_interval: int,
+    party_called: bool = False,
 ) -> bool:
     """True => re-decide from scratch. Triggers (any):
     1. no cache (cold start)
@@ -20,13 +21,18 @@ def should_replan(
     4. the character's level changed since plan time
     5. cached run reached the staleness bound
     6. the cached step is no longer applicable
+    7. a party lease calls this character and the cached plan is not its
+       hold (docs/PLAN_group_fights.md increment 4): the PARTY_JOIN guard is
+       an interrupt, and an interrupt is only consulted on a re-decide — live
+       2026-10-11, HAL ran its cached sunflower batches through a lease and
+       held only between them, so C3P0's party fight met 499/486 45 times
 
     Trigger 4 was the RegearEdge latch (armed on a level-up or a lost fight,
     cleared when no craftable upgrade remained) until Phase 4-3b: a level-up
     is a re-rank FACT, read here off the state, and a lost fight is already
     trigger 2.
     """
-    if cache is None:
+    if cache is None or party_called:
         return True
     if last_outcome is not None and last_outcome != "ok":
         return True
@@ -46,13 +52,14 @@ def refresh_only(
     goal_satisfied: bool,
     step_applicable: bool,
     replan_interval: int,
+    party_called: bool = False,
 ) -> bool:
     """True when the ONLY reason to re-decide is the staleness bound (trigger 5):
     the plan is live, its last step succeeded and its next step still applies.
     Then a re-decide that picks the same goal keeps the committed plan (Phase
     2d-L1c): re-walking mid-plan does not converge, since a shrunken deficit can
     make an earlier route usable that spends a scarce unit the plan needed."""
-    return (cache is not None
+    return (cache is not None and not party_called
             and (last_outcome is None or last_outcome == "ok")
             and not goal_satisfied and not cache.exhausted()
             and level == cache.plan_level

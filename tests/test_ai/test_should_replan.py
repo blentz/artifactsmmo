@@ -103,3 +103,14 @@ def test_any_other_trigger_is_not_a_refresh(over):
     """A committed plan survives the periodic re-decide only when nothing but
     the staleness bound asks for it (Phase 2d-L1c)."""
     assert refresh_only(**_refresh_args(**over)) is False
+
+
+def test_a_party_call_preempts_a_live_cached_plan():
+    """Trigger 7 (docs/PLAN_group_fights.md increment 4): HAL's cached
+    sunflower batch ran through a live lease; a call re-decides, so the
+    PARTY_JOIN interrupt gets its say. A call is never a mere refresh."""
+    args = _ok_hit_args()
+    assert should_replan(**args, party_called=True) is True
+    args["cache"] = _cache(cycles=20)
+    assert refresh_only(**args) is True
+    assert refresh_only(**args, party_called=True) is False
