@@ -486,8 +486,10 @@ def test_ladder_entry_count_matches_lean() -> None:
     objective's step; OBJECTIVE_STEP fires on `supply_due` / `turn_in_due`).
     − MAINTAIN_CONSUMABLES (retired 2026-10-10: every fight step carries its
     loadout's potions and food).
+    + PARTY_JOIN (2026-10-11, group fights: the LAST guard in GUARD_ORDER,
+    after CRAFT_POTIONS).
     Lean side mirrors via MeansKind.allInLadderOrder."""
-    assert len(ALL_IN_LADDER_ORDER) == 21
+    assert len(ALL_IN_LADDER_ORDER) == 22
 
 
 def test_the_ladder_interrupt_prefix_is_what_production_runs_as_interrupts() -> None:

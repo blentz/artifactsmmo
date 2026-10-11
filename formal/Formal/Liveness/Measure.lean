@@ -292,6 +292,25 @@ structure State where
       same honest-disclosure treatment `objectiveStepFires`/`supplyDemand` get.
       The ladder differential asserts agreement with the real value. -/
   currencyTurnInActive : Bool := false
+  /-- OPAQUE: production's PARTY_JOIN guard firing predicate (2026-10-11, group
+      fights). Mirrors `tiers/guards.py::_fires(PARTY_JOIN, …)` =
+      `ctx.party_hold is not None`: a live party lease
+      (`CoordinationStore.party_lease_for`) names THIS character as a member.
+      The lease is threaded onto `SelectionContext` as DATA by the player, the
+      same seam `currencyTurnInActive` uses for `ctx.turn_in`.
+
+      Flipped false by `applyActionKind .holdForParty` — fire-and-lose, like
+      `geCancelTargetsNonempty`. The hold's world answer is the lease ENDING:
+      the leader fights (consuming it) or it expires after
+      `PARTY_LEASE_TTL_SECONDS` (300 s). Honest disclosure: production may
+      repeat the hold across several cycles until then; the model collapses
+      that wait, which is bounded by the TTL, into one step.
+
+      Default false — a single-character run never holds a party lease
+      (`SelectionContext.party_hold` defaults to `None`), so every pre-existing
+      witness keeps its semantics unchanged. The ladder differential asserts
+      agreement with the real value. -/
+  partyJoinActive : Bool := false
   /-- `state.bank_items is not None` (means.py:104). -/
   bankItemsKnown : Bool
   /-- `len(state.bank_items)` when known, else `0` (means.py:108). -/

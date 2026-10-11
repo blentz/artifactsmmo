@@ -94,11 +94,12 @@ theorem productionLadder_eq_claimPending (s : State)
     (h5c : fires .sellRelief s = false)
     (h6 : fires .depositFull s = false) (h7 : fires .discardHigh s = false)
     (h8b : fires .craftPotions s = false)
+    (hpj : fires .partyJoin s = false)
     (hsp : fires .sellPressured s = false)
     (hfire : fires .claimPending s = true) :
     productionLadder s = some .claimPending := by
   simp [productionLadder, allInLadderOrder,
-    h0, h1, h2, h3, hgc, h4, h5, h5b, h5c, h6, h7, h8b, hsp, hfire]
+    h0, h1, h2, h3, hgc, h4, h5, h5b, h5c, h6, h7, h8b, hpj, hsp, hfire]
 
 /-- `sellPressured` — higher: every guard (Phase 5-2b: it closes the
 interrupt prefix, ahead of the collect rungs). -/
@@ -111,10 +112,11 @@ theorem productionLadder_eq_sellPressured (s : State)
     (h5c : fires .sellRelief s = false)
     (h6 : fires .depositFull s = false) (h7 : fires .discardHigh s = false)
     (h8b : fires .craftPotions s = false)
+    (hpj : fires .partyJoin s = false)
     (hfire : fires .sellPressured s = true) :
     productionLadder s = some .sellPressured := by
   simp [productionLadder, allInLadderOrder,
-    h0, h1, h2, h3, hgc, h4, h5, h5b, h5c, h6, h7, h8b, hfire]
+    h0, h1, h2, h3, hgc, h4, h5, h5b, h5c, h6, h7, h8b, hpj, hfire]
 
 /-- `bankUnlock` (slot 2, a FIGHT means) is selected when it fires and the two
     higher slots (hpCritical, restForCombat) are quiet. Used by the B-0 bootstrap

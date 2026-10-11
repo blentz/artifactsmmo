@@ -85,6 +85,15 @@ inductive MeansKind where
                         --                     GUARD_ORDER; stocks the utility-slot
                         --                     potion baseline before grind;
                         --                     fires on craft_potions_fires)
+  | partyJoin           -- PARTY_JOIN,         guards.py (2026-10-11, group fights;
+                        --                     LAST in GUARD_ORDER, after CRAFT_POTIONS):
+                        --                     a live party lease names this
+                        --                     character as a member, so it moves to
+                        --                     the lease tile and holds. Fire-and-lose,
+                        --                     like geCancel: the hold's world answer
+                        --                     is the lease ending (the leader fights,
+                        --                     or the lease expires after
+                        --                     PARTY_LEASE_TTL_SECONDS = 300 s).
   -- Collect-reward (COLLECT_REWARD_ORDER, means.py:35)
   | claimPending        -- CLAIM_PENDING,      means.py:69
   | sellPressured       -- SELL_PRESSURED,     means.py:76
@@ -125,6 +134,9 @@ def allInLadderOrder : List MeansKind :=
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull, .discardHigh,
    .craftPotions,
+   -- 2026-10-11 (group fights): PARTY_JOIN is the LAST guard, mirroring
+   -- GUARD_ORDER — survival, bag and potions first, then a party lease.
+   .partyJoin,
    -- 2026-10-05 (Phase 5-2b): SELL_PRESSURED is an INTERRUPT — the bag at the
    -- pressure threshold is a precondition of continuing — so it closes the
    -- interrupt prefix, ahead of the collect rungs.
@@ -139,7 +151,7 @@ def allInLadderOrder : List MeansKind :=
    .sellIdle, .recycleSurplus, .geBid, .drainBankJunk,
    .wait]
 
-/-- Sanity: 21 rungs (one per constructor). GEAR_REVIEW was retired in Phase
+/-- Sanity: 22 rungs (one per constructor). PARTY_JOIN joined 2026-10-11. GEAR_REVIEW was retired in Phase
     4-3b: its one arm never fired in recorded history. LOW_YIELD_CANCEL,
     TASK_EXCHANGE, ACCEPT_TASK, PURSUE_TASK, TASK_CANCEL and COMPLETE_TASK
     were retired in Phase 5-2c-iii-c-2: the task objective's step owns the
@@ -148,6 +160,6 @@ def allInLadderOrder : List MeansKind :=
     Phase 5-2c-iv: fleet work is the fleet objective's step. MAINTAIN_CONSUMABLES
     was retired 2026-10-10: every fight step carries its loadout's potions and
     food. -/
-example : allInLadderOrder.length = 21 := by decide
+example : allInLadderOrder.length = 22 := by decide
 
 end Formal.Liveness.MeansKind

@@ -55,7 +55,7 @@ def blockerPrefix : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
-   .discardHigh, .craftPotions, .sellPressured, .claimPending, .bankExpand,
+   .discardHigh, .craftPotions, .partyJoin, .sellPressured, .claimPending, .bankExpand,
    .objectiveStep]
 
 /-- The discretionary tail — everything after `.objectiveStep`. -/
@@ -131,6 +131,7 @@ theorem cycleStepF_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | bankUnlock      => exact descends_fight s hlvl (Or.inl hk)
     | reachUnlockLevel => exact descends_fight s hlvl (Or.inr (Or.inl hk))
     | geCancel        => exact descends_geCancel s hk
+    | partyJoin       => exact descends_partyJoin s hk
     | discardCritical => exact descends_discardCritical s hk
     | craftRelief     => exact descends_craftRelief s hk
     | recycleRelief   => exact descends_recycleRelief s hk

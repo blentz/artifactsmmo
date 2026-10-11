@@ -135,6 +135,10 @@ class WorldState:
     (`party_win.wins_as_a_party`). Empty by default: production fills it from
     the fleet in increment 4; the conditions census fills it with copies of
     the census character."""
+    party_held: str | None = None
+    """PLANNING-ONLY marker: the boss a `HoldForPartyAction` has held for in
+    this simulated plan (docs/PLAN_group_fights.md increment 4). Always None
+    on a state read from the API; `JoinPartyGoal` is satisfied by it."""
     crafting_target: str | None = None
     """Item the bot is currently working to craft/upgrade toward (the committed
     UpgradeEquipment target). Set per cycle by the player. Lets

@@ -1259,6 +1259,20 @@ class CoordinationStore:
                 return PartyLease(row.boss, row.leader, members, row.layer, row.x, row.y)
         return None
 
+    def party_lease_names(self, now: datetime) -> frozenset[str]:
+        """Every character a live lease names, as leader or member: the
+        siblings no other leader may take along. Never writes."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        try:
+            with SqlSession(self._engine) as s:
+                rows = self._live_leases(s, stamp)
+        except SQLAlchemyError as e:
+            print(f"[coordination] party_lease_names failed: {e}")
+            return frozenset()
+        return frozenset(name for row in rows
+                         for name in (row.leader, *row.members.split(",")) if name)
+
     def release_party(self, boss: str) -> None:
         """Drop THIS character's lease on `boss`. No-op if it leads none,
         including when a sibling leads it (own-row-only, as `release_supply`)."""

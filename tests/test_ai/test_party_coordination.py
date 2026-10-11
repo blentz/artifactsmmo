@@ -114,10 +114,11 @@ def test_every_party_call_degrades_on_a_broken_store(tmp_path: Path, capsys) -> 
     assert hal.sibling_party_cards(T0) == []
     assert hal.claim_party("duskworm", (), TILE, T0) is False
     assert hal.party_lease_for(T0) is None
+    assert hal.party_lease_names(T0) == frozenset()
     hal.release_party("duskworm")
     out = capsys.readouterr().out
     for name in ("publish_party_card", "sibling_party_cards", "claim_party", "party_lease_for",
-                 "release_party"):
+                 "party_lease_names", "release_party"):
         assert f"[coordination] {name} failed" in out
 
 

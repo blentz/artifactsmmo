@@ -350,12 +350,16 @@ leave it after one turn. USER ruling 2 ("always") makes it an INTERRUPT.
 - The roster: `state.party` = the live siblings' cards NOT named by another
   live lease (each a WorldState). The band (increment 3) ranks party bosses
   over it; the drop gate (increment 2) admits them.
-- Leader: when the band target carries `joiners`, the leader claims a lease
-  for (boss, joiner names, the boss tile nearest the leader), renews it every
-  cycle while the target stays, releases it after the party fight resolves or
-  when the target changes. While its own lease is not assembled, its party
-  `FightAction` is inapplicable (participants off the tile would be HTTP 486)
-  and it holds on the tile like a member.
+- Leader: NOT a guard. Rotation would walk a guard-held leader off the fight
+  while its members wait, and a party fight is wanted by two producers (the
+  band's XP target and a drop route's plan). So the leader acts at EXECUTION:
+  when the plan's head is a party `FightAction` (`participants`, set by the
+  factory), `GamePlayer._lead_party` claims or renews the lease (boss, the
+  participants, the fight's nearest tile) and runs the fight only when the
+  party is `assembled`; otherwise it runs a `HoldForPartyAction` on that tile
+  instead. The fight — won, lost or refused — releases the lease. A leader
+  whose plan stops heading the fight stops renewing; the lease expires on its
+  TTL.
 - Member: a live lease naming it fires the `PARTY_JOIN` guard — the LAST
   guard, after `CRAFT_POTIONS` (survival, bag and the fight's potions first;
   the potion guard's fight is the lease's boss). Its goal `JoinPartyGoal`
@@ -383,3 +387,43 @@ boss or a live lease on another boss names any of the party; renews its own;
 an insert race reports False), `party_lease_for` (leader or member, read-only),
 `release_party` (the leader's own row only); `party_lease_core.PartyLease`,
 `on_tile`, `ready`, `assembled`. Inert: nothing publishes or reads them yet.
+
+## Increment 4b — built (2026-10-11)
+
+- `GuardKind.PARTY_JOIN` (LAST guard, after CRAFT_POTIONS) fires on
+  `ctx.party_hold` — the live lease naming this character as a member —
+  and maps to `JoinPartyGoal`: one `HoldForPartyAction` (move to the tile, else
+  pause `HOLD_SECONDS` 20 and read the character back, so the cycle records
+  what the leader's fight paid this member). `WorldState.party_held` is the
+  planning-only marker the hold sets.
+- Leader at execution (`GamePlayer._lead_party`): a party `FightAction` at the
+  plan's head claims/renews the lease and fights only when `assembled`, else
+  holds on the tile; the fight releases the lease. Past
+  `PARTY_ASSEMBLY_SECONDS` (300, the lease TTL) unassembled, the leader frees
+  the members and blocks the fight as a TRANSPORT failure, so its plan moves
+  on.
+- `GamePlayer._refresh_party` each cycle (before the actions are built, and in
+  `plan_from_state`): sibling cards, the lease, and `state.party` (the lease's
+  members for its leader; none for a member; else every sibling no live lease
+  names). `_update_coordination` publishes this character's card.
+- Lean (`Formal.Liveness`): `MeansKind.partyJoin` after `.craftPotions`;
+  `State.partyJoinActive`; `ActionKind.holdForParty` clears it (fire-and-lose:
+  the model collapses the hold, bounded in production by the lease TTL, into
+  one step — the `GE_CANCEL` shape); F/D/E slot `partyJoinFlag` (F: bottom,
+  slot 17; D/E: directly above `objectiveStepFlag`, which the refresh can
+  raise); `descends*_partyJoin`; ladder oracle index [41], decide-key guard
+  index 13; the ladder diff (PARTY_JOIN selected when every higher rung is
+  quiet, preempted by HP_CRITICAL, quiet without a lease); sim mirrors.
+- Census: `JoinPartyGoal` / `HoldForPartyAction` declared `conditional:`.
+
+THIS IS THE FIRST LIVE INCREMENT: with the fleet running under
+`--coordination-db`, cards are published, rosters fill, the band and the drop
+gate weigh parties, and a boss only a party wins is fought by a lease.
+
+Known limits (residuals):
+- A member joins only on the lease tile's own layer (`HoldForPartyAction` is
+  inapplicable elsewhere); a cross-region approach is not planned.
+- A member fights in the utility potions it already wears; nothing stocks the
+  party loadout for it (the CRAFT_POTIONS guard sizes for its own fight).
+- A leader whose plan stops heading the fight stops renewing: its members
+  hold until the lease's TTL (300 s).

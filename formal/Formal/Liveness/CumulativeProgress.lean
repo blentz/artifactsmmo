@@ -622,6 +622,9 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | geCancel =>
       show (applyActionKind .geCancelOrder s).level ≥ s.level
       simp [applyActionKind]
+    | partyJoin =>
+      show (applyActionKind .holdForParty s).level ≥ s.level
+      simp [applyActionKind]
     | recycleRelief =>
       show (applyActionKind .recycle s).level ≥ s.level
       simp [applyActionKind]
@@ -1152,6 +1155,7 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   | drainBankJunk   => exfalso; revert hmem; unfold progressMeans; decide
   | geBid           => exfalso; revert hmem; unfold progressMeans; decide
   | geCancel        => exfalso; revert hmem; unfold progressMeans; decide
+  | partyJoin       => exfalso; revert hmem; unfold progressMeans; decide
   | recycleRelief   => exfalso; revert hmem; unfold progressMeans; decide
   | sellRelief      => exfalso; revert hmem; unfold progressMeans; decide
   -- restForCombat is a guard OUT of `progressMeans` scope: no

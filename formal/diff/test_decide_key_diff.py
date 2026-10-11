@@ -37,6 +37,7 @@ _GUARD_INDEX = {
     GuardKind.SELL_RELIEF: 10,
     GuardKind.CRAFT_POTIONS: 11,
     GuardKind.GE_CANCEL: 12,
+    GuardKind.PARTY_JOIN: 13,  # 2026-10-11: group fights, appended last.
 }
 
 _MEANS_INDEX = {

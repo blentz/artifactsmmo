@@ -11,14 +11,16 @@ copies it may bank. `tiers.guards` re-exports the name, so every existing
 
 Pure data: no behavior, so this module imports nothing else from the package —
 the exceptions are `TurnIn` below, a leaf pure-data class (`ai.currency_turnin`
-imports only stdlib), and `ChosenLoadout` (`ai.chosen_loadout`, pure data over
-`thresholds`), neither of which carries a cycle risk of its own.
+imports only stdlib), `ChosenLoadout` (`ai.chosen_loadout`, pure data over
+`thresholds`) and `PartyLease` (`ai.party_lease_core`, pure data over
+`world_state`), none of which carries a cycle risk of its own.
 """
 
 from dataclasses import dataclass, field
 
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
+from artifactsmmo_cli.ai.party_lease_core import PartyLease
 
 
 @dataclass(frozen=True)
@@ -201,6 +203,13 @@ class SelectionContext:
     # the recipe as inputs and the measured request cost as the unlock, so a
     # sibling saves the SKILL GATE and nothing else.
     sibling_skills: dict[str, int] = field(default_factory=dict)
+
+    # The live party lease naming this character as a MEMBER
+    # (`CoordinationStore.party_lease_for`, read once per cycle by the player
+    # and threaded here as DATA, like `supply_target`): the `PARTY_JOIN`
+    # guard fires on it and `JoinPartyGoal` holds on its tile
+    # (docs/PLAN_group_fights.md increment 4). None on a single-character run.
+    party_hold: PartyLease | None = None
 
     # The monster the committed intention FIGHTS next: the first Fight in its
     # cached plan, or None when the intention fights nothing (2026-10-06). The

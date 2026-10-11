@@ -374,6 +374,7 @@ def generate_lean(snapshot: dict) -> str:
         # next snapshot refresh. Emitted here so generator and fixture agree.
                 "  geBidCandidateNonempty := false",
         "  geCancelTargetsNonempty := false",
+        "  partyJoinActive := false",
         "  bankUnlockMonsterPresent := false",
         "  initialXp := 0",
         "  unlockMonsterLevel := 0",

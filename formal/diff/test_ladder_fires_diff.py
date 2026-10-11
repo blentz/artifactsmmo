@@ -159,6 +159,7 @@ from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
+from artifactsmmo_cli.ai.party_lease_core import PartyLease
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
@@ -200,6 +201,7 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.DEPOSIT_FULL: "depositFull",
     LadderMeans.DISCARD_HIGH: "discardHigh",
     LadderMeans.CRAFT_POTIONS: "craftPotions",
+    LadderMeans.PARTY_JOIN: "partyJoin",
     LadderMeans.CLAIM_PENDING: "claimPending",
     LadderMeans.SELL_PRESSURED: "sellPressured",
     LadderMeans.OBJECTIVE_STEP: "objectiveStep",
@@ -487,6 +489,11 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         # reach the oracle separately. Appended, so every existing caller keeps
         # its indices.
         scn.bank_gold,
+        # 41 partyJoinActive (2026-10-11, group fights): read off the SAME ctx
+        # production's PARTY_JOIN `_fires` reads (`ctx.party_hold is not
+        # None`), so a Scenario that ever grows a party lease drives both sides
+        # together rather than hard-wiring the Lean slot to false.
+        _party_join_active(_make_ctx(scn)),
     ]
 
 
@@ -510,6 +517,14 @@ def _currency_turn_in_active(ctx: SelectionContext) -> int:
     `fleet_work.py::turn_in_due` tests, so the two flags cannot
     drift between the oracle and production."""
     return 1 if (ctx.turn_in is not None or ctx.recall is not None) else 0
+
+
+def _party_join_active(ctx: SelectionContext) -> int:
+    """The Lean `State.partyJoinActive` slot read off production's own ctx:
+    `ctx.party_hold is not None` — the SAME condition
+    `tiers/guards.py::_fires(PARTY_JOIN, …)` tests, so the flag cannot drift
+    between the oracle and production."""
+    return 1 if ctx.party_hold is not None else 0
 
 
 def _supply_asymmetric(ctx: SelectionContext) -> int:
@@ -755,8 +770,11 @@ def test_complete_task_witness() -> None:
 
 
 def test_reach_unlock_level_boundary() -> None:
-    # required 12, level 8 -> gap 4 (<=5) fires; level 6 -> gap 6 does not.
+    # required 12, level 8 -> gap 4 (<=5) fires; level 7 -> gap 5, the
+    # boundary itself, still fires (pins `<=` against `<`, which the random
+    # sweep only kills when it happens to draw gap 5); level 6 -> gap 6 does not.
     _assert_full_agreement(_base_scn(level=8, bank_required_level=12))
+    _assert_full_agreement(_base_scn(level=7, bank_required_level=12))
     _assert_full_agreement(_base_scn(level=6, bank_required_level=12))
 
 
@@ -988,6 +1006,10 @@ def _rich_oracle_args(
         # none. Enough panics filled the 64 KB pipe and wedged the oracle,
         # which is what the recurring 120 s `ladder_fires` timeouts were.
         account_gold(w) - w.gold,
+        # 41 partyJoinActive (2026-10-11): production's PARTY_JOIN `_fires` is
+        # exactly `ctx.party_hold is not None`, so thread that condition itself
+        # — one value, two sides, exact lockstep (like currencyTurnInActive).
+        _party_join_active(ctx),  # 41 partyJoinActive
     ]
 
 
@@ -1445,6 +1467,66 @@ def test_ge_bid_near_miss_no_step_demand() -> None:
     prod, _, lean, _ = drive_and_contest(w, gd, _gebid_ctx({}))
     assert prod[LadderMeans.GE_BID] is False
     assert lean[LadderMeans.GE_BID] is False
+
+
+# ===========================================================================
+# PARTY_JOIN (2026-10-11, group fights) — the LAST guard. Its `_fires` is
+# exactly `ctx.party_hold is not None`; the oracle reads arg[41] off the SAME
+# ctx. These fixtures pin that it fires on a lease, and that it WINS only when
+# every higher rung is quiet: it outranks the objective step below it and
+# loses to a survival guard above it.
+# ===========================================================================
+
+_PARTY_LEASE = PartyLease(boss="duskworm", leader="Lead", members=("diff",),
+                          layer="overworld", x=3, y=4)
+
+
+def _party_ctx(*, hold: bool) -> SelectionContext:
+    return dataclasses.replace(_gebid_ctx({}),
+                               party_hold=_PARTY_LEASE if hold else None)
+
+
+def _party_world(*, hp: int = 100) -> WorldState:
+    return dataclasses.replace(_gebid_world(), hp=hp)
+
+
+def test_party_join_drives_true_and_wins_over_the_objective_step() -> None:
+    """TRUE fixture: a live lease names this character, nothing above fires ->
+    PARTY_JOIN fires and is selected on BOTH ladders, ahead of an armed
+    objective step (which sits below every guard)."""
+    prod, prod_sel, lean, lean_sel = drive_and_contest(
+        _party_world(), _gebid_gd(), _party_ctx(hold=True), objective_step=True,
+        driven=frozenset({LadderMeans.PARTY_JOIN}))
+    assert prod[LadderMeans.PARTY_JOIN] is True
+    assert lean[LadderMeans.PARTY_JOIN] is True
+    assert prod[LadderMeans.OBJECTIVE_STEP] is True
+    assert prod_sel is LadderMeans.PARTY_JOIN
+    assert lean_sel is LadderMeans.PARTY_JOIN
+
+
+def test_party_join_loses_to_a_higher_guard() -> None:
+    """A lease AND critical HP: PARTY_JOIN still fires on both sides, but
+    HP_CRITICAL (first rung) wins selection on both — the party guard wins
+    only when every higher rung is quiet."""
+    prod, prod_sel, lean, lean_sel = drive_and_contest(
+        _party_world(hp=10), _gebid_gd(), _party_ctx(hold=True),
+        driven=frozenset({LadderMeans.PARTY_JOIN}))
+    assert prod[LadderMeans.PARTY_JOIN] is True
+    assert lean[LadderMeans.PARTY_JOIN] is True
+    assert prod_sel is LadderMeans.HP_CRITICAL
+    assert lean_sel is LadderMeans.HP_CRITICAL
+
+
+def test_party_join_near_miss_no_lease() -> None:
+    """Near-miss: no lease names this character -> PARTY_JOIN quiet on both
+    sides, and the objective step is selected instead."""
+    prod, prod_sel, lean, lean_sel = drive_and_contest(
+        _party_world(), _gebid_gd(), _party_ctx(hold=False), objective_step=True,
+        driven=frozenset({LadderMeans.PARTY_JOIN}))
+    assert prod[LadderMeans.PARTY_JOIN] is False
+    assert lean[LadderMeans.PARTY_JOIN] is False
+    assert prod_sel is LadderMeans.OBJECTIVE_STEP
+    assert lean_sel is LadderMeans.OBJECTIVE_STEP
 
 
 # ===========================================================================

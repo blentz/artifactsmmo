@@ -5,7 +5,7 @@ import Mathlib.Data.Prod.Lex
 /-! # DMeasure — the cycleStepD-tailored lex measure (residual closure)
 
 Bricks D1 + Phase-A1 + Phase-A2 of `docs/PLAN_residual_closure.md` /
-`docs/PLAN_c2_composed_liveness.md`. 21-slot lex measure under which the
+`docs/PLAN_c2_composed_liveness.md`. 22-slot lex measure under which the
 defer-faithful, MINT-RE-ARMING, PARTIAL-CLEARING cycle (`cycleStepD`) descends
 on every below-50 cycle.
 
@@ -34,7 +34,8 @@ batches is modelled step for step.
 | 15 | `bankPressure` | reducers | fight loot (1/2), claim mint (5) |
 | 16 | `hpDeficit`    | hpCritical / restForCombat | — |
 | 17-20 | geCancel / supplyDemand / currencyTurnIn / bankExpand | their rows (fire-and-lose or counted) | — |
-| 21 | `objectiveStepFlag` | synthetic placeholder | `perceptionRefreshD` arming — every other row descends a slot ≤ 20 |
+| 21 | `partyJoinFlag` (2026-10-11) | partyJoin (`.holdForParty` clears the flag; fire-and-lose) | — |
+| 22 | `objectiveStepFlag` | synthetic placeholder | `perceptionRefreshD` arming — every other row descends a slot ≤ 21 |
 
 The `drawOwedFlag` slot (2026-08-19, ACCEPT_TASK's descent above
 `phasePresent`) was removed in the Phase 5-2c-iii cleanup: the rung retired in
@@ -54,7 +55,7 @@ namespace Formal.Liveness.DMeasure
 open Formal.Liveness.Measure
 open Formal.Liveness.CumulativeProgress (b2n)
 
-/-- The 21-slot lex measure for the defer-faithful cycle. -/
+/-- The 22-slot lex measure for the defer-faithful cycle. -/
 structure DMeasure where
   levelDeficit           : Nat
   xpDeficit              : Nat
@@ -98,6 +99,14 @@ structure DMeasure where
   -- threshold, so a fire-and-lose flag would not descend. See
   -- `FMeasure.bankExpandSlot` for the full argument.
   bankExpandSlot         : Nat
+  -- 2026-10-11 (group fights): PARTY_JOIN is the LAST guard, so a party-hold
+  -- cycle is selectable below the cap and owes a descent. `.holdForParty`
+  -- clears only `partyJoinActive` (fire-and-lose — the hold's world answer is
+  -- the lease ending), touching no higher slot. Placed (like `geCancelFlag`)
+  -- ABOVE `objectiveStepFlag`, which `perceptionRefreshD` can RAISE — a slot
+  -- below it could not carry the descent of a cycle whose refresh arms the
+  -- objective step.
+  partyJoinFlag          : Nat
   objectiveStepFlag      : Nat
   deriving DecidableEq, Repr
 
@@ -125,18 +134,20 @@ noncomputable def dMeasure (s : State) : DMeasure :=
     bankExpandSlot         :=
       (ProductionLadder.BANK_EXPAND_FILL_DEN * s.bankItemsCount + 1)
         - ProductionLadder.BANK_EXPAND_FILL_NUM * s.bankCapacity
+    partyJoinFlag          := b2n s.partyJoinActive
     objectiveStepFlag      := b2n s.objectiveStepFires }
 
-/-- Right-associated 21-tuple of `Nat`. Widened on 2026-09-13 for
+/-- Right-associated 22-tuple of `Nat`. Widened on 2026-10-11 for
+    `partyJoinFlag`; widened on 2026-09-13 for
     `bankExpandSlot`; narrowed in the Phase 5-2c-iii cleanup (`drawOwedFlag`
     removed). (The name is historical; the arity is the tuple below, not the
     name.) -/
 abbrev LexNineteenD :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
     Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
-    Nat ×ₗ Nat
+    Nat ×ₗ Nat ×ₗ Nat
 
-/-- Embed a `DMeasure` into the right-associated lex 21-tuple. -/
+/-- Embed a `DMeasure` into the right-associated lex 22-tuple. -/
 def toLexD (m : DMeasure) : LexNineteenD :=
   toLex (m.levelDeficit,
       toLex (m.xpDeficit,
@@ -157,7 +168,8 @@ def toLexD (m : DMeasure) : LexNineteenD :=
       toLex (m.geCancelFlag,
       toLex (m.supplyDemandSlot,
       toLex (m.currencyTurnInFlag,
-      toLex (m.bankExpandSlot, m.objectiveStepFlag))))))))))))))))))))
+      toLex (m.bankExpandSlot,
+      toLex (m.partyJoinFlag, m.objectiveStepFlag)))))))))))))))))))))
 
 /-- Strict lex order on `DMeasure` — via the Mathlib lex embedding. -/
 def dMeasureLt (m₁ m₂ : DMeasure) : Prop :=
@@ -391,10 +403,40 @@ theorem dLt_of_objectiveStepFlag_dec {m₁ m₂ : DMeasure}
     (h19 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
     (h20 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
     (h21 : m₁.bankExpandSlot = m₂.bankExpandSlot)
+    (h22 : m₁.partyJoinFlag = m₂.partyJoinFlag)
     (h : m₁.objectiveStepFlag < m₂.objectiveStepFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inr ⟨h22, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+
+/-- Slot 21 (`partyJoinFlag`, 2026-10-11) decrease with slots 1-20 equal. The
+    PARTY_JOIN guard's `.holdForParty` apply clears only `partyJoinActive`, so
+    the fire-and-lose Bool flip `true → false` is the strict decrease. -/
+theorem dLt_of_partyJoin_dec {m₁ m₂ : DMeasure}
+    (h1 : m₁.levelDeficit = m₂.levelDeficit)
+    (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (h3 : m₁.phasePresent = m₂.phasePresent)
+    (h4 : m₁.taskCycles = m₂.taskCycles)
+    (h5 : m₁.pendingFlag = m₂.pendingFlag)
+    (h6 : m₁.overstockDebt = m₂.overstockDebt)
+    (h7 : m₁.overstockFlag = m₂.overstockFlag)
+    (h8 : m₁.depositDebt = m₂.depositDebt)
+    (h9 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
+    (h10 : m₁.sellDebt = m₂.sellDebt)
+    (h11 : m₁.sellableFlag = m₂.sellableFlag)
+    (h12 : m₁.recyclableFlag = m₂.recyclableFlag)
+    (h13 : m₁.craftReliefFlag = m₂.craftReliefFlag)
+    (h14 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
+    (h16 : m₁.bankPressure = m₂.bankPressure)
+    (h17 : m₁.hpDeficit = m₂.hpDeficit)
+    (h18 : m₁.geCancelFlag = m₂.geCancelFlag)
+    (h19 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
+    (h20 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
+    (h21 : m₁.bankExpandSlot = m₂.bankExpandSlot)
+    (h : m₁.partyJoinFlag < m₂.partyJoinFlag) : dMeasureLt m₁ m₂ := by
+  apply lex_intro
+  simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Slot 21 (`bankExpandSlot`, 2026-09-13) decrease with slots 1-20 equal. -/
 theorem dLt_of_bankExpand_dec {m₁ m₂ : DMeasure}

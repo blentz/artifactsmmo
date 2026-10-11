@@ -381,6 +381,8 @@ CRAFT_CONDITIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_cond
 REACH_CURRENCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "reach_currency.py"
 LOADOUT_WIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loadout_win.py"
 PARTY_WIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "party_win.py"
+HOLD_FOR_PARTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "hold_for_party.py"
+JOIN_PARTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "join_party.py"
 PARTY_COORD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "coordination_store.py"
 PARTY_LEASE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "party_lease_core.py"
 PARTY_LOOP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "party_loop.py"
@@ -5755,6 +5757,41 @@ PARTY_LEASE_CORE_MUTATIONS = [
      "    return all(name in cards and ready(cards[name], lease, now) for name in lease.members)\n",
      "    return all(ready(cards[name], lease, now) for name in lease.members if name in cards)\n"),
 ]
+# The party hold (docs/PLAN_group_fights.md increment 4b). OWN run_groups:
+# unit-killed by tests/test_ai/test_party_hold.py.
+PARTY_HOLD_ACTION_MUTATIONS = [
+    ("party hold: any layer",
+     "        return state.layer == self.lease.layer\n",
+     "        return True\n"),
+    ("party hold: the plan does not hold",
+     "        return replace(state, x=self.lease.x, y=self.lease.y, party_held=self.lease.boss)\n",
+     "        return replace(state, x=self.lease.x, y=self.lease.y)\n"),
+    ("party hold: holds off the tile",
+     "        if not on_tile(state, self.lease):\n",
+     "        if on_tile(state, self.lease):\n"),
+]
+JOIN_PARTY_GOAL_MUTATIONS = [
+    ("join party: never satisfied",
+     "        return state.party_held == self._lease.boss\n",
+     "        return False\n"),
+]
+PARTY_PLAYER_MUTATIONS = [
+    ("player: the leader holds for its own lease",
+     "        self._party_hold = lease if lease is not None and lease.leader != self.character else None\n",
+     "        self._party_hold = lease\n"),
+    ("player: a leased sibling stays on the roster",
+     "            party = tuple(c for c in cards if c.character not in taken)\n",
+     "            party = tuple(cards)\n"),
+    ("player: the leader fights before the party assembles",
+     "        if claimed and assembled(lease, self._party_cards, now):\n",
+     "        if claimed:\n"),
+    ("player: a party that never assembles is held for forever",
+     "        if now - since >= timedelta(seconds=PARTY_ASSEMBLY_SECONDS):\n",
+     "        if False:\n"),
+    ("player: a party fight keeps its lease",
+     "                    self._coordination.release_party(action.monster_code)\n",
+     "                    pass\n"),
+]
 # The party fight's execution (docs/PLAN_group_fights.md increment 5). OWN
 # run_groups: unit-killed by tests/test_ai/test_actions_execute.py,
 # tests/test_ai/test_party_win.py and tests/test_ai/test_player_learning.py.
@@ -7758,6 +7795,14 @@ LADDER_GUARD_FIRES_MUTATIONS = [
         "        return bool(cancel_targets(\n"
         "            state, game_data, 0, frozenset(step_profile or ()),\n"
         "            ctx.sibling_order_claims))",
+        "        return True",
+    ),
+    (
+        # 2026-10-11 (group fights): the PARTY_JOIN guard-drop — fires with no
+        # lease naming this character. Killed by the ladder differential (the
+        # oracle reads arg[41] off the SAME ctx, so the sides disagree).
+        "ladder/guards: PARTY_JOIN drop party_hold guard (fires with no lease)",
+        "        return ctx.party_hold is not None",
         "        return True",
     ),
     (
@@ -10493,6 +10538,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_party_loop.py", survivors)
     run_group(PARTY_COORD_SRC, PARTY_LEASE_STORE_MUTATIONS,
               "tests/test_ai/test_party_coordination.py", survivors)
+    run_group(HOLD_FOR_PARTY_SRC, PARTY_HOLD_ACTION_MUTATIONS,
+              "tests/test_ai/test_party_hold.py", survivors)
+    run_group(JOIN_PARTY_SRC, JOIN_PARTY_GOAL_MUTATIONS,
+              "tests/test_ai/test_party_hold.py", survivors)
+    run_group(PLAYER_SRC, PARTY_PLAYER_MUTATIONS,
+              "tests/test_ai/test_party_hold.py", survivors)
     run_group(PARTY_LEASE_CORE_SRC, PARTY_LEASE_CORE_MUTATIONS,
               "tests/test_ai/test_party_coordination.py", survivors)
     run_group(APPLY_FIGHT_SRC, PARTY_FIGHT_EXECUTE_MUTATIONS,

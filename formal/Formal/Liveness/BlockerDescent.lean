@@ -222,6 +222,23 @@ theorem descends_geCancel (s : State)
   apply fLt_of_geCancel_dec <;>
     simp [fMeasure, pressureDelta, applyActionKind, hfire]
 
+/-- `partyJoin` (→ `.holdForParty`) strictly descends at `partyJoinFlag`
+    (2026-10-11, group fights). The fire-and-lose PARTY_JOIN guard, exactly the
+    `geCancel` shape: `.holdForParty` clears only `partyJoinActive`, so every
+    higher slot is unchanged and the bottom slot strictly drops. -/
+theorem descends_partyJoin (s : State)
+    (hk : productionLadder (perceptionRefresh s) = some .partyJoin) :
+    fMeasureLt (fMeasure (cycleStepF s)) (fMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, partyJoinFires] at hfire
+  rw [cycleStepF_some s hk, ← fMeasure_perceptionRefresh s]
+  have hcs : cycleStep (perceptionRefresh s) =
+      applyActionKind .holdForParty (perceptionRefresh s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  apply fLt_of_partyJoin_dec <;>
+    simp [fMeasure, pressureDelta, applyActionKind, hfire]
+
 set_option maxRecDepth 8000 in
 /-- `bankExpand` (→ `.buyBankExpansion`) strictly descends at `bankExpandSlot`
     (2026-09-13). Bottom of the cascade, like `geCancel`:

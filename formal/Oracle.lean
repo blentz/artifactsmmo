@@ -1121,7 +1121,7 @@ def runBootstrapCharHorizon (_args : Array Json) : Json :=
 
 args layout (Ints):
 * `[0]`         query: 1 = goalReprOfGuard, 2 = goalReprOfMeans
-* For query 1: `[1]` = GuardKind index 0..12.
+* For query 1: `[1]` = GuardKind index 0..13.
 * For query 2: `[1]` = MeansKind index 0..15.
 
 (Query 0, the retired flat ranking's `decideCmp` comparator, was deleted with
@@ -1146,7 +1146,8 @@ def runDecideKey (args : Array Json) : Json :=
       | 9 => .recycleRelief
       | 10 => .sellRelief
       | 11 => .craftPotions
-      | _ => .geCancel  -- index 12
+      | 12 => .geCancel
+      | _ => .partyJoin  -- index 13 (2026-10-11, appended last)
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfGuard k))]
   else
     let idx := (intArg args 1).toNat
@@ -2591,6 +2592,14 @@ ARG LAYOUT (flat ints; index → field):
                                         for every differential scenario and
                                         left the new arm uncompared against
                                         production.)
+* `[41]` partyJoinActive              (Bool 0/1 — `ctx.party_hold is not None`,
+                                        the PARTY_JOIN guard, 2026-10-11 group
+                                        fights: a live party lease names this
+                                        character as a member. Appended, layout
+                                        undisturbed. The cycle_step_d/e runners
+                                        reuse only the 0..32 prefix and leave it
+                                        at `inertLadderState`'s false, as they
+                                        do every guard Bool past `[32]`.)
 
 Emits a JSON object: one Bool field per MeansKind keyed by `meansKindName`
 (one per `allInLadderOrder` rung), plus `"selected"`: the name of
@@ -2628,7 +2637,9 @@ def runLadder (args : Array Json) : Json :=
     -- [40] bankGold (2026-09-13): the BANKED half of the account balance, for
     -- BANK_EXPAND's account-scoped reserve gate. Appended, so every existing
     -- caller keeps its indices.
-    bankGold := n 40 }
+    bankGold := n 40,
+    -- [41] partyJoinActive (2026-10-11): `ctx.party_hold is not None`.
+    partyJoinActive := b 41 }
   let firesFields : List (String × Json) :=
     allInLadderOrder.map (fun k => (meansKindName k, Json.bool (fires k s)))
   let selected : Json := match productionLadder s with

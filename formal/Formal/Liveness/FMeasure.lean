@@ -5,7 +5,7 @@ import Mathlib.Data.Prod.Lex
 
 /-! # FMeasure — the cycleStepF-tailored lex measure (unconditional-descent engine)
 
-Phase U (see `docs/PLAN_l50_unconditional_descent.md`): the 16-slot lexicographic
+Phase U (see `docs/PLAN_l50_unconditional_descent.md`): the 17-slot lexicographic
 measure under which EVERY below-50 `cycleStepF` cycle strictly descends — whatever
 means the ladder selects. This is the measure that discharges the capstone's
 `hquiet` (blockers-quiet) residual: instead of assuming every below-50 cycle
@@ -33,6 +33,7 @@ and every means that RAISES a slot strictly descends an earlier one:
 | 14 | `supplyDemandSlot` (2026-08-01) | supplyBank (`.gather` discharges one unit; fires require `supplyDemand ≥ SUPPLY_DEMAND_MIN > 0`) | nothing in-model |
 | 15 | `currencyTurnInFlag` (2026-08-16) | currencyTurnIn (`.npcBuy` clears the flag; fire-and-lose, no threshold) | nothing in-model |
 | 16 | `bankExpandSlot` (2026-09-13) | bankExpand (`.buyBankExpansion` raises capacity; a count, see the field note) | nothing in-model |
+| 17 | `partyJoinFlag` (2026-10-11) | partyJoin (`.holdForParty` clears the flag; fire-and-lose, like `geCancelFlag`) | nothing in-model |
 
 The `drawOwedFlag` slot (2026-08-19, ACCEPT_TASK's descent above `phasePresent`)
 was removed in the Phase 5-2c-iii cleanup: the rung retired in c-2 #3 and the
@@ -68,7 +69,7 @@ open Formal.Liveness.CumulativeProgress (b2n)
 open Formal.Liveness.CycleStepF
 open Formal.Liveness.CycleStepFIteration
 
-/-- The 16-slot lex measure for the faithful cycle. See module docstring for the
+/-- The 17-slot lex measure for the faithful cycle. See module docstring for the
     slot-by-slot design table. -/
 structure FMeasure where
   levelDeficit           : Nat
@@ -127,6 +128,15 @@ structure FMeasure where
   -- so retuning the trigger cannot silently invalidate the termination argument
   -- the way it invalidated the flag shape.
   bankExpandSlot         : Nat
+  -- Slot 17 (2026-10-11, group fights). PARTY_JOIN is the LAST guard (after
+  -- CRAFT_POTIONS), so a party-hold cycle is selectable below the cap and owes
+  -- a descent. `.holdForParty` touches NO higher slot (it clears only
+  -- `partyJoinActive`) and is fire-and-lose — the model's reading of the lease
+  -- ending (the leader fights, or the lease expires after
+  -- `PARTY_LEASE_TTL_SECONDS`). Production may repeat the hold for up to that
+  -- TTL; the model collapses that bounded wait to one step. So like
+  -- `geCancelFlag` this flag sits at the bottom of the cascade.
+  partyJoinFlag          : Nat
   deriving DecidableEq, Repr
 
 /-- Extract the FMeasure from a `State`. Slot 3 is "a task is present"
@@ -153,9 +163,10 @@ noncomputable def fMeasure (s : State) : FMeasure :=
     currencyTurnInFlag     := b2n s.currencyTurnInActive
     bankExpandSlot         :=
       (ProductionLadder.BANK_EXPAND_FILL_DEN * s.bankItemsCount + 1)
-        - ProductionLadder.BANK_EXPAND_FILL_NUM * s.bankCapacity }
+        - ProductionLadder.BANK_EXPAND_FILL_NUM * s.bankCapacity
+    partyJoinFlag          := b2n s.partyJoinActive }
 
-/-! ## Strict lex order — hand-rolled 16-way disjunction (the
+/-! ## Strict lex order — hand-rolled 17-way disjunction (the
 `CumulativeProgress.extMeasureLt` pattern). -/
 
 /-- Equality of the first `n` slots, spelled out per prefix — the shared
@@ -282,18 +293,34 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.supplyDemandSlot = m₂.supplyDemandSlot
      ∧ m₁.currencyTurnInFlag = m₂.currencyTurnInFlag
      ∧ m₁.bankExpandSlot < m₂.bankExpandSlot)
+  ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.phasePresent = m₂.phasePresent
+     ∧ m₁.overstockFlag = m₂.overstockFlag
+     ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
+     ∧ m₁.sellableFlag = m₂.sellableFlag
+     ∧ m₁.recyclableFlag = m₂.recyclableFlag
+     ∧ m₁.craftReliefFlag = m₂.craftReliefFlag
+     ∧ m₁.craftPotionsFlag = m₂.craftPotionsFlag
+     ∧ m₁.pendingFlag = m₂.pendingFlag
+     ∧ m₁.bankPressure = m₂.bankPressure
+     ∧ m₁.hpDeficit = m₂.hpDeficit
+     ∧ m₁.geCancelFlag = m₂.geCancelFlag
+     ∧ m₁.supplyDemandSlot = m₂.supplyDemandSlot
+     ∧ m₁.currencyTurnInFlag = m₂.currencyTurnInFlag
+     ∧ m₁.bankExpandSlot = m₂.bankExpandSlot
+     ∧ m₁.partyJoinFlag < m₂.partyJoinFlag)
 
 /-! ### Well-foundedness via embedding into Mathlib lex. -/
 
-/-- Right-associated 16-tuple of `Nat`. Widened on 2026-09-13 for
-    `bankExpandSlot`, narrowed in the Phase 5-2c-iii cleanup when the retired
+/-- Right-associated 17-tuple of `Nat`. Widened on 2026-10-11 for
+    `partyJoinFlag`; widened on 2026-09-13 for `bankExpandSlot`, narrowed in the Phase 5-2c-iii cleanup when the retired
     ACCEPT_TASK rung's `drawOwedFlag` slot left. (The name is historical; the
     arity is the tuple below, not the name.) -/
 abbrev LexSixteen :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
-    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
+    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
-/-- Embed an `FMeasure` into the right-associated lex 16-tuple. -/
+/-- Embed an `FMeasure` into the right-associated lex 17-tuple. -/
 def toLex13 (m : FMeasure) : LexSixteen :=
   toLex (m.levelDeficit,
     toLex (m.xpDeficit,
@@ -310,14 +337,15 @@ def toLex13 (m : FMeasure) : LexSixteen :=
                             toLex (m.geCancelFlag,
                               toLex (m.supplyDemandSlot,
                                 toLex (m.currencyTurnInFlag,
-                                  m.bankExpandSlot)))))))))))))))
+                                  toLex (m.bankExpandSlot,
+                                    m.partyJoinFlag))))))))))))))))
 
 /-- `fMeasureLt` implies the embedded `<` on `LexSixteen`. -/
 theorem toLex13_lt_of_fMeasureLt
     {m₁ m₂ : FMeasure} (h : fMeasureLt m₁ m₂) :
     toLex13 m₁ < toLex13 m₂ := by
   simp only [toLex13, Prod.Lex.lt_iff, ofLex_toLex]
-  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h
+  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h
   · exact Or.inl h
   · obtain ⟨h1, h⟩ := h
     exact Or.inr ⟨h1, Or.inl h⟩
@@ -369,7 +397,14 @@ theorem toLex13_lt_of_fMeasureLt
     exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
             Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
               Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
-                Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+                Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16,
+            h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
+            Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
+              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
+                Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15,
+                  Or.inr ⟨h16, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Well-foundedness of `fMeasureLt`, by `InvImage` reduction to Mathlib's
     standard well-founded order on `LexSixteen`. -/
@@ -591,8 +626,34 @@ theorem fLt_of_bankExpand_dec {m₁ m₂ : FMeasure}
     (h16 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
     (h : m₁.bankExpandSlot < m₂.bankExpandSlot) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-      ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h11, h12, h13, h14, h15, h16, h⟩))))))))))))))
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl
+      ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h11, h12, h13, h14, h15, h16, h⟩)))))))))))))))
+
+/-- Slot 17 (`partyJoinFlag`) decrease with slots 1-16 equal (2026-10-11).
+    The PARTY_JOIN guard's `.holdForParty` apply clears only `partyJoinActive`,
+    so — exactly like `geCancelFlag` — every higher slot is unchanged and the
+    fire-and-lose Bool flip `true → false` is the strict decrease. -/
+theorem fLt_of_partyJoin_dec {m₁ m₂ : FMeasure}
+    (h1 : m₁.levelDeficit = m₂.levelDeficit)
+    (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (h3 : m₁.phasePresent = m₂.phasePresent)
+    (h4 : m₁.overstockFlag = m₂.overstockFlag)
+    (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
+    (h6 : m₁.sellableFlag = m₂.sellableFlag)
+    (h7 : m₁.recyclableFlag = m₂.recyclableFlag)
+    (h8 : m₁.craftReliefFlag = m₂.craftReliefFlag)
+    (h9 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
+    (h11 : m₁.pendingFlag = m₂.pendingFlag)
+    (h12 : m₁.bankPressure = m₂.bankPressure)
+    (h13 : m₁.hpDeficit = m₂.hpDeficit)
+    (h14 : m₁.geCancelFlag = m₂.geCancelFlag)
+    (h15 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
+    (h16 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
+    (h17 : m₁.bankExpandSlot = m₂.bankExpandSlot)
+    (h : m₁.partyJoinFlag < m₂.partyJoinFlag) : fMeasureLt m₁ m₂ :=
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+      ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h11, h12, h13, h14, h15, h16, h17, h⟩)))))))))))))))
 
 /-! ## The engine — reach 50 from per-cycle FMeasure descent (the
 `MeasureDescent.exists_level_ge_of_descent` shape over the richer tuple). -/

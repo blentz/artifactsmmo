@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
+from artifactsmmo_cli.ai.party_lease_core import PartyLease
 from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.thresholds import (
     DEPOSIT_FULL_FRACTION,
@@ -212,9 +213,19 @@ def test_fires_returns_false_for_unknown_guard_kind():
     assert result is False
 
 
-def test_craft_potions_is_last_guard():
-    # CRAFT_POTIONS is the LAST (lowest-priority) guard — still preempts all means.
-    assert GUARD_ORDER[-1] is GuardKind.CRAFT_POTIONS
+def test_craft_potions_then_party_join_close_the_guards():
+    # CRAFT_POTIONS stocks the fight's potions; PARTY_JOIN (docs/PLAN_group_fights.md
+    # increment 4) is the LAST guard — survival, bag and potions first — and still
+    # preempts all means.
+    assert GUARD_ORDER[-2:] == (GuardKind.CRAFT_POTIONS, GuardKind.PARTY_JOIN)
+
+
+def test_party_join_fires_on_a_lease_naming_a_member():
+    lease = PartyLease("duskworm", "HAL", ("testchar",), "overworld", 3, -1)
+    state = make_state()
+    assert not _fires(GuardKind.PARTY_JOIN, state, GameData(), None, _ctx())
+    assert _fires(GuardKind.PARTY_JOIN, state, GameData(), None,
+                  dataclasses.replace(_ctx(), party_hold=lease))
 
 
 def test_discard_high_silent_when_step_profile_protects_goal_item():

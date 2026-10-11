@@ -48,6 +48,7 @@ _GUARD_REPR: dict[GuardKind, str] = {
     GuardKind.SELL_RELIEF: "SellInventory",
     GuardKind.CRAFT_POTIONS: "CraftPotions",
     GuardKind.GE_CANCEL: "CancelOrders",
+    GuardKind.PARTY_JOIN: "JoinParty",
 }
 
 _MEANS_REPR: dict[MeansKind, str] = {

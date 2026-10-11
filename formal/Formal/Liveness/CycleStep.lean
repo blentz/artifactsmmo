@@ -112,6 +112,7 @@ noncomputable def planFor : MeansKind → State → Plan
   | .depositFull      , _ => [.depositAll]
   | .discardHigh      , _ => [.deleteItem]
   | .craftPotions     , _ => [.craft]
+  | .partyJoin        , _ => [.holdForParty]
   | .claimPending     , _ => [.claimPendingItem]
   | .sellPressured    , _ => [.npcSell]
   | .objectiveStep    , s =>
@@ -416,6 +417,22 @@ theorem cycleStep_progress_or_waits
     have hpost : (applyActionKind .craft s).craftPotionsFires = false := by
       simp [applyActionKind]
     have hpre' : s.craftPotionsFires = false := by
+      rw [heq] at hpost; exact hpost
+    rw [hfires] at hpre'; cases hpre'
+  | partyJoin =>
+    -- PARTY_JOIN plans `.holdForParty`, which clears `partyJoinActive`.
+    -- partyJoinFires requires partyJoinActive = true, so the post-state
+    -- (false) differs from the pre-state (true) → cycleStep s ≠ s. Mirrors the
+    -- geCancel fire-and-lose descent exactly.
+    left
+    have hcs : cycleStep s = applyActionKind .holdForParty s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    simp only [fires, ProductionLadder.partyJoinFires] at hfires
+    intro heq
+    have hpost : (applyActionKind .holdForParty s).partyJoinActive = false := by
+      simp [applyActionKind]
+    have hpre' : s.partyJoinActive = false := by
       rw [heq] at hpost; exact hpost
     rw [hfires] at hpre'; cases hpre'
   | claimPending =>

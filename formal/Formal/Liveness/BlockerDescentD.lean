@@ -100,6 +100,9 @@ private theorem refreshD_supplyAsymmetric (s : State) :
 private theorem refreshD_currencyTurnIn (s : State) :
     (perceptionRefreshD s).currencyTurnInActive = s.currencyTurnInActive := by
   unfold perceptionRefreshD; split <;> rfl
+private theorem refreshD_partyJoin (s : State) :
+    (perceptionRefreshD s).partyJoinActive = s.partyJoinActive := by
+  unfold perceptionRefreshD; split <;> rfl
 private theorem refreshD_craftRelief (s : State) :
     (perceptionRefreshD s).craftReliefFires = s.craftReliefFires := by
   unfold perceptionRefreshD; split <;> rfl
@@ -324,6 +327,35 @@ theorem descendsD_bankExpand (s : State)
       refreshD_bankItemsCount, refreshD_bankCapacity,
       perceptionRefreshD_level, perceptionRefreshD_xp] <;>
     omega
+
+set_option maxRecDepth 8000 in
+/-- `partyJoin` (→ `.holdForParty`) strictly descends at `partyJoinFlag`
+    (2026-10-11, the fire-and-lose PARTY_JOIN guard). `.holdForParty` clears
+    only `partyJoinActive`; the slot sits ABOVE `objectiveStepFlag`, so no
+    perception-raised slot is below the strict decrease — the `geCancel`
+    shape. -/
+theorem descendsD_partyJoin (s : State)
+    (hk : productionLadder (perceptionRefreshD s) = some .partyJoin) :
+    dMeasureLt (dMeasure (cycleStepD s)) (dMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, partyJoinFires, refreshD_partyJoin] at hfire
+  rw [cycleStepD_some s hk]
+  have hcs : cycleStep (perceptionRefreshD s) =
+      applyActionKind .holdForParty (perceptionRefreshD s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  apply dLt_of_partyJoin_dec <;>
+    simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
+      applyActionKind, hfire,
+      refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
+      refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
+      refreshD_craftRelief, refreshD_craftPotions,
+      refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
+      refreshD_hp, refreshD_maxHp,
+      refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
+      refreshD_geCancel, refreshD_supplyDemand, refreshD_currencyTurnIn,
+      refreshD_bankItemsCount, refreshD_bankCapacity, refreshD_partyJoin,
+      perceptionRefreshD_level, perceptionRefreshD_xp]
 
 /-- `depositFull` (→ `.depositAll`) strictly descends. -/
 theorem descendsD_depositFull (s : State)
@@ -632,7 +664,7 @@ theorem descendsD_placeholder (s : State) (hlvl : s.level < 50)
     rw [hmint]
     apply dLt_of_objectiveStepFlag_dec <;>
       simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
-        applyActionKind, his0, hof, refreshD_geCancel]
+        applyActionKind, his0, hof, refreshD_geCancel, refreshD_partyJoin]
   · -- Unarmed Bool: the step is the held task's work (slot 4).
     have hof' : s.objectiveStepFires = false := Bool.eq_false_iff.mpr hof
     have hgate : deferGate s = true := by

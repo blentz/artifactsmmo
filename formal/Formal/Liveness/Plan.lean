@@ -487,6 +487,15 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- (see `CycleStep.planFor`'s `.currencyTurnIn` case for the honest
   -- disclosure of that over-approximation).
   | .npcBuy, s => { s with currencyTurnInActive := false }
+  -- HoldForPartyAction (hold_for_party.py) emitted by the PARTY_JOIN guard
+  -- (2026-10-11, group fights): the member moves to the lease tile and holds.
+  -- The hold's world answer is the lease ENDING — the leader fights (consuming
+  -- it) or it expires after PARTY_LEASE_TTL_SECONDS (300 s) — so the next
+  -- evaluation no longer finds a lease naming this member. Clears the partyJoin
+  -- signal — single-action semantics, like .geCancelOrder clears the geCancel
+  -- target. Fire-and-lose; production may repeat the hold for up to the TTL,
+  -- which the model collapses into this one step.
+  | .holdForParty, s => { s with partyJoinActive := false }
   -- All other kinds: no-op (see module docstring; future phases will
   -- replace each with its specific semantics).
   | _, s => s

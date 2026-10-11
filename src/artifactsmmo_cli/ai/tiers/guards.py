@@ -91,6 +91,7 @@ class GuardKind(Enum):
     DISCARD_HIGH = "discard_high"
     CRAFT_POTIONS = "craft_potions"  # preemptively stock the utility-slot potion baseline
     GE_CANCEL = "ge_cancel"  # on-need + TTL cancellation of posted GE orders (appended LAST)
+    PARTY_JOIN = "party_join"  # a live party lease names this character as a member
 
 
 GUARD_ORDER: tuple[GuardKind, ...] = (
@@ -111,7 +112,10 @@ GUARD_ORDER: tuple[GuardKind, ...] = (
     GuardKind.SELL_RELIEF,  # bank-full: sell surplus to NPC before deposit/discard
     GuardKind.DEPOSIT_FULL,
     GuardKind.DISCARD_HIGH,
-    GuardKind.CRAFT_POTIONS,  # lowest-priority guard: stock potions before grind
+    GuardKind.CRAFT_POTIONS,  # stock potions before grind
+    # Last: survival, bag and potions first; then a party lease pulls the member
+    # off its own objective (USER 2026-10-10, "always"; docs/PLAN_group_fights.md).
+    GuardKind.PARTY_JOIN,
 )
 
 
@@ -270,6 +274,10 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
         # Only the chosen loadout's potions, for the fight ahead
         # (docs/PLAN_consumable_utility.md increment 5).
         return craft_potions_fires(state, game_data, guard_loadout(ctx.loadout, ctx.fight_monster))
+    if kind is GuardKind.PARTY_JOIN:
+        # A live lease names this character as a member (`ctx.party_hold`,
+        # read once per cycle from the coordination store).
+        return ctx.party_hold is not None
     if kind is GuardKind.GE_CANCEL:
         # On-need + TTL cancellation. `needed_items` is the active step's material
         # demand (`step_profile` codes — the same per-cycle demand GE_BID reads); a

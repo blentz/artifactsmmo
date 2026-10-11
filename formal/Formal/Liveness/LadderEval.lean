@@ -66,6 +66,7 @@ def inertLadderState : State where
   bankJunkNonempty := false
   geBidCandidateNonempty := false
   geCancelTargetsNonempty := false
+  partyJoinActive := false
   taskCoinsTotal := 0
   taskExchangeMinCoins := 0
   objectiveStepFires := false
@@ -246,6 +247,7 @@ def meansKindName : MeansKind → String
   | .depositFull         => "depositFull"
   | .discardHigh         => "discardHigh"
   | .craftPotions        => "craftPotions"
+  | .partyJoin           => "partyJoin"
   | .claimPending        => "claimPending"
   | .sellPressured       => "sellPressured"
   | .objectiveStep       => "objectiveStep"

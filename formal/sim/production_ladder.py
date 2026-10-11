@@ -54,6 +54,7 @@ class LadderMeans(Enum):
     DEPOSIT_FULL = "deposit_full"
     DISCARD_HIGH = "discard_high"
     CRAFT_POTIONS = "craft_potions"
+    PARTY_JOIN = "party_join"
     CLAIM_PENDING = "claim_pending"
     SELL_PRESSURED = "sell_pressured"
     OBJECTIVE_STEP = "objective_step"
@@ -78,6 +79,8 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.DEPOSIT_FULL,
     LadderMeans.DISCARD_HIGH,
     LadderMeans.CRAFT_POTIONS,
+    # 2026-10-11 (group fights): the LAST guard, mirroring GUARD_ORDER.
+    LadderMeans.PARTY_JOIN,
     LadderMeans.SELL_PRESSURED,
     LadderMeans.CLAIM_PENDING,
     # Phase 5-2c-ii: an interrupt (the deposit sink), mirroring
@@ -105,6 +108,7 @@ _GUARD_MAP: dict[LadderMeans, GuardKind] = {
     LadderMeans.DEPOSIT_FULL: GuardKind.DEPOSIT_FULL,
     LadderMeans.DISCARD_HIGH: GuardKind.DISCARD_HIGH,
     LadderMeans.CRAFT_POTIONS: GuardKind.CRAFT_POTIONS,
+    LadderMeans.PARTY_JOIN: GuardKind.PARTY_JOIN,
 }
 
 _MEANS_MAP: dict[LadderMeans, MeansKind] = {
@@ -133,6 +137,7 @@ assert tuple(g for g in GUARD_ORDER) == (
     GuardKind.DEPOSIT_FULL,
     GuardKind.DISCARD_HIGH,
     GuardKind.CRAFT_POTIONS,
+    GuardKind.PARTY_JOIN,
 ), "GUARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 assert COLLECT_REWARD_ORDER == (

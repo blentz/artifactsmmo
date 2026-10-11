@@ -4,7 +4,7 @@ import Mathlib.Data.Prod.Lex
 
 /-! # EMeasure — the geared-cycle lex measure (E-tower, C2b)
 
-`docs/PLAN_c2_composed_liveness.md`. 23 slots. Gear slots:
+`docs/PLAN_c2_composed_liveness.md`. 24 slots. Gear slots:
 
 * slot 1 `levelDeficit` — fight rollover; dominates the band-change gear
   re-arm (`gearGap := GEAR_CAP`, adequacy dropped).
@@ -30,7 +30,7 @@ namespace Formal.Liveness.EMeasure
 open Formal.Liveness.Measure
 open Formal.Liveness.CumulativeProgress (b2n)
 
-/-- The 23-slot lex measure for the geared cycle. -/
+/-- The 24-slot lex measure for the geared cycle. -/
 structure EMeasure where
   levelDeficit           : Nat
   gearGap                : Nat
@@ -71,6 +71,12 @@ structure EMeasure where
   -- flag, because the 75% trigger is not cleared by a single buy — see
   -- `FMeasure.bankExpandSlot`.
   bankExpandSlot         : Nat
+  -- 2026-10-11 (group fights): PARTY_JOIN is the LAST guard, selectable below
+  -- the cap. `.holdForParty` clears only `partyJoinActive` (fire-and-lose — the
+  -- hold's world answer is the lease ending) and touches no higher slot. Placed
+  -- (like `geCancelFlag`) ABOVE `objectiveStepFlag`, which `perceptionRefreshE`
+  -- can RAISE.
+  partyJoinFlag          : Nat
   objectiveStepFlag      : Nat
   deriving DecidableEq, Repr
 
@@ -100,15 +106,17 @@ noncomputable def eMeasure (s : State) : EMeasure :=
     bankExpandSlot         :=
       (ProductionLadder.BANK_EXPAND_FILL_DEN * s.bankItemsCount + 1)
         - ProductionLadder.BANK_EXPAND_FILL_NUM * s.bankCapacity
+    partyJoinFlag          := b2n s.partyJoinActive
     objectiveStepFlag      := b2n s.objectiveStepFires }
 
-/-- Right-associated 23-tuple of `Nat`. -/
+/-- Right-associated 24-tuple of `Nat`. -/
 abbrev LexE :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
     Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
-    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
+    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
-/-- Embed an `EMeasure` into the lex 23-tuple (widened 2026-09-13 for
+/-- Embed an `EMeasure` into the lex 24-tuple (widened 2026-10-11 for
+    `partyJoinFlag`; widened 2026-09-13 for
     `bankExpandSlot`; narrowed in the Phase 5-2c-iii cleanup when the retired
     ACCEPT_TASK rung's `drawOwedFlag` slot left). -/
 def toLexE (m : EMeasure) : LexE :=
@@ -134,7 +142,8 @@ def toLexE (m : EMeasure) : LexE :=
       toLex (m.supplyDemandSlot,
       toLex (m.currencyTurnInFlag,
       toLex (m.bankExpandSlot,
-      m.objectiveStepFlag))))))))))))))))))))))
+      toLex (m.partyJoinFlag,
+      m.objectiveStepFlag)))))))))))))))))))))))
 
 /-- Strict lex order via the Mathlib embedding. -/
 def eMeasureLt (m₁ m₂ : EMeasure) : Prop :=
@@ -442,10 +451,42 @@ theorem eLt_of_objectiveStepFlag_dec {m₁ m₂ : EMeasure}
     (h20 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
     (h21 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
     (hbe : m₁.bankExpandSlot = m₂.bankExpandSlot)
+    (hpj : m₁.partyJoinFlag = m₂.partyJoinFlag)
     (h : m₁.objectiveStepFlag < m₂.objectiveStepFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inr ⟨hbe, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inr ⟨hbe, Or.inr ⟨hpj, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+
+/-- Slot for `partyJoinFlag` (2026-10-11): decrease with every higher slot
+    equal, directly below `bankExpandSlot`. The PARTY_JOIN guard's
+    `.holdForParty` apply clears only `partyJoinActive` — fire-and-lose. -/
+theorem eLt_of_partyJoin_dec {m₁ m₂ : EMeasure}
+    (h1 : m₁.levelDeficit = m₂.levelDeficit)
+    (h2 : m₁.gearGap = m₂.gearGap)
+    (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
+    (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (h5 : m₁.phasePresent = m₂.phasePresent)
+    (h6 : m₁.taskCycles = m₂.taskCycles)
+    (h7 : m₁.pendingFlag = m₂.pendingFlag)
+    (h8 : m₁.overstockDebt = m₂.overstockDebt)
+    (h9 : m₁.overstockFlag = m₂.overstockFlag)
+    (h10 : m₁.depositDebt = m₂.depositDebt)
+    (h11 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
+    (h12 : m₁.sellDebt = m₂.sellDebt)
+    (h13 : m₁.sellableFlag = m₂.sellableFlag)
+    (h14 : m₁.recyclableFlag = m₂.recyclableFlag)
+    (h15 : m₁.craftReliefFlag = m₂.craftReliefFlag)
+    (h16 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
+    (h17 : m₁.bankPressure = m₂.bankPressure)
+    (h18 : m₁.hpDeficit = m₂.hpDeficit)
+    (h19 : m₁.geCancelFlag = m₂.geCancelFlag)
+    (h20 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
+    (h21 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
+    (hbe : m₁.bankExpandSlot = m₂.bankExpandSlot)
+    (h : m₁.partyJoinFlag < m₂.partyJoinFlag) : eMeasureLt m₁ m₂ := by
+  apply lex_intro
+  simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inr ⟨hbe, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_geCancel_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)

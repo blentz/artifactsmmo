@@ -114,6 +114,8 @@ inductive ActionKind where
                     -- the GE_BID means. Real production Action subclass.
   | geCancelOrder   -- 2026-07-24: GeCancelOrderAction (ge_cancel_order.py), emitted
                     -- by the GE_CANCEL guard. Real production Action subclass.
+  | holdForParty    -- 2026-10-11: HoldForPartyAction (hold_for_party.py), emitted
+                    -- by the PARTY_JOIN guard. Real production Action subclass.
   -- Phase 21d-1: synthetic placeholder, NOT a production `Action` subclass.
   -- See module docstring "Phase 21d-1: synthetic `.objectiveStep`
   -- placeholder" for the honest disclosure. Excluded from
@@ -129,7 +131,7 @@ def allActionKinds : List ActionKind :=
    .gather, .mapTransition, .move, .moveTo, .npcBuy, .npcSell,
    .optimizeLoadout, .recycle, .rest, .taskCancel, .taskExchange,
    .taskTrade, .unequip, .useConsumable, .wait, .withdrawGold,
-   .withdrawItem, .gePostBuyOrder, .geCancelOrder, .objectiveStep]
+   .withdrawItem, .gePostBuyOrder, .geCancelOrder, .holdForParty, .objectiveStep]
 
 /-- Enumeration of the production `Action` subclasses ONLY (27, matching
     `src/artifactsmmo_cli/ai/actions/` at commit b60e979). Excludes the
@@ -140,13 +142,13 @@ def productionActionKinds : List ActionKind :=
    .gather, .mapTransition, .move, .moveTo, .npcBuy, .npcSell,
    .optimizeLoadout, .recycle, .rest, .taskCancel, .taskExchange,
    .taskTrade, .unequip, .useConsumable, .wait, .withdrawGold,
-   .withdrawItem, .gePostBuyOrder, .geCancelOrder]
+   .withdrawItem, .gePostBuyOrder, .geCancelOrder, .holdForParty]
 
-/-- Sanity: 30 constructors total (29 production + 1 synthetic). -/
-example : allActionKinds.length = 30 := by decide
+/-- Sanity: 31 constructors total (30 production + 1 synthetic). -/
+example : allActionKinds.length = 31 := by decide
 
-/-- Sanity: 29 production `Action` subclasses (b60e979's 27 + GePostBuyOrderAction
-    + GeCancelOrderAction, 2026-07-24). -/
-example : productionActionKinds.length = 29 := by decide
+/-- Sanity: 30 production `Action` subclasses (b60e979's 27 + GePostBuyOrderAction
+    + GeCancelOrderAction, 2026-07-24, + HoldForPartyAction, 2026-10-11). -/
+example : productionActionKinds.length = 30 := by decide
 
 end Formal.Liveness.PlanAction

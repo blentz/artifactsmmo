@@ -367,6 +367,10 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
   -- the fleet election. Clears the currencyTurnIn signal — mirrors
   -- `applyActionKind .npcBuy`. Fire-and-lose.
   | .npcBuy, s => { s with currencyTurnInActive := false }
+  -- HoldForPartyAction (hold_for_party.py) emitted by PARTY_JOIN (2026-10-11):
+  -- the hold's answer is the lease ending. Clears the partyJoin signal —
+  -- mirrors `applyActionKind .holdForParty`. Fire-and-lose.
+  | .holdForParty, s => { s with partyJoinActive := false }
   -- All other kinds: no-op (see module docstring; future phases will
   -- replace each with its specific semantics).
   | _, s => s
@@ -414,6 +418,7 @@ def planForC : MeansKind → State → Plan
   | .drainBankJunk    , _ => [.withdrawItem]
   | .geBid            , _ => [.gePostBuyOrder]
   | .geCancel         , _ => [.geCancelOrder]
+  | .partyJoin        , _ => [.holdForParty]
   | .bankExpand       , _ => [.buyBankExpansion]
   | .wait             , _ => [.wait]
 

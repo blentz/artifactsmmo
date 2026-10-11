@@ -159,14 +159,14 @@ def test_process_health_of_a_vanished_process_still_reports_the_machine():
 def test_a_request_that_makes_the_oracle_panic_fails_loudly():
     """A runner reading past the arguments sent prints an out-of-bounds PANIC to
     stderr and carries on with a default. The server must refuse that answer,
-    not return it: `ladder_fires` reads 41 slots, so 40 is one short, exactly
+    not return it: `ladder_fires` reads 42 slots, so 41 is one short, exactly
     the rich harness's old bug."""
     server = OracleServer()
     try:
         with pytest.raises(RuntimeError, match="wrote to stderr"):
-            server.request("ladder_fires", [[0] * 40])
+            server.request("ladder_fires", [[0] * 41])
         # The wedged-by-noise process is gone; the next request gets a fresh one.
-        assert "selected" in server.request("ladder_fires", [[0] * 41])[0]
+        assert "selected" in server.request("ladder_fires", [[0] * 42])[0]
     finally:
         server.close()
 
@@ -174,7 +174,7 @@ def test_a_request_that_makes_the_oracle_panic_fails_loudly():
 def test_a_clean_request_leaves_nothing_on_stderr():
     server = OracleServer()
     try:
-        server.request("ladder_fires", [[0] * 41])
+        server.request("ladder_fires", [[0] * 42])
         assert server._stderr_available() == ""
     finally:
         server.close()

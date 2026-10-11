@@ -51,6 +51,7 @@ from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.goals.join_party import JoinPartyGoal
 from artifactsmmo_cli.ai.goals.participate_raid import ParticipateRaidGoal
 from artifactsmmo_cli.ai.goals.post_buy_bid import PostBuyBidGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
@@ -336,6 +337,10 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
         return CraftPotionsGoal(
             loadout=guard_loadout(ctx.loadout, ctx.fight_monster),
             game_data=game_data, state=state)
+    if kind is GuardKind.PARTY_JOIN:
+        if ctx.party_hold is None:
+            raise ValueError("PARTY_JOIN mapped but no lease names this character")
+        return JoinPartyGoal(ctx.party_hold, game_data)
     if kind is GuardKind.GE_CANCEL:
         if state is None:
             raise ValueError("GE_CANCEL guard requires a state")

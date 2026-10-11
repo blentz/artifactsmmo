@@ -104,6 +104,12 @@ private theorem refreshE_geCancel (s : State) :
   split
   · split <;> rfl
   · rfl
+private theorem refreshE_partyJoin (s : State) :
+    (perceptionRefreshE s).partyJoinActive = s.partyJoinActive := by
+  unfold perceptionRefreshE
+  split
+  · split <;> rfl
+  · rfl
 private theorem refreshE_supplyDemand (s : State) :
     (perceptionRefreshE s).supplyDemand = s.supplyDemand := by
   unfold perceptionRefreshE
@@ -578,6 +584,34 @@ theorem descendsE_bankExpand (s : State)
       perceptionRefreshE_level, perceptionRefreshE_xp] <;>
     omega
 
+set_option maxRecDepth 8000 in
+/-- `partyJoin` (→ `.holdForParty`) strictly descends at `partyJoinFlag`
+    (2026-10-11, the fire-and-lose PARTY_JOIN guard). Directly below
+    `bankExpandSlot` and ABOVE `objectiveStepFlag`, the slot
+    `perceptionRefreshE` can raise — the `geCancel` shape. -/
+theorem descendsE_partyJoin (s : State)
+    (hk : productionLadder (perceptionRefreshE s) = some .partyJoin) :
+    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, partyJoinFires, refreshE_partyJoin] at hfire
+  rw [cycleStepE_some s hk]
+  have hcs : cycleStep (perceptionRefreshE s) =
+      applyActionKind .holdForParty (perceptionRefreshE s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  apply eLt_of_partyJoin_dec <;>
+    simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
+      applyActionKind, hfire,
+      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
+      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
+      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
+      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
+      refreshE_gearGap, refreshE_adequate, refreshE_geCancel, refreshE_supplyDemand,
+      refreshE_currencyTurnIn, refreshE_partyJoin,
+      refreshE_bankItemsCount, refreshE_bankCapacity,
+      perceptionRefreshE_level, perceptionRefreshE_xp]
+
 /-- `craftRelief` (→ `.craft`) strictly descends. -/
 theorem descendsE_craftRelief (s : State)
     (hk : productionLadder (perceptionRefreshE s) = some .craftRelief) :
@@ -894,7 +928,7 @@ private def gearScanPrefix : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
-   .discardHigh, .craftPotions, .sellPressured, .claimPending, .bankExpand]
+   .discardHigh, .craftPotions, .partyJoin, .sellPressured, .claimPending, .bankExpand]
 
 private theorem blockerPrefix_split :
     Formal.Liveness.UnconditionalDescent.blockerPrefix
@@ -1130,7 +1164,7 @@ theorem descendsE_placeholder (s : State) (hArms : AdequateArmsFightAt s)
     apply eLt_of_objectiveStepFlag_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight,
         fightLoss, partialClear, pressureDeltaD,
-        applyActionKind, his0, hfire, refreshE_geCancel,
+        applyActionKind, his0, hfire, refreshE_geCancel, refreshE_partyJoin,
         turnInRearm_of_not_turnIn _ (Or.inl hfire)]
   · -- A gap closed: slot 2.
     rw [cycleStepE_some s hk, hcs, rearmE_eq_mint_of_no_levelup hLV]

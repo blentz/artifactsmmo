@@ -215,6 +215,15 @@ def discardHighFires (s : State) : Bool :=
     asserts agreement. Cleared by the `.craft` apply (CraftPotions goal). -/
 def craftPotionsFires (s : State) : Bool := s.craftPotionsFires
 
+/-- PARTY_JOIN guard (2026-10-11, group fights). Mirrors
+    `guards.py::_fires(GuardKind.PARTY_JOIN, …)`:
+      return ctx.party_hold is not None
+    Opaque Bool — the Lean state carries production's answer (a live party
+    lease names this character as a member); the ladder differential asserts
+    agreement. Cleared by the `.holdForParty` apply (JoinParty goal),
+    fire-and-lose like `geCancelFires`. -/
+def partyJoinFires (s : State) : Bool := s.partyJoinActive
+
 /-- CLAIM_PENDING. Mirrors `means.py:67-68`. -/
 def claimPendingFires (s : State) : Bool := s.pendingItemsNonempty
 
@@ -433,6 +442,7 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .depositFull      => depositFullFires s
   | .discardHigh      => discardHighFires s
   | .craftPotions     => craftPotionsFires s
+  | .partyJoin        => partyJoinFires s
   | .claimPending     => claimPendingFires s
   | .sellPressured    => sellPressuredFires s
   | .objectiveStep    => objectiveStepFires s

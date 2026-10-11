@@ -7,7 +7,7 @@ from collections import deque
 from collections.abc import Callable, Mapping
 from contextlib import nullcontext
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fractions import Fraction
 from functools import partial
 from typing import Any
@@ -47,6 +47,7 @@ from artifactsmmo_cli.ai.actions.ge_fill import GeFillBuyOrderAction
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
 from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
+from artifactsmmo_cli.ai.actions.hold_for_party import HoldForPartyAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.best_loadout import BestLoadout, best_loadout, candidate_potions, fight_ahead_loadout
@@ -83,6 +84,7 @@ from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.failure_recovery_core import (
     STATE,
+    TRANSPORT,
     Block,
     blocked,
     failure_class,
@@ -119,8 +121,11 @@ from artifactsmmo_cli.ai.loadout_profiles import (
     party_combat_key,
 )
 from artifactsmmo_cli.ai.loop_rate import food_menu
+from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
+from artifactsmmo_cli.ai.party_card import card_json, card_state
+from artifactsmmo_cli.ai.party_lease_core import PartyLease, assembled
 from artifactsmmo_cli.ai.party_loop import PartyLoop, best_party_loop
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.plan_report import PlanReport
@@ -204,6 +209,12 @@ def _error_text(exc: BaseException) -> str:
     which is exactly the ambiguity this field exists to remove.
     """
     return str(exc) or repr(exc)
+
+
+PARTY_ASSEMBLY_SECONDS = 300
+"""How long a party fight's leader holds for its party before giving the fight
+up (docs/PLAN_group_fights.md increment 4): the party lease's own TTL
+(`coordination_store.PARTY_LEASE_TTL_SECONDS`), the bound on a member's hold."""
 
 
 class GamePlayer:
@@ -518,6 +529,15 @@ class GamePlayer:
         # stays inert there, exactly like every other coordination field.
         self._asymmetric_demand: frozenset[str] = frozenset()
         self._sibling_skills: dict[str, int] = {}
+        # The live party lease naming this character as a member, and the
+        # siblings' party cards by name (docs/PLAN_group_fights.md increment
+        # 4): read every cycle by `_refresh_party`; empty without a
+        # coordination store.
+        self._party_hold: PartyLease | None = None
+        self._party_cards: dict[str, WorldState] = {}
+        # When this character, as a leader, first held for each boss's party
+        # (`_lead_party`'s assembly deadline).
+        self._party_since: dict[str, datetime] = {}
         # The cycle's grind target when it stands only on consumables (bare
         # gear names no fight), set by `_winnable_farm_target`; read by
         # `_selection_context` into `SelectionContext.combat_propped`.
@@ -949,6 +969,8 @@ class GamePlayer:
         # publishes and it contends, and a read-only diagnostic must not change
         # what the fleet does. See `_refresh_sibling_reads`.
         self._refresh_sibling_reads(datetime.now(tz=timezone.utc))
+        self._refresh_party(datetime.now(tz=timezone.utc))
+        state = self.state
         combat_monster = self._winnable_farm_target()
         ctx = self._selection_context(combat_monster)
         self._last_ctx = ctx
@@ -1037,6 +1059,10 @@ class GamePlayer:
                 # — see world_state.py's `open_orders` docstring) so planning
                 # always sees the authoritative fill/aging state.
                 self._reconcile_open_orders(client)
+                # The fleet's party (docs/PLAN_group_fights.md increment 4):
+                # BEFORE the actions, which take a party to a boss only a
+                # party wins (`party_win.party_participants`).
+                self._refresh_party(datetime.now(tz=timezone.utc))
                 actions = self._build_actions()
 
                 assert self.state is not None
@@ -1361,6 +1387,8 @@ class GamePlayer:
         disagreed this way.
         """
         assert self.state is not None
+        if isinstance(action, FightAction) and action.participants:
+            action = self._lead_party(action)
         if isinstance(action, CraftAction):
             action.history = self.history
             if self.game_data is not None:
@@ -1401,7 +1429,14 @@ class GamePlayer:
                                    GePostBuyOrderAction)):
                 self._ge_orders_dirty = True
             self._acquire_action()
-            new_state = action.execute(self.state, client)
+            try:
+                new_state = action.execute(self.state, client)
+            finally:
+                # A party fight resolved (won, lost or refused): the lease
+                # ends with it; a next fight claims a fresh one.
+                if (isinstance(action, FightAction) and action.participants
+                        and self._coordination is not None):
+                    self._coordination.release_party(action.monster_code)
             # Re-sync bank state after visiting bank
             # BuyBankExpansionAction is in this tuple for the SAME reason the
             # three deposit/withdraw actions are: it changes bank state the
@@ -3402,6 +3437,59 @@ class GamePlayer:
         # (USER 2026-10-09, "Need ledger + API order").
         self._sibling_needs = self._coordination.sibling_consumable_needs(now)
 
+    def _refresh_party(self, now: datetime) -> None:
+        """The cycle's party facts (docs/PLAN_group_fights.md increment 4),
+        read-only: the siblings' live cards, the lease naming this character,
+        and `state.party` — the lease's members for its leader, nobody for a
+        member (it fights in someone else's party), else every sibling no
+        live lease names (the roster the band and the drop gate weigh)."""
+        if self._coordination is None or self.state is None:
+            self._party_hold = None
+            self._party_cards = {}
+            return
+        cards = [card_state(c) for c in self._coordination.sibling_party_cards(now)]
+        self._party_cards = {c.character: c for c in cards}
+        lease = self._coordination.party_lease_for(now)
+        self._party_hold = lease if lease is not None and lease.leader != self.character else None
+        if lease is not None and lease.leader == self.character:
+            party = tuple(self._party_cards[m] for m in lease.members if m in self._party_cards)
+        elif lease is not None:
+            party = ()
+        else:
+            taken = self._coordination.party_lease_names(now)
+            party = tuple(c for c in cards if c.character not in taken)
+        self.state = replace(self.state, party=party)
+
+    def _lead_party(self, action: FightAction) -> Action:
+        """The action a party fight's leader runs this cycle (increment 4):
+        claim or renew the lease on the boss, meeting on the fight's nearest
+        tile; the fight itself once every member is on it out of cooldown
+        (`party_lease_core.assembled`), else hold there for them. Without a
+        coordination store there is no party to wait for."""
+        assert self.state is not None
+        if self._coordination is None:
+            return action
+        now = datetime.now(tz=timezone.utc)
+        x, y = nearest_or_error(self.state.x, self.state.y, action.locations, "combat")
+        lease = PartyLease(action.monster_code, self.character, action.participants,
+                           self.state.layer, x, y)
+        claimed = self._coordination.claim_party(action.monster_code, action.participants,
+                                                 (lease.layer, x, y), now)
+        if claimed and assembled(lease, self._party_cards, now):
+            self._party_since.pop(action.monster_code, None)
+            return action
+        since = self._party_since.setdefault(action.monster_code, now)
+        if now - since >= timedelta(seconds=PARTY_ASSEMBLY_SECONDS):
+            # The party never assembled (a member could not reach the tile, or
+            # another leader holds the boss): give the fight up as a transport
+            # failure — a short retry block — so the plan moves on, and free
+            # the members.
+            self._party_since.pop(action.monster_code, None)
+            self._coordination.release_party(action.monster_code)
+            self._failure_blocks = record_failure(self._failure_blocks, action.learning_key(),
+                                                  TRANSPORT, self._failure_premise())
+        return HoldForPartyAction(lease=lease, travel_region=action.travel_region)
+
     def _update_coordination(self, state: "WorldState", game_data: GameData) -> None:
         """Renew, publish, and re-decide this character's role for one cycle,
         and recompute this cycle's supply target.
@@ -3438,6 +3526,9 @@ class GamePlayer:
         # that we can and price asking as a route rather than as unobtainable.
         # Same write path and same TTL as the holdings publish directly above.
         self._coordination.publish_skills(state.skills, now)
+        # Our party card: what a sibling leader judges a party fight with, and
+        # whether we stand on its tile out of cooldown (increment 4).
+        self._coordination.publish_party_card(card_json(state), now)
         # Bank stock a sibling has already committed to withdrawing. Read here
         # with the rest of the coordination block (one SQLite query, no API
         # call) so the shed licence this cycle derives is netted against it —
@@ -3880,6 +3971,9 @@ class GamePlayer:
             # on every single-character run. Feeds
             # `acquisition_cost._sibling_craft_option`.
             sibling_skills=self._sibling_skills,
+            # The live lease naming this character as a member (increment 4):
+            # set by `_refresh_party`, None on a single-character run.
+            party_hold=self._party_hold,
             fight_monster=self._committed_fight_monster(),
             # The learned loss rates a fight's price carries (USER 2026-10-08,
             # "Price the loss risk"); none without history.
