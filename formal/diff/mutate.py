@@ -4966,10 +4966,9 @@ INTENTION_BUDGET_MUTATIONS = [
     # A guard's cycle spends no turn: an upkeep-heavy intention holds the turn
     # (Lor's death_knight grind, ~6h a turn, 2026-10-07; USER: count them).
     ("budget: a guard cycle under the commitment does not spend its turn",
-     "        spent = self._budget_spent[committed] = self._budget_spent.get(committed, 0) + 1\n"
-     "        own = repr(goal) == committed\n",
-     "        own = repr(goal) == committed\n"
-     "        spent = self._budget_spent[committed] = self._budget_spent.get(committed, 0) + own\n"),
+     "self._budget_spent.get(committed, 0) + 1\n        if self.history is not None:\n",
+     "self._budget_spent.get(committed, 0) + (repr(goal) == committed)\n"
+     "        if self.history is not None:\n"),
     # The budget is never spent: no intention ever yields, the ring2 shape.
     ("budget: the cycle budget is never spent",
      "        elif spent >= BUDGET_CYCLES:\n",
@@ -5846,6 +5845,17 @@ INTENTION_BUDGET_PER_GOAL_MUTATIONS = [
     ("intention budget: a recorded turn keeps its spend",
      "            del self._budget_spent[committed]\n",
      "            pass\n"),
+    ("intention budget: the spend is not stored",
+     "        spent = self._budget_spent[committed] = self._budget_spent.get(committed, 0) + 1\n"
+     "        if self.history is not None:\n            self.history.save_budget_spent(self._budget_spent)\n",
+     "        spent = self._budget_spent[committed] = self._budget_spent.get(committed, 0) + 1\n"),
+    ("intention budget: a restart resumes with no spend",
+     "        self._budget_spent = (self.history.load_budget_spent()\n",
+     "        self._budget_spent = ({}\n"),
+    ("intention budget: a recorded turn leaves its stored spend",
+     "                self.history.save_turns(self._turns)\n"
+     "                self.history.save_budget_spent(self._budget_spent)\n",
+     "                self.history.save_turns(self._turns)\n"),
     ("intention budget: one cycle short",
      "        elif spent >= BUDGET_CYCLES:\n",
      "        elif spent > BUDGET_CYCLES:\n"),

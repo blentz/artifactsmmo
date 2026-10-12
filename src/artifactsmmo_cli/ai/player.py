@@ -2384,6 +2384,8 @@ class GamePlayer:
         if committed is None or goal is None:
             return
         spent = self._budget_spent[committed] = self._budget_spent.get(committed, 0) + 1
+        if self.history is not None:
+            self.history.save_budget_spent(self._budget_spent)
         own = repr(goal) == committed
         if own and progressed(progress_measure(goal, before), progress_measure(goal, after), ok):
             self._intention_stall = 0
@@ -2403,6 +2405,7 @@ class GamePlayer:
             self._turns = record_turn(self._turns, committed)
             if self.history is not None:
                 self.history.save_turns(self._turns)
+                self.history.save_budget_spent(self._budget_spent)
             self._arbiter.abandon_intention(Mechanism.INTENTION_BUDGET,
                                             f"budget:{spent}")
         else:
@@ -2425,8 +2428,11 @@ class GamePlayer:
             self.history.clear_plan_commitment()
 
     def _resume_turns(self) -> None:
-        """Adopt the turn log a previous process persisted (Phase 5-2c-iii-a)."""
+        """Adopt the turn log and the per-goal budget spend a previous process
+        persisted (Phase 5-2c-iii-a)."""
         self._turns = self.history.load_turns() if self.history is not None else {}
+        self._budget_spent = (self.history.load_budget_spent()
+                              if self.history is not None else {})
 
     def _record_cycle(self, record: CycleRecord) -> None:
         """Record one cycle for stuck detection AND track per-signal

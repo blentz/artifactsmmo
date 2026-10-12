@@ -720,6 +720,20 @@ class IntentionTurn(SQLModel, table=True):
     turn: int
 
 
+class IntentionBudget(SQLModel, table=True):
+    """Committed cycles one goal has spent since its last recorded turn
+    (`GamePlayer._budget_spent`): summed across commitments, and kept across
+    restarts so a fleet restart does not hand every goal a fresh budget and
+    postpone the turn of the goal waiting behind them (live C3P0 2026-10-11:
+    king_slimeball waited behind goals whose counts each restart zeroed)."""
+
+    __tablename__ = "intention_budget"
+
+    character: str = Field(primary_key=True)
+    goal_repr: str = Field(primary_key=True)
+    spent: int
+
+
 class CraftYieldObservation(SQLModel, table=True):
     """Observed output quantity and XP per craft run, per character + item.
 

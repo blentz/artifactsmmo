@@ -110,6 +110,24 @@ def test_alternating_commitments_still_spend_their_turns():
     assert repr(grind) not in player._budget_spent  # a recorded turn starts afresh
 
 
+def test_the_budget_spend_survives_a_restart(tmp_path):
+    """A restart resumed with zeroed counts, so every restart handed each goal
+    a fresh budget and postponed the turn of the goal behind them (live C3P0,
+    2026-10-11). The spend is stored per goal and resumed; a recorded turn
+    clears its goal's row."""
+    goal = GrindCharacterXPGoal("vampire")
+    player = _player(tmp_path)
+    player._arbiter._committed_repr = repr(goal)
+    _run(player, goal, 30)
+    reborn = GamePlayer(character="hero", history=player.history)
+    reborn._resume_turns()
+    assert reborn._budget_spent == {repr(goal): 30}
+    reborn._arbiter._committed_repr = repr(goal)
+    _run(reborn, goal, BUDGET_CYCLES - 30)
+    assert reborn._turns == {repr(goal): 1}
+    assert reborn.history.load_budget_spent() == {}
+
+
 def test_progress_does_not_reset_the_budget():
     """The budget is fairness, not liveness: a grind that progresses every
     cycle still yields after its turn."""

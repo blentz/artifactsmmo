@@ -189,3 +189,22 @@ def test_a_db_error_on_the_turn_log_is_reported_or_reads_as_empty(tmp_path, caps
     store.save_turns({"ObtainItem(code='life_ring')": 1})
     assert "save_turns failed" in capsys.readouterr().out
     assert store.load_turns() == {}
+
+
+def test_the_budget_spend_round_trips_and_is_replaced(tmp_path):
+    store = _store(tmp_path)
+    assert store.load_budget_spent() == {}
+    store.save_budget_spent({"GrindCharacterXP(vampire)": 30, "GatherMaterials(trout)": 4})
+    assert store.load_budget_spent() == {"GrindCharacterXP(vampire)": 30,
+                                         "GatherMaterials(trout)": 4}
+    store.save_budget_spent({"GrindCharacterXP(vampire)": 31})
+    assert store.load_budget_spent() == {"GrindCharacterXP(vampire)": 31}
+    assert _store(tmp_path, character="Lor").load_budget_spent() == {}, "per character"
+
+
+def test_the_budget_spend_degrades_on_a_broken_store(tmp_path, capsys):
+    store = _store(tmp_path)
+    _break_engine(store)
+    store.save_budget_spent({"GrindCharacterXP(vampire)": 1})
+    assert "[learning] save_budget_spent failed" in capsys.readouterr().out
+    assert store.load_budget_spent() == {}

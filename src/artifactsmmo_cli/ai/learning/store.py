@@ -28,6 +28,7 @@ from artifactsmmo_cli.ai.learning.models import (
     FleetLearnedSetting,
     Intention,
     IntentionBase,
+    IntentionBudget,
     IntentionTurn,
     LoadoutProfileObservation,
     PlanBodyLog,
@@ -1614,6 +1615,32 @@ class LearningStore:
                 rows = s.exec(select(IntentionTurn).where(
                     IntentionTurn.character == self._character)).all()
                 return {row.goal_repr: row.turn for row in rows}
+        except SQLAlchemyError:
+            return {}
+
+    def save_budget_spent(self, spent: Mapping[str, int]) -> None:
+        """Replace this character's per-goal budget spend (`IntentionBudget`)."""
+        try:
+            with SqlSession(self._engine) as s:
+                for row in s.exec(select(IntentionBudget).where(
+                        IntentionBudget.character == self._character)).all():
+                    s.delete(row)
+                s.flush()  # the composite key: the deletes before the inserts
+                for goal_repr, cycles in spent.items():
+                    s.add(IntentionBudget(character=self._character, goal_repr=goal_repr,
+                                          spent=cycles))
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] save_budget_spent failed: {e}")
+
+    def load_budget_spent(self) -> dict[str, int]:
+        """This character's per-goal budget spend; empty on a fresh store (or
+        on DB error)."""
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(select(IntentionBudget).where(
+                    IntentionBudget.character == self._character)).all()
+                return {row.goal_repr: row.spent for row in rows}
         except SQLAlchemyError:
             return {}
 
