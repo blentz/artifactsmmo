@@ -17,6 +17,7 @@ from artifactsmmo_cli.ai.goals.join_party import JOIN_PARTY_VALUE, JoinPartyGoal
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.party_card import card_json
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
+from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import PARTY_ASSEMBLY_SECONDS, GamePlayer
 from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.tiers.guards import GuardKind
@@ -75,6 +76,19 @@ def test_the_goal_is_one_hold() -> None:
     (action,) = goal.relevant_actions([], state, gd)
     assert isinstance(action, HoldForPartyAction) and action.lease == LEASE
     assert repr(goal) == "JoinParty(duskworm)"
+
+
+def test_a_member_already_on_the_tile_still_plans_its_hold() -> None:
+    """On the tile, the hold changes only `party_held`. With `party_held` out
+    of the planner's state key the child collided with its parent in the
+    visited set and was pruned (`explored=1 created=2 depth=0 plan_len=0`),
+    so the guard had no plan and the commitment ran instead: live HAL,
+    2026-10-12 05:15:29, back to `Gather(trout_spot)` with the lease live."""
+    gd = GameData()
+    goal = JoinPartyGoal(LEASE, gd)
+    state = make_state(x=3, y=-1)
+    plan = GOAPPlanner().plan(state, goal, goal.relevant_actions([], state, gd), gd)
+    assert plan is not None and [repr(a) for a in plan] == ["HoldForParty(duskworm)"]
 
 
 def test_the_guard_maps_to_the_join_goal() -> None:

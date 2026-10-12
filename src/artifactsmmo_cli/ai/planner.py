@@ -132,9 +132,16 @@ def _state_key(state: WorldState) -> tuple[object, ...]:
     Live Robby, 2026-09-21: stranded in `interior:-3,12` at 179/710 with `Rest`
     an overworld action and `FightAction`'s HP floor refusing another rat, the
     arbiter fell to `Wait` at cooldown 0.0 and spun at ~2 requests/second until
-    the process died. Finer dedup only, so PlannerAdmissibility is untouched."""
+    the process died. Finer dedup only, so PlannerAdmissibility is untouched.
+
+    Includes `state.party_held` for the same reason a third time. A member
+    already on its party lease's tile holds there (`HoldForPartyAction`), and
+    the hold changes ONLY `party_held`: the child was pruned against its parent,
+    `JoinParty` planned nothing, and the commitment ran in its place. Live HAL,
+    2026-10-12 05:15:29: one hold, then back to `Gather(trout_spot)` with the
+    lease live, while the leader's party fight drew HTTP 499 every cycle."""
     return (
-        state.x, state.y, state.layer,
+        state.x, state.y, state.layer, state.party_held,
         state.hp, state.gold,
         state.xp,
         state.task_code, state.task_type, state.task_progress, state.task_total,
