@@ -135,6 +135,15 @@ class WorldState:
     (`party_win.wins_as_a_party`). Empty by default: production fills it from
     the fleet in increment 4; the conditions census fills it with copies of
     the census character."""
+    lost_fights: frozenset[str] = frozenset()
+    """The monsters the learned record refuses this character a SOLO fight
+    against, at its level in that fight's loadout (`combat.lost_fights`, the
+    learned-loss veto's rule). The drop route's WINNABLE gate and
+    `party_win.party_participants` read it so a fight the stats call won but
+    the record calls lost is not fought alone: live C3P0, 2026-10-12, lost
+    king_slime 41 of 44 at level 31 while the cold gate kept admitting it and
+    the party arm never fired. Empty by default; production fills it every
+    cycle beside `party`."""
     party_held: str | None = None
     """PLANNING-ONLY marker: the boss a `HoldForPartyAction` has held for in
     this simulated plan (docs/PLAN_group_fights.md increment 4). Always None

@@ -103,6 +103,24 @@ def test_the_participants_are_named_only_where_the_party_is_needed() -> None:
     assert party_participants(party, gd, "cultist_emperor") == ()
 
 
+def test_a_solo_fight_the_record_refuses_takes_the_party() -> None:
+    """The stats win king_slime alone, but a learned record of losses
+    (`WorldState.lost_fights`) voids both solo arms: alone the gate refuses
+    it, and with siblings ready the fight takes a party. Live C3P0, 2026-10-12:
+    41 of 44 solo king_slime fights lost while the cold gate kept admitting it."""
+    gd = _gd()
+    hero = _hero(gd)
+    lost = replace(hero, lost_fights=frozenset({"king_slime"}))
+    assert drop_fight_winnable(hero, gd, "king_slime")
+    assert not drop_fight_winnable(lost, gd, "king_slime")
+    party = replace(lost, party=(replace(hero, character="R2D2"), replace(hero, character="Lor")))
+    assert drop_fight_winnable(party, gd, "king_slime")
+    assert party_participants(party, gd, "king_slime") == ("R2D2",)
+    # a record against another monster changes nothing here
+    other = replace(party, lost_fights=frozenset({"duskworm"}))
+    assert party_participants(other, gd, "king_slime") == ()
+
+
 def test_the_factory_takes_the_party_to_the_boss() -> None:
     gd = _gd()
     hero = _hero(gd)

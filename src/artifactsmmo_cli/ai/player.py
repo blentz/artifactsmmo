@@ -52,7 +52,7 @@ from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.best_loadout import BestLoadout, best_loadout, candidate_potions, fight_ahead_loadout
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
-from artifactsmmo_cli.ai.combat import fight_records, is_winnable, predict_win
+from artifactsmmo_cli.ai.combat import fight_records, is_winnable, lost_fights, predict_win
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.constants import (
     BANK_REFRESH_FORCE_SENTINEL,
@@ -982,6 +982,7 @@ class GamePlayer:
         # what the fleet does. See `_refresh_sibling_reads`.
         self._refresh_sibling_reads(datetime.now(tz=timezone.utc))
         self._refresh_party(datetime.now(tz=timezone.utc))
+        self._refresh_lost_fights()
         state = self.state
         combat_monster = self._winnable_farm_target()
         ctx = self._selection_context(combat_monster)
@@ -1075,6 +1076,7 @@ class GamePlayer:
                 # BEFORE the actions, which take a party to a boss only a
                 # party wins (`party_win.party_participants`).
                 self._refresh_party(datetime.now(tz=timezone.utc))
+                self._refresh_lost_fights()
                 actions = self._build_actions()
 
                 assert self.state is not None
@@ -1263,9 +1265,13 @@ class GamePlayer:
                 )
                 # Auto-record loadout profile for fight/gather tasks so the
                 # active-profile keep economy can protect the correct gear.
+                # `executed_action`, not `action`: a party leader's FightAction
+                # runs as a HoldForParty until its party assembles
+                # (`_lead_party`), and recording the plan's fight logged every
+                # hold as a party WIN (live C3P0 2026-10-12: 134 "wins", 0 fights).
                 if outcome == "ok":
-                    self._record_loadout_for_action(action, prev_state_for_learning)
-                self._record_combat_outcome(action, prev_state_for_learning, outcome)
+                    self._record_loadout_for_action(executed_action, prev_state_for_learning)
+                self._record_combat_outcome(executed_action, prev_state_for_learning, outcome)
                 # Record the action outcome so the next cycle's gear-latch
                 # update can detect a fight loss ("error:fight_lost"). Only set
                 # on the action-execution path — no_plan cycles leave the
@@ -3496,6 +3502,15 @@ class GamePlayer:
             taken = self._coordination.party_lease_names(now)
             party = tuple(c for c in cards if c.character not in taken)
         self.state = replace(self.state, party=party)
+
+    def _refresh_lost_fights(self) -> None:
+        """`state.lost_fights` from the learned record (`combat.lost_fights`):
+        the solo fights the drop gate and the party pick must not take. Empty
+        without history."""
+        assert self.state is not None and self.game_data is not None
+        lost = (lost_fights(self.state, self.game_data, self.history)
+                if self.history is not None else frozenset[str]())
+        self.state = replace(self.state, lost_fights=lost)
 
     def _release_party(self, action: Action) -> None:
         """End the lease a resolved party fight was fought under."""

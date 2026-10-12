@@ -88,12 +88,14 @@ def wins_as_a_party(state: WorldState, game_data: GameData, monster: str) -> boo
 def party_participants(state: WorldState, game_data: GameData, monster: str) -> tuple[str, ...]:
     """The characters a fight against `monster` takes along: the first winning
     party's joiners by name when only a party wins it (the solo arms of the
-    drop gate lose at full HP: bare stats and every stockable potion loadout),
+    drop gate lose at full HP: bare stats and every stockable potion loadout,
+    or the learned record refuses the solo fight, `WorldState.lost_fights`),
     else none — a fight one character wins is fought alone."""
     if not state.party or game_data.monsters.types.get(monster) not in PARTY_MONSTER_TYPES:
         return ()
     rested = replace(state, hp=state.max_hp)
-    if is_winnable(rested, game_data, monster) or wins_with_a_loadout(rested, game_data, monster):
+    if monster not in state.lost_fights and (is_winnable(rested, game_data, monster)
+                                             or wins_with_a_loadout(rested, game_data, monster)):
         return ()
     party = winning_party(rested, game_data, monster)
     return () if party is None else tuple(state.party[j].character for j in party[1])

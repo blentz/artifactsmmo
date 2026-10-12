@@ -442,8 +442,20 @@ def loss_vetoed(state: WorldState, game_data: GameData, monster_code: str,
     loadout the fight is fought in (`fight_record`), won below
     WIN_RATE_THRESHOLD. Also the band target's: a fight carried by consumables
     (`band_target.band_combat_target`) is refused on the same record."""
-    samples, wins = fight_record(state, game_data, monster_code, history)
+    return _vetoes(*fight_record(state, game_data, monster_code, history))
+
+
+def _vetoes(samples: int, wins: int) -> bool:
+    """The learned-loss veto's rule on a record of `samples` fights and `wins`."""
     return samples >= MIN_WIN_SAMPLES and wins < WIN_RATE_THRESHOLD * samples
+
+
+def lost_fights(state: WorldState, game_data: GameData, history: LearningStore) -> frozenset[str]:
+    """Every monster the learned-loss veto refuses this character at its level,
+    in that fight's loadout (`fight_records`, `loss_vetoed`'s rule): the
+    `WorldState.lost_fights` the drop gate's solo arms read."""
+    return frozenset(monster for monster, samples, wins in fight_records(state, game_data, history)
+                     if _vetoes(samples, wins))
 
 
 def _won_at_or_above_level(

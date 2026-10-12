@@ -14,7 +14,8 @@ The gates on a fight, whatever it pays:
 - `SPAWN_KNOWN`: `monster_spawn_known`, which also admits layered tiles in a
   reachable region.
 - `WINNABLE`: asked at RESTORABLE hp (route existence is not an hp question;
-  resting is an action the planner has), cold (no LearningStore), and only for
+  resting is an action the planner has), cold (no LearningStore: the record's
+  refusals arrive as `WorldState.lost_fights`, which voids both solo arms), and only for
   a monster that spawns under either predicate: one that spawns nowhere has no
   FightAction to serve it, so its verdict could never be used. The bare stats,
   or failing them some runnable utility-potion loadout
@@ -55,10 +56,12 @@ class _Rested:
 
 
 def drop_fight_winnable(rested: WorldState, game_data: GameData, monster: str) -> bool:
-    """The WINNABLE gate's verdict for a character at full HP: the bare stats,
-    a stockable potion loadout, or a party (`party_win`)."""
-    return (is_winnable(rested, game_data, monster)
-            or wins_with_a_loadout(rested, game_data, monster)
+    """The WINNABLE gate's verdict for a character at full HP: the bare stats
+    or a stockable potion loadout, unless the learned record refuses the solo
+    fight (`WorldState.lost_fights`), or a party (`party_win`)."""
+    return ((monster not in rested.lost_fights
+             and (is_winnable(rested, game_data, monster)
+                  or wins_with_a_loadout(rested, game_data, monster)))
             or wins_as_a_party(rested, game_data, monster))
 
 

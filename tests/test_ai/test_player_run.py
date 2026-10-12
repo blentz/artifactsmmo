@@ -13,8 +13,10 @@ from sqlmodel import Session as SqlSession
 from sqlmodel import select
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.hold_for_party import HoldForPartyAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
@@ -24,6 +26,7 @@ from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.party_lease_core import PartyLease
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckSignal
 from artifactsmmo_cli.ai.strategy_driver import map_means
@@ -254,6 +257,34 @@ class TestPlayerRun:
                                         with pytest.raises(KeyboardInterrupt):
                                             player.run()
         assert order[:2] == ["refresh", "build"]
+
+    def test_run_reads_the_learned_record_before_building_actions(self):
+        """`state.lost_fights` is filled before the actions are built: the
+        factory takes a party to a boss whose solo fight the record refuses
+        (`party_win.party_participants`)."""
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+        order: list[str] = []
+
+        def fake_wait():
+            raise KeyboardInterrupt
+
+        initial_state = make_state(hp=100, max_hp=150)
+        with patch.object(ClientManager_mock := MagicMock(), "client", client):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+                with _patch_game_data_load():
+                    with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                        with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait), \
+                                patch.object(player, "_reconcile_open_orders"), \
+                                patch.object(player, "_maybe_periodic_refresh"):
+                            with patch.object(player, "_refresh_lost_fights",
+                                              side_effect=lambda: order.append("lost")):
+                                with patch.object(player, "_build_actions",
+                                                  side_effect=lambda: order.append("build") or []):
+                                    with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                        with pytest.raises(KeyboardInterrupt):
+                                            player.run()
+        assert order[:2] == ["lost", "build"]
 
     def test_run_dry_run_uses_apply_not_execute(self):
         """In dry_run mode, the player calls action.apply() instead of action.execute()."""
@@ -865,10 +896,11 @@ def test_run_derives_crafting_target_from_fallback_obtain_item():
     assert captured["crafting_target"] == "copper_dagger"
 
 
-def _run_one_action_with(player, action, new_state, outcome, client):
+def _run_one_action_with(player, action, new_state, outcome, client, executed=None):
     """Drive run() through exactly one action-execution cycle by stubbing the
     strategy/arbiter to return a fixed (goal, [action]) plan, then raising
-    KeyboardInterrupt on the second cooldown wait."""
+    KeyboardInterrupt on the second cooldown wait. `_execute` reports
+    `executed` as the action it ran (default: `action`)."""
     goal = MagicMock()
     goal.is_satisfied.return_value = False
     goal.__repr__ = lambda self: "StubGoal()"  # type: ignore[assignment]
@@ -891,7 +923,8 @@ def _run_one_action_with(player, action, new_state, outcome, client):
                 patch.object(player, "_reconcile_open_orders"):
             with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
                 with patch.object(player, "_winnable_farm_target", return_value=None):
-                    with patch.object(player, "_execute", return_value=(new_state, outcome, action)):
+                    with patch.object(player, "_execute",
+                                      return_value=(new_state, outcome, executed or action)):
                         with patch("artifactsmmo_cli.ai.player.time.sleep"):
                             with pytest.raises(KeyboardInterrupt):
                                 player.run()
@@ -1065,3 +1098,25 @@ def test_run_holds_plan_cursor_through_a_batched_gather():
     # a batch that stalls (see should_replan.py's replan_interval check).
     assert player._plan_cache is not None
     assert player._plan_cache.cycles_since_replan == 2
+
+
+def test_run_records_the_fight_outcome_of_the_action_that_ran():
+    """A party leader's FightAction runs as a HoldForParty until its party
+    assembles (`_lead_party`). The run loop records the combat outcome and the
+    loadout of the action `_execute` RAN: recording the plan's fight logged
+    every hold as a party WIN (live C3P0 2026-10-12: 134 "wins", 0 fights)."""
+    player = GamePlayer(character="hero")
+    client = MagicMock()
+    initial_state = make_state(hp=120, max_hp=150, level=5)
+    lease = PartyLease("king_slime", "hero", ("HAL",), "overworld", 3, -1)
+    fight = FightAction(monster_code="king_slime", locations=frozenset({(3, -1)}), participants=("HAL",))
+    hold = HoldForPartyAction(lease=lease)
+    with patch.object(ClientManager_mock := MagicMock(), "client", client):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with _patch_game_data_load():
+                with patch.object(player, "_fetch_world_state", return_value=initial_state), \
+                        patch.object(player, "_record_combat_outcome") as combat, \
+                        patch.object(player, "_record_loadout_for_action") as loadout:
+                    _run_one_action_with(player, fight, initial_state, "ok", client, executed=hold)
+    assert combat.call_args.args[0] is hold
+    assert loadout.call_args.args[0] is hold

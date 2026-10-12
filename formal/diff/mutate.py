@@ -5726,8 +5726,8 @@ CENSUS_RUN_EVENT_MUTATIONS = [
 # The drop route's WINNABLE gate wears a potion loadout (USER 2026-10-10).
 DROP_LOADOUT_GATE_MUTATIONS = [
     ("drop gate: bare stats only",
-     "            or wins_with_a_loadout(rested, game_data, monster)\n",
-     "            or False\n"),
+     "                  or wins_with_a_loadout(rested, game_data, monster)))\n",
+     "                  or False))\n"),
 ]
 # The party boss XP loop (docs/PLAN_group_fights.md increment 3). OWN
 # run_groups: unit-killed by tests/test_ai/test_party_loop.py and
@@ -5904,9 +5904,13 @@ PARTY_FIGHT_EXECUTE_MUTATIONS = [
 ]
 PARTY_PARTICIPANTS_MUTATIONS = [
     ("party participants: a boss won alone takes the party",
-     "    if is_winnable(rested, game_data, monster) or wins_with_a_loadout(rested, game_data, monster):\n"
+     "    if monster not in state.lost_fights and (is_winnable(rested, game_data, monster)\n"
+     "                                             or wins_with_a_loadout(rested, game_data, monster)):\n"
      "        return ()\n",
      "    if False:\n        return ()\n"),
+    ("party participants: the learned record is ignored",
+     "    if monster not in state.lost_fights and (is_winnable(rested, game_data, monster)\n",
+     "    if (is_winnable(rested, game_data, monster)\n"),
     ("party participants: every member joins",
      "    return () if party is None else tuple(state.party[j].character for j in party[1])\n",
      "    return () if party is None else tuple(m.character for m in state.party)\n"),
@@ -5915,6 +5919,44 @@ PARTY_FACTORY_MUTATIONS = [
     ("factory: the boss fight goes alone",
      "                                       travel_region=region, participants=joiners))\n",
      "                                       travel_region=region))\n"),
+]
+# The learned record reaches the drop gate and the party pick as
+# `WorldState.lost_fights` (live C3P0 2026-10-12: king_slime lost 41 of 44
+# alone while the cold gate admitted it). OWN run_groups, one per killing test.
+LOST_FIGHTS_COMBAT_MUTATIONS = [
+    ("lost fights: the record refuses nothing",
+     "                     if _vetoes(samples, wins))\n",
+     "                     if False)\n"),
+]
+LOST_FIGHTS_GATE_MUTATIONS = [
+    ("drop gate: the learned record is ignored",
+     "    return ((monster not in rested.lost_fights\n",
+     "    return ((True\n"),
+]
+LOST_FIGHTS_REFRESH_MUTATIONS = [
+    ("player: the record is never read",
+     "        lost = (lost_fights(self.state, self.game_data, self.history)\n",
+     "        lost = (frozenset[str]()\n"),
+]
+LOST_FIGHTS_RUN_MUTATIONS = [
+    ("player: the live loop never reads the record",
+     "                self._refresh_party(datetime.now(tz=timezone.utc))\n"
+     "                self._refresh_lost_fights()\n",
+     "                self._refresh_party(datetime.now(tz=timezone.utc))\n"),
+    ("player: the hold is recorded as the plan's fight",
+     "                self._record_combat_outcome(executed_action, prev_state_for_learning, outcome)\n",
+     "                self._record_combat_outcome(action, prev_state_for_learning, outcome)\n"),
+    ("player: the hold's loadout is recorded as the plan's fight's",
+     "                    self._record_loadout_for_action(executed_action, prev_state_for_learning)\n",
+     "                    self._record_loadout_for_action(action, prev_state_for_learning)\n"),
+]
+LOST_FIGHTS_PLAN_MUTATIONS = [
+    ("player: the plan diagnostic never reads the record",
+     "        self._refresh_party(datetime.now(tz=timezone.utc))\n"
+     "        self._refresh_lost_fights()\n"
+     "        state = self.state\n",
+     "        self._refresh_party(datetime.now(tz=timezone.utc))\n"
+     "        state = self.state\n"),
 ]
 PARTY_RECORD_MUTATIONS = [
     ("player: a party fight feeds the solo veto",
@@ -10660,6 +10702,16 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_intention_budget.py", survivors)
     run_group(PLAYER_SRC, PARTY_RECORD_MUTATIONS,
               "tests/test_ai/test_player_learning.py", survivors)
+    run_group(COMBAT_SRC, LOST_FIGHTS_COMBAT_MUTATIONS,
+              "tests/test_ai/test_combat.py", survivors)
+    run_group(OBTAIN_MODEL_DROP_SRC, LOST_FIGHTS_GATE_MUTATIONS,
+              "tests/test_ai/test_party_win.py", survivors)
+    run_group(PLAYER_SRC, LOST_FIGHTS_REFRESH_MUTATIONS,
+              "tests/test_ai/test_player_learning.py", survivors)
+    run_group(PLAYER_SRC, LOST_FIGHTS_RUN_MUTATIONS,
+              "tests/test_ai/test_player_run.py", survivors)
+    run_group(PLAYER_SRC, LOST_FIGHTS_PLAN_MUTATIONS,
+              "tests/test_ai/test_plan_command.py", survivors)
     run_group(BAND_TARGET_PARTY_SRC, BAND_PARTY_MUTATIONS,
               "tests/test_ai/test_band_target.py", survivors)
     run_group(CRAFT_CONDITIONS_SRC, CONDITIONS_PARTY_MUTATIONS,

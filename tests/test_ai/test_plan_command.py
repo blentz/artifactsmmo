@@ -311,3 +311,15 @@ def test_plan_command_scenario_prints_tree_chosen_root(capsys):
     assert "jewelrycrafting" in out
     assert "tree: " not in out
     assert "TREE (shadow" not in out
+
+
+def test_plan_once_reads_the_learned_record_like_a_live_bot():
+    """The diagnostic fills `state.lost_fights` as the live loop does, so its
+    drop gate refuses the solo fights the record refuses."""
+    player = GamePlayer(character="hero")
+    with contextlib.ExitStack() as stack:
+        for cm in _plan_once_mocks(player, make_state(hp=100, max_hp=150)):
+            stack.enter_context(cm)
+        refresh = stack.enter_context(patch.object(player, "_refresh_lost_fights"))
+        player.plan_once()
+    refresh.assert_called()

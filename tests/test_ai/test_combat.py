@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.combat import (
     fight_loadout,
     fight_records,
     is_winnable,
+    lost_fights,
     predict_win,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -797,4 +798,20 @@ def test_fight_records_are_this_loadouts_record_of_each_monster_lost_to(tmp_path
     store.record_combat_outcome(combat_key("other"), {"weapon_slot": "stick"}, True, False, 30)
     store.record_combat_outcome("gather:mining", {}, True, False, 30)
     assert fight_records(state, gd, store) == (("mob", 10, 6),)
+    store.close()
+
+
+def test_lost_fights_is_the_veto_on_every_lost_monster(tmp_path):
+    """`lost_fights` names a monster exactly when the learned-loss veto refuses
+    it: one loss short of the sample floor it is absent, at the floor it is in,
+    and a monster won often enough is never in it."""
+    state = make_state(max_hp=100, attack={"fire": 30}, initiative=50)
+    gd = _gd(hp=30, attack={"fire": 5}, initiative=10)
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
+    _record_outcomes(store, state, gd, "mob", wins=0, losses=MIN_WIN_SAMPLES - 1)
+    assert lost_fights(state, gd, store) == frozenset()
+    _record_outcomes(store, state, gd, "mob", wins=0, losses=1)
+    assert lost_fights(state, gd, store) == frozenset({"mob"})
+    _record_outcomes(store, state, gd, "mob", wins=8, losses=0)
+    assert lost_fights(state, gd, store) == frozenset()
     store.close()

@@ -12,10 +12,11 @@ from sqlmodel import Session as SqlSession
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
-from artifactsmmo_cli.ai.combat import predict_win
+from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES, fight_loadout, predict_win
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.loadout_profiles import combat_key
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 
@@ -443,3 +444,24 @@ def test_store_migrates_consumables_expended_column(tmp_path):
     conn.close()
     assert "consumables_expended_json" in cols
     assert "delta_skill_xp_json" in cols
+
+
+def test_the_learned_record_fills_lost_fights(tmp_path):
+    """`_refresh_lost_fights` puts the veto's refusals on the state the gates
+    read; without history there are none."""
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
+    player = GamePlayer(character="Robby", history=store)
+    gd = _make_chicken_game_data()
+    player.game_data = gd
+    player.state = make_state()
+    for _ in range(MIN_WIN_SAMPLES):
+        store.record_combat_outcome(combat_key("chicken"), fight_loadout(player.state, gd, "chicken"),
+                                    True, False, player.state.level)
+    player._refresh_lost_fights()
+    assert player.state.lost_fights == frozenset({"chicken"})
+    cold = GamePlayer(character="Robby")
+    cold.game_data = gd
+    cold.state = dataclasses.replace(make_state(), lost_fights=frozenset({"chicken"}))
+    cold._refresh_lost_fights()
+    assert cold.state.lost_fights == frozenset()
+    store.close()
