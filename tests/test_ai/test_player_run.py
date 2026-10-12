@@ -877,6 +877,7 @@ def _run_one_action_with(player, action, new_state, outcome, client):
     player._strategy.decide.return_value = _StubDecision()
     player._arbiter = MagicMock()
     player._arbiter.select.return_value = (goal, [action], [])
+    player._arbiter._committed_repr = repr(goal)  # a goal repr, as production's arbiter holds
 
     call_count = [0]
 
@@ -999,6 +1000,7 @@ def test_run_holds_plan_cursor_through_a_batched_gather():
     player._strategy.decide.return_value = _StubDecision()
     player._arbiter = MagicMock()
     player._arbiter.select.return_value = (goal, [gather], [])
+    player._arbiter._committed_repr = repr(goal)  # a goal repr, as production's arbiter holds
 
     initial_state = make_state(x=0, y=0, inventory={}, inventory_max=20,
                                inventory_slots_max=20)

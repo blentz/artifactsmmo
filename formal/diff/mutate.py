@@ -4966,8 +4966,8 @@ INTENTION_BUDGET_MUTATIONS = [
     # A guard's cycle spends no turn: an upkeep-heavy intention holds the turn
     # (Lor's death_knight grind, ~6h a turn, 2026-10-07; USER: count them).
     ("budget: a guard cycle under the commitment does not spend its turn",
-     "self._budget_spent.get(committed, 0) + 1\n        if self.history is not None:\n",
-     "self._budget_spent.get(committed, 0) + (repr(goal) == committed)\n"
+     "self._budget_spent.get(key, 0) + 1\n        if self.history is not None:\n",
+     "self._budget_spent.get(key, 0) + (repr(goal) == committed)\n"
      "        if self.history is not None:\n"),
     # The budget is never spent: no intention ever yields, the ring2 shape.
     ("budget: the cycle budget is never spent",
@@ -5010,10 +5010,20 @@ INTENTION_BUDGET_MUTATIONS = [
 # The turn order (`intention_progress.rotate`/`record_turn`, Phase 5-2c-iii-a).
 # Unit-killed by tests/test_ai/test_intention_budget.py.
 INTENTION_YIELD_MUTATIONS = [
+    ("turn key: quantities stay part of a turn's identity",
+     "    return _SUPPLY_QTY.sub(r\"SupplyBank(\\1)\", _NEEDED_MAP.sub(\"\", goal_repr))\n",
+     "    return goal_repr\n"),
+    ("turn key: a supply's size stays part of its identity",
+     "    return _SUPPLY_QTY.sub(r\"SupplyBank(\\1)\", _NEEDED_MAP.sub(\"\", goal_repr))\n",
+     "    return _NEEDED_MAP.sub(\"\", goal_repr)\n"),
+    ("turn key: a demoted goal is matched by its full repr",
+     "    for hit in [c for c in candidates if turn_key(c.repr_) == served]:\n",
+     "    for hit in [c for c in candidates if c.repr_ == served]:\n"),
     # The turn log is ignored: the spent goal keeps its place and wins again.
     ("turns: the served goals keep their place",
-     "    for served in sorted({c.repr_ for c in candidates if c.repr_ in turns},\n",
-     "    for served in sorted(set[str](),\n"),
+     "    for served in sorted({turn_key(c.repr_) for c in candidates\n"
+     "                          if turn_key(c.repr_) in turns}, key=turns.__getitem__):\n",
+     "    for served in sorted(set[str](), key=turns.__getitem__):\n"),
     # The objective step keeps its own band, so it still precedes every
     # fallback: the step yields to nothing.
     ("turns: the served step keeps the step band",
@@ -5026,8 +5036,8 @@ INTENTION_YIELD_MUTATIONS = [
     # The newest turn is not newer than the others: a re-served goal can sort
     # ahead of one that waited.
     ("turns: a recorded turn is not the newest",
-     "    logged = {**turns, goal: max(turns.values(), default=0) + 1}\n",
-     "    logged = {**turns, goal: 1}\n"),
+     "    logged = {**turns, turn_key(goal): max(turns.values(), default=0) + 1}\n",
+     "    logged = {**turns, turn_key(goal): 1}\n"),
     # The log keeps the OLDEST turns, forgetting the newest — the goal just
     # served counts as never served and leads again.
     ("turns: the log keeps the oldest turns",
@@ -5039,8 +5049,8 @@ INTENTION_YIELD_MUTATIONS = [
 TURN_ROTATION_DIFF_MUTATIONS = [
     # Most recently served first: the one-goal yield's A, B, A, B, generalised.
     ("turns: served goals ordered newest first",
-     "                         key=turns.__getitem__):\n",
-     "                         key=lambda r: -turns[r]):\n"),
+     "                          if turn_key(c.repr_) in turns}, key=turns.__getitem__):\n",
+     "                          if turn_key(c.repr_) in turns}, key=lambda r: -turns[r]):\n"),
 ]
 
 # SELL_PRESSURED is an interrupt (Phase 5-2b): built at BAND_GUARD so it runs
@@ -5843,15 +5853,18 @@ INTENTION_BUDGET_PER_GOAL_MUTATIONS = [
      "            self._intention_counted = committed\n            self._intention_stall = 0\n"
      "            self._budget_spent.pop(committed or \"\", None)\n"),
     ("intention budget: a recorded turn keeps its spend",
-     "            del self._budget_spent[committed]\n",
+     "            del self._budget_spent[key]\n",
      "            pass\n"),
     ("intention budget: the spend is not stored",
-     "        spent = self._budget_spent[committed] = self._budget_spent.get(committed, 0) + 1\n"
+     "        spent = self._budget_spent[key] = self._budget_spent.get(key, 0) + 1\n"
      "        if self.history is not None:\n            self.history.save_budget_spent(self._budget_spent)\n",
-     "        spent = self._budget_spent[committed] = self._budget_spent.get(committed, 0) + 1\n"),
+     "        spent = self._budget_spent[key] = self._budget_spent.get(key, 0) + 1\n"),
     ("intention budget: a restart resumes with no spend",
-     "        self._budget_spent = (self.history.load_budget_spent()\n",
-     "        self._budget_spent = ({}\n"),
+     "        spent = self.history.load_budget_spent() if self.history is not None else {}\n",
+     "        spent = {}\n"),
+    ("turn key: rows from before the key are not folded",
+     "            self._turns[turn_key(goal)] = max(turn, self._turns.get(turn_key(goal), 0))\n",
+     "            self._turns[goal] = turn\n"),
     ("intention budget: a recorded turn leaves its stored spend",
      "                self.history.save_turns(self._turns)\n"
      "                self.history.save_budget_spent(self._budget_spent)\n",

@@ -71,7 +71,7 @@ from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal, potion_prep_goal
-from artifactsmmo_cli.ai.intention_progress import rotate
+from artifactsmmo_cli.ai.intention_progress import rotate, turn_key
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner
@@ -1024,7 +1024,7 @@ class StrategyArbiter:
             fallback_steps, fallback_roots, state, game_data, ctx, step_profile,
             chosen_root=chosen_root, needs=needs)
         turns = turns or {}
-        served = [c.repr_ for c in candidates if c.repr_ in turns]
+        served = [turn_key(c.repr_) for c in candidates if turn_key(c.repr_) in turns]
         if served:
             last = max(served, key=turns.__getitem__)
             self.events.note(Mechanism.INTENTION_YIELD, last, f"turn:{turns[last]}")

@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
 )
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.intention_progress import (
@@ -25,6 +26,7 @@ from artifactsmmo_cli.ai.intention_progress import (
     TURN_LOG_SIZE,
     record_turn,
     rotate,
+    turn_key,
 )
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.plan_cache import PlanCache
@@ -317,3 +319,40 @@ def test_any_progress_restarts_the_exit_window():
     _run(player, goal, 1)  # a successful leg
     assert player._cycles_without_progress == 0
     _unproductive(player, EXIT_CYCLES - 1)
+
+
+def test_a_turn_is_kept_per_kind_of_work_not_per_quantity():
+    """Live C3P0 2026-10-12: the trout carry spent its turn at 60 and came
+    back at 20, a NEW goal by its repr, at the front again."""
+    assert turn_key("GatherMaterials(cooked_trout, {cooked_trout:20}, carry)") == \
+        "GatherMaterials(cooked_trout, carry)"
+    assert turn_key("GatherMaterials(iron_bar, {iron_bar:6})") == "GatherMaterials(iron_bar)"
+    assert turn_key("SupplyBank(cooked_shrimpx20)") == "SupplyBank(cooked_shrimp)"
+    assert turn_key("GrindCharacterXP(vampire)") == "GrindCharacterXP(vampire)"
+    resized = _cand("GatherMaterials(cooked_trout, {cooked_trout:20}, carry)", BAND_STEP)
+    waiting = _cand("GatherMaterials(king_slimeball, {king_slimeball:6})", BAND_FALLBACK_STEP)
+    turns = record_turn(record_turn({}, "GatherMaterials(king_slimeball, {king_slimeball:6})"),
+                        "GatherMaterials(cooked_trout, {cooked_trout:60}, carry)")
+    assert turns == {"GatherMaterials(king_slimeball)": 1, "GatherMaterials(cooked_trout, carry)": 2}
+    assert [c.repr_ for c in rotate([resized, waiting], turns)] == [waiting.repr_, resized.repr_]
+
+
+def test_a_resized_goal_keeps_spending_the_same_budget(tmp_path):
+    big = GatherMaterialsGoal("cooked_trout", {"cooked_trout": 60})
+    small = GatherMaterialsGoal("cooked_trout", {"cooked_trout": 20})
+    player = _player()
+    for goal, cycles in ((big, BUDGET_CYCLES - 1), (small, 1)):
+        player._arbiter._committed_repr = repr(goal)
+        _run(player, goal, cycles)
+    assert list(player._turns) == [turn_key(repr(big))]
+
+
+def test_rows_from_before_the_key_fold_into_it(tmp_path):
+    player = _player(tmp_path)
+    player.history.save_turns({"GatherMaterials(trout, {trout:60})": 3,
+                               "GatherMaterials(trout, {trout:20})": 5})
+    player.history.save_budget_spent({"GatherMaterials(trout, {trout:60})": 30,
+                                      "GatherMaterials(trout, {trout:20})": 12})
+    player._resume_turns()
+    assert player._turns == {"GatherMaterials(trout)": 5}
+    assert player._budget_spent == {"GatherMaterials(trout)": 42}

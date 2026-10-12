@@ -107,6 +107,7 @@ from artifactsmmo_cli.ai.intention_progress import (
     progress_measure,
     progressed,
     record_turn,
+    turn_key,
 )
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -2383,7 +2384,8 @@ class GamePlayer:
             self._intention_stall = 0
         if committed is None or goal is None:
             return
-        spent = self._budget_spent[committed] = self._budget_spent.get(committed, 0) + 1
+        key = turn_key(committed)
+        spent = self._budget_spent[key] = self._budget_spent.get(key, 0) + 1
         if self.history is not None:
             self.history.save_budget_spent(self._budget_spent)
         own = repr(goal) == committed
@@ -2401,7 +2403,7 @@ class GamePlayer:
             self._arbiter.abandon_intention(Mechanism.INTENTION_STALLED,
                                             f"stalled:{self._intention_stall}")
         elif spent >= BUDGET_CYCLES:
-            del self._budget_spent[committed]
+            del self._budget_spent[key]
             self._turns = record_turn(self._turns, committed)
             if self.history is not None:
                 self.history.save_turns(self._turns)
@@ -2430,9 +2432,16 @@ class GamePlayer:
     def _resume_turns(self) -> None:
         """Adopt the turn log and the per-goal budget spend a previous process
         persisted (Phase 5-2c-iii-a)."""
-        self._turns = self.history.load_turns() if self.history is not None else {}
-        self._budget_spent = (self.history.load_budget_spent()
-                              if self.history is not None else {})
+        turns = self.history.load_turns() if self.history is not None else {}
+        spent = self.history.load_budget_spent() if self.history is not None else {}
+        # Rows written under full reprs (before `turn_key`) fold into their key:
+        # the newest turn, the summed spend.
+        self._turns = {}
+        for goal, turn in turns.items():
+            self._turns[turn_key(goal)] = max(turn, self._turns.get(turn_key(goal), 0))
+        self._budget_spent = {}
+        for goal, cycles in spent.items():
+            self._budget_spent[turn_key(goal)] = self._budget_spent.get(turn_key(goal), 0) + cycles
 
     def _record_cycle(self, record: CycleRecord) -> None:
         """Record one cycle for stuck detection AND track per-signal

@@ -25,6 +25,7 @@ suppressed the grind for 5 cycles (93 suppressions in 7 days to 2026-10-04,
 66 of them HAL's vampire grind).
 """
 
+import re
 from collections.abc import Mapping
 from dataclasses import replace
 
@@ -79,6 +80,25 @@ def progressed(before: Measure | None, after: Measure | None, ok: bool) -> bool:
     return before is not None and after is not None and after > before
 
 
+_NEEDED_MAP = re.compile(r", \{[^}]*\}")
+_SUPPLY_QTY = re.compile(r"^SupplyBank\((.+)x\d+\)$")
+
+
+def turn_key(goal_repr: str) -> str:
+    """The identity a goal's TURN is kept under: its repr without the
+    quantities a re-derived goal re-sizes — the needed map of
+    `GatherMaterials(item, {item: n}, ...)` and the `xN` of `SupplyBank(itemxN)`.
+
+    A turn is fairness between kinds of work, and a quantity is not a kind:
+    live C3P0 2026-10-12, `GatherMaterials(cooked_trout, {cooked_trout:60},
+    carry)` spent its turn and came back as `{cooked_trout:20}` — under its
+    repr a NEW goal, never served, at the front of the order again, while
+    `GatherMaterials(king_slimeball)` waited behind it. Commitment and plan
+    caching still key on the full repr; only the turn order and the turn
+    budget read this."""
+    return _SUPPLY_QTY.sub(r"SupplyBank(\1)", _NEEDED_MAP.sub("", goal_repr))
+
+
 def _demote(candidates: list[Candidate], served: str) -> list[Candidate]:
     """The candidate list with `served` moved behind its peers: every candidate
     whose repr is `served` goes to the END of its band, and the objective step's
@@ -86,7 +106,7 @@ def _demote(candidates: list[Candidate], served: str) -> list[Candidate]:
     first. Nothing is removed — when no peer can plan, the served goal still
     runs, so a turn never empties."""
     out = list(candidates)
-    for hit in [c for c in candidates if c.repr_ == served]:
+    for hit in [c for c in candidates if turn_key(c.repr_) == served]:
         band = BAND_FALLBACK_STEP if hit.band == BAND_STEP else hit.band
         del out[next(i for i, c in enumerate(out) if c is hit)]
         at = max((i + 1 for i, c in enumerate(out) if c.band <= band), default=0)
@@ -102,8 +122,8 @@ def rotate(candidates: list[Candidate], turns: Mapping[str, int]) -> list[Candid
     it cannot preempt the goal whose turn it is. Nothing is removed: a lone
     plannable goal still runs.
 
-    `turns` maps a goal repr to the sequence number of its last spent budget
-    (`record_turn`). Each served goal is demoted to the end of its band in
+    `turns` maps a goal's `turn_key` to the sequence number of its last spent
+    budget (`record_turn`). Each served goal is demoted to the end of its band in
     increasing turn order, so the most recently served ends last.
 
     WHY A TURN ORDER, NOT ONE YIELD (2026-10-05). The yield (Phase 4-2b)
@@ -114,8 +134,8 @@ def rotate(candidates: list[Candidate], turns: Mapping[str, int]) -> list[Candid
     plannable goals, every one is picked within k - 1 turns
     (`rotation_fair`)."""
     out = candidates
-    for served in sorted({c.repr_ for c in candidates if c.repr_ in turns},
-                         key=turns.__getitem__):
+    for served in sorted({turn_key(c.repr_) for c in candidates
+                          if turn_key(c.repr_) in turns}, key=turns.__getitem__):
         out = _demote(out, served)
     return out
 
@@ -124,6 +144,6 @@ def record_turn(turns: Mapping[str, int], goal: str) -> dict[str, int]:
     """`turns` with `goal`'s turn recorded as the newest, keeping the
     `TURN_LOG_SIZE` most recent. A goal dropped from the log counts as never
     served, which only moves it forward."""
-    logged = {**turns, goal: max(turns.values(), default=0) + 1}
+    logged = {**turns, turn_key(goal): max(turns.values(), default=0) + 1}
     kept = sorted(logged, key=logged.__getitem__)[-TURN_LOG_SIZE:]
     return {code: logged[code] for code in kept}
