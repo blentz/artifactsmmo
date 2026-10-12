@@ -5828,14 +5828,29 @@ PARTY_PLAYER_MUTATIONS = [
      "            party = tuple(c for c in cards if c.character not in taken)\n",
      "            party = tuple(cards)\n"),
     ("player: the leader fights before the party assembles",
-     "        if claimed and assembled(lease, self._party_cards, now):\n",
-     "        if claimed:\n"),
+     "        if claimed and not refused and assembled(lease, self._party_cards, now):\n",
+     "        if claimed and not refused:\n"),
+    ("player: a refused party fight is fired again at once",
+     "        if claimed and not refused and assembled(lease, self._party_cards, now):\n",
+     "        if claimed and assembled(lease, self._party_cards, now):\n"),
+    ("player: a refusal is never noted",
+     "                    self._party_refused.add(action.monster_code)\n",
+     "                    pass\n"),
+    ("player: a refusal holds the leader forever",
+     "        self._party_refused.discard(action.monster_code)\n",
+     "        pass\n"),
+    ("player: a new commitment keeps the lease it leads",
+     "            self._release_led_party()\n",
+     "            pass\n"),
+    ("player: the card is the cycle's stale state",
+     "            self._coordination.publish_party_card(card_json(state), datetime.now(tz=timezone.utc))\n",
+     "            self._coordination.publish_party_card(card_json(self.state), datetime.now(tz=timezone.utc))\n"),
     ("player: a party that never assembles is held for forever",
      "        if now - since >= timedelta(seconds=PARTY_ASSEMBLY_SECONDS):\n",
      "        if False:\n"),
-    ("player: a won party fight keeps its lease",
-     "                raise\n            if party_fight:\n                self._release_party(action)\n",
-     "                raise\n"),
+    ("player: a won party fight frees its members",
+     "            # A WON party fight keeps its lease: the leader fights the boss\n",
+     "            if party_fight:\n                self._release_party(action)\n"),
     ("player: a lost party fight keeps its lease",
      "                if party_fight and str(e).startswith(\"fight_lost\"):\n",
      "                if False:\n"),
@@ -5949,6 +5964,11 @@ LOST_FIGHTS_RUN_MUTATIONS = [
     ("player: the hold's loadout is recorded as the plan's fight's",
      "                    self._record_loadout_for_action(executed_action, prev_state_for_learning)\n",
      "                    self._record_loadout_for_action(action, prev_state_for_learning)\n"),
+]
+PARTY_CARD_RUN_MUTATIONS = [
+    ("player: the card is not republished after the action",
+     "                self._publish_party_card(new_state)\n",
+     "                pass\n"),
 ]
 LOST_FIGHTS_PLAN_MUTATIONS = [
     ("player: the plan diagnostic never reads the record",
@@ -10709,6 +10729,8 @@ def _collect_all_groups() -> None:
     run_group(PLAYER_SRC, LOST_FIGHTS_REFRESH_MUTATIONS,
               "tests/test_ai/test_player_learning.py", survivors)
     run_group(PLAYER_SRC, LOST_FIGHTS_RUN_MUTATIONS,
+              "tests/test_ai/test_player_run.py", survivors)
+    run_group(PLAYER_SRC, PARTY_CARD_RUN_MUTATIONS,
               "tests/test_ai/test_player_run.py", survivors)
     run_group(PLAYER_SRC, LOST_FIGHTS_PLAN_MUTATIONS,
               "tests/test_ai/test_plan_command.py", survivors)

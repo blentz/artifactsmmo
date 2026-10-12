@@ -1120,3 +1120,20 @@ def test_run_records_the_fight_outcome_of_the_action_that_ran():
                     _run_one_action_with(player, fight, initial_state, "ok", client, executed=hold)
     assert combat.call_args.args[0] is hold
     assert loadout.call_args.args[0] is hold
+
+
+def test_run_republishes_the_party_card_after_the_action():
+    """The card published at the cycle's start predates the cooldown the action
+    set; the run loop publishes the post-action state too (live 2026-10-12: a
+    leader read a member cooling down from the party fight as ready)."""
+    player = GamePlayer(character="hero")
+    client = MagicMock()
+    initial_state = make_state(hp=120, max_hp=150, level=5)
+    post = replace(initial_state, cooldown_expires=datetime.now(tz=timezone.utc) + timedelta(seconds=60))
+    with patch.object(ClientManager_mock := MagicMock(), "client", client):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with _patch_game_data_load():
+                with patch.object(player, "_fetch_world_state", return_value=initial_state), \
+                        patch.object(player, "_publish_party_card") as publish:
+                    _run_one_action_with(player, RestAction(), post, "ok", client)
+    publish.assert_any_call(post)

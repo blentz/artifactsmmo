@@ -546,6 +546,9 @@ class GamePlayer:
         # When this character, as a leader, first held for each boss's party
         # (`_lead_party`'s assembly deadline).
         self._party_since: dict[str, datetime] = {}
+        # Bosses whose party fight the server refused last cycle (HTTP 486 /
+        # 499): the leader holds one cycle for them (`_lead_party`).
+        self._party_refused: set[str] = set()
         # The cycle's grind target when it stands only on consumables (bare
         # gear names no fight), set by `_winnable_farm_target`; read by
         # `_selection_context` into `SelectionContext.combat_propped`.
@@ -1278,6 +1281,12 @@ class GamePlayer:
                 # previous value intact (they continue before reaching here).
                 self._last_outcome = outcome
                 self.state = new_state
+                # Again after the action: the card published at the cycle's
+                # start predates the cooldown this action set, and the next
+                # publish waits that cooldown out — a leader read a member
+                # cooling down from the party fight as ready and drew HTTP 499
+                # (live 2026-10-12).
+                self._publish_party_card(new_state)
                 if outcome == "ok" and self._plan_cache is not None:
                     if self._plan_cache.batch_satisfied(new_state.inventory,
                                                         self.game_data):
@@ -1452,16 +1461,25 @@ class GamePlayer:
             try:
                 new_state = action.execute(self.state, client)
             except RuntimeError as e:
-                # A party fight LOST still resolved: the lease ends with it. A
-                # REFUSED one (HTTP 486 a member off the tile, 499 one in
-                # cooldown) keeps it, so the members keep holding — live
-                # 2026-10-11, releasing on every refusal freed HAL between
-                # C3P0's 26 king_slime attempts and HAL walked off to its task.
+                # A party fight LOST still resolved, and the party model that
+                # chose it was wrong: the lease ends with it. A REFUSED one
+                # (HTTP 486 a member off the tile, 499 one in cooldown) keeps
+                # it, so the members keep holding — live 2026-10-11, releasing
+                # on every refusal freed HAL between C3P0's 26 king_slime
+                # attempts and HAL walked off to its task — and the leader
+                # holds its next cycle instead of firing again (live
+                # 2026-10-12: 13 refusals 4 s apart after one won fight).
                 if party_fight and str(e).startswith("fight_lost"):
                     self._release_party(action)
+                elif party_fight:
+                    assert isinstance(action, FightAction)
+                    self._party_refused.add(action.monster_code)
                 raise
-            if party_fight:
-                self._release_party(action)
+            # A WON party fight keeps its lease: the leader fights the boss
+            # again, and a released lease sent the member back to its own work
+            # between fights (live 2026-10-12, HAL to iron between two wins).
+            # The lease ends with the leader's commitment (`_track_intention`)
+            # or its TTL.
             # Re-sync bank state after visiting bank
             # BuyBankExpansionAction is in this tuple for the SAME reason the
             # three deposit/withdraw actions are: it changes bank state the
@@ -2383,11 +2401,15 @@ class GamePlayer:
           is recorded (`_turns`) and goal choice serves every other plannable
           goal before it runs again.
 
-        A new commitment starts its own stall count."""
+        A new commitment starts its own stall count, and ends any party lease
+        this character leads: its members held for the boss the old one
+        fought (live 2026-10-12, HAL idle on the tile 5 minutes after C3P0's
+        turn rotated it to shrimp)."""
         committed = self._arbiter._committed_repr
         if committed != self._intention_counted:
             self._intention_counted = committed
             self._intention_stall = 0
+            self._release_led_party()
         if committed is None or goal is None:
             return
         key = turn_key(committed)
@@ -3513,16 +3535,32 @@ class GamePlayer:
         self.state = replace(self.state, lost_fights=lost)
 
     def _release_party(self, action: Action) -> None:
-        """End the lease a resolved party fight was fought under."""
+        """End the lease a lost party fight was fought under."""
         assert isinstance(action, FightAction) and self._coordination is not None
         self._coordination.release_party(action.monster_code)
+
+    def _publish_party_card(self, state: WorldState) -> None:
+        """Publish `state` as this character's party card; no-op without a
+        coordination store."""
+        if self._coordination is not None:
+            self._coordination.publish_party_card(card_json(state), datetime.now(tz=timezone.utc))
+
+    def _release_led_party(self) -> None:
+        """End the party lease this character leads, if any."""
+        if self._coordination is None:
+            return
+        lease = self._coordination.party_lease_for(datetime.now(tz=timezone.utc))
+        if lease is not None and lease.leader == self.character:
+            self._coordination.release_party(lease.boss)
 
     def _lead_party(self, action: FightAction) -> Action:
         """The action a party fight's leader runs this cycle (increment 4):
         claim or renew the lease on the boss, meeting on the fight's nearest
         tile; the fight itself once every member is on it out of cooldown
-        (`party_lease_core.assembled`), else hold there for them. Without a
-        coordination store there is no party to wait for."""
+        (`party_lease_core.assembled`), else hold there for them — and hold
+        one cycle after the server refused the fight, whatever the cards say,
+        while the members' cards catch up. Without a coordination store there
+        is no party to wait for."""
         assert self.state is not None
         if self._coordination is None:
             return action
@@ -3532,7 +3570,9 @@ class GamePlayer:
                            self.state.layer, x, y)
         claimed = self._coordination.claim_party(action.monster_code, action.participants,
                                                  (lease.layer, x, y), now)
-        if claimed and assembled(lease, self._party_cards, now):
+        refused = action.monster_code in self._party_refused
+        self._party_refused.discard(action.monster_code)
+        if claimed and not refused and assembled(lease, self._party_cards, now):
             self._party_since.pop(action.monster_code, None)
             return action
         since = self._party_since.setdefault(action.monster_code, now)
@@ -3585,7 +3625,7 @@ class GamePlayer:
         self._coordination.publish_skills(state.skills, now)
         # Our party card: what a sibling leader judges a party fight with, and
         # whether we stand on its tile out of cooldown (increment 4).
-        self._coordination.publish_party_card(card_json(state), now)
+        self._publish_party_card(state)
         # Bank stock a sibling has already committed to withdrawing. Read here
         # with the rest of the coordination block (one SQLite query, no API
         # call) so the shed licence this cycle derives is netted against it —

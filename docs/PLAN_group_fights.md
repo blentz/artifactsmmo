@@ -470,3 +470,26 @@ A third fix on the way (the local gate's liveness alarm, HAL 21:35Z): 12 Wait
 cycles with every plan declined `bag_overflow` at 61/164 items, 17/20 slots,
 far below DEPOSIT_FULL. An overflowing plan now banks the bag's surplus in
 front of itself when that makes it fit (`craft_plan_gen._bank_first`).
+
+## Increment 6 — first party wins (2026-10-12)
+
+Four faults between the first formed party and the first wins, each fixed:
+
+- `fe19dcbb`: the planner's state key left out `party_held`, so a member
+  already on the tile planned no hold and its commitment ran instead (HAL
+  back to trout with the lease live).
+- `323f6c16`: the drop gate and `party_participants` were cold — C3P0 lost
+  king_slime alone 41 of 44 at level 31 and the party arm never fired. The
+  learned-loss veto now reaches both as `WorldState.lost_fights`, which voids
+  the solo arms only. Also: the run loop recorded the PLAN's fight, so every
+  leader hold was logged as a party win (134 rows, 0 fights); it now records
+  `executed_action`.
+- 19:31Z and 19:33Z: `Fight(king_slime+HAL)` won twice (grey: 0 XP; HAL paid
+  gold). Between the wins the lease was released, HAL went to iron, and the
+  leader drew 13 HTTP 499 four seconds apart; its 100-cycle turn ran out and
+  HAL held an orphan lease for 5 minutes.
+- Fixed together: a WON party fight keeps its lease (only a loss, the
+  assembly deadline, the TTL, or a new leader commitment end it); a refused
+  party fight makes the leader hold one cycle; each character republishes
+  its party card after its action (the cycle-start card predates the action's
+  cooldown, and the next publish waits it out).

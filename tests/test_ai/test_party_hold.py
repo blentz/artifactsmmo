@@ -211,11 +211,69 @@ def test_a_refused_party_fight_keeps_its_lease(tmp_path: Path) -> None:
     assert lor_store.party_lease_for(datetime.now(tz=timezone.utc)) is not None
 
 
-def test_a_won_party_fight_releases_its_lease(tmp_path: Path) -> None:
+def test_a_won_party_fight_keeps_its_lease(tmp_path: Path) -> None:
+    """The leader fights the boss again: a released lease sent the member back
+    to its own work between fights (live 2026-10-12, HAL to iron between two
+    king_slime wins, then 13 refusals)."""
     hal, lor_store, fight = _assembled_leader(tmp_path)
+    assert hal._lead_party(fight) is fight
     fight.execute = MagicMock(return_value=hal.state)  # type: ignore[method-assign]
     hal._execute(fight, MagicMock())
+    assert lor_store.party_lease_for(datetime.now(tz=timezone.utc)) is not None
+
+
+def test_a_lost_party_fight_releases_its_lease(tmp_path: Path) -> None:
+    hal, lor_store, fight = _assembled_leader(tmp_path)
+    fight.execute = MagicMock(side_effect=RuntimeError("fight_lost: duskworm (turns=9)"))  # type: ignore[method-assign]
+    with patch.object(hal, "_fetch_world_state", return_value=hal.state):
+        hal._execute(fight, MagicMock())
     assert lor_store.party_lease_for(datetime.now(tz=timezone.utc)) is None
+
+
+def test_a_refused_party_fight_holds_one_cycle(tmp_path: Path) -> None:
+    """After HTTP 499 the cards still read the party assembled (a member's card
+    predates its cooldown): the leader holds one cycle instead of firing
+    again, then fights."""
+    hal, _, fight = _assembled_leader(tmp_path)
+    assert hal._lead_party(fight) is fight
+    fight.execute = MagicMock(side_effect=ApiActionError(499, "in cooldown"))  # type: ignore[method-assign]
+    with patch.object(hal, "_fetch_world_state", return_value=hal.state):
+        hal._execute(fight, MagicMock())
+    assert isinstance(hal._lead_party(fight), HoldForPartyAction)
+    assert hal._lead_party(fight) is fight
+
+
+def test_a_new_commitment_ends_the_lease_it_leads(tmp_path: Path) -> None:
+    """The leader's turn on the boss ended: its members are freed (live
+    2026-10-12, HAL idle on the tile 5 minutes while C3P0 gathered shrimp).
+    A lease another character leads is not this one's to end."""
+    hal, lor_store, fight = _assembled_leader(tmp_path)
+    hal._arbiter._committed_repr = "GatherMaterials(duskworm_scale)"
+    hal._track_intention(None, hal.state, hal.state, True)
+    assert hal._lead_party(fight) is fight
+    # the same commitment, cycle after cycle: the lease stands
+    hal._track_intention(None, hal.state, hal.state, True)
+    assert lor_store.party_lease_for(datetime.now(tz=timezone.utc)) is not None
+    hal._arbiter._committed_repr = "GatherMaterials(cooked_shrimp)"
+    hal._track_intention(None, hal.state, hal.state, True)
+    assert lor_store.party_lease_for(datetime.now(tz=timezone.utc)) is None
+    # a member's commitment change leaves its leader's lease alone
+    assert hal._lead_party(fight) is fight
+    lor, _ = _player(tmp_path, "Lor")
+    lor._arbiter._committed_repr = "GatherMaterials(sunflower)"
+    lor._track_intention(None, lor.state, lor.state, True)
+    assert lor_store.party_lease_for(datetime.now(tz=timezone.utc)) is not None
+    # no store, nothing to end
+    GamePlayer(character="solo")._release_led_party()
+
+
+def test_the_party_card_is_published_from_the_given_state(tmp_path: Path) -> None:
+    hal, _ = _player(tmp_path, "HAL")
+    lor_store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Lor")
+    hal._publish_party_card(make_state(character="HAL", x=7, y=8))
+    (card,) = lor_store.sibling_party_cards(datetime.now(tz=timezone.utc))
+    assert '"x": 7' in card and '"y": 8' in card
+    GamePlayer(character="solo")._publish_party_card(make_state())
 
 
 def test_a_party_call_breaks_a_cached_plan_that_is_not_its_hold(tmp_path: Path) -> None:
