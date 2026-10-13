@@ -2407,3 +2407,24 @@ def test_the_shortfall_reaches_the_selection_context(monkeypatch):
     assert seen == {"monster": "chicken", "store": p.history, "order": ("HAL", "hero"),
                     "me": "hero", "own": {"cooked_bass": 20},
                     "siblings": {"HAL": {"cooked_bass": 4}}}
+
+
+def test_the_skill_demand_is_known_when_the_loadout_is_chosen(monkeypatch):
+    """Spec §2: the make price credits `ctx.skill_demand`, so the loadout must
+    be chosen against a context that already carries it."""
+    p = GamePlayer(character="hero", fleet_order=("hero",))
+    p.state = make_state()
+    p.game_data = _make_planner_gd()
+    seen = {}
+
+    def choose(state, gd, ctx, store):  # type: ignore[no-untyped-def]
+        seen["skills"] = ctx.skill_demand
+        return None
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.xp_demand",
+                        lambda roots, s, g, c: (frozenset({"fishing"}), False))
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.fight_ahead_loadout", choose)
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))
+    ctx = p._selection_context(combat_monster="chicken")
+    assert seen["skills"] == frozenset({"fishing"})
+    assert ctx.skill_demand == frozenset({"fishing"})

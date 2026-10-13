@@ -4117,6 +4117,13 @@ class GamePlayer:
             fight_records=(fight_records(self.state, self.game_data, self.history)
                            if self.history is not None else ()),
         )
+        # Skill demand first (spec 2026-10-13 §2): the loadout's make prices
+        # credit the skills it names, and it no longer reads the shortfall.
+        skills, level = xp_demand(
+            demand_roots(self._last_decision.chosen_root if self._last_decision is not None else None,
+                         self.state, ctx),
+            self.state, self.game_data, ctx)
+        ctx = replace(ctx, skill_demand=skills, level_demanded=level)
         ctx = replace(ctx, loadout=self._party_fight_loadout()
                       or fight_ahead_loadout(self.state, self.game_data, ctx, self.history))
         self._consumable_need = consumable_need(ctx.loadout)
@@ -4124,11 +4131,6 @@ class GamePlayer:
             self.state, self._fleet_order, self.character, self._consumable_need,
             self._sibling_needs)
         ctx = replace(ctx, supply_shortfall=self._supply_shortfall)
-        skills, level = xp_demand(
-            demand_roots(self._last_decision.chosen_root if self._last_decision is not None else None,
-                         self.state, ctx),
-            self.state, self.game_data, ctx)
-        ctx = replace(ctx, skill_demand=skills, level_demanded=level)
         if not self._draws_enabled:
             return ctx
         # Phase 5-2c-iii-c-2 #5 (USER 2026-10-07): a draw is owed by the

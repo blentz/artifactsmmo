@@ -5595,9 +5595,18 @@ CONSUMABLE_FLOOR_MUTATIONS = [
      "        out.append((code, owed))\n"),
 ]
 CONSUMABLE_DEMAND_MUTATIONS = [
-    ("floor demand: the shortfall seeds no DAG root",
-     "    roots.extend(ObtainItem(code, qty) for code, qty in ctx.supply_shortfall)\n",
-     ""),
+    ("floor demand: the shortfall seeds a DAG root again",
+     "                 for code in sorted(ctx.target_gear | ctx.near_term_targets) if code not in worn)\n"
+     "    return roots\n",
+     "                 for code in sorted(ctx.target_gear | ctx.near_term_targets) if code not in worn)\n"
+     "    roots.extend(ObtainItem(code, qty) for code, qty in ctx.supply_shortfall)\n"
+     "    return roots\n"),
+]
+SKILL_DEMAND_ORDER_MUTATIONS = [
+    ("skill demand: the loadout is chosen without it",
+     "        ctx = replace(ctx, skill_demand=skills, level_demanded=level)\n"
+     "        ctx = replace(ctx, loadout=self._party_fight_loadout()\n",
+     "        ctx = replace(ctx, loadout=self._party_fight_loadout()\n"),
 ]
 CONSUMABLE_SHORT_MUTATIONS = [
     ("floor demand: the shortfall's ingredients are never short",
@@ -10837,7 +10846,9 @@ def _collect_all_groups() -> None:
     run_group(PLAYER_SRC, LOSS_RISK_PLAYER_MUTATIONS,
               "tests/test_ai/test_loss_risk.py", survivors)
     run_group(XP_DEMAND_SRC, CONSUMABLE_DEMAND_MUTATIONS,
-              "tests/test_ai/test_consumable_floor.py", survivors)
+              "tests/test_ai/test_xp_demand.py", survivors)
+    run_group(PLAYER_SRC, SKILL_DEMAND_ORDER_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
     run_group(TASK_WORTH_SRC, CONSUMABLE_SHORT_MUTATIONS,
               "tests/test_ai/test_consumable_floor.py", survivors)
     run_group(PLAYER_SRC, CONSUMABLE_PLAYER_MUTATIONS,

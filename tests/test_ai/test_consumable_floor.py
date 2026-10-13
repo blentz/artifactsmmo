@@ -17,7 +17,6 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.heal_catalog import FOOD, POTION, heal_candidates
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.task_worth import short_items
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.xp_demand import demand_roots
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_best_loadout import _gd as _ogre_gd
@@ -104,9 +103,10 @@ class TestShortfall:
 
 
 class TestShortfallIsDemand:
-    def test_it_seeds_the_dag_roots(self) -> None:
+    def test_it_seeds_no_dag_root(self) -> None:
+        """The shortfall no longer seeds a DAG root (spec 2026-10-13 §2)."""
         ctx = dataclasses.replace(NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_bass", 12),))
-        assert demand_roots(None, make_state(), ctx) == [ObtainItem("cooked_bass", 12)]
+        assert demand_roots(None, make_state(), ctx) == []
 
     def test_it_makes_its_ingredients_short(self) -> None:
         gd = GameData()

@@ -20,6 +20,14 @@ def test_the_roots_are_the_chosen_root_then_the_unworn_targets() -> None:
     assert demand_roots(None, state, NO_PROFILE_CONTEXT) == []
 
 
+def test_the_fleet_food_shortfall_is_not_dag_demand() -> None:
+    """Spec §2: the shortfall made fishing 'useful', which made the food cheap,
+    which made the shortfall. Fishing is useful only when a gear or skill root
+    needs it."""
+    ctx = dataclasses.replace(NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_bass", 12),))
+    assert demand_roots(None, make_state(), ctx) == []
+
+
 def test_the_walks_and_the_skill_root_name_the_skills(monkeypatch) -> None:
     monkeypatch.setattr(mod, "craft_demand", lambda roots, s, g, c: {"gearcrafting": 20})
     monkeypatch.setattr(mod, "gather_demand", lambda roots, s, g, c: {"mining": 25})

@@ -30,13 +30,13 @@ from artifactsmmo_cli.ai.world_state import WorldState
 def demand_roots(chosen: MetaGoal | None, state: WorldState,
                  ctx: SelectionContext) -> list[MetaGoal]:
     """The chosen root, then one `ObtainItem` per unworn target or near-term
-    target, in a stable order, then the fleet consumable shortfall
-    (`ctx.supply_shortfall`: fishing feeds cooking feeds the heal supply)."""
+    target, in a stable order. NOT the fleet consumable shortfall (spec
+    2026-10-13 §2): food demand made fishing 'useful XP', which credited the
+    food's make price, which kept the food demanded."""
     worn = {code for code in state.equipment.values() if code is not None}
     roots: list[MetaGoal] = [] if chosen is None else [chosen]
     roots.extend(ObtainItem(code, 1)
                  for code in sorted(ctx.target_gear | ctx.near_term_targets) if code not in worn)
-    roots.extend(ObtainItem(code, qty) for code, qty in ctx.supply_shortfall)
     return roots
 
 
