@@ -232,9 +232,18 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
                 return None
             if held < price:
                 fleet = held + pooled
-                return GatherMaterialsGoal(
-                    target_item=currency,
-                    needed={currency: held + currency_grind_target_pure(fleet, price) - fleet})
+                want = currency_grind_target_pure(fleet, price) - fleet
+                funded = _passively_funded(currency, state, game_data)
+                if funded is not None:
+                    # The currency is BOUGHT with a passive one (a medal for 100
+                    # event_ticket): the same rule one level down — buy what
+                    # the tickets already held pay for, never farm the tickets
+                    # (live 2026-10-13: 472 gathers for 4 tickets, 1 in 200).
+                    want = min(want, funded)
+                    if want == 0:
+                        return None
+                return GatherMaterialsGoal(target_item=currency,
+                                           needed={currency: held + want})
         return GatherMaterialsGoal(target_item=code, needed={code: 1})
     # Route on the STEP, not on a depth-bound proxy for it (see the docstring:
     # the deleted `is_plannable` depth gate never rejected on real data).
@@ -268,6 +277,25 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
     # line. `step.code != code` therefore implies a non-empty recipe. Kept
     # as a total-function fallback.
     return upgrade  # pragma: no cover
+
+
+def _passively_funded(currency: str, state: WorldState, game_data: GameData) -> int | None:
+    """Units of `currency` the passive currency already held (bag and bank)
+    buys, when `currency`'s ONLY source is permanent vendors paid in a currency
+    that accrues passively (`GameData.currency_accrues_passively`:
+    event_ticket, from 56 of 58 monsters); None when it has any other source,
+    and then nothing caps the step. The cheapest vendor sets the price."""
+    if (game_data.crafting_recipe(currency) is not None
+            or currency in game_data.gatherable_drop_items()
+            or game_data.monsters_dropping(currency)):
+        return None
+    vendors = _permanent_vendor_purchases(currency, game_data)
+    if not vendors or not all(pay != "gold" and game_data.currency_accrues_passively(pay)
+                              for _price, pay in vendors):
+        return None
+    price, pay = min(vendors)
+    held = state.inventory.get(pay, 0) + (state.bank_items or {}).get(pay, 0)
+    return held // price
 
 
 def _recipe_has_combat_drop_input(

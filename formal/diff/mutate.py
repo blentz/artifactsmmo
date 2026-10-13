@@ -6054,13 +6054,31 @@ FLEET_CURRENCY_STEP_MUTATIONS = [
      "            if held < price <= held + pooled:\n",
      "            if False:\n"),
     ("fleet step: the shortfall is this character's alone",
-     "                    needed={currency: held + currency_grind_target_pure(fleet, price) - fleet})\n",
-     "                    needed={currency: currency_grind_target_pure(held, price)})\n"),
+     "                want = currency_grind_target_pure(fleet, price) - fleet\n",
+     "                want = currency_grind_target_pure(held, price) - held\n"),
 ]
 FLEET_CURRENCY_STEP_MUTATIONS += [
     ("fleet step: a non-buyer buys the elected item",
      "            and ctx.turn_in.buyer != state.character):\n",
      "            and False):\n"),
+]
+FLEET_CURRENCY_STEP_MUTATIONS += [
+    ("passive: the medal step is never capped",
+     "                funded = _passively_funded(currency, state, game_data)\n",
+     "                funded = None\n"),
+    ("passive: a zero cap still gathers",
+     "                    if want == 0:\n                        return None\n",
+     "                    if False:\n                        return None\n"),
+    ("passive: a currency with another source is capped",
+     "    if (game_data.crafting_recipe(currency) is not None\n"
+     "            or currency in game_data.gatherable_drop_items()\n",
+     "    if (game_data.crafting_recipe(currency) is not None\n            or False\n"),
+    ("passive: a non-passive vendor caps",
+     "    if not vendors or not all(pay != \"gold\" and game_data.currency_accrues_passively(pay)\n",
+     "    if not vendors or not all(pay != \"gold\" and True\n"),
+    ("passive: banked tickets are not counted",
+     "    held = state.inventory.get(pay, 0) + (state.bank_items or {}).get(pay, 0)\n    return held // price\n",
+     "    held = state.inventory.get(pay, 0)\n    return held // price\n"),
 ]
 FLEET_POOLED_MUTATIONS = [
     ("fleet pool: worn copies are not pooled",

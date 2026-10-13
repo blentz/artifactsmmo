@@ -5,7 +5,7 @@ from artifactsmmo_cli.ai.currency_grind_target import currency_grind_target_pure
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
 from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings, fleet_pooled, is_dual_role
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.obtain_item_routing import _equippable_goal
+from artifactsmmo_cli.ai.obtain_item_routing import _equippable_goal, _passively_funded
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
@@ -87,3 +87,40 @@ def test_a_trophy_a_sibling_was_elected_to_buy_is_not_bought_here():
     assert _equippable_goal("lich_race_trophy", "artifact1_slot", state, gd, mine) is not None
     other = replace(ctx, turn_in=replace(claim, item_code="emerald_book"))
     assert _equippable_goal("lich_race_trophy", "artifact1_slot", state, gd, other) is not None
+
+
+def _passive_tickets(gd, monkeypatch):  # type: ignore[no-untyped-def]
+    """event_ticket drops from 56 of 58 live monsters; the fixture catalogue is
+    too small to say so, so the predicate is pinned."""
+    monkeypatch.setattr(gd, "currency_accrues_passively", lambda code: code == "event_ticket")
+    return gd
+
+
+def test_a_medal_step_buys_only_what_the_held_tickets_pay_for(monkeypatch):
+    """Live 2026-10-13: 472 ticket gathers for 4 tickets (1 in 200). Medals are
+    bought with tickets already held, never farmed for."""
+    gd = _passive_tickets(_trophy_world(), monkeypatch)
+    state = make_state(level=30, bank_items={"lich_race_medal": 3, "event_ticket": 150})
+    goal = _equippable_goal("lich_race_trophy", "artifact1_slot", state, gd, NO_PROFILE_CONTEXT)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.needed == {"lich_race_medal": 3 + 1}  # 150 tickets pay for 1
+    # under one medal's price: nothing to do, the character levels instead
+    poor = make_state(level=30, bank_items={"lich_race_medal": 3, "event_ticket": 99})
+    assert _equippable_goal("lich_race_trophy", "artifact1_slot", poor, gd, NO_PROFILE_CONTEXT) is None
+    # plenty: the batch milestone, as before
+    rich = make_state(level=30, bank_items={"lich_race_medal": 3, "event_ticket": 900})
+    goal = _equippable_goal("lich_race_trophy", "artifact1_slot", rich, gd, NO_PROFILE_CONTEXT)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.needed == {"lich_race_medal": currency_grind_target_pure(3, 10)}
+
+
+def test_only_a_currency_bought_with_a_passive_one_is_capped(monkeypatch):
+    gd = _passive_tickets(_trophy_world(), monkeypatch)
+    state = make_state(inventory={"event_ticket": 30}, bank_items={"event_ticket": 220})
+    assert _passively_funded("lich_race_medal", state, gd) == 2
+    # a medal with any other source is not capped
+    monkeypatch.setattr(gd, "gatherable_drop_items", lambda: frozenset({"lich_race_medal"}))
+    assert _passively_funded("lich_race_medal", state, gd) is None
+    # nor one bought with a currency that is not passive
+    plain = _trophy_world()
+    assert _passively_funded("lich_race_medal", state, plain) is None
