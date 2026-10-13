@@ -47,6 +47,7 @@ from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.test_dual_role_fixtures import medal_game_data
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -2121,3 +2122,60 @@ class TestGatherInTheCharactersRegion:
                             drop_item_override="palm_wood", travel_region="isle")
         assert self._action([isle], "overworld").travel_region == "isle"
         assert self._action([], "overworld") is None
+
+
+class TestItemCurrencyBuyTrip:
+    """A buy paid in an ITEM is walked one bag-load at a time: its pay stack
+    has to be in the bag at the counter. Live 2026-10-12: the walk sized
+    `Withdraw(event_ticket x400)` -> `NpcBuy(lich_race_medal x4)`, peak 493 in a
+    166 bag, and every character declined the trophy `bag_overflow`."""
+
+    def _gd(self) -> GameData:
+        gd = medal_game_data()
+        gd.world.bank_tile = (4, 1)
+        gd.world.npc_tiles = {"archaeologist": (6, 13)}
+        return gd
+
+    def _plan(self, gd: GameData, need: int, inventory_max: int, **state_kw: object) -> tuple[
+            list[str] | None, list[str]]:
+        state = make_state(inventory={}, inventory_max=inventory_max, **state_kw)
+        goal = GatherMaterialsGoal("lich_race_medal", {"lich_race_medal": need})
+        declined: list[str] = []
+        plan = decompose(goal, state, gd, goal.relevant_actions([], state, gd), _ctx(), declined)
+        return (None if plan is None else [repr(a) for a in plan]), declined
+
+    def test_a_deficit_past_one_bag_load_is_walked_one_trip(self) -> None:
+        plan, _ = self._plan(self._gd(), 5, 166,
+                             bank_items={"event_ticket": 637, "lich_race_medal": 1})
+        assert plan == ["Withdraw(lich_race_medal×1)", "Withdraw(event_ticket×100)",
+                        "NpcBuy(lich_race_medal×1@archaeologist)"]
+
+    def test_a_deficit_that_fits_is_bought_whole(self) -> None:
+        plan, _ = self._plan(self._gd(), 5, 500,
+                             bank_items={"event_ticket": 637, "lich_race_medal": 1})
+        assert plan == ["Withdraw(lich_race_medal×1)", "Withdraw(event_ticket×400)",
+                        "NpcBuy(lich_race_medal×4@archaeologist)"]
+
+    def test_a_buy_no_unit_of_which_fits_is_left_to_the_bag_check(self) -> None:
+        plan, declined = self._plan(self._gd(), 2, 50, bank_items={"event_ticket": 637})
+        assert plan is None
+        assert declined == ["first_leg_inapplicable:Withdraw(event_ticket×200)"]
+
+    def test_a_gold_buy_is_never_shrunk(self) -> None:
+        gd = self._gd()
+        gd.world.npc_buy_currency["archaeologist"]["lich_race_medal"] = "gold"
+        gd.world.npc_stock["archaeologist"]["lich_race_medal"] = 1
+        plan, _ = self._plan(gd, 6, 10, gold=10**6)
+        assert plan == ["NpcBuy(lich_race_medal×6@archaeologist)"]
+
+    def test_only_the_goal_item_s_own_buy_is_tripped(self) -> None:
+        """A buy deeper in the closure (the trophy's medals) is not the goal's
+        target to shrink: the trophy step stays one plan and the bag check
+        names it. The arbiter walks the medals as their own step."""
+        gd = self._gd()
+        state = make_state(inventory={}, inventory_max=166, level=27,
+                           bank_items={"event_ticket": 1000})
+        goal = GatherMaterialsGoal("lich_race_trophy", {"lich_race_trophy": 1})
+        declined: list[str] = []
+        assert decompose(goal, state, gd, goal.relevant_actions([], state, gd), _ctx(), declined) is None
+        assert declined and declined[0].startswith("first_leg_inapplicable:Withdraw(event_ticket×1000)")

@@ -46,6 +46,7 @@ from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.bag_peak import plan_bag_peak
+from artifactsmmo_cli.ai.currency_buy_batch import currency_buy_batch_pure
 from artifactsmmo_cli.ai.decompose_core import Act, OpenGate, Step
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.game_data import GameData
@@ -61,13 +62,13 @@ from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, Policy
-from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkGraph
+from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
 from artifactsmmo_cli.ai.obtain_sources import SourceKind
 from artifactsmmo_cli.ai.potion_supply import POTION_POLICY
 from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG, admit_region_edges
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 
 def _decline(declined: list[str] | None, reason: str) -> list[Action] | None:
@@ -382,7 +383,9 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
     short (a gather or a drop below its average) is repeated by the plan cache
     until it delivers. The plan stops at a skill gate: the grind that opens it
     (`_decompose_grind`) is the plan's tail, and the next cycle continues from
-    there.
+    there. It also stops at one bag-load of an item-currency buy of the goal's
+    own item (`_one_trip`): the walk is asked for the smaller target, and the
+    next cycle walks the rest.
 
     The walk is proved complete: a feasible goal the bag does not hold always
     has a step, so a decline here names either an infeasible goal (with the
@@ -424,8 +427,13 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
                                   actions, state, game_data)
     for item, needed in goal.needed.items():
         qty = _bag_target(item, needed, goal.exclude_recycle, state)
-        answer = ObtainModel(state, game_data, ctx, datetime.now(UTC)).walk(
-            item, qty, policy, goal.exclude_recycle, openable, frozenset(goal.needed), grey_ok)
+        model = ObtainModel(state, game_data, ctx, datetime.now(UTC))
+        answer = model.walk(item, qty, policy, goal.exclude_recycle, openable,
+                            frozenset(goal.needed), grey_ok)
+        trip = _one_trip(item, qty, answer, state, game_data)
+        if trip < qty:
+            answer = model.walk(item, trip, policy, goal.exclude_recycle, openable,
+                                frozenset(goal.needed), grey_ok)
         if not answer.feasible:
             graph = answer.graph
             dead = sorted(code for code, routes in graph.routes.items()
@@ -457,6 +465,37 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
         if legs:
             return _finish(legs, state, game_data, declined)
     return _decline(declined, "satisfied")
+
+
+def _one_trip(item: str, qty: int, answer: WalkAnswer, state: WorldState,
+              game_data: GameData) -> int:
+    """`qty`, less what the walk's buys of `item` from a vendor paid in an ITEM
+    carry beyond one bag-load (`currency_buy_batch_pure`).
+
+    The walk sizes a buy to the whole deficit, and its pay stack has to be in
+    the bag at the counter, so a deficit past one bag-load is a plan no
+    deposit can make fit. Live 2026-10-12: `GatherMaterials(lich_race_medal,
+    x5)` walked `Withdraw(event_ticket x400)` -> `NpcBuy(lich_race_medal x4)`,
+    peak 493 in a 166 bag, and every character declined the trophy
+    `bag_overflow` ~1,000 times in 12 h. Walking the smaller target is the
+    proved walk on a smaller goal: one trip, and the next cycle walks the rest
+    from the bag it left. A buy not even one unit of which fits is left whole,
+    for the `bag_overflow` decline to name."""
+    excess = 0
+    for leg in answer.plan:
+        if not isinstance(leg, Act) or leg.item != item:
+            continue
+        route = answer.graph.sources[item][leg.route]
+        if route.kind is not SourceKind.BUY:
+            continue
+        price, currency = next((p, c) for npc, p, c in game_data.npc_purchases(item)
+                               if npc == route.via)
+        if currency == GOLD_CODE:
+            continue
+        batch = currency_buy_batch_pure(leg.amount, price, state.inventory_max)
+        if 0 < batch < leg.amount:
+            excess += leg.amount - batch
+    return qty - excess
 
 
 def _bag_target(item: str, needed: int, produce: frozenset[str], state: WorldState) -> int:

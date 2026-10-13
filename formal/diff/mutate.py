@@ -5978,6 +5978,23 @@ LOST_FIGHTS_PLAN_MUTATIONS = [
      "        self._refresh_party(datetime.now(tz=timezone.utc))\n"
      "        state = self.state\n"),
 ]
+# An item-currency buy of the goal's own item is walked one bag-load at a
+# time (live 2026-10-12: the trophy declined `bag_overflow` ~1,000 times a
+# character). OWN run_group: unit-killed by tests/test_ai/test_craft_plan_gen.py.
+CURRENCY_TRIP_MUTATIONS = [
+    ("trip: the walk is never shrunk",
+     "        if trip < qty:\n",
+     "        if False:\n"),
+    ("trip: a gold buy is shrunk",
+     "        if currency == GOLD_CODE:\n            continue\n        batch = currency_buy_batch_pure(",
+     "        batch = currency_buy_batch_pure("),
+    ("trip: a buy no unit of which fits is dropped",
+     "        if 0 < batch < leg.amount:\n",
+     "        if batch < leg.amount:\n"),
+    ("trip: a deeper buy shrinks the goal",
+     "        if not isinstance(leg, Act) or leg.item != item:\n            continue\n        route = answer.graph",
+     "        if not isinstance(leg, Act):\n            continue\n        route = answer.graph"),
+]
 PARTY_RECORD_MUTATIONS = [
     ("player: a party fight feeds the solo veto",
      "                party_combat_key(action.monster_code), loadout, True, outcome == \"ok\", state.level)\n",
@@ -10716,6 +10733,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_party_win.py", survivors)
     run_group(FACTORY_SRC, PARTY_FACTORY_MUTATIONS,
               "tests/test_ai/test_party_win.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, CURRENCY_TRIP_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, BANK_FIRST_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(PLAYER_SRC, INTENTION_BUDGET_PER_GOAL_MUTATIONS,
