@@ -296,8 +296,8 @@ theorem descendsD_geCancel (s : State)
 set_option maxRecDepth 8000 in
 /-- `bankExpand` (→ `.buyBankExpansion`) strictly descends at `bankExpandSlot`
     (2026-09-13). Bottom-of-cascade, above `objectiveStepFlag` which
-    `perceptionRefreshD` can RAISE — the same placement `supplyDemandSlot` and
-    `currencyTurnInFlag` take, and for the same reason. -/
+    `perceptionRefreshD` can RAISE — the same placement `geCancelFlag` takes,
+    and for the same reason. -/
 theorem descendsD_bankExpand (s : State)
     (hk : productionLadder (perceptionRefreshD s) = some .bankExpand) :
     dMeasureLt (dMeasure (cycleStepD s)) (dMeasure s) := by

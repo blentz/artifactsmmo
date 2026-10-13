@@ -552,7 +552,7 @@ private theorem refreshE_bankCapacity (s : State) :
 
 set_option maxRecDepth 8000 in
 /-- `bankExpand` (→ `.buyBankExpansion`) strictly descends at `bankExpandSlot`
-    (2026-09-13). Directly below `currencyTurnInFlag` and above the two
+    (2026-09-13). Directly below `geCancelFlag` and above the two
     perception-raised slots. -/
 theorem descendsE_bankExpand (s : State)
     (hk : productionLadder (perceptionRefreshE s) = some .bankExpand) :
