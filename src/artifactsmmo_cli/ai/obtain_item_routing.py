@@ -244,6 +244,13 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
                         return None
                 return GatherMaterialsGoal(target_item=currency,
                                            needed={currency: held + want})
+        if _passively_funded(code, state, game_data) == 0:
+            # The ITEM itself is bought with a passive currency (a medal worn
+            # as an artifact): the "plain buy attempt" above is not
+            # unplannable, GatherMaterials' currency injection farms the
+            # tickets as a drop (live 2026-10-13: HAL and Lor, 163 gathers).
+            # Buy once held tickets pay for it; until then, level.
+            return None
         return GatherMaterialsGoal(target_item=code, needed={code: 1})
     # Route on the STEP, not on a depth-bound proxy for it (see the docstring:
     # the deleted `is_plannable` depth gate never rejected on real data).

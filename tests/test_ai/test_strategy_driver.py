@@ -617,12 +617,15 @@ def _passive_currency_gd():
 
 def test_equippable_passive_currency_skips_dedicated_grind():
     """A buy-only item priced in a passively-accruing currency does NOT mint a
-    dedicated currency grind — the currency is earned while levelling, so the goal
-    falls through to the plain buy (unplannable until affordable, so the arbiter
-    levels). This is the live event_ticket / lich_race_medal fix."""
+    dedicated currency grind — the currency is earned while levelling. Until the
+    held tickets pay for it there is no step (None: the arbiter levels); the
+    plain buy is NOT unplannable, its currency injection farms the tickets as a
+    drop (live 2026-10-13). This is the live event_ticket / lich_race_medal fix."""
     gd = _passive_currency_gd()
     state = make_state(inventory={"ticket": 7}, bank_items={})
-    goal = _equippable_goal("medal", "artifact1_slot", state, gd)
+    assert _equippable_goal("medal", "artifact1_slot", state, gd) is None
+    paid = make_state(inventory={"ticket": 7}, bank_items={"ticket": 93})
+    goal = _equippable_goal("medal", "artifact1_slot", paid, gd)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal._target_item == "medal"      # the buy, NOT a "ticket" grind
 

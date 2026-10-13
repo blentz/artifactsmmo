@@ -6079,6 +6079,9 @@ FLEET_CURRENCY_STEP_MUTATIONS += [
     ("passive: banked tickets are not counted",
      "    held = state.inventory.get(pay, 0) + (state.bank_items or {}).get(pay, 0)\n    return held // price\n",
      "    held = state.inventory.get(pay, 0)\n    return held // price\n"),
+    ("passive: an item bought with tickets farms them",
+     "        if _passively_funded(code, state, game_data) == 0:\n",
+     "        if False:\n"),
 ]
 FLEET_POOLED_MUTATIONS = [
     ("fleet pool: worn copies are not pooled",

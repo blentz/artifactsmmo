@@ -124,3 +124,17 @@ def test_only_a_currency_bought_with_a_passive_one_is_capped(monkeypatch):
     # nor one bought with a currency that is not passive
     plain = _trophy_world()
     assert _passively_funded("lich_race_medal", state, plain) is None
+
+
+def test_a_medal_worn_for_itself_is_bought_only_with_tickets_held(monkeypatch):
+    """Live 2026-10-13 (after 9559cc91): HAL and Lor rooted on the MEDAL as an
+    artifact and ran 163 `Gather(...->event_ticket)` for it. The passive rule
+    filtered the ticket price out, so the step fell through to a plain
+    GatherMaterials(medal) whose currency injection farmed the tickets."""
+    gd = _passive_tickets(_trophy_world(), monkeypatch)
+    poor = make_state(level=30, inventory={"event_ticket": 20}, bank_items={"event_ticket": 79})
+    assert _equippable_goal("lich_race_medal", "artifact2_slot", poor, gd, NO_PROFILE_CONTEXT) is None
+    paid = make_state(level=30, inventory={"event_ticket": 20}, bank_items={"event_ticket": 80})
+    goal = _equippable_goal("lich_race_medal", "artifact2_slot", paid, gd, NO_PROFILE_CONTEXT)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.needed == {"lich_race_medal": 1}
