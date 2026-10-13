@@ -6057,6 +6057,11 @@ FLEET_CURRENCY_STEP_MUTATIONS = [
      "                    needed={currency: held + currency_grind_target_pure(fleet, price) - fleet})\n",
      "                    needed={currency: currency_grind_target_pure(held, price)})\n"),
 ]
+FLEET_CURRENCY_STEP_MUTATIONS += [
+    ("fleet step: a non-buyer buys the elected item",
+     "            and ctx.turn_in.buyer != state.character):\n",
+     "            and False):\n"),
+]
 FLEET_POOLED_MUTATIONS = [
     ("fleet pool: worn copies are not pooled",
      "    return worn + siblings.get(code, 0)\n",

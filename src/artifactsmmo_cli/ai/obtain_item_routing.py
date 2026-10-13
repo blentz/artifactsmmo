@@ -172,6 +172,13 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
     target into `UpgradeEquipment`, the two DO become two producers and that
     census has to be re-run."""
     upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment, committed_target=(code, slot))
+    if (ctx.turn_in is not None and ctx.turn_in.item_code == code
+            and ctx.turn_in.buyer != state.character):
+        # A SIBLING HOLDS THE ELECTION for this item: the pooled currency in
+        # the shared bank is the buyer's to spend. Live 2026-10-13 02:15Z:
+        # R2D2, not the buyer, withdrew the 10 surrendered medals for its own
+        # trophy step and the elected Robby's withdraw came back HTTP 404.
+        return None
     owned = (state.inventory.get(code, 0) > 0
              or (state.bank_items or {}).get(code, 0) > 0)
     if (game_data.crafting_recipe(code) is None and not owned

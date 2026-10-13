@@ -2,6 +2,7 @@
 from dataclasses import replace
 
 from artifactsmmo_cli.ai.currency_grind_target import currency_grind_target_pure
+from artifactsmmo_cli.ai.currency_turnin import TurnIn
 from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings, fleet_pooled, is_dual_role
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.obtain_item_routing import _equippable_goal
@@ -71,3 +72,18 @@ def test_a_fleet_short_of_the_price_gathers_only_the_fleet_s_shortfall():
     alone = _equippable_goal("lich_race_trophy", "artifact1_slot", state, gd, NO_PROFILE_CONTEXT)
     assert isinstance(alone, GatherMaterialsGoal)
     assert alone.needed == {"lich_race_medal": currency_grind_target_pure(3, 10)}
+
+
+def test_a_trophy_a_sibling_was_elected_to_buy_is_not_bought_here():
+    """Live 2026-10-13 02:15Z: R2D2 withdrew the 10 surrendered medals for its
+    own trophy step and the elected buyer's withdraw came back HTTP 404."""
+    gd = _trophy_world()
+    state = make_state(character="R2D2", level=30, bank_items={"lich_race_medal": 10})
+    claim = TurnIn("lich_race_trophy", "archaeologist", 10, "lich_race_medal", "Robby", 10)
+    ctx = replace(NO_PROFILE_CONTEXT, turn_in=claim)
+    assert _equippable_goal("lich_race_trophy", "artifact1_slot", state, gd, ctx) is None
+    # the buyer itself, and a claim on another item, plan the buy as before
+    mine = replace(ctx, turn_in=replace(claim, buyer="R2D2"))
+    assert _equippable_goal("lich_race_trophy", "artifact1_slot", state, gd, mine) is not None
+    other = replace(ctx, turn_in=replace(claim, item_code="emerald_book"))
+    assert _equippable_goal("lich_race_trophy", "artifact1_slot", state, gd, other) is not None
