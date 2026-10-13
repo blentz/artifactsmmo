@@ -200,6 +200,17 @@ def _migrate_material_demand_self_servable(conn: Connection) -> None:
     )
 
 
+def _migrate_party_lease_loadout(conn: Connection) -> None:
+    """`party_leases` grew a `loadout` column (2026-10-13, docs/PLAN_group_fights.md
+    residual R2): the potions the party wins in, comma-joined. Same shape as
+    `_migrate_material_demand_self_servable`: detect with `PRAGMA`, add in
+    place, no-op on a fresh DB. A legacy row reads as no potions."""
+    columns = [row[1] for row in conn.exec_driver_sql("PRAGMA table_info(party_leases)")]
+    if "loadout" in columns:
+        return
+    conn.exec_driver_sql("ALTER TABLE party_leases ADD COLUMN loadout VARCHAR NOT NULL DEFAULT ''")
+
+
 def _require_utc(now: datetime) -> None:
     """Guard the ONE invariant the whole TTL/liveness design rests on.
 
@@ -273,6 +284,7 @@ class CoordinationStore:
             SQLModel.metadata.create_all(conn)
             _migrate_role_lease_unique_index(conn)
             _migrate_material_demand_self_servable(conn)
+            _migrate_party_lease_loadout(conn)
         # Same exposure as `LearningStore`, on the same file: the journal-mode
         # change cannot go inside the lock above, so it races every sibling that
         # is still queueing for it. One shared implementation, not two.
@@ -1200,7 +1212,7 @@ class CoordinationStore:
         return list(s.exec(select(PartyLeaseRow).where(PartyLeaseRow.expires_at > stamp)).all())
 
     def claim_party(self, boss: str, members: tuple[str, ...], tile: tuple[str, int, int],
-                    now: datetime) -> bool:
+                    now: datetime, loadout: tuple[str, ...] = ()) -> bool:
         """Elect THIS character to lead a party of `members` against `boss`,
         meeting on `tile` (layer, x, y), and report whether it holds the lease
         afterwards (docs/PLAN_group_fights.md increment 4).
@@ -1210,7 +1222,9 @@ class CoordinationStore:
         character refuses the claim; an expired one, or this character's own,
         is taken over / renewed in place with the members and tile given. A
         character is in at most one party: the claim is also refused while a
-        live lease on ANOTHER boss names the leader or any member."""
+        live lease on ANOTHER boss names the leader or any member. `loadout`
+        is the utility potions the party wins in, which every member stocks
+        (residual R2)."""
         _require_utc(now)
         stamp = now.isoformat()
         expiry = (now + timedelta(seconds=PARTY_LEASE_TTL_SECONDS)).isoformat()
@@ -1230,6 +1244,7 @@ class CoordinationStore:
                     claimed_at=stamp, expires_at=expiry)
                 row.leader = self._character
                 row.members = ",".join(members)
+                row.loadout = ",".join(loadout)
                 row.layer, row.x, row.y = layer, x, y
                 row.claimed_at = stamp
                 row.expires_at = expiry
@@ -1256,7 +1271,8 @@ class CoordinationStore:
         for row in sorted(rows, key=lambda r: r.boss):
             members = tuple(m for m in row.members.split(",") if m)
             if self._character == row.leader or self._character in members:
-                return PartyLease(row.boss, row.leader, members, row.layer, row.x, row.y)
+                return PartyLease(row.boss, row.leader, members, row.layer, row.x, row.y,
+                                  tuple(c for c in row.loadout.split(",") if c))
         return None
 
     def party_lease_names(self, now: datetime) -> frozenset[str]:

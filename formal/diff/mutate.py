@@ -5644,9 +5644,11 @@ FLEET_ORDER_PLAY_MUTATIONS = [
 REGION_SPLIT_MUTATIONS = [
     ("factory: a legacy fight keeps the default region",
      "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),\n"
-     "                                       travel_region=region, participants=joiners))\n",
+     "                                       travel_region=region, participants=joiners,\n"
+     "                                       party_loadout=potions))\n",
      "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),\n"
-     "                                       participants=joiners))\n"),
+     "                                       participants=joiners,\n"
+     "                                       party_loadout=potions))\n"),
     ("factory: the layered path emits a second copy",
      "            if region == \"overworld\" or (code, region) in emitted:\n",
      "            if region == \"overworld\":\n"),
@@ -5828,11 +5830,11 @@ PARTY_PLAYER_MUTATIONS = [
      "            party = tuple(c for c in cards if c.character not in taken)\n",
      "            party = tuple(cards)\n"),
     ("player: the leader fights before the party assembles",
-     "        if claimed and not refused and assembled(lease, self._party_cards, now):\n",
-     "        if claimed and not refused:\n"),
+     "        if (claimed and not refused and assembled(lease, self._party_cards, now)\n",
+     "        if (claimed and not refused\n"),
     ("player: a refused party fight is fired again at once",
-     "        if claimed and not refused and assembled(lease, self._party_cards, now):\n",
-     "        if claimed and assembled(lease, self._party_cards, now):\n"),
+     "        if (claimed and not refused and assembled(",
+     "        if (claimed and assembled("),
     ("player: a refusal is never noted",
      "                    self._party_refused.add(action.monster_code)\n",
      "                    pass\n"),
@@ -5921,19 +5923,19 @@ PARTY_PARTICIPANTS_MUTATIONS = [
     ("party participants: a boss won alone takes the party",
      "    if monster not in state.lost_fights and (is_winnable(rested, game_data, monster)\n"
      "                                             or wins_with_a_loadout(rested, game_data, monster)):\n"
-     "        return ()\n",
-     "    if False:\n        return ()\n"),
+     "        return None\n",
+     "    if False:\n        return None\n"),
     ("party participants: the learned record is ignored",
      "    if monster not in state.lost_fights and (is_winnable(rested, game_data, monster)\n",
      "    if (is_winnable(rested, game_data, monster)\n"),
     ("party participants: every member joins",
-     "    return () if party is None else tuple(state.party[j].character for j in party[1])\n",
-     "    return () if party is None else tuple(m.character for m in state.party)\n"),
+     "    return None if party is None else (party[0], tuple(state.party[j].character for j in party[1]))\n",
+     "    return None if party is None else (party[0], tuple(m.character for m in state.party))\n"),
 ]
 PARTY_FACTORY_MUTATIONS = [
     ("factory: the boss fight goes alone",
-     "                                       travel_region=region, participants=joiners))\n",
-     "                                       travel_region=region))\n"),
+     "                                       travel_region=region, participants=joiners,\n",
+     "                                       travel_region=region,\n"),
 ]
 # The learned record reaches the drop gate and the party pick as
 # `WorldState.lost_fights` (live C3P0 2026-10-12: king_slime lost 41 of 44
@@ -5995,6 +5997,55 @@ CURRENCY_TRIP_MUTATIONS = [
      "        if not isinstance(leg, Act) or leg.item != item:\n            continue\n        route = answer.graph",
      "        if not isinstance(leg, Act):\n            continue\n        route = answer.graph"),
 ]
+# Residual R2: the party's potion loadout is stocked and worn by every member
+# (docs/PLAN_group_fights.md). OWN run_groups, one per killing test module.
+PARTY_LOADOUT_WIN_MUTATIONS = [
+    ("party loadout: none is named",
+     "    return () if pick is None else pick[0]\n",
+     "    return ()\n"),
+    ("party drinks: a boost is not drunk",
+     "    return tuple((code, restores if game_data.items.stats[code].hp_restore > 0 else 1)\n",
+     "    return tuple((code, restores if game_data.items.stats[code].hp_restore > 0 else 0)\n"),
+    ("party chosen: a member who cannot stock is stocked anyway",
+     "    if not all(code in stockable[0] for code in codes):\n        return ChosenLoadout(monster, (), ())\n",
+     "    if False:\n        return ChosenLoadout(monster, (), ())\n"),
+    ("party wears: what is worn is never checked",
+     "            or all(equipped_potion_qty(state, code) > 0 for code in codes))\n",
+     "            or True)\n"),
+    ("party wears: a member who cannot stock must wear",
+     "    return (not all(code in stockable_potions(state, game_data) for code in codes)\n",
+     "    return (False\n"),
+]
+PARTY_LOADOUT_FACTORY_MUTATIONS = [
+    ("factory: the fight carries no party loadout",
+     "                                       party_loadout=potions))\n",
+     "                                       ))\n"),
+]
+PARTY_LOADOUT_STORE_MUTATIONS = [
+    ("lease store: the loadout is not written",
+     "                row.loadout = \",\".join(loadout)\n",
+     "                row.loadout = \"\"\n"),
+    ("lease store: a legacy table is not migrated",
+     "            _migrate_party_lease_loadout(conn)\n",
+     "            pass\n"),
+]
+PARTY_LOADOUT_PLAYER_MUTATIONS = [
+    ("player: the leader fights in any loadout",
+     "                and self._party_wears(lease)):\n",
+     "                ):\n"),
+    ("player: the lease carries no loadout",
+     "                                                 (lease.layer, x, y), now, action.party_loadout)\n",
+     "                                                 (lease.layer, x, y), now)\n"),
+    ("player: a lease's boss is not the fight ahead",
+     "            fight_monster=(self._party_lease.boss if self._party_lease is not None\n",
+     "            fight_monster=(None if self._party_lease is not None\n"),
+    ("player: the party loadout is not the context's",
+     "        ctx = replace(ctx, loadout=self._party_fight_loadout()\n",
+     "        ctx = replace(ctx, loadout=None\n"),
+    ("player: the leader forgets its own lease",
+     "        self._party_lease = lease\n",
+     "        self._party_lease = None\n"),
+]
 PARTY_RECORD_MUTATIONS = [
     ("player: a party fight feeds the solo veto",
      "                party_combat_key(action.monster_code), loadout, True, outcome == \"ok\", state.level)\n",
@@ -6011,8 +6062,8 @@ DROP_PARTY_GATE_MUTATIONS = [
 PARTY_WIN_MUTATIONS = [
     ("party win: any monster takes a party",
      "    if not state.party or game_data.monsters.types.get(monster) not in PARTY_MONSTER_TYPES:\n"
-     "        return None\n",
-     "    if not state.party:\n        return None\n"),
+     "        return None\n    members = (state, *state.party)\n",
+     "    if not state.party:\n        return None\n    members = (state, *state.party)\n"),
     ("party win: one joiner at most",
      "MAX_JOINERS = 2\n",
      "MAX_JOINERS = 1\n"),
@@ -6316,8 +6367,8 @@ CHOSEN_LOADOUT_MUTATIONS = [
 ]
 LOADOUT_PLAYER_MUTATIONS = [
     ("player: the chosen loadout never reaches the context",
-     "        ctx = replace(ctx, loadout=fight_ahead_loadout(self.state, self.game_data, ctx, self.history))",
-     "        ctx = replace(ctx, loadout=None)"),
+     "                      or fight_ahead_loadout(self.state, self.game_data, ctx, self.history))",
+     "                      or None)"),
 ]
 PROVISION_LOADOUT_MUTATIONS = [
     ("provision: a loadout chosen for another monster is equipped",
@@ -9770,7 +9821,8 @@ PLAN_EXISTS_BUILD_ACTIONS_MUTATIONS = [
     # BANK_UNLOCK] fires (the only fight-rooted in-scope means).
     ("plan_exists: drop FightAction from _build_actions",
      "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),\n"
-     "                                       travel_region=region, participants=joiners))\n",
+     "                                       travel_region=region, participants=joiners,\n"
+     "                                       party_loadout=potions))\n",
      "            pass  # mutation: dropped FightAction append\n"),
     # Disable the items-task TaskTradeAction insertion block (BOTH the
     # quantity=k primary and the quantity=1 fallback). PURSUE_TASK then has
@@ -10741,6 +10793,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_intention_budget.py", survivors)
     run_group(PLAYER_SRC, PARTY_RECORD_MUTATIONS,
               "tests/test_ai/test_player_learning.py", survivors)
+    run_group(PARTY_WIN_SRC, PARTY_LOADOUT_WIN_MUTATIONS,
+              "tests/test_ai/test_party_win.py", survivors)
+    run_group(FACTORY_SRC, PARTY_LOADOUT_FACTORY_MUTATIONS,
+              "tests/test_ai/test_party_win.py", survivors)
+    run_group(PARTY_COORD_SRC, PARTY_LOADOUT_STORE_MUTATIONS,
+              "tests/test_ai/test_party_coordination.py", survivors)
+    run_group(PLAYER_SRC, PARTY_LOADOUT_PLAYER_MUTATIONS,
+              "tests/test_ai/test_party_hold.py", survivors)
     run_group(COMBAT_SRC, LOST_FIGHTS_COMBAT_MUTATIONS,
               "tests/test_ai/test_combat.py", survivors)
     run_group(OBTAIN_MODEL_DROP_SRC, LOST_FIGHTS_GATE_MUTATIONS,

@@ -92,6 +92,11 @@ class FightAction(Action):
     # docs/PLAN_group_fights.md increment 5). Part of the action's identity
     # and repr: a party fight's learned cost and record are its own.
     participants: tuple[str, ...] = ()
+    # The utility potions that party wins in (`party_win.party_loadout`): the
+    # leader's lease carries them, so every member stocks and wears them
+    # before the fight (docs/PLAN_group_fights.md residual R2). Empty for a
+    # solo fight; not in the repr (the party is).
+    party_loadout: tuple[str, ...] = field(default=(), repr=False)
 
     _MIN_FREE_SLOTS = 1  # combat can drop loot; need at least 1 free capacity
 

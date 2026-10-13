@@ -2,6 +2,7 @@
 guard's goal, and the player's party wiring (docs/PLAN_group_fights.md
 increment 4)."""
 
+import dataclasses
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -9,9 +10,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import artifactsmmo_cli.ai.player as player_mod
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.hold_for_party import HOLD_SECONDS, HoldForPartyAction
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.join_party import JOIN_PARTY_VALUE, JoinPartyGoal
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
@@ -19,12 +23,14 @@ from artifactsmmo_cli.ai.party_card import card_json
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import PARTY_ASSEMBLY_SECONDS, GamePlayer
+from artifactsmmo_cli.ai.scenario import load_bundle_game_data
 from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.tiers.guards import GuardKind
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema, make_get_character_result
 from tests.test_ai.test_strategy_driver import _ctx
 
+BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
 LEASE = PartyLease("duskworm", "HAL", ("testchar",), "overworld", 3, -1)
 
 
@@ -91,6 +97,21 @@ def test_a_member_already_on_the_tile_still_plans_its_hold() -> None:
     assert plan is not None and [repr(a) for a in plan] == ["HoldForParty(duskworm)"]
 
 
+def test_a_member_on_another_layer_crosses_to_the_tile() -> None:
+    """A member in the Abandoned House (`interior:-3,12`) called to an
+    overworld boss tile plans the crossing, then the hold: the hold's
+    `travel_region` is the tile's, so the search admits the region edges
+    (`region_edges.admit_region_edges`)."""
+    gd = load_bundle_game_data(BUNDLE)
+    lease = PartyLease("king_slime", "C3P0", ("HAL",), "overworld", 3, -1)
+    state = make_state(character="HAL", x=-3, y=12, layer="interior")
+    goal = JoinPartyGoal(lease, gd)
+    actions = build_actions(gd, state, None, bank_accessible=True, task_exchange_min_coins=0)
+    plan = GOAPPlanner().plan(state, goal, actions, gd)
+    assert [repr(a) for a in plan] == ["Transition((-3,12,interior)->(-3,12,overworld))",
+                                       "HoldForParty(king_slime)"]
+
+
 def test_the_guard_maps_to_the_join_goal() -> None:
     gd = MagicMock()
     assert isinstance(map_guard(GuardKind.PARTY_JOIN, gd, replace(_ctx(), party_hold=LEASE)),
@@ -134,6 +155,7 @@ def test_the_roster_is_every_sibling_no_lease_names(tmp_path: Path) -> None:
     assert hal_store.claim_party("duskworm", ("Lor",), ("overworld", 3, -1), T0)
     hal._refresh_party(T0)
     assert [m.character for m in hal.state.party] == ["Lor"] and hal._party_hold is None
+    assert hal._party_lease is not None and hal._party_lease.leader == "HAL"
     # a member: no party of its own, and the guard's lease
     lor, _ = _player(tmp_path, "Lor")
     lor._refresh_party(T0)
@@ -295,3 +317,43 @@ def test_a_party_call_breaks_a_cached_plan_that_is_not_its_hold(tmp_path: Path) 
         cache.goal_repr = "JoinParty(duskworm)"
         lor._plan_or_reuse(lor.state, lor.game_data, [], None)
     assert seen == [True, False]
+
+
+def test_a_lease_s_boss_and_loadout_are_the_fight_ahead(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Leader or member, the lease's boss is the fight its potions are stocked
+    for, in the party loadout beside the other members' cards (residual R2)."""
+    lor, _ = _player(tmp_path, "Lor")
+    monkeypatch.setattr(lor, "_winnable_farm_target", lambda: None)
+    lor._draws_enabled = False
+    assert lor._party_fight_loadout() is None
+    seen: list[object] = []
+    party = ChosenLoadout("duskworm", (("water_res_potion", 1),), ())
+
+    def chosen(me, others, gd, monster, codes):  # type: ignore[no-untyped-def]
+        seen.append(([o.character for o in others], monster, codes))
+        return party
+
+    monkeypatch.setattr(player_mod, "party_chosen_loadout", chosen)
+    lor._party_lease = PartyLease("duskworm", "HAL", ("Lor", "R2D2"), "overworld", 3, -1,
+                                  ("water_res_potion",))
+    lor._party_cards = {"HAL": make_state(character="HAL"), "R2D2": make_state(character="R2D2")}
+    ctx = lor._selection_context()
+    assert ctx.fight_monster == "duskworm" and ctx.loadout == party
+    assert seen[0] == (["HAL", "R2D2"], "duskworm", ("water_res_potion",))
+
+
+def test_the_leader_fights_only_once_the_party_wears_its_loadout(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    hal, lor_store, fight = _assembled_leader(tmp_path)
+    fight = dataclasses.replace(fight, party_loadout=("water_res_potion",))
+    worn: list[list[str]] = []
+
+    def wears(state, gd, codes):  # type: ignore[no-untyped-def]
+        worn.append([state.character, *codes])
+        return state.character != "Lor"
+
+    monkeypatch.setattr(player_mod, "wears_party_loadout", wears)
+    assert isinstance(hal._lead_party(fight), HoldForPartyAction)
+    assert worn == [["HAL", "water_res_potion"], ["Lor", "water_res_potion"]]
+    assert lor_store.party_lease_for(T0).loadout == ("water_res_potion",)
+    monkeypatch.setattr(player_mod, "wears_party_loadout", lambda *a: True)
+    assert hal._lead_party(fight) is fight

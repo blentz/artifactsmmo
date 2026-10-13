@@ -52,6 +52,7 @@ from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.best_loadout import BestLoadout, best_loadout, candidate_potions, fight_ahead_loadout
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.combat import fight_records, is_winnable, lost_fights, predict_win
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.constants import (
@@ -128,6 +129,7 @@ from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.party_card import card_json, card_state
 from artifactsmmo_cli.ai.party_lease_core import PartyLease, assembled
 from artifactsmmo_cli.ai.party_loop import PartyLoop, best_party_loop
+from artifactsmmo_cli.ai.party_win import party_chosen_loadout, wears_party_loadout
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.plan_tree import build_plan_tree
@@ -542,6 +544,9 @@ class GamePlayer:
         # 4): read every cycle by `_refresh_party`; empty without a
         # coordination store.
         self._party_hold: PartyLease | None = None
+        # The live lease naming this character in EITHER role: its boss is the
+        # fight ahead and its loadout the one to stock (residual R2).
+        self._party_lease: PartyLease | None = None
         self._party_cards: dict[str, WorldState] = {}
         # When this character, as a leader, first held for each boss's party
         # (`_lead_party`'s assembly deadline).
@@ -3510,11 +3515,13 @@ class GamePlayer:
         live lease names (the roster the band and the drop gate weigh)."""
         if self._coordination is None or self.state is None:
             self._party_hold = None
+            self._party_lease = None
             self._party_cards = {}
             return
         cards = [card_state(c) for c in self._coordination.sibling_party_cards(now)]
         self._party_cards = {c.character: c for c in cards}
         lease = self._coordination.party_lease_for(now)
+        self._party_lease = lease
         self._party_hold = lease if lease is not None and lease.leader != self.character else None
         if lease is not None and lease.leader == self.character:
             party = tuple(self._party_cards[m] for m in lease.members if m in self._party_cards)
@@ -3538,6 +3545,26 @@ class GamePlayer:
         """End the lease a lost party fight was fought under."""
         assert isinstance(action, FightAction) and self._coordination is not None
         self._coordination.release_party(action.monster_code)
+
+    def _party_fight_loadout(self) -> ChosenLoadout | None:
+        """The loadout for the party fight a live lease names this character in
+        (`party_win.party_chosen_loadout`, beside the lease's other members'
+        cards), or None without a lease."""
+        lease = self._party_lease
+        if lease is None:
+            return None
+        assert self.state is not None and self.game_data is not None
+        others = [self._party_cards[name] for name in (lease.leader, *lease.members)
+                  if name != self.character and name in self._party_cards]
+        return party_chosen_loadout(self.state, others, self.game_data, lease.boss, lease.loadout)
+
+    def _party_wears(self, lease: PartyLease) -> bool:
+        """The leader and every member fight as the party model judged them
+        (`party_win.wears_party_loadout`): no fight in a loadout the walk did
+        not win."""
+        assert self.state is not None and self.game_data is not None
+        fighters = [self.state, *(self._party_cards[m] for m in lease.members)]
+        return all(wears_party_loadout(f, self.game_data, lease.loadout) for f in fighters)
 
     def _publish_party_card(self, state: WorldState) -> None:
         """Publish `state` as this character's party card; no-op without a
@@ -3567,12 +3594,13 @@ class GamePlayer:
         now = datetime.now(tz=timezone.utc)
         x, y = nearest_or_error(self.state.x, self.state.y, action.locations, "combat")
         lease = PartyLease(action.monster_code, self.character, action.participants,
-                           self.state.layer, x, y)
+                           self.state.layer, x, y, action.party_loadout)
         claimed = self._coordination.claim_party(action.monster_code, action.participants,
-                                                 (lease.layer, x, y), now)
+                                                 (lease.layer, x, y), now, action.party_loadout)
         refused = action.monster_code in self._party_refused
         self._party_refused.discard(action.monster_code)
-        if claimed and not refused and assembled(lease, self._party_cards, now):
+        if (claimed and not refused and assembled(lease, self._party_cards, now)
+                and self._party_wears(lease)):
             self._party_since.pop(action.monster_code, None)
             return action
         since = self._party_since.setdefault(action.monster_code, now)
@@ -4071,13 +4099,17 @@ class GamePlayer:
             # The live lease naming this character as a member (increment 4):
             # set by `_refresh_party`, None on a single-character run.
             party_hold=self._party_hold,
-            fight_monster=self._committed_fight_monster(),
+            # A party lease's boss is the fight ahead, leader or member: its
+            # loadout is what this character stocks (residual R2).
+            fight_monster=(self._party_lease.boss if self._party_lease is not None
+                           else self._committed_fight_monster()),
             # The learned loss rates a fight's price carries (USER 2026-10-08,
             # "Price the loss risk"); none without history.
             fight_records=(fight_records(self.state, self.game_data, self.history)
                            if self.history is not None else ()),
         )
-        ctx = replace(ctx, loadout=fight_ahead_loadout(self.state, self.game_data, ctx, self.history))
+        ctx = replace(ctx, loadout=self._party_fight_loadout()
+                      or fight_ahead_loadout(self.state, self.game_data, ctx, self.history))
         self._consumable_need = consumable_need(ctx.loadout)
         self._supply_shortfall = supply_shortfall(
             self.state, self._fleet_order, self.character, self._consumable_need,

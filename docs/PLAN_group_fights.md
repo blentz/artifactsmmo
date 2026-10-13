@@ -420,13 +420,25 @@ THIS IS THE FIRST LIVE INCREMENT: with the fleet running under
 `--coordination-db`, cards are published, rosters fill, the band and the drop
 gate weigh parties, and a boss only a party wins is fought by a lease.
 
-Known limits (residuals):
-- A member joins only on the lease tile's own layer (`HoldForPartyAction` is
+Known limits (residuals), and how each closed:
+- R1. A member joins only on the lease tile's own layer (`HoldForPartyAction` is
   inapplicable elsewhere); a cross-region approach is not planned.
-- A member fights in the utility potions it already wears; nothing stocks the
+  CLOSED (2026-10-13, verified, test-pinned): the hold carries the tile's
+  `travel_region`, so the search admits the region edges and an interior member
+  plans `Transition` then `HoldForParty`.
+- R2. A member fights in the utility potions it already wears; nothing stocks the
   party loadout for it (the CRAFT_POTIONS guard sizes for its own fight).
-- A leader whose plan stops heading the fight stops renewing: its members
-  hold until the lease's TTL (300 s).
+  CLOSED (2026-10-13): the fight carries the winning party's loadout
+  (`party_win.party_loadout`), the lease stores it, and leader and members
+  take the lease's boss as the fight ahead in `party_chosen_loadout` (what the
+  party walk drinks for each), so the CRAFT_POTIONS guard stocks and equips
+  it. The leader fights only once every fighter that can stock it wears it
+  (`wears_party_loadout`). A member that cannot stock it fights bare, as the
+  model judged it. Bounded by the 300 s assembly deadline.
+- R3. A leader whose plan stops heading the fight stops renewing: its members
+  hold until the lease's TTL (300 s). CLOSED by f1bd902a for a commitment
+  change (the lease is released); a leader process that dies still leaves
+  the TTL as the bound.
 
 ## Increment 6 — first live data (2026-10-11 13:55-14:03Z)
 

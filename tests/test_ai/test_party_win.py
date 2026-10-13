@@ -9,7 +9,14 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
-from artifactsmmo_cli.ai.party_win import party_participants, winning_party, wins_as_a_party
+from artifactsmmo_cli.ai.party_win import (
+    party_chosen_loadout,
+    party_loadout,
+    party_participants,
+    wears_party_loadout,
+    winning_party,
+    wins_as_a_party,
+)
 from artifactsmmo_cli.audit.craft_completeness import CraftCell, census_state
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
@@ -121,6 +128,47 @@ def test_a_solo_fight_the_record_refuses_takes_the_party() -> None:
     assert party_participants(other, gd, "king_slime") == ()
 
 
+def test_the_party_names_its_loadout() -> None:
+    """duskworm is won in water resistance and enhanced health; king_slime
+    alone, so no party and no loadout."""
+    gd = _gd()
+    hero = _hero(gd)
+    party = replace(hero, party=(replace(hero, character="R2D2"), replace(hero, character="Lor")))
+    assert party_loadout(party, gd, "duskworm") == ("water_res_potion", "enhanced_health_potion")
+    assert party_loadout(party, gd, "king_slime") == ()
+
+
+def test_each_member_stocks_what_the_party_walk_drinks() -> None:
+    gd = _gd()
+    hero = _hero(gd)
+    codes = ("water_res_potion", "enhanced_health_potion")
+    mine = party_chosen_loadout(hero, [hero, hero], gd, "duskworm", codes)
+    assert mine.monster == "duskworm" and mine.food == ()
+    assert dict(mine.potions)["water_res_potion"] == 1
+    assert dict(mine.potions)["enhanced_health_potion"] >= 1
+    # a member who cannot stock them fights bare, as the model judged it
+    poor = replace(hero, skills=dict.fromkeys(hero.skills, 1), gold=0)
+    assert party_chosen_loadout(poor, [hero, hero], gd, "duskworm", codes).potions == ()
+    # no loadout, nothing to stock
+    assert party_chosen_loadout(hero, [hero], gd, "king_slime", ()).potions == ()
+
+
+def test_a_member_fights_as_the_model_judged_it() -> None:
+    gd = _gd()
+    hero = _hero(gd)
+    codes = ("water_res_potion", "enhanced_health_potion")
+    assert not wears_party_loadout(hero, gd, codes)
+    worn = replace(hero, equipment={**hero.equipment, "utility1_slot": "water_res_potion",
+                                    "utility2_slot": "enhanced_health_potion"},
+                   utility1_slot_quantity=5, utility2_slot_quantity=5)
+    assert wears_party_loadout(worn, gd, codes)
+    half = replace(worn, utility2_slot_quantity=0)
+    assert not wears_party_loadout(half, gd, codes)
+    poor = replace(hero, skills=dict.fromkeys(hero.skills, 1), gold=0)
+    assert wears_party_loadout(poor, gd, codes)
+    assert wears_party_loadout(hero, gd, ())
+
+
 def test_the_factory_takes_the_party_to_the_boss() -> None:
     gd = _gd()
     hero = _hero(gd)
@@ -129,4 +177,5 @@ def test_the_factory_takes_the_party_to_the_boss() -> None:
                                                          task_exchange_min_coins=0)
               if isinstance(a, FightAction)}
     assert fights["duskworm"].participants == ("R2D2", "Lor")
-    assert fights["king_slime"].participants == ()
+    assert fights["duskworm"].party_loadout == ("water_res_potion", "enhanced_health_potion")
+    assert fights["king_slime"].participants == () and fights["king_slime"].party_loadout == ()

@@ -612,6 +612,8 @@ class PartyLeaseRow(SQLModel, table=True):
     y: int
     claimed_at: str
     expires_at: str
+    # The utility potions the party wins in, comma-joined (residual R2).
+    loadout: str = ""
 
 
 class PlanBodyLogBase(SQLModel):

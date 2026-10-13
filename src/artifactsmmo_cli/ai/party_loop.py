@@ -37,7 +37,7 @@ from artifactsmmo_cli.ai.held_stock import held_count
 from artifactsmmo_cli.ai.loadout_win import stockable_potions
 from artifactsmmo_cli.ai.loop_rate import EAT_SECONDS, FoodOffer, LoopRate
 from artifactsmmo_cli.ai.loop_rate_core import consumed_seconds, recovery_choice, xp_per_second
-from artifactsmmo_cli.ai.party_win import MAX_JOINERS, member_card
+from artifactsmmo_cli.ai.party_win import MAX_JOINERS, member_card, party_drinks
 from artifactsmmo_cli.ai.world_state import WorldState
 
 PARTY_XP_TYPES = frozenset({"boss"})
@@ -71,9 +71,7 @@ has no replacement."""
     outcome = group_outcome(party_boss(game_data, monster), [cards[0], *(cards[j + 1] for j in joined)])
     if not outcome.win:
         return None
-    # the restore drinks the walk counted (`fight_walk`'s restore: `hp_restore > 0`), one of each boost
-    used = tuple((code, outcome.used[0] if game_data.items.stats[code].hp_restore > 0 else 1)
-                 for code in codes)
+    used = party_drinks(codes, outcome.used[0], game_data)
     consumed = consumed_seconds([(n, prices[code], held_count(code, state)) for code, n in used])
     if consumed is None:
         return None

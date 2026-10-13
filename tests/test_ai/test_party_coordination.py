@@ -1,6 +1,7 @@
 """Party cards and party leases in the coordination store
 (docs/PLAN_group_fights.md increment 4a)."""
 
+import sqlite3
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -139,3 +140,31 @@ def test_assembled_means_every_member_ready_on_the_tile() -> None:
     assert assembled(lease, {"Lor": here, "R2D2": r2}, T0)
     assert not assembled(lease, {"Lor": here}, T0)
     assert not assembled(lease, {"Lor": here, "R2D2": replace(r2, y=0)}, T0)
+
+
+def test_a_lease_carries_the_party_loadout(tmp_path: Path) -> None:
+    """Every member reads the potions the party wins in (residual R2)."""
+    hal, lor = _stores(tmp_path, "HAL", "Lor")
+    potions = ("water_res_potion", "enhanced_health_potion")
+    assert hal.claim_party("duskworm", ("Lor",), TILE, T0, potions)
+    assert lor.party_lease_for(T0) == PartyLease("duskworm", "HAL", ("Lor",), *TILE, potions)
+    assert hal.claim_party("duskworm", ("Lor",), TILE, T0)
+    assert lor.party_lease_for(T0) == PartyLease("duskworm", "HAL", ("Lor",), *TILE)
+
+
+def test_a_lease_table_without_the_loadout_is_migrated_in_place(tmp_path: Path) -> None:
+    db = str(tmp_path / "legacy.db")
+    raw = sqlite3.connect(db)
+    raw.execute("CREATE TABLE party_leases (id INTEGER PRIMARY KEY, boss VARCHAR UNIQUE, "
+                "leader VARCHAR, members VARCHAR, layer VARCHAR, x INTEGER, y INTEGER, "
+                "claimed_at VARCHAR, expires_at VARCHAR)")
+    raw.execute("INSERT INTO party_leases (boss, leader, members, layer, x, y, claimed_at, "
+                "expires_at) VALUES ('lich', 'HAL', 'Lor', 'overworld', 0, 0, ?, ?)",
+                (T0.isoformat(), (T0 + timedelta(seconds=60)).isoformat()))
+    raw.commit()
+    raw.close()
+    lor = CoordinationStore(db_path=db, character="Lor")
+    assert lor.party_lease_for(T0) == PartyLease("lich", "HAL", ("Lor",), "overworld", 0, 0)
+    # a second open finds the column and leaves it
+    CoordinationStore(db_path=db, character="HAL").close()
+    lor.close()

@@ -24,6 +24,9 @@ class PartyLease:
     layer: str
     x: int
     y: int
+    loadout: tuple[str, ...] = ()
+    """The utility potions the party wins in: every member that can stock
+    them wears them (`party_win.party_chosen_loadout`)."""
 
 
 def on_tile(state: WorldState, lease: PartyLease) -> bool:
