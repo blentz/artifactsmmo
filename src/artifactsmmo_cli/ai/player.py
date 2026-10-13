@@ -30,6 +30,7 @@ from artifactsmmo_api_client.types import Unset
 
 from artifactsmmo_cli.ai.account_read_cache import AccountReadCache
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
+from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.action_kind import action_kind_of
 from artifactsmmo_cli.ai.action_rejection import is_categorical_rejection
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
@@ -3477,6 +3478,19 @@ class GamePlayer:
         level_of_item = {code: req[1] for code, req in producing.items() if req is not None}
         return skill_of_item, level_of_item
 
+    @staticmethod
+    def _work_of_item(item_demand: Mapping[str, int], state: WorldState,
+                      game_data: GameData) -> dict[str, int]:
+        """Acquisition actions for one unit of each code on the board -- the work
+        a role is asked for (spec 2026-10-13 §3). Priced against the profile-free
+        context: a board weight, not a plan. A code with no route is left out and
+        so recruits no one."""
+        work = {code: acquisition_actions(code, 1, state, game_data, NO_PROFILE_CONTEXT,
+                                          equip=False)
+                for code in item_demand}
+        return {code: actions for code, actions in work.items()
+                if actions < UNOBTAINABLE_PER_UNIT}
+
     def _refresh_sibling_reads(self, now: datetime) -> None:
         """Re-read the five PURE-READ sibling facts the selection context needs.
 
@@ -3714,12 +3728,13 @@ class GamePlayer:
 
         item_demand = self._coordination.sibling_demand(now)
         skill_of_item, level_of_item = self._producing_split(item_demand, game_data)
+        work_of_item = self._work_of_item(item_demand, state, game_data)
         # PER-CHARACTER demand: `state.skills` gates out every item this
         # character's levels cannot produce, so it is never recruited to a role
         # by demand it provably cannot serve (live 2026-08-03: `Lor` at mining 8
         # held `miner` against iron demand that gates at mining 10).
         by_role = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG,
-                                 level_of_item, state.skills)
+                                 level_of_item, state.skills, work_of_item)
         # The roles through which this character could serve an ASYMMETRIC ask:
         # the same aggregate over those requests alone. They win the claim, as
         # `_pick_supply_target` ranks those requests first (`decide_role`).
@@ -3727,7 +3742,8 @@ class GamePlayer:
             name for name, qty in demand_by_role(
                 {code: qty for code, qty in item_demand.items()
                  if code in self._asymmetric_demand},
-                skill_of_item, ROLE_CATALOG, level_of_item, state.skills).items()
+                skill_of_item, ROLE_CATALOG, level_of_item, state.skills,
+                work_of_item).items()
             if qty > 0)
         # Extend or break the zero-demand RUN before deciding, so the count
         # passed in includes this cycle's observation. `decide_role` releases on

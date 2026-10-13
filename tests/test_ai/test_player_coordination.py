@@ -19,10 +19,12 @@ from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
 from sqlalchemy import text
 from sqlmodel import Session as SqlSession
 from sqlmodel import select
 
+from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.ge_cancel_order import GeCancelOrderAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
@@ -62,6 +64,18 @@ from tests.test_ai.test_role_selection import _LOR_SKILLS, _ROBBY_SKILLS
 from tests.test_ai.test_strategy_driver import _make_planner_gd
 
 _T0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
+
+# The production walk, captured before the autouse fixture below replaces it.
+_REAL_WORK_OF_ITEM = GamePlayer._work_of_item
+
+
+@pytest.fixture(autouse=True)
+def _every_board_item_costs_one_action(monkeypatch):
+    """These role tests pin election mechanics over bare fixture worlds with no
+    map, where the real acquisition walk finds no route and (correctly) prices
+    nothing. One action per unit keeps demand counted in units, as before."""
+    monkeypatch.setattr(GamePlayer, "_work_of_item",
+                        staticmethod(lambda demand, state, game_data: {c: 1 for c in demand}))
 
 
 # ---------------------------------------------------------------------------
@@ -2464,6 +2478,47 @@ def test_a_siblings_live_lease_is_a_fleet_role(tmp_path):
         assert "fisher" in live
         assert "fisher" in p._fleet_roles
         assert p._fleet_roles <= frozenset(live)
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_the_work_of_an_item_is_its_acquisition_walk(monkeypatch):
+    walks = {"cooked_trout": 2, "relic": UNOBTAINABLE_PER_UNIT}
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.acquisition_actions",
+                        lambda code, qty, state, gd, ctx, equip: walks[code])
+    assert _REAL_WORK_OF_ITEM({"cooked_trout": 80, "relic": 1}, make_state(), GameData()) == {
+        "cooked_trout": 2}
+
+
+def test_update_coordination_weighs_role_demand_by_work(tmp_path, monkeypatch):
+    """The `demand_by_role` handed to `decide_role` is the work-weighted one."""
+    db = str(tmp_path / "coord.db")
+    gd = _make_planner_gd()
+    gd._item_stats = {}
+    gd._crafting_recipes = {}
+    gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
+    p = GamePlayer(character="hero")
+    p.state = make_state()
+    p.game_data = gd
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="rival")
+    p.set_coordination_store(store)
+    monkeypatch.setattr(GamePlayer, "_work_of_item",
+                        staticmethod(lambda demand, state, game_data: {"copper_ore": 7}))
+    seen: dict = {}
+    real = decide_role
+
+    def spy(**kwargs):
+        seen.update(kwargs["demand_by_role"])
+        return real(**kwargs)
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.decide_role", spy)
+    try:
+        sibling.publish_demand({"copper_ore": 5}, frozenset(), datetime.now(tz=timezone.utc))
+        p._update_coordination(p.state, p.game_data)
+        assert seen["miner"] == 35
     finally:
         store.close()
         sibling.close()

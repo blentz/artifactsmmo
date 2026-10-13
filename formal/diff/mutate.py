@@ -176,6 +176,7 @@ REGION_EDGES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "region_edges.py"
 CURRENCY_BUY_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_buy_batch.py"
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
+ROLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "role_selection.py"
 PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
 INTENTION_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "intention_progress.py"
 LEVEL_SKILL_EXPAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grind_rung.py"
@@ -6538,6 +6539,22 @@ REST_FIGHT_AHEAD_MUTATIONS = [
      "        monster = ctx.fight_monster or ctx.combat_monster\n",
      "        monster = ctx.combat_monster\n"),
 ]
+ROLE_WORK_MUTATIONS = [
+    ("role work: rows count units",
+     "        totals[role_name] += quantity * weight\n",
+     "        totals[role_name] += quantity\n"),
+    ("role work: an unpriced item counts as one",
+     "        weight = 1 if work_of_item is None else work_of_item.get(item_code)\n",
+     "        weight = 1 if work_of_item is None else work_of_item.get(item_code, 1)\n"),
+]
+ROLE_WORK_PLAYER_MUTATIONS = [
+    ("role work: the player never weighs the board",
+     "        work_of_item = self._work_of_item(item_demand, state, game_data)\n",
+     "        work_of_item = None\n"),
+    ("role work: an unroutable item is weighed",
+     "                if actions < UNOBTAINABLE_PER_UNIT}\n",
+     "                }\n"),
+]
 GOLD_SHORT_MUTATIONS = [
     ("gold short: the root's purchases are not counted",
      "        need = max(progression_reserve(self.state, self.game_data), root_need)\n",
@@ -6571,6 +6588,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
+    ROLE_SELECTION_SRC,
     FOOD_PRODUCER_SRC,
     SKILL_CREDIT_SRC,
     LOSS_RISK_CORE_SRC, FAILURE_RECOVERY_CORE_SRC, ACTION_BASE_SRC, REST_ACTION_SRC,
@@ -11052,6 +11070,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_plan_or_reuse.py", survivors)
     run_group(GUARDS_SRC, REST_FIGHT_AHEAD_MUTATIONS,
               "tests/test_ai/test_tiers_guards.py", survivors)
+    run_group(ROLE_SELECTION_SRC, ROLE_WORK_MUTATIONS,
+              "tests/test_ai/test_role_selection.py", survivors)
+    run_group(PLAYER_SRC, ROLE_WORK_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
     run_group(PLAYER_SRC, GOLD_SHORT_MUTATIONS,
               "tests/test_ai/test_task_worth.py", survivors)
     run_group(TASK_WORTH_SRC, TASK_WORTH_HORIZON_MUTATIONS,

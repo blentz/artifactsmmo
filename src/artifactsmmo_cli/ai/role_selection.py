@@ -661,7 +661,8 @@ def demand_by_role(item_demand: Mapping[str, int],
                    skill_of_item: Mapping[str, str | None],
                    catalog: tuple[Role, ...],
                    level_of_item: Mapping[str, int] = NO_ITEM_LEVELS,
-                   skill_levels: Mapping[str, int] = NO_SKILL_LEVELS) -> dict[str, int]:
+                   skill_levels: Mapping[str, int] = NO_SKILL_LEVELS,
+                   work_of_item: Mapping[str, int] | None = None) -> dict[str, int]:
     """Aggregate item-keyed demand into role-keyed demand, AS ONE CHARACTER
     SHOULD READ IT.
 
@@ -691,6 +692,12 @@ def demand_by_role(item_demand: Mapping[str, int],
     caller with no readings gets the pre-existing demand-only aggregate --
     see `serves_item` for why both unknowns read as servable.
 
+    `work_of_item` (spec 2026-10-13 §3) weighs each row by the work one unit
+    asks -- acquisition actions per unit -- so eighty fish do not out-recruit a
+    sword that is an hour of crafting. A code with no entry has no priced route
+    and recruits no one. None counts units (the pure unit tests' shape; the
+    player always passes the map).
+
     All four maps are passed in rather than derived from GameData so this
     module stays pure and testable without a game-data fixture."""
     totals = {role.name: 0 for role in catalog}
@@ -707,5 +714,8 @@ def demand_by_role(item_demand: Mapping[str, int],
             continue
         if not serves_item(item_code, skill, level_of_item, skill_levels):
             continue
-        totals[role_name] += quantity
+        weight = 1 if work_of_item is None else work_of_item.get(item_code)
+        if weight is None:
+            continue
+        totals[role_name] += quantity * weight
     return totals

@@ -1187,3 +1187,19 @@ def test_a_holder_without_an_asymmetric_ask_releases_for_a_rival_that_has_one() 
     assert released.release == "logger"
     assert _decide("jeweler", ROLE_MIN_HOLD_CYCLES, _held(jeweler=(_ME,)), demand,
                    asymmetric_roles=frozenset({"jeweler"})).keep == "jeweler"
+
+
+def test_role_demand_is_the_work_it_asks_for():
+    """Spec §3: 80 fish at 2 actions each (160) weigh less than one sword at
+    300 actions."""
+    demand = {"cooked_trout": 80, "iron_sword": 1}
+    skill = {"cooked_trout": "cooking", "iron_sword": "weaponcrafting"}
+    work = {"cooked_trout": 2, "iron_sword": 300}
+    totals = demand_by_role(demand, skill, ROLE_CATALOG, work_of_item=work)
+    assert totals["fisher"] == 160 and totals["miner"] == 300
+
+
+def test_an_item_with_no_priced_work_does_not_recruit():
+    """Review Focus 4: an unpriceable item is skipped, not counted as free."""
+    totals = demand_by_role({"relic": 5}, {"relic": "gearcrafting"}, ROLE_CATALOG, work_of_item={})
+    assert totals["logger"] == 0
