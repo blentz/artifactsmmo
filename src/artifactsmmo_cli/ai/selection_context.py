@@ -203,6 +203,14 @@ class SelectionContext:
     # the recipe as inputs and the measured request cost as the unlock, so a
     # sibling saves the SKILL GATE and nothing else.
     sibling_skills: dict[str, int] = field(default_factory=dict)
+    # The siblings' dual-role units, WORN PLUS CARRIED, per code
+    # (`CoordinationStore.sibling_holdings`, the ledger the turn-in election
+    # counts): a currency the fleet pools is short only by what the WHOLE fleet
+    # lacks (`obtain_item_routing._equippable_goal`). Live 2026-10-13: four
+    # characters each bought medals toward their OWN lich_race_trophy shortfall,
+    # emptied the bank of event_ticket between them, then gathered tickets
+    # while the fleet already held the 10 medals. Empty without a store.
+    sibling_holdings: dict[str, int] = field(default_factory=dict)
 
     # The live party lease naming this character as a MEMBER
     # (`CoordinationStore.party_lease_for`, read once per cycle by the player

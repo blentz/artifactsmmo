@@ -8,6 +8,8 @@ artifact slots without anyone deciding to.
 Nothing here forbids wearing one. Recognising the dual role is what lets the
 fleet COUNT what it is wearing; `currency_turnin` decides when to spend it."""
 
+from collections.abc import Mapping
+
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -36,3 +38,17 @@ def dual_role_holdings(state: WorldState, game_data: GameData) -> dict[str, int]
         if worn_code and is_dual_role(worn_code, game_data):
             held[worn_code] = held.get(worn_code, 0) + 1
     return held
+
+
+def fleet_pooled(code: str, state: WorldState, game_data: GameData,
+                 siblings: Mapping[str, int]) -> int:
+    """Units of `code` the fleet pools BEYOND this character's bag and bank:
+    its own worn copies plus every sibling's worn and carried ones
+    (`siblings`: `CoordinationStore.sibling_holdings`). The turn-in election
+    spends exactly these (`currency_turnin.fleet_total_pure`), so a shortfall in
+    a dual-role currency is the fleet's, not one character's. 0 for a code no
+    turn-in pools."""
+    if not is_dual_role(code, game_data):
+        return 0
+    worn = sum(1 for worn_code in state.equipment.values() if worn_code == code)
+    return worn + siblings.get(code, 0)

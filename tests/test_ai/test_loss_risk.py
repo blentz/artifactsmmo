@@ -134,3 +134,8 @@ class TestThePlayerContext:
     def test_no_history_no_records(self, monkeypatch) -> None:
         player = self._player(monkeypatch, None)
         assert player._selection_context().fight_records == ()
+
+    def test_the_siblings_holdings_reach_the_selection_context(self, monkeypatch) -> None:
+        player = self._player(monkeypatch, None)
+        player._sibling_holdings = {"lich_race_medal": 4}
+        assert player._selection_context().sibling_holdings == {"lich_race_medal": 4}

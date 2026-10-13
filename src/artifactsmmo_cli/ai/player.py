@@ -539,6 +539,8 @@ class GamePlayer:
         # stays inert there, exactly like every other coordination field.
         self._asymmetric_demand: frozenset[str] = frozenset()
         self._sibling_skills: dict[str, int] = {}
+        # The siblings' dual-role units (`SelectionContext.sibling_holdings`).
+        self._sibling_holdings: dict[str, int] = {}
         # The live party lease naming this character as a member, and the
         # siblings' party cards by name (docs/PLAN_group_fights.md increment
         # 4): read every cycle by `_refresh_party`; empty without a
@@ -3503,6 +3505,7 @@ class GamePlayer:
         self._sibling_order_claims = self._coordination.sibling_order_claims(now)
         self._asymmetric_demand = self._coordination.sibling_demand_asymmetric(now)
         self._sibling_skills = self._coordination.sibling_skill_levels(now)
+        self._sibling_holdings = self._coordination.sibling_holdings(now)
         # The siblings' consumable needs, for this character's floor share
         # (USER 2026-10-09, "Need ledger + API order").
         self._sibling_needs = self._coordination.sibling_consumable_needs(now)
@@ -3633,6 +3636,7 @@ class GamePlayer:
             self._recall = None
             self._asymmetric_demand = frozenset()
             self._sibling_skills = {}
+            self._sibling_holdings = {}
             self._sibling_needs = {}
             return
         role_before = self._role
@@ -4096,6 +4100,9 @@ class GamePlayer:
             # on every single-character run. Feeds
             # `acquisition_cost._sibling_craft_option`.
             sibling_skills=self._sibling_skills,
+            # The siblings' dual-role units, same source and lifecycle as
+            # `sibling_skills`: a pooled currency's shortfall is the fleet's.
+            sibling_holdings=self._sibling_holdings,
             # The live lease naming this character as a member (increment 4):
             # set by `_refresh_party`, None on a single-character run.
             party_hold=self._party_hold,

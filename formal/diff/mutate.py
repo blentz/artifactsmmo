@@ -6046,6 +6046,35 @@ PARTY_LOADOUT_PLAYER_MUTATIONS = [
      "        self._party_lease = lease\n",
      "        self._party_lease = None\n"),
 ]
+# A pooled (dual-role) currency is short only by what the WHOLE fleet lacks
+# (live 2026-10-13: four characters bought and gathered toward their own medal
+# shortfall). OWN run_groups, one per killing test module.
+FLEET_CURRENCY_STEP_MUTATIONS = [
+    ("fleet step: the fleet's holding never leaves it to the turn-in",
+     "            if held < price <= held + pooled:\n",
+     "            if False:\n"),
+    ("fleet step: the shortfall is this character's alone",
+     "                    needed={currency: held + currency_grind_target_pure(fleet, price) - fleet})\n",
+     "                    needed={currency: currency_grind_target_pure(held, price)})\n"),
+]
+FLEET_POOLED_MUTATIONS = [
+    ("fleet pool: worn copies are not pooled",
+     "    return worn + siblings.get(code, 0)\n",
+     "    return siblings.get(code, 0)\n"),
+    ("fleet pool: any currency is pooled",
+     "    if not is_dual_role(code, game_data):\n        return 0\n    worn = ",
+     "    if False:\n        return 0\n    worn = "),
+]
+FLEET_HOLDINGS_READ_MUTATIONS = [
+    ("player: the siblings' holdings are never read",
+     "        self._sibling_holdings = self._coordination.sibling_holdings(now)\n",
+     "        self._sibling_holdings = {}\n"),
+]
+FLEET_HOLDINGS_CTX_MUTATIONS = [
+    ("player: the siblings' holdings never reach the context",
+     "            sibling_holdings=self._sibling_holdings,\n",
+     ""),
+]
 PARTY_RECORD_MUTATIONS = [
     ("player: a party fight feeds the solo veto",
      "                party_combat_key(action.monster_code), loadout, True, outcome == \"ok\", state.level)\n",
@@ -10793,6 +10822,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_intention_budget.py", survivors)
     run_group(PLAYER_SRC, PARTY_RECORD_MUTATIONS,
               "tests/test_ai/test_player_learning.py", survivors)
+    run_group(OBTAIN_ITEM_ROUTING_SRC, FLEET_CURRENCY_STEP_MUTATIONS,
+              "tests/test_ai/test_dual_role_currency.py", survivors)
+    run_group(DUAL_ROLE_CURRENCY_SRC, FLEET_POOLED_MUTATIONS,
+              "tests/test_ai/test_dual_role_currency.py", survivors)
+    run_group(PLAYER_SRC, FLEET_HOLDINGS_READ_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
+    run_group(PLAYER_SRC, FLEET_HOLDINGS_CTX_MUTATIONS,
+              "tests/test_ai/test_loss_risk.py", survivors)
     run_group(PARTY_WIN_SRC, PARTY_LOADOUT_WIN_MUTATIONS,
               "tests/test_ai/test_party_win.py", survivors)
     run_group(FACTORY_SRC, PARTY_LOADOUT_FACTORY_MUTATIONS,

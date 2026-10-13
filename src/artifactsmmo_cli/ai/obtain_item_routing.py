@@ -12,6 +12,7 @@ each other) breaks the cycle that direction would otherwise create.
 """
 
 from artifactsmmo_cli.ai.currency_grind_target import currency_grind_target_pure
+from artifactsmmo_cli.ai.dual_role_currency import fleet_pooled
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_step_target import gather_step_target
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -130,7 +131,7 @@ def _gather_goal_for_unreachable_equippable(
 
 
 def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameData,
-                     ctx: SelectionContext = NO_PROFILE_CONTEXT) -> Goal:
+                     ctx: SelectionContext = NO_PROFILE_CONTEXT) -> Goal | None:
     """Map an equippable target to UpgradeEquipment when it is reachable, else to
     GatherMaterials for the strategy's next achievable step toward it.
 
@@ -215,10 +216,18 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
         if purchases:
             price, currency = min(purchases)
             held = state.inventory.get(currency, 0) + bank.get(currency, 0)
+            pooled = fleet_pooled(currency, state, game_data, ctx.sibling_holdings)
+            if held < price <= held + pooled:
+                # The FLEET holds the price in a currency it pools (worn or
+                # carried by siblings, or worn here): the turn-in election
+                # buys it (`GamePlayer._resolve_turn_in`), and no one gathers
+                # more. None, as for the reservation above it: no work here.
+                return None
             if held < price:
+                fleet = held + pooled
                 return GatherMaterialsGoal(
                     target_item=currency,
-                    needed={currency: currency_grind_target_pure(held, price)})
+                    needed={currency: held + currency_grind_target_pure(fleet, price) - fleet})
         return GatherMaterialsGoal(target_item=code, needed={code: 1})
     # Route on the STEP, not on a depth-bound proxy for it (see the docstring:
     # the deleted `is_plannable` depth gate never rejected on real data).

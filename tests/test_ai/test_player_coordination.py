@@ -2212,13 +2212,15 @@ def _coord_player(tmp_path, character: str = "C3P0"):  # type: ignore[no-untyped
 def test_refresh_sibling_reads_populates_every_pure_read_field(tmp_path) -> None:
     """All four fields the selection context needs, from one shared reader."""
     now = datetime.now(tz=timezone.utc)
-    CoordinationStore(db_path=str(tmp_path / "coord.db"),
-                      character="Robby").publish_skills({"jewelrycrafting": 15}, now)
+    robby = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Robby")
+    robby.publish_skills({"jewelrycrafting": 15}, now)
+    robby.publish_holdings({"lich_race_medal": 2}, now)
     player, _ = _coord_player(tmp_path)
 
     player._refresh_sibling_reads(now)
 
     assert player._sibling_skills == {"jewelrycrafting": 15}
+    assert player._sibling_holdings == {"lich_race_medal": 2}
     assert player._sibling_bank_claims == {}
     assert player._sibling_order_claims == frozenset()
     assert player._asymmetric_demand == frozenset()
