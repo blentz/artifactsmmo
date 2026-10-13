@@ -66,7 +66,7 @@ from tests.test_ai.test_strategy_driver import _make_planner_gd
 _T0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
 
 # The production walk, captured before the autouse fixture below replaces it.
-_REAL_WORK_OF_ITEM = GamePlayer._work_of_item
+_REAL_WORK_OF_ITEM = GamePlayer._work_of_item  # unbound: call with the player first
 
 
 @pytest.fixture(autouse=True)
@@ -2484,11 +2484,19 @@ def test_a_siblings_live_lease_is_a_fleet_role(tmp_path):
 
 
 def test_the_work_of_an_item_is_its_acquisition_walk(monkeypatch):
+    p = GamePlayer(character="hero")
+    p.history = object()
+    stores = []
     walks = {"cooked_trout": 2, "relic": UNOBTAINABLE_PER_UNIT}
-    monkeypatch.setattr("artifactsmmo_cli.ai.player.acquisition_actions",
-                        lambda code, qty, state, gd, ctx, equip: walks[code])
-    assert _REAL_WORK_OF_ITEM({"cooked_trout": 80, "relic": 1}, make_state(), GameData()) == {
+
+    def walk(code, qty, state, gd, ctx, equip, store):
+        stores.append(store)
+        return walks[code]
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.acquisition_actions", walk)
+    assert _REAL_WORK_OF_ITEM(p, {"cooked_trout": 80, "relic": 1}, make_state(), GameData()) == {
         "cooked_trout": 2}
+    assert stores == [p.history, p.history]
 
 
 def test_update_coordination_weighs_role_demand_by_work(tmp_path, monkeypatch):
@@ -2522,3 +2530,25 @@ def test_update_coordination_weighs_role_demand_by_work(tmp_path, monkeypatch):
     finally:
         store.close()
         sibling.close()
+
+
+_EXPECTED_PLANK_WORK = 13
+
+
+def test_real_work_of_an_item_prices_the_craft_route(bundle_game_data):
+    """No stubbing: the real walk over the bundle world (gather + craft route)."""
+    p = GamePlayer(character="hero")
+    work = _REAL_WORK_OF_ITEM(p, {"ash_plank": 4}, make_state(), bundle_game_data)
+    assert work == {"ash_plank": _EXPECTED_PLANK_WORK}
+
+
+def test_work_of_an_item_ignores_what_the_character_holds_and_banks(bundle_game_data):
+    """The weight is the work to MAKE one unit: a held or banked copy must not
+    shrink it (the fisher holds the food it is asked for)."""
+    p = GamePlayer(character="hero")
+    empty = _REAL_WORK_OF_ITEM(p, {"ash_plank": 4}, make_state(), bundle_game_data)
+    held = _REAL_WORK_OF_ITEM(
+        p, {"ash_plank": 4},
+        make_state(inventory={"ash_plank": 9}, bank_items={"ash_plank": 9}), bundle_game_data)
+    assert held == empty
+    assert empty["ash_plank"] > 0

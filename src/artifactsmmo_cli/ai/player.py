@@ -3478,15 +3478,19 @@ class GamePlayer:
         level_of_item = {code: req[1] for code, req in producing.items() if req is not None}
         return skill_of_item, level_of_item
 
-    @staticmethod
-    def _work_of_item(item_demand: Mapping[str, int], state: WorldState,
+    def _work_of_item(self, item_demand: Mapping[str, int], state: WorldState,
                       game_data: GameData) -> dict[str, int]:
-        """Acquisition actions for one unit of each code on the board -- the work
-        a role is asked for (spec 2026-10-13 §3). Priced against the profile-free
-        context: a board weight, not a plan. A code with no route is left out and
-        so recruits no one."""
-        work = {code: acquisition_actions(code, 1, state, game_data, NO_PROFILE_CONTEXT,
-                                          equip=False)
+        """Acquisition actions to MAKE one unit of each code on the board -- the
+        work a role is asked for (spec 2026-10-13 §3). Priced against EMPTY
+        holdings: owned bag units are credited first and a banked copy is a
+        cheap withdraw, so pricing against the live bag would let the role that
+        makes and holds the demanded item read its own demand as zero. Priced
+        with the learning store so skill-gated craft/gather routes count, and
+        against the profile-free context: a board weight, not a plan. A code with
+        no route at all is left out and so recruits no one."""
+        bare = replace(state, inventory={}, bank_items={})
+        work = {code: acquisition_actions(code, 1, bare, game_data, NO_PROFILE_CONTEXT,
+                                          equip=False, store=self.history)
                 for code in item_demand}
         return {code: actions for code, actions in work.items()
                 if actions < UNOBTAINABLE_PER_UNIT}
