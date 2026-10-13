@@ -37,12 +37,17 @@ character's banked share is one carry."""
 @dataclass(frozen=True)
 class ChosenLoadout:
     """The chosen loadout against `monster`: each utility potion it wears with
-    the units one fight drinks, and each food its recovery eats with the units
-    one fight's recovery eats (only codes it uses, in the chooser's order)."""
+    the units one fight drinks, each food its recovery eats with the units one
+    fight's recovery eats (only codes it uses, in the chooser's order), and
+    `made_food`, the food that recovery eats when every unit must be MADE
+    (held count 0, replacement price): the food worth producing (spec
+    2026-10-13 section 1). Held food is eaten free; only `made_food` is stocked
+    past what is held, or asked of the fleet."""
 
     monster: str
     potions: tuple[tuple[str, int], ...]
     food: tuple[tuple[str, int], ...]
+    made_food: tuple[tuple[str, int], ...]
 
     def potion_codes(self) -> frozenset[str]:
         """The utility potions the loadout wears."""

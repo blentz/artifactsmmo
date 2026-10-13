@@ -336,7 +336,7 @@ def test_objective_step_goal_provisions_for_reach_char_level():
     state = make_state(level=3, inventory={"small_health_potion": 100})
     gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
     ctx = _ctx(combat_monster="green_slime",
-               loadout=ChosenLoadout("green_slime", (("small_health_potion", 2),), ()))
+               loadout=ChosenLoadout("green_slime", (("small_health_potion", 2),), (), ()))
     step = ReachCharLevel(level=5)
     goal = objective_step_goal(step, state, gd, ctx)
     assert isinstance(goal, ProvisionMarginalFightGoal)

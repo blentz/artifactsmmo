@@ -2386,7 +2386,7 @@ def test_the_shortfall_reaches_the_selection_context(monkeypatch):
     p.game_data = _make_planner_gd()
     p._sibling_needs = {"HAL": {"cooked_bass": 4}}
     seen = {}
-    pick = ChosenLoadout("chicken", (), (("cooked_bass", 1),))
+    pick = ChosenLoadout("chicken", (), (("cooked_bass", 1),), (("cooked_bass", 1),))
 
     def choose(state, gd, ctx, store):  # type: ignore[no-untyped-def]
         seen.update(monster=ctx.combat_monster, store=store)

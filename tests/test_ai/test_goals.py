@@ -1873,7 +1873,8 @@ class TestDepositInventorySelective:
         })
         # The heal is protected as the food the chosen loadout eats (its carry).
         ctx = dataclasses.replace(NO_PROFILE_CONTEXT, loadout=ChosenLoadout(
-            monster="chicken", potions=(), food=(("cooked_chicken", 1),)))
+            monster="chicken", potions=(), food=(("cooked_chicken", 1),),
+            made_food=(("cooked_chicken", 1),)))
         goal = DepositInventoryGoal(bank_accessible=True, game_data=gd, ctx=ctx)
         action = DepositAllAction(bank_location=(4, 1), accessible=True, game_data=gd, ctx=ctx)
         state = make_state(

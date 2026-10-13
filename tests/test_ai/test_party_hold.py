@@ -327,7 +327,7 @@ def test_a_lease_s_boss_and_loadout_are_the_fight_ahead(tmp_path: Path, monkeypa
     lor._draws_enabled = False
     assert lor._party_fight_loadout() is None
     seen: list[object] = []
-    party = ChosenLoadout("duskworm", (("water_res_potion", 1),), ())
+    party = ChosenLoadout("duskworm", (("water_res_potion", 1),), (), ())
 
     def chosen(me, others, gd, monster, codes):  # type: ignore[no-untyped-def]
         seen.append(([o.character for o in others], monster, codes))

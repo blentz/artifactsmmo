@@ -164,4 +164,5 @@ def make_loop(*, xp: int = 0, win: bool = False, recovery: int = 0, consumed: in
 def make_best_loadout(loadout: tuple[str, ...] = (), **loop: object) -> BestLoadout:
     """A `best_loadout.BestLoadout` whose pick is `make_loop(**loop)` wearing
     `loadout`; its bare loop loses."""
-    return BestLoadout(loadout, make_loop(**loop), make_loop())  # type: ignore[arg-type]
+    loop_rate = make_loop(**loop)  # type: ignore[arg-type]
+    return BestLoadout(loadout, loop_rate, make_loop(), loop_rate)

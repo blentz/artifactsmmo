@@ -163,7 +163,7 @@ def test_healing_carry_row_matches_lean():
     stay; cooked_chicken is not chosen and banks whole (HEALING_CONSUMABLE is
     bag-only, so it never leaves ownership)."""
     state = make_state(level=10, inventory={"cooked_chicken": 3, "apple": 10})
-    ctx = _ctx(loadout=ChosenLoadout("chicken", (), (("apple", 1),)))
+    ctx = _ctx(loadout=ChosenLoadout("chicken", (), (("apple", 1),), (("apple", 1),)))
     _check("cooked_chicken", state, ctx)
     _check("apple", state, ctx)
     assert bankable("apple", state, GD, ctx) == 0

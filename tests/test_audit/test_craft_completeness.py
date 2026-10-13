@@ -931,7 +931,8 @@ def test_a_heal_prep_leg_before_a_grind_fight_is_directional() -> None:
 
     def eats_gudgeon(_state, _gd, _ctx, monster: str) -> ChosenLoadout:
         asked.append(monster)
-        return ChosenLoadout(monster=monster, potions=(), food=(("cooked_gudgeon", 1),))
+        return ChosenLoadout(monster=monster, potions=(), food=(("cooked_gudgeon", 1),),
+                             made_food=(("cooked_gudgeon", 1),))
 
     with patch.object(grind_heal_prep, "loadout_for", side_effect=eats_gudgeon):
         state = census_state("iron_boots", CraftCell(8, "gearcrafting", 5), gd)

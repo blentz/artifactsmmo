@@ -1981,7 +1981,7 @@ def _gd_with_food(code: str, hp_restore: int) -> GameData:
 
 
 def _chosen(*potions: tuple[str, int], monster: str = "green_slime") -> ChosenLoadout:
-    return ChosenLoadout(monster, tuple(potions), ())
+    return ChosenLoadout(monster, tuple(potions), (), ())
 
 
 # The tests below rely on make_state's default empty utility slots unless they
@@ -2322,7 +2322,8 @@ class TestFightStepsCarryTheirLoadout:
     PREP = GatherMaterialsGoal(target_item="cooked_chicken", needed={"cooked_chicken": 20})
 
     def _loadout(self, monster: str) -> ChosenLoadout:
-        return ChosenLoadout(monster=monster, potions=(), food=(("cooked_chicken", 1),))
+        return ChosenLoadout(monster=monster, potions=(), food=(("cooked_chicken", 1),),
+                             made_food=(("cooked_chicken", 1),))
 
     def test_the_grind_preps_first(self, monkeypatch):
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)

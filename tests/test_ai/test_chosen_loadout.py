@@ -31,7 +31,7 @@ def test_a_food_carry_is_uncapped() -> None:
 
 def test_codes() -> None:
     pick = ChosenLoadout("wolf", (("small_health_potion", 3), ("earth_boost_potion", 1)),
-                         (("cooked_chicken", 2),))
+                         (("cooked_chicken", 2),), (("cooked_chicken", 2),))
     assert pick.potion_codes() == frozenset({"small_health_potion", "earth_boost_potion"})
     assert pick.food_codes() == frozenset({"cooked_chicken"})
-    assert ChosenLoadout("wolf", (), ()).potion_codes() == frozenset()
+    assert ChosenLoadout("wolf", (), (), ()).potion_codes() == frozenset()

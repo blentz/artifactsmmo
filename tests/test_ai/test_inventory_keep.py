@@ -118,7 +118,7 @@ def test_active_task_keeps_remaining_qty_not_the_whole_stack():
 
 
 _CHOSEN = ChosenLoadout(monster="wolf", potions=(("small_health_potion", 2),),
-                        food=(("cooked_chicken", 1),))
+                        food=(("cooked_chicken", 1),), made_food=(("cooked_chicken", 1),))
 
 
 def test_healing_consumable_keeps_nothing_without_a_chosen_loadout():
@@ -138,7 +138,8 @@ def test_healing_consumable_keeps_the_chosen_foods_carry():
     gd = _gd()
     state = make_state(level=10, inventory={"cooked_chicken": 40, "apple": 10})
     ctx = _ctx(loadout=ChosenLoadout(monster="wolf", potions=(),
-                                     food=(("apple", 1), ("cooked_chicken", 2))))
+                                     food=(("apple", 1), ("cooked_chicken", 2)),
+                                     made_food=(("apple", 1), ("cooked_chicken", 2))))
     assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "cooked_chicken",
                            state, gd, ctx) == food_carry(2) == 40
     assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "apple",
@@ -693,7 +694,8 @@ def test_far_out_of_band_heals_are_never_destroyable():
     assert destroyable("cooked_chicken", far, gd, ctx) == 0
     # The surplus above the chosen food's carry is still shed to the BANK.
     chosen = _ctx(loadout=ChosenLoadout(monster="wolf", potions=(),
-                                        food=(("cooked_chicken", 1),)))
+                                        food=(("cooked_chicken", 1),),
+                                        made_food=(("cooked_chicken", 1),)))
     assert keep_in_bag("cooked_chicken", far, gd, chosen) == food_carry(1)
     assert bankable("cooked_chicken", far, gd, chosen) == 30 - food_carry(1)
 

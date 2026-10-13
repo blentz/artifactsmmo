@@ -31,10 +31,10 @@ _INGREDIENT = "sunflower"
 _RESOURCE = "sunflower_field"
 _HURTS = "biting_slime"
 
-HEAL_LOADOUT = ChosenLoadout(monster=_HURTS, potions=((_HEAL, 1),), food=())
+HEAL_LOADOUT = ChosenLoadout(monster=_HURTS, potions=((_HEAL, 1),), food=(), made_food=())
 """The chosen loadout against `_HURTS`: one heal a fight, a carry of 20."""
 
-BOTH_LOADOUT = ChosenLoadout(monster=_HURTS, potions=((_HEAL, 1), (_BOOST, 1)), food=())
+BOTH_LOADOUT = ChosenLoadout(monster=_HURTS, potions=((_HEAL, 1), (_BOOST, 1)), food=(), made_food=())
 
 
 def _gd(*, with_boost: bool, monster_level: int = 3, ingredient_qty: int = 1) -> GameData:

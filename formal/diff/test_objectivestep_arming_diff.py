@@ -312,7 +312,7 @@ def test_provision_branch_yields_no_fight_despite_combat_target() -> None:
         _make_world(scn), inventory={heal: 5}, attack={"fire": 20},
     )
     ctx = dataclasses.replace(
-        _make_ctx(scn), loadout=ChosenLoadout(COMBAT_MONSTER, ((heal, 1),), ()))
+        _make_ctx(scn), loadout=ChosenLoadout(COMBAT_MONSTER, ((heal, 1),), (), ()))
 
     goal = objective_step_goal(ReachCharLevel(scn.target_level), w, gd, ctx)
 

@@ -229,7 +229,7 @@ def _gd_batch() -> GameData:
 
 
 def _loadout(*potions: tuple[str, int]) -> ChosenLoadout:
-    return ChosenLoadout(monster=_MONSTER, potions=tuple(potions), food=())
+    return ChosenLoadout(monster=_MONSTER, potions=tuple(potions), food=(), made_food=())
 
 
 def _worn(code: str, qty: int, **kw):  # type: ignore[no-untyped-def]

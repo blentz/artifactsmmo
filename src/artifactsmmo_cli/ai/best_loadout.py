@@ -29,7 +29,8 @@ The player reads the pick once per cycle against the fight ahead
 (`fight_ahead_loadout`) and threads it on the selection context; every
 consumable decision reads it there (`chosen_loadout`, increment 5)."""
 
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.best_loadout_core import pick_best
@@ -40,7 +41,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.heal_catalog import POTION
 from artifactsmmo_cli.ai.held_stock import held_count
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.loop_rate import LoopRate, food_menu, loop_rate
+from artifactsmmo_cli.ai.loop_rate import FoodOffer, LoopRate, food_menu, loop_rate
 from artifactsmmo_cli.ai.potion_supply import potion_stockable
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
@@ -50,12 +51,20 @@ from artifactsmmo_cli.ai.world_state import WorldState
 @dataclass(frozen=True)
 class BestLoadout:
     """The chosen utility potions, their loop (`rate.used`: the potions one
-    fight drinks; `rate.eaten`: the foods its recovery eats) and the no-potion
-    loop."""
+    fight drinks; `rate.eaten`: the foods its recovery eats), the no-potion
+    loop, and `made`: the chosen potions' loop over the food menu with nothing
+    held (spec 2026-10-13 section 1)."""
 
     loadout: tuple[str, ...]
     rate: LoopRate
     bare: LoopRate
+    made: LoopRate
+
+
+def unheld(food: Sequence[FoodOffer]) -> tuple[FoodOffer, ...]:
+    """The menu as if nothing were held: every unit at its replacement price,
+    and a food with no replacement off the menu."""
+    return tuple(replace(offer, held=0) for offer in food if offer.price is not None)
 
 
 def candidate_potions(state: WorldState, game_data: GameData, ctx: SelectionContext,
@@ -90,7 +99,12 @@ def best_loadout(state: WorldState, game_data: GameData, ctx: SelectionContext, 
     # The no-potion loadout is first and consumes nothing: always runnable.
     assert index is not None and scored[0][0] == ()
     codes, rate = scored[index]
-    return BestLoadout(codes, rate, scored[0][1])
+    made = loop_rate(state, game_data, monster,
+                     [(code, UTILITY_SLOT_MAX_STACK) for code in codes], unheld(food), prices)
+    # The chosen potions were payable over the real menu, and food never
+    # changes what a fight drinks: the same potions are payable here.
+    assert made is not None
+    return BestLoadout(codes, rate, scored[0][1], made)
 
 
 def units_used(rate: LoopRate) -> int:
@@ -102,7 +116,7 @@ def chosen(best: BestLoadout, monster: str) -> ChosenLoadout:
     """The pick as plain data: the potions one fight drinks and the food its
     recovery eats."""
     return ChosenLoadout(monster, tuple((code, n) for code, n in best.rate.used if n > 0),
-                         best.rate.eaten)
+                         best.rate.eaten, best.made.eaten)
 
 
 def fight_ahead_loadout(state: WorldState, game_data: GameData, ctx: SelectionContext,

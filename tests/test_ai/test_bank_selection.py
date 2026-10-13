@@ -9,7 +9,8 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 
 EATS_CHICKEN = replace(NO_PROFILE_CONTEXT, loadout=ChosenLoadout(
-    monster="chicken", potions=(), food=(("cooked_chicken", 1),)))
+    monster="chicken", potions=(), food=(("cooked_chicken", 1),),
+    made_food=(("cooked_chicken", 1),)))
 """A cycle whose chosen loadout eats `cooked_chicken`: the keep authority holds
 its carry (20) in the bag, so the heal stock is protected."""
 

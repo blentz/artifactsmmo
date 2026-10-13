@@ -714,7 +714,7 @@ def _potion_gd() -> GameData:
     return gd
 
 
-_POTION_LOADOUT = ChosenLoadout(monster="red_slime", potions=(("health_potion", 1),), food=())
+_POTION_LOADOUT = ChosenLoadout(monster="red_slime", potions=(("health_potion", 1),), food=(), made_food=())
 """The loadout chosen against red_slime: one health_potion a fight, a carry of 20."""
 
 
@@ -748,7 +748,7 @@ def test_craft_potions_guard_silent_without_a_fight_ahead():
 
 
 def test_craft_potions_guard_silent_when_the_loadout_was_chosen_for_another_fight():
-    other = ChosenLoadout(monster="blue_slime", potions=(("health_potion", 1),), food=())
+    other = ChosenLoadout(monster="blue_slime", potions=(("health_potion", 1),), food=(), made_food=())
     assert _potion_fires(_potion_state(), _potion_gd(), _potion_ctx(loadout=other)) is False
 
 

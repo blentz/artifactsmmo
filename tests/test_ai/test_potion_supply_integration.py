@@ -44,7 +44,7 @@ _INGREDIENT = "sunflower"
 _RESOURCE = "sunflower_field"
 _MONSTER = "slime"
 _BOOST = "fire_boost"
-_LOADOUT = ChosenLoadout(monster=_MONSTER, potions=((_POTION, 1),), food=())
+_LOADOUT = ChosenLoadout(monster=_MONSTER, potions=((_POTION, 1),), food=(), made_food=())
 
 
 def _ctx(fight_monster: str | None = None,
@@ -216,7 +216,7 @@ def test_an_unchosen_craftable_potion_is_never_brewed():
         equipment={**make_state().equipment, "utility1_slot": _POTION},
         utility1_slot_quantity=20)
     assert _fires(state, gd, _ctx(fight_monster=_MONSTER)) is False
-    boost_too = ChosenLoadout(monster=_MONSTER, potions=((_POTION, 1), (_BOOST, 1)), food=())
+    boost_too = ChosenLoadout(monster=_MONSTER, potions=((_POTION, 1), (_BOOST, 1)), food=(), made_food=())
     assert _fires(state, gd, _ctx(fight_monster=_MONSTER, loadout=boost_too)) is True
 
 
@@ -228,7 +228,7 @@ def test_a_chosen_boost_is_planned_into_the_free_slot():
         _understocked_state(),
         equipment={**make_state().equipment, "utility1_slot": _POTION},
         utility1_slot_quantity=20)
-    boost_too = ChosenLoadout(monster=_MONSTER, potions=((_POTION, 1), (_BOOST, 1)), food=())
+    boost_too = ChosenLoadout(monster=_MONSTER, potions=((_POTION, 1), (_BOOST, 1)), food=(), made_food=())
     ctx = _ctx(fight_monster=_MONSTER, loadout=boost_too)
     goal = map_guard(GuardKind.CRAFT_POTIONS, gd, ctx, state)
     catalog = [CraftAction(code=_BOOST, quantity=1, workshop_location=(3, 0)),

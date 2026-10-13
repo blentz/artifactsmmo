@@ -15,7 +15,8 @@ account's `GET /my/characters` order.
 
 * NEED — the chosen loadout against the fight ahead (`ctx.loadout`,
   `best_loadout.fight_ahead_loadout`; no fight ahead: no need): the potions one
-  fight drinks and the food its recovery eats, each × `REFILL_HORIZON_FIGHTS`.
+  fight drinks and the food its recovery eats when every unit must be made
+  (`ChosenLoadout.made_food`), each × `REFILL_HORIZON_FIGHTS`.
 * STOCK — the account BANK only: the floor is a banked minimum, and units in a
   bag or a utility slot are already that character's to use.
 * SHORTFALL — per type this character needs, its share
@@ -37,7 +38,7 @@ def consumable_need(loadout: ChosenLoadout | None) -> dict[str, int]:
     if loadout is None:
         return {}
     need: dict[str, int] = {}
-    for code, units in (*loadout.potions, *loadout.food):
+    for code, units in (*loadout.potions, *loadout.made_food):
         need[code] = need.get(code, 0) + units * REFILL_HORIZON_FIGHTS
     return need
 

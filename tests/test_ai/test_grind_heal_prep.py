@@ -72,7 +72,7 @@ def _eats(*food: tuple[str, int], monster: str = "wolf",
           combat_monster: str | None = "wolf") -> SelectionContext:
     """A cycle whose loadout, chosen against `monster`, eats `food` in order."""
     return replace(NO_PROFILE_CONTEXT, combat_monster=combat_monster,
-                   loadout=ChosenLoadout(monster=monster, potions=(), food=food))
+                   loadout=ChosenLoadout(monster=monster, potions=(), food=food, made_food=food))
 
 
 EATS_CHEESE = _eats(("cheese", 1))
@@ -165,7 +165,7 @@ class TestHealPrepGoal:
 
         def eats_bread(_state, _gd, _ctx, monster: str) -> ChosenLoadout:
             asked.append(monster)
-            return ChosenLoadout(monster=monster, potions=(), food=(("bread", 1),))
+            return ChosenLoadout(monster=monster, potions=(), food=(("bread", 1),), made_food=(("bread", 1),))
 
         state = _state(gd, {"milk": CARRY, "wheat": CARRY})
         with patch.object(grind_heal_prep, "loadout_for", side_effect=eats_bread):
@@ -255,7 +255,7 @@ class TestGrindFightLegPreps:
 
         def eats_nothing(_state, _gd, _ctx, monster: str) -> ChosenLoadout:
             asked.append(monster)
-            return ChosenLoadout(monster=monster, potions=(), food=())
+            return ChosenLoadout(monster=monster, potions=(), food=(), made_food=())
 
         ogre = FightAction(monster_code="ogre", locations=frozenset({(1, 2)}))
         gather = GatherAction(resource_code="milk_rocks", locations=frozenset({(3, 3)}))
@@ -314,7 +314,7 @@ class TestPotionPrep:
     cannot brew (live C3P0 2026-10-10: water_boost_potion, a drop ingredient,
     17 of 34 vampire fights lost with an empty slot)."""
 
-    LOADOUT = ChosenLoadout(monster="wolf", potions=(("boost", 1),), food=())
+    LOADOUT = ChosenLoadout(monster="wolf", potions=(("boost", 1),), food=(), made_food=())
 
     def _patch(self, monkeypatch, *, ladder: bool, feasible: bool) -> None:
         monkeypatch.setattr(grind_heal_prep, "loadout_for", lambda *a: self.LOADOUT)

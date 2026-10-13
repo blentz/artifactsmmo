@@ -137,11 +137,11 @@ def party_chosen_loadout(me: WorldState, others: Sequence[WorldState], game_data
     members = (me, *others)
     stockable = [stockable_potions(m, game_data) for m in members]
     if not all(code in stockable[0] for code in codes):
-        return ChosenLoadout(monster, (), ())
+        return ChosenLoadout(monster, (), (), ())
     cards = [member_card(m, game_data, monster, codes, s) for m, s in zip(members, stockable, strict=True)]
     outcome = group_outcome(party_boss(game_data, monster), cards)
     drinks = party_drinks(codes, outcome.used[0], game_data)
-    return ChosenLoadout(monster, tuple((code, n) for code, n in drinks if n > 0), ())
+    return ChosenLoadout(monster, tuple((code, n) for code, n in drinks if n > 0), (), ())
 
 
 def wears_party_loadout(state: WorldState, game_data: GameData, codes: tuple[str, ...]) -> bool:

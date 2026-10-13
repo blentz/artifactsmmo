@@ -71,7 +71,7 @@ class TestNeed:
         assert consumable_need(pick) == {"heal_potion": drunk * REFILL_HORIZON_FIGHTS}
 
     def test_potions_and_food_both_count(self) -> None:
-        pick = ChosenLoadout("wolf", (("heal_potion", 2),), (("apple", 3),))
+        pick = ChosenLoadout("wolf", (("heal_potion", 2),), (("apple", 3),), (("apple", 3),))
         assert consumable_need(pick) == {"heal_potion": 40, "apple": 60}
 
 
@@ -118,3 +118,12 @@ class TestShortfallIsDemand:
         assert short_items(make_state(bank_items={"bass": 5}), gd, ctx) == {"cooked_bass", "bass"}
         enough = make_state(bank_items={"bass": 12})
         assert short_items(enough, gd, ctx) == {"cooked_bass"}
+
+
+def test_the_need_is_the_food_worth_making_not_the_food_held() -> None:
+    """Spec 4: the fleet floor asks the producer only for food the fleet would
+    still eat at replacement price."""
+    loadout = ChosenLoadout("wolf", (("boost", 1),), (("apple", 2),), ())
+    assert consumable_need(loadout) == {"boost": REFILL_HORIZON_FIGHTS}
+    made = ChosenLoadout("wolf", (), (("apple", 2),), (("apple", 1),))
+    assert consumable_need(made) == {"apple": REFILL_HORIZON_FIGHTS}

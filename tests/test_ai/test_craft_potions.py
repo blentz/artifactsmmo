@@ -44,7 +44,7 @@ def _gd() -> GameData:
     return gd
 
 
-_LOADOUT = ChosenLoadout(monster=_MONSTER, potions=((_HEAL, 1), (_BOOST, 1)), food=())
+_LOADOUT = ChosenLoadout(monster=_MONSTER, potions=((_HEAL, 1), (_BOOST, 1)), food=(), made_food=())
 
 
 def _state(slot1: str | None = None, qty1: int = 0, slot2: str | None = None,
@@ -149,7 +149,7 @@ def test_batch_equip_never_evicts_the_loadouts_other_potion():
     state = _state(_HEAL, 20, _OTHER, 40, inventory={_INGREDIENT: 50})
     state = _worn(state, "utility1_slot", _HEAL, 5)
     goal = CraftPotionsGoal(
-        loadout=ChosenLoadout(monster=_MONSTER, potions=((_BOOST, 1), (_HEAL, 1)), food=()),
+        loadout=ChosenLoadout(monster=_MONSTER, potions=((_BOOST, 1), (_HEAL, 1)), food=(), made_food=()),
         game_data=gd, state=state)
     equip = goal.batch_equip(state)
     assert equip is not None and equip.code == _BOOST

@@ -253,7 +253,8 @@ def test_nongear_protection_unchanged():
                                 bank_unlock_monster=None, initial_xp=0,
                                 task_exchange_min_coins=0, combat_monster=None,
                                 loadout=ChosenLoadout(monster="chicken", potions=(),
-                                                      food=(("cooked_chicken", 1),)))
+                                                      food=(("cooked_chicken", 1),),
+                                                      made_food=(("cooked_chicken", 1),)))
     profile_ctx = replace(base_ctx, gear_keep=gear_keep)
     for code in (TASKS_COIN_CODE, "copper_helmet", "cooked_chicken",
                  "copper_ore", "copper_bar"):
