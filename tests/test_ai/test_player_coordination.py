@@ -2428,3 +2428,42 @@ def test_the_skill_demand_is_known_when_the_loadout_is_chosen(monkeypatch):
     ctx = p._selection_context(combat_monster="chicken")
     assert seen["skills"] == frozenset({"fishing"})
     assert ctx.skill_demand == frozenset({"fishing"})
+
+
+def test_the_role_and_the_fleet_s_roles_reach_the_selection_context(monkeypatch):
+    p = GamePlayer(character="hero", fleet_order=("hero",))
+    p.state = make_state()
+    p.game_data = _make_planner_gd()
+    p._role = "fisher"
+    p._fleet_roles = frozenset({"fisher", "miner"})
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.fight_ahead_loadout", lambda *a: None)
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))
+    ctx = p._selection_context(combat_monster="chicken")
+    assert ctx.role == "fisher"
+    assert ctx.fleet_roles == frozenset({"fisher", "miner"})
+
+
+def test_a_lone_character_sees_no_fleet_roles():
+    assert GamePlayer(character="hero")._fleet_roles == frozenset()
+
+
+def test_a_siblings_live_lease_is_a_fleet_role(tmp_path):
+    """Through the real store: a sibling's live `fisher` lease is in
+    `_fleet_roles` after the cycle's coordination update."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state()
+    p.game_data = _make_planner_gd()
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="HAL")
+    p.set_coordination_store(store)
+    try:
+        assert sibling.claim("fisher", datetime.now(tz=timezone.utc)) is True
+        p._update_coordination(p.state, p.game_data)
+        live = store.live_leases(datetime.now(tz=timezone.utc))
+        assert "fisher" in live
+        assert "fisher" in p._fleet_roles
+        assert p._fleet_roles <= frozenset(live)
+    finally:
+        store.close()
+        sibling.close()

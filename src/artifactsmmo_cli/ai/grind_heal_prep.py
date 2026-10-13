@@ -32,6 +32,7 @@ from datetime import UTC, datetime
 from artifactsmmo_cli.ai.best_loadout import loadout_for
 from artifactsmmo_cli.ai.chosen_loadout import food_carry, potion_carry
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
+from artifactsmmo_cli.ai.food_producer import may_make_food
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
@@ -56,17 +57,25 @@ def heal_prep_goal(state: WorldState, game_data: GameData, ctx: SelectionContext
     carried (or cannot be supplied).
 
     The foods are taken in the loadout's order; the first one short of its
-    carry in the bag is the goal. Its target is the full carry when the walk
-    can supply it under `HEAL_PREP_POLICY`, else the units already held (bag
+    carry in the bag is the goal. Its target is the full carry only when the
+    food is in the loadout's `made_food` (worth making at replacement price),
+    this character makes the fleet's food (`food_producer.may_make_food`) and
+    the walk can supply it under `HEAL_PREP_POLICY`; otherwise the units already held (bag
     and bank: held stock is free, USER 2026-10-09 "free until used up") — a
     banked unit is withdrawn by the walk like any banked copy of its target
     (Phase 2c-2b). A food with neither is skipped for the next one."""
     model = ObtainModel(state, game_data, ctx, datetime.now(UTC))
-    for code, eaten in loadout_for(state, game_data, ctx, monster).food:
+    loadout = loadout_for(state, game_data, ctx, monster)
+    made = dict(loadout.made_food)
+    for code, eaten in loadout.food:
         carry = food_carry(eaten)
         bag = state.inventory.get(code, 0)
         held = bag + (state.bank_items or {}).get(code, 0)
-        for target in (carry, min(carry, held)):
+        # Spec 2026-10-13 §1/§4: units past the held ones are MADE only when
+        # the food beats Rest at replacement price and this character makes
+        # the fleet's food; otherwise only what is held is fetched.
+        makes = made.get(code, 0) > 0 and may_make_food(code, ctx.role, ctx.fleet_roles, game_data)
+        for target in ((carry, min(carry, held)) if makes else (min(carry, held),)):
             if target > bag and model.feasible(code, target, HEAL_PREP_POLICY):
                 return GatherMaterialsGoal(target_item=code, needed={code: target}, carry=True)
     return None

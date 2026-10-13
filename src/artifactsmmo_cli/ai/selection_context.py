@@ -61,6 +61,12 @@ class SelectionContext:
     # is demanded. A task's XP is a reason only for demanded XP (USER
     # 2026-10-07: the seesaw is emergent, never a phase rule).
     skill_demand: frozenset[str] = frozenset()
+    # The role this character holds and every role a live character holds
+    # (`CoordinationStore.live_leases`), set by the player each cycle. None /
+    # empty on a single-character run. `food_producer.may_make_food` reads
+    # them: only the owner of a food's craft makes it (spec 2026-10-13 §4).
+    role: str | None = None
+    fleet_roles: frozenset[str] = frozenset()
     level_demanded: bool = False
     # The fleet consumable floor's shortfall: (consumable, fleet deficit) per
     # class below its floor (`consumable_floor.supply_shortfall`, set by the

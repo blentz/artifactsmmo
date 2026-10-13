@@ -448,6 +448,7 @@ class GamePlayer:
         # budget that actually binds this bot.
         self._coordination: CoordinationStore | None = None
         self._role: str | None = None
+        self._fleet_roles: frozenset[str] = frozenset()
         self._role_held_cycles: int = 0
         # Roles this character has voluntarily RELEASED (for any reason —
         # idle or losing a demand-margin contest) — `decide_role`'s docstring
@@ -3640,9 +3641,11 @@ class GamePlayer:
             self._sibling_skills = {}
             self._sibling_holdings = {}
             self._sibling_needs = {}
+            self._fleet_roles = frozenset()
             return
         role_before = self._role
         now = datetime.now(tz=timezone.utc)
+        self._fleet_roles = frozenset(self._coordination.live_leases(now))
         # Snapshot of what this character wears + carries in dual-role codes
         # (worn artifact slots double as currency, see `dual_role_currency`),
         # so every sibling's `sibling_holdings` read sees THIS cycle's total
@@ -4102,6 +4105,8 @@ class GamePlayer:
             # on every single-character run. Feeds
             # `acquisition_cost._sibling_craft_option`.
             sibling_skills=self._sibling_skills,
+            role=self._role,
+            fleet_roles=self._fleet_roles,
             # The siblings' dual-role units, same source and lifecycle as
             # `sibling_skills`: a pooled currency's shortfall is the fleet's.
             sibling_holdings=self._sibling_holdings,

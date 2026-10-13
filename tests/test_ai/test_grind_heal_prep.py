@@ -112,6 +112,25 @@ class TestHealPrepGoal:
         gd = _gd()
         assert heal_prep_goal(_state(gd, {"milk": CARRY}), gd, _eats(), "wolf") is None
 
+    def test_food_not_worth_making_is_only_withdrawn(self):
+        """Spec §1: Rest beats the food at replacement price (`made_food`
+        empty): the banked units are fetched, nothing is cooked."""
+        gd = _gd()
+        ctx = replace(NO_PROFILE_CONTEXT, combat_monster="wolf",
+                      loadout=ChosenLoadout("wolf", (), (("cheese", 1),), ()))
+        state = _state(gd, {"milk": CARRY}, bank={"cheese": 5})
+        assert _needed(heal_prep_goal(state, gd, ctx, "wolf")) == {"cheese": 5}
+        assert heal_prep_goal(_state(gd, {"milk": CARRY}), gd, ctx, "wolf") is None
+
+    def test_a_non_fisher_only_withdraws_while_a_fisher_is_held(self):
+        """Spec §4: the fisher makes the fleet's food; a sibling fetches it."""
+        gd = _gd()
+        ctx = replace(EATS_CHEESE, role="miner", fleet_roles=frozenset({"fisher", "miner"}))
+        state = _state(gd, {"milk": CARRY}, bank={"cheese": 5})
+        assert _needed(heal_prep_goal(state, gd, ctx, "wolf")) == {"cheese": 5}
+        fisher = replace(ctx, role="fisher")
+        assert _needed(heal_prep_goal(state, gd, fisher, "wolf")) == {"cheese": CARRY}
+
     def test_an_unsuppliable_carry_stocks_the_units_held_in_the_bank(self):
         """No milk, so the carry cannot be crafted; the five banked cheese are
         free stock, so the goal is the units held (bag + bank), and the walk

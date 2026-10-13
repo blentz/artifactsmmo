@@ -42,7 +42,8 @@ class ChosenLoadout:
     `made_food`, the food that recovery eats when every unit must be MADE
     (held count 0, replacement price): the food worth producing (spec
     2026-10-13 section 1). Held food is eaten free; only `made_food` is stocked
-    past what is held, or asked of the fleet."""
+    past what is held (`grind_heal_prep.heal_prep_goal` reads it), or asked of
+    the fleet."""
 
     monster: str
     potions: tuple[tuple[str, int], ...]

@@ -183,6 +183,7 @@ GRIND_CYCLE_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "grind_cy
 PLAN_CACHE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "plan_cache.py"
 SHOULD_REPLAN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "should_replan.py"
 GRIND_HEAL_PREP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grind_heal_prep.py"
+FOOD_PRODUCER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "food_producer.py"
 BAG_PEAK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bag_peak.py"
 ACTION_REJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "action_rejection.py"
 TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "taskmaster_choice.py"
@@ -3519,14 +3520,39 @@ POTION_DECOMPOSE_POLICY_MUTATIONS = [
      "                     policy=POTION_POLICY)",
      "    legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False)"),
 ]
+FOOD_PRODUCER_MUTATIONS = [
+    ("food producer: no food has an owner",
+     "    return next((role.name for role in ROLE_CATALOG if skill in role_skills(role)), None)\n",
+     "    return None\n"),
+    ("food producer: an unheld role still forbids",
+     "    return owner is None or role == owner or owner not in fleet_roles\n",
+     "    return owner is None or role == owner\n"),
+    ("food producer: the owner may not make it",
+     "    return owner is None or role == owner or owner not in fleet_roles\n",
+     "    return owner is None or owner not in fleet_roles\n"),
+]
+FLEET_ROLES_PLAYER_MUTATIONS = [
+    ("fleet roles: never read",
+     "        self._fleet_roles = frozenset(self._coordination.live_leases(now))\n",
+     ""),
+    ("fleet roles: the context never carries the role",
+     "            role=self._role,\n            fleet_roles=self._fleet_roles,\n",
+     "            fleet_roles=self._fleet_roles,\n"),
+]
 GRIND_HEAL_PREP_POLICY_MUTATIONS = [
     # Increment 5: the chosen food, stocked to its carry, the bag counting.
     ("grind_heal_prep: a carry already in the bag is stocked again",
      "            if target > bag and model.feasible(code, target, HEAL_PREP_POLICY):",
      "            if target >= bag and model.feasible(code, target, HEAL_PREP_POLICY):"),
     ("grind_heal_prep: an unsuppliable carry leaves the held units in the bank",
-     "        for target in (carry, min(carry, held)):",
-     "        for target in (carry,):"),
+     "        for target in ((carry, min(carry, held)) if makes else (min(carry, held),)):",
+     "        for target in ((carry,) if makes else (min(carry, held),)):"),
+    ("grind_heal_prep: food not worth making is made",
+     "        makes = made.get(code, 0) > 0 and may_make_food(code, ctx.role, ctx.fleet_roles, game_data)\n",
+     "        makes = may_make_food(code, ctx.role, ctx.fleet_roles, game_data)\n"),
+    ("grind_heal_prep: a non-owner makes food",
+     "        makes = made.get(code, 0) > 0 and may_make_food(code, ctx.role, ctx.fleet_roles, game_data)\n",
+     "        makes = made.get(code, 0) > 0\n"),
     # (the rung's no-combat-ahead mutant retired 2026-10-10 with MAINTAIN_CONSUMABLES)
     ("grind_heal_prep: the heal prep counts drops as supply",
      "HEAL_PREP_POLICY: Policy = replace(DECOMPOSE_POLICY, drop_routes=False)",
@@ -5633,8 +5659,8 @@ CONSUMABLE_PLAYER_MUTATIONS = [
      "        self._sibling_needs = self._coordination.sibling_consumable_needs(now)\n",
      ""),
     ("floor player: stale sibling needs survive a detached store",
-     "            self._sibling_needs = {}\n            return\n",
-     "            return\n"),
+     "            self._sibling_needs = {}\n            self._fleet_roles = frozenset()\n            return\n",
+     "            self._fleet_roles = frozenset()\n            return\n"),
     ("floor player: the share is not published",
      "            own_demand[code] = max(own_demand.get(code, 0), owed)\n",
      "            own_demand[code] = own_demand.get(code, 0)\n"),
@@ -6545,6 +6571,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
+    FOOD_PRODUCER_SRC,
     SKILL_CREDIT_SRC,
     LOSS_RISK_CORE_SRC, FAILURE_RECOVERY_CORE_SRC, ACTION_BASE_SRC, REST_ACTION_SRC,
     TASK_CANCEL_GOAL_SRC, COMPLETE_TASK_GOAL_SRC,
@@ -10544,6 +10571,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(GRIND_HEAL_PREP_SRC, GRIND_HEAL_PREP_POLICY_MUTATIONS,
               "tests/test_ai/test_grind_heal_prep.py", survivors)
+    run_group(FOOD_PRODUCER_SRC, FOOD_PRODUCER_MUTATIONS,
+              "tests/test_ai/test_food_producer.py", survivors)
+    run_group(PLAYER_SRC, FLEET_ROLES_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
     run_group(LEVEL_SKILL_EXPAND_SRC, GRIND_RUNG_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen_level_skill.py", survivors)
     run_group(OBTAIN_MODEL_SRC, GRIND_PRODUCE_MUTATIONS,
