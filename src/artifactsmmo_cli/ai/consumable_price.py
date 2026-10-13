@@ -12,6 +12,8 @@ this module only reads its four inputs. Not wired into any decision yet.
   route: no make side. The walk prices EVERY route `obtain_sources` names,
   including a gold vendor paid from the pocket, so "make" is the cheapest way to
   obtain it in actions, not only crafting.
+  Actions of a skill in `ctx.skill_demand` are credited (`skill_credit`, USER
+  2026-10-13 'useful XP only').
 * BUY — the cheapest current gold price for one unit over the `BUY` (gold
   currency) and `GE_FILL` sources `obtain_sources` names, re-read through
   `acquisition_cost.npc_price_of` / `ge_price_of` exactly as the walk prices
@@ -42,7 +44,8 @@ FIGHT_SECONDS = Fraction(TYPICAL_FIGHT_COOLDOWN_SECONDS)
 def make_seconds(code: str, state: WorldState, game_data: GameData, ctx: SelectionContext,
                  store: LearningStore | None) -> Fraction | None:
     """The acquisition walk for one unit in seconds; None when it has no route."""
-    actions = acquisition_actions(code, 1, state, game_data, ctx, equip=False, store=store)
+    actions = acquisition_actions(code, 1, state, game_data, ctx, equip=False, store=store,
+                                  credit_skills=ctx.skill_demand)
     if actions >= UNOBTAINABLE_PER_UNIT:
         return None
     return actions * FIGHT_SECONDS

@@ -343,6 +343,7 @@ LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / 
 OBTAIN_MODEL_READY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "ready_core.py"
 OBTAIN_MODEL_POLICY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "policy.py"
 ACQUISITION_COST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "acquisition_cost.py"
+SKILL_CREDIT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "skill_credit.py"
 OBTAIN_MODEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "obtain_model.py"
 OBTAIN_MODEL_DROP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "drop_routes.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
@@ -5530,6 +5531,22 @@ LOSS_RISK_COST_MUTATIONS = [
      "    return Fraction(seconds + rest_cooldown_seconds(max_hp - 1, max_hp), seconds)\n",
      "    return Fraction(rest_cooldown_seconds(max_hp - 1, max_hp), seconds)\n"),
 ]
+SKILL_CREDIT_MUTATIONS = [
+    ("skill credit: a gather trains nothing",
+     "        return requirement[0] if requirement is not None else None\n",
+     "        return None\n"),
+    ("skill credit: a craft trains nothing",
+     "        return stats.crafting_skill if stats is not None else None\n",
+     "        return None\n"),
+    ("skill credit: every route is credited",
+     "                   if route_skill(item, route, game_data) in skills else route\n",
+     "                   if True else route\n"),
+]
+SKILL_CREDIT_PRICE_MUTATIONS = [
+    ("skill credit: the make price ignores the demanded skills",
+     "                                  credit_skills=ctx.skill_demand)\n",
+     "                                  credit_skills=frozenset())\n"),
+]
 LOSS_RISK_ACQUISITION_MUTATIONS = [
     ("loss risk: the drop price ignores the learned losses",
      "    per_kill += _loss_surcharge(monster_code, state.max_hp, records)\n",
@@ -6507,6 +6524,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
+    SKILL_CREDIT_SRC,
     LOSS_RISK_CORE_SRC, FAILURE_RECOVERY_CORE_SRC, ACTION_BASE_SRC, REST_ACTION_SRC,
     TASK_CANCEL_GOAL_SRC, COMPLETE_TASK_GOAL_SRC,
     FIGHT_TERMS_CORE_SRC, FIGHT_OUTCOME_CORE_SRC, GROUP_FIGHT_CORE_SRC,
@@ -10093,6 +10111,10 @@ def _collect_all_groups() -> None:
               "formal/diff/test_consumable_price_diff.py", survivors)
     run_group(CONSUMABLE_PRICE_SRC, CONSUMABLE_PRICE_READER_MUTATIONS,
               "tests/test_ai/test_consumable_price.py", survivors)
+    run_group(SKILL_CREDIT_SRC, SKILL_CREDIT_MUTATIONS,
+              "tests/test_ai/test_skill_credit.py", survivors)
+    run_group(CONSUMABLE_PRICE_SRC, SKILL_CREDIT_PRICE_MUTATIONS,
+              "tests/test_ai/test_skill_credit.py", survivors)
     run_group(LOOP_RATE_CORE_SRC, LOOP_RATE_CORE_MUTATIONS,
               "formal/diff/test_loop_rate_diff.py", survivors)
     run_group(LOOP_RATE_SRC, LOOP_RATE_READER_MUTATIONS,

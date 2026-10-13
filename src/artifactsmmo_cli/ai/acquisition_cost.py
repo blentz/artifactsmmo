@@ -60,6 +60,7 @@ from artifactsmmo_cli.ai.obtain_sources import (
     obtain_sources,
 )
 from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.skill_credit import credit_demanded_skills
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -715,7 +716,8 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
                         game_data: GameData, ctx: SelectionContext,
                         equip: bool,
                         store: LearningStore | None = None,
-                        gated_drop: bool = True, *, policy: Policy = LEGACY) -> int:
+                        gated_drop: bool = True, *, policy: Policy = LEGACY,
+                        credit_skills: frozenset[str] = frozenset()) -> int:
     """Lower bound on planner actions to obtain (and optionally equip) `qty` of
     `item`, over every route the executor can currently serve.
 
@@ -730,10 +732,14 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
     the bank is a ROUTE — `SourceKind.WITHDRAW`, capacity = the bank's stock —
     so counting it as owned too would credit the same copy twice and price the
     trip to the bank at nothing. A banked item costs one hop plus one withdraw,
-    which is what it costs."""
+    which is what it costs.
+
+    `credit_skills` — routes training one of these skills cost no actions
+    (`skill_credit`); empty by default, so every existing caller is unchanged."""
     owned: dict[str, int] = _owned_with_gold(state)
-    options: Mapping[str, list[RouteOption]] = acquisition_options(
-        item, state, game_data, ctx, store, gated_drop, policy=policy)
+    options: Mapping[str, list[RouteOption]] = credit_demanded_skills(
+        acquisition_options(item, state, game_data, ctx, store, gated_drop, policy=policy),
+        credit_skills, game_data)
     return acquisition_cost(item, qty, options, owned) + (
         EQUIP_ACTIONS if equip else 0)
 
