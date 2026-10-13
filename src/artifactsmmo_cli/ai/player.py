@@ -994,6 +994,7 @@ class GamePlayer:
         # publishes and it contends, and a read-only diagnostic must not change
         # what the fleet does. See `_refresh_sibling_reads`.
         self._refresh_sibling_reads(datetime.now(tz=timezone.utc))
+        self._adopt_lease_role(datetime.now(tz=timezone.utc))
         self._refresh_party(datetime.now(tz=timezone.utc))
         self._refresh_lost_fights()
         state = self.state
@@ -3496,7 +3497,7 @@ class GamePlayer:
                 if actions < UNOBTAINABLE_PER_UNIT}
 
     def _refresh_sibling_reads(self, now: datetime) -> None:
-        """Re-read the five PURE-READ sibling facts the selection context needs.
+        """Re-read the PURE-READ sibling facts the selection context needs.
 
         Split out of `_update_coordination` so the read-only planning path can
         use it too. `plan <char>` never called `_update_coordination` — it runs
@@ -3530,6 +3531,23 @@ class GamePlayer:
         # The siblings' consumable needs, for this character's floor share
         # (USER 2026-10-09, "Need ledger + API order").
         self._sibling_needs = self._coordination.sibling_consumable_needs(now)
+        # Every role a live character holds, for the food producer rule
+        # (`food_producer.may_make_food`, spec 2026-10-13 §4). Read here, not
+        # in `_update_coordination`, so the diagnostics see the fleet's roles.
+        self._fleet_roles = frozenset(self._coordination.live_leases(now))
+
+    def _adopt_lease_role(self, now: datetime) -> None:
+        """The diagnostics' role: the live lease naming this character, when
+        none is held. `plan <char>` never runs `decide_role` (it contends, see
+        `_refresh_sibling_reads`), so `_role` is None there while the live
+        child holds a lease; without this the diagnostic would plan as a food
+        producer the child is not. Read-only: it renews and claims nothing.
+        Roles are scanned in `ROLE_CATALOG` order (a character holds one)."""
+        if self._coordination is None or self._role is not None:
+            return
+        leases = self._coordination.live_leases(now)
+        self._role = next((role.name for role in ROLE_CATALOG
+                           if self.character in leases.get(role.name, frozenset())), None)
 
     def _refresh_party(self, now: datetime) -> None:
         """The cycle's party facts (docs/PLAN_group_fights.md increment 4),
@@ -3663,7 +3681,6 @@ class GamePlayer:
             return
         role_before = self._role
         now = datetime.now(tz=timezone.utc)
-        self._fleet_roles = frozenset(self._coordination.live_leases(now))
         # Snapshot of what this character wears + carries in dual-role codes
         # (worn artifact slots double as currency, see `dual_role_currency`),
         # so every sibling's `sibling_holdings` read sees THIS cycle's total

@@ -5,14 +5,15 @@ trains a demanded skill made free
 USER 2026-10-13, "useful XP only": seconds spent on a skill the goal-action DAG
 still demands (`SelectionContext.skill_demand`) are spent levelling it anyway,
 so they are not a cost of what they produce. A GATHER route trains its
-resource's skill; a CRAFT route trains the item's crafting skill. Every other
+resource's skill; a CRAFT route trains the item's crafting skill, except a
+sibling's craft (venue `BANK_VENUE`), which trains the sibling. Every other
 route (withdraw, buy, drop, ...) trains none and keeps its price. Travel hops
 are charged by the walk, not by a route, and always cost."""
 
 from collections.abc import Mapping
 from dataclasses import replace
 
-from artifactsmmo_cli.ai.acquisition_cost_core import RouteOption
+from artifactsmmo_cli.ai.acquisition_cost_core import BANK_VENUE, RouteOption
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.source_kind import SourceKind
 
@@ -22,7 +23,7 @@ def route_skill(item: str, route: RouteOption, game_data: GameData) -> str | Non
     if route.kind == SourceKind.GATHER.value:
         requirement = game_data.resource_skill_level(route.venue)
         return requirement[0] if requirement is not None else None
-    if route.kind == SourceKind.CRAFT.value:
+    if route.kind == SourceKind.CRAFT.value and route.venue != BANK_VENUE:
         stats = game_data.item_stats(item)
         return stats.crafting_skill if stats is not None else None
     return None

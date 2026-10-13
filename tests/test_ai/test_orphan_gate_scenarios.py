@@ -157,3 +157,42 @@ class TestTierFoodDemandsFishing:
         offered = (res.root, *res.alternatives)
         assert ReachSkillLevel(skill="cooking", level=20) in offered
         assert ReachSkillLevel(skill="fishing", level=CHAIN_RUNG) in offered
+
+
+class TestOnlyTheProducerClimbsForFood:
+    """Spec 2026-10-13 §4: only the food's owner makes it. A sibling with a
+    share of the fleet's food shortfall is NOT offered the fishing climb its
+    `cooked_shrimp` closure would demand while a live fisher holds the role;
+    the fisher, and a character in a fleet with no fisher, still are."""
+
+    def _fishing_offered(self, gd, role, fleet_roles) -> bool:  # type: ignore[no-untyped-def]
+        objective = CharacterObjective.from_game_data(gd)
+        state = census_state(SCENARIOS[CHAIN_CELL], gd)
+        ctx = dataclasses.replace(SHORT_SHRIMP, role=role, fleet_roles=fleet_roles)
+        res = resolve_root(state, gd, objective, ctx, None)
+        return ReachSkillLevel(skill="fishing", level=CHAIN_RUNG) in (res.root, *res.alternatives)
+
+    def test_a_sibling_of_a_live_fisher_is_not_offered_the_climb(self, bundle_game_data):
+        assert not self._fishing_offered(
+            bundle_game_data, "miner", frozenset({"fisher", "miner"}))
+
+    def test_the_fisher_is_offered_the_climb(self, bundle_game_data):
+        assert self._fishing_offered(
+            bundle_game_data, "fisher", frozenset({"fisher", "miner"}))
+
+    def test_a_fleet_without_a_fisher_still_climbs(self, bundle_game_data):
+        assert self._fishing_offered(bundle_game_data, "miner", frozenset({"miner"}))
+
+    def test_a_potion_shortfall_is_read_for_every_role(self, bundle_game_data):
+        """Potions are untouched (spec non-goal): a miner beside a live
+        alchemist is still offered the alchemy climb `minor_health_potion`
+        (alchemy 20) demands. Kills a filter that drops every non-producer
+        row instead of only the FOOD rows."""
+        gd = bundle_game_data
+        objective = CharacterObjective.from_game_data(gd)
+        state = census_state(SCENARIOS[CHAIN_CELL], gd)
+        ctx = dataclasses.replace(
+            NO_PROFILE_CONTEXT, supply_shortfall=(("minor_health_potion", 10),),
+            role="miner", fleet_roles=frozenset({"alchemist", "miner"}))
+        res = resolve_root(state, gd, objective, ctx, None)
+        assert ReachSkillLevel(skill="alchemy", level=20) in (res.root, *res.alternatives)

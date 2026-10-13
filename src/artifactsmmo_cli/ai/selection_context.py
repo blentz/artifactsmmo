@@ -70,9 +70,12 @@ class SelectionContext:
     level_demanded: bool = False
     # The fleet consumable floor's shortfall: (consumable, fleet deficit) per
     # class below its floor (`consumable_floor.supply_shortfall`, set by the
-    # player). DAG demand like the gear targets: it seeds `demand_roots` and
-    # `task_worth.short_items` (USER 2026-10-07: "Fishing feeds Cooking ...
-    # the fleet can collectively maintain a minimum supply in the bank").
+    # player). A food is published only when it is worth making (the chosen
+    # loadout's `made_food`, spec 2026-10-13 §4). Read by the orphan-skill gate
+    # (`decisions.root._orphan_skill_roots`), which reads a FOOD row only for
+    # the food's producer (`food_producer.may_make_food`), and by
+    # `task_worth.short_items`. NOT a `xp_demand.demand_roots` seed (spec §2:
+    # the shortfall must not make its own skills useful XP).
     supply_shortfall: tuple[tuple[str, int], ...] = ()
     # (monster, fights, wins) at the character's level in that fight's loadout,
     # for every monster it has lost to (`combat.fight_records`, set by the

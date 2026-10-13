@@ -62,6 +62,11 @@ withdraw only, never produce. Held food is still eaten free.
 The recovery DP (`loop_rate_core.recovery_choice`, proved in
 `Formal.LoopRate`) is unchanged; only its inputs differ.
 
+**Rulings during implementation (2026-10-13).** `made_food` is the recovery
+chosen with EVERY food's held count set to 0 and unpriced foods off the menu,
+not only the evaluated food's held count: a food is "worth making" when the
+recovery still eats it with nothing held anywhere.
+
 ### §2 Useful-XP credit on the make side
 
 `consumable_price.make_seconds` today is `acquisition_actions × FIGHT_SECONDS`.
@@ -95,6 +100,11 @@ demand-splitting rule (`_effective_demand`, share / (others + 1)) and the
 hysteresis are unchanged. Effect: a second `fisher` holder is recruited only
 while the fisher share, split, still out-weighs every other role's.
 
+**Rulings during implementation (2026-10-13).** The weights are acquisition
+actions per unit (= `make_seconds / FIGHT_SECONDS`, a uniform factor, so the
+ranking is the same as in seconds), priced against an empty bag and bank with
+the learning store. A code with no route is skipped.
+
 ### §4 Only the producer makes food
 
 - `SelectionContext` gains `role: str | None` (the held role, `player._role`).
@@ -107,6 +117,17 @@ while the fisher share, split, still out-weighs every other role's.
   is published only for food whose `make_carry > 0` (food the fleet would
   still choose at replacement price). A fleet whose loadouts rest publishes no
   food demand, and `fisher` loses its demand.
+
+**Rulings during implementation (2026-10-13).**
+
+- The fleet floor publishes `made_food` UNITS (the need sized to what would be
+  eaten at replacement price), not only a filter of `food`.
+- A food's owner is the role owning its CRAFTING skill (`fisher` owns
+  cooking); a food no role crafts (an apple gathered off a tree) is anyone's
+  (`food_producer.may_make_food`).
+- The orphan-skill gate reads a FOOD row of the shortfall only for that
+  food's producer, so a sibling of a live fisher is not offered a
+  fishing/cooking climb by its share; potion rows are read for everyone.
 
 ### Non-goals
 

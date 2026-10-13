@@ -69,6 +69,7 @@ from dataclasses import dataclass, field, replace
 # `craft_demand` raises ImportError. Binding the module object defers both
 # attribute lookups to CALL time, by which point it is complete.
 from artifactsmmo_cli.ai import craft_demand as _craft_demand
+from artifactsmmo_cli.ai import food_producer as _food_producer
 from artifactsmmo_cli.ai import gather_demand as _gather_demand
 
 # `skill_grindable` is imported as a MODULE, not as `from ... import
@@ -101,6 +102,7 @@ from artifactsmmo_cli.ai.fleet_work import (
     turn_in_due,
 )
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.heal_catalog import FOOD
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.task_accept import accept_due
@@ -393,6 +395,12 @@ def _slot_order(item: tuple[str, GearTarget], state: WorldState,
             EQUIPMENT_SLOTS.index(slot))
 
 
+def _is_food(code: str, game_data: GameData) -> bool:
+    """Whether `code` is a FOOD (`heal_catalog.FOOD`) in the catalogue."""
+    stats = game_data.item_stats(code)
+    return stats is not None and stats.type_ == FOOD
+
+
 def _orphan_skill_roots(state: WorldState, game_data: GameData,
                         offered: Sequence[MetaGoal],
                         ctx: SelectionContext) -> tuple[ReachSkillLevel, ...]:
@@ -409,8 +417,12 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
     (`feedback_seesaw_is_emergent`), so no skill is admitted for being behind.
 
     THE DEMAND is read off the roots on offer plus the fleet consumable
-    shortfall (`ctx.supply_shortfall`, the floor's tier food — the same roots
-    `xp_demand.demand_roots` seeds), in two passes:
+    shortfall (`ctx.supply_shortfall`, the floor's tier food). A FOOD row is
+    read only when this character makes that food
+    (`food_producer.may_make_food`, spec 2026-10-13 §4): a sibling of a live
+    fisher fetches or rests, so its share of the shortfall demands no fishing
+    or cooking climb. Potion rows are read for everyone (spec non-goal).
+    `xp_demand.demand_roots` does NOT read the shortfall. Two passes:
 
     * CRAFT demand (`craft_demand`): every crafting skill some root's
       requirement closure names above the character's level — the gear
@@ -446,7 +458,10 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
     DO NOT ADD A SECOND TERM: if the order is wrong, change WHICH integer it
     is, not how many.
     """
-    roots = [*offered, *(ObtainItem(code, qty) for code, qty in ctx.supply_shortfall)]
+    shortfall = [ObtainItem(code, qty) for code, qty in ctx.supply_shortfall
+                 if not _is_food(code, game_data)
+                 or _food_producer.may_make_food(code, ctx.role, ctx.fleet_roles, game_data)]
+    roots = [*offered, *shortfall]
     demand = _craft_demand.craft_demand(roots, state, game_data, ctx)
     climbs = [ReachSkillLevel(skill=skill, level=level) for skill, level in demand.items()]
     for skill, level in _gather_demand.gather_demand(

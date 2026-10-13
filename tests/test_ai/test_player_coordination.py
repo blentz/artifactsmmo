@@ -2483,6 +2483,62 @@ def test_a_siblings_live_lease_is_a_fleet_role(tmp_path):
         sibling.close()
 
 
+def test_the_read_only_path_reads_the_fleet_roles(tmp_path):
+    """`plan <char>` never runs `_update_coordination`; its read-only
+    `_refresh_sibling_reads` must still see a sibling's live `fisher` lease,
+    or the diagnostic shows every character as a food producer."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="HAL")
+    p.set_coordination_store(store)
+    try:
+        now = datetime.now(tz=timezone.utc)
+        assert sibling.claim("fisher", now) is True
+        p._refresh_sibling_reads(now)
+        assert p._fleet_roles == frozenset({"fisher"})
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_the_diagnostic_adopts_the_lease_naming_this_character(tmp_path):
+    """The diagnostic holds no role of its own (`decide_role` runs only in
+    `run()`), so it reads the role the live child's lease names."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="HAL")
+    p.set_coordination_store(store)
+    try:
+        now = datetime.now(tz=timezone.utc)
+        assert sibling.claim("fisher", now) is True
+        p._adopt_lease_role(now)
+        assert p._role is None
+        assert store.claim("miner", now) is True
+        p._adopt_lease_role(now)
+        assert p._role == "miner"
+        p._role = "logger"
+        p._adopt_lease_role(now)
+        assert p._role == "logger"
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_the_diagnostic_without_a_store_holds_no_role():
+    p = GamePlayer(character="hero")
+    p._adopt_lease_role(datetime.now(tz=timezone.utc))
+    assert p._role is None
+
+
+def test_a_detached_store_clears_the_fleet_roles():
+    p = GamePlayer(character="hero")
+    p._fleet_roles = frozenset({"fisher"})
+    p._update_coordination(make_state(), _make_planner_gd())
+    assert p._fleet_roles == frozenset()
+
+
 def test_the_work_of_an_item_is_its_acquisition_walk(monkeypatch):
     p = GamePlayer(character="hero")
     p.history = object()

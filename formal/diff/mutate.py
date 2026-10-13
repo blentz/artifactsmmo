@@ -3523,7 +3523,8 @@ POTION_DECOMPOSE_POLICY_MUTATIONS = [
 ]
 FOOD_PRODUCER_MUTATIONS = [
     ("food producer: no food has an owner",
-     "    return next((role.name for role in ROLE_CATALOG if skill in role_skills(role)), None)\n",
+     "    return next((role.name for role in _role_catalog.ROLE_CATALOG\n"
+     "                 if skill in _role_catalog.role_skills(role)), None)\n",
      "    return None\n"),
     ("food producer: an unheld role still forbids",
      "    return owner is None or role == owner or owner not in fleet_roles\n",
@@ -3533,6 +3534,18 @@ FOOD_PRODUCER_MUTATIONS = [
      "    return owner is None or owner not in fleet_roles\n"),
 ]
 FLEET_ROLES_PLAYER_MUTATIONS = [
+    ("fleet roles: a detached store keeps the stale fleet roles",
+     "            self._sibling_needs = {}\n            self._fleet_roles = frozenset()\n            return\n",
+     "            self._sibling_needs = {}\n            return\n"),
+    ("fleet roles: the diagnostic never adopts its lease's role",
+     "        self._role = next((role.name for role in ROLE_CATALOG\n",
+     "        self._role = None and next((role.name for role in ROLE_CATALOG\n"),
+    ("fleet roles: the diagnostic adopts any live role, not its own",
+     "                           if self.character in leases.get(role.name, frozenset())), None)\n",
+     "                           if leases.get(role.name, frozenset())), None)\n"),
+    ("fleet roles: the diagnostic overwrites a held role",
+     "        if self._coordination is None or self._role is not None:\n",
+     "        if self._coordination is None:\n"),
     ("fleet roles: never read",
      "        self._fleet_roles = frozenset(self._coordination.live_leases(now))\n",
      ""),
@@ -4064,7 +4077,7 @@ ORPHAN_GEAR_ADMISSION_MUTATIONS = [
     # The fleet consumable floor's tier food is DAG demand ("Cooking rises when
     # a better tier food is due, not before").
     ("root: the orphan demand ignores the consumable floor's shortfall",
-     "    roots = [*offered, *(ObtainItem(code, qty) for code, qty in ctx.supply_shortfall)]\n",
+     "    roots = [*offered, *shortfall]\n",
      "    roots = [*offered]\n"),
 ]
 
@@ -4083,6 +4096,16 @@ CRAFT_DEMAND_MUTATIONS = [
 ]
 
 ORPHAN_DEMAND_GATE_MUTATIONS = [
+    # Only the food's owner makes it (spec 2026-10-13 §4): a sibling of a live
+    # fisher reads no FOOD row of the shortfall, so it is never offered the
+    # fishing/cooking climb that food demands. Killed by
+    # `TestOnlyTheProducerClimbsForFood` (test_orphan_gate_scenarios.py).
+    ("root: the orphan demand reads every food row, producer or not",
+     "                 or _food_producer.may_make_food(code, ctx.role, ctx.fleet_roles, game_data)]\n",
+     "                 or True]\n"),
+    ("root: the orphan demand filters potion rows by the food producer rule",
+     "                 if not _is_food(code, game_data)\n",
+     "                 if False\n"),
     # GATHER demand dropped: only crafting skills are ever admitted. Killed by
     # `TestGatheringDemandPositiveBranch` and `TestTierFoodDemandsFishing`.
     ("root: the orphan demand skips the gather pass, so no gathering skill is"
@@ -5577,6 +5600,9 @@ SKILL_CREDIT_MUTATIONS = [
     ("skill credit: every route is credited",
      "                   if route_skill(item, route, game_data) in skills else route\n",
      "                   if True else route\n"),
+    ("skill credit: a sibling's craft (bank venue) trains this character",
+     "    if route.kind == SourceKind.CRAFT.value and route.venue != BANK_VENUE:\n",
+     "    if route.kind == SourceKind.CRAFT.value:\n"),
 ]
 SKILL_CREDIT_PRICE_MUTATIONS = [
     ("skill credit: the make price ignores the demanded skills",

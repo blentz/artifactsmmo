@@ -60,10 +60,10 @@ def heal_prep_goal(state: WorldState, game_data: GameData, ctx: SelectionContext
     carry in the bag is the goal. Its target is the full carry only when the
     food is in the loadout's `made_food` (worth making at replacement price),
     this character makes the fleet's food (`food_producer.may_make_food`) and
-    the walk can supply it under `HEAL_PREP_POLICY`; otherwise the units already held (bag
-    and bank: held stock is free, USER 2026-10-09 "free until used up") — a
-    banked unit is withdrawn by the walk like any banked copy of its target
-    (Phase 2c-2b). A food with neither is skipped for the next one."""
+    the walk can supply it under `HEAL_PREP_POLICY`; otherwise the units already
+    held (bag and bank: held stock is free, USER 2026-10-09 "free until used
+    up") — a banked unit is withdrawn by the walk like any banked copy of its
+    target (Phase 2c-2b). A food with neither is skipped for the next one."""
     model = ObtainModel(state, game_data, ctx, datetime.now(UTC))
     loadout = loadout_for(state, game_data, ctx, monster)
     made = dict(loadout.made_food)

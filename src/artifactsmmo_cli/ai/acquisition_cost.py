@@ -29,6 +29,7 @@ from fractions import Fraction
 from math import ceil
 
 from artifactsmmo_cli.ai.acquisition_cost_core import (
+    BANK_VENUE,
     UNOBTAINABLE_PER_UNIT,
     RouteOption,
     acquisition_cost,
@@ -63,11 +64,6 @@ from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_credit import credit_demanded_skills
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
 from artifactsmmo_cli.ai.world_state import WorldState
-
-BANK_VENUE = "bank"
-"""Venue code for a bank tile. A constant rather than a per-tile code because
-every bank serves the same withdraw, so two withdraws pay one hop between them —
-which is what the character actually does."""
 
 EQUIP_ACTIONS = 1
 """One `EquipAction`. Carries no venue: equipping happens wherever the character

@@ -7,8 +7,11 @@ When no live character holds the owning role, anyone makes it — the fleet must
 not starve while the role is unheld — and a food no role crafts (an apple
 gathered off a tree) is anyone's."""
 
+# Module import, attributes read at call time: `role_catalog` -> `tiers` ->
+# `decisions.root` -> this module is an import cycle, and a `from ... import
+# ROLE_CATALOG` here would read the partially initialised module.
+from artifactsmmo_cli.ai import role_catalog as _role_catalog
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG, role_skills
 
 
 def food_owner(code: str, game_data: GameData) -> str | None:
@@ -17,7 +20,8 @@ def food_owner(code: str, game_data: GameData) -> str | None:
     skill = stats.crafting_skill if stats is not None else None
     if not skill:
         return None
-    return next((role.name for role in ROLE_CATALOG if skill in role_skills(role)), None)
+    return next((role.name for role in _role_catalog.ROLE_CATALOG
+                 if skill in _role_catalog.role_skills(role)), None)
 
 
 def may_make_food(code: str, role: str | None, fleet_roles: frozenset[str],

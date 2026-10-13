@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from artifactsmmo_cli.ai.acquisition_cost_core import RouteOption
+from artifactsmmo_cli.ai.acquisition_cost_core import BANK_VENUE, RouteOption
 from artifactsmmo_cli.ai.consumable_price import make_seconds
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.obtain_sources import UNBOUNDED_CAPACITY
@@ -41,6 +41,17 @@ def test_a_gather_trains_its_resource_skill_and_a_craft_its_item_skill(monkeypat
     assert route_skill("cooked_fish", CRAFT, gd) == "cooking"
     assert route_skill("fish", WITHDRAW, gd) is None
     assert route_skill("fish", dataclasses.replace(GATHER, venue="rock"), gd) is None
+
+
+def test_a_siblings_craft_trains_none_of_this_characters_skills(monkeypatch):
+    """`_sibling_craft_option` is a CRAFT at the bank venue: a SIBLING crafts
+    it, so this character's demanded cooking is not trained and the route keeps
+    its price."""
+    gd = _gd(monkeypatch)
+    sibling = dataclasses.replace(CRAFT, venue=BANK_VENUE)
+    assert route_skill("cooked_fish", sibling, gd) is None
+    credited = credit_demanded_skills({"cooked_fish": [sibling]}, frozenset({"cooking"}), gd)
+    assert credited["cooked_fish"][0].actions_per_application == 1
 
 
 def test_only_the_demanded_skills_routes_are_free(monkeypatch):

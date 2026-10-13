@@ -61,6 +61,13 @@ with its own live-trace check.
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
+BANK_VENUE = "bank"
+"""Venue code for a bank tile. A constant rather than a per-tile code because
+every bank serves the same withdraw, so two withdraws pay one hop between them —
+which is what the character actually does. It is also the venue of a
+sibling's craft (`_sibling_craft_option`): a CRAFT route here is made by a
+sibling, not by this character."""
+
 UNOBTAINABLE_PER_UNIT = 10**6
 """Per-unit cost charged for an item with NO route at all.
 
