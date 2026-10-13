@@ -404,6 +404,7 @@ CRAFT_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_demand.py"
 # obtain_item.py` can depend on them without strategy_driver.py depending
 # back on decisions/obtain_item.py (a circular import otherwise).
 OBTAIN_ITEM_ROUTING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_item_routing.py"
+COOLDOWN_WAIT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cooldown_wait.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -6083,6 +6084,31 @@ FLEET_CURRENCY_STEP_MUTATIONS += [
      "        if _passively_funded(code, state, game_data) == 0:\n",
      "        if False:\n"),
 ]
+SERVER_LAG_MUTATIONS = [
+    ("server lag: a 499 teaches nothing",
+     "    match = _REMAINING_RE.search(message)\n    if match is None:\n        return\n",
+     "    match = _REMAINING_RE.search(message)\n    if True:\n        return\n"),
+    ("server lag: a second 499 replaces the lag",
+     "    _LAG.update(seconds=min(_live_lag(now) + float(match.group(1)), MAX_SERVER_LAG_SECONDS),\n",
+     "    _LAG.update(seconds=min(float(match.group(1)), MAX_SERVER_LAG_SECONDS),\n"),
+    ("server lag: uncapped",
+     "    _LAG.update(seconds=min(_live_lag(now) + float(match.group(1)), MAX_SERVER_LAG_SECONDS),\n",
+     "    _LAG.update(seconds=_live_lag(now) + float(match.group(1)),\n"),
+    ("server lag: never lapses",
+     "    if now - _LAG[\"at\"] >= LAG_HOLD_SECONDS:\n",
+     "    if False:\n"),
+    ("server lag: the action wait ignores it",
+     "        time.sleep(remaining + cooldown_margin(time.monotonic()))\n",
+     "        time.sleep(remaining + SKEW_MARGIN_SECONDS)\n"),
+]
+SERVER_LAG_PLAYER_MUTATIONS = [
+    ("server lag: the loop never notes a 499",
+     "                note_server_cooldown(e.message, time.monotonic())\n",
+     "                pass\n"),
+    ("server lag: the loop wait ignores it",
+     "            time.sleep(remaining + cooldown_margin(time.monotonic()))\n",
+     "            time.sleep(remaining + 0.1)\n"),
+]
 FLEET_POOLED_MUTATIONS = [
     ("fleet pool: worn copies are not pooled",
      "    return worn + siblings.get(code, 0)\n",
@@ -6487,7 +6513,7 @@ _ALL_SRCS = [
     CONSUMABLE_PRICE_CORE_SRC, CONSUMABLE_PRICE_SRC, LOOP_RATE_CORE_SRC, LOOP_RATE_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
     ROOT_DECISION_SRC, GATHER_DEMAND_SRC,
-    OBTAIN_ITEM_ROUTING_SRC, EQUIP_VALUE_SRC,
+    OBTAIN_ITEM_ROUTING_SRC, COOLDOWN_WAIT_SRC, EQUIP_VALUE_SRC,
     GEAR_VALUE_CORE_SRC,
     GAME_DATA_PARSE_SRC, LOCATION_CATALOG_SRC,
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
@@ -10852,6 +10878,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_dual_role_currency.py", survivors)
     run_group(DUAL_ROLE_CURRENCY_SRC, FLEET_POOLED_MUTATIONS,
               "tests/test_ai/test_dual_role_currency.py", survivors)
+    run_group(COOLDOWN_WAIT_SRC, SERVER_LAG_MUTATIONS,
+              "tests/test_ai/test_cooldown_wait.py", survivors)
+    run_group(PLAYER_SRC, SERVER_LAG_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player.py", survivors)
     run_group(PLAYER_SRC, FLEET_HOLDINGS_READ_MUTATIONS,
               "tests/test_ai/test_player_coordination.py", survivors)
     run_group(PLAYER_SRC, FLEET_HOLDINGS_CTX_MUTATIONS,

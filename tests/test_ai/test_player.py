@@ -16,6 +16,7 @@ from artifactsmmo_api_client.types import UNSET
 from sqlmodel import Session, select
 
 from artifactsmmo_cli.ai.account_read_cache import AccountReadCache
+from artifactsmmo_cli.ai.actions import cooldown_wait
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
@@ -1202,6 +1203,36 @@ class TestExecute:
         assert isinstance(new_state, WorldState)
         assert outcome == "error:cooldown"
         assert "Server cooldown (HTTP 499)" in buf.getvalue()
+
+    def test_execute_http_499_teaches_the_wait_the_server_s_lag(self):
+        """Live 2026-10-13: the server enforced cooldowns ~0.5 s past the expiry
+        it returned. The 499's remainder must reach the wait, or every next
+        cycle races the same 499."""
+        player = GamePlayer(character="hero")
+        player.state = make_state()
+        player.game_data = make_game_data_mock()
+        empty_events = MagicMock()
+        empty_events.data = []
+        cooldown_wait._LAG.update(seconds=0.0, at=float("-inf"))
+        try:
+            with patch("artifactsmmo_cli.ai.actions.movement.action_move",
+                       side_effect=ApiActionError(
+                           499, "The character is in cooldown: 0.37 seconds remaining.")), \
+                    patch("artifactsmmo_cli.ai.player.get_character",
+                          return_value=make_get_character_result(make_char_schema())), \
+                    patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events), \
+                    patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
+                _state, outcome, _executed = player._execute(MoveAction(x=3, y=5), MagicMock())
+            assert outcome == "error:cooldown"
+            margin = cooldown_wait.cooldown_margin(cooldown_wait.time.monotonic())
+            assert margin == pytest.approx(cooldown_wait.SKEW_MARGIN_SECONDS + 0.37)
+            future = datetime.now(tz=timezone.utc) + timedelta(seconds=2.0)
+            player.state = make_state(cooldown_expires=future)
+            with patch("artifactsmmo_cli.ai.player.time.sleep") as sleep:
+                player._wait_for_cooldown()
+            assert 2.4 < sleep.call_args[0][0] < 2.6
+        finally:
+            cooldown_wait._LAG.update(seconds=0.0, at=float("-inf"))
 
     def test_execute_http_485_records_already_equipped(self, capsys):
         """HTTP 485 ("This item is already equipped") is an ordinary

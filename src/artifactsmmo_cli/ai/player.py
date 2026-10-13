@@ -37,6 +37,7 @@ from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.cooldown_wait import cooldown_margin, note_server_cooldown
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
@@ -1551,6 +1552,7 @@ class GamePlayer:
             self._release_ge_orders(action)
             if e.code == ERROR_CODE_COOLDOWN:
                 print(f"[{self._now()}] Server cooldown (HTTP 499) — refreshing state")
+                note_server_cooldown(e.message, time.monotonic())
                 outcome = "error:cooldown"
             elif e.code == 496 and isinstance(action, (DepositAllAction, DepositItemAction, WithdrawItemAction)):
                 # Discover unlock monster + compute required level, then push
@@ -2149,7 +2151,7 @@ class GamePlayer:
         remaining = (self.state.cooldown_expires - now).total_seconds()
         if remaining > 0:
             print(f"[{self._now()}] Cooldown: {remaining:.1f}s")
-            time.sleep(remaining + 0.1)
+            time.sleep(remaining + cooldown_margin(time.monotonic()))
 
     def _drop_stale_bank_lock(self) -> None:
         """Drop a persisted global "bank" lock when the world has an open bank.
