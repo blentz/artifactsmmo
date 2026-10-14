@@ -289,12 +289,12 @@ open Formal.PriorityBand
 #check @Formal.TaskDecision.decision_pursue_vpc_monotone         -- vpc-monotone: PURSUE preserved by ↑skill_up_vpc
 -- ObjectiveStepFight required roles (O5.4 perception binding; pure ReachCharLevel
 -- Fight-routing core: src/artifactsmmo_cli/ai/objective_step_fight_core.py):
-#check @Formal.ObjectiveStepFight.fires_iff                       -- characterization: fires ⇔ ReachCharLevel ∧ monster ∧ ¬long-haul-defer
+#check @Formal.ObjectiveStepFight.fires_iff                       -- characterization: fires ⇔ ReachCharLevel ∧ monster ∧ ¬(items task active ∧ pays)
 #check @Formal.ObjectiveStepFight.not_reach_char_level_never_fires -- safety: ¬ReachCharLevel ⇒ never Fight-led
 #check @Formal.ObjectiveStepFight.no_combat_monster_never_fires    -- safety: no combat monster ⇒ never Fight-led
-#check @Formal.ObjectiveStepFight.bootstrap_always_fires           -- liveness: ReachCharLevel ∧ monster ∧ gap ≤ 4 ⇒ Fight-led (breaks no-combat livelock)
-#check @Formal.ObjectiveStepFight.completed_task_fires            -- release: items-task done ⇒ stand-down lifts ⇒ Fight-led
-#check @Formal.ObjectiveStepFight.bootstrap_step_always_fires      -- grounded: bootstrap target (level + horizon 2) ⇒ unconditionally Fight-led
+#check @Formal.ObjectiveStepFight.unpaid_task_fires               -- liveness: an unpaid items task never defers the grind
+#check @Formal.ObjectiveStepFight.no_items_task_fires             -- no items task in progress ⇒ Fight-led
+#check @Formal.ObjectiveStepFight.completed_task_fires            -- release: items-task done ⇒ Fight-led
 -- StrategyBlend + decideCmp comparator rows RETIRED (progression-tree Phase 4b
 -- Task 3): their subjects (strategy_blend.py; the flat ranking's decide sort key)
 -- were deleted with the flat scalar ranking.

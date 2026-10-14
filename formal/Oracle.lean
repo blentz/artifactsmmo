@@ -1087,34 +1087,26 @@ def runTaskDecision (args : Array Json) : Json :=
 
 args layout:
 * `[0]`  isReachCharLevel (0/1)
-* `[1]`  target (Nat)
-* `[2]`  level (Nat)
-* `[3]`  hasCombatMonster (0/1)
-* `[4]`  taskType (String, e.g. "items")
-* `[5]`  taskCode (String, "" = no task; the harness maps Python None → "")
-* `[6]`  taskTotal (Nat)
-* `[7]`  taskProgress (Nat)
+* `[1]`  hasCombatMonster (0/1)
+* `[2]`  taskType (String, e.g. "items")
+* `[3]`  taskCode (String, "" = no task; the harness maps Python None → "")
+* `[4]`  taskTotal (Nat)
+* `[5]`  taskProgress (Nat)
+* `[6]`  taskPays (0/1)
 
 Emits `fires` as a Bool. The String comparisons (`== "items"`, `≠ ""`) are done
 by the proved def itself, not the harness. -/
 def runObjectiveStepIsFight (args : Array Json) : Json :=
   let isReachCharLevel := intArg args 0 != 0
-  let target := (intArg args 1).toNat
-  let level := (intArg args 2).toNat
-  let hasCombatMonster := intArg args 3 != 0
-  let taskType := strArg args 4
-  let taskCode := strArg args 5
-  let taskTotal := (intArg args 6).toNat
-  let taskProgress := (intArg args 7).toNat
-  let b := Formal.ObjectiveStepFight.objectiveStepIsFightPure isReachCharLevel target level
-              hasCombatMonster taskType taskCode taskTotal taskProgress
+  let hasCombatMonster := intArg args 1 != 0
+  let taskType := strArg args 2
+  let taskCode := strArg args 3
+  let taskTotal := (intArg args 4).toNat
+  let taskProgress := (intArg args 5).toNat
+  let taskPays := intArg args 6 != 0
+  let b := Formal.ObjectiveStepFight.objectiveStepIsFightPure isReachCharLevel hasCombatMonster
+              taskType taskCode taskTotal taskProgress taskPays
   Json.mkObj [("fires", Json.bool b)]
-
-/-- Emit the proved `bootstrapCharHorizon` constant so the differential gate can
-assert it equals the live `_CHAR_LEVEL_BOOTSTRAP_HORIZON`. Drift above 4 would break
-`bootstrap_step_always_fires`. -/
-def runBootstrapCharHorizon (_args : Array Json) : Json :=
-  Json.mkObj [("horizon", Json.num (Int.ofNat Formal.ObjectiveStepFight.bootstrapCharHorizon))]
 
 /-- Compute one decide_key dispatch result using the SAME proved
 `goalReprOfGuard` / `goalReprOfMeans` maps.
@@ -3003,8 +2995,6 @@ def runOne (item : Json) : Json :=
     runMaxBatchFromHeld args
   else if kind == "objective_step_is_fight" then
     runObjectiveStepIsFight args
-  else if kind == "bootstrap_char_horizon" then
-    runBootstrapCharHorizon args
   else if kind == "decide_key" then
     runDecideKey args
   else if kind == "progression_reserve" then

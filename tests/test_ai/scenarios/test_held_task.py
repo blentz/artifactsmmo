@@ -571,14 +571,16 @@ def test_craft_relief_caps_by_the_remaining_task_units(gd: GameData) -> None:
     assert any(c.item_code == "apprentice_gloves" for c in with_task)
 
 
-def test_a_long_haul_grind_stands_down_for_the_items_task(gd: GameData) -> None:
-    """`objective_step_fight_core.py:61` — a bootstrap gap of more than four
-    levels DEFERS to an in-progress items task rather than grinding past it.
+def test_a_paying_items_task_stands_down_the_grind(gd: GameData) -> None:
+    """`objective_step_fight_core.py` — the level step defers to an in-progress
+    items task only while it PAYS (spec 2026-10-14); the gap plays no part.
 
-    Both arms are exercised: the same gap with no task does NOT stand down."""
-    args = dict(is_reach_char_level=True, target=40, level=32,
-                has_combat_monster=True, task_progress=2, task_total=10)
+    Every arm is exercised: unpaid fights, and a non-items task never defers."""
+    args = dict(is_reach_char_level=True, has_combat_monster=True,
+                task_progress=2, task_total=10)
     assert objective_step_is_fight_pure(
-        task_type="items", task_code="apprentice_gloves", **args) is False
+        task_type="items", task_code="apprentice_gloves", task_pays=True, **args) is False
     assert objective_step_is_fight_pure(
-        task_type="monsters", task_code="cow", **args) is True
+        task_type="items", task_code="apprentice_gloves", task_pays=False, **args) is True
+    assert objective_step_is_fight_pure(
+        task_type="monsters", task_code="cow", task_pays=True, **args) is True

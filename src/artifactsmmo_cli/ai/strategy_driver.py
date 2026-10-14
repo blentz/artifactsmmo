@@ -71,9 +71,10 @@ from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal, potion_prep_goal
+from artifactsmmo_cli.ai.held_task_pays import held_task_pays
 from artifactsmmo_cli.ai.intention_progress import rotate, turn_key
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
+from artifactsmmo_cli.ai.objective_step_fight_core import items_task_active, objective_step_is_fight_pure
 from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.potion_supply import guard_loadout
@@ -507,45 +508,30 @@ def objective_step_goal(
     if isinstance(step, ReachCharLevel):
         if ctx.combat_monster is None:
             return None
-        # Items-task stand-down was designed for the LONG-HAUL
-        # ReachCharLevel(50) root: don't preempt PURSUE_TASK's
-        # gold / tasks_coin / skill-XP / gear-progression payout
-        # with a 47-level combat grind. Items tasks DO NOT award
-        # character XP — combat is the only source (verified in
-        # trace: all 1229 char-XP gain events attributed to
-        # `Fight(...)`, zero to `CompleteTask` or `TaskTrade`). But
-        # items tasks chain indefinitely (one finishes, another
-        # starts), so the unconditional stand-down meant the bot
-        # NEVER fought — trace 2026-06-03/05 showed zero combat
-        # across 3300+ cycles and Robby permanently parked at
-        # level 3.
-        #
-        # Bootstrap roots (`ReachCharLevel(state.level + horizon)`,
-        # see tiers.prerequisite_graph._CHAR_LEVEL_BOOTSTRAP_HORIZON)
-        # are the critical-path nudge that breaks this. A small-gap
-        # step (target - current <= 4) is the bootstrap path: let it
-        # grind through even when an items task is active. The
-        # bootstrap target advances with each level-up so the bot is
-        # never grinding more than `horizon` levels at a time. The
-        # long-haul level-50 step still stands down — its grind would
-        # be 40+ unbroken combat cycles, which is the wrong trade for
-        # an in-progress items task that's paying out gold + skill XP
-        # + task rewards every batch.
-        # Fire-as-Fight decision extracted to the pure boundary
-        # `objective_step_is_fight_pure` (objective_step_fight_core.py) — the
-        # SAME predicate the Lean liveness Bool `objectiveStepIsFight` binds to
-        # via the differential gate. False here = long-haul grind deferred to an
-        # active items task.
+        # A HELD ITEMS TASK DEFERS THE GRIND ONLY WHILE IT PAYS (spec
+        # 2026-10-14 items-task-pays, USER "Price it by useful XP"): a gold or
+        # drop verdict, or skill XP the DAG demands at a better rate than the
+        # grind's character XP (`held_task_pays`). The rule was a level gap
+        # (> 4 deferred, whatever the task paid): HAL, level 35 against a
+        # level-40 root, worked worthless items tasks for 5.5 h at 0 character
+        # XP (2026-10-14), the June 2026 "items tasks chain, the bot never
+        # fought" livelock back whenever a root sat more than 4 levels away.
+        # The pay is read only for an active items task (it walks the task).
+        # Decision extracted to the pure boundary `objective_step_is_fight_pure`
+        # — the SAME predicate the Lean liveness Bool `objectiveStepIsFight`
+        # binds to via the differential gate.
+        task_pays = (items_task_active(state.task_type, state.task_code,
+                                       state.task_total, state.task_progress)
+                     and held_task_pays(state, game_data, ctx, ctx.combat_monster, history))
         if not objective_step_is_fight_pure(
                 is_reach_char_level=True,
-                target=step.level,
-                level=state.level,
-                has_combat_monster=ctx.combat_monster is not None,
+                has_combat_monster=True,
                 task_type=state.task_type,
                 task_code=state.task_code,
                 task_total=state.task_total,
-                task_progress=state.task_progress):
-            return None        # long-haul grind, items task active → defer
+                task_progress=state.task_progress,
+                task_pays=task_pays):
+            return None        # a paying items task is worked instead
         provision = _marginal_provision_goal(ctx, state, game_data)
         if provision is not None:
             return provision

@@ -265,9 +265,8 @@ def _next_rung_above(game_data: GameData, level: int) -> int:
         already-met rung yields an EMPTY `NeedSet` and switches the arbiter's
         PURSUE_TASK worth gate OFF — a live gate disabled by a level nobody
         chose;
-      * the gap `target - level` is negative, so the long-haul items-task
-        stand-down in `objective_step_is_fight_pure` can never engage, whatever
-        the character is actually doing.
+      * it names a level already reached, so the `ReachCharLevel` step it
+        commits has nothing left to grind.
 
     The rung strictly above is what the arm MEANT: this is the "there is a
     monster to fight" arm, and the reason to fight is to reach the next gear

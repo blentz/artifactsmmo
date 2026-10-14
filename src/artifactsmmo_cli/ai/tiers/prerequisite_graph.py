@@ -132,30 +132,3 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData,
         f"{node!r} is registered in META_GOAL_KINDS but prerequisites() has "
         f"no arm for it")
     raise AssertionError(f"unhandled MetaGoal kind: {node!r}")
-
-
-_CHAR_LEVEL_BOOTSTRAP_HORIZON = 2
-"""Look-ahead for the character-level bootstrap root. When `state.level <
-target_char_level`, prepend a `ReachCharLevel(current + _HORIZON)` root so
-GrindCharacterXP gets a low-effort competitor that ranks above
-gear-chain ObtainItems.
-
-Trace 2026-06-03/05 (3 days): Robby was last seen in combat 2026-06-03
-01:45 when he dinged level 3. After that NO fights at all across ~3300
-cycles — bot stuck at level 3, xp 6/350, every fight-XP-gain event
-attributed to L1 or L2. Root cause: `ReachCharLevel(50)` has effort=47
-and consistently loses Tier-1 ranking to small-effort gear/tool roots
-(unmet_closure_size ~6-30). The bot funded gear progress via tasks
-forever and never bothered combat. A bootstrap root with effort=2
-restores combat parity without overriding the long-term goal —
-GrindCharacterXP fires until level rises +2, then a new bootstrap
-auto-emits at the next horizon. Removed once current_level + horizon >=
-target_char_level (we're already in the home stretch)."""
-
-
-# NOTE: `objective_roots` (the Tier-1 objective expressed as P3 search roots)
-# was retired in progression-tree Phase 4b Task 5 — the flat-ranking search it
-# fed was deleted in Task-1's THE FLIP, leaving zero callers (tiers/__init__
-# re-export only). `_CHAR_LEVEL_BOOTSTRAP_HORIZON` above stays: it is a live
-# formal/diff anchor (test_objective_step_is_fight_diff.py,
-# ObjectiveStepFight.lean) independent of the deleted function.

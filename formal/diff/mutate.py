@@ -2819,50 +2819,54 @@ TASK_DECISION_MUTATIONS = [
 # Each perturbs the ReachCharLevel Fight-routing predicate so it diverges from the
 # proved Lean oracle Formal.ObjectiveStepFight.objectiveStepIsFightPure; killed by
 # formal/diff/test_objective_step_is_fight_diff.py (250-example property over random
-# inputs + the gap == 4 / gap == 5 boundary tests).
+# inputs + the paying / unpaid / completed-task tests).
 #
 # NOTE: `task_total > 0` carries NO independent mutation — it is logically implied
 # by `task_progress < task_total` over Nat (progress < total ⇒ total > 0), so any
 # mutation of it would survive. Mutating it would be a dishonest (un-killable)
 # anchor; the spec honestly does not pin a redundant clause.
 OBJECTIVE_STEP_FIGHT_MUTATIONS = [
-    # gap boundary: > 4 -> >= 4. At gap == 4 (bootstrap) the rule fires; >= 4 makes
-    # it defer. The gap==4 boundary test pins this.
-    ("objective_step_fight: gap > 4 -> >= 4 (boundary flip)",
-     "return not (bootstrap_gap > 4 and items_task_active)",
-     "return not (bootstrap_gap >= 4 and items_task_active)"),
-    # drop the stand-down inversion: `not (...)` -> `(...)`. Inverts every verdict.
+    # the pay is ignored: an active items task defers whatever it pays (the
+    # pre-2026-10-14 HAL livelock shape).
+    ("objective_step_fight: the pay is ignored",
+     "    return not (items_task_active(task_type, task_code, task_total, task_progress)\n"
+     "                and task_pays)",
+     "    return not items_task_active(task_type, task_code, task_total, task_progress)"),
+    # drop the `not`: inverts every verdict.
     ("objective_step_fight: drop the `not` (invert defer)",
-     "return not (bootstrap_gap > 4 and items_task_active)",
-     "return (bootstrap_gap > 4 and items_task_active)"),
-    # items-type equality flip: a non-items task would now trigger the stand-down.
+     "    return not (items_task_active(task_type, task_code, task_total, task_progress)\n"
+     "                and task_pays)",
+     "    return (items_task_active(task_type, task_code, task_total, task_progress)\n"
+     "                and task_pays)"),
     ("objective_step_fight: task_type == \"items\" -> !=",
-     'task_type == "items"',
-     'task_type != "items"'),
-    # progress strict `<` -> `<=`: a COMPLETED task (progress == total) would wrongly
-    # count as active and defer. The completed-task case pins this.
+     '    return (task_type == "items"',
+     '    return (task_type != "items"'),
     ("objective_step_fight: task_progress < total -> <=",
-     "and task_progress < task_total",
-     "and task_progress <= task_total"),
-    # reach-char-level gate inversion: would fire for non-ReachCharLevel steps.
+     "            and task_progress < task_total)",
+     "            and task_progress <= task_total)"),
+    ("objective_step_fight: a blank task code is a task",
+     "            and bool(task_code)\n",
+     "            and task_code is not None\n"),
     ("objective_step_fight: invert is_reach_char_level gate",
      "    if not is_reach_char_level:",
      "    if is_reach_char_level:"),
-    # combat-monster gate inversion: would claim a fight with no target monster.
     ("objective_step_fight: invert has_combat_monster gate",
      "    if not has_combat_monster:",
      "    if has_combat_monster:"),
 ]
 
-# Bootstrap horizon binding: the production constant must stay ≤ 4 for the
-# unconditional bootstrap-fires guarantee (bootstrap_step_always_fires) to hold.
-# Drift to 5 makes a bootstrap step's gap exceed the stand-down threshold; killed by
-# test_bootstrap_horizon_matches_production (oracle 2 ≠ 5) AND
-# test_bootstrap_step_always_fires_live (gap 5 + active items task no longer fires).
-BOOTSTRAP_HORIZON_MUTATIONS = [
-    ("bootstrap horizon 2 -> 5 (breaks gap ≤ 4)",
-     "_CHAR_LEVEL_BOOTSTRAP_HORIZON = 2",
-     "_CHAR_LEVEL_BOOTSTRAP_HORIZON = 5"),
+# The driver reads the pay only for an active items task, and passes it on.
+# Killed by tests/test_ai/test_decisions_obtain_item.py.
+OBJECTIVE_STEP_DRIVER_MUTATIONS = [
+    ("strategy_driver: the level step never reads the pay",
+     "                     and held_task_pays(state, game_data, ctx, ctx.combat_monster, history))",
+     "                     and True)"),
+    ("strategy_driver: the pay is read for any task",
+     "        task_pays = (items_task_active(state.task_type, state.task_code,\n"
+     "                                       state.task_total, state.task_progress)\n"
+     "                     and held_task_pays(",
+     "        task_pays = (True\n"
+     "                     and held_task_pays("),
 ]
 
 
@@ -10344,8 +10348,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_task_decision_diff.py", survivors)
     run_group(OBJECTIVE_STEP_FIGHT_CORE_SRC, OBJECTIVE_STEP_FIGHT_MUTATIONS,
               "formal/diff/test_objective_step_is_fight_diff.py", survivors)
-    run_group(PREREQUISITE_GRAPH_SRC, BOOTSTRAP_HORIZON_MUTATIONS,
-              "formal/diff/test_objective_step_is_fight_diff.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, OBJECTIVE_STEP_DRIVER_MUTATIONS,
+              "tests/test_ai/test_decisions_obtain_item.py", survivors)
     run_group(DECIDE_KEY_SRC, DECIDE_KEY_MUTATIONS,
               "formal/diff/test_decide_key_diff.py", survivors)
     run_group(PROGRESSION_RESERVE_CORE_SRC, PROGRESSION_RESERVE_MUTATIONS,

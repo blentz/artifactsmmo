@@ -234,9 +234,9 @@ open Formal.PriorityBand
 #print axioms Formal.ObjectiveStepFight.fires_iff
 #print axioms Formal.ObjectiveStepFight.not_reach_char_level_never_fires
 #print axioms Formal.ObjectiveStepFight.no_combat_monster_never_fires
-#print axioms Formal.ObjectiveStepFight.bootstrap_always_fires
+#print axioms Formal.ObjectiveStepFight.unpaid_task_fires
+#print axioms Formal.ObjectiveStepFight.no_items_task_fires
 #print axioms Formal.ObjectiveStepFight.completed_task_fires
-#print axioms Formal.ObjectiveStepFight.bootstrap_step_always_fires
 #print axioms Formal.DecideKey.goalReprOfGuard_nonempty
 #print axioms Formal.DecideKey.goalReprOfMeans_nonempty
 #print axioms Formal.ProgressionReserve.floor_plus_cost

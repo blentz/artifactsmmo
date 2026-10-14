@@ -1469,45 +1469,43 @@ example : ∀ (v v' baseline margin confidence : Rat),
   @Formal.TaskDecision.decision_pursue_vpc_monotone
 
 /-! ### ObjectiveStepFight role contracts (O5.4 perception binding). -/
--- characterization: fires ⇔ ReachCharLevel ∧ combat monster ∧ ¬long-haul-defer.
-example : ∀ (isReachCharLevel hasCombatMonster : Bool)
-    (target level taskTotal taskProgress : Nat) (taskType taskCode : String),
-    Formal.ObjectiveStepFight.objectiveStepIsFightPure isReachCharLevel target level
-        hasCombatMonster taskType taskCode taskTotal taskProgress = true
+-- characterization: fires ⇔ ReachCharLevel ∧ combat monster ∧ ¬(items task active ∧ it pays).
+example : ∀ (isReachCharLevel hasCombatMonster : Bool) (taskType taskCode : String)
+    (taskTotal taskProgress : Nat) (taskPays : Bool),
+    Formal.ObjectiveStepFight.objectiveStepIsFightPure isReachCharLevel hasCombatMonster
+        taskType taskCode taskTotal taskProgress taskPays = true
       ↔ (isReachCharLevel = true ∧ hasCombatMonster = true ∧
-          ¬ (target - level > 4 ∧
-             Formal.ObjectiveStepFight.itemsTaskActive taskType taskCode taskTotal taskProgress)) :=
+          ¬ (Formal.ObjectiveStepFight.itemsTaskActive taskType taskCode taskTotal taskProgress
+             ∧ taskPays = true)) :=
   @Formal.ObjectiveStepFight.fires_iff
 -- safety: not a ReachCharLevel step ⇒ never Fight-led.
-example : ∀ (target level taskTotal taskProgress : Nat)
-    (hasCombatMonster : Bool) (taskType taskCode : String),
-    Formal.ObjectiveStepFight.objectiveStepIsFightPure false target level hasCombatMonster
-        taskType taskCode taskTotal taskProgress = false :=
+example : ∀ (hasCombatMonster : Bool) (taskType taskCode : String)
+    (taskTotal taskProgress : Nat) (taskPays : Bool),
+    Formal.ObjectiveStepFight.objectiveStepIsFightPure false hasCombatMonster
+        taskType taskCode taskTotal taskProgress taskPays = false :=
   @Formal.ObjectiveStepFight.not_reach_char_level_never_fires
--- safety: no combat monster ⇒ never Fight-led (model cannot claim a fight with no target).
-example : ∀ (target level taskTotal taskProgress : Nat) (taskType taskCode : String),
-    Formal.ObjectiveStepFight.objectiveStepIsFightPure true target level false
-        taskType taskCode taskTotal taskProgress = false :=
+-- safety: no combat monster ⇒ never Fight-led.
+example : ∀ (taskType taskCode : String) (taskTotal taskProgress : Nat) (taskPays : Bool),
+    Formal.ObjectiveStepFight.objectiveStepIsFightPure true false
+        taskType taskCode taskTotal taskProgress taskPays = false :=
   @Formal.ObjectiveStepFight.no_combat_monster_never_fires
--- liveness: ReachCharLevel ∧ monster ∧ gap ≤ 4 ⇒ Fight-led, regardless of items task.
-example : ∀ (target level taskTotal taskProgress : Nat) (taskType taskCode : String),
-    target - level ≤ 4 →
-    Formal.ObjectiveStepFight.objectiveStepIsFightPure true target level true
-        taskType taskCode taskTotal taskProgress = true :=
-  @Formal.ObjectiveStepFight.bootstrap_always_fires
--- release: items task complete ⇒ stand-down lifts ⇒ Fight-led (deferral is temporary).
-example : ∀ (target level taskTotal taskProgress : Nat) (taskType taskCode : String),
+-- liveness: an unpaid task never defers the grind (replaces the gap guarantee).
+example : ∀ (taskType taskCode : String) (taskTotal taskProgress : Nat),
+    Formal.ObjectiveStepFight.objectiveStepIsFightPure true true
+        taskType taskCode taskTotal taskProgress false = true :=
+  @Formal.ObjectiveStepFight.unpaid_task_fires
+-- no items task in progress ⇒ Fight-led.
+example : ∀ (taskType taskCode : String) (taskTotal taskProgress : Nat) (taskPays : Bool),
+    ¬ Formal.ObjectiveStepFight.itemsTaskActive taskType taskCode taskTotal taskProgress →
+    Formal.ObjectiveStepFight.objectiveStepIsFightPure true true
+        taskType taskCode taskTotal taskProgress taskPays = true :=
+  @Formal.ObjectiveStepFight.no_items_task_fires
+-- release: items task complete ⇒ Fight-led (deferral is temporary).
+example : ∀ (taskType taskCode : String) (taskTotal taskProgress : Nat) (taskPays : Bool),
     taskProgress ≥ taskTotal →
-    Formal.ObjectiveStepFight.objectiveStepIsFightPure true target level true
-        taskType taskCode taskTotal taskProgress = true :=
+    Formal.ObjectiveStepFight.objectiveStepIsFightPure true true
+        taskType taskCode taskTotal taskProgress taskPays = true :=
   @Formal.ObjectiveStepFight.completed_task_fires
--- grounded liveness: a bootstrap step (target = level + horizon) is unconditionally
--- Fight-led when a combat monster exists — the horizon (2) keeps the gap ≤ 4.
-example : ∀ (level taskTotal taskProgress : Nat) (taskType taskCode : String),
-    Formal.ObjectiveStepFight.objectiveStepIsFightPure true
-        (level + Formal.ObjectiveStepFight.bootstrapCharHorizon) level true
-        taskType taskCode taskTotal taskProgress = true :=
-  @Formal.ObjectiveStepFight.bootstrap_step_always_fires
 
 /-! ### DecideKey role contracts (dispatcher exhaustiveness).
 (StrategyBlend + decideCmp comparator pins retired with the flat scalar

@@ -1555,7 +1555,8 @@ class TestPursueTaskMapping:
 # ---------------------------------------------------------------------------
 
 class TestItemsTaskStandDown:
-    def test_char_step_stands_down_for_items_task(self):
+    def test_char_step_stands_down_for_a_paying_items_task(self, monkeypatch):
+        monkeypatch.setattr(sd, "held_task_pays", lambda *a: True)
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0)
         assert objective_step_goal(ReachCharLevel(50), state, GameData(),
@@ -1573,30 +1574,17 @@ class TestItemsTaskStandDown:
                                    _ctx(combat_monster="chicken"))
         assert goal is not None and repr(goal).startswith("GrindCharacterXP")
 
-    def test_bootstrap_char_step_grinds_through_items_task(self):
-        """Trace 2026-06-03/05: 0 fights across 3300+ cycles because items
-        tasks chain indefinitely and the long-haul ReachCharLevel(50)
-        stand-down meant char-grind NEVER fired. The bootstrap-class
-        root (state.level + 2) MUST punch through the stand-down — it
-        IS the critical-path nudge that unblocks combat XP."""
+    def test_char_step_grinds_through_an_unpaid_items_task(self, monkeypatch):
+        """Trace 2026-06-03/05: items tasks chain indefinitely, so a stand-down
+        that ignored what the task pays meant char-grind NEVER fired. Only a
+        task that PAYS defers it (spec 2026-10-14), at any level gap."""
+        monkeypatch.setattr(sd, "held_task_pays", lambda *a: False)
         state = make_state(level=3, task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0)
-        # Bootstrap step: target = state.level + 2 = 5, gap = 2.
-        goal = objective_step_goal(ReachCharLevel(5), state, GameData(),
-                                   _ctx(combat_monster="chicken"))
-        assert goal is not None and repr(goal).startswith("GrindCharacterXP"), (
-            f"bootstrap ReachCharLevel(5) must grind through items-task "
-            f"stand-down (was the only way to escape level 3); got {goal!r}"
-        )
-
-    def test_long_haul_char_step_still_stands_down_for_items_task(self):
-        """Sanity: the original stand-down behavior is preserved for the
-        long-haul ReachCharLevel(50) step. Only the small-gap bootstrap
-        path bypasses it."""
-        state = make_state(level=3, task_code="copper_bar", task_type="items",
-                           task_total=20, task_progress=0)
-        assert objective_step_goal(ReachCharLevel(50), state, GameData(),
-                                   _ctx(combat_monster="chicken")) is None
+        for target in (5, 50):
+            goal = objective_step_goal(ReachCharLevel(target), state, GameData(),
+                                       _ctx(combat_monster="chicken"))
+            assert goal is not None and repr(goal).startswith("GrindCharacterXP"), goal
 
 
 # ---------------------------------------------------------------------------
