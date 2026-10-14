@@ -212,8 +212,19 @@ WITNESS_BASELINE: dict[str, int] = {
     # serves the cycle"; neither did. FIXED: an overflowing plan banks the
     # bag's surplus in front of itself when that makes it fit (`_bank_first`;
     # `test_a_plan_that_fits_after_banking_banks_first`).
-    "WaitGoal": 1982,
-    "WaitAction": 1982,
+    # 2026-10-14, +10874 (1982 -> 12856). HAL x5661 (03:56-07:48 UTC), R2D2
+    # x4473 (04:12-07:46), C3P0 x740 (03:46-07:52), on the 398f3cd7 fleet.
+    # That commit priced a made food from empty holdings, so the chosen food
+    # became a HELD one (banked cooked_chicken, free), and its 20-fight carry
+    # was one `Withdraw(cooked_chicken×100)` into a bag with 67 units of room:
+    # `first_leg_inapplicable`, the fight step had no other goal, and the
+    # character waited. FIXED (35329d03): the carry is capped at the bag's
+    # held units plus its free room, and a new stack needs a free slot.
+    #
+    # Fleet RESTARTED on 35329d03 at 13:20 UTC before the raise: 0 Wait
+    # cycles in 5.5 h after it (2,283 cycles, five characters).
+    "WaitGoal": 12856,
+    "WaitAction": 12856,
 }
 
 #: form "unreachable: ..." is a DEFECT that is being tracked, not an excuse —
