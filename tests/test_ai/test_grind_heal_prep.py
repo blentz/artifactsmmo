@@ -141,6 +141,25 @@ class TestHealPrepGoal:
         state = _state(gd, {"cheese": 2}, bank={"cheese": 3})
         assert _needed(heal_prep_goal(state, gd, EATS_CHEESE, "wolf")) == {"cheese": 5}
 
+    def test_the_carry_is_capped_at_the_bags_room(self):
+        """The bag takes only what it has room for: a carry past it plans a
+        Withdraw the server refuses, and the step waited (live HAL 2026-10-14:
+        Withdraw(cooked_chicken×100) into 67 units of room, 1.5 h of Wait)."""
+        gd = _gd()
+        state = replace(_state(gd, {"cheese": 2}, bank={"cheese": 100}),
+                        inventory_max=CARRY - 5)  # room: 2 held + 13 free
+        assert _needed(heal_prep_goal(state, gd, EATS_CHEESE, "wolf")) == {"cheese": CARRY - 5}
+        made = _state(gd, {"cheese": 2, "milk": CARRY})
+        made = replace(made, inventory_max=made.inventory_used + 3)
+        assert _needed(heal_prep_goal(made, gd, EATS_CHEESE, "wolf")) == {"cheese": 5}
+
+    def test_a_new_stack_needs_a_free_slot(self):
+        """No cheese in the bag and no free slot: nothing fits, no goal."""
+        gd = _gd()
+        state = _state(gd, {}, bank={"cheese": 5})
+        state = replace(state, inventory={"rock": 1}, inventory_slots_max=1)
+        assert heal_prep_goal(state, gd, EATS_CHEESE, "wolf") is None
+
     def test_held_units_already_in_the_bag_are_no_goal(self):
         """The carry cannot be supplied and everything held is already in the
         bag: nothing to fetch."""

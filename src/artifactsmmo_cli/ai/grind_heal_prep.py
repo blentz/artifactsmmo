@@ -71,6 +71,12 @@ def heal_prep_goal(state: WorldState, game_data: GameData, ctx: SelectionContext
         carry = food_carry(eaten)
         bag = state.inventory.get(code, 0)
         held = bag + (state.bank_items or {}).get(code, 0)
+        # The bag takes only what it has room for (a new stack needs a free
+        # slot): a carry past it plans a Withdraw the server refuses, and the
+        # step waited (live HAL 2026-10-14, Withdraw(cooked_chicken×100) into
+        # 67 units of room, 1.5 h of Wait).
+        room = bag + state.inventory_free if bag or state.inventory_slots_free else 0
+        carry = min(carry, room)
         # Spec 2026-10-13 §1/§4: units past the held ones are MADE only when
         # the food beats Rest at replacement price and this character makes
         # the fleet's food; otherwise only what is held is fetched.

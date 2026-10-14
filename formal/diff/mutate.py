@@ -3574,6 +3574,12 @@ GRIND_HEAL_PREP_POLICY_MUTATIONS = [
     ("grind_heal_prep: the heal prep counts drops as supply",
      "HEAL_PREP_POLICY: Policy = replace(DECOMPOSE_POLICY, drop_routes=False)",
      "HEAL_PREP_POLICY: Policy = DECOMPOSE_POLICY"),
+    ("grind_heal_prep: the carry ignores the bag's room",
+     "        carry = min(carry, room)\n",
+     "        carry = carry\n"),
+    ("grind_heal_prep: a new stack needs no free slot",
+     "        room = bag + state.inventory_free if bag or state.inventory_slots_free else 0\n",
+     "        room = bag + state.inventory_free\n"),
 ]
 # The committed plan (Phase 2d-L1c). Killed by tests/test_ai/test_craft_plan_gen.py.
 COMMITTED_PLAN_MUTATIONS = [
