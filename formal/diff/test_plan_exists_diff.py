@@ -70,9 +70,11 @@ each is caught by the corresponding in-scope case.
 """
 from collections.abc import Callable
 from dataclasses import replace
+from unittest.mock import patch
 
 import pytest
 
+import artifactsmmo_cli.ai.decisions.root as root_mod
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
@@ -91,6 +93,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.strategy_driver import map_guard, map_means, objective_step_goal
+from artifactsmmo_cli.ai.task_worth_core import TaskWorth
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
 from artifactsmmo_cli.ai.tiers.guards import _fires as _guard_fires
 from artifactsmmo_cli.ai.tiers.means import MeansKind
@@ -98,6 +101,8 @@ from artifactsmmo_cli.ai.tiers.means import _fires as _means_fires
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.sim.production_ladder import LadderMeans
+
+PAYING = TaskWorth(xp=True, gold=False, drops=False)
 
 # ---------------------------------------------------------------------------
 # Test-fixture builders
@@ -456,8 +461,9 @@ def test_planner_finds_plan_for_task_phase_objective_step() -> None:
     )
     ctx = _ctx()
     history = LearningStore(":memory:", "diff")
-    assert _task_root(state, gd, ctx, history) == ReachTaskOutcome("task_x"), (
-        "the task objective is not offered for the held items task")
+    with patch.object(root_mod, "task_worth_for", return_value=PAYING):
+        assert _task_root(state, gd, ctx, history) == ReachTaskOutcome("task_x"), (
+            "the task objective is not offered for the held items task")
     player = _build_player_with_data(
         gd, state,
         bank_accessible=ctx.bank_accessible,

@@ -39,12 +39,16 @@ INTEGRITY rules (Phase 20d-v2 scope):
 Result reporting: at session end the module emits a coverage summary
 (per-MeansKind firing rate, invariant violations, sampled state count).
 """
+from unittest.mock import patch
+
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
+import artifactsmmo_cli.ai.decisions.root as root_mod
 from artifactsmmo_cli.ai.decisions.root import _task_root
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.task_accept import accept_due
+from artifactsmmo_cli.ai.task_worth_core import TaskWorth
 from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import COLLECT_REWARD_ORDER, INTERRUPT_MEANS
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
@@ -58,6 +62,8 @@ from formal.sim.production_ladder import (
 from formal.sim.production_ladder import (
     fires as production_fires,
 )
+
+PAYING = TaskWorth(xp=True, gold=False, drops=False)
 
 # ---------------------------------------------------------------------------
 # Reporting infrastructure
@@ -348,7 +354,8 @@ def test_objective_step_fires_when_items_task_in_progress_history_none(
     gd = _empty_gd()
     history = None
     assert _items_task_unmet(state)
-    assert _task_root(state, gd, ctx, history) == ReachTaskOutcome(state.task_code)
+    with patch.object(root_mod, "task_worth_for", return_value=PAYING):
+        assert _task_root(state, gd, ctx, history) == ReachTaskOutcome(state.task_code)
     step_fires = production_fires(LadderMeans.OBJECTIVE_STEP, state, gd,
                                   history, ctx, False)
     if not step_fires:
@@ -587,7 +594,8 @@ def test_history_None_items_task_is_still_worked() -> None:
         bank_items=None, pending=None, level=1, xp=0, gold=0,
     )
     assert _items_task_unmet(state)
-    assert _task_root(state, gd, ctx, None) == ReachTaskOutcome("task_x")
+    with patch.object(root_mod, "task_worth_for", return_value=PAYING):
+        assert _task_root(state, gd, ctx, None) == ReachTaskOutcome("task_x")
     assert production_ladder(state, gd, None, ctx, objective_step_fires=False) \
         is LadderMeans.OBJECTIVE_STEP
 

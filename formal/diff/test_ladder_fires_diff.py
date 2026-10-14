@@ -143,10 +143,12 @@ coincide — production read `history`/`task_decision` — is retired.)
 from __future__ import annotations
 
 import dataclasses
+from unittest.mock import patch
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+import artifactsmmo_cli.ai.decisions.root as root_mod
 from artifactsmmo_cli.ai.accumulation_sell import sellable_tradeable_now
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
@@ -163,6 +165,7 @@ from artifactsmmo_cli.ai.party_lease_core import PartyLease
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
+from artifactsmmo_cli.ai.task_worth_core import TaskWorth
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -176,6 +179,8 @@ from formal.sim.production_ladder import (
     fires as production_fires,
 )
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
+
+PAYING = TaskWorth(xp=True, gold=False, drops=False)
 
 # Slots whose TRUE-firing path is deferred to Brick 4 (see module docstring).
 # They are still compared at their reachable (False) value in every scenario;
@@ -1794,7 +1799,8 @@ def test_task_phase_drives_objective_step_and_selects() -> None:
         driven=frozenset({LadderMeans.OBJECTIVE_STEP}),
         history=hist, objective_step=False)
     # Production REALLY has the task to work (not faked):
-    assert _task_root(w, gd, _plain_ctx(), hist) == ReachTaskOutcome("widget")
+    with patch.object(root_mod, "task_worth_for", return_value=PAYING):
+        assert _task_root(w, gd, _plain_ctx(), hist) == ReachTaskOutcome("widget")
     assert prod[LadderMeans.OBJECTIVE_STEP] is True
     assert lean[LadderMeans.OBJECTIVE_STEP] is True
     # Strong selection teeth: the objective step wins on both ladders.
