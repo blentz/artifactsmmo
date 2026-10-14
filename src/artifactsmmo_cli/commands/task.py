@@ -12,6 +12,7 @@ from artifactsmmo_api_client.api.my_characters import (
 )
 from artifactsmmo_api_client.api.tasks import get_all_tasks_tasks_list_get, get_task_tasks_list_code_get
 from artifactsmmo_api_client.errors import UnexpectedStatus
+from artifactsmmo_api_client.models.rewards_schema import RewardsSchema
 from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 from artifactsmmo_api_client.models.skill import Skill
 from artifactsmmo_api_client.models.task_type import TaskType
@@ -31,6 +32,17 @@ from artifactsmmo_cli.utils.validators import validate_character_name
 
 app = typer.Typer(help="Task management commands")
 console = Console()
+
+
+def _reward_lines(rewards: RewardsSchema) -> list[tuple[str, int]]:
+    """(code, quantity) per task reward: the reward items, then the gold.
+
+    The API's `rewards` is ONE `RewardsSchema` (items + gold), not a list;
+    iterating it fell through to `__getitem__(0)` and raised KeyError."""
+    lines = [(item.code, item.quantity) for item in rewards.items]
+    if rewards.gold:
+        lines.append(("gold", rewards.gold))
+    return lines
 
 
 @app.command("new")
@@ -249,15 +261,9 @@ def task_status(character: str = typer.Argument(..., help="Character name")) -> 
                         # Show task rewards if available
                         if hasattr(task_details, "rewards") and task_details.rewards:
                             reward_headers = ["Reward", "Quantity"]
-                            reward_rows = []
-                            for reward in task_details.rewards:
-                                if hasattr(reward, "code"):
-                                    reward_rows.append(
-                                        [
-                                            str(display_field(reward, "code")),
-                                            str(display_field(reward, "quantity")),
-                                        ]
-                                    )
+                            reward_rows = [
+                                [code, str(quantity)] for code, quantity in _reward_lines(task_details.rewards)
+                            ]
 
                             if reward_rows:
                                 reward_output = format_table(reward_headers, reward_rows, title="Task Rewards")
@@ -317,22 +323,21 @@ def list_tasks(
         )
 
         cli_response = handle_api_response(response)
-        if cli_response.success and cli_response.data:
+        if cli_response.success:
+            # `handle_api_response` already unwrapped the page: `.data` IS the task list.
             tasks = cli_response.data
-            if hasattr(tasks, "data") and tasks.data:
+            if tasks:
                 headers = ["Code", "Type", "Level", "Skill", "Rewards"]
                 rows = []
-                for task in tasks.data:
+                for task in tasks:
                     rewards = []
                     if hasattr(task, "rewards") and task.rewards:
-                        for reward in task.rewards:
-                            if hasattr(reward, "code"):
-                                rewards.append(f"{display_field(reward, 'quantity')}x {reward.code}")
+                        rewards = [f"{quantity}x {code}" for code, quantity in _reward_lines(task.rewards)]
 
                     rows.append(
                         [
                             str(display_field(task, "code")),
-                            str(display_field(task, "type")),
+                            str(display_field(task, "type_")),
                             str(display_field(task, "level")),
                             str(display_field(task, "skill")),
                             ", ".join(rewards) if rewards else "None",

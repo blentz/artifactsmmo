@@ -2,6 +2,11 @@
 
 from unittest.mock import Mock, patch
 
+from artifactsmmo_api_client.models.rewards_schema import RewardsSchema
+from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
+from artifactsmmo_api_client.models.task_full_schema import TaskFullSchema
+from artifactsmmo_api_client.models.task_type import TaskType
+
 from artifactsmmo_cli.commands.task import app
 from tests.test_commands.conftest import api_error, api_response, cooldown_status, unexpected_status
 
@@ -77,39 +82,40 @@ class TestTaskCommands:
     def test_list_tasks_success(self, runner, stub_api):
         """Test successful list tasks command."""
         with patch("artifactsmmo_api_client.api.tasks.get_all_tasks_tasks_list_get.sync") as mock_api:
-            # Mock task
-            mock_task = Mock()
-            mock_task.code = "kill_monsters"
-            mock_task.type = "combat"
-            mock_task.level = 5
-            mock_task.skill = "combat"
-            mock_task.rewards = [Mock(code="gold", quantity=100)]
-
-            mock_data = Mock()
-            mock_data.data = [mock_task]
-
-            mock_api.return_value = api_response(mock_data)
+            # The paged envelope's `.data` IS the task list (`DataPageTaskFullSchema`);
+            # reading `.data` off it again printed "No tasks found" live (2026-10-14).
+            task = TaskFullSchema(
+                code="birch_wood",
+                level=20,
+                type_=TaskType.ITEMS,
+                min_quantity=100,
+                max_quantity=400,
+                rewards=RewardsSchema(items=[SimpleItemSchema(code="tasks_coin", quantity=3)], gold=250),
+                skill="woodcutting",
+            )
+            mock_api.return_value = api_response([task])
 
             result = runner.invoke(app, ["list"])
 
             assert result.exit_code == 0
             mock_api.assert_called_once()
-            assert "kill_monsters" in result.stdout
+            assert "birch_wood" in result.stdout
+            assert "items" in result.stdout
+            assert "woodcutting" in result.stdout
+            assert "3x tasks_coin" in result.stdout
+            assert "250x gold" in result.stdout
 
     def test_list_tasks_missing_fields_render_marker(self, runner, stub_api):
         """Test list tasks renders the MISSING marker when API task fields are absent."""
         with patch("artifactsmmo_api_client.api.tasks.get_all_tasks_tasks_list_get.sync") as mock_api:
             mock_task = Mock()
             mock_task.code = None
-            mock_task.type = None
+            mock_task.type_ = None
             mock_task.level = None
             mock_task.skill = None
-            mock_task.rewards = [Mock(code="gold", quantity=None)]
+            mock_task.rewards = RewardsSchema(items=[], gold=0)
 
-            mock_data = Mock()
-            mock_data.data = [mock_task]
-
-            mock_api.return_value = api_response(mock_data)
+            mock_api.return_value = api_response([mock_task])
 
             result = runner.invoke(app, ["list"])
 
@@ -119,7 +125,7 @@ class TestTaskCommands:
     def test_list_tasks_with_filters(self, runner, stub_api):
         """Test list tasks command with filters."""
         with patch("artifactsmmo_api_client.api.tasks.get_all_tasks_tasks_list_get.sync") as mock_api:
-            mock_api.return_value = api_response(Mock(data=[]))
+            mock_api.return_value = api_response([])
 
             result = runner.invoke(app, ["list", "--task-type", "monsters", "--skill", "mining", "--level", "5"])
 
@@ -129,7 +135,7 @@ class TestTaskCommands:
     def test_list_tasks_empty(self, runner, stub_api):
         """Test list tasks with no tasks."""
         with patch("artifactsmmo_api_client.api.tasks.get_all_tasks_tasks_list_get.sync") as mock_api:
-            mock_api.return_value = api_response(Mock(data=[]))
+            mock_api.return_value = api_response([])
 
             result = runner.invoke(app, ["list"])
 
@@ -396,11 +402,11 @@ class TestTaskCommands:
                 mock_task_details.level = 5
                 mock_task_details.description = "Kill chickens"
 
-                # Mock rewards
-                mock_reward = Mock()
-                mock_reward.code = "gold"
-                mock_reward.quantity = 100
-                mock_task_details.rewards = [mock_reward]
+                # The API's rewards are ONE object (items + gold), not a list:
+                # iterating it raised KeyError: 0 live (HAL, 2026-10-14).
+                mock_task_details.rewards = RewardsSchema(
+                    items=[SimpleItemSchema(code="tasks_coin", quantity=3)], gold=100
+                )
 
                 mock_task_api.return_value = api_response(mock_task_details)
 
@@ -412,6 +418,8 @@ class TestTaskCommands:
                 assert "Kill chickens" in result.stdout
                 assert "gold" in result.stdout
                 assert "100" in result.stdout
+                assert "tasks_coin" in result.stdout
+                assert "Task Rewards" in result.stdout
 
     def test_task_status_missing_fields_render_marker(self, runner, stub_api):
         """Test task status renders the MISSING marker when API task fields are absent."""
