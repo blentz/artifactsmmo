@@ -2855,18 +2855,15 @@ OBJECTIVE_STEP_FIGHT_MUTATIONS = [
      "    if has_combat_monster:"),
 ]
 
-# The driver reads the context's pay only for an active items task, and passes it on.
+# The driver passes the context's pay (set only for an active items task) on.
 # Killed by tests/test_ai/test_decisions_obtain_item.py.
 OBJECTIVE_STEP_DRIVER_MUTATIONS = [
     ("strategy_driver: the level step never reads the pay",
-     "                     and ctx.held_task_pays)",
-     "                     and True)"),
-    ("strategy_driver: the pay is read for any task",
-     "        task_pays = (items_task_active(state.task_type, state.task_code,\n"
-     "                                       state.task_total, state.task_progress)\n"
-     "                     and ctx.held_task_pays)",
-     "        task_pays = (True\n"
-     "                     and ctx.held_task_pays)"),
+     "        task_pays = ctx.held_task_pays\n",
+     "        task_pays = False\n"),
+    ("strategy_driver: the level step always defers to an items task",
+     "        task_pays = ctx.held_task_pays\n",
+     "        task_pays = True\n"),
 ]
 
 
