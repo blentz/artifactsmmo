@@ -898,6 +898,34 @@ class LearningStore:
         """
         return self._grind_rate(skill, window, character=None)
 
+    def task_work_xp_per_second(self, task_code: str, skills: frozenset[str],
+                                window: int = WINDOW_RECENT) -> float | None:
+        """XP of `skills` per second of THIS character's work on task
+        `task_code` (spec 2026-10-14 §2: what a held items task pays in demanded
+        skill XP, against the grind's character XP per second).
+
+        Work cycles are the rows holding the task (`Cycle.task_code`) whose goal
+        is one of the two `strategy_driver._pursue_goal` emits —
+        `PursueTask(<code>)` and `GatherMaterials(<code>, {…})`. A fight while the
+        task is held carries its task_code too and is excluded: counting it would
+        let fighting lower the task's rate, and the low rate would keep the
+        character fighting (an absorbing state).
+
+        EVERY work second stays in the denominator, a zero-XP gather included:
+        a mean over XP-gaining cycles only is the 50x over-estimate
+        `skill_grind_rate` documents (R2D2, 2026-08-08). Seconds, not cycles: a
+        batched craft is one cycle of many seconds.
+
+        None when there are no work cycles with positive seconds (ignorance) or
+        on a DB fault; 0.0 when the work ran and paid none of `skills`."""
+        return self._task_work_rate(task_code, skills, window, character=self._character)
+
+    def fleet_task_work_xp_per_second(self, task_code: str, skills: frozenset[str],
+                                      window: int = WINDOW_RECENT) -> float | None:
+        """`task_work_xp_per_second` pooled over every character in the store:
+        the fallback for a character that has never worked the task."""
+        return self._task_work_rate(task_code, skills, window, character=None)
+
     def fleet_craft_yields(self) -> dict[str, int]:
         """item_code -> units one craft run produces, MEASURED over every
         character's successful crafts (the crafted item's bag gain in
@@ -1013,6 +1041,34 @@ class LearningStore:
                 return None
             total = sum(max(0, _parse_skill_xp_value(raw, skill)) for raw in rows)
             return float(total) / len(rows)
+        except SQLAlchemyError:
+            return None
+
+    def _task_work_rate(self, task_code: str, skills: frozenset[str], window: int,
+                        character: str | None) -> float | None:
+        """Shared body of the two task-work rates — ONE query, so the
+        per-character and fleet answers agree on what a work cycle is."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle.delta_skill_xp_json, Cycle.actual_cooldown_seconds)
+                    .where(col(Cycle.task_code) == task_code)
+                    .where(or_(
+                        col(Cycle.selected_goal).startswith(
+                            f"PursueTask({task_code})", autoescape=True),
+                        col(Cycle.selected_goal).startswith(
+                            f"GatherMaterials({task_code}, ", autoescape=True)))
+                )
+                if character is not None:
+                    stmt = stmt.where(col(Cycle.character) == character)
+                stmt = stmt.order_by(col(Cycle.id).desc()).limit(window)
+                rows = list(s.exec(stmt))
+            seconds = sum(max(0.0, sec or 0.0) for _, sec in rows)
+            if seconds <= 0:
+                return None
+            xp = sum(max(0, _parse_skill_xp_value(raw, skill))
+                     for raw, _ in rows for skill in skills)
+            return xp / seconds
         except SQLAlchemyError:
             return None
 

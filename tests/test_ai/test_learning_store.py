@@ -1079,6 +1079,12 @@ class TestDegradationOnDbError:
         assert stats.avg_cycles_to_satisfy is None
         assert stats.satisfaction_rate == 0.0
 
+    def test_task_work_xp_per_second_returns_none(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.task_work_xp_per_second("t", frozenset({"cooking"})) is None
+        assert store.fleet_task_work_xp_per_second("t", frozenset({"cooking"})) is None
+
     def test_set_blocker_swallows_error(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="hero")
         _break_engine(store)
@@ -1970,3 +1976,83 @@ class TestFleetCraftYields:
         self._craft(store, "CraftAll()", {"axe": 2})
         assert store.fleet_craft_yields() == {"potion": 2, "bar": 1}
         store.close()
+
+
+class TestTaskWorkXpRate:
+    """Demanded skill XP per second of a task's OWN work cycles (spec
+    2026-10-14 §2): every second of the work counts, fights do not."""
+
+    @staticmethod
+    def _add(store: LearningStore, i: int, *, character: str = "hero",
+             task_code: str | None = "cooked_shrimp",
+             goal: str = "GatherMaterials(cooked_shrimp, {cooked_shrimp:10})",
+             seconds: float | None = 30.0, xp: str = "{}") -> None:
+        with SqlSession(store._engine) as s:
+            s.add(Cycle(ts=f"2026-10-14T00:00:{i:02d}+00:00", session_id=store._session_id,
+                        cycle_index=i, character=character, outcome="ok",
+                        task_code=task_code, selected_goal=goal,
+                        actual_cooldown_seconds=seconds, delta_skill_xp_json=xp))
+            s.commit()
+
+    def test_no_work_is_no_rate(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        assert store.task_work_xp_per_second("cooked_shrimp", frozenset({"cooking"})) is None
+
+    def test_rate_counts_every_second_of_the_work(self, tmp_db_path):
+        """Two 30 s fishing gathers pay no cooking XP and stay in the
+        denominator; a batched craft is priced by its seconds, not as one
+        cycle: 100 cooking XP over 30 + 30 + 60 s."""
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        self._add(store, 0, xp='{"fishing": 19}')
+        self._add(store, 1, xp='{"fishing": 19}')
+        self._add(store, 2, goal="PursueTask(cooked_shrimp)", seconds=60.0, xp='{"cooking": 100}')
+        assert store.task_work_xp_per_second("cooked_shrimp", frozenset({"cooking"})) == 100 / 120
+        both = frozenset({"cooking", "fishing"})
+        assert store.task_work_xp_per_second("cooked_shrimp", both) == 138 / 120
+        assert store.task_work_xp_per_second("cooked_shrimp", frozenset()) == 0.0
+
+    def test_fight_cycles_while_held_are_not_task_work(self, tmp_db_path):
+        """A fight while the task is held carries its task_code but is not its
+        work: counting it would let fighting lower the task's rate."""
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        self._add(store, 0, goal="PursueTask(cooked_shrimp)", xp='{"cooking": 30}')
+        self._add(store, 1, goal="GrindCharacterXP(imp)", seconds=900.0)
+        assert store.task_work_xp_per_second("cooked_shrimp", frozenset({"cooking"})) == 1.0
+
+    def test_another_codes_rows_are_not_this_tasks_work(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        self._add(store, 0, xp='{"cooking": 30}')
+        self._add(store, 1, task_code="cooked_shrimp_soup",
+                  goal="GatherMaterials(cooked_shrimp_soup, {cooked_shrimp_soup:5})",
+                  xp='{"cooking": 900}')
+        self._add(store, 2, task_code="trout", goal="PursueTask(cooked_shrimp)",
+                  xp='{"cooking": 900}')
+        assert store.task_work_xp_per_second("cooked_shrimp", frozenset({"cooking"})) == 1.0
+
+    def test_null_seconds_count_as_zero(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        self._add(store, 0, seconds=None, xp='{"cooking": 30}')
+        assert store.task_work_xp_per_second("cooked_shrimp", frozenset({"cooking"})) is None
+        self._add(store, 1, xp='{"cooking": 30}')
+        assert store.task_work_xp_per_second("cooked_shrimp", frozenset({"cooking"})) == 2.0
+
+    def test_own_rows_only_and_the_fleet_pools(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        self._add(store, 0, character="sibling", xp='{"cooking": 60}')
+        assert store.task_work_xp_per_second("cooked_shrimp", frozenset({"cooking"})) is None
+        self._add(store, 1, xp='{"cooking": 0}')
+        assert store.task_work_xp_per_second("cooked_shrimp", frozenset({"cooking"})) == 0.0
+        assert store.fleet_task_work_xp_per_second("cooked_shrimp", frozenset({"cooking"})) == 1.0
+
+    def test_window_keeps_the_newest_rows(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        self._add(store, 0, xp='{"cooking": 300}')
+        self._add(store, 1, xp='{"cooking": 30}')
+        assert store.task_work_xp_per_second("cooked_shrimp", frozenset({"cooking"}), window=1) == 1.0

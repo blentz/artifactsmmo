@@ -3418,6 +3418,25 @@ FLEET_CRAFT_YIELDS_MUTATIONS = [
      "                seen.setdefault(code, Counter())[produced // runs] += 1",
      "                seen.setdefault(code, Counter())[produced] += 1"),
 ]
+# Task-work XP rate (spec 2026-10-14 items-task-pays §2). OWN run_group: killed
+# by tests/test_ai/test_learning_store.py::TestTaskWorkXpRate.
+TASK_WORK_RATE_MUTATIONS = [
+    ("task work rate: fights while held count as work",
+     "                    .where(col(Cycle.task_code) == task_code)\n"
+     "                    .where(or_(\n",
+     "                    .where(col(Cycle.task_code) == task_code)\n"
+     "                    .where(or_(col(Cycle.selected_goal).is_not(None),\n"),
+    ("task work rate: only XP-gaining cycles count (the 50x over-estimate)",
+     "            seconds = sum(max(0.0, sec or 0.0) for _, sec in rows)\n",
+     "            seconds = sum(max(0.0, sec or 0.0) for raw, sec in rows\n"
+     "                          if any(_parse_skill_xp_value(raw, k) > 0 for k in skills))\n"),
+    ("task work rate: no work reads as a zero rate",
+     "            if seconds <= 0:\n                return None\n            xp = sum(",
+     "            if seconds <= 0:\n                return 0.0\n            xp = sum("),
+    ("task work rate: the fleet reads only this character",
+     "        return self._task_work_rate(task_code, skills, window, character=None)",
+     "        return self._task_work_rate(task_code, skills, window, character=self._character)"),
+]
 # Killed by tests/test_ai/test_crafting_action.py.
 CRAFT_RECORD_PER_RUN_MUTATIONS = [
     ("crafting: the table records the batch total again",
@@ -10617,6 +10636,8 @@ def _collect_all_groups() -> None:
     run_group(GAME_DATA_PARSE_SRC, GAME_DATA_LEARNED_CRAFT_YIELD_MUTATIONS,
               "tests/test_ai/test_recycle_yield.py", survivors)
     run_group(LEARNING_STORE_SRC, FLEET_CRAFT_YIELDS_MUTATIONS,
+              "tests/test_ai/test_learning_store.py", survivors)
+    run_group(LEARNING_STORE_SRC, TASK_WORK_RATE_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)
     run_group(CRAFT_ACTION_SRC, CRAFT_RECORD_PER_RUN_MUTATIONS,
               "tests/test_ai/test_crafting_action.py", survivors)
