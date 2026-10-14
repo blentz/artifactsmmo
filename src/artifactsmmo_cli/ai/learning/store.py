@@ -909,7 +909,9 @@ class LearningStore:
         `PursueTask(<code>)` and `GatherMaterials(<code>, {…})`. A fight while the
         task is held carries its task_code too and is excluded: counting it would
         let fighting lower the task's rate, and the low rate would keep the
-        character fighting (an absorbing state).
+        character fighting (an absorbing state). The task-skill gate grind
+        (`ReachSkillGoal`, `_pursue_goal`'s third emit) is excluded on purpose
+        too: it levels the skill the task needs, it does not work the task.
 
         EVERY work second stays in the denominator, a zero-XP gather included:
         a mean over XP-gaining cycles only is the 50x over-estimate

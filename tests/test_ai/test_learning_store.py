@@ -2013,6 +2013,14 @@ class TestTaskWorkXpRate:
         assert store.task_work_xp_per_second("cooked_shrimp", both) == 138 / 120
         assert store.task_work_xp_per_second("cooked_shrimp", frozenset()) == 0.0
 
+    def test_a_gather_materials_only_row_is_task_work(self, tmp_db_path):
+        """`GatherMaterials(<code>, {...})` is work on its own, with no
+        `PursueTask` row beside it."""
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        self._add(store, 0, xp='{"cooking": 15}')
+        assert store.task_work_xp_per_second("cooked_shrimp", frozenset({"cooking"})) == 0.5
+
     def test_fight_cycles_while_held_are_not_task_work(self, tmp_db_path):
         """A fight while the task is held carries its task_code but is not its
         work: counting it would let fighting lower the task's rate."""

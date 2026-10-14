@@ -101,6 +101,14 @@ task_code, state.task_type, remaining, …)` and returns True when:
   sends a paying task's character to fight; the live check compares HAL's
   measured fight XP/s against the modelled one.
 
+**Rulings during implementation (2026-10-14).** The pay is computed ONCE per
+cycle, not at each read: the level step is reached up to four times a cycle
+(`_build_candidates`, both passes of `_resolve_step_goal`, the step-decline
+check), and each read walked the task and the loadout chooser. The player sets
+`SelectionContext.held_task_pays` in `_selection_context` (true iff an items
+task is active, a combat target exists and `held_task_pays` says so); the
+`ReachCharLevel` arm reads the field and no longer calls the function.
+
 ### §3 Liveness without the gap
 
 A deferral needs a paying task. Items tasks chain (one completes, another is
@@ -124,6 +132,12 @@ This is an argument, not a proof: the Lean model proves the decision
   drawing a new task until a coin is held (USER, approach 1).
 - A task paying demanded skill XP faster than the grind is worked at any gap
   (today a bootstrap grind, gap ≤ 4, preempted it).
+
+**Rulings during implementation (2026-10-14).** `decisions.root._task_root`
+returns NO root for a held, unmet items task whose `task_worth_for` verdict is
+all-False when no coin cancels it. Left as a root, the fair rotation gave it
+turns and HAL would have alternated about 100 grind cycles with 100 task
+cycles. Monsters tasks, met tasks (turn-in) and cancel-due tasks are unchanged.
 
 ### Non-goals
 

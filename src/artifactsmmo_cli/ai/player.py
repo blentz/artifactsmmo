@@ -103,6 +103,7 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.currency_demand import closure_gold_demand
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY
+from artifactsmmo_cli.ai.held_task_pays import held_task_pays
 from artifactsmmo_cli.ai.intention_progress import (
     BUDGET_CYCLES,
     EXIT_CYCLES,
@@ -127,6 +128,7 @@ from artifactsmmo_cli.ai.loadout_profiles import (
 from artifactsmmo_cli.ai.loop_rate import food_menu
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.null_tracer import NullTracer
+from artifactsmmo_cli.ai.objective_step_fight_core import items_task_active
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.party_card import card_json, card_state
 from artifactsmmo_cli.ai.party_lease_core import PartyLease, assembled
@@ -4168,6 +4170,16 @@ class GamePlayer:
         ctx = replace(ctx, skill_demand=skills, level_demanded=level)
         ctx = replace(ctx, loadout=self._party_fight_loadout()
                       or fight_ahead_loadout(self.state, self.game_data, ctx, self.history))
+        # Whether the held items task pays enough to defer the level step
+        # (spec 2026-10-14 items-task-pays §2): priced ONCE per cycle here,
+        # because the step is resolved up to four times a cycle and the price
+        # walks the task and the loadout chooser.
+        ctx = replace(ctx, held_task_pays=(
+            ctx.combat_monster is not None
+            and items_task_active(self.state.task_type, self.state.task_code,
+                                  self.state.task_total, self.state.task_progress)
+            and held_task_pays(self.state, self.game_data, ctx, ctx.combat_monster,
+                               self.history)))
         self._consumable_need = consumable_need(ctx.loadout)
         self._supply_shortfall = supply_shortfall(
             self.state, self._fleet_order, self.character, self._consumable_need,

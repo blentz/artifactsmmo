@@ -255,6 +255,15 @@ class SelectionContext:
     # False (the default) whenever bare gear has a fight, or there is no target.
     combat_propped: bool = False
 
+    # Whether the held items task pays enough to defer the grind (spec
+    # 2026-10-14 items-task-pays §2, `held_task_pays.held_task_pays`): its
+    # gold or drops verdict, or skill XP the DAG demands at a better rate than
+    # the grind's character XP. Priced ONCE per cycle by the player, because
+    # the level step reads it up to four times a cycle and the price walks the
+    # task and the loadout chooser. False (the default) with no items task, no
+    # combat target, or a task that does not pay.
+    held_task_pays: bool = False
+
 
 NO_PROFILE_CONTEXT = SelectionContext(
     bank_accessible=True,

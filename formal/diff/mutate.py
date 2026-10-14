@@ -2855,18 +2855,30 @@ OBJECTIVE_STEP_FIGHT_MUTATIONS = [
      "    if has_combat_monster:"),
 ]
 
-# The driver reads the pay only for an active items task, and passes it on.
+# The driver reads the context's pay only for an active items task, and passes it on.
 # Killed by tests/test_ai/test_decisions_obtain_item.py.
 OBJECTIVE_STEP_DRIVER_MUTATIONS = [
     ("strategy_driver: the level step never reads the pay",
-     "                     and held_task_pays(state, game_data, ctx, ctx.combat_monster, history))",
+     "                     and ctx.held_task_pays)",
      "                     and True)"),
     ("strategy_driver: the pay is read for any task",
      "        task_pays = (items_task_active(state.task_type, state.task_code,\n"
      "                                       state.task_total, state.task_progress)\n"
-     "                     and held_task_pays(",
+     "                     and ctx.held_task_pays)",
      "        task_pays = (True\n"
-     "                     and held_task_pays("),
+     "                     and ctx.held_task_pays)"),
+]
+
+
+# `_task_root` holds a worthless coinless items task (spec 2026-10-14
+# items-task-pays §4). Killed by tests/test_ai/test_task_objective.py.
+TASK_ROOT_HOLD_MUTATIONS = [
+    ("root: a worthless coinless items task is worked, not held",
+     "        return ReachTaskOutcome(state.task_code) if worth.any() else None",
+     "        return ReachTaskOutcome(state.task_code)"),
+    ("root: a paying items task is held and a worthless one worked",
+     "        return ReachTaskOutcome(state.task_code) if worth.any() else None",
+     "        return ReachTaskOutcome(state.task_code) if not worth.any() else None"),
 ]
 
 
@@ -3431,6 +3443,11 @@ TASK_WORK_RATE_MUTATIONS = [
      "                    .where(or_(\n",
      "                    .where(col(Cycle.task_code) == task_code)\n"
      "                    .where(or_(col(Cycle.selected_goal).is_not(None),\n"),
+    ("task work rate: a GatherMaterials row is not task work",
+     "                        col(Cycle.selected_goal).startswith(\n"
+     "                            f\"GatherMaterials({task_code}, \", autoescape=True)))",
+     "                        col(Cycle.selected_goal).startswith(\n"
+     "                            f\"PursueTask({task_code})\", autoescape=True)))"),
     ("task work rate: only XP-gaining cycles count (the 50x over-estimate)",
      "            seconds = sum(max(0.0, sec or 0.0) for _, sec in rows)\n",
      "            seconds = sum(max(0.0, sec or 0.0) for raw, sec in rows\n"
@@ -3441,6 +3458,23 @@ TASK_WORK_RATE_MUTATIONS = [
     ("task work rate: the fleet reads only this character",
      "        return self._task_work_rate(task_code, skills, window, character=None)",
      "        return self._task_work_rate(task_code, skills, window, character=self._character)"),
+]
+# The player prices the held task's pay ONCE per cycle into the context (spec
+# 2026-10-14 items-task-pays §2). Killed by tests/test_ai/test_held_task_pays.py.
+HELD_TASK_PAYS_PLAYER_MUTATIONS = [
+    ("player: the context never reads the pay",
+     "            and held_task_pays(self.state, self.game_data, ctx, ctx.combat_monster,\n"
+     "                               self.history)))",
+     "            and False))"),
+    ("player: the pay is priced for any task",
+     "            and items_task_active(self.state.task_type, self.state.task_code,\n"
+     "                                  self.state.task_total, self.state.task_progress)\n",
+     "            and True\n"),
+    ("player: the pay is priced without a combat target",
+     "            ctx.combat_monster is not None\n"
+     "            and items_task_active(",
+     "            True\n"
+     "            and items_task_active("),
 ]
 # held_task_pays (spec 2026-10-14 items-task-pays §2). OWN run_group: killed by
 # tests/test_ai/test_held_task_pays.py.
@@ -10350,6 +10384,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_objective_step_is_fight_diff.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, OBJECTIVE_STEP_DRIVER_MUTATIONS,
               "tests/test_ai/test_decisions_obtain_item.py", survivors)
+    run_group(ROOT_DECISION_SRC, TASK_ROOT_HOLD_MUTATIONS,
+              "tests/test_ai/test_task_objective.py", survivors)
     run_group(DECIDE_KEY_SRC, DECIDE_KEY_MUTATIONS,
               "formal/diff/test_decide_key_diff.py", survivors)
     run_group(PROGRESSION_RESERVE_CORE_SRC, PROGRESSION_RESERVE_MUTATIONS,
@@ -10666,6 +10702,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_learning_store.py", survivors)
     run_group(LEARNING_STORE_SRC, TASK_WORK_RATE_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)
+    run_group(PLAYER_SRC, HELD_TASK_PAYS_PLAYER_MUTATIONS,
+              "tests/test_ai/test_held_task_pays.py", survivors)
     run_group(HELD_TASK_PAYS_SRC, HELD_TASK_PAYS_MUTATIONS,
               "tests/test_ai/test_held_task_pays.py", survivors)
     run_group(CRAFT_ACTION_SRC, CRAFT_RECORD_PER_RUN_MUTATIONS,

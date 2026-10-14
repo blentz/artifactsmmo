@@ -30,6 +30,7 @@ from artifactsmmo_cli.ai.plan_tree import _label
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
+from artifactsmmo_cli.ai.task_worth_core import WORTHLESS, TaskWorth
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachTaskOutcome
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
@@ -138,6 +139,32 @@ class TestTaskRoot:
             == ReachTaskOutcome("chicken")
         met_items = _held(10, 10, task_type="items")
         assert root_mod._task_root(met_items, gd, NO_PROFILE_CONTEXT, None) == ReachTaskOutcome("chicken")
+
+    def test_a_worthless_coinless_items_task_is_held_not_worked(self) -> None:
+        """Spec 2026-10-14 items-task-pays §4: with no coin to cancel it, a
+        worthless unmet items task has NO root, so the rotation never gives it
+        turns. An XP/gold/drops verdict makes it a root again."""
+        held = _held(3, task_type="items")
+        with patch.object(root_mod, "task_worth_for", return_value=WORTHLESS) as worth:
+            assert root_mod._task_root(held, _gd(), NO_PROFILE_CONTEXT, None) is None
+        assert worth.call_args.args[:3] == ("chicken", "items", 7)
+        for verdict in (TaskWorth(xp=True, gold=False, drops=False),
+                        TaskWorth(xp=False, gold=True, drops=False),
+                        TaskWorth(xp=False, gold=False, drops=True)):
+            with patch.object(root_mod, "task_worth_for", return_value=verdict):
+                assert root_mod._task_root(held, _gd(), NO_PROFILE_CONTEXT, None) \
+                    == ReachTaskOutcome("chicken")
+
+    def test_a_worthless_coinless_monsters_task_is_still_worked(self) -> None:
+        with (patch.object(root_mod, "task_worth_for", return_value=WORTHLESS),
+              patch.object(root_mod, "is_winnable", return_value=True)):
+            assert root_mod._task_root(_held(3), _gd(), NO_PROFILE_CONTEXT, None) \
+                == ReachTaskOutcome("chicken")
+
+    def test_a_met_worthless_items_task_is_still_turned_in(self) -> None:
+        with patch.object(root_mod, "task_worth_for", return_value=WORTHLESS):
+            assert root_mod._task_root(_held(10, 10, task_type="items"), _gd(),
+                                       NO_PROFILE_CONTEXT, None) == ReachTaskOutcome("chicken")
 
     def test_a_phantom_task_without_a_total_is_no_root(self) -> None:
         """The API briefly reports a task code with no total
@@ -289,11 +316,15 @@ class TestAcceptFold:
 
 class TestItemsTaskIsWorked:
     """Phase 5-2c-iii-c-2 #4/#5: a held, unmet items task not cancelled for its
-    worth is worked on the task objective's turn (the PIVOT gate is gone)."""
+    worth is worked on the task objective's turn (the PIVOT gate is gone) --
+    when it pays; a worthless coinless one is held (see TestTaskRoot)."""
 
     def test_a_held_items_task_offers_the_objective(self) -> None:
         held = _held(task_type="items")
-        assert root_mod._task_root(held, _gd(), NO_PROFILE_CONTEXT, None) == ReachTaskOutcome("chicken")
+        with patch.object(root_mod, "task_worth_for",
+                          return_value=TaskWorth(xp=True, gold=False, drops=False)):
+            assert root_mod._task_root(held, _gd(), NO_PROFILE_CONTEXT, None) \
+                == ReachTaskOutcome("chicken")
 
     def test_its_step_is_the_pursuit(self) -> None:
         held = dataclasses.replace(_held(task_type="items"), inventory={"chicken": 10})

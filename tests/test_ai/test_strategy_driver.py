@@ -1555,12 +1555,11 @@ class TestPursueTaskMapping:
 # ---------------------------------------------------------------------------
 
 class TestItemsTaskStandDown:
-    def test_char_step_stands_down_for_a_paying_items_task(self, monkeypatch):
-        monkeypatch.setattr(sd, "held_task_pays", lambda *a: True)
+    def test_char_step_stands_down_for_a_paying_items_task(self):
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0)
-        assert objective_step_goal(ReachCharLevel(50), state, GameData(),
-                                   _ctx(combat_monster="chicken")) is None
+        ctx = dataclasses.replace(_ctx(combat_monster="chicken"), held_task_pays=True)
+        assert objective_step_goal(ReachCharLevel(50), state, GameData(), ctx) is None
 
     def test_char_step_grinds_for_monster_task(self):
         state = make_state(task_code="chicken", task_type="monsters",
@@ -1574,11 +1573,10 @@ class TestItemsTaskStandDown:
                                    _ctx(combat_monster="chicken"))
         assert goal is not None and repr(goal).startswith("GrindCharacterXP")
 
-    def test_char_step_grinds_through_an_unpaid_items_task(self, monkeypatch):
+    def test_char_step_grinds_through_an_unpaid_items_task(self):
         """Trace 2026-06-03/05: items tasks chain indefinitely, so a stand-down
         that ignored what the task pays meant char-grind NEVER fired. Only a
         task that PAYS defers it (spec 2026-10-14), at any level gap."""
-        monkeypatch.setattr(sd, "held_task_pays", lambda *a: False)
         state = make_state(level=3, task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0)
         for target in (5, 50):

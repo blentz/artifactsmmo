@@ -46,12 +46,10 @@ Template: `formal/diff/test_ladder_fires_diff.py`
 from __future__ import annotations
 
 import dataclasses
-from unittest import mock
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-import artifactsmmo_cli.ai.strategy_driver as strategy_driver_mod
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
@@ -73,7 +71,7 @@ class Scenario:
     task_code: str | None
     task_progress: int
     task_total: int
-    task_pays: bool = False      # what `held_task_pays` answers
+    task_pays: bool = False      # what `SelectionContext.held_task_pays` holds
 
     @property
     def bootstrap_gap(self) -> int:
@@ -138,6 +136,7 @@ def _make_ctx(scn: Scenario) -> SelectionContext:
         initial_xp=0, task_exchange_min_coins=5,
         combat_monster=COMBAT_MONSTER if scn.combat_target_exists else None,
         target_gear=frozenset(), target_tools=frozenset(),
+        held_task_pays=scn.task_pays,
         )
 
 
@@ -147,9 +146,7 @@ def _production_answers(scn: Scenario) -> bool:
     gd = _make_game_data()
     w = _make_world(scn)
     ctx = _make_ctx(scn)
-    with mock.patch.object(strategy_driver_mod, "held_task_pays",
-                           return_value=scn.task_pays):
-        goal = objective_step_goal(ReachCharLevel(scn.target_level), w, gd, ctx)
+    goal = objective_step_goal(ReachCharLevel(scn.target_level), w, gd, ctx)
     return isinstance(goal, GrindCharacterXPGoal)
 
 

@@ -71,7 +71,6 @@ from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal, potion_prep_goal
-from artifactsmmo_cli.ai.held_task_pays import held_task_pays
 from artifactsmmo_cli.ai.intention_progress import rotate, turn_key
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import items_task_active, objective_step_is_fight_pure
@@ -516,13 +515,15 @@ def objective_step_goal(
         # level-40 root, worked worthless items tasks for 5.5 h at 0 character
         # XP (2026-10-14), the June 2026 "items tasks chain, the bot never
         # fought" livelock back whenever a root sat more than 4 levels away.
-        # The pay is read only for an active items task (it walks the task).
+        # The pay is priced once per cycle by the player
+        # (`SelectionContext.held_task_pays`) and read here only for an
+        # active items task.
         # Decision extracted to the pure boundary `objective_step_is_fight_pure`
         # — the SAME predicate the Lean liveness Bool `objectiveStepIsFight`
         # binds to via the differential gate.
         task_pays = (items_task_active(state.task_type, state.task_code,
                                        state.task_total, state.task_progress)
-                     and held_task_pays(state, game_data, ctx, ctx.combat_monster, history))
+                     and ctx.held_task_pays)
         if not objective_step_is_fight_pure(
                 is_reach_char_level=True,
                 has_combat_monster=True,

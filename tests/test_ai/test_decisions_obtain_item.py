@@ -32,7 +32,6 @@ import json
 
 import pytest
 
-import artifactsmmo_cli.ai.strategy_driver as strategy_driver_mod
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.decision import resolve_node
 from artifactsmmo_cli.ai.decisions.obtain_item import obtain_item_decision
@@ -316,36 +315,28 @@ def test_objective_step_goal_returns_none_for_reach_char_level_no_monster():
 def test_objective_step_goal_stands_down_for_a_paying_items_task(monkeypatch):
     """A held items task that pays defers the level step, at ANY gap (spec
     2026-10-14: the gap no longer matters — here it is 1)."""
-    monkeypatch.setattr(strategy_driver_mod, "held_task_pays", lambda *a: True)
     state = make_state(level=3, task_code="copper_bar", task_type="items",
                        task_total=20, task_progress=0)
-    ctx = _ctx(combat_monster="chicken")
+    ctx = dataclasses.replace(_ctx(combat_monster="chicken"), held_task_pays=True)
     assert objective_step_goal(ReachCharLevel(4), state, GameData(), ctx) is None
 
 
-def test_objective_step_goal_grinds_past_an_unpaid_items_task(monkeypatch):
+def test_objective_step_goal_grinds_past_an_unpaid_items_task():
     """HAL 2026-10-14 (level 35, root 40, worthless trout task): the grind."""
-    seen: list[str] = []
-
-    def pays(state, game_data, ctx, monster, history):
-        seen.append(monster)
-        return False
-    monkeypatch.setattr(strategy_driver_mod, "held_task_pays", pays)
     state = make_state(level=3, xp=50, task_code="copper_bar", task_type="items",
                        task_total=20, task_progress=0)
     ctx = _ctx(combat_monster="chicken")
+    assert ctx.held_task_pays is False
     goal = objective_step_goal(ReachCharLevel(50), state, _gd(), ctx)
     assert isinstance(goal, GrindCharacterXPGoal)
-    assert seen == ["chicken"]
 
 
-def test_objective_step_goal_reads_no_pay_without_an_active_items_task(monkeypatch):
-    def boom(*_a):
-        raise AssertionError("the pay is read only for an active items task")
-    monkeypatch.setattr(strategy_driver_mod, "held_task_pays", boom)
+def test_objective_step_goal_reads_no_pay_without_an_active_items_task():
+    """A pay on the context means nothing unless an items task is held."""
     state = make_state(level=3, xp=50, task_code="chicken", task_type="monsters",
                        task_total=20, task_progress=0)
-    goal = objective_step_goal(ReachCharLevel(50), state, _gd(), _ctx(combat_monster="chicken"))
+    ctx = dataclasses.replace(_ctx(combat_monster="chicken"), held_task_pays=True)
+    goal = objective_step_goal(ReachCharLevel(50), state, _gd(), ctx)
     assert isinstance(goal, GrindCharacterXPGoal)
 
 

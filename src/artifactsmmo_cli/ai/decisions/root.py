@@ -108,6 +108,7 @@ from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_coins import tasks_coin_total
 from artifactsmmo_cli.ai.task_horizon import HORIZON_GEAR, resolve_task_horizon
+from artifactsmmo_cli.ai.task_worth import task_worth_for
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -848,11 +849,14 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
     * a WORTHLESS task (no XP, no GOLD, no DROPS reason — `task_worth_core`)
       with a pocket coin to cancel it: the task itself, whose step is the
       cancel (c-2 #5, USER 2026-10-07: this was the TASK_CANCEL rung and, before
-      it, the LOW_YIELD_CANCEL rung). Without a coin it is worked to clear it.
+      it, the LOW_YIELD_CANCEL rung). Without a coin a worthless MONSTERS task
+      is worked to clear it; a worthless ITEMS task stays HELD, not worked
+      (spec 2026-10-14 items-task-pays §4, USER approach 1: the rotation would
+      otherwise give it half the turns, as HAL's 5.5 h at 0 character XP did);
 
-    * a held, unmet items task: the task itself, worked (c-2 #4 was the
-      PURSUE_TASK rung; #5 drops its PIVOT gate — a task is cancelled by its
-      worth or worked).
+    * a held, unmet items task that pays (an XP, GOLD or DROPS verdict): the
+      task itself, worked (c-2 #4 was the PURSUE_TASK rung; #5 drops its PIVOT
+      gate — a task is cancelled by its worth or worked).
 
     * a held, MET task: the task itself, whose step is the turn-in (c-2 #6:
       this was the COMPLETE_TASK collect rung). Turned in on the task
@@ -872,8 +876,13 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
     if (state.task_type == "items" and state.task_code
             and state.task_progress < state.task_total):
         # c-2 #4/#5: a held items task not cancelled for its worth is worked on
-        # the task objective's turn.
-        return ReachTaskOutcome(state.task_code)
+        # the task objective's turn -- unless it is worthless and no coin
+        # cancels it (the cancel arm above came first): then it stays HELD
+        # (spec 2026-10-14 items-task-pays §4), so the rotation never works it.
+        worth = task_worth_for(state.task_code, state.task_type,
+                               state.task_total - state.task_progress,
+                               state, game_data, ctx, history)
+        return ReachTaskOutcome(state.task_code) if worth.any() else None
     if (state.task_type != "monsters" or not state.task_code
             or state.task_progress >= state.task_total):
         return None

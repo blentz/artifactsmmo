@@ -136,8 +136,10 @@ def task_worth_for(code: str, task_type: str | None, remaining: int, state: Worl
 def held_task_cancel_due(state: WorldState, game_data: GameData, ctx: SelectionContext,
                          history: LearningStore | None) -> bool:
     """The held task is worthless, a pocket coin can cancel it, and it is not
-    met (`task_worth_core.cancel_due`). Without a coin it is worked to clear it
-    (USER: "Work it to clear it"), so the worth is not even read."""
+    met (`task_worth_core.cancel_due`). Without a coin a worthless monsters task
+    is worked to clear it (USER: "Work it to clear it") and a worthless items
+    task stays HELD, not worked (spec 2026-10-14 items-task-pays §4, USER
+    approach 1; `decisions.root._task_root`), so the worth is not read here."""
     if not state.task_code or state.task_progress >= state.task_total:
         return False
     if state.inventory.get(TASKS_COIN_CODE, 0) < 1:
