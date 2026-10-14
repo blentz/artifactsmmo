@@ -983,8 +983,11 @@ CONSUMABLE_PRICE_READER_MUTATIONS = [
      "    return fight_gold_rate(state, game_data, ctx.combat_monster) / FIGHT_SECONDS",
      "    return fight_gold_rate(state, game_data, ctx.combat_monster)"),
     ("consumable_price reader: a replacement is free while any unit is held",
-     "    return consumable_price(0, make_seconds(code, state, game_data, ctx, store),",
-     "    return consumable_price(held_count(code, state), make_seconds(code, state, game_data, ctx, store),"),
+     "    return consumable_price(0, make_seconds(code, unheld, game_data, ctx, store),",
+     "    return consumable_price(held_count(code, state), make_seconds(code, unheld, game_data, ctx, store),"),
+    ("consumable_price reader: a replacement is made from the held stock",
+     "    unheld = replace(state, inventory={}, bank_items={})",
+     "    unheld = state"),
 ]
 
 # loop_rate_core: recovery and the XP rate (consumable utility increments 3-4).

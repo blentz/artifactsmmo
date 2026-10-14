@@ -23,6 +23,7 @@ this module only reads its four inputs. Not wired into any decision yet.
   reads) over `TYPICAL_FIGHT_COOLDOWN_SECONDS`; 0 with no grind target, which
   makes buying unpriceable."""
 
+from dataclasses import replace
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, ge_price_of, npc_price_of
@@ -77,8 +78,15 @@ def replacement_price_of(code: str, state: WorldState, game_data: GameData,
                          store: LearningStore | None = None) -> Fraction | None:
     """The price in seconds of a unit PAST the held stock: the cheaper of making
     and buying it, as if none were held (USER 2026-10-09, "free until used up";
-    further units cost replacement). None when neither side is available."""
-    return consumable_price(0, make_seconds(code, state, game_data, ctx, store),
+    further units cost replacement). None when neither side is available.
+
+    The make side walks from EMPTY holdings: the walk credits a bag unit at 0
+    actions and a banked one at a withdraw, so a held food would price its own
+    replacement at nothing and the stock would make itself forever (live
+    2026-10-14: 38 cooked_trout in the bag priced 0 s, making one takes 4
+    actions)."""
+    unheld = replace(state, inventory={}, bank_items={})
+    return consumable_price(0, make_seconds(code, unheld, game_data, ctx, store),
                             buy_gold(code, state, game_data, ctx),
                             gold_per_second(state, game_data, ctx))
 

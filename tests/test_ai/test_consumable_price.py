@@ -139,3 +139,22 @@ class TestPrice:
         assert replacement_price_of("x", state, GameData(), _CTX) == 120
         monkeypatch.setattr(price_mod, "acquisition_actions", lambda *a, **k: UNOBTAINABLE_PER_UNIT)
         assert replacement_price_of("x", state, GameData(), _CTX) is None
+
+
+class TestReplacementIgnoresHoldings:
+    """The make side of a replacement price walks from EMPTY holdings: the
+    real walk credits a bag unit at 0 actions and a banked one at a withdraw,
+    so a held food priced its own replacement at nothing and the stock made
+    itself forever (live 2026-10-14: cooked_trout, 38 in C3P0's bag, priced 0 s
+    where making one takes 4 actions)."""
+
+    def test_a_held_food_and_its_input_price_the_full_walk(self, game_data: GameData) -> None:
+        bare = scenario_state(SCENARIOS["l20_boost_stock"], game_data)
+        bare = replace(bare, inventory={}, bank_items={})
+        ctx = replace(_CTX, combat_monster="wolf")
+        walk = make_seconds("cooked_chicken", bare, game_data, ctx, None)
+        assert walk is not None and walk > 0
+        held = replace(bare, inventory={"cooked_chicken": 5, "raw_chicken": 5},
+                       bank_items={"cooked_chicken": 5, "raw_chicken": 5})
+        assert make_seconds("cooked_chicken", held, game_data, ctx, None) < walk
+        assert replacement_price_of("cooked_chicken", held, game_data, ctx) == walk
