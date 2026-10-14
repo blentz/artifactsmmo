@@ -83,6 +83,7 @@ ACQUISITION_COST_CORE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai"
                              / "acquisition_cost_core.py")
 KEEP_VALUATION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "keep_valuation.py"
 BUY_SOURCE_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "buy_source_venue.py"
+HELD_TASK_PAYS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "held_task_pays.py"
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 POTION_PROVISION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_provision_qty.py"
 POTION_BASELINE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_baseline.py"
@@ -3436,6 +3437,28 @@ TASK_WORK_RATE_MUTATIONS = [
     ("task work rate: the fleet reads only this character",
      "        return self._task_work_rate(task_code, skills, window, character=None)",
      "        return self._task_work_rate(task_code, skills, window, character=self._character)"),
+]
+# held_task_pays (spec 2026-10-14 items-task-pays §2). OWN run_group: killed by
+# tests/test_ai/test_held_task_pays.py.
+HELD_TASK_PAYS_MUTATIONS = [
+    ("held_task_pays: a drop verdict does not pay",
+     "    if worth.gold or worth.drops:",
+     "    if worth.gold:"),
+    ("held_task_pays: a worthless task pays",
+     "    if not worth.xp:\n        return False",
+     "    if not worth.xp:\n        return True"),
+    ("held_task_pays: no learned rate never defers",
+     "    if rate is None:\n        return True",
+     "    if rate is None:\n        return False"),
+    ("held_task_pays: an equal rate pays",
+     "    return Fraction(rate) > grind",
+     "    return Fraction(rate) >= grind"),
+    ("held_task_pays: the fleet never stands in",
+     "    return own if own is not None else history.fleet_task_work_xp_per_second(code, skills)",
+     "    return own"),
+    ("held_task_pays: the worth reads the whole task, not what remains",
+     "                           state.task_total - state.task_progress,",
+     "                           state.task_total,"),
 ]
 # Killed by tests/test_ai/test_crafting_action.py.
 CRAFT_RECORD_PER_RUN_MUTATIONS = [
@@ -10639,6 +10662,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_learning_store.py", survivors)
     run_group(LEARNING_STORE_SRC, TASK_WORK_RATE_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)
+    run_group(HELD_TASK_PAYS_SRC, HELD_TASK_PAYS_MUTATIONS,
+              "tests/test_ai/test_held_task_pays.py", survivors)
     run_group(CRAFT_ACTION_SRC, CRAFT_RECORD_PER_RUN_MUTATIONS,
               "tests/test_ai/test_crafting_action.py", survivors)
     run_group(USE_CONSUMABLE_SRC, USE_CONSUMABLE_HEAL_MUTATIONS,
