@@ -138,8 +138,8 @@ class RootResolution:
     trunk, then the orphan skill roots (`_orphan_skill_roots`) — three ordered
     groups, none of them scored against each other. It exists because
     `objective_step_goal` can still return None for a
-    resolved root (`ReachCharLevel` with no combat target, the long-haul
-    items-task defer) and the arbiter walks it when the chosen step does not
+    resolved root (`ReachCharLevel` with no combat target, a paying held
+    items task) and the arbiter walks it when the chosen step does not
     plan. Deleting it regresses three named live traces — see
     `strategy_driver._resolve_step_goal` and `progression_tree`'s
     fallback-order comment.

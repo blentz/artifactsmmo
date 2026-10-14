@@ -134,8 +134,8 @@ production differential (`test_objectivestep_arming_diff.py`) ground the model's
 FAITHFULNESS *offline* — they are NOT logically consumed inside this proof term.
 
 Note: the model's below-50 arming is OPTIMISTIC relative to production.  Production's
-`objective_step_goal(ReachCharLevel)` returns None (no fight) in the long-haul items-task
-defer case (`bootstrap_gap > 4 ∧ items-task active`), but `perceptionRefresh` sets
+`objective_step_goal(ReachCharLevel)` returns None (no fight) in the paying-items-task
+defer case (an items task in progress AND it pays, `held_task_pays`), but `perceptionRefresh` sets
 `objectiveStepIsFight := true` unconditionally below 50.  That gap is folded into the named
 `hquiet` residual below — this proof does NOT claim the defer-case is handled.
 

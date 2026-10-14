@@ -8,7 +8,7 @@ Brick D2 of `docs/PLAN_residual_closure.md`. Three refinements over
 `docs/LEVEL_FIFTY_RESIDUALS.md`:
 
 1. **Defer-gated arming** (`perceptionRefreshD`): the combat objective is armed
-   below 50 ONLY outside the items-task long-haul defer window
+   below 50 ONLY outside the paying-items-task defer window
    (`deferGate`). Inside the window the cycle pursues the items task —
    production's actual behaviour in the one branch the F-tower
    over-approximated (residual 3). `itemsTaskDeferActive` is a state-carried
@@ -42,10 +42,10 @@ open Formal.Liveness.ProductionLadder
 open Formal.Liveness.CycleStep
 open Formal.Liveness.InventoryDynamics
 
-/-- The items-task long-haul DEFER window: production's observed defer decision
+/-- The paying-items-task DEFER window: production's observed defer decision
     AND the facts making the window self-certifying for the descent proof.
-    Production (`test_objectivestep_arming_diff.py`): defer ⟺ `bootstrap_gap >
-    4 ∧ items-task active` — an active items task means phase ∈
+    Production (`test_objectivestep_arming_diff.py`): defer ⟺ an items task in
+    progress ∧ it pays (`held_task_pays`) — an active items task means phase ∈
     {accepted, inProgress} (`Plan.phaseActive`) with work remaining
     (`taskProgress < taskTotal`), so the conjuncts under-approximate nothing. -/
 def deferGate (s : State) : Bool :=

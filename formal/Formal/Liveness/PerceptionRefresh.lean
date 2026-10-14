@@ -20,7 +20,7 @@ target-existence a THEOREM and `arming_justified_below_fifty` shows the set
 `objectiveStepIsFight := true` is BACKED (kernel target-existence + the production
 differential `formal/diff/test_objectivestep_arming_diff.py`, which pins
 `objective_step_goal(ReachCharLevel) → GrindCharacterXPGoal` whenever a target
-exists and we are not in the long-haul items-task defer case). So arming
+exists and we are not in the paying-items-task defer case). So arming
 `objectiveStepFires`/`objectiveStepIsFight` on `level < 50` is DISCHARGED, not a
 free assertion. It arms ONLY those two
 Bools — the chore flags (`hasOverstockItems`, `selectBankDepositsNonempty`, …)
@@ -82,8 +82,8 @@ consumed by proofs that merely need the set value:
   `winnableAcrossBand_grounded` fed through `combatObjective_live_below_fifty`) proves a
   winnable combat target EXISTS at every level `1 ≤ L < 50`.
 * The production differential (`formal/diff/test_objectivestep_arming_diff.py`) pins that
-  when such a target exists and we are NOT in the long-haul items-task defer case
-  (`bootstrap_gap > 4 ∧ items-task active`), production's
+  when such a target exists and we are NOT in the paying-items-task defer case
+  (an items task in progress AND it pays, `held_task_pays`), production's
   `objective_step_goal(ReachCharLevel)` yields a `GrindCharacterXPGoal`, a FIGHT.
 
 Together these ground the model's unconditional arming as a faithful image of production
@@ -116,7 +116,7 @@ theorem combatTarget_exists_below_fifty (L : Int) (hlo : 1 ≤ L) (hhi : L < 50)
   proved by `unfold perceptionRefresh; rw [if_pos]`.  This is what the capstone proof
   term directly consumes.
 
-The model's unconditional arming is OPTIMISTIC vs production: in the long-haul items-task
+The model's unconditional arming is OPTIMISTIC vs production: in the paying-items-task
 defer case production returns None (no fight), but `perceptionRefresh` sets `true`
 regardless.  That gap is the items-task component of the undischarged
 `BlockersQuietInfinitelyOften` residual — it is named there, not confronted here. -/

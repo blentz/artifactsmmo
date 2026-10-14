@@ -477,8 +477,8 @@ structure State where
       For now: list of (event_code, posX, posY). -/
   eventSpawns : List (String × Nat × Nat)
   /-- OPAQUE (residual-closure, `docs/PLAN_residual_closure.md`): production's
-      items-task LONG-HAUL DEFER decision — `bootstrap_gap > 4 ∧ items-task
-      active` (the one branch where `objective_step_goal(ReachCharLevel)`
+      items-task DEFER decision — an items task in progress AND it pays
+      (`held_task_pays`; the level gap plays no part) (the one branch where `objective_step_goal(ReachCharLevel)`
       yields NO fight; see `test_objectivestep_arming_diff.py`). Consumed only
       by `CycleStepD.deferGate` / `perceptionRefreshD`; the base
       `perceptionRefresh` tower ignores it. Defaulted so existing State

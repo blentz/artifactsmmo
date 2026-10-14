@@ -656,7 +656,7 @@ open Formal.Liveness.UnconditionalDescent
 
 -- Residual closure (2026-07-04, docs/PLAN_residual_closure.md): the
 -- defer-faithful, adversarially-re-arming capstone. cycleStepD models the
--- items-task LONG-HAUL DEFER window (residual 3: arming gated on
+-- paying-items-task DEFER window (residual 3: arming gated on
 -- itemsTaskDeferActive; inside the window the objective step works the held
 -- items task — since Phase 5-2c-iii-c-2 #4 that is the task objective's step,
 -- which replaced the PURSUE_TASK rung — descending taskCycles) and worst-cases chore re-arming (residual 4, fight
