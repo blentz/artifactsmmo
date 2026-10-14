@@ -75,19 +75,25 @@ task_code, state.task_type, remaining, …)` and returns True when:
    `drops`); or
 2. `worth.xp` (its producing skill is in `ctx.skill_demand`) AND the task's
    skill XP per second exceeds the grind's character XP per second:
-   - task side: a new `LearningStore.skill_xp_per_second(skill)` — this
-     character's skill XP over the cooldown seconds of its recent cycles that
-     gained XP in that skill (`delta_skill_xp_json`,
-     `actual_cooldown_seconds`). Not `skill_xp_per_cycle`: a cycle can be a
-     batched craft (`Craft(cooked_shrimp×10)`), so a per-cycle mean is not a
-     rate;
+   - task side: a new `LearningStore.task_work_xp_per_second(task_code,
+     skills)` — the XP of the demanded skills (`ctx.skill_demand`) over the
+     cooldown seconds of this character's cycles WORKING that task: rows with
+     `Cycle.task_code == task_code` whose goal is one of the two
+     `strategy_driver._pursue_goal` emits (`PursueTask(<code>)`,
+     `GatherMaterials(<code>, {…})`). Every such cycle stays in the
+     denominator, zero-XP gathers included: a mean over XP-gaining cycles only
+     is the 50x over-estimate `skill_grind_rate` was written to stop (R2D2,
+     2026-08-08). Fight cycles while the task is held are not its work and are
+     excluded, so fighting cannot lower the task's rate (an absorbing state).
+     Fallback: the fleet's rows for the same task
+     (`fleet_task_work_xp_per_second`), one-way, as `skill_grind_rate` does;
    - grind side: `best_loadout(state, game_data, ctx, ctx.combat_monster,
      history).rate.xp_per_second` (`loop_rate`'s rate, recovery included).
 
 **Rulings.**
 
-- With no learned skill rate (no store, or `skill_xp_per_second` returns
-  None), clause 2 is `worth.xp` alone. Cost if wrong: a slow demanded task
+- With no learned skill rate (no store, or `task_work_xp_per_second` returns
+  None for this character and the fleet), clause 2 is `worth.xp` alone. Cost if wrong: a slow demanded task
   preempts the grind until the skill has history.
 - The two sides are measured differently: the task side is LEARNED seconds,
   the grind side the MODELLED loop (`loop_rate`, the rate the loadout chooser
