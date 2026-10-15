@@ -102,6 +102,9 @@ _CRAFT_REPR = re.compile(r"Craft\((\w+)×(\d+)\)")
 _RECYCLE_REPR = re.compile(r"Recycle\((\w+)×(\d+)\)")
 """`RecycleAction.__repr__`: `Recycle(<code>×<quantity>)`."""
 
+_FIGHT_COST_CLASSES = ("FightAction", "RestAction", "MoveAction")
+"""The cycles a fight's loss cost is measured over (`fight_cost_rows`)."""
+
 
 def _parse_skill_xp_value(raw: str | None, skill: str) -> int:
     """Extract one skill's per-cycle xp delta from a stored JSON row.
@@ -1463,6 +1466,26 @@ class LearningStore:
                     .group_by(CombatLoadoutOutcome.task_key)
                     .order_by(func.min(CombatLoadoutOutcome.id)))
                 return list(rows)
+        except SQLAlchemyError:
+            return []
+
+    def fight_cost_rows(self, since_iso: str) -> list[tuple[str, str, str, int]]:
+        """This character's Fight, Rest and Move cycles at or after `since_iso`,
+        in id order, as `(action_class, action_repr, outcome, seconds)` with the
+        cooldown rounded to whole seconds (0 when none was recorded): the
+        loss-cost evidence a fight's win threshold reads
+        (`win_threshold_core.win_thresholds_from_rows`). [] on a DB error."""
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(
+                    select(Cycle.action_class, Cycle.action_repr, Cycle.outcome,
+                           Cycle.actual_cooldown_seconds)
+                    .where(Cycle.character == self._character,
+                           Cycle.ts >= since_iso,
+                           col(Cycle.action_class).in_(_FIGHT_COST_CLASSES))
+                    .order_by(col(Cycle.id)))
+                return [(str(cls), str(rep), outcome, round(secs or 0))
+                        for cls, rep, outcome, secs in rows]
         except SQLAlchemyError:
             return []
 
