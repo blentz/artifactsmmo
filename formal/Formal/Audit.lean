@@ -420,6 +420,10 @@ open Formal.PriorityBand
 #print axioms Formal.FightOutcome.stock_mono
 #print axioms Formal.FightOutcome.turns_le_roundsToKill
 #print axioms Formal.FightOutcome.win_turns_stock_indep
+#print axioms Formal.FightOdds.fightOdds_sum_one
+#print axioms Formal.FightOdds.fightOdds_noCrit
+#print axioms Formal.FightOdds.fightOdds_win_mono_stock
+#print axioms Formal.FightOdds.fightOdds_win_mono_hp
 #print axioms Formal.GroupFight.groupOutcome_single
 #print axioms Formal.GroupFight.killRounds_antitone
 #print axioms Formal.GroupFight.win_survivor

@@ -196,6 +196,7 @@ import Formal.ConsumableFloor
 import Formal.LossRisk
 import Formal.FailureRecovery
 import Formal.FightOutcome
+import Formal.FightOdds
 import Formal.GroupFight
 import Formal.ConsumablePrice
 import Formal.LoopRate

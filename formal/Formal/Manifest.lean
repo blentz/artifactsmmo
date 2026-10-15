@@ -522,6 +522,11 @@ open Formal.PriorityBand
 #check @Formal.FightOutcome.stock_mono                 -- more stock: no lost win, no lower HP
 #check @Formal.FightOutcome.turns_le_roundsToKill      -- never past the kill round
 #check @Formal.FightOutcome.win_turns_stock_indep      -- a win takes the same rounds
+-- FightOdds (fight odds part A, `ai/fight_odds_core.py`):
+#check @Formal.FightOdds.fightOdds_sum_one          -- the ending probabilities sum to 1
+#check @Formal.FightOdds.fightOdds_noCrit           -- no crit: the tree is the expected walk
+#check @Formal.FightOdds.fightOdds_win_mono_stock   -- more stock never lowers P(win)
+#check @Formal.FightOdds.fightOdds_win_mono_hp      -- no stock: more HP never lowers P(win)
 -- GroupFight (group fights increment 1, `ai/group_fight_core.py`):
 #check @Formal.GroupFight.groupOutcome_single   -- one member IS the solo walk
 #check @Formal.GroupFight.killRounds_antitone   -- a member adding damage never delays the kill

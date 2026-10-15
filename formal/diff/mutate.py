@@ -823,6 +823,39 @@ COMBAT_MARGIN_HP_MUTATIONS = [
 # fight_outcome_core: the consumable turn walk (consumable utility increment 1).
 # Killed by formal/diff/test_fight_outcome_diff.py (exact agreement with the
 # proved Formal.FightOutcome.fightOutcome).
+FIGHT_OUTCOME_MUTATIONS = [
+    ("fight_outcome: drink at exactly half (< -> <=)",
+     "    if 2 * pool < max_pool and stock > 0:",
+     "    if 2 * pool <= max_pool and stock > 0:"),
+    ("fight_outcome: drink with no stock",
+     "    if 2 * pool < max_pool and stock > 0:",
+     "    if 2 * pool < max_pool and stock >= 0:"),
+    ("fight_outcome: a drink is not capped at max hp",
+     "        return min(pool + restore_pool, max_pool), stock - 1",
+     "        return pool + restore_pool, stock - 1"),
+    ("fight_outcome: first-mover order inverted",
+     "        if terms.player_first:",
+     "        if not terms.player_first:"),
+    ("fight_outcome: the second mover survives at exactly 0 HP",
+     "            pool -= terms.die_step\n            if pool <= 0:\n"
+     "                return FightOutcome(False, round_no, 0, stock - left)\n"
+     "            pool, left = drink(",
+     "            pool -= terms.die_step\n            if pool < 0:\n"
+     "                return FightOutcome(False, round_no, 0, stock - left)\n"
+     "            pool, left = drink("),
+    ("fight_outcome: the out-sustain win reports 0 rounds",
+     "        return FightOutcome(True, terms.rounds_to_kill, pool, 0)",
+     "        return FightOutcome(True, 0, pool, 0)"),
+    ("fight_outcome: a DEAD terms exit is not walked",
+     "    if terms.exit not in (FightExit.NONE, FightExit.DEAD) or pool <= 0:",
+     "    if terms.exit is not FightExit.NONE or pool <= 0:"),
+    ("fight_outcome: the restore is not scaled",
+     "    restore_pool = restore * SCALE",
+     "    restore_pool = restore"),
+]
+
+# fight_odds_core: the merged crit walk (fight odds part A).
+# Killed by tests/test_ai/test_fight_odds_core.py
 FIGHT_ODDS_MUTATIONS = [
     ("fight_odds: a zero-probability branch is kept",
      "    return tuple(b for b in branches if b[0] != 0)",
@@ -853,36 +886,6 @@ FIGHT_ODDS_MUTATIONS = [
     ("fight_odds: no drink before the player's hit",
      "    player, left = drink(player, max_pool, restore_pool, left)",
      "    pass"),
-]
-FIGHT_OUTCOME_MUTATIONS = [
-    ("fight_outcome: drink at exactly half (< -> <=)",
-     "    if 2 * pool < max_pool and stock > 0:",
-     "    if 2 * pool <= max_pool and stock > 0:"),
-    ("fight_outcome: drink with no stock",
-     "    if 2 * pool < max_pool and stock > 0:",
-     "    if 2 * pool < max_pool and stock >= 0:"),
-    ("fight_outcome: a drink is not capped at max hp",
-     "        return min(pool + restore_pool, max_pool), stock - 1",
-     "        return pool + restore_pool, stock - 1"),
-    ("fight_outcome: first-mover order inverted",
-     "        if terms.player_first:",
-     "        if not terms.player_first:"),
-    ("fight_outcome: the second mover survives at exactly 0 HP",
-     "            pool -= terms.die_step\n            if pool <= 0:\n"
-     "                return FightOutcome(False, round_no, 0, stock - left)\n"
-     "            pool, left = drink(",
-     "            pool -= terms.die_step\n            if pool < 0:\n"
-     "                return FightOutcome(False, round_no, 0, stock - left)\n"
-     "            pool, left = drink("),
-    ("fight_outcome: the out-sustain win reports 0 rounds",
-     "        return FightOutcome(True, terms.rounds_to_kill, pool, 0)",
-     "        return FightOutcome(True, 0, pool, 0)"),
-    ("fight_outcome: a DEAD terms exit is not walked",
-     "    if terms.exit not in (FightExit.NONE, FightExit.DEAD) or pool <= 0:",
-     "    if terms.exit is not FightExit.NONE or pool <= 0:"),
-    ("fight_outcome: the restore is not scaled",
-     "    restore_pool = restore * SCALE",
-     "    restore_pool = restore"),
 ]
 
 # consumable_price_core: the build/buy price (consumable utility increment 2).

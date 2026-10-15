@@ -53,6 +53,7 @@ import Formal.ConsumableFloor
 import Formal.LossRisk
 import Formal.FailureRecovery
 import Formal.FightOutcome
+import Formal.FightOdds
 import Formal.GroupFight
 import Formal.ConsumablePrice
 import Formal.LoopRate
@@ -3452,6 +3453,36 @@ example : ∀ (t : Formal.FightOutcome.Terms) (hp maxHp : Int) (restore s s' : N
     (Formal.FightOutcome.fightOutcome t hp maxHp restore s).turns
       = (Formal.FightOutcome.fightOutcome t hp maxHp restore s').turns :=
   @Formal.FightOutcome.win_turns_stock_indep
+
+/-! ### FightOdds role contracts. -/
+
+example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp maxHp : Int)
+    (restore stock : Nat), d.pCrit ≤ 100 → d.mCrit ≤ 100 →
+    ((Formal.FightOdds.fightOdds t d hp maxHp restore stock).map (·.1)).foldr (· + ·) 0 = 1 :=
+  @Formal.FightOdds.fightOdds_sum_one
+
+example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp maxHp : Int)
+    (restore stock : Nat), d.pCrit = 0 → d.mCrit = 0 →
+    d.killNormal = t.killStep → d.dieNormal = t.dieStep → d.monsterHp = t.monsterHp →
+    0 < t.monsterHp →
+    Formal.FightOdds.fightOdds t d hp maxHp restore stock =
+      [(1, ⟨(Formal.FightOutcome.fightOutcome t hp maxHp restore stock).win,
+            (Formal.FightOutcome.fightOutcome t hp maxHp restore stock).turns,
+            (Formal.FightOutcome.fightOutcome t hp maxHp restore stock).hpEnd,
+            (Formal.FightOutcome.fightOutcome t hp maxHp restore stock).used⟩)] :=
+  @Formal.FightOdds.fightOdds_noCrit
+
+example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp maxHp : Int)
+    (restore s s' : Nat), s ≤ s' → d.pCrit ≤ 100 → d.mCrit ≤ 100 →
+    Formal.FightOdds.winProb (Formal.FightOdds.fightOdds t d hp maxHp restore s)
+      ≤ Formal.FightOdds.winProb (Formal.FightOdds.fightOdds t d hp maxHp restore s') :=
+  @Formal.FightOdds.fightOdds_win_mono_stock
+
+example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp hp' maxHp : Int)
+    (restore stock : Nat), hp ≤ hp' → d.pCrit ≤ 100 → d.mCrit ≤ 100 → stock = 0 →
+    Formal.FightOdds.winProb (Formal.FightOdds.fightOdds t d hp maxHp restore stock)
+      ≤ Formal.FightOdds.winProb (Formal.FightOdds.fightOdds t d hp' maxHp restore stock) :=
+  @Formal.FightOdds.fightOdds_win_mono_hp
 
 /-! ### GroupFight contracts. -/
 

@@ -1844,6 +1844,24 @@ def runFightOutcome (args : Array Json) : Json :=
               ("hp_end", Json.num o.hpEnd), ("used", Json.num (Int.ofNat o.used)),
               ("closed_win", Json.bool (Formal.FightOutcome.closedWin t (i 6) (i 7)))]
 
+/-- A fight's ending distribution (`Formal.FightOdds.fightOdds`), grouped by
+ending with summed probabilities. Args: `[rawPlayer, killStep, monsterHp, recon,
+dieStep, playerFirst, hp, maxHp, restore, stock, dMonsterHp, killNormal,
+killCrit, pCrit, dieNormal, dieCrit, mCrit]`, playerFirst as 0/1. -/
+def runFightOdds (args : Array Json) : Json :=
+  let i : Nat → Int := fun k => intArg args k
+  let t : Formal.FightOutcome.Terms := ⟨i 0, i 1, i 2, i 3, i 4, i 5 != 0⟩
+  let d : Formal.FightOdds.Damage := ⟨i 10, i 11, i 12, (i 13).toNat, i 14, i 15, (i 16).toNat⟩
+  let xs := Formal.FightOdds.fightOdds t d (i 6) (i 7) (i 8).toNat (i 9).toNat
+  let grouped := xs.foldl (fun (acc : List (Formal.FightOdds.Ending × Rat)) e =>
+    match acc.find? (·.1 == e.2) with
+    | some _ => acc.map fun a => if a.1 == e.2 then (a.1, a.2 + e.1) else a
+    | none => acc ++ [(e.2, e.1)]) []
+  Json.arr (grouped.map fun (en, p) => Json.mkObj [
+    ("win", Json.bool en.win), ("turns", Json.num en.turns), ("hp_end", Json.num en.hpEnd),
+    ("used", Json.num (Int.ofNat en.used)),
+    ("prob_num", Json.num p.num), ("prob_den", Json.num (Int.ofNat p.den))]).toArray
+
 /-- A party boss fight (`Formal.GroupFight.groupOutcome`). Args: `[bossHp,
 recon, drain, n]` then `n` members of `[raw, net, hit, area, hp, maxHp, first,
 threat, restore, stock]`, first as 0/1. -/
@@ -3067,6 +3085,8 @@ def runOne (item : Json) : Json :=
     runFailureRecovery args
   else if kind == "fight_outcome" then
     runFightOutcome args
+  else if kind == "fight_odds" then
+    runFightOdds args
   else if kind == "group_fight" then
     runGroupFight args
   else if kind == "consumable_price" then
