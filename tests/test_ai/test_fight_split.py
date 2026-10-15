@@ -94,3 +94,11 @@ def test_odds_walk_with_no_crit_is_the_walk():
     e = endings[0]
     assert (e.win, e.turns, e.hp_end, e.used) == (outcome.win, outcome.turns, outcome.hp_end, outcome.used)
     assert fight_outcome(combat_terms(state, gd, "owl"), max_hp, max_hp, 0, 0) == outcome
+
+
+def test_a_damage_bonus_raises_the_players_crit_not_the_monsters():
+    _, bare = fight_split(_state(), _gd(), "owl")
+    _, boosted = fight_split(_state(dmg=20, dmg_elements={"fire": 10}), _gd(), "owl")
+    assert boosted.kill_crit > bare.kill_crit
+    assert boosted.kill_normal > bare.kill_normal
+    assert (boosted.die_normal, boosted.die_crit) == (bare.die_normal, bare.die_crit)
