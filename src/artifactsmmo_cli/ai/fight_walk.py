@@ -19,7 +19,9 @@ gate can ask it without a cycle through the obtain model
 from collections.abc import Sequence
 
 from artifactsmmo_cli.ai.boost_selection import project_equip
-from artifactsmmo_cli.ai.combat import combat_terms, fight_max_hp
+from artifactsmmo_cli.ai.combat import SPLASH_RESTORE as SPLASH_RESTORE
+from artifactsmmo_cli.ai.combat import combat_terms, fight_max_hp, fight_split
+from artifactsmmo_cli.ai.fight_odds_core import Ending, fight_odds
 from artifactsmmo_cli.ai.fight_outcome_core import FightOutcome, fight_outcome
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.heal_catalog import POTION
@@ -32,12 +34,6 @@ RESTORE = "restore"
 BOOST_PREFIX = "boost_"
 """The API effects of a stat-buff utility potion (`boost_dmg_*`, `boost_res_*`,
 `boost_hp`)."""
-
-SPLASH_RESTORE = "splash_restore"
-"""The API effect of a splash potion: "Restores X HP at the start of the turn to
-another character" — `hp_restore` carries its value too, but it never heals the
-wearer, so the solo loop refuses it rather than walking it as a restore."""
-
 
 def potion_effects_usable(codes: Sequence[str]) -> bool:
     """Every effect changes the wearer's own fight: a `restore` or a boost."""
@@ -103,3 +99,12 @@ def fight_walk(state: WorldState, game_data: GameData, monster: str,
     outcome = fight_outcome(combat_terms(projected, game_data, monster),
                             max_hp, max_hp, restore_hp, restore_stock)
     return outcome, max_hp, restore_code
+
+
+def odds_walk(state: WorldState, game_data: GameData, monster: str,
+              loadout: Sequence[tuple[str, int]]) -> tuple[tuple[Ending, ...], int, str | None]:
+    """`fight_walk`'s fight as its exact ending distribution (spec §1)."""
+    projected, restore_code, restore_hp, restore_stock = wear(state, game_data, loadout)
+    max_hp = fight_max_hp(projected, game_data, monster)
+    terms, damage = fight_split(projected, game_data, monster)
+    return fight_odds(terms, damage, max_hp, max_hp, restore_hp, restore_stock), max_hp, restore_code

@@ -7,20 +7,29 @@ a stable verdict, not a sampled fight."""
 
 import math
 from dataclasses import dataclass
+from fractions import Fraction
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import ProjectedStats, project_loadout_stats
+from artifactsmmo_cli.ai.fight_odds_core import RoundDamage, fight_odds
+from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
 from artifactsmmo_cli.ai.fight_terms_core import LOSE_MARGIN as LOSE_MARGIN
 from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS as MAX_TURNS
+from artifactsmmo_cli.ai.fight_terms_core import SCALE, FightTerms, fight_terms, terms_margin, terms_win
 from artifactsmmo_cli.ai.fight_terms_core import WIN_MARGIN as WIN_MARGIN
-from artifactsmmo_cli.ai.fight_terms_core import FightTerms, fight_terms, terms_margin, terms_win
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.group_fight_core import PartyBoss, PartyMember
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import combat_key
+from artifactsmmo_cli.ai.utility_slot import UTILITY_SLOTS, utility_slot_quantity
 from artifactsmmo_cli.ai.world_state import WorldState
+
+SPLASH_RESTORE = "splash_restore"
+"""The API effect of a splash potion: "Restores X HP at the start of the turn to
+another character" — `hp_restore` carries its value too, but it never heals the
+wearer, so the solo loop refuses it rather than walking it as a restore."""
 
 GREED_MAX_STACKS = 9
 """Max `greed` stacks the closed-form model assumes (conservative upper bound).
@@ -71,6 +80,17 @@ def _element_damage(attack: int, dmg_pct: int, resist_pct: int) -> int:
     output = attack + _round_half_up(attack * dmg_pct / 100)
     blocked = _round_half_up(output * resist_pct / 100)
     return max(0, output - blocked)
+
+
+def _crit_hit(attack: dict[str, int], dmg_global: int, dmg_elements: dict[str, int],
+              resist: dict[str, int]) -> int:
+    """One CRITICAL turn's damage: each element's net hit ×1.5, rounded half up
+    per element — the server's rule (2026-10-15 fight logs: 77 → 116, 83 → 125,
+    64 → 96). `(3 × d + 1) // 2` is ⌊1.5 × d + ½⌋ exactly."""
+    return sum(
+        (3 * _element_damage(attack.get(e, 0), dmg_global + dmg_elements.get(e, 0), resist.get(e, 0)) + 1) // 2
+        for e in ELEMENTS
+    )
 
 
 def _expected_hit(
@@ -203,6 +223,7 @@ class FightNumbers:
     hit: int
     max_hp: int
     threat: int
+    damage: RoundDamage
 
 
 def combat_terms(state: WorldState, game_data: GameData, monster_code: str) -> FightTerms:
@@ -363,7 +384,46 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
         state.hp, p.max_hp,
         p.initiative >= game_data.monster_initiative(monster_code),
     )
-    return FightNumbers(terms, raw_player, hit, p.max_hp, threat)
+    crit_player = _crit_hit(p.attack, p.dmg, p.dmg_elements, m_resist)
+    crit_monster = _crit_hit(m_attack, 0, {}, p.resistance)
+    # Everything a round charges beyond the bare hit (spec 2026-10-15 §1): the
+    # expected step less its hit term, applied to both crit outcomes.
+    kill_rest = kill_step - raw_player * SCALE - 50 * raw_player * p.critical_strike
+    die_rest = die_step - raw_monster * SCALE - 50 * raw_monster * m_crit
+    damage = RoundDamage(
+        effective_monster_hp,
+        raw_player * SCALE + kill_rest, crit_player * SCALE + kill_rest, p.critical_strike,
+        raw_monster * SCALE + die_rest, crit_monster * SCALE + die_rest, m_crit,
+    )
+    return FightNumbers(terms, raw_player, hit, p.max_hp, threat, damage)
+
+
+def fight_split(state: WorldState, game_data: GameData, monster_code: str) -> tuple[FightTerms, RoundDamage]:
+    """`fight_numbers`' terms and the round's crit split, from the same integers."""
+    n = fight_numbers(state, game_data, monster_code)
+    return n.terms, n.damage
+
+
+def worn_restore(state: WorldState, game_data: GameData) -> tuple[int, int]:
+    """`(restore HP, stock)` of the first worn utility potion that heals the
+    wearer, `(0, 0)` without one. A `splash_restore` heals another character."""
+    for slot in UTILITY_SLOTS:
+        code = state.equipment.get(slot)
+        if not code or SPLASH_RESTORE in game_data.effect_codes(code):
+            continue
+        stats = game_data.item_stats(code)
+        if stats is not None and stats.hp_restore > 0:
+            return stats.hp_restore, utility_slot_quantity(state, slot)
+    return 0, 0
+
+
+def win_probability(state: WorldState, game_data: GameData, monster_code: str) -> Fraction:
+    """P(win) of fighting now: from `state.hp`, in the on-hand loadout
+    `predict_win` reads, drinking the worn restore potion (spec §4)."""
+    terms, damage = fight_split(state, game_data, monster_code)
+    restore, stock = worn_restore(state, game_data)
+    return odds_win(fight_odds(terms, damage, state.hp,
+                               fight_max_hp(state, game_data, monster_code), restore, stock))
 
 
 def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bool:

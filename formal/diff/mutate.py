@@ -888,6 +888,29 @@ FIGHT_ODDS_MUTATIONS = [
      "    pass"),
 ]
 
+# combat.fight_split / win_probability: the crit split of a round (fight odds part A).
+# Killed by tests/test_ai/test_fight_split.py
+FIGHT_SPLIT_MUTATIONS = [
+    ("fight_split: the crit hit rounds down",
+     "(3 * _element_damage(attack.get(e, 0), dmg_global + dmg_elements.get(e, 0), resist.get(e, 0)) + 1) // 2",
+     "(3 * _element_damage(attack.get(e, 0), dmg_global + dmg_elements.get(e, 0), resist.get(e, 0))) // 2"),
+    ("fight_split: kill_rest keeps the crit term",
+     "    kill_rest = kill_step - raw_player * SCALE - 50 * raw_player * p.critical_strike",
+     "    kill_rest = kill_step - raw_player * SCALE"),
+    ("fight_split: die_rest keeps the crit term",
+     "    die_rest = die_step - raw_monster * SCALE - 50 * raw_monster * m_crit",
+     "    die_rest = die_step - raw_monster * SCALE"),
+    ("fight_split: the monster crit hit reads the player's damage bonus",
+     "    crit_monster = _crit_hit(m_attack, 0, {}, p.resistance)",
+     "    crit_monster = _crit_hit(m_attack, p.dmg, {}, p.resistance)"),
+    ("win_probability: reads max HP instead of current",
+     "    return odds_win(fight_odds(terms, damage, state.hp,",
+     "    return odds_win(fight_odds(terms, damage, fight_max_hp(state, game_data, monster_code),"),
+    ("worn_restore: a splash potion is a self restore",
+     "        if not code or SPLASH_RESTORE in game_data.effect_codes(code):",
+     "        if not code:"),
+]
+
 # consumable_price_core: the build/buy price (consumable utility increment 2).
 # Killed by formal/diff/test_consumable_price_diff.py (exact agreement with the
 # proved Formal.ConsumablePrice.consumablePrice).
@@ -10324,6 +10347,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_fight_outcome_diff.py", survivors)
     run_group(FIGHT_ODDS_CORE_SRC, FIGHT_ODDS_MUTATIONS,
               "tests/test_ai/test_fight_odds_core.py", survivors)
+    run_group(COMBAT_SRC, FIGHT_SPLIT_MUTATIONS,
+              "tests/test_ai/test_fight_split.py", survivors)
     run_group(GROUP_FIGHT_CORE_SRC, GROUP_FIGHT_MUTATIONS,
               "formal/diff/test_group_fight_diff.py", survivors)
     run_group(COMBAT_SRC, PARTY_TERMS_MUTATIONS,
