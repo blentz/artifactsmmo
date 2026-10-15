@@ -1154,6 +1154,9 @@ LOOP_RATE_READER_MUTATIONS = [
     ("loop_rate reader: an unheld unpriced food is on the menu",
      "        if held > 0 or price is not None:\n            menu.append(",
      "        if True:\n            menu.append("),
+    ("loop_rate reader: a sure win still needs a spawn tile",
+     "    if p_win < 1:\n        extra = (1 - p_win)",
+     "    if True:\n        extra = (1 - p_win)"),
     ("loop_rate reader: a loss walks back for free",
      "    extra = (1 - p_win) * travel_seconds(RESPAWN_TILE, _monster_tile(game_data, monster))",
      "    extra = Fraction(0)"),
@@ -1220,8 +1223,11 @@ BEST_LOADOUT_READER_MUTATIONS = [
      "for code, n in best.rate.used if n >= 0)"),
     ("best_loadout reader: the grind target outranks the fight ahead",
      "    monster = ctx.fight_monster or ctx.combat_monster\n"
-     "    if monster is None:\n        return None\n    return chosen(",
+     "    if monster is None or not game_data.monster_locations(monster):\n        return None\n    return chosen(",
      "    monster = ctx.combat_monster or ctx.fight_monster\n"
+     "    if monster is None:\n        return None\n    return chosen("),
+    ("best_loadout reader: a monster that spawns nowhere is a fight ahead",
+     "    if monster is None or not game_data.monster_locations(monster):\n        return None\n    return chosen(",
      "    if monster is None:\n        return None\n    return chosen("),
     ("best_loadout reader: the cycle's pick is reused for any monster",
      "    if ctx.loadout is not None and ctx.loadout.monster == monster:",
@@ -6526,8 +6532,11 @@ FIGHT_STEP_POTION_MUTATIONS = [
      "    return (heal_prep_goal(state, game_data, ctx, monster)\n"
      "            or potion_prep_goal(state, game_data, ctx, monster))\n"),
     ("fight step: no loadout still preps",
-     "    if monster is None or ctx.loadout is None:\n",
-     "    if monster is None:\n"),
+     "    if monster is None or ctx.loadout is None or not game_data.monster_locations(monster):\n",
+     "    if monster is None or not game_data.monster_locations(monster):\n"),
+    ("fight step: a monster that spawns nowhere is still prepped",
+     "    if monster is None or ctx.loadout is None or not game_data.monster_locations(monster):\n",
+     "    if monster is None or ctx.loadout is None:\n"),
 ]
 LADDER_SUPPLIES_MUTATIONS = [
     ("ladder supplies: every potion is the ladder's",
