@@ -799,3 +799,6 @@ class CombatLoadoutOutcome(SQLModel, table=True):
     predicted_win: bool
     actual_win: bool
     level: int | None = None
+    # win_probability at fight time: a stored diagnostic, never a decision
+    # input. None on rows from before it existed and on party fights.
+    p_win: float | None = None

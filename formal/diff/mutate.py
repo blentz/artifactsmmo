@@ -179,6 +179,7 @@ SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 ROLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "role_selection.py"
 PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
+LOADOUT_CALIBRATION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "macro" / "loadout_calibration.py"
 INTENTION_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "intention_progress.py"
 LEVEL_SKILL_EXPAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grind_rung.py"
 GRIND_CYCLE_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "grind_cycle_census.py"
@@ -6791,6 +6792,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
+    LOADOUT_CALIBRATION_SRC,
     ROLE_SELECTION_SRC,
     FOOD_PRODUCER_SRC,
     SKILL_CREDIT_SRC,
@@ -9143,6 +9145,30 @@ FLEET_LEARNED_MIGRATION_MUTATIONS = [
 ]
 
 
+# Every fight records its win odds (2026-10-15). Killed by
+# tests/test_ai/learning/test_combat_loadout_outcome_store.py (migration),
+# tests/test_ai/macro/test_loadout_calibration.py (bucketing) and
+# tests/test_ai/test_player_learning.py (the party fight records none).
+COMBAT_ODDS_STORE_MUTATIONS = [
+    ("p_win migration: the column is never added",
+     '            if "p_win" not in clo_cols:\n',
+     '            if False:\n'),
+]
+COMBAT_ODDS_REPORT_MUTATIONS = [
+    ("p_win report: a certain win overflows the top bucket",
+     "buckets[min(int(r.p_win * 10), 9)].append(r)",
+     "buckets[int(r.p_win * 10)].append(r)"),
+]
+COMBAT_ODDS_PLAYER_MUTATIONS = [
+    ("p_win record: a party fight records the solo odds",
+     "            self.history.record_combat_outcome(\n"
+     "                party_combat_key(action.monster_code), loadout, True, outcome == \"ok\", state.level)",
+     "            self.history.record_combat_outcome(\n"
+     "                party_combat_key(action.monster_code), loadout, True, outcome == \"ok\", state.level,\n"
+     "                p_win=win_probability(state, self.game_data, action.monster_code))"),
+]
+
+
 # The accept gate: no task held and a draw owed, nothing else (USER
 # 2026-10-06 dropped the gear-chain deferral). Killed by
 # tests/test_ai/test_tiers_means.py.
@@ -10962,6 +10988,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_task_exchange_learning.py", survivors)
     run_group(LEARNING_STORE_SRC, FLEET_LEARNED_MIGRATION_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)
+    run_group(LEARNING_STORE_SRC, COMBAT_ODDS_STORE_MUTATIONS,
+              "tests/test_ai/learning/test_combat_loadout_outcome_store.py", survivors)
+    run_group(LOADOUT_CALIBRATION_SRC, COMBAT_ODDS_REPORT_MUTATIONS,
+              "tests/test_ai/macro/test_loadout_calibration.py", survivors)
+    run_group(PLAYER_SRC, COMBAT_ODDS_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player_learning.py", survivors)
     run_group(ROOT_DECISION_SRC, TASK_ROOT_MUTATIONS,
               "tests/test_ai/test_task_objective.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, TASK_STEP_MUTATIONS,

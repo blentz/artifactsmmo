@@ -72,3 +72,29 @@ def test_report_per_loadout_win_loss_counts() -> None:
     report = loadout_calibration_report(rows)
     # 2 wins and 1 loss for stick loadout — the exact tally row must appear
     assert "| weapon_slot=stick | 2 | 1 |" in report
+
+
+def _odds_row(p: float | None, won: bool) -> CombatLoadoutOutcomeRow:
+    return CombatLoadoutOutcomeRow("Robby", "combat:owl", {}, True, won, p)
+
+
+def test_report_buckets_win_odds_against_observed() -> None:
+    rows = [_odds_row(0.05, False), _odds_row(0.63, True), _odds_row(0.66, False),
+            _odds_row(0.97, True), _odds_row(None, True)]
+    report = loadout_calibration_report(rows)
+    assert "## P(win) calibration" in report
+    assert "| bucket | fights | mean predicted | observed |" in report
+    assert "| 0.0-0.1 | 1 | 5% | 0% |" in report
+    assert "| 0.6-0.7 | 2 | 64.5% | 50% |" in report
+    assert "| 0.9-1.0 | 1 | 97% | 100% |" in report
+    assert "No P(win) recorded yet." not in report
+
+
+def test_report_a_certain_win_lands_in_the_top_bucket() -> None:
+    report = loadout_calibration_report([_odds_row(1.0, True)])
+    assert "| 0.9-1.0 | 1 | 100% | 100% |" in report
+
+
+def test_report_without_recorded_odds_says_so() -> None:
+    report = loadout_calibration_report([_odds_row(None, True)])
+    assert "No P(win) recorded yet." in report

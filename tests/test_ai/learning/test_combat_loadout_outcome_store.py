@@ -1,6 +1,7 @@
 """Tests for LearningStore combat loadout outcome append table (Task 1)."""
 
 import tempfile
+from fractions import Fraction
 
 from sqlmodel import create_engine
 
@@ -130,3 +131,31 @@ def test_the_lost_keys_read_as_empty_on_error(tmp_path):
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="hero")
     _break_engine(store)
     assert store.lost_task_keys(30) == []
+
+
+def test_the_win_odds_are_stored_as_a_float_and_default_to_none(tmp_path):
+    store = LearningStore(db_path=str(tmp_path / "p.db"), character="C3P0")
+    store.record_combat_outcome("combat:owl", {}, True, False, 34, p_win=Fraction(63, 100))
+    store.record_combat_outcome("combat:owl", {}, True, True, 34)
+    rows = store.combat_loadout_outcomes()
+    assert [r.p_win for r in rows] == [0.63, None]
+    store.close()
+
+
+def test_a_table_from_before_the_p_win_column_gains_it(tmp_path):
+    path = str(tmp_path / "old.db")
+    engine = create_engine(f"sqlite:///{path}")
+    with engine.begin() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE combat_loadout_outcome (id INTEGER NOT NULL PRIMARY KEY, "
+            "character VARCHAR NOT NULL, task_key VARCHAR NOT NULL, loadout VARCHAR NOT NULL, "
+            "predicted_win BOOLEAN NOT NULL, actual_win BOOLEAN NOT NULL, level INTEGER)")
+        conn.exec_driver_sql(
+            "INSERT INTO combat_loadout_outcome (character, task_key, loadout, predicted_win, "
+            "actual_win, level) VALUES ('C3P0', 'combat:pig', '{}', 1, 0, 5)")
+    engine.dispose()
+    store = LearningStore(db_path=path, character="C3P0")
+    assert [r.p_win for r in store.combat_loadout_outcomes()] == [None]
+    store.record_combat_outcome("combat:pig", {}, True, True, 6, p_win=Fraction(1, 2))
+    assert [r.p_win for r in store.combat_loadout_outcomes()] == [None, 0.5]
+    store.close()

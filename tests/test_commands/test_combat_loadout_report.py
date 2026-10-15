@@ -1,5 +1,6 @@
 """Tests for the combat-loadout-report CLI command."""
 
+from fractions import Fraction
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -91,3 +92,13 @@ def test_command_empty_db_gives_empty_state_message(
     result = runner.invoke(app, ["combat-loadout-report", "--db", db])
     assert result.exit_code == 0
     assert "No fight outcome data recorded yet" in result.output
+
+
+def test_command_fills_p_win_from_the_db(tmp_path: Path, runner: CliRunner) -> None:
+    db = str(tmp_path / "l.db")
+    store = LearningStore(db_path=db, character="hero")
+    store.record_combat_outcome("combat:owl", {}, True, True, 5, p_win=Fraction(97, 100))
+    store.close()
+    result = runner.invoke(app, ["combat-loadout-report", "--db", db])
+    assert result.exit_code == 0
+    assert "| 0.9-1.0 | 1 | 97% | 100% |" in result.output

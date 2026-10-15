@@ -73,6 +73,7 @@ class CombatLoadoutOutcomeRow:
     loadout: dict[str, str]
     predicted_win: bool
     actual_win: bool
+    p_win: float | None = None
 
 
 def grind_goal_prefix(skill: str) -> str:
@@ -252,6 +253,12 @@ class LearningStore:
             if "level" not in clo_cols:
                 conn.exec_driver_sql(
                     "ALTER TABLE combat_loadout_outcome ADD COLUMN level INTEGER")
+            # Fight-odds calibration (2026-10-15): a fight outcome records the
+            # win probability it was fought at. Older rows keep NULL, which the
+            # calibration report leaves out of its buckets.
+            if "p_win" not in clo_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE combat_loadout_outcome ADD COLUMN p_win REAL")
             # Fleet-wide learning (2026-10-06): the per-character
             # `learned_settings` rows fold into one account-wide row per key.
             # The largest value wins: every row is a lower bound on the same
@@ -1399,9 +1406,11 @@ class LearningStore:
         return sum(vals) / len(vals) if vals else default
 
     def record_combat_outcome(self, task_key: str, loadout: dict[str, str],
-                              predicted_win: bool, actual_win: bool, level: int) -> None:
-        """Append one fight outcome row, at the character's `level`. APPEND;
-        NOT upsert. Best-effort: SQLAlchemyError is caught and printed."""
+                              predicted_win: bool, actual_win: bool, level: int,
+                              p_win: Fraction | None = None) -> None:
+        """Append one fight outcome row, at the character's `level`, with the
+        win probability it was fought at (`p_win`, stored as a float diagnostic;
+        None for a party fight). APPEND; NOT upsert. Best-effort: SQLAlchemyError is caught and printed."""
         try:
             with SqlSession(self._engine) as s:
                 s.add(CombatLoadoutOutcome(
@@ -1411,6 +1420,7 @@ class LearningStore:
                     predicted_win=predicted_win,
                     actual_win=actual_win,
                     level=level,
+                    p_win=None if p_win is None else float(p_win),
                 ))
                 s.commit()
         except SQLAlchemyError as e:
@@ -1470,6 +1480,7 @@ class LearningStore:
                     loadout=json.loads(r.loadout),
                     predicted_win=r.predicted_win,
                     actual_win=r.actual_win,
+                    p_win=r.p_win,
                 )
                 for r in rows
             ]

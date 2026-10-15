@@ -55,7 +55,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.best_loadout import BestLoadout, best_loadout, candidate_potions, fight_ahead_loadout
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
-from artifactsmmo_cli.ai.combat import fight_records, is_winnable, lost_fights, predict_win
+from artifactsmmo_cli.ai.combat import fight_records, is_winnable, lost_fights, predict_win, win_probability
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.constants import (
     BANK_REFRESH_FORCE_SENTINEL,
@@ -4334,7 +4334,8 @@ class GamePlayer:
             return
         predicted = predict_win(state, self.game_data, action.monster_code)
         self.history.record_combat_outcome(
-            combat_key(action.monster_code), loadout, predicted, outcome == "ok", state.level)
+            combat_key(action.monster_code), loadout, predicted, outcome == "ok", state.level,
+            p_win=win_probability(state, self.game_data, action.monster_code))
 
     def _record_learning_cycle(
         self,

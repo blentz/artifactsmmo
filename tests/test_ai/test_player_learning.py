@@ -4,6 +4,7 @@ import dataclasses
 import json
 import os
 import tempfile
+from fractions import Fraction
 
 import pytest
 from sqlmodel import Session, select
@@ -464,4 +465,22 @@ def test_the_learned_record_fills_lost_fights(tmp_path):
     cold.state = dataclasses.replace(make_state(), lost_fights=frozenset({"chicken"}))
     cold._refresh_lost_fights()
     assert cold.state.lost_fights == frozenset()
+    store.close()
+
+
+def test_a_solo_fight_records_its_win_odds_and_a_party_fight_records_none(tmp_path, monkeypatch):
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
+    player = GamePlayer(character="Robby", history=store)
+    player.game_data = _make_chicken_game_data()
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.win_probability",
+                        lambda state, gd, monster: Fraction(1, 2))
+    solo = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
+    party = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}),
+                        participants=("Lor",))
+
+    player._record_combat_outcome(solo, make_state(), "ok")
+    player._record_combat_outcome(party, make_state(), "ok")
+
+    assert [(r.task_key, r.p_win) for r in store.combat_loadout_outcomes()] == [
+        ("combat:chicken", 0.5), ("combat-party:chicken", None)]
     store.close()

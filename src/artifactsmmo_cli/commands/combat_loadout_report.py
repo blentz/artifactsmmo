@@ -38,6 +38,7 @@ def _load_all_outcome_rows(db_path: str) -> list[CombatLoadoutOutcomeRow]:
                 loadout=json.loads(r.loadout),
                 predicted_win=r.predicted_win,
                 actual_win=r.actual_win,
+                p_win=r.p_win,
             )
             for r in rows
         ]

@@ -21,6 +21,37 @@ def _over_estimate_rate(over: int, total: int) -> float:
     return over / total if total > 0 else 0.0
 
 
+def _percent(x: float) -> str:
+    """A whole-number-or-one-decimal percentage: 0.5 -> '50%', 0.645 -> '64.5%'."""
+    text = f"{100.0 * x:.1f}"
+    return (text[:-2] if text.endswith(".0") else text) + "%"
+
+
+def _p_win_buckets(rows: list[CombatLoadoutOutcomeRow]) -> list[str]:
+    """The `## P(win) calibration` section: fights bucketed by the win
+    probability recorded for them, with the mean predicted and the observed win
+    rate per bucket. Rows with no recorded p_win are left out."""
+    buckets: dict[int, list[CombatLoadoutOutcomeRow]] = defaultdict(list)
+    for r in rows:
+        if r.p_win is not None:
+            buckets[min(int(r.p_win * 10), 9)].append(r)
+    lines = ["## P(win) calibration", ""]
+    if not buckets:
+        lines.append("No P(win) recorded yet.")
+        lines.append("")
+        return lines
+    lines.append("| bucket | fights | mean predicted | observed |")
+    lines.append("|---|---|---|---|")
+    for b in sorted(buckets):
+        members = buckets[b]
+        predicted = sum(m.p_win for m in members if m.p_win is not None) / len(members)
+        observed = sum(1 for m in members if m.actual_win) / len(members)
+        lines.append(f"| {b / 10:.1f}-{(b + 1) / 10:.1f} | {len(members)} "
+                     f"| {_percent(predicted)} | {_percent(observed)} |")
+    lines.append("")
+    return lines
+
+
 def loadout_calibration_report(rows: list[CombatLoadoutOutcomeRow]) -> str:
     """Build a markdown calibration report from CombatLoadoutOutcomeRow records.
 
@@ -102,4 +133,5 @@ def loadout_calibration_report(rows: list[CombatLoadoutOutcomeRow]) -> str:
             lines.append(f"| {loadout_repr} | {wins} | {losses} |")
         lines.append("")
 
+    lines.extend(_p_win_buckets(rows))
     return "\n".join(lines)
