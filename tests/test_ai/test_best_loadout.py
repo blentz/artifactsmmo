@@ -20,8 +20,11 @@ from artifactsmmo_cli.ai.best_loadout import (
 )
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
 from artifactsmmo_cli.ai.loop_rate import FoodOffer, LoopRate, food_menu, loop_rate
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.strategy_driver import _fight_step_prep
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -135,6 +138,20 @@ class TestBest:
         best = best_loadout(_state(inventory={"heal_potion": 1}), _gd(), _CTX, "ogre")
         assert best.loadout == ()
 
+    def test_a_held_unpriced_restore_runs_on_its_expected_drinks(
+            self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Final review I1: one held heal, no replacement; a rare deep ending
+        # drinks two, the expectation one. The restore stays payable and is chosen.
+        _prices(monkeypatch, {})
+        gd = _gd()
+        gd._monster_attack["ogre"] = {"fire": 15}
+        gd._monster_critical_strike["ogre"] = 20
+        state = _state(critical_strike=30, inventory={"heal_potion": 1})
+        best = best_loadout(state, gd, _CTX, "ogre")
+        assert best.loadout == ("heal_potion",)
+        assert best.rate.used == (("heal_potion", 1),) and best.rate.consumed_seconds == 0
+        assert best.rate.xp_per_second > best.bare.xp_per_second
+
     def test_a_priced_restore_beats_losing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _prices(monkeypatch, {"heal_potion": Fraction(2)})
         best = best_loadout(_state(), _gd(), _CTX, "ogre")
@@ -228,6 +245,24 @@ class TestChosen:
         ctx = replace(_CTX, fight_monster="ogre")
         assert fight_ahead_loadout(_state(), gd, ctx, None) is None
 
+    def test_a_committed_monster_fought_only_in_an_interior_is_a_fight_ahead(
+            self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # rat-shaped (final review C1): no legacy spawn, one interior tile, and a
+        # loss is possible, so the walk back is priced on the interior tile.
+        _prices(monkeypatch, {})
+        gd = _interior_gd()
+        state = _state(critical_strike=30, bank_items={"apple": 3})
+        ctx = replace(_CTX, fight_monster="ogre")
+        got = fight_ahead_loadout(state, gd, ctx, None)
+        assert got is not None and got == chosen(best_loadout(state, gd, _CTX, "ogre"), "ogre")
+        assert 0 < best_loadout(state, gd, _CTX, "ogre").rate.p_win < 1
+        assert loadout_for(state, gd, _CTX, "ogre") == got
+        prep = heal_prep_goal(state, gd, replace(ctx, loadout=got), "ogre")
+        assert repr(prep) == repr(GatherMaterialsGoal(target_item="apple", needed={"apple": 3},
+                                                      carry=True))
+        step = _fight_step_prep(state, gd, replace(ctx, loadout=got), "ogre")
+        assert repr(step) == repr(prep)
+
     def test_no_fight_ahead_chooses_nothing(self) -> None:
         assert fight_ahead_loadout(_state(), _gd(), _CTX, None) is None
 
@@ -242,6 +277,14 @@ class TestChosen:
         got = loadout_for(_state(), _gd(), replace(_CTX, loadout=mine), "ogre")
         assert got == chosen(best_loadout(_state(), _gd(), _CTX, "ogre"), "ogre")
         assert loadout_for(_state(), _gd(), _CTX, "ogre") == got
+
+
+def _interior_gd() -> GameData:
+    gd = _gd()
+    gd._monster_locations = {"wolf": [(1, 1)]}
+    gd.world.layered_content = {"ogre": [(-3, 12, "interior")]}
+    gd._bank_location = (5, 5)
+    return gd
 
 
 def _refuse(*_args: object, **_kw: object) -> best_mod.BestLoadout:

@@ -378,6 +378,7 @@ CONSUMABLE_FLOOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_fl
 MULTI_RUN_SRC = ROOT / "src" / "artifactsmmo_cli" / "multi" / "multi_run.py"
 PLAY_COMMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "commands" / "play.py"
 FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
+FIGHT_TILES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_tiles.py"
 CRAFT_COMPLETENESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_completeness.py"
 CRAFT_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_census.py"
 HELD_STOCK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "held_stock.py"
@@ -910,6 +911,9 @@ FIGHT_SPLIT_MUTATIONS = [
     ("worn_restore: a splash potion is a self restore",
      "        if not code or SPLASH_RESTORE in game_data.effect_codes(code):",
      "        if not code:"),
+    ("worn_restore: the stock is always the first slot's",
+     "            return stats.hp_restore, utility_slot_quantity(state, slot)",
+     "            return stats.hp_restore, state.utility1_slot_quantity"),
 ]
 
 # consumable_price_core: the build/buy price (consumable utility increment 2).
@@ -1144,8 +1148,18 @@ LOOP_RATE_READER_MUTATIONS = [
      "    menu = [(f.restore, f.price, f.held) for f in food]",
      "    menu = []"),
     ("loop_rate reader: held potions are not counted",
-     "        consumed = consumed_seconds([(n, prices[code], held_count(code, state)) for code, n in used])",
-     "        consumed = consumed_seconds([(n, prices[code], 0) for code, n in used])"),
+     "    held = {code: held_count(code, state) for code, _ in loadout}",
+     "    held = {code: 0 for code, _ in loadout}"),
+    ("loop_rate reader: an unpriced potion is paid per ending",
+     "        consumed = consumed_seconds([(n, prices[code], held[code]) for code, n in used\n"
+     "                                     if prices[code] is not None])",
+     "        consumed = consumed_seconds([(n, prices[code], held[code]) for code, n in used])"),
+    ("loop_rate reader: an unpriced potion expected past the held runs",
+     "    if any(prices[code] is None and n > held[code] for code, n in used_units):",
+     "    if False:"),
+    ("loop_rate reader: an unpriced potion vetoes at the held units",
+     "    if any(prices[code] is None and n > held[code] for code, n in used_units):",
+     "    if any(prices[code] is None and n >= held[code] for code, n in used_units):"),
     ("loop_rate reader: an uneaten food is reported eaten",
      "    eaten = tuple((f.code, math.ceil(k)) for f, k in zip(food, eaten_mean, strict=True) if k > 0)",
      "    eaten = tuple((f.code, math.ceil(k)) for f, k in zip(food, eaten_mean, strict=True))"),
@@ -1159,8 +1173,11 @@ LOOP_RATE_READER_MUTATIONS = [
      "    if p_win < 1:\n        extra = (1 - p_win)",
      "    if True:\n        extra = (1 - p_win)"),
     ("loop_rate reader: a loss walks back for free",
-     "    extra = (1 - p_win) * travel_seconds(RESPAWN_TILE, _monster_tile(game_data, monster))",
-     "    extra = Fraction(0)"),
+     "        extra = (1 - p_win) * travel_seconds(RESPAWN_TILE, _monster_tile(state, game_data, monster))",
+     "        extra = Fraction(0)"),
+    ("loop_rate reader: the walk back reads the legacy spawn index",
+     "    tiles = fight_tiles(state, game_data, monster)\n    if not tiles:",
+     "    tiles = game_data.monster_locations(monster)\n    if not tiles:"),
     ("loop_rate reader: a loss recovers from its own pool",
      "        hp_end = e.hp_end // SCALE if e.win else LOSS_HP",
      "        hp_end = e.hp_end // SCALE"),
@@ -1224,12 +1241,15 @@ BEST_LOADOUT_READER_MUTATIONS = [
      "for code, n in best.rate.used if n >= 0)"),
     ("best_loadout reader: the grind target outranks the fight ahead",
      "    monster = ctx.fight_monster or ctx.combat_monster\n"
-     "    if monster is None or not game_data.monster_locations(monster):\n        return None\n    return chosen(",
+     "    if monster is None or not fight_tiles(state, game_data, monster):\n        return None\n    return chosen(",
      "    monster = ctx.combat_monster or ctx.fight_monster\n"
      "    if monster is None:\n        return None\n    return chosen("),
     ("best_loadout reader: a monster that spawns nowhere is a fight ahead",
-     "    if monster is None or not game_data.monster_locations(monster):\n        return None\n    return chosen(",
+     "    if monster is None or not fight_tiles(state, game_data, monster):\n        return None\n    return chosen(",
      "    if monster is None:\n        return None\n    return chosen("),
+    ("best_loadout reader: an interior-only monster is no fight ahead",
+     "    if monster is None or not fight_tiles(state, game_data, monster):\n        return None\n    return chosen(",
+     "    if monster is None or not game_data.monster_locations(monster):\n        return None\n    return chosen("),
     ("best_loadout reader: the cycle's pick is reused for any monster",
      "    if ctx.loadout is not None and ctx.loadout.monster == monster:",
      "    if ctx.loadout is not None:"),
@@ -5910,16 +5930,45 @@ REGION_SPLIT_MUTATIONS = [
      "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),\n"
      "                                       participants=joiners,\n"
      "                                       party_loadout=potions))\n"),
-    ("factory: the layered path emits a second copy",
-     "            if region == \"overworld\" or (code, region) in emitted:\n",
-     "            if region == \"overworld\":\n"),
+    ("factory: the layered path forgets the legacy regions",
+     "        for region, region_tiles in layered_extra(game_data, code, emitted.get(code, set())).items():\n",
+     "        for region, region_tiles in layered_extra(game_data, code, set()).items():\n"),
     ("factory: a gather keeps the default region",
      "    actions.append(GatherAction(resource_code=resource_code, locations=frozenset(tiles),\n"
      "                                travel_region=region))\n",
      "    actions.append(GatherAction(resource_code=resource_code, locations=frozenset(tiles)))\n"),
-    ("factory: tiles are not split by region",
+]
+# fight_tiles: the tiles a monster is fought on, shared by the factory and the
+# fight-ahead readers (fight-odds final review C1). Killed by
+# tests/test_ai/test_fight_tiles.py.
+FIGHT_TILES_MUTATIONS = [
+    ("fight_tiles: the layered path emits a second copy",
+     "        if region == \"overworld\" or region in emitted:\n",
+     "        if region == \"overworld\":\n"),
+    ("fight_tiles: an overworld layered tile is fought again",
+     "        if region == \"overworld\" or region in emitted:\n",
+     "        if region in emitted:\n"),
+    ("fight_tiles: tiles are not split by region",
      "        out.setdefault(game_data.region_of(x, y, \"overworld\"), []).append((x, y))\n",
      "        out.setdefault(\"overworld\", []).append((x, y))\n"),
+    ("fight_tiles: the layered tiles are not fought",
+     "    return list(dict.fromkeys(legacy + raid + layered))",
+     "    return list(dict.fromkeys(legacy + raid))"),
+    ("fight_tiles: the raid tiles are not fought",
+     "    return list(dict.fromkeys(legacy + raid + layered))",
+     "    return list(dict.fromkeys(legacy + layered))"),
+    ("fight_tiles: the legacy tiles are not fought",
+     "    return list(dict.fromkeys(legacy + raid + layered))",
+     "    return list(dict.fromkeys(raid + layered))"),
+    ("fight_tiles: a tile is listed twice",
+     "    return list(dict.fromkeys(legacy + raid + layered))",
+     "    return legacy + raid + layered"),
+    ("fight_tiles: a raid fights every boss",
+     "    raid = [tile for r in state.active_raids if r.monster == monster",
+     "    raid = [tile for r in state.active_raids"),
+    ("fight_tiles: the legacy regions do not suppress a layered copy",
+     "                                               by_region(legacy, game_data).keys()).values()",
+     "                                               set()).values()"),
 ]
 HELD_MASTER_MUTATIONS = [
     ("factory: a held task is handled at the default master",
@@ -6533,11 +6582,14 @@ FIGHT_STEP_POTION_MUTATIONS = [
      "    return (heal_prep_goal(state, game_data, ctx, monster)\n"
      "            or potion_prep_goal(state, game_data, ctx, monster))\n"),
     ("fight step: no loadout still preps",
-     "    if monster is None or ctx.loadout is None or not game_data.monster_locations(monster):\n",
-     "    if monster is None or not game_data.monster_locations(monster):\n"),
+     "    if monster is None or ctx.loadout is None or not fight_tiles(state, game_data, monster):\n",
+     "    if monster is None or not fight_tiles(state, game_data, monster):\n"),
     ("fight step: a monster that spawns nowhere is still prepped",
-     "    if monster is None or ctx.loadout is None or not game_data.monster_locations(monster):\n",
+     "    if monster is None or ctx.loadout is None or not fight_tiles(state, game_data, monster):\n",
      "    if monster is None or ctx.loadout is None:\n"),
+    ("fight step: an interior-only monster is not prepped",
+     "    if monster is None or ctx.loadout is None or not fight_tiles(state, game_data, monster):\n",
+     "    if monster is None or ctx.loadout is None or not game_data.monster_locations(monster):\n"),
 ]
 LADDER_SUPPLIES_MUTATIONS = [
     ("ladder supplies: every potion is the ladder's",
@@ -6857,7 +6909,7 @@ _ALL_SRCS = [
     # Phase 21d-2 — Tier-3 plan-exists differential against real planner.
     # (The `_build_actions` body now lives in actions/factory.py — `GamePlayer.
     # _build_actions` delegates to `build_actions`; mutations target the factory.)
-    ACTION_FACTORY_SRC,
+    ACTION_FACTORY_SRC, FIGHT_TILES_SRC,
     # Phase-22b — cycle-loop mirror.
     CYCLE_STEP_SRC,
     # Piece-C — feasibility router for depth-unreachable equippable roots.
@@ -11172,6 +11224,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_factory_regions.py", survivors)
     run_group(FACTORY_SRC, REGION_SPLIT_MUTATIONS,
               "tests/test_ai/test_factory_regions.py", survivors)
+    run_group(FIGHT_TILES_SRC, FIGHT_TILES_MUTATIONS,
+              "tests/test_ai/test_fight_tiles.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, GATHER_REGION_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, CROSSINGS_MUTATIONS,

@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
 )
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
+from artifactsmmo_cli.ai.fight_tiles import fight_tiles
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict as sd_goal_from_dict
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
@@ -2352,9 +2353,22 @@ class TestFightStepsCarryTheirLoadout:
         gd = _spawning_gd()
         gd._monster_locations = {}
         state = make_state(task_code="chicken", task_type="monsters", task_progress=1, task_total=5)
+        assert fight_tiles(state, gd, "chicken") == []
         ctx = _ctx(loadout=self._loadout("cow"))
         assert isinstance(objective_step_goal(ReachTaskOutcome("chicken"), state, gd, ctx),
                           TaskKillsGoal)
+
+    def test_a_task_monster_fought_only_in_an_interior_is_prepped(self, monkeypatch):
+        """rat-shaped (final review C1): no legacy spawn, one interior tile the
+        factory fights on. The legacy index alone left a rat task unprepped."""
+        monkeypatch.setattr(sd, "potion_prep_goal", lambda *a: None)
+        monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
+        gd = _spawning_gd()
+        gd._monster_locations = {}
+        gd.world.layered_content = {"chicken": [(-3, 12, "interior")]}
+        state = make_state(task_code="chicken", task_type="monsters", task_progress=1, task_total=5)
+        ctx = _ctx(loadout=self._loadout("cow"))
+        assert objective_step_goal(ReachTaskOutcome("chicken"), state, gd, ctx) is self.PREP
 
     def test_the_potions_prep_before_the_food(self, monkeypatch):
         potion = GatherMaterialsGoal(target_item="water_boost_potion",

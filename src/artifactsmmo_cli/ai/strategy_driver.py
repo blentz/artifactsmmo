@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.equipment.bank_tool_fills import bank_tool_fills
 from artifactsmmo_cli.ai.equipment.empty_slot_fills import empty_slot_rank_fills
 from artifactsmmo_cli.ai.event_plan_window import plan_fits_event_window
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.fight_tiles import fight_tiles
 from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY, supply_due, turn_in_due
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
@@ -612,8 +613,9 @@ def _fight_step_prep(state: WorldState, game_data: GameData, ctx: SelectionConte
     carry is committed, the fight ahead is the carry's own (its ingredient's
     dropper), and a prep that switched off then would hand the commitment back
     to the bare fight. No loadout this cycle (no fight ahead) is no prep, and a
-    monster that spawns nowhere now has no fight to prep."""
-    if monster is None or ctx.loadout is None or not game_data.monster_locations(monster):
+    monster fought on no tile now, on any layer (`fight_tiles`), has no fight
+    to prep."""
+    if monster is None or ctx.loadout is None or not fight_tiles(state, game_data, monster):
         return None
     return (potion_prep_goal(state, game_data, ctx, monster)
             or heal_prep_goal(state, game_data, ctx, monster))

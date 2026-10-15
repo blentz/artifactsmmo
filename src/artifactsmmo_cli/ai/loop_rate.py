@@ -10,7 +10,8 @@ first starts where the last recovery left it, at full). The fight is walked
 over every crit ending (`fight_walk.odds_walk`, spec 2026-10-15 fight-odds §2):
 the loop's recovery and consumed seconds are EXPECTATIONS over the endings, a
 lost fight recovers from `LOSS_HP` and walks back from `RESPAWN_TILE` to the
-nearest spawn tile (needed only when a loss is possible), and the rate is
+nearest spawn tile (needed only when a loss is possible; the tiles are the
+factory's FightAction tiles on every layer, `fight_tiles.fight_tiles`), and the rate is
 renewal-reward: `p_win x xp / (fight + expected recovery + consumed + walk)`.
 
 * THE LOADOUT is what the two utility slots wear for the fight — up to two
@@ -31,8 +32,10 @@ renewal-reward: `p_win x xp / (fight + expected recovery + consumed + walk)`.
   up": the drinks up to the units HELD (`held_stock.held_count`: bag,
   bank, utility slots) are free, every further one costs its replacement
   (`prices`, from `consumable_price.replacement_price_of`);
-  `loop_rate_core.consumed_seconds`. A drink past the held units with no
-  replacement makes the loop unrunnable: the result is None.
+  `loop_rate_core.consumed_seconds`, per crit ending. A potion with NO
+  replacement is paid on its expectation instead (final review I1 ruling): the
+  loop is unrunnable (None) when its expected drinks, rounded up, exceed the
+  units held — a rare deep ending that drinks past them does not veto it.
 * RECOVERY — `recovery_choice` of the missing HP (`max_hp − hp_end`, the end
   pool floored to whole HP) over the FOOD MENU (`food_menu`), eaten at the flat
   `CONSUMABLE_COOLDOWN_SECONDS`; the units it eats are the loop's `eaten`.
@@ -49,6 +52,7 @@ from artifactsmmo_cli.ai.actions.cost_core import CONSUMABLE_COOLDOWN_SECONDS, t
 from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS, replacement_price_of
 from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
 from artifactsmmo_cli.ai.fight_terms_core import SCALE
+from artifactsmmo_cli.ai.fight_tiles import fight_tiles
 from artifactsmmo_cli.ai.fight_walk import fight_walk, odds_walk
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.heal_catalog import FOOD, heal_candidates
@@ -90,7 +94,9 @@ class LoopRate:
     tile appears only in `xp_per_second`. `used` is the units of each loadout
     potion one fight drinks and `eaten` the units of each food its recovery eats
     (only the foods it eats), both the expectation rounded UP; `hp_end` is the
-    expected end HP rounded down."""
+    expected end HP rounded down. `xp_per_kill` is the kill's XP when the
+    fight can be won (`p_win > 0`) and 0 when it cannot: the XP a win pays,
+    not an expectation (`xp_per_second` carries the `p_win` weight)."""
 
     xp_per_second: Fraction
     xp_per_kill: int
@@ -122,9 +128,12 @@ def food_menu(state: WorldState, game_data: GameData, ctx: SelectionContext,
     return tuple(menu)
 
 
-def _monster_tile(game_data: GameData, monster: str) -> tuple[int, int]:
-    """The monster's spawn tile nearest the respawn tile: where a loss walks back to."""
-    tiles = game_data.monster_locations(monster)
+def _monster_tile(state: WorldState, game_data: GameData, monster: str) -> tuple[int, int]:
+    """The monster's fight tile nearest the respawn tile: where a loss walks back
+    to. The tiles are every layer's (`fight_tiles`); the walk is priced on the
+    tile's (x, y) alone, so a walk back into an interior or the underground is
+    under-priced by its layer transitions (a residual of spec 2026-10-15 §2)."""
+    tiles = fight_tiles(state, game_data, monster)
     if not tiles:
         raise ValueError(f"{monster} has no spawn tile: a loss's walk back cannot be priced")
     return min(tiles, key=lambda tile: (travel_seconds(RESPAWN_TILE, tile), tile))
@@ -136,23 +145,27 @@ def loop_rate(state: WorldState, game_data: GameData, monster: str,
     """The loop's expected XP per second against `monster` wearing `loadout` and
     recovering over `food` (see the module doc): every crit ending of the fight
     is priced (`odds_walk`), a loss walks back from `RESPAWN_TILE`. `prices`
-    holds every loadout potion's replacement price. None when a drink past the
-    held units has no replacement in some ending."""
+    holds every loadout potion's replacement price. None when a potion with no
+    replacement is expected (rounded up) to be drunk past the held units."""
     outcome, max_hp, restore_code = fight_walk(state, game_data, monster, loadout)
     endings, _, _ = odds_walk(state, game_data, monster, loadout)
     p_win = odds_win(endings)
     menu = [(f.restore, f.price, f.held) for f in food]
     extra = Fraction(0)
     if p_win < 1:
-        extra = (1 - p_win) * travel_seconds(RESPAWN_TILE, _monster_tile(game_data, monster))
+        extra = (1 - p_win) * travel_seconds(RESPAWN_TILE, _monster_tile(state, game_data, monster))
+    held = {code: held_count(code, state) for code, _ in loadout}
     used_mean = {code: Fraction(0) for code, _ in loadout}
     eaten_mean = [Fraction(0)] * len(food)
     recovery_mean = consumed_mean = hp_end_mean = Fraction(0)
     for e in endings:
         used = tuple((code, e.used if code == restore_code else 1) for code, _ in loadout)
-        consumed = consumed_seconds([(n, prices[code], held_count(code, state)) for code, n in used])
-        if consumed is None:
-            return None
+        # A potion with no replacement is paid on its expectation (below), so no
+        # single ending prices it: only the priced ones enter, and a priced
+        # drink always has a price.
+        consumed = consumed_seconds([(n, prices[code], held[code]) for code, n in used
+                                     if prices[code] is not None])
+        assert consumed is not None
         hp_end = e.hp_end // SCALE if e.win else LOSS_HP
         recovery, counts = recovery_choice(max_hp - hp_end, max_hp, menu, EAT_SECONDS)
         recovery_mean += e.prob * recovery
@@ -166,6 +179,8 @@ def loop_rate(state: WorldState, game_data: GameData, monster: str,
     xp = game_data.xp_per_kill(monster, state.level, state.wisdom)
     rate = expected_xp_per_second(xp, p_win, FIGHT_SECONDS, extra)
     used_units = tuple((code, math.ceil(used_mean[code])) for code, _ in loadout)
+    if any(prices[code] is None and n > held[code] for code, n in used_units):
+        return None
     eaten = tuple((f.code, math.ceil(k)) for f, k in zip(food, eaten_mean, strict=True) if k > 0)
     return LoopRate(rate, xp if p_win > 0 else 0, outcome.win, p_win, FIGHT_SECONDS, recovery_mean,
                     consumed_mean, max_hp, math.floor(hp_end_mean), used_units, eaten)

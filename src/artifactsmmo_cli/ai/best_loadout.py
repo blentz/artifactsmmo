@@ -36,6 +36,7 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.best_loadout_core import pick_best
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.consumable_price import replacement_price_of
+from artifactsmmo_cli.ai.fight_tiles import fight_tiles
 from artifactsmmo_cli.ai.fight_walk import loadouts, potion_effects_usable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.heal_catalog import POTION
@@ -123,10 +124,11 @@ def fight_ahead_loadout(state: WorldState, game_data: GameData, ctx: SelectionCo
                         store: LearningStore | None) -> ChosenLoadout | None:
     """The pick against the fight ahead — the committed intention's next fight
     (`ctx.fight_monster`), else the grind target (`ctx.combat_monster`) — or
-    None with neither, or when the monster spawns nowhere now (a committed
-    fight whose event despawned: there is no fight to price)."""
+    None with neither, or when the monster is fought on no tile now, on any
+    layer (`fight_tiles`: a committed fight whose event despawned: there is
+    no fight to price)."""
     monster = ctx.fight_monster or ctx.combat_monster
-    if monster is None or not game_data.monster_locations(monster):
+    if monster is None or not fight_tiles(state, game_data, monster):
         return None
     return chosen(best_loadout(state, game_data, ctx, monster, store), monster)
 

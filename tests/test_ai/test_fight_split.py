@@ -82,6 +82,9 @@ def test_worn_restore_skips_splash_and_non_healers():
     assert worn_restore(_worn("res_potion", 5), gd) == (0, 0)
     assert worn_restore(_worn("heal_potion", 7), gd) == (70, 7)
     assert worn_restore(_worn("heal_potion", 7, "utility2_slot"), gd) == (70, 0)
+    # the second slot's own quantity is the stock (final review T3)
+    in_two = replace(_worn("heal_potion", 0, "utility2_slot"), utility2_slot_quantity=9)
+    assert worn_restore(in_two, gd) == (70, 9)
 
 
 def test_odds_walk_with_no_crit_is_the_walk():

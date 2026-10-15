@@ -32,6 +32,7 @@ from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.use_gold_bag import UseGoldBagAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.fight_tiles import by_region, layered_extra
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
@@ -95,16 +96,17 @@ def build_actions(
     # Sandwhisper Isle (`overworld:-4,17`, reached by a 1000-gold boat) labelled
     # "overworld", so the walk planned it from the mainland with no crossing.
     # `emitted` keeps the layered (P5b) block below from emitting a second copy.
-    emitted: set[tuple[str, str]] = set()
+    # The tile sources are `ai/fight_tiles`'s, which the fight-ahead readers share.
+    emitted: dict[str, set[str]] = {}
     for monster_code, locs in game_data.all_monster_locations.items():
         # a boss only a party wins is fought with the party (increment 5)
         joiners = party_participants(state, game_data, monster_code) if state is not None else ()
         potions = party_loadout(state, game_data, monster_code) if state is not None and joiners else ()
-        for region, tiles in _by_region(locs, game_data).items():
+        for region, tiles in by_region(locs, game_data).items():
             actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),
                                        travel_region=region, participants=joiners,
                                        party_loadout=potions))
-            emitted.add((monster_code, region))
+            emitted.setdefault(monster_code, set()).add(region)
         actions.append(OptimizeLoadoutAction(target_monster_code=monster_code, game_data=game_data))
 
     # Raid bosses have NO monster-type map tile, so the loop above never sees
@@ -123,9 +125,9 @@ def build_actions(
                                                  game_data=game_data))
 
     for resource_code, locs in game_data.all_resource_locations.items():
-        for region, tiles in _by_region(locs, game_data).items():
+        for region, tiles in by_region(locs, game_data).items():
             _gathers(actions, game_data, resource_code, tiles, region)
-            emitted.add((resource_code, region))
+            emitted.setdefault(resource_code, set()).add(region)
 
     # One gather-loadout optimizer per gathering skill — lets the planner re-arm
     # with the best tool before a gather session (mirrors the per-monster combat
@@ -345,14 +347,11 @@ def build_actions(
             dest_x=dx, dest_y=dy, dest_layer=dlayer,
             conditions=conds,
             travel_region=game_data.region_of(px, py, playr)))
-    layered_extra: dict[tuple[str, str], list[tuple[int, int]]] = {}
-    for code, layered_tiles in game_data.world.layered_content.items():
-        for (tx, ty, tlayer) in layered_tiles:
-            region = game_data.region_of(tx, ty, tlayer)
-            if region == "overworld" or (code, region) in emitted:
-                continue
-            layered_extra.setdefault((code, region), []).append((tx, ty))
-    for (code, region), region_tiles in sorted(layered_extra.items()):
+    extra_tiles: dict[tuple[str, str], list[tuple[int, int]]] = {}
+    for code in game_data.world.layered_content:
+        for region, region_tiles in layered_extra(game_data, code, emitted.get(code, set())).items():
+            extra_tiles[(code, region)] = region_tiles
+    for (code, region), region_tiles in sorted(extra_tiles.items()):
         if code in game_data.monsters.levels:
             actions.append(FightAction(
                 monster_code=code, locations=frozenset(region_tiles),
@@ -392,14 +391,6 @@ def build_actions(
             actions.append(TaskTradeAction(code=task_code, quantity=1, taskmaster_location=held_master))
 
     return actions
-
-
-def _by_region(tiles: list[tuple[int, int]], game_data: GameData) -> dict[str, list[tuple[int, int]]]:
-    """Overworld-layer `tiles` grouped by access region, in tile order."""
-    out: dict[str, list[tuple[int, int]]] = {}
-    for x, y in tiles:
-        out.setdefault(game_data.region_of(x, y, "overworld"), []).append((x, y))
-    return out
 
 
 def _gathers(actions: list[Action], game_data: GameData, resource_code: str,

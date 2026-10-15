@@ -10,7 +10,9 @@ Date: 2026-10-15.
   ("A then B then C"):
   - **A (this spec):** an exact win-probability core, and the fight loop's XP
     rate (`loop_rate`) priced by it. Potions become worth carrying against a
-    risky fight.
+    risky fight. Every fight, a sure win included, is priced as an expectation
+    over its crit endings, so a sure win's price changes wherever crits change
+    its drinks or its end HP (Amendment 11).
   - **B:** the yes/no gates (`is_winnable`, `predict_win` and their ~12 callers)
     read the odds.
   - **C:** gear choice (`pick_loadout`, `combat_deficit`) ranks by the odds, so
@@ -64,12 +66,14 @@ Date: 2026-10-15.
 
 One function walks every way a fight can end:
 
-    fight_odds(split, hp_start, max_hp, restore, stock) -> tuple[Ending, ...]
+    fight_odds(terms, damage, hp_start, max_hp, restore, stock) -> tuple[Ending, ...]
+    RoundDamage = (monster_hp, kill_normal, kill_crit, p_crit, die_normal, die_crit, m_crit)
     Ending = (prob: Fraction, win: bool, turns: int, hp_end: int, used: int)
 
 `hp_end` is in the ×10000 scale, as in `FightOutcome`.
 
-**Inputs.** `split` is today's `FightTerms` plus the crit split per side:
+**Inputs.** `terms` is today's `FightTerms` (it decides the guard exits) and
+`damage` is a `RoundDamage`, the crit split per side (Amendment 8):
 
 - player: `kill_hit` (normal hit) and `kill_crit_hit`, both ×10000; `p_crit` in
   percent;
@@ -82,7 +86,10 @@ One function walks every way a fight can end:
   bubble and sun shield on the kill side; poison, burn, greed, berserker rage,
   frenzy, enchanted mirror and the player's mean lifesteal on the die side). It
   applies every round as a deterministic term with today's conservative
-  bounds. Only crits branch.
+  bounds. Only crits branch. `RoundDamage` does not carry `kill_rest` and
+  `die_rest` as fields: `fight_split` folds the rest into both amounts,
+  `kill_normal = kill_hit + kill_rest`, `kill_crit = kill_crit_hit + kill_rest`,
+  `die_normal = die_hit + die_rest`, `die_crit = die_crit_hit + die_rest`.
 
 `fight_numbers` (`combat.py`) builds the split alongside `FightTerms` from the
 same resolved integers, so the two cannot disagree.
@@ -111,14 +118,17 @@ same resolved integers, so the two cannot disagree.
 **Lean (`formal/Formal/FightOdds.lean`, new).** Theorems:
 
 - `fightOdds_sum_one`: the endings' probabilities sum to 1.
-- `fightOdds_noCrit`: for a split with `p_crit = m_crit = 0`, the result is one
+- `fightOdds_noCrit`: under the explicit hypotheses `pCrit = 0`, `mCrit = 0`,
+  `killNormal = killStep`, `dieNormal = dieStep`, `monsterHp` equal in the
+  damage and the terms, and `0 < monsterHp` (Amendment 3), the result is one
   ending with probability 1, equal to `fightOutcome` (win, turns, hp_end, used)
-  over the terms whose steps are `kill_hit + kill_rest` and
-  `die_hit + die_rest`. (Those sums are today's `kill_step` and `die_step` at
+  over the terms. (Those sums are today's `kill_step` and `die_step` at
   zero crit, since `kill_hit = 50 × raw_player × 200`; so the odds walk
   generalises the existing walk rather than replacing it.)
-- `fightOdds_win_mono_hp`, `fightOdds_win_mono_stock`: P(win) does not fall
-  when the starting HP or the stock rises.
+- `fightOdds_win_mono_stock`: P(win) does not fall when the stock rises.
+- `fightOdds_win_mono_hp`: P(win) does not fall when the starting HP rises,
+  **with `stock = 0` only** (Amendment 2). With stock it is false: at hp 49
+  of 100 the player drinks and wins, at hp 50 it does not drink and dies.
 
 `Contracts.lean`, `Manifest.lean`, `Audit.lean` and `Oracle.lean` change with
 the model. A new `formal/diff/test_fight_odds_diff.py` checks Python against
@@ -142,22 +152,36 @@ loadout's walk:
 - A losing ending has `hp_end = 1` (the server leaves 1 HP), so its recovery
   prices `max_hp − 1` through the same `recovery_choice` (food or rest) a win
   uses. Potions drunk before the loss are still consumed.
-- A potion drink past the held units with no replacement makes that loadout
-  unpayable (`consumed_seconds` is None), as today.
+- Payability (Amendment 7). A potion with a replacement price is priced per
+  ending: each ending's drinks past the held units cost their price. A potion
+  with NO replacement is judged once, over the expectation: the loadout is
+  unpayable (`loop_rate` returns None) when `ceil(expected drinks) > held`. A
+  rare deep ending that drinks past the held units does not veto it.
 - `RESPAWN_TILE = (0, 0)`, cited to learning.db (every R2D2 owlbear loss row
   ends there). Ruling: this is observed server behaviour, not API data; it
   closes the `PLAN_loss_risk` residual. Cost if wrong: a moved respawn
   misprices a loss's walk back by its distance difference × 5 s.
-- `monster_tile` is the monster's nearest spawn tile to `RESPAWN_TILE`
-  (`game_data.monster_locations`), priced by `cost_core.travel_seconds`.
-  Ruling: nearest to the respawn tile, not to the character, because the walk
-  back starts there. Cost if wrong: none for a single-spawn monster.
+- `monster_tile` is the monster's nearest fight tile to `RESPAWN_TILE`,
+  priced by `cost_core.travel_seconds`. It is looked up only when
+  `P(win) < 1` (a sure win has no walk back). The tiles are exactly the ones
+  the action factory builds a `FightAction` from, on every layer
+  (`ai/fight_tiles.fight_tiles`: the legacy overworld/event/open-raid index,
+  an active raid's tiles, and interior/underground tiles); the fight-ahead
+  guards (`best_loadout.fight_ahead_loadout`,
+  `strategy_driver._fight_step_prep`) use the same set. A monster with no tile
+  on any layer has no fight ahead (Amendment 6). Ruling: nearest to the
+  respawn tile, not to the character, because the walk back starts there.
+  Cost if wrong: none for a single-spawn monster.
+- Residual: the walk back is priced on the tile's (x, y) alone, so a walk back
+  into an interior or the underground is under-priced by its layer
+  transitions.
 
 **`LoopRate`** gains `p_win: Fraction`. `win` keeps today's yes/no value
 (`fight_outcome`), so `band_target`'s `rate.win` gate does not change until
-part B. `hp_end` and `used` become the expected values, rounded down to whole
-HP and whole units for the fields consumers read; `potion_carry` keeps reading
-`used`.
+part B. `hp_end`, `used` and `eaten` become the expected values: `used` and
+`eaten` rounded UP to whole units, `hp_end` rounded down to whole HP
+(Amendment 1); `potion_carry` keeps reading `used`. `xp_per_kill` is the
+kill's XP when `P(win) > 0` and 0 otherwise.
 
 **`best_loadout` is unchanged.** It already ranks by `xp_per_second`, which now
 carries the risk: against owlbear, R2D2's bare loadout earns `0.63 × xp` over
@@ -168,9 +192,15 @@ potion wins whenever it has a route (held, or a replacement price and
 a price. With no route, the discounted rate still ranks owlbear below targets
 that pay better.
 
+**The combat band** (`tiers/band_target.rank_rate`, Amendment 5): its
+MODELLED rank reads `rate.xp_per_second` (the expected rate); the MEASURED
+upkeep rank is unchanged. A monster the record says is beaten while the
+model's odds are nil ranks at the model's rate, 0.
+
 **Lean (`formal/Formal/LoopRate.lean`).** The expected rate is added;
-`expectedXpPerSecond_sure_win` proves that a single winning ending gives
-today's `xpPerSecond`. `formal/diff/test_loop_rate_diff.py` extends to the
+`expectedXpRate_sure_win` proves that `P(win) = 1` gives `xpPerSecond` over the
+same expected seconds, and `expectedXpRate_mono_p` that the rate does not fall
+when `P(win)` rises (Amendment 4). `formal/diff/test_loop_rate_diff.py` extends to the
 expected form.
 
 ### §3 Cache and cost
@@ -183,9 +213,10 @@ expected form.
 
 ### §4 Calibration record
 
-- `combat_loadout_outcome` gains `p_win` (a REAL, nullable for old rows), the
-  loadout's P(win) at fight time, recorded next to `predicted_win` in
-  `GamePlayer._record_combat_outcome`.
+- `combat_loadout_outcome` gains `p_win` (a REAL), the loadout's P(win) at
+  fight time, recorded next to `predicted_win` in
+  `GamePlayer._record_combat_outcome`. It is None on old rows AND on party
+  fights, which the solo odds do not model (Amendment 10).
 - `combat-loadout-report` prints predicted against observed win rate per
   probability bucket (tenths), over rows with `p_win` set. This is the
   evidence part B reads.
@@ -206,12 +237,15 @@ TDD in `tests/test_ai/`:
 
 - §1: no-crit equals `fight_outcome` on random terms; probabilities sum to 1;
   the R2D2-owlbear replay (785 HP, hits 141/212 and 83/125, crits 45%/5%,
-  owlbear first) gives P(win) = 0.6308 to four places, and 1 with
-  `minor_health_potion`; every guard exit returns one ending with
+  owlbear first) gives P(win) = 0.6308 to four places, and about
+  1 − 5e-11 with `minor_health_potion` (a run of crits can still outrun a
+  70 HP drink; the test asserts > 1 − 1e-9, Amendment 9); every guard exit returns one ending with
   probability 1; the turn cap ends unresolved states as losses.
 - The crit split: `fight_numbers` on the live owlbear numbers gives
   `kill_crit_hit = 212 × 10000` and `die_crit_hit = 125 × 10000`.
-- §2: a sure win prices exactly as today; a 63% fight's rate includes the
+- §2: with no crit on either side (one ending) the loop prices exactly as the
+  one `fight_walk` walk did; with crits a sure win is an expectation over its
+  endings (Amendment 11); a 63% fight's rate includes the
   loss recovery and the walk back from `(0,0)`; `best_loadout` chooses
   `minor_health_potion` over bare for R2D2's owlbear numbers when it is held.
 - §4: the record writes `p_win`; the report buckets it.
@@ -227,3 +261,56 @@ TDD in `tests/test_ai/`:
   (9,220 XP in 1.24 h, about 7,400/h).
 - New `p_win` rows: predicted and observed win rates within ±10 points in every
   bucket holding at least 30 fights.
+
+## Amendments (2026-10-15, execution)
+
+Changes made while building part A, each with its reason. The sections above
+are already corrected.
+
+1. **§2 LoopRate rounding.** `used` and `eaten` round UP, `hp_end` rounds
+   down. Why: a potion (or food) used in some endings must still be carried;
+   rounding the expectation down would carry none for a fight that sometimes
+   drinks one.
+2. **§1 `fightOdds_win_mono_hp` holds only with `stock = 0`.** Why: with a
+   restore it is false. Counterexample: at hp 49 of 100 the player drinks
+   (below half) and wins; at hp 50 it does not drink and dies.
+3. **§1 `fightOdds_noCrit` needs `0 < monsterHp`** and states its hypotheses
+   explicitly: `pCrit = 0`, `mCrit = 0`, `killNormal = killStep`,
+   `dieNormal = dieStep`, and the same `monsterHp` in damage and terms. Why:
+   at monster HP <= 0 `fightOutcome` reports round 0 (`roundsToKill` is 0)
+   while the odds tree always plays round 1. A real monster has HP >= 1.
+4. **§2 Lean names.** The theorems are `expectedXpRate_sure_win` and
+   `expectedXpRate_mono_p` (the spec said `expectedXpPerSecond_sure_win`, and
+   did not name the monotonicity).
+5. **§2 the combat band.** The band's MODELLED rank reads
+   `rate.xp_per_second`; the measured upkeep rank is unchanged; a
+   record-beaten, model-nil monster ranks 0. Why: ranking a risky monster by
+   its full kill XP put it above a sure one that pays better.
+6. **§2 spawn tile.** Looked up only when `P(win) < 1`. The source is the
+   action factory's `FightAction` tiles on every layer (`ai/fight_tiles`),
+   shared with the factory, `best_loadout.fight_ahead_loadout` and
+   `strategy_driver._fight_step_prep`. No tile on any layer means no fight
+   ahead. Why (final review C1): `monster_locations` holds only the overworld
+   and event tiles, so 12 fightable monsters (rat, bat, lich, ...) raised
+   `no spawn tile` in `heal_prep_goal` and got no prep. Residual: the walk back
+   is priced on (x, y) alone and under-prices cross-layer walk backs.
+7. **§2 payability.** A priced potion is priced per ending; a potion with no
+   replacement is payable when `ceil(expected drinks) <= held`. Why (final
+   review I1): judging an unpriced potion per ending vetoed a held potion
+   whenever any rare ending drank past the held units, stricter than the old
+   one-walk rule.
+8. **§1 signature.** `fight_odds(terms, damage, hp_start, max_hp, restore,
+   stock)`. `RoundDamage` folds the rest terms into `kill_normal`,
+   `kill_crit`, `die_normal` and `die_crit`. Why: the guard exits read
+   `FightTerms`, and a folded amount is one input per branch.
+9. **Testing.** With `minor_health_potion` P(win) is about 1 − 5e-11, not
+   exactly 1: a run of crits can still outrun a 70 HP drink. The test asserts
+   P(win) > 1 − 1e-9.
+10. **§4.** `p_win` is None on old rows and on party fights. Why: the solo odds
+    do not model a party fight.
+11. **Intent / §2 sure-win pricing.** A sure win is no longer priced exactly as
+    before: recovery, consumed seconds, drinks and food are expectations over
+    the crit endings (an ogre fixture at P(win) = 1 with crits 30/0 recovers in
+    36.5 s against 40 s before). Only a fight with no crit on either side (one
+    ending) prices exactly as the one `fight_walk` walk did, and a test pins
+    that equality.
