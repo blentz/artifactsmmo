@@ -271,7 +271,12 @@ def test_the_level_up_evaluation_moves_the_body_not_only_the_pool(gd: GameData) 
 
 
 def test_the_level_up_arm_has_real_witnesses() -> None:
-    """Six of 1,375 futile pairs, and the clause is worth exactly that much.
+    """Four of 1,375 futile pairs, and the clause is worth exactly that much.
+
+    Six until 2026-10-15: `l35_artifact_fill` and `l35_boots_drop_farm` against
+    demon left when the closed form began charging burn off the MONSTER's attack
+    (20% of demon's 110, more than 20% of those characters' attack), so one
+    level no longer closes those fights either.
 
     Recorded as a test rather than a comment because "nearly dead weight" and
     "dead weight" are different findings, and only a measurement tells them
@@ -313,7 +318,7 @@ def test_the_level_up_arm_has_real_witnesses() -> None:
         per_scenario = list(executor.map(_level_up_witnesses, names))
 
     witnesses = sorted(pair for scenario in per_scenario for pair in scenario)
-    assert len(witnesses) == 6, witnesses
+    assert len(witnesses) == 4, witnesses
     assert (LEVEL_UP_CELL, LEVEL_UP_MONSTER) in witnesses
 
 

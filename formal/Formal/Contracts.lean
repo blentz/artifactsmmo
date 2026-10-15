@@ -343,7 +343,7 @@ example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
       (ceilDiv (playerMaxHp*10000)
         (dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn playerMaxHp
           monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison rawPlayer monsterGreed
-          monsterEnchantedMirror)).toNat ≤ fd →
+          monsterEnchantedMirror mAtkSum)).toNat ≤ fd →
       predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
         pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing
         monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerAntipoison
@@ -360,7 +360,7 @@ example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
                else
                  let ds := dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
                      playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison rawPlayer
-                     monsterGreed monsterEnchantedMirror
+                     monsterGreed monsterEnchantedMirror mAtkSum
                  if ds ≤ 0 then true
                  else
                    let rtd := simRoundsNet playerMaxHp ds fd
@@ -3410,7 +3410,7 @@ example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
         monsterHp + monsterBarrier, monsterReconstitution,
         Formal.PredictWin.dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison
           monsterBurn playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison
-          rawPlayer monsterGreed monsterEnchantedMirror,
+          rawPlayer monsterGreed monsterEnchantedMirror mAtkSum,
         playerFirst⟩ playerMaxHp playerMaxHp :=
   @Formal.FightOutcome.closedWin_eq_predictWin
 

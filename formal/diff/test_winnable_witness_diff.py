@@ -90,7 +90,7 @@ def _kernel_predict_win(row: WitnessRow) -> bool:
         50 * row.raw_monster * (200 + row.m_crit)
         - row.p_crit * row.p_lifesteal * row.p_atk_sum
         + max(0, row.m_poison - row.p_antipoison) * 10000
-        + row.m_burn * row.p_atk_sum * 100
+        + row.m_burn * row.m_atk_sum * 100
         + row.m_void_drain * row.p_max_hp * 100
         + row.m_berserk * row.raw_monster * (200 + row.m_crit) // 2
         + row.m_frenzy * row.raw_monster * (200 + row.m_crit) // 2

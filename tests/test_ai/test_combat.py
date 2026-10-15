@@ -8,6 +8,7 @@ from artifactsmmo_cli.ai.combat import (
     LOSE_MARGIN,
     MIN_WIN_SAMPLES,
     WIN_MARGIN,
+    _die_step,
     _element_damage,
     _expected_hit,
     _round_half_up,
@@ -815,3 +816,12 @@ def test_lost_fights_is_the_veto_on_every_lost_monster(tmp_path):
     _record_outcomes(store, state, gd, "mob", wins=8, losses=0)
     assert lost_fights(state, gd, store) == frozenset()
     store.close()
+
+
+def test_burn_is_charged_off_the_monsters_attack_not_the_players() -> None:
+    """imp: burn 15%, attack 45, against a player with attack 80. The server's
+    first tick is round(15% x 45) = 7, so the closed form charges 15 x 45 x 100
+    per round (the ticks decay, so that bounds every round's tick)."""
+    base = _die_step(0, 0, 0, 0, 80, 0, 0, 500, 0, 0, 0, 0, 0, 0, 0, 45)
+    burned = _die_step(0, 0, 0, 0, 80, 0, 15, 500, 0, 0, 0, 0, 0, 0, 0, 45)
+    assert burned - base == 15 * 45 * 100

@@ -286,7 +286,7 @@ theorem closedWin_eq_predictWin (rawPlayer pCrit monsterHp rawMonster mCrit play
         monsterHp + monsterBarrier, monsterReconstitution,
         dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
           playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison
-          rawPlayer monsterGreed monsterEnchantedMirror,
+          rawPlayer monsterGreed monsterEnchantedMirror mAtkSum,
         playerFirst⟩ playerMaxHp playerMaxHp := by
   have heff : effHp playerMaxHp playerMaxHp = playerMaxHp := by
     simp [effHp, show 0 < playerMaxHp by omega]
@@ -296,7 +296,7 @@ theorem closedWin_eq_predictWin (rawPlayer pCrit monsterHp rawMonster mCrit play
     playerMaxHp monsterVoidDrain monsterBubble monsterSunShield = ks
   generalize dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
     playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison
-    rawPlayer monsterGreed monsterEnchantedMirror = ds
+    rawPlayer monsterGreed monsterEnchantedMirror mAtkSum = ds
   by_cases h1 : rawPlayer ≤ 0
   · simp [h1]
   by_cases h2 : ks ≤ 0

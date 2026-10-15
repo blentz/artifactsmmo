@@ -1892,7 +1892,7 @@ def runPredictWinHp (g : Nat → Int) : Json :=
   let ks := killStepNet rawPlayer (g 12) (g 26) (g 31) (g 32) (g 13) (g 36) (g 27) (g 38)
     (g 41) (g 43)
   let ds := dieStep rawMonster (g 26) (g 12) (g 29) (g 30) (g 33) (g 35) (g 27) (g 38)
-    (g 39) (g 40) (g 42) rawPlayer (g 44) (g 45)
+    (g 39) (g 40) (g 42) rawPlayer (g 44) (g 45) (g 32)
   let t : Formal.FightOutcome.Terms := ⟨rawPlayer, ks, g 13 + g 34, g 37, ds, g 28 != 0⟩
   Json.mkObj [("win", Json.bool (Formal.FightOutcome.closedWin t (g 46) (g 27)))]
 

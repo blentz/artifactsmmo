@@ -491,7 +491,7 @@ def test_burn_flips_winnable_fight_against_lean():
     """A symmetric fight the player WINS on the initiative tiebreak (rtk == rtd == 2,
     player first), but the monster's burn (percent-of-attack DoT) raises dieStep so
     rounds_to_die drops below rounds_to_kill and flips it to a LOSS. Pins the burn
-    term against Lean — a mutant that drops `+ monster_burn*p_atk_sum*100` keeps the
+    term against Lean — a mutant that drops `+ monster_burn*m_atk_sum*100` keeps the
     win and dies here. Player Σatk 50, burn 100% => +5e5/round => dieStep 1e6 => rtd 1."""
     p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
              max_hp=100, init=10)
@@ -508,6 +508,23 @@ def test_burn_flips_winnable_fight_against_lean():
     assert py_brn is False
     assert py_brn == lean_brn["win"]
 
+
+
+def test_burn_is_a_share_of_the_monsters_attack_against_lean():
+    """Burn is a share of the MONSTER's attack, not the player's. Player Σatk 500
+    against a monster of Σatk 50 and hp 1000: rtk 2, and the monster's hit
+    (5e5/round) gives rtd 2, so the player wins first. Burn 10% of the monster's
+    50 adds 5e4 (rtd still 2, a win); 10% of the player's 500 would add 5e5
+    (rtd 1, a loss). A mutant that charges the player's attack loses here."""
+    p = dict(attack={"fire": 500}, dmg=0, dmg_elem={}, resist={}, crit=0,
+             max_hp=100, init=10)
+    m = dict(hp=1000, attack={"fire": 50}, resist={}, crit=0, init=10)
+    py, lean = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                    p["crit"], p["max_hp"], p["init"], m["hp"],
+                    m["attack"], m["resist"], m["crit"], m["init"],
+                    m_burn=10)
+    assert py is True
+    assert py == lean["win"]
 
 def test_healing_flips_winnable_fight_against_lean():
     """A symmetric fight the player WINS on the initiative tiebreak (rtk == rtd == 2,

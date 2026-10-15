@@ -128,15 +128,15 @@ def killStepNet (rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHeali
 /-- Per-round net HP removed from the PLAYER (×10000): monster damage MINUS the
 player's heal-on-crit `pCrit*pLifesteal*pAtkSum`, PLUS the monster's flat per-turn
 `monsterPoison` DoT, PLUS the monster's `monsterBurn` DoT — a percent of the
-player's total attack `pAtkSum` (modeled conservatively as flat per-turn, i.e. NO
-decay: an upper bound on the real decaying burn). `monsterBurn*pAtkSum*100` = the
-percent (÷100) × pAtkSum × 10000. -/
+MONSTER's total attack `mAtkSum`, the first tick unrounded, charged every round
+(the real ticks decay by a tenth each turn, so this bounds each one).
+`monsterBurn*mAtkSum*100` = the percent (÷100) × mAtkSum × 10000. -/
 def dieStep (rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
     playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison
-    rawPlayer monsterGreed monsterEnchantedMirror : Int) : Int :=
+    rawPlayer monsterGreed monsterEnchantedMirror mAtkSum : Int) : Int :=
   50 * rawMonster * (200 + mCrit) - pCrit * pLifesteal * pAtkSum
     + max 0 (monsterPoison - playerAntipoison) * 10000
-    + monsterBurn * pAtkSum * 100 + monsterVoidDrain * playerMaxHp * 100
+    + monsterBurn * mAtkSum * 100 + monsterVoidDrain * playerMaxHp * 100
     + monsterBerserk * rawMonster * (200 + mCrit) / 2
     + monsterFrenzy * rawMonster * (200 + mCrit) / 2
     + 9 * monsterGreed * rawMonster * (200 + mCrit) / 2
@@ -162,7 +162,7 @@ def predictWin (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
       -- before dying ⇒ unwinnable (conservative: win needs roundsToKill < period).
       else if 0 < monsterReconstitution ∧ monsterReconstitution ≤ roundsToKill then false
       else
-        let ds := dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison rawPlayer monsterGreed monsterEnchantedMirror
+        let ds := dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison rawPlayer monsterGreed monsterEnchantedMirror mAtkSum
         if ds ≤ 0 then true                       -- we out-sustain the monster (poison+burn-inclusive)
         else
           let roundsToDie := ceilDiv (playerMaxHp * 10000) ds
@@ -202,7 +202,7 @@ def combatMargin (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
       else
         let ds := dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
             playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison
-            rawPlayer monsterGreed monsterEnchantedMirror
+            rawPlayer monsterGreed monsterEnchantedMirror mAtkSum
         if ds ≤ 0 then winMargin
         else
           let roundsToDie := ceilDiv (playerMaxHp * 10000) ds
@@ -434,7 +434,7 @@ theorem predict_win_eq_sim (rawPlayer pCrit monsterHp rawMonster mCrit playerMax
     (hfd : (ceilDiv (playerMaxHp*10000)
               (dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn playerMaxHp
                 monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison rawPlayer monsterGreed
-                monsterEnchantedMirror)).toNat ≤ fd) :
+                monsterEnchantedMirror mAtkSum)).toNat ≤ fd) :
     predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
       pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing
       monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerAntipoison
@@ -451,7 +451,7 @@ theorem predict_win_eq_sim (rawPlayer pCrit monsterHp rawMonster mCrit playerMax
              else
                let ds := dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
                    playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison rawPlayer
-                   monsterGreed monsterEnchantedMirror
+                   monsterGreed monsterEnchantedMirror mAtkSum
                if ds ≤ 0 then true
                else
                  let rtd := simRoundsNet playerMaxHp ds fd
@@ -488,21 +488,21 @@ theorem predict_win_eq_sim (rawPlayer pCrit monsterHp rawMonster mCrit playerMax
         · rw [if_neg hrec, if_neg hrec]
           by_cases hds : dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
               playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison rawPlayer
-              monsterGreed monsterEnchantedMirror ≤ 0
+              monsterGreed monsterEnchantedMirror mAtkSum ≤ 0
           · simp only [hds, if_true]
           · simp only [hds, if_false]
             have hdsp : 0 < dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
                 playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison rawPlayer
-                monsterGreed monsterEnchantedMirror :=
+                monsterGreed monsterEnchantedMirror mAtkSum :=
               Int.not_le.mp hds
             have hrtd : simRoundsNet playerMaxHp
                 (dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn playerMaxHp
                   monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison rawPlayer monsterGreed
-                  monsterEnchantedMirror) fd
+                  monsterEnchantedMirror mAtkSum) fd
                 = ceilDiv (playerMaxHp * 10000)
                     (dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
                       playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison rawPlayer
-                      monsterGreed monsterEnchantedMirror) :=
+                      monsterGreed monsterEnchantedMirror mAtkSum) :=
               simRoundsNet_eq playerMaxHp _ hdsp hphp fd hfd
             rw [hrtd]
 
@@ -626,9 +626,9 @@ theorem predict_win_mono_player
   subst hmirror
   unfold predictWin at hwin ⊢
   have hmirror_ds : dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
-      playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison raw1 monsterGreed 0
+      playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison raw1 monsterGreed 0 mAtkSum
       = dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
-      playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison raw2 monsterGreed 0 := by
+      playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison raw2 monsterGreed 0 mAtkSum := by
     unfold dieStep
     have h0a : (0 : Int) * raw1 * (200 + pCrit) = 0 := by simp [Int.zero_mul]
     have h0b : (0 : Int) * raw2 * (200 + pCrit) = 0 := by simp [Int.zero_mul]
@@ -680,7 +680,7 @@ theorem predict_win_mono_player
         -- the remaining branches are independent of rawPlayer (mirror=0 proved above).
         by_cases hds : dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
             playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison raw2
-            monsterGreed 0 ≤ 0
+            monsterGreed 0 mAtkSum ≤ 0
         · rw [if_pos hds]
         · rw [if_neg hds] at hwin ⊢
           cases playerFirst with
@@ -792,7 +792,7 @@ theorem predict_win_mono_monsterhp
         -- the remaining branches are independent of monsterHp.
         by_cases hds : dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
             playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison rawPlayer
-            monsterGreed monsterEnchantedMirror ≤ 0
+            monsterGreed monsterEnchantedMirror mAtkSum ≤ 0
         · rw [if_pos hds]
         · rw [if_neg hds] at hwin ⊢
           cases playerFirst with

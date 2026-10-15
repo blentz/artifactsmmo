@@ -134,17 +134,18 @@ def _die_step(
     player_max_hp: int, monster_void_drain: int,
     monster_berserk: int, monster_frenzy: int,
     player_antipoison: int, raw_player: int,
-    monster_greed: int, monster_enchanted_mirror: int,
+    monster_greed: int, monster_enchanted_mirror: int, m_atk_sum: int,
 ) -> int:
     """Net per-turn die rate (player receiving damage, ×10000 scale).
 
     Mirrors Lean `dieStep` (PredictWin.lean:134). All inputs are ints;
     output is an int. A non-positive result means the player out-sustains the
-    monster. See predict_win for the modelling rationale behind each term."""
+    monster. See predict_win for the modelling rationale behind each term.
+    Burn is a share of the MONSTER's summed attack `m_atk_sum`."""
     return (50 * raw_monster * (200 + m_crit)
             - p_crit * p_lifesteal * p_atk_sum
             + max(0, monster_poison - player_antipoison) * 10000
-            + monster_burn * p_atk_sum * 100
+            + monster_burn * m_atk_sum * 100
             + monster_void_drain * player_max_hp * 100
             + monster_berserk * raw_monster * (200 + m_crit) // 2
             + monster_frenzy * raw_monster * (200 + m_crit) // 2
@@ -342,10 +343,10 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
     # Monster poison is a flat per-turn DoT on the player (applied turn 1, ticks
     # every turn), so it RAISES the player's net death rate — even when the monster
     # deals no direct damage (raw_monster == 0), poison alone can kill. Monster burn
-    # is charged here flat per turn as burn% × p_atk_sum × 100 (no decay). The server
-    # bases it on the MONSTER's attack and decays it (`fight_odds_core.burn_ticks`,
-    # which the odds walk charges instead); the yes/no gates keep this term until
-    # they read the odds, so it is NOT a bound when the monster outhits the player.
+    # is a share of the MONSTER's attack (`fight_odds_core.burn_ticks`): the closed
+    # form charges the first tick, unrounded, as burn% × m_atk_sum × 100 every round.
+    # The ticks decay, so this bounds every round's tick; the odds walk charges the
+    # exact ticks instead.
     # Berserker-rage (+% dmg below 25% HP, permanent) and frenzy (+% dmg on crit)
     # both raise monster damage; modeled conservatively as ALWAYS active — each adds
     # value% of the monster's per-turn damage (= value * raw_monster * (200+m_crit) / 2,
@@ -368,13 +369,14 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
         player_antipoison, raw_player,
         game_data.monster_greed(monster_code),
         game_data.monster_enchanted_mirror(monster_code),
+        m_atk_sum,
     )
     # One monster hit: `_die_step` with every term a non-target also pays zeroed.
     hit = _die_step(
         raw_monster, m_crit, p.critical_strike, 0, p_atk_sum, 0, 0, p.max_hp, 0,
         game_data.monster_berserker_rage(monster_code),
         game_data.monster_frenzy(monster_code),
-        0, 0, game_data.monster_greed(monster_code), 0,
+        0, 0, game_data.monster_greed(monster_code), 0, m_atk_sum,
     )
     threat = sum(
         st.threat for code in final_equip.values()
@@ -392,9 +394,8 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
     # expected step less its hit term, applied to both crit outcomes.
     kill_rest = kill_step - raw_player * SCALE - 50 * raw_player * p.critical_strike
     # Burn is not one of them: the walk charges its decaying ticks (off the
-    # MONSTER's attack, `burn_ticks`) instead of `die_step`'s flat bound, which
-    # the yes/no gates keep.
-    flat_burn = game_data.monster_burn(monster_code) * p_atk_sum * 100
+    # MONSTER's attack, `burn_ticks`) instead of `die_step`'s per-round bound.
+    flat_burn = game_data.monster_burn(monster_code) * m_atk_sum * 100
     die_rest = die_step - flat_burn - raw_monster * SCALE - 50 * raw_monster * m_crit
     damage = RoundDamage(
         effective_monster_hp,
