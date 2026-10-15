@@ -362,6 +362,7 @@ CONSUMABLE_FLOOR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumab
 LOSS_RISK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loss_risk_core.py"
 FIGHT_TERMS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_terms_core.py"
 FIGHT_OUTCOME_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_outcome_core.py"
+FIGHT_ODDS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_odds_core.py"
 GROUP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "group_fight_core.py"
 CONSUMABLE_PRICE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price_core.py"
 CONSUMABLE_PRICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price.py"
@@ -822,6 +823,37 @@ COMBAT_MARGIN_HP_MUTATIONS = [
 # fight_outcome_core: the consumable turn walk (consumable utility increment 1).
 # Killed by formal/diff/test_fight_outcome_diff.py (exact agreement with the
 # proved Formal.FightOutcome.fightOutcome).
+FIGHT_ODDS_MUTATIONS = [
+    ("fight_odds: a zero-probability branch is kept",
+     "    return tuple(b for b in branches if b[0] != 0)",
+     "    return branches"),
+    ("fight_odds: crit and normal swapped",
+     "(Fraction(100 - pct, 100), normal), (Fraction(pct, 100), crit)",
+     "(Fraction(100 - pct, 100), crit), (Fraction(pct, 100), normal)"),
+    ("fight_odds: player-first kill at exactly 0 HP is not a kill",
+     "        if monster - kill <= 0:\n            _add_ended(ended, (True, round_no, player,",
+     "        if monster - kill < 0:\n            _add_ended(ended, (True, round_no, player,"),
+    ("fight_odds: monster-first kill at exactly 0 HP is not a kill",
+     "            if monster - kill <= 0:\n                _add_ended(ended, (True, round_no, drunk,",
+     "            if monster - kill < 0:\n                _add_ended(ended, (True, round_no, drunk,"),
+    ("fight_odds: the player survives at exactly 0 HP (player first)",
+     "            if player - hit <= 0:\n                _add_ended(ended, (False, round_no, 0, "
+     "stock - left), prob * pk * ph)",
+     "            if player - hit < 0:\n                _add_ended(ended, (False, round_no, 0, "
+     "stock - left), prob * pk * ph)"),
+    ("fight_odds: the player survives at exactly 0 HP (monster first)",
+     "        if player - hit <= 0:\n            _add_ended(ended, (False, round_no, 0, stock - left), prob * ph)",
+     "        if player - hit < 0:\n            _add_ended(ended, (False, round_no, 0, stock - left), prob * ph)"),
+    ("fight_odds: first-mover order inverted",
+     "            if terms.player_first:",
+     "            if not terms.player_first:"),
+    ("fight_odds: unresolved states dropped at the cap",
+     "        _add_ended(ended, (False, MAX_TURNS, 0, stock - left), prob)",
+     "        pass"),
+    ("fight_odds: no drink before the player's hit",
+     "    player, left = drink(player, max_pool, restore_pool, left)",
+     "    pass"),
+]
 FIGHT_OUTCOME_MUTATIONS = [
     ("fight_outcome: drink at exactly half (< -> <=)",
      "    if 2 * pool < max_pool and stock > 0:",
@@ -6711,7 +6743,7 @@ _ALL_SRCS = [
     SKILL_CREDIT_SRC,
     LOSS_RISK_CORE_SRC, FAILURE_RECOVERY_CORE_SRC, ACTION_BASE_SRC, REST_ACTION_SRC,
     TASK_CANCEL_GOAL_SRC, COMPLETE_TASK_GOAL_SRC,
-    FIGHT_TERMS_CORE_SRC, FIGHT_OUTCOME_CORE_SRC, GROUP_FIGHT_CORE_SRC,
+    FIGHT_TERMS_CORE_SRC, FIGHT_OUTCOME_CORE_SRC, FIGHT_ODDS_CORE_SRC, GROUP_FIGHT_CORE_SRC,
     CONSUMABLE_PRICE_CORE_SRC, CONSUMABLE_PRICE_SRC, LOOP_RATE_CORE_SRC, LOOP_RATE_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
     ROOT_DECISION_SRC, GATHER_DEMAND_SRC,
@@ -10287,6 +10319,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_combat.py", survivors)
     run_group(FIGHT_OUTCOME_CORE_SRC, FIGHT_OUTCOME_MUTATIONS,
               "formal/diff/test_fight_outcome_diff.py", survivors)
+    run_group(FIGHT_ODDS_CORE_SRC, FIGHT_ODDS_MUTATIONS,
+              "tests/test_ai/test_fight_odds_core.py", survivors)
     run_group(GROUP_FIGHT_CORE_SRC, GROUP_FIGHT_MUTATIONS,
               "formal/diff/test_group_fight_diff.py", survivors)
     run_group(COMBAT_SRC, PARTY_TERMS_MUTATIONS,
