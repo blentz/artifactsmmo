@@ -40,6 +40,7 @@ def _gd() -> GameData:
     gd._monster_attack = {"ogre": {"fire": 30}}
     gd._monster_resistance = {"ogre": {}}
     fill_monster_stat_defaults(gd)
+    gd._monster_locations = {"ogre": [(3, 4)]}
     gd._consumable_effect_codes = {
         "heal_potion": ["restore"], "big_heal_potion": ["restore"],
         "fire_res_potion": ["boost_res_fire"], "hp_potion": ["boost_hp"],
@@ -143,6 +144,19 @@ class TestBest:
         assert best.rate.consumed_seconds == 2 * drunk
         assert chosen(best, "ogre").potions == (("heal_potion", drunk),)
 
+    def test_a_restore_potion_beats_a_risky_bare_fight(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # R2D2-shaped: the bare fight wins about two times in three and a loss
+        # walks home; a priced restore potion makes the win certain.
+        _prices(monkeypatch, {"heal_potion": Fraction(2)})
+        gd = _gd()
+        gd._item_stats["heal_potion"] = ItemStats(code="heal_potion", hp_restore=70, **_UTILITY)
+        state = _state(critical_strike=50, inventory={"heal_potion": 5})
+        best = best_loadout(state, gd, _CTX, "ogre")
+        assert 0 < best.bare.p_win < 1
+        assert best.rate.p_win == 1
+        assert best.rate.xp_per_second > best.bare.xp_per_second
+        assert ("heal_potion", dict(best.rate.used)["heal_potion"]) in chosen(best, "ogre").potions
+
     def test_equal_rates_prefer_fewer_units(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # A water boost changes nothing for a fire attacker: fire_res + water
         # runs at exactly fire_res's rate on one more unit a fight, so the
@@ -229,7 +243,7 @@ def _refuse(*_args: object, **_kw: object) -> best_mod.BestLoadout:
 
 
 def _rate(used: tuple[tuple[str, int], ...], eaten: tuple[tuple[str, int], ...] = ()) -> LoopRate:
-    return LoopRate(Fraction(0), 0, False, Fraction(30), Fraction(0), Fraction(0), 100, 0,
+    return LoopRate(Fraction(0), 0, False, Fraction(0), Fraction(30), Fraction(0), Fraction(0), 100, 0,
                     used, eaten)
 
 

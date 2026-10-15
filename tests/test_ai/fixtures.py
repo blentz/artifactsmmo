@@ -156,7 +156,7 @@ def make_loop(*, xp: int = 0, win: bool = False, recovery: int = 0, consumed: in
     fight = Fraction(30)
     seconds = fight + recovery + consumed
     return LoopRate(xp_per_second=Fraction(xp) / seconds if win else Fraction(0),
-                    xp_per_kill=xp, win=win, fight_seconds=fight,
+                    xp_per_kill=xp, win=win, p_win=Fraction(int(win)), fight_seconds=fight,
                     recovery_seconds=Fraction(recovery), consumed_seconds=Fraction(consumed),
                     max_hp=100, hp_end=50, used=used, eaten=())
 

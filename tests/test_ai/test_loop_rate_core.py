@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.loop_rate_core import (
     consumed_seconds,
     count_bound,
     eat_cost,
+    expected_xp_per_second,
     food_bound,
     potion_cost,
     recovery_choice,
@@ -203,3 +204,24 @@ def test_one_table_answers_every_query_on_the_same_menu() -> None:
     assert recovery_choice(95, 300, menu, EAT) == shared
     assert recovery_choice(140, 300, menu, EAT) == first
     assert _recovery_table.cache_info().currsize == 1
+
+
+class TestExpectedRate:
+    def test_expected_rate_of_a_sure_win_is_the_rate(self) -> None:
+        f, e = Fraction(30), Fraction(7)
+        assert expected_xp_per_second(30, Fraction(1), f, e) == xp_per_second(30, f, e, Fraction(0))
+
+    def test_expected_rate_scales_with_p(self) -> None:
+        f, e = Fraction(30), Fraction(7)
+        assert expected_xp_per_second(30, Fraction(1, 2), f, e) == expected_xp_per_second(30, Fraction(1), f, e) / 2
+
+    @pytest.mark.parametrize("args", [
+        (30, Fraction(1), Fraction(0), Fraction(0)),
+        (-1, Fraction(1), Fraction(30), Fraction(0)),
+        (30, Fraction(1), Fraction(30), Fraction(-1)),
+        (30, Fraction(2), Fraction(30), Fraction(0)),
+        (30, Fraction(-1, 2), Fraction(30), Fraction(0)),
+    ])
+    def test_out_of_range_raises(self, args: tuple[int, Fraction, Fraction, Fraction]) -> None:
+        with pytest.raises(ValueError, match=r"must be positive|out of range"):
+            expected_xp_per_second(*args)

@@ -1953,6 +1953,13 @@ def runLoopXpRate (args : Array Json) : Json :=
   let r := Formal.LoopRate.xpRate (n 0) (n 1) (n 2) (n 3) (n 4)
   Json.mkObj [("num", Json.num (Int.ofNat r.1)), ("den", Json.num (Int.ofNat r.2))]
 
+/-- Expected XP per second (`Formal.LoopRate.expectedXpRate`). Args: `[p_num, p_den,
+xp, fight_num, fight_den, extra_num, extra_den]`. Emits `rate_num` / `rate_den`. -/
+def runExpectedXpRate (args : Array Json) : Json :=
+  let r := Formal.LoopRate.expectedXpRate (ratArg args 0) (intArg args 2).toNat
+    (ratArg args 3) (ratArg args 5)
+  Json.mkObj [("rate_num", Json.num r.num), ("rate_den", Json.num (Int.ofNat r.den))]
+
 /-- The failure block table after `ticks` ticks (`Formal.FailureRecovery`).
 Args: `[premise, ticks, n, key_0, left_0, premise_0, ...]`, a premise of -1
 meaning a transport block. Emits the keys blocked under `premise`. -/
@@ -3095,6 +3102,8 @@ def runOne (item : Json) : Json :=
     runLoopRecovery args
   else if kind == "loop_xp_rate" then
     runLoopXpRate args
+  else if kind == "expected_xp_rate" then
+    runExpectedXpRate args
   else if kind == "loop_plan_cost" then
     runLoopPlanCost args
   else if kind == "loop_consumed" then

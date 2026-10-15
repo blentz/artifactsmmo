@@ -172,3 +172,15 @@ def xp_per_second(xp_per_kill: int, fight_seconds: Fraction, recovery: Fraction,
         raise ValueError(f"xp {xp_per_kill}, recovery {recovery} and consumed "
                          f"{consumed_price_seconds} must be non-negative")
     return Fraction(xp_per_kill) / (fight_seconds + recovery + consumed_price_seconds)
+
+
+def expected_xp_per_second(xp_per_kill: int, p_win: Fraction, fight_seconds: Fraction,
+                           extra_seconds: Fraction) -> Fraction:
+    """XP per second of a loop whose fight wins with probability `p_win`
+    (renewal-reward: expected XP over expected seconds; spec 2026-10-15 §2).
+    `extra_seconds` is the expected recovery, consumed price and walk back."""
+    if fight_seconds <= 0:
+        raise ValueError(f"fight_seconds {fight_seconds} must be positive")
+    if xp_per_kill < 0 or extra_seconds < 0 or not 0 <= p_win <= 1:
+        raise ValueError(f"xp {xp_per_kill}, extra {extra_seconds}, p_win {p_win} out of range")
+    return p_win * xp_per_kill / (fight_seconds + extra_seconds)

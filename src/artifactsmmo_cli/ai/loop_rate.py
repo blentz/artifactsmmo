@@ -34,25 +34,34 @@ first starts where the last recovery left it, at full).
 * XP — `game_data.xp_per_kill` at the character's level and wisdom on a win;
   0 on a loss."""
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 
-from artifactsmmo_cli.ai.actions.cost_core import CONSUMABLE_COOLDOWN_SECONDS
+from artifactsmmo_cli.ai.actions.cost_core import CONSUMABLE_COOLDOWN_SECONDS, travel_seconds
 from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS, replacement_price_of
+from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
 from artifactsmmo_cli.ai.fight_terms_core import SCALE
-from artifactsmmo_cli.ai.fight_walk import fight_walk
+from artifactsmmo_cli.ai.fight_walk import fight_walk, odds_walk
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.heal_catalog import FOOD, heal_candidates
 from artifactsmmo_cli.ai.held_stock import held_count
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.loop_rate_core import consumed_seconds, recovery_choice, xp_per_second
+from artifactsmmo_cli.ai.loop_rate_core import consumed_seconds, expected_xp_per_second, recovery_choice
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 EAT_SECONDS = Fraction(CONSUMABLE_COOLDOWN_SECONDS)
 """One use of a food, whatever the quantity, exact."""
 
+RESPAWN_TILE = (0, 0)
+"""Where the server puts a character that lost a fight (learning.db 2026-10-15:
+every R2D2 owlbear `error:fight_lost` row ends at (0, 0) with hp = 1). Observed
+server behaviour, not API data (spec 2026-10-15 fight-odds §2 ruling)."""
+
+LOSS_HP = 1
+"""The HP a lost fight leaves (`learning/fight_loop_cost.loss_cost`, live 2026-10-08)."""
 
 
 @dataclass(frozen=True)
@@ -75,6 +84,7 @@ class LoopRate:
     xp_per_second: Fraction
     xp_per_kill: int
     win: bool
+    p_win: Fraction
     fight_seconds: Fraction
     recovery_seconds: Fraction
     consumed_seconds: Fraction
@@ -101,22 +111,48 @@ def food_menu(state: WorldState, game_data: GameData, ctx: SelectionContext,
     return tuple(menu)
 
 
+def _monster_tile(game_data: GameData, monster: str) -> tuple[int, int]:
+    """The monster's spawn tile nearest the respawn tile: where a loss walks back to."""
+    tiles = game_data.monster_locations(monster)
+    if not tiles:
+        raise ValueError(f"{monster} has no spawn tile: a loss's walk back cannot be priced")
+    return min(tiles, key=lambda tile: (travel_seconds(RESPAWN_TILE, tile), tile))
+
+
 def loop_rate(state: WorldState, game_data: GameData, monster: str,
               loadout: Sequence[tuple[str, int]], food: Sequence[FoodOffer],
               prices: Mapping[str, Fraction | None]) -> LoopRate | None:
-    """The loop's XP per second against `monster` wearing `loadout` and
-    recovering over `food` (see the module doc); `prices` holds every loadout
-    potion's replacement price. None when a drink past the held units has no
-    replacement."""
+    """The loop's expected XP per second against `monster` wearing `loadout` and
+    recovering over `food` (see the module doc): every crit ending of the fight
+    is priced (`odds_walk`), a loss walks back from `RESPAWN_TILE`. `prices`
+    holds every loadout potion's replacement price. None when a drink past the
+    held units has no replacement in some ending."""
     outcome, max_hp, restore_code = fight_walk(state, game_data, monster, loadout)
-    used = tuple((code, outcome.used if code == restore_code else 1) for code, _ in loadout)
-    consumed = consumed_seconds([(n, prices[code], held_count(code, state)) for code, n in used])
-    if consumed is None:
-        return None
-    hp_end = outcome.hp_end // SCALE
-    recovery, counts = recovery_choice(max_hp - hp_end, max_hp,
-                                       [(f.restore, f.price, f.held) for f in food], EAT_SECONDS)
-    eaten = tuple((f.code, k) for f, k in zip(food, counts, strict=True) if k > 0)
-    xp = game_data.xp_per_kill(monster, state.level, state.wisdom) if outcome.win else 0
-    return LoopRate(xp_per_second(xp, FIGHT_SECONDS, recovery, consumed), xp, outcome.win,
-                    FIGHT_SECONDS, recovery, consumed, max_hp, hp_end, used, eaten)
+    endings, _, _ = odds_walk(state, game_data, monster, loadout)
+    p_win = odds_win(endings)
+    menu = [(f.restore, f.price, f.held) for f in food]
+    extra = (1 - p_win) * travel_seconds(RESPAWN_TILE, _monster_tile(game_data, monster))
+    used_mean = {code: Fraction(0) for code, _ in loadout}
+    eaten_mean = [Fraction(0)] * len(food)
+    recovery_mean = consumed_mean = hp_end_mean = Fraction(0)
+    for e in endings:
+        used = tuple((code, e.used if code == restore_code else 1) for code, _ in loadout)
+        consumed = consumed_seconds([(n, prices[code], held_count(code, state)) for code, n in used])
+        if consumed is None:
+            return None
+        hp_end = e.hp_end // SCALE if e.win else LOSS_HP
+        recovery, counts = recovery_choice(max_hp - hp_end, max_hp, menu, EAT_SECONDS)
+        recovery_mean += e.prob * recovery
+        consumed_mean += e.prob * consumed
+        hp_end_mean += e.prob * hp_end
+        for code, n in used:
+            used_mean[code] += e.prob * n
+        for i, k in enumerate(counts):
+            eaten_mean[i] += e.prob * k
+    extra += recovery_mean + consumed_mean
+    xp = game_data.xp_per_kill(monster, state.level, state.wisdom)
+    rate = expected_xp_per_second(xp, p_win, FIGHT_SECONDS, extra)
+    used_units = tuple((code, math.ceil(used_mean[code])) for code, _ in loadout)
+    eaten = tuple((f.code, math.ceil(k)) for f, k in zip(food, eaten_mean, strict=True) if k > 0)
+    return LoopRate(rate, xp if p_win > 0 else 0, outcome.win, p_win, FIGHT_SECONDS, recovery_mean,
+                    consumed_mean, max_hp, math.floor(hp_end_mean), used_units, eaten)

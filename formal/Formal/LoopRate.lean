@@ -106,6 +106,11 @@ def consumedPrice : List (Nat × Option Nat × Nat) → Option Nat
 def xpRate (xp scale fight recov consumed : Nat) : Nat × Nat :=
   (xp * scale, fight + recov + consumed)
 
+/-- Expected XP per second of a loop winning with probability `p` (renewal-reward:
+expected XP over expected seconds; `loop_rate_core.expected_xp_per_second`). -/
+def expectedXpRate (p : Rat) (xp : Nat) (fight extra : Rat) : Rat :=
+  p * (xp : Rat) / (fight + extra)
+
 /-! ## Lemmas -/
 
 theorem minUpTo_le (f : Nat → Nat) : ∀ (n k : Nat), k ≤ n → minUpTo n f ≤ f k
@@ -454,6 +459,19 @@ example : recovery 1 3 100 [(50, some 0, 0)] 0 = 0 := by decide
 example : consumedPrice [(5, some 7, 3)] = some 14 := by decide
 example : consumedPrice [(5, some 7, 3), (6, none, 5)] = none := by decide
 example : consumedPrice [(2, none, 5)] = some 0 := by decide
+theorem expectedXpRate_sure_win (xp : Nat) (fight extra : Rat) :
+    expectedXpRate 1 xp fight extra = (xp : Rat) / (fight + extra) := by
+  simp [expectedXpRate, Rat.one_mul]
+
+theorem expectedXpRate_mono_p (p p' : Rat) (xp : Nat) (fight extra : Rat)
+    (hp : p ≤ p') (hd : 0 < fight + extra) :
+    expectedXpRate p xp fight extra ≤ expectedXpRate p' xp fight extra := by
+  simp only [expectedXpRate, Rat.div_def]
+  have hinv : 0 ≤ (fight + extra)⁻¹ := Rat.le_of_lt (Rat.inv_pos.mpr hd)
+  have hx : 0 ≤ (xp : Rat) := Rat.natCast_nonneg
+  have h1 : p * (xp : Rat) ≤ p' * (xp : Rat) := Rat.mul_le_mul_of_nonneg_right hp hx
+  exact Rat.mul_le_mul_of_nonneg_right h1 hinv
+
 -- 30 XP over a 30 s fight and 60 s of recovery: 1/3 XP per second.
 example : xpRate 30 1 30 60 0 = (30, 90) := by decide
 

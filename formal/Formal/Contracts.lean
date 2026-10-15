@@ -3626,6 +3626,14 @@ example : ∀ (xp scale eat maxHp f c : Nat) (fs : List Formal.LoopRate.Food), (
         (Formal.LoopRate.xpRate xp scale f (Formal.LoopRate.recovery scale eat maxHp fs m) c) :=
   @Formal.LoopRate.rate_antitone_missing
 
+example : ∀ (xp : Nat) (fight extra : Rat),
+    Formal.LoopRate.expectedXpRate 1 xp fight extra = (xp : Rat) / (fight + extra) :=
+  @Formal.LoopRate.expectedXpRate_sure_win
+
+example : ∀ (p p' : Rat) (xp : Nat) (fight extra : Rat), p ≤ p' → 0 < fight + extra →
+    Formal.LoopRate.expectedXpRate p xp fight extra ≤ Formal.LoopRate.expectedXpRate p' xp fight extra :=
+  @Formal.LoopRate.expectedXpRate_mono_p
+
 /-! ### BestLoadout contracts. -/
 
 example : ∀ (cs : List Formal.BestLoadout.Cand), (∀ c ∈ cs, 0 < c.1.2) →

@@ -445,6 +445,8 @@ open Formal.PriorityBand
 #print axioms Formal.LoopRate.xpRate_zero
 #print axioms Formal.LoopRate.xpRate_den_pos
 #print axioms Formal.LoopRate.xpRate_antitone
+#print axioms Formal.LoopRate.expectedXpRate_sure_win
+#print axioms Formal.LoopRate.expectedXpRate_mono_p
 #print axioms Formal.LoopRate.rate_antitone_missing
 #print axioms Formal.LoopRate.held_free_le
 #print axioms Formal.LoopRate.priced_le_unpriced

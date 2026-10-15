@@ -6,12 +6,16 @@ from fractions import Fraction
 import pytest
 
 import artifactsmmo_cli.ai.loop_rate as loop_mod
+from artifactsmmo_cli.ai.actions.cost_core import travel_seconds
 from artifactsmmo_cli.ai.boost_selection import project_equip
 from artifactsmmo_cli.ai.combat import combat_terms, fight_max_hp
+from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS
+from artifactsmmo_cli.ai.fight_odds_core import win_probability
 from artifactsmmo_cli.ai.fight_outcome_core import fight_outcome
+from artifactsmmo_cli.ai.fight_walk import odds_walk
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.loop_rate import EAT_SECONDS, FoodOffer, LoopRate, food_menu, loop_rate
-from artifactsmmo_cli.ai.loop_rate_core import recovery_seconds
+from artifactsmmo_cli.ai.loop_rate_core import recovery_seconds, xp_per_second
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -30,6 +34,7 @@ def _gd() -> GameData:
     gd._monster_attack = {"ogre": {"fire": 30}}
     gd._monster_resistance = {"ogre": {}}
     fill_monster_stat_defaults(gd)
+    gd._monster_locations = {"ogre": [(3, 4)]}
     gd._consumable_effect_codes = {"heal_potion": ["restore"], "splash_potion": ["splash_restore"]}
     gd._item_stats = {
         "heal_potion": ItemStats(code="heal_potion", hp_restore=40, **_UTILITY),
@@ -83,8 +88,9 @@ class TestLoop:
         rate = _rate(_state(), _gd(), [])
         assert rate is not None
         assert (rate.win, rate.xp_per_kill, rate.xp_per_second, rate.used) == (False, 0, 0, ())
-        assert rate.hp_end == 0
-        assert rate.recovery_seconds == 100  # a whole bar rested off
+        assert rate.p_win == 0
+        assert rate.hp_end == loop_mod.LOSS_HP
+        assert rate.recovery_seconds == 99  # the bar a loss leaves at 1 HP, rested off
 
     def test_a_held_restore_wins_the_fight_and_is_free(self) -> None:
         gd = _gd()
@@ -175,6 +181,77 @@ class TestLoop:
         assert without.eaten == ()
         assert with_food.eaten and all(code in ("apple", "bread") for code, _ in with_food.eaten)
         assert all(n > 0 for _, n in with_food.eaten)
+
+
+class TestOdds:
+    """The loop is priced by every crit ending of its fight (spec 2026-10-15 §2)."""
+
+    def test_a_sure_win_prices_as_before(self) -> None:
+        gd = _gd()
+        state = _state(inventory={"heal_potion": 5})
+        rate = _rate(state, gd, [("heal_potion", 5)])
+        assert rate is not None and rate.p_win == 1
+        assert rate.xp_per_second == xp_per_second(rate.xp_per_kill, FIGHT_SECONDS,
+                                                   rate.recovery_seconds, rate.consumed_seconds)
+
+    def test_a_risky_fight_pays_its_losses(self) -> None:
+        gd = _gd()
+        state = _state(critical_strike=30)
+        rate = _rate(state, gd, [])
+        endings, _, _ = odds_walk(state, gd, "ogre", [])
+        p = win_probability(endings)
+        assert 0 < p < 1
+        recovery = sum((e.prob * recovery_seconds(100 - (e.hp_end // 10_000 if e.win else loop_mod.LOSS_HP),
+                                                  100, [], EAT_SECONDS) for e in endings), Fraction(0))
+        walk = travel_seconds((0, 0), (3, 4))
+        assert rate is not None
+        assert rate.p_win == p
+        assert rate.xp_per_kill == gd.xp_per_kill("ogre", 5) > 0
+        assert rate.recovery_seconds == recovery
+        assert rate.xp_per_second == p * rate.xp_per_kill / (FIGHT_SECONDS + recovery + (1 - p) * walk)
+
+    def test_a_loss_still_pays_its_drinks(self) -> None:
+        gd = _gd()
+        gd._monster_attack["ogre"] = {"fire": 60}
+        state = _state()
+        loadout = [("heal_potion", 1)]
+        endings, _, _ = odds_walk(state, gd, "ogre", loadout)
+        assert all(not e.win and e.used > 0 for e in endings)
+        rate = _rate(state, gd, loadout, prices={"heal_potion": Fraction(5)})
+        assert rate is not None and rate.p_win == 0
+        assert rate.consumed_seconds > 0
+        assert rate.xp_per_kill == 0
+
+    def test_expected_drinks_round_up(self) -> None:
+        gd = _gd()
+        gd._monster_attack["ogre"] = {"fire": 15}
+        gd._monster_critical_strike["ogre"] = 20
+        state = _state(critical_strike=30, inventory={"heal_potion": 3})
+        loadout = [("heal_potion", 3)]
+        endings, _, _ = odds_walk(state, gd, "ogre", loadout)
+        mean = sum((e.prob * e.used for e in endings), Fraction(0))
+        assert 0 < mean < 1
+        rate = _rate(state, gd, loadout)
+        assert rate is not None and rate.used == (("heal_potion", 1),)
+
+    def test_expected_food_rounds_up(self) -> None:
+        gd = _gd()
+        state = _state(critical_strike=30)
+        food = (FoodOffer("apple", 30, Fraction(0), 1),)
+        rate = _rate(state, gd, [], food=food)
+        assert rate is not None
+        assert rate.eaten and all(isinstance(n, int) and n >= 1 for _, n in rate.eaten)
+
+    def test_no_spawn_tile_raises(self) -> None:
+        gd = _gd()
+        gd._monster_locations = {}
+        with pytest.raises(ValueError, match="no spawn tile"):
+            _rate(_state(), gd, [])
+
+    def test_the_nearest_spawn_tile_to_the_respawn_prices_the_walk(self) -> None:
+        gd = _gd()
+        gd._monster_locations = {"ogre": [(9, 9), (3, 4), (4, 3)]}
+        assert loop_mod._monster_tile(gd, "ogre") == (3, 4)
 
 
 class TestFoodMenu:

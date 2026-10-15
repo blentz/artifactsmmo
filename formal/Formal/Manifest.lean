@@ -551,6 +551,8 @@ open Formal.PriorityBand
 #check @Formal.LoopRate.xpRate_zero               -- no XP, no rate
 #check @Formal.LoopRate.xpRate_den_pos            -- a positive fight keeps the rate defined
 #check @Formal.LoopRate.xpRate_antitone           -- longer in any term is slower
+#check @Formal.LoopRate.expectedXpRate_sure_win   -- a sure win is the plain rate
+#check @Formal.LoopRate.expectedXpRate_mono_p     -- better odds never lower the rate
 #check @Formal.LoopRate.rate_antitone_missing     -- more HP lost never raises the rate
 #check @Formal.LoopRate.held_free_le              -- more held food never slows recovery
 #check @Formal.LoopRate.priced_le_unpriced        -- a replacement never slows recovery

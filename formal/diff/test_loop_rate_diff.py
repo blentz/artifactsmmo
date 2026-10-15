@@ -19,6 +19,7 @@ from hypothesis import strategies as st
 from artifactsmmo_cli.ai.loop_rate_core import (
     Food,
     consumed_seconds,
+    expected_xp_per_second,
     recovery_choice,
     recovery_seconds,
     xp_per_second,
@@ -103,6 +104,25 @@ def test_xp_rate_matches_lean(cases: list[tuple[int, Fraction, Fraction, Fractio
     rows = run_oracle("loop_xp_rate", args)
     for case, row in zip(cases, rows, strict=True):
         assert xp_per_second(*case) == Fraction(row["num"], row["den"]), case
+
+
+_p_win = st.fractions(min_value=0, max_value=1, max_denominator=40)
+_expected_case = st.tuples(
+    _p_win, st.integers(min_value=0, max_value=5000),
+    st.fractions(min_value=Fraction(1, 20), max_value=120, max_denominator=20),
+    _seconds,
+)
+
+
+@settings(max_examples=300, deadline=None)
+@given(cases=st.lists(_expected_case, min_size=1, max_size=30))
+def test_expected_xp_rate_matches_lean(cases: list[tuple[Fraction, int, Fraction, Fraction]]) -> None:
+    args = [[p.numerator, p.denominator, xp, fight.numerator, fight.denominator,
+             extra.numerator, extra.denominator] for p, xp, fight, extra in cases]
+    rows = run_oracle("expected_xp_rate", args)
+    for (p, xp, fight, extra), row in zip(cases, rows, strict=True):
+        assert expected_xp_per_second(xp, p, fight, extra) == Fraction(row["rate_num"], row["rate_den"]), \
+            (p, xp, fight, extra)
 
 
 _potion = st.tuples(st.integers(min_value=0, max_value=8), st.one_of(st.none(), _price),
