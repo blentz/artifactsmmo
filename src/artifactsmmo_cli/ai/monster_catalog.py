@@ -184,7 +184,7 @@ class MonsterCatalog:
         return self.barrier.get(code, 0)
 
     def monster_burn(self, code: str) -> int:
-        """Burn DoT percent (of player attack) of a monster (the `burn` effect).
+        """Burn DoT percent (of the monster's own attack) of a monster (the `burn` effect).
         Returns 0 when absent — burn is an OPTIONAL monster ability (most monsters
         have none), so unlike the always-present combat stats this does not raise."""
         return self.burn.get(code, 0)

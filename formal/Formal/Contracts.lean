@@ -3462,7 +3462,7 @@ example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp 
   @Formal.FightOdds.fightOdds_sum_one
 
 example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp maxHp : Int)
-    (restore stock : Nat), d.pCrit = 0 → d.mCrit = 0 →
+    (restore stock : Nat), d.pCrit = 0 → d.mCrit = 0 → d.burn = [] →
     d.killNormal = t.killStep → d.dieNormal = t.dieStep → d.monsterHp = t.monsterHp →
     0 < t.monsterHp →
     Formal.FightOdds.fightOdds t d hp maxHp restore stock =

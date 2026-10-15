@@ -934,9 +934,9 @@ class GameData:
         return self.monsters.monster_barrier(code)
 
     def monster_burn(self, code: str) -> int:
-        """Burn DoT percent (of player attack) of a monster (optional `burn`
-        effect; 0 if absent). Feeds predict_win: burn raises the player's net death
-        rate each turn (modeled conservatively as flat, no decay)."""
+        """Burn DoT percent (of the monster's own attack) of a monster (optional
+        `burn` effect; 0 if absent). The odds walk charges its decaying ticks
+        (`fight_odds_core.burn_ticks`); predict_win charges a flat term."""
         return self.monsters.monster_burn(code)
 
     def monster_healing(self, code: str) -> int:

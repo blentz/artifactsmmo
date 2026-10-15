@@ -12,18 +12,31 @@ holds at most `(r + 1)²` pool pairs per stock value.
 THE ROUND. `RoundDamage` holds what one round charges, ×10000: `kill_normal` /
 `kill_crit` to the monster, `die_normal` / `die_crit` to the player, each the
 bare hit plus every term today's expected step charges beyond it (healing,
-poison, greed, mean lifesteal, ... — `combat.fight_split`). Only crits branch.
-A player turn first applies `drink` (start of turn, below half, one per turn
-while stock lasts), then hits; `player_first` orders the two turns, exactly as
-`fight_outcome`. A monster pool at or below 0 is a win, a player pool at or
-below 0 a loss, and any state unresolved after `MAX_TURNS` rounds a loss in
-round `MAX_TURNS`. Pools are not capped: a negative amount (a mean-modelled
-heal larger than the bare hit) only raises a pool, as the mean model allows.
+poison, greed, mean lifesteal, ... — `combat.fight_split`) except burn. Only
+crits branch. A player turn first takes its burn tick, then applies `drink`
+(start of turn, below half, one per turn while stock lasts), then hits;
+`player_first` orders the two turns, exactly as `fight_outcome`. A monster
+pool at or below 0 is a win, a player pool at or below 0 a loss, and any state
+unresolved after `MAX_TURNS` rounds a loss in round `MAX_TURNS`. Pools are not
+capped: a negative amount (a mean-modelled heal larger than the bare hit) only
+raises a pool, as the mean model allows.
+
+BURN. The server's text: "On his first turn, apply a burn effect of {value}% of
+your attack of all elements. The damage is applied each turn and decreases by
+10% each time." Logs of 292 imp fights (2026-10-15): "applies a burn of 7" for
+15% of the imp's attack 45 (the player's is 80), then ticks 7, 6, 5,
+4, 3, 2, 1 at the start of the player's turns, before the player hits. The
+monster burns on its first turn, so the first tick is the player's turn of
+round 2 when the player moves first, of round 1 when the monster does. A tick
+that takes the pool to 0 or below is a loss in that round. Each tick is 9/10 of
+the last, rounded down (ruling: the logs of a 7 burn cannot tell this from "less
+10% of the first", which differs by about 10 HP over a 22 burn).
 
 THE EXITS. The closed form's guard ladder decides first, with probability 1:
 the out-sustain exit is one win in `rounds_to_kill` at the starting pool; every
 other exit and a dead start is one loss in round 0 (spec ruling: the exits
-stay deterministic). With both crit chances 0 the walk equals `fight_outcome`
+stay deterministic). With both crit chances 0 and no burn the walk equals
+`fight_outcome`
 (`Formal.FightOdds.fightOdds_noCrit`)."""
 
 from collections.abc import Sequence
@@ -49,6 +62,8 @@ class RoundDamage:
     die_normal: int
     die_crit: int
     m_crit: int
+    burn: tuple[int, ...]
+    """The burn ticks in order, ×10000 (`burn_ticks`); empty without burn."""
 
 
 @dataclass(frozen=True)
@@ -60,6 +75,24 @@ class Ending:
     turns: int
     hp_end: int
     used: int
+
+
+def burn_ticks(burn_pct: int, monster_attack: int) -> tuple[int, ...]:
+    """The burn ticks, ×10000, of a monster with `burn_pct`% burn and
+    `monster_attack` summed over its elements: the first is the share rounded
+    half up, each next 9/10 of the last rounded down, until 0 (module doc)."""
+    tick = (2 * burn_pct * monster_attack + 100) // 200
+    ticks: list[int] = []
+    while tick > 0:
+        ticks.append(tick * SCALE)
+        tick = tick * 9 // 10
+    return tuple(ticks)
+
+
+def _tick(damage: RoundDamage, player_first: bool, round_no: int) -> int:
+    """The burn tick of the player's turn in round `round_no` (module doc)."""
+    index = round_no - 2 if player_first else round_no - 1
+    return damage.burn[index] if 0 <= index < len(damage.burn) else 0
 
 
 State = tuple[int, int, int]
@@ -104,11 +137,12 @@ def fight_odds(terms: FightTerms, damage: RoundDamage, hp_start: int, max_hp: in
     for round_no in range(1, MAX_TURNS + 1):
         after: dict[State, Fraction] = {}
         for (monster, player, left), prob in states.items():
+            tick = _tick(damage, terms.player_first, round_no)
             if terms.player_first:
-                _player_then_monster(round_no, monster, player, left, prob, stock,
+                _player_then_monster(round_no, tick, monster, player, left, prob, stock,
                                      max_pool, restore_pool, kills, hits, ended, after)
             else:
-                _monster_then_player(round_no, monster, player, left, prob, stock,
+                _monster_then_player(round_no, tick, monster, player, left, prob, stock,
                                      max_pool, restore_pool, kills, hits, ended, after)
         states = after
         if not states:
@@ -119,11 +153,14 @@ def fight_odds(terms: FightTerms, damage: RoundDamage, hp_start: int, max_hp: in
                  for (win, turns, hp_end, used), p in sorted(ended.items()))
 
 
-def _player_then_monster(round_no: int, monster: int, player: int, left: int, prob: Fraction,
-                         stock: int, max_pool: int, restore_pool: int,
+def _player_then_monster(round_no: int, tick: int, monster: int, player: int, left: int,
+                         prob: Fraction, stock: int, max_pool: int, restore_pool: int,
                          kills: tuple[tuple[Fraction, int], ...], hits: tuple[tuple[Fraction, int], ...],
                          ended: dict[Key, Fraction], after: dict[State, Fraction]) -> None:
-    player, left = drink(player, max_pool, restore_pool, left)
+    if tick > 0 and player - tick <= 0:
+        _add_ended(ended, (False, round_no, 0, stock - left), prob)
+        return
+    player, left = drink(player - tick, max_pool, restore_pool, left)
     for pk, kill in kills:
         if monster - kill <= 0:
             _add_ended(ended, (True, round_no, player, stock - left), prob * pk)
@@ -135,15 +172,15 @@ def _player_then_monster(round_no: int, monster: int, player: int, left: int, pr
                 _add_state(after, (monster - kill, player - hit, left), prob * pk * ph)
 
 
-def _monster_then_player(round_no: int, monster: int, player: int, left: int, prob: Fraction,
-                         stock: int, max_pool: int, restore_pool: int,
+def _monster_then_player(round_no: int, tick: int, monster: int, player: int, left: int,
+                         prob: Fraction, stock: int, max_pool: int, restore_pool: int,
                          kills: tuple[tuple[Fraction, int], ...], hits: tuple[tuple[Fraction, int], ...],
                          ended: dict[Key, Fraction], after: dict[State, Fraction]) -> None:
     for ph, hit in hits:
-        if player - hit <= 0:
+        if player - hit <= 0 or (tick > 0 and player - hit - tick <= 0):
             _add_ended(ended, (False, round_no, 0, stock - left), prob * ph)
             continue
-        drunk, rest = drink(player - hit, max_pool, restore_pool, left)
+        drunk, rest = drink(player - hit - tick, max_pool, restore_pool, left)
         for pk, kill in kills:
             if monster - kill <= 0:
                 _add_ended(ended, (True, round_no, drunk, stock - rest), prob * ph * pk)

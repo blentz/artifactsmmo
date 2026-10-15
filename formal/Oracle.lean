@@ -1847,11 +1847,14 @@ def runFightOutcome (args : Array Json) : Json :=
 /-- A fight's ending distribution (`Formal.FightOdds.fightOdds`), grouped by
 ending with summed probabilities. Args: `[rawPlayer, killStep, monsterHp, recon,
 dieStep, playerFirst, hp, maxHp, restore, stock, dMonsterHp, killNormal,
-killCrit, pCrit, dieNormal, dieCrit, mCrit]`, playerFirst as 0/1. -/
+killCrit, pCrit, dieNormal, dieCrit, mCrit, n, burn₁ … burnₙ]`, playerFirst as
+0/1. -/
 def runFightOdds (args : Array Json) : Json :=
   let i : Nat → Int := fun k => intArg args k
   let t : Formal.FightOutcome.Terms := ⟨i 0, i 1, i 2, i 3, i 4, i 5 != 0⟩
-  let d : Formal.FightOdds.Damage := ⟨i 10, i 11, i 12, (i 13).toNat, i 14, i 15, (i 16).toNat⟩
+  let burn := (List.range (i 17).toNat).map fun j => i (18 + j)
+  let d : Formal.FightOdds.Damage :=
+    ⟨i 10, i 11, i 12, (i 13).toNat, i 14, i 15, (i 16).toNat, burn⟩
   let xs := Formal.FightOdds.fightOdds t d (i 6) (i 7) (i 8).toNat (i 9).toNat
   let grouped := xs.foldl (fun (acc : List (Formal.FightOdds.Ending × Rat)) e =>
     match acc.find? (·.1 == e.2) with

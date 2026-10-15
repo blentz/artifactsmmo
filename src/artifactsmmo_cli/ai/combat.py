@@ -12,7 +12,7 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import ProjectedStats, project_loadout_stats
-from artifactsmmo_cli.ai.fight_odds_core import RoundDamage, fight_odds
+from artifactsmmo_cli.ai.fight_odds_core import RoundDamage, burn_ticks, fight_odds
 from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
 from artifactsmmo_cli.ai.fight_terms_core import LOSE_MARGIN as LOSE_MARGIN
 from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS as MAX_TURNS
@@ -342,8 +342,10 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
     # Monster poison is a flat per-turn DoT on the player (applied turn 1, ticks
     # every turn), so it RAISES the player's net death rate — even when the monster
     # deals no direct damage (raw_monster == 0), poison alone can kill. Monster burn
-    # is a percent-of-player-attack DoT, modeled conservatively as flat per-turn (no
-    # decay — an upper bound on the real decaying burn): burn% × p_atk_sum × 100.
+    # is charged here flat per turn as burn% × p_atk_sum × 100 (no decay). The server
+    # bases it on the MONSTER's attack and decays it (`fight_odds_core.burn_ticks`,
+    # which the odds walk charges instead); the yes/no gates keep this term until
+    # they read the odds, so it is NOT a bound when the monster outhits the player.
     # Berserker-rage (+% dmg below 25% HP, permanent) and frenzy (+% dmg on crit)
     # both raise monster damage; modeled conservatively as ALWAYS active — each adds
     # value% of the monster's per-turn damage (= value * raw_monster * (200+m_crit) / 2,
@@ -389,11 +391,16 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
     # Everything a round charges beyond the bare hit (spec 2026-10-15 §1): the
     # expected step less its hit term, applied to both crit outcomes.
     kill_rest = kill_step - raw_player * SCALE - 50 * raw_player * p.critical_strike
-    die_rest = die_step - raw_monster * SCALE - 50 * raw_monster * m_crit
+    # Burn is not one of them: the walk charges its decaying ticks (off the
+    # MONSTER's attack, `burn_ticks`) instead of `die_step`'s flat bound, which
+    # the yes/no gates keep.
+    flat_burn = game_data.monster_burn(monster_code) * p_atk_sum * 100
+    die_rest = die_step - flat_burn - raw_monster * SCALE - 50 * raw_monster * m_crit
     damage = RoundDamage(
         effective_monster_hp,
         raw_player * SCALE + kill_rest, crit_player * SCALE + kill_rest, p.critical_strike,
         raw_monster * SCALE + die_rest, crit_monster * SCALE + die_rest, m_crit,
+        burn_ticks(game_data.monster_burn(monster_code), m_atk_sum),
     )
     return FightNumbers(terms, raw_player, hit, p.max_hp, threat, damage)
 

@@ -24,6 +24,7 @@ _case = st.tuples(
     st.integers(min_value=1, max_value=300),                # max hp
     st.integers(min_value=0, max_value=120),                # restore
     st.integers(min_value=0, max_value=4),                  # stock
+    st.lists(st.integers(min_value=0, max_value=40), max_size=6),  # burn ticks (whole HP)
 )
 
 
@@ -31,14 +32,15 @@ _case = st.tuples(
 @given(cases=st.lists(_case, min_size=1, max_size=10))
 def test_fight_odds_matches_lean(cases):
     args, ours = [], []
-    for mhp, kn, kx, pc, dn, dx, mc, pf, hp, max_hp, restore, stock in cases:
+    for mhp, kn, kx, pc, dn, dx, mc, pf, hp, max_hp, restore, stock, ticks in cases:
         kill, die = kn * SCALE, dn * SCALE
         mean_kill = kill + (kx * SCALE * pc) // 100
         mean_die = die + (dx * SCALE * mc) // 100
         terms = fight_terms(1, mean_kill, mhp, 0, mean_die, hp, max_hp, pf)
-        damage = RoundDamage(mhp, kill, kill + kx * SCALE, pc, die, die + dx * SCALE, mc)
+        burn = tuple(t * SCALE for t in ticks)
+        damage = RoundDamage(mhp, kill, kill + kx * SCALE, pc, die, die + dx * SCALE, mc, burn)
         args.append([1, mean_kill, mhp, 0, mean_die, 1 if pf else 0, hp, max_hp, restore, stock,
-                     mhp, kill, kill + kx * SCALE, pc, die, die + dx * SCALE, mc])
+                     mhp, kill, kill + kx * SCALE, pc, die, die + dx * SCALE, mc, len(burn), *burn])
         ours.append(fight_odds(terms, damage, hp, max_hp, restore, stock))
     for mine, row in zip(ours, run_oracle("fight_odds", args), strict=True):
         lean = {(r["win"], r["turns"], r["hp_end"], r["used"]): Fraction(r["prob_num"], r["prob_den"])

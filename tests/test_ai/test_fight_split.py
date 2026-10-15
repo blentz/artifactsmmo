@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 from artifactsmmo_cli.ai.combat import combat_terms, fight_split, win_probability, worn_restore
+from artifactsmmo_cli.ai.fight_odds_core import burn_ticks
 from artifactsmmo_cli.ai.fight_outcome_core import fight_outcome
 from artifactsmmo_cli.ai.fight_terms_core import SCALE
 from artifactsmmo_cli.ai.fight_walk import fight_walk, odds_walk
@@ -13,7 +14,7 @@ from tests.test_ai.fixtures import make_state
 _UTILITY = dict(level=1, type_="utility")
 
 
-def _gd(healing: int = 0, m_crit: int = 5) -> GameData:
+def _gd(healing: int = 0, m_crit: int = 5, burn: int = 0) -> GameData:
     gd = GameData()
     gd._monster_level = {"owl": 10}
     gd._monster_hp = {"owl": 1450}
@@ -22,6 +23,7 @@ def _gd(healing: int = 0, m_crit: int = 5) -> GameData:
     gd._monster_critical_strike = {"owl": m_crit}
     gd._monster_initiative = {"owl": 250}
     gd._monster_healing = {"owl": healing}
+    gd._monster_burn = {"owl": burn}
     fill_monster_stat_defaults(gd)
     gd._consumable_effect_codes = {"heal_potion": ["restore"], "splash_potion": ["splash_restore"],
                                    "res_potion": ["boost_res_fire"]}
@@ -105,3 +107,13 @@ def test_a_damage_bonus_raises_the_players_crit_not_the_monsters():
     assert boosted.kill_crit > bare.kill_crit
     assert boosted.kill_normal > bare.kill_normal
     assert (boosted.die_normal, boosted.die_crit) == (bare.die_normal, bare.die_crit)
+
+
+def test_burn_is_ticks_off_the_monsters_attack_not_a_flat_charge():
+    terms_bare, bare = fight_split(_state(), _gd(), "owl")
+    terms_burnt, burnt = fight_split(_state(), _gd(burn=15), "owl")
+    assert bare.burn == ()
+    assert burnt.burn == burn_ticks(15, 83)
+    assert (burnt.die_normal, burnt.die_crit) == (bare.die_normal, bare.die_crit)
+    # The yes/no gates keep the flat bound until part B.
+    assert terms_burnt.die_step > terms_bare.die_step

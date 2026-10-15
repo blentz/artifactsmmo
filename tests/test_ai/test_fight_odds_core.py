@@ -1,24 +1,25 @@
 """The exact ending distribution of a fight over crit rolls
 (spec 2026-10-15 fight-odds §1)."""
 
+from dataclasses import replace
 from fractions import Fraction
 
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.fight_odds_core import Ending, RoundDamage, fight_odds, win_probability
+from artifactsmmo_cli.ai.fight_odds_core import Ending, RoundDamage, burn_ticks, fight_odds, win_probability
 from artifactsmmo_cli.ai.fight_outcome_core import fight_outcome
 from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS, SCALE, fight_terms
 
 # R2D2 v owlbear, 2026-10-15 server logs: 141/212 a turn at 45% crit; the owlbear
 # 83/125 at 5%, moving first; R2D2 785 HP, owlbear 1450 HP.
 _R2D2_TERMS = fight_terms(141, 50 * 141 * 245, 1450, 0, 50 * 83 * 205, 785, 785, False)
-_R2D2 = RoundDamage(1450, 141 * SCALE, 212 * SCALE, 45, 83 * SCALE, 125 * SCALE, 5)
+_R2D2 = RoundDamage(1450, 141 * SCALE, 212 * SCALE, 45, 83 * SCALE, 125 * SCALE, 5, ())
 
 
 def _no_crit(kill: int, die: int, mhp: int) -> RoundDamage:
-    return RoundDamage(mhp, kill, kill, 0, die, die, 0)
+    return RoundDamage(mhp, kill, kill, 0, die, die, 0, ())
 
 
 class TestR2D2Replay:
@@ -46,17 +47,61 @@ class TestDistribution:
         assert len(keys) == len(set(keys))
 
     def test_certain_crit_is_one_walk(self):
-        damage = RoundDamage(1450, 141 * SCALE, 212 * SCALE, 100, 83 * SCALE, 125 * SCALE, 0)
+        damage = RoundDamage(1450, 141 * SCALE, 212 * SCALE, 100, 83 * SCALE, 125 * SCALE, 0, ())
         endings = fight_odds(_R2D2_TERMS, damage, 785, 785, 0, 0)
         assert len(endings) == 1 and endings[0].prob == 1 and endings[0].win
 
     def test_heal_larger_than_normal_hit_terminates(self):
         # The normal hit heals the monster (net -1), the crit kills: mean positive.
         terms = fight_terms(10, 5000, 50, 0, 20_000, 1000, 1000, True)
-        damage = RoundDamage(50, -10_000, 600_000, 50, 20_000, 20_000, 0)
+        damage = RoundDamage(50, -10_000, 600_000, 50, 20_000, 20_000, 0, ())
         endings = fight_odds(terms, damage, 1000, 1000, 0, 0)
         assert sum(e.prob for e in endings) == 1
         assert max(e.turns for e in endings) <= MAX_TURNS
+
+
+
+class TestBurn:
+    """2026-10-15 server logs (292 imp fights): "applies a burn of 7" =
+    round(15% x the imp's attack 45); it ticks 7, 6, 5, 4, 3, 2, 1."""
+
+    def test_ticks_start_at_the_rounded_share_of_the_monsters_attack(self):
+        assert burn_ticks(15, 45) == tuple(t * SCALE for t in (7, 6, 5, 4, 3, 2, 1))
+
+    def test_each_tick_is_nine_tenths_of_the_last_rounded_down(self):
+        assert burn_ticks(20, 110) == tuple(
+            t * SCALE for t in (22, 19, 17, 15, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1))
+
+    def test_no_burn_is_no_ticks(self):
+        assert burn_ticks(0, 45) == ()
+        assert burn_ticks(15, 0) == ()
+        assert burn_ticks(1, 3) == ()  # round(0.03) = 0
+
+    @pytest.mark.parametrize(("player_first", "lost_in"), [(True, 3), (False, 2)])
+    def test_a_burn_tick_can_kill(self, player_first, lost_in):
+        # 10 HP, a 1 HP hit, ticks 7 then 6: the burn kills before the 3-round kill.
+        # Player first: the monster burns in round 1, ticks in rounds 2 and 3.
+        # Monster first: it burns and the first tick lands in round 1.
+        terms = fight_terms(10, 100_000, 30, 0, SCALE, 10, 10, player_first)
+        damage = RoundDamage(30, 100_000, 100_000, 0, SCALE, SCALE, 0, (7 * SCALE, 6 * SCALE))
+        assert fight_odds(terms, damage, 10, 10, 0, 0) == (Ending(Fraction(1), False, lost_in, 0, 0),)
+        assert fight_odds(terms, replace(damage, burn=()), 10, 10, 0, 0)[0].win
+
+    def test_a_tick_lands_before_the_drink(self):
+        # 20 HP, 10 restore, half is 10: the 11 HP tick takes 20 to 9, which drinks to 19.
+        terms = fight_terms(10, 100_000, 20, 0, SCALE, 20, 20, False)
+        damage = RoundDamage(20, 100_000, 100_000, 0, 0, 0, 0, (11 * SCALE,))
+        assert fight_odds(terms, damage, 20, 20, 10, 1) == (
+            Ending(Fraction(1), True, 2, 19 * SCALE, 1),)
+
+    def test_hal_v_imp_is_a_sure_win(self):
+        # HAL v imp, 2026-10-15: 101/152 a turn at 21% crit, first; imp 1750 HP,
+        # 39/59 at 5% (lifesteal 23 x 21% folded in: -4.83). Model said 0.8123.
+        rest = -21 * 23 * 100
+        terms = fight_terms(101, 50 * 101 * 221, 1750, 0, 50 * 39 * 205 + rest, 795, 795, True)
+        damage = RoundDamage(1750, 101 * SCALE, 152 * SCALE, 21, 39 * SCALE + rest,
+                             59 * SCALE + rest, 5, burn_ticks(15, 45))
+        assert float(win_probability(fight_odds(terms, damage, 795, 795, 0, 0))) > 0.999
 
 
 class TestExits:
