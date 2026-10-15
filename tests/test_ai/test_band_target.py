@@ -455,13 +455,32 @@ def test_the_learned_loss_veto_refuses_a_potion_propped_fight(monkeypatch):
     assert taken is not None and taken.monster == "ogre"
 
 
-def test_a_win_on_the_record_is_ranked_on_the_walk_seconds(monkeypatch):
-    """`is_winnable` says spider is beaten (the record) while the model's walk
-    loses: the record decides the win, the model's seconds the rate."""
+def test_a_win_on_the_record_is_ranked_at_the_models_rate(monkeypatch):
+    """`is_winnable` says spider is beaten (the record) while the model's odds
+    are nil: the record decides the win filter, the model's rate the rank."""
     gd = _spider_bare_ogre_on_potions(monkeypatch)
     xp = gd.xp_per_kill("spider", 30)
     lost_walk = make_best_loadout(xp=xp, win=False, recovery=90)
-    assert rank_rate(xp, None, lambda: lost_walk, _never_priced) == Fraction(xp, 120)
+    assert rank_rate(xp, None, lambda: lost_walk, _never_priced) == 0
+
+
+def test_a_sure_win_ranks_at_the_old_loop_rate():
+    sure = make_best_loadout(xp=60, win=True, recovery=30)
+    assert rank_rate(60, None, lambda: sure, _never_priced) == Fraction(60, 60)
+
+
+def test_a_risky_monster_ranks_below_a_sure_one_that_pays_less_per_kill(monkeypatch):
+    """ogre's full-XP loop is faster (30 s, 3x spider's XP) but it wins one fight
+    in three: its expected rate falls below spider's sure one."""
+    gd = _spider_bare_ogre_on_potions(monkeypatch)
+    spider_xp, ogre_xp = gd.xp_per_kill("spider", 30), gd.xp_per_kill("ogre", 30)
+    spider = make_best_loadout(xp=spider_xp, win=True, recovery=0)
+    ogre = make_best_loadout(("small_health_potion",), xp=ogre_xp, win=True,
+                             p_win=Fraction(1, 100))
+    assert Fraction(ogre_xp, 30) > Fraction(spider_xp, 30)
+    target = band_combat_target(make_state(level=30), gd, None, _never_priced,
+                                {"spider": spider, "ogre": ogre}.__getitem__, _no_party)
+    assert target is not None and target.monster == "spider"
 
 
 def _party_of(xp: int):  # type: ignore[no-untyped-def]

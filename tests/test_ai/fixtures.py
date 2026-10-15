@@ -150,13 +150,14 @@ def make_state(**overrides) -> WorldState:
 
 
 def make_loop(*, xp: int = 0, win: bool = False, recovery: int = 0, consumed: int = 0,
-              used: tuple[tuple[str, int], ...] = ()) -> LoopRate:
+              p_win: Fraction | None = None, used: tuple[tuple[str, int], ...] = ()) -> LoopRate:
     """One modelled fight loop (`loop_rate.LoopRate`): a 30 s fight, `recovery`
     and `consumed` seconds, `xp` per kill on a win."""
     fight = Fraction(30)
     seconds = fight + recovery + consumed
-    return LoopRate(xp_per_second=Fraction(xp) / seconds if win else Fraction(0),
-                    xp_per_kill=xp, win=win, p_win=Fraction(int(win)), fight_seconds=fight,
+    odds = Fraction(int(win)) if p_win is None else p_win
+    return LoopRate(xp_per_second=odds * xp / seconds,
+                    xp_per_kill=xp, win=win, p_win=odds, fight_seconds=fight,
                     recovery_seconds=Fraction(recovery), consumed_seconds=Fraction(consumed),
                     max_hp=100, hp_end=50, used=used, eaten=())
 

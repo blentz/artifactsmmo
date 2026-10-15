@@ -40,7 +40,7 @@ def _gd() -> GameData:
     gd._monster_attack = {"ogre": {"fire": 30}}
     gd._monster_resistance = {"ogre": {}}
     fill_monster_stat_defaults(gd)
-    gd._monster_locations = {"ogre": [(3, 4)]}
+    gd._monster_locations = {"ogre": [(3, 4)], "wolf": [(1, 1)]}
     gd._consumable_effect_codes = {
         "heal_potion": ["restore"], "big_heal_potion": ["restore"],
         "fire_res_potion": ["boost_res_fire"], "hp_potion": ["boost_hp"],
@@ -221,6 +221,12 @@ class TestChosen:
         assert fight_ahead_loadout(_state(), _gd(), ctx, None) == ChosenLoadout(
             "wolf", (), (("apple", 1),), (("apple", 1),))
         assert asked == ["ogre", "wolf"]
+
+    def test_a_committed_monster_that_spawns_nowhere_is_no_fight_ahead(self) -> None:
+        gd = _gd()
+        gd._monster_locations = {}
+        ctx = replace(_CTX, fight_monster="ogre")
+        assert fight_ahead_loadout(_state(), gd, ctx, None) is None
 
     def test_no_fight_ahead_chooses_nothing(self) -> None:
         assert fight_ahead_loadout(_state(), _gd(), _CTX, None) is None

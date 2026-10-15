@@ -9062,12 +9062,13 @@ BAND_LOADOUT_MUTATIONS = [
     ("band: a propped monster counts as a bare fight",
      "        bare_fight = bare_fight or bare\n",
      "        bare_fight = True\n"),
-    ("band: the loop's consumed price is not charged",
-     "    return rate.fight_seconds + rate.recovery_seconds + rate.consumed_seconds\n",
-     "    return rate.fight_seconds + rate.recovery_seconds\n"),
-    ("band: the model ranks on the fight alone",
-     "    return Fraction(xp_per_kill) / loop_seconds(best().rate)\n",
+    ("band: the model ranks at the full kill's XP over the fight alone",
+     "    return best().rate.xp_per_second\n",
      "    return Fraction(xp_per_kill) / best().rate.fight_seconds\n"),
+    ("band: the model ranks without the win odds",
+     "    return best().rate.xp_per_second\n",
+     "    return Fraction(xp_per_kill) / (best().rate.fight_seconds + best().rate.recovery_seconds\n"
+     "                                    + best().rate.consumed_seconds)\n"),
 ]
 # The band on potions against the windowed pick, and the propped flag (USER
 # 2026-10-10). Killed by tests/test_ai/test_player.py.

@@ -74,7 +74,6 @@ from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_upkeep_core import FightUpkeep, xp_per_action
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.loop_rate import LoopRate
 from artifactsmmo_cli.ai.party_loop import PARTY_XP_TYPES, PartyLoop
 from artifactsmmo_cli.ai.tiers.tier_ladder import normal_band
 from artifactsmmo_cli.ai.tiers.tier_progress import next_uncleared_tier
@@ -98,12 +97,6 @@ class BandTarget:
     solo pick."""
 
 
-def loop_seconds(rate: LoopRate) -> Fraction:
-    """Seconds of one modelled loop: the fight, its recovery and the price of
-    what it consumed."""
-    return rate.fight_seconds + rate.recovery_seconds + rate.consumed_seconds
-
-
 def rank_rate(xp_per_kill: int, upkeep: FightUpkeep | None, best: Callable[[], BestLoadout],
               price_of: Callable[[str], Fraction]) -> Fraction:
     """XP per second of farming a monster: MEASURED where the store has its
@@ -113,14 +106,16 @@ def rank_rate(xp_per_kill: int, upkeep: FightUpkeep | None, best: Callable[[], B
       per kill, and its consumables at `price_of`, acquisition actions per unit)
       over `FIGHT_SECONDS`, the seconds of one fight-equivalent action — the
       unit both the acquisition walk and the model's prices are counted in.
-    * Modelled: the kill's XP over the seconds of the best loadout's loop
-      (`best_loadout`, `loop_seconds`). A monster the record says is beaten
-      (`is_winnable`'s monotonic-win inference) while the model's walk loses is
-      ranked on the walk's seconds all the same: the record decides the win,
-      the model only the time."""
+    * Modelled: the best loadout's expected XP per second
+      (`best_loadout`, `LoopRate.xp_per_second`: the win odds times the kill's
+      XP over the expected loop seconds, a loss's walk back included), so a
+      risky monster ranks below a sure one that pays better. A monster the
+      record says is beaten (`is_winnable`'s monotonic-win inference) while
+      the model's odds are nil ranks at the model's rate, zero: the record
+      decides the win filter, the model the rate."""
     if upkeep is not None:
         return xp_per_action(xp_per_kill, upkeep, price_of) / FIGHT_SECONDS
-    return Fraction(xp_per_kill) / loop_seconds(best().rate)
+    return best().rate.xp_per_second
 
 
 def target_rate(state: WorldState, game_data: GameData, history: LearningStore | None,

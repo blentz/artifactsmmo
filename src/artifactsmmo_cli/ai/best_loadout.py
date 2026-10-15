@@ -123,9 +123,10 @@ def fight_ahead_loadout(state: WorldState, game_data: GameData, ctx: SelectionCo
                         store: LearningStore | None) -> ChosenLoadout | None:
     """The pick against the fight ahead — the committed intention's next fight
     (`ctx.fight_monster`), else the grind target (`ctx.combat_monster`) — or
-    None with neither."""
+    None with neither, or when the monster spawns nowhere now (a committed
+    fight whose event despawned: there is no fight to price)."""
     monster = ctx.fight_monster or ctx.combat_monster
-    if monster is None:
+    if monster is None or not game_data.monster_locations(monster):
         return None
     return chosen(best_loadout(state, game_data, ctx, monster, store), monster)
 

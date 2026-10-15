@@ -2,11 +2,16 @@
 the world (`docs/PLAN_consumable_utility.md` increments 3-4). The arithmetic is
 `loop_rate_core` (proved: `Formal.LoopRate`) and the fight is
 `fight_outcome_core.fight_outcome` (proved: `Formal.FightOutcome`); this module
-assembles their inputs. Not wired into any decision yet.
+assembles their inputs.
 
 ONE LOOP is a fight from full HP, the recovery back to full, and the price of
 what the fight consumed (the steady state of a grind: every fight after the
-first starts where the last recovery left it, at full).
+first starts where the last recovery left it, at full). The fight is walked
+over every crit ending (`fight_walk.odds_walk`, spec 2026-10-15 fight-odds §2):
+the loop's recovery and consumed seconds are EXPECTATIONS over the endings, a
+lost fight recovers from `LOSS_HP` and walks back from `RESPAWN_TILE` to the
+nearest spawn tile (needed only when a loss is possible), and the rate is
+renewal-reward: `p_win x xp / (fight + expected recovery + consumed + walk)`.
 
 * THE LOADOUT is what the two utility slots wear for the fight — up to two
   `(code, stock)` utility potions, at most one of them a `restore` (the turn walk
@@ -31,8 +36,9 @@ first starts where the last recovery left it, at full).
 * RECOVERY — `recovery_choice` of the missing HP (`max_hp − hp_end`, the end
   pool floored to whole HP) over the FOOD MENU (`food_menu`), eaten at the flat
   `CONSUMABLE_COOLDOWN_SECONDS`; the units it eats are the loop's `eaten`.
-* XP — `game_data.xp_per_kill` at the character's level and wisdom on a win;
-  0 on a loss."""
+* XP — `game_data.xp_per_kill` at the character's level and wisdom on a win
+  (`LoopRate.p_win` weights it); 0 on a loss. `used`/`eaten` are the expected
+  units rounded up, `hp_end` the expected end HP rounded down."""
 
 import math
 from collections.abc import Mapping, Sequence
@@ -77,9 +83,14 @@ class FoodOffer:
 
 @dataclass(frozen=True)
 class LoopRate:
-    """One loop's XP rate and its parts (seconds exact, HP whole). `used` is the
-    units of each loadout potion one fight drinks, `eaten` the units of each food
-    its recovery eats (only the foods it eats)."""
+    """One loop's expected XP rate and its parts (seconds exact, HP whole).
+    `p_win` is the fight's win probability; `win` the plain one-walk yes/no.
+    `recovery_seconds` and `consumed_seconds` are EXPECTATIONS over the fight's
+    endings (a loss recovers from `LOSS_HP`); the walk back from the respawn
+    tile appears only in `xp_per_second`. `used` is the units of each loadout
+    potion one fight drinks and `eaten` the units of each food its recovery eats
+    (only the foods it eats), both the expectation rounded UP; `hp_end` is the
+    expected end HP rounded down."""
 
     xp_per_second: Fraction
     xp_per_kill: int
@@ -131,7 +142,9 @@ def loop_rate(state: WorldState, game_data: GameData, monster: str,
     endings, _, _ = odds_walk(state, game_data, monster, loadout)
     p_win = odds_win(endings)
     menu = [(f.restore, f.price, f.held) for f in food]
-    extra = (1 - p_win) * travel_seconds(RESPAWN_TILE, _monster_tile(game_data, monster))
+    extra = Fraction(0)
+    if p_win < 1:
+        extra = (1 - p_win) * travel_seconds(RESPAWN_TILE, _monster_tile(game_data, monster))
     used_mean = {code: Fraction(0) for code, _ in loadout}
     eaten_mean = [Fraction(0)] * len(food)
     recovery_mean = consumed_mean = hp_end_mean = Fraction(0)

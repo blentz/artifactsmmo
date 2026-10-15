@@ -2300,6 +2300,12 @@ def test_the_chore_means_are_built_as_interrupts():
     assert bands["ExpandBank"] == BAND_GUARD    # Phase 5-2c-ii
 
 
+def _spawning_gd():
+    gd = _gd()
+    gd._monster_locations = {"chicken": [(1, 1)], "cow": [(2, 2)]}
+    return gd
+
+
 class TestFightStepsCarryTheirLoadout:
     """USER 2026-10-10, "Fight steps prep it": the trunk's grind and the task
     kill first stock the cycle's chosen loadout food (live: 120 banked
@@ -2314,12 +2320,12 @@ class TestFightStepsCarryTheirLoadout:
     def test_the_grind_preps_first(self, monkeypatch):
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
         ctx = _ctx(combat_monster="chicken", loadout=self._loadout("chicken"))
-        assert objective_step_goal(ReachCharLevel(10), make_state(), _gd(), ctx) is self.PREP
+        assert objective_step_goal(ReachCharLevel(10), make_state(), _spawning_gd(), ctx) is self.PREP
 
     def test_a_carried_loadout_grinds(self, monkeypatch):
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: None)
         ctx = _ctx(combat_monster="chicken", loadout=self._loadout("chicken"))
-        assert isinstance(objective_step_goal(ReachCharLevel(10), make_state(), _gd(), ctx),
+        assert isinstance(objective_step_goal(ReachCharLevel(10), make_state(), _spawning_gd(), ctx),
                           GrindCharacterXPGoal)
 
     def test_a_loadout_for_another_monster_preps_for_the_steps_own(self, monkeypatch):
@@ -2330,14 +2336,25 @@ class TestFightStepsCarryTheirLoadout:
         monkeypatch.setattr(sd, "potion_prep_goal", lambda *a: None)
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: asked.append(a[3]) or self.PREP)
         ctx = _ctx(combat_monster="chicken", loadout=self._loadout("cow"))
-        assert objective_step_goal(ReachCharLevel(10), make_state(), _gd(), ctx) is self.PREP
+        assert objective_step_goal(ReachCharLevel(10), make_state(), _spawning_gd(), ctx) is self.PREP
         assert asked == ["chicken"]
 
     def test_no_loadout_no_prep(self, monkeypatch):
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
         ctx = _ctx(combat_monster="chicken", loadout=None)
-        assert isinstance(objective_step_goal(ReachCharLevel(10), make_state(), _gd(), ctx),
+        assert isinstance(objective_step_goal(ReachCharLevel(10), make_state(), _spawning_gd(), ctx),
                           GrindCharacterXPGoal)
+
+    def test_a_task_monster_that_spawns_nowhere_is_not_prepped(self, monkeypatch):
+        """A carried loadout for another monster must not price a task monster
+        whose event despawned (`loadout_for` would raise on its walk back)."""
+        monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
+        gd = _spawning_gd()
+        gd._monster_locations = {}
+        state = make_state(task_code="chicken", task_type="monsters", task_progress=1, task_total=5)
+        ctx = _ctx(loadout=self._loadout("cow"))
+        assert isinstance(objective_step_goal(ReachTaskOutcome("chicken"), state, gd, ctx),
+                          TaskKillsGoal)
 
     def test_the_potions_prep_before_the_food(self, monkeypatch):
         potion = GatherMaterialsGoal(target_item="water_boost_potion",
@@ -2345,15 +2362,15 @@ class TestFightStepsCarryTheirLoadout:
         monkeypatch.setattr(sd, "potion_prep_goal", lambda *a: potion)
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
         ctx = _ctx(combat_monster="chicken", loadout=self._loadout("chicken"))
-        assert objective_step_goal(ReachCharLevel(10), make_state(), _gd(), ctx) is potion
+        assert objective_step_goal(ReachCharLevel(10), make_state(), _spawning_gd(), ctx) is potion
 
     def test_the_task_kill_preps_first(self, monkeypatch):
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
         state = make_state(task_code="chicken", task_type="monsters", task_progress=1, task_total=5)
         ctx = _ctx(loadout=self._loadout("chicken"))
-        assert objective_step_goal(ReachTaskOutcome("chicken"), state, _gd(), ctx) is self.PREP
+        assert objective_step_goal(ReachTaskOutcome("chicken"), state, _spawning_gd(), ctx) is self.PREP
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: None)
-        assert isinstance(objective_step_goal(ReachTaskOutcome("chicken"), state, _gd(), ctx),
+        assert isinstance(objective_step_goal(ReachTaskOutcome("chicken"), state, _spawning_gd(), ctx),
                           TaskKillsGoal)
 
 

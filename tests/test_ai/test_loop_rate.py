@@ -248,6 +248,12 @@ class TestOdds:
         with pytest.raises(ValueError, match="no spawn tile"):
             _rate(_state(), gd, [])
 
+    def test_a_sure_win_needs_no_spawn_tile(self) -> None:
+        gd = _gd()
+        gd._monster_locations = {}
+        rate = _rate(_state(inventory={"heal_potion": 5}), gd, [("heal_potion", 5)])
+        assert rate is not None and rate.p_win == 1 and rate.xp_per_second > 0
+
     def test_the_nearest_spawn_tile_to_the_respawn_prices_the_walk(self) -> None:
         gd = _gd()
         gd._monster_locations = {"ogre": [(9, 9), (3, 4), (4, 3)]}

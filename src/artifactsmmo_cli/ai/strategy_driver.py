@@ -611,8 +611,9 @@ def _fight_step_prep(state: WorldState, game_data: GameData, ctx: SelectionConte
     against it). Not only when the cycle's loadout matches: while a potion
     carry is committed, the fight ahead is the carry's own (its ingredient's
     dropper), and a prep that switched off then would hand the commitment back
-    to the bare fight. No loadout this cycle (no fight ahead) is no prep."""
-    if monster is None or ctx.loadout is None:
+    to the bare fight. No loadout this cycle (no fight ahead) is no prep, and a
+    monster that spawns nowhere now has no fight to prep."""
+    if monster is None or ctx.loadout is None or not game_data.monster_locations(monster):
         return None
     return (potion_prep_goal(state, game_data, ctx, monster)
             or heal_prep_goal(state, game_data, ctx, monster))
