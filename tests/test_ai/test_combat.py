@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.combat import (
     lost_fights,
     predict_win,
     secure_win,
+    unpotioned,
     win_probability,
     win_threshold,
 )
@@ -30,6 +31,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import combat_key
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 
@@ -881,3 +883,37 @@ def test_secure_win_needs_the_threshold_when_it_is_above_three_quarters() -> Non
     assert secure_win(cheap, gd, "owlbear") is True
     strict = dataclasses.replace(state, win_thresholds={"owlbear": Fraction(9, 10)})
     assert secure_win(strict, gd, "owlbear") is False
+
+
+def test_unpotioned_drinks_no_worn_restore(bundle_game_data):
+    """`unpotioned` is the fight on bare gear: the worn restore potions stay
+    worn (the loadout is unchanged) and none is drunk. 40 worn greater health
+    potions carry `l25_currency_leaf_unfunded` through an ogre it loses bare."""
+    gd = bundle_game_data
+    state = scenario_state(SCENARIOS["l25_currency_leaf_unfunded"], gd)
+    state = dataclasses.replace(state, hp=state.max_hp)
+    bare = unpotioned(state)
+    assert predict_win(state, gd, "ogre")
+    assert not predict_win(bare, gd, "ogre")
+    assert bare.equipment == state.equipment
+    assert (bare.utility1_slot_quantity, bare.utility2_slot_quantity) == (0, 0)
+
+
+def test_a_threshold_equal_to_the_odds_is_cleared() -> None:
+    """The bar is P(win) AT LEAST θ (Lean `θ ≤ winProb`): a θ measured exactly
+    at the fight's odds clears, the next rational above does not — for the
+    fight gate and the secure bar alike."""
+    state, gd = _owlbear()
+    p = win_probability(state, gd, "owlbear")
+    at = dataclasses.replace(state, win_thresholds={"owlbear": p})
+    above = dataclasses.replace(state, win_thresholds={"owlbear": p + Fraction(1, 10**9)})
+    assert predict_win(at, gd, "owlbear") is True
+    assert predict_win(above, gd, "owlbear") is False
+    # +12 fire: P 0.9121, above SECURE_WIN, so θ decides the secure bar too.
+    strong = dataclasses.replace(state, attack={"fire": 153})
+    q = win_probability(strong, gd, "owlbear")
+    assert q > Fraction(3, 4)
+    assert secure_win(dataclasses.replace(strong, win_thresholds={"owlbear": q}),
+                      gd, "owlbear") is True
+    assert secure_win(dataclasses.replace(strong, win_thresholds={"owlbear": q + Fraction(1, 10**9)}),
+                      gd, "owlbear") is False

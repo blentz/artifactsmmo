@@ -140,7 +140,7 @@ def is_obtainable(code: str, model: ObtainModel) -> bool:
 _CacheKey = tuple[str, int, tuple[tuple[str, str | None], ...],
                   tuple[tuple[str, int], ...], tuple[tuple[str, int], ...],
                   tuple[tuple[str, int], ...], tuple[tuple[str, int, int], ...],
-                  tuple[tuple[str, Fraction], ...]]
+                  tuple[tuple[str, Fraction], ...], tuple[int, int]]
 
 CACHE_MAX_ENTRIES = 4096
 """Per-GameData LRU bound, mirroring `equipment/loadout_cache`: comfortably holds
@@ -182,7 +182,8 @@ def _cache_key(skill: str, state: WorldState,
     the rungs that farm that monster. They change only when a fight resolves.
 
     `win_thresholds` drive the same `is_winnable` (spec 2026-10-15
-    fight-gates-odds §1)."""
+    fight-gates-odds §1), and so do the utility slot quantities: the odds
+    drink the worn restore stock (`combat.worn_restore`)."""
     return (
         skill,
         state.level,
@@ -192,6 +193,7 @@ def _cache_key(skill: str, state: WorldState,
         tuple(sorted(state.skills.items())),
         fight_records,
         tuple(sorted(state.win_thresholds.items())),
+        (state.utility1_slot_quantity, state.utility2_slot_quantity),
     )
 
 

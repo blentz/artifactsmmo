@@ -191,3 +191,13 @@ def _monster_then_player(round_no: int, tick: int, monster: int, player: int, le
 def win_probability(endings: Sequence[Ending]) -> Fraction:
     """P(win): the summed probability of the winning endings."""
     return sum((e.prob for e in endings if e.win), Fraction(0))
+
+
+def odds_clear(p_win: Fraction, theta: Fraction) -> bool:
+    """The fight gates' one verdict on the odds: P(win) AT LEAST `theta` (Lean
+    `θ ≤ winProb`, `WinnableGrounded.rowWinnable_sound`), so a θ measured
+    exactly at the odds clears. Every gate reads it — `combat.predict_win`,
+    `combat.secure_win`, the drop gate's potion loadouts (`loadout_win`), the
+    band's potion arm — and `formal/diff/test_odds_verdict_diff.py` pins it
+    against the Lean tree."""
+    return p_win >= theta

@@ -592,6 +592,9 @@ open Formal.Liveness.GearTierLeveling
 -- formal/diff/test_winnable_witness_diff.py); no native_decide, no new axioms.
 open Formal.Liveness.WinnableGrounded
 #print axioms winnableAcrossBand_grounded
+-- Post-merge review 2026-10-16 (USER: θ stays uncapped): the grounding at
+-- production's verdict, its θ ≤ 99/100 hypothesis explicit.
+#print axioms winnableAcrossBand_at_threshold
 
 -- Perception-refresh Brick 3 (2026-06-18): the combat objective is ARMED along the
 -- refreshed trajectory. At every step k with level<50, the state the refreshed cycle

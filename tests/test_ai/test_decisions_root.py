@@ -1059,15 +1059,24 @@ def test_risky_target_asks_for_gear_first(monkeypatch):
 
 
 def test_risky_target_without_gear_still_grinds(monkeypatch):
-    """Risky, no task, and the gear sheet wants nothing: the walk still reaches
-    the trunk — a risky fight is fought when there is no gear to build."""
+    """Risky, a gear deficit, and no gear that closes it: the walk takes the
+    fight arm (the risky target hides no gear — it ASKED for the fight's gear),
+    finds none, and still reaches the trunk through the tier sheet, which wants
+    nothing — a risky fight is fought when there is no gear to build."""
     gd = _gd()
     gd._monster_level = {"chicken": 1}
     gd._monster_type = {"chicken": "normal"}
     monkeypatch.setattr(tier_progress, "is_winnable", lambda s, g, c, h: True)
-    monkeypatch.setattr(_root_mod, "resolve_task_horizon", _horizon(None))
+    monkeypatch.setattr(_root_mod, "resolve_task_horizon", _horizon(HORIZON_GEAR))
+    asked: list[str] = []
+
+    def no_gear(state, game_data, actions_of=None):  # type: ignore[no-untyped-def]
+        asked.append("deficit")
+        return None
+    monkeypatch.setattr(_root_mod, "deficit_upgrade_target", no_gear)
     resolution = resolve_root(_geared_state(), gd, _objective(gd),
                               _ctx(combat_monster="chicken", combat_risky=True), None)
+    assert asked
     assert resolution.root == ReachCharLevel(level=20)
 
 

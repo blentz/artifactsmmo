@@ -135,16 +135,17 @@ def test_only_the_gold_wall_is_exercised_and_the_matrix_says_so(
 
     THIS TEST DID ITS JOB. It was written asserting `walled == 0` precisely so
     that the day a fixture exercised a wall it would fail rather than rot — and
-    adding the gold row is that day. `WALL_GOLD` now fires on 5 cells (4 until
-    the fight gates read the odds, 2026-10-15: `l20_boost_stock`'s worn heal
-    stack now counts, it gears for rung 20, and its root became
-    `lifesteal_rune`); the three catalogue-currency walls still have no witness
+    adding the gold row is that day. `WALL_GOLD` fires on 4 cells. (It read 5
+    for one commit, 2026-10-15: the rung check counted `l20_boost_stock`'s
+    worn heal stack, so it geared for rung 20 and its root became
+    `lifesteal_rune`. A rung is cleared on BARE gear, 2026-10-16, so its root
+    is `backpack` again.) The three catalogue-currency walls still have no witness
     and stay pinned by their positive controls."""
     walls = [r for r in results if r.gap.startswith("wall_")]
     assert {r.gap for r in walls} == {CurrencyGap.WALL_GOLD.value}
     assert {r.currency for r in walls} == {GOLD_ROW}
-    assert len(walls) == 5
-    assert "walled 5" in summary_line(results)
+    assert len(walls) == 4
+    assert "walled 4" in summary_line(results)
 
 
 # --- the detector is production's own answer --------------------------------
@@ -477,7 +478,7 @@ def test_the_demand_breakdown_states_the_residual_scope(
     """The claim that stops "0 residuals over 264 cells" being read as a sweep:
     only CHARGED cells can ever be a residual, and there is one."""
     line = demand_breakdown(results)
-    assert "6 of 308 cells are CHARGED" in line
+    assert "5 of 308 cells are CHARGED" in line
     assert FUNDED_CURRENCY in line
     assert demand_breakdown([]) .endswith(
         "An uncharged currency can only be not_demanded.")
@@ -529,11 +530,11 @@ def test_the_gold_wall_names_what_no_other_row_can_see(
     `state.inventory` (so the item-currency differential cannot reveal it). A
     root blocked purely on money therefore read `not_demanded` in all six rows.
 
-    Five cells are gold-walled on the committed bundle, all of them
+    Four cells are gold-walled on the committed bundle, all of them
     `lifesteal_rune` for `rune_slot` against 100-1,500 held gold, priced
     1_000_001 and dropping to single digits once money is granted."""
     gold = [r for r in results if r.currency == GOLD_ROW and r.charged]
-    assert len(gold) == 5
+    assert len(gold) == 4
     assert {r.gap for r in gold} == {CurrencyGap.WALL_GOLD.value}
     assert GOLD_WALLED_CELL in {r.scenario for r in gold}
     for row in gold:

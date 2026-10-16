@@ -49,6 +49,7 @@ still a fact rather than a forecast.
 import dataclasses
 from dataclasses import dataclass
 
+from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.combat_deficit import (
     blocked_task_monster,
     combat_deficit,
@@ -179,6 +180,11 @@ def resolve_task_horizon(state: WorldState, game_data: GameData) -> TaskHorizon 
     target = deficit_upgrade_target(state, game_data)
     if target is not None:
         return TaskHorizon(monster=monster, verdict=HORIZON_GEAR, gear_target=target)
+    if predict_win(dataclasses.replace(state, hp=state.max_hp), game_data, monster):
+        # A fight the gate takes (P(win) at least θ) that no gear secures: the
+        # task is workable now, not a level away (post-merge review
+        # 2026-10-16; the gear deficit is the SECURE_WIN bar's, the gate's is θ).
+        return None
     at_next = combat_deficit(next_level_state(state), game_data, monster)
     if at_next is None or at_next.closes:
         # `None` is the level-alone case: the +5 HP (or a level-gated item already in

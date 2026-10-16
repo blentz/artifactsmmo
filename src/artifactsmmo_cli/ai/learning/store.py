@@ -380,7 +380,7 @@ class LearningStore:
     @contextmanager
     def search_cache(self) -> Iterator[None]:
         """Memoize learned-stat queries (action_cost median / success_rate /
-        win_count / goal_avg_cycles_to_satisfy) for the duration of one READ-ONLY
+        goal_avg_cycles_to_satisfy / combat_record) for the duration of one READ-ONLY
         decision episode. Safe because the DB is not written inside one — that is
         the whole condition, and it holds for the strategy decision exactly as it
         does for the planner search nested within it. Reentrant: a nested enter
@@ -1088,54 +1088,15 @@ class LearningStore:
         """Number of cycles recorded for this action_repr and the store's character."""
         try:
             with SqlSession(self._engine) as s:
-                # COUNT(*) over `ix_cycles_char_action` — same reason as
-                # `_win_count_uncached` directly below.
+                # COUNT(*), not `len(list(...))`, over `ix_cycles_char_action`
+                # (see `Cycle.__table_args__`): 0.22ms a call against 6.47ms
+                # for shipping every matching row id to Python.
                 stmt = (
                     select(func.count())
                     .select_from(Cycle)
                     .where(
                         Cycle.character == self._character,
                         Cycle.action_repr == action_repr,
-                    )
-                )
-                return int(s.exec(stmt).one())
-        except SQLAlchemyError:
-            return 0
-
-    def win_count(self, action_repr: str) -> int:
-        """Number of cycles with outcome=='ok' recorded for this action_repr. The raw
-        (NOT warmup-gated) success tally — `success_rate` returns 1.0 below 5 samples,
-        so it cannot distinguish a single win from a single loss. Its consumer, the
-        monotonic-win shortcut in `combat.is_winnable`, was removed 2026-10-15
-        (fight-gates-odds §4).
-
-        SEARCH-CACHED (2026-08-07), like its sibling `action_cost`. This is the
-        hottest read in the codebase and it was the only one of its family issuing
-        a fresh SELECT every call: `is_winnable`'s monotonic-win shortcut (removed
-        2026-10-15) walked every monster at or above a level, so one `cheapest_path_to_level` walk
-        fired **3,617** queries and took ~400ms, of which ~95% was SQLite. The
-        tally is a read-only count over history the planner does not write during a
-        search — exactly the invariant `search_cache` documents — so the memo is
-        sound for the same reason `action_cost`'s is. Outside a search the cache is
-        None and every call still hits the DB."""
-        return self._cached(("win_count", action_repr),
-                            lambda: self._win_count_uncached(action_repr))
-
-    def _win_count_uncached(self, action_repr: str) -> int:
-        try:
-            with SqlSession(self._engine) as s:
-                # COUNT(*), not `len(list(...))`: the old form shipped every
-                # matching row id to Python to measure its length. Paired with
-                # `ix_cycles_char_action` (see `Cycle.__table_args__`) this is
-                # the difference between 6.47ms and 0.22ms per call, on the
-                # hottest read in the codebase.
-                stmt = (
-                    select(func.count())
-                    .select_from(Cycle)
-                    .where(
-                        Cycle.character == self._character,
-                        Cycle.action_repr == action_repr,
-                        Cycle.outcome == "ok",
                     )
                 )
                 return int(s.exec(stmt).one())
@@ -1434,7 +1395,7 @@ class LearningStore:
                       loadout: dict[str, str]) -> tuple[int, int]:
         """(fights, wins) this character has resolved against `task_key` at
         exactly `level` wearing exactly `loadout` — the evidence the learned-loss
-        veto may use (`combat.is_winnable`). SEARCH-CACHED like `win_count`: the
+        veto may use (`combat.is_winnable`). SEARCH-CACHED like `action_cost`: the
         veto runs inside every winnability walk. (0, 0) on a DB error."""
         encoded = json.dumps(loadout, sort_keys=True)
         return self._cached(("combat_record", task_key, level, encoded),

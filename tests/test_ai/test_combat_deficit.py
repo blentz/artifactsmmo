@@ -14,8 +14,10 @@ includes worn gear; a fixture that puts a sword in `equipment` while leaving
 `test_weapon_winnability`.
 """
 
+import dataclasses
 from fractions import Fraction
 
+from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.combat_deficit import (
     combat_deficit,
     deficit_upgrade_target,
@@ -281,7 +283,7 @@ def test_has_combat_deficit_agrees_with_the_full_walk() -> None:
     gd = _gd()
     for state in (_task_state(), _task_state(inventory={"steel_sword": 1})):
         assert has_combat_deficit(state, gd) is (
-            combat_deficit(state, gd, "boar") is not None)
+            combat_deficit(state, gd, "boar", secure=True) is not None)
 
 
 def test_has_combat_deficit_is_false_without_a_workable_monsters_task() -> None:
@@ -487,22 +489,25 @@ def _owlbear_task(theta: Fraction):  # type: ignore[no-untyped-def]
 
 
 def test_has_combat_deficit_below_secure() -> None:
-    """P 0.6308 clears a measured θ of 1/2, so `predict_win` fights it — but it
-    is below SECURE_WIN, so the gear arm still sees a deficit, and the full walk
+    """P 0.6308 clears a measured θ of 1/2, so `predict_win` fights it: there
+    is no gap to close before fighting (the feasibility walk is None). It is
+    below SECURE_WIN, so the gear arm still sees a deficit, and the routing walk
     agrees (the pinned equivalence)."""
     gd = _owlbear_gd(12)
     state = _owlbear_task(Fraction(1, 2))
     assert has_combat_deficit(state, gd) is True
-    assert combat_deficit(state, gd, "owlbear") is not None
+    assert combat_deficit(state, gd, "owlbear", secure=True) is not None
+    assert combat_deficit(state, gd, "owlbear") is None
 
 
-def test_deficit_closes_only_at_secure() -> None:
-    """The chain closes at the step that reaches max(θ, SECURE_WIN). The +12
-    blade (P 0.9121) closes at θ 1/2; at θ 99/100 the same step is taken and
-    does not close; the +30 blade (P 0.9951) closes there."""
-    deficit = combat_deficit(_owlbear_task(Fraction(1, 2)), _owlbear_gd(12), "owlbear")
-    assert deficit is not None and deficit.closes is True
-    assert [step.code for step in deficit.chain] == ["blade"]
+def test_feasibility_closes_at_the_threshold() -> None:
+    """The feasibility walk (every pricing and task-worth caller) closes at θ,
+    the bar the fight gate reads: at θ 9/10 the +12 blade (P 0.9121) closes it;
+    at θ 99/100 it is taken and does not close, and the +30 blade (P 0.9951)
+    does."""
+    closing = combat_deficit(_owlbear_task(Fraction(9, 10)), _owlbear_gd(12), "owlbear")
+    assert closing is not None and closing.closes is True
+    assert [step.code for step in closing.chain] == ["blade"]
 
     short = combat_deficit(_owlbear_task(Fraction(99, 100)), _owlbear_gd(12), "owlbear")
     assert short is not None and short.closes is False
@@ -510,3 +515,58 @@ def test_deficit_closes_only_at_secure() -> None:
 
     enough = combat_deficit(_owlbear_task(Fraction(99, 100)), _owlbear_gd(30), "owlbear")
     assert enough is not None and enough.closes is True
+
+
+def test_routing_closes_only_at_secure() -> None:
+    """The routing walk closes at the step that reaches max(θ, SECURE_WIN): the
+    +12 blade (P 0.9121) closes at θ 1/2, where the feasibility walk has
+    nothing to close."""
+    deficit = combat_deficit(_owlbear_task(Fraction(1, 2)), _owlbear_gd(12), "owlbear",
+                             secure=True)
+    assert deficit is not None and deficit.closes is True
+    assert [step.code for step in deficit.chain] == ["blade"]
+
+
+def _owlbear_with_elixir() -> tuple[GameData, object]:
+    """The owlbear replay wearing 20 elixirs (restore 300): drunk below half HP
+    they win the fight outright; bare it is P 0.6308."""
+    gd = _owlbear_gd(12)
+    gd._item_stats["elixir"] = ItemStats(code="elixir", level=1, type_="utility",
+                                         hp_restore=300)
+    state = dataclasses.replace(_owlbear_task(Fraction(9, 10)),
+                                equipment={"utility1_slot": "elixir"},
+                                utility1_slot_quantity=20)
+    return gd, state
+
+
+def test_routing_judges_bare_gear() -> None:
+    """Worn potions win the fight, so there is nothing to close before
+    fighting; the routing walk and its cheap form judge bare gear, where the
+    gap is still open — a potion-propped win never hides a gear upgrade."""
+    gd, state = _owlbear_with_elixir()
+    assert predict_win(state, gd, "owlbear")
+    assert combat_deficit(state, gd, "owlbear") is None
+    assert combat_deficit(state, gd, "owlbear", secure=True) is not None
+    assert has_combat_deficit(state, gd) is True
+
+
+def test_an_item_that_lifts_the_odds_but_not_the_margin_is_a_step() -> None:
+    """The closed-form margin reads crit at its mean, so the +4 blade (P 0.6308
+    -> 0.7965) moves no margin. When no item moves the margin the walk ranks on
+    the bare odds instead: the blade is the step, and it closes θ 7/10 in both
+    walks (SECURE_WIN 3/4 is below 0.7965)."""
+    for secure in (False, True):
+        deficit = combat_deficit(_owlbear_task(Fraction(7, 10)), _owlbear_gd(4), "owlbear",
+                                 secure=secure)
+        assert deficit is not None and deficit.closes is True
+        assert [step.code for step in deficit.chain] == ["blade"]
+        assert deficit.chain[0].margin_after == deficit.baseline_margin
+
+
+def test_an_item_that_lifts_neither_is_no_step() -> None:
+    """A helmet with no combat stats lifts neither the margin nor the odds: no
+    step, and the walk reports a gap it cannot close."""
+    gd = _owlbear_gd(4)
+    gd._item_stats = {"cloth_cap": ItemStats(code="cloth_cap", level=1, type_="helmet")}
+    deficit = combat_deficit(_owlbear_task(Fraction(7, 10)), gd, "owlbear")
+    assert deficit is not None and deficit.chain == () and deficit.closes is False

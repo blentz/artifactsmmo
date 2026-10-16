@@ -24,13 +24,14 @@ import dataclasses
 import multiprocessing
 import os
 from concurrent.futures import ProcessPoolExecutor
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
 
 from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.combat_deficit import combat_deficit
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.rung_state_core import HP_PER_LEVEL
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.task_horizon import (
@@ -51,16 +52,19 @@ GEAR_CELL = "l32_held_task_closable"      # ogre: a chain closes it
 OUT_OF_REACH_CELL = "l32_held_task_open"  # lich: nothing closes it
 WORKABLE_CELL = "l32_held_task_workable"  # wolf: already winnable
 
-LEVEL_UP_CELL = "l10_gearcrafting_gap"
-LEVEL_UP_MONSTER = "wolf"
-"""The level-up witness. At its level no chain closes `wolf`; one level up a
+LEVEL_UP_CELL = "l12_ge_book_adequate"
+LEVEL_UP_MONSTER = "mushmush"
+"""The level-up witness. At its level no chain closes `mushmush`; one level up a
 chain does — and the catalogue pool is IDENTICAL at both levels, so the flip is
 the +5 Max HP and nothing else. See
 `test_the_level_up_evaluation_moves_the_body_not_only_the_pool`.
 
 It was `l13_drop_recipe_grind` v mushmush until the fight gates read the odds
 (spec 2026-10-15 fight-gates-odds §1): that chain closed at closed-form margin
-1, where the exact P(win) is 0.42."""
+1, where the exact P(win) is 0.42. Then `l10_gearcrafting_gap` v wolf until the
+deficit walk ranked on the odds at a margin stall (post-merge review
+2026-10-16): gear closes wolf at level 10, through items that lift the odds
+at a flat margin."""
 
 
 @pytest.fixture(scope="module")
@@ -279,9 +283,13 @@ def test_the_level_up_evaluation_moves_the_body_not_only_the_pool(gd: GameData) 
 
 
 def test_the_level_up_arm_has_real_witnesses() -> None:
-    """Five of 1,375 futile pairs, and the clause is worth exactly that much.
+    """Six of 1,375 futile pairs, and the clause is worth exactly that much.
 
-    Six until 2026-10-15, when two changes landed together. Burn charged off
+    Five from 2026-10-15 until the deficit walk ranked on the odds at a margin
+    stall (post-merge review 2026-10-16): the l10 / l19 / l48 pairs left (l10
+    v wolf: gear closes it at level 10), and l12 mushmush (three cells), l11 pig
+    and l24 spider came in — at a flat margin the walk now reaches the step a
+    level's HP completes. Six until 2026-10-15, when two changes landed together. Burn charged off
     the MONSTER's attack took `l35_artifact_fill` / `l35_boots_drop_farm` v
     demon out (one level no longer closes them). The odds verdict
     (fight-gates-odds §1) moved the rest: mushmush, pig and the l11-l13 pairs
@@ -328,7 +336,7 @@ def test_the_level_up_arm_has_real_witnesses() -> None:
         per_scenario = list(executor.map(_level_up_witnesses, names))
 
     witnesses = sorted(pair for scenario in per_scenario for pair in scenario)
-    assert len(witnesses) == 5, witnesses
+    assert len(witnesses) == 6, witnesses
     assert (LEVEL_UP_CELL, LEVEL_UP_MONSTER) in witnesses
 
 
@@ -345,3 +353,26 @@ def test_the_verdict_is_resolved_once_per_state(gd: GameData) -> None:
     # A DIFFERENT state object recomputes — identity, never equality, so a stale
     # answer can never be served for a state that has moved on.
     assert resolve_task_horizon(dataclasses.replace(state), gd) is not first
+
+
+def test_a_task_the_gate_fights_with_no_gear_to_secure_it_has_no_verdict() -> None:
+    """P 0.6308 clears a measured θ of 1/2, so the gate fights the task; it is
+    below SECURE_WIN (a gear deficit), but the only item is a helmet with no
+    combat stats, so no gear is named. The task is workable NOW: no horizon,
+    rather than a level-up verdict for a fight the gate already takes
+    (post-merge review 2026-10-16)."""
+    gd = GameData()
+    gd._item_stats = {"cloth_cap": ItemStats(code="cloth_cap", level=1, type_="helmet")}
+    gd._monster_level = {"owlbear": 1}
+    gd._monster_hp = {"owlbear": 1450}
+    gd._monster_attack = {"owlbear": {"fire": 83}}
+    gd._monster_resistance = {"owlbear": {}}
+    fill_monster_stat_defaults(gd)
+    gd._monster_critical_strike = {"owlbear": 5}
+    gd._monster_initiative = {"owlbear": 10}
+    state = make_state(level=1, hp=785, max_hp=785, attack={"fire": 141},
+                       critical_strike=45, initiative=0, equipment={}, inventory={},
+                       task_code="owlbear", task_type="monsters", task_total=10,
+                       task_progress=0, win_thresholds={"owlbear": Fraction(1, 2)})
+    assert predict_win(state, gd, "owlbear")
+    assert resolve_task_horizon(state, gd) is None

@@ -3,7 +3,12 @@ fight-gates-odds §2)."""
 
 from fractions import Fraction
 
-from artifactsmmo_cli.ai.win_threshold_core import FightCostRow, win_thresholds_from_rows
+from artifactsmmo_cli.ai.win_threshold_core import (
+    LIVENESS_THETA,
+    FightCostRow,
+    beyond_liveness,
+    win_thresholds_from_rows,
+)
 
 
 def _fight(monster: str, won: bool, secs: int) -> FightCostRow:
@@ -75,3 +80,26 @@ def test_zero_second_fights_are_no_evidence() -> None:
         rows.append(_fight("cyclops", w, 0))
     rows.append(_fight("cyclops", True, 0))
     assert win_thresholds_from_rows(rows) == {}
+
+
+def test_beyond_liveness_names_thresholds_above_the_proved_bound() -> None:
+    """Liveness is proved for θ <= 99/100 (Lean `witnessTheta`); production
+    never caps θ (USER 2026-10-16), so the pairs above it are reported, the
+    highest first. θ exactly at the bound is inside it."""
+    assert Fraction(99, 100) == LIVENESS_THETA
+    thresholds = {"imp": Fraction(999, 1000), "owlbear": Fraction(1, 2),
+                  "edge": Fraction(99, 100), "demon": Fraction(995, 1000)}
+    assert beyond_liveness(thresholds) == [("imp", Fraction(999, 1000)),
+                                           ("demon", Fraction(995, 1000))]
+    assert beyond_liveness({}) == []
+
+
+def test_a_loss_costing_more_than_99_wins_crosses_the_bound() -> None:
+    """Each win costs 60 s; each loss 10 + 9000 + 20 s, more than 99 wins."""
+    rows: list[FightCostRow] = []
+    for w in [True] * 5 + [False] * 5:
+        rows += [_fight("imp", w, 10), _rest(50 if w else 9000)]
+        if not w:
+            rows.append(_move(20))
+    rows.append(_fight("imp", True, 10))
+    assert [m for m, _ in beyond_liveness(win_thresholds_from_rows(rows))] == ["imp"]

@@ -238,20 +238,21 @@ def test_the_memo_key_notices_a_changed_inventory():
     `acquire_steps`, so a changed inventory MUST miss."""
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    first = build_selectable_grind_candidates("weaponcrafting", state, gd)
+    build_selectable_grind_candidates("weaponcrafting", state, gd)
     changed = make_state(skills={"weaponcrafting": 3}, inventory={"copper_bar": 6})
-    assert build_selectable_grind_candidates("weaponcrafting", changed, gd) is not first
+    build_selectable_grind_candidates("weaponcrafting", changed, gd)
+    assert len(_CACHES.cache_for(gd)) == 2
 
 
 def test_the_memo_key_notices_a_changed_skill_level():
     """Skill level drives the zero-xp band, so it belongs in the key — a stale
     list here would grind a rung that pays nothing."""
     gd = _gd()
-    first = build_selectable_grind_candidates(
+    build_selectable_grind_candidates(
         "weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd)
-    later = build_selectable_grind_candidates(
+    build_selectable_grind_candidates(
         "weaponcrafting", make_state(skills={"weaponcrafting": 9}), gd)
-    assert later is not first
+    assert len(_CACHES.cache_for(gd)) == 2
 
 
 
@@ -262,6 +263,19 @@ def test_the_memo_key_notices_a_changed_threshold():
     state = make_state(skills={"weaponcrafting": 3})
     cheap = make_state(skills={"weaponcrafting": 3}, win_thresholds={"mob": Fraction(1, 2)})
     assert _cache_key("weaponcrafting", state, ()) != _cache_key("weaponcrafting", cheap, ())
+
+
+def test_the_memo_key_notices_a_changed_worn_stock():
+    """`is_winnable` drinks the worn restore potions on the DROP route
+    (`combat.worn_restore` reads the slot quantity), so a drunk-down stock
+    MUST change the key, in either slot."""
+    state = make_state(skills={"weaponcrafting": 3}, utility1_slot_quantity=40,
+                       utility2_slot_quantity=40)
+    key = _cache_key("weaponcrafting", state, ())
+    assert key != _cache_key("weaponcrafting",
+                             dataclasses.replace(state, utility1_slot_quantity=0), ())
+    assert key != _cache_key("weaponcrafting",
+                             dataclasses.replace(state, utility2_slot_quantity=0), ())
 
 def test_each_game_data_gets_its_own_cache():
     """Scoped per catalogue by `ai/catalogue_scope`, exactly as

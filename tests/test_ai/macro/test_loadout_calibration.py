@@ -1,5 +1,7 @@
 """Tests for the pure loadout_calibration_report aggregator + formatter."""
 
+from fractions import Fraction
+
 from artifactsmmo_cli.ai.learning.store import CombatLoadoutOutcomeRow
 from artifactsmmo_cli.ai.macro.loadout_calibration import loadout_calibration_report
 
@@ -98,3 +100,19 @@ def test_report_a_certain_win_lands_in_the_top_bucket() -> None:
 def test_report_without_recorded_odds_says_so() -> None:
     report = loadout_calibration_report([_odds_row(None, True)])
     assert "No P(win) recorded yet." in report
+
+
+def test_report_names_thresholds_beyond_the_liveness_bound() -> None:
+    """Liveness is proved for θ <= 99/100 and θ is never capped (USER
+    2026-10-16), so the report names every (character, monster) above it."""
+    rows = [_row("combat:imp", {}, True, True)]
+    report = loadout_calibration_report(
+        rows, {"Robby": [("imp", Fraction(999, 1000))], "HAL": []})
+    assert "## Win thresholds beyond the liveness bound (θ > 0.99)" in report
+    assert "| Robby | imp | 0.999 |" in report
+    assert "HAL" not in report
+
+
+def test_report_says_when_no_threshold_is_beyond_the_bound() -> None:
+    report = loadout_calibration_report([_row("combat:imp", {}, True, True)], {"HAL": []})
+    assert "None: every measured threshold is within the liveness bound." in report

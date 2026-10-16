@@ -8,9 +8,9 @@
 >
 > Every field `classify_gap` reads is a column: `droppers`, `live tiles` and `winnable` are the two conjuncts `ObtainModel._drop` gates on, and `event` separates a dormant event from a permanent monster with no tile.
 
-308 cells over 7 currencies; charged 6; FUNDED 1; walled 5; not_demanded 288; root_unresolved 14; o7_silent_currency_stall 0; o7_multi_currency_wall 0; o7_unexplained 0; currency_catalogue_empty 0
+308 cells over 7 currencies; charged 5; FUNDED 1; walled 4; not_demanded 289; root_unresolved 14; o7_silent_currency_stall 0; o7_multi_currency_wall 0; o7_unexplained 0; currency_catalogue_empty 0
 
-residual scope: 6 of 308 cells are CHARGED (2 distinct currencies) — gold 5, tasks_coin 1. An uncharged currency can only be not_demanded.
+residual scope: 5 of 308 cells are CHARGED (2 distinct currencies) — gold 4, tasks_coin 1. An uncharged currency can only be not_demanded.
 
 | Scenario | Currency | Verdict | charged | base | granted | earnable | droppers | live tiles | winnable | event |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -321,5 +321,5 @@ residual scope: 6 of 308 cells are CHARGED (2 distinct currencies) — gold 5, t
 | l20_boost_stock | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
 | l20_boost_stock | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l20_boost_stock | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l20_boost_stock | gold | **wall_gold** | - | - | - | - | - | - | - | - |
+| l20_boost_stock | gold | PASS | - | - | - | - | - | - | - | - |
 

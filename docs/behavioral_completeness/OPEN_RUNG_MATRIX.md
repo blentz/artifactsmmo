@@ -8,9 +8,9 @@
 >
 > Every field `classify_gap` reads is a column here, so a verdict can be reconstructed from the row alone: `g-in`/`g-above` are the in-range and above-range resource counts and `g-xp+` is whether the HIGHEST in-range resource still pays XP — the three that separate `wall_all_rungs_grey` from `wall_below_first_rung`.
 
-352 cells over 92 distinct (skill, level) pairs; PASS 343; routed 29; walled 9; o1_silent_stall 0; o1_unexplained 0; skill_catalogue_empty 0
+352 cells over 92 distinct (skill, level) pairs; PASS 343; routed 26; walled 9; o1_silent_stall 0; o1_unexplained 0; skill_catalogue_empty 0
 
-residual scope: 29 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 16, gearcrafting 10, weaponcrafting 3. A closure in an unrouted skill can only be an explained wall.
+residual scope: 26 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 15, gearcrafting 9, weaponcrafting 2. A closure in an unrouted skill can only be an explained wall.
 
 | Scenario | Skill | C | Target | Verdict | routed | in-level | xp+ | obtainable | above | g-in | g-above | g-xp+ | gather rung |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -348,7 +348,7 @@ residual scope: 29 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l25_currency_leaf_unfunded | gearcrafting | 20 | 21 | PASS | - | 38 | 31 | 16 | 94 | 0 | 0 | - | `None` |
 | l25_currency_leaf_unfunded | jewelrycrafting | 20 | 21 | PASS | - | 17 | 15 | 8 | 33 | 0 | 0 | - | `None` |
 | l25_currency_leaf_unfunded | mining | 20 | 21 | PASS | - | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
-| l25_currency_leaf_unfunded | weaponcrafting | 20 | 21 | PASS | - | 31 | 21 | 7 | 38 | 0 | 0 | - | `None` |
+| l25_currency_leaf_unfunded | weaponcrafting | 20 | 21 | PASS | - | 31 | 21 | 10 | 38 | 0 | 0 | - | `None` |
 | l25_currency_leaf_unfunded | woodcutting | 20 | 21 | PASS | - | 3 | 2 | 2 | 8 | 3 | 4 | yes | `birch_wood` |
 | l24_fisher_cooking_rung | alchemy | 5 | 6 | PASS | - | 2 | 2 | 2 | 23 | 1 | 4 | yes | `sunflower` |
 | l24_fisher_cooking_rung | cooking | 21 | 22 | PASS | - | 12 | 5 | 5 | 8 | 0 | 0 | - | `None` |
@@ -361,9 +361,9 @@ residual scope: 29 of 352 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l20_boost_stock | alchemy | 10 | 11 | PASS | - | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
 | l20_boost_stock | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
 | l20_boost_stock | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
-| l20_boost_stock | gearcrafting | 15 | 16 | PASS | yes | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
-| l20_boost_stock | jewelrycrafting | 15 | 16 | PASS | yes | 11 | 10 | 8 | 39 | 0 | 0 | - | `None` |
+| l20_boost_stock | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
+| l20_boost_stock | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 8 | 39 | 0 | 0 | - | `None` |
 | l20_boost_stock | mining | 20 | 21 | PASS | - | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
-| l20_boost_stock | weaponcrafting | 15 | 16 | PASS | yes | 21 | 15 | 8 | 48 | 0 | 0 | - | `None` |
+| l20_boost_stock | weaponcrafting | 15 | 16 | PASS | - | 21 | 15 | 8 | 48 | 0 | 0 | - | `None` |
 | l20_boost_stock | woodcutting | 20 | 21 | PASS | - | 3 | 2 | 2 | 8 | 3 | 4 | yes | `birch_wood` |
 

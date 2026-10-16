@@ -527,3 +527,43 @@ def test_a_cleared_ladder_still_farms_a_party_boss(monkeypatch):
     target = band_combat_target(party, gd, None, _never_priced, _bare_loop, _party_of(500))
     assert target is not None and target.monster == "king_slime"
     assert band_combat_target(party, gd, None, _never_priced, _bare_loop, _no_party) is None
+
+
+def test_bare_fight_is_asked_without_a_worn_potion(monkeypatch):
+    """`bare_fight` judges bare gear: a band won only by drinking the worn
+    restore potions (here: any state with stock) has no bare fight, so the
+    gear decisions that read it still see the gap."""
+    def wins_on_worn_stock(s: WorldState, g: object, c: str, h: object) -> bool:
+        return s.utility1_slot_quantity > 0
+    monkeypatch.setattr(mod, "is_winnable", wins_on_worn_stock)
+    monkeypatch.setattr(tp, "is_winnable", lambda s, g, c, h: c not in ("spider", "ogre"))
+    state = dataclasses.replace(make_state(level=30), utility1_slot_quantity=40)
+    target = band_combat_target(state, _gd(), None, _never_priced,
+                                _loops(spider_recovery=0, ogre_win=True, ogre_consumed=0), _no_party)
+    assert target is not None and target.bare_fight is False
+
+
+def test_a_potion_loadout_short_of_the_threshold_is_no_candidate(monkeypatch):
+    """The potion arm reads the loadout's odds against θ, like every other
+    gate: a loop the closed form calls a win at P 1/2 is short of the default
+    4/5, so ogre is no candidate and spider is the target."""
+    gd = _spider_bare_ogre_on_potions(monkeypatch)
+    spider = make_best_loadout(xp=gd.xp_per_kill("spider", 30), win=True, recovery=600)
+    ogre = make_best_loadout(("small_health_potion",), xp=gd.xp_per_kill("ogre", 30), win=True,
+                             p_win=Fraction(1, 2))
+    target = band_combat_target(make_state(level=30), gd, None, _never_priced,
+                                {"spider": spider, "ogre": ogre}.__getitem__, _no_party)
+    assert target is not None and target.monster == "spider"
+
+
+def test_a_potion_loadout_at_a_lower_measured_threshold_is_a_candidate(monkeypatch):
+    """θ is this character's measured threshold for the monster: at θ 2/5 the
+    same P 1/2 loadout makes ogre a candidate, and it pays more per second."""
+    gd = _spider_bare_ogre_on_potions(monkeypatch)
+    spider = make_best_loadout(xp=gd.xp_per_kill("spider", 30), win=True, recovery=600)
+    ogre = make_best_loadout(("small_health_potion",), xp=gd.xp_per_kill("ogre", 30), win=True,
+                             p_win=Fraction(1, 2))
+    state = dataclasses.replace(make_state(level=30), win_thresholds={"ogre": Fraction(2, 5)})
+    target = band_combat_target(state, gd, None, _never_priced,
+                                {"spider": spider, "ogre": ogre}.__getitem__, _no_party)
+    assert target is not None and target.monster == "ogre"

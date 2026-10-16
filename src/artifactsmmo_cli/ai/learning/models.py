@@ -148,10 +148,10 @@ class CycleBase(SQLModel):
 class Cycle(CycleBase, table=True):
     """ORM-persisted Cycle. Inherits all fields from CycleBase.
 
-    The COMPOSITE index is load-bearing, not tidiness. `win_count` /
-    `sample_count` filter on `(character, action_repr)` and are the hottest reads
-    in the codebase: `is_winnable`'s learned-loss veto and monotonic-win
-    inference issued 64,738 `win_count` calls in ONE `plan_from_state` on
+    The COMPOSITE index is load-bearing, not tidiness. `sample_count` (and
+    `win_count`, removed 2026-10-16 with its last consumer) filter on
+    `(character, action_repr)`: `is_winnable`'s learned-loss veto and
+    monotonic-win inference issued 64,738 `win_count` calls in ONE `plan_from_state` on
     2026-08-21. With only the single-column indexes SQLite picked
     `ix_cycles_character` and then filtered `action_repr` row by row, so every
     call scanned that character's ENTIRE history — 6.47ms each at 66,359 rows,

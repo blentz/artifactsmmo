@@ -15,7 +15,7 @@ sets it.
 
 import dataclasses
 
-from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.combat import is_winnable, unpotioned
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, normal_band, tier_of_level
@@ -30,8 +30,11 @@ def tier_cleared(state: WorldState, game_data: GameData, tier: int,
     depend on incidental damage. Same idiom as `ObtainModel._drop`,
     `weapon_winnability.marginal_weapon_winnability` and
     `combat_deficit.combat_deficit`: a character resting to full is always an
-    option, so "is this rung clearable" must not flip with transient HP."""
-    rested = dataclasses.replace(state, hp=state.max_hp)
+    option, so "is this rung clearable" must not flip with transient HP.
+
+    On BARE gear (`combat.unpotioned`): a rung fought only on worn potions is
+    a rung still to gear for."""
+    rested = unpotioned(dataclasses.replace(state, hp=state.max_hp))
     return all(is_winnable(rested, game_data, code, history)
                for code in normal_band(game_data, tier))
 

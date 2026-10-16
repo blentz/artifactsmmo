@@ -65,8 +65,12 @@ open Formal.Liveness.GameDataFixture
 open Formal.PredictWin
 
 /-- The P(win) every witness row is proved to reach. Liveness holds for any
-character threshold θ ≤ 99/100 (`rowWinnable_sound`); a learned θ =
-t_loss / (t_win + t_loss) reaches 0.99 only when a loss costs 99 wins. -/
+character threshold θ ≤ 99/100 (`rowWinnable_sound`,
+`winnableAcrossBand_at_threshold`) — a HYPOTHESIS, not a production invariant:
+`win_threshold_core` never caps θ (USER 2026-10-16: keep θ as derived), and a
+learned θ = t_loss / (t_win + t_loss) exceeds 0.99 when a loss costs more than
+99 wins. `combat-loadout-report` names every (character, monster) above it.
+Python mirror: `win_threshold_core.LIVENESS_THETA`. -/
 def witnessTheta : Rat := 99 / 100
 
 /-- The row's fight-odds `Terms` (production `fight_split`'s terms). -/
@@ -215,5 +219,28 @@ theorem winnableAcrossBand_grounded :
     -- hnotover : monsterLevel ≤ r.level + 2, hlvl : r.level = i+1, hLeq : i+1 = L.
     rw [hlvl, hLeq] at hnotover
     omega
+
+/-- **The grounding stated at production's verdict, with its hypothesis
+explicit.** For every character threshold θ ≤ `witnessTheta`, every band level
+`1 ≤ L < 50` has a witness row at level `L` whose fight production's
+`predict_win` takes: θ ≤ P(win). Production does not enforce `θ ≤ witnessTheta`
+(see `witnessTheta`); a pair above it is outside this theorem. -/
+theorem winnableAcrossBand_at_threshold (θ : Rat) (hθ : θ ≤ witnessTheta)
+    (L : Int) (hL : 1 ≤ L ∧ L < 50) :
+    ∃ r ∈ winnableWitness, r.level = L ∧ θ ≤ Formal.FightOdds.winProb (rowOdds r) := by
+  obtain ⟨hlo, hhi⟩ := hL
+  set i : Nat := L.toNat - 1 with hi
+  have hlen : winnableWitness.length = 49 := by decide
+  have hirange : i < winnableWitness.length := by rw [hlen, hi]; omega
+  have hmem : (winnableWitness[i]'hirange, i) ∈ winnableWitness.zipIdx :=
+    List.mem_zipIdx_iff_getElem?.mpr (List.getElem?_eq_getElem hirange)
+  have hband := rowWitnessesBand_of_mem _ _ hmem
+  unfold rowWitnessesBand at hband
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at hband
+  obtain ⟨⟨⟨hlvl, _⟩, _⟩, _⟩ := hband
+  refine ⟨winnableWitness[i]'hirange, List.getElem_mem hirange, ?_,
+    witness_rows_win _ (List.getElem_mem hirange) θ hθ⟩
+  have hLeq : (i : Int) + 1 = L := by rw [hi]; omega
+  rw [hlvl, hLeq]
 
 end Formal.Liveness.WinnableGrounded

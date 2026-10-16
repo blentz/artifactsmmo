@@ -61,6 +61,7 @@ from artifactsmmo_cli.ai.combat import (
     lost_fights,
     predict_win,
     secure_win,
+    unpotioned,
     win_probability,
 )
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
@@ -4117,7 +4118,7 @@ class GamePlayer:
             combat_propped=(combat_monster is not None
                             and combat_monster == self._propped_target),
             combat_risky=(combat_monster is not None
-                          and not secure_win(replace(self.state, hp=self.state.max_hp),
+                          and not secure_win(unpotioned(replace(self.state, hp=self.state.max_hp)),
                                              self.game_data, combat_monster)),
             # A bank expansion is never a reserved gear code → buying=None
             # applies the full progression-reserve floor (same call the goal

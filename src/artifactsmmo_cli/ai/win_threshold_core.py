@@ -20,6 +20,13 @@ THRESHOLD_WINDOW_DAYS = 14
 """Days of `cycles` the threshold reads (spec §2 ruling: a cycle's refresh stays
 cheap; older evidence is ignored)."""
 
+LIVENESS_THETA = Fraction(99, 100)
+"""The largest θ the leveling liveness proof covers (Lean
+`WinnableGrounded.witnessTheta`, `winnableAcrossBand_at_threshold`): every band
+level has a witness fight won with P(win) at least 99/100. θ is NOT capped here
+(USER 2026-10-16: keep θ as derived) — a loss costing more than 99 wins puts a
+fight above it, and `combat-loadout-report` names those (`beyond_liveness`)."""
+
 FightCostRow = tuple[str, str, str, int]
 """`(action_class, action_repr, outcome, seconds)` of one cycle, one character,
 in id order (`LearningStore.fight_cost_rows`)."""
@@ -63,3 +70,10 @@ def win_thresholds_from_rows(rows: Sequence[FightCostRow]) -> dict[str, Fraction
         if denominator > 0:
             thresholds[monster] = Fraction(loss_total * wins, denominator)
     return thresholds
+
+
+def beyond_liveness(thresholds: dict[str, Fraction]) -> list[tuple[str, Fraction]]:
+    """The `(monster, θ)` pairs above LIVENESS_THETA, highest θ first: the
+    fights outside the liveness proof's hypothesis."""
+    return sorted(((monster, theta) for monster, theta in thresholds.items()
+                   if theta > LIVENESS_THETA), key=lambda pair: pair[1], reverse=True)

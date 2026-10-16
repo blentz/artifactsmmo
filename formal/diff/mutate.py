@@ -364,6 +364,9 @@ LOSS_RISK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loss_risk_core.
 FIGHT_TERMS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_terms_core.py"
 FIGHT_OUTCOME_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_outcome_core.py"
 FIGHT_ODDS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_odds_core.py"
+TIER_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "tier_progress.py"
+COMBAT_TARGETS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_targets.py"
+WIN_THRESHOLD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "win_threshold_core.py"
 GROUP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "group_fight_core.py"
 CONSUMABLE_PRICE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price_core.py"
 CONSUMABLE_PRICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price.py"
@@ -747,21 +750,45 @@ FIGHT_TERMS_LADDER_MUTATIONS = [
 # Spec 2026-10-15-fight-gates-odds §1/§3: the gates read the odds against the
 # character's measured threshold.
 PREDICT_WIN_ODDS_MUTATIONS = [
-    ("predict_win: the threshold itself loses (>= -> >)",
-     "    return win_probability(state, game_data, monster_code) >= win_threshold(state, monster_code)\n",
-     "    return win_probability(state, game_data, monster_code) > win_threshold(state, monster_code)\n"),
     ("predict_win: the measured threshold is ignored",
-     "    return win_probability(state, game_data, monster_code) >= win_threshold(state, monster_code)\n",
-     "    return win_probability(state, game_data, monster_code) >= DEFAULT_WIN_THRESHOLD\n"),
+     "                      win_threshold(state, monster_code))\n",
+     "                      DEFAULT_WIN_THRESHOLD)\n"),
+    ("unpotioned: the worn restore potions are still drunk",
+     "    return replace(state, utility1_slot_quantity=0, utility2_slot_quantity=0)\n",
+     "    return state\n"),
     ("win_threshold: the record is ignored",
      "    return state.win_thresholds.get(monster_code, DEFAULT_WIN_THRESHOLD)\n",
      "    return DEFAULT_WIN_THRESHOLD\n"),
     ("secure_win: no three-quarter floor",
-     "        win_threshold(state, monster_code), SECURE_WIN)\n",
-     "        win_threshold(state, monster_code), Fraction(0))\n"),
+     "max(win_threshold(state, monster_code), SECURE_WIN))\n",
+     "max(win_threshold(state, monster_code), Fraction(0)))\n"),
     ("secure_win: the threshold is ignored",
-     "        win_threshold(state, monster_code), SECURE_WIN)\n",
-     "        Fraction(0), SECURE_WIN)\n"),
+     "max(win_threshold(state, monster_code), SECURE_WIN))\n",
+     "max(Fraction(0), SECURE_WIN))\n"),
+]
+# Post-merge review 2026-10-16: the one `>= θ` authority (Lean `θ ≤ winProb`).
+ODDS_CLEAR_MUTATIONS = [
+    ("odds_clear: the threshold itself loses (>= -> >)",
+     "    return p_win >= theta\n",
+     "    return p_win > theta\n"),
+]
+# Post-merge review 2026-10-16: a rung is cleared on BARE gear.
+TIER_CLEARED_BARE_MUTATIONS = [
+    ("tier_cleared: the worn potions clear the rung",
+     "    rested = unpotioned(dataclasses.replace(state, hp=state.max_hp))\n",
+     "    rested = dataclasses.replace(state, hp=state.max_hp)\n"),
+]
+# Post-merge review 2026-10-16: the verdict reads the worn stock and the hp.
+COMBAT_TARGETS_KEY_MUTATIONS = [
+    ("combat targets: the memo ignores the worn stock and the hp",
+     "           (state.hp, state.utility1_slot_quantity, state.utility2_slot_quantity))",
+     "           (0, 0, 0))"),
+]
+# USER 2026-10-16: θ stays uncapped, the report names the pairs above the bound.
+LIVENESS_THETA_MUTATIONS = [
+    ("beyond liveness: a threshold at the bound is reported",
+     "                   if theta > LIVENESS_THETA)",
+     "                   if theta >= LIVENESS_THETA)"),
 ]
 PREDICT_WIN_LIFESTEAL_MUTATIONS = [
     ("predict_win: drop monster lifesteal term in killStep",
@@ -5480,8 +5507,8 @@ COMBAT_DEFICIT_TIEBREAK_MUTATIONS = [
     # is the exact "a future consumer using `>=` would decide it by iteration
     # order" hazard the ceiling fix flagged and could not pin.
     ("combat_deficit: ceiling tie taken by the LAST candidate, not the first",
-     "            if best is None or score > best_score:",
-     "            if best is None or score >= best_score:"),
+     "        if best is None or score > best_score:",
+     "        if best is None or score >= best_score:"),
 ]
 
 # `deficit_upgrade_target` must honour `closes`, not merely `chain`. Reading
@@ -5496,8 +5523,11 @@ COMBAT_DEFICIT_FUTILE_TARGET_MUTATIONS = [
     # that two items would close reads as unclosable, so honouring `closes`
     # would silently narrow the walk's fight arm instead of correcting it.
     ("deficit_upgrade_target: walk bounded at one step, so multi-item chains vanish",
-     "                             candidates=candidates, actions_of=actions_of)",
-     "                             candidates=candidates, max_chain=1, actions_of=actions_of)"),
+     "                             candidates=candidates, actions_of=actions_of, secure=True)",
+     "                             candidates=candidates, max_chain=1, actions_of=actions_of, secure=True)"),
+    ("deficit_upgrade_target: routes at the feasibility bar",
+     "                             candidates=candidates, actions_of=actions_of, secure=True)",
+     "                             candidates=candidates, actions_of=actions_of)"),
 ]
 
 # The ONE-LEVEL PLANNING HORIZON (USER 2026-08-25): "cancel tasks that we can't
@@ -5563,6 +5593,9 @@ ROOT_FIGHT_ARM_MUTATIONS = [
 ]
 
 TASK_HORIZON_MUTATIONS = [
+    ("horizon: a task the gate fights still waits for a level",
+     "    if predict_win(dataclasses.replace(state, hp=state.max_hp), game_data, monster):\n",
+     "    if False:\n"),
     ("task_horizon: the gear arm never fires",
      "    target = deficit_upgrade_target(state, game_data)",
      "    target = None"),
@@ -5861,13 +5894,16 @@ LOSS_RISK_GRIND_MUTATIONS = [
      "    pricing_ctx = replace(NO_PROFILE_CONTEXT, fight_records=ctx.fight_records)\n",
      "    pricing_ctx = NO_PROFILE_CONTEXT\n"),
     ("loss risk: the grind memo ignores the records",
-     "        fight_records,\n        tuple(sorted(state.win_thresholds.items())),\n    )\n",
-     "        (),\n        tuple(sorted(state.win_thresholds.items())),\n    )\n"),
+     "        fight_records,\n        tuple(sorted(state.win_thresholds.items())),\n",
+     "        (),\n        tuple(sorted(state.win_thresholds.items())),\n"),
 ]
 WIN_THRESHOLD_GRIND_MUTATIONS = [
     ("win threshold: the grind memo ignores the thresholds",
-     "        fight_records,\n        tuple(sorted(state.win_thresholds.items())),\n    )\n",
-     "        fight_records,\n    )\n"),
+     "        tuple(sorted(state.win_thresholds.items())),\n        (state.utility1_slot_quantity",
+     "        (),\n        (state.utility1_slot_quantity"),
+    ("worn stock: the grind memo ignores it",
+     "        (state.utility1_slot_quantity, state.utility2_slot_quantity),\n    )\n",
+     "        (0, 0),\n    )\n"),
 ]
 LOSS_RISK_COMBAT_MUTATIONS = [
     ("loss risk: a monster lost to only in another loadout keeps an empty record",
@@ -6555,8 +6591,8 @@ LOADOUT_WIN_MUTATIONS = [
      "    key = (monster, threshold, tuple(stockable), fight_key(state, game_data))\n",
      "    key = (monster, tuple(stockable), fight_key(state, game_data))\n"),
     ("loadout win: the walk wins at the default threshold",
-     "                          [(code, UTILITY_SLOT_MAX_STACK) for code in codes])[0]) >= threshold),\n",
-     "                          [(code, UTILITY_SLOT_MAX_STACK) for code in codes])[0]) >= 0.8),\n"),
+     "                          [(code, UTILITY_SLOT_MAX_STACK) for code in codes])[0]), threshold)),\n",
+     "                          [(code, UTILITY_SLOT_MAX_STACK) for code in codes])[0]), 0.8)),\n"),
 ]
 # Found by the conditions census (USER 2026-10-10, docs/PLAN_drop_fight_loadout.md).
 NPC_REGION_GAME_DATA_MUTATIONS = [
@@ -6906,6 +6942,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 _ALL_SRCS = [
     LOADOUT_CALIBRATION_SRC,
+    TIER_PROGRESS_SRC, COMBAT_TARGETS_SRC, WIN_THRESHOLD_CORE_SRC,
     ROLE_SELECTION_SRC,
     FOOD_PRODUCER_SRC,
     SKILL_CREDIT_SRC,
@@ -9178,8 +9215,17 @@ BAND_UPKEEP_MUTATIONS = [
 # tests/test_ai/test_band_target.py.
 BAND_LOADOUT_MUTATIONS = [
     ("band: a potion-propped monster is no candidate",
-     "        if not bare and (not loadout().rate.win or (\n",
+     "        if not bare and (not odds_clear(loadout().rate.p_win, win_threshold(rested, code)) or (\n",
      "        if not bare and (True or (\n"),
+    ("band: the potion arm ignores the measured threshold",
+     "        if not bare and (not odds_clear(loadout().rate.p_win, win_threshold(rested, code)) or (\n",
+     "        if not bare and (not odds_clear(loadout().rate.p_win, Fraction(4, 5)) or (\n"),
+    ("band: the potion arm reads the closed form again",
+     "        if not bare and (not odds_clear(loadout().rate.p_win, win_threshold(rested, code)) or (\n",
+     "        if not bare and (not loadout().rate.win or (\n"),
+    ("band: the bare fight drinks the worn potions",
+     "        bare = is_winnable(unpotioned(rested), game_data, code, history)\n",
+     "        bare = is_winnable(rested, game_data, code, history)\n"),
     ("band: the learned-loss veto does not refuse a propped fight",
      "                history is not None and loss_vetoed(rested, game_data, code, history))):\n",
      "                False)):\n"),
@@ -9213,8 +9259,11 @@ BAND_PICK_MUTATIONS = [
      "            combat_risky=(combat_monster is not None\n",
      "            combat_risky=(False\n"),
     ("ctx: risk is asked at the current hp",
-     "                          and not secure_win(replace(self.state, hp=self.state.max_hp),\n",
-     "                          and not secure_win(self.state,\n"),
+     "                          and not secure_win(unpotioned(replace(self.state, hp=self.state.max_hp)),\n",
+     "                          and not secure_win(unpotioned(self.state),\n"),
+    ("ctx: risk drinks the worn potions",
+     "                          and not secure_win(unpotioned(replace(self.state, hp=self.state.max_hp)),\n",
+     "                          and not secure_win(replace(self.state, hp=self.state.max_hp),\n"),
     ("ctx: any target is the propped one",
      "                            and combat_monster == self._propped_target),\n",
      "                            and self._propped_target is not None),\n"),
@@ -9224,10 +9273,21 @@ BAND_PICK_MUTATIONS = [
 # Spec 2026-10-15-fight-gates-odds §3: the deficit is a fight below
 # max(θ, SECURE_WIN), not below θ. Killed by tests/test_ai/test_combat_deficit.py.
 COMBAT_DEFICIT_SECURE_MUTATIONS = [
-    ("deficit: every gate asks predict_win instead of secure_win",
-     "from artifactsmmo_cli.ai.combat import combat_margin, secure_win\n",
-     "from artifactsmmo_cli.ai.combat import combat_margin\n"
-     "from artifactsmmo_cli.ai.combat import predict_win as secure_win\n"),
+    ("deficit: the routing walk asks predict_win",
+     "    clears = secure_win if secure else predict_win\n",
+     "    clears = predict_win\n"),
+    ("deficit: the feasibility walk asks secure_win",
+     "    clears = secure_win if secure else predict_win\n",
+     "    clears = secure_win\n"),
+    ("deficit: the routing walk drinks the worn potions",
+     "    if secure:\n        state = unpotioned(state)\n",
+     "    if False:\n        state = unpotioned(state)\n"),
+    ("has_combat_deficit: the worn potions secure the fight",
+     "    return not secure_win(unpotioned(dataclasses.replace(state, hp=state.max_hp)),\n",
+     "    return not secure_win(dataclasses.replace(state, hp=state.max_hp),\n"),
+    ("deficit: no odds step at a margin stall",
+     "            step = _best_step(pool, bare_now, actions_of,\n",
+     "            step = None and _best_step(pool, bare_now, actions_of,\n"),
 ]
 PROPPED_GEAR_MUTATIONS = [
     ("root: a potion-propped target hides the fight's gear",
@@ -10523,6 +10583,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_combat.py", survivors)
     run_group(COMBAT_SRC, PREDICT_WIN_ODDS_MUTATIONS,
               "tests/test_ai/test_combat.py", survivors)
+    run_group(FIGHT_ODDS_CORE_SRC, ODDS_CLEAR_MUTATIONS,
+              "tests/test_ai/test_fight_odds_core.py", survivors)
+    run_group(TIER_PROGRESS_SRC, TIER_CLEARED_BARE_MUTATIONS,
+              "tests/test_ai/test_tier_progress.py", survivors)
+    run_group(COMBAT_TARGETS_SRC, COMBAT_TARGETS_KEY_MUTATIONS,
+              "tests/test_ai/test_combat_targets.py", survivors)
+    run_group(WIN_THRESHOLD_CORE_SRC, LIVENESS_THETA_MUTATIONS,
+              "tests/test_ai/test_win_threshold_core.py", survivors)
     run_group(FIGHT_TERMS_CORE_SRC, FIGHT_TERMS_PREDICT_MUTATIONS,
               "formal/diff/test_predict_win_diff.py", survivors)
     run_group(FIGHT_TERMS_CORE_SRC, FIGHT_TERMS_LADDER_MUTATIONS,

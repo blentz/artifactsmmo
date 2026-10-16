@@ -7,6 +7,7 @@ rate). No bot behavior or decision logic — read-only diagnostics only.
 
 import json
 from collections import defaultdict
+from fractions import Fraction
 
 from artifactsmmo_cli.ai.learning.store import CombatLoadoutOutcomeRow
 
@@ -52,14 +53,33 @@ def _p_win_buckets(rows: list[CombatLoadoutOutcomeRow]) -> list[str]:
     return lines
 
 
-def loadout_calibration_report(rows: list[CombatLoadoutOutcomeRow]) -> str:
+def _beyond_liveness_lines(beyond: dict[str, list[tuple[str, Fraction]]]) -> list[str]:
+    """The (character, monster) pairs whose win threshold is above the 99/100
+    the leveling liveness proof covers (`win_threshold_core.LIVENESS_THETA`).
+    θ is never capped (USER 2026-10-16), so this is where a pair outside the
+    proof's hypothesis shows."""
+    lines = ["## Win thresholds beyond the liveness bound (θ > 0.99)", ""]
+    pairs = [(character, monster, theta) for character, found in beyond.items()
+             for monster, theta in found]
+    if not pairs:
+        return [*lines, "None: every measured threshold is within the liveness bound.", ""]
+    lines += ["| character | monster | θ |", "|---|---|---|"]
+    lines += [f"| {character} | {monster} | {float(theta):.3f} |"
+              for character, monster, theta in pairs]
+    return [*lines, ""]
+
+
+def loadout_calibration_report(rows: list[CombatLoadoutOutcomeRow],
+                               beyond: dict[str, list[tuple[str, Fraction]]] | None = None) -> str:
     """Build a markdown calibration report from CombatLoadoutOutcomeRow records.
 
     Groups by task_key; per task: predicted-win rate, actual-win rate, the two
     mis-prediction buckets (over-estimate = predicted-win & not actual-win;
     under-estimate = not predicted-win & actual-win); per distinct worn loadout:
     win/loss tally. Tasks ranked worst-calibration-first (largest over-estimate
-    rate first). Empty input returns an empty-state message.
+    rate first). Empty input returns an empty-state message. `beyond` (per
+    character, `win_threshold_core.beyond_liveness`) adds the thresholds above
+    the liveness bound.
     """
     if not rows:
         return "# Combat-loadout calibration\n\nNo fight outcome data recorded yet.\n"
@@ -134,4 +154,6 @@ def loadout_calibration_report(rows: list[CombatLoadoutOutcomeRow]) -> str:
         lines.append("")
 
     lines.extend(_p_win_buckets(rows))
+    if beyond is not None:
+        lines.extend(_beyond_liveness_lines(beyond))
     return "\n".join(lines)

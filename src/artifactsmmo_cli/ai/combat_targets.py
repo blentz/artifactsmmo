@@ -23,7 +23,8 @@ LEVEL_BAND_BELOW = 5
 """A monster whose level is at least `character level - LEVEL_BAND_BELOW` counts as
 one we might fight; the upper end is the beatability frontier (`is_winnable`)."""
 
-_MemoKey = tuple[int, tuple[str, ...], frozenset[str], frozenset[tuple[str, Fraction]]]
+_MemoKey = tuple[int, tuple[str, ...], frozenset[str], frozenset[tuple[str, Fraction]],
+                 tuple[int, int, int]]
 
 
 @dataclass
@@ -73,9 +74,12 @@ def combat_target_monsters(state: WorldState, game_data: GameData) -> list[str]:
     # (player.py:1275). Keying only on identity would serve the pre-event answer
     # for the rest of the run.
     # The thresholds are read by the verdict itself (`combat.win_threshold`,
-    # spec 2026-10-15 fight-gates-odds §1): a new one must re-ask.
+    # spec 2026-10-15 fight-gates-odds §1): a new one must re-ask. So are the
+    # worn restore stock (`combat.worn_restore`, drunk in the odds) and the hp
+    # the verdict is asked at (post-merge review 2026-10-16).
     key = (state.level, equip_sig, frozenset(game_data.active_event_codes),
-           frozenset(state.win_thresholds.items()))
+           frozenset(state.win_thresholds.items()),
+           (state.hp, state.utility1_slot_quantity, state.utility2_slot_quantity))
     # Identity is held as a WEAKREF and compared with `is`, never as id().
     # CPython reuses the id of a collected object, so an id-keyed entry could be
     # hit by a DIFFERENT GameData that happened to land on the same address --

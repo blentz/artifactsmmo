@@ -8,7 +8,14 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.fight_odds_core import Ending, RoundDamage, burn_ticks, fight_odds, win_probability
+from artifactsmmo_cli.ai.fight_odds_core import (
+    Ending,
+    RoundDamage,
+    burn_ticks,
+    fight_odds,
+    odds_clear,
+    win_probability,
+)
 from artifactsmmo_cli.ai.fight_outcome_core import fight_outcome
 from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS, SCALE, fight_terms
 
@@ -152,3 +159,11 @@ def test_no_crit_equals_the_expected_value_walk(case):
     o = fight_outcome(terms, hp, hp, restore, stock)
     assert fight_odds(terms, _no_crit(ks, ds, mhp), hp, hp, restore, stock) == (
         Ending(Fraction(1), o.win, o.turns, o.hp_end, o.used),)
+
+
+def test_odds_clear_is_at_least_the_threshold() -> None:
+    """P(win) AT LEAST θ (Lean `θ ≤ winProb`): equal clears, a hair above
+    does not, and θ 0 clears a lost fight."""
+    assert odds_clear(Fraction(1, 2), Fraction(1, 2)) is True
+    assert odds_clear(Fraction(1, 2), Fraction(1, 2) + Fraction(1, 10**9)) is False
+    assert odds_clear(Fraction(0), Fraction(0)) is True

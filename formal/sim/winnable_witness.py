@@ -73,6 +73,7 @@ from artifactsmmo_cli.ai.fight_terms_core import (
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.item_catalog import ItemStats
+from artifactsmmo_cli.ai.win_threshold_core import LIVENESS_THETA
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Leveling band from `GearTierLeveling.InLevelingBand`: 1 <= L < 50.
@@ -204,11 +205,11 @@ class WitnessRow:
     crit_budget: int
 
 
-WITNESS_THETA = Fraction(99, 100)
+WITNESS_THETA = LIVENESS_THETA
 """The bound every witness row's P(win) is proved to reach (Lean
-`WinnableGrounded.witnessTheta`): liveness holds for any character threshold
-θ <= 99/100. A learned θ = t_loss / (t_win + t_loss) reaches 0.99 only when a
-loss costs 99 wins."""
+`WinnableGrounded.witnessTheta`, production `win_threshold_core.LIVENESS_THETA`):
+liveness holds for any character threshold θ <= 99/100. A learned
+θ = t_loss / (t_win + t_loss) exceeds 0.99 when a loss costs more than 99 wins."""
 
 
 def _crit_hit(damage: RoundDamage, crits_left: int) -> int:

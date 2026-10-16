@@ -346,14 +346,15 @@ class TestArbiterSelection:
     def test_selection_context_marks_risky_target(self):
         """A grind target won below SECURE_WIN at max HP is risky (USER
         2026-10-15: below 75% we probably need better gear); a secure one is
-        not; no target is never risky. Asked of the RESTED state."""
+        not; no target is never risky. Asked of the RESTED state on BARE gear
+        (`combat.unpotioned`): worn potions never hide a gear upgrade."""
         player = self._with_strategy(make_game_data_mock(), level=3)
-        player.state = replace(player.state, hp=1)
-        asked: list[int] = []
+        player.state = replace(player.state, hp=1, utility1_slot_quantity=40)
+        asked: list[tuple[int, int]] = []
 
         def _secure(verdict):
             def _fake(state, game_data, monster):
-                asked.append(state.hp)
+                asked.append((state.hp, state.utility1_slot_quantity))
                 return verdict
             return _fake
 
@@ -361,7 +362,7 @@ class TestArbiterSelection:
             assert player._selection_context("chicken").combat_risky is True
         with patch("artifactsmmo_cli.ai.player.secure_win", _secure(True)):
             assert player._selection_context("chicken").combat_risky is False
-        assert asked == [player.state.max_hp, player.state.max_hp]
+        assert asked == [(player.state.max_hp, 0), (player.state.max_hp, 0)]
         player._path_aligned_monster = lambda: None
         player._pick_winnable_monster = lambda: None
         with patch("artifactsmmo_cli.ai.player.secure_win", _secure(False)):

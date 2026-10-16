@@ -27,7 +27,7 @@ it for every non-bare-winnable dropper on every obtain walk (census 40 s ->
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.combat import win_threshold
-from artifactsmmo_cli.ai.fight_odds_core import win_probability
+from artifactsmmo_cli.ai.fight_odds_core import odds_clear, win_probability
 from artifactsmmo_cli.ai.fight_walk import loadouts, odds_walk, potion_effects_usable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.heal_catalog import POTION
@@ -78,9 +78,9 @@ def winning_loadout(state: WorldState, game_data: GameData, monster: str) -> tup
     memo = _WINS.cache_for(game_data)
     if key not in memo:
         found = next((codes for codes in loadouts(stockable, game_data) if codes
-                      and win_probability(odds_walk(
+                      and odds_clear(win_probability(odds_walk(
                           state, game_data, monster,
-                          [(code, UTILITY_SLOT_MAX_STACK) for code in codes])[0]) >= threshold),
+                          [(code, UTILITY_SLOT_MAX_STACK) for code in codes])[0]), threshold)),
                      None)
         _WINS.remember(memo, key, found)
     return memo[key]

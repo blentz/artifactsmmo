@@ -103,50 +103,15 @@ class TestSessionLifecycle:
         assert rows[0][1] is not None
         assert rows[0][2] == 3
 
-    def test_win_count_counts_only_ok_outcomes(self, tmp_db_path):
+    def test_sample_count_counts_every_outcome(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="testchar")
         store.start_session()
         for i, o in enumerate(["ok", "ok", "error:fight_lost"]):
             store.record_cycle(Cycle(
                 ts=f"2026-05-17T00:00:{i:02d}+00:00", session_id="x", cycle_index=i,
                 character="testchar", outcome=o, action_repr="Fight(chicken)"))
-        assert store.win_count("Fight(chicken)") == 2
         assert store.sample_count("Fight(chicken)") == 3
-        assert store.win_count("Fight(never)") == 0
-        store.close()
-
-    def test_win_count_is_memoised_inside_a_search(self, tmp_db_path):
-        """`win_count` is the hottest read in the codebase and was the only member
-        of its family issuing a fresh SELECT per call.
-
-        `is_winnable` -> `_won_at_or_above_level` walks every monster at or above a
-        level, so ONE `cheapest_path_to_level` walk fired 3,617 queries and took
-        ~400ms, ~95% of it SQLite. Memoised it is ~23ms. This pins the memo so the
-        query storm cannot come back silently."""
-        store = LearningStore(db_path=tmp_db_path, character="testchar")
-        store.start_session()
-        store.record_cycle(Cycle(
-            ts="2026-05-17T00:00:00+00:00", session_id="x", cycle_index=0,
-            character="testchar", outcome="ok", action_repr="Fight(chicken)"))
-
-        calls: list[int] = []
-        original = store._win_count_uncached
-
-        def counting(action_repr: str) -> int:
-            calls.append(1)
-            return original(action_repr)
-
-        store._win_count_uncached = counting  # type: ignore[method-assign]
-        with store.search_cache():
-            assert [store.win_count("Fight(chicken)") for _ in range(5)] == [1] * 5
-        assert len(calls) == 1, "win_count hit the DB more than once inside a search"
-
-        # ...and OUTSIDE a search there is no cache, so every call still reads the
-        # DB — a later cycle must see a fight recorded since.
-        calls.clear()
-        assert store.win_count("Fight(chicken)") == 1
-        assert store.win_count("Fight(chicken)") == 1
-        assert len(calls) == 2
+        assert store.sample_count("Fight(never)") == 0
         store.close()
 
     def test_end_session_without_start_is_noop(self, tmp_db_path):
@@ -1065,11 +1030,6 @@ class TestDegradationOnDbError:
         _break_engine(store)
         assert store.sample_count("FightAction(chicken)") == 0
 
-    def test_win_count_returns_zero(self, tmp_db_path):
-        store = LearningStore(db_path=tmp_db_path, character="hero")
-        _break_engine(store)
-        assert store.win_count("Fight(chicken)") == 0
-
     def test_goal_stats_returns_empty_rollup(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="hero")
         _break_engine(store)
@@ -1887,18 +1847,15 @@ class TestTheHottestReadIsIndexed:
 
         assert "ix_cycles_char_action" in names
 
-    def test_win_count_and_sample_count_still_answer_correctly(self, tmp_db_path):
+    def test_sample_count_still_answers_correctly(self, tmp_db_path):
         """The speedup must not change the numbers. 30 rows: 20 `Fight(pig)`
-        (i % 3 != 0), of which the odd-i ones are wins."""
+        (i % 3 != 0)."""
         store = LearningStore(db_path=tmp_db_path, character="hero")
         self._seed(store, 30)
 
         assert store.sample_count("Fight(pig)") == sum(
             1 for i in range(30) if i % 3)
-        assert store.win_count("Fight(pig)") == sum(
-            1 for i in range(30) if i % 3 and i % 2)
         assert store.sample_count("Fight(never)") == 0
-        assert store.win_count("Fight(never)") == 0
         store.close()
 
     def test_they_count_only_this_characters_rows(self, tmp_db_path):

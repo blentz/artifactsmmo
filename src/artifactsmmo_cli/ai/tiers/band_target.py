@@ -69,8 +69,9 @@ from functools import cache, partial
 
 from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
 from artifactsmmo_cli.ai.best_loadout import BestLoadout
-from artifactsmmo_cli.ai.combat import is_winnable, loss_vetoed
+from artifactsmmo_cli.ai.combat import is_winnable, loss_vetoed, unpotioned, win_threshold
 from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS
+from artifactsmmo_cli.ai.fight_odds_core import odds_clear
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_upkeep_core import FightUpkeep, xp_per_action
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -157,9 +158,11 @@ def band_combat_target(state: WorldState, game_data: GameData,
     depend on incidental damage. A character resting to full is always an
     option, so "is this tier's band winnable" must not flip with transient HP.
 
-    A candidate must be WINNABLE — `is_winnable` (bare gear: a stat
-    prediction and the learned record), or, failing that, its best loadout's
-    loop wins and the learned-loss veto does not refuse it — AND clear both of
+    A candidate must be WINNABLE — `is_winnable` on bare gear
+    (`combat.unpotioned`: the odds and the learned record), or, failing that,
+    its best loadout's odds reach this character's threshold for it
+    (`combat.win_threshold`, the bar every fight gate reads) and the
+    learned-loss veto does not refuse it — AND clear both of
     `FightAction`'s structural level gates: the `state.level +
     FIGHT_LEVEL_GAP_CEILING` ceiling (the executor's suicide guard, blind to
     gear strength) and the `xp_per_kill > 0` floor (an XP fight is refused
@@ -184,9 +187,9 @@ def band_combat_target(state: WorldState, game_data: GameData,
     scored: list[tuple[str, Fraction, tuple[int, ...]]] = []
     bare_fight = False
     for code in fightable:
-        bare = is_winnable(rested, game_data, code, history)
+        bare = is_winnable(unpotioned(rested), game_data, code, history)
         loadout = cache(partial(loadout_of, code))
-        if not bare and (not loadout().rate.win or (
+        if not bare and (not odds_clear(loadout().rate.p_win, win_threshold(rested, code)) or (
                 history is not None and loss_vetoed(rested, game_data, code, history))):
             continue
         bare_fight = bare_fight or bare

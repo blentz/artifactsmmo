@@ -110,16 +110,28 @@ derived θ is near 0.5. In that range the 0.75 gear signal (§3) does the work.
 
 - `SECURE_WIN = Fraction(3, 4)`.
 - `SelectionContext.combat_risky: bool`, true when the grind target
-  (`ctx.combat_monster`) has `win_probability < SECURE_WIN` in the loadout the
-  band picked. Set beside `combat_propped` in `player._selection_context`.
+  (`ctx.combat_monster`) is not `secure_win` at max HP on bare gear
+  (`combat.unpotioned`: worn restore potions not drunk). Set beside
+  `combat_propped` in `player._selection_context`. *Amended 2026-10-16
+  (post-merge review): it read "in the loadout the band picked", and the
+  merged code read the best on-hand loadout with worn potions drunk; both let a
+  potion-propped win hide a gear upgrade. Every gear question — this flag, a
+  rung cleared (`tier_cleared`), the band's `bare_fight`, the routing walk —
+  judges bare gear.*
 - `IsAFightBlockingMe` treats `combat_risky` like `combat_propped`: a risky
   target does not hide gear, so the walk asks the task horizon and the gear
   sheet first. When gear names nothing, `IsThereACombatTarget` still grinds the
   risky monster, so nothing walls.
 - The task monster: `combat_deficit.has_combat_deficit` becomes "P(win) <
-  max(θ, SECURE_WIN)", and `combat_deficit`'s chain "closes" at the same bar,
-  so `WhichSlotClosesTheFight` aims at a secure fight, not a merely winnable
-  one.
+  max(θ, SECURE_WIN)" on bare gear, and the ROUTING walk
+  (`combat_deficit(…, secure=True)`, behind `deficit_upgrade_target`) "closes"
+  at the same bar, so `WhichSlotClosesTheFight` aims at a secure fight, not a
+  merely winnable one. *Amended 2026-10-16: the FEASIBILITY walk (the default:
+  drop pricing, task worth, the task horizon's level-up arm, the censuses)
+  closes at `predict_win`'s θ, the bar the gate fights at. With one bar for
+  both, a dropper fought at θ 0.488 and P 0.6 was priced unobtainable for want
+  of gear to reach 0.75, and a held task the gate fights was cancelled. A task
+  the gate fights that no gear secures has no horizon (workable now).*
 
 ### §4 What stays closed form
 
@@ -153,6 +165,15 @@ derived θ is near 0.5. In that range the 0.75 gear signal (§3) does the work.
     killCrit`, `dieNormal ≤ dieCrit` and both chances ≤ 100.
   - The single path is cheap for the kernel. `1 ≥ θ` for every θ, so the
     theorem needs no bound on θ (the earlier `θ ≤ 0.99` hypothesis is dropped).
+  - *Amended 2026-10-16 (implementation ruling, then USER): the any-stock form
+    of this theorem is false (a 50% drink threshold counterexample), and the
+    acquirable pool has no P == 1 XP winner at L39 and L46–48. Rows are grounded
+    on the counted-crit floor `critBound ≥ 99/100`
+    (`FightOdds.winProb_ge_critBound`), so liveness holds for θ ≤ 99/100 only.
+    USER 2026-10-16: θ stays uncapped; the bound is an explicit hypothesis
+    (`WinnableGrounded.winnableAcrossBand_at_threshold`, Python
+    `win_threshold_core.LIVENESS_THETA`), and `combat-loadout-report` names
+    every (character, monster) whose measured θ is above it.*
 - Measured 2026-10-15 on the witness fixtures (`probe_witness_worst.py`):
   every band level 1–49 has a worst-case winner in band (2–13 monsters per
   level, no gap). Nine of today's 49 rows are below P 0.99 (L29 imp is 0.54),

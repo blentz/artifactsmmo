@@ -25,7 +25,9 @@ float-vs-exact disagreement is a real finding and surfaces the exact tuple.
 
 Since 2026-10-15 `predict_win` reads the exact odds (spec fight-gates-odds §1);
 the closed form this harness pins is `terms_win(combat_terms(...))`, which the
-exits and `combat_margin` still read, so that is what it calls.
+exits and `combat_margin` still read, so that is what it calls. The odds verdict
+itself (`fight_odds_core.odds_clear`, P(win) at least θ) is pinned by
+`test_odds_verdict_diff.py`, the odds by `test_fight_odds_diff.py`.
 """
 import random
 

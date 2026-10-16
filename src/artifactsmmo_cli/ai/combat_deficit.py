@@ -14,9 +14,7 @@ the model was right every time and the bot fought anyway.
 
 `combat_deficit` is that missing link, and it is a fact rather than a timer:
 
-  * `None` exactly when `secure_win` holds (P(win) at least max(θ, SECURE_WIN),
-    spec 2026-10-15-fight-gates-odds §3: a fight won below 75% is still a gear
-    gap) — so a caller that suppresses a fight
+  * `None` exactly when the fight clears its bar — so a caller that suppresses a fight
     "while the deficit is non-None" releases the moment the gear lands, with
     nothing to expire and no escalation to exhaust.
   * otherwise a `CombatDeficit` naming the acquisitions that close the margin,
@@ -29,6 +27,21 @@ the model was right every time and the bot fought anyway.
 
     A single-item answer would have hidden three of those four layers.
 
+TWO BARS, two questions (post-merge review 2026-10-16):
+
+  * FEASIBILITY (the default): can gear make this fight one the gate takes?
+    The bar is `predict_win` — P(win) at least this character's θ, worn
+    restore potions drunk — and it is what every pricing and task-worth
+    caller asks (`acquisition_cost`, `drop_evidence`, `decisions.obtain_item`,
+    `task_horizon`'s level-up arm, the censuses). It was `secure_win` for one
+    commit: a dropper fought at θ 0.488 and P 0.6 was priced unobtainable for
+    want of gear to reach 0.75.
+  * ROUTING (`secure=True`): what gear should be built first? The bar is
+    `secure_win` — max(θ, SECURE_WIN), USER 2026-10-15: below 75% we probably
+    need better gear — on BARE gear (`combat.unpotioned`), so a potion-propped
+    win never hides a gear upgrade. `has_combat_deficit` and
+    `deficit_upgrade_target` ask it.
+
 USER (2026-08-20), on what to do when no one item is enough: "that just means we
 need multiple upgrades before we can win that fight. the time it takes is just the
 cost of progress." So the chain STACKS rather than giving up, and there is no
@@ -40,7 +53,13 @@ chose `iron_boots` — already worn, and absent from all 24 items that improved 
 pig margin — while the weapon that actually moved `rounds_to_kill` went unbuilt
 for ten hours.
 
-Costs one `combat_margin` per candidate per step. That is fine for the read-only
+Margin first, ODDS AT A STALL (post-merge review 2026-10-16): when no candidate
+moves the margin, the step is the best bare-gear P(win) lift instead (`_odds_owning`)
+— an item that lifts the odds at a flat margin was invisible to the walk, so the
+deficit said `closes=False` for a gap gear could close.
+
+Costs one `combat_margin` per candidate per step, and one bare odds walk per
+candidate at a stall (77 ms a scan on the held-task scenarios, 305 ms at worst). That is fine for the read-only
 `combat-deficit` diagnostic; a per-cycle caller must memoize (see
 `equipment/loadout_cache.py` for the established read-set-keyed pattern).
 """
@@ -48,8 +67,15 @@ Costs one `combat_margin` per candidate per step. That is fine for the read-only
 import dataclasses
 from collections.abc import Callable
 from dataclasses import dataclass
+from fractions import Fraction
 
-from artifactsmmo_cli.ai.combat import combat_margin, secure_win
+from artifactsmmo_cli.ai.combat import (
+    combat_margin,
+    predict_win,
+    secure_win,
+    unpotioned,
+    win_probability,
+)
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.item_catalog import ItemStats
@@ -142,6 +168,49 @@ def _margin_owning(state: WorldState, game_data: GameData, monster: str,
     return combat_margin(dataclasses.replace(state, inventory=trial), game_data, monster)
 
 
+def _odds_owning(state: WorldState, game_data: GameData, monster: str,
+                 inventory: dict[str, int], code: str) -> Fraction:
+    """Bare-gear P(win) against `monster` if the character also OWNED one
+    `code` (`_margin_owning`'s question, asked of the exact odds)."""
+    trial = dict(inventory)
+    trial[code] = trial.get(code, 0) + 1
+    return win_probability(unpotioned(dataclasses.replace(state, inventory=trial)),
+                           game_data, monster)
+
+
+def _best_step(pool: tuple[tuple[str, ItemStats], ...], current: Fraction | int,
+               actions_of: Callable[[str, str], int] | None,
+               value_of: Callable[[str], Fraction | int]) -> tuple[str, ItemStats, int | None] | None:
+    """The candidate with the best gain in `value_of` over `current` — per
+    acquisition action when `actions_of` prices it — as `(code, stats, cost)`,
+    or None when no candidate gains anything."""
+    best: tuple[str, ItemStats, int | None] | None = None
+    best_score = 0.0
+    for code, stats in pool:
+        value = value_of(code)
+        if value <= current:
+            continue  # cheap is no reason to acquire something that cannot help
+        gain = value - current
+        # The slot comes from the SAME rule `deficit_upgrade_target` returns
+        # (`ITEM_TYPE_TO_SLOTS[type_][0]`), computed here because the pricer
+        # needs it: an ObtainItem's price includes the equip action exactly
+        # when it carries a slot, and deriving that in the caller would be a
+        # second producer of the slot rule. `slots` is never empty for a
+        # default-pool candidate — `_pool` filters on `ITEM_TYPE_TO_SLOTS` — so
+        # this is None only for a caller-supplied `candidates` set, which
+        # nothing supplies today.
+        slots = ITEM_TYPE_TO_SLOTS.get(stats.type_, [])
+        cost = (None if actions_of is None or not slots
+                else actions_of(code, slots[0]))
+        # `max(cost, 1.0)`: an item priced 0 is one already owned, which cannot
+        # improve the fight anyway (`pick_loadout` would be wearing it) — but
+        # the ranking must not be able to divide by zero if one is.
+        score = float(gain) if cost is None else float(gain) / max(cost, 1.0)
+        if best is None or score > best_score:
+            best, best_score = (code, stats, cost), score
+    return best
+
+
 def blocked_task_monster(state: WorldState) -> str | None:
     """The held monsters-task's code when it is still workable, else None."""
     if state.task_type != "monsters" or not state.task_code:
@@ -153,21 +222,21 @@ def blocked_task_monster(state: WorldState) -> str | None:
 
 def has_combat_deficit(state: WorldState, game_data: GameData) -> bool:
     """Is the held task's monster not secure — below max(θ, SECURE_WIN) at max
-    HP? The CHEAP form of the same fact.
+    HP on bare gear? The CHEAP form of the routing walk's existence fact.
 
     `combat_deficit` walks every candidate to name what closes the gap; this is
     one `secure_win`. `task_horizon.resolve_task_horizon` runs every cycle and
     first needs to know THAT a deficit exists, so the walk would be the wrong
     thing to put there.
 
-    Exactly equivalent to `combat_deficit(...) is not None` — pinned by a test,
+    Exactly equivalent to `combat_deficit(..., secure=True) is not None` — pinned by a test,
     because if the two ever disagreed the latch would arm for a deficit the gear
     chain cannot name, and the character would review gear forever.
     """
     monster = blocked_task_monster(state)
     if monster is None:
         return False
-    return not secure_win(dataclasses.replace(state, hp=state.max_hp),
+    return not secure_win(unpotioned(dataclasses.replace(state, hp=state.max_hp)),
                           game_data, monster)
 
 
@@ -233,7 +302,7 @@ def deficit_upgrade_target(
     if monster is None:
         return None
     deficit = combat_deficit(state, game_data, monster,
-                             candidates=candidates, actions_of=actions_of)
+                             candidates=candidates, actions_of=actions_of, secure=True)
     if deficit is None or not deficit.closes:
         return None
     step = deficit.chain[0]
@@ -256,8 +325,11 @@ def combat_deficit(
     candidates: tuple[str, ...] | None = None,
     max_chain: int = MAX_CHAIN,
     actions_of: Callable[[str, str], int] | None = None,
+    secure: bool = False,
 ) -> CombatDeficit | None:
-    """The gear gap against `monster`, or None when the fight is already winnable.
+    """The gear gap against `monster`, or None when the fight already clears
+    its bar: `predict_win` (feasibility), or with `secure` `secure_win` on bare
+    gear (routing) — see the module docstring.
 
     Args:
       state:      the character. Evaluated at `max_hp`, NOT current hp — see the
@@ -288,7 +360,10 @@ def combat_deficit(
     # price swing, fixed the same way (PLAN_iron_gear_acquisition increment 2),
     # and `tiers/objective.py` sets the precedent for building `rested` here.
     state = dataclasses.replace(state, hp=state.max_hp)
-    if secure_win(state, game_data, monster):
+    if secure:
+        state = unpotioned(state)
+    clears = secure_win if secure else predict_win
+    if clears(state, game_data, monster):
         return None
     baseline = combat_margin(state, game_data, monster)
     pool = _pool(state, game_data, candidates)
@@ -298,38 +373,26 @@ def combat_deficit(
     current = baseline
     closes = False
     while len(chain) < max_chain:
-        best: tuple[str, ItemStats] | None = None
-        best_margin = current
-        best_score = 0.0
-        best_cost: float | None = None
-        for code, stats in pool:
-            margin = _margin_owning(state, game_data, monster, inventory, code)
-            if margin <= current:
-                continue  # cheap is no reason to acquire something that cannot help
-            gain = margin - current
-            # The slot comes from the SAME rule `deficit_upgrade_target`
-            # returns (`ITEM_TYPE_TO_SLOTS[type_][0]`, :236-245), computed here
-            # because the pricer needs it: an ObtainItem's price includes the
-            # equip action exactly when it carries a slot, and deriving that in
-            # the caller would be a second producer of the slot rule.
-            # `slots` is never empty for a default-pool candidate — `:124`
-            # filters on `ITEM_TYPE_TO_SLOTS` — so this is None only for a
-            # caller-supplied `candidates` set, which nothing supplies today.
-            slots = ITEM_TYPE_TO_SLOTS.get(stats.type_, [])
-            cost = (None if actions_of is None or not slots
-                    else actions_of(code, slots[0]))
-            # `max(cost, 1.0)`: an item priced 0 is one already owned, which
-            # cannot improve the margin anyway (`pick_loadout` would be wearing
-            # it) — but the ranking must not be able to divide by zero if one is.
-            score = float(gain) if cost is None else float(gain) / max(cost, 1.0)
-            if best is None or score > best_score:
-                best, best_margin, best_score, best_cost = (
-                    (code, stats), margin, score, cost)
-        if best is None:
-            break
-        best_code, best_stats = best
+        step = _best_step(pool, current, actions_of,
+                          lambda code: _margin_owning(state, game_data, monster, inventory, code))
+        if step is None:
+            # No item moves the closed-form margin, which reads crit at its
+            # mean: the +4 fire blade takes R2D2 v owlbear from P 0.63 to 0.80
+            # at margin 1 -> 1 (post-merge review 2026-10-16). Rank on the
+            # exact odds instead — on BARE gear, as gear is valued everywhere
+            # (`combat.unpotioned`), which also keeps the scan cheap: a worn
+            # stock of 40 greater health potions costs the odds walk seconds
+            # per candidate. Only at a stall, so the margin still ranks the
+            # common case at a fraction of the cost.
+            bare_now = win_probability(
+                unpotioned(dataclasses.replace(state, inventory=inventory)), game_data, monster)
+            step = _best_step(pool, bare_now, actions_of,
+                              lambda code: _odds_owning(state, game_data, monster, inventory, code))
+            if step is None:
+                break
+        best_code, best_stats, best_cost = step
         inventory[best_code] = inventory.get(best_code, 0) + 1
-        current = best_margin
+        current = combat_margin(dataclasses.replace(state, inventory=inventory), game_data, monster)
         chain.append(DeficitStep(
             code=best_code,
             item_type=best_stats.type_,
@@ -339,7 +402,7 @@ def combat_deficit(
             margin_after=current,
             acquire_cost=best_cost,
         ))
-        if secure_win(dataclasses.replace(state, inventory=inventory), game_data, monster):
+        if clears(dataclasses.replace(state, inventory=inventory), game_data, monster):
             closes = True
             break
     return CombatDeficit(monster=monster, baseline_margin=baseline,

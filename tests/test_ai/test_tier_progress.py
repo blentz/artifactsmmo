@@ -3,8 +3,10 @@ target is the rung being cleared, capped by character level."""
 import dataclasses
 
 import artifactsmmo_cli.ai.tiers.tier_progress as mod
+from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
+from artifactsmmo_cli.ai.tiers.tier_ladder import normal_band
 from artifactsmmo_cli.ai.tiers.tier_progress import (
     gear_target_tier,
     next_uncleared_tier,
@@ -126,3 +128,15 @@ def test_gear_target_follows_an_uncleared_lower_band_below_the_level_rung(monkey
     return 10, not 20. Exists to kill the `return tier_of_level(...)` mutant."""
     monkeypatch.setattr(mod, "is_winnable", lambda s, g, c, h: c != "mushmush")
     assert gear_target_tier(make_state(level=30), _gd(), None) == 10
+
+
+def test_a_band_won_only_on_worn_potions_is_not_cleared(bundle_game_data):
+    """A rung is cleared on BARE gear: `l25_currency_leaf_unfunded` wins every
+    rung-15 normal monster with its 40 worn greater health potions drunk, and
+    loses skeleton without them (P 0.04), so rung 15 is still the one to gear
+    for. A potion-propped win never hides a gear upgrade."""
+    gd = bundle_game_data
+    state = scenario_state(SCENARIOS["l25_currency_leaf_unfunded"], gd)
+    rested = dataclasses.replace(state, hp=state.max_hp)
+    assert all(predict_win(rested, gd, code) for code in normal_band(gd, 15))
+    assert tier_cleared(state, gd, 15, None) is False

@@ -76,3 +76,32 @@ def test_a_threshold_change_is_a_cache_miss(monkeypatch):
     assert combat_target_monsters(state, gd) == ["wolf"]
     strict = dataclasses.replace(state, win_thresholds={"wolf": Fraction(1)})
     assert combat_target_monsters(strict, gd) == []
+
+
+def test_a_worn_stock_change_is_a_cache_miss(monkeypatch):
+    """`is_winnable` drinks the worn restore potions (`combat.worn_restore`
+    reads the slot quantity), so a drunk-down stock must not be served the
+    list the full stock won."""
+    _clear_cache()
+    monkeypatch.setattr(ct, "is_winnable",
+                        lambda s, g, code, h=None: s.utility1_slot_quantity > 0)
+    gd = _gd({"wolf": 9})
+    stocked = make_state(level=10, utility1_slot_quantity=40)
+    assert combat_target_monsters(stocked, gd) == ["wolf"]
+    assert combat_target_monsters(dataclasses.replace(stocked, utility1_slot_quantity=0), gd) == []
+    _clear_cache()
+    second = make_state(level=10, utility2_slot_quantity=40)
+    monkeypatch.setattr(ct, "is_winnable",
+                        lambda s, g, code, h=None: s.utility2_slot_quantity > 0)
+    assert combat_target_monsters(second, gd) == ["wolf"]
+    assert combat_target_monsters(dataclasses.replace(second, utility2_slot_quantity=0), gd) == []
+
+
+def test_an_hp_change_is_a_cache_miss(monkeypatch):
+    """The verdict is asked at the state's hp, so hp is part of the key."""
+    _clear_cache()
+    monkeypatch.setattr(ct, "is_winnable", lambda s, g, code, h=None: s.hp > 50)
+    gd = _gd({"wolf": 9})
+    state = make_state(level=10, hp=100, max_hp=100)
+    assert combat_target_monsters(state, gd) == ["wolf"]
+    assert combat_target_monsters(dataclasses.replace(state, hp=10), gd) == []

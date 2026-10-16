@@ -6,13 +6,13 @@ modelled as their expected contribution (deterministic) since the planner needs
 a stable verdict, not a sampled fight."""
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import ProjectedStats, project_loadout_stats
-from artifactsmmo_cli.ai.fight_odds_core import RoundDamage, burn_ticks, fight_odds
+from artifactsmmo_cli.ai.fight_odds_core import RoundDamage, burn_ticks, fight_odds, odds_clear
 from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
 from artifactsmmo_cli.ai.fight_terms_core import LOSE_MARGIN as LOSE_MARGIN
 from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS as MAX_TURNS
@@ -363,8 +363,9 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
     # deals no direct damage (raw_monster == 0), poison alone can kill. Monster burn
     # is a share of the MONSTER's attack (`fight_odds_core.burn_ticks`): the closed
     # form charges the first tick, unrounded, as burn% × m_atk_sum × 100 every round.
-    # The ticks decay, so this bounds every round's tick; the odds walk charges the
-    # exact ticks instead.
+    # The ticks decay, so this bounds every LATER tick; the first is rounded half
+    # up (15% x 45 = 6.75 -> 7), so it can exceed the charge by under 1 HP. The
+    # odds walk charges the exact ticks instead.
     # Berserker-rage (+% dmg below 25% HP, permanent) and frenzy (+% dmg on crit)
     # both raise monster damage; modeled conservatively as ALWAYS active — each adds
     # value% of the monster's per-turn damage (= value * raw_monster * (200+m_crit) / 2,
@@ -443,6 +444,19 @@ def worn_restore(state: WorldState, game_data: GameData) -> tuple[int, int]:
     return 0, 0
 
 
+def unpotioned(state: WorldState) -> WorldState:
+    """`state` fighting on BARE gear: the worn restore potions stay worn but
+    none is drunk (`worn_restore` reads stock 0; it is the only fight reader of
+    a utility slot's quantity). Every GEAR question asks it — a rung cleared
+    (`tier_progress.tier_cleared`), the band's bare fight
+    (`band_target.BandTarget.bare_fight`), a fight secure enough to need no
+    gear (`SelectionContext.combat_risky`, `combat_deficit`'s routing walk) —
+    so a potion-propped win never hides a gear upgrade. Live probe 2026-10-16:
+    40 worn greater health potions take `l25_currency_leaf_unfunded` from P 0
+    to P 1 against every rung-20 to rung-30 monster."""
+    return replace(state, utility1_slot_quantity=0, utility2_slot_quantity=0)
+
+
 def win_probability(state: WorldState, game_data: GameData, monster_code: str) -> Fraction:
     """P(win) of fighting now: from `state.hp`, in the on-hand loadout
     `predict_win` reads, drinking the worn restore potion (spec §4)."""
@@ -461,15 +475,16 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     It was the closed form's expected-round race (`terms_win`), which reads
     crit at its mean: C3P0 v cyclops at margin 1 was "won" at P 0.51, and lost
     52 of 140 fights since 2026-10-10."""
-    return win_probability(state, game_data, monster_code) >= win_threshold(state, monster_code)
+    return odds_clear(win_probability(state, game_data, monster_code),
+                      win_threshold(state, monster_code))
 
 
 def secure_win(state: WorldState, game_data: GameData, monster_code: str) -> bool:
     """A fight won often enough that gear is not the better use of time (spec
     §3): P(win) at least max(θ, SECURE_WIN). The gear arm reads it
     (`combat_deficit`, `SelectionContext.combat_risky`)."""
-    return win_probability(state, game_data, monster_code) >= max(
-        win_threshold(state, monster_code), SECURE_WIN)
+    return odds_clear(win_probability(state, game_data, monster_code),
+                      max(win_threshold(state, monster_code), SECURE_WIN))
 
 
 def combat_margin(state: WorldState, game_data: GameData, monster_code: str) -> int:
