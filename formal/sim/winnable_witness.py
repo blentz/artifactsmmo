@@ -12,16 +12,29 @@ model. This module re-runs that exact production chain and, for each band level
     (`p.attack` per element, `p.critical_strike`, `p.max_hp`, `p.initiative`,
     `p.dmg`, `p.dmg_elements`, player lifesteal / antipoison summed over the
     loadout) — the exact inputs `predict_win` reads; and
-  * the 20 integer `predictWin` inputs + the `playerFirst` boolean, computed
-    EXACTLY as `predict_win` computes them internally (reusing production's
-    `_element_damage`), so the kernel `predictWin` over these scalars reproduces
-    production's verdict.
+  * the 20 integer closed-form `predictWin` inputs + the `playerFirst` boolean
+    (kept for the projection pin; the kernel no longer decides them); and
+  * the fight-odds inputs the kernel DOES decide: production `fight_split`'s
+    `FightTerms` scalars (Lean `Formal.FightOutcome.Terms`) and `RoundDamage`
+    (Lean `Formal.FightOdds.Damage`), the fight's start HP (`state.hp`), its max
+    HP (`fight_max_hp`), and the worn restore potion (`worn_restore`).
 
-The kernel TRUSTS this projection only as far as the differential
-(`formal/diff/test_winnable_witness_diff.py`) enforces it against production:
-that test re-derives each row's projection scalars from `project_loadout_stats`
-and asserts the verdict equals production `is_winnable`. So the witness reflects
-production — it is never reverse-engineered to pass the kernel `decide`.
+The verdict is production's (spec 2026-10-15 fight-gates-odds §1/§5): a row's
+monster is picked among the monsters production `is_winnable` accepts AND whose
+counted-crit lower bound `crit_bound` (Lean `Formal.FightOdds.critBound`) is at
+least `WITNESS_THETA` = 99/100: the single path on which the player never crits
+and the monster crits its first `crit_budget` turns wins, so every path with at
+most that many monster crits wins and P(win) >= P(Binomial(turns, m_crit%) <=
+crit_budget). The kernel decides that bound per row
+(`WinnableGrounded.rowWinnable`) and lifts it to P(win) at the row's real crit
+chances and stock (`Formal.FightOdds.winProb_ge_critBound`).
+
+The kernel TRUSTS these scalars only as far as the differential
+(`formal/diff/test_winnable_witness_diff.py`) enforces them against production:
+that test re-derives each row's projection and fight-odds scalars from
+`project_loadout_stats` / `fight_split` and asserts production `is_winnable` and
+the bound >= 99/100. So the witness reflects production — it is never
+reverse-engineered to pass the kernel `decide`.
 
 The witness rows are consumed by `generate_lean_fixture.py` to emit
 `def winnableWitness : List WitnessRow` into `GameDataFixture.lean`.
@@ -30,9 +43,17 @@ The witness rows are consumed by `generate_lean_fixture.py` to emit
 from __future__ import annotations
 
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Any
 
-from artifactsmmo_cli.ai.combat import _element_damage, is_winnable
+from artifactsmmo_cli.ai.combat import (
+    _element_damage,
+    fight_max_hp,
+    fight_numbers,
+    fight_split,
+    is_winnable,
+    worn_restore,
+)
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.level_loadout import (
@@ -41,6 +62,14 @@ from artifactsmmo_cli.ai.equipment.level_loadout import (
 )
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
+from artifactsmmo_cli.ai.fight_odds_core import RoundDamage, _tick
+from artifactsmmo_cli.ai.fight_terms_core import (
+    MAX_TURNS,
+    SCALE,
+    FightExit,
+    FightTerms,
+    effective_player_hp,
+)
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.item_catalog import ItemStats
@@ -149,6 +178,141 @@ class WitnessRow:
     m_frenzy: int
     m_bubble: int
     player_first: bool
+    # The fight-odds inputs the kernel decides (production `fight_split`):
+    # Lean `Terms` ...
+    t_raw_player: int
+    t_kill_step: int
+    t_monster_hp: int
+    t_recon: int
+    t_die_step: int
+    t_player_first: bool
+    # ... Lean `Damage` at the row's real crit chances ...
+    d_monster_hp: int
+    d_kill_normal: int
+    d_kill_crit: int
+    d_p_crit: int
+    d_die_normal: int
+    d_die_crit: int
+    d_m_crit: int
+    d_burn: tuple[int, ...]
+    # ... and the fight's start HP, max HP and worn restore potion.
+    fight_hp: int
+    fight_max_hp: int
+    restore: int
+    stock: int
+    # The crit budget certificate the kernel's `critBound` reads.
+    crit_budget: int
+
+
+WITNESS_THETA = Fraction(99, 100)
+"""The bound every witness row's P(win) is proved to reach (Lean
+`WinnableGrounded.witnessTheta`): liveness holds for any character threshold
+θ <= 99/100. A learned θ = t_loss / (t_win + t_loss) reaches 0.99 only when a
+loss costs 99 wins."""
+
+
+def _crit_hit(damage: RoundDamage, crits_left: int) -> int:
+    """The monster's hit on the counted-crit path (Lean `FightOdds.khit`): a crit
+    while crits are left, else a normal hit."""
+    return damage.die_crit if crits_left > 0 else damage.die_normal
+
+
+def crit_path_wins(damage: RoundDamage, player_first: bool, monster_pool: int,
+                   player_pool: int, crits: int) -> bool:
+    """Lean `FightOdds.kpath` from round 1 with `MAX_TURNS` rounds of fuel: the
+    single path on which the player never crits, the monster crits its first
+    `crits` turns and then hits normal, with no restore stock, is won."""
+    m, p, c = monster_pool, player_pool, crits
+    for round_no in range(1, MAX_TURNS + 1):
+        tick = _tick(damage, player_first, round_no)
+        hit = _crit_hit(damage, c)
+        if player_first:
+            if tick > 0 and p - tick <= 0:
+                return False
+            if m - damage.kill_normal <= 0:
+                return True
+            if p - tick - hit <= 0:
+                return False
+            p = p - tick - hit
+        else:
+            if p - hit <= 0:
+                return False
+            if tick > 0 and p - hit - tick <= 0:
+                return False
+            if m - damage.kill_normal <= 0:
+                return True
+            p = p - hit - tick
+        m, c = m - damage.kill_normal, max(c - 1, 0)
+    return False
+
+
+def monster_turns(damage: RoundDamage, player_first: bool, monster_pool: int) -> int:
+    """Lean `FightOdds.mturns` with `MAX_TURNS` rounds of fuel: the monster's turns
+    before the player's never-critting kill."""
+    m, turns = monster_pool, 0
+    for _round in range(MAX_TURNS):
+        killed = m - damage.kill_normal <= 0
+        if player_first and killed:
+            return turns
+        turns += 1
+        if killed:
+            return turns
+        m -= damage.kill_normal
+    return turns
+
+
+def binom_at_most(m_crit: int, turns: int, crits: int) -> Fraction:
+    """Lean `FightOdds.binom`: P(at most `crits` of `turns` monster turns crit),
+    each crit at `m_crit`%."""
+    wn, wc = Fraction(100 - m_crit, 100), Fraction(m_crit, 100)
+    row: list[Fraction] = []
+    for _n in range(turns):
+        row = [wn * (row[c] if c < len(row) else 1)
+               + wc * (0 if c == 0 else (row[c - 1] if c - 1 < len(row) else 1))
+               for c in range(len(row) + 1)]
+    return row[crits] if crits < len(row) else Fraction(1)
+
+
+def crit_bound(terms: FightTerms, damage: RoundDamage, hp: int, max_hp: int,
+               crits: int) -> Fraction:
+    """Lean `FightOdds.critBound`: the proved lower bound on P(win) at no stock
+    (`FightOdds.winProb_ge_critBound`, any stock by stock monotonicity). If the
+    counted-crit path with `crits` crits wins, every path with at most `crits`
+    monster crits wins, so P(win) >= P(Binomial(turns, m_crit%) <= crits)."""
+    if terms.exit is FightExit.OUT_SUSTAIN:
+        return Fraction(1)
+    if terms.exit not in (FightExit.NONE, FightExit.DEAD):
+        return Fraction(0)
+    pool = effective_player_hp(hp, max_hp) * SCALE
+    if pool <= 0:
+        return Fraction(0)
+    monster = damage.monster_hp * SCALE
+    if not crit_path_wins(damage, terms.player_first, monster, pool, crits):
+        return Fraction(0)
+    return binom_at_most(damage.m_crit, monster_turns(damage, terms.player_first, monster), crits)
+
+
+def best_crit_budget(terms: FightTerms, damage: RoundDamage, hp: int, max_hp: int) -> int:
+    """The most crits the counted-crit path survives, at most the monster's turns
+    (0 when it survives none): the budget with the largest `crit_bound`, since
+    the bound grows with the budget while the path still wins. The certificate
+    the kernel checks; its soundness does not depend on this choice."""
+    monster = damage.monster_hp * SCALE
+    pool = effective_player_hp(hp, max_hp) * SCALE
+    turns = monster_turns(damage, terms.player_first, monster)
+    for crits in range(turns, -1, -1):
+        if crit_path_wins(damage, terms.player_first, monster, pool, crits):
+            return crits
+    return 0
+
+
+def witness_bound(state: WorldState, game_data: GameData, monster_code: str) -> tuple[int, Fraction]:
+    """`(crit budget, crit_bound)` of the fight against `monster_code`, over
+    production `fight_split` and `fight_max_hp`."""
+    terms, damage = fight_split(state, game_data, monster_code)
+    max_hp = fight_max_hp(state, game_data, monster_code)
+    budget = best_crit_budget(terms, damage, state.hp, max_hp)
+    return budget, crit_bound(terms, damage, state.hp, max_hp, budget)
 
 
 def _base_world_state(
@@ -183,9 +347,11 @@ def build_witness_row(
 
     Runs the SAME chain as the Task-1 sweep: full obtainable inventory ->
     faithful WorldState -> `pick_winnable_monster_pure` over the live catalog
-    with the real `is_winnable`. For the chosen monster it then runs
-    `pick_loadout` + `project_loadout_stats` (production) and computes the
-    `predict_win` integer scalars EXACTLY as production does internally.
+    with the real `is_winnable`, narrowed to the monsters whose `crit_bound` is
+    at least `WITNESS_THETA` (the verdict the kernel decides). For the chosen
+    monster it then runs `pick_loadout` + `project_loadout_stats` (production),
+    computes the closed-form integer scalars as production does internally, and
+    records production `fight_split`'s terms and damage.
     """
     inventory = obtainable_inventory_for_level(stats_by_code, level)
     hp_ceiling = obtainable_hp_bonus_ceiling(stats_by_code, level)
@@ -193,7 +359,8 @@ def build_witness_row(
     monster_code = pick_winnable_monster_pure(
         level,
         list(game_data.monster_levels.items()),
-        lambda code: is_winnable(state, game_data, code),
+        lambda code: (is_winnable(state, game_data, code)
+                      and witness_bound(state, game_data, code)[1] >= WITNESS_THETA),
         lambda code: game_data.xp_per_kill(code, level) > 0,
     )
     if monster_code is None:
@@ -232,6 +399,10 @@ def build_witness_row(
     # Loadout codes that pick_loadout actually selected (slot -> code | None).
     loadout_codes = sorted(c for c in loadout.values() if c)
 
+    numbers = fight_numbers(state, game_data, monster_code)
+    terms, damage = numbers.terms, numbers.damage
+    restore, stock = worn_restore(state, game_data)
+
     return WitnessRow(
         level=level,
         monster_code=monster_code,
@@ -259,6 +430,25 @@ def build_witness_row(
         m_frenzy=game_data.monster_frenzy(monster_code),
         m_bubble=game_data.monster_protective_bubble(monster_code),
         player_first=p.initiative >= game_data.monster_initiative(monster_code),
+        t_raw_player=numbers.raw_player,
+        t_kill_step=terms.kill_step,
+        t_monster_hp=damage.monster_hp,
+        t_recon=game_data.monster_reconstitution(monster_code),
+        t_die_step=terms.die_step,
+        t_player_first=terms.player_first,
+        d_monster_hp=damage.monster_hp,
+        d_kill_normal=damage.kill_normal,
+        d_kill_crit=damage.kill_crit,
+        d_p_crit=damage.p_crit,
+        d_die_normal=damage.die_normal,
+        d_die_crit=damage.die_crit,
+        d_m_crit=damage.m_crit,
+        d_burn=damage.burn,
+        fight_hp=state.hp,
+        fight_max_hp=fight_max_hp(state, game_data, monster_code),
+        restore=restore,
+        stock=stock,
+        crit_budget=witness_bound(state, game_data, monster_code)[0],
     )
 
 

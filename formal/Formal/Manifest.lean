@@ -527,6 +527,8 @@ open Formal.PriorityBand
 #check @Formal.FightOdds.fightOdds_noCrit           -- no crit, no burn: the tree is the expected walk
 #check @Formal.FightOdds.fightOdds_win_mono_stock   -- more stock never lowers P(win)
 #check @Formal.FightOdds.fightOdds_win_mono_hp      -- no stock: more HP never lowers P(win)
+#check @Formal.FightOdds.winProb_eq_one_of_worst   -- no stock, worst-case path won: P(win) = 1
+#check @Formal.FightOdds.winProb_ge_critBound      -- counted-crit floor: P(win) ≥ critBound
 -- GroupFight (group fights increment 1, `ai/group_fight_core.py`):
 #check @Formal.GroupFight.groupOutcome_single   -- one member IS the solo walk
 #check @Formal.GroupFight.killRounds_antitone   -- a member adding damage never delays the kill

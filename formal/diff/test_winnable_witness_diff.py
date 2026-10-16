@@ -2,10 +2,12 @@
 
 The kernel proof (`Formal/Liveness/WinnableGrounded.lean`) verifies a per-level
 WITNESS extracted from the Task-1 sweep: for each band level `L in [1, 49]` the
-winning monster + the `pick_loadout` loadout + the production-projected combat
-scalars `predict_win` reads. The kernel computes `predictWin` over those scalars
-and `decide`s the verdict; it TRUSTS the projection only as far as THIS test
-enforces it against production.
+winning monster + the `pick_loadout` loadout + production `fight_split`'s
+fight-odds `Terms`/`Damage` with the fight's HP, max HP and worn restore. The
+kernel decides the counted-crit floor `Formal.FightOdds.critBound` over those
+scalars against `witnessTheta` = 99/100 and lifts it to P(win) at every
+θ <= 99/100 (`winProb_ge_critBound`); it TRUSTS the scalars only as far as THIS
+test enforces them against production.
 
 This is the ANTI-RIGGING gate. For every witness row it asserts:
 
@@ -18,11 +20,16 @@ This is the ANTI-RIGGING gate. For every witness row it asserts:
   3. every loadout item's `level <= L` (obtainable, backed by Task 3's
      `canonicalPlan` obtainability); and
   4. the witness monster is not over-leveled (`monster_level <= L + 2`) and the
-     row's monster scalars match the live catalog.
-
-It also reconstructs the kernel `predictWin` formula from the emitted Int
-scalars and asserts it returns True — so a witness that the kernel would accept
-necessarily reflects production's verdict (no fixture massaging can pass both).
+     row's monster scalars match the live catalog;
+  5. the fight-odds scalars (`t_*`, `d_*`, `fight_hp`, `fight_max_hp`,
+     `restore`, `stock`) EQUAL production `fight_numbers` / `fight_split` /
+     `fight_max_hp` / `worn_restore` for the witness monster at `L`;
+  6. the Python mirror of the kernel's `critBound` over those scalars is at
+     least `WITNESS_THETA` and never above production's exact P(win) (a floor,
+     not an estimate); and
+  7. the rows EMITTED into `GameDataFixture.lean` (both `winnableWitness` and
+     `acquirableWitness`) carry exactly those scalars and crit budget — so the
+     table the kernel decides is the one pinned here.
 
 Skips cleanly when the real fixtures are absent (CI / `formal/gate.sh` stay
 green until the data is captured), mirroring `test_winnable_across_band_diff.py`.
@@ -30,11 +37,20 @@ green until the data is captured), mirroring `test_winnable_across_band_diff.py`
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 from typing import Any
 
 import pytest
 
-from artifactsmmo_cli.ai.combat import _element_damage, is_winnable
+from artifactsmmo_cli.ai.combat import (
+    _element_damage,
+    fight_max_hp,
+    fight_numbers,
+    fight_split,
+    is_winnable,
+    worn_restore,
+)
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.level_loadout import (
     obtainable_hp_bonus_ceiling,
@@ -42,6 +58,7 @@ from artifactsmmo_cli.ai.equipment.level_loadout import (
 )
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
+from artifactsmmo_cli.ai.fight_odds_core import fight_odds, win_probability
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from formal.diff.test_winnable_across_band_diff import (
@@ -53,54 +70,62 @@ from formal.diff.test_winnable_across_band_diff import (
     _item_stats_from_snapshot,
     _snapshot_has_combat_fields,
 )
+from formal.sim.generate_lean_fixture import _acquirability_closure
 from formal.sim.winnable_witness import (
+    WITNESS_THETA,
     WitnessRow,
     _base_world_state,
+    build_witness_row,
     build_witness_table,
+    crit_bound,
 )
 
-MAX_TURNS = 100
+FIXTURE = Path(__file__).resolve().parents[1] / "Formal/Liveness/GameDataFixture.lean"
+
+# The fixture fields the kernel's fight-odds verdict reads, and the WitnessRow
+# attribute each one is emitted from.
+_ODDS_FIELDS = {
+    "tRawPlayer": "t_raw_player", "tKillStep": "t_kill_step",
+    "tMonsterHp": "t_monster_hp", "tRecon": "t_recon", "tDieStep": "t_die_step",
+    "tPlayerFirst": "t_player_first", "dMonsterHp": "d_monster_hp",
+    "dKillNormal": "d_kill_normal", "dKillCrit": "d_kill_crit", "dPCrit": "d_p_crit",
+    "dDieNormal": "d_die_normal", "dDieCrit": "d_die_crit", "dMCrit": "d_m_crit",
+    "dBurn": "d_burn", "fightHp": "fight_hp", "fightMaxHp": "fight_max_hp",
+    "restore": "restore", "stock": "stock", "critBudget": "crit_budget",
+}
+
+_FIELD_RE = re.compile(r"(\w+) := (\[[^\]]*\]|\"[^\"]*\"|-?\d+|true|false)")
 
 
-def _ceil_div(n: int, d: int) -> int:
-    return -(-n // d)
+def _lean_value(value: object) -> str:
+    """A WitnessRow attribute as the generator writes it into the fixture."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, tuple):
+        return "[" + ", ".join(str(v) for v in value) + "]"
+    return str(value)
 
 
-def _kernel_predict_win(row: WitnessRow) -> bool:
-    """Reconstruct the Lean `predictWin` verdict from a witness row's Int scalars
-    (exact mirror of `Formal/PredictWin.lean::predictWin`). Used to confirm the
-    emitted scalars are the ones the kernel will `decide` true."""
-    if row.raw_player <= 0:
-        return False
-    kill_step = (
-        50 * row.raw_player * (200 + row.p_crit)
-        - row.m_crit * row.m_lifesteal * row.m_atk_sum
-        - row.m_healing * row.monster_hp * 100
-        - row.m_void_drain * row.p_max_hp * 100
-        - row.m_bubble * row.raw_player * (200 + row.p_crit) // 2
-    )
-    if kill_step <= 0:
-        return False
-    rounds_to_kill = _ceil_div((row.monster_hp + row.m_barrier) * 10000, kill_step)
-    if rounds_to_kill > MAX_TURNS:
-        return False
-    if 0 < row.m_reconstitution <= rounds_to_kill:
-        return False
-    die_step = (
-        50 * row.raw_monster * (200 + row.m_crit)
-        - row.p_crit * row.p_lifesteal * row.p_atk_sum
-        + max(0, row.m_poison - row.p_antipoison) * 10000
-        + row.m_burn * row.m_atk_sum * 100
-        + row.m_void_drain * row.p_max_hp * 100
-        + row.m_berserk * row.raw_monster * (200 + row.m_crit) // 2
-        + row.m_frenzy * row.raw_monster * (200 + row.m_crit) // 2
-    )
-    if die_step <= 0:
-        return True
-    rounds_to_die = _ceil_div(row.p_max_hp * 10000, die_step)
-    if row.player_first:
-        return rounds_to_kill <= rounds_to_die
-    return rounds_to_kill < rounds_to_die
+def _emitted_rows(table: str) -> list[dict[str, str]]:
+    """The `table` rows of `GameDataFixture.lean`, each as field -> Lean literal."""
+    src = FIXTURE.read_text()
+    body = src[src.index(f"def {table} : List WitnessRow :="):]
+    body = body[:body.index("\n  ]\n")]
+    return [{"level": chunk.split(",", 1)[0], **dict(_FIELD_RE.findall(chunk))}
+            for chunk in body.split("{ level := ")[1:]]
+
+
+def _assert_emitted(table: str, rows: list[WitnessRow]) -> None:
+    """The fixture's `table` carries exactly `rows`' fight-odds scalars."""
+    emitted = _emitted_rows(table)
+    assert len(emitted) == len(rows), f"{table}: {len(emitted)} emitted vs {len(rows)} built"
+    for lean, row in zip(emitted, rows, strict=True):
+        assert int(lean["level"]) == row.level, f"{table} level order"
+        for field, attr in _ODDS_FIELDS.items():
+            assert lean[field] == _lean_value(getattr(row, attr)), (
+                f"{table} L{row.level} {field}: emitted {lean[field]} != "
+                f"{_lean_value(getattr(row, attr))}"
+            )
 
 
 def _load_real_inputs() -> tuple[dict[str, dict[str, Any]], dict[str, ItemStats], Any] | None:
@@ -211,13 +236,66 @@ def test_witness_rows_pin_projection_and_verdict() -> None:
         assert row.m_crit == game_data.monster_critical_strike(row.monster_code)
         assert row.m_atk_sum == sum(m_attack.values())
 
-        # the kernel `predictWin` over the emitted scalars must be True.
-        assert _kernel_predict_win(row) is True, (
-            f"L{row.level}: kernel predictWin over emitted scalars is False — "
-            f"the witness row would not pass the kernel decide."
+        # (5) fight-odds fidelity: the scalars the kernel decides are production's.
+        numbers = fight_numbers(state, game_data, row.monster_code)
+        terms, damage = fight_split(state, game_data, row.monster_code)
+        max_hp = fight_max_hp(state, game_data, row.monster_code)
+        restore, stock = worn_restore(state, game_data)
+        assert (terms, damage) == (numbers.terms, numbers.damage), f"L{row.level} split"
+        assert row.t_raw_player == numbers.raw_player, f"L{row.level} t_raw_player"
+        assert row.t_kill_step == terms.kill_step, f"L{row.level} t_kill_step"
+        assert row.t_monster_hp == damage.monster_hp, f"L{row.level} t_monster_hp"
+        assert row.t_recon == game_data.monster_reconstitution(row.monster_code)
+        assert row.t_die_step == terms.die_step, f"L{row.level} t_die_step"
+        assert row.t_player_first == terms.player_first, f"L{row.level} t_player_first"
+        assert (row.d_monster_hp, row.d_kill_normal, row.d_kill_crit, row.d_p_crit,
+                row.d_die_normal, row.d_die_crit, row.d_m_crit, row.d_burn) == (
+            damage.monster_hp, damage.kill_normal, damage.kill_crit, damage.p_crit,
+            damage.die_normal, damage.die_crit, damage.m_crit, damage.burn,
+        ), f"L{row.level} damage"
+        assert (row.fight_hp, row.fight_max_hp) == (state.hp, max_hp), f"L{row.level} hp"
+        assert (row.restore, row.stock) == (restore, stock), f"L{row.level} restore"
+
+        # (6) the floor the kernel decides holds, and is a floor of the exact odds.
+        bound = crit_bound(terms, damage, state.hp, max_hp, row.crit_budget)
+        assert bound >= WITNESS_THETA, (
+            f"L{row.level}: crit_bound {float(bound)} < {WITNESS_THETA} — the "
+            f"witness row would not pass the kernel decide."
         )
+        exact = win_probability(fight_odds(terms, damage, state.hp, max_hp, restore, stock))
+        assert bound <= exact, f"L{row.level}: floor {bound} above exact P(win) {exact}"
 
         # xp-positive at this level (the xpPos band condition).
         assert game_data.xp_per_kill(row.monster_code, row.level) > 0, (
             f"L{row.level}: {row.monster_code} grants no XP"
         )
+
+    # (7) the emitted fixture table is the table pinned above.
+    _assert_emitted("winnableWitness", rows)
+
+
+def test_acquirable_rows_pin_fight_odds() -> None:
+    """The cert-restricted table the kernel also decides (`acquirableWitness`,
+    `WitnessAcquirable.acquirable_rows_winnable`): every band level has a row,
+    each row's production `is_winnable` is True and its floor is at least
+    `WITNESS_THETA`, and the fixture carries exactly those scalars."""
+    loaded = _load_real_inputs()
+    if loaded is None:
+        pytest.skip("real fixtures absent (see test_winnable_across_band_diff.py).")
+    base_stats, stats_by_code, game_data = loaded
+    _gather, _drops, cert = _acquirability_closure(json.loads(SNAPSHOT_PATH.read_text()))
+    acq_stats = {c: st for c, st in stats_by_code.items() if c in set(cert)}
+    rows = []
+    for level in range(BAND_LO, BAND_HI):
+        row = build_witness_row(level, base_stats[str(level)], acq_stats, game_data)
+        assert row is not None, f"L{level}: no acquirable witness (a frontier level)"
+        state = _base_world_state(
+            level, base_stats[str(level)], obtainable_inventory_for_level(acq_stats, level),
+            obtainable_hp_bonus_ceiling(acq_stats, level))
+        assert is_winnable(state, game_data, row.monster_code) is True, f"L{level} is_winnable"
+        terms, damage = fight_split(state, game_data, row.monster_code)
+        bound = crit_bound(terms, damage, state.hp,
+                           fight_max_hp(state, game_data, row.monster_code), row.crit_budget)
+        assert bound >= WITNESS_THETA, f"L{level}: crit_bound {float(bound)} < {WITNESS_THETA}"
+        rows.append(row)
+    _assert_emitted("acquirableWitness", rows)

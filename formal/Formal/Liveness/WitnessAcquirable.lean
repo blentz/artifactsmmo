@@ -15,7 +15,8 @@ residual). This module discharges that residual against the live fixture:
 * `acquirableWitness` (generated) is the SAME production sweep as
   `winnableWitness`, restricted to the cert pool: every row's loadout is
   closure-obtainable by the gather/fight/craft loop, and the row's kernel
-  `predictWin` verdict still holds (`acquirable_rows_winnable`).
+  fight-odds verdict (`WinnableGrounded.rowWinnable`) still holds
+  (`acquirable_rows_winnable`).
 * `acquirableFrontier = []` — EMPTY since the P1 multi-drop closure
   (docs/PLAN_engagement_expansion.md): gem stones are gatherable secondary
   drops of ordinary rocks, which closes the jewelry/obsidian/gold recipe
@@ -67,11 +68,12 @@ theorem acquirable_loadouts_in_cert :
       (fun r => r.loadoutCodes.all (fun c => acquirableCert.contains c)) = true := by
   decide
 
-/-- Every acquirable-witness row still WINS: the kernel `predictWin` verdict
-    holds over the restricted-pool projection scalars (same `rowWinnable` as
-    the optimistic table). -/
+/-- Every acquirable-witness row still WINS: the kernel-decided counted-crit
+    floor `witnessTheta ≤ critBound` holds over the restricted-pool fight split
+    (same `rowWinnable` as the optimistic table; `rowWinnable_sound` lifts it to
+    P(win) ≥ θ for every θ ≤ `witnessTheta`). -/
 theorem acquirable_rows_winnable :
-    acquirableWitness.all rowWinnable = true := by decide
+    acquirableWitness.all rowWinnable = true := by decide +kernel
 
 /-- **Band coverage modulo the named frontier**: every band level in [1, 49]
     is covered by an acquirable-witness row, or is in `acquirableFrontier`

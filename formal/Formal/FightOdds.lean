@@ -13,6 +13,12 @@ UNMERGED tree; `ai/fight_odds_core.fight_odds` merges identical states.
 * `fightOdds_win_mono_stock` — more restore stock never lowers P(win).
 * `fightOdds_win_mono_hp` — with no restore stock, more starting HP never
   lowers P(win). (With stock it is FALSE: see the theorem's comment.)
+* `winProb_eq_one_of_worst` — a fight won with no stock on the worst-case path
+  (no player crit, every monster turn a crit) is won with probability 1 at any stock.
+* `winProb_ge_critBound` — the counted-crit floor: if the no-stock path on which
+  the player never crits and the monster crits its first `c` turns wins, P(win)
+  at any stock is at least P(at most `c` of that path's monster turns crit)
+  (`critBound`, a single path plus a binomial table, cheap for the kernel).
 
 Lean core only — no Mathlib.
 -/
@@ -679,5 +685,698 @@ theorem fightOdds_win_mono_hp (t : Terms) (d : Damage) (hp hp' maxHp : Int) (res
         (Int.mul_nonneg (Int.natCast_nonneg _) (by decide)) _ _ _ _ _ _ _ _ _
         (Or.inr ⟨rfl, by simp only [scale]; omega⟩)
   · exact Rat.le_refl
+
+/-! ### (d) A worst-case win with no stock is a sure win. -/
+
+theorem roll_hundred (normal crit : Int) : roll 100 normal crit = [(1, crit)] := by
+  have h0 : (((100 - 100 : Nat) : Rat) / 100) = 0 := by grind
+  have h1 : (((100 : Nat) : Rat) / 100) = 1 := by grind
+  unfold roll
+  rw [h0, h1]; simp
+
+theorem roll_mem {pct : Nat} {normal crit : Int} {x : Rat × Int}
+    (hx : x ∈ roll pct normal crit) : x.2 = normal ∨ x.2 = crit := by
+  unfold roll at hx
+  have hm := (List.mem_filter.mp hx).1
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
+  rcases hm with rfl | rfl <;> simp
+
+theorem winProb_single_le (w : Rat) (e : Ending) (hw : 0 ≤ w) :
+    winProb [(w, e)] ≤ mass [(w, e)] := by
+  rw [winProb_single, mass_single]
+  split
+  · exact Rat.le_refl
+  · exact hw
+
+theorem tree_wp_le_mass (d : Damage) (pf : Bool) (maxPool rPool : Int) (stock : Nat) :
+    ∀ (fuel : Nat) (r m p : Int) (k : Nat),
+      winProb (tree d pf maxPool rPool stock fuel r m p k)
+        ≤ mass (tree d pf maxPool rPool stock fuel r m p k) := by
+  intro fuel
+  induction fuel with
+  | zero => intro r m p k; simp only [tree]; exact winProb_single_le _ _ (by decide)
+  | succ fuel ih =>
+    intro r m p k
+    cases pf
+    · simp only [tree, Bool.false_eq_true, if_false]
+      rw [winProb_flatMap, mass_flatMap]
+      apply lsum_le
+      rintro ⟨wh, hit⟩ hx
+      have hw := roll_nonneg hx
+      simp only at hw ⊢
+      split
+      · exact winProb_single_le _ _ hw
+      · split
+        · exact winProb_single_le _ _ hw
+        · rw [winProb_scaleBy, mass_scaleBy]
+          apply Rat.mul_le_mul_of_nonneg_left _ hw
+          rw [winProb_flatMap, mass_flatMap]
+          apply lsum_le
+          rintro ⟨wk, kill⟩ hy
+          have hw' := roll_nonneg hy
+          simp only at hw' ⊢
+          split
+          · exact winProb_single_le _ _ hw'
+          · rw [winProb_scaleBy, mass_scaleBy]
+            exact Rat.mul_le_mul_of_nonneg_left (ih _ _ _ _) hw'
+    · simp only [tree, if_true]
+      split
+      · exact winProb_single_le _ _ (by decide)
+      · rw [winProb_flatMap, mass_flatMap]
+        apply lsum_le
+        rintro ⟨wk, kill⟩ hx
+        have hw := roll_nonneg hx
+        simp only at hw ⊢
+        split
+        · exact winProb_single_le _ _ hw
+        · rw [winProb_scaleBy, mass_scaleBy]
+          apply Rat.mul_le_mul_of_nonneg_left _ hw
+          rw [winProb_flatMap, mass_flatMap]
+          apply lsum_le
+          rintro ⟨wh, hit⟩ hy
+          have hw' := roll_nonneg hy
+          simp only at hw' ⊢
+          split
+          · exact winProb_single_le _ _ hw'
+          · rw [winProb_scaleBy, mass_scaleBy]
+            exact Rat.mul_le_mul_of_nonneg_left (ih _ _ _ _) hw'
+
+theorem fightOdds_wp_le_one (t : Terms) (d : Damage) (hp maxHp : Int) (restore stock : Nat)
+    (hp' : d.pCrit ≤ 100) (hm : d.mCrit ≤ 100) :
+    winProb (fightOdds t d hp maxHp restore stock) ≤ 1 := by
+  unfold fightOdds
+  split
+  · simp only [winProb_single, if_true]; exact Rat.le_refl
+  · split
+    · simp only [winProb_single, Bool.false_eq_true, if_false]; decide
+    · rw [← tree_mass d _ _ _ stock hp' hm maxTurns.toNat 1 (d.monsterHp * scale)
+        (effHp hp maxHp * scale) stock]
+      exact tree_wp_le_mass _ _ _ _ _ _ _ _ _ _
+  · simp only [winProb_single, Bool.false_eq_true, if_false]; decide
+
+/-- With no stock the real tree loses nowhere the worst-case tree `d'` (no player
+crit, every monster turn a crit) wins: every real leaf wins, so P(win) is the mass. -/
+theorem tree_worst (d d' : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
+    (hk : d.killNormal ≤ d.killCrit) (hd : d.dieNormal ≤ d.dieCrit)
+    (hp0 : d'.pCrit = 0) (hm1 : d'.mCrit = 100) (hkn : d'.killNormal = d.killNormal)
+    (hdc : d'.dieCrit = d.dieCrit) (htick : ∀ pf r, tick d' pf r = tick d pf r) :
+    ∀ (fuel : Nat) (r m m' p p' : Int), m ≤ m' → p' ≤ p →
+      winProb (tree d' pf maxPool rPool st fuel r m' p' 0) = 1 →
+      winProb (tree d pf maxPool rPool st fuel r m p 0)
+        = mass (tree d pf maxPool rPool st fuel r m p 0) := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro r m m' p p' _ _ hw
+    simp [tree, winProb_single] at hw
+  | succ fuel ih =>
+    intro r m m' p p' hm hp hw
+    cases pf
+    · simp only [tree, Bool.false_eq_true, if_false, hp0, hm1, roll_zero, roll_hundred,
+        List.flatMap_cons, List.flatMap_nil, List.append_nil, scaleBy_one,
+        Formal.FightOutcome.drink_noStock,
+        htick, hkn, hdc] at hw
+      simp only [tree, Bool.false_eq_true, if_false, Formal.FightOutcome.drink_noStock]
+      rw [winProb_flatMap, mass_flatMap]
+      apply lsum_congr
+      rintro ⟨wh, hit⟩ hx
+      have hh := roll_mem hx
+      simp only at hh ⊢
+      have hhit : hit ≤ d.dieCrit := by omega
+      by_cases w1 : p' - d.dieCrit ≤ 0
+      · rw [if_pos w1] at hw; simp [winProb_single] at hw
+      rw [if_neg w1] at hw
+      by_cases w2 : 0 < tick d false r ∧ p' - d.dieCrit - tick d false r ≤ 0
+      · rw [if_pos w2] at hw; simp [winProb_single] at hw
+      rw [if_neg w2] at hw
+      have h1 : ¬ p - hit ≤ 0 := by omega
+      have g0 : ¬ (0 < tick d false r ∧ p - hit - tick d false r ≤ 0) :=
+        fun h => w2 ⟨h.1, by omega⟩
+      rw [if_neg h1, if_neg g0, winProb_scaleBy, mass_scaleBy, winProb_flatMap, mass_flatMap]
+      congr 1
+      apply lsum_congr
+      rintro ⟨wk, kill⟩ hy
+      have hh' := roll_mem hy
+      simp only at hh' ⊢
+      have hkill : d.killNormal ≤ kill := by omega
+      split
+      · rw [winProb_single, mass_single]; rfl
+      · rename_i hmk
+        have w3 : ¬ m' - d.killNormal ≤ 0 := by omega
+        rw [if_neg w3] at hw
+        rw [winProb_scaleBy, mass_scaleBy, ih _ _ _ _ _ (by omega) (by omega) hw]
+    · simp only [tree, if_true, hp0, hm1, roll_zero, roll_hundred,
+        List.flatMap_cons, List.flatMap_nil, List.append_nil, scaleBy_one,
+        Formal.FightOutcome.drink_noStock,
+        htick, hkn, hdc] at hw
+      by_cases w1 : 0 < tick d true r ∧ p' - tick d true r ≤ 0
+      · rw [if_pos w1] at hw; simp [winProb_single] at hw
+      rw [if_neg w1] at hw
+      have g0 : ¬ (0 < tick d true r ∧ p - tick d true r ≤ 0) :=
+        fun h => w1 ⟨h.1, by omega⟩
+      simp only [tree, if_true, if_neg g0, Formal.FightOutcome.drink_noStock]
+      rw [winProb_flatMap, mass_flatMap]
+      apply lsum_congr
+      rintro ⟨wk, kill⟩ hx
+      have hh := roll_mem hx
+      simp only at hh ⊢
+      have hkill : d.killNormal ≤ kill := by omega
+      split
+      · rw [winProb_single, mass_single]; rfl
+      · rename_i hmk
+        have w3 : ¬ m' - d.killNormal ≤ 0 := by omega
+        rw [if_neg w3] at hw
+        rw [winProb_scaleBy, mass_scaleBy, winProb_flatMap, mass_flatMap]
+        congr 1
+        apply lsum_congr
+        rintro ⟨wh, hit⟩ hy
+        have hh' := roll_mem hy
+        simp only at hh' ⊢
+        have hhit : hit ≤ d.dieCrit := by omega
+        by_cases w2 : p' - tick d true r - d.dieCrit ≤ 0
+        · rw [if_pos w2] at hw; simp [winProb_single] at hw
+        rw [if_neg w2] at hw
+        have h0 : ¬ p - tick d true r - hit ≤ 0 := by omega
+        rw [if_neg h0, winProb_scaleBy, mass_scaleBy, ih _ _ _ _ _ (by omega) (by omega) hw]
+
+/-- A fight won on the worst-case path (no player crit, every monster turn a
+crit) with no restore stock is won with probability 1 — at any stock, since
+more stock never lowers P(win) (`fightOdds_win_mono_stock`). With stock the
+worst path alone is not enough: the 50% drink threshold can let the richer
+pool skip a drink the worst pool takes (counterexample in the PR notes). -/
+theorem winProb_eq_one_of_worst (t : Terms) (d : Damage) (hp maxHp : Int) (restore stock : Nat)
+    (hk : d.killNormal ≤ d.killCrit) (hd : d.dieNormal ≤ d.dieCrit)
+    (hp100 : d.pCrit ≤ 100) (hm100 : d.mCrit ≤ 100)
+    (hw : winProb (fightOdds t { d with pCrit := 0, mCrit := 100 } hp maxHp restore 0) = 1) :
+    winProb (fightOdds t d hp maxHp restore stock) = 1 := by
+  have h0 : winProb (fightOdds t d hp maxHp restore 0) = 1 := by
+    unfold fightOdds at hw ⊢
+    cases hg : gate t <;> simp only [hg] at hw ⊢
+    case outSustain => simp only [winProb_single, if_true]
+    case none =>
+      by_cases he : effHp hp maxHp * scale ≤ 0
+      · rw [if_pos he] at hw; simp [winProb_single] at hw
+      rw [if_neg he] at hw ⊢
+      rw [tree_worst d { d with pCrit := 0, mCrit := 100 } _ _ _ _ hk hd rfl rfl rfl rfl
+        (fun _ _ => rfl) _ _ _ _ _ _ (Int.le_refl _) (Int.le_refl _) hw]
+      exact tree_mass _ _ _ _ _ hp100 hm100 _ _ _ _ _
+    all_goals simp [winProb_single] at hw
+  have hge := fightOdds_win_mono_stock t d hp maxHp restore 0 stock (Nat.zero_le _) hp100 hm100
+  rw [h0] at hge
+  exact Rat.le_antisymm (fightOdds_wp_le_one t d hp maxHp restore stock hp100 hm100) hge
+
+/-! ### (e) A counted-crit lower bound with no stock. -/
+
+/-- The monster's hit on the counted-crit path: a crit while crits are left. -/
+def khit (d : Damage) (c : Nat) : Int := if 0 < c then d.dieCrit else d.dieNormal
+
+/-- The counted-crit path with no stock (`drink` is then the identity): the
+player never crits, the monster crits its next `c` turns and then hits normal.
+`true` iff that single path is won within `fuel` rounds. -/
+def kpath (d : Damage) (pf : Bool) : Nat → Int → Int → Int → Nat → Bool
+  | 0, _, _, _, _ => false
+  | fuel + 1, r, m, p, c =>
+    if pf then
+      if 0 < tick d pf r ∧ p - tick d pf r ≤ 0 then false
+      else if m - d.killNormal ≤ 0 then true
+      else if p - tick d pf r - khit d c ≤ 0 then false
+      else kpath d pf fuel (r + 1) (m - d.killNormal) (p - tick d pf r - khit d c) (c - 1)
+    else
+      if p - khit d c ≤ 0 then false
+      else if 0 < tick d pf r ∧ p - khit d c - tick d pf r ≤ 0 then false
+      else if m - d.killNormal ≤ 0 then true
+      else kpath d pf fuel (r + 1) (m - d.killNormal) (p - khit d c - tick d pf r) (c - 1)
+
+/-- The monster's turns before the never-critting player's kill, within `fuel`
+rounds (the monster pool alone decides it). -/
+def mturns (d : Damage) (pf : Bool) : Nat → Int → Nat
+  | 0, _ => 0
+  | fuel + 1, m =>
+    if pf then (if m - d.killNormal ≤ 0 then 0 else mturns d pf fuel (m - d.killNormal) + 1)
+    else (if m - d.killNormal ≤ 0 then 0 else mturns d pf fuel (m - d.killNormal)) + 1
+
+/-- One row of the at-most-`c` binomial table from the previous one; an index
+past the row reads 1 (at most `c ≥ n` crits of `n` turns is certain). -/
+def bstep (wn wc : Rat) (row : List Rat) : List Rat :=
+  (List.range (row.length + 1)).map fun c =>
+    wn * row.getD c 1 + wc * (if c = 0 then 0 else row.getD (c - 1) 1)
+
+def brow (wn wc : Rat) : Nat → List Rat
+  | 0 => []
+  | n + 1 => bstep wn wc (brow wn wc n)
+
+/-- P(at most `c` of `n` turns crit), a turn normal with weight `wn` and a crit
+with weight `wc`. -/
+def binom (wn wc : Rat) (n c : Nat) : Rat := (brow wn wc n).getD c 1
+
+/-- P(at most `c - 1` of `n` turns crit), 0 at `c = 0`. -/
+def bcrit (wn wc : Rat) (n c : Nat) : Rat := if c = 0 then 0 else binom wn wc n (c - 1)
+
+theorem brow_length (wn wc : Rat) : ∀ n, (brow wn wc n).length = n := by
+  intro n; induction n with
+  | zero => rfl
+  | succ n ih => simp [brow, bstep, ih]
+
+theorem binom_zero (wn wc : Rat) (c : Nat) : binom wn wc 0 c = 1 := by
+  simp [binom, brow]
+
+theorem binom_succ (wn wc : Rat) (h1 : wn + wc = 1) (n c : Nat) :
+    binom wn wc (n + 1) c = wn * binom wn wc n c + wc * bcrit wn wc n c := by
+  have hl := brow_length wn wc n
+  by_cases hc : c < n + 1
+  · simp [binom, bcrit, brow, bstep, hl, hc, List.getD_eq_getElem?_getD]
+  · have h0 : c ≠ 0 := by omega
+    have e1 : binom wn wc (n + 1) c = 1 := by
+      simp [binom, List.getD_eq_getElem?_getD, brow_length, show n + 1 ≤ c by omega]
+    have e2 : binom wn wc n c = 1 := by
+      simp [binom, List.getD_eq_getElem?_getD, hl, show n ≤ c by omega]
+    have e3 : binom wn wc n (c - 1) = 1 := by
+      simp [binom, List.getD_eq_getElem?_getD, hl, show n ≤ c - 1 by omega]
+    rw [e1, bcrit, if_neg h0, e2, e3]; grind
+
+theorem binom_bounds (wn wc : Rat) (h1 : wn + wc = 1) (hn : 0 ≤ wn) (hc : 0 ≤ wc) :
+    ∀ n c, 0 ≤ binom wn wc n c ∧ binom wn wc n c ≤ 1 := by
+  intro n
+  induction n with
+  | zero => intro c; rw [binom_zero]; decide
+  | succ n ih =>
+    intro c
+    rw [binom_succ _ _ h1]
+    have ⟨a0, a1⟩ := ih c
+    have hb : 0 ≤ bcrit wn wc n c ∧ bcrit wn wc n c ≤ 1 := by
+      unfold bcrit; split
+      · decide
+      · exact ih _
+    have m1 := Rat.mul_le_mul_of_nonneg_left a1 hn
+    have m0 := Rat.mul_nonneg hn a0
+    have m2 := Rat.mul_le_mul_of_nonneg_left hb.2 hc
+    have m3 := Rat.mul_nonneg hc hb.1
+    constructor <;> grind
+
+theorem binom_nonneg (wn wc : Rat) (h1 : wn + wc = 1) (hn : 0 ≤ wn) (hc : 0 ≤ wc) (n c : Nat) :
+    0 ≤ binom wn wc n c := (binom_bounds wn wc h1 hn hc n c).1
+
+theorem binom_le_one (wn wc : Rat) (h1 : wn + wc = 1) (hn : 0 ≤ wn) (hc : 0 ≤ wc) (n c : Nat) :
+    binom wn wc n c ≤ 1 := (binom_bounds wn wc h1 hn hc n c).2
+
+theorem bcrit_le_binom (wn wc : Rat) (h1 : wn + wc = 1) (hn : 0 ≤ wn) (hc : 0 ≤ wc) :
+    ∀ n c, bcrit wn wc n c ≤ binom wn wc n c := by
+  intro n
+  induction n with
+  | zero => intro c; unfold bcrit; split <;> simp only [binom_zero] <;> decide
+  | succ n ih =>
+    intro c
+    cases c with
+    | zero => simp only [bcrit, if_true]; exact binom_nonneg _ _ h1 hn hc _ _
+    | succ c =>
+      have e : bcrit wn wc (n + 1) (c + 1) = binom wn wc (n + 1) c := by simp [bcrit]
+      rw [e, binom_succ _ _ h1, binom_succ _ _ h1]
+      have i1 := ih (c + 1)
+      have e2 : bcrit wn wc n (c + 1) = binom wn wc n c := by simp [bcrit]
+      rw [e2] at i1
+      have i2 := ih c
+      have m1 := Rat.mul_le_mul_of_nonneg_left i1 hn
+      have m2 := Rat.mul_le_mul_of_nonneg_left (show bcrit wn wc n c ≤ binom wn wc n c from i2) hc
+      rw [e2]
+      grind
+
+theorem bcrit_nonneg (wn wc : Rat) (h1 : wn + wc = 1) (hn : 0 ≤ wn) (hc : 0 ≤ wc) (n c : Nat) :
+    0 ≤ bcrit wn wc n c := by
+  unfold bcrit; split
+  · exact Rat.le_refl
+  · exact binom_nonneg _ _ h1 hn hc _ _
+
+/-- The crit roll's two weights. -/
+def critWn (d : Damage) : Rat := ((100 - d.mCrit : Nat) : Rat) / 100
+def critWc (d : Damage) : Rat := ((d.mCrit : Nat) : Rat) / 100
+
+theorem roll_weights (pct : Nat) (h : pct ≤ 100) :
+    ((100 - pct : Nat) : Rat) / 100 + ((pct : Nat) : Rat) / 100 = 1 ∧
+      0 ≤ ((100 - pct : Nat) : Rat) / 100 ∧ 0 ≤ ((pct : Nat) : Rat) / 100 := by
+  have h2 : ((100 - pct : Nat) : Rat) + (pct : Rat) = 100 := by
+    rw [← Rat.natCast_add, Nat.sub_add_cancel h]; rfl
+  have h3 := @Rat.natCast_nonneg (100 - pct)
+  have h4 := @Rat.natCast_nonneg pct
+  refine ⟨?_, ?_, ?_⟩ <;> grind
+
+theorem crit_weights (d : Damage) (hm100 : d.mCrit ≤ 100) :
+    critWn d + critWc d = 1 ∧ 0 ≤ critWn d ∧ 0 ≤ critWc d := roll_weights d.mCrit hm100
+
+theorem lsum_filter_ne_zero_mul (G : Int → Rat) :
+    ∀ xs : List (Rat × Int),
+      lsum (fun x => x.1 * G x.2) (xs.filter (fun b => b.1 ≠ 0))
+        = lsum (fun x => x.1 * G x.2) xs := by
+  intro xs
+  induction xs with
+  | nil => rfl
+  | cons x xs ih =>
+    by_cases h : x.1 = 0
+    · rw [List.filter_cons_of_neg (by simp [h]), ih]
+      simp only [lsum, List.map_cons, List.foldr_cons, h]; grind
+    · rw [List.filter_cons_of_pos (by simp [h])]
+      simp only [lsum, List.map_cons, List.foldr_cons] at ih ⊢
+      rw [ih]
+
+/-- A sum over a crit roll is at least its two weighted per-outcome bounds. -/
+theorem lsum_roll_ge (pct : Nat) (a b : Int) (g : Rat × Int → Rat) (G : Int → Rat)
+    (hg : ∀ x ∈ roll pct a b, x.1 * G x.2 ≤ g x) :
+    ((100 - pct : Nat) : Rat) / 100 * G a + ((pct : Nat) : Rat) / 100 * G b
+      ≤ lsum g (roll pct a b) := by
+  have he : lsum (fun x => x.1 * G x.2) (roll pct a b)
+      = ((100 - pct : Nat) : Rat) / 100 * G a + ((pct : Nat) : Rat) / 100 * G b := by
+    unfold roll
+    rw [lsum_filter_ne_zero_mul]
+    simp only [lsum, List.map_cons, List.map_nil, List.foldr_cons, List.foldr_nil]
+    grind
+  rw [← he]
+  exact lsum_le _ _ _ hg
+
+/-- A sum over a crit roll whose every branch is worth its weight times `T`. -/
+theorem lsum_roll_ge_const (pct : Nat) (h : pct ≤ 100) (a b : Int) (g : Rat × Int → Rat) (T : Rat)
+    (hg : ∀ x ∈ roll pct a b, x.1 * T ≤ g x) : T ≤ lsum g (roll pct a b) := by
+  have h1 := lsum_roll_ge pct a b g (fun _ => T) hg
+  have ⟨hw, _, _⟩ := roll_weights pct h
+  simp only at h1
+  rw [← Rat.add_mul, hw, Rat.one_mul] at h1
+  exact h1
+
+theorem khit_ge (d : Damage) (hd : d.dieNormal ≤ d.dieCrit) (c : Nat) : d.dieNormal ≤ khit d c := by
+  unfold khit; split <;> omega
+
+theorem khit_pos (d : Damage) {c : Nat} (h : 0 < c) : khit d c = d.dieCrit := by
+  simp [khit, h]
+
+theorem khit_zero (d : Damage) : khit d 0 = d.dieNormal := by simp [khit]
+
+/-- Trading a normal hit now for one more crit later never helps the path: if
+the path from `x - dieCrit` with `c` crits wins, so does the one from
+`x - dieNormal` with `c + 1` (its pool is never lower at any check). -/
+theorem kpath_shift (d : Damage) (pf : Bool) (hd : d.dieNormal ≤ d.dieCrit) :
+    ∀ (fuel : Nat) (r m x : Int) (c : Nat),
+      kpath d pf fuel r m (x - d.dieCrit) c = true →
+      kpath d pf fuel r m (x - d.dieNormal) (c + 1) = true := by
+  intro fuel
+  induction fuel with
+  | zero => intro r m x c hw; simp [kpath] at hw
+  | succ fuel ih =>
+    intro r m x c hw
+    have hc1 : khit d (c + 1) = d.dieCrit := khit_pos d (by omega)
+    have hkg := khit_ge d hd c
+    cases pf
+    · simp only [kpath, Bool.false_eq_true, if_false] at hw ⊢
+      rw [hc1, Nat.add_sub_cancel]
+      by_cases w1 : x - d.dieCrit - khit d c ≤ 0
+      · rw [if_pos w1] at hw; exact absurd hw (by decide)
+      rw [if_neg w1] at hw
+      by_cases w2 : 0 < tick d false r ∧ x - d.dieCrit - khit d c - tick d false r ≤ 0
+      · rw [if_pos w2] at hw; exact absurd hw (by decide)
+      rw [if_neg w2] at hw
+      have g1 : ¬ x - d.dieNormal - d.dieCrit ≤ 0 := by omega
+      have g2 : ¬ (0 < tick d false r ∧ x - d.dieNormal - d.dieCrit - tick d false r ≤ 0) :=
+        fun h => w2 ⟨h.1, by omega⟩
+      rw [if_neg g1, if_neg g2]
+      by_cases w3 : m - d.killNormal ≤ 0
+      · rw [if_pos w3]
+      rw [if_neg w3] at hw ⊢
+      cases c with
+      | zero =>
+        rw [khit_zero] at hw
+        have e : x - d.dieNormal - d.dieCrit - tick d false r
+            = x - d.dieCrit - d.dieNormal - tick d false r := by omega
+        rw [e]; exact hw
+      | succ c =>
+        rw [khit_pos d (by omega), Nat.add_sub_cancel] at hw
+        have e1 : x - d.dieCrit - d.dieCrit - tick d false r
+            = (x - d.dieCrit - tick d false r) - d.dieCrit := by omega
+        have e2 : x - d.dieNormal - d.dieCrit - tick d false r
+            = (x - d.dieCrit - tick d false r) - d.dieNormal := by omega
+        rw [e1] at hw; rw [e2]; exact ih _ _ _ _ hw
+    · simp only [kpath, if_true] at hw ⊢
+      rw [hc1, Nat.add_sub_cancel]
+      by_cases w1 : 0 < tick d true r ∧ x - d.dieCrit - tick d true r ≤ 0
+      · rw [if_pos w1] at hw; exact absurd hw (by decide)
+      rw [if_neg w1] at hw
+      have g1 : ¬ (0 < tick d true r ∧ x - d.dieNormal - tick d true r ≤ 0) :=
+        fun h => w1 ⟨h.1, by omega⟩
+      rw [if_neg g1]
+      by_cases w3 : m - d.killNormal ≤ 0
+      · rw [if_pos w3]
+      rw [if_neg w3] at hw ⊢
+      by_cases w2 : x - d.dieCrit - tick d true r - khit d c ≤ 0
+      · rw [if_pos w2] at hw; exact absurd hw (by decide)
+      rw [if_neg w2] at hw
+      have g2 : ¬ x - d.dieNormal - tick d true r - d.dieCrit ≤ 0 := by omega
+      rw [if_neg g2]
+      cases c with
+      | zero =>
+        rw [khit_zero] at hw
+        have e : x - d.dieNormal - tick d true r - d.dieCrit
+            = x - d.dieCrit - tick d true r - d.dieNormal := by omega
+        rw [e]; exact hw
+      | succ c =>
+        rw [khit_pos d (by omega), Nat.add_sub_cancel] at hw
+        have e1 : x - d.dieCrit - tick d true r - d.dieCrit
+            = (x - tick d true r - d.dieCrit) - d.dieCrit := by omega
+        have e2 : x - d.dieNormal - tick d true r - d.dieCrit
+            = (x - tick d true r - d.dieCrit) - d.dieNormal := by omega
+        rw [e1] at hw; rw [e2]; exact ih _ _ _ _ hw
+
+/-- The hit roll's split of `binom (n + 1) c`: a normal hit keeps the budget, a
+crit spends one (`bcrit`). -/
+theorem hit_level (d : Damage) (hm100 : d.mCrit ≤ 100)
+    (n c : Nat) (f : Rat × Int → List (Rat × Ending))
+    (hf : ∀ x ∈ roll d.mCrit d.dieNormal d.dieCrit,
+      x.1 * (if x.2 ≤ d.dieNormal then binom (critWn d) (critWc d) n c
+        else bcrit (critWn d) (critWc d) n c) ≤ winProb (f x)) :
+    binom (critWn d) (critWc d) (n + 1) c
+      ≤ winProb ((roll d.mCrit d.dieNormal d.dieCrit).flatMap f) := by
+  have ⟨h1, hn, hc⟩ := crit_weights d hm100
+  rw [winProb_flatMap, binom_succ _ _ h1]
+  refine Rat.le_trans ?_ (lsum_roll_ge _ _ _ _ (fun h => if h ≤ d.dieNormal then
+    binom (critWn d) (critWc d) n c else bcrit (critWn d) (critWc d) n c) hf)
+  simp only [Int.le_refl, if_true]
+  have hb : bcrit (critWn d) (critWc d) n c ≤
+      (if d.dieCrit ≤ d.dieNormal then binom (critWn d) (critWc d) n c
+        else bcrit (critWn d) (critWc d) n c) := by
+    split
+    · exact bcrit_le_binom _ _ h1 hn hc _ _
+    · exact Rat.le_refl
+  have := Rat.mul_le_mul_of_nonneg_left hb hc
+  unfold critWn critWc at *
+  grind
+
+theorem tree_critBound (d : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
+    (hk : d.killNormal ≤ d.killCrit) (hd : d.dieNormal ≤ d.dieCrit)
+    (hp100 : d.pCrit ≤ 100) (hm100 : d.mCrit ≤ 100) :
+    ∀ (fuel : Nat) (r m m' p p' : Int) (c : Nat), m ≤ m' → p' ≤ p →
+      kpath d pf fuel r m' p' c = true →
+      binom (critWn d) (critWc d) (mturns d pf fuel m') c
+        ≤ winProb (tree d pf maxPool rPool st fuel r m p 0) := by
+  have ⟨h1, hn, hc⟩ := crit_weights d hm100
+  have hb0 := binom_nonneg _ _ h1 hn hc
+  have hb1 := binom_le_one _ _ h1 hn hc
+  intro fuel
+  induction fuel with
+  | zero => intro r m m' p p' c _ _ hw; simp [kpath] at hw
+  | succ fuel ih =>
+    intro r m m' p p' c hm hp hw
+    have hkg := khit_ge d hd c
+    cases pf
+    · simp only [kpath, Bool.false_eq_true, if_false] at hw
+      by_cases w1 : p' - khit d c ≤ 0
+      · rw [if_pos w1] at hw; exact absurd hw (by decide)
+      rw [if_neg w1] at hw
+      by_cases w2 : 0 < tick d false r ∧ p' - khit d c - tick d false r ≤ 0
+      · rw [if_pos w2] at hw; exact absurd hw (by decide)
+      rw [if_neg w2] at hw
+      simp only [mturns, Bool.false_eq_true, if_false]
+      simp only [tree, Bool.false_eq_true, if_false, Formal.FightOutcome.drink_noStock]
+      generalize hn' : (if m' - d.killNormal ≤ 0 then 0 else mturns d false fuel (m' - d.killNormal))
+        = n'
+      apply hit_level d hm100
+      rintro ⟨wh, h⟩ hx
+      have hh := roll_mem hx
+      have hwh := roll_nonneg hx
+      simp only at hh hwh ⊢
+      by_cases hgood : h ≤ d.dieNormal ∨ 0 < c
+      · have hle : h ≤ khit d c := by
+          rcases hgood with hg | hg
+          · omega
+          · rw [khit_pos d hg]; omega
+        have g1 : ¬ p - h ≤ 0 := by omega
+        have g2 : ¬ (0 < tick d false r ∧ p - h - tick d false r ≤ 0) :=
+          fun h' => w2 ⟨h'.1, by omega⟩
+        rw [if_neg g1, if_neg g2, winProb_scaleBy]
+        apply Rat.mul_le_mul_of_nonneg_left _ hwh
+        rw [winProb_flatMap]
+        obtain ⟨c'', P', hV, hP', hkp⟩ : ∃ (c'' : Nat) (P' : Int),
+            (if h ≤ d.dieNormal then binom (critWn d) (critWc d) n' c
+              else bcrit (critWn d) (critWc d) n' c) = binom (critWn d) (critWc d) n' c'' ∧
+            P' ≤ p - h - tick d false r ∧
+            (¬ m' - d.killNormal ≤ 0 →
+              kpath d false fuel (r + 1) (m' - d.killNormal) P' c'' = true) := by
+          by_cases hhn : h ≤ d.dieNormal
+          · refine ⟨c, p' - d.dieNormal - tick d false r, by rw [if_pos hhn], by omega, ?_⟩
+            intro w3; rw [if_neg w3] at hw
+            cases c with
+            | zero => rw [khit_zero] at hw; exact hw
+            | succ c =>
+              rw [khit_pos d (by omega), Nat.add_sub_cancel] at hw
+              have e1 : p' - d.dieCrit - tick d false r = (p' - tick d false r) - d.dieCrit := by
+                omega
+              have e2 : p' - d.dieNormal - tick d false r
+                  = (p' - tick d false r) - d.dieNormal := by omega
+              rw [e1] at hw; rw [e2]; exact kpath_shift d false hd _ _ _ _ _ hw
+          · have hcpos : 0 < c := hgood.resolve_left hhn
+            refine ⟨c - 1, p' - d.dieCrit - tick d false r,
+              by rw [if_neg hhn, bcrit, if_neg (by omega)], by omega, ?_⟩
+            intro w3; rw [if_neg w3, khit_pos d hcpos] at hw; exact hw
+        rw [hV]
+        apply lsum_roll_ge_const _ hp100
+        rintro ⟨wk, kill⟩ hy
+        have hkk := roll_mem hy
+        have hwk := roll_nonneg hy
+        simp only at hkk hwk ⊢
+        split
+        · simp only [winProb_single, if_true]
+          have := Rat.mul_le_mul_of_nonneg_left (hb1 n' c'') hwk
+          rwa [Rat.mul_one] at this
+        · rename_i hmk
+          have w3 : ¬ m' - d.killNormal ≤ 0 := by omega
+          rw [winProb_scaleBy]
+          apply Rat.mul_le_mul_of_nonneg_left _ hwk
+          have := ih (r + 1) (m - kill) (m' - d.killNormal) (p - h - tick d false r) P' c''
+            (by omega) hP' (hkp w3)
+          rw [← hn', if_neg w3]; exact this
+      · have hc0 : c = 0 := by omega
+        have hhn : ¬ h ≤ d.dieNormal := fun h' => hgood (Or.inl h')
+        rw [if_neg hhn, bcrit, if_pos hc0, Rat.mul_zero]
+        split
+        · simp only [winProb_single, Bool.false_eq_true, if_false]; exact Rat.le_refl
+        · split
+          · simp only [winProb_single, Bool.false_eq_true, if_false]; exact Rat.le_refl
+          · rw [winProb_scaleBy, winProb_flatMap]
+            apply Rat.mul_nonneg hwh
+            apply lsum_nonneg
+            rintro ⟨wk, kill⟩ hy
+            have hwk := roll_nonneg hy
+            simp only at hwk ⊢
+            split
+            · simp only [winProb_single, if_true]; exact hwk
+            · rw [winProb_scaleBy]; exact Rat.mul_nonneg hwk (tree_wp_nonneg _ _ _ _ _ _ _ _ _ _)
+    · simp only [kpath, if_true] at hw
+      by_cases w1 : 0 < tick d true r ∧ p' - tick d true r ≤ 0
+      · rw [if_pos w1] at hw; exact absurd hw (by decide)
+      rw [if_neg w1] at hw
+      have g0 : ¬ (0 < tick d true r ∧ p - tick d true r ≤ 0) := fun h => w1 ⟨h.1, by omega⟩
+      simp only [mturns, if_true]
+      simp only [tree, if_true, if_neg g0, Formal.FightOutcome.drink_noStock]
+      rw [winProb_flatMap]
+      by_cases w3 : m' - d.killNormal ≤ 0
+      · rw [if_pos w3, binom_zero]
+        apply lsum_roll_ge_const _ hp100
+        rintro ⟨wk, kill⟩ hy
+        have hkk := roll_mem hy
+        have hwk := roll_nonneg hy
+        simp only at hkk hwk ⊢
+        have hmk : m - kill ≤ 0 := by omega
+        rw [if_pos hmk]
+        simp only [winProb_single, if_true, Rat.mul_one]
+        exact Rat.le_refl
+      rw [if_neg w3] at hw ⊢
+      by_cases w4 : p' - tick d true r - khit d c ≤ 0
+      · rw [if_pos w4] at hw; exact absurd hw (by decide)
+      rw [if_neg w4] at hw
+      apply lsum_roll_ge_const _ hp100
+      rintro ⟨wk, kill⟩ hy
+      have hkk := roll_mem hy
+      have hwk := roll_nonneg hy
+      simp only at hkk hwk ⊢
+      split
+      · simp only [winProb_single, if_true]
+        have := Rat.mul_le_mul_of_nonneg_left (hb1 (mturns d true fuel (m' - d.killNormal) + 1) c) hwk
+        rwa [Rat.mul_one] at this
+      · rename_i hmk
+        rw [winProb_scaleBy]
+        apply Rat.mul_le_mul_of_nonneg_left _ hwk
+        apply hit_level d hm100
+        rintro ⟨wh, h⟩ hx
+        have hh := roll_mem hx
+        have hwh := roll_nonneg hx
+        simp only at hh hwh ⊢
+        by_cases hgood : h ≤ d.dieNormal ∨ 0 < c
+        · have hle : h ≤ khit d c := by
+            rcases hgood with hg | hg
+            · omega
+            · rw [khit_pos d hg]; omega
+          have g1 : ¬ p - tick d true r - h ≤ 0 := by omega
+          rw [if_neg g1, winProb_scaleBy]
+          apply Rat.mul_le_mul_of_nonneg_left _ hwh
+          obtain ⟨c'', P', hV, hP', hkp⟩ : ∃ (c'' : Nat) (P' : Int),
+              (if h ≤ d.dieNormal then
+                  binom (critWn d) (critWc d) (mturns d true fuel (m' - d.killNormal)) c
+                else bcrit (critWn d) (critWc d) (mturns d true fuel (m' - d.killNormal)) c)
+                = binom (critWn d) (critWc d) (mturns d true fuel (m' - d.killNormal)) c'' ∧
+              P' ≤ p - tick d true r - h ∧
+              kpath d true fuel (r + 1) (m' - d.killNormal) P' c'' = true := by
+            by_cases hhn : h ≤ d.dieNormal
+            · refine ⟨c, p' - tick d true r - d.dieNormal, by rw [if_pos hhn], by omega, ?_⟩
+              cases c with
+              | zero => rw [khit_zero] at hw; exact hw
+              | succ c =>
+                rw [khit_pos d (by omega), Nat.add_sub_cancel] at hw
+                exact kpath_shift d true hd _ _ _ _ _ hw
+            · have hcpos : 0 < c := hgood.resolve_left hhn
+              refine ⟨c - 1, p' - tick d true r - d.dieCrit,
+                by rw [if_neg hhn, bcrit, if_neg (by omega)], by omega, ?_⟩
+              rw [khit_pos d hcpos] at hw; exact hw
+          rw [hV]
+          exact ih (r + 1) (m - kill) (m' - d.killNormal) (p - tick d true r - h) P' c''
+            (by omega) hP' hkp
+        · have hc0 : c = 0 := by omega
+          have hhn : ¬ h ≤ d.dieNormal := fun h' => hgood (Or.inl h')
+          rw [if_neg hhn, bcrit, if_pos hc0, Rat.mul_zero]
+          split
+          · simp only [winProb_single, Bool.false_eq_true, if_false]; exact Rat.le_refl
+          · rw [winProb_scaleBy]; exact Rat.mul_nonneg hwh (tree_wp_nonneg _ _ _ _ _ _ _ _ _ _)
+
+/-- The proved P(win) floor of a fight at no stock (see `winProb_ge_critBound`):
+if the counted-crit path from the fight's start with budget `c` wins, every path
+with at most `c` monster crits wins, so P(win) is at least P(at most `c` of the
+path's `mturns` monster turns crit). Follows `fightOdds`' gate. -/
+def critBound (t : Terms) (d : Damage) (hp maxHp : Int) (c : Nat) : Rat :=
+  match gate t with
+  | .outSustain => 1
+  | .none =>
+    if effHp hp maxHp * scale ≤ 0 then 0
+    else if kpath d t.playerFirst maxTurns.toNat 1 (d.monsterHp * scale) (effHp hp maxHp * scale) c
+    then binom (critWn d) (critWc d) (mturns d t.playerFirst maxTurns.toNat (d.monsterHp * scale)) c
+    else 0
+  | _ => 0
+
+/-- **The counted-crit floor.** P(win) at any stock is at least `critBound` for
+any crit budget `c`: with no stock `drink` is the identity, so a path's pool
+after its monster turns depends only on how many of them crit (`kpath_shift`),
+and a player crit only kills sooner; more stock never lowers P(win)
+(`fightOdds_win_mono_stock`). `winProb_eq_one_of_worst` is the budget-`mturns`
+case's cousin. -/
+theorem winProb_ge_critBound (t : Terms) (d : Damage) (hp maxHp : Int) (restore stock c : Nat)
+    (hk : d.killNormal ≤ d.killCrit) (hd : d.dieNormal ≤ d.dieCrit)
+    (hp100 : d.pCrit ≤ 100) (hm100 : d.mCrit ≤ 100) :
+    critBound t d hp maxHp c ≤ winProb (fightOdds t d hp maxHp restore stock) := by
+  refine Rat.le_trans ?_
+    (fightOdds_win_mono_stock t d hp maxHp restore 0 stock (Nat.zero_le _) hp100 hm100)
+  unfold critBound fightOdds
+  cases gate t <;> dsimp only
+  case outSustain => simp only [winProb_single, if_true]; exact Rat.le_refl
+  case none =>
+    split
+    · simp only [winProb_single, Bool.false_eq_true, if_false]; exact Rat.le_refl
+    · split
+      · rename_i hw
+        exact tree_critBound d _ _ _ 0 hk hd hp100 hm100 _ _ _ _ _ _ _
+          (Int.le_refl _) (Int.le_refl _) hw
+      · exact tree_wp_nonneg _ _ _ _ _ _ _ _ _ _
+  all_goals simp only [winProb_single, Bool.false_eq_true, if_false]; exact Rat.le_refl
 
 end Formal.FightOdds

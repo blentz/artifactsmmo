@@ -3484,6 +3484,21 @@ example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp 
       ≤ Formal.FightOdds.winProb (Formal.FightOdds.fightOdds t d hp' maxHp restore stock) :=
   @Formal.FightOdds.fightOdds_win_mono_hp
 
+example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp maxHp : Int)
+    (restore stock : Nat), d.killNormal ≤ d.killCrit → d.dieNormal ≤ d.dieCrit →
+    d.pCrit ≤ 100 → d.mCrit ≤ 100 →
+    Formal.FightOdds.winProb
+      (Formal.FightOdds.fightOdds t { d with pCrit := 0, mCrit := 100 } hp maxHp restore 0) = 1 →
+    Formal.FightOdds.winProb (Formal.FightOdds.fightOdds t d hp maxHp restore stock) = 1 :=
+  @Formal.FightOdds.winProb_eq_one_of_worst
+
+example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp maxHp : Int)
+    (restore stock c : Nat), d.killNormal ≤ d.killCrit → d.dieNormal ≤ d.dieCrit →
+    d.pCrit ≤ 100 → d.mCrit ≤ 100 →
+    Formal.FightOdds.critBound t d hp maxHp c
+      ≤ Formal.FightOdds.winProb (Formal.FightOdds.fightOdds t d hp maxHp restore stock) :=
+  @Formal.FightOdds.winProb_ge_critBound
+
 /-! ### GroupFight contracts. -/
 
 example : ∀ (b : Formal.GroupFight.Boss) (m : Formal.GroupFight.Member),

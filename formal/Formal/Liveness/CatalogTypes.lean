@@ -49,8 +49,10 @@ deriving Repr, DecidableEq
 /-- One band level's verified winnability WITNESS for the kernel
 `winnableAcrossBand_grounded` proof. Carries the winning monster (code + level),
 the `pick_loadout` loadout codes (every item `level ≤ level`, obtainability per
-Task 3's `canonicalPlan`), the production-projected player combat scalars, and
-the exact integer inputs `Formal.PredictWin.predictWin` reads. Emitted into
+Task 3's `canonicalPlan`), the production-projected player combat scalars, the
+closed-form integer inputs `Formal.PredictWin.predictWin` reads (projection pin
+only), and the fight-odds `Terms`/`Damage`/HP/restore the kernel decides the
+row's verdict over (`WinnableGrounded.rowWinnable`). Emitted into
 `GameDataFixture.lean` by `formal/sim/generate_lean_fixture.py`; the projection's
 fidelity to production is differential-pinned by
 `formal/diff/test_winnable_witness_diff.py`. -/
@@ -87,6 +89,32 @@ structure WitnessRow where
   mGreed : Int := 0
   mEnchantedMirror : Int := 0
   playerFirst : Bool
+  -- The fight-odds inputs the kernel DECIDES (production `combat.fight_split`,
+  -- spec 2026-10-15 fight-gates-odds §5): the `Formal.FightOutcome.Terms` ...
+  tRawPlayer : Int
+  tKillStep : Int
+  tMonsterHp : Int
+  tRecon : Int
+  tDieStep : Int
+  tPlayerFirst : Bool
+  -- ... the `Formal.FightOdds.Damage` at the row's REAL crit chances ...
+  dMonsterHp : Int
+  dKillNormal : Int
+  dKillCrit : Int
+  dPCrit : Nat
+  dDieNormal : Int
+  dDieCrit : Int
+  dMCrit : Nat
+  dBurn : List Int
+  -- ... and the fight's start HP, max HP and worn restore potion (HP, stock).
+  fightHp : Int
+  fightMaxHp : Int
+  restore : Nat
+  stock : Nat
+  -- The crit-budget certificate `Formal.FightOdds.critBound` reads (the most
+  -- monster crits the never-critting player survives); soundness does not
+  -- depend on its value.
+  critBudget : Nat
 deriving Repr, DecidableEq
 
 end Formal.Liveness

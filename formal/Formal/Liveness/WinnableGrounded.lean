@@ -1,7 +1,7 @@
 import Formal.Liveness.GameDataFixture
 import Formal.CombatTargetExistence
 import Formal.Liveness.GearTierLeveling
-import Formal.PredictWin
+import Formal.FightOdds
 import Mathlib.Tactic
 
 /-! # WinnableGrounded — kernel-prove `WinnableAcrossBand` over the live catalog
@@ -14,19 +14,30 @@ extracted live catalog, kernel-checked.
 
 ## What is proven in the kernel vs. pinned by differential
 
-* The combat VERDICT (`Formal.PredictWin.predictWin`, an exact-integer mirror of
-  production `predict_win`, itself differential-locked by
-  `formal/diff/test_predict_win_diff.py`) is computed IN KERNEL over the witness
-  scalars and `decide`d.
+* The combat VERDICT is production's fight odds (spec 2026-10-15
+  fight-gates-odds §1/§5): `predict_win` is `P(win) ≥ θ` over the exact ending
+  distribution `Formal.FightOdds.fightOdds` (differential-locked to production
+  `fight_odds_core.fight_odds` by `formal/diff/test_fight_odds_diff.py`). Deciding
+  `fightOdds` itself is infeasible (an unmerged 4^rounds tree), so each row is
+  decided IN KERNEL on its counted-crit floor `Formal.FightOdds.critBound`: one
+  no-stock path (the player never crits, the monster crits its first
+  `critBudget` turns) and a binomial table. `witnessTheta ≤ critBound` is
+  `decide +kernel`d per row, and `Formal.FightOdds.winProb_ge_critBound` (proved
+  for every input, any stock) lifts it to `θ ≤ winProb (fightOdds …)` for every
+  θ ≤ `witnessTheta` (`rowWinnable_sound`). The old closed form
+  (`Formal.PredictWin.predictWin`) is no longer the verdict; its scalars stay in
+  the rows only for the projection pin.
 
-* The messy loadout PROJECTION (base stats + summed item stats → the scalar
-  inputs `predictWin` takes) is computed in PYTHON by the real production chain
-  (`pick_loadout` + `project_loadout_stats`) and emitted into `winnableWitness`
-  (`GameDataFixture.lean`). Its fidelity to production is pinned by
-  `formal/diff/test_winnable_witness_diff.py`, which re-derives each row's
-  projection from `project_loadout_stats` and asserts the verdict equals
-  production `is_winnable`. The kernel trusts the projection only as far as that
-  differential enforces it — the witness is never hand-massaged.
+* The messy loadout PROJECTION and fight SPLIT (base stats + summed item stats →
+  the `Terms`/`Damage`/HP/restore the odds take) are computed in PYTHON by the
+  real production chain (`pick_loadout` + `project_loadout_stats` +
+  `combat.fight_split` / `fight_max_hp` / `worn_restore`) and emitted into
+  `winnableWitness` (`GameDataFixture.lean`). Their fidelity to production is
+  pinned by `formal/diff/test_winnable_witness_diff.py`, which re-derives each
+  row from production, asserts production `is_winnable` is True and the Python
+  mirror of `critBound` is ≥ 99/100. The kernel trusts the scalars only as far as
+  that differential enforces them — the witness is never hand-massaged. The
+  `critBudget` certificate is NOT trusted: any budget gives a sound floor.
 
 * Loadout OBTAINABILITY: every witness loadout item has `level ≤ L` (asserted by
   the same differential), and that an obtainable loadout is reachable in the
@@ -39,7 +50,8 @@ THIS module verifies, purely in the kernel, that the witness witnesses
 
 Liveness-tier (imports Mathlib). NO new axioms beyond the standard set + LIV-001
 carried by the imports; the band-reduction lemma is `decide`/`omega`, the
-per-row verdict is `decide` over integer arithmetic.
+per-row verdict is `decide +kernel` over exact `Rat` arithmetic (no
+`native_decide`).
 -/
 
 set_option maxRecDepth 100000
@@ -52,13 +64,44 @@ open Formal.Liveness.GearTierLeveling
 open Formal.Liveness.GameDataFixture
 open Formal.PredictWin
 
-/-- The winnability verdict for a witness row: kernel `predictWin` over the
-production-projected scalars. -/
+/-- The P(win) every witness row is proved to reach. Liveness holds for any
+character threshold θ ≤ 99/100 (`rowWinnable_sound`); a learned θ =
+t_loss / (t_win + t_loss) reaches 0.99 only when a loss costs 99 wins. -/
+def witnessTheta : Rat := 99 / 100
+
+/-- The row's fight-odds `Terms` (production `fight_split`'s terms). -/
+def rowTerms (r : WitnessRow) : Formal.FightOutcome.Terms :=
+  { rawPlayer := r.tRawPlayer, killStep := r.tKillStep, monsterHp := r.tMonsterHp,
+    recon := r.tRecon, dieStep := r.tDieStep, playerFirst := r.tPlayerFirst }
+
+/-- The row's round `Damage` at its real crit chances (production `fight_split`). -/
+def rowDamage (r : WitnessRow) : Formal.FightOdds.Damage :=
+  { monsterHp := r.dMonsterHp, killNormal := r.dKillNormal, killCrit := r.dKillCrit,
+    pCrit := r.dPCrit, dieNormal := r.dDieNormal, dieCrit := r.dDieCrit, mCrit := r.dMCrit,
+    burn := r.dBurn }
+
+/-- The row's fight odds: from its start HP, at its max HP, with its worn restore. -/
+def rowOdds (r : WitnessRow) : List (Rat × Formal.FightOdds.Ending) :=
+  Formal.FightOdds.fightOdds (rowTerms r) (rowDamage r) r.fightHp r.fightMaxHp r.restore r.stock
+
+/-- The row's proved floor on P(win) (`Formal.FightOdds.critBound` at its crit budget). -/
+def rowBound (r : WitnessRow) : Rat :=
+  Formal.FightOdds.critBound (rowTerms r) (rowDamage r) r.fightHp r.fightMaxHp r.critBudget
+
+/-- The winnability verdict for a witness row: the floor's side conditions and
+`witnessTheta ≤ rowBound`, all decidable over the row's exact scalars. -/
 def rowWinnable (r : WitnessRow) : Bool :=
-  predictWin r.rawPlayer r.pCrit r.monsterHp r.rawMonster r.mCrit r.pMaxHp
-    r.pLifesteal r.pAtkSum r.mLifesteal r.mAtkSum r.mPoison r.mBarrier r.mBurn
-    r.mHealing r.mReconstitution r.mVoidDrain r.mBerserk r.mFrenzy r.mBubble
-    r.pAntipoison r.mSunShield r.mGreed r.mEnchantedMirror r.playerFirst
+  decide (r.dKillNormal ≤ r.dKillCrit) && decide (r.dDieNormal ≤ r.dDieCrit)
+    && decide (r.dPCrit ≤ 100) && decide (r.dMCrit ≤ 100) && decide (witnessTheta ≤ rowBound r)
+
+/-- A winnable row's fight is won with probability at least any θ ≤
+`witnessTheta`, at the row's real crit chances and stock — so production's
+`predict_win` (`P(win) ≥ θ`) holds for the row at every such threshold. -/
+theorem rowWinnable_sound (r : WitnessRow) (h : rowWinnable r = true) (θ : Rat)
+    (hθ : θ ≤ witnessTheta) : θ ≤ Formal.FightOdds.winProb (rowOdds r) := by
+  simp only [rowWinnable, Bool.and_eq_true, decide_eq_true_eq] at h
+  obtain ⟨⟨⟨⟨hk, hd⟩, hp⟩, hm⟩, hb⟩ := h
+  exact le_trans hθ (le_trans hb (Formal.FightOdds.winProb_ge_critBound _ _ _ _ _ _ _ hk hd hp hm))
 
 /-- The witness catalog as abstract `Monster`s: one entry per witness row, the
 `code` a stable row index, the `level` the row's winning monster level. Every
@@ -99,14 +142,14 @@ def rowWitnessesBand (r : WitnessRow) (i : Nat) : Bool :=
     && notOverleveled r.level (witnessMonster r i)
 
 /-- Every witness row witnesses its own band condition — the single `decide`
-over the 49-row table. The per-row `predictWin` integer arithmetic over the 49
-rows is a finite, fully-determined Boolean evaluation (an exact-integer function,
-no `Float`, no `Classical`); we discharge it by the kernel `decide` (no
-`native_decide`, so the no-sorry gate stays green and no `Lean.ofReduceBool`
-axiom is introduced). -/
+over the 49-row table. The per-row `critBound` over the 49 rows is a finite,
+fully-determined evaluation (exact `Int`/`Rat` arithmetic, no `Float`, no
+`Classical`); we discharge it by `decide +kernel` (no `native_decide`, so no
+`Lean.ofReduceBool` axiom is introduced). -/
 theorem all_rows_witness_band :
     (winnableWitness.zipIdx.all (fun (r, i) => rowWitnessesBand r i)) = true := by
-  decide
+  decide +kernel
+
 
 /-- Membership-aware extraction: every entry of `winnableWitness.zipIdx` satisfies
 `rowWitnessesBand`. -/
@@ -117,14 +160,30 @@ theorem rowWitnessesBand_of_mem (r : WitnessRow) (i : Nat)
   rw [List.all_eq_true] at hall
   exact hall (r, i) h
 
+/-- Every witness row's fight is won with probability at least any θ ≤
+`witnessTheta` — the odds verdict production's `predict_win` reads. -/
+theorem witness_rows_win (r : WitnessRow) (hr : r ∈ winnableWitness) (θ : Rat)
+    (hθ : θ ≤ witnessTheta) : θ ≤ Formal.FightOdds.winProb (rowOdds r) := by
+  obtain ⟨i, hi⟩ := List.mem_iff_getElem.mp hr
+  obtain ⟨hlt, rfl⟩ := hi
+  have hmem : (winnableWitness[i], i) ∈ winnableWitness.zipIdx :=
+    List.mem_zipIdx_iff_getElem?.mpr (List.getElem?_eq_getElem hlt)
+  have hband := rowWitnessesBand_of_mem _ _ hmem
+  unfold rowWitnessesBand winnableConcrete witnessMonster at hband
+  simp only [Bool.and_eq_true] at hband
+  have hw := hband.1.1.2
+  simp only [Int.toNat_natCast, List.getElem?_eq_getElem hlt] at hw
+  exact rowWinnable_sound _ hw θ hθ
+
 /-! ## The grounded theorem. -/
 
 /-- **`WinnableAcrossBand` discharged over the live catalog.** At every band
 level `1 ≤ L < 50` the witness catalog contains a winnable, XP-positive,
 not-overleveled monster — the witness row whose `level = L`. The winnability is
-the kernel `predictWin` verdict over production-projected scalars
-(differential-pinned), so this is a faithful grounding of the gear-tier
-hypothesis, not a re-derivation of `pick_loadout`. -/
+the kernel-decided counted-crit floor over production's fight split
+(differential-pinned), which by `rowWinnable_sound` gives P(win) ≥ θ for every
+θ ≤ `witnessTheta` — a faithful grounding of the gear-tier hypothesis on the
+odds verdict, not a re-derivation of `pick_loadout`. -/
 theorem winnableAcrossBand_grounded :
     WinnableAcrossBand winnableConcrete xpPosConcrete catalogAsMonsters := by
   intro L hL

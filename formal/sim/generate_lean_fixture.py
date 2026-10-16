@@ -220,8 +220,8 @@ def _emit_witness_table(lines: list[str], rows: list[WitnessRow]) -> None:
     lines.append("/-! ## WinnableAcrossBand witness table (one row per band level 1..49)")
     lines.append("")
     lines.append("  Each row: the winning monster + `pick_loadout` loadout + the")
-    lines.append("  production-projected `predictWin` scalars at that level. The")
-    lines.append("  projection's fidelity is pinned by")
+    lines.append("  production-projected closed-form scalars + production `fight_split`'s")
+    lines.append("  fight-odds `Terms`/`Damage` at that level. Their fidelity is pinned by")
     lines.append("  `formal/diff/test_winnable_witness_diff.py`. -/")
     lines.append("")
     lines.append("def winnableWitness : List WitnessRow :=")
@@ -243,7 +243,18 @@ def _emit_witness_table(lines: list[str], rows: list[WitnessRow]) -> None:
             + f"      mHealing := {r.m_healing}, mReconstitution := {r.m_reconstitution}, "
             + f"mVoidDrain := {r.m_void_drain}\n"
             + f"      mBerserk := {r.m_berserk}, mFrenzy := {r.m_frenzy}, mBubble := {r.m_bubble}\n"
-            + f"      playerFirst := {first} }}"
+            + f"      playerFirst := {first}\n"
+            + f"      tRawPlayer := {r.t_raw_player}, tKillStep := {r.t_kill_step}, "
+            + f"tMonsterHp := {r.t_monster_hp}, tRecon := {r.t_recon}\n"
+            + f"      tDieStep := {r.t_die_step}, "
+            + f"tPlayerFirst := {'true' if r.t_player_first else 'false'}\n"
+            + f"      dMonsterHp := {r.d_monster_hp}, dKillNormal := {r.d_kill_normal}, "
+            + f"dKillCrit := {r.d_kill_crit}, dPCrit := {r.d_p_crit}\n"
+            + f"      dDieNormal := {r.d_die_normal}, dDieCrit := {r.d_die_crit}, "
+            + f"dMCrit := {r.d_m_crit}\n"
+            + f"      dBurn := [{', '.join(str(b) for b in r.d_burn)}]\n"
+            + f"      fightHp := {r.fight_hp}, fightMaxHp := {r.fight_max_hp}, "
+            + f"restore := {r.restore}, stock := {r.stock}, critBudget := {r.crit_budget} }}"
         )
     lines.append(",\n".join(row_strs))
     lines.append("  ]")
