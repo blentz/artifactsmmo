@@ -12,10 +12,13 @@ stocks the cycle's chosen loadout), the gate's is whether a loadout exists. The
 ingredients of a craftable potion are not walked here.
 
 Each loadout (`fight_walk.loadouts`) is walked with a full slot, as the pick
-walks it. Food is eaten between fights, so it never decides a win.
+walks it, and wins when its exact P(win) (`fight_walk.odds_walk`) reaches the
+character's threshold for the monster (`combat.win_threshold`) — the verdict
+every fight gate reads (spec 2026-10-15 fight-gates-odds §1). Food is eaten
+between fights, so it never decides a win.
 
 The verdict is memoized per catalogue (`CatalogueScope`) on exactly what the
-walk reads: the monster, the stockable potions, and the state's fight fields —
+walk reads: the monster, its threshold, the stockable potions, and the state's fight fields —
 level, max HP, the combat stats `project_loadout_stats` reads, the worn gear,
 and the bag's equippable codes (`pick_loadout_cached`'s pool). The planner asks
 it for every non-bare-winnable dropper on every obtain walk (census 40 s ->
@@ -23,7 +26,9 @@ it for every non-bare-winnable dropper on every obtain walk (census 40 s ->
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
-from artifactsmmo_cli.ai.fight_walk import fight_walk, loadouts, potion_effects_usable
+from artifactsmmo_cli.ai.combat import win_threshold
+from artifactsmmo_cli.ai.fight_odds_core import win_probability
+from artifactsmmo_cli.ai.fight_walk import loadouts, odds_walk, potion_effects_usable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.heal_catalog import POTION
 from artifactsmmo_cli.ai.held_stock import held_count
@@ -65,15 +70,17 @@ def fight_key(state: WorldState, game_data: GameData) -> tuple[object, ...]:
 
 
 def winning_loadout(state: WorldState, game_data: GameData, monster: str) -> tuple[str, ...] | None:
-    """The first loadout of stockable potions, in `loadouts` order, that wins
-    the fight from full HP; None when none does."""
+    """The first loadout of stockable potions, in `loadouts` order, whose
+    P(win) from full HP reaches the threshold; None when none does."""
     stockable = stockable_potions(state, game_data)
-    key = (monster, tuple(stockable), fight_key(state, game_data))
+    threshold = win_threshold(state, monster)
+    key = (monster, threshold, tuple(stockable), fight_key(state, game_data))
     memo = _WINS.cache_for(game_data)
     if key not in memo:
         found = next((codes for codes in loadouts(stockable, game_data) if codes
-                      and fight_walk(state, game_data, monster,
-                                     [(code, UTILITY_SLOT_MAX_STACK) for code in codes])[0].win),
+                      and win_probability(odds_walk(
+                          state, game_data, monster,
+                          [(code, UTILITY_SLOT_MAX_STACK) for code in codes])[0]) >= threshold),
                      None)
         _WINS.remember(memo, key, found)
     return memo[key]

@@ -193,6 +193,7 @@ from artifactsmmo_cli.ai.tiers.progression_tree import has_structural_upgrade
 from artifactsmmo_cli.ai.tiers.root_group import root_group_of
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.tracer import Tracer
+from artifactsmmo_cli.ai.win_threshold_core import THRESHOLD_WINDOW_DAYS, win_thresholds_from_rows
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from artifactsmmo_cli.ai.xp_demand import demand_roots, xp_demand
@@ -998,7 +999,7 @@ class GamePlayer:
         self._refresh_sibling_reads(datetime.now(tz=timezone.utc))
         self._adopt_lease_role(datetime.now(tz=timezone.utc))
         self._refresh_party(datetime.now(tz=timezone.utc))
-        self._refresh_lost_fights()
+        self._refresh_fight_record()
         state = self.state
         combat_monster = self._winnable_farm_target()
         ctx = self._selection_context(combat_monster)
@@ -1092,7 +1093,7 @@ class GamePlayer:
                 # BEFORE the actions, which take a party to a boss only a
                 # party wins (`party_win.party_participants`).
                 self._refresh_party(datetime.now(tz=timezone.utc))
-                self._refresh_lost_fights()
+                self._refresh_fight_record()
                 actions = self._build_actions()
 
                 assert self.state is not None
@@ -3576,14 +3577,20 @@ class GamePlayer:
             party = tuple(c for c in cards if c.character not in taken)
         self.state = replace(self.state, party=party)
 
-    def _refresh_lost_fights(self) -> None:
-        """`state.lost_fights` from the learned record (`combat.lost_fights`):
-        the solo fights the drop gate and the party pick must not take. Empty
-        without history."""
+    def _refresh_fight_record(self) -> None:
+        """`state.lost_fights` and `state.win_thresholds` from the learned
+        record: the solo fights the drop gate and the party pick must not take
+        (`combat.lost_fights`), and each monster's loss-cost threshold over the
+        last THRESHOLD_WINDOW_DAYS (`win_threshold_core`). Both empty without
+        history."""
         assert self.state is not None and self.game_data is not None
-        lost = (lost_fights(self.state, self.game_data, self.history)
-                if self.history is not None else frozenset[str]())
-        self.state = replace(self.state, lost_fights=lost)
+        if self.history is None:
+            self.state = replace(self.state, lost_fights=frozenset[str](), win_thresholds={})
+            return
+        lost = lost_fights(self.state, self.game_data, self.history)
+        since = (datetime.now(tz=timezone.utc) - timedelta(days=THRESHOLD_WINDOW_DAYS)).isoformat()
+        thresholds = win_thresholds_from_rows(self.history.fight_cost_rows(since))
+        self.state = replace(self.state, lost_fights=lost, win_thresholds=thresholds)
 
     def _release_party(self, action: Action) -> None:
         """End the lease a lost party fight was fought under."""

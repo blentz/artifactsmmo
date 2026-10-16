@@ -11,8 +11,13 @@ control-flow as `predict_win`, so the same monkeypatch strategy applies:
 The oracle returns `{"margin": int}` from the proved Lean `combatMargin`.
 The differential asserts exact int equality between Python and Lean.
 
-Invariant check: `predict_win(...) == (combat_margin(...) > 0)` is verified
-here in addition to the exact-value agreement, acting as a double-bind.
+Invariant check: the closed-form verdict `terms_win(combat_terms(...))` ==
+(combat_margin(...) > 0) is verified here in addition to the exact-value
+agreement, acting as a double-bind.
+
+Since 2026-10-15 `predict_win` reads the exact odds (spec fight-gates-odds §1);
+the closed form this harness pins is `terms_win(combat_terms(...))`, which the
+exits and `combat_margin` still read, so that is what it calls.
 """
 import random
 
@@ -21,6 +26,7 @@ from hypothesis import strategies as st
 from pytest import MonkeyPatch
 
 import artifactsmmo_cli.ai.combat as combat_mod
+from artifactsmmo_cli.ai.fight_terms_core import terms_win
 from artifactsmmo_cli.ai.equipment.projection import ProjectedStats
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.world_state import ELEMENTS
@@ -132,7 +138,7 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         mp.setattr(combat_mod, "pick_loadout_cached", lambda code, state, gd: loadout)
         mp.setattr(combat_mod, "project_loadout_stats", lambda state, loadout, gd: stats)
         py_margin = combat_mod.combat_margin(_FakeState(), _FakeGameData(), MONSTER)
-        py_win = combat_mod.predict_win(_FakeState(), _FakeGameData(), MONSTER)
+        py_win = terms_win(combat_mod.combat_terms(_FakeState(), _FakeGameData(), MONSTER))
 
     # Same arg layout as test_predict_win_diff.py (46 ints, indices 0..45).
     # RUF005 (unpack instead of `+`) is declined here and in test_predict_win_diff:

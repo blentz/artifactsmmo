@@ -193,7 +193,7 @@ def test_predict_win_at_current_hp_matches_lean(seed):
     with MonkeyPatch.context() as mp:
         mp.setattr(combat_mod, "pick_loadout_cached", lambda code, s, gd: {})
         mp.setattr(combat_mod, "project_loadout_stats", lambda s, loadout, gd: stats)
-        py = combat_mod.predict_win(state, _FakeGameData(), "M")
+        py = terms_win(combat_mod.combat_terms(state, _FakeGameData(), "M"))
         margin = combat_mod.combat_margin(state, _FakeGameData(), "M")
 
     # RUF005 declined: the positional 46-int oracle layout of test_predict_win_diff.py.

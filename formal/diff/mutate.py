@@ -744,6 +744,25 @@ FIGHT_TERMS_LADDER_MUTATIONS = [
 # the killStep≤0 / dieStep≤0 guard no longer fires, or a poison loss flips win).
 # All killStep / dieStep body anchors live in the extracted helpers
 # _kill_step_net / _die_step (combat.py) after helper extraction.
+# Spec 2026-10-15-fight-gates-odds §1/§3: the gates read the odds against the
+# character's measured threshold.
+PREDICT_WIN_ODDS_MUTATIONS = [
+    ("predict_win: the threshold itself loses (>= -> >)",
+     "    return win_probability(state, game_data, monster_code) >= win_threshold(state, monster_code)\n",
+     "    return win_probability(state, game_data, monster_code) > win_threshold(state, monster_code)\n"),
+    ("predict_win: the measured threshold is ignored",
+     "    return win_probability(state, game_data, monster_code) >= win_threshold(state, monster_code)\n",
+     "    return win_probability(state, game_data, monster_code) >= DEFAULT_WIN_THRESHOLD\n"),
+    ("win_threshold: the record is ignored",
+     "    return state.win_thresholds.get(monster_code, DEFAULT_WIN_THRESHOLD)\n",
+     "    return DEFAULT_WIN_THRESHOLD\n"),
+    ("secure_win: no three-quarter floor",
+     "        win_threshold(state, monster_code), SECURE_WIN)\n",
+     "        win_threshold(state, monster_code), Fraction(0))\n"),
+    ("secure_win: the threshold is ignored",
+     "        win_threshold(state, monster_code), SECURE_WIN)\n",
+     "        Fraction(0), SECURE_WIN)\n"),
+]
 PREDICT_WIN_LIFESTEAL_MUTATIONS = [
     ("predict_win: drop monster lifesteal term in killStep",
      "            - m_crit * m_lifesteal * m_atk_sum\n",
@@ -5841,8 +5860,13 @@ LOSS_RISK_GRIND_MUTATIONS = [
      "    pricing_ctx = replace(NO_PROFILE_CONTEXT, fight_records=ctx.fight_records)\n",
      "    pricing_ctx = NO_PROFILE_CONTEXT\n"),
     ("loss risk: the grind memo ignores the records",
-     "        fight_records,\n    )\n",
-     "        (),\n    )\n"),
+     "        fight_records,\n        tuple(sorted(state.win_thresholds.items())),\n    )\n",
+     "        (),\n        tuple(sorted(state.win_thresholds.items())),\n    )\n"),
+]
+WIN_THRESHOLD_GRIND_MUTATIONS = [
+    ("win threshold: the grind memo ignores the thresholds",
+     "        fight_records,\n        tuple(sorted(state.win_thresholds.items())),\n    )\n",
+     "        fight_records,\n    )\n"),
 ]
 LOSS_RISK_COMBAT_MUTATIONS = [
     ("loss risk: a monster lost to only in another loadout keeps an empty record",
@@ -6289,13 +6313,16 @@ LOST_FIGHTS_GATE_MUTATIONS = [
 ]
 LOST_FIGHTS_REFRESH_MUTATIONS = [
     ("player: the record is never read",
-     "        lost = (lost_fights(self.state, self.game_data, self.history)\n",
-     "        lost = (frozenset[str]()\n"),
+     "        lost = lost_fights(self.state, self.game_data, self.history)\n",
+     "        lost = frozenset[str]()\n"),
+    ("player: the thresholds are never read",
+     "        thresholds = win_thresholds_from_rows(self.history.fight_cost_rows(since))\n",
+     "        thresholds = dict[str, Fraction]()\n"),
 ]
 LOST_FIGHTS_RUN_MUTATIONS = [
     ("player: the live loop never reads the record",
      "                self._refresh_party(datetime.now(tz=timezone.utc))\n"
-     "                self._refresh_lost_fights()\n",
+     "                self._refresh_fight_record()\n",
      "                self._refresh_party(datetime.now(tz=timezone.utc))\n"),
     ("player: the hold is recorded as the plan's fight",
      "                self._record_combat_outcome(executed_action, prev_state_for_learning, outcome)\n",
@@ -6312,7 +6339,7 @@ PARTY_CARD_RUN_MUTATIONS = [
 LOST_FIGHTS_PLAN_MUTATIONS = [
     ("player: the plan diagnostic never reads the record",
      "        self._refresh_party(datetime.now(tz=timezone.utc))\n"
-     "        self._refresh_lost_fights()\n"
+     "        self._refresh_fight_record()\n"
      "        state = self.state\n",
      "        self._refresh_party(datetime.now(tz=timezone.utc))\n"
      "        state = self.state\n"),
@@ -6521,8 +6548,14 @@ LOADOUT_WIN_MUTATIONS = [
      "        if stats.type_ != POTION or stats.level > state.level:\n",
      "        if stats.type_ != POTION:\n"),
     ("loadout win: the memo ignores the fight fields",
-     "    key = (monster, tuple(stockable), fight_key(state, game_data))\n",
-     "    key = (monster, tuple(stockable))\n"),
+     "    key = (monster, threshold, tuple(stockable), fight_key(state, game_data))\n",
+     "    key = (monster, threshold, tuple(stockable))\n"),
+    ("loadout win: the memo ignores the threshold",
+     "    key = (monster, threshold, tuple(stockable), fight_key(state, game_data))\n",
+     "    key = (monster, tuple(stockable), fight_key(state, game_data))\n"),
+    ("loadout win: the walk wins at the default threshold",
+     "                          [(code, UTILITY_SLOT_MAX_STACK) for code in codes])[0]) >= threshold),\n",
+     "                          [(code, UTILITY_SLOT_MAX_STACK) for code in codes])[0]) >= 0.8),\n"),
 ]
 # Found by the conditions census (USER 2026-10-10, docs/PLAN_drop_fight_loadout.md).
 NPC_REGION_GAME_DATA_MUTATIONS = [
@@ -10468,6 +10501,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_predict_win_diff.py", survivors)
     run_group(COMBAT_SRC, PREDICT_WIN_LIFESTEAL_MUTATIONS,
               "tests/test_ai/test_combat.py", survivors)
+    run_group(COMBAT_SRC, PREDICT_WIN_ODDS_MUTATIONS,
+              "tests/test_ai/test_combat.py", survivors)
     run_group(FIGHT_TERMS_CORE_SRC, FIGHT_TERMS_PREDICT_MUTATIONS,
               "formal/diff/test_predict_win_diff.py", survivors)
     run_group(FIGHT_TERMS_CORE_SRC, FIGHT_TERMS_LADDER_MUTATIONS,
@@ -11229,6 +11264,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_loss_risk.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, LOSS_RISK_GRIND_MUTATIONS,
               "tests/test_ai/test_loss_risk.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, WIN_THRESHOLD_GRIND_MUTATIONS,
+              "tests/test_ai/test_skill_grind_target.py", survivors)
     run_group(COMBAT_SRC, LOSS_RISK_COMBAT_MUTATIONS,
               "tests/test_ai/test_combat.py", survivors)
     run_group(PLAYER_SRC, LOSS_RISK_PLAYER_MUTATIONS,

@@ -67,6 +67,24 @@ lowering the warmup gate (which would broaden the contract across all
 learned estimates)."""
 
 
+DEFAULT_WIN_THRESHOLD = Fraction(4, 5)
+"""The win probability a fight needs before its loss cost is measured (USER
+2026-10-15: "0.8 default win rate until we collect enough win/loss data to
+derive loss costs"; spec fight-gates-odds §1)."""
+
+SECURE_WIN = Fraction(3, 4)
+"""Below this win probability a fight asks for gear first (USER 2026-10-15: "if
+all of our fights are below 75% win rates, we probably need better gear";
+spec fight-gates-odds §3)."""
+
+
+def win_threshold(state: WorldState, monster_code: str) -> Fraction:
+    """θ for a fight against `monster_code`: this character's loss-cost
+    threshold (`WorldState.win_thresholds`), or DEFAULT_WIN_THRESHOLD before
+    there is evidence."""
+    return state.win_thresholds.get(monster_code, DEFAULT_WIN_THRESHOLD)
+
+
 def _round_half_up(value: float) -> int:
     """Round to nearest integer; exact halves round up (documented rule)."""
     return math.floor(value + 0.5)
@@ -435,20 +453,34 @@ def win_probability(state: WorldState, game_data: GameData, monster_code: str) -
 
 
 def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bool:
-    """True if the documented formula says the player beats the monster using the
-    best on-hand loadout (inventory + equipped) for it: the closed-form verdict
-    (`fight_terms_core.terms_win`) over `combat_terms`."""
-    return terms_win(combat_terms(state, game_data, monster_code))
+    """The fight verdict every gate reads (spec 2026-10-15 fight-gates-odds §1):
+    the exact P(win) from `state.hp` in the best on-hand loadout with the worn
+    restore potion (`win_probability`), at least this character's threshold for
+    the monster (`win_threshold`).
+
+    It was the closed form's expected-round race (`terms_win`), which reads
+    crit at its mean: C3P0 v cyclops at margin 1 was "won" at P 0.51, and lost
+    52 of 140 fights since 2026-10-10."""
+    return win_probability(state, game_data, monster_code) >= win_threshold(state, monster_code)
+
+
+def secure_win(state: WorldState, game_data: GameData, monster_code: str) -> bool:
+    """A fight won often enough that gear is not the better use of time (spec
+    §3): P(win) at least max(θ, SECURE_WIN). The gear arm reads it
+    (`combat_deficit`, `SelectionContext.combat_risky`)."""
+    return win_probability(state, game_data, monster_code) >= max(
+        win_threshold(state, monster_code), SECURE_WIN)
 
 
 def combat_margin(state: WorldState, game_data: GameData, monster_code: str) -> int:
-    """Signed margin whose sign equals the `predict_win` verdict.
+    """The closed form's signed round cushion, whose sign equals its own
+    expected-round verdict (`fight_terms_core.terms_win`): a gear-ranking
+    signal (`combat_deficit` ranks candidates on its gain), NOT the fight
+    verdict, which reads the odds (`predict_win`, spec 2026-10-15
+    fight-gates-odds §4). Part C replaces it with the odds.
 
-    Invariant: ``predict_win(...) == (combat_margin(...) > 0)`` for all inputs.
-
-    Read from the same `combat_terms` as `predict_win`
-    (`fight_terms_core.terms_margin`), returning int sentinels or the
-    round-cushion at each exit:
+    Read from `combat_terms` (`fight_terms_core.terms_margin`), returning int
+    sentinels or the round-cushion at each exit:
     * ``raw_player <= 0``                        → ``LOSE_MARGIN``
     * ``kill_step <= 0``                         → ``LOSE_MARGIN``
     * ``rounds_to_kill > MAX_TURNS``             → ``LOSE_MARGIN``
@@ -470,18 +502,18 @@ def is_winnable(
 ) -> bool:
     """The single combat-beatability verdict used across planning and runtime.
 
-    Three gates, in order, when a history is supplied:
-    1. LEARNED-LOSS veto: a monster lost in >= MIN_WIN_SAMPLES observed fights at
-       < WIN_RATE_THRESHOLD success is judged unwinnable regardless of the formula —
-       counting ONLY fights at this level in this loadout (`fight_loadout`).
-    2. MONOTONIC-WIN inference: an observed win against ANY monster of level >= this
-       one's level proves this (no-harder) monster is winnable too — until a future
-       loss against it appears. Beating a level-2 slime flags every level-1 monster
-       (e.g. chicken) winnable, so a pessimistic `predict_win` can't block an
-       already-demonstrated-easy fight (the feather/chicken hunt). Skipped if we've
-       ourselves lost to this monster (any sub-threshold result), honouring the
-       "until a future loss" caveat.
-    3. STAT PREDICTION (`predict_win`): the optimistic formula, used cold.
+    Two gates, in order:
+    1. LEARNED-LOSS veto, when a history is supplied: a monster lost in >=
+       MIN_WIN_SAMPLES observed fights at < WIN_RATE_THRESHOLD success is judged
+       unwinnable regardless of the odds — counting ONLY fights at this level in
+       this loadout (`fight_loadout`).
+    2. THE ODDS (`predict_win`): exact P(win) against this character's threshold.
+
+    There was a MONOTONIC-WIN shortcut between them: a win against any monster
+    of level >= this one's made this one winnable until a loss against it. It
+    rescued a pessimistic closed form; the odds are calibrated (part A's live
+    check, 2026-10-15), and the shortcut said "winnable" for a coin-flip fight
+    until its first loss (spec 2026-10-15 fight-gates-odds §4).
 
     A cold/absent history defers to the prediction. Pass history at runtime (target
     selection); the planning gates call it stat-only since the veto is applied
@@ -498,8 +530,6 @@ def is_winnable(
         # about a different fight.
         if loss_vetoed(state, game_data, monster_code, history):
             return False
-        if _won_at_or_above_level(history, game_data, monster_code):
-            return True
     return predict_win(state, game_data, monster_code)
 
 
@@ -525,20 +555,3 @@ def lost_fights(state: WorldState, game_data: GameData, history: LearningStore) 
     return frozenset(monster for monster, samples, wins in fight_records(state, game_data, history)
                      if _vetoes(samples, wins))
 
-
-def _won_at_or_above_level(
-    history: LearningStore, game_data: GameData, monster_code: str) -> bool:
-    """True when we've recorded an actual WIN (>=1 outcome 'ok') against some monster
-    whose level is >= this monster's level, and we have NOT lost to this monster
-    ourselves. A win against a no-easier monster is monotonic evidence this one is
-    winnable too. Uses raw `win_count` (NOT warmup-gated `success_rate`, which reads
-    1.0 below 5 samples and can't see a single win). The own-loss guard — any recorded
-    fight against this monster that was not a win — honours "until a future loss"."""
-    target_repr = f"Fight({monster_code})"
-    if history.sample_count(target_repr) > history.win_count(target_repr):
-        return False  # at least one loss against this monster -> defer to prediction
-    target_level = game_data.monster_level(monster_code)
-    for other, level in game_data.monster_levels.items():
-        if level >= target_level and history.win_count(f"Fight({other})") >= 1:
-            return True
-    return False

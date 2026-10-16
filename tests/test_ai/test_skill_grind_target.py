@@ -2,6 +2,7 @@
 
 import dataclasses
 from dataclasses import replace
+from fractions import Fraction
 from unittest.mock import patch
 
 import pytest
@@ -12,6 +13,7 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
     _CACHES,
     CACHE_MAX_ENTRIES,
+    _cache_key,
     GRIND_POLICY,
     build_selectable_grind_candidates,
     grind_model,
@@ -251,6 +253,15 @@ def test_the_memo_key_notices_a_changed_skill_level():
         "weaponcrafting", make_state(skills={"weaponcrafting": 9}), gd)
     assert later is not first
 
+
+
+def test_the_memo_key_notices_a_changed_threshold():
+    """A win threshold drives `is_winnable` on the DROP route (spec 2026-10-15
+    fight-gates-odds §1), so a changed one MUST change the key. (Asserted on
+    the key: the returned list is always a fresh copy, `_with_wanted`.)"""
+    state = make_state(skills={"weaponcrafting": 3})
+    cheap = make_state(skills={"weaponcrafting": 3}, win_thresholds={"mob": Fraction(1, 2)})
+    assert _cache_key("weaponcrafting", state, ()) != _cache_key("weaponcrafting", cheap, ())
 
 def test_each_game_data_gets_its_own_cache():
     """Scoped per catalogue by `ai/catalogue_scope`, exactly as

@@ -1444,12 +1444,14 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     #
     # The `level_up` band is EMPTY at this loadout: 0 of 58 monsters, which is
     # why the triple has no fourth member. That verdict IS witnessed, on a
-    # different character: `test_held_task.py`'s STARVED triple injects a task
-    # onto `l48_capstone_approach` and drives all three verdicts through
-    # `plan_from_state`.
-    # D2 = WORKABLE. `pig` is the monster C3P0 lost 42 straight fights to at
-    # level 19; at this loadout it is winnable, so `has_combat_deficit` is
-    # False and `deficit_upgrade_target` is None through its FIRST return.
+    # different character: `test_task_horizon.py`'s census (`l10_gearcrafting_gap`
+    # v wolf); `test_held_task.py`'s STARVED rows drive gear and out-of-reach
+    # through `plan_from_state`.
+    # D2 = WORKABLE. `wolf` is winnable at this loadout (P(win) 1.0), so
+    # `has_combat_deficit` is False and `deficit_upgrade_target` is None through
+    # its FIRST return. It was `pig` until the fight gates read the odds (spec
+    # 2026-10-15 fight-gates-odds §1): pig is P 0.76 here, short of 0.8, and
+    # only wolf and highwayman clear it in band.
     # THE ITEMS-TASK CELL, and the only one in the set. Built from the SAME
     # `_held_task_cell` loadout as the monsters triple below, so the one thing
     # that differs from `l32_held_task_workable` is the task's TYPE — which is
@@ -1485,8 +1487,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         "the set, and the sole offline witness for the consumers that branch "
         "on it."),
     "l32_held_task_workable": _held_task_cell(
-        "l32_held_task_workable", ("pig", "monsters", 4, 10),
-        "Held-task triple, value WORKABLE: a pig task this loadout wins — "
+        "l32_held_task_workable", ("wolf", "monsters", 4, 10),
+        "Held-task triple, value WORKABLE: a wolf task this loadout wins — "
         "the negative arm of the deficit check."),
     # D2 = UNWINNABLE, A GEAR CHAIN CLOSES IT. The greedy margin walk names
     # `perfect_bow` unpriced and `earth_boost_potion` under acquisition
@@ -1563,6 +1565,14 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # The bag holds every root input EXCEPT `dreadful_amulet`, which is what
     # forces the descent through the depth-3 leg instead of stopping at a drop.
     # D1 derived and D8 mid-band (47 sits between rungs 45 and 50) per §5.3.
+    # NO POTIONS. It wore 40 greater and 40 small health potions (and held 6
+    # more) until the fight gates read the odds (spec 2026-10-15
+    # fight-gates-odds §1), which count a worn restore potion: with them it
+    # clears rungs 30 and 35 and the amulet stops being the rung's best
+    # candidate. Held in the bag, `EquipOwnedGear` wears them first. The six
+    # held potions sit in the BANK instead: still stockable for the drop
+    # gate's potion loadout (`loadout_win`), which is what opens this cell's
+    # weaponcrafting 40 rung (test_open_rung_completeness), never worn.
     "l47_depth3_amulet": ScenarioCharacter(
         name="l47_depth3_amulet", level=47,
         skills={"mining": 40, "woodcutting": 40, "weaponcrafting": 40,
@@ -1574,14 +1584,11 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "ring2_slot": "hell_ring", "boots_slot": "darkforged_boots",
             "leg_armor_slot": "mesh_legs_armor",
             "body_armor_slot": "darkforged_plate",
-            "utility1_slot": "greater_health_potion",
-            "utility2_slot": "small_health_potion",
         },
         inventory={"gold_bar": 8, "cyclops_eye": 4, "ogre_eye": 8,
-                   "red_cloth": 3, "hard_leather": 2, "king_slimeball": 2,
-                   "greater_health_potion": 6},
-        utility_quantities={"utility1_slot": 40, "utility2_slot": 40},
-        inventory_max=150, bank={}, gold=9000, derive_combat_stats=True,
+                   "red_cloth": 3, "hard_leather": 2, "king_slimeball": 2},
+        inventory_max=150, bank={"greater_health_potion": 6}, gold=9000,
+        derive_combat_stats=True,
         description="Cell 6: a DEPTH-3 gear rung (greater_dreadful_amulet) — "
                     "the descent must walk root -> dreadful_amulet -> "
                     "hardwood_plank -> ash_wood, two levels deeper than any "
@@ -1687,6 +1694,10 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # satchel stall of 2026-07-06. Pocket gold is 200 — far under any gold
     # route — so the leaf is unaffordable on both currencies at once.
     # D1 derived per §5.3.
+    # NO POTIONS. It wore 40 greater and 40 small health potions (and held 6)
+    # until the fight gates read the odds (spec 2026-10-15 fight-gates-odds §1),
+    # which count a worn restore potion: with them it gears for rung 20, where
+    # the weapon root is `battlestaff` and the jasper leaf is never reached.
     "l25_currency_leaf_unfunded": ScenarioCharacter(
         name="l25_currency_leaf_unfunded", level=25,
         skills={"mining": 20, "woodcutting": 20, "weaponcrafting": 20,
@@ -1702,12 +1713,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "artifact2_slot": "lost_world_map",
             "artifact3_slot": "perfect_pearl", "bag_slot": "backpack",
             "rune_slot": "lifesteal_rune",
-            "utility1_slot": "greater_health_potion",
-            "utility2_slot": "small_health_potion",
         },
-        inventory={"iron_bar": 8, "king_slimeball": 6,
-                   "greater_health_potion": 6},
-        utility_quantities={"utility1_slot": 40, "utility2_slot": 40},
+        inventory={"iron_bar": 8, "king_slimeball": 6},
         inventory_max=140, bank={}, gold=200,
         unlocked_achievements=("tasks_farmer",), derive_combat_stats=True,
         description="Cell 11: a jasper-gated weapon with 0 tasks_coin — the "

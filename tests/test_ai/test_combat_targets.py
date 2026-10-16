@@ -1,5 +1,8 @@
 """Tests for combat_target_monsters winnable near-level set."""
 
+import dataclasses
+from fractions import Fraction
+
 import artifactsmmo_cli.ai.combat_targets as ct
 from artifactsmmo_cli.ai.combat_targets import (
     _clear_cache,
@@ -60,3 +63,16 @@ def test_returned_list_independent_of_cache(monkeypatch):
     second_result = combat_target_monsters(state, gd)
     assert "poison" not in second_result
     assert "wolf" in second_result
+
+
+def test_a_threshold_change_is_a_cache_miss(monkeypatch):
+    """`is_winnable` reads `state.win_thresholds` (spec 2026-10-15
+    fight-gates-odds §1), so a new threshold must not be served the old list."""
+    _clear_cache()
+    monkeypatch.setattr(ct, "is_winnable",
+                        lambda s, g, code, h=None: s.win_thresholds.get(code, Fraction(4, 5)) < 1)
+    gd = _gd({"wolf": 9})
+    state = make_state(level=10)
+    assert combat_target_monsters(state, gd) == ["wolf"]
+    strict = dataclasses.replace(state, win_thresholds={"wolf": Fraction(1)})
+    assert combat_target_monsters(strict, gd) == []

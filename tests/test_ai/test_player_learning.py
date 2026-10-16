@@ -2,6 +2,7 @@
 
 import dataclasses
 import json
+from datetime import UTC, datetime, timedelta
 import os
 import tempfile
 from fractions import Fraction
@@ -448,7 +449,7 @@ def test_store_migrates_consumables_expended_column(tmp_path):
 
 
 def test_the_learned_record_fills_lost_fights(tmp_path):
-    """`_refresh_lost_fights` puts the veto's refusals on the state the gates
+    """`_refresh_fight_record` puts the veto's refusals on the state the gates
     read; without history there are none."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
@@ -458,12 +459,12 @@ def test_the_learned_record_fills_lost_fights(tmp_path):
     for _ in range(MIN_WIN_SAMPLES):
         store.record_combat_outcome(combat_key("chicken"), fight_loadout(player.state, gd, "chicken"),
                                     True, False, player.state.level)
-    player._refresh_lost_fights()
+    player._refresh_fight_record()
     assert player.state.lost_fights == frozenset({"chicken"})
     cold = GamePlayer(character="Robby")
     cold.game_data = gd
     cold.state = dataclasses.replace(make_state(), lost_fights=frozenset({"chicken"}))
-    cold._refresh_lost_fights()
+    cold._refresh_fight_record()
     assert cold.state.lost_fights == frozenset()
     store.close()
 
@@ -483,4 +484,33 @@ def test_a_solo_fight_records_its_win_odds_and_a_party_fight_records_none(tmp_pa
 
     assert [(r.task_key, r.p_win) for r in store.combat_loadout_outcomes()] == [
         ("combat:chicken", 0.5), ("combat-party:chicken", None)]
+    store.close()
+
+
+def test_the_learned_record_fills_win_thresholds(tmp_path):
+    """`_refresh_fight_record` puts each monster's loss-cost threshold on the
+    state (`win_threshold_core`); without history there are none."""
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
+    store.start_session()
+    now = datetime.now(UTC)
+    rows = []
+    for won in [True] * 5 + [False] * 5 + [True]:
+        rows.append(("FightAction", "Fight(chicken)", "ok" if won else "error:fight_lost", 10))
+        rows.append(("RestAction", "Rest", "ok", 50 if won else 110))
+    for i, (cls, rep, outcome, secs) in enumerate(rows):
+        store.record_cycle(Cycle(
+            ts=(now - timedelta(hours=1) + timedelta(seconds=i)).isoformat(),
+            session_id="x", cycle_index=i, character="x", outcome=outcome,
+            action_class=cls, action_repr=rep, actual_cooldown_seconds=secs))
+    player = GamePlayer(character="Robby", history=store)
+    player.game_data = _make_chicken_game_data()
+    player.state = make_state()
+    player._refresh_fight_record()
+    # wins 60 s, losses 120 s: theta = 120 / 180
+    assert player.state.win_thresholds == {"chicken": Fraction(2, 3)}
+    cold = GamePlayer(character="Robby")
+    cold.game_data = player.game_data
+    cold.state = dataclasses.replace(make_state(), win_thresholds={"chicken": Fraction(1, 2)})
+    cold._refresh_fight_record()
+    assert cold.state.win_thresholds == {}
     store.close()

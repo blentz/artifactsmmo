@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from fractions import Fraction
 from typing import Any
 
 import attrs
@@ -144,6 +145,13 @@ class WorldState:
     king_slime 41 of 44 at level 31 while the cold gate kept admitting it and
     the party arm never fired. Empty by default; production fills it every
     cycle beside `party`."""
+    win_thresholds: dict[str, Fraction] = field(default_factory=dict)
+    """Per monster, the win probability this character's measured loss cost
+    asks of a fight (`win_threshold_core`; spec 2026-10-15 fight-gates-odds
+    §2). A monster absent reads `combat.DEFAULT_WIN_THRESHOLD`. Every gate
+    reads it through `combat.win_threshold`, so a gate with no history agrees
+    with one that has it. Empty by default; production fills it every cycle
+    beside `lost_fights`."""
     party_held: str | None = None
     """PLANNING-ONLY marker: the boss a `HoldForPartyAction` has held for in
     this simulated plan (docs/PLAN_group_fights.md increment 4). Always None

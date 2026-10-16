@@ -277,7 +277,7 @@ class TestPlayerRun:
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait), \
                                 patch.object(player, "_reconcile_open_orders"), \
                                 patch.object(player, "_maybe_periodic_refresh"):
-                            with patch.object(player, "_refresh_lost_fights",
+                            with patch.object(player, "_refresh_fight_record",
                                               side_effect=lambda: order.append("lost")):
                                 with patch.object(player, "_build_actions",
                                                   side_effect=lambda: order.append("build") or []):

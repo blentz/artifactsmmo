@@ -2,9 +2,13 @@
 2026-10-10, "judge drop fights with the chosen loadout";
 docs/PLAN_drop_fight_loadout.md)."""
 
+import dataclasses
+from fractions import Fraction
 from unittest.mock import patch
 
 import artifactsmmo_cli.ai.loadout_win as win_mod
+from artifactsmmo_cli.ai.fight_odds_core import win_probability
+from artifactsmmo_cli.ai.fight_walk import odds_walk
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.loadout_win import stockable_potions, winning_loadout, wins_with_a_loadout
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
@@ -81,7 +85,7 @@ def test_a_potion_wins_what_the_bare_stats_lose() -> None:
 def test_the_verdict_is_memoized_on_what_the_walk_reads() -> None:
     gd = _gd()
     state = _state()
-    with patch.object(win_mod, "fight_walk", wraps=win_mod.fight_walk) as walk:
+    with patch.object(win_mod, "odds_walk", wraps=win_mod.odds_walk) as walk:
         assert wins_with_a_loadout(state, gd, "ogre")
         calls = walk.call_count
         assert wins_with_a_loadout(_state(inventory={"ogre_eye": 3}), gd, "ogre")
@@ -107,3 +111,20 @@ def test_the_winning_loadout_is_named() -> None:
     gd._npc_stock = {}
     assert winning_loadout(_state(), gd, "ogre") is None
     assert winning_loadout(_state(bank_items={"heal_potion": 1}), gd, "ogre") == ("heal_potion",)
+
+
+
+def test_the_loadout_must_win_at_the_threshold() -> None:
+    """The potion gate reads the odds against the character's threshold (spec
+    2026-10-15 fight-gates-odds §1): an ogre that crits half its turns leaves
+    the heal-potion loadout a P(win) below 1, and the verdict follows θ."""
+    gd = _gd()
+    gd._npc_stock = {}
+    gd._monster_critical_strike = {"ogre": 50}
+    state = _state(bank_items={"heal_potion": 1})
+    p = win_probability(odds_walk(state, gd, "ogre", [("heal_potion", 100)])[0])
+    assert 0 < p < 1
+    assert wins_with_a_loadout(dataclasses.replace(state, win_thresholds={"ogre": p}), gd, "ogre")
+    above = p + (1 - p) / 2
+    assert not wins_with_a_loadout(
+        dataclasses.replace(state, win_thresholds={"ogre": above}), gd, "ogre")

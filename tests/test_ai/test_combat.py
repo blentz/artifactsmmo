@@ -1,8 +1,12 @@
 """Tests for the documented combat-outcome estimator."""
 
+import dataclasses
 import json
+from fractions import Fraction
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.combat import (
     LOSE_MARGIN,
@@ -18,11 +22,15 @@ from artifactsmmo_cli.ai.combat import (
     is_winnable,
     lost_fights,
     predict_win,
+    secure_win,
+    win_probability,
+    win_threshold,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import combat_key
+from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 
 
@@ -358,47 +366,16 @@ def _record_wins(store: LearningStore, action_repr: str, n: int) -> None:
     _record_mixed(store, action_repr, wins=n, losses=0)
 
 
-def test_monotonic_win_flags_lower_level_after_higher_win(tmp_path):
-    """A win vs a level-2 monster flags a level-1 monster winnable even when the
-    stat formula (predict_win) would lose against it."""
+def test_higher_level_win_no_longer_makes_a_monster_winnable(tmp_path):
+    """A win against a level-2 monster said nothing about a level-1 monster the
+    odds call lost, yet `is_winnable` used to return True off it (the removed
+    monotonic-win shortcut, spec 2026-10-15 fight-gates-odds §4)."""
     state = make_state(max_hp=10, attack={"fire": 1}, initiative=0)
     gd = _gd(hp=10000, attack={"fire": 50}, initiative=100, code="chicken")
     gd._monster_level = {"chicken": 1, "slime": 2}
     store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
     _record_wins(store, "Fight(slime)", 1)
     assert predict_win(state, gd, "chicken") is False
-    assert is_winnable(state, gd, "chicken", store) is True
-
-
-def test_monotonic_win_does_not_flag_higher_level(tmp_path):
-    """A win vs a level-1 monster does NOT flag a level-2 monster winnable."""
-    state = make_state(max_hp=10, attack={"fire": 1}, initiative=0)
-    gd = _gd(hp=10000, attack={"fire": 50}, initiative=100, code="slime")
-    gd._monster_level = {"chicken": 1, "slime": 2}
-    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
-    _record_wins(store, "Fight(chicken)", 1)
-    assert is_winnable(state, gd, "slime", store) is False
-
-
-def test_monotonic_win_vetoed_by_own_loss(tmp_path):
-    """Having lost to THIS monster, the higher-level-win inference is suppressed
-    (the 'until a future loss' caveat)."""
-    state = make_state(max_hp=10, attack={"fire": 1}, initiative=0)
-    gd = _gd(hp=10000, attack={"fire": 50}, initiative=100, code="chicken")
-    gd._monster_level = {"chicken": 1, "slime": 2}
-    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
-    _record_wins(store, "Fight(slime)", 1)
-    _record_mixed(store, "Fight(chicken)", wins=0, losses=1)  # one loss to chicken
-    assert is_winnable(state, gd, "chicken", store) is False
-
-
-def test_monotonic_win_needs_an_actual_win(tmp_path):
-    """A LOSS vs a higher-level monster is not a win — no inference."""
-    state = make_state(max_hp=10, attack={"fire": 1}, initiative=0)
-    gd = _gd(hp=10000, attack={"fire": 50}, initiative=100, code="chicken")
-    gd._monster_level = {"chicken": 1, "slime": 2}
-    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
-    _record_losses(store, "Fight(slime)", 1)
     assert is_winnable(state, gd, "chicken", store) is False
 
 
@@ -825,3 +802,70 @@ def test_burn_is_charged_off_the_monsters_attack_not_the_players() -> None:
     base = _die_step(0, 0, 0, 0, 80, 0, 0, 500, 0, 0, 0, 0, 0, 0, 0, 45)
     burned = _die_step(0, 0, 0, 0, 80, 0, 15, 500, 0, 0, 0, 0, 0, 0, 0, 45)
     assert burned - base == 15 * 45 * 100
+
+
+def test_win_threshold_defaults_to_four_fifths() -> None:
+    assert win_threshold(make_state(), "cyclops") == Fraction(4, 5)
+
+
+def test_threshold_entry_changes_only_its_monster() -> None:
+    state = dataclasses.replace(make_state(), win_thresholds={"cyclops": Fraction(1, 2)})
+    assert win_threshold(state, "cyclops") == Fraction(1, 2)
+    assert win_threshold(state, "imp") == Fraction(4, 5)
+
+
+
+def _owlbear() -> tuple[WorldState, GameData]:
+    """The R2D2 v owlbear replay (part A): hits 141/212 at 45% crit against
+    83/125 at 5%, owlbear first, 785 HP. Exact P(win) 0.6308; the closed form's
+    expected-round race calls it won."""
+    state = make_state(hp=785, max_hp=785, attack={"fire": 141}, critical_strike=45,
+                       initiative=0)
+    return state, _gd(hp=1450, attack={"fire": 83}, crit=5, initiative=10, code="owlbear")
+
+
+def test_coin_flip_is_not_winnable_at_default() -> None:
+    state, gd = _owlbear()
+    assert round(float(win_probability(state, gd, "owlbear")), 4) == 0.6308
+    assert predict_win(state, gd, "owlbear") is False
+    cheap = dataclasses.replace(state, win_thresholds={"owlbear": Fraction(1, 2)})
+    assert predict_win(cheap, gd, "owlbear") is True
+
+
+@settings(max_examples=60, deadline=None)
+@given(st.integers(1, 300), st.integers(0, 100), st.integers(1, 300), st.integers(0, 100),
+       st.integers(1, 3000), st.integers(50, 1500), st.booleans(), st.integers(1, 99))
+def test_predict_win_is_odds_against_threshold(p_atk, p_crit, m_atk, m_crit, m_hp, max_hp,
+                                               first, theta) -> None:
+    state = make_state(hp=max_hp, max_hp=max_hp, attack={"fire": p_atk},
+                       critical_strike=p_crit, initiative=10 if first else 0,
+                       win_thresholds={"mob": Fraction(theta, 100)})
+    gd = _gd(hp=m_hp, attack={"fire": m_atk}, crit=m_crit, initiative=5)
+    assert predict_win(state, gd, "mob") == (
+        win_probability(state, gd, "mob") >= Fraction(theta, 100))
+
+
+def test_exits_decide_regardless_of_threshold() -> None:
+    sure = make_state(max_hp=100, attack={"fire": 30}, initiative=50,
+                      win_thresholds={"mob": Fraction(1)})
+    assert predict_win(sure, _gd(hp=30, attack={}, initiative=10), "mob") is True
+    hopeless = make_state(max_hp=100, attack={}, initiative=50,
+                          win_thresholds={"mob": Fraction(1, 100)})
+    assert predict_win(hopeless, _gd(hp=30, attack={"fire": 5}, initiative=10), "mob") is False
+
+
+def test_predict_win_reads_current_hp() -> None:
+    state, gd = _owlbear()
+    cheap = dataclasses.replace(state, win_thresholds={"owlbear": Fraction(1, 2)})
+    assert predict_win(cheap, gd, "owlbear") is True
+    assert predict_win(dataclasses.replace(cheap, hp=78), gd, "owlbear") is False
+
+
+def test_secure_win_needs_three_quarters() -> None:
+    state, gd = _owlbear()
+    cheap = dataclasses.replace(state, win_thresholds={"owlbear": Fraction(1, 2)})
+    assert predict_win(cheap, gd, "owlbear") is True
+    assert secure_win(cheap, gd, "owlbear") is False
+    strict = dataclasses.replace(state, win_thresholds={"owlbear": Fraction(9, 10)})
+    sure = _gd(hp=10, attack={"fire": 83}, crit=5, initiative=10, code="owlbear")
+    assert secure_win(strict, sure, "owlbear") is True

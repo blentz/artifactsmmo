@@ -49,14 +49,18 @@ BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.jso
 
 GEAR_CELL = "l32_held_task_closable"      # ogre: a chain closes it
 OUT_OF_REACH_CELL = "l32_held_task_open"  # lich: nothing closes it
-WORKABLE_CELL = "l32_held_task_workable"  # pig: already winnable
+WORKABLE_CELL = "l32_held_task_workable"  # wolf: already winnable
 
-LEVEL_UP_CELL = "l13_drop_recipe_grind"
-LEVEL_UP_MONSTER = "mushmush"
-"""The level-up witness. At 13 no chain closes `mushmush`; at 14 `iron_dagger`
-does — and the catalogue pool is IDENTICAL at both levels (102 items either
-side), so the flip is the +5 Max HP and nothing else. See
-`test_the_level_up_evaluation_moves_the_body_not_only_the_pool`."""
+LEVEL_UP_CELL = "l10_gearcrafting_gap"
+LEVEL_UP_MONSTER = "wolf"
+"""The level-up witness. At its level no chain closes `wolf`; one level up a
+chain does — and the catalogue pool is IDENTICAL at both levels, so the flip is
+the +5 Max HP and nothing else. See
+`test_the_level_up_evaluation_moves_the_body_not_only_the_pool`.
+
+It was `l13_drop_recipe_grind` v mushmush until the fight gates read the odds
+(spec 2026-10-15 fight-gates-odds §1): that chain closed at closed-form margin
+1, where the exact P(win) is 0.42."""
 
 
 @pytest.fixture(scope="module")
@@ -172,7 +176,11 @@ def test_the_level_alone_arm_is_a_level_up_verdict_too() -> None:
     right answer — gear is faster than a level). The arm is reachable only where
     no helpful gear exists at all, which is what the empty item catalogue below
     says. Recorded so a future reader does not mistake "no corpus witness" for
-    "dead code"."""
+    "dead code".
+
+    Since the gates read the odds (2026-10-15) the corpus has one:
+    `l10_gearcrafting_gap` v highwayman, where one level wins with nothing
+    acquired. The hand-built case stays: it isolates the arm from the catalogue."""
     game_data = GameData()
     game_data._item_stats = {}
     game_data._crafting_recipes = {}
@@ -271,12 +279,14 @@ def test_the_level_up_evaluation_moves_the_body_not_only_the_pool(gd: GameData) 
 
 
 def test_the_level_up_arm_has_real_witnesses() -> None:
-    """Four of 1,375 futile pairs, and the clause is worth exactly that much.
+    """Five of 1,375 futile pairs, and the clause is worth exactly that much.
 
-    Six until 2026-10-15: `l35_artifact_fill` and `l35_boots_drop_farm` against
-    demon left when the closed form began charging burn off the MONSTER's attack
-    (20% of demon's 110, more than 20% of those characters' attack), so one
-    level no longer closes those fights either.
+    Six until 2026-10-15, when two changes landed together. Burn charged off
+    the MONSTER's attack took `l35_artifact_fill` / `l35_boots_drop_farm` v
+    demon out (one level no longer closes them). The odds verdict
+    (fight-gates-odds §1) moved the rest: mushmush, pig and the l11-l13 pairs
+    sat at closed-form margin 1, short of P 0.8, and the l10 / l19 / l48 pairs
+    came in.
 
     Recorded as a test rather than a comment because "nearly dead weight" and
     "dead weight" are different findings, and only a measurement tells them
@@ -318,7 +328,7 @@ def test_the_level_up_arm_has_real_witnesses() -> None:
         per_scenario = list(executor.map(_level_up_witnesses, names))
 
     witnesses = sorted(pair for scenario in per_scenario for pair in scenario)
-    assert len(witnesses) == 4, witnesses
+    assert len(witnesses) == 5, witnesses
     assert (LEVEL_UP_CELL, LEVEL_UP_MONSTER) in witnesses
 
 

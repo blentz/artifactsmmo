@@ -5,12 +5,14 @@ weapon that beats MORE monsters. The metric is MARGINAL: does OWNING a weapon le
 the character beat a monster it cannot beat now?
 """
 
-
+import dataclasses
 import gc
 import weakref
+from fractions import Fraction
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.weapon_winnability import (
+    _combat_fingerprint,
     _MEMO,
     beatable_count,
     marginal_weapon_winnability,
@@ -163,3 +165,15 @@ def test_a_recycled_address_never_serves_the_previous_catalogues_count():
             f"round {round_}: an empty catalogue was served the populated "
             f"catalogue's count from a recycled address")
         del empty
+
+
+
+def test_the_fingerprint_carries_the_thresholds_and_worn_potions() -> None:
+    """`predict_win` reads `win_thresholds` and the worn restore potion's
+    quantity (spec 2026-10-15 fight-gates-odds §1): either changing must miss
+    the memo."""
+    state = make_state()
+    base = _combat_fingerprint(state)
+    assert _combat_fingerprint(
+        dataclasses.replace(state, win_thresholds={"mob": Fraction(1, 2)})) != base
+    assert _combat_fingerprint(dataclasses.replace(state, utility1_slot_quantity=3)) != base

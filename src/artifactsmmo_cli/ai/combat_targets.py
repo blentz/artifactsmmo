@@ -4,7 +4,7 @@
 """The winnable near-level monster set used to keep situationally-best gear.
 
 Memoized single-entry on a WEAKREF to game_data plus (character level, equipment
-signature, active event codes) because the dominance check that consumes it runs
+signature, active event codes, win thresholds) because the dominance check that consumes it runs
 per inventory item. Identity is a weakref compared with `is`, never `id()`: CPython
 reuses the address of a collected object, so an id-keyed entry could be hit by a
 different GameData that happened to land there. `is_winnable`
@@ -12,6 +12,7 @@ is called with `history=None` (cold/stat beatability) — the keep decision uses
 optimistic prediction, not the learned-loss veto, matching how planning calls it."""
 
 from dataclasses import dataclass, field
+from fractions import Fraction
 from weakref import ReferenceType, ref
 
 from artifactsmmo_cli.ai.combat import is_winnable
@@ -22,7 +23,7 @@ LEVEL_BAND_BELOW = 5
 """A monster whose level is at least `character level - LEVEL_BAND_BELOW` counts as
 one we might fight; the upper end is the beatability frontier (`is_winnable`)."""
 
-_MemoKey = tuple[int, tuple[str, ...], frozenset[str]]
+_MemoKey = tuple[int, tuple[str, ...], frozenset[str], frozenset[tuple[str, Fraction]]]
 
 
 @dataclass
@@ -71,7 +72,10 @@ def combat_target_monsters(state: WorldState, game_data: GameData) -> list[str]:
     # and the player mutates it on the SAME GameData object every cycle
     # (player.py:1275). Keying only on identity would serve the pre-event answer
     # for the rest of the run.
-    key = (state.level, equip_sig, frozenset(game_data.active_event_codes))
+    # The thresholds are read by the verdict itself (`combat.win_threshold`,
+    # spec 2026-10-15 fight-gates-odds §1): a new one must re-ask.
+    key = (state.level, equip_sig, frozenset(game_data.active_event_codes),
+           frozenset(state.win_thresholds.items()))
     # Identity is held as a WEAKREF and compared with `is`, never as id().
     # CPython reuses the id of a collected object, so an id-keyed entry could be
     # hit by a DIFFERENT GameData that happened to land on the same address --

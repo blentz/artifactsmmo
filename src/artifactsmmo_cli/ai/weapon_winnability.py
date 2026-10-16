@@ -95,6 +95,10 @@ def _combat_fingerprint(state: WorldState) -> tuple[object, ...]:
         tuple(sorted(state.attack.items())),
         tuple(sorted(state.dmg_elements.items())),
         tuple(sorted(state.resistance.items())),
+        # The odds verdict reads the threshold and the worn restore potion's
+        # stock (spec 2026-10-15 fight-gates-odds §1).
+        tuple(sorted(state.win_thresholds.items())),
+        state.utility1_slot_quantity, state.utility2_slot_quantity,
     )
 
 

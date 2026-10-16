@@ -34,6 +34,7 @@ such items so the reachable `copper_dagger` wins.
 import dataclasses
 from dataclasses import replace
 from datetime import UTC, datetime
+from fractions import Fraction
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
@@ -138,7 +139,8 @@ def is_obtainable(code: str, model: ObtainModel) -> bool:
 
 _CacheKey = tuple[str, int, tuple[tuple[str, str | None], ...],
                   tuple[tuple[str, int], ...], tuple[tuple[str, int], ...],
-                  tuple[tuple[str, int], ...], tuple[tuple[str, int, int], ...]]
+                  tuple[tuple[str, int], ...], tuple[tuple[str, int, int], ...],
+                  tuple[tuple[str, Fraction], ...]]
 
 CACHE_MAX_ENTRIES = 4096
 """Per-GameData LRU bound, mirroring `equipment/loadout_cache`: comfortably holds
@@ -177,7 +179,10 @@ def _cache_key(skill: str, state: WorldState,
 
     `fight_records` (`ctx.fight_records`) drive the DROP route's loss surcharge
     (USER 2026-10-08, "Price the loss risk"), so a new fight outcome reprices
-    the rungs that farm that monster. They change only when a fight resolves."""
+    the rungs that farm that monster. They change only when a fight resolves.
+
+    `win_thresholds` drive the same `is_winnable` (spec 2026-10-15
+    fight-gates-odds §1)."""
     return (
         skill,
         state.level,
@@ -186,6 +191,7 @@ def _cache_key(skill: str, state: WorldState,
         tuple(sorted((state.bank_items or {}).items())),
         tuple(sorted(state.skills.items())),
         fight_records,
+        tuple(sorted(state.win_thresholds.items())),
     )
 
 

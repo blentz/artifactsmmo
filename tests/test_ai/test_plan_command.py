@@ -320,6 +320,6 @@ def test_plan_once_reads_the_learned_record_like_a_live_bot():
     with contextlib.ExitStack() as stack:
         for cm in _plan_once_mocks(player, make_state(hp=100, max_hp=150)):
             stack.enter_context(cm)
-        refresh = stack.enter_context(patch.object(player, "_refresh_lost_fights"))
+        refresh = stack.enter_context(patch.object(player, "_refresh_fight_record"))
         player.plan_once()
     refresh.assert_called()

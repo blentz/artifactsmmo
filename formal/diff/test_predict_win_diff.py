@@ -22,6 +22,10 @@ reductions (`round_half_up`, resist subtraction) are exercised too.
 
 Generates >= 200 random stat tuples; asserts the boolean verdicts match. Any
 float-vs-exact disagreement is a real finding and surfaces the exact tuple.
+
+Since 2026-10-15 `predict_win` reads the exact odds (spec fight-gates-odds §1);
+the closed form this harness pins is `terms_win(combat_terms(...))`, which the
+exits and `combat_margin` still read, so that is what it calls.
 """
 import random
 
@@ -30,6 +34,7 @@ from hypothesis import strategies as st
 from pytest import MonkeyPatch
 
 import artifactsmmo_cli.ai.combat as combat_mod
+from artifactsmmo_cli.ai.fight_terms_core import terms_win
 from artifactsmmo_cli.ai.equipment.projection import ProjectedStats
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.world_state import ELEMENTS
@@ -141,7 +146,7 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
     with MonkeyPatch.context() as mp:
         mp.setattr(combat_mod, "pick_loadout_cached", lambda code, state, gd: loadout)
         mp.setattr(combat_mod, "project_loadout_stats", lambda state, loadout, gd: stats)
-        py = combat_mod.predict_win(_FakeState(), _FakeGameData(), MONSTER)
+        py = terms_win(combat_mod.combat_terms(_FakeState(), _FakeGameData(), MONSTER))
 
     # monster attack uses dmg_global=0, dmg_elements={} vs player resistance.
     # RUF005 declined: positional oracle layout, `+` marks the block boundaries

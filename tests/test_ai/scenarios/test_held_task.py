@@ -22,7 +22,7 @@ also differs. Coverage-matrix cells 1-3 (design 2026-08-24 §5.3) add the
 controlled form — ONE character in three task states, every other field
 identical:
 
-* `l32_held_task_workable` — pig, winnable,
+* `l32_held_task_workable` — wolf, winnable,
 * `l32_held_task_closable` — ogre, unwinnable, a chain closes it,
 * `l32_held_task_open` — lich, unwinnable, nothing closes it.
 
@@ -218,8 +218,9 @@ def test_the_task_triple_splits_the_deficit_three_ways(gd: GameData) -> None:
     `blocked_task_monster` is reached in all three (a task is held); what
     differs is only which arm of `has_combat_deficit` / `deficit_upgrade_target`
     the monster lands on. Measured over all 58 catalogue monsters at this
-    loadout: 12 are workable, 8 closable, 38 open — so none of the three values
-    is a lucky single.
+    loadout: 11 are workable, 8 closable, 39 open — so none of the three values
+    is a lucky single. (12 / 8 / 38 under the closed form; the fight odds moved
+    one monster from workable to open.)
 
     That split was 12 / 37 / 9 while `deficit_upgrade_target` branched on
     `deficit.chain` instead of `deficit.closes`. Twenty-nine of those thirty-
@@ -414,8 +415,11 @@ def test_the_open_task_is_offered_for_its_cancel_with_a_coin(gd: GameData) -> No
 
 STARVED = "l48_capstone_approach"
 STARVED_GEAR = "corrupted_ogre"
-STARVED_LEVEL_UP = "dryad"
 STARVED_OUT_OF_REACH = "baby_red_dragon"
+# There was a level-up row, dryad. Since the fight gates read the odds
+# (spec 2026-10-15 fight-gates-odds §1) this cell has no level-up monster:
+# every one of the 58 reads gear or out of reach. The level-up arm keeps its
+# corpus witness in `test_task_horizon` (`l10_gearcrafting_gap` v wolf).
 
 
 def _starved_state(monster: str, game_data: GameData):
@@ -452,7 +456,7 @@ def test_a_starved_cascade_witnesses_the_standing_arm_end_to_end(gd: GameData) -
     The EDGE arm is provably not what fires here: `plan_from_state` passes
     `self._last_outcome` (None on a seeded player) and `prev_level == state.level`,
     so `self._active` cannot be set. What is measured is `_blocked` alone."""
-    for monster in (STARVED_GEAR, STARVED_LEVEL_UP, STARVED_OUT_OF_REACH):
+    for monster in (STARVED_GEAR, STARVED_OUT_OF_REACH):
         state, player, _ = _starved_run(monster, gd)
         # The three conjuncts of the standing arm, measured rather than passed in.
         assert player._winnable_farm_target() is None
@@ -460,9 +464,8 @@ def test_a_starved_cascade_witnesses_the_standing_arm_end_to_end(gd: GameData) -
         assert has_combat_deficit(state, gd) is True
 
     verdicts = {m: resolve_task_horizon(_starved_state(m, gd), gd).verdict
-                for m in (STARVED_GEAR, STARVED_LEVEL_UP, STARVED_OUT_OF_REACH)}
+                for m in (STARVED_GEAR, STARVED_OUT_OF_REACH)}
     assert verdicts == {STARVED_GEAR: HORIZON_GEAR,
-                        STARVED_LEVEL_UP: HORIZON_LEVEL_UP,
                         STARVED_OUT_OF_REACH: HORIZON_OUT_OF_REACH}
 
     # WHERE EACH VERDICT IS SERVED: the gear verdict by the walk's fight arm.
@@ -470,9 +473,8 @@ def test_a_starved_cascade_witnesses_the_standing_arm_end_to_end(gd: GameData) -
                  IsAFightBlockingMe(_obj(gd), RootWalk()).resolve(
                      _starved_state(m, gd), gd, NO_PROFILE_CONTEXT, None),
                  WhichSlotClosesTheFight)
-             for m in (STARVED_GEAR, STARVED_LEVEL_UP, STARVED_OUT_OF_REACH)}
+             for m in (STARVED_GEAR, STARVED_OUT_OF_REACH)}
     assert armed == {STARVED_GEAR: True,
-                     STARVED_LEVEL_UP: False,
                      STARVED_OUT_OF_REACH: False}
 
 
@@ -486,15 +488,16 @@ def test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work(
     the fight arm, which diverts the character only when that gear's step can be
     served this cycle (Phase 3-2).
 
-    `HORIZON_LEVEL_UP` lands with the out-of-reach row deliberately, and the
-    reason is in `regear_edge.py`: the standing arm's other conjunct is
+    `HORIZON_LEVEL_UP` would land with the out-of-reach row deliberately, and
+    the reason is in `regear_edge.py`: the standing arm's other conjunct is
     `not winnable_alternative`, so a level-up verdict reached HERE has no monster
     to fight for the level. Letting the objective's own XP grind run IS the
-    level-up being pursued."""
+    level-up being pursued. (This cell has no level-up row under the odds; see
+    the note at `STARVED`.)"""
     _, _, control = _starved_run(None, gd)
     control_goal, control_first = repr(control.selected_goal), repr(control.plan[0])
 
-    for monster in (STARVED_LEVEL_UP, STARVED_OUT_OF_REACH):
+    for monster in (STARVED_OUT_OF_REACH,):
         _, _, report = _starved_run(monster, gd)
         assert repr(report.selected_goal) == control_goal
         assert repr(report.plan[0]) == control_first

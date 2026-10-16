@@ -8,7 +8,7 @@
 >
 > The crossing is a differential on production's own pricer — the candidate priced as it stands, then again with the walled items granted. No closure is re-derived here; obligation O6 forbids a second cost model and this census must not be one.
 
-208 candidate cells over 44 scenarios; gate opens 1 of 2 walls (store-less); obtainable 85; not_drop_walled 119; walled 2 (2 on ALTERNATIVES); closes 2; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
+211 candidate cells over 44 scenarios; gate opens 1 of 2 walls (store-less); obtainable 82; not_drop_walled 125; walled 2 (2 on ALTERNATIVES); closes 2; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
 
 argmax blindness: 0 of 2 walls sit on a RESOLVED root. A census that prices only the argmax sees those 0 and misses 2 — an infinite price is a veto, so a walled candidate never becomes the argmax.
 
@@ -156,7 +156,6 @@ argmax blindness: 0 of 2 walls sit on a RESOLVED root. A census that prices only
 | l32_items_task | ObtainItem(code='adventurer_pants', quantity=1, slot='leg_armor_slot') | alt | PASS | 255 | 255 | 255 | - | - | - | - | - |
 | l32_items_task | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 64 | 64 | 64 | - | - | - | - | - |
 | l32_items_task | ReachCharLevel(level=40) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l32_items_task | ReachTaskOutcome(task_code='apprentice_gloves') | alt | PASS | 8 | 8 | 8 | - | - | - | - | - |
 | l32_held_task_workable | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l32_held_task_workable | ObtainItem(code='jasper_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_workable | ObtainItem(code='lucky_wizard_hat', quantity=1, slot='helmet_slot') | alt | PASS | 621 | 621 | 621 | - | - | - | - | - |
@@ -164,7 +163,7 @@ argmax blindness: 0 of 2 walls sit on a RESOLVED root. A census that prices only
 | l32_held_task_workable | ObtainItem(code='adventurer_pants', quantity=1, slot='leg_armor_slot') | alt | PASS | 255 | 255 | 255 | - | - | - | - | - |
 | l32_held_task_workable | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 64 | 64 | 64 | - | - | - | - | - |
 | l32_held_task_workable | ReachCharLevel(level=40) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l32_held_task_workable | ReachTaskOutcome(task_code='pig') | alt | PASS | 26 | 26 | 26 | - | - | - | - | - |
+| l32_held_task_workable | ReachTaskOutcome(task_code='wolf') | alt | PASS | 20 | 20 | 20 | - | - | - | - | - |
 | l32_held_task_closable | ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot') | argmax | PASS | 29 | 29 | 29 | - | - | - | - | - |
 | l32_held_task_closable | ReachCharLevel(level=40) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_open | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
@@ -217,9 +216,13 @@ argmax blindness: 0 of 2 walls sit on a RESOLVED root. A census that prices only
 | l24_fisher_cooking_rung | ReachSkillLevel(skill='jewelrycrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l24_fisher_cooking_rung | ReachSkillLevel(skill='gearcrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l24_fisher_cooking_rung | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l20_boost_stock | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l20_boost_stock | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 107 | 107 | 107 | - | - | - | - | - |
-| l20_boost_stock | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 253 | 253 | 253 | - | - | - | - | - |
-| l20_boost_stock | ObtainItem(code='adventurer_vest', quantity=1, slot='body_armor_slot') | alt | PASS | 163 | 163 | 163 | - | - | - | - | - |
+| l20_boost_stock | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l20_boost_stock | ObtainItem(code='lost_world_map', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l20_boost_stock | ObtainItem(code='perfect_pearl', quantity=1, slot='artifact2_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l20_boost_stock | ReachSkillLevel(skill='jewelrycrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l20_boost_stock | ReachSkillLevel(skill='weaponcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l20_boost_stock | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l20_boost_stock | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l20_boost_stock | ObtainItem(code='mushmush_jacket', quantity=1, slot='body_armor_slot') | alt | PASS | 520 | 520 | 520 | - | - | - | - | - |
 | l20_boost_stock | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 
