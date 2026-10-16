@@ -3,7 +3,6 @@
 docs/PLAN_drop_fight_loadout.md)."""
 
 import dataclasses
-from fractions import Fraction
 from unittest.mock import patch
 
 import artifactsmmo_cli.ai.loadout_win as win_mod

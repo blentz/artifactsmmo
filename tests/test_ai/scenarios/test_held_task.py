@@ -68,7 +68,6 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.task_horizon import (
     HORIZON_GEAR,
-    HORIZON_LEVEL_UP,
     HORIZON_OUT_OF_REACH,
     resolve_task_horizon,
 )

@@ -26,8 +26,8 @@ from hypothesis import strategies as st
 from pytest import MonkeyPatch
 
 import artifactsmmo_cli.ai.combat as combat_mod
-from artifactsmmo_cli.ai.fight_terms_core import terms_win
 from artifactsmmo_cli.ai.equipment.projection import ProjectedStats
+from artifactsmmo_cli.ai.fight_terms_core import terms_win
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.world_state import ELEMENTS
 from formal.diff.oracle_client import run_oracle

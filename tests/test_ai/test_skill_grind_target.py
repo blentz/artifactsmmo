@@ -13,8 +13,8 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
     _CACHES,
     CACHE_MAX_ENTRIES,
-    _cache_key,
     GRIND_POLICY,
+    _cache_key,
     build_selectable_grind_candidates,
     grind_model,
     has_grind_target,

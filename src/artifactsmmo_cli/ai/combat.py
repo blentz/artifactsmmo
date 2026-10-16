@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.fight_odds_core import RoundDamage, burn_ticks, fight_o
 from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
 from artifactsmmo_cli.ai.fight_terms_core import LOSE_MARGIN as LOSE_MARGIN
 from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS as MAX_TURNS
-from artifactsmmo_cli.ai.fight_terms_core import SCALE, FightTerms, fight_terms, terms_margin, terms_win
+from artifactsmmo_cli.ai.fight_terms_core import SCALE, FightTerms, fight_terms, terms_margin
 from artifactsmmo_cli.ai.fight_terms_core import WIN_MARGIN as WIN_MARGIN
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat
@@ -519,17 +519,16 @@ def is_winnable(
     selection); the planning gates call it stat-only since the veto is applied
     upstream.
     """
-    if history is not None:
-        # LEVEL- AND GEAR-SCOPED (USER 2026-10-05: "Old losses are gear-specific
-        # and level-specific"). The veto read every Fight(monster) cycle ever
-        # recorded, so a monster lost to once could never be fought again — and
-        # a vetoed monster is never fought, so no later evidence could clear it.
-        # Live: C3P0 lost 42/42 to its task pig at level 19 (2026-08-20); at
-        # level 30 the stats win and the veto still refused, holding the task
-        # inert. Evidence about another level or another loadout is evidence
-        # about a different fight.
-        if loss_vetoed(state, game_data, monster_code, history):
-            return False
+    # LEVEL- AND GEAR-SCOPED (USER 2026-10-05: "Old losses are gear-specific
+    # and level-specific"). The veto read every Fight(monster) cycle ever
+    # recorded, so a monster lost to once could never be fought again — and
+    # a vetoed monster is never fought, so no later evidence could clear it.
+    # Live: C3P0 lost 42/42 to its task pig at level 19 (2026-08-20); at
+    # level 30 the stats win and the veto still refused, holding the task
+    # inert. Evidence about another level or another loadout is evidence
+    # about a different fight.
+    if history is not None and loss_vetoed(state, game_data, monster_code, history):
+        return False
     return predict_win(state, game_data, monster_code)
 
 

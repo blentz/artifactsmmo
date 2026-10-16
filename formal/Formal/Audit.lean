@@ -424,6 +424,8 @@ open Formal.PriorityBand
 #print axioms Formal.FightOdds.fightOdds_noCrit
 #print axioms Formal.FightOdds.fightOdds_win_mono_stock
 #print axioms Formal.FightOdds.fightOdds_win_mono_hp
+#print axioms Formal.FightOdds.winProb_eq_one_of_worst
+#print axioms Formal.FightOdds.winProb_ge_critBound
 #print axioms Formal.GroupFight.groupOutcome_single
 #print axioms Formal.GroupFight.killRounds_antitone
 #print axioms Formal.GroupFight.win_survivor

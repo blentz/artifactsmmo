@@ -12,8 +12,8 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.weapon_winnability import (
-    _combat_fingerprint,
     _MEMO,
+    _combat_fingerprint,
     beatable_count,
     marginal_weapon_winnability,
 )
