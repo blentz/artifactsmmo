@@ -464,9 +464,9 @@ def test_default_candidate_pool_excludes_gear_above_the_characters_level() -> No
 def _owlbear_gd(blade_fire: int) -> GameData:
     """The R2D2 v owlbear replay (P 0.6308 bare, closed-form margin 1) and one
     blade. Exact odds owning it: +12 fire -> 0.9121 (margin 2), +30 fire ->
-    0.9951 (margin 3). The walk admits a step only on a margin gain (`combat_margin`
-    stays the closed-form ranking), so a +4 blade (P 0.7965, margin 1) is never
-    a step."""
+    0.9951 (margin 3). The walk ranks on the closed-form margin; a +4 blade
+    (P 0.7965, margin 1) moves none, so it is a step only through the bare-odds
+    fallback at a margin stall."""
     gd = GameData()
     gd._item_stats = {"blade": ItemStats(code="blade", level=1, type_="weapon",
                                          attack={"fire": blade_fire},
@@ -525,6 +525,16 @@ def test_routing_closes_only_at_secure() -> None:
                              secure=True)
     assert deficit is not None and deficit.closes is True
     assert [step.code for step in deficit.chain] == ["blade"]
+
+
+def test_the_upgrade_target_routes_at_the_secure_bar() -> None:
+    """The held task's gear target is a ROUTING question: owlbear at P 0.6308
+    clears θ 1/2, so the feasibility walk has no gap, yet the fight is won
+    below SECURE_WIN and the +12 blade (P 0.9121) is what to build."""
+    state = _owlbear_task(Fraction(1, 2))
+    gd = _owlbear_gd(12)
+    assert combat_deficit(state, gd, "owlbear") is None
+    assert deficit_upgrade_target(state, gd) == ("blade", "weapon_slot")
 
 
 def _owlbear_with_elixir() -> tuple[GameData, object]:
