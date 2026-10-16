@@ -869,3 +869,15 @@ def test_secure_win_needs_three_quarters() -> None:
     strict = dataclasses.replace(state, win_thresholds={"owlbear": Fraction(9, 10)})
     sure = _gd(hp=10, attack={"fire": 83}, crit=5, initiative=10, code="owlbear")
     assert secure_win(strict, sure, "owlbear") is True
+
+
+def test_secure_win_needs_the_threshold_when_it_is_above_three_quarters() -> None:
+    """P 0.7965 clears SECURE_WIN but not a measured 9/10: the floor is the
+    larger of the two, never SECURE_WIN alone."""
+    state, _ = _owlbear()
+    gd = _gd(hp=1390, attack={"fire": 83}, crit=5, initiative=10, code="owlbear")
+    assert round(float(win_probability(state, gd, "owlbear")), 4) == 0.7965
+    cheap = dataclasses.replace(state, win_thresholds={"owlbear": Fraction(1, 2)})
+    assert secure_win(cheap, gd, "owlbear") is True
+    strict = dataclasses.replace(state, win_thresholds={"owlbear": Fraction(9, 10)})
+    assert secure_win(strict, gd, "owlbear") is False

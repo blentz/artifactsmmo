@@ -1000,7 +1000,7 @@ def _horizon(verdict: str | None):
     return _fake
 
 
-def _arm(monkeypatch, verdict, combat_monster, gd=None, propped=False):
+def _arm(monkeypatch, verdict, combat_monster, gd=None, propped=False, risky=False):
     """The CHILD `IsAFightBlockingMe` hands the walk to.
 
     Asserted on the returned node rather than on `walk.trail`: a node appends
@@ -1010,7 +1010,8 @@ def _arm(monkeypatch, verdict, combat_monster, gd=None, propped=False):
     monkeypatch.setattr(_root_mod, "resolve_task_horizon", _horizon(verdict))
     node = IsAFightBlockingMe(_objective(gd), RootWalk())
     return node.resolve(make_state(level=5), gd,
-                        _ctx(combat_monster=combat_monster, combat_propped=propped), None)
+                        _ctx(combat_monster=combat_monster, combat_propped=propped,
+                             combat_risky=risky), None)
 
 
 def test_an_unwinnable_task_takes_the_fight_arm_without_a_loss(monkeypatch):
@@ -1044,6 +1045,30 @@ def test_a_potion_propped_target_still_takes_the_fight_arm(monkeypatch):
                       WhichSlotClosesTheFight)
     assert isinstance(_arm(monkeypatch, HORIZON_GEAR, combat_monster="chicken", propped=False),
                       IsMyGearBehindMyTier)
+
+
+def test_risky_target_asks_for_gear_first(monkeypatch):
+    """USER 2026-10-15: "if all of our fights are below 75% win rates, we
+    probably need better gear". A grind target won below SECURE_WIN
+    (`ctx.combat_risky`) is, like a propped one, no winnable alternative to the
+    gear decisions: the fight's gear is still asked for."""
+    assert isinstance(_arm(monkeypatch, HORIZON_GEAR, combat_monster="owlbear", risky=True),
+                      WhichSlotClosesTheFight)
+    assert isinstance(_arm(monkeypatch, HORIZON_GEAR, combat_monster="owlbear", risky=False),
+                      IsMyGearBehindMyTier)
+
+
+def test_risky_target_without_gear_still_grinds(monkeypatch):
+    """Risky, no task, and the gear sheet wants nothing: the walk still reaches
+    the trunk — a risky fight is fought when there is no gear to build."""
+    gd = _gd()
+    gd._monster_level = {"chicken": 1}
+    gd._monster_type = {"chicken": "normal"}
+    monkeypatch.setattr(tier_progress, "is_winnable", lambda s, g, c, h: True)
+    monkeypatch.setattr(_root_mod, "resolve_task_horizon", _horizon(None))
+    resolution = resolve_root(_geared_state(), gd, _objective(gd),
+                              _ctx(combat_monster="chicken", combat_risky=True), None)
+    assert resolution.root == ReachCharLevel(level=20)
 
 
 def test_a_potion_propped_only_win_keeps_the_gear_root_ahead_of_the_trunk(monkeypatch):

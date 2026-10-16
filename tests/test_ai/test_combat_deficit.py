@@ -14,6 +14,8 @@ includes worn gear; a fixture that puts a sword in `equipment` while leaving
 `test_weapon_winnability`.
 """
 
+from fractions import Fraction
+
 from artifactsmmo_cli.ai.combat_deficit import (
     combat_deficit,
     deficit_upgrade_target,
@@ -448,3 +450,63 @@ def test_default_candidate_pool_excludes_gear_above_the_characters_level() -> No
     deficit = combat_deficit(_state(), gd, "boar")
 
     assert "mythic_blade" not in [s.code for s in deficit.chain]
+
+
+# ---------------------------------------------------------------------------
+# Spec 2026-10-15-fight-gates-odds §3: a deficit is a fight below SECURE_WIN
+# (USER: "if all of our fights are below 75% win rates, we probably need better
+# gear"), or below the character's own threshold when that is higher.
+# ---------------------------------------------------------------------------
+
+
+def _owlbear_gd(blade_fire: int) -> GameData:
+    """The R2D2 v owlbear replay (P 0.6308 bare, closed-form margin 1) and one
+    blade. Exact odds owning it: +12 fire -> 0.9121 (margin 2), +30 fire ->
+    0.9951 (margin 3). The walk admits a step only on a margin gain (`combat_margin`
+    stays the closed-form ranking), so a +4 blade (P 0.7965, margin 1) is never
+    a step."""
+    gd = GameData()
+    gd._item_stats = {"blade": ItemStats(code="blade", level=1, type_="weapon",
+                                         attack={"fire": blade_fire},
+                                         crafting_skill="weaponcrafting", crafting_level=5)}
+    gd._monster_level = {"owlbear": 1}
+    gd._monster_hp = {"owlbear": 1450}
+    gd._monster_attack = {"owlbear": {"fire": 83}}
+    gd._monster_resistance = {"owlbear": {}}
+    fill_monster_stat_defaults(gd)
+    gd._monster_critical_strike = {"owlbear": 5}
+    gd._monster_initiative = {"owlbear": 10}
+    return gd
+
+
+def _owlbear_task(theta: Fraction):  # type: ignore[no-untyped-def]
+    return make_state(level=1, hp=785, max_hp=785, attack={"fire": 141},
+                      critical_strike=45, initiative=0, equipment={}, inventory={},
+                      task_code="owlbear", task_type="monsters", task_total=10,
+                      task_progress=0, win_thresholds={"owlbear": theta})
+
+
+def test_has_combat_deficit_below_secure() -> None:
+    """P 0.6308 clears a measured θ of 1/2, so `predict_win` fights it — but it
+    is below SECURE_WIN, so the gear arm still sees a deficit, and the full walk
+    agrees (the pinned equivalence)."""
+    gd = _owlbear_gd(12)
+    state = _owlbear_task(Fraction(1, 2))
+    assert has_combat_deficit(state, gd) is True
+    assert combat_deficit(state, gd, "owlbear") is not None
+
+
+def test_deficit_closes_only_at_secure() -> None:
+    """The chain closes at the step that reaches max(θ, SECURE_WIN). The +12
+    blade (P 0.9121) closes at θ 1/2; at θ 99/100 the same step is taken and
+    does not close; the +30 blade (P 0.9951) closes there."""
+    deficit = combat_deficit(_owlbear_task(Fraction(1, 2)), _owlbear_gd(12), "owlbear")
+    assert deficit is not None and deficit.closes is True
+    assert [step.code for step in deficit.chain] == ["blade"]
+
+    short = combat_deficit(_owlbear_task(Fraction(99, 100)), _owlbear_gd(12), "owlbear")
+    assert short is not None and short.closes is False
+    assert [step.code for step in short.chain] == ["blade"]
+
+    enough = combat_deficit(_owlbear_task(Fraction(99, 100)), _owlbear_gd(30), "owlbear")
+    assert enough is not None and enough.closes is True

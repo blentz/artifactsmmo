@@ -14,7 +14,9 @@ the model was right every time and the bot fought anyway.
 
 `combat_deficit` is that missing link, and it is a fact rather than a timer:
 
-  * `None` exactly when `predict_win` holds — so a caller that suppresses a fight
+  * `None` exactly when `secure_win` holds (P(win) at least max(θ, SECURE_WIN),
+    spec 2026-10-15-fight-gates-odds §3: a fight won below 75% is still a gear
+    gap) — so a caller that suppresses a fight
     "while the deficit is non-None" releases the moment the gear lands, with
     nothing to expire and no escalation to exhaust.
   * otherwise a `CombatDeficit` naming the acquisitions that close the margin,
@@ -47,7 +49,7 @@ import dataclasses
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from artifactsmmo_cli.ai.combat import combat_margin, predict_win
+from artifactsmmo_cli.ai.combat import combat_margin, secure_win
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.item_catalog import ItemStats
@@ -150,10 +152,11 @@ def blocked_task_monster(state: WorldState) -> str | None:
 
 
 def has_combat_deficit(state: WorldState, game_data: GameData) -> bool:
-    """Is the held task's monster unwinnable? The CHEAP form of the same fact.
+    """Is the held task's monster not secure — below max(θ, SECURE_WIN) at max
+    HP? The CHEAP form of the same fact.
 
     `combat_deficit` walks every candidate to name what closes the gap; this is
-    one `predict_win`. `task_horizon.resolve_task_horizon` runs every cycle and
+    one `secure_win`. `task_horizon.resolve_task_horizon` runs every cycle and
     first needs to know THAT a deficit exists, so the walk would be the wrong
     thing to put there.
 
@@ -164,8 +167,8 @@ def has_combat_deficit(state: WorldState, game_data: GameData) -> bool:
     monster = blocked_task_monster(state)
     if monster is None:
         return False
-    return not predict_win(dataclasses.replace(state, hp=state.max_hp),
-                           game_data, monster)
+    return not secure_win(dataclasses.replace(state, hp=state.max_hp),
+                          game_data, monster)
 
 
 def deficit_upgrade_target(
@@ -285,7 +288,7 @@ def combat_deficit(
     # price swing, fixed the same way (PLAN_iron_gear_acquisition increment 2),
     # and `tiers/objective.py` sets the precedent for building `rested` here.
     state = dataclasses.replace(state, hp=state.max_hp)
-    if predict_win(state, game_data, monster):
+    if secure_win(state, game_data, monster):
         return None
     baseline = combat_margin(state, game_data, monster)
     pool = _pool(state, game_data, candidates)
@@ -336,7 +339,7 @@ def combat_deficit(
             margin_after=current,
             acquire_cost=best_cost,
         ))
-        if predict_win(dataclasses.replace(state, inventory=inventory), game_data, monster):
+        if secure_win(dataclasses.replace(state, inventory=inventory), game_data, monster):
             closes = True
             break
     return CombatDeficit(monster=monster, baseline_margin=baseline,

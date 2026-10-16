@@ -5548,7 +5548,8 @@ ROOT_FIGHT_ARM_MUTATIONS = [
     # against a pig is fine. but that shouldn't block us from fighting other,
     # winnable monsters."
     ("root: the fight arm ignores a winnable alternative",
-     "        if ctx.combat_monster is not None and not ctx.combat_propped:\n"
+     "        if (ctx.combat_monster is not None and not ctx.combat_propped\n"
+     "                and not ctx.combat_risky):\n"
      "            return IsMyGearBehindMyTier(self.objective, self.walk)\n"
      "        horizon = resolve_task_horizon(state, game_data)\n",
      "        horizon = resolve_task_horizon(state, game_data)\n"),
@@ -9208,16 +9209,35 @@ BAND_PICK_MUTATIONS = [
     ("cascade: a target with no bare fight anywhere is not propped",
      "            self._propped_target = band.monster\n",
      "            pass\n"),
+    ("ctx: a risky target is never marked",
+     "            combat_risky=(combat_monster is not None\n",
+     "            combat_risky=(False\n"),
+    ("ctx: risk is asked at the current hp",
+     "                          and not secure_win(replace(self.state, hp=self.state.max_hp),\n",
+     "                          and not secure_win(self.state,\n"),
     ("ctx: any target is the propped one",
      "                            and combat_monster == self._propped_target),\n",
      "                            and self._propped_target is not None),\n"),
 ]
 # The gear decisions judge bare gear (USER 2026-10-10). Killed by
 # tests/test_ai/test_decisions_root.py.
+# Spec 2026-10-15-fight-gates-odds §3: the deficit is a fight below
+# max(θ, SECURE_WIN), not below θ. Killed by tests/test_ai/test_combat_deficit.py.
+COMBAT_DEFICIT_SECURE_MUTATIONS = [
+    ("deficit: every gate asks predict_win instead of secure_win",
+     "from artifactsmmo_cli.ai.combat import combat_margin, secure_win\n",
+     "from artifactsmmo_cli.ai.combat import combat_margin\n"
+     "from artifactsmmo_cli.ai.combat import predict_win as secure_win\n"),
+]
 PROPPED_GEAR_MUTATIONS = [
     ("root: a potion-propped target hides the fight's gear",
-     "        if ctx.combat_monster is not None and not ctx.combat_propped:\n",
-     "        if ctx.combat_monster is not None:\n"),
+     "        if (ctx.combat_monster is not None and not ctx.combat_propped\n",
+     "        if (ctx.combat_monster is not None\n"),
+    # Spec 2026-10-15-fight-gates-odds §3 (USER: below 75% we probably need
+    # better gear).
+    ("root: a risky target hides the fight's gear",
+     "                and not ctx.combat_risky):\n",
+     "                ):\n"),
 ]
 CONSUMABLE_PRICE_MUTATIONS = [
     ("price: held copies are priced as already owned",
@@ -11209,6 +11229,8 @@ def _collect_all_groups() -> None:
     run_group(COMBAT_DEFICIT_SRC, COMBAT_DEFICIT_TIEBREAK_MUTATIONS,
               "tests/test_ai/test_combat_deficit_ceiling_tie.py", survivors)
     run_group(COMBAT_DEFICIT_SRC, COMBAT_DEFICIT_FUTILE_TARGET_MUTATIONS,
+              "tests/test_ai/test_combat_deficit.py", survivors)
+    run_group(COMBAT_DEFICIT_SRC, COMBAT_DEFICIT_SECURE_MUTATIONS,
               "tests/test_ai/test_combat_deficit.py", survivors)
     run_group(TASK_HORIZON_SRC, TASK_HORIZON_MUTATIONS,
               "tests/test_ai/test_task_horizon.py", survivors)

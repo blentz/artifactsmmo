@@ -255,6 +255,13 @@ class SelectionContext:
     # False (the default) whenever bare gear has a fight, or there is no target.
     combat_propped: bool = False
 
+    # The grind target wins below SECURE_WIN (USER 2026-10-15: below 75% we
+    # probably need better gear; `combat.secure_win`, asked at max HP): like a
+    # propped target it does not hide a gear upgrade from
+    # `decisions.root.IsAFightBlockingMe`. It is still fought when no gear is
+    # to be built. False whenever there is no target.
+    combat_risky: bool = False
+
     # Whether the held items task pays enough to defer the grind (spec
     # 2026-10-14 items-task-pays §2, `held_task_pays.held_task_pays`): its
     # gold or drops verdict, or skill XP the DAG demands at a better rate than

@@ -524,6 +524,12 @@ class IsAFightBlockingMe(Decision[MetaGoal]):
     (`ctx.combat_propped`) counts as none and the fight's gear acquisition is
     still asked for. A potion-propped win never hides a gear upgrade.
 
+    SECURE (USER 2026-10-15, "if all of our fights are below 75% win rates, we
+    probably need better gear"). A target won below `combat.SECURE_WIN`
+    (`ctx.combat_risky`) counts as none here too, so the held fight's gear is
+    asked for first. Without that gear the tier arm still reaches the trunk, and
+    the risky target is grinded.
+
     `has_craftable_upgrade_any_slot` is NOT re-tested here. In the latch it was
     the AND-guard that stopped the standing arm firing with nothing to build; in
     the graph that job belongs to the child — `WhichSlotClosesTheFight` returns
@@ -546,7 +552,8 @@ class IsAFightBlockingMe(Decision[MetaGoal]):
                 ctx: SelectionContext, history: LearningStore | None
                 ) -> "Decision[MetaGoal] | MetaGoal | None":
         self.walk.trail.append(self.name)
-        if ctx.combat_monster is not None and not ctx.combat_propped:
+        if (ctx.combat_monster is not None and not ctx.combat_propped
+                and not ctx.combat_risky):
             return IsMyGearBehindMyTier(self.objective, self.walk)
         horizon = resolve_task_horizon(state, game_data)
         if horizon is None or horizon.verdict != HORIZON_GEAR:

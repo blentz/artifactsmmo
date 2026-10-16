@@ -55,7 +55,14 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.best_loadout import BestLoadout, best_loadout, candidate_potions, fight_ahead_loadout
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
-from artifactsmmo_cli.ai.combat import fight_records, is_winnable, lost_fights, predict_win, win_probability
+from artifactsmmo_cli.ai.combat import (
+    fight_records,
+    is_winnable,
+    lost_fights,
+    predict_win,
+    secure_win,
+    win_probability,
+)
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.constants import (
     BANK_REFRESH_FORCE_SENTINEL,
@@ -4109,6 +4116,9 @@ class GamePlayer:
             combat_monster=combat_monster,
             combat_propped=(combat_monster is not None
                             and combat_monster == self._propped_target),
+            combat_risky=(combat_monster is not None
+                          and not secure_win(replace(self.state, hp=self.state.max_hp),
+                                             self.game_data, combat_monster)),
             # A bank expansion is never a reserved gear code → buying=None
             # applies the full progression-reserve floor (same call the goal
             # makes inside should_expand_bank's inputs).
