@@ -196,13 +196,16 @@ def test_predict_win_at_current_hp_matches_lean(seed):
         py = terms_win(combat_mod.combat_terms(state, _FakeGameData(), "M"))
         margin = combat_mod.combat_margin(state, _FakeGameData(), "M")
 
-    # RUF005 declined: the positional 46-int oracle layout of test_predict_win_diff.py.
+    # RUF005 declined: the positional 45-int oracle layout of test_predict_win_diff.py.
+    # Turn order is the server's, stated independently of `combat.moves_first`:
+    # higher initiative, a tie to the higher (current) HP, then the monster.
+    first = stats.initiative > m["init"] or (stats.initiative == m["init"] and hp > m["hp"])
     args = (
         _elem_args(stats.attack, stats.dmg, stats.dmg_elements, m["resist"])  # noqa: RUF005
         + [stats.critical_strike, m["hp"]]
         + _elem_args(m["attack"], 0, {}, stats.resistance)
-        + [m["crit"], stats.max_hp, 1 if stats.initiative >= m["init"] else 0]
-        + [0, sum(stats.attack.values()), m["lifesteal"], sum(m["attack"].values())]
+        + [m["crit"], stats.max_hp, 1 if first else 0]
+        + [0, m["lifesteal"], sum(m["attack"].values())]
         + [m["poison"], m["barrier"], m["burn"], m["healing"], m["recon"], m["void"],
            m["berserk"], m["frenzy"], m["bubble"]]
         + [0]

@@ -84,9 +84,17 @@ One function walks every way a fight can end:
   `die_rest = die_step − 50 × raw_monster × (200 + m_crit)`: everything today's
   expected step charges beyond the bare hit (monster healing, void drain,
   bubble and sun shield on the kill side; poison, burn, greed, berserker rage,
-  frenzy, enchanted mirror and the player's mean lifesteal on the die side). It
-  applies every round as a deterministic term with today's conservative
-  bounds. Only crits branch. `RoundDamage` does not carry `kill_rest` and
+  frenzy and enchanted mirror on the die side). It applies every round as a
+  deterministic term with today's conservative bounds. Only crits branch.
+  **Amended 2026-10-17:** lifesteal is NOT in `kill_rest` / `die_rest`. Server
+  logs (2,327 heals) show a crit that does not kill heals its attacker
+  `round(lifesteal% × that turn's crit damage)`, capped at max HP; the mean
+  folded into every hit made the walk optimistic (C3P0 v cyclops 0.896
+  modelled, 0.807 observed, 0.816 exact). `RoundDamage` carries `p_heal` /
+  `m_heal` and the walk applies them on the crit branch (Lean
+  `FightOdds.cure`). Turn order: higher initiative, a tie to the higher HP
+  (`combat.moves_first`); the old `>=` gave R2D2 v cultist_acolyte 0.405 for a
+  fight the monster opened 26 of 26 times. `RoundDamage` does not carry `kill_rest` and
   `die_rest` as fields: `fight_split` folds the rest into both amounts,
   `kill_normal = kill_hit + kill_rest`, `kill_crit = kill_crit_hit + kill_rest`,
   `die_normal = die_hit + die_rest`, `die_crit = die_crit_hit + die_rest`.
@@ -228,8 +236,8 @@ expected form.
 - Gear choice and initiative (`pick_loadout`, `scoring.py:289`,
   `combat_deficit`): part C.
 - Party fights (`group_fight_core`): unchanged.
-- Crit-linked effects (lifesteal on crit, frenzy) stay at their means inside
-  `kill_rest` / `die_rest`.
+- Frenzy stays at its mean inside `die_rest`. (Lifesteal rode the crit branch
+  from 2026-10-17; see above.)
 
 ## Testing
 

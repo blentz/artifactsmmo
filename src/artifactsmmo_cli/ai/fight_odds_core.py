@@ -12,7 +12,7 @@ holds at most `(r + 1)²` pool pairs per stock value.
 THE ROUND. `RoundDamage` holds what one round charges, ×10000: `kill_normal` /
 `kill_crit` to the monster, `die_normal` / `die_crit` to the player, each the
 bare hit plus every term today's expected step charges beyond it (healing,
-poison, greed, mean lifesteal, ... — `combat.fight_split`) except burn. Only
+poison, greed, ... — `combat.fight_split`) except burn and lifesteal. Only
 crits branch. A player turn first takes its burn tick, then applies `drink`
 (start of turn, below half, one per turn while stock lasts), then hits;
 `player_first` orders the two turns, exactly as `fight_outcome`. A monster
@@ -20,6 +20,16 @@ pool at or below 0 is a win, a player pool at or below 0 a loss, and any state
 unresolved after `MAX_TURNS` rounds a loss in round `MAX_TURNS`. Pools are not
 capped: a negative amount (a mean-modelled heal larger than the bare hit) only
 raises a pool, as the mean model allows.
+
+LIFESTEAL. Server logs 2026-10-17 (2,327 heals over three characters): a crit
+heals its attacker `lifesteal`% of that turn's crit damage, rounded
+(`combat.lifesteal_heal`: 15% of 165 is 25), capped at the attacker's max HP,
+and a crit that kills heals nothing. So the heal rides the crit branch: after
+a non-killing player crit the player pool rises by `p_heal`, after a monster
+crit the monster pool by `m_heal`, each by `cure`. It used to be a mean folded
+into every hit; a guaranteed 3.33 a round clears HP breakpoints a 25 on 30% of
+turns does not (C3P0 v cyclops: 0.896 modelled, 0.807 observed over 161
+fights, 0.816 exact).
 
 BURN. The server's text: "On his first turn, apply a burn effect of {value}% of
 your attack of all elements. The damage is applied each turn and decreases by
@@ -64,6 +74,10 @@ class RoundDamage:
     m_crit: int
     burn: tuple[int, ...]
     """The burn ticks in order, ×10000 (`burn_ticks`); empty without burn."""
+    p_heal: int = 0
+    """The player's lifesteal heal on a crit turn, ×10000; 0 without lifesteal."""
+    m_heal: int = 0
+    """The monster's lifesteal heal on its crit turn, ×10000."""
 
 
 @dataclass(frozen=True)
@@ -99,10 +113,21 @@ State = tuple[int, int, int]
 """`(monster pool, player pool, stock left)`."""
 
 
-def _roll(pct: int, normal: int, crit: int) -> tuple[tuple[Fraction, int], ...]:
-    """The two outcomes of one crit roll, without a zero-probability branch."""
-    branches = ((Fraction(100 - pct, 100), normal), (Fraction(pct, 100), crit))
+Roll = tuple[tuple[Fraction, int, int], ...]
+"""`(probability, amount, heal)` per outcome of a crit roll."""
+
+
+def _roll(pct: int, normal: int, crit: int, heal: int) -> Roll:
+    """The two outcomes of one crit roll, without a zero-probability branch;
+    only the crit heals."""
+    branches = ((Fraction(100 - pct, 100), normal, 0), (Fraction(pct, 100), crit, heal))
     return tuple(b for b in branches if b[0] != 0)
+
+
+def cure(pool: int, heal: int, cap: int) -> int:
+    """`pool` after a lifesteal heal of `heal`, capped at `cap`; a heal never
+    lowers a pool (Lean `FightOdds.cure`)."""
+    return max(pool, min(pool + heal, cap))
 
 
 Key = tuple[bool, int, int, int]
@@ -130,8 +155,9 @@ def fight_odds(terms: FightTerms, damage: RoundDamage, hp_start: int, max_hp: in
     if terms.exit not in (FightExit.NONE, FightExit.DEAD) or pool <= 0:
         return (Ending(Fraction(1), False, 0, 0, 0),)
     max_pool, restore_pool = max_hp * SCALE, restore * SCALE
-    kills = _roll(damage.p_crit, damage.kill_normal, damage.kill_crit)
-    hits = _roll(damage.m_crit, damage.die_normal, damage.die_crit)
+    kills = _roll(damage.p_crit, damage.kill_normal, damage.kill_crit, damage.p_heal)
+    hits = _roll(damage.m_crit, damage.die_normal, damage.die_crit, damage.m_heal)
+    m_cap = damage.monster_hp * SCALE
     ended: dict[Key, Fraction] = {}
     states: dict[State, Fraction] = {(damage.monster_hp * SCALE, pool, stock): Fraction(1)}
     for round_no in range(1, MAX_TURNS + 1):
@@ -140,10 +166,10 @@ def fight_odds(terms: FightTerms, damage: RoundDamage, hp_start: int, max_hp: in
             tick = _tick(damage, terms.player_first, round_no)
             if terms.player_first:
                 _player_then_monster(round_no, tick, monster, player, left, prob, stock,
-                                     max_pool, restore_pool, kills, hits, ended, after)
+                                     max_pool, restore_pool, m_cap, kills, hits, ended, after)
             else:
                 _monster_then_player(round_no, tick, monster, player, left, prob, stock,
-                                     max_pool, restore_pool, kills, hits, ended, after)
+                                     max_pool, restore_pool, m_cap, kills, hits, ended, after)
         states = after
         if not states:
             break
@@ -154,38 +180,42 @@ def fight_odds(terms: FightTerms, damage: RoundDamage, hp_start: int, max_hp: in
 
 
 def _player_then_monster(round_no: int, tick: int, monster: int, player: int, left: int,
-                         prob: Fraction, stock: int, max_pool: int, restore_pool: int,
-                         kills: tuple[tuple[Fraction, int], ...], hits: tuple[tuple[Fraction, int], ...],
+                         prob: Fraction, stock: int, max_pool: int, restore_pool: int, m_cap: int,
+                         kills: Roll, hits: Roll,
                          ended: dict[Key, Fraction], after: dict[State, Fraction]) -> None:
     if tick > 0 and player - tick <= 0:
         _add_ended(ended, (False, round_no, 0, stock - left), prob)
         return
     player, left = drink(player - tick, max_pool, restore_pool, left)
-    for pk, kill in kills:
+    for pk, kill, p_heal in kills:
         if monster - kill <= 0:
             _add_ended(ended, (True, round_no, player, stock - left), prob * pk)
             continue
-        for ph, hit in hits:
-            if player - hit <= 0:
+        healed = cure(player, p_heal, max_pool)
+        for ph, hit, m_heal in hits:
+            if healed - hit <= 0:
                 _add_ended(ended, (False, round_no, 0, stock - left), prob * pk * ph)
             else:
-                _add_state(after, (monster - kill, player - hit, left), prob * pk * ph)
+                _add_state(after, (cure(monster - kill, m_heal, m_cap), healed - hit, left),
+                           prob * pk * ph)
 
 
 def _monster_then_player(round_no: int, tick: int, monster: int, player: int, left: int,
-                         prob: Fraction, stock: int, max_pool: int, restore_pool: int,
-                         kills: tuple[tuple[Fraction, int], ...], hits: tuple[tuple[Fraction, int], ...],
+                         prob: Fraction, stock: int, max_pool: int, restore_pool: int, m_cap: int,
+                         kills: Roll, hits: Roll,
                          ended: dict[Key, Fraction], after: dict[State, Fraction]) -> None:
-    for ph, hit in hits:
+    for ph, hit, m_heal in hits:
         if player - hit <= 0 or (tick > 0 and player - hit - tick <= 0):
             _add_ended(ended, (False, round_no, 0, stock - left), prob * ph)
             continue
         drunk, rest = drink(player - hit - tick, max_pool, restore_pool, left)
-        for pk, kill in kills:
-            if monster - kill <= 0:
+        healed_monster = cure(monster, m_heal, m_cap)
+        for pk, kill, p_heal in kills:
+            if healed_monster - kill <= 0:
                 _add_ended(ended, (True, round_no, drunk, stock - rest), prob * ph * pk)
             else:
-                _add_state(after, (monster - kill, drunk, rest), prob * ph * pk)
+                _add_state(after, (healed_monster - kill, cure(drunk, p_heal, max_pool), rest),
+                           prob * ph * pk)
 
 
 def win_probability(endings: Sequence[Ending]) -> Fraction:

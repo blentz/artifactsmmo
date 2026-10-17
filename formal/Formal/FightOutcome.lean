@@ -271,20 +271,20 @@ theorem fightOutcome_noStock_win (t : Terms) (hp maxHp : Int) (restore : Nat) :
 /-- The closed form over the terms IS `Formal.PredictWin.predictWin` (which
 models the player at full HP): the extracted terms reproduce the verdict. -/
 theorem closedWin_eq_predictWin (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn
+    pLifesteal pCritHit mLifesteal mCritHit mAtkSum monsterPoison monsterBarrier monsterBurn
     monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy
     monsterBubble playerAntipoison monsterSunShield monsterGreed monsterEnchantedMirror : Int)
     (playerFirst : Bool) (hmax : 1 ≤ playerMaxHp) :
     predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn
+      pLifesteal pCritHit mLifesteal mCritHit mAtkSum monsterPoison monsterBarrier monsterBurn
       monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy
       monsterBubble playerAntipoison monsterSunShield monsterGreed monsterEnchantedMirror
       playerFirst
     = closedWin ⟨rawPlayer,
-        killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing
+        killStepNet rawPlayer pCrit mCrit mLifesteal mCritHit monsterHp monsterHealing
           playerMaxHp monsterVoidDrain monsterBubble monsterSunShield,
         monsterHp + monsterBarrier, monsterReconstitution,
-        dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
+        dieStep rawMonster mCrit pCrit pLifesteal pCritHit monsterPoison monsterBurn
           playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison
           rawPlayer monsterGreed monsterEnchantedMirror mAtkSum,
         playerFirst⟩ playerMaxHp playerMaxHp := by
@@ -292,9 +292,9 @@ theorem closedWin_eq_predictWin (rawPlayer pCrit monsterHp rawMonster mCrit play
     simp [effHp, show 0 < playerMaxHp by omega]
   unfold predictWin closedWin exitOf gate roundsToKill
   simp only [heff, scale]
-  generalize killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing
+  generalize killStepNet rawPlayer pCrit mCrit mLifesteal mCritHit monsterHp monsterHealing
     playerMaxHp monsterVoidDrain monsterBubble monsterSunShield = ks
-  generalize dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
+  generalize dieStep rawMonster mCrit pCrit pLifesteal pCritHit monsterPoison monsterBurn
     playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison
     rawPlayer monsterGreed monsterEnchantedMirror mAtkSum = ds
   by_cases h1 : rawPlayer ≤ 0

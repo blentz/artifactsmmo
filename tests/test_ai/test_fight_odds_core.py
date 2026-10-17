@@ -44,6 +44,51 @@ class TestR2D2Replay:
         assert losses == {7, 8, 9, 10}
 
 
+# C3P0 v cyclops, 2026-10-17 server logs (161 fights, 130 won): 110/165 a turn at
+# 30% crit, moving first; the cyclops 118/177 at 5%; C3P0 725 HP, cyclops 850 HP;
+# a lifesteal rune heals 25 on every crit that does not kill; 30-HP potions.
+_C3P0_TERMS = fight_terms(110, 50 * 110 * 230, 850, 0, 50 * 118 * 205, 725, 725, True)
+_C3P0 = RoundDamage(850, 110 * SCALE, 165 * SCALE, 30, 118 * SCALE, 177 * SCALE, 5, (),
+                    p_heal=25 * SCALE)
+
+
+class TestLifesteal:
+    def test_c3p0_v_cyclops_matches_the_server_rule(self):
+        """The exact DP over the logged rules gives 0.8157 (observed 130/161 =
+        0.807); the mean model this replaced gave 0.8956."""
+        p = win_probability(fight_odds(_C3P0_TERMS, _C3P0, 725, 725, 30, 80))
+        assert round(float(p), 4) == 0.8157
+
+    def test_c3p0_v_cyclops_bare(self):
+        p = win_probability(fight_odds(_C3P0_TERMS, _C3P0, 725, 725, 0, 0))
+        assert round(float(p), 4) == 0.6048
+
+    @pytest.mark.parametrize("player_first", [True, False])
+    def test_a_heal_is_capped_and_a_killing_crit_heals_nothing(self, player_first):
+        """Every turn a crit: each non-killing crit tops 90 up to the 100 cap, not
+        115; the third crit kills and heals nothing, so the fight ends at 90
+        whichever side moves first."""
+        terms = fight_terms(100, 100 * SCALE, 300, 0, 10 * SCALE, 100, 100, player_first)
+        damage = RoundDamage(300, 50 * SCALE, 100 * SCALE, 100, 10 * SCALE, 10 * SCALE, 0, (),
+                             p_heal=25 * SCALE)
+        assert fight_odds(terms, damage, 100, 100, 0, 0) == (Ending(Fraction(1), True, 3, 90 * SCALE, 0),)
+
+    @pytest.mark.parametrize("player_first", [True, False])
+    def test_a_monster_crit_heals_the_monster(self, player_first):
+        """A 100 kill a turn against a monster healing 50 on each (certain) crit
+        takes five rounds, not three. Moving first, the monster's round-1 heal
+        lands at full HP and is capped to nothing."""
+        terms = fight_terms(100, 100 * SCALE, 300, 0, 1 * SCALE, 10_000, 10_000, player_first)
+        damage = RoundDamage(300, 100 * SCALE, 100 * SCALE, 0, 1 * SCALE, 1 * SCALE, 100, (),
+                             m_heal=50 * SCALE)
+        (ending,) = fight_odds(terms, damage, 10_000, 10_000, 0, 0)
+        assert ending.win and ending.turns == 5
+
+    def test_no_heal_is_the_old_walk(self):
+        assert fight_odds(_R2D2_TERMS, replace(_R2D2, p_heal=0, m_heal=0), 785, 785, 0, 0) \
+            == fight_odds(_R2D2_TERMS, _R2D2, 785, 785, 0, 0)
+
+
 class TestDistribution:
     def test_probabilities_sum_to_one(self):
         assert sum(e.prob for e in fight_odds(_R2D2_TERMS, _R2D2, 785, 785, 70, 3)) == 1

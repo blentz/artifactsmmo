@@ -65,7 +65,10 @@ def _gd() -> GameData:
 
 
 def _state(**inventory: int):
-    return make_state(level=1, hp=100, max_hp=100, equipment={}, inventory=dict(inventory))
+    """Initiative 1 against the boar's 0: the player moves first, as the margins
+    above were calibrated (an initiative tie goes to the higher HP, the boar)."""
+    return make_state(level=1, hp=100, max_hp=100, equipment={}, inventory=dict(inventory),
+                      initiative=1)
 
 
 def test_no_deficit_when_the_fight_is_already_winnable() -> None:
@@ -308,7 +311,7 @@ def test_has_combat_deficit_is_false_without_a_workable_monsters_task() -> None:
 def _task_state(**over):  # type: ignore[no-untyped-def]
     base = dict(level=1, hp=100, max_hp=100, equipment={}, inventory={},
                 task_code="boar", task_type="monsters", task_total=104,
-                task_progress=0)
+                task_progress=0, initiative=1)
     base.update(over)
     return make_state(**base)
 

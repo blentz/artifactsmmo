@@ -16,7 +16,9 @@ MEASURED, and it is the reason the middle clause is nearly dead weight: over the
 corpus' 32 `derive_combat_stats` characters against all 58 catalogue monsters
 there are 1,493 losing pairs — 118 close on gear, 6 close at level+1, and 1,369
 are out of reach. The clause fires for 0.44 % of the futile cases. It is not
-vacuous (six pairs, and `test_the_level_up_arm_has_real_witnesses` pins them),
+vacuous (eight pairs since 2026-10-17, when a lifesteal rune began healing its
+real share of crit damage and closed two more chains at level+1;
+`test_the_level_up_arm_has_real_witnesses` pins them),
 but nobody should expect it to carry the rule.
 """
 
@@ -336,7 +338,7 @@ def test_the_level_up_arm_has_real_witnesses() -> None:
         per_scenario = list(executor.map(_level_up_witnesses, names))
 
     witnesses = sorted(pair for scenario in per_scenario for pair in scenario)
-    assert len(witnesses) == 6, witnesses
+    assert len(witnesses) == 8, witnesses
     assert (LEVEL_UP_CELL, LEVEL_UP_MONSTER) in witnesses
 
 

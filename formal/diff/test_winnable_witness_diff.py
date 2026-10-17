@@ -12,7 +12,7 @@ test enforces them against production.
 This is the ANTI-RIGGING gate. For every witness row it asserts:
 
   1. the emitted player-projection scalars (`p_crit`, `p_max_hp`,
-     `p_initiative`, `p_atk_sum`, `p_lifesteal`, `p_antipoison`, `raw_player`,
+     `p_initiative`, `p_crit_hit`, `p_lifesteal`, `p_antipoison`, `raw_player`,
      `raw_monster`, `player_first`) EQUAL what production `project_loadout_stats`
      (+ `predict_win`'s own element-damage sums) produce for the witness loadout
      at level `L` — the projection is faithful, not reverse-engineered;
@@ -44,6 +44,7 @@ from typing import Any
 import pytest
 
 from artifactsmmo_cli.ai.combat import (
+    _crit_hit,
     _element_damage,
     fight_max_hp,
     fight_numbers,
@@ -90,7 +91,7 @@ _ODDS_FIELDS = {
     "tPlayerFirst": "t_player_first", "dMonsterHp": "d_monster_hp",
     "dKillNormal": "d_kill_normal", "dKillCrit": "d_kill_crit", "dPCrit": "d_p_crit",
     "dDieNormal": "d_die_normal", "dDieCrit": "d_die_crit", "dMCrit": "d_m_crit",
-    "dBurn": "d_burn", "fightHp": "fight_hp", "fightMaxHp": "fight_max_hp",
+    "dBurn": "d_burn", "dPHeal": "d_p_heal", "dMHeal": "d_m_heal", "fightHp": "fight_hp", "fightMaxHp": "fight_max_hp",
     "restore": "restore", "stock": "stock", "critBudget": "crit_budget",
 }
 
@@ -208,13 +209,16 @@ def test_witness_rows_pin_projection_and_verdict() -> None:
         assert row.p_crit == p.critical_strike, f"L{row.level} p_crit"
         assert row.p_max_hp == p.max_hp, f"L{row.level} p_max_hp"
         assert row.p_initiative == p.initiative, f"L{row.level} p_initiative"
-        assert row.p_atk_sum == sum(p.attack.values()), f"L{row.level} p_atk_sum"
+        assert row.p_crit_hit == _crit_hit(p.attack, p.dmg, p.dmg_elements, m_resist), (
+            f"L{row.level} p_crit_hit")
         assert row.p_lifesteal == p_lifesteal, f"L{row.level} p_lifesteal"
         assert row.p_antipoison == p_antipoison, f"L{row.level} p_antipoison"
         assert row.raw_player == raw_player, f"L{row.level} raw_player"
         assert row.raw_monster == raw_monster, f"L{row.level} raw_monster"
+        m_init = game_data.monster_initiative(row.monster_code)
         assert row.player_first == (
-            p.initiative >= game_data.monster_initiative(row.monster_code)
+            p.initiative > m_init
+            or (p.initiative == m_init and state.hp > game_data.monster_hp(row.monster_code))
         ), f"L{row.level} player_first"
 
         # the emitted loadout codes match what pick_loadout actually selected.
@@ -235,6 +239,7 @@ def test_witness_rows_pin_projection_and_verdict() -> None:
         assert row.monster_hp == game_data.monster_hp(row.monster_code)
         assert row.m_crit == game_data.monster_critical_strike(row.monster_code)
         assert row.m_atk_sum == sum(m_attack.values())
+        assert row.m_crit_hit == _crit_hit(m_attack, 0, {}, p.resistance), f"L{row.level} m_crit_hit"
 
         # (5) fight-odds fidelity: the scalars the kernel decides are production's.
         numbers = fight_numbers(state, game_data, row.monster_code)
@@ -249,9 +254,11 @@ def test_witness_rows_pin_projection_and_verdict() -> None:
         assert row.t_die_step == terms.die_step, f"L{row.level} t_die_step"
         assert row.t_player_first == terms.player_first, f"L{row.level} t_player_first"
         assert (row.d_monster_hp, row.d_kill_normal, row.d_kill_crit, row.d_p_crit,
-                row.d_die_normal, row.d_die_crit, row.d_m_crit, row.d_burn) == (
+                row.d_die_normal, row.d_die_crit, row.d_m_crit, row.d_burn,
+                row.d_p_heal, row.d_m_heal) == (
             damage.monster_hp, damage.kill_normal, damage.kill_crit, damage.p_crit,
             damage.die_normal, damage.die_crit, damage.m_crit, damage.burn,
+            damage.p_heal, damage.m_heal,
         ), f"L{row.level} damage"
         assert (row.fight_hp, row.fight_max_hp) == (state.hp, max_hp), f"L{row.level} hp"
         assert (row.restore, row.stock) == (restore, stock), f"L{row.level} restore"

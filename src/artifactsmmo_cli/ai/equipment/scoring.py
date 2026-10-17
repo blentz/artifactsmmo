@@ -286,7 +286,7 @@ def armor_score_pure(elements: list[str], resistance: dict[str, int],
     fire-weak monster, which is exactly the signal the flat formula destroyed.
 
     ``initiative`` is deliberately NOT included. It is not a per-turn rate but a
-    THRESHOLD: ``predict_win`` uses ``p.initiative >= monster_initiative`` to
+    THRESHOLD: ``predict_win`` uses it (``combat.moves_first``, ties to the higher HP) to
     decide only whether a tie in rounds goes to the player. Converting a
     threshold to damage-per-turn would need an invented exchange rate, so it
     stays out rather than entering the sum on a made-up scale.

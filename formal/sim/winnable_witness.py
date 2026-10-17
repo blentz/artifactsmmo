@@ -47,11 +47,13 @@ from fractions import Fraction
 from typing import Any
 
 from artifactsmmo_cli.ai.combat import (
+    _crit_hit,
     _element_damage,
     fight_max_hp,
     fight_numbers,
     fight_split,
     is_winnable,
+    moves_first,
     worn_restore,
 )
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
@@ -159,7 +161,7 @@ class WitnessRow:
     p_crit: int
     p_max_hp: int
     p_initiative: int
-    p_atk_sum: int
+    p_crit_hit: int
     p_lifesteal: int
     p_antipoison: int
     # The 20 integer `predictWin` inputs + playerFirst (computed as predict_win does).
@@ -168,6 +170,7 @@ class WitnessRow:
     raw_monster: int
     m_crit: int
     m_atk_sum: int
+    m_crit_hit: int
     m_lifesteal: int
     m_poison: int
     m_barrier: int
@@ -196,6 +199,8 @@ class WitnessRow:
     d_die_crit: int
     d_m_crit: int
     d_burn: tuple[int, ...]
+    d_p_heal: int
+    d_m_heal: int
     # ... and the fight's start HP, max HP and worn restore potion.
     fight_hp: int
     fight_max_hp: int
@@ -212,21 +217,29 @@ liveness holds for any character threshold θ <= 99/100. A learned
 θ = t_loss / (t_win + t_loss) exceeds 0.99 when a loss costs more than 99 wins."""
 
 
-def _crit_hit(damage: RoundDamage, crits_left: int) -> int:
+def _khit(damage: RoundDamage, crits_left: int) -> int:
     """The monster's hit on the counted-crit path (Lean `FightOdds.khit`): a crit
     while crits are left, else a normal hit."""
     return damage.die_crit if crits_left > 0 else damage.die_normal
 
 
+def _m_up(damage: RoundDamage) -> int:
+    """Lean `FightOdds.mUp`: the most the monster's lifesteal heals it in one
+    turn, charged on every monster turn of the counted-crit path."""
+    return max(0, damage.m_heal)
+
+
 def crit_path_wins(damage: RoundDamage, player_first: bool, monster_pool: int,
                    player_pool: int, crits: int) -> bool:
     """Lean `FightOdds.kpath` from round 1 with `MAX_TURNS` rounds of fuel: the
-    single path on which the player never crits, the monster crits its first
-    `crits` turns and then hits normal, with no restore stock, is won."""
+    single path on which the player never crits (so never heals), the monster
+    crits its first `crits` turns and then hits normal, healing `_m_up` every
+    turn, with no restore stock, is won."""
     m, p, c = monster_pool, player_pool, crits
+    up = _m_up(damage)
     for round_no in range(1, MAX_TURNS + 1):
         tick = _tick(damage, player_first, round_no)
-        hit = _crit_hit(damage, c)
+        hit = _khit(damage, c)
         if player_first:
             if tick > 0 and p - tick <= 0:
                 return False
@@ -235,30 +248,35 @@ def crit_path_wins(damage: RoundDamage, player_first: bool, monster_pool: int,
             if p - tick - hit <= 0:
                 return False
             p = p - tick - hit
+            m = m - damage.kill_normal + up
         else:
             if p - hit <= 0:
                 return False
             if tick > 0 and p - hit - tick <= 0:
                 return False
-            if m - damage.kill_normal <= 0:
+            if m + up - damage.kill_normal <= 0:
                 return True
             p = p - hit - tick
-        m, c = m - damage.kill_normal, max(c - 1, 0)
+            m = m + up - damage.kill_normal
+        c = max(c - 1, 0)
     return False
 
 
 def monster_turns(damage: RoundDamage, player_first: bool, monster_pool: int) -> int:
     """Lean `FightOdds.mturns` with `MAX_TURNS` rounds of fuel: the monster's turns
-    before the player's never-critting kill."""
-    m, turns = monster_pool, 0
+    before the player's never-critting kill, the monster healing `_m_up` each."""
+    m, turns, up = monster_pool, 0, _m_up(damage)
     for _round in range(MAX_TURNS):
-        killed = m - damage.kill_normal <= 0
-        if player_first and killed:
-            return turns
-        turns += 1
-        if killed:
-            return turns
-        m -= damage.kill_normal
+        if player_first:
+            if m - damage.kill_normal <= 0:
+                return turns
+            turns += 1
+            m = m - damage.kill_normal + up
+        else:
+            turns += 1
+            if m + up - damage.kill_normal <= 0:
+                return turns
+            m = m + up - damage.kill_normal
     return turns
 
 
@@ -412,7 +430,7 @@ def build_witness_row(
         p_crit=p.critical_strike,
         p_max_hp=p.max_hp,
         p_initiative=p.initiative,
-        p_atk_sum=sum(p.attack.values()),
+        p_crit_hit=_crit_hit(p.attack, p.dmg, p.dmg_elements, m_resist),
         p_lifesteal=p_lifesteal,
         p_antipoison=p_antipoison,
         raw_player=raw_player,
@@ -420,6 +438,7 @@ def build_witness_row(
         raw_monster=raw_monster,
         m_crit=game_data.monster_critical_strike(monster_code),
         m_atk_sum=sum(m_attack.values()),
+        m_crit_hit=_crit_hit(m_attack, 0, {}, p.resistance),
         m_lifesteal=game_data.monster_lifesteal(monster_code),
         m_poison=game_data.monster_poison(monster_code),
         m_barrier=game_data.monster_barrier(monster_code),
@@ -430,7 +449,8 @@ def build_witness_row(
         m_berserk=game_data.monster_berserker_rage(monster_code),
         m_frenzy=game_data.monster_frenzy(monster_code),
         m_bubble=game_data.monster_protective_bubble(monster_code),
-        player_first=p.initiative >= game_data.monster_initiative(monster_code),
+        player_first=moves_first(p.initiative, state.hp, game_data.monster_initiative(monster_code),
+                                 game_data.monster_hp(monster_code)),
         t_raw_player=numbers.raw_player,
         t_kill_step=terms.kill_step,
         t_monster_hp=damage.monster_hp,
@@ -445,6 +465,8 @@ def build_witness_row(
         d_die_crit=damage.die_crit,
         d_m_crit=damage.m_crit,
         d_burn=damage.burn,
+        d_p_heal=damage.p_heal,
+        d_m_heal=damage.m_heal,
         fight_hp=state.hp,
         fight_max_hp=fight_max_hp(state, game_data, monster_code),
         restore=restore,

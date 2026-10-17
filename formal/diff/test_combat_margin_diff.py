@@ -35,6 +35,12 @@ from formal.diff.oracle_client import run_oracle
 MONSTER = "M"
 
 
+
+def _player_first(p_init: int, p_hp: int, m_init: int, m_hp: int) -> bool:
+    """The server's turn order, stated independently of `combat.moves_first`:
+    higher initiative, a tie to the higher HP, a tie on both to the monster."""
+    return p_init > m_init or (p_init == m_init and p_hp > m_hp)
+
 def _elem_args(attack: dict, dmg_global: int, dmg_elements: dict, resist: dict) -> list[int]:
     """Flatten four elements into [attack, dmgPct, resist] triples where
     dmgPct = dmg_global + dmg_elements[e] (combined as Python's _expected_hit)."""
@@ -59,7 +65,6 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         resistance=dict(p_resist), critical_strike=p_crit, initiative=p_init,
         max_hp=p_max_hp,
     )
-    p_atk_sum = sum(stats.attack.values())
     m_atk_sum = sum(m_attack.values())
     loadout = {"weapon_slot": "_ls"} if (p_lifesteal or p_antipoison) else {}
 
@@ -140,17 +145,17 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         py_margin = combat_mod.combat_margin(_FakeState(), _FakeGameData(), MONSTER)
         py_win = terms_win(combat_mod.combat_terms(_FakeState(), _FakeGameData(), MONSTER))
 
-    # Same arg layout as test_predict_win_diff.py (46 ints, indices 0..45).
+    # Same arg layout as test_predict_win_diff.py (45 ints, indices 0..44).
     # RUF005 (unpack instead of `+`) is declined here and in test_predict_win_diff:
-    # this is a 46-int POSITIONAL oracle layout, and the `+` boundaries are what
+    # this is a 45-int POSITIONAL oracle layout, and the `+` boundaries are what
     # make each block auditable against the Lean argument order. Flattening it to
     # one `[*..., *...]` literal drops the per-block comments with it.
     args = (
         _elem_args(p_attack, p_dmg, p_dmg_elem, m_resist)  # noqa: RUF005 - player vs monster resist
         + [p_crit, m_hp]
         + _elem_args(m_attack, 0, {}, p_resist)            # monster vs player resist
-        + [m_crit, p_max_hp, 1 if p_init >= m_init else 0]
-        + [p_lifesteal, p_atk_sum, m_lifesteal, m_atk_sum]
+        + [m_crit, p_max_hp, 1 if _player_first(p_init, p_max_hp, m_init, m_hp) else 0]
+        + [p_lifesteal, m_lifesteal, m_atk_sum]
         + [m_poison, m_barrier, m_burn, m_healing, m_recon, m_void, m_berserk, m_frenzy, m_bubble]
         + [p_antipoison]
         + [m_sun_shield, m_greed, m_enchanted_mirror]
@@ -240,8 +245,8 @@ def test_player_first_tiebreak_margin_is_one():
     Pins the +1 player-first adjustment — dropping it would give margin=0 (not win)."""
     # Player raw 50, monster hp 100 => rtk = 2 (ceil(100*10000 / 500000))
     # Monster raw 50, player hp 100 => rtd = 2
-    # player_first=True (p_init 10 >= m_init 10) => margin = 2 - 2 + 1 = 1
-    py_margin, lean, py_win = _run({"fire": 50}, 0, {}, {}, 0, 100, 10,
+    # player_first=True (p_init 11 > m_init 10) => margin = 2 - 2 + 1 = 1
+    py_margin, lean, py_win = _run({"fire": 50}, 0, {}, {}, 0, 100, 11,
                                    100, {"fire": 50}, {}, 0, 10)
     assert py_win is True
     assert py_margin == 1

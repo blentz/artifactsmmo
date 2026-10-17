@@ -210,11 +210,12 @@ def test_a_party_cell_brings_copies_of_the_census_character() -> None:
 
 def test_duskworm_recipes_plan_under_a_party() -> None:
     """adamantite_sword's duskworm_skin: no loadout beats duskworm alone; three
-    census characters wearing a water-resistance and a health potion do
-    (docs/PLAN_group_fights.md increment 2)."""
+    census characters wearing a health potion do (docs/PLAN_group_fights.md
+    increment 2). Before lifesteal healed its real share of crit damage
+    (2026-10-17) the party needed a water-resistance potion too."""
     result = climb("adamantite_sword", _gd(), _achieved())
     assert result.rung == "party" and result.result.passed
-    assert dict(result.result.fights)["duskworm"] == f"{PARTY}3:water_res_potion+enhanced_health_potion"
+    assert dict(result.result.fights)["duskworm"] == f"{PARTY}3:enhanced_health_potion"
 
 
 def test_a_recipe_no_rung_plans_is_named_by_its_held_leaves() -> None:

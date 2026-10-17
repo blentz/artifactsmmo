@@ -111,6 +111,27 @@ def _crit_hit(attack: dict[str, int], dmg_global: int, dmg_elements: dict[str, i
     )
 
 
+def lifesteal_heal(lifesteal: int, crit_hit: int) -> int:
+    """The HP a lifesteal of `lifesteal`% heals on a crit turn dealing
+    `crit_hit`: the share rounded half up (Lean `PredictWin.lifestealHeal`).
+    Server logs 2026-10-17, 2,327 heals over three characters: 15% of 165 heals
+    25, of 196 heals 29, of 152 heals 23. Only a crit heals, and a crit that
+    kills heals nothing (the odds walk models both)."""
+    return (2 * lifesteal * crit_hit + 100) // 200
+
+
+def moves_first(player_initiative: int, player_hp: int,
+                monster_initiative: int, monster_hp: int) -> bool:
+    """Whether the player takes the first turn: higher initiative; on a tie,
+    higher HP (docs/PLAN_group_fights.md: "ties: higher HP, then random").
+    R2D2 v cultist_acolyte, both initiative 200, 890 HP against 1500: the
+    monster moved first in 26 of 26 logged fights (2026-10-16). A tie on both
+    is a coin flip on the server, ruled the monster's (the conservative side)."""
+    if player_initiative != monster_initiative:
+        return player_initiative > monster_initiative
+    return player_hp > monster_hp
+
+
 def _expected_hit(
     attack: dict[str, int],
     dmg_global: int,
@@ -129,7 +150,7 @@ def _expected_hit(
 
 def _kill_step_net(
     raw_player: int, p_crit: int, m_crit: int, m_lifesteal: int,
-    m_atk_sum: int, monster_hp: int, monster_healing: int,
+    m_crit_hit: int, monster_hp: int, monster_healing: int,
     player_max_hp: int, monster_void_drain: int,
     monster_bubble: int, monster_sun_shield: int,
 ) -> int:
@@ -139,7 +160,7 @@ def _kill_step_net(
     output is an int. A non-positive result means the monster is unkillable.
     See predict_win for the modelling rationale behind each term."""
     return (50 * raw_player * (200 + p_crit)
-            - m_crit * m_lifesteal * m_atk_sum
+            - m_crit * lifesteal_heal(m_lifesteal, m_crit_hit) * 100
             - monster_healing * monster_hp * 100
             - monster_void_drain * player_max_hp * 100
             - (monster_bubble
@@ -148,7 +169,7 @@ def _kill_step_net(
 
 def _die_step(
     raw_monster: int, m_crit: int, p_crit: int, p_lifesteal: int,
-    p_atk_sum: int, monster_poison: int, monster_burn: int,
+    p_crit_hit: int, monster_poison: int, monster_burn: int,
     player_max_hp: int, monster_void_drain: int,
     monster_berserk: int, monster_frenzy: int,
     player_antipoison: int, raw_player: int,
@@ -159,9 +180,10 @@ def _die_step(
     Mirrors Lean `dieStep` (PredictWin.lean:134). All inputs are ints;
     output is an int. A non-positive result means the player out-sustains the
     monster. See predict_win for the modelling rationale behind each term.
-    Burn is a share of the MONSTER's summed attack `m_atk_sum`."""
+    Burn is a share of the MONSTER's summed attack `m_atk_sum`; the lifesteal
+    heal is a share of the player's crit-turn damage `p_crit_hit`."""
     return (50 * raw_monster * (200 + m_crit)
-            - p_crit * p_lifesteal * p_atk_sum
+            - p_crit * lifesteal_heal(p_lifesteal, p_crit_hit) * 100
             + max(0, monster_poison - player_antipoison) * 10000
             + monster_burn * m_atk_sum * 100
             + monster_void_drain * player_max_hp * 100
@@ -235,7 +257,9 @@ def fight_max_hp(state: WorldState, game_data: GameData, monster_code: str) -> i
 class FightNumbers:
     """`combat_terms`' terms with what a party fight splits out of them: the
     raw hit, the cost of one monster hit (`die_step` less every term charged
-    targeted or not), the loadout's max HP and threat."""
+    targeted or not), the loadout's max HP and threat, and the kill-step terms
+    the monster charges once per its turn against THIS player (`drain`: its
+    lifesteal off its crit on this player, its healing)."""
 
     terms: FightTerms
     raw_player: int
@@ -243,6 +267,7 @@ class FightNumbers:
     max_hp: int
     threat: int
     damage: RoundDamage
+    drain: int
 
 
 def combat_terms(state: WorldState, game_data: GameData, monster_code: str) -> FightTerms:
@@ -253,11 +278,15 @@ def combat_terms(state: WorldState, game_data: GameData, monster_code: str) -> F
 def boss_drain(game_data: GameData, monster_code: str) -> int:
     """The kill-step terms charged once per MONSTER turn — its lifesteal on
     crit and its healing — as a positive rate: `_kill_step_net` with no player
-    side, negated."""
+    side, negated. A party's boss heals off whichever member it hits, which the
+    walk models only in expectation, so the heal is the one off its crit on NO
+    resistance: the most it can heal (ruling 2026-10-17, conservative for the
+    party). A lone member without resistance in the boss's elements pays exactly
+    its solo drain."""
+    m_attack = game_data.monster_attack(monster_code)
     return -_kill_step_net(
         0, 0, game_data.monster_critical_strike(monster_code),
-        game_data.monster_lifesteal(monster_code),
-        sum(game_data.monster_attack(monster_code).values()),
+        game_data.monster_lifesteal(monster_code), _crit_hit(m_attack, 0, {}, {}),
         game_data.monster_hp(monster_code), game_data.monster_healing(monster_code),
         0, 0, 0, 0)
 
@@ -273,11 +302,13 @@ def party_member(state: WorldState, game_data: GameData, monster_code: str,
                  restore: int, stock: int) -> PartyMember:
     """One member of a party fight against `monster_code`, in its best on-hand
     loadout with `stock` restore potions of `restore` HP: its solo terms split
-    so that `net - boss_drain` is its `kill_step` and `hit + area` its
-    `die_step`."""
+    so that `net` is its `kill_step` less the monster's per-turn terms on it
+    (`FightNumbers.drain`) and `hit + area` its `die_step`. `net - boss_drain`
+    is the solo `kill_step` when the boss's heal off this member is its most
+    (`boss_drain`), and never above it."""
     n = fight_numbers(state, game_data, monster_code)
     return PartyMember(
-        raw=n.raw_player, net=n.terms.kill_step + boss_drain(game_data, monster_code),
+        raw=n.raw_player, net=n.terms.kill_step + n.drain,
         hit=n.hit, area=n.terms.die_step - n.hit, hp=state.hp, max_hp=n.max_hp,
         first=n.terms.player_first, threat=n.threat, restore=restore, stock=stock)
 
@@ -298,16 +329,19 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
     m_resist = game_data.monster_resistance(monster_code)
     m_crit = game_data.monster_critical_strike(monster_code)
     # EXACT INTEGER arithmetic mirroring Formal/PredictWin.lean (×10000 scale, so the
-    # heal `crit% × lifesteal% × Σattack` is exact). `_expected_hit`'s float form is
+    # heal `crit% × lifestealHeal × 100` is exact). `_expected_hit`'s float form is
     # the same expected per-turn damage; here we keep it integral to match the proof
     # exactly under the finer lifesteal fractions.
     raw_player = sum(
         _element_damage(p.attack.get(e, 0), p.dmg + p.dmg_elements.get(e, 0), m_resist.get(e, 0))
         for e in ELEMENTS
     )
-    # Monster lifesteal heals it on ITS crit, lowering our NET kill rate.
+    # Monster lifesteal heals it on ITS crit, lowering our NET kill rate: the
+    # lifesteal share of its crit-turn damage on us (`lifesteal_heal`).
     m_attack = game_data.monster_attack(monster_code)
     m_atk_sum = sum(m_attack.values())
+    crit_player = _crit_hit(p.attack, p.dmg, p.dmg_elements, m_resist)
+    crit_monster = _crit_hit(m_attack, 0, {}, p.resistance)
     # Monster healing is per-turn regen (a % of its HP every 3 turns), modeled
     # conservatively as the full per-3-turn amount EVERY turn (3× upper bound):
     # subtract it from the net kill step. A monster we can't out-damage out-heals
@@ -328,7 +362,7 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
     # so this is identical for live data). // 2 matches the Lean `/ 2` on non-negatives.
     kill_step = _kill_step_net(
         raw_player, p.critical_strike, m_crit,
-        game_data.monster_lifesteal(monster_code), m_atk_sum,
+        game_data.monster_lifesteal(monster_code), crit_monster,
         game_data.monster_hp(monster_code),
         game_data.monster_healing(monster_code),
         p.max_hp,
@@ -357,7 +391,6 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
         st.antipoison for code in final_equip.values()
         if code and (st := game_data.item_stats(code)) is not None
     )
-    p_atk_sum = sum(p.attack.values())
     # Monster poison is a flat per-turn DoT on the player (applied turn 1, ticks
     # every turn), so it RAISES the player's net death rate — even when the monster
     # deals no direct damage (raw_monster == 0), poison alone can kill. Monster burn
@@ -378,7 +411,7 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
     # the only die_step term scaled by the player's raw output (raw_player, p.crit).
     die_step = _die_step(
         raw_monster, m_crit, p.critical_strike, player_lifesteal,
-        p_atk_sum,
+        crit_player,
         game_data.monster_poison(monster_code),
         game_data.monster_burn(monster_code),
         p.max_hp,
@@ -392,7 +425,7 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
     )
     # One monster hit: `_die_step` with every term a non-target also pays zeroed.
     hit = _die_step(
-        raw_monster, m_crit, p.critical_strike, 0, p_atk_sum, 0, 0, p.max_hp, 0,
+        raw_monster, m_crit, p.critical_strike, 0, crit_player, 0, 0, p.max_hp, 0,
         game_data.monster_berserker_rage(monster_code),
         game_data.monster_frenzy(monster_code),
         0, 0, game_data.monster_greed(monster_code), 0, m_atk_sum,
@@ -405,24 +438,35 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
         raw_player, kill_step, effective_monster_hp,
         game_data.monster_reconstitution(monster_code), die_step,
         state.hp, p.max_hp,
-        p.initiative >= game_data.monster_initiative(monster_code),
+        moves_first(p.initiative, state.hp, game_data.monster_initiative(monster_code),
+                    game_data.monster_hp(monster_code)),
     )
-    crit_player = _crit_hit(p.attack, p.dmg, p.dmg_elements, m_resist)
-    crit_monster = _crit_hit(m_attack, 0, {}, p.resistance)
+    # Lifesteal rides the crit branch of the odds walk (`fight_odds_core`): the
+    # heal each side's crit lands, not its mean.
+    p_heal = lifesteal_heal(player_lifesteal, crit_player)
+    m_heal = lifesteal_heal(game_data.monster_lifesteal(monster_code), crit_monster)
     # Everything a round charges beyond the bare hit (spec 2026-10-15 §1): the
-    # expected step less its hit term, applied to both crit outcomes.
-    kill_rest = kill_step - raw_player * SCALE - 50 * raw_player * p.critical_strike
+    # expected step less its hit term and its mean lifesteal, applied to both
+    # crit outcomes.
+    kill_rest = (kill_step - raw_player * SCALE - 50 * raw_player * p.critical_strike
+                 + m_crit * m_heal * 100)
     # Burn is not one of them: the walk charges its decaying ticks (off the
     # MONSTER's attack, `burn_ticks`) instead of `die_step`'s per-round bound.
     flat_burn = game_data.monster_burn(monster_code) * m_atk_sum * 100
-    die_rest = die_step - flat_burn - raw_monster * SCALE - 50 * raw_monster * m_crit
+    die_rest = (die_step - flat_burn - raw_monster * SCALE - 50 * raw_monster * m_crit
+                + p.critical_strike * p_heal * 100)
     damage = RoundDamage(
         effective_monster_hp,
         raw_player * SCALE + kill_rest, crit_player * SCALE + kill_rest, p.critical_strike,
         raw_monster * SCALE + die_rest, crit_monster * SCALE + die_rest, m_crit,
         burn_ticks(game_data.monster_burn(monster_code), m_atk_sum),
+        p_heal * SCALE, m_heal * SCALE,
     )
-    return FightNumbers(terms, raw_player, hit, p.max_hp, threat, damage)
+    drain = -_kill_step_net(
+        0, 0, m_crit, game_data.monster_lifesteal(monster_code), crit_monster,
+        game_data.monster_hp(monster_code), game_data.monster_healing(monster_code),
+        0, 0, 0, 0)
+    return FightNumbers(terms, raw_player, hit, p.max_hp, threat, damage, drain)
 
 
 def fight_split(state: WorldState, game_data: GameData, monster_code: str) -> tuple[FightTerms, RoundDamage]:

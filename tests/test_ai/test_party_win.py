@@ -40,15 +40,17 @@ def test_no_party_no_verdict() -> None:
     assert hero.party == () and winning_party(hero, gd, "duskworm") is None
 
 
-def test_three_beat_duskworm_where_one_cannot() -> None:
+def test_a_party_beats_duskworm_where_one_cannot() -> None:
+    """The hero's `greater_lifesteal_rune` (25%) heals 284 off each 1,134 crit
+    (server rule, 2026-10-17; the mean model credited 9.75 a round). Alone it
+    still loses; one joiner already wins, and two win in enhanced health."""
     gd = _gd()
     hero = _hero(gd)
     party = replace(hero, party=(hero, hero))
     assert not drop_fight_winnable(hero, gd, "duskworm")
-    assert winning_party(party, gd, "duskworm") == (("water_res_potion", "enhanced_health_potion"), (0, 1))
+    assert winning_party(party, gd, "duskworm") == (("enhanced_health_potion",), (0, 1))
     assert drop_fight_winnable(party, gd, "duskworm")
-    # one joiner is not enough
-    assert not wins_as_a_party(replace(hero, party=(hero,)), gd, "duskworm")
+    assert wins_as_a_party(replace(hero, party=(hero,)), gd, "duskworm")
 
 
 def test_only_bosses_take_a_party() -> None:
@@ -80,11 +82,17 @@ def test_the_memo_tells_parties_apart() -> None:
 
 def test_a_joiner_that_cannot_stock_a_potion_fights_without_it() -> None:
     """Joiners with no gold, no skill and no potion held stock nothing, so they
-    fight duskworm bare and the party loses."""
+    fight duskworm bare: the party needs more of the hero than a party of heroes
+    does (water resistance too, not enhanced health alone), and the model judged
+    the joiners bare. (Before lifesteal healed its real share of crit damage,
+    2026-10-17, this party lost outright.)"""
     gd = _gd()
     hero = _hero(gd)
     poor = replace(hero, skills=dict.fromkeys(hero.skills, 1), gold=0)
-    assert winning_party(replace(hero, party=(poor, poor)), gd, "duskworm") is None
+    codes = ("water_res_potion", "enhanced_health_potion")
+    assert winning_party(replace(hero, party=(poor, poor)), gd, "duskworm") == (codes, (0, 1))
+    assert winning_party(replace(hero, party=(hero, hero)), gd, "duskworm") == (codes[1:], (0, 1))
+    assert wears_party_loadout(poor, gd, codes)
 
 
 def test_every_member_is_judged_rested() -> None:
@@ -129,12 +137,12 @@ def test_a_solo_fight_the_record_refuses_takes_the_party() -> None:
 
 
 def test_the_party_names_its_loadout() -> None:
-    """duskworm is won in water resistance and enhanced health; king_slime
-    alone, so no party and no loadout."""
+    """duskworm is won in enhanced health; king_slime alone, so no party and no
+    loadout."""
     gd = _gd()
     hero = _hero(gd)
     party = replace(hero, party=(replace(hero, character="R2D2"), replace(hero, character="Lor")))
-    assert party_loadout(party, gd, "duskworm") == ("water_res_potion", "enhanced_health_potion")
+    assert party_loadout(party, gd, "duskworm") == ("enhanced_health_potion",)
     assert party_loadout(party, gd, "king_slime") == ()
 
 
@@ -177,5 +185,5 @@ def test_the_factory_takes_the_party_to_the_boss() -> None:
                                                          task_exchange_min_coins=0)
               if isinstance(a, FightAction)}
     assert fights["duskworm"].participants == ("R2D2", "Lor")
-    assert fights["duskworm"].party_loadout == ("water_res_potion", "enhanced_health_potion")
+    assert fights["duskworm"].party_loadout == ("enhanced_health_potion",)
     assert fights["king_slime"].participants == () and fights["king_slime"].party_loadout == ()

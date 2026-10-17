@@ -88,38 +88,42 @@ def runPredictWin (g : Nat → Int) : Json :=
   let mCrit := g 26
   let playerMaxHp := g 27
   let playerFirst := g 28 != 0
-  -- lifesteal extension: [29]=pLifesteal [30]=pAtkSum [31]=mLifesteal [32]=mAtkSum
+  -- lifesteal extension: [29]=pLifesteal [30]=mLifesteal (percent; a side heals
+  -- `lifestealHeal` of its crit-turn damage `critHit` on a crit), [31]=mAtkSum (burn base)
+  let pCritHit := critHit (g 0) (g 1) (g 2) (g 3) (g 4) (g 5)
+    (g 6) (g 7) (g 8) (g 9) (g 10) (g 11)
+  let mCritHit := critHit (g 14) (g 15) (g 16) (g 17) (g 18) (g 19)
+    (g 20) (g 21) (g 22) (g 23) (g 24) (g 25)
   let pLifesteal := g 29
-  let pAtkSum := g 30
-  let mLifesteal := g 31
-  let mAtkSum := g 32
-  -- poison extension: [33]=monsterPoison (flat per-turn DoT on the player)
-  let monsterPoison := g 33
-  -- barrier extension: [34]=monsterBarrier (absorbing shield ⇒ extra effective HP)
-  let monsterBarrier := g 34
-  -- burn extension: [35]=monsterBurn (percent-of-attack DoT, modeled flat/no-decay)
-  let monsterBurn := g 35
-  -- healing extension: [36]=monsterHealing (regen %; subtracted from killStep)
-  let monsterHealing := g 36
-  -- reconstitution extension: [37]=monsterReconstitution (full-heal period; turn-cap)
-  let monsterReconstitution := g 37
-  -- void_drain extension: [38]=monsterVoidDrain (drain % of player HP; dieStep + killStep)
-  let monsterVoidDrain := g 38
-  -- berserker_rage [39] + frenzy [40]: monster +% damage (always-active bound; dieStep)
-  let monsterBerserk := g 39
-  let monsterFrenzy := g 40
-  -- protective_bubble [41]: % resist on rotating element (conservative always-on; killStep)
-  let monsterBubble := g 41
-  -- player antipoison [42]: equipped antidote total; caps the monster poison DoT
-  let playerAntipoison := g 42
-  -- sun_shield [43]: % resist to player attacks (conservative always-on; killStep)
-  let monsterSunShield := g 43
-  -- greed [44]: % bonus monster damage (scales rawMonster; dieStep)
-  let monsterGreed := g 44
-  -- enchanted_mirror [45]: % of player damage reflected back (dieStep)
-  let monsterEnchantedMirror := g 45
+  let mLifesteal := g 30
+  let mAtkSum := g 31
+  -- poison extension: [32]=monsterPoison (flat per-turn DoT on the player)
+  let monsterPoison := g 32
+  -- barrier extension: [33]=monsterBarrier (absorbing shield ⇒ extra effective HP)
+  let monsterBarrier := g 33
+  -- burn extension: [34]=monsterBurn (percent-of-attack DoT, modeled flat/no-decay)
+  let monsterBurn := g 34
+  -- healing extension: [35]=monsterHealing (regen %; subtracted from killStep)
+  let monsterHealing := g 35
+  -- reconstitution extension: [36]=monsterReconstitution (full-heal period; turn-cap)
+  let monsterReconstitution := g 36
+  -- void_drain extension: [37]=monsterVoidDrain (drain % of player HP; dieStep + killStep)
+  let monsterVoidDrain := g 37
+  -- berserker_rage [38] + frenzy [39]: monster +% damage (always-active bound; dieStep)
+  let monsterBerserk := g 38
+  let monsterFrenzy := g 39
+  -- protective_bubble [40]: % resist on rotating element (conservative always-on; killStep)
+  let monsterBubble := g 40
+  -- player antipoison [41]: equipped antidote total; caps the monster poison DoT
+  let playerAntipoison := g 41
+  -- sun_shield [42]: % resist to player attacks (conservative always-on; killStep)
+  let monsterSunShield := g 42
+  -- greed [43]: % bonus monster damage (scales rawMonster; dieStep)
+  let monsterGreed := g 43
+  -- enchanted_mirror [44]: % of player damage reflected back (dieStep)
+  let monsterEnchantedMirror := g 44
   let verdict := predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing
+    pLifesteal pCritHit mLifesteal mCritHit mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing
     monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerAntipoison
     monsterSunShield monsterGreed monsterEnchantedMirror playerFirst
   Json.mkObj [("win", Json.bool verdict), ("raw_player", Json.num rawPlayer),
@@ -127,7 +131,7 @@ def runPredictWin (g : Nat → Int) : Json :=
 
 /-- Compute one combat_margin result using the SAME proved `combatMargin`/`rawHit`.
 
-Same args layout as `runPredictWin` (46 ints, 0..45). Returns the signed integer
+Same args layout as `runPredictWin` (45 ints, 0..44). Returns the signed integer
 margin whose sign equals the `predictWin` verdict. -/
 def runCombatMargin (g : Nat → Int) : Json :=
   let rawPlayer := rawHit (g 0) (g 1) (g 2) (g 3) (g 4) (g 5)
@@ -139,25 +143,30 @@ def runCombatMargin (g : Nat → Int) : Json :=
   let mCrit := g 26
   let playerMaxHp := g 27
   let playerFirst := g 28 != 0
+  -- lifesteal extension: [29]=pLifesteal [30]=mLifesteal (percent; a side heals
+  -- `lifestealHeal` of its crit-turn damage `critHit` on a crit), [31]=mAtkSum (burn base)
+  let pCritHit := critHit (g 0) (g 1) (g 2) (g 3) (g 4) (g 5)
+    (g 6) (g 7) (g 8) (g 9) (g 10) (g 11)
+  let mCritHit := critHit (g 14) (g 15) (g 16) (g 17) (g 18) (g 19)
+    (g 20) (g 21) (g 22) (g 23) (g 24) (g 25)
   let pLifesteal := g 29
-  let pAtkSum := g 30
-  let mLifesteal := g 31
-  let mAtkSum := g 32
-  let monsterPoison := g 33
-  let monsterBarrier := g 34
-  let monsterBurn := g 35
-  let monsterHealing := g 36
-  let monsterReconstitution := g 37
-  let monsterVoidDrain := g 38
-  let monsterBerserk := g 39
-  let monsterFrenzy := g 40
-  let monsterBubble := g 41
-  let playerAntipoison := g 42
-  let monsterSunShield := g 43
-  let monsterGreed := g 44
-  let monsterEnchantedMirror := g 45
+  let mLifesteal := g 30
+  let mAtkSum := g 31
+  let monsterPoison := g 32
+  let monsterBarrier := g 33
+  let monsterBurn := g 34
+  let monsterHealing := g 35
+  let monsterReconstitution := g 36
+  let monsterVoidDrain := g 37
+  let monsterBerserk := g 38
+  let monsterFrenzy := g 39
+  let monsterBubble := g 40
+  let playerAntipoison := g 41
+  let monsterSunShield := g 42
+  let monsterGreed := g 43
+  let monsterEnchantedMirror := g 44
   let margin := combatMargin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing
+    pLifesteal pCritHit mLifesteal mCritHit mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing
     monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerAntipoison
     monsterSunShield monsterGreed monsterEnchantedMirror playerFirst
   Json.mkObj [("margin", Json.num margin)]
@@ -1847,14 +1856,14 @@ def runFightOutcome (args : Array Json) : Json :=
 /-- A fight's ending distribution (`Formal.FightOdds.fightOdds`), grouped by
 ending with summed probabilities. Args: `[rawPlayer, killStep, monsterHp, recon,
 dieStep, playerFirst, hp, maxHp, restore, stock, dMonsterHp, killNormal,
-killCrit, pCrit, dieNormal, dieCrit, mCrit, n, burn₁ … burnₙ]`, playerFirst as
-0/1. -/
+killCrit, pCrit, dieNormal, dieCrit, mCrit, pHeal, mHeal, n, burn₁ … burnₙ]`,
+playerFirst as 0/1. -/
 def runFightOdds (args : Array Json) : Json :=
   let i : Nat → Int := fun k => intArg args k
   let t : Formal.FightOutcome.Terms := ⟨i 0, i 1, i 2, i 3, i 4, i 5 != 0⟩
-  let burn := (List.range (i 17).toNat).map fun j => i (18 + j)
+  let burn := (List.range (i 19).toNat).map fun j => i (20 + j)
   let d : Formal.FightOdds.Damage :=
-    ⟨i 10, i 11, i 12, (i 13).toNat, i 14, i 15, (i 16).toNat, burn⟩
+    ⟨i 10, i 11, i 12, (i 13).toNat, i 14, i 15, (i 16).toNat, burn, i 17, i 18⟩
   let xs := Formal.FightOdds.fightOdds t d (i 6) (i 7) (i 8).toNat (i 9).toNat
   let grouped := xs.foldl (fun (acc : List (Formal.FightOdds.Ending × Rat)) e =>
     match acc.find? (·.1 == e.2) with
@@ -1882,19 +1891,23 @@ def runGroupFight (args : Array Json) : Json :=
               ("used", Json.arr (o.used.map fun u => Json.num (Int.ofNat u)).toArray)]
 
 /-- `predict_win` at a CURRENT hp (`Formal.FightOutcome.closedWin` over the
-`PredictWin.killStepNet` / `PredictWin.dieStep` terms). Args: the 46-int
-`runPredictWin` layout, then `[46]` = the player's current hp. -/
+`PredictWin.killStepNet` / `PredictWin.dieStep` terms). Args: the 45-int
+`runPredictWin` layout, then `[45]` = the player's current hp. -/
 def runPredictWinHp (g : Nat → Int) : Json :=
   let rawPlayer := rawHit (g 0) (g 1) (g 2) (g 3) (g 4) (g 5)
     (g 6) (g 7) (g 8) (g 9) (g 10) (g 11)
   let rawMonster := rawHit (g 14) (g 15) (g 16) (g 17) (g 18) (g 19)
     (g 20) (g 21) (g 22) (g 23) (g 24) (g 25)
-  let ks := killStepNet rawPlayer (g 12) (g 26) (g 31) (g 32) (g 13) (g 36) (g 27) (g 38)
-    (g 41) (g 43)
-  let ds := dieStep rawMonster (g 26) (g 12) (g 29) (g 30) (g 33) (g 35) (g 27) (g 38)
-    (g 39) (g 40) (g 42) rawPlayer (g 44) (g 45) (g 32)
-  let t : Formal.FightOutcome.Terms := ⟨rawPlayer, ks, g 13 + g 34, g 37, ds, g 28 != 0⟩
-  Json.mkObj [("win", Json.bool (Formal.FightOutcome.closedWin t (g 46) (g 27)))]
+  let pCritHit := critHit (g 0) (g 1) (g 2) (g 3) (g 4) (g 5)
+    (g 6) (g 7) (g 8) (g 9) (g 10) (g 11)
+  let mCritHit := critHit (g 14) (g 15) (g 16) (g 17) (g 18) (g 19)
+    (g 20) (g 21) (g 22) (g 23) (g 24) (g 25)
+  let ks := killStepNet rawPlayer (g 12) (g 26) (g 30) mCritHit (g 13) (g 35) (g 27) (g 37)
+    (g 40) (g 42)
+  let ds := dieStep rawMonster (g 26) (g 12) (g 29) pCritHit (g 32) (g 34) (g 27) (g 37)
+    (g 38) (g 39) (g 41) rawPlayer (g 43) (g 44) (g 31)
+  let t : Formal.FightOutcome.Terms := ⟨rawPlayer, ks, g 13 + g 33, g 36, ds, g 28 != 0⟩
+  Json.mkObj [("win", Json.bool (Formal.FightOutcome.closedWin t (g 45) (g 27)))]
 
 /-- The price of one consumable (`Formal.ConsumablePrice.consumablePrice`).
 Args: `[held, makeTag, makeNum, makeDen, goldTag, gold, gpsNum, gpsDen]`, a tag of

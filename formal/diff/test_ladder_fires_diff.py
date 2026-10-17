@@ -1624,7 +1624,8 @@ def _rest_combat_ctx() -> SelectionContext:
 
 
 def _rest_combat_world(hp: int, max_hp: int) -> WorldState:
-    # Player attack {fire:50}, initiative 0 (ties the monster -> player first).
+    # Player attack {fire:50}, initiative 1 over the monster's 0 -> player first (an
+    # initiative tie goes to the higher HP, so a 0-0 tie would move with the hp).
     # No task (phase NONE) so when restForCombat does NOT fire the selection
     # falls cleanly through to Wait on both ladders.
     return WorldState(
@@ -1634,7 +1635,7 @@ def _rest_combat_world(hp: int, max_hp: int) -> WorldState:
         equipment={"weapon_slot": None}, cooldown_expires=None,
         bank_items=None, bank_gold=None, pending_items=None,
         task_code=None, task_type=None, task_progress=0, task_total=0,
-        attack={"fire": 50}, initiative=0)
+        attack={"fire": 50}, initiative=1)
 
 
 def test_rest_for_combat_drives_and_selects() -> None:

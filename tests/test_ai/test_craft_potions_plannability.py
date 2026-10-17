@@ -80,10 +80,11 @@ def _state(**overrides):
 
     Alchemy is high enough for BOTH the heal and the boost recipe, and every
     potion material is already in hand, so material supply can never be the
-    reason a plan is not found.
+    reason a plan is not found. Initiative 1 against the slime's 0: the player
+    moves first (a tie goes to the higher HP, the slime's 200).
     """
     base = dict(
-        level=20, hp=150, max_hp=150,
+        level=20, hp=150, max_hp=150, initiative=1,
         attack={"fire": 150},
         equipment={**make_state().equipment, "weapon_slot": "wpn"},
         inventory={_INGREDIENT: 300},

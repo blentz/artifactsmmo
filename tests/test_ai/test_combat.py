@@ -15,12 +15,15 @@ from artifactsmmo_cli.ai.combat import (
     _die_step,
     _element_damage,
     _expected_hit,
+    _kill_step_net,
     _round_half_up,
     combat_margin,
     fight_loadout,
     fight_records,
     is_winnable,
+    lifesteal_heal,
     lost_fights,
+    moves_first,
     predict_win,
     secure_win,
     unpotioned,
@@ -93,13 +96,16 @@ def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifestea
 
 
 def test_predict_win_false_when_monster_out_heals_via_lifesteal():
-    """killStep ≤ 0: a high-crit/high-lifesteal monster heals more per turn than
-    our weak attack removes → unkillable → not winnable (combat.py:100). The
-    monster's own damage is fully RESISTED, so WITHOUT the lifesteal term the bot
-    would (wrongly) predict a win — that is what the mutation gate checks."""
-    state = make_state(max_hp=200, attack={"fire": 5}, resistance={"fire": 100},
+    """killStep ≤ 0: a monster healing as much per turn as our weak attack
+    removes → unkillable → not winnable. Its 10 fire is 90% resisted to 1 (a
+    crit 2), and a 25% lifesteal heals 1 of that on every (certain) crit: our 1
+    a turn is undone. Its own 1.5 a turn never kills 200 HP, so WITHOUT the
+    lifesteal term the bot would (wrongly) predict a win — that is what the
+    mutation gate checks. A heal is a share of damage DEALT (server logs
+    2026-10-17), so a fully resisted monster heals nothing."""
+    state = make_state(max_hp=200, attack={"fire": 1}, resistance={"fire": 90},
                        initiative=50)
-    gd = _gd(hp=30, attack={"fire": 200}, crit=50, lifesteal=10)
+    gd = _gd(hp=30, attack={"fire": 10}, crit=100, lifesteal=25)
     assert predict_win(state, gd, "mob") is False
 
 
@@ -124,7 +130,7 @@ def test_predict_win_false_when_poison_outpaces_the_kill():
     mutation gate checks the term flips it. Player raw 50 vs hp 100 ⇒ 2 rounds to
     kill; symmetric monster ⇒ 2 rounds to die (win, player first); poison 100/turn
     ⇒ 1 round to die ⇒ loss."""
-    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
     assert predict_win(state, gd_no, "mob") is True
     gd_psn = _gd(hp=100, attack={"fire": 50}, initiative=10, poison=100)
@@ -136,7 +142,7 @@ def test_predict_win_false_when_sun_shield_zeroes_kill_step():
     winnable, but sun_shield 100% halves-then-zeroes the player's per-turn damage so
     killStep ≤ 0 ⇒ unkillable ⇒ loss. WITHOUT the sun_shield term the bot predicts a
     win — the mutation gate checks the term flips it."""
-    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_no = _gd(hp=100, attack={}, initiative=10)
     assert predict_win(state, gd_no, "mob") is True
     gd_ss = _gd(hp=100, attack={}, initiative=10, sun_shield=100)
@@ -148,7 +154,7 @@ def test_predict_win_false_when_greed_outpaces_the_kill():
     == 2) becomes a loss once the monster's 9-stack greed boost shortens rounds_to_die.
     Player raw 50 vs hp 100 ⇒ 2 rounds; symmetric monster ⇒ 2 rounds (win, player first);
     greed 20 ⇒ +9*20% monster damage ⇒ 1 round to die ⇒ loss."""
-    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
     assert predict_win(state, gd_no, "mob") is True
     gd_greed = _gd(hp=100, attack={"fire": 50}, initiative=10, greed=20)
@@ -160,7 +166,7 @@ def test_predict_win_false_when_enchanted_mirror_reflects_to_death():
     winnable, but reflecting 50% of the player's own output kills the (low-HP) player in 2
     rounds while the kill takes 4 (monster hp 200) ⇒ loss. WITHOUT the reflect term the bot
     predicts a win — the mutation gate checks the term flips it."""
-    state = make_state(hp=50, max_hp=50, attack={"fire": 50}, initiative=10)
+    state = make_state(hp=50, max_hp=50, attack={"fire": 50}, initiative=11)
     gd_no = _gd(hp=200, attack={}, initiative=10)
     assert predict_win(state, gd_no, "mob") is True
     gd_mirror = _gd(hp=200, attack={}, initiative=10, enchanted_mirror=50)
@@ -190,7 +196,7 @@ def test_predict_win_false_when_poison_kills_a_harmless_monster():
     """Removing the `raw_monster <= 0 => True` shortcut: a monster dealing ZERO
     direct damage is harmless (win) UNLESS it has poison, which kills over time.
     Pins that poison-only death is a loss (the old shortcut wrongly said win)."""
-    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_safe = _gd(hp=100, attack={}, initiative=10)        # no direct damage ⇒ win
     assert predict_win(state, gd_safe, "mob") is True
     gd_psn = _gd(hp=100, attack={}, initiative=10, poison=100)  # poison alone kills
@@ -203,7 +209,7 @@ def test_predict_win_false_when_barrier_pushes_kill_past_death():
     raises effective HP and stretches rounds_to_kill. WITHOUT the barrier term the
     bot predicts a win — the mutation gate checks the term flips it. Player raw 50
     vs hp 100 ⇒ 2 rounds; barrier 100 ⇒ effective hp 200 ⇒ 8 rounds > 2 ⇒ loss."""
-    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
     assert predict_win(state, gd_no, "mob") is True
     gd_bar = _gd(hp=100, attack={"fire": 50}, initiative=10, barrier=100)
@@ -216,7 +222,7 @@ def test_predict_win_false_when_burn_outpaces_the_kill():
     shortens rounds_to_die. WITHOUT the burn term the bot predicts a win — the
     mutation gate checks the term flips it. Player Σatk 50, burn 100% ⇒ +5e5/round
     ⇒ dieStep 1e6 ⇒ rtd 1 < rtk 2 ⇒ loss."""
-    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
     assert predict_win(state, gd_no, "mob") is True
     gd_brn = _gd(hp=100, attack={"fire": 50}, initiative=10, burn=100)
@@ -229,7 +235,7 @@ def test_predict_win_false_when_healing_outpaces_our_damage():
     shrinks killStep and stretches rounds_to_kill. WITHOUT the healing term the bot
     predicts a win — the mutation gate checks the term flips it. Monster hp 100,
     healing 40% ⇒ killStep 5e5 - 4e5 = 1e5 ⇒ rtk 10 > rtd 2 ⇒ loss."""
-    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
     assert predict_win(state, gd_no, "mob") is True
     gd_heal = _gd(hp=100, attack={"fire": 50}, initiative=10, healing=40)
@@ -264,7 +270,7 @@ def test_predict_win_false_when_void_drain_drains_and_heals():
     down ⇒ rtk up) AND damages the player (dieStep up ⇒ rtd down). WITHOUT either
     term the bot predicts a win; the mutation gate checks each term flips it. Player
     hp 100, raw 50 vs hp 100; void 20% ⇒ killStep 3e5 (rtk 4), dieStep 7e5 (rtd 2)."""
-    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
     assert predict_win(state, gd_no, "mob") is True
     gd_void = _gd(hp=100, attack={"fire": 50}, initiative=10, void_drain=20)
@@ -290,7 +296,7 @@ def test_predict_win_false_when_berserker_rage_boosts_monster_damage():
     won tiebreak (rtk == rtd == 2) to a loss. frenzy held at 0 so this isolates the
     berserker term (kills its mutation). Player hp 100, raw 50 vs hp 100; berserk 100%
     ⇒ dieStep 5e5 + 100*50*200//2=5e5 = 1e6 ⇒ rtd 1 < rtk 2."""
-    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
     assert predict_win(state, gd_no, "mob") is True
     gd_b = _gd(hp=100, attack={"fire": 50}, initiative=10, berserker_rage=100)
@@ -300,7 +306,7 @@ def test_predict_win_false_when_berserker_rage_boosts_monster_damage():
 def test_predict_win_false_when_frenzy_boosts_monster_damage():
     """Frenzy's always-active monster-damage boost (same shape as berserker) flips the
     same won tiebreak to a loss. berserk held at 0 so this isolates the frenzy term."""
-    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
     assert predict_win(state, gd_no, "mob") is True
     gd_f = _gd(hp=100, attack={"fire": 50}, initiative=10, frenzy=100)
@@ -312,7 +318,7 @@ def test_predict_win_false_when_protective_bubble_resists_player():
     rounds_to_kill past rounds_to_die and flipping a won tiebreak to a loss. WITHOUT
     the term the bot predicts a win; the mutation gate checks it flips. Player raw 50
     vs hp 100; bubble 50% ⇒ killStep 5e5 - 50*50*200//2=2.5e5 = 2.5e5 ⇒ rtk 4 > rtd 2."""
-    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
     assert predict_win(state, gd_no, "mob") is True
     gd_bub = _gd(hp=100, attack={"fire": 50}, initiative=10, protective_bubble=50)
@@ -325,7 +331,7 @@ def test_predict_win_ignores_corrupted_conservatively():
     the player's pre-corruption (minimum) damage ⇒ corrupted must NOT change the
     verdict. Locks the carve-out: same fight, with/without corrupted, identical
     verdict (a borderline tiebreak win that a damage boost could only over-call)."""
-    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
     gd_cor = _gd(hp=100, attack={"fire": 50}, initiative=10, corrupted=50)
     assert predict_win(state, gd_no, "mob") == predict_win(state, gd_cor, "mob")
@@ -601,9 +607,9 @@ def test_predict_win_boolean_unchanged_by_helper_extraction():
     assert predict_win(state_a, gd_a, "mob") is False
 
     # Case B: kill_step <= 0 — monster lifesteal out-heals player → False
-    state_b = make_state(max_hp=200, attack={"fire": 5}, resistance={"fire": 100},
+    state_b = make_state(max_hp=200, attack={"fire": 1}, resistance={"fire": 90},
                          initiative=50)
-    gd_b = _gd(hp=30, attack={"fire": 200}, crit=50, lifesteal=10)
+    gd_b = _gd(hp=30, attack={"fire": 10}, crit=100, lifesteal=25)
     assert predict_win(state_b, gd_b, "mob") is False
 
     # Case C: die_step <= 0 — player lifesteal out-sustains monster → True
@@ -616,12 +622,12 @@ def test_predict_win_boolean_unchanged_by_helper_extraction():
     assert predict_win(state_c, gd_c, "mob") is True
 
     # Case D: die_step > 0, poison-only loss — poison raises die_step → False
-    state_d = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    state_d = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_d = _gd(hp=100, attack={"fire": 50}, initiative=10, poison=100)
     assert predict_win(state_d, gd_d, "mob") is False
 
-    # Case E: normal win — player initiative tie favours player (rtk == rtd == 2) → True
-    state_e = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    # Case E: normal win — the player moves first (initiative 11 > 10), rtk == rtd == 2 → True
+    state_e = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_e = _gd(hp=100, attack={"fire": 50}, initiative=10)
     assert predict_win(state_e, gd_e, "mob") is True
 
@@ -646,17 +652,17 @@ def _predict_win_case_matrix() -> list[tuple]:
          False),
         # Case B: kill_step <= 0 (monster lifesteal out-heals) → LOSE
         ("kill_step_zero",
-         make_state(max_hp=200, attack={"fire": 5}, resistance={"fire": 100}, initiative=50),
-         _gd(hp=30, attack={"fire": 200}, crit=50, lifesteal=10),
+         make_state(max_hp=200, attack={"fire": 1}, resistance={"fire": 90}, initiative=50),
+         _gd(hp=30, attack={"fire": 10}, crit=100, lifesteal=25),
          False),
         # Case D: die_step > 0, poison raises cost → LOSE
         ("poison_loss",
-         make_state(max_hp=100, attack={"fire": 50}, initiative=10),
+         make_state(max_hp=100, attack={"fire": 50}, initiative=11),
          _gd(hp=100, attack={"fire": 50}, initiative=10, poison=100),
          False),
         # Case E: normal win, player-first tie (rtk == rtd == 2) → WIN
         ("normal_win_player_first",
-         make_state(max_hp=100, attack={"fire": 50}, initiative=10),
+         make_state(max_hp=100, attack={"fire": 50}, initiative=11),
          _gd(hp=100, attack={"fire": 50}, initiative=10),
          True),
         # Case F: state.hp=0 → effective_hp==0 guard → LOSE
@@ -685,7 +691,7 @@ def test_combat_margin_sign_matches_predict_win():
     _, state_a, gd_a, _ = _predict_win_case_matrix()[0]
     assert combat_margin(state_a, gd_a, "mob") == LOSE_MARGIN
     # Sentinel check: monster with no attack → die_step=0 → WIN_MARGIN
-    state_sustain = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    state_sustain = make_state(max_hp=100, attack={"fire": 50}, initiative=11)
     gd_sustain = _gd(hp=100, attack={})  # no monster attack → die_step=0
     assert combat_margin(state_sustain, gd_sustain, "mob") == WIN_MARGIN
 
@@ -694,7 +700,7 @@ def test_combat_margin_magnitude_orders_by_cushion():
     """A player with more HP (bigger round cushion) has a strictly larger margin.
 
     Construction: keep rtk fixed (same attack vs same monster HP), vary player HP
-    so rtd grows. Margin = rtd - rtk + 1 (player_first, tie in initiative).
+    so rtd grows. Margin = rtd - rtk + 1 (player_first: initiative 11 > 10).
 
     Larger rtd → larger margin, and the stronger player's margin > weaker player's.
     Also verifies the boundary: the exact-tie player (rtk == rtd, player_first) has
@@ -706,19 +712,19 @@ def test_combat_margin_magnitude_orders_by_cushion():
     gd_sym = _gd(hp=100, attack={"fire": 50}, initiative=10)
 
     # Tie: rtk==rtd==2, player_first → margin = 2-2+1 = 1.
-    state_tie = make_state(max_hp=100, hp=100, attack={"fire": 50}, initiative=10)
+    state_tie = make_state(max_hp=100, hp=100, attack={"fire": 50}, initiative=11)
     margin_tie = combat_margin(state_tie, gd_sym, "mob")
     assert margin_tie == 1, f"expected margin 1 for tie-win, got {margin_tie}"
     assert predict_win(state_tie, gd_sym, "mob") is True
 
     # Weaker player: rtd=1 → margin = 1-2+1 = 0 (loss).
-    state_weak = make_state(max_hp=50, hp=50, attack={"fire": 50}, initiative=10)
+    state_weak = make_state(max_hp=50, hp=50, attack={"fire": 50}, initiative=11)
     margin_weak = combat_margin(state_weak, gd_sym, "mob")
     assert margin_weak == 0, f"expected margin 0 for weak player, got {margin_weak}"
     assert margin_weak < margin_tie
 
     # Stronger player: rtd=4 → margin = 4-2+1 = 3 (cushion).
-    state_strong = make_state(max_hp=200, hp=200, attack={"fire": 50}, initiative=10)
+    state_strong = make_state(max_hp=200, hp=200, attack={"fire": 50}, initiative=11)
     margin_strong = combat_margin(state_strong, gd_sym, "mob")
     assert margin_strong == 3, f"expected margin 3 for strong player, got {margin_strong}"
     assert margin_strong > margin_tie
@@ -917,3 +923,37 @@ def test_a_threshold_equal_to_the_odds_is_cleared() -> None:
                       gd, "owlbear") is True
     assert secure_win(dataclasses.replace(strong, win_thresholds={"owlbear": q + Fraction(1, 10**9)}),
                       gd, "owlbear") is False
+
+
+# --- lifesteal and turn order, read off server logs 2026-10-17 -------------------
+
+
+@pytest.mark.parametrize(("lifesteal", "crit_hit", "heal"), [
+    (15, 165, 25),  # C3P0, 295 heals
+    (15, 196, 29),  # Robby, 1,151 heals
+    (15, 152, 23),  # HAL, 862 heals
+    (0, 165, 0),
+])
+def test_a_crit_heals_the_lifesteal_share_of_its_damage(lifesteal, crit_hit, heal):
+    assert lifesteal_heal(lifesteal, crit_hit) == heal
+
+
+def test_the_closed_form_charges_the_monsters_heal_per_crit():
+    """`crit% × heal × 100`: a 10% crit healing 25 (15% of 165) takes 25,000."""
+    assert _kill_step_net(0, 0, 10, 15, 165, 0, 0, 0, 0, 0, 0) == -10 * 25 * 100
+
+
+def test_the_closed_form_credits_the_players_heal_per_crit():
+    assert _die_step(0, 0, 30, 15, 165, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) == -30 * 25 * 100
+
+
+@pytest.mark.parametrize(("p_init", "p_hp", "m_init", "m_hp", "first"), [
+    (201, 1, 200, 1500, True),      # higher initiative moves first
+    (199, 9999, 200, 1500, False),
+    (200, 890, 200, 1500, False),   # R2D2 v cultist_acolyte: the monster, 26 of 26 fights
+    (200, 1600, 200, 1500, True),   # a tie goes to the higher HP
+    (200, 1500, 200, 1500, False),  # a coin flip on the server: ruled the monster's
+])
+def test_turn_order(p_init, p_hp, m_init, m_hp, first):
+    assert moves_first(p_init, p_hp, m_init, m_hp) is first
+

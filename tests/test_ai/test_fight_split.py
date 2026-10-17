@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.fight_walk import fight_walk, odds_walk
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.test_combat import _gd as _mob_gd
 
 _UTILITY = dict(level=1, type_="utility")
 
@@ -117,3 +118,17 @@ def test_burn_is_ticks_off_the_monsters_attack_not_a_flat_charge():
     assert (burnt.die_normal, burnt.die_crit) == (bare.die_normal, bare.die_crit)
     # The yes/no gates keep the flat bound until part B.
     assert terms_burnt.die_step > terms_bare.die_step
+
+
+def test_lifesteal_rides_the_crit_branch_not_the_round():
+    """Both sides' lifesteal leave the per-round charge and land as the heal a
+    crit carries: a 15% rune on a 150 crit (100 fire ×1.5) heals 23; a 10%
+    monster on its 75 crit (50 fire ×1.5) heals 8. Every hit is the bare hit."""
+    gd = _mob_gd(hp=900, attack={"fire": 50}, crit=20, lifesteal=10)
+    gd._item_stats = {"vamp": ItemStats(code="vamp", level=1, type_="weapon", lifesteal=15)}
+    state = make_state(max_hp=400, attack={"fire": 100}, critical_strike=25, initiative=20,
+                       equipment={"weapon_slot": "vamp"})
+    _terms, damage = fight_split(state, gd, "mob")
+    assert (damage.p_heal, damage.m_heal) == (23 * 10_000, 8 * 10_000)
+    assert (damage.kill_normal, damage.kill_crit) == (100 * 10_000, 150 * 10_000)
+    assert (damage.die_normal, damage.die_crit) == (50 * 10_000, 75 * 10_000)

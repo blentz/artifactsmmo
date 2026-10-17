@@ -67,9 +67,8 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         max_hp=p_max_hp,
     )
     # Player lifesteal is summed over the post-loadout equipment; route it through
-    # one dummy slot carrying p_lifesteal. pAtkSum/mAtkSum are the RAW attack sums
-    # the heal formula uses (crit% × lifesteal% × Σattack).
-    p_atk_sum = sum(stats.attack.values())
+    # one dummy slot carrying p_lifesteal. Lean derives each side's crit-turn
+    # damage from the same element args (`critHit`); mAtkSum is burn's base.
     m_atk_sum = sum(m_attack.values())
     loadout = {"weapon_slot": "_ls"} if (p_lifesteal or p_antipoison) else {}
 
@@ -157,14 +156,20 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         _elem_args(p_attack, p_dmg, p_dmg_elem, m_resist)  # noqa: RUF005 - player vs monster resist
         + [p_crit, m_hp]
         + _elem_args(m_attack, 0, {}, p_resist)            # monster vs player resist
-        + [m_crit, p_max_hp, 1 if p_init >= m_init else 0]
-        + [p_lifesteal, p_atk_sum, m_lifesteal, m_atk_sum]
+        + [m_crit, p_max_hp, 1 if _player_first(p_init, p_max_hp, m_init, m_hp) else 0]
+        + [p_lifesteal, m_lifesteal, m_atk_sum]
         + [m_poison, m_barrier, m_burn, m_healing, m_recon, m_void, m_berserk, m_frenzy, m_bubble]
         + [p_antipoison]
         + [m_sun_shield, m_greed, m_enchanted_mirror]
     )
     lean = run_oracle("predict_win", [args])[0]
     return py, lean
+
+
+def _player_first(p_init: int, p_hp: int, m_init: int, m_hp: int) -> bool:
+    """The server's turn order, stated independently of `combat.moves_first`:
+    higher initiative, a tie to the higher HP, a tie on both to the monster."""
+    return p_init > m_init or (p_init == m_init and p_hp > m_hp)
 
 
 def _rand_elem_map(rng: random.Random, lo: int, hi: int, prob: float) -> dict:
@@ -249,15 +254,16 @@ def test_python_matches_lean(seed):
 
 
 def test_initiative_tiebreak_binds_against_lean():
-    """A dead heat on rounds where initiative decides: equal rounds_to_kill /
-    rounds_to_die, player wins iff it goes first (the combat.py:79 `<=` vs `<`
-    tiebreak). Pins the tiebreak against Lean."""
+    """A dead heat on rounds where turn order decides: equal rounds_to_kill /
+    rounds_to_die, player wins iff it goes first (the `<=` vs `<` tiebreak).
+    Pins the tiebreak against Lean, and the server's turn order: higher
+    initiative, then higher HP (R2D2 v cultist_acolyte, 2026-10-16)."""
     # Player: 50 fire attack, no crit/resist => raw 50, rounds depend on hp.
     # Symmetric monster so rounds_to_kill == rounds_to_die.
     p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
-             max_hp=100, init=10)
+             max_hp=100, init=11)
     m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
-    # player first (init equal => >= holds) => win on the <= tiebreak.
+    # player first (higher initiative) => win on the <= tiebreak.
     py_first, lean_first = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
                                 p["crit"], p["max_hp"], p["init"], m["hp"],
                                 m["attack"], m["resist"], m["crit"], m["init"])
@@ -291,7 +297,7 @@ def test_berserker_rage_flips_winnable_fight_against_lean():
     floor) against Lean with frenzy held at 0 so it is the sole decider. Player hp 100,
     raw 50 vs hp 100; berserk 100% => dieStep 5e5 + 100*50*200/2=5e5 = 1e6 => rtd 1 < 2."""
     p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
-             max_hp=100, init=10)
+             max_hp=100, init=11)
     m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
     py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
                           p["crit"], p["max_hp"], p["init"], m["hp"],
@@ -311,7 +317,7 @@ def test_greed_flips_winnable_fight_against_lean():
     against Lean. Player hp 100, raw 50 vs hp 100; greed 20 => dieStep 5e5 + 9*20*50*200/2
     = 5e5 + 9e5 = 1.4e6 => rtd 1 < rtk 2."""
     p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
-             max_hp=100, init=10)
+             max_hp=100, init=11)
     m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
     py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
                           p["crit"], p["max_hp"], p["init"], m["hp"],
@@ -331,7 +337,7 @@ def test_sun_shield_flips_winnable_fight_against_lean():
     killStep reduction against Lean with bubble held at 0. Monster deals no direct damage
     (raw_monster 0 => die_step<=0 => win) until sun_shield 100% makes killStep 0 => loss."""
     p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
-             max_hp=100, init=10)
+             max_hp=100, init=11)
     m = dict(hp=100, attack={}, resist={}, crit=0, init=10)
     py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
                           p["crit"], p["max_hp"], p["init"], m["hp"],
@@ -369,7 +375,7 @@ def test_frenzy_flips_winnable_fight_against_lean():
     """Frenzy's always-active monster-damage boost (same shape as berserker) flips the
     same won tiebreak to a loss. Pins the frenzy term against Lean with berserk at 0."""
     p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
-             max_hp=100, init=10)
+             max_hp=100, init=11)
     m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
     py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
                           p["crit"], p["max_hp"], p["init"], m["hp"],
@@ -389,7 +395,7 @@ def test_protective_bubble_flips_winnable_fight_against_lean():
     killStep bubble term (incl. the `/ 2` floor) against Lean. Player raw 50 vs hp 100;
     bubble 50% => killStep 5e5 - 50*50*200//2=2.5e5 = 2.5e5 => rtk 4 > rtd 2 => loss."""
     p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
-             max_hp=100, init=10)
+             max_hp=100, init=11)
     m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
     py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
                           p["crit"], p["max_hp"], p["init"], m["hp"],
@@ -438,7 +444,7 @@ def test_poison_flips_winnable_fight_against_lean():
     # Player raw 50, monster hp 100 => rtk = 2. Monster raw 50, player hp 100,
     # no poison => rtd = 2, player first => win.
     p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
-             max_hp=100, init=10)
+             max_hp=100, init=11)
     m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
     py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
                           p["crit"], p["max_hp"], p["init"], m["hp"],
@@ -478,7 +484,7 @@ def test_barrier_flips_winnable_fight_against_lean():
     would keep the win and die here."""
     # Player raw 50 vs hp 100 => rtk 2; monster raw 50, player hp 100 => rtd 2; win.
     p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
-             max_hp=100, init=10)
+             max_hp=100, init=11)
     m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
     py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
                           p["crit"], p["max_hp"], p["init"], m["hp"],
@@ -501,7 +507,7 @@ def test_burn_flips_winnable_fight_against_lean():
     term against Lean — a mutant that drops `+ monster_burn*m_atk_sum*100` keeps the
     win and dies here. Player Σatk 50, burn 100% => +5e5/round => dieStep 1e6 => rtd 1."""
     p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
-             max_hp=100, init=10)
+             max_hp=100, init=11)
     m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
     py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
                           p["crit"], p["max_hp"], p["init"], m["hp"],
@@ -524,7 +530,7 @@ def test_burn_is_a_share_of_the_monsters_attack_against_lean():
     50 adds 5e4 (rtd still 2, a win); 10% of the player's 500 would add 5e5
     (rtd 1, a loss). A mutant that charges the player's attack loses here."""
     p = dict(attack={"fire": 500}, dmg=0, dmg_elem={}, resist={}, crit=0,
-             max_hp=100, init=10)
+             max_hp=100, init=11)
     m = dict(hp=1000, attack={"fire": 50}, resist={}, crit=0, init=10)
     py, lean = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
                     p["crit"], p["max_hp"], p["init"], m["hp"],
@@ -541,7 +547,7 @@ def test_healing_flips_winnable_fight_against_lean():
     (win) and dies here. Monster hp 100, healing 40% => killStep 5e5 - 4e5 = 1e5 =>
     rtk = 10 > rtd = 2 => loss."""
     p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
-             max_hp=100, init=10)
+             max_hp=100, init=11)
     m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
     py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
                           p["crit"], p["max_hp"], p["init"], m["hp"],
@@ -583,7 +589,7 @@ def test_void_drain_flips_winnable_fight_against_lean():
     raw 50 vs hp 100; void 20% => killStep 5e5-2e5=3e5 => rtk 4; dieStep 5e5+2e5=7e5 =>
     rtd 2; 4 > 2 => loss."""
     p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
-             max_hp=100, init=10)
+             max_hp=100, init=11)
     m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
     py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
                           p["crit"], p["max_hp"], p["init"], m["hp"],
@@ -596,3 +602,14 @@ def test_void_drain_flips_winnable_fight_against_lean():
                         m_void=20)
     assert py_v is False
     assert py_v == lean_v["win"]
+
+
+def test_an_initiative_tie_goes_to_the_higher_hp_against_lean():
+    """Equal initiative, equal rounds (raw 50: ceil(99/50) = ceil(100/50) = 2):
+    the side with more HP moves first, so the 100-HP player beats the 99-HP
+    monster and the 99-HP player loses to the 100-HP one. Both verdicts pinned
+    against Lean."""
+    first, lean_first = _run({"fire": 50}, 0, {}, {}, 0, 100, 10, 99, {"fire": 50}, {}, 0, 10)
+    assert first is True and first == lean_first["win"]
+    second, lean_second = _run({"fire": 50}, 0, {}, {}, 0, 99, 10, 100, {"fire": 50}, {}, 0, 10)
+    assert second is False and second == lean_second["win"]

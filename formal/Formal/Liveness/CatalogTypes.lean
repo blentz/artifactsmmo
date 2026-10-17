@@ -65,7 +65,7 @@ structure WitnessRow where
   pCrit : Int
   pMaxHp : Int
   pInitiative : Int
-  pAtkSum : Int
+  pCritHit : Int
   pLifesteal : Int
   pAntipoison : Int
   -- The integer `predictWin` inputs + playerFirst.
@@ -74,6 +74,7 @@ structure WitnessRow where
   rawMonster : Int
   mCrit : Int
   mAtkSum : Int
+  mCritHit : Int
   mLifesteal : Int
   mPoison : Int
   mBarrier : Int
@@ -106,6 +107,8 @@ structure WitnessRow where
   dDieCrit : Int
   dMCrit : Nat
   dBurn : List Int
+  dPHeal : Int
+  dMHeal : Int
   -- ... and the fight's start HP, max HP and worn restore potion (HP, stock).
   fightHp : Int
   fightMaxHp : Int

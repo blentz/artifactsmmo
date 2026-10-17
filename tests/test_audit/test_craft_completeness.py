@@ -1122,10 +1122,12 @@ def test_a_loadout_swap_is_not_the_work_leg() -> None:
 
 def test_the_classifier_reads_the_drop_gate() -> None:
     """A dropper a potion loadout beats is not combat-blocked
-    (`_drop_winnable` is the drop route's gate: bare OR a stockable loadout)."""
+    (`_drop_winnable` is the drop route's gate: bare OR a stockable loadout).
+    (grimlet was the pin until lifesteal healed its real share of crit damage,
+    2026-10-17: the census gear's greater_lifesteal_rune now wins it bare.)"""
     gd = _gd()
     state = census_state("conjurer_cloak", CraftCell(50, "gearcrafting", 30, skills_at_level=True,
                                                      gold=10**6, geared=True), gd)
-    assert not is_winnable(replace(state, hp=state.max_hp), gd, "grimlet")  # bare loses
-    assert _drop_winnable(state, gd, "grimlet")                              # a potion wins
+    assert not is_winnable(replace(state, hp=state.max_hp), gd, "sandwarden")  # bare loses
+    assert _drop_winnable(state, gd, "sandwarden")                              # a potion wins
     assert not _drop_winnable(state, gd, "duskworm")

@@ -82,7 +82,7 @@ def rowTerms (r : WitnessRow) : Formal.FightOutcome.Terms :=
 def rowDamage (r : WitnessRow) : Formal.FightOdds.Damage :=
   { monsterHp := r.dMonsterHp, killNormal := r.dKillNormal, killCrit := r.dKillCrit,
     pCrit := r.dPCrit, dieNormal := r.dDieNormal, dieCrit := r.dDieCrit, mCrit := r.dMCrit,
-    burn := r.dBurn }
+    burn := r.dBurn, pHeal := r.dPHeal, mHeal := r.dMHeal }
 
 /-- The row's fight odds: from its start HP, at its max HP, with its worn restore. -/
 def rowOdds (r : WitnessRow) : List (Rat × Formal.FightOdds.Ending) :=

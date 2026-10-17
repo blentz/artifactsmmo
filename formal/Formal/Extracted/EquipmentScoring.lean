@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/equipment/scoring.py (sha256: 79161f3f197c518f79ac8d6e6694718a2e4bbad39768302346000645ab21ba16) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/equipment/scoring.py (sha256: 94cfe54dfff4ad204c3d944f16520da536f159f6c065a44fd56eb55ad516ce2f) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.EquipmentScoring

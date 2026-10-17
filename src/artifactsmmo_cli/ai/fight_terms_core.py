@@ -13,7 +13,8 @@ them into the closed form's quantities, in the exact ×10000 scale the steps use
 * `rounds_to_kill` = ⌈effective monster HP × 10000 / kill_step⌉;
 * `effective_hp` — the player's HP at fight start (current HP, capped at max);
 * `rounds_to_die` = ⌈effective_hp × 10000 / die_step⌉;
-* `player_first` — the initiative tiebreak (`player ≥ monster`);
+* `player_first` — who moves first (`combat.moves_first`: higher initiative, a tie
+  to the higher HP, a tie on both to the monster);
 * `exit` — which guard of the ladder decided the fight before the round count,
   in the order the closed form tests them.
 

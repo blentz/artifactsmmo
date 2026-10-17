@@ -60,6 +60,19 @@ def test_hit_is_the_attack_area_is_what_every_member_pays():
 
 
 def test_boss_drain_is_its_lifesteal_and_healing():
-    """crit 20 × lifesteal 10 × attack 50 + healing 2 × hp 100 × 100."""
+    """crit 20 × the heal off its unresisted crit (10% of 75 = 7.5, rounded to 8)
+    × 100 + healing 2 × hp 100 × 100: the most the boss can heal a turn."""
     gd = _gd(hp=100, attack={"fire": 50}, crit=20, lifesteal=10, healing=2)
-    assert boss_drain(gd, "mob") == 20 * 10 * 50 + 2 * 100 * 100
+    assert boss_drain(gd, "mob") == 20 * 8 * 100 + 2 * 100 * 100
+
+
+def test_a_resisting_member_is_drained_at_most_the_boss_bound():
+    """The boss heals off the member it hits; the party walk charges the heal
+    off its UNRESISTED crit, the most it can heal. A member resisting the
+    boss's fire is healed off less, so its solo kill step is the larger:
+    crit 20 x (8 - 4) x 100 apart (10% of 75 is 8, of 38 is 4)."""
+    gd = _gd(hp=100, attack={"fire": 50}, crit=20, lifesteal=10)
+    state = make_state(max_hp=400, attack={"fire": 60}, resistance={"fire": 50}, initiative=20)
+    member = party_member(state, gd, "mob", 0, 0)
+    assert combat_terms(state, gd, "mob").kill_step - (member.net - party_boss(gd, "mob").drain) \
+        == 20 * (8 - 4) * 100
