@@ -513,10 +513,14 @@ def test_predict_win_resistance_lets_defender_survive_longer():
     assert predict_win(state, armored, "mob") is False
 
 
-def test_predict_win_initiative_tie_favors_player():
-    state = make_state(max_hp=20, attack={"fire": 20}, initiative=50)
+def test_predict_win_initiative_tie_goes_to_the_higher_hp():
+    """Both sides one-shot each other at equal initiative: the side with more
+    HP moves first and wins (server rule, 2026-10-17)."""
     gd = _gd(hp=20, attack={"fire": 20}, initiative=50)
-    assert predict_win(state, gd, "mob") is True
+    bigger = make_state(hp=100, max_hp=100, attack={"fire": 20}, initiative=50)
+    smaller = make_state(hp=19, max_hp=19, attack={"fire": 20}, initiative=50)
+    assert predict_win(bigger, gd, "mob") is True
+    assert predict_win(smaller, gd, "mob") is False
 
 
 def test_predict_win_player_resistance_reduces_monster_damage():
