@@ -4,6 +4,7 @@ import dataclasses
 from unittest.mock import patch
 
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
+from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
@@ -28,6 +29,8 @@ from artifactsmmo_cli.ai.tiers.guards import (
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.test_rest_first import _gd as _rest_gd
+from tests.test_ai.test_rest_first import _state as _rest_state
 
 
 def _ctx(**kw) -> SelectionContext:
@@ -78,6 +81,17 @@ def test_rest_for_combat_fires_when_winnable_only_at_max_hp():
     gd = _combat_gd(monster_hp=40, monster_attack={"fire": 10})
     assert _fires(GuardKind.REST_FOR_COMBAT, state, gd, None,
                   _ctx(combat_monster="mob")) is True
+
+
+def test_rest_for_combat_fires_when_resting_first_pays():
+    """θ 1/2 admits the 40-HP fight (P 1/2), but a rest and a sure win cost
+    less per kill (`rest_first.rest_pays`); a sure win at 60 HP fights."""
+    gd = _rest_gd()
+    assert predict_win(_rest_state(40), gd, "mob")
+    assert _fires(GuardKind.REST_FOR_COMBAT, _rest_state(40), gd, None,
+                  _ctx(combat_monster="mob")) is True
+    assert _fires(GuardKind.REST_FOR_COMBAT, _rest_state(60), gd, None,
+                  _ctx(combat_monster="mob")) is False
 
 
 def test_hp_critical_fires_below_quarter_and_outranks_all():

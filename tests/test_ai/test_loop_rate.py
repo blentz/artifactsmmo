@@ -314,7 +314,7 @@ class TestOdds:
     def test_the_nearest_spawn_tile_to_the_respawn_prices_the_walk(self) -> None:
         gd = _gd()
         gd._monster_locations = {"ogre": [(9, 9), (3, 4), (4, 3)]}
-        assert loop_mod._monster_tile(_state(), gd, "ogre") == (3, 4)
+        assert loop_mod.monster_tile(_state(), gd, "ogre") == (3, 4)
 
     def test_an_interior_only_monster_walks_back_to_its_interior_tile(self) -> None:
         # rat-shaped (final review C1): no legacy spawn, one interior tile, the
@@ -325,7 +325,7 @@ class TestOdds:
         state = _state(critical_strike=30)
         rate = _rate(state, gd, [])
         assert rate is not None and 0 < rate.p_win < 1
-        assert loop_mod._monster_tile(state, gd, "ogre") == (-3, 12)
+        assert loop_mod.monster_tile(state, gd, "ogre") == (-3, 12)
         walk = travel_seconds((0, 0), (-3, 12))
         assert rate.xp_per_second == rate.p_win * rate.xp_per_kill / (
             FIGHT_SECONDS + rate.recovery_seconds + (1 - rate.p_win) * walk)

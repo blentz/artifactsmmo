@@ -930,6 +930,7 @@ open Formal.PriorityBand
 #check @Formal.GuardCoverage.critical_inv_with_overstock_triggers_discard
 #check @Formal.GuardCoverage.high_inv_with_bank_triggers_deposit
 #check @Formal.GuardCoverage.rest_for_combat_triggers_when_needed
+#check @Formal.GuardCoverage.rest_for_combat_triggers_when_resting_pays
 #check @Formal.GuardCoverage.firstGuard_nonzero_when_low_hp
 #check @Formal.GuardCoverage.stuck_state_always_guarded
 

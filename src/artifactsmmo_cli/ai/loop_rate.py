@@ -128,7 +128,7 @@ def food_menu(state: WorldState, game_data: GameData, ctx: SelectionContext,
     return tuple(menu)
 
 
-def _monster_tile(state: WorldState, game_data: GameData, monster: str) -> tuple[int, int]:
+def monster_tile(state: WorldState, game_data: GameData, monster: str) -> tuple[int, int]:
     """The monster's fight tile nearest the respawn tile: where a loss walks back
     to. The tiles are every layer's (`fight_tiles`); the walk is priced on the
     tile's (x, y) alone, so a walk back into an interior or the underground is
@@ -153,7 +153,7 @@ def loop_rate(state: WorldState, game_data: GameData, monster: str,
     menu = [(f.restore, f.price, f.held) for f in food]
     extra = Fraction(0)
     if p_win < 1:
-        extra = (1 - p_win) * travel_seconds(RESPAWN_TILE, _monster_tile(state, game_data, monster))
+        extra = (1 - p_win) * travel_seconds(RESPAWN_TILE, monster_tile(state, game_data, monster))
     held = {code: held_count(code, state) for code, _ in loadout}
     used_mean = {code: Fraction(0) for code, _ in loadout}
     eaten_mean = [Fraction(0)] * len(food)

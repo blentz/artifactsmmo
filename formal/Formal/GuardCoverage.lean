@@ -13,7 +13,8 @@ state class triggers AT LEAST ONE guard.
 
 Covered guards (matching Python `GuardKind`):
   * HP_CRITICAL — hp < 25%
-  * REST_FOR_COMBAT — combat target winnable @ max_hp but not @ current
+  * REST_FOR_COMBAT — combat target winnable @ max_hp, and lost @ current
+    or cheaper per kill after a rest (`rest_first.rest_pays`)
   * BANK_UNLOCK — bank locked + lvl ≥ target_lvl - 1
   * REACH_UNLOCK_LEVEL — bank locked + sub-target lvl
   * DISCARD_CRITICAL — inventory ≥ 95% + overstock exists
@@ -41,6 +42,7 @@ structure Pressure where
   combatTargetSet : Bool
   combatWinAtMax  : Bool  -- predict_win at max hp
   combatWinAtCur  : Bool  -- predict_win at current hp
+  restPays        : Bool  -- rest_first.rest_pays at current hp
 
 /-! ## Guard kinds. -/
 
@@ -61,10 +63,10 @@ deriving Repr, DecidableEq
 /-- HP_CRITICAL: `hpPct < 25`. -/
 def hpCritical (p : Pressure) : Bool := decide (p.hpPct < 25)
 
-/-- REST_FOR_COMBAT: combat target set ∧ win @ max ∧ ¬win @ current ∧
-hp < full (modeled here as hpPct < 100). -/
+/-- REST_FOR_COMBAT: combat target set ∧ win @ max ∧ (¬win @ current ∨
+resting first pays) ∧ hp < full (modeled here as hpPct < 100). -/
 def restForCombat (p : Pressure) : Bool :=
-  p.combatTargetSet && p.combatWinAtMax && !p.combatWinAtCur &&
+  p.combatTargetSet && p.combatWinAtMax && (!p.combatWinAtCur || p.restPays) &&
     decide (p.hpPct < 100)
 
 /-- DISCARD_CRITICAL: inv ≥ 95% ∧ overstock. -/
@@ -122,6 +124,20 @@ theorem rest_for_combat_triggers_when_needed
     restForCombat p = true := by
   unfold restForCombat
   simp [hT, hMax, hCur, hHp]
+
+/-- **A fight the odds admit still rests when resting pays**: target set,
+max-hp winnable, current-hp winnable too, but a rest and the fight from full
+cost less per kill (live R2D2 v king_slime at 452/890 hp, 2026-10-17) ⇒
+REST_FOR_COMBAT fires. -/
+theorem rest_for_combat_triggers_when_resting_pays
+    (p : Pressure)
+    (hT : p.combatTargetSet = true)
+    (hMax : p.combatWinAtMax = true)
+    (hPays : p.restPays = true)
+    (hHp : p.hpPct < 100) :
+    restForCombat p = true := by
+  unfold restForCombat
+  simp [hT, hMax, hPays, hHp]
 
 /-! ## Total covering theorem. -/
 

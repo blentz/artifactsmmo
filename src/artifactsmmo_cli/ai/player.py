@@ -164,6 +164,7 @@ from artifactsmmo_cli.ai.recovery import (
 )
 from artifactsmmo_cli.ai.refusal_facts import RefusalFacts
 from artifactsmmo_cli.ai.requirement_projections import requirement_closure
+from artifactsmmo_cli.ai.rest_first import rest_pays
 from artifactsmmo_cli.ai.role_catalog import (
     ROLE_CATALOG,
     ROLES_BY_NAME,
@@ -830,11 +831,15 @@ class GamePlayer:
         every guard: live 2026-10-08, R2D2's supply fights against rat ran the
         second fight at 335/695 hp (rat hits for ~360) and lost, 9 in 70
         minutes — the potions that used to carry it were (correctly) no longer
-        stocked for a fight it wins from full. An unready fight is a replan,
-        where the rest-for-combat guard rests first."""
+        stocked for a fight it wins from full. A fight the odds admit is still
+        unready when resting first costs less per kill (`rest_first.rest_pays`):
+        live 2026-10-17, R2D2's cache fought king_slime at 452/890 hp (P 0.633
+        over θ 0.552) and lost. An unready fight is a replan, where the
+        rest-for-combat guard rests first (it reads the same two verdicts)."""
         if not isinstance(step, FightAction):
             return True
-        return predict_win(state, game_data, step.monster_code)
+        return (predict_win(state, game_data, step.monster_code)
+                and not rest_pays(state, game_data, step.monster_code))
 
     def _resume_plan_cache(self, state: WorldState, game_data: GameData | None) -> None:
         """Restore a persisted commitment iff the goal rehydrates and every remaining

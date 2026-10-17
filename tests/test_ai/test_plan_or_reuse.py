@@ -7,6 +7,9 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state, one_equippable_item_page
+from tests.test_ai.test_rest_first import TILE
+from tests.test_ai.test_rest_first import _gd as _rest_gd
+from tests.test_ai.test_rest_first import _state as _rest_state
 
 
 @dataclass
@@ -163,6 +166,7 @@ def test_a_cached_fight_that_would_now_be_lost_is_replanned(monkeypatch):
     monkeypatch.setattr(FightAction, "is_applicable", lambda self, s, g: True)
     wins = {"now": True}
     monkeypatch.setattr("artifactsmmo_cli.ai.player.predict_win", lambda s, g, m: wins["now"])
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.rest_pays", lambda s, g, m: False)
     state = make_state()
     player._plan_or_reuse(state, None, [], None)
     player._plan_or_reuse(state, None, [], None)
@@ -174,3 +178,12 @@ def test_a_cached_fight_that_would_now_be_lost_is_replanned(monkeypatch):
 
 def test_a_non_fight_step_needs_no_fight_check():
     assert GamePlayer._fight_ready(_Act(), make_state(), None) is True
+
+
+def test_a_cached_fight_the_threshold_admits_is_unready_when_resting_pays():
+    """Live 2026-10-17: R2D2's cache ran Fight(king_slime) at 452/890 HP
+    (P 0.633 over θ 0.552) and lost; a rest first costs less per kill."""
+    fight = FightAction(monster_code="mob", locations=frozenset({TILE}))
+    gd = _rest_gd()
+    assert GamePlayer._fight_ready(fight, _rest_state(40), gd) is False
+    assert GamePlayer._fight_ready(fight, _rest_state(60), gd) is True

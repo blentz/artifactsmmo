@@ -21,6 +21,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires, guard_loadout
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
+from artifactsmmo_cli.ai.rest_first import rest_pays
 
 # Explicit re-export (`X as X`): `SelectionContext` lives one layer down now, but
 # `tiers.guards` remains its public home for every existing importer.
@@ -187,7 +188,11 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
         # Fight-at-low-HP path by forcing RestoreHP whenever:
         #   (a) a combat target is selected,
         #   (b) state.hp < state.max_hp (Rest is actionable),
-        #   (c) predict_win at current hp is False, AND
+        #   (c) predict_win at current hp is False, OR resting first costs
+        #       less per kill than fighting now (`rest_first.rest_pays`: live
+        #       2026-10-17, R2D2 fought king_slime at 452/890 hp, P 0.633 over
+        #       θ 0.552, and lost — ~211 s a kill against a 52 s rest and 86 s
+        #       from full), AND
         #   (d) predict_win at max_hp is True (i.e. resting MEANS we can
         #       then win — otherwise this isn't a hp problem, it's a gear
         #       problem and the picker should have rejected the target).
@@ -200,7 +205,7 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
             return False
         if state.hp >= state.max_hp:
             return False
-        if predict_win(state, game_data, monster):
+        if predict_win(state, game_data, monster) and not rest_pays(state, game_data, monster):
             return False
         return predict_win(replace(state, hp=state.max_hp), game_data, monster)
     if kind is GuardKind.BANK_UNLOCK:

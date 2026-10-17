@@ -372,6 +372,8 @@ CONSUMABLE_PRICE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumab
 CONSUMABLE_PRICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price.py"
 LOOP_RATE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate_core.py"
 LOOP_RATE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate.py"
+REST_FIRST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "rest_first_core.py"
+REST_FIRST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "rest_first.py"
 BEST_LOADOUT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "best_loadout_core.py"
 BEST_LOADOUT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "best_loadout.py"
 FAILURE_RECOVERY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "failure_recovery_core.py"
@@ -1011,8 +1013,8 @@ FIGHT_SPLIT_MUTATIONS = [
      "    crit_monster = _crit_hit(m_attack, 0, {}, p.resistance)",
      "    crit_monster = _crit_hit(m_attack, p.dmg, {}, p.resistance)"),
     ("win_probability: reads max HP instead of current",
-     "    return odds_win(fight_odds(terms, damage, state.hp,",
-     "    return odds_win(fight_odds(terms, damage, fight_max_hp(state, game_data, monster_code),"),
+     "    return fight_odds(terms, damage, state.hp,",
+     "    return fight_odds(terms, damage, fight_max_hp(state, game_data, monster_code),"),
     ("worn_restore: a splash potion is a self restore",
      "        if not code or SPLASH_RESTORE in game_data.effect_codes(code):",
      "        if not code:"),
@@ -1296,7 +1298,7 @@ LOOP_RATE_READER_MUTATIONS = [
      "    if p_win < 1:\n        extra = (1 - p_win)",
      "    if True:\n        extra = (1 - p_win)"),
     ("loop_rate reader: a loss walks back for free",
-     "        extra = (1 - p_win) * travel_seconds(RESPAWN_TILE, _monster_tile(state, game_data, monster))",
+     "        extra = (1 - p_win) * travel_seconds(RESPAWN_TILE, monster_tile(state, game_data, monster))",
      "        extra = Fraction(0)"),
     ("loop_rate reader: the walk back reads the legacy spawn index",
      "    tiles = fight_tiles(state, game_data, monster)\n    if not tiles:",
@@ -6924,17 +6926,58 @@ PROVISION_LOADOUT_MUTATIONS = [
 ]
 FIGHT_READY_MUTATIONS = [
     ("fight ready: a cached fight is reused whatever the hp",
-     "        return predict_win(state, game_data, step.monster_code)\n",
+     "        return (predict_win(state, game_data, step.monster_code)\n"
+     "                and not rest_pays(state, game_data, step.monster_code))\n",
      "        return True\n"),
+    ("fight ready: a fight the odds admit never rests first",
+     "                and not rest_pays(state, game_data, step.monster_code))\n",
+     "                and True)\n"),
     ("fight ready: the cached step's readiness is not asked",
      "        step_applicable = (step is not None and step.is_applicable(state, game_data)\n"
      "                           and self._fight_ready(step, state, game_data))\n",
      "        step_applicable = (step is not None and step.is_applicable(state, game_data))\n"),
 ]
 REST_FIGHT_AHEAD_MUTATIONS = [
+    ("rest guard: a fight the odds admit never rests first",
+     "        if predict_win(state, game_data, monster) and not rest_pays(state, game_data, monster):\n",
+     "        if predict_win(state, game_data, monster):\n"),
     ("rest guard: asks about the grind target, not the fight ahead",
      "        monster = ctx.fight_monster or ctx.combat_monster\n",
      "        monster = ctx.combat_monster\n"),
+]
+REST_FIRST_CORE_MUTATIONS = [
+    ("rest_first: a tie rests",
+     "    return now is None or rest_seconds + full < now\n",
+     "    return now is None or rest_seconds + full <= now\n"),
+    ("rest_first: the rest is free",
+     "    return now is None or rest_seconds + full < now\n",
+     "    return now is None or full < now\n"),
+    ("rest_first: a fight lost now never rests",
+     "    return now is None or rest_seconds + full < now\n",
+     "    return now is not None and rest_seconds + full < now\n"),
+    ("rest_first: a fight lost from full rests",
+     "    if full is None:\n        return False\n",
+     "    if full is None:\n        return True\n"),
+    ("kill_seconds: a try is not divided by its odds",
+     "    return None if p_win == 0 else try_seconds / p_win\n",
+     "    return None if p_win == 0 else try_seconds\n"),
+    ("kill_seconds: out-of-range odds pass",
+     "    if not 0 <= p_win <= 1 or try_seconds < 0:\n",
+     "    if try_seconds < 0:\n"),
+]
+REST_FIRST_MUTATIONS = [
+    ("rest_pays: a loss rests from 0, not 1",
+     "(e.hp_end // SCALE if e.win else LOSS_HP)",
+     "(e.hp_end // SCALE if e.win else 0)"),
+    ("rest_pays: a loss walks back for free",
+     "        walk = (1 - p_win) * travel_seconds(RESPAWN_TILE, monster_tile(state, game_data, monster))\n",
+     "        walk = Fraction(0)\n"),
+    ("rest_pays: the fight itself costs nothing",
+     "    return kill_seconds(p_win, FIGHT_SECONDS + recovery + walk)\n",
+     "    return kill_seconds(p_win, recovery + walk)\n"),
+    ("rest_pays: compares against the current hp twice",
+     "                      fight_kill_seconds(replace(state, hp=state.max_hp), game_data, monster))\n",
+     "                      fight_kill_seconds(state, game_data, monster))\n"),
 ]
 ROLE_WORK_MUTATIONS = [
     ("role work: rows count units",
@@ -11576,6 +11619,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_plan_or_reuse.py", survivors)
     run_group(GUARDS_SRC, REST_FIGHT_AHEAD_MUTATIONS,
               "tests/test_ai/test_tiers_guards.py", survivors)
+    run_group(REST_FIRST_CORE_SRC, REST_FIRST_CORE_MUTATIONS,
+              "tests/test_ai/test_rest_first_core.py", survivors)
+    run_group(REST_FIRST_SRC, REST_FIRST_MUTATIONS,
+              "tests/test_ai/test_rest_first.py", survivors)
     run_group(ROLE_SELECTION_SRC, ROLE_WORK_MUTATIONS,
               "tests/test_ai/test_role_selection.py", survivors)
     run_group(PLAYER_SRC, ROLE_WORK_PLAYER_MUTATIONS,

@@ -12,7 +12,7 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import ProjectedStats, project_loadout_stats
-from artifactsmmo_cli.ai.fight_odds_core import RoundDamage, burn_ticks, fight_odds, odds_clear
+from artifactsmmo_cli.ai.fight_odds_core import Ending, RoundDamage, burn_ticks, fight_odds, odds_clear
 from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
 from artifactsmmo_cli.ai.fight_terms_core import LOSE_MARGIN as LOSE_MARGIN
 from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS as MAX_TURNS
@@ -501,13 +501,18 @@ def unpotioned(state: WorldState) -> WorldState:
     return replace(state, utility1_slot_quantity=0, utility2_slot_quantity=0)
 
 
-def win_probability(state: WorldState, game_data: GameData, monster_code: str) -> Fraction:
-    """P(win) of fighting now: from `state.hp`, in the on-hand loadout
+def fight_endings(state: WorldState, game_data: GameData, monster_code: str) -> tuple[Ending, ...]:
+    """Every ending of fighting now: from `state.hp`, in the on-hand loadout
     `predict_win` reads, drinking the worn restore potion (spec §4)."""
     terms, damage = fight_split(state, game_data, monster_code)
     restore, stock = worn_restore(state, game_data)
-    return odds_win(fight_odds(terms, damage, state.hp,
-                               fight_max_hp(state, game_data, monster_code), restore, stock))
+    return fight_odds(terms, damage, state.hp,
+                      fight_max_hp(state, game_data, monster_code), restore, stock)
+
+
+def win_probability(state: WorldState, game_data: GameData, monster_code: str) -> Fraction:
+    """P(win) of fighting now: the winning share of `fight_endings`."""
+    return odds_win(fight_endings(state, game_data, monster_code))
 
 
 def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bool:

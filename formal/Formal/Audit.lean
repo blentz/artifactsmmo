@@ -778,6 +778,7 @@ open Formal.PriorityBand
 #print axioms Formal.GuardCoverage.critical_inv_with_overstock_triggers_discard
 #print axioms Formal.GuardCoverage.high_inv_with_bank_triggers_deposit
 #print axioms Formal.GuardCoverage.rest_for_combat_triggers_when_needed
+#print axioms Formal.GuardCoverage.rest_for_combat_triggers_when_resting_pays
 #print axioms Formal.GuardCoverage.firstGuard_nonzero_when_low_hp
 #print axioms Formal.GuardCoverage.stuck_state_always_guarded
 #print axioms Formal.ActionSetCompleteness.capability_mapping_total
