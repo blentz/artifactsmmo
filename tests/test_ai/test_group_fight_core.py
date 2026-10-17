@@ -124,6 +124,13 @@ def test_a_party_meets_the_refresh_as_a_late_mover_unless_all_move_first():
     assert group_outcome(PartyBoss(400, 0, 0, 100), mixed).turns == 6
 
 
+def test_an_all_first_party_refreshes_after_a_round_that_does_not_kill():
+    """50 a round into 400 HP behind 100: the 5th round's 50 goes through
+    before the refresh, so 14 rounds, as alone (`kill_rounds`)."""
+    out = group_outcome(PartyBoss(400, 0, 0, 100), [_m(net=500_000, hit=1)])
+    assert out.win and out.turns == kill_rounds(400, 100, 500_000, True) == 14
+
+
 def test_a_barrier_no_block_breaks_is_over_the_cap():
     assert party_exit(PartyBoss(10, 0, 0, 500), [_m(net=1_000_000)]) is FightExit.OVER_CAP
     assert party_exit(PartyBoss(10, 0, 0, 499), [_m(net=1_000_000)]) is FightExit.NONE

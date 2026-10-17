@@ -960,7 +960,7 @@ FIGHT_OUTCOME_MUTATIONS = [
 FIGHT_ODDS_MUTATIONS = [
     ("absorb: a heal wears the barrier",
      "    if amount <= 0:\n        return amount, shield\n",
-     "    if amount < 0:\n        return amount, shield\n"),
+     "    if False:\n        return amount, shield\n"),
     ("absorb: the barrier swallows the whole hit",
      "    return max(0, amount - shield), max(0, shield - amount)",
      "    return (0 if shield > 0 else amount), max(0, shield - amount)"),
@@ -1111,13 +1111,19 @@ CONSUMABLE_PRICE_CORE_MUTATIONS = [
 # group_fight_core: the party boss-fight walk (group fights increment 1).
 # Killed by formal/diff/test_group_fight_diff.py (exact agreement with
 # `Formal.GroupFight.groupOutcome`).
+# The refresh order of an all-first party only shows in a round-5 lump that
+# does not kill (a killing one ends at the early check), past the
+# differential's short fights: the unit test pins it.
+GROUP_FIGHT_WALK_MUTATIONS = [
+    ("group_fight: an all-first party meets the refresh first",
+     "    shield, early = full, all_first(members)",
+     "    shield, early = full, False"),
+]
+
 GROUP_FIGHT_MUTATIONS = [
     ("group_fight: the boss's barrier never refreshes",
      "        if refresh and not early:\n            shield = full\n",
      "        if False:\n            shield = full\n"),
-    ("group_fight: an all-first party meets the refresh first",
-     "    shield, early = full, all_first(members)",
-     "    shield, early = full, False"),
     ("group_fight: the gate ignores the barrier",
      "    return barrier_rounds(boss.hp, boss.barrier, kill_rate(boss, members), all_first(members))",
      "    return barrier_rounds(boss.hp, 0, kill_rate(boss, members), all_first(members))"),
@@ -10765,6 +10771,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_fight_split.py", survivors)
     run_group(GROUP_FIGHT_CORE_SRC, GROUP_FIGHT_MUTATIONS,
               "formal/diff/test_group_fight_diff.py", survivors)
+    run_group(GROUP_FIGHT_CORE_SRC, GROUP_FIGHT_WALK_MUTATIONS,
+              "tests/test_ai/test_group_fight_core.py", survivors)
     run_group(COMBAT_SRC, PARTY_TERMS_MUTATIONS,
               "tests/test_ai/test_party_terms.py", survivors)
     run_group(CONSUMABLE_PRICE_CORE_SRC, CONSUMABLE_PRICE_CORE_MUTATIONS,

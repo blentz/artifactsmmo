@@ -146,6 +146,12 @@ class TestDistribution:
     def test_probabilities_sum_to_one(self):
         assert sum(e.prob for e in fight_odds(_R2D2_TERMS, _R2D2, 785, 785, 70, 3)) == 1
 
+    def test_the_player_dies_at_exactly_zero_hp_moving_first(self):
+        """Two 50 hits take 100 HP to exactly 0: dead in round 2, not alive at 0."""
+        terms = fight_terms(10, 10 * SCALE, 1000, 0, 50 * SCALE, 100, 100, True)
+        assert fight_odds(terms, _no_crit(10 * SCALE, 50 * SCALE, 1000), 100, 100, 0, 0) \
+            == (Ending(Fraction(1), False, 2, 0, 0),)
+
     def test_endings_are_merged(self):
         endings = fight_odds(_R2D2_TERMS, _R2D2, 785, 785, 0, 0)
         keys = [(e.win, e.turns, e.hp_end, e.used) for e in endings]
