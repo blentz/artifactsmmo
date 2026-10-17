@@ -294,8 +294,8 @@ def boss_drain(game_data: GameData, monster_code: str) -> int:
 def party_boss(game_data: GameData, monster_code: str) -> PartyBoss:
     """The boss's side of a party fight (`group_fight_core`)."""
     return PartyBoss(
-        game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code),
-        game_data.monster_reconstitution(monster_code), boss_drain(game_data, monster_code))
+        game_data.monster_hp(monster_code), game_data.monster_reconstitution(monster_code),
+        boss_drain(game_data, monster_code), game_data.monster_barrier(monster_code))
 
 
 def party_member(state: WorldState, game_data: GameData, monster_code: str,
@@ -370,9 +370,11 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
         game_data.monster_protective_bubble(monster_code),
         game_data.monster_sun_shield(monster_code),
     )
-    # Barrier is an absorbing shield: model it conservatively as extra effective HP
-    # the player must chew through (per-5-turn refresh deferred — first cut flat add).
-    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)
+    # Barrier is an absorbing shield the monster refreshes every 5 of its turns:
+    # the terms count the rounds behind it (`fight_terms_core.kill_rounds`) and
+    # the odds walk carries what is left of it (`fight_odds_core.absorb`).
+    monster_hp = game_data.monster_hp(monster_code)
+    barrier = game_data.monster_barrier(monster_code)
     raw_monster = sum(
         _element_damage(m_attack.get(e, 0), 0, p.resistance.get(e, 0)) for e in ELEMENTS
     )
@@ -435,11 +437,11 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
         if code and (st := game_data.item_stats(code)) is not None
     )
     terms = fight_terms(
-        raw_player, kill_step, effective_monster_hp,
+        raw_player, kill_step, monster_hp,
         game_data.monster_reconstitution(monster_code), die_step,
         state.hp, p.max_hp,
-        moves_first(p.initiative, state.hp, game_data.monster_initiative(monster_code),
-                    game_data.monster_hp(monster_code)),
+        moves_first(p.initiative, state.hp, game_data.monster_initiative(monster_code), monster_hp),
+        barrier,
     )
     # Lifesteal rides the crit branch of the odds walk (`fight_odds_core`): the
     # heal each side's crit lands, not its mean.
@@ -456,11 +458,11 @@ def fight_numbers(state: WorldState, game_data: GameData, monster_code: str) -> 
     die_rest = (die_step - flat_burn - raw_monster * SCALE - 50 * raw_monster * m_crit
                 + p.critical_strike * p_heal * 100)
     damage = RoundDamage(
-        effective_monster_hp,
+        monster_hp,
         raw_player * SCALE + kill_rest, crit_player * SCALE + kill_rest, p.critical_strike,
         raw_monster * SCALE + die_rest, crit_monster * SCALE + die_rest, m_crit,
         burn_ticks(game_data.monster_burn(monster_code), m_atk_sum),
-        p_heal * SCALE, m_heal * SCALE,
+        p_heal * SCALE, m_heal * SCALE, barrier,
     )
     drain = -_kill_step_net(
         0, 0, m_crit, game_data.monster_lifesteal(monster_code), crit_monster,

@@ -3,7 +3,8 @@
 1. The live turn walk (`ai/fight_outcome_core.fight_outcome`) and the closed-form
    verdict over the extracted terms (`ai/fight_terms_core.terms_win`) must agree
    with the proved `Formal.FightOutcome.fightOutcome` / `closedWin` on random
-   terms, including every guard exit and rounds-to-kill at and past the cap.
+   terms, including every guard exit and rounds-to-kill at and past the cap, a
+   monster barrier (refreshed every 5 monster turns) included.
 2. `combat.predict_win` at a CURRENT hp (dead, damaged, overfull) must agree
    with `Formal.FightOutcome.closedWin` over `PredictWin.killStepNet` /
    `PredictWin.dieStep`. `test_predict_win_diff.py` / `test_combat_margin_diff.py`
@@ -19,7 +20,7 @@ from pytest import MonkeyPatch
 import artifactsmmo_cli.ai.combat as combat_mod
 from artifactsmmo_cli.ai.equipment.projection import ProjectedStats
 from artifactsmmo_cli.ai.fight_outcome_core import fight_outcome
-from artifactsmmo_cli.ai.fight_terms_core import fight_terms, terms_win
+from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS, fight_terms, kill_rounds, terms_win
 from artifactsmmo_cli.ai.world_state import ELEMENTS
 from formal.diff.oracle_client import run_oracle
 
@@ -38,29 +39,69 @@ _case = st.tuples(
     st.integers(min_value=0, max_value=2000),                               # max hp
     st.integers(min_value=0, max_value=800),                                # restore
     st.integers(min_value=0, max_value=12),                                 # stock
+    st.one_of(st.just(0), st.just(0), st.integers(min_value=1, max_value=300)),  # barrier
 )
 
 
 @settings(max_examples=300, deadline=None)
 @given(cases=st.lists(_case, min_size=1, max_size=25))
 def test_fight_outcome_matches_lean(cases):
-    args = [[raw, ks, mhp, recon, ds, 1 if pf else 0, hp, max_hp, restore, stock]
-            for raw, ks, mhp, recon, ds, pf, hp, _, max_hp, restore, stock in cases]
+    args = [[raw, ks, mhp, recon, ds, 1 if pf else 0, hp, max_hp, restore, stock, barrier]
+            for raw, ks, mhp, recon, ds, pf, hp, _, max_hp, restore, stock, barrier in cases]
     lean = run_oracle("fight_outcome", args)
     for case, row in zip(cases, lean, strict=True):
-        raw, ks, mhp, recon, ds, pf, hp, terms_hp, max_hp, restore, stock = case
+        raw, ks, mhp, recon, ds, pf, hp, terms_hp, max_hp, restore, stock, barrier = case
         # The walk reads the monster side of the terms only: build them at an
         # unrelated hp to pin that it walks from `hp_start`.
-        walked = fight_outcome(fight_terms(raw, ks, mhp, recon, ds, terms_hp, max_hp, pf),
+        walked = fight_outcome(fight_terms(raw, ks, mhp, recon, ds, terms_hp, max_hp, pf, barrier),
                                hp, max_hp, restore, stock)
         assert (walked.win, walked.turns, walked.hp_end, walked.used) == (
             row["win"], row["turns"], row["hp_end"], row["used"]), case
-        assert terms_win(fight_terms(raw, ks, mhp, recon, ds, hp, max_hp, pf)) == row["closed_win"], case
+        assert terms_win(fight_terms(raw, ks, mhp, recon, ds, hp, max_hp, pf, barrier)) == (
+            row["closed_win"]), case
+
+
+# Kill steps from a tenth of a barrier to well past it, so every branch of the
+# closed form occurs: dead in the first block, the wall, and the later blocks.
+_kill_case = st.tuples(
+    st.integers(min_value=0, max_value=1500),                               # monster hp
+    st.one_of(st.just(0), st.just(0), st.integers(min_value=1, max_value=500)),  # barrier
+    st.integers(min_value=1, max_value=2_000_000),                          # kill step
+    st.booleans(),                                                          # player first
+)
+
+
+@settings(max_examples=300, deadline=None)
+@given(cases=st.lists(_kill_case, min_size=1, max_size=40))
+def test_kill_rounds_matches_lean_closed_form_and_walk(cases):
+    """`fight_terms_core.kill_rounds` IS `Formal.PredictWin.killRounds`, and for a
+    living monster it is the round the proved barrier walk `killSim` kills in
+    (`killSim_eq_killRounds`), or past the cap behind a wall (`killSim_walled`)."""
+    fuel = 400
+    rows = run_oracle("kill_rounds", [[hp, b, ks, 1 if pf else 0, fuel] for hp, b, ks, pf in cases])
+    for (hp, b, ks, pf), row in zip(cases, rows, strict=True):
+        ours = kill_rounds(hp, b, ks, pf)
+        assert ours == row["kill_rounds"], (hp, b, ks, pf)
+        if hp < 1:
+            continue
+        if row["walled"]:
+            assert ours == MAX_TURNS + 1 and row["sim"] == 1 + fuel, (hp, b, ks, pf)
+        elif ours <= fuel:
+            assert row["sim"] == ours, (hp, b, ks, pf)
+
+
+def test_kill_rounds_lor_v_king_slime_against_lean():
+    """Lor v king_slime, 2026-10-17: a flat 115 a round against 1000 HP behind a
+    100 barrier refreshed after the player's 5th and 10th hits takes 12 hits,
+    not the 10 the flat add (HP + barrier) gave."""
+    row = run_oracle("kill_rounds", [[1000, 100, 1_150_000, 1, 400]])[0]
+    assert row == {"kill_rounds": 12, "sim": 12, "walled": False}
+    assert kill_rounds(1000, 100, 1_150_000, True) == 12
 
 
 def test_restore_turns_a_loss_into_a_win_against_lean():
     """A pinned case where the potion matters: 100 HP, 30 per round, kill in 6."""
-    case = [10, 10_000, 6, 0, 300_000, 1, 100, 100, 40, 3]
+    case = [10, 10_000, 6, 0, 300_000, 1, 100, 100, 40, 3, 0]
     row = run_oracle("fight_outcome", [case])[0]
     assert row == {"win": True, "turns": 6, "hp_end": 700_000, "used": 3, "closed_win": False}
     walked = fight_outcome(fight_terms(10, 10_000, 6, 0, 300_000, 100, 100, True), 100, 100, 40, 3)
@@ -76,7 +117,7 @@ def test_boundaries_against_lean():
         (10, 10_000, 1, 0, 300_000, 1, 50, 100, 40, 3): (True, 1, 500_000, 0),
         (10, 10_000, 6, 0, 300_000, 0, 30, 100, 40, 9): (False, 1, 0, 0),
     }
-    rows = run_oracle("fight_outcome", [list(c) for c in cases])
+    rows = run_oracle("fight_outcome", [[*c, 0] for c in cases])
     for (case, expected), row in zip(cases.items(), rows, strict=True):
         raw, ks, mhp, recon, ds, pf, hp, max_hp, restore, stock = case
         walked = fight_outcome(fight_terms(raw, ks, mhp, recon, ds, hp, max_hp, pf == 1),

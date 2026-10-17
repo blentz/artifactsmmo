@@ -99,7 +99,8 @@ def runPredictWin (g : Nat → Int) : Json :=
   let mAtkSum := g 31
   -- poison extension: [32]=monsterPoison (flat per-turn DoT on the player)
   let monsterPoison := g 32
-  -- barrier extension: [33]=monsterBarrier (absorbing shield ⇒ extra effective HP)
+  -- barrier extension: [33]=monsterBarrier (absorbing shield refreshed every 5 monster
+  -- turns; `killRounds`)
   let monsterBarrier := g 33
   -- burn extension: [34]=monsterBurn (percent-of-attack DoT, modeled flat/no-decay)
   let monsterBurn := g 34
@@ -1843,11 +1844,11 @@ def runConsumableFloor (args : Array Json) : Json :=
 
 /-- A fight's expected-value outcome with restore potions (`Formal.FightOutcome`).
 Args: `[rawPlayer, killStep, monsterHp, recon, dieStep, playerFirst, hp, maxHp,
-restore, stock]`, playerFirst as 0/1. Emits the walk's outcome and the
+restore, stock, barrier]`, playerFirst as 0/1. Emits the walk's outcome and the
 closed-form verdict over the same terms. -/
 def runFightOutcome (args : Array Json) : Json :=
   let i : Nat → Int := fun k => intArg args k
-  let t : Formal.FightOutcome.Terms := ⟨i 0, i 1, i 2, i 3, i 4, i 5 != 0⟩
+  let t : Formal.FightOutcome.Terms := ⟨i 0, i 1, i 2, i 10, i 3, i 4, i 5 != 0⟩
   let o := Formal.FightOutcome.fightOutcome t (i 6) (i 7) (i 8).toNat (i 9).toNat
   Json.mkObj [("win", Json.bool o.win), ("turns", Json.num o.turns),
               ("hp_end", Json.num o.hpEnd), ("used", Json.num (Int.ofNat o.used)),
@@ -1856,14 +1857,15 @@ def runFightOutcome (args : Array Json) : Json :=
 /-- A fight's ending distribution (`Formal.FightOdds.fightOdds`), grouped by
 ending with summed probabilities. Args: `[rawPlayer, killStep, monsterHp, recon,
 dieStep, playerFirst, hp, maxHp, restore, stock, dMonsterHp, killNormal,
-killCrit, pCrit, dieNormal, dieCrit, mCrit, pHeal, mHeal, n, burn₁ … burnₙ]`,
-playerFirst as 0/1. -/
+killCrit, pCrit, dieNormal, dieCrit, mCrit, pHeal, mHeal, tBarrier, dBarrier, n,
+burn₁ … burnₙ]`, playerFirst as 0/1 (`tBarrier` the terms' barrier, `dBarrier`
+the round damage's). -/
 def runFightOdds (args : Array Json) : Json :=
   let i : Nat → Int := fun k => intArg args k
-  let t : Formal.FightOutcome.Terms := ⟨i 0, i 1, i 2, i 3, i 4, i 5 != 0⟩
-  let burn := (List.range (i 19).toNat).map fun j => i (20 + j)
+  let t : Formal.FightOutcome.Terms := ⟨i 0, i 1, i 2, i 19, i 3, i 4, i 5 != 0⟩
+  let burn := (List.range (i 21).toNat).map fun j => i (22 + j)
   let d : Formal.FightOdds.Damage :=
-    ⟨i 10, i 11, i 12, (i 13).toNat, i 14, i 15, (i 16).toNat, burn, i 17, i 18⟩
+    ⟨i 10, i 11, i 12, (i 13).toNat, i 14, i 15, (i 16).toNat, burn, i 17, i 18, i 20⟩
   let xs := Formal.FightOdds.fightOdds t d (i 6) (i 7) (i 8).toNat (i 9).toNat
   let grouped := xs.foldl (fun (acc : List (Formal.FightOdds.Ending × Rat)) e =>
     match acc.find? (·.1 == e.2) with
@@ -1875,13 +1877,13 @@ def runFightOdds (args : Array Json) : Json :=
     ("prob_num", Json.num p.num), ("prob_den", Json.num (Int.ofNat p.den))]).toArray
 
 /-- A party boss fight (`Formal.GroupFight.groupOutcome`). Args: `[bossHp,
-recon, drain, n]` then `n` members of `[raw, net, hit, area, hp, maxHp, first,
-threat, restore, stock]`, first as 0/1. -/
+recon, drain, barrier, n]` then `n` members of `[raw, net, hit, area, hp, maxHp,
+first, threat, restore, stock]`, first as 0/1. -/
 def runGroupFight (args : Array Json) : Json :=
   let i : Nat → Int := fun k => intArg args k
-  let b : Formal.GroupFight.Boss := ⟨i 0, i 1, i 2⟩
-  let ms := (List.range (i 3).toNat).map fun j =>
-    let o := 4 + 10 * j
+  let b : Formal.GroupFight.Boss := ⟨i 0, i 1, i 2, i 3⟩
+  let ms := (List.range (i 4).toNat).map fun j =>
+    let o := 5 + 10 * j
     ({ rawPlayer := i o, net := i (o + 1), hit := i (o + 2), area := i (o + 3), hp := i (o + 4),
        maxHp := i (o + 5), first := i (o + 6) != 0, threat := i (o + 7),
        restore := (i (o + 8)).toNat, stock := (i (o + 9)).toNat } : Formal.GroupFight.Member)
@@ -1889,6 +1891,20 @@ def runGroupFight (args : Array Json) : Json :=
   Json.mkObj [("win", Json.bool o.win), ("turns", Json.num o.turns),
               ("hp_end", Json.arr (o.hpEnd.map Json.num).toArray),
               ("used", Json.arr (o.used.map fun u => Json.num (Int.ofNat u)).toArray)]
+
+/-- The rounds to kill a monster behind its barrier (`Formal.PredictWin`). Args:
+`[hp, barrier, killStep, playerFirst, fuel]`, playerFirst as 0/1. Emits the
+closed form `killRounds`, the round-by-round walk `killSim` from round 1 with
+`fuel` rounds, and whether the barrier is a wall (`walled`). -/
+def runKillRounds (args : Array Json) : Json :=
+  let i : Nat → Int := fun k => intArg args k
+  let pf := i 3 != 0
+  Json.mkObj [
+    ("kill_rounds", Json.num (Formal.PredictWin.killRounds (i 0) (i 1) (i 2) pf)),
+    ("sim", Json.num (Formal.PredictWin.killSim (i 2) (i 1 * 10000) pf (i 4).toNat 1
+      (i 0 * 10000) (i 1 * 10000))),
+    ("walled", Json.bool (decide (¬ (i 0 * 10000 + i 1 * 10000 ≤ Formal.PredictWin.firstLen pf * i 2)
+      ∧ Formal.PredictWin.kGap (i 1 * 10000) (i 2) ≤ 0)))]
 
 /-- `predict_win` at a CURRENT hp (`Formal.FightOutcome.closedWin` over the
 `PredictWin.killStepNet` / `PredictWin.dieStep` terms). Args: the 45-int
@@ -1906,7 +1922,7 @@ def runPredictWinHp (g : Nat → Int) : Json :=
     (g 40) (g 42)
   let ds := dieStep rawMonster (g 26) (g 12) (g 29) pCritHit (g 32) (g 34) (g 27) (g 37)
     (g 38) (g 39) (g 41) rawPlayer (g 43) (g 44) (g 31)
-  let t : Formal.FightOutcome.Terms := ⟨rawPlayer, ks, g 13 + g 33, g 36, ds, g 28 != 0⟩
+  let t : Formal.FightOutcome.Terms := ⟨rawPlayer, ks, g 13, g 33, g 36, ds, g 28 != 0⟩
   Json.mkObj [("win", Json.bool (Formal.FightOutcome.closedWin t (g 45) (g 27)))]
 
 /-- The price of one consumable (`Formal.ConsumablePrice.consumablePrice`).
@@ -3112,6 +3128,8 @@ def runOne (item : Json) : Json :=
     runFightOdds args
   else if kind == "group_fight" then
     runGroupFight args
+  else if kind == "kill_rounds" then
+    runKillRounds args
   else if kind == "consumable_price" then
     runConsumablePrice args
   else if kind == "loop_recovery" then

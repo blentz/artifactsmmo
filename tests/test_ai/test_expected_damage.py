@@ -29,6 +29,16 @@ def test_expected_damage_exact_for_winnable_monster():
     assert expected_damage_per_fight(state, gd, "slime") == expected
 
 
+def test_expected_damage_counts_the_hits_behind_the_barrier():
+    """50 a hit into 300 HP behind a 100 barrier refreshed every 5 monster
+    turns (`kill_rounds`): the player, moving first, gets 150 through its first
+    5 hits and 150 through the next 5 — 10 rounds, not the 6 HP alone takes."""
+    gd = _gd(hp=300, attack={"fire": 10}, code="slime", barrier=100)
+    gd._monster_level = {"slime": 1}
+    state = make_state(level=5, hp=200, max_hp=200, attack={"fire": 50}, initiative=10)
+    assert expected_damage_per_fight(state, gd, "slime") == 10 * 10
+
+
 def test_expected_damage_zero_when_unknown_monster():
     """An unknown monster code returns 0 (caller won't fight it)."""
     gd = _gd(hp=30, code="slime")

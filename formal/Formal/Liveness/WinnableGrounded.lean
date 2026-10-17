@@ -73,16 +73,17 @@ learned θ = t_loss / (t_win + t_loss) exceeds 0.99 when a loss costs more than
 Python mirror: `win_threshold_core.LIVENESS_THETA`. -/
 def witnessTheta : Rat := 99 / 100
 
-/-- The row's fight-odds `Terms` (production `fight_split`'s terms). -/
+/-- The row's fight-odds `Terms` (production `fight_split`'s terms; the barrier
+is the monster's, `mBarrier`). -/
 def rowTerms (r : WitnessRow) : Formal.FightOutcome.Terms :=
   { rawPlayer := r.tRawPlayer, killStep := r.tKillStep, monsterHp := r.tMonsterHp,
-    recon := r.tRecon, dieStep := r.tDieStep, playerFirst := r.tPlayerFirst }
+    barrier := r.mBarrier, recon := r.tRecon, dieStep := r.tDieStep, playerFirst := r.tPlayerFirst }
 
 /-- The row's round `Damage` at its real crit chances (production `fight_split`). -/
 def rowDamage (r : WitnessRow) : Formal.FightOdds.Damage :=
   { monsterHp := r.dMonsterHp, killNormal := r.dKillNormal, killCrit := r.dKillCrit,
     pCrit := r.dPCrit, dieNormal := r.dDieNormal, dieCrit := r.dDieCrit, mCrit := r.dMCrit,
-    burn := r.dBurn, pHeal := r.dPHeal, mHeal := r.dMHeal }
+    burn := r.dBurn, pHeal := r.dPHeal, mHeal := r.dMHeal, barrier := r.mBarrier }
 
 /-- The row's fight odds: from its start HP, at its max HP, with its worn restore. -/
 def rowOdds (r : WitnessRow) : List (Rat × Formal.FightOdds.Ending) :=
@@ -96,7 +97,8 @@ def rowBound (r : WitnessRow) : Rat :=
 `witnessTheta ≤ rowBound`, all decidable over the row's exact scalars. -/
 def rowWinnable (r : WitnessRow) : Bool :=
   decide (r.dKillNormal ≤ r.dKillCrit) && decide (r.dDieNormal ≤ r.dDieCrit)
-    && decide (r.dPCrit ≤ 100) && decide (r.dMCrit ≤ 100) && decide (witnessTheta ≤ rowBound r)
+    && decide (r.dPCrit ≤ 100) && decide (r.dMCrit ≤ 100) && decide (0 ≤ r.mBarrier)
+    && decide (witnessTheta ≤ rowBound r)
 
 /-- A winnable row's fight is won with probability at least any θ ≤
 `witnessTheta`, at the row's real crit chances and stock — so production's
@@ -104,8 +106,8 @@ def rowWinnable (r : WitnessRow) : Bool :=
 theorem rowWinnable_sound (r : WitnessRow) (h : rowWinnable r = true) (θ : Rat)
     (hθ : θ ≤ witnessTheta) : θ ≤ Formal.FightOdds.winProb (rowOdds r) := by
   simp only [rowWinnable, Bool.and_eq_true, decide_eq_true_eq] at h
-  obtain ⟨⟨⟨⟨hk, hd⟩, hp⟩, hm⟩, hb⟩ := h
-  exact le_trans hθ (le_trans hb (Formal.FightOdds.winProb_ge_critBound _ _ _ _ _ _ _ hk hd hp hm))
+  obtain ⟨⟨⟨⟨⟨hk, hd⟩, hp⟩, hm⟩, hB⟩, hb⟩ := h
+  exact le_trans hθ (le_trans hb (Formal.FightOdds.winProb_ge_critBound _ _ _ _ _ _ _ hk hd hp hm hB))
 
 /-- The witness catalog as abstract `Monster`s: one entry per witness row, the
 `code` a stable row index, the `level` the row's winning monster level. Every

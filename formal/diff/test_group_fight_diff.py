@@ -5,9 +5,11 @@
    three members, including every guard exit, threat ties and the 90/10 split.
 2. A one-member party must be the solo walk (`fight_outcome` over
    `fight_terms`) — `Formal.GroupFight.groupOutcome_single`, checked on the
-   live code.
+   live code (its hypothesis: a boss at HP <= 0 has no barrier).
+
+The boss's barrier (absorbed, refreshed every 5 boss turns) is drawn too.
 """
-from hypothesis import given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.fight_outcome_core import fight_outcome
@@ -35,11 +37,12 @@ _boss = st.builds(
     hp=st.integers(min_value=0, max_value=1500),
     recon=st.one_of(st.just(0), st.just(0), st.integers(min_value=1, max_value=150)),
     drain=st.one_of(st.just(0), st.integers(min_value=-1000, max_value=200_000)),
+    barrier=st.one_of(st.just(0), st.just(0), st.integers(min_value=1, max_value=300)),
 )
 
 
 def _args(boss: PartyBoss, members: list[PartyMember]) -> list[int]:
-    out = [boss.hp, boss.recon, boss.drain, len(members)]
+    out = [boss.hp, boss.recon, boss.drain, boss.barrier, len(members)]
     for m in members:
         out += [m.raw, m.net, m.hit, m.area, m.hp, m.max_hp, 1 if m.first else 0,
                 m.threat, m.restore, m.stock]
@@ -60,8 +63,9 @@ def test_group_outcome_matches_lean(cases):
 @settings(max_examples=300, deadline=None)
 @given(boss=_boss, m=_member)
 def test_one_member_is_the_solo_walk(boss, m):
+    assume(boss.hp > 0 or boss.barrier == 0)
     terms = fight_terms(m.raw, m.net - boss.drain, boss.hp, boss.recon, m.hit + m.area,
-                        m.hp, m.max_hp, m.first)
+                        m.hp, m.max_hp, m.first, boss.barrier)
     solo = fight_outcome(terms, m.hp, m.max_hp, m.restore, m.stock)
     got = group_outcome(boss, [m])
     assert (got.win, got.turns, got.hp_end, got.used) == (

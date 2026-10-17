@@ -7,9 +7,9 @@ increment 1; `src/artifactsmmo_cli/ai/group_fight_core.py`).
 
 A `Member` carries its share of the kill rate (`net`), what one monster hit
 costs it (`hit`), what every round costs it targeted or not (`area`), its HP,
-initiative, threat and restore potions. The `Boss` carries its effective HP,
-its reconstitution period and `drain`, the kill-rate terms charged once per
-monster turn. For one member `net - drain` is the solo kill step and
+initiative, threat and restore potions. The `Boss` carries its HP, its
+reconstitution period, `drain`, the kill-rate terms charged once per monster
+turn, and its barrier. For one member `net - drain` is the solo kill step and
 `hit + area` the solo die step (`FightOutcome.Terms`).
 
 ## The round
@@ -27,10 +27,28 @@ alive before the boss's turn and each late mover alive after it, less `drain`;
 late movers then drink. The turn cap and reconstitution count actor turns
 (`N + 1` a round, the full party's: conservative once a member dies).
 
+## The barrier
+
+"At the start of the fight and every 5 played turns, gain a protective barrier
+of {value} HP. All attacks are redirected to this barrier until it is
+destroyed." (Lor v king_slime 2026-10-17: refreshed at the monster's 5th and
+10th turns, "36 absorbed, 15 through".) The boss's barrier takes a round's
+damage first (`PredictWin.absorb`) and is refreshed at the start of every 5th
+boss turn. The walk lumps a round's hits, so they meet that refresh after the
+round's damage only when every member moves first (`allFirst`), and before it
+otherwise (a ruling: the slower of the two counts, and exactly the solo rule
+for one member). The early win before the boss's turn meets the barrier as it
+stands.
+
 ## Results
 
-* `groupOutcome_single` — one member IS `FightOutcome.fightOutcome` on the solo terms.
-* `killRounds_antitone` — a member adding damage never delays the full party's kill round.
+* `groupOutcome_single` — one member IS `FightOutcome.fightOutcome` on the solo
+  terms (a non-negative barrier; a boss at HP ≤ 0 with a barrier is excluded:
+  the walk wins it in round 0, the solo closed form still counts the barrier).
+* `killRounds_antitone` — a member adding damage never delays the full party's
+  kill round, when it does not turn an all-first party into a mixed one (that
+  moves the refresh before the round's hits:
+  `killRounds_late_mover_counterexample`) or the boss has no barrier.
 * `win_survivor` — a walked win leaves some member alive (`win_survivor_witness`:
   one dies, the other wins).
 
@@ -40,7 +58,8 @@ import Formal.FightOutcome
 
 namespace Formal.GroupFight
 
-open Formal.PredictWin (ceilDiv maxTurns ceilDiv_antitone_divisor)
+open Formal.PredictWin (ceilDiv maxTurns ceilDiv_antitone_divisor absorb preShield postShield killsAt
+  not_walled_of_le killRounds_zero_barrier)
 open Formal.FightOutcome (scale effHp drink Exit Terms)
 
 /-- One party member's resolved integers (×10000 scale for the steps). -/
@@ -56,18 +75,24 @@ structure Member where
   restore : Nat
   stock : Nat
 
-/-- The boss's side: effective HP (barrier included), reconstitution, and the
-kill-rate terms charged once per monster turn. -/
+/-- The boss's side: HP, reconstitution, the kill-rate terms charged once per
+monster turn, and its barrier. -/
 structure Boss where
   hp : Int
   recon : Int
   drain : Int
+  barrier : Int
 
 /-- The party's summed kill rate per round. -/
 def killRate (b : Boss) (ms : List Member) : Int := (ms.map (·.net)).sum - b.drain
 
-/-- Rounds until the boss dies. -/
-def killRounds (b : Boss) (ms : List Member) : Int := ceilDiv (b.hp * scale) (killRate b ms)
+/-- Every member moves first: the round's hits land before the boss's turn
+(`group_fight_core.all_first`). -/
+def allFirst (ms : List Member) : Bool := ms.all (·.first)
+
+/-- Rounds until the boss dies behind its barrier (`PredictWin.killRounds`). -/
+def killRounds (b : Boss) (ms : List Member) : Int :=
+  Formal.PredictWin.killRounds b.hp b.barrier (killRate b ms) (allFirst ms)
 
 /-- The guard ladder over the party; actor turns per round are `N + 1`. -/
 def gate (b : Boss) (ms : List Member) : Exit :=
@@ -157,20 +182,26 @@ structure Walk where
   turns : Int
   slots : List Slot
 
-/-- The fight from round `r` with the boss's pool at `hp` (`f` bounds the rounds). -/
-def walk (b : Boss) (ms : List Member) : Nat → Int → Int → List Slot → Walk
-  | 0, r, _, st => ⟨false, r - 1, clamp st⟩
-  | f + 1, r, hp, st =>
+/-- The fight from round `r` with the boss's pool at `hp` behind `sh` of barrier
+(`f` bounds the rounds). -/
+def walk (b : Boss) (ms : List Member) : Nat → Int → Int → Int → List Slot → Walk
+  | 0, r, _, _, st => ⟨false, r - 1, clamp st⟩
+  | f + 1, r, hp, sh, st =>
     if deadline b ms r then ⟨false, r - 1, clamp st⟩
     else if allAliveFirst ms (drinkAll true ms st) = true ∧
-        hp - (netSum ms (drinkAll true ms st) (drinkAll true ms st) - b.drain) ≤ 0 then
+        hp - (absorb sh (netSum ms (drinkAll true ms st) (drinkAll true ms st) - b.drain)).1 ≤ 0 then
       ⟨true, r, clamp (drinkAll true ms st)⟩
     else if allDead (bossTurn ms (drinkAll true ms st)) = true then
       ⟨false, r, clamp (bossTurn ms (drinkAll true ms st))⟩
-    else if hp - (netSum ms (drinkAll true ms st) (bossTurn ms (drinkAll true ms st)) - b.drain) ≤ 0
+    else if hp - (absorb (preShield (allFirst ms) sh (b.barrier * scale) r)
+        (netSum ms (drinkAll true ms st) (bossTurn ms (drinkAll true ms st)) - b.drain)).1 ≤ 0
     then ⟨true, r, clamp (drinkAll false ms (bossTurn ms (drinkAll true ms st)))⟩
     else walk b ms f (r + 1)
-      (hp - (netSum ms (drinkAll true ms st) (bossTurn ms (drinkAll true ms st)) - b.drain))
+      (hp - (absorb (preShield (allFirst ms) sh (b.barrier * scale) r)
+        (netSum ms (drinkAll true ms st) (bossTurn ms (drinkAll true ms st)) - b.drain)).1)
+      (postShield (allFirst ms) (absorb (preShield (allFirst ms) sh (b.barrier * scale) r)
+        (netSum ms (drinkAll true ms st) (bossTurn ms (drinkAll true ms st)) - b.drain)).2
+        (b.barrier * scale) r)
       (drinkAll false ms (bossTurn ms (drinkAll true ms st)))
 
 /-- A party fight's expected-value outcome (`hpEnd` ×10000, per member). -/
@@ -197,7 +228,7 @@ def groupOutcome (b : Boss) (ms : List Member) : Outcome :=
     else if b.hp * scale ≤ 0 then
       ⟨true, 0, ms.map (fun m => effHp m.hp m.maxHp * scale), ms.map fun _ => 0⟩
     else
-      let w := walk b ms fuel 1 (b.hp * scale) (start ms)
+      let w := walk b ms fuel 1 (b.hp * scale) (b.barrier * scale) (start ms)
       ⟨w.win, w.turns, w.slots.map (·.1), (ms.zip w.slots).map fun (m, s) => m.stock - s.2⟩
   | _ => ⟨false, 0, ms.map fun _ => 0, ms.map fun _ => 0⟩
 
@@ -205,11 +236,21 @@ def groupOutcome (b : Boss) (ms : List Member) : Outcome :=
 
 /-- The solo terms of a one-member party. -/
 def soloTerms (b : Boss) (m : Member) : Terms :=
-  ⟨m.rawPlayer, m.net - b.drain, b.hp, b.recon, m.hit + m.area, m.first⟩
+  ⟨m.rawPlayer, m.net - b.drain, b.hp, b.barrier, b.recon, m.hit + m.area, m.first⟩
+
+theorem allFirst_single (m : Member) : allFirst [m] = m.first := by simp [allFirst]
 
 theorem killRounds_single (b : Boss) (m : Member) :
     killRounds b [m] = Formal.FightOutcome.roundsToKill (soloTerms b m) := by
-  simp [killRounds, Formal.FightOutcome.roundsToKill, killRate, soloTerms]
+  simp [killRounds, Formal.FightOutcome.roundsToKill, killRate, soloTerms, allFirst_single]
+
+/-- The deadline only gets nearer. -/
+theorem deadline_mono (b : Boss) (ms : List Member) {r r' : Int} (hr : r ≤ r')
+    (h : deadline b ms r) : deadline b ms r' := by
+  unfold deadline at h ⊢
+  have : r * ((ms.length : Int) + 1) ≤ r' * ((ms.length : Int) + 1) :=
+    Int.mul_le_mul_of_nonneg_right hr (by omega)
+  omega
 
 theorem gate_single (b : Boss) (m : Member) :
     gate b [m] = Formal.FightOutcome.gate (soloTerms b m) := by
@@ -277,64 +318,89 @@ theorem allAliveFirst_single (m : Member) (s : Slot) :
 
 theorem allDead_single (s : Slot) : allDead [s] = decide (s.1 ≤ 0) := by simp [allDead]
 
-/-- The singleton walk is the solo walk while the boss's pool is `n` kill
-steps from 0 and no deadline falls inside those rounds. -/
-theorem walk_single (b : Boss) (m : Member) (hds : 0 < m.hit + m.area)
-    (hK : 0 < m.net - b.drain) :
-    ∀ (n f : Nat) (r B pool : Int) (k : Nat), 1 ≤ n → n ≤ f → 0 < B →
-      ceilDiv B (m.net - b.drain) = n → 0 < pool → 1 ≤ r →
-      ¬ deadline b [m] (r + n - 1) →
-      walk b [m] f r B [(pool, k)] =
+/-- The singleton walk is the solo walk while the boss's barrier walk kills
+with the round's hit `n + 1` rounds on (`PredictWin.killsAt`) and no deadline
+falls inside those rounds. -/
+theorem walk_single (b : Boss) (m : Member) (hds : 0 < m.hit + m.area) :
+    ∀ (n f : Nat) (r B sh pool : Int) (k : Nat), n < f →
+      killsAt (m.net - b.drain) (b.barrier * scale) m.first n r B sh → 0 < pool → 1 ≤ r →
+      ¬ deadline b [m] (r + n) →
+      walk b [m] f r B sh [(pool, k)] =
         let w := Formal.FightOutcome.walk m.first (m.hit + m.area) (m.maxHp * scale)
-          ((m.restore : Int) * scale) n r pool k
+          ((m.restore : Int) * scale) (n + 1) r pool k
         ⟨w.win, w.turns, [(max w.pool 0, w.left)]⟩ := by
   intro n
   induction n with
-  | zero => intro f r B pool k h; omega
-  | succ n ih =>
-    intro f r B pool k _ hf hB hc hp hr hd
+  | zero =>
+    intro f r B sh pool k hf hka hp hr hd
     obtain ⟨f, rfl⟩ : ∃ f', f = f' + 1 := ⟨f - 1, by omega⟩
     have hr0 : (0 : Int) ≤ (m.restore : Int) * scale :=
       Int.mul_nonneg (Int.natCast_nonneg _) (by decide)
-    have hnd : ¬ deadline b [m] r := by
-      unfold deadline at hd ⊢; simp only [List.length_singleton] at hd ⊢
-      intro h; apply hd; rcases h with h | h
-      · left; have : r * ((1 : Nat) + 1 : Int) ≤ (r + (n + 1 : Nat) - 1) * ((1 : Nat) + 1 : Int) :=
-          Int.mul_le_mul_of_nonneg_right (by omega) (by omega)
-        omega
-      · right; refine ⟨h.1, ?_⟩
-        have : r * ((1 : Nat) + 1 : Int) ≤ (r + (n + 1 : Nat) - 1) * ((1 : Nat) + 1 : Int) :=
-          Int.mul_le_mul_of_nonneg_right (by omega) (by omega)
-        omega
-    have hdk : 0 < m.hit + m.area := hds
-    have hdmg : damage m 0 (some 0) (some 0) = m.hit + m.area := by
-      unfold damage; simp; omega
-    have hkill : (n = 0) ↔ B - (m.net - b.drain) ≤ 0 := by
-      rw [← ceilDiv_le_one_iff B _ hK hB]; omega
-    have hkd : ¬ B - (m.net - b.drain) ≤ 0 → 0 < B - (m.net - b.drain) := by omega
+    have hnd : ¬ deadline b [m] r := by simpa using hd
+    simp only [killsAt] at hka
     cases hfst : m.first
     · -- the boss moves first
+      rw [hfst] at hka
       have hpos := fun (h : ¬ pool - (m.hit + m.area) ≤ 0) =>
         drink_pos (pool - (m.hit + m.area)) (m.maxHp * scale) _ k (by omega) hr0
       rw [walk, if_neg hnd]
       simp only [drinkAll_single, hfst, Bool.false_eq_true, false_and, if_false,
         allAliveFirst_single, Bool.false_or, bossTurn_single m pool k hp (by omega), allDead_single,
-        netSum_single, Formal.FightOutcome.walk]
+        netSum_single, allFirst_single, Formal.FightOutcome.walk]
       by_cases hl : pool - (m.hit + m.area) ≤ 0
       · simp [hl, clamp, show ¬ pool ≤ 0 by omega, Int.max_eq_right hl]
       · have hp2 : 0 < pool - (m.hit + m.area) := by omega
         simp only [hl, decide_false, Bool.false_eq_true, if_false, hp2, if_true,
           show ¬ (pool ≤ 0) by omega, false_and, decide_false, and_self]
-        by_cases hn : n = 0
-        · simp [hn, hkill.mp hn, clamp, Int.max_eq_left (Int.le_of_lt (hpos hl))]
-        · have hnk : ¬ B - (m.net - b.drain) ≤ 0 := fun h => hn (hkill.mpr h)
-          simp only [hn, hnk, if_false]
-          rw [ih f (r + 1) (B - (m.net - b.drain)) _ _ (by omega) (by omega) (hkd hnk)
-            (by rw [ceilDiv_sub _ _ hK]; omega) (hpos hl) (by omega)
-            (by have : r + 1 + (n : Int) - 1 = r + ((n + 1 : Nat) : Int) - 1 := by omega
-                rw [this]; exact hd)]
-          simp [hfst]
+        rw [if_pos hka]
+        simp [clamp, Int.max_eq_left (Int.le_of_lt (hpos hl))]
     · -- the member moves first
+      rw [hfst] at hka
+      simp only [preShield, if_true] at hka
+      have hdp := drink_pos pool (m.maxHp * scale) _ k hp hr0
+      rw [walk, if_neg hnd]
+      simp only [drinkAll_single, hfst, true_and, if_pos hp, Formal.FightOutcome.walk]
+      generalize hdr : drink pool (m.maxHp * scale) ((m.restore : Int) * scale) k = d at hdp ⊢
+      obtain ⟨p1, k1⟩ := d
+      simp only at hdp
+      simp only [allAliveFirst_single, hfst, Bool.true_or, netSum_single, if_true, hdp]
+      simp only [true_and]
+      rw [if_pos hka]
+      simp [clamp, Int.max_eq_left (Int.le_of_lt hdp)]
+  | succ n ih =>
+    intro f r B sh pool k hf hka hp hr hd
+    obtain ⟨f, rfl⟩ : ∃ f', f = f' + 1 := ⟨f - 1, by omega⟩
+    have hr0 : (0 : Int) ≤ (m.restore : Int) * scale :=
+      Int.mul_nonneg (Int.natCast_nonneg _) (by decide)
+    have hnd : ¬ deadline b [m] r := fun h => hd (deadline_mono b [m] (by omega) h)
+    have hd' : ¬ deadline b [m] (r + 1 + (n : Int)) := by
+      have : r + 1 + (n : Int) = r + ((n + 1 : Nat) : Int) := by push_cast; omega
+      rw [this]; exact hd
+    simp only [killsAt] at hka
+    obtain ⟨hnk, hrest⟩ := hka
+    cases hfst : m.first
+    · -- the boss moves first
+      rw [hfst] at hnk hrest
+      have hpos := fun (h : ¬ pool - (m.hit + m.area) ≤ 0) =>
+        drink_pos (pool - (m.hit + m.area)) (m.maxHp * scale) _ k (by omega) hr0
+      rw [walk, if_neg hnd]
+      simp only [drinkAll_single, hfst, Bool.false_eq_true, false_and, if_false,
+        allAliveFirst_single, Bool.false_or, bossTurn_single m pool k hp (by omega), allDead_single,
+        netSum_single, allFirst_single, Formal.FightOutcome.walk]
+      by_cases hl : pool - (m.hit + m.area) ≤ 0
+      · simp [hl, clamp, show ¬ pool ≤ 0 by omega, Int.max_eq_right hl]
+      · have hp2 : 0 < pool - (m.hit + m.area) := by omega
+        simp only [hl, decide_false, Bool.false_eq_true, if_false, hp2, if_true,
+          show ¬ (pool ≤ 0) by omega, false_and, decide_false, and_self, Nat.add_one_ne_zero]
+        rw [if_neg hnk]
+        have hw := ih f (r + 1) _ _ _ (drink (pool - (m.hit + m.area)) (m.maxHp * scale)
+          ((m.restore : Int) * scale) k).2 (by omega) (by rw [hfst]; exact hrest) (hpos hl) (by omega) hd'
+        rw [hfst] at hw
+        rw [hw]
+        simp [Formal.FightOutcome.walk]
+    · -- the member moves first
+      rw [hfst] at hnk hrest
+      simp only [preShield, postShield, if_true] at hnk hrest
       have hdp := drink_pos pool (m.maxHp * scale) _ k hp hr0
       rw [walk, if_neg hnd]
       simp only [drinkAll_single, hfst, true_and, if_pos hp, Formal.FightOutcome.walk]
@@ -342,20 +408,20 @@ theorem walk_single (b : Boss) (m : Member) (hds : 0 < m.hit + m.area)
       obtain ⟨p1, k1⟩ := d
       simp only at hdp
       simp only [allAliveFirst_single, hfst, Bool.true_or, netSum_single, if_true, hdp,
-        bossTurn_single m _ k1 hdp (by omega), allDead_single]
-      by_cases hn : n = 0
-      · simp [hn, hkill.mp hn, clamp, Int.max_eq_left (Int.le_of_lt hdp)]
-      · have hnk : ¬ B - (m.net - b.drain) ≤ 0 := fun h => hn (hkill.mpr h)
-        simp only [hn, hnk, and_false, if_false, decide_eq_true_eq]
-        by_cases hl : p1 - (m.hit + m.area) ≤ 0
-        · simp [hl, clamp, Int.max_eq_right hl]
-        · have hp2 : 0 < p1 - (m.hit + m.area) := by omega
-          simp only [hl, if_false]
-          have hw := ih f (r + 1) (B - (m.net - b.drain)) _ k1 (by omega) (by omega) (hkd hnk)
-            (by rw [ceilDiv_sub _ _ hK]; omega) hp2 (by omega)
-            (by have : r + 1 + (n : Int) - 1 = r + ((n + 1 : Nat) : Int) - 1 := by omega
-                rw [this]; exact hd)
-          simp [drinkAll_single, hfst, hw]
+        bossTurn_single m _ k1 hdp (by omega), allDead_single, allFirst_single, preShield,
+        postShield, Nat.add_one_ne_zero, if_false]
+      rw [if_neg (fun h => hnk h.2)]
+      by_cases hl : p1 - (m.hit + m.area) ≤ 0
+      · simp [hl, clamp, Int.max_eq_right hl]
+      · have hp2 : 0 < p1 - (m.hit + m.area) := by omega
+        simp only [hl, decide_false, Bool.false_eq_true, if_false]
+        rw [if_neg hnk]
+        have hw := ih f (r + 1) _ _ _ k1 (by omega)
+          (by rw [hfst]; exact hrest) hp2 (by omega) hd'
+        rw [hfst] at hw
+        simp only [drinkAll_single, hfst, Bool.true_eq_false, false_and, if_false]
+        rw [hw]
+        simp [Formal.FightOutcome.walk]
 
 theorem gate_none_facts (t : Terms) (h : Formal.FightOutcome.gate t = .none) :
     0 < t.killStep ∧ Formal.FightOutcome.roundsToKill t ≤ maxTurns ∧
@@ -377,8 +443,12 @@ theorem ceilDiv_nonpos (n d : Int) (hn : n ≤ 0) (hd : 0 < d) : ceilDiv n d ≤
     omega
   · exact hq
 
-/-- One member IS the solo fight: verdict, turns, ending HP and potions. -/
-theorem groupOutcome_single (b : Boss) (m : Member) :
+/-- One member IS the solo fight: verdict, turns, ending HP and potions. The
+boss's barrier is non-negative, and a boss at HP ≤ 0 has none: the walk wins
+such a boss in round 0, while the solo closed form still counts its barrier
+(`PredictWin.killRounds` at HP 0 is the hits through the barrier). -/
+theorem groupOutcome_single (b : Boss) (m : Member) (hb : 0 ≤ b.barrier)
+    (hhp : 0 < b.hp ∨ b.barrier = 0) :
     groupOutcome b [m] =
       let s := Formal.FightOutcome.fightOutcome (soloTerms b m) m.hp m.maxHp m.restore m.stock
       ⟨s.win, s.turns, [s.hpEnd], [s.used]⟩ := by
@@ -388,27 +458,38 @@ theorem groupOutcome_single (b : Boss) (m : Member) :
   | none =>
     obtain ⟨hK, hR, hrc, hds⟩ := gate_none_facts _ hg
     simp only [soloTerms] at hK hds
-    have hRdef : Formal.FightOutcome.roundsToKill (soloTerms b m) = ceilDiv (b.hp * scale) (m.net - b.drain) := rfl
+    have hRdef : Formal.FightOutcome.roundsToKill (soloTerms b m)
+        = Formal.PredictWin.killRounds b.hp b.barrier (m.net - b.drain) m.first := rfl
     by_cases h0 : effHp m.hp m.maxHp * scale ≤ 0
     · simp [h0]
-    by_cases hb : b.hp * scale ≤ 0
-    · have hz : (Formal.FightOutcome.roundsToKill (soloTerms b m)).toNat = 0 := by
-        rw [hRdef]; have := ceilDiv_nonpos _ _ hb hK; omega
-      simp [h0, hb, hz, Formal.FightOutcome.walk]
-    · have hpos := Formal.PredictWin.ceilDiv_pos (b.hp * scale) (m.net - b.drain) hK (by omega)
-      have hw := walk_single b m hds hK (Formal.FightOutcome.roundsToKill (soloTerms b m)).toNat fuel 1
-        (b.hp * scale) (effHp m.hp m.maxHp * scale) m.stock (by rw [hRdef]; omega)
-        (by rw [hRdef]; unfold fuel; simp only [hRdef] at hR; simp [Formal.PredictWin.maxTurns] at hR ⊢; omega)
-        (by omega) (by rw [hRdef]; omega) (by omega) (by omega)
+    by_cases hbp : b.hp * scale ≤ 0
+    · have hb0 : b.barrier = 0 := by
+        rcases hhp with h | h
+        · simp only [scale] at hbp; omega
+        · exact h
+      have hz : (Formal.FightOutcome.roundsToKill (soloTerms b m)).toNat = 0 := by
+        rw [hRdef, hb0, killRounds_zero_barrier _ _ _ hK]
+        have := ceilDiv_nonpos (b.hp * 10000) _ (by simp only [scale] at hbp; omega) hK
+        omega
+      simp [h0, hbp, hz, Formal.FightOutcome.walk]
+    · have hhp1 : 1 ≤ b.hp := by simp only [scale] at hbp; omega
+      obtain ⟨n, hn, hka⟩ := Formal.PredictWin.killRounds_killsAt b.hp b.barrier (m.net - b.drain)
+        m.first hK hhp1 hb (not_walled_of_le _ _ _ _ (by rw [← hRdef]; exact hR))
+      have hn' : (Formal.FightOutcome.roundsToKill (soloTerms b m)).toNat = n + 1 := by
+        rw [hRdef]; omega
+      have hRn : Formal.FightOutcome.roundsToKill (soloTerms b m) = (n : Int) + 1 := by rw [hRdef]; exact hn
+      have hw := walk_single b m hds n fuel 1 (b.hp * scale) (b.barrier * scale)
+        (effHp m.hp m.maxHp * scale) m.stock
+        (by rw [hRn] at hR; unfold fuel; simp [Formal.PredictWin.maxTurns] at hR ⊢; omega)
+        hka (by omega) (by omega)
         (by
-          unfold deadline; simp only [List.length_singleton, hRdef] at hrc hR ⊢
+          rw [hRn] at hR hrc
           simp only [soloTerms] at hrc
-          have := hpos
-          generalize ceilDiv (b.hp * scale) (m.net - b.drain) = R at *
-          have hRn : ((R.toNat : Nat) : Int) = R := by omega
-          rw [hRn]; simp only [Formal.PredictWin.maxTurns] at hR ⊢; omega)
+          unfold deadline; simp only [List.length_singleton]
+          simp only [Formal.PredictWin.maxTurns] at hR ⊢; omega)
       have hmax : 0 < effHp m.hp m.maxHp * scale := by omega
-      simp only [h0, hb, if_false, List.any_cons, List.any_nil, Bool.or_false, decide_eq_true_eq,
+      rw [hn']
+      simp only [h0, hbp, if_false, List.any_cons, List.any_nil, Bool.or_false, decide_eq_true_eq,
         start, List.map_cons, List.map_nil, hw]
       have hmaxHp : 0 ≤ m.maxHp := by
         unfold effHp at hmax; split at hmax
@@ -418,22 +499,42 @@ theorem groupOutcome_single (b : Boss) (m : Member) :
         have := Formal.FightOutcome.effHp_le m.hp m.maxHp hmaxHp; simp only [scale]; omega
       have hnn := Formal.FightOutcome.walk_pool_nonneg m.first (m.hit + m.area) (m.maxHp * scale)
         ((m.restore : Int) * scale) hds (Int.mul_nonneg (Int.natCast_nonneg _) (by decide))
-        (Formal.FightOutcome.roundsToKill (soloTerms b m)).toNat 1 _ m.stock hmax hle
+        (n + 1) 1 _ m.stock hmax hle
       simp only [soloTerms] at hnn ⊢
       simp [Int.max_eq_left hnn]
   | _ => simp
 
 /-! ### The kill round. -/
 
-/-- A member adding damage never delays the kill round (the full party's). -/
+/-- A member adding damage never delays the kill round (the full party's),
+when the boss has no barrier or the member keeps the party's turn order where
+the barrier is no wall. A late mover joining an all-first party moves the
+barrier's refresh before the round's hits and can add a round
+(`killRounds_late_mover_counterexample`). -/
 theorem killRounds_antitone (b : Boss) (ms : List Member) (m : Member)
-    (hk : 0 < killRate b ms) (hn : 0 ≤ m.net) (hhp : 0 ≤ b.hp) :
+    (hk : 0 < killRate b ms) (hn : 0 ≤ m.net) (hhp : 0 ≤ b.hp) (hb : 0 ≤ b.barrier)
+    (hcase : (allFirst (m :: ms) = allFirst ms ∧ killRounds b ms ≤ maxTurns) ∨ b.barrier = 0) :
     killRounds b (m :: ms) ≤ killRounds b ms := by
   have h : killRate b (m :: ms) = m.net + killRate b ms := by
     simp [killRate, List.sum_cons]; omega
-  unfold killRounds
+  unfold killRounds at hcase ⊢
   rw [h]
-  exact ceilDiv_antitone_divisor _ _ _ (Int.mul_nonneg hhp (by decide)) hk (by omega)
+  rcases hcase with ⟨hf, hw⟩ | h0
+  · rw [hf]
+    exact Formal.PredictWin.killRounds_antitone_ks _ _ _ _ _ hhp hb hk (by omega)
+      (not_walled_of_le _ _ _ _ hw)
+  · rw [h0, killRounds_zero_barrier _ _ _ (by omega), killRounds_zero_barrier _ _ _ hk]
+    exact ceilDiv_antitone_divisor _ _ _ (Int.mul_nonneg hhp (by decide)) hk (by omega)
+
+/-- `killRounds_antitone`'s turn-order hypothesis is needed: a late mover with
+no damage joining one first mover (10 HP a hit against a 38-HP boss behind a
+10-HP barrier) moves the refresh before the 5th hit, and the kill takes 6
+rounds, not 5. -/
+theorem killRounds_late_mover_counterexample : ∃ (b : Boss) (ms : List Member) (m : Member),
+    0 < killRate b ms ∧ 0 ≤ m.net ∧ 0 ≤ b.hp ∧ 0 ≤ b.barrier ∧
+      killRounds b ms < killRounds b (m :: ms) :=
+  ⟨⟨38, 0, 0, 10⟩, [⟨1, 100000, 0, 0, 1, 1, true, 0, 0, 0⟩], ⟨1, 0, 0, 0, 1, 1, false, 0, 0, 0⟩,
+   by decide, by decide, by decide, by decide, by decide⟩
 
 /-! ### A won fight leaves a member alive. -/
 
@@ -487,28 +588,29 @@ theorem not_allDead (st : List Slot) (h : ¬ allDead st = true) : anyAlive st = 
 
 /-- A won walk leaves some member alive. -/
 theorem walk_win_anyAlive (b : Boss) (ms : List Member) :
-    ∀ (f : Nat) (r hp : Int) (st : List Slot), anyAlive st = true → st.length ≤ ms.length →
-      (walk b ms f r hp st).win = true → anyAlive (walk b ms f r hp st).slots = true := by
+    ∀ (f : Nat) (r hp sh : Int) (st : List Slot), anyAlive st = true → st.length ≤ ms.length →
+      (walk b ms f r hp sh st).win = true → anyAlive (walk b ms f r hp sh st).slots = true := by
   intro f
   induction f with
-  | zero => intro r hp st _ _ hw; simp [walk] at hw
+  | zero => intro r hp sh st _ _ hw; simp [walk] at hw
   | succ f ih =>
-    intro r hp st ha hl hw
+    intro r hp sh st ha hl hw
     have a1 := drinkAll_anyAlive true ms st ha hl
     by_cases hd : deadline b ms r
     · simp [walk, hd] at hw
     by_cases he : allAliveFirst ms (drinkAll true ms st) = true ∧
-        hp - (netSum ms (drinkAll true ms st) (drinkAll true ms st) - b.drain) ≤ 0
+        hp - (absorb sh (netSum ms (drinkAll true ms st) (drinkAll true ms st) - b.drain)).1 ≤ 0
     · simp only [walk, if_neg hd, if_pos he]; exact clamp_anyAlive _ a1
     by_cases hdead : allDead (bossTurn ms (drinkAll true ms st)) = true
     · simp [walk, hd, he, hdead] at hw
     have a2 := not_allDead _ hdead
     have l2 : (bossTurn ms (drinkAll true ms st)).length ≤ ms.length := strike_length _ _ _ _ _
     have a3 := drinkAll_anyAlive false ms _ a2 l2
-    by_cases hk : hp - (netSum ms (drinkAll true ms st) (bossTurn ms (drinkAll true ms st)) - b.drain) ≤ 0
+    by_cases hk : hp - (absorb (preShield (allFirst ms) sh (b.barrier * scale) r)
+        (netSum ms (drinkAll true ms st) (bossTurn ms (drinkAll true ms st)) - b.drain)).1 ≤ 0
     · simp only [walk, if_neg hd, if_neg he, if_neg hdead, if_pos hk]; exact clamp_anyAlive _ a3
     · simp only [walk, if_neg hd, if_neg he, if_neg hdead, if_neg hk] at hw ⊢
-      exact ih _ _ _ a3 (drinkAll_length _ _ _) hw
+      exact ih _ _ _ _ a3 (drinkAll_length _ _ _) hw
 
 /-- A walked win (no out-sustain exit) leaves some member alive. -/
 theorem win_survivor (b : Boss) (ms : List Member) (hg : gate b ms = .none)
@@ -534,7 +636,7 @@ theorem win_survivor (b : Boss) (ms : List Member) (hg : gate b ms = .none)
       obtain ⟨m, hm⟩ := List.exists_mem_of_ne_nil ms hne
       simp only [anyAlive, start, List.any_map, List.any_eq_true, decide_eq_true_eq, Function.comp]
       exact ⟨m, hm, hall m hm⟩
-    have := walk_win_anyAlive b ms fuel 1 _ (start ms) hs (by simp [start]) hw
+    have := walk_win_anyAlive b ms fuel 1 _ _ (start ms) hs (by simp [start]) hw
     simp only [anyAlive, List.any_eq_true, decide_eq_true_eq] at this
     obtain ⟨s, hs, hp⟩ := this
     exact ⟨s.1, List.mem_map_of_mem hs, hp⟩
@@ -544,7 +646,7 @@ the weak member dies in round 1 and the strong one wins alone (the 2026-10-11
 probe's shape). -/
 theorem win_survivor_witness : ∃ (b : Boss) (ms : List Member),
     gate b ms = .none ∧ (groupOutcome b ms).win = true ∧ (groupOutcome b ms).hpEnd.head? = some 0 :=
-  ⟨⟨20, 0, 0⟩,
+  ⟨⟨20, 0, 0, 0⟩,
    [⟨10, 20000, 400000, 0, 1, 100, false, 0, 0, 0⟩, ⟨10, 20000, 100000, 0, 200, 200, true, 0, 0, 0⟩],
    by decide, by decide, by decide⟩
 

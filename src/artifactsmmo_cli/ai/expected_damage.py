@@ -5,11 +5,10 @@ in the learning store.  The computation reuses ``_expected_hit`` from
 ``combat.py`` so it cannot drift from the main ``predict_win`` damage model.
 """
 
-import math
-
-from artifactsmmo_cli.ai.combat import _expected_hit
+from artifactsmmo_cli.ai.combat import _expected_hit, moves_first
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
+from artifactsmmo_cli.ai.fight_terms_core import SCALE, kill_rounds
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -24,8 +23,9 @@ def expected_damage_per_fight(
 
     Mirrors ``predict_win``'s ``raw_monster`` (monster per-turn damage vs
     player resistance, scaled by monster crit) and ``rounds_to_kill``
-    (ceiling of monster HP divided by the player's per-turn damage) via
-    the same ``_expected_hit`` primitive — so the estimate cannot drift
+    (``fight_terms_core.kill_rounds``: the monster's HP behind its
+    refreshing barrier, at the player's per-turn damage) via the same
+    ``_expected_hit`` primitive — so the estimate cannot drift
     from the combat verdict's damage model.
 
     Judged against the loadout ``pick_loadout`` would actually equip, exactly as
@@ -56,5 +56,7 @@ def expected_damage_per_fight(
     )
     if player_kill_step <= 0:
         return 0
-    rounds_to_kill = math.ceil(m_hp / player_kill_step)
+    first = moves_first(p.initiative, state.hp, game_data.monster_initiative(monster_code), m_hp)
+    rounds_to_kill = kill_rounds(m_hp, game_data.monster_barrier(monster_code),
+                                 round(player_kill_step * SCALE), first)
     return round(monster_per_turn) * rounds_to_kill

@@ -478,10 +478,10 @@ def test_poison_kills_when_monster_deals_no_direct_damage_against_lean():
 
 def test_barrier_flips_winnable_fight_against_lean():
     """A symmetric fight the player WINS on the initiative tiebreak (rtk == rtd == 2,
-    player first), but the monster's absorbing barrier raises effective HP so
+    player first), but the monster's absorbing barrier soaks hits so
     rounds_to_kill grows past rounds_to_die and flips it to a LOSS. Pins the
-    effective-HP barrier term against Lean — a mutant that drops `+ monster_barrier`
-    would keep the win and die here."""
+    barrier term against Lean — a mutant that drops the barrier would keep the
+    win and die here."""
     # Player raw 50 vs hp 100 => rtk 2; monster raw 50, player hp 100 => rtd 2; win.
     p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
              max_hp=100, init=11)
@@ -491,7 +491,7 @@ def test_barrier_flips_winnable_fight_against_lean():
                           m["attack"], m["resist"], m["crit"], m["init"])
     assert py_no is True
     assert py_no == lean_no["win"]
-    # barrier 100 => effective hp 200 => rtk = 8 > rtd = 2 => loss.
+    # barrier 100 soaks the first two 50-HP hits => rtk = 4 > rtd = 2 => loss.
     py_b, lean_b = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
                         p["crit"], p["max_hp"], p["init"], m["hp"],
                         m["attack"], m["resist"], m["crit"], m["init"],

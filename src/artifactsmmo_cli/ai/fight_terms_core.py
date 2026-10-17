@@ -10,7 +10,8 @@ them into the closed form's quantities, in the exact ×10000 scale the steps use
 
 * `kill_step` — net per-round damage to the monster;
 * `die_step` — net per-round damage to the player;
-* `rounds_to_kill` = ⌈effective monster HP × 10000 / kill_step⌉;
+* `rounds_to_kill` — rounds until the monster dies behind its barrier
+  (`kill_rounds`); ⌈monster HP × 10000 / kill_step⌉ without one;
 * `effective_hp` — the player's HP at fight start (current HP, capped at max);
 * `rounds_to_die` = ⌈effective_hp × 10000 / die_step⌉;
 * `player_first` — who moves first (`combat.moves_first`: higher initiative, a tie
@@ -36,6 +37,9 @@ LOSE_MARGIN = -(MAX_TURNS + 1)
 SCALE = 10000
 """The exact-integer scale of the per-round steps (×200 crit × ×100 percent ×
 ×100 percent, `Formal/PredictWin.lean`)."""
+
+BARRIER_PERIOD = 5
+"""The monster's turns between barrier refreshes (`kill_rounds`)."""
 
 
 class FightExit(Enum):
@@ -75,18 +79,50 @@ def effective_player_hp(hp: int, max_hp: int) -> int:
     return min(hp, max_hp) if hp > 0 else 0
 
 
-def fight_terms(raw_player: int, kill_step: int, effective_monster_hp: int,
+def kill_rounds(monster_hp: int, barrier: int, kill_step: int, player_first: bool) -> int:
+    """Rounds until a monster of `monster_hp` behind a `barrier` dies at a
+    positive `kill_step` (×10000) a round; `MAX_TURNS + 1` when no block of
+    hits gets through the barrier.
+
+    The barrier's effect text: "At the start of the fight and every 5 played
+    turns, gain a protective barrier of {value} HP. All attacks are redirected
+    to this barrier until it is destroyed." Lor v king_slime, 2026-10-17: the
+    barrier is raised at the start and SET back to full at the monster's 5th
+    and 10th turns, and a hit's excess passes through ("36 absorbed, 15
+    through"). So the hits come in blocks against one barrier each: the first
+    `L1` hits (5 when the player moves first, its refresh following the
+    player's 5th hit; 4 when the monster does, the refresh coming before the
+    player's 5th hit — a ruling: no monster-first barrier fight is on record),
+    then blocks of `BARRIER_PERIOD`. A block of `n` hits gets
+    `max(0, n × kill_step − B)` through, so after the first block each full
+    block gets `g = 5 × kill_step − B` through, and the last block needs
+    `⌈(R + B) / kill_step⌉` hits for the `R` left. With no barrier this is
+    ⌈H / kill_step⌉."""
+    pool, shield = monster_hp * SCALE, barrier * SCALE
+    first = BARRIER_PERIOD if player_first else BARRIER_PERIOD - 1
+    if pool + shield <= first * kill_step:
+        return ceil_div(pool + shield, kill_step)
+    through = BARRIER_PERIOD * kill_step - shield
+    if through <= 0:
+        return MAX_TURNS + 1
+    left = pool - max(0, first * kill_step - shield)
+    blocks = ceil_div(left, through) - 1
+    last = left - blocks * through
+    return first + blocks * BARRIER_PERIOD + ceil_div(last + shield, kill_step)
+
+
+def fight_terms(raw_player: int, kill_step: int, monster_hp: int,
                 reconstitution: int, die_step: int, hp: int, max_hp: int,
-                player_first: bool) -> FightTerms:
+                player_first: bool, barrier: int = 0) -> FightTerms:
     """The closed form's guard ladder over resolved integers. `kill_step` /
-    `die_step` are `combat._kill_step_net` / `combat._die_step`;
-    `effective_monster_hp` includes the barrier."""
+    `die_step` are `combat._kill_step_net` / `combat._die_step`; the monster's
+    `barrier` refreshes (`kill_rounds`)."""
     effective_hp = effective_player_hp(hp, max_hp)
     if raw_player <= 0:
         return FightTerms(FightExit.NO_DAMAGE, kill_step, die_step, 0, effective_hp, 0, player_first)
     if kill_step <= 0:
         return FightTerms(FightExit.UNKILLABLE, kill_step, die_step, 0, effective_hp, 0, player_first)
-    rounds_to_kill = ceil_div(effective_monster_hp * SCALE, kill_step)
+    rounds_to_kill = kill_rounds(monster_hp, barrier, kill_step, player_first)
     if rounds_to_kill > MAX_TURNS:
         return FightTerms(FightExit.OVER_CAP, kill_step, die_step, rounds_to_kill,
                           effective_hp, 0, player_first)

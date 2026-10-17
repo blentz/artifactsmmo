@@ -28,14 +28,28 @@ alone). The fight is lost only when every member is dead. A round's damage is
 each first mover alive before the boss's turn and each late mover alive after
 it, less `drain`; late movers then drink.
 
+The boss's barrier (`fight_odds_core.absorb`) takes a round's damage first
+and is refreshed at the start of every `BARRIER_PERIOD`-th boss turn. The walk
+lumps a round's hits, so they meet that refresh after the round's damage only
+when every member moves first, and before it otherwise (a ruling: the slower of
+the two counts, and exactly the solo rule for one member).
+
 The guard ladder is the solo one over the full party, and the turn cap and the
 reconstitution period are counted in actor turns (`N + 1` a round, the full
 party's — conservative once a member dies)."""
 
 from dataclasses import dataclass
 
+from artifactsmmo_cli.ai.fight_odds_core import absorb
 from artifactsmmo_cli.ai.fight_outcome_core import drink
-from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS, SCALE, FightExit, ceil_div, effective_player_hp
+from artifactsmmo_cli.ai.fight_terms_core import (
+    BARRIER_PERIOD,
+    MAX_TURNS,
+    SCALE,
+    FightExit,
+    effective_player_hp,
+)
+from artifactsmmo_cli.ai.fight_terms_core import kill_rounds as barrier_rounds
 
 
 @dataclass(frozen=True)
@@ -56,12 +70,13 @@ class PartyMember:
 
 @dataclass(frozen=True)
 class PartyBoss:
-    """The boss's side: effective HP (barrier included), reconstitution, and
-    the kill-rate terms charged once per boss turn."""
+    """The boss's side: HP, reconstitution, the kill-rate terms charged once
+    per boss turn, and its barrier."""
 
     hp: int
     recon: int
     drain: int
+    barrier: int = 0
 
 
 @dataclass(frozen=True)
@@ -79,9 +94,15 @@ def kill_rate(boss: PartyBoss, members: list[PartyMember]) -> int:
     return sum(m.net for m in members) - boss.drain
 
 
+def all_first(members: list[PartyMember]) -> bool:
+    """Every member moves first: the round's hits land before the boss's turn."""
+    return all(m.first for m in members)
+
+
 def kill_rounds(boss: PartyBoss, members: list[PartyMember]) -> int:
-    """Rounds until the boss dies (a positive kill rate)."""
-    return ceil_div(boss.hp * SCALE, kill_rate(boss, members))
+    """Rounds until the boss dies behind its barrier (a positive kill rate;
+    `fight_terms_core.kill_rounds`)."""
+    return barrier_rounds(boss.hp, boss.barrier, kill_rate(boss, members), all_first(members))
 
 
 def party_exit(boss: PartyBoss, members: list[PartyMember]) -> FightExit:
@@ -170,10 +191,11 @@ def group_outcome(boss: PartyBoss, members: list[PartyMember]) -> GroupOutcome:
         return GroupOutcome(True, kill_rounds(boss, members), tuple(starts), zeros)
     if gate is not FightExit.NONE or any(p <= 0 for p in starts):
         return GroupOutcome(False, 0, zeros, zeros)
-    boss_pool = boss.hp * SCALE
+    boss_pool, full = boss.hp * SCALE, boss.barrier * SCALE
     if boss_pool <= 0:
         return GroupOutcome(True, 0, tuple(starts), zeros)
     pools, left = list(starts), [m.stock for m in members]
+    shield, early = full, all_first(members)
 
     def end(win: bool, turns: int) -> GroupOutcome:
         return GroupOutcome(win, turns, tuple(max(p, 0) for p in pools),
@@ -186,10 +208,16 @@ def group_outcome(boss: PartyBoss, members: list[PartyMember]) -> GroupOutcome:
             return end(False, round_no - 1)
         _drink_all(True, members, pools, left)
         if (all(m.first or p <= 0 for m, p in zip(members, pools, strict=True))
-                and boss_pool - (_net_sum(members, pools, pools) - boss.drain) <= 0):
+                and boss_pool - absorb(shield, _net_sum(members, pools, pools) - boss.drain)[0] <= 0):
             return end(True, round_no)
         post = _boss_turn(members, pools)
-        boss_pool -= _net_sum(members, pools, post) - boss.drain
+        refresh = round_no % BARRIER_PERIOD == 0
+        if refresh and not early:
+            shield = full
+        through, shield = absorb(shield, _net_sum(members, pools, post) - boss.drain)
+        if refresh and early:
+            shield = full
+        boss_pool -= through
         pools = post
         if all(p <= 0 for p in pools):
             return end(False, round_no)

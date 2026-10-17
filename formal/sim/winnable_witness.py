@@ -64,7 +64,7 @@ from artifactsmmo_cli.ai.equipment.level_loadout import (
 )
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
-from artifactsmmo_cli.ai.fight_odds_core import RoundDamage, _tick
+from artifactsmmo_cli.ai.fight_odds_core import RoundDamage, _refresh, _tick, absorb
 from artifactsmmo_cli.ai.fight_terms_core import (
     MAX_TURNS,
     SCALE,
@@ -234,49 +234,58 @@ def crit_path_wins(damage: RoundDamage, player_first: bool, monster_pool: int,
     """Lean `FightOdds.kpath` from round 1 with `MAX_TURNS` rounds of fuel: the
     single path on which the player never crits (so never heals), the monster
     crits its first `crits` turns and then hits normal, healing `_m_up` every
-    turn, with no restore stock, is won."""
+    turn, with no restore stock, is won. The kill goes to the barrier first
+    (`absorb`), refreshed by the monster's turn in every 5th round."""
     m, p, c = monster_pool, player_pool, crits
-    up = _m_up(damage)
+    up, full = _m_up(damage), damage.barrier * SCALE
+    s = full
     for round_no in range(1, MAX_TURNS + 1):
         tick = _tick(damage, player_first, round_no)
         hit = _khit(damage, c)
         if player_first:
             if tick > 0 and p - tick <= 0:
                 return False
-            if m - damage.kill_normal <= 0:
+            through, kept = absorb(s, damage.kill_normal)
+            if m - through <= 0:
                 return True
             if p - tick - hit <= 0:
                 return False
             p = p - tick - hit
-            m = m - damage.kill_normal + up
+            m, s = m - through + up, _refresh(kept, full, round_no)
         else:
             if p - hit <= 0:
                 return False
             if tick > 0 and p - hit - tick <= 0:
                 return False
-            if m + up - damage.kill_normal <= 0:
+            through, s = absorb(_refresh(s, full, round_no), damage.kill_normal)
+            if m + up - through <= 0:
                 return True
             p = p - hit - tick
-            m = m + up - damage.kill_normal
+            m = m + up - through
         c = max(c - 1, 0)
     return False
 
 
 def monster_turns(damage: RoundDamage, player_first: bool, monster_pool: int) -> int:
     """Lean `FightOdds.mturns` with `MAX_TURNS` rounds of fuel: the monster's turns
-    before the player's never-critting kill, the monster healing `_m_up` each."""
+    before the player's never-critting kill, the monster healing `_m_up` each
+    and its barrier absorbing the kill first (`crit_path_wins`)."""
     m, turns, up = monster_pool, 0, _m_up(damage)
-    for _round in range(MAX_TURNS):
+    full = damage.barrier * SCALE
+    s = full
+    for round_no in range(1, MAX_TURNS + 1):
         if player_first:
-            if m - damage.kill_normal <= 0:
+            through, kept = absorb(s, damage.kill_normal)
+            if m - through <= 0:
                 return turns
             turns += 1
-            m = m - damage.kill_normal + up
+            m, s = m - through + up, _refresh(kept, full, round_no)
         else:
             turns += 1
-            if m + up - damage.kill_normal <= 0:
+            through, s = absorb(_refresh(s, full, round_no), damage.kill_normal)
+            if m + up - through <= 0:
                 return turns
-            m = m + up - damage.kill_normal
+            m = m + up - through
     return turns
 
 

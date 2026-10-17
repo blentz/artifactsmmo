@@ -39,7 +39,7 @@ def test_one_member_is_its_solo_terms(effects):
     boss = party_boss(gd, "mob")
     assert member.net - boss.drain == terms.kill_step
     assert member.hit + member.area == terms.die_step
-    assert (boss.hp, boss.recon) == (900 + effects.get("barrier", 0), 0)
+    assert (boss.hp, boss.recon, boss.barrier) == (900, 0, effects.get("barrier", 0))
     assert member.threat == 10
     assert (member.hp, member.max_hp, member.first) == (300, 400, terms.player_first)
     solo = fight_outcome(terms, 300, 400, 50, 3)

@@ -97,6 +97,17 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @maxturns_sound              -- rounds_to_kill > MAX_TURNS ⇒ ¬win
 #check @predict_win_mono_player     -- ↑player raw never flips win→loss
 #check @predict_win_mono_monsterhp  -- ↓monster HP never flips win→loss
+-- PredictWin barrier (refreshed every 5 monster turns, `fight_terms_core.kill_rounds`):
+#check @Formal.PredictWin.killRoundsCore_spec      -- closed form = the walk's first kill (least n)
+#check @Formal.PredictWin.killSim_eq_killRounds    -- the absorb+refresh walk kills in killRounds rounds
+#check @Formal.PredictWin.killSim_walled           -- behind a wall the walk never kills
+#check @Formal.PredictWin.killRounds_killsAt       -- the walk's kill hit is the killRounds-th
+#check @Formal.PredictWin.killRounds_pos           -- a living monster takes ≥ 1 round
+#check @Formal.PredictWin.killRounds_antitone_ks   -- ↑kill step never delays the kill (no wall)
+#check @Formal.PredictWin.killRounds_mono_hp       -- ↑monster HP never speeds the kill
+#check @Formal.PredictWin.killRounds_mono_barrier  -- ↑barrier never speeds the kill (no wall)
+#check @Formal.PredictWin.killRounds_zero_barrier  -- no barrier: ⌈hp·10000 / ks⌉
+#check @Formal.PredictWin.cumThrough_mono          -- damage through the barrier never falls
 -- LoadoutProjection required roles:
 #check @proj_identity              -- loadout = equipment ⇒ projected = current
 #check @proj_additive              -- projected = current + Σ_all (new − old)
@@ -529,9 +540,11 @@ open Formal.PriorityBand
 #check @Formal.FightOdds.fightOdds_win_mono_hp      -- no stock: more HP never lowers P(win)
 #check @Formal.FightOdds.winProb_eq_one_of_worst   -- no stock, worst-case path won: P(win) = 1
 #check @Formal.FightOdds.winProb_ge_critBound      -- counted-crit floor: P(win) ≥ critBound
+#check @Formal.FightOdds.absorb_couple             -- a bigger hit on less barrier: more through, less left
 -- GroupFight (group fights increment 1, `ai/group_fight_core.py`):
 #check @Formal.GroupFight.groupOutcome_single   -- one member IS the solo walk
 #check @Formal.GroupFight.killRounds_antitone   -- a member adding damage never delays the kill
+#check @Formal.GroupFight.killRounds_late_mover_counterexample -- LOAD-BEARING: the turn-order hypothesis is needed
 #check @Formal.GroupFight.win_survivor          -- a walked win leaves a member alive
 #check @Formal.GroupFight.win_survivor_witness  -- satisfiable: one dies, the other wins
 -- ConsumablePrice (consumable utility increment 2, `ai/consumable_price_core.py`):

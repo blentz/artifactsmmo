@@ -368,6 +368,7 @@ TIER_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "tier_p
 COMBAT_TARGETS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_targets.py"
 WIN_THRESHOLD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "win_threshold_core.py"
 GROUP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "group_fight_core.py"
+EXPECTED_DAMAGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "expected_damage.py"
 CONSUMABLE_PRICE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price_core.py"
 CONSUMABLE_PRICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price.py"
 LOOP_RATE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate_core.py"
@@ -737,11 +738,45 @@ FIGHT_TERMS_PREDICT_MUTATIONS = [
      "        return terms.rounds_to_kill < terms.rounds_to_die"),
 ]
 
+# The cold-start damage seed counts the hits behind the barrier.
+# Killed by tests/test_ai/test_expected_damage.py.
+EXPECTED_DAMAGE_MUTATIONS = [
+    ("expected_damage: the barrier is ignored",
+     "    rounds_to_kill = kill_rounds(m_hp, game_data.monster_barrier(monster_code),\n",
+     "    rounds_to_kill = kill_rounds(m_hp, 0,\n"),
+]
+
 # Killed by tests/test_ai/test_combat.py (the reconstitution and dead-start cases).
 FIGHT_TERMS_LADDER_MUTATIONS = [
     ("predict_win: drop reconstitution turn-cap guard",
      "    if 0 < reconstitution <= rounds_to_kill:",
      "    if 0 < reconstitution <= 0:"),
+]
+
+# The barrier's closed form (`kill_rounds`). Killed by
+# tests/test_ai/test_fight_terms_core.py (Lor's 12 hits and the walk cross-check).
+KILL_ROUNDS_MUTATIONS = [
+    ("kill_rounds: the barrier never refreshes",
+     "    through = BARRIER_PERIOD * kill_step - shield\n",
+     "    through = BARRIER_PERIOD * kill_step\n"),
+    ("kill_rounds: a late mover's first block is a full period",
+     "    first = BARRIER_PERIOD if player_first else BARRIER_PERIOD - 1\n",
+     "    first = BARRIER_PERIOD\n"),
+    ("kill_rounds: an unbreakable barrier is walked",
+     "    if through <= 0:\n        return MAX_TURNS + 1\n",
+     "    if through < 0:\n        return MAX_TURNS + 1\n"),
+    ("kill_rounds: the first block's spill is not credited",
+     "    left = pool - max(0, first * kill_step - shield)\n",
+     "    left = pool\n"),
+    ("kill_rounds: the last block ignores its barrier",
+     "    return first + blocks * BARRIER_PERIOD + ceil_div(last + shield, kill_step)",
+     "    return first + blocks * BARRIER_PERIOD + ceil_div(last, kill_step)"),
+    ("kill_rounds: a first-block kill ignores the barrier",
+     "        return ceil_div(pool + shield, kill_step)\n",
+     "        return ceil_div(pool, kill_step)\n"),
+    ("fight_terms: the terms ignore the barrier",
+     "    rounds_to_kill = kill_rounds(monster_hp, barrier, kill_step, player_first)",
+     "    rounds_to_kill = kill_rounds(monster_hp, 0, kill_step, player_first)"),
 ]
 
 # Lifesteal terms (heal-on-crit) and poison term (per-turn DoT). Killed by the
@@ -840,9 +875,9 @@ PREDICT_WIN_LIFESTEAL_MUTATIONS = [
      "            + monster_enchanted_mirror * 0 * raw_player * (200 + p_crit) // 2)"),
     # combat_terms computes effective HP ONCE for predict_win and combat_margin
     # (the two duplicated sites became one in the consumable-utility extraction).
-    ("predict_win: drop monster barrier term in effective HP",
-     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)\n",
-     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code) * 0\n"),
+    ("predict_win: drop the monster's barrier",
+     "    barrier = game_data.monster_barrier(monster_code)\n",
+     "    barrier = 0\n"),
     # Server rules read off 2026-10-17 logs (tests/test_ai/test_combat.py).
     ("lifesteal_heal: the share rounds down",
      "    return (2 * lifesteal * crit_hit + 100) // 200",
@@ -854,8 +889,7 @@ PREDICT_WIN_LIFESTEAL_MUTATIONS = [
      "    return player_hp > monster_hp",
      "    return player_hp >= monster_hp"),
     ("fight_numbers: turn order is initiative alone",
-     "        moves_first(p.initiative, state.hp, game_data.monster_initiative(monster_code),\n"
-     "                    game_data.monster_hp(monster_code)),",
+     "        moves_first(p.initiative, state.hp, game_data.monster_initiative(monster_code), monster_hp),",
      "        p.initiative >= game_data.monster_initiative(monster_code),"),
 ]
 
@@ -924,6 +958,24 @@ FIGHT_OUTCOME_MUTATIONS = [
 # fight_odds_core: the merged crit walk (fight odds part A).
 # Killed by tests/test_ai/test_fight_odds_core.py
 FIGHT_ODDS_MUTATIONS = [
+    ("absorb: a heal wears the barrier",
+     "    if amount <= 0:\n        return amount, shield\n",
+     "    if amount < 0:\n        return amount, shield\n"),
+    ("absorb: the barrier swallows the whole hit",
+     "    return max(0, amount - shield), max(0, shield - amount)",
+     "    return (0 if shield > 0 else amount), max(0, shield - amount)"),
+    ("absorb: the barrier is never worn down",
+     "    return max(0, amount - shield), max(0, shield - amount)",
+     "    return max(0, amount - shield), shield"),
+    ("fight_odds: the barrier never refreshes",
+     "    return full if round_no % BARRIER_PERIOD == 0 else shield",
+     "    return shield"),
+    ("fight_odds: a late mover's refresh comes after its hit",
+     "    monster, shield, player, left = state\n    shield = _refresh(shield, full, round_no)\n",
+     "    monster, shield, player, left = state\n"),
+    ("fight_odds: the barrier starts down",
+     "    states: dict[State, Fraction] = {(m_cap, full, pool, stock): Fraction(1)}",
+     "    states: dict[State, Fraction] = {(m_cap, 0, pool, stock): Fraction(1)}"),
     ("fight_odds: a zero-probability branch is kept",
      "    return tuple(b for b in branches if b[0] != 0)",
      "    return branches"),
@@ -931,11 +983,11 @@ FIGHT_ODDS_MUTATIONS = [
      "(Fraction(100 - pct, 100), normal, 0), (Fraction(pct, 100), crit, heal)",
      "(Fraction(100 - pct, 100), crit, 0), (Fraction(pct, 100), normal, heal)"),
     ("fight_odds: player-first kill at exactly 0 HP is not a kill",
-     "        if monster - kill <= 0:\n            _add_ended(ended, (True, round_no, player,",
-     "        if monster - kill < 0:\n            _add_ended(ended, (True, round_no, player,"),
+     "        if monster - through <= 0:\n            _add_ended(ended, (True, round_no, player,",
+     "        if monster - through < 0:\n            _add_ended(ended, (True, round_no, player,"),
     ("fight_odds: monster-first kill at exactly 0 HP is not a kill",
-     "            if healed_monster - kill <= 0:\n                _add_ended(ended, (True, round_no, drunk,",
-     "            if healed_monster - kill < 0:\n                _add_ended(ended, (True, round_no, drunk,"),
+     "            if healed_monster - through <= 0:\n                _add_ended(ended, (True, round_no, drunk,",
+     "            if healed_monster - through < 0:\n                _add_ended(ended, (True, round_no, drunk,"),
     ("fight_odds: the player survives at exactly 0 HP (player first)",
      "            if healed - hit <= 0:\n                _add_ended(ended, (False, round_no, 0, "
      "stock - left), prob * pk * ph)",
@@ -981,11 +1033,11 @@ FIGHT_ODDS_MUTATIONS = [
      "        healed = cure(player, p_heal, max_pool)",
      "        healed = player"),
     ("fight_odds: the player's crit heals nothing (monster first)",
-     "(healed_monster - kill, cure(drunk, p_heal, max_pool), rest)",
-     "(healed_monster - kill, drunk, rest)"),
+     "(healed_monster - through, kept, cure(drunk, p_heal, max_pool), rest)",
+     "(healed_monster - through, kept, drunk, rest)"),
     ("fight_odds: the monster's crit heals nothing (player first)",
-     "(cure(monster - kill, m_heal, m_cap), healed - hit, left)",
-     "(monster - kill, healed - hit, left)"),
+     "(cure(monster - through, m_heal, m_cap), kept, healed - hit, left)",
+     "(monster - through, kept, healed - hit, left)"),
     ("fight_odds: the monster's crit heals nothing (monster first)",
      "        healed_monster = cure(monster, m_heal, m_cap)",
      "        healed_monster = monster"),
@@ -1060,6 +1112,15 @@ CONSUMABLE_PRICE_CORE_MUTATIONS = [
 # Killed by formal/diff/test_group_fight_diff.py (exact agreement with
 # `Formal.GroupFight.groupOutcome`).
 GROUP_FIGHT_MUTATIONS = [
+    ("group_fight: the boss's barrier never refreshes",
+     "        if refresh and not early:\n            shield = full\n",
+     "        if False:\n            shield = full\n"),
+    ("group_fight: an all-first party meets the refresh first",
+     "    shield, early = full, all_first(members)",
+     "    shield, early = full, False"),
+    ("group_fight: the gate ignores the barrier",
+     "    return barrier_rounds(boss.hp, boss.barrier, kill_rate(boss, members), all_first(members))",
+     "    return barrier_rounds(boss.hp, 0, kill_rate(boss, members), all_first(members))"),
     ("group_fight: the boss's drain is not charged",
      "    return sum(m.net for m in members) - boss.drain",
      "    return sum(m.net for m in members)"),
@@ -1142,8 +1203,8 @@ PARTY_TERMS_MUTATIONS = [
      "        hit=n.hit, area=n.terms.die_step - n.hit,",
      "        hit=n.hit, area=n.terms.die_step,"),
     ("party_terms: the boss's barrier dropped",
-     "        game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code),",
-     "        game_data.monster_hp(monster_code),"),
+     "        boss_drain(game_data, monster_code), game_data.monster_barrier(monster_code))",
+     "        boss_drain(game_data, monster_code), 0)"),
     ("party_terms: a hit carries the void drain",
      "        raw_monster, m_crit, p.critical_strike, 0, crit_player, 0, 0, p.max_hp, 0,",
      "        raw_monster, m_crit, p.critical_strike, 0, crit_player, 0, 0, p.max_hp,\n"
@@ -10686,6 +10747,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_win_threshold_core.py", survivors)
     run_group(FIGHT_TERMS_CORE_SRC, FIGHT_TERMS_PREDICT_MUTATIONS,
               "formal/diff/test_predict_win_diff.py", survivors)
+    run_group(EXPECTED_DAMAGE_SRC, EXPECTED_DAMAGE_MUTATIONS,
+              "tests/test_ai/test_expected_damage.py", survivors)
+    run_group(FIGHT_TERMS_CORE_SRC, KILL_ROUNDS_MUTATIONS,
+              "tests/test_ai/test_fight_terms_core.py", survivors)
     run_group(FIGHT_TERMS_CORE_SRC, FIGHT_TERMS_LADDER_MUTATIONS,
               "tests/test_ai/test_combat.py", survivors)
     run_group(FIGHT_TERMS_CORE_SRC, COMBAT_MARGIN_MUTATIONS,

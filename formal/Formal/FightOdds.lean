@@ -10,23 +10,36 @@ attacker's max (`cure`). It used to be a mean folded into every hit, which
 cleared HP breakpoints the real heal does not (C3P0 v cyclops: 0.896 modelled,
 0.807 observed over 161 fights, 0.816 exact).
 
+BARRIER. The effect text: "At the start of the fight and every 5 played turns,
+gain a protective barrier of {value} HP. All attacks are redirected to this
+barrier until it is destroyed." Lor v king_slime, 2026-10-17: the barrier is set
+back to full at the start of the monster's 5th and 10th turns, and a hit's
+excess goes through ("36 absorbed, 15 through"). The tree carries the barrier
+left: a player hit `absorb`s, and the monster's turn in every 5th round
+`refresh`es it before the monster hits (a ruling for a monster moving first: no
+such fight is on record). A monster's lifesteal heals its HP, never the barrier.
+
 ## Results
 
 * `fightOdds_sum_one` — the endings' probabilities sum to 1.
 * `fightOdds_noCrit` — with both crit chances 0 and no burn the tree is the
   single ending of `Formal.FightOutcome.fightOutcome` (for a monster with
-  positive HP; that walk charges burn as a flat bound, the tree as ticks).
+  positive HP and a non-negative barrier; that walk charges burn as a flat
+  bound, the tree as ticks; its kill round `PredictWin.killRounds` is the
+  tree's barrier walk, `PredictWin.killRounds_killsAt`).
 * `fightOdds_win_mono_stock` — more restore stock never lowers P(win).
 * `fightOdds_win_mono_hp` — with no restore stock, more starting HP never
   lowers P(win). (With stock it is FALSE: see the theorem's comment.)
 * `winProb_eq_one_of_worst` — a fight won with no stock on the worst-case path
-  (no player crit, every monster turn a crit) is won with probability 1 at any stock.
+  (no player crit, every monster turn a crit) is won with probability 1 at any
+  stock (a non-negative barrier: a smaller hit then leaves no less barrier).
 * `winProb_ge_critBound` — the counted-crit floor: if the no-stock path on which
   the player never crits and the monster crits its first `c` turns wins, P(win)
   at any stock is at least P(at most `c` of that path's monster turns crit)
   (`critBound`, a single path plus a binomial table, cheap for the kernel). The
   path heals the monster `mUp` on EVERY monster turn, uncapped, so it bounds
-  every real monster pool whichever turns crit.
+  every real monster pool whichever turns crit (its barrier, hit by the normal
+  kill only, bounds every real barrier).
 
 Lean core only — no Mathlib.
 -/
@@ -36,7 +49,8 @@ namespace Formal.FightOdds
 
 open Formal.FightOutcome (Terms scale gate roundsToKill effHp drink fightOutcome Exit walk
   coupled coupled_le coupled_sub gate_none_dieStep)
-open Formal.PredictWin (maxTurns ceilDiv ceilDiv_mul_ge ceilDiv_pred_mul_lt ceilDiv_pos)
+open Formal.PredictWin (maxTurns ceilDiv ceilDiv_mul_ge ceilDiv_pred_mul_lt ceilDiv_pos absorb refresh
+  preShield postShield killsAt killRounds_killsAt not_walled_of_le)
 
 /-- One round's charges ×10000 and the crit chances in percent. -/
 structure Damage where
@@ -54,6 +68,9 @@ structure Damage where
   pHeal : Int := 0
   /-- The monster's lifesteal heal on its crit turn, ×10000; 0 without lifesteal. -/
   mHeal : Int := 0
+  /-- The monster's barrier HP, raised at the start and refreshed every 5
+  monster turns (`PredictWin.refresh`); 0 without one. -/
+  barrier : Int := 0
 
 structure Ending where
   win : Bool
@@ -85,25 +102,30 @@ def tick (d : Damage) (pf : Bool) (r : Int) : Int :=
 def scaleBy (w : Rat) (xs : List (Rat × Ending)) : List (Rat × Ending) :=
   xs.map fun e => (w * e.1, e.2)
 
-/-- The tree from round `r` with `fuel` rounds left. A player turn takes its
-burn tick, a loss if it empties the pool, then drinks (`q := drink …`)
-before it hits; a crit that does not kill heals the player (`cure`, capped at
-`maxPool`). A monster crit heals the monster (capped at its HP). A killing
-blow heals nobody: the fight is over. -/
+/-- The tree from round `r` with `fuel` rounds left, the monster's pool `m`
+behind `s` of barrier. A player turn takes its burn tick, a loss if it empties
+the pool, then drinks (`q := drink …`) before it hits; the hit is `absorb`ed by
+the barrier and what passes through kills or not. A crit that does not kill
+heals the player (`cure`, capped at `maxPool`). A monster crit heals the
+monster's HP (capped at its HP, never the barrier). The monster's turn in every
+5th round refreshes the barrier first (`refresh`): after the player's hit when
+the player moves first, before it when the monster does. A killing blow heals
+nobody: the fight is over. -/
 def tree (d : Damage) (pf : Bool) (maxPool rPool : Int) (stock : Nat) :
-    Nat → Int → Int → Int → Nat → List (Rat × Ending)
-  | 0, r, _, _, k => [(1, ⟨false, r - 1, 0, stock - k⟩)]
-  | fuel + 1, r, m, p, k =>
+    Nat → Int → Int → Int → Int → Nat → List (Rat × Ending)
+  | 0, r, _, _, _, k => [(1, ⟨false, r - 1, 0, stock - k⟩)]
+  | fuel + 1, r, m, s, p, k =>
     if pf then
       if 0 < tick d pf r ∧ p - tick d pf r ≤ 0 then [(1, ⟨false, r, 0, stock - k⟩)]
       else
         let q := drink (p - tick d pf r) maxPool rPool k
         (roll d.pCrit d.killNormal d.killCrit d.pHeal).flatMap fun (wk, kill, ph) =>
-          if m - kill ≤ 0 then [(wk, ⟨true, r, q.1, stock - q.2⟩)]
+          if m - (absorb s kill).1 ≤ 0 then [(wk, ⟨true, r, q.1, stock - q.2⟩)]
           else scaleBy wk ((roll d.mCrit d.dieNormal d.dieCrit d.mHeal).flatMap fun (wh, hit, mh) =>
             if cure q.1 ph maxPool - hit ≤ 0 then [(wh, ⟨false, r, 0, stock - q.2⟩)]
             else scaleBy wh (tree d pf maxPool rPool stock fuel (r + 1)
-              (cure (m - kill) mh (d.monsterHp * scale)) (cure q.1 ph maxPool - hit) q.2))
+              (cure (m - (absorb s kill).1) mh (d.monsterHp * scale))
+              (refresh (absorb s kill).2 (d.barrier * scale) r) (cure q.1 ph maxPool - hit) q.2))
     else
       (roll d.mCrit d.dieNormal d.dieCrit d.mHeal).flatMap fun (wh, hit, mh) =>
         if p - hit ≤ 0 then [(wh, ⟨false, r, 0, stock - k⟩)]
@@ -111,9 +133,11 @@ def tree (d : Damage) (pf : Bool) (maxPool rPool : Int) (stock : Nat) :
         else
           let q := drink (p - hit - tick d pf r) maxPool rPool k
           scaleBy wh ((roll d.pCrit d.killNormal d.killCrit d.pHeal).flatMap fun (wk, kill, ph) =>
-            if cure m mh (d.monsterHp * scale) - kill ≤ 0 then [(wk, ⟨true, r, q.1, stock - q.2⟩)]
+            if cure m mh (d.monsterHp * scale) - (absorb (refresh s (d.barrier * scale) r) kill).1 ≤ 0
+            then [(wk, ⟨true, r, q.1, stock - q.2⟩)]
             else scaleBy wk (tree d pf maxPool rPool stock fuel (r + 1)
-              (cure m mh (d.monsterHp * scale) - kill) (cure q.1 ph maxPool) q.2))
+              (cure m mh (d.monsterHp * scale) - (absorb (refresh s (d.barrier * scale) r) kill).1)
+              (absorb (refresh s (d.barrier * scale) r) kill).2 (cure q.1 ph maxPool) q.2))
 
 /-- `fight_odds_core.fight_odds`, unmerged. -/
 def fightOdds (t : Terms) (d : Damage) (hp maxHp : Int) (restore stock : Nat) :
@@ -123,7 +147,7 @@ def fightOdds (t : Terms) (d : Damage) (hp maxHp : Int) (restore stock : Nat) :
   | .none =>
     if effHp hp maxHp * scale ≤ 0 then [(1, ⟨false, 0, 0, 0⟩)]
     else tree d t.playerFirst (maxHp * scale) ((restore : Int) * scale) stock
-      maxTurns.toNat 1 (d.monsterHp * scale) (effHp hp maxHp * scale) stock
+      maxTurns.toNat 1 (d.monsterHp * scale) (d.barrier * scale) (effHp hp maxHp * scale) stock
   | _ => [(1, ⟨false, 0, 0, 0⟩)]
 
 /-- P(win). -/
@@ -314,13 +338,13 @@ theorem mass_single (w : Rat) (e : Ending) : mass [(w, e)] = w := by
 
 theorem tree_mass (d : Damage) (pf : Bool) (maxPool rPool : Int) (stock : Nat)
     (hp : d.pCrit ≤ 100) (hm : d.mCrit ≤ 100) :
-    ∀ (fuel : Nat) (r m p : Int) (k : Nat),
-      mass (tree d pf maxPool rPool stock fuel r m p k) = 1 := by
+    ∀ (fuel : Nat) (r m s p : Int) (k : Nat),
+      mass (tree d pf maxPool rPool stock fuel r m s p k) = 1 := by
   intro fuel
   induction fuel with
-  | zero => intro r m p k; simp only [tree]; exact mass_single _ _
+  | zero => intro r m s p k; simp only [tree]; exact mass_single _ _
   | succ fuel ih =>
-    intro r m p k
+    intro r m s p k
     cases pf
     · simp only [tree, Bool.false_eq_true, if_false]
       apply mass_flatMap_roll _ _ _ _ hm
@@ -361,7 +385,7 @@ theorem fightOdds_sum_one (t : Terms) (d : Damage) (hp maxHp : Int) (restore sto
   · exact mass_single _ _
   · split
     · exact mass_single _ _
-    · exact tree_mass _ _ _ _ _ hp' hm _ _ _ _ _
+    · exact tree_mass _ _ _ _ _ hp' hm _ _ _ _ _ _
   · exact mass_single _ _
 
 /-! ### (b) With no crit the tree is the deterministic walk. -/
@@ -372,9 +396,9 @@ theorem tick_nil (d : Damage) (pf : Bool) (r : Int) (h : d.burn = []) : tick d p
 
 theorem tree_noCrit (d : Damage) (pf : Bool) (maxPool rPool : Int) (stock : Nat)
     (hp0 : d.pCrit = 0) (hm0 : d.mCrit = 0) (hb : d.burn = []) :
-    ∀ (n fuel : Nat) (r m p : Int) (k : Nat), n < fuel →
-      (n : Int) * d.killNormal < m → m ≤ (n : Int) * d.killNormal + d.killNormal →
-      tree d pf maxPool rPool stock fuel r m p k =
+    ∀ (n fuel : Nat) (r m s p : Int) (k : Nat), n < fuel →
+      killsAt d.killNormal (d.barrier * scale) pf n r m s →
+      tree d pf maxPool rPool stock fuel r m s p k =
         [(1, ⟨(walk pf d.dieNormal maxPool rPool (n + 1) r p k).win,
               (walk pf d.dieNormal maxPool rPool (n + 1) r p k).turns,
               (walk pf d.dieNormal maxPool rPool (n + 1) r p k).pool,
@@ -382,43 +406,37 @@ theorem tree_noCrit (d : Damage) (pf : Bool) (maxPool rPool : Int) (stock : Nat)
   intro n
   induction n with
   | zero =>
-    intro fuel r m p k hf hlo hhi
+    intro fuel r m s p k hf hka
     obtain ⟨f, rfl⟩ : ∃ f, fuel = f + 1 := ⟨fuel - 1, by omega⟩
-    have hk : m - d.killNormal ≤ 0 := by omega
     cases pf
-    · simp only [tree, walk, hp0, hm0, roll_zero, cure_zero, tick_nil d _ _ hb, Int.lt_irrefl, false_and,
+    · simp only [killsAt, preShield, Bool.false_eq_true, if_false] at hka
+      simp only [tree, walk, hp0, hm0, roll_zero, cure_zero, tick_nil d _ _ hb, Int.lt_irrefl, false_and,
         Int.sub_zero, if_false, List.flatMap_cons, List.flatMap_nil,
-        List.append_nil, Bool.false_eq_true, if_false, if_true, scaleBy_one, hk]
+        List.append_nil, Bool.false_eq_true, if_false, if_true, scaleBy_one, hka]
       split <;> rfl
-    · simp only [tree, walk, hp0, hm0, roll_zero, cure_zero, tick_nil d _ _ hb, Int.lt_irrefl, false_and,
+    · simp only [killsAt, preShield, if_true] at hka
+      simp only [tree, walk, hp0, hm0, roll_zero, cure_zero, tick_nil d _ _ hb, Int.lt_irrefl, false_and,
         Int.sub_zero, if_false, List.flatMap_cons, List.flatMap_nil,
-        List.append_nil, if_true, hk]
+        List.append_nil, if_true, hka]
   | succ n ih =>
-    intro fuel r m p k hf hlo hhi
+    intro fuel r m s p k hf hka
     obtain ⟨f, rfl⟩ : ∃ f, fuel = f + 1 := ⟨fuel - 1, by omega⟩
-    have hs : ((n + 1 : Nat) : Int) * d.killNormal = (n : Int) * d.killNormal + d.killNormal := by
-      rw [Int.natCast_add, Int.add_mul, Int.natCast_one, Int.one_mul]
-    have hnn : 0 ≤ (n : Int) * d.killNormal := by
-      by_cases hz : (n : Int) * d.killNormal < 0
-      · exfalso
-        have : (0 : Int) ≤ n := Int.natCast_nonneg n
-        have hkn : d.killNormal < 0 ∨ 0 ≤ d.killNormal := by omega
-        rcases hkn with hkn | hkn
-        · omega
-        · exact absurd hz (Int.not_lt.mpr (Int.mul_nonneg this hkn))
-      · omega
-    have hk : ¬ m - d.killNormal ≤ 0 := by omega
-    have hih := fun p k => ih f (r + 1) (m - d.killNormal) p k (by omega) (by omega) (by omega)
     rw [walk]
     cases pf
-    · simp only [tree, hp0, hm0, roll_zero, cure_zero, tick_nil d _ _ hb, Int.lt_irrefl, false_and,
+    · simp only [killsAt, preShield, postShield, Bool.false_eq_true, if_false] at hka
+      obtain ⟨hk, hrest⟩ := hka
+      have hih := fun p k => ih f (r + 1) _ _ p k (by omega) hrest
+      simp only [tree, hp0, hm0, roll_zero, cure_zero, tick_nil d _ _ hb, Int.lt_irrefl, false_and,
         Int.sub_zero, if_false, List.flatMap_cons, List.flatMap_nil,
         List.append_nil, Bool.false_eq_true, if_false, scaleBy_one, hk,
         Nat.add_one_ne_zero]
       split
       · rfl
       · rw [hih]
-    · simp only [tree, hp0, hm0, roll_zero, cure_zero, tick_nil d _ _ hb, Int.lt_irrefl, false_and,
+    · simp only [killsAt, preShield, postShield, if_true] at hka
+      obtain ⟨hk, hrest⟩ := hka
+      have hih := fun p k => ih f (r + 1) _ _ p k (by omega) hrest
+      simp only [tree, hp0, hm0, roll_zero, cure_zero, tick_nil d _ _ hb, Int.lt_irrefl, false_and,
         Int.sub_zero, if_false, List.flatMap_cons, List.flatMap_nil,
         List.append_nil, if_true, if_false, scaleBy_one, hk, Nat.add_one_ne_zero]
       split
@@ -435,13 +453,16 @@ theorem gate_none_kill (t : Terms) (h : gate t = .none) :
     · contradiction
     · rename_i h3; exact ⟨by omega, by omega⟩
 
-/-- (b) With both crit chances 0 the tree is the one ending of `fightOutcome`.
-A real monster has HP ≥ 1; at HP ≤ 0 the walk reports round 0 (`roundsToKill`
-is 0) while the tree always plays round 1, hence `hm0hp`. -/
+/-- (b) With both crit chances 0 the tree is the one ending of `fightOutcome`:
+the tree's barrier walk kills in `roundsToKill` rounds
+(`PredictWin.killRounds_killsAt`). A real monster has HP ≥ 1 and a barrier
+≥ 0; at HP ≤ 0 the walk reports `roundsToKill` rounds while the tree's first
+hit always kills, hence `hm0hp`. -/
 theorem fightOdds_noCrit (t : Terms) (d : Damage) (hp maxHp : Int) (restore stock : Nat)
     (hp0 : d.pCrit = 0) (hm0 : d.mCrit = 0) (hb : d.burn = [])
     (hk : d.killNormal = t.killStep) (hd : d.dieNormal = t.dieStep)
-    (hmhp : d.monsterHp = t.monsterHp) (hm0hp : 0 < t.monsterHp) :
+    (hmhp : d.monsterHp = t.monsterHp) (hbar : d.barrier = t.barrier)
+    (hm0hp : 0 < t.monsterHp) (hb0 : 0 ≤ t.barrier) :
     fightOdds t d hp maxHp restore stock =
       [(1, ⟨(fightOutcome t hp maxHp restore stock).win,
             (fightOutcome t hp maxHp restore stock).turns,
@@ -454,24 +475,14 @@ theorem fightOdds_noCrit (t : Terms) (d : Damage) (hp maxHp : Int) (restore stoc
     split
     · rfl
     · obtain ⟨hks, hcap⟩ := gate_none_kill t hg
-      have hN : 1 ≤ t.monsterHp * scale := by simp only [scale]; omega
-      have hpos := ceilDiv_pos _ _ hks hN
-      have hr : roundsToKill t = ceilDiv (t.monsterHp * scale) t.killStep := rfl
-      have hge := ceilDiv_mul_ge (t.monsterHp * scale) t.killStep hks (by omega)
-      have hlt := ceilDiv_pred_mul_lt (t.monsterHp * scale) t.killStep hks hN
-      obtain ⟨n, hn⟩ : ∃ n : Nat, (roundsToKill t).toNat = n + 1 :=
-        ⟨(roundsToKill t).toNat - 1, by omega⟩
-      have hni : roundsToKill t = (n : Int) + 1 := by omega
-      unfold roundsToKill at hni
-      rw [hni] at hge hlt
-      have hge' : t.monsterHp * scale ≤ (n : Int) * t.killStep + t.killStep := by
-        rw [Int.add_mul, Int.one_mul] at hge; exact hge
-      have hlt' : (n : Int) * t.killStep < t.monsterHp * scale := by
-        rw [Int.add_sub_cancel] at hlt; exact hlt
-      have hmt : (maxTurns.toNat) = 100 := rfl
+      obtain ⟨n, hn, hka⟩ := killRounds_killsAt t.monsterHp t.barrier t.killStep t.playerFirst hks
+        (by omega) hb0 (not_walled_of_le _ _ _ _ hcap)
+      have hn' : (roundsToKill t).toNat = n + 1 := by
+        unfold roundsToKill; omega
       have hcap' : roundsToKill t ≤ 100 := hcap
-      rw [hn, ← hd, tree_noCrit d _ _ _ _ hp0 hm0 hb n maxTurns.toNat _ _ _ _ (by omega)
-        (by rw [hk, hmhp]; exact hlt') (by rw [hk, hmhp]; exact hge')]
+      have hmt : (maxTurns.toNat) = 100 := rfl
+      rw [hn', ← hd, tree_noCrit d _ _ _ _ hp0 hm0 hb n maxTurns.toNat _ _ _ _ _
+        (by unfold roundsToKill at hcap'; omega) (by rw [hk, hbar, hmhp]; exact hka)]
   | _ => rfl
 
 /-! ### (c) More stock, or more HP with no stock, never lowers P(win). -/
@@ -510,13 +521,13 @@ theorem drink_coupled_nonneg (maxPool rPool : Int) (hM : 0 ≤ maxPool) (hr : 0 
       exact Int.le_trans hle (drink_ge_nonneg _ _ _ _ hM hr)⟩
 
 theorem tree_wp_nonneg (d : Damage) (pf : Bool) (maxPool rPool : Int) (stock : Nat) :
-    ∀ (fuel : Nat) (r m p : Int) (k : Nat),
-      0 ≤ winProb (tree d pf maxPool rPool stock fuel r m p k) := by
+    ∀ (fuel : Nat) (r m s p : Int) (k : Nat),
+      0 ≤ winProb (tree d pf maxPool rPool stock fuel r m s p k) := by
   intro fuel
   induction fuel with
-  | zero => intro r m p k; simp only [tree, winProb_single]; exact Rat.le_refl
+  | zero => intro r m s p k; simp only [tree, winProb_single]; exact Rat.le_refl
   | succ fuel ih =>
-    intro r m p k
+    intro r m s p k
     cases pf
     · simp only [tree, Bool.false_eq_true, if_false]
       rw [winProb_flatMap]
@@ -536,7 +547,7 @@ theorem tree_wp_nonneg (d : Damage) (pf : Bool) (maxPool rPool : Int) (stock : N
           simp only at hw' ⊢
           split
           · simp only [winProb_single, if_true]; exact hw'
-          · rw [winProb_scaleBy]; exact Rat.mul_nonneg hw' (ih _ _ _ _)
+          · rw [winProb_scaleBy]; exact Rat.mul_nonneg hw' (ih _ _ _ _ _)
     · simp only [tree, if_true]
       split
       · simp only [winProb_single, Bool.false_eq_true, if_false]; exact Rat.le_refl
@@ -555,22 +566,22 @@ theorem tree_wp_nonneg (d : Damage) (pf : Bool) (maxPool rPool : Int) (stock : N
           simp only at hw' ⊢
           split
           · simp only [winProb_single, Bool.false_eq_true, if_false]; exact Rat.le_refl
-          · rw [winProb_scaleBy]; exact Rat.mul_nonneg hw' (ih _ _ _ _)
+          · rw [winProb_scaleBy]; exact Rat.mul_nonneg hw' (ih _ _ _ _ _)
 
 /-- The coupled trees: the poorer state's P(win) never exceeds the richer one's
 (the monster pool and round are shared; the stock base only labels `used`). -/
 theorem tree_mono (d : Damage) (pf : Bool) (maxPool rPool : Int) (hM : 0 ≤ maxPool)
     (hr : 0 ≤ rPool) (st st' : Nat) :
-    ∀ (fuel : Nat) (r m p p' : Int) (k k' : Nat), coupled p k p' k' →
-      winProb (tree d pf maxPool rPool st fuel r m p k)
-        ≤ winProb (tree d pf maxPool rPool st' fuel r m p' k') := by
+    ∀ (fuel : Nat) (r m s p p' : Int) (k k' : Nat), coupled p k p' k' →
+      winProb (tree d pf maxPool rPool st fuel r m s p k)
+        ≤ winProb (tree d pf maxPool rPool st' fuel r m s p' k') := by
   intro fuel
   induction fuel with
   | zero =>
-    intro r m p p' k k' _
+    intro r m s p p' k k' _
     simp only [tree, winProb_single, Bool.false_eq_true, if_false]; exact Rat.le_refl
   | succ fuel ih =>
-    intro r m p p' k k' hc
+    intro r m s p p' k k' hc
     have hpp := coupled_le hc
     cases pf
     · simp only [tree, Bool.false_eq_true, if_false]
@@ -598,7 +609,7 @@ theorem tree_mono (d : Damage) (pf : Bool) (maxPool rPool : Int) (hM : 0 ≤ max
             simp only at hw' ⊢
             split
             · simp only [winProb_single, if_true]; exact hw'
-            · rw [winProb_scaleBy]; exact Rat.mul_nonneg hw' (tree_wp_nonneg _ _ _ _ _ _ _ _ _ _)
+            · rw [winProb_scaleBy]; exact Rat.mul_nonneg hw' (tree_wp_nonneg _ _ _ _ _ _ _ _ _ _ _)
         · rw [if_neg h0]
           by_cases g1 : 0 < tick d false r ∧ p' - hit - tick d false r ≤ 0
           · have g0 : 0 < tick d false r ∧ p - hit - tick d false r ≤ 0 := ⟨g1.1, by omega⟩
@@ -617,7 +628,7 @@ theorem tree_mono (d : Damage) (pf : Bool) (maxPool rPool : Int) (hM : 0 ≤ max
               simp only at hw' ⊢
               split
               · simp only [winProb_single, if_true]; exact hw'
-              · rw [winProb_scaleBy]; exact Rat.mul_nonneg hw' (tree_wp_nonneg _ _ _ _ _ _ _ _ _ _)
+              · rw [winProb_scaleBy]; exact Rat.mul_nonneg hw' (tree_wp_nonneg _ _ _ _ _ _ _ _ _ _ _)
             · rw [if_neg g0, winProb_scaleBy, winProb_scaleBy]
               apply Rat.mul_le_mul_of_nonneg_left _ hw
               rw [winProb_flatMap, winProb_flatMap]
@@ -629,7 +640,7 @@ theorem tree_mono (d : Damage) (pf : Bool) (maxPool rPool : Int) (hM : 0 ≤ max
               · simp only [winProb_single, if_true]; exact Rat.le_refl
               · rw [winProb_scaleBy, winProb_scaleBy]
                 apply Rat.mul_le_mul_of_nonneg_left _ hw'
-                exact ih _ _ _ _ _ _ (coupled_cure ph maxPool (drink_coupled_nonneg _ _ hM hr _ _ _ _
+                exact ih _ _ _ _ _ _ _ (coupled_cure ph maxPool (drink_coupled_nonneg _ _ hM hr _ _ _ _
                   (coupled_sub (tick d false r) (coupled_sub hit hc))))
     · by_cases g1 : 0 < tick d true r ∧ p' - tick d true r ≤ 0
       · have g0 : 0 < tick d true r ∧ p - tick d true r ≤ 0 := ⟨g1.1, by omega⟩
@@ -637,9 +648,9 @@ theorem tree_mono (d : Damage) (pf : Bool) (maxPool rPool : Int) (hM : 0 ≤ max
           if_false]
         exact Rat.le_refl
       · by_cases g0 : 0 < tick d true r ∧ p - tick d true r ≤ 0
-        · have hz : winProb (tree d true maxPool rPool st (fuel + 1) r m p k) = 0 := by
+        · have hz : winProb (tree d true maxPool rPool st (fuel + 1) r m s p k) = 0 := by
             simp only [tree, if_true, if_pos g0, winProb_single, Bool.false_eq_true, if_false]
-          rw [hz]; exact tree_wp_nonneg _ _ _ _ _ _ _ _ _ _
+          rw [hz]; exact tree_wp_nonneg _ _ _ _ _ _ _ _ _ _ _
         · have hd := drink_coupled_nonneg _ _ hM hr _ _ _ _ (coupled_sub (tick d true r) hc)
           have hdd := coupled_le hd
           simp only [tree, if_true, if_neg g0, if_neg g1]
@@ -669,9 +680,9 @@ theorem tree_mono (d : Damage) (pf : Bool) (maxPool rPool : Int) (hM : 0 ≤ max
               · rw [if_pos h0]
                 simp only [winProb_single, Bool.false_eq_true, if_false]
                 rw [winProb_scaleBy]
-                exact Rat.mul_nonneg hw' (tree_wp_nonneg _ _ _ _ _ _ _ _ _ _)
+                exact Rat.mul_nonneg hw' (tree_wp_nonneg _ _ _ _ _ _ _ _ _ _ _)
               · rw [if_neg h0, winProb_scaleBy, winProb_scaleBy]
-                exact Rat.mul_le_mul_of_nonneg_left (ih _ _ _ _ _ _ (coupled_sub hit hcu)) hw'
+                exact Rat.mul_le_mul_of_nonneg_left (ih _ _ _ _ _ _ _ (coupled_sub hit hcu)) hw'
 
 theorem effHp_pos {hp maxHp : Int} (h : ¬ effHp hp maxHp * scale ≤ 0) :
     0 < hp ∧ 0 < maxHp ∧ 0 < effHp hp maxHp := by
@@ -696,7 +707,7 @@ theorem fightOdds_win_mono_stock (t : Terms) (d : Damage) (hp maxHp : Int) (rest
     · rename_i h
       obtain ⟨_, hmax, _⟩ := effHp_pos h
       exact tree_mono _ _ _ _ (by simp only [scale]; omega)
-        (Int.mul_nonneg (Int.natCast_nonneg _) (by decide)) _ _ _ _ _ _ _ _ _
+        (Int.mul_nonneg (Int.natCast_nonneg _) (by decide)) _ _ _ _ _ _ _ _ _ _
         (Or.inl ⟨rfl, hs⟩)
   · exact Rat.le_refl
 
@@ -719,7 +730,7 @@ theorem fightOdds_win_mono_hp (t : Terms) (d : Damage) (hp hp' maxHp : Int) (res
       simp only [winProb_single, Bool.false_eq_true, if_false]
       split
       · simp only [winProb_single, Bool.false_eq_true, if_false]; exact Rat.le_refl
-      · exact tree_wp_nonneg _ _ _ _ _ _ _ _ _ _
+      · exact tree_wp_nonneg _ _ _ _ _ _ _ _ _ _ _
     · obtain ⟨hhp, hmax, he⟩ := effHp_pos h1
       have hle : effHp hp maxHp ≤ effHp hp' maxHp := by
         unfold effHp at he ⊢
@@ -730,7 +741,7 @@ theorem fightOdds_win_mono_hp (t : Terms) (d : Damage) (hp hp' maxHp : Int) (res
       have h1' : ¬ effHp hp' maxHp * scale ≤ 0 := by simp only [scale] at h1 ⊢; omega
       rw [if_neg h1, if_neg h1']
       exact tree_mono _ _ _ _ (by simp only [scale]; omega)
-        (Int.mul_nonneg (Int.natCast_nonneg _) (by decide)) _ _ _ _ _ _ _ _ _
+        (Int.mul_nonneg (Int.natCast_nonneg _) (by decide)) _ _ _ _ _ _ _ _ _ _
         (Or.inr ⟨rfl, by simp only [scale]; omega⟩)
   · exact Rat.le_refl
 
@@ -757,14 +768,14 @@ theorem winProb_single_le (w : Rat) (e : Ending) (hw : 0 ≤ w) :
   · exact hw
 
 theorem tree_wp_le_mass (d : Damage) (pf : Bool) (maxPool rPool : Int) (stock : Nat) :
-    ∀ (fuel : Nat) (r m p : Int) (k : Nat),
-      winProb (tree d pf maxPool rPool stock fuel r m p k)
-        ≤ mass (tree d pf maxPool rPool stock fuel r m p k) := by
+    ∀ (fuel : Nat) (r m s p : Int) (k : Nat),
+      winProb (tree d pf maxPool rPool stock fuel r m s p k)
+        ≤ mass (tree d pf maxPool rPool stock fuel r m s p k) := by
   intro fuel
   induction fuel with
-  | zero => intro r m p k; simp only [tree]; exact winProb_single_le _ _ (by decide)
+  | zero => intro r m s p k; simp only [tree]; exact winProb_single_le _ _ (by decide)
   | succ fuel ih =>
-    intro r m p k
+    intro r m s p k
     cases pf
     · simp only [tree, Bool.false_eq_true, if_false]
       rw [winProb_flatMap, mass_flatMap]
@@ -786,7 +797,7 @@ theorem tree_wp_le_mass (d : Damage) (pf : Bool) (maxPool rPool : Int) (stock : 
           split
           · exact winProb_single_le _ _ hw'
           · rw [winProb_scaleBy, mass_scaleBy]
-            exact Rat.mul_le_mul_of_nonneg_left (ih _ _ _ _) hw'
+            exact Rat.mul_le_mul_of_nonneg_left (ih _ _ _ _ _) hw'
     · simp only [tree, if_true]
       split
       · exact winProb_single_le _ _ (by decide)
@@ -807,7 +818,7 @@ theorem tree_wp_le_mass (d : Damage) (pf : Bool) (maxPool rPool : Int) (stock : 
           split
           · exact winProb_single_le _ _ hw'
           · rw [winProb_scaleBy, mass_scaleBy]
-            exact Rat.mul_le_mul_of_nonneg_left (ih _ _ _ _) hw'
+            exact Rat.mul_le_mul_of_nonneg_left (ih _ _ _ _ _) hw'
 
 theorem fightOdds_wp_le_one (t : Terms) (d : Damage) (hp maxHp : Int) (restore stock : Nat)
     (hp' : d.pCrit ≤ 100) (hm : d.mCrit ≤ 100) :
@@ -818,36 +829,57 @@ theorem fightOdds_wp_le_one (t : Terms) (d : Damage) (hp maxHp : Int) (restore s
   · split
     · simp only [winProb_single, Bool.false_eq_true, if_false]; decide
     · rw [← tree_mass d _ _ _ stock hp' hm maxTurns.toNat 1 (d.monsterHp * scale)
-        (effHp hp maxHp * scale) stock]
-      exact tree_wp_le_mass _ _ _ _ _ _ _ _ _ _
+        (d.barrier * scale) (effHp hp maxHp * scale) stock]
+      exact tree_wp_le_mass _ _ _ _ _ _ _ _ _ _ _
   · simp only [winProb_single, Bool.false_eq_true, if_false]; decide
+
+/-- A hit no smaller against a barrier no larger gets no less through and
+leaves no more barrier (the larger barrier non-negative). -/
+theorem absorb_couple {s s' a a' : Int} (ha : a' ≤ a) (hs : s ≤ s') (hs0 : 0 ≤ s') :
+    (absorb s' a').1 ≤ (absorb s a).1 ∧ (absorb s a).2 ≤ (absorb s' a').2 := by
+  unfold absorb
+  by_cases h1 : a ≤ 0 <;> by_cases h2 : a' ≤ 0 <;> simp only [h1, h2, ↓reduceIte] <;> omega
+
+theorem absorb_kept_nonneg {s : Int} (a : Int) (hs : 0 ≤ s) : 0 ≤ (absorb s a).2 := by
+  unfold absorb
+  by_cases h1 : a ≤ 0 <;> simp only [h1, ↓reduceIte] <;> omega
+
+theorem refresh_mono {s s' : Int} (full r : Int) (h : s ≤ s') :
+    refresh s full r ≤ refresh s' full r := by
+  unfold refresh; split <;> omega
+
+theorem refresh_nonneg {s full : Int} (r : Int) (hs : 0 ≤ s) (hf : 0 ≤ full) :
+    0 ≤ refresh s full r := by
+  unfold refresh; split <;> omega
 
 /-- With no stock the real tree loses nowhere the worst-case tree `d'` (no player
 crit, every monster turn a crit) wins: every real leaf wins, so P(win) is the mass.
 The worst tree heals the monster on every turn (each is a crit) and the player on
-none; the real tree's monster pool never exceeds the worst's (`cure_mono`,
-`cure_ge`) and its player pool never falls below it. -/
+none; the real tree's monster pool and barrier never exceed the worst's
+(`cure_mono`, `cure_ge`, `absorb_couple`) and its player pool never falls below it. -/
 theorem tree_worst (d d' : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
-    (hk : d.killNormal ≤ d.killCrit) (hd : d.dieNormal ≤ d.dieCrit)
+    (hk : d.killNormal ≤ d.killCrit) (hd : d.dieNormal ≤ d.dieCrit) (hB : 0 ≤ d.barrier)
     (hp0 : d'.pCrit = 0) (hm1 : d'.mCrit = 100) (hkn : d'.killNormal = d.killNormal)
     (hdc : d'.dieCrit = d.dieCrit) (htick : ∀ pf r, tick d' pf r = tick d pf r)
-    (hmh : d'.mHeal = d.mHeal) (hmhp : d'.monsterHp = d.monsterHp) :
-    ∀ (fuel : Nat) (r m m' p p' : Int), m ≤ m' → p' ≤ p →
-      winProb (tree d' pf maxPool rPool st fuel r m' p' 0) = 1 →
-      winProb (tree d pf maxPool rPool st fuel r m p 0)
-        = mass (tree d pf maxPool rPool st fuel r m p 0) := by
+    (hmh : d'.mHeal = d.mHeal) (hmhp : d'.monsterHp = d.monsterHp)
+    (hbar : d'.barrier = d.barrier) :
+    ∀ (fuel : Nat) (r m m' s s' p p' : Int), m ≤ m' → s ≤ s' → 0 ≤ s' → p' ≤ p →
+      winProb (tree d' pf maxPool rPool st fuel r m' s' p' 0) = 1 →
+      winProb (tree d pf maxPool rPool st fuel r m s p 0)
+        = mass (tree d pf maxPool rPool st fuel r m s p 0) := by
+  have hfull : 0 ≤ d.barrier * scale := Int.mul_nonneg hB (by decide)
   intro fuel
   induction fuel with
   | zero =>
-    intro r m m' p p' _ _ hw
+    intro r m m' s s' p p' _ _ _ _ hw
     simp [tree, winProb_single] at hw
   | succ fuel ih =>
-    intro r m m' p p' hm hp hw
+    intro r m m' s s' p p' hm hs hs0 hp hw
     cases pf
     · simp only [tree, Bool.false_eq_true, if_false, hp0, hm1, roll_zero, roll_hundred,
         List.flatMap_cons, List.flatMap_nil, List.append_nil, scaleBy_one,
         Formal.FightOutcome.drink_noStock, cure_zero,
-        htick, hkn, hdc, hmh, hmhp] at hw
+        htick, hkn, hdc, hmh, hmhp, hbar] at hw
       simp only [tree, Bool.false_eq_true, if_false, Formal.FightOutcome.drink_noStock]
       rw [winProb_flatMap, mass_flatMap]
       apply lsum_congr
@@ -859,6 +891,8 @@ theorem tree_worst (d d' : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
         rcases hh with ⟨_, rfl⟩ | ⟨_, rfl⟩
         · rw [cure_zero]; exact Int.le_trans hm (cure_ge _ _ _)
         · exact cure_mono _ _ hm
+      have hrs := refresh_mono (d.barrier * scale) r hs
+      have hrs0 := refresh_nonneg (s := s') (full := d.barrier * scale) r hs0 hfull
       by_cases w1 : p' - d.dieCrit ≤ 0
       · rw [if_pos w1] at hw; simp [winProb_single] at hw
       rw [if_neg w1] at hw
@@ -875,17 +909,19 @@ theorem tree_worst (d d' : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
       have hh' := roll_mem hy
       simp only at hh' ⊢
       have hkill : d.killNormal ≤ kill := by omega
+      have hab := absorb_couple hkill hrs hrs0
       split
       · rw [winProb_single, mass_single]; rfl
       · rename_i hmk
-        have w3 : ¬ cure m' d.mHeal (d.monsterHp * scale) - d.killNormal ≤ 0 := by omega
+        have w3 : ¬ cure m' d.mHeal (d.monsterHp * scale)
+            - (absorb (refresh s' (d.barrier * scale) r) d.killNormal).1 ≤ 0 := by omega
         rw [if_neg w3] at hw
-        rw [winProb_scaleBy, mass_scaleBy, ih _ _ _ _ _ (by omega)
-          (Int.le_trans (by omega) (cure_ge _ ph maxPool)) hw]
+        rw [winProb_scaleBy, mass_scaleBy, ih _ _ _ _ _ _ _ (by omega) hab.2
+          (absorb_kept_nonneg _ hrs0) (Int.le_trans (by omega) (cure_ge _ ph maxPool)) hw]
     · simp only [tree, if_true, hp0, hm1, roll_zero, roll_hundred,
         List.flatMap_cons, List.flatMap_nil, List.append_nil, scaleBy_one,
         Formal.FightOutcome.drink_noStock, cure_zero,
-        htick, hkn, hdc, hmh, hmhp] at hw
+        htick, hkn, hdc, hmh, hmhp, hbar] at hw
       by_cases w1 : 0 < tick d true r ∧ p' - tick d true r ≤ 0
       · rw [if_pos w1] at hw; simp [winProb_single] at hw
       rw [if_neg w1] at hw
@@ -898,10 +934,11 @@ theorem tree_worst (d d' : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
       have hh := roll_mem hx
       simp only at hh ⊢
       have hkill : d.killNormal ≤ kill := by omega
+      have hab := absorb_couple hkill hs hs0
       split
       · rw [winProb_single, mass_single]; rfl
       · rename_i hmk
-        have w3 : ¬ m' - d.killNormal ≤ 0 := by omega
+        have w3 : ¬ m' - (absorb s' d.killNormal).1 ≤ 0 := by omega
         rw [if_neg w3] at hw
         rw [winProb_scaleBy, mass_scaleBy, winProb_flatMap, mass_flatMap]
         congr 1
@@ -911,8 +948,8 @@ theorem tree_worst (d d' : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
         simp only at hh' ⊢
         have hhit : hit ≤ d.dieCrit := by omega
         have hcp := cure_ge (p - tick d true r) ph maxPool
-        have hcm : cure (m - kill) mh (d.monsterHp * scale)
-            ≤ cure (m' - d.killNormal) d.mHeal (d.monsterHp * scale) := by
+        have hcm : cure (m - (absorb s kill).1) mh (d.monsterHp * scale)
+            ≤ cure (m' - (absorb s' d.killNormal).1) d.mHeal (d.monsterHp * scale) := by
           rcases hh' with ⟨_, rfl⟩ | ⟨_, rfl⟩
           · rw [cure_zero]; exact Int.le_trans (by omega) (cure_ge _ _ _)
           · exact cure_mono _ _ (by omega)
@@ -920,7 +957,8 @@ theorem tree_worst (d d' : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
         · rw [if_pos w2] at hw; simp [winProb_single] at hw
         rw [if_neg w2] at hw
         have h0 : ¬ cure (p - tick d true r) ph maxPool - hit ≤ 0 := by omega
-        rw [if_neg h0, winProb_scaleBy, mass_scaleBy, ih _ _ _ _ _ hcm (by omega) hw]
+        rw [if_neg h0, winProb_scaleBy, mass_scaleBy, ih _ _ _ _ _ _ _ hcm
+          (refresh_mono _ r hab.2) (refresh_nonneg r (absorb_kept_nonneg _ hs0) hfull) (by omega) hw]
 
 /-- A fight won on the worst-case path (no player crit, every monster turn a
 crit) with no restore stock is won with probability 1 — at any stock, since
@@ -929,7 +967,7 @@ worst path alone is not enough: the 50% drink threshold can let the richer
 pool skip a drink the worst pool takes (counterexample in the PR notes). -/
 theorem winProb_eq_one_of_worst (t : Terms) (d : Damage) (hp maxHp : Int) (restore stock : Nat)
     (hk : d.killNormal ≤ d.killCrit) (hd : d.dieNormal ≤ d.dieCrit)
-    (hp100 : d.pCrit ≤ 100) (hm100 : d.mCrit ≤ 100)
+    (hp100 : d.pCrit ≤ 100) (hm100 : d.mCrit ≤ 100) (hB : 0 ≤ d.barrier)
     (hw : winProb (fightOdds t { d with pCrit := 0, mCrit := 100 } hp maxHp restore 0) = 1) :
     winProb (fightOdds t d hp maxHp restore stock) = 1 := by
   have h0 : winProb (fightOdds t d hp maxHp restore 0) = 1 := by
@@ -940,9 +978,10 @@ theorem winProb_eq_one_of_worst (t : Terms) (d : Damage) (hp maxHp : Int) (resto
       by_cases he : effHp hp maxHp * scale ≤ 0
       · rw [if_pos he] at hw; simp [winProb_single] at hw
       rw [if_neg he] at hw ⊢
-      rw [tree_worst d { d with pCrit := 0, mCrit := 100 } _ _ _ _ hk hd rfl rfl rfl rfl
-        (fun _ _ => rfl) rfl rfl _ _ _ _ _ _ (Int.le_refl _) (Int.le_refl _) hw]
-      exact tree_mass _ _ _ _ _ hp100 hm100 _ _ _ _ _
+      rw [tree_worst d { d with pCrit := 0, mCrit := 100 } _ _ _ _ hk hd hB rfl rfl rfl rfl
+        (fun _ _ => rfl) rfl rfl rfl _ _ _ _ _ _ _ _ (Int.le_refl _) (Int.le_refl _)
+        (Int.mul_nonneg hB (by decide)) (Int.le_refl _) hw]
+      exact tree_mass _ _ _ _ _ hp100 hm100 _ _ _ _ _ _
     all_goals simp [winProb_single] at hw
   have hge := fightOdds_win_mono_stock t d hp maxHp restore 0 stock (Nat.zero_le _) hp100 hm100
   rw [h0] at hge
@@ -961,29 +1000,39 @@ def mUp (d : Damage) : Int := max 0 d.mHeal
 
 /-- The counted-crit path with no stock (`drink` is then the identity): the
 player never crits (so never heals), the monster crits its next `c` turns and
-then hits normal, healing `mUp` every turn. `true` iff that single path is won
+then hits normal, healing `mUp` every turn. The barrier `s` takes the normal
+kill and is refreshed as in the tree. `true` iff that single path is won
 within `fuel` rounds. -/
-def kpath (d : Damage) (pf : Bool) : Nat → Int → Int → Int → Nat → Bool
-  | 0, _, _, _, _ => false
-  | fuel + 1, r, m, p, c =>
+def kpath (d : Damage) (pf : Bool) : Nat → Int → Int → Int → Int → Nat → Bool
+  | 0, _, _, _, _, _ => false
+  | fuel + 1, r, m, s, p, c =>
     if pf then
       if 0 < tick d pf r ∧ p - tick d pf r ≤ 0 then false
-      else if m - d.killNormal ≤ 0 then true
+      else if m - (absorb s d.killNormal).1 ≤ 0 then true
       else if p - tick d pf r - khit d c ≤ 0 then false
-      else kpath d pf fuel (r + 1) (m - d.killNormal + mUp d) (p - tick d pf r - khit d c) (c - 1)
+      else kpath d pf fuel (r + 1) (m - (absorb s d.killNormal).1 + mUp d)
+        (refresh (absorb s d.killNormal).2 (d.barrier * scale) r) (p - tick d pf r - khit d c) (c - 1)
     else
       if p - khit d c ≤ 0 then false
       else if 0 < tick d pf r ∧ p - khit d c - tick d pf r ≤ 0 then false
-      else if m + mUp d - d.killNormal ≤ 0 then true
-      else kpath d pf fuel (r + 1) (m + mUp d - d.killNormal) (p - khit d c - tick d pf r) (c - 1)
+      else if m + mUp d - (absorb (refresh s (d.barrier * scale) r) d.killNormal).1 ≤ 0 then true
+      else kpath d pf fuel (r + 1) (m + mUp d - (absorb (refresh s (d.barrier * scale) r) d.killNormal).1)
+        (absorb (refresh s (d.barrier * scale) r) d.killNormal).2 (p - khit d c - tick d pf r) (c - 1)
 
 /-- The monster's turns before the never-critting player's kill, within `fuel`
-rounds (the monster pool alone decides it, healing `mUp` every monster turn). -/
-def mturns (d : Damage) (pf : Bool) : Nat → Int → Nat
-  | 0, _ => 0
-  | fuel + 1, m =>
-    if pf then (if m - d.killNormal ≤ 0 then 0 else mturns d pf fuel (m - d.killNormal + mUp d) + 1)
-    else (if m + mUp d - d.killNormal ≤ 0 then 0 else mturns d pf fuel (m + mUp d - d.killNormal)) + 1
+rounds from round `r` (the monster pool and barrier alone decide it, healing
+`mUp` every monster turn). -/
+def mturns (d : Damage) (pf : Bool) : Nat → Int → Int → Int → Nat
+  | 0, _, _, _ => 0
+  | fuel + 1, r, m, s =>
+    if pf then
+      (if m - (absorb s d.killNormal).1 ≤ 0 then 0
+       else mturns d pf fuel (r + 1) (m - (absorb s d.killNormal).1 + mUp d)
+         (refresh (absorb s d.killNormal).2 (d.barrier * scale) r) + 1)
+    else
+      (if m + mUp d - (absorb (refresh s (d.barrier * scale) r) d.killNormal).1 ≤ 0 then 0
+       else mturns d pf fuel (r + 1) (m + mUp d - (absorb (refresh s (d.barrier * scale) r) d.killNormal).1)
+         (absorb (refresh s (d.barrier * scale) r) d.killNormal).2) + 1
 
 /-- One row of the at-most-`c` binomial table from the previous one; an index
 past the row reads 1 (at most `c ≥ n` crits of `n` turns is certain). -/
@@ -1142,14 +1191,14 @@ theorem khit_zero (d : Damage) : khit d 0 = d.dieNormal := by simp [khit]
 the path from `x - dieCrit` with `c` crits wins, so does the one from
 `x - dieNormal` with `c + 1` (its pool is never lower at any check). -/
 theorem kpath_shift (d : Damage) (pf : Bool) (hd : d.dieNormal ≤ d.dieCrit) :
-    ∀ (fuel : Nat) (r m x : Int) (c : Nat),
-      kpath d pf fuel r m (x - d.dieCrit) c = true →
-      kpath d pf fuel r m (x - d.dieNormal) (c + 1) = true := by
+    ∀ (fuel : Nat) (r m s x : Int) (c : Nat),
+      kpath d pf fuel r m s (x - d.dieCrit) c = true →
+      kpath d pf fuel r m s (x - d.dieNormal) (c + 1) = true := by
   intro fuel
   induction fuel with
-  | zero => intro r m x c hw; simp [kpath] at hw
+  | zero => intro r m s x c hw; simp [kpath] at hw
   | succ fuel ih =>
-    intro r m x c hw
+    intro r m s x c hw
     have hc1 : khit d (c + 1) = d.dieCrit := khit_pos d (by omega)
     have hkg := khit_ge d hd c
     cases pf
@@ -1165,7 +1214,7 @@ theorem kpath_shift (d : Damage) (pf : Bool) (hd : d.dieNormal ≤ d.dieCrit) :
       have g2 : ¬ (0 < tick d false r ∧ x - d.dieNormal - d.dieCrit - tick d false r ≤ 0) :=
         fun h => w2 ⟨h.1, by omega⟩
       rw [if_neg g1, if_neg g2]
-      by_cases w3 : m + mUp d - d.killNormal ≤ 0
+      by_cases w3 : m + mUp d - (absorb (refresh s (d.barrier * scale) r) d.killNormal).1 ≤ 0
       · rw [if_pos w3]
       rw [if_neg w3] at hw ⊢
       cases c with
@@ -1180,7 +1229,7 @@ theorem kpath_shift (d : Damage) (pf : Bool) (hd : d.dieNormal ≤ d.dieCrit) :
             = (x - d.dieCrit - tick d false r) - d.dieCrit := by omega
         have e2 : x - d.dieNormal - d.dieCrit - tick d false r
             = (x - d.dieCrit - tick d false r) - d.dieNormal := by omega
-        rw [e1] at hw; rw [e2]; exact ih _ _ _ _ hw
+        rw [e1] at hw; rw [e2]; exact ih _ _ _ _ _ hw
     · simp only [kpath, if_true] at hw ⊢
       rw [hc1, Nat.add_sub_cancel]
       by_cases w1 : 0 < tick d true r ∧ x - d.dieCrit - tick d true r ≤ 0
@@ -1189,7 +1238,7 @@ theorem kpath_shift (d : Damage) (pf : Bool) (hd : d.dieNormal ≤ d.dieCrit) :
       have g1 : ¬ (0 < tick d true r ∧ x - d.dieNormal - tick d true r ≤ 0) :=
         fun h => w1 ⟨h.1, by omega⟩
       rw [if_neg g1]
-      by_cases w3 : m - d.killNormal ≤ 0
+      by_cases w3 : m - (absorb s d.killNormal).1 ≤ 0
       · rw [if_pos w3]
       rw [if_neg w3] at hw ⊢
       by_cases w2 : x - d.dieCrit - tick d true r - khit d c ≤ 0
@@ -1209,7 +1258,7 @@ theorem kpath_shift (d : Damage) (pf : Bool) (hd : d.dieNormal ≤ d.dieCrit) :
             = (x - tick d true r - d.dieCrit) - d.dieCrit := by omega
         have e2 : x - d.dieNormal - tick d true r - d.dieCrit
             = (x - tick d true r - d.dieCrit) - d.dieNormal := by omega
-        rw [e1] at hw; rw [e2]; exact ih _ _ _ _ hw
+        rw [e1] at hw; rw [e2]; exact ih _ _ _ _ _ hw
 
 /-- A monster turn's heal never exceeds the path's per-turn charge `mUp`. -/
 theorem cure_hit_le (d : Damage) {x : Rat × Int × Int}
@@ -1244,19 +1293,20 @@ theorem hit_level (d : Damage) (hm100 : d.mCrit ≤ 100)
 
 theorem tree_critBound (d : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
     (hk : d.killNormal ≤ d.killCrit) (hd : d.dieNormal ≤ d.dieCrit)
-    (hp100 : d.pCrit ≤ 100) (hm100 : d.mCrit ≤ 100) :
-    ∀ (fuel : Nat) (r m m' p p' : Int) (c : Nat), m ≤ m' → p' ≤ p →
-      kpath d pf fuel r m' p' c = true →
-      binom (critWn d) (critWc d) (mturns d pf fuel m') c
-        ≤ winProb (tree d pf maxPool rPool st fuel r m p 0) := by
+    (hp100 : d.pCrit ≤ 100) (hm100 : d.mCrit ≤ 100) (hB : 0 ≤ d.barrier) :
+    ∀ (fuel : Nat) (r m m' s s' p p' : Int) (c : Nat), m ≤ m' → s ≤ s' → 0 ≤ s' → p' ≤ p →
+      kpath d pf fuel r m' s' p' c = true →
+      binom (critWn d) (critWc d) (mturns d pf fuel r m' s') c
+        ≤ winProb (tree d pf maxPool rPool st fuel r m s p 0) := by
   have ⟨h1, hn, hc⟩ := crit_weights d hm100
   have hb0 := binom_nonneg _ _ h1 hn hc
   have hb1 := binom_le_one _ _ h1 hn hc
+  have hfull : 0 ≤ d.barrier * scale := Int.mul_nonneg hB (by decide)
   intro fuel
   induction fuel with
-  | zero => intro r m m' p p' c _ _ hw; simp [kpath] at hw
+  | zero => intro r m m' s s' p p' c _ _ _ _ hw; simp [kpath] at hw
   | succ fuel ih =>
-    intro r m m' p p' c hm hp hw
+    intro r m m' s s' p p' c hm hs hs0 hp hw
     have hkg := khit_ge d hd c
     cases pf
     · simp only [kpath, Bool.false_eq_true, if_false] at hw
@@ -1266,10 +1316,16 @@ theorem tree_critBound (d : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
       by_cases w2 : 0 < tick d false r ∧ p' - khit d c - tick d false r ≤ 0
       · rw [if_pos w2] at hw; exact absurd hw (by decide)
       rw [if_neg w2] at hw
+      have hrs := refresh_mono (d.barrier * scale) r hs
+      have hrs0 := refresh_nonneg (s := s') (full := d.barrier * scale) r hs0 hfull
+      have hab := absorb_couple (Int.le_refl d.killNormal) hrs hrs0
       simp only [mturns, Bool.false_eq_true, if_false]
       simp only [tree, Bool.false_eq_true, if_false, Formal.FightOutcome.drink_noStock]
-      generalize hn' : (if m' + mUp d - d.killNormal ≤ 0 then 0
-        else mturns d false fuel (m' + mUp d - d.killNormal)) = n'
+      generalize hn' : (if m' + mUp d - (absorb (refresh s' (d.barrier * scale) r) d.killNormal).1 ≤ 0
+        then 0
+        else mturns d false fuel (r + 1)
+          (m' + mUp d - (absorb (refresh s' (d.barrier * scale) r) d.killNormal).1)
+          (absorb (refresh s' (d.barrier * scale) r) d.killNormal).2) = n'
       apply hit_level d hm100
       rintro ⟨wh, h, mh⟩ hx
       have hh := roll_mem hx
@@ -1291,8 +1347,10 @@ theorem tree_critBound (d : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
             (if h ≤ d.dieNormal then binom (critWn d) (critWc d) n' c
               else bcrit (critWn d) (critWc d) n' c) = binom (critWn d) (critWc d) n' c'' ∧
             P' ≤ p - h - tick d false r ∧
-            (¬ m' + mUp d - d.killNormal ≤ 0 →
-              kpath d false fuel (r + 1) (m' + mUp d - d.killNormal) P' c'' = true) := by
+            (¬ m' + mUp d - (absorb (refresh s' (d.barrier * scale) r) d.killNormal).1 ≤ 0 →
+              kpath d false fuel (r + 1)
+                (m' + mUp d - (absorb (refresh s' (d.barrier * scale) r) d.killNormal).1)
+                (absorb (refresh s' (d.barrier * scale) r) d.killNormal).2 P' c'' = true) := by
           by_cases hhn : h ≤ d.dieNormal
           · refine ⟨c, p' - d.dieNormal - tick d false r, by rw [if_pos hhn], by omega, ?_⟩
             intro w3; rw [if_neg w3] at hw
@@ -1304,7 +1362,7 @@ theorem tree_critBound (d : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
                 omega
               have e2 : p' - d.dieNormal - tick d false r
                   = (p' - tick d false r) - d.dieNormal := by omega
-              rw [e1] at hw; rw [e2]; exact kpath_shift d false hd _ _ _ _ _ hw
+              rw [e1] at hw; rw [e2]; exact kpath_shift d false hd _ _ _ _ _ _ hw
           · have hcpos : 0 < c := hgood.resolve_left hhn
             refine ⟨c - 1, p' - d.dieCrit - tick d false r,
               by rw [if_neg hhn, bcrit, if_neg (by omega)], by omega, ?_⟩
@@ -1315,17 +1373,24 @@ theorem tree_critBound (d : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
         have hkk := roll_mem hy
         have hwk := roll_nonneg hy
         simp only at hkk hwk ⊢
+        have hkill : d.killNormal ≤ kill := by omega
+        have hab' := absorb_couple hkill hrs hrs0
         split
         · simp only [winProb_single, if_true]
           have := Rat.mul_le_mul_of_nonneg_left (hb1 n' c'') hwk
           rwa [Rat.mul_one] at this
         · rename_i hmk
-          have w3 : ¬ m' + mUp d - d.killNormal ≤ 0 := by omega
+          have w3 : ¬ m' + mUp d - (absorb (refresh s' (d.barrier * scale) r) d.killNormal).1 ≤ 0 := by
+            omega
           rw [winProb_scaleBy]
           apply Rat.mul_le_mul_of_nonneg_left _ hwk
-          have := ih (r + 1) (cure m mh (d.monsterHp * scale) - kill) (m' + mUp d - d.killNormal)
+          have := ih (r + 1) (cure m mh (d.monsterHp * scale)
+              - (absorb (refresh s (d.barrier * scale) r) kill).1)
+            (m' + mUp d - (absorb (refresh s' (d.barrier * scale) r) d.killNormal).1)
+            (absorb (refresh s (d.barrier * scale) r) kill).2
+            (absorb (refresh s' (d.barrier * scale) r) d.killNormal).2
             (cure (p - h - tick d false r) ph maxPool) P' c''
-            (by omega) (Int.le_trans hP' (cure_ge _ _ _)) (hkp w3)
+            (by omega) hab'.2 (absorb_kept_nonneg _ hrs0) (Int.le_trans hP' (cure_ge _ _ _)) (hkp w3)
           rw [← hn', if_neg w3]; exact this
       · have hc0 : c = 0 := by omega
         have hhn : ¬ h ≤ d.dieNormal := fun h' => hgood (Or.inl h')
@@ -1342,7 +1407,7 @@ theorem tree_critBound (d : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
             simp only at hwk ⊢
             split
             · simp only [winProb_single, if_true]; exact hwk
-            · rw [winProb_scaleBy]; exact Rat.mul_nonneg hwk (tree_wp_nonneg _ _ _ _ _ _ _ _ _ _)
+            · rw [winProb_scaleBy]; exact Rat.mul_nonneg hwk (tree_wp_nonneg _ _ _ _ _ _ _ _ _ _ _)
     · simp only [kpath, if_true] at hw
       by_cases w1 : 0 < tick d true r ∧ p' - tick d true r ≤ 0
       · rw [if_pos w1] at hw; exact absurd hw (by decide)
@@ -1351,14 +1416,15 @@ theorem tree_critBound (d : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
       simp only [mturns, if_true]
       simp only [tree, if_true, if_neg g0, Formal.FightOutcome.drink_noStock]
       rw [winProb_flatMap]
-      by_cases w3 : m' - d.killNormal ≤ 0
+      by_cases w3 : m' - (absorb s' d.killNormal).1 ≤ 0
       · rw [if_pos w3, binom_zero]
         apply lsum_roll_ge_const _ hp100
         rintro ⟨wk, kill, ph⟩ hy
         have hkk := roll_mem hy
         have hwk := roll_nonneg hy
         simp only at hkk hwk ⊢
-        have hmk : m - kill ≤ 0 := by omega
+        have hab := absorb_couple (show d.killNormal ≤ kill by omega) hs hs0
+        have hmk : m - (absorb s kill).1 ≤ 0 := by omega
         rw [if_pos hmk]
         simp only [winProb_single, if_true, Rat.mul_one]
         exact Rat.le_refl
@@ -1371,10 +1437,12 @@ theorem tree_critBound (d : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
       have hkk := roll_mem hy
       have hwk := roll_nonneg hy
       simp only at hkk hwk ⊢
+      have hab := absorb_couple (show d.killNormal ≤ kill by omega) hs hs0
       split
       · simp only [winProb_single, if_true]
         have := Rat.mul_le_mul_of_nonneg_left
-          (hb1 (mturns d true fuel (m' - d.killNormal + mUp d) + 1) c) hwk
+          (hb1 (mturns d true fuel (r + 1) (m' - (absorb s' d.killNormal).1 + mUp d)
+            (refresh (absorb s' d.killNormal).2 (d.barrier * scale) r) + 1) c) hwk
         rwa [Rat.mul_one] at this
       · rename_i hmk
         rw [winProb_scaleBy]
@@ -1383,7 +1451,7 @@ theorem tree_critBound (d : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
         rintro ⟨wh, h, mh⟩ hx
         have hh := roll_mem hx
         have hwh := roll_nonneg hx
-        have hcm := cure_hit_le d hx (m - kill)
+        have hcm := cure_hit_le d hx (m - (absorb s kill).1)
         have hcp := cure_ge (p - tick d true r) ph maxPool
         simp only at hh hwh hcm ⊢
         by_cases hgood : h ≤ d.dieNormal ∨ 0 < c
@@ -1396,31 +1464,43 @@ theorem tree_critBound (d : Damage) (pf : Bool) (maxPool rPool : Int) (st : Nat)
           apply Rat.mul_le_mul_of_nonneg_left _ hwh
           obtain ⟨c'', P', hV, hP', hkp⟩ : ∃ (c'' : Nat) (P' : Int),
               (if h ≤ d.dieNormal then
-                  binom (critWn d) (critWc d) (mturns d true fuel (m' - d.killNormal + mUp d)) c
-                else bcrit (critWn d) (critWc d) (mturns d true fuel (m' - d.killNormal + mUp d)) c)
-                = binom (critWn d) (critWc d) (mturns d true fuel (m' - d.killNormal + mUp d)) c'' ∧
+                  binom (critWn d) (critWc d) (mturns d true fuel (r + 1)
+                    (m' - (absorb s' d.killNormal).1 + mUp d)
+                    (refresh (absorb s' d.killNormal).2 (d.barrier * scale) r)) c
+                else bcrit (critWn d) (critWc d) (mturns d true fuel (r + 1)
+                    (m' - (absorb s' d.killNormal).1 + mUp d)
+                    (refresh (absorb s' d.killNormal).2 (d.barrier * scale) r)) c)
+                = binom (critWn d) (critWc d) (mturns d true fuel (r + 1)
+                    (m' - (absorb s' d.killNormal).1 + mUp d)
+                    (refresh (absorb s' d.killNormal).2 (d.barrier * scale) r)) c'' ∧
               P' ≤ p - tick d true r - h ∧
-              kpath d true fuel (r + 1) (m' - d.killNormal + mUp d) P' c'' = true := by
+              kpath d true fuel (r + 1) (m' - (absorb s' d.killNormal).1 + mUp d)
+                (refresh (absorb s' d.killNormal).2 (d.barrier * scale) r) P' c'' = true := by
             by_cases hhn : h ≤ d.dieNormal
             · refine ⟨c, p' - tick d true r - d.dieNormal, by rw [if_pos hhn], by omega, ?_⟩
               cases c with
               | zero => rw [khit_zero] at hw; exact hw
               | succ c =>
                 rw [khit_pos d (by omega), Nat.add_sub_cancel] at hw
-                exact kpath_shift d true hd _ _ _ _ _ hw
+                exact kpath_shift d true hd _ _ _ _ _ _ hw
             · have hcpos : 0 < c := hgood.resolve_left hhn
               refine ⟨c - 1, p' - tick d true r - d.dieCrit,
                 by rw [if_neg hhn, bcrit, if_neg (by omega)], by omega, ?_⟩
               rw [khit_pos d hcpos] at hw; exact hw
           rw [hV]
-          exact ih (r + 1) (cure (m - kill) mh (d.monsterHp * scale)) (m' - d.killNormal + mUp d)
-            (cure (p - tick d true r) ph maxPool - h) P' c'' (by omega) (by omega) hkp
+          exact ih (r + 1) (cure (m - (absorb s kill).1) mh (d.monsterHp * scale))
+            (m' - (absorb s' d.killNormal).1 + mUp d)
+            (refresh (absorb s kill).2 (d.barrier * scale) r)
+            (refresh (absorb s' d.killNormal).2 (d.barrier * scale) r)
+            (cure (p - tick d true r) ph maxPool - h) P' c'' (by omega)
+            (refresh_mono _ r hab.2) (refresh_nonneg r (absorb_kept_nonneg _ hs0) hfull)
+            (by omega) hkp
         · have hc0 : c = 0 := by omega
           have hhn : ¬ h ≤ d.dieNormal := fun h' => hgood (Or.inl h')
           rw [if_neg hhn, bcrit, if_pos hc0, Rat.mul_zero]
           split
           · simp only [winProb_single, Bool.false_eq_true, if_false]; exact Rat.le_refl
-          · rw [winProb_scaleBy]; exact Rat.mul_nonneg hwh (tree_wp_nonneg _ _ _ _ _ _ _ _ _ _)
+          · rw [winProb_scaleBy]; exact Rat.mul_nonneg hwh (tree_wp_nonneg _ _ _ _ _ _ _ _ _ _ _)
 
 /-- The proved P(win) floor of a fight at no stock (see `winProb_ge_critBound`):
 if the counted-crit path from the fight's start with budget `c` wins, every path
@@ -1431,8 +1511,10 @@ def critBound (t : Terms) (d : Damage) (hp maxHp : Int) (c : Nat) : Rat :=
   | .outSustain => 1
   | .none =>
     if effHp hp maxHp * scale ≤ 0 then 0
-    else if kpath d t.playerFirst maxTurns.toNat 1 (d.monsterHp * scale) (effHp hp maxHp * scale) c
-    then binom (critWn d) (critWc d) (mturns d t.playerFirst maxTurns.toNat (d.monsterHp * scale)) c
+    else if kpath d t.playerFirst maxTurns.toNat 1 (d.monsterHp * scale) (d.barrier * scale)
+      (effHp hp maxHp * scale) c
+    then binom (critWn d) (critWc d)
+      (mturns d t.playerFirst maxTurns.toNat 1 (d.monsterHp * scale) (d.barrier * scale)) c
     else 0
   | _ => 0
 
@@ -1444,7 +1526,7 @@ and a player crit only kills sooner; more stock never lowers P(win)
 case's cousin. -/
 theorem winProb_ge_critBound (t : Terms) (d : Damage) (hp maxHp : Int) (restore stock c : Nat)
     (hk : d.killNormal ≤ d.killCrit) (hd : d.dieNormal ≤ d.dieCrit)
-    (hp100 : d.pCrit ≤ 100) (hm100 : d.mCrit ≤ 100) :
+    (hp100 : d.pCrit ≤ 100) (hm100 : d.mCrit ≤ 100) (hB : 0 ≤ d.barrier) :
     critBound t d hp maxHp c ≤ winProb (fightOdds t d hp maxHp restore stock) := by
   refine Rat.le_trans ?_
     (fightOdds_win_mono_stock t d hp maxHp restore 0 stock (Nat.zero_le _) hp100 hm100)
@@ -1456,9 +1538,9 @@ theorem winProb_ge_critBound (t : Terms) (d : Damage) (hp maxHp : Int) (restore 
     · simp only [winProb_single, Bool.false_eq_true, if_false]; exact Rat.le_refl
     · split
       · rename_i hw
-        exact tree_critBound d _ _ _ 0 hk hd hp100 hm100 _ _ _ _ _ _ _
-          (Int.le_refl _) (Int.le_refl _) hw
-      · exact tree_wp_nonneg _ _ _ _ _ _ _ _ _ _
+        exact tree_critBound d _ _ _ 0 hk hd hp100 hm100 hB _ _ _ _ _ _ _ _ _
+          (Int.le_refl _) (Int.le_refl _) (Int.mul_nonneg hB (by decide)) (Int.le_refl _) hw
+      · exact tree_wp_nonneg _ _ _ _ _ _ _ _ _ _ _
   all_goals simp only [winProb_single, Bool.false_eq_true, if_false]; exact Rat.le_refl
 
 end Formal.FightOdds

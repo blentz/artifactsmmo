@@ -37,6 +37,8 @@ def _harmless(gd: GameData) -> GameData:
     gd._monster_attack = {code: {} for code in codes}
     gd._monster_resistance = {code: {} for code in codes}
     gd._monster_critical_strike = dict.fromkeys(codes, 0)
+    # Who moves first sets where the barrier refresh falls (`kill_rounds`).
+    gd._monster_initiative = dict.fromkeys(codes, 0)
     # HP only where a case has not already set its own — several pin xp-per-kill,
     # which reads it. The value is irrelevant to the damage term (empty attack
     # already forces 0), it just has to exist.
@@ -879,6 +881,7 @@ class TestTheWalkCarriesAGrowingBody:
         gd._monster_attack = {"wolf": {"earth": 6}}
         gd._monster_resistance = {"wolf": {}}
         gd._monster_critical_strike = {"wolf": 0}
+        gd._monster_initiative = {"wolf": 0}
         state = make_state(level=5, xp=0, max_xp=100, max_hp=100,
                            attack={"earth": 40})
 

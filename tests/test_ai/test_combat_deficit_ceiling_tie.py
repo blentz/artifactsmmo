@@ -18,24 +18,24 @@ gain itself falls through to `_pool` order — which is `game_data.items.stats`
 insertion order, i.e. the server's items pages.
 
 THE TIE IS NOT A FIXTURE ARTEFACT, and that is the whole point of driving the
-committed real-catalogue bundle rather than a hand-built `GameData`. Swept over
-every committed scenario x every monster that scenario loses to, pricing with the
+committed real-catalogue bundle rather than a hand-built `GameData`. Swept
+(2026-10-17, after the barrier refresh model) over every committed scenario x
+every monster that scenario's margin is negative against, pricing with the
 production `acquisition_actions(..., equip=True)`:
 
-  * 249 (scenario, monster) pairs where EVERY margin-improving candidate prices
+  * 579 (scenario, monster) pairs where EVERY margin-improving candidate prices
     at the ceiling — so `gain / cost` has one denominator and the cost key is
     inert.
-  * 75 of those 249 where the top GAIN is tied as well, leaving `_pool` order as
-    the sole decider with nothing semantic under it.
-  * 49 further pairs where the ceiling-tied top-gain set has more than one member
-    even though some cheaper candidate exists.
+  * 21 of those 579 where every candidate's GAIN is tied as well (two or more
+    candidates), leaving `_pool` order as the sole decider with nothing semantic
+    under it.
 
 The two cases pinned below are drawn from that sweep:
 
-  * `l24_fisher_cooking_rung` vs `king_slime` — 23 improving candidates, all 23
-    at the ceiling, two sharing the top gain of 18. Gain decides.
-  * `l47_depth3_amulet` vs `dusk_beetle` — 9 improving candidates, all 9 at the
-    ceiling, all 9 gaining exactly 1. Catalogue order decides.
+  * `l24_fisher_cooking_rung` vs `king_slime` — 8 improving candidates, all 8
+    at the ceiling, two sharing the top gain of 61. Gain decides.
+  * `l47_depth3_amulet` vs `sandwarden` — 5 improving candidates, all 5 at the
+    ceiling, all 5 gaining exactly 1. Catalogue order decides.
 
 At `l20_band_entry`, 98 of the 108 equippables at or below the character's level
 price at the ceiling. This is the common case, not the corner.
@@ -126,9 +126,9 @@ def _actions_of(state: WorldState) -> Callable[[str, str], int]:
 def test_at_the_ceiling_the_winner_is_the_largest_raw_margin_gain() -> None:
     """Every candidate ties on cost, so the largest GAIN wins — not the first.
 
-    `l24_fisher_cooking_rung` vs `king_slime`, real catalogue: all 23 improving
+    `l24_fisher_cooking_rung` vs `king_slime`, real catalogue: all 8 improving
     candidates price at the ceiling, so `gain / cost` shares a denominator and
-    collapses to `gain`. Fifteen candidates sit EARLIER in catalogue order than
+    collapses to `gain`. Four candidates sit EARLIER in catalogue order than
     the winner and every one of them loses, which is what separates "gain
     decides" from "iteration order decides".
     """
@@ -137,16 +137,16 @@ def test_at_the_ceiling_the_winner_is_the_largest_raw_margin_gain() -> None:
 
     # The tie is real and TOTAL: nothing here has a route the character can pay
     # for, so the cap is what every one of these numbers is.
-    assert len(rows) == 23
+    assert len(rows) == 8
     assert {cost for _i, _c, _g, cost in rows} == {CEILING}
 
     top = max(gain for _i, _c, gain, _cost in rows)
     winners = [code for _i, code, gain, _cost in rows if gain == top]
-    assert top == 18
+    assert top == 61
     assert winners == ["skull_staff", "steel_battleaxe"]
-    # Fifteen earlier-in-catalogue candidates, all beaten on gain alone.
+    # Four earlier-in-catalogue candidates, all beaten on gain alone.
     first_winner_index = min(i for i, _c, gain, _cost in rows if gain == top)
-    assert sum(1 for i, _c, _g, _cost in rows if i < first_winner_index) == 15
+    assert sum(1 for i, _c, _g, _cost in rows if i < first_winner_index) == 4
 
     deficit = combat_deficit(state, _gd(), "king_slime", max_chain=1,
                              actions_of=_actions_of(state))
@@ -159,8 +159,8 @@ def test_at_the_ceiling_the_winner_is_the_largest_raw_margin_gain() -> None:
 def test_a_gain_tie_at_the_ceiling_falls_to_catalogue_order_and_takes_the_first() -> None:
     """When the GAIN ties too, `_pool` order decides — and it takes the FIRST.
 
-    `l47_depth3_amulet` vs `dusk_beetle`, real catalogue: 9 candidates improve
-    the margin, all 9 at the ceiling, all 9 by exactly +1. Nothing semantic is
+    `l47_depth3_amulet` vs `sandwarden`, real catalogue: 5 candidates improve
+    the margin, all 5 at the ceiling, all 5 by exactly +1. Nothing semantic is
     left, so the answer is `game_data.items.stats` insertion order — the server's
     items pages — and the walk's strict `score > best_score` keeps the incumbent,
     which is the earliest of them.
@@ -168,51 +168,47 @@ def test_a_gain_tie_at_the_ceiling_falls_to_catalogue_order_and_takes_the_first(
     Recorded honestly rather than defended: this is an INCIDENTAL key. It is
     ACCEPTABLE today only because the bundle's item pages are level-monotone (0
     descending steps across all 522 items), so "first in the catalogue" is
-    currently "lowest item level" — `emerald_amulet` at level 25 over
-    `greater_emerald_amulet` at level 40. Nothing in the code says that, and a
-    server that reorders its pages changes this ranking with no diff. See
+    currently "lowest item level" — the level-40 `mithril_ring` ahead of the
+    level-45 `diabolic_elixir`. Nothing in the code says that, and a server that
+    reorders its pages changes this ranking with no diff. See
     `.superpowers/sdd/PLAN_wave3b_deletion/pricing-tiebreak-audit-report.md`
     for the proposed semantic key.
 
-    WHAT THIS TEST IS NOW, AND IS NOT. It pins `combat_deficit`'s RANKING and
-    nothing further. It is not vacuous — the nine candidates still tie, and the
-    strict `>` still takes the first — but the decision it once appeared to
-    describe is gone: `deficit_upgrade_target` reads `closes`, and this pair
-    closes only at depth 3 (see the test below), so the tie decides nothing a
-    character acts on before the chain reaches its third step (see the test
-    below). That is also the answer to the level-25-for-a-level-47 objection
-    this pair provoked: it was never a tie-break defect.
+    It pins `combat_deficit`'s RANKING and nothing further. (This pair used to
+    be `dusk_beetle`, whose nine amulets tied at +1 while the model charged its
+    barrier once; refreshed every 5 turns, the barrier makes some candidates
+    gain 2 and prices some below the ceiling, so the tie is gone there.)
     """
     state = _rested("l47_depth3_amulet")
-    rows = _priced_improvers(state, "dusk_beetle")
+    rows = _priced_improvers(state, "sandwarden")
 
-    assert len(rows) == 9
+    assert len(rows) == 5
     assert {cost for _i, _c, _g, cost in rows} == {CEILING}
     assert {gain for _i, _c, gain, _cost in rows} == {1}
 
     by_catalogue = [code for _i, code, _g, _cost in rows]
-    assert by_catalogue[0] == "emerald_amulet"
-    assert "greater_emerald_amulet" in by_catalogue
+    assert by_catalogue[0] == "mithril_ring"
+    assert by_catalogue[-1] == "diabolic_elixir"
 
-    deficit = combat_deficit(state, _gd(), "dusk_beetle", max_chain=1,
+    deficit = combat_deficit(state, _gd(), "sandwarden", max_chain=1,
                              actions_of=_actions_of(state))
 
     assert deficit is not None
-    assert [s.code for s in deficit.chain] == ["emerald_amulet"]
+    assert [s.code for s in deficit.chain] == ["mithril_ring"]
 
 
-def test_the_tied_amulet_pick_closes_only_with_a_lifesteal_rune() -> None:
-    """Why the level-25-amulet objection is not a tie finding.
+def test_the_dusk_beetle_chain_closes_only_with_a_lifesteal_rune() -> None:
+    """A margin walk that stalls closes on the bare odds, at depth 3.
 
-    `l47_depth3_amulet` vs `dusk_beetle` on the real catalogue: the margin is -6
-    and the margin walk stalls at -4 — one amulet and one
-    `enhanced_boost_potion`, after which nothing on offer moves the number.
+    `l47_depth3_amulet` vs `dusk_beetle` on the real catalogue: the margin is -8
+    and the margin walk stalls at -5 — a `water_boost_potion` and a
+    `greater_sapphire_amulet`, after which nothing on offer moves the number.
     The stall falls back to the bare odds, and `greater_lifesteal_rune` lifts
     them past the bar: a lifesteal heals its share of the crit's DAMAGE
     (server logs 2026-10-17), not of the attack stat, which made every rune
-    worth half of what it is. Until then this pair closed at no depth. The
-    ranking among the nine tied +1 candidates names the first step of a
-    closing chain; no level-aware key would change what the chain ends on.
+    worth half of what it is. Until then this pair closed at no depth. (Its
+    barrier, refreshed every 5 turns since 2026-10-17, moved the margin from -6
+    to -8 and the first two steps; the rune still closes it at depth 3.)
 
     Also pinned: the answer does not move with the bound. The walk is greedy and
     prefix-stable, which is what lets `deficit_upgrade_target` pay for `closes`
@@ -227,15 +223,15 @@ def test_the_tied_amulet_pick_closes_only_with_a_lifesteal_rune() -> None:
     }
 
     assert all(d is not None for d in by_depth.values())
-    assert {d.baseline_margin for d in by_depth.values() if d is not None} == {-6}
+    assert {d.baseline_margin for d in by_depth.values() if d is not None} == {-8}
     # It closes once the walk may take the rune, and not before.
     assert {depth: d.closes for depth, d in by_depth.items() if d is not None} == {
         1: False, 2: False, 3: True, 8: True}
     deepest = by_depth[8]
     assert deepest is not None
-    assert [s.code for s in deepest.chain] == ["emerald_amulet", "enhanced_boost_potion",
+    assert [s.code for s in deepest.chain] == ["water_boost_potion", "greater_sapphire_amulet",
                                               "greater_lifesteal_rune"]
-    assert [s.margin_after for s in deepest.chain] == [-5, -4, -4]
+    assert [s.margin_after for s in deepest.chain] == [-7, -5, -5]
     # Prefix stability: every shallower chain is a prefix of the deepest one.
     for depth, deficit in by_depth.items():
         assert deficit is not None

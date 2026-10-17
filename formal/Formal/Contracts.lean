@@ -330,16 +330,17 @@ example : ∀ (i : Formal.InventoryChainSafe.Inv) (used' wnum wden : Nat),
 /-! ### PredictWin role contracts. -/
 
 -- predict_win_eq_sim: closed-form verdict = operational fight-sim verdict
--- (∀ stat tuples in the modeled domain: crit ≥ 0, HP ≥ 1, with enough sim fuel).
+-- (∀ stat tuples in the modeled domain: HP ≥ 1, barrier ≥ 0, with enough sim fuel;
+-- the kill side is the barrier walk `killSim`: absorb + refresh every 5 monster turns).
 example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
       pLifesteal pCritHit mLifesteal mCritHit mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing
       monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerAntipoison
       monsterSunShield monsterGreed monsterEnchantedMirror : Int) (playerFirst : Bool),
-    1 ≤ monsterHp + monsterBarrier → 1 ≤ playerMaxHp →
+    1 ≤ monsterHp → 0 ≤ monsterBarrier → 1 ≤ playerMaxHp →
     ∀ (fk fd : Nat),
-      (ceilDiv ((monsterHp + monsterBarrier)*10000)
+      (killRounds monsterHp monsterBarrier
         (killStepNet rawPlayer pCrit mCrit mLifesteal mCritHit monsterHp monsterHealing playerMaxHp
-          monsterVoidDrain monsterBubble monsterSunShield)).toNat ≤ fk →
+          monsterVoidDrain monsterBubble monsterSunShield) playerFirst).toNat ≤ fk →
       (ceilDiv (playerMaxHp*10000)
         (dieStep rawMonster mCrit pCrit pLifesteal pCritHit monsterPoison monsterBurn playerMaxHp
           monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison rawPlayer monsterGreed
@@ -354,7 +355,8 @@ example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
                  playerMaxHp monsterVoidDrain monsterBubble monsterSunShield
              if ks ≤ 0 then false
              else
-               let rtk := simRoundsNet (monsterHp + monsterBarrier) ks fk
+               let rtk := killSim ks (monsterBarrier * 10000) playerFirst fk 1 (monsterHp * 10000)
+                 (monsterBarrier * 10000)
                if rtk > maxTurns then false
                else if 0 < monsterReconstitution ∧ monsterReconstitution ≤ rtk then false
                else
@@ -366,7 +368,7 @@ example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
                    let rtd := simRoundsNet playerMaxHp ds fd
                    if playerFirst then rtk ≤ rtd else rtk < rtd) :=
   @predict_win_eq_sim
--- maxturns_sound: rounds_to_kill > MAX_TURNS ⇒ ¬win (effective HP = monsterHp+barrier)
+-- maxturns_sound: rounds_to_kill > MAX_TURNS ⇒ ¬win (rounds behind the refreshed barrier)
 example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
       pLifesteal pCritHit mLifesteal mCritHit mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing
       monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerAntipoison
@@ -374,9 +376,9 @@ example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
     0 < rawPlayer →
     0 < killStepNet rawPlayer pCrit mCrit mLifesteal mCritHit monsterHp monsterHealing playerMaxHp
       monsterVoidDrain monsterBubble monsterSunShield →
-    ceilDiv ((monsterHp + monsterBarrier)*10000)
+    killRounds monsterHp monsterBarrier
       (killStepNet rawPlayer pCrit mCrit mLifesteal mCritHit monsterHp monsterHealing playerMaxHp
-        monsterVoidDrain monsterBubble monsterSunShield) > maxTurns →
+        monsterVoidDrain monsterBubble monsterSunShield) playerFirst > maxTurns →
     predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
       pLifesteal pCritHit mLifesteal mCritHit mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing
       monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerAntipoison
@@ -3407,7 +3409,7 @@ example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
     = Formal.FightOutcome.closedWin ⟨rawPlayer,
         Formal.PredictWin.killStepNet rawPlayer pCrit mCrit mLifesteal mCritHit monsterHp
           monsterHealing playerMaxHp monsterVoidDrain monsterBubble monsterSunShield,
-        monsterHp + monsterBarrier, monsterReconstitution,
+        monsterHp, monsterBarrier, monsterReconstitution,
         Formal.PredictWin.dieStep rawMonster mCrit pCrit pLifesteal pCritHit monsterPoison
           monsterBurn playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison
           rawPlayer monsterGreed monsterEnchantedMirror mAtkSum,
@@ -3464,7 +3466,7 @@ example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp 
 example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp maxHp : Int)
     (restore stock : Nat), d.pCrit = 0 → d.mCrit = 0 → d.burn = [] →
     d.killNormal = t.killStep → d.dieNormal = t.dieStep → d.monsterHp = t.monsterHp →
-    0 < t.monsterHp →
+    d.barrier = t.barrier → 0 < t.monsterHp → 0 ≤ t.barrier →
     Formal.FightOdds.fightOdds t d hp maxHp restore stock =
       [(1, ⟨(Formal.FightOutcome.fightOutcome t hp maxHp restore stock).win,
             (Formal.FightOutcome.fightOutcome t hp maxHp restore stock).turns,
@@ -3486,7 +3488,7 @@ example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp 
 
 example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp maxHp : Int)
     (restore stock : Nat), d.killNormal ≤ d.killCrit → d.dieNormal ≤ d.dieCrit →
-    d.pCrit ≤ 100 → d.mCrit ≤ 100 →
+    d.pCrit ≤ 100 → d.mCrit ≤ 100 → 0 ≤ d.barrier →
     Formal.FightOdds.winProb
       (Formal.FightOdds.fightOdds t { d with pCrit := 0, mCrit := 100 } hp maxHp restore 0) = 1 →
     Formal.FightOdds.winProb (Formal.FightOdds.fightOdds t d hp maxHp restore stock) = 1 :=
@@ -3494,7 +3496,7 @@ example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp 
 
 example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp maxHp : Int)
     (restore stock c : Nat), d.killNormal ≤ d.killCrit → d.dieNormal ≤ d.dieCrit →
-    d.pCrit ≤ 100 → d.mCrit ≤ 100 →
+    d.pCrit ≤ 100 → d.mCrit ≤ 100 → 0 ≤ d.barrier →
     Formal.FightOdds.critBound t d hp maxHp c
       ≤ Formal.FightOdds.winProb (Formal.FightOdds.fightOdds t d hp maxHp restore stock) :=
   @Formal.FightOdds.winProb_ge_critBound
@@ -3502,16 +3504,19 @@ example : ∀ (t : Formal.FightOutcome.Terms) (d : Formal.FightOdds.Damage) (hp 
 /-! ### GroupFight contracts. -/
 
 example : ∀ (b : Formal.GroupFight.Boss) (m : Formal.GroupFight.Member),
+    0 ≤ b.barrier → (0 < b.hp ∨ b.barrier = 0) →
     Formal.GroupFight.groupOutcome b [m] =
       let s := Formal.FightOutcome.fightOutcome
-        ⟨m.rawPlayer, m.net - b.drain, b.hp, b.recon, m.hit + m.area, m.first⟩
+        ⟨m.rawPlayer, m.net - b.drain, b.hp, b.barrier, b.recon, m.hit + m.area, m.first⟩
         m.hp m.maxHp m.restore m.stock
       ⟨s.win, s.turns, [s.hpEnd], [s.used]⟩ :=
   @Formal.GroupFight.groupOutcome_single
 
 example : ∀ (b : Formal.GroupFight.Boss) (ms : List Formal.GroupFight.Member)
     (m : Formal.GroupFight.Member),
-    0 < Formal.GroupFight.killRate b ms → 0 ≤ m.net → 0 ≤ b.hp →
+    0 < Formal.GroupFight.killRate b ms → 0 ≤ m.net → 0 ≤ b.hp → 0 ≤ b.barrier →
+    ((Formal.GroupFight.allFirst (m :: ms) = Formal.GroupFight.allFirst ms ∧
+        Formal.GroupFight.killRounds b ms ≤ maxTurns) ∨ b.barrier = 0) →
     Formal.GroupFight.killRounds b (m :: ms) ≤ Formal.GroupFight.killRounds b ms :=
   @Formal.GroupFight.killRounds_antitone
 

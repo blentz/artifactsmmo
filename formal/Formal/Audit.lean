@@ -66,6 +66,16 @@ open Formal.PriorityBand
 #print axioms maxturns_sound
 #print axioms predict_win_mono_player
 #print axioms predict_win_mono_monsterhp
+#print axioms Formal.PredictWin.killRoundsCore_spec
+#print axioms Formal.PredictWin.killSim_eq_killRounds
+#print axioms Formal.PredictWin.killSim_walled
+#print axioms Formal.PredictWin.killRounds_killsAt
+#print axioms Formal.PredictWin.killRounds_pos
+#print axioms Formal.PredictWin.killRounds_antitone_ks
+#print axioms Formal.PredictWin.killRounds_mono_hp
+#print axioms Formal.PredictWin.killRounds_mono_barrier
+#print axioms Formal.PredictWin.killRounds_zero_barrier
+#print axioms Formal.PredictWin.cumThrough_mono
 #print axioms proj_identity
 #print axioms proj_additive
 #print axioms guarded_eq_unconditional
@@ -426,8 +436,10 @@ open Formal.PriorityBand
 #print axioms Formal.FightOdds.fightOdds_win_mono_hp
 #print axioms Formal.FightOdds.winProb_eq_one_of_worst
 #print axioms Formal.FightOdds.winProb_ge_critBound
+#print axioms Formal.FightOdds.absorb_couple
 #print axioms Formal.GroupFight.groupOutcome_single
 #print axioms Formal.GroupFight.killRounds_antitone
+#print axioms Formal.GroupFight.killRounds_late_mover_counterexample
 #print axioms Formal.GroupFight.win_survivor
 #print axioms Formal.GroupFight.win_survivor_witness
 #print axioms Formal.ConsumablePrice.held_free

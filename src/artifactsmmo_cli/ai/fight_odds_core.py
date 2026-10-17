@@ -42,6 +42,17 @@ that takes the pool to 0 or below is a loss in that round. Each tick is 9/10 of
 the last, rounded down (ruling: the logs of a 7 burn cannot tell this from "less
 10% of the first", which differs by about 10 HP over a 22 burn).
 
+BARRIER. The effect text: "At the start of the fight and every 5 played
+turns, gain a protective barrier of {value} HP. All attacks are redirected to
+this barrier until it is destroyed." Lor v king_slime, 2026-10-17: the barrier
+is set back to full at the start of the monster's 5th and 10th turns, and a
+hit's excess goes through ("36 absorbed, 15 through"). So the state carries
+the barrier left; a player hit `absorb`s, and the monster's turn in every round
+divisible by `BARRIER_PERIOD` refreshes it before the monster hits (a ruling
+for a monster moving first: no such fight is on record). A monster's lifesteal
+heals its HP, never the barrier. The flat add this replaced (HP + barrier, no
+refresh) gave Lor 10 hits to kill and 0.999 at 546 HP; the slime needs 12.
+
 THE EXITS. The closed form's guard ladder decides first, with probability 1:
 the out-sustain exit is one win in `rounds_to_kill` at the starting pool; every
 other exit and a dead start is one loss in round 0 (spec ruling: the exits
@@ -55,7 +66,14 @@ from fractions import Fraction
 from functools import lru_cache
 
 from artifactsmmo_cli.ai.fight_outcome_core import drink
-from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS, SCALE, FightExit, FightTerms, effective_player_hp
+from artifactsmmo_cli.ai.fight_terms_core import (
+    BARRIER_PERIOD,
+    MAX_TURNS,
+    SCALE,
+    FightExit,
+    FightTerms,
+    effective_player_hp,
+)
 
 FIGHT_ODDS_CACHE = 4096
 """Distinct fights `fight_odds` keeps (value keys: frozen dataclasses and ints)."""
@@ -78,6 +96,9 @@ class RoundDamage:
     """The player's lifesteal heal on a crit turn, ×10000; 0 without lifesteal."""
     m_heal: int = 0
     """The monster's lifesteal heal on its crit turn, ×10000."""
+    barrier: int = 0
+    """The monster's barrier HP, raised at the start and refreshed every
+    `BARRIER_PERIOD` monster turns (module doc); 0 without one."""
 
 
 @dataclass(frozen=True)
@@ -109,8 +130,22 @@ def _tick(damage: RoundDamage, player_first: bool, round_no: int) -> int:
     return damage.burn[index] if 0 <= index < len(damage.burn) else 0
 
 
-State = tuple[int, int, int]
-"""`(monster pool, player pool, stock left)`."""
+State = tuple[int, int, int, int]
+"""`(monster pool, barrier left, player pool, stock left)`."""
+
+
+def absorb(shield: int, amount: int) -> tuple[int, int]:
+    """A hit of `amount` against a barrier of `shield`: what goes through to HP
+    and the barrier left. A non-positive amount (a mean-modelled heal past the
+    hit) goes to HP and leaves the barrier alone."""
+    if amount <= 0:
+        return amount, shield
+    return max(0, amount - shield), max(0, shield - amount)
+
+
+def _refresh(shield: int, full: int, round_no: int) -> int:
+    """The barrier after the monster's turn of `round_no` starts."""
+    return full if round_no % BARRIER_PERIOD == 0 else shield
 
 
 Roll = tuple[tuple[Fraction, int, int], ...]
@@ -157,53 +192,58 @@ def fight_odds(terms: FightTerms, damage: RoundDamage, hp_start: int, max_hp: in
     max_pool, restore_pool = max_hp * SCALE, restore * SCALE
     kills = _roll(damage.p_crit, damage.kill_normal, damage.kill_crit, damage.p_heal)
     hits = _roll(damage.m_crit, damage.die_normal, damage.die_crit, damage.m_heal)
-    m_cap = damage.monster_hp * SCALE
+    m_cap, full = damage.monster_hp * SCALE, damage.barrier * SCALE
     ended: dict[Key, Fraction] = {}
-    states: dict[State, Fraction] = {(damage.monster_hp * SCALE, pool, stock): Fraction(1)}
+    states: dict[State, Fraction] = {(m_cap, full, pool, stock): Fraction(1)}
     for round_no in range(1, MAX_TURNS + 1):
         after: dict[State, Fraction] = {}
-        for (monster, player, left), prob in states.items():
+        for (monster, shield, player, left), prob in states.items():
             tick = _tick(damage, terms.player_first, round_no)
             if terms.player_first:
-                _player_then_monster(round_no, tick, monster, player, left, prob, stock,
-                                     max_pool, restore_pool, m_cap, kills, hits, ended, after)
+                _player_then_monster(round_no, tick, (monster, shield, player, left), prob, stock,
+                                     max_pool, restore_pool, m_cap, full, kills, hits, ended, after)
             else:
-                _monster_then_player(round_no, tick, monster, player, left, prob, stock,
-                                     max_pool, restore_pool, m_cap, kills, hits, ended, after)
+                _monster_then_player(round_no, tick, (monster, shield, player, left), prob, stock,
+                                     max_pool, restore_pool, m_cap, full, kills, hits, ended, after)
         states = after
         if not states:
             break
-    for (_, _, left), prob in states.items():
+    for (_, _, _, left), prob in states.items():
         _add_ended(ended, (False, MAX_TURNS, 0, stock - left), prob)
     return tuple(Ending(p, win, turns, hp_end, used)
                  for (win, turns, hp_end, used), p in sorted(ended.items()))
 
 
-def _player_then_monster(round_no: int, tick: int, monster: int, player: int, left: int,
-                         prob: Fraction, stock: int, max_pool: int, restore_pool: int, m_cap: int,
+def _player_then_monster(round_no: int, tick: int, state: State, prob: Fraction, stock: int,
+                         max_pool: int, restore_pool: int, m_cap: int, full: int,
                          kills: Roll, hits: Roll,
                          ended: dict[Key, Fraction], after: dict[State, Fraction]) -> None:
+    monster, shield, player, left = state
     if tick > 0 and player - tick <= 0:
         _add_ended(ended, (False, round_no, 0, stock - left), prob)
         return
     player, left = drink(player - tick, max_pool, restore_pool, left)
     for pk, kill, p_heal in kills:
-        if monster - kill <= 0:
+        through, kept = absorb(shield, kill)
+        if monster - through <= 0:
             _add_ended(ended, (True, round_no, player, stock - left), prob * pk)
             continue
         healed = cure(player, p_heal, max_pool)
+        kept = _refresh(kept, full, round_no)
         for ph, hit, m_heal in hits:
             if healed - hit <= 0:
                 _add_ended(ended, (False, round_no, 0, stock - left), prob * pk * ph)
             else:
-                _add_state(after, (cure(monster - kill, m_heal, m_cap), healed - hit, left),
+                _add_state(after, (cure(monster - through, m_heal, m_cap), kept, healed - hit, left),
                            prob * pk * ph)
 
 
-def _monster_then_player(round_no: int, tick: int, monster: int, player: int, left: int,
-                         prob: Fraction, stock: int, max_pool: int, restore_pool: int, m_cap: int,
+def _monster_then_player(round_no: int, tick: int, state: State, prob: Fraction, stock: int,
+                         max_pool: int, restore_pool: int, m_cap: int, full: int,
                          kills: Roll, hits: Roll,
                          ended: dict[Key, Fraction], after: dict[State, Fraction]) -> None:
+    monster, shield, player, left = state
+    shield = _refresh(shield, full, round_no)
     for ph, hit, m_heal in hits:
         if player - hit <= 0 or (tick > 0 and player - hit - tick <= 0):
             _add_ended(ended, (False, round_no, 0, stock - left), prob * ph)
@@ -211,10 +251,11 @@ def _monster_then_player(round_no: int, tick: int, monster: int, player: int, le
         drunk, rest = drink(player - hit - tick, max_pool, restore_pool, left)
         healed_monster = cure(monster, m_heal, m_cap)
         for pk, kill, p_heal in kills:
-            if healed_monster - kill <= 0:
+            through, kept = absorb(shield, kill)
+            if healed_monster - through <= 0:
                 _add_ended(ended, (True, round_no, drunk, stock - rest), prob * ph * pk)
             else:
-                _add_state(after, (healed_monster - kill, cure(drunk, p_heal, max_pool), rest),
+                _add_state(after, (healed_monster - through, kept, cure(drunk, p_heal, max_pool), rest),
                            prob * ph * pk)
 
 

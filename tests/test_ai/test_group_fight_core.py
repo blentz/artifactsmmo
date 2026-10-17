@@ -3,7 +3,8 @@
 
 import pytest
 
-from artifactsmmo_cli.ai.fight_terms_core import FightExit
+from artifactsmmo_cli.ai.fight_outcome_core import fight_outcome
+from artifactsmmo_cli.ai.fight_terms_core import FightExit, fight_terms, kill_rounds
 from artifactsmmo_cli.ai.group_fight_core import GroupOutcome, PartyBoss, PartyMember, group_outcome, party_exit
 
 
@@ -102,3 +103,27 @@ def test_area_heal_is_capped_and_second_movers_drink():
         _m(hp=40, first=False, hit=0, area=10_000, restore=50, stock=1),
     ])
     assert out.win and out.hp_end[0] == 1_000_000 and out.used == (0, 1)
+
+
+@pytest.mark.parametrize("first", [True, False])
+def test_a_lone_member_meets_the_barrier_as_it_would_alone(first):
+    """100 a round into 400 HP behind a 100 barrier: 5 rounds moving first,
+    6 moving second (`kill_rounds`), as the solo walk."""
+    out = group_outcome(PartyBoss(400, 0, 0, 100), [_m(net=1_000_000, hit=1, first=first)])
+    solo = fight_outcome(fight_terms(10, 1_000_000, 400, 0, 1, 100, 100, first, 100), 100, 100, 0, 0)
+    assert out.win and solo.win
+    assert out.turns == solo.turns == kill_rounds(400, 100, 1_000_000, first) == (5 if first else 6)
+
+
+def test_a_party_meets_the_refresh_as_a_late_mover_unless_all_move_first():
+    """The walk lumps a round's hits; with a late mover among them they meet
+    the 5th-turn refresh before the round's damage (the slower count)."""
+    both = [_m(net=500_000, hit=1, hp=200, max_hp=200), _m(net=500_000, hit=1, hp=200, max_hp=200)]
+    mixed = [both[0], _m(net=500_000, hit=1, hp=200, max_hp=200, first=False)]
+    assert group_outcome(PartyBoss(400, 0, 0, 100), both).turns == 5
+    assert group_outcome(PartyBoss(400, 0, 0, 100), mixed).turns == 6
+
+
+def test_a_barrier_no_block_breaks_is_over_the_cap():
+    assert party_exit(PartyBoss(10, 0, 0, 500), [_m(net=1_000_000)]) is FightExit.OVER_CAP
+    assert party_exit(PartyBoss(10, 0, 0, 499), [_m(net=1_000_000)]) is FightExit.NONE

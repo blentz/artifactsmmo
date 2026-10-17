@@ -9,8 +9,13 @@ A fight's expected-value outcome with in-fight restore potions
 
 `Terms` are the closed form's resolved integers: the player's raw damage, the
 net per-round kill step and die step (×10000, `PredictWin.killStepNet` /
-`PredictWin.dieStep`), the effective monster HP (barrier included), the
-reconstitution period and the initiative tiebreak. `gate` is the closed form's
+`PredictWin.dieStep`), the monster's HP and its barrier, the reconstitution
+period and the initiative tiebreak. The kill round is `PredictWin.killRounds`:
+the barrier ("At the start of the fight and every 5 played turns, gain a
+protective barrier of {value} HP. All attacks are redirected to this barrier
+until it is destroyed.") absorbs hits and is SET back to full at the start of
+every 5th monster turn (Lor v king_slime 2026-10-17: refreshed at the monster's
+5th and 10th turns, "36 absorbed, 15 through"). `gate` is the closed form's
 guard ladder over the monster side; `exitOf` adds the player's starting HP;
 `closedWin` is the closed-form verdict over them. `closedWin_eq_predictWin`
 ties it to `Formal.PredictWin.predictWin` (which models the player at full HP).
@@ -44,7 +49,7 @@ import Formal.PredictWin
 namespace Formal.FightOutcome
 
 open Formal.PredictWin (ceilDiv maxTurns killStepNet dieStep predictWin ceilDiv_mul_ge
-  ceilDiv_pred_mul_lt ceilDiv_pos)
+  ceilDiv_pred_mul_lt ceilDiv_pos killRounds)
 
 /-- The ×10000 scale of the per-round steps. -/
 def scale : Int := 10000
@@ -59,11 +64,14 @@ structure Terms where
   rawPlayer : Int
   killStep : Int
   monsterHp : Int
+  /-- The monster's barrier HP (0 without one), refreshed every 5 monster turns. -/
+  barrier : Int
   recon : Int
   dieStep : Int
   playerFirst : Bool
 
-def roundsToKill (t : Terms) : Int := ceilDiv (t.monsterHp * scale) t.killStep
+/-- Rounds until the monster dies behind its barrier (`fight_terms_core.kill_rounds`). -/
+def roundsToKill (t : Terms) : Int := killRounds t.monsterHp t.barrier t.killStep t.playerFirst
 
 /-- Player HP at fight start: current HP capped at max, or 0 if already dead. -/
 def effHp (hp maxHp : Int) : Int := if 0 < hp then min hp maxHp else 0
@@ -283,7 +291,7 @@ theorem closedWin_eq_predictWin (rawPlayer pCrit monsterHp rawMonster mCrit play
     = closedWin ⟨rawPlayer,
         killStepNet rawPlayer pCrit mCrit mLifesteal mCritHit monsterHp monsterHealing
           playerMaxHp monsterVoidDrain monsterBubble monsterSunShield,
-        monsterHp + monsterBarrier, monsterReconstitution,
+        monsterHp, monsterBarrier, monsterReconstitution,
         dieStep rawMonster mCrit pCrit pLifesteal pCritHit monsterPoison monsterBurn
           playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison
           rawPlayer monsterGreed monsterEnchantedMirror mAtkSum,
@@ -301,7 +309,7 @@ theorem closedWin_eq_predictWin (rawPlayer pCrit monsterHp rawMonster mCrit play
   · simp [h1]
   by_cases h2 : ks ≤ 0
   · simp [h1, h2]
-  generalize ceilDiv ((monsterHp + monsterBarrier) * 10000) ks = rtk
+  generalize killRounds monsterHp monsterBarrier ks playerFirst = rtk
   by_cases h3 : rtk > maxTurns
   · simp [h1, h2, h3]
   by_cases h4 : 0 < monsterReconstitution ∧ monsterReconstitution ≤ rtk
