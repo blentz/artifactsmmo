@@ -47,13 +47,17 @@ committed bundle predates."""
 
 
 def _robby(equipment: dict[str, str] = ROBBY_WORN) -> WorldState:
-    """Robby's live shape (spec §1.2): level 41, the server's own stat totals
-    for the worn gear, gearcrafting 23, jewelrycrafting 22, weaponcrafting 22,
-    every other skill at its starting level."""
+    """Robby's live shape (spec §1.2, his sheet on 2026-10-18): level 41, the
+    server's own stat totals for the worn gear, gearcrafting 23,
+    jewelrycrafting 22, weaponcrafting 22, and the alchemy 32 and cooking 34
+    that make his potion loadouts stockable (no fight that pays him XP is won
+    on bare gear alone)."""
     worn: dict[str, str | None] = {slot: None for slot in make_state().equipment}
     worn.update(equipment)
     return make_state(level=41, hp=845, max_hp=845, gold=0, bank_items={},
-                      skills={"gearcrafting": 23, "jewelrycrafting": 22, "weaponcrafting": 22},
+                      skills={"gearcrafting": 23, "jewelrycrafting": 22, "weaponcrafting": 22,
+                              "alchemy": 32, "cooking": 34, "mining": 25, "woodcutting": 27,
+                              "fishing": 29},
                       equipment=worn, attack={"fire": 37, "earth": 37, "water": 0, "air": 0},
                       dmg=29, dmg_elements={"fire": 30, "earth": 30, "water": 0, "air": 20},
                       resistance={"fire": 7, "earth": 13, "water": 21, "air": 21},
@@ -214,7 +218,7 @@ def test_pieces_come_in_core_order(robby: GearObjective, novice: GearObjective) 
         keys = [piece_order_key(piece.layer, max(piece.gain, Fraction(0)), piece.price,
                                 rank.index(piece.slot)) for piece in objective.missing]
         assert keys == sorted(keys)
-    assert len({piece.layer for piece in robby.missing}) > 1
+    assert len({piece.layer for piece in novice.missing}) > 1
 
 
 def test_held_when_every_slot_wears_its_target(gd: GameData, novice: GearObjective) -> None:
@@ -384,3 +388,17 @@ def test_a_static_monster_on_another_layer_is_a_candidate(gd: GameData) -> None:
     it."""
     assert not gd.monster_locations("goblin_guard")
     assert "goblin_guard" in mod._candidates(_robby(), gd)
+
+
+def test_a_fight_below_the_threshold_in_its_target_is_no_candidate(
+        monkeypatch: pytest.MonkeyPatch, gd: GameData) -> None:
+    """At level 13 `wolf` out-rates `flying_snake`, and in its `L*` it wins
+    with P just under 1. With this character's threshold for wolf at 1 the
+    fight gates refuse it, so `m*` is the slower fight they take."""
+    monkeypatch.setattr(mod, "_candidates", lambda *_args: ["wolf", "flying_snake"])
+    state = _novice(gd, level=13)
+    assert _objective(state, gd).monster == "wolf"
+    fighter, _ = mod._targets(state, gd, frozenset().union(*achievable(state, gd, CTX)))["wolf"]
+    assert Fraction(0) < win_probability(fighter, gd, "wolf") < 1
+    picky = replace(state, win_thresholds={"wolf": Fraction(1)})
+    assert _objective(picky, gd).monster == "flying_snake"

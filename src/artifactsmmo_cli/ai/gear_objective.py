@@ -68,6 +68,7 @@ from artifactsmmo_cli.ai.gear_value_core import Combat, Rank
 from artifactsmmo_cli.ai.heal_catalog import POTION
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loop_rate import FoodOffer, food_menu, loop_rate
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.obtain_model.gate import GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import GEAR_OBJECTIVE_POLICY
@@ -270,6 +271,14 @@ def _rated(targets: Mapping[str, tuple[WorldState, dict[str, str]]], game_data: 
            food: tuple[FoodOffer, ...]) -> list[tuple[str, Fraction]]:
     """`(m, R)` for every candidate that can be the argmax, in candidate order.
 
+    A candidate is a fight the executor will take once `L*(m)` is worn: the
+    fighter wearing it, at full hp, passes the WINNABLE verdict every fight gate
+    and the drop gate read (`drop_fight_winnable`: the learned record does not
+    refuse it, and its bare odds or a stockable potion loadout's clear this
+    character's threshold, `combat.win_threshold` through
+    `fight_odds_core.odds_clear`). A monster it fails is no `m*`: the objective
+    would read "held" while every fight against it is refused.
+
     `R` is the no-potion loop's win odds times a kill's XP over the fight's
     seconds plus a non-negative recovery and walk back (`loop_rate`), so it
     never exceeds the odds times the XP over the fight alone. Candidates are
@@ -284,6 +293,8 @@ def _rated(targets: Mapping[str, tuple[WorldState, dict[str, str]]], game_data: 
     for code in sorted(targets, key=bound.__getitem__, reverse=True):
         if rates and bound[code] < max(rates.values()):
             break
+        if not drop_fight_winnable(targets[code][0], game_data, code):
+            continue
         rates[code] = _rate(targets[code][0], game_data, code, food)
     return [(code, rates[code]) for code in targets if code in rates]
 
@@ -354,7 +365,8 @@ def _price(state: WorldState, game_data: GameData, ctx: SelectionContext,
 def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext,
                    history: LearningStore | None) -> GearObjective | None:
     """`(L*, m*)` and the missing pieces of `L*` in pursuit order, or None when
-    no candidate monster has `R > 0` even owning the whole achievable set.
+    no candidate monster the executor would fight in its `L*` (see `_rated`)
+    has `R > 0`, even owning the whole achievable set.
 
     `m*` is the max-`R` monster; a tie goes to the higher monster level, then to
     the lower total acquisition price of its missing pieces, then to catalogue
