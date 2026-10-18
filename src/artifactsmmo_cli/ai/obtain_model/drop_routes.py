@@ -29,6 +29,7 @@ The gates on a fight, whatever it pays:
   state: grey is about level, which a rested copy shares.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from artifactsmmo_cli.ai.combat import is_winnable
@@ -39,6 +40,10 @@ from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.party_win import wins_as_a_party
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
+
+Fighter = WorldState | Callable[[str], WorldState]
+"""Who a drop fight is judged against: one character for every monster, or a
+function of the monster's code."""
 
 
 @dataclass
@@ -79,15 +84,22 @@ def _fight_gates(monster: str, state: WorldState, game_data: GameData,
 
 
 def drop_routes(item: str, state: WorldState, game_data: GameData,
-                fighter: WorldState | None = None) -> list[Route]:
+                fighter: Fighter | None = None) -> list[Route]:
     """One DROP route per monster that drops `item`, in drop-table order.
 
     `fighter`, when given, is who WINNABLE asks (rested), in place of `state`:
     a projected loadout rather than the worn gear (the global gear objective's
-    fixed point, spec 2026-10-18 §2.3). XP_POSITIVE still reads `state`'s level."""
-    rested = _Rested(state if fighter is None else fighter)
+    fixed point, spec 2026-10-18 §2.3). A callable is asked once per dropping
+    monster for the fighter that monster is judged against (its own target
+    loadout: "beatable by SOME achievable loadout"). XP_POSITIVE still reads
+    `state`'s level."""
+    shared = _Rested(state if fighter is None or callable(fighter) else fighter)
+
+    def rested(monster: str) -> _Rested:
+        return _Rested(fighter(monster)) if callable(fighter) else shared
+
     return [Route(item, SourceKind.DROP, monster, 1, UNBOUNDED_CAPACITY,
-                  _fight_gates(monster, state, game_data, rested))
+                  _fight_gates(monster, state, game_data, rested(monster)))
             for monster, _rate, _mn, _mx in game_data.monsters_dropping(item)]
 
 

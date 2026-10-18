@@ -126,3 +126,23 @@ def test_grey_droppers_count(gd: GameData) -> None:
     model = ObtainModel(state, gd, CTX, NOW)
     assert model.feasible("feather", 1, GEAR_OBJECTIVE_POLICY)
     assert not model.feasible("feather", 1, replace(GEAR_OBJECTIVE_POLICY, allow_grey=False))
+
+
+def test_a_fighter_per_monster_judges_each_dropper_on_its_own(gd: GameData) -> None:
+    """A callable fighter is asked per dropping monster, so each monster is
+    judged against its own loadout: armed for the chicken, `feather` opens;
+    unarmed for it, it does not. Stock still comes from the real state."""
+    state = _character(gd)
+    armed = _character(gd, equipment={"weapon_slot": "iron_sword"}, inventory={"iron_sword": 1})
+    asked: list[str] = []
+
+    def per_monster(monster: str) -> WorldState:
+        asked.append(monster)
+        return armed if monster == "chicken" else state
+
+    model = ObtainModel(state, gd, CTX, NOW, fighter=per_monster)
+    assert model.feasible("feather", 1, GEAR_OBJECTIVE_POLICY)
+    assert "chicken" in asked
+    assert model.in_bag("iron_sword") == 0
+    assert not ObtainModel(state, gd, CTX, NOW, fighter=lambda _monster: state).feasible(
+        "feather", 1, GEAR_OBJECTIVE_POLICY)

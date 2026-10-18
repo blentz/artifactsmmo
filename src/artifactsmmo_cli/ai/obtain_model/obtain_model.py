@@ -37,7 +37,7 @@ from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, rank_gather_sources
 from artifactsmmo_cli.ai.inventory_keep import destroyable
-from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes, gold_drop_routes
+from artifactsmmo_cli.ai.obtain_model.drop_routes import Fighter, drop_routes, gold_drop_routes
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
@@ -60,12 +60,14 @@ class ObtainModel:
 
     `fighter`, when given, is the character a DROP route's WINNABLE gate is
     asked of (at full hp) instead of `state`: a projected loadout (the global
-    gear objective's fixed point, spec 2026-10-18 §2.3). It is never stock:
-    the bag, bank and pocket are always `state`'s."""
+    gear objective's fixed point, spec 2026-10-18 §2.3), or a function giving
+    that character per dropping monster (each monster judged on its own target
+    loadout). It is never stock: the bag, bank and pocket are always
+    `state`'s."""
 
     def __init__(self, state: WorldState, game_data: GameData,
                  ctx: SelectionContext, now: datetime,
-                 fighter: WorldState | None = None) -> None:
+                 fighter: Fighter | None = None) -> None:
         self._state = state
         self._fighter = fighter
         self._gd = game_data

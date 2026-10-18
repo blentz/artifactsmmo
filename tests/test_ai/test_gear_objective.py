@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.yield_reprs import grind_xp_repr
 from artifactsmmo_cli.ai.loop_rate import food_menu
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -402,3 +403,17 @@ def test_a_fight_below_the_threshold_in_its_target_is_no_candidate(
     assert Fraction(0) < win_probability(fighter, gd, "wolf") < 1
     picky = replace(state, win_thresholds={"wolf": Fraction(1)})
     assert _objective(picky, gd).monster == "flying_snake"
+
+
+def test_a_drop_monster_is_judged_on_its_own_target(gd: GameData) -> None:
+    """§2.3: a drop is achievable when SOME achievable loadout beats its
+    monster. `forest_ring` drops only from `mushmush`, which the level-12
+    character's holdings beat only in mushmush's own `L*`, not undressed."""
+    state = _novice(gd)
+    assert [row[0] for row in gd.monsters_dropping("forest_ring")] == ["mushmush"]
+    layers = achievable(state, gd, CTX)
+    achieved = frozenset().union(*layers)
+    assert "forest_ring" in achieved
+    owned = frozenset().union(*layers[:-1])
+    assert not drop_fight_winnable(mod._bare(state, owned, gd), gd, "mushmush")
+    assert drop_fight_winnable(mod._fighters(state, owned, gd)("mushmush"), gd, "mushmush")

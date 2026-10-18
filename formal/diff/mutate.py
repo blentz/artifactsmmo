@@ -3614,8 +3614,11 @@ OBTAIN_MODEL_DROP_MUTATIONS = [
 # tests/test_ai/test_obtain_model_fighter.py.
 OBTAIN_MODEL_FIGHTER_DROP_MUTATIONS = [
     ("drop_routes: the fighter is ignored",
-     "    rested = _Rested(state if fighter is None else fighter)",
-     "    rested = _Rested(state)"),
+     "    shared = _Rested(state if fighter is None or callable(fighter) else fighter)",
+     "    shared = _Rested(state)"),
+    ("drop_routes: a per-monster fighter is ignored for the real state",
+     "        return _Rested(fighter(monster)) if callable(fighter) else shared",
+     "        return shared"),
 ]
 OBTAIN_MODEL_FIGHTER_MUTATIONS = [
     ("obtain_model: the fighter never reaches the drop gates",
@@ -5354,15 +5357,15 @@ GEAR_OBJECTIVE_CORE_MUTATIONS = [
 # dropping the filter is an equivalent mutant; the held arm beside it is.
 GEAR_OBJECTIVE_MUTATIONS = [
     ("gear objective: the worn gear judges every drop fight",
-     "        model = ObtainModel(state, game_data, ctx, now, fighter=_dressed(state, owned, game_data))",
+     "        model = ObtainModel(state, game_data, ctx, now, fighter=_fighters(state, owned, game_data))",
      "        model = ObtainModel(state, game_data, ctx, now, fighter=state)"),
     ("gear objective: the unlock fighter keeps the worn gear on",
-     "        model = ObtainModel(state, game_data, ctx, now, fighter=_dressed(state, owned, game_data))",
+     "        model = ObtainModel(state, game_data, ctx, now, fighter=_fighters(state, owned, game_data))",
      "        model = ObtainModel(state, game_data, ctx, now,"
      " fighter=fighter_owning(state, owned, game_data))"),
-    ("gear objective: the unlock fighter fights undressed",
-     "    return _wearing(bare, {slot: pick.get(slot) for slot in _GEAR_SLOTS}, game_data)",
-     "    return bare"),
+    ("gear objective: one undressed fighter judges every drop monster",
+     "            worn[monster] = _target(bare, game_data, monster)[0]",
+     "            worn[monster] = bare"),
     ("gear objective: an item a fighter could still open is dropped from later walks",
      "            elif not _reachable_by_some_fighter(model, code):",
      "            else:"),

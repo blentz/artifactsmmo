@@ -10,9 +10,10 @@ in the order they are pursued. Three questions, each answered from game data:
   item is achievable when `ObtainModel` finds it feasible under
   `GEAR_OBJECTIVE_POLICY` with the DROP fights judged against a projected
   fighter: the character owning one copy of every item achievable so far (two
-  of a ring), stripped of what it wears and dressed in the picker's
-  monster-free pick of those holdings (`_dressed`). So a drop opens as soon as
-  an achievable loadout beats its monster, never because of what is worn.
+  of a ring), stripped of what it wears and, for each dropping monster,
+  wearing that monster's own `L*` over those holdings (`_fighters`). So a drop
+  opens as soon as an achievable loadout beats its monster, never because of
+  what is worn.
 * Which monster (§2.2)? `m*` is the argmax of the advancement rate `R` over the
   monsters the fight pool reaches now on any layer. For each, `L*(m)` is the
   picker's fight loadout over the whole achievable set, taken as a fixed point
@@ -44,7 +45,7 @@ loadout.
 """
 
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
 from fractions import Fraction
@@ -55,7 +56,6 @@ from artifactsmmo_cli.ai.combat import fight_loadout
 from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.decompose_core import can_obtain
-from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.loadout_picker import _benefit, _ordered_slots
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.equipment.realizable_loadout import ownership
@@ -64,7 +64,7 @@ from artifactsmmo_cli.ai.fight_walk import odds_walk
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_core import achievable_layers, layer_of, piece_order_key
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
-from artifactsmmo_cli.ai.gear_value_core import Combat, Rank
+from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.heal_catalog import POTION
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loop_rate import FoodOffer, food_menu, loop_rate
@@ -153,19 +153,6 @@ def _bare(state: WorldState, items: frozenset[str], game_data: GameData) -> Worl
                     game_data)
 
 
-def _dressed(state: WorldState, items: frozenset[str], game_data: GameData) -> WorldState:
-    """The unlock fighter: `_bare`, then wearing the picker's monster-free pick
-    (`Rank`) of what it owns. A drop's WINNABLE gate picks per monster from the
-    fighter it is handed, with that fighter's attack as the purpose; the bare
-    fighter's attack is nothing, which blinds every pick to offense (Robby's
-    level-30 set drops out of reach), and the worn gear's attack leans toward
-    the worn gear. Dressed from the bare fighter, the attack is a real weapon's
-    and depends on the holdings alone."""
-    bare = _bare(state, items, game_data)
-    pick = pick_loadout_cached(Rank(), bare, game_data)
-    return _wearing(bare, {slot: pick.get(slot) for slot in _GEAR_SLOTS}, game_data)
-
-
 def _target(bare: WorldState, game_data: GameData,
             monster: str) -> tuple[WorldState, dict[str, str]]:
     """`L*(monster)` (its gear slots: the utility slots are the consumables',
@@ -231,7 +218,7 @@ def achievable(state: WorldState, game_data: GameData,
     now = datetime.now(UTC)
 
     def unlock(owned: frozenset[str]) -> frozenset[str]:
-        model = ObtainModel(state, game_data, ctx, now, fighter=_dressed(state, owned, game_data))
+        model = ObtainModel(state, game_data, ctx, now, fighter=_fighters(state, owned, game_data))
         fresh = set()
         for code in open_items - owned:
             if model.feasible(code, 1, GEAR_OBJECTIVE_POLICY):
@@ -241,6 +228,24 @@ def achievable(state: WorldState, game_data: GameData,
         return owned | frozenset(fresh)
 
     return achievable_layers(unlock(frozenset(open_items) & _held(state)), unlock)
+
+
+def _fighters(state: WorldState, owned: frozenset[str],
+              game_data: GameData) -> Callable[[str], WorldState]:
+    """The unlock fighter, per drop monster: owning `owned` and wearing that
+    monster's own `L*` over it (`_target` from the bare fighter), so a drop is
+    achievable when SOME achievable loadout beats its monster (§2.3), not only
+    the loadout one pick would wear for every monster. Memoized per monster for
+    this layer's holdings."""
+    bare = _bare(state, owned, game_data)
+    worn: dict[str, WorldState] = {}
+
+    def fighter(monster: str) -> WorldState:
+        if monster not in worn:
+            worn[monster] = _target(bare, game_data, monster)[0]
+        return worn[monster]
+
+    return fighter
 
 
 def _reachable_by_some_fighter(model: ObtainModel, code: str) -> bool:
