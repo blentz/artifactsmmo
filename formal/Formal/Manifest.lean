@@ -1562,3 +1562,15 @@ open Formal.PriorityBand
 #check @Formal.WinnableCascade.pick_wins_when_path_not_winnable
 #check @Formal.WinnableCascade.task_wins
 #check @Formal.WinnableCascade.totality
+-- GearObjective (spec 2026-10-18 §2.3/§2.4 — the achievable-set fixed point and the
+-- missing-piece order of `ai/gear_objective_core.py`):
+#check @Formal.GearObjective.layers_terminate          -- at most cat.length + 1 layers (well-founded, no fuel)
+#check @Formal.GearObjective.layers_monotone           -- every later layer: non-empty, unlocked by, and disjoint from the union before it
+#check @Formal.GearObjective.layers_fixed_point        -- the final union is closed under unlock on the catalogue
+#check @Formal.GearObjective.layers_witness            -- a concrete two-layer walk (non-vacuity of layers_monotone)
+#check @Formal.GearObjective.layer_first               -- a lower layer orders first whatever the gain and price
+#check @Formal.GearObjective.ratio_orders              -- within a layer, the larger gain per price orders first
+#check @Formal.GearObjective.gain_breaks_ratio_tie     -- equal ratio: the larger gain orders first
+#check @Formal.GearObjective.slot_rank_breaks_tie      -- equal ratio and gain: the smaller slot rank orders first
+#check @Formal.GearObjective.keyLt_irrefl              -- the key order is strict
+#check @Formal.GearObjective.held_iff_empty            -- the objective is held iff nothing is missing

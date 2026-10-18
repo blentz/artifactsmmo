@@ -1218,3 +1218,13 @@ open Formal.PriorityBand
 #print axioms Formal.WinnableCascade.pick_wins_when_path_not_winnable
 #print axioms Formal.WinnableCascade.task_wins
 #print axioms Formal.WinnableCascade.totality
+#print axioms Formal.GearObjective.layers_terminate
+#print axioms Formal.GearObjective.layers_monotone
+#print axioms Formal.GearObjective.layers_fixed_point
+#print axioms Formal.GearObjective.layers_witness
+#print axioms Formal.GearObjective.layer_first
+#print axioms Formal.GearObjective.ratio_orders
+#print axioms Formal.GearObjective.gain_breaks_ratio_tie
+#print axioms Formal.GearObjective.slot_rank_breaks_tie
+#print axioms Formal.GearObjective.keyLt_irrefl
+#print axioms Formal.GearObjective.held_iff_empty

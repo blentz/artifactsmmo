@@ -171,6 +171,7 @@ DECOMPOSE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decompose_core.
 GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxonomy_core.py"
 POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
 PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
+GEAR_OBJECTIVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective_core.py"
 PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
 SLOT_OCCUPANCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "slot_occupancy.py"
 REGION_EDGES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "region_edges.py"
@@ -5290,6 +5291,33 @@ PROGRESSION_TREE_MUTATIONS = [
      "    return POTION_TYPE_WEIGHTS.get(family, Fraction(1))"),
 ]
 
+# Gear objective core (spec 2026-10-18 §2.3/§2.4): unit-killed group bound to
+# tests/test_ai/test_gear_objective_core.py; the same semantics are proven in
+# Formal/GearObjective.lean and diffed by formal/diff/test_gear_objective_diff.py.
+GEAR_OBJECTIVE_CORE_MUTATIONS = [
+    ("gear objective: layer dropped from the piece key (dependency no longer first)",
+     "    return (layer, -(gain / price), -gain, slot_rank)",
+     "    return (0, -(gain / price), -gain, slot_rank)"),
+    ("gear objective: raw gain ranked before gain per price",
+     "    return (layer, -(gain / price), -gain, slot_rank)",
+     "    return (layer, -gain, -(gain / price), slot_rank)"),
+    ("gear objective: a free price admitted",
+     '    assert price > 0, f"piece price must be positive, got {price}"',
+     '    assert price >= 0, f"piece price must be positive, got {price}"'),
+    ("gear objective: the walk stops after layer 1",
+     "        if not fresh:",
+     "        if not fresh or len(layers) > 1:"),
+    ("gear objective: a shrinking unlock accepted",
+     '        assert union <= unlocked, f"unlock shrank the achievable set: lost {sorted(union - unlocked)}"',
+     "        pass"),
+    ("gear objective: an item in two layers accepted",
+     '            assert item not in index, f"{item} appears in layers {index[item]} and {depth}"',
+     "            pass"),
+    ("gear objective: held with one piece still missing",
+     "    return not missing",
+     "    return len(missing) <= 1"),
+]
+
 # synergy_core.synergy_pure — the purity factor read by the taskmaster choice and
 # the means-worth gate (spec 2026-07-19 §3, Phase 2). Unit-killed by tests/test_ai/test_synergy_core.py;
 # the same core is proven in Formal/Synergy.lean (synergy_le_one/ge_floor/floor_pos/
@@ -7246,6 +7274,8 @@ _ALL_SRCS = [
     GEAR_TAXONOMY_CORE_SRC,
     # Progression-tree cores (2026-07-06): unit-killed group.
     PROGRESSION_TREE_SRC,
+    # Gear objective core (spec 2026-10-18 §2.3/§2.4): unit-killed group.
+    GEAR_OBJECTIVE_CORE_SRC,
     # Equipment-profile selector (2026-07-08): differential-killed group.
     EQUIPMENT_PROFILE_SRC,
     # Task 7 (role-driven supply): coordination-store asymmetric-demand reader.
@@ -11444,6 +11474,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_potion_supply.py", survivors)
     run_group(PROGRESSION_TREE_SRC, PROGRESSION_TREE_MUTATIONS,
               "tests/test_ai/test_progression_tree_core.py", survivors)
+    run_group(GEAR_OBJECTIVE_CORE_SRC, GEAR_OBJECTIVE_CORE_MUTATIONS,
+              "tests/test_ai/test_gear_objective_core.py", survivors)
     run_group(SYNERGY_CORE_SRC, SYNERGY_CORE_MUTATIONS,
               "tests/test_ai/test_synergy_core.py", survivors)
     run_group(ROOT_DECISION_SRC, STEP_DECLINE_MUTATIONS,

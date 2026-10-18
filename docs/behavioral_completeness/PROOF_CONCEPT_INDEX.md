@@ -45,6 +45,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | GatherCost | planner, action, cost | monotonicity, safety |
 | GatherSelection | resources | dominance, monotonicity, totality, reachability |
 | GePostPricing | grandexchange, undercut | fail-closed, dominance, boundedness |
+| GearObjective | gear-objective | termination, monotonicity, validity, dominance |
 | GearPolicy | items, characters | dominance, safety |
 | GearTaxonomy | core, gear | validity, monotonicity, safety |
 | GearValue | items, gear | validity, dominance |

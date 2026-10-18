@@ -7,6 +7,7 @@ import Formal.PotionProvisionQty
 import Formal.PotionBaseline
 import Formal.MaxBatchFromHeld
 import Formal.OptimalBuyMix
+import Formal.GearObjective
 import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
@@ -2955,6 +2956,42 @@ def runXpValue (args : Array Json) : Json :=
   Json.mkObj [("xp", Json.num (Int.ofNat
     (Formal.XpValue.xpPerKill (n 0) (n 1) (n 2) (n 3) (n 4))))]
 
+/-- `gear_objective_layers` — the proved `Formal.GearObjective.layers` over a
+catalogue of items `0..n-1`. args: `[n, then per item: baseFlag, nAlts,
+mask_1 .. mask_nAlts]`. Item `i` is unlocked by a union holding every item of
+SOME alternative's bitmask (an empty mask: unlocked from the start), so the
+encoded `unlock` is monotone and keeps its input — every monotone `unlock` over
+the catalogue has this form. Emits `{"layers": [[id, ..], ..]}`, each layer in
+ascending id order. -/
+def runGearObjectiveLayers (args : Array Json) : Json :=
+  let n := (intArg args 0).toNat
+  let step := fun (st : Nat × List (Bool × List Nat)) (_ : Nat) =>
+    let pos := st.1
+    let k := (intArg args (pos + 1)).toNat
+    let masks := (List.range k).map (fun j => (intArg args (pos + 2 + j)).toNat)
+    (pos + 2 + k, st.2 ++ [(intArg args pos != 0, masks)])
+  let items := ((List.range n).foldl step (1, [])).2
+  let cat := List.range n
+  let base := cat.filter (fun i => (items.getD i (false, [])).1)
+  let unlock := fun (acc : List Nat) =>
+    acc ++ cat.filter (fun i => (items.getD i (false, [])).2.any
+      (fun m => cat.all (fun b => !m.testBit b || decide (b ∈ acc))))
+  let ls := Formal.GearObjective.layers cat unlock base
+  Json.mkObj [("layers", Json.arr (ls.map (fun l =>
+    Json.arr (l.map (fun i => Json.num (Int.ofNat i))).toArray)).toArray)]
+
+/-- `gear_objective_order` — the proved `Formal.GearObjective.pieceOrder`.
+args: `[m, then per piece: layer, gainNum, gainDen, priceNum, priceDen,
+slotRank]`. Emits `{"order": [piece index, ..]}` ascending by `pieceKey`. -/
+def runGearObjectiveOrder (args : Array Json) : Json :=
+  let m := (intArg args 0).toNat
+  let piece := fun (i : Nat) =>
+    let o := 1 + 6 * i
+    (i, Formal.GearObjective.pieceKey (intArg args o).toNat (ratArg args (o + 1))
+      (ratArg args (o + 3)) (intArg args (o + 5)))
+  let order := Formal.GearObjective.pieceOrder ((List.range m).map piece)
+  Json.mkObj [("order", Json.arr (order.map (fun i => Json.num (Int.ofNat i))).toArray)]
+
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
   let args := ((item.getObjValD "args" |>.getArr?).toOption.getD #[])
@@ -3204,6 +3241,10 @@ def runOne (item : Json) : Json :=
     runGearDemand args
   else if kind == "bank_space_cost" then
     runBankSpaceCost args
+  else if kind == "gear_objective_layers" then
+    runGearObjectiveLayers args
+  else if kind == "gear_objective_order" then
+    runGearObjectiveOrder args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

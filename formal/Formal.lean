@@ -223,3 +223,4 @@ import Formal.EquipmentProfile
 import Formal.InventoryRoom
 import Formal.InventoryKeep
 import Formal.EscrowConservation
+import Formal.GearObjective
