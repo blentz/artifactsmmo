@@ -58,8 +58,8 @@ class TestFetchActiveEvents:
         early = datetime(2026, 10, 18, 2, 0, tzinfo=timezone.utc)
         late = datetime(2026, 10, 18, 2, 30, tzinfo=timezone.utc)
         page = MagicMock()
-        page.data = [_event("corrupted_owlbear", late, 10, 1),
-                     _event("corrupted_owlbear", early, 10, 2)]
+        page.data = [_event("corrupted_owlbear", early, 10, 1),
+                     _event("corrupted_owlbear", late, 10, 2)]
         with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=page):
             result = player._fetch_active_events(MagicMock())
         assert result == {"corrupted_owlbear": LiveEvent(
