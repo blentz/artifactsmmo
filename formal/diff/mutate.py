@@ -3608,6 +3608,34 @@ OBTAIN_MODEL_DROP_MUTATIONS = [
      "        paid = max(1, (game_data.monster_min_gold(monster) + top) // 2)",
      "        paid = max(1, top)"),
 ]
+# The projected fighter (global gear objective, spec 2026-10-18 §2.3): a DROP
+# route's WINNABLE gate asks it, stock never reads it. Killed by
+# tests/test_ai/test_obtain_model_fighter.py.
+OBTAIN_MODEL_FIGHTER_DROP_MUTATIONS = [
+    ("drop_routes: the fighter is ignored",
+     "    rested = _Rested(state if fighter is None else fighter)",
+     "    rested = _Rested(state)"),
+]
+OBTAIN_MODEL_FIGHTER_MUTATIONS = [
+    ("obtain_model: the fighter never reaches the drop gates",
+     "        return drop_routes(item, self._state, self._gd, self._fighter)",
+     "        return drop_routes(item, self._state, self._gd)"),
+    ("obtain_model: the fighter's inventory is stock",
+     "        bag: dict[str, int] = dict(self._state.inventory)",
+     "        bag: dict[str, int] = dict(self._state.inventory) | "
+     "(dict(self._fighter.inventory) if self._fighter is not None else {})"),
+]
+GEAR_OBJECTIVE_POLICY_MUTATIONS = [
+    ("GEAR_OBJECTIVE_POLICY: grey droppers refused",
+     "                               allow_grey=True, vendor_routes=True, ge_routes=False,",
+     "                               allow_grey=False, vendor_routes=True, ge_routes=False,"),
+    ("GEAR_OBJECTIVE_POLICY: only a live overworld spawn counts",
+     "                               craft_skill_gate=False, event_vendors=True, spawn_known=True,",
+     "                               craft_skill_gate=False, event_vendors=True, spawn_known=False,"),
+    ("GEAR_OBJECTIVE_POLICY: the crafting skill is a veto",
+     "                               craft_skill_gate=False, event_vendors=True, spawn_known=True,",
+     "                               craft_skill_gate=True, event_vendors=True, spawn_known=True,"),
+]
 # The GATHER spawn gate (obtain_model.py) and its predicate (game_data.py),
 # killed by tests/test_ai/test_obtain_model.py and test_game_data.py.
 OBTAIN_MODEL_GATHER_SPAWN_MUTATIONS = [
@@ -11211,6 +11239,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_drop_obtainability.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_GATHER_SPAWN_MUTATIONS,
               "tests/test_ai/test_obtain_model.py", survivors)
+    run_group(OBTAIN_MODEL_DROP_SRC, OBTAIN_MODEL_FIGHTER_DROP_MUTATIONS,
+              "tests/test_ai/test_obtain_model_fighter.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_FIGHTER_MUTATIONS,
+              "tests/test_ai/test_obtain_model_fighter.py", survivors)
+    run_group(OBTAIN_MODEL_POLICY_SRC, GEAR_OBJECTIVE_POLICY_MUTATIONS,
+              "tests/test_ai/test_obtain_model_fighter.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_QUANTITY_MUTATIONS,
               "tests/test_ai/test_obtain_model.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_MINTS_MUTATIONS,

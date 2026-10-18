@@ -151,3 +151,28 @@ switches.
   own target), as the search's admission applied it. LEGACY allowed every grey
   dropper, so the walk fought a grey sheep for an ordinary wool demand (live
   from 2c-2b until 2026-10-02)."""
+
+
+GEAR_OBJECTIVE_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False,
+                               craft_skill_gate=False, event_vendors=True, spawn_known=True,
+                               allow_grey=True, vendor_routes=True, ge_routes=False,
+                               task_rewards=True, fight_gold=True, drop_routes=True)
+"""What the global gear objective counts as achievable "in principle"
+(docs/superpowers/specs/2026-10-18-global-gear-objective-design.md §2.1).
+
+- No skill gate on a GATHER or CRAFT route: any skill level is climbable, so a
+  climb is a cost, never a veto.
+- An event vendor counts while it is tradeable now, and an event monster only
+  while its event is live: event-only routes are not completable otherwise.
+- A routable spawn (`spawn_known`): a tile on any layer in a reachable region.
+  It admits a static underground or interior monster, which the overworld-only
+  live index cannot see, and it does NOT admit an event monster whose event is
+  not live: `monster_spawn_known` reads the event tiles only while the event is
+  live, and an event's candidate maps carry no static content in the map data.
+- Grey droppers count: the objective asks what can be had, not what pays XP.
+- No GE fill, as `DECOMPOSE_POLICY`: a standing order is not a supply route the
+  catalogue guarantees.
+- Gold is earned by fighting (`fight_gold`), and task-earned currency counts.
+
+The WINNABLE gate on a drop is the caller's projected fighter, not the worn
+gear (`ObtainModel(..., fighter=...)`, §2.3)."""

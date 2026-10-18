@@ -56,11 +56,18 @@ DEFAULT_SKILL_LEVEL = 1
 
 
 class ObtainModel:
-    """All routes to any item from one snapshot of the world."""
+    """All routes to any item from one snapshot of the world.
+
+    `fighter`, when given, is the character a DROP route's WINNABLE gate is
+    asked of (at full hp) instead of `state`: a projected loadout (the global
+    gear objective's fixed point, spec 2026-10-18 §2.3). It is never stock:
+    the bag, bank and pocket are always `state`'s."""
 
     def __init__(self, state: WorldState, game_data: GameData,
-                 ctx: SelectionContext, now: datetime) -> None:
+                 ctx: SelectionContext, now: datetime,
+                 fighter: WorldState | None = None) -> None:
         self._state = state
+        self._fighter = fighter
         self._gd = game_data
         self._ctx = ctx
         self._now = now
@@ -369,8 +376,9 @@ class ObtainModel:
 
     def _drop(self, item: str) -> list[Route]:
         """Monsters that drop `item`: see `drop_routes`, the one place drop gates
-        are evaluated (shared with `drop_obtainability`)."""
-        return drop_routes(item, self._state, self._gd)
+        are evaluated (shared with `drop_obtainability`), judged against the
+        projected `fighter` when one is given."""
+        return drop_routes(item, self._state, self._gd, self._fighter)
 
     def _task_reward(self, item: str) -> list[Route]:
         """The task board pays `item`: one application is a whole task loop

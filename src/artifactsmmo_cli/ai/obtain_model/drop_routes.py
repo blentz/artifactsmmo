@@ -78,9 +78,14 @@ def _fight_gates(monster: str, state: WorldState, game_data: GameData,
     )
 
 
-def drop_routes(item: str, state: WorldState, game_data: GameData) -> list[Route]:
-    """One DROP route per monster that drops `item`, in drop-table order."""
-    rested = _Rested(state)
+def drop_routes(item: str, state: WorldState, game_data: GameData,
+                fighter: WorldState | None = None) -> list[Route]:
+    """One DROP route per monster that drops `item`, in drop-table order.
+
+    `fighter`, when given, is who WINNABLE asks (rested), in place of `state`:
+    a projected loadout rather than the worn gear (the global gear objective's
+    fixed point, spec 2026-10-18 §2.3). XP_POSITIVE still reads `state`'s level."""
+    rested = _Rested(state if fighter is None else fighter)
     return [Route(item, SourceKind.DROP, monster, 1, UNBOUNDED_CAPACITY,
                   _fight_gates(monster, state, game_data, rested))
             for monster, _rate, _mn, _mx in game_data.monsters_dropping(item)]
