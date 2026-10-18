@@ -514,9 +514,9 @@ class IsAFightBlockingMe(Decision[MetaGoal]):
         letting the objective's own XP grind run IS the level-up being pursued.
 
     `ctx.combat_monster`, not a separate `winnable_alternative` parameter.
-    `player.py` computes `_winnable_farm_target()` ONCE and hands it to
-    `_selection_context`; the sibling node `IsThereACombatTarget` already reads
-    `ctx`. One read.
+    `player.py`'s `_selection_context` sets it ONCE per cycle
+    (`_winnable_farm_target`, from the cycle's gear objective); the sibling node
+    `IsThereACombatTarget` already reads `ctx`. One read.
 
     BARE GEAR (USER 2026-10-10). The grind target may stand only on a potion
     loadout (`band_target`: the loadout picks the monster); this node asks
@@ -774,9 +774,9 @@ class IsThisTargetBlocked(Decision[MetaGoal]):
 class IsThereACombatTarget(Decision[MetaGoal]):
     """Is there a monster this character should be fighting right now?
 
-    `ctx.combat_monster` is fed by `band_target.band_combat_target` — the
-    band's best winnable monster, or None when nothing in the band is
-    beatable.
+    `ctx.combat_monster` is the held monsters task's monster, else the gear
+    objective's `m*` while its `L*` is held, else None: no fight is chosen for
+    XP while a piece of `L*` is missing (spec 2026-10-18 §6.2).
 
     The level it names is the next ladder rung STRICTLY ABOVE the character's
     — see `_next_rung_above` for why that is not what spec §5.3 wrote.

@@ -495,7 +495,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "shield_slot": "iron_shield",
         },
         bank={"iron_ore": 15, "spruce_wood": 10, "feather": 5, "wolf_bone": 3},
-        inventory_max=120,
+        inventory_max=120, derive_combat_stats=True,
         description="Mid L10-20 band: full iron (L10) set, L15 upgrades on offer."),
     "l20_band_entry": ScenarioCharacter(
         name="l20_band_entry", level=20, max_hp=360, gold=100,

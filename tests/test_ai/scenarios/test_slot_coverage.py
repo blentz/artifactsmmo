@@ -599,49 +599,21 @@ def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
     # it and having promotion move the root afterwards. With no servable gear
     # target the walk takes its own combat arm, whose trunk is the next rung
     # above (15), not the alternatives' milestone (20) promotion used to land on.
-    assert report.decision.chosen_root == ReachCharLevel(level=15)
+    #
+    # SPEC 2026-10-18 §6.2 (one gear objective per cycle): no fight is chosen
+    # for XP while a piece of `L*` is missing, and this L10 build is missing
+    # five (`ctx.gear_objective`: its `m*` is cow). So the walk's combat arm
+    # has no grind target and the trunk is NOT the root any more; the
+    # backpack is still passed over with its reason, and nothing grinds.
+    # Making an `L*` piece the root is the root walk's job (Task 5).
+    assert report.decision.chosen_root is None
     assert report.decision.declined == (
         ("ObtainItem(code='backpack', quantity=1, slot='bag_slot')",
          "infeasible:backpack:no_route:backpack"),)
     assert not any(r.code == "satchel" for r in report.decision.fallback_roots
                    if isinstance(r, ObtainItem)), report.decision.fallback_roots
-    # The grind target moved with the re-converged loadout (2026-08-04): at the
-    # ruler's own fixed point this L10 build beats `flying_snake`, which out-XPs
-    # the cow it used to grind. Still a plain combat grind on the trunk, which
-    # is what this pin is about. GAP-8 (fix round 1, 2026-08-23) briefly moved
-    # this to MaintainConsumables via an unfightable band pick (highwayman,
-    # tier 15) — see the module docstring for the mechanism; with
-    # FIGHT_LEVEL_GAP_CEILING now filtering the band, tier 15 offers nothing
-    # and the cascade falls through to tier 3, which finds flying_snake again.
-    # WAVE 3a: the artifact/bag roots ahead of the grind are new — they are the
-    # tier sheet's empty slots, walked in order before the trunk is reached.
-    # None of them plans, so the grind still wins; the list is spelled out
-    # rather than trimmed so a future change that makes one of them plannable
-    # (and silently displaces the grind) fails here.
-    # RE-DERIVED 2026-08-22 (artifact duplicate-slot revert): novice_guide is
-    # walked ONCE, not three times. It is the only artifact on this sheet, and
-    # artifacts are no longer duplicate-allowed, so slots 2 and 3 have no
-    # candidate at all instead of a 2nd and 3rd copy whose equip would 485.
-    # Two doomed goals per cycle, deleted.
-    #
-    # RE-DERIVED 2026-09-05 (suppliability gate): the last two doomed goals are
-    # deleted too, and the grind is now the ONLY goal the planner attempts.
-    # `novice_guide` is minted by nothing and held by nobody, so it leaves the
-    # sheet entirely and `UpgradeEquipment(novice_guide->artifact1_slot)` is
-    # never built. With the artifact slot gone the bag root is the walk's head,
-    # `_servable_promotion` demotes it as unservable, and the trunk is promoted
-    # in its place — so `GatherMaterials(backpack, ...)` is not attempted
-    # either. The VERDICT this test pins is unchanged: the grind still wins and
-    # still plans `Fight(flying_snake)`. What changed is that it wins without
-    # two dead searches in front of it, and backpack stays a fallback root
-    # (asserted via `promoted_from` above) rather than vanishing.
-    assert [g["goal"] for g in report.goals_tried] == [
-        "GrindCharacterXP(flying_snake)",
-    ], report.goals_tried
-    assert repr(report.selected_goal).startswith("GrindCharacterXP(flying_snake"), (
-        repr(report.selected_goal))
-    assert report.plan and repr(report.plan[0]).startswith("Fight(flying_snake"), \
-        report.plan
+    assert not any(g["goal"].startswith("GrindCharacterXP") for g in report.goals_tried), \
+        report.goals_tried
 
 
 def test_l12_bag_pursuit_satchel_chain_gated() -> None:

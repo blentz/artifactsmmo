@@ -119,7 +119,7 @@ def _decide_and_record(player: GamePlayer, store: LearningStore) -> list[Cycle]:
     assert player.state is not None
     assert player.game_data is not None
     selected_goal, _plan, _tried = player._decide_band(
-        player.state, player.game_data, player._build_actions(), None)
+        player.state, player.game_data, player._build_actions())
     prev = player.state
     player._record_learning_cycle(
         prev_state=prev, new_state=prev,

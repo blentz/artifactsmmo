@@ -132,12 +132,18 @@ def test_swap_precedes_fight_when_loadout_suboptimal() -> None:
 
 def test_no_swap_when_loadout_already_optimal() -> None:
     """The unmodified l10_bag_pursuit scenario (greater_wooden_staff already
-    equipped) plans Fight(flying_snake) directly, no leading swap — the
-    control for the test above, and the reason its first-action assertion is
-    about the SWAP rather than about planning a fight at all."""
+    equipped) plans no leading swap — the control for the test above, and the
+    reason its first-action assertion is about the SWAP rather than about
+    planning a fight at all.
+
+    SPEC 2026-10-18 §6.2: this build is missing pieces of its gear objective's
+    `L*`, so no fight is chosen for XP: the control no longer grinds
+    `flying_snake` (it planned `Fight(flying_snake)` under `GrindCharacterXP`
+    until the gear objective named the grind target)."""
     report = _run(SCENARIOS[BASE_SCENARIO])
-    assert [repr(a) for a in report.plan] == [f"Fight({TARGET_MONSTER})"]
-    assert isinstance(report.selected_goal, GrindCharacterXPGoal), (
+    reprs = [repr(a) for a in report.plan]
+    assert not any(r.startswith("OptimizeLoadout(") for r in reprs), reprs
+    assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
 
 

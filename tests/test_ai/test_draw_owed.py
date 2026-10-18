@@ -99,7 +99,7 @@ class TestPlayerContext:
         player = GamePlayer(character="probe", history=None)
         player.state = make_state(task_code=None, task_total=0)
         player.game_data = GameData()
-        monkeypatch.setattr(player, "_winnable_farm_target", lambda: None)
+        monkeypatch.setattr(player, "_winnable_farm_target", lambda *_: None)
         return player
 
     def test_the_pool_verdict_reaches_the_selection_context(self, monkeypatch) -> None:

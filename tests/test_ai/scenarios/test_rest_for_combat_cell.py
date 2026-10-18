@@ -11,7 +11,13 @@ and that context has `combat_monster=None` — the guard's FIRST conjunct. Under
 that context it can never fire whatever the character's HP is, so the 0/30 was
 partly a property of the measuring instrument. The guard IS reachable: the real
 `SelectionContext` the player binds in `plan_from_state` carries
-`_winnable_farm_target()`, and this cell fires the guard through it.
+`_winnable_farm_target`'s grind target, and this cell fires the guard through it.
+
+Since the gear objective names the grind target (spec 2026-10-18 §6.2) a
+character whose `L*` is missing pieces has no XP fight, and this cell's iron set
+is one. Its fight is therefore its held monsters TASK's (`TASK`), whose monster
+keeps its precedence over the objective: the cell is the scenario with that task
+added, so the scenario as catalogued reaches the guard nowhere.
 `test_the_census_context_can_never_see_this_guard` pins that difference so it
 cannot be rediscovered by accident.
 
@@ -36,13 +42,15 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 CELL = "l22_rest_for_combat"
 TARGET = "flying_snake"
-"""The farm target `_winnable_farm_target()` selects for this loadout — named
-so a catalogue or picker change that moves it fails here rather than silently
-retargeting the cell at a monster with different margins."""
+"""The grind target of this loadout — named so a catalogue or picker change
+that moves it fails here rather than silently retargeting the cell at a monster
+with different margins."""
+TASK = (TARGET, "monsters", 0, 20)
+"""The held monsters task that makes `TARGET` the grind target."""
 
 
 def _state(game_data: GameData) -> WorldState:
-    return scenario_state(SCENARIOS[CELL], game_data)
+    return scenario_state(dataclasses.replace(SCENARIOS[CELL], task=TASK), game_data)
 
 
 def _planned(state: WorldState, game_data: GameData):
@@ -123,7 +131,10 @@ def test_resting_to_full_silences_the_guard_and_moves_the_goal(
 def test_no_other_scenario_reaches_this_guard(
         bundle_game_data: GameData) -> None:
     """The gap the cell closes, measured over the whole set through the SAME
-    real-context seam — not through the census context, which cannot see it."""
+    real-context seam — not through the census context, which cannot see it.
+    No catalogued scenario holds a grind target the guard's fight is lost at
+    (none wears its `L*` short of HP, none holds such a task): only the cell's
+    state, the catalogued cell with its task, reaches it."""
     holders = set()
     for name in SCENARIOS:
         scenario_gd = bundle_game_data
@@ -131,7 +142,11 @@ def test_no_other_scenario_reaches_this_guard(
         player = GamePlayer(character=name, history=None)
         player.seed_offline(scenario_world, scenario_gd)
         if GuardKind.REST_FOR_COMBAT in active_guards(
-                scenario_world, scenario_gd, None,
-                player._selection_context(player._winnable_farm_target())):
+                scenario_world, scenario_gd, None, player._selection_context()):
             holders.add(name)
-    assert holders == {CELL}
+    assert holders == set()
+    cell = _state(bundle_game_data)
+    player = GamePlayer(character=CELL, history=None)
+    player.seed_offline(cell, bundle_game_data)
+    assert GuardKind.REST_FOR_COMBAT in active_guards(
+        cell, bundle_game_data, None, player._selection_context())

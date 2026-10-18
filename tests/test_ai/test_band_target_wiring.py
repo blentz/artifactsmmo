@@ -1,4 +1,6 @@
-"""The cascade's tier-2 source is the band target, not the unbounded projection."""
+"""The band's pick is the band target, not the unbounded projection (the grind
+target is the gear objective's since spec 2026-10-18; the band is no longer
+consulted for it, and Plan C deletes it)."""
 from fractions import Fraction
 
 import artifactsmmo_cli.ai.player as player_mod
@@ -11,9 +13,9 @@ from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_strategy_driver import _make_planner_gd
 
 
-def test_the_cascade_asks_the_band_not_the_unbounded_projection(monkeypatch):
+def test_the_band_asks_the_band_target_not_the_unbounded_projection(monkeypatch):
     """`_path_aligned_monster` used `cheapest_path_to_level`, whose candidate
-    floor is 1. The cascade must consult `band_combat_target` instead."""
+    floor is 1. It must consult `band_combat_target` instead."""
     player = GamePlayer(character="Robby")
     player.state = make_state(level=30)
     player.game_data = _make_planner_gd()
@@ -24,38 +26,22 @@ def test_the_cascade_asks_the_band_not_the_unbounded_projection(monkeypatch):
     monkeypatch.setattr(GamePlayer, "_task_aligned_monster", lambda self: None)
     monkeypatch.setattr(GamePlayer, "_is_winnable", lambda self, code: True)
 
-    assert player._winnable_farm_target() == "spider"
+    assert player._path_aligned_monster() == BandTarget("spider", Fraction(1), True)
 
 
-def test_no_band_target_yields_no_combat_target(monkeypatch):
-    """A gear wall must surface as None, not fall through to a lower tier."""
+def test_no_band_target_yields_no_band_pick(monkeypatch):
+    """A gear wall surfaces as None."""
     player = GamePlayer(character="Robby")
     player.state = make_state(level=30)
     player.game_data = _make_planner_gd()
 
     monkeypatch.setattr(player_mod, "band_combat_target",
                         lambda state, game_data, history, price_of, loadout_of, party_of: None)
-    monkeypatch.setattr(GamePlayer, "_task_aligned_monster", lambda self: None)
 
-    assert player._winnable_farm_target() is None
-
-
-def test_a_winnable_task_monster_still_wins(monkeypatch):
-    """Tier 1 is unchanged: the held task's monster outranks the band when it
-    is winnable, because the task is what the character is blocked on."""
-    player = GamePlayer(character="Robby")
-    player.state = make_state(level=30)
-    player.game_data = _make_planner_gd()
-
-    monkeypatch.setattr(GamePlayer, "_task_aligned_monster", lambda self: "pig")
-    monkeypatch.setattr(player_mod, "band_combat_target",
-                        lambda state, game_data, history, price_of, loadout_of, party_of:
-                        BandTarget("spider", Fraction(1), True))
-
-    assert player._winnable_farm_target() == "pig"
+    assert player._path_aligned_monster() is None
 
 
-def test_unfightable_band_target_falls_through_to_the_windowed_picker(monkeypatch):
+def test_an_unfightable_band_target_is_no_band_pick(monkeypatch):
     """GAP-8 / task 5.2 fix round 1: before `band_combat_target` applied
     `FIGHT_LEVEL_GAP_CEILING`, a stat-winnable-but-unfightable target (e.g.
     `highwayman` at char level 10) outranked tier 3 outright — `is_winnable`
@@ -66,9 +52,8 @@ def test_unfightable_band_target_falls_through_to_the_windowed_picker(monkeypatc
     `_winnable_farm_target`, so it would have caught GAP-8 itself: the
     band's only stat-winnable member (`highwayman`, L15) sits outside the
     executor's window at char level 10, so `band_combat_target` must return
-    None, and the cascade must fall through to tier 3, which finds
-    `mushmush` (L10, in-window, winnable) rather than surfacing None or the
-    unfightable `highwayman`."""
+    None, while the windowed picker finds `mushmush` (L10, in-window,
+    winnable) rather than the unfightable `highwayman`."""
     def fake_is_winnable(s: object, g: object, c: str, h: object) -> bool:
         return c != "pig"  # pig stays unwinnable so tier 15 stays uncleared
     monkeypatch.setattr(band_target_mod, "is_winnable", fake_is_winnable)
@@ -92,7 +77,8 @@ def test_unfightable_band_target_falls_through_to_the_windowed_picker(monkeypatc
     player.state = make_state(level=10)
     player.game_data = gd
 
-    assert player._winnable_farm_target() == "mushmush"
+    assert player._path_aligned_monster() is None
+    assert player._pick_winnable_monster() == "mushmush"
 
 
 def test_unseeded_player_yields_no_path_aligned_monster():
@@ -103,3 +89,20 @@ def test_unseeded_player_yields_no_path_aligned_monster():
     assert player.state is None
     assert player.game_data is None
     assert player._path_aligned_monster() is None
+
+
+def test_a_band_candidate_is_priced_as_the_grind_target(monkeypatch):
+    """`_band_loadout` prices each band candidate's loadout as if it were the
+    grind target: the band context names it, on this cycle's bank access."""
+    player = GamePlayer(character="Robby")
+    player.state = make_state(level=30)
+    player.game_data = _make_planner_gd()
+    seen = []
+
+    def fake(state, game_data, ctx, monster, history):  # type: ignore[no-untyped-def]
+        seen.append((ctx.combat_monster, ctx.bank_accessible, monster))
+        return "loadout"
+
+    monkeypatch.setattr(player_mod, "best_loadout", fake)
+    assert player._band_loadout("spider") == "loadout"
+    assert seen == [("spider", True, "spider")]

@@ -139,7 +139,7 @@ class TestRunLoopOrder:
         client = MagicMock()
         seen: list[float | None] = []
 
-        def fake_plan(state, game_data, actions, combat_monster):
+        def fake_plan(state, game_data, actions):
             seen.append(player._arbiter._planning_deadline)
             raise KeyboardInterrupt
 
@@ -173,7 +173,7 @@ class TestRunLoopOrder:
         goal = MagicMock()
         goal.is_satisfied.return_value = False
 
-        def fake_plan(state, game_data, actions, combat_monster):
+        def fake_plan(state, game_data, actions):
             order.append("plan")
             return goal, [action], [], True
 

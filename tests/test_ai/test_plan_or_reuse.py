@@ -38,7 +38,7 @@ def _player_with_stub_plan(plan, goal):
     player = GamePlayer(character="hero", dry_run=True)
     calls = {"n": 0}
 
-    def _fake_decide(state, game_data, actions, ctx_combat_monster):
+    def _fake_decide(state, game_data, actions):
         calls["n"] += 1
         return goal, list(plan), [{"goal": repr(goal)}]
 
@@ -52,7 +52,7 @@ def test_first_call_replans_and_caches():
     plan = [_Act(), _Act(), _Act()]
     player, calls = _player_with_stub_plan(plan, goal)
     state = make_state()
-    sel, _returned_plan, _tried, replanned = player._plan_or_reuse(state, None, [], None)
+    sel, _returned_plan, _tried, replanned = player._plan_or_reuse(state, None, [])
     assert replanned is True
     assert calls["n"] == 1
     assert player._plan_cache is not None
@@ -64,10 +64,10 @@ def test_second_call_reuses_without_replanning():
     plan = [_Act(), _Act(), _Act()]
     player, calls = _player_with_stub_plan(plan, goal)
     state = make_state()
-    player._plan_or_reuse(state, None, [], None)        # cycle 1: replan, cache
+    player._plan_or_reuse(state, None, [])        # cycle 1: replan, cache
     player._plan_cache.advance()                         # simulate a successful execute
     player._last_outcome = "ok"
-    _sel, returned_plan, _tried, replanned = player._plan_or_reuse(state, None, [], None)
+    _sel, returned_plan, _tried, replanned = player._plan_or_reuse(state, None, [])
     assert replanned is False
     assert calls["n"] == 1                               # decide NOT called again
     assert returned_plan[0] is plan[1]                   # serves the next step
@@ -80,11 +80,11 @@ def test_replan_persists_body_and_commitment(tmp_path):
     store.start_session()
     player = GamePlayer(character="hero", dry_run=True, history=store)
 
-    def _fake_decide(state, game_data, actions, ctx_combat_monster):
+    def _fake_decide(state, game_data, actions):
         return goal, list(plan), [{"goal": repr(goal)}]
 
     player._decide_band = _fake_decide  # type: ignore[attr-defined]
-    player._plan_or_reuse(make_state(), None, [], None)
+    player._plan_or_reuse(make_state(), None, [])
 
     assert len(store.plan_bodies_for_goal("FakeGoal()")) == 1
     assert store.load_plan_commitment() is not None
@@ -168,11 +168,11 @@ def test_a_cached_fight_that_would_now_be_lost_is_replanned(monkeypatch):
     monkeypatch.setattr("artifactsmmo_cli.ai.player.predict_win", lambda s, g, m: wins["now"])
     monkeypatch.setattr("artifactsmmo_cli.ai.player.rest_pays", lambda s, g, m: False)
     state = make_state()
-    player._plan_or_reuse(state, None, [], None)
-    player._plan_or_reuse(state, None, [], None)
+    player._plan_or_reuse(state, None, [])
+    player._plan_or_reuse(state, None, [])
     assert calls["n"] == 1  # a ready fight is reused
     wins["now"] = False
-    player._plan_or_reuse(state, None, [], None)
+    player._plan_or_reuse(state, None, [])
     assert calls["n"] == 2  # an unready one replans
 
 

@@ -202,7 +202,8 @@ class TestPlayerPricesThePayOncePerCycle:
         player = GamePlayer(character="probe", history=None)
         player.state = state
         player.game_data = GameData()
-        monkeypatch.setattr(player, "_winnable_farm_target", lambda: None)
+        monkeypatch.setattr(player, "_winnable_farm_target", lambda *_: None)
+        monkeypatch.setattr(player, "_task_aligned_monster", lambda: None)
         monkeypatch.setattr(player_mod, "pool_draw", lambda *a: (False, None))
         monkeypatch.setattr(player_mod, "fight_ahead_loadout", lambda *a: None)
         monkeypatch.setattr(player_mod, "secure_win", lambda *a: True)
@@ -217,7 +218,8 @@ class TestPlayerPricesThePayOncePerCycle:
             self, monkeypatch: pytest.MonkeyPatch) -> None:
         pays: list[object] = []
         player = self._player(monkeypatch, STATE, pays)
-        ctx = player._selection_context("imp")
+        monkeypatch.setattr(player, "_winnable_farm_target", lambda *_: "imp")
+        ctx = player._selection_context()
         assert ctx.held_task_pays is True
         assert pays == [("imp", "imp")]
 
@@ -225,7 +227,8 @@ class TestPlayerPricesThePayOncePerCycle:
         pays: list[object] = []
         monsters = replace(STATE, task_type="monsters")
         player = self._player(monkeypatch, monsters, pays)
-        assert player._selection_context("imp").held_task_pays is False
+        monkeypatch.setattr(player, "_winnable_farm_target", lambda *_: "imp")
+        assert player._selection_context().held_task_pays is False
         assert pays == []
 
     def test_no_combat_target_is_not_priced(self, monkeypatch: pytest.MonkeyPatch) -> None:

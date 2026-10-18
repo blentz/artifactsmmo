@@ -9602,21 +9602,9 @@ BAND_LOADOUT_MUTATIONS = [
      "    return Fraction(xp_per_kill) / (best().rate.fight_seconds + best().rate.recovery_seconds\n"
      "                                    + best().rate.consumed_seconds)\n"),
 ]
-# The band on potions against the windowed pick, and the propped flag (USER
-# 2026-10-10). Killed by tests/test_ai/test_player.py.
+# The grind target's risk (USER 2026-10-15). Killed by
+# tests/test_ai/test_player.py.
 BAND_PICK_MUTATIONS = [
-    ("cascade: a band on potions beats the windowed pick unpriced",
-     "        return band.rate > pick_rate\n",
-     "        return True\n"),
-    ("cascade: a band on potions ties the windowed pick",
-     "        return band.rate > pick_rate\n",
-     "        return band.rate >= pick_rate\n"),
-    ("cascade: the windowed pick is asked over a bare band",
-     "        if band.bare_fight:\n            return True\n",
-     "        if False:\n            return True\n"),
-    ("cascade: a target with no bare fight anywhere is not propped",
-     "            self._propped_target = band.monster\n",
-     "            pass\n"),
     ("ctx: a risky target is never marked",
      "            combat_risky=(combat_monster is not None\n",
      "            combat_risky=(False\n"),
@@ -9626,9 +9614,25 @@ BAND_PICK_MUTATIONS = [
     ("ctx: risk drinks the worn potions",
      "                          and not secure_win(unpotioned(replace(self.state, hp=self.state.max_hp)),\n",
      "                          and not secure_win(replace(self.state, hp=self.state.max_hp),\n"),
-    ("ctx: any target is the propped one",
-     "                            and combat_monster == self._propped_target),\n",
-     "                            and self._propped_target is not None),\n"),
+]
+# One gear objective per cycle names the grind target (spec 2026-10-18 §2.4,
+# §6.2). Killed by tests/test_ai/test_player_gear_objective.py.
+GEAR_OBJECTIVE_CTX_MUTATIONS = [
+    ("target: m* is fought while a piece of L* is missing",
+     "            path_winnable=objective is not None and objective.held,\n",
+     "            path_winnable=objective is not None,\n"),
+    ("target: a held monsters task loses its precedence",
+     "            task_monster=task_monster,\n",
+     "            task_monster=None,\n"),
+    ("ctx: the objective is priced without the task's target",
+     "            combat_monster=task_monster,\n",
+     "            combat_monster=None,\n"),
+    ("ctx: the gear keep stays the task's for a new target",
+     "            gear_keep=(task_keep if combat_monster == task_monster\n",
+     "            gear_keep=(task_keep if True\n"),
+    ("ctx: the objective is not carried",
+     "            ctx, gear_objective=objective, combat_monster=combat_monster,\n",
+     "            ctx, combat_monster=combat_monster,\n"),
 ]
 # The gear decisions judge bare gear (USER 2026-10-10). Killed by
 # tests/test_ai/test_decisions_root.py.
@@ -11560,6 +11564,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_band_target.py", survivors)
     run_group(PLAYER_SRC, BAND_PICK_MUTATIONS,
               "tests/test_ai/test_player.py", survivors)
+    run_group(PLAYER_SRC, GEAR_OBJECTIVE_CTX_MUTATIONS,
+              "tests/test_ai/test_player_gear_objective.py", survivors)
     run_group(ROOT_DECISION_SRC, PROPPED_GEAR_MUTATIONS,
               "tests/test_ai/test_decisions_root.py", survivors)
     run_group(PLAYER_SRC, CONSUMABLE_PRICE_MUTATIONS,

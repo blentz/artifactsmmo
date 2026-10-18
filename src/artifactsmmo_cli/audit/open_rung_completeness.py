@@ -48,7 +48,7 @@ sees 0 attack)". A rung's obtainability walk asks the shared drop gates,
 so with the flag off EVERY monster-drop leaf in the catalogue is unreachable
 and the census would report walls that are properties of the fixture. Measured
 on the committed bundle: 62 closed cells with the flag off everywhere, 20 with
-the scenarios AS COMMITTED (34 of the 44 opt the flag on), and 9 with it
+the scenarios AS COMMITTED (35 of the 44 opt the flag on), and 9 with it
 forced on (21 and 10 until the drop gate wore a potion loadout, 2026-10-10).
 The all-off figure moved 74 -> 77 when wave 6 added `l32_items_task` (the
 other two did NOT move, which is the point of keeping all three), and 77 -> 62

@@ -117,7 +117,7 @@ class TestThePlayerContext:
         player = GamePlayer(character="probe", history=history)
         player.state = make_state(task_code=None, task_total=0)
         player.game_data = GameData()
-        monkeypatch.setattr(player, "_winnable_farm_target", lambda: None)
+        monkeypatch.setattr(player, "_winnable_farm_target", lambda *_: None)
         player._draws_enabled = False
         return player
 

@@ -4,7 +4,6 @@ import json
 import time
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, timedelta, timezone
-from fractions import Fraction
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -33,12 +32,11 @@ from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.player import GamePlayer, _format_plan
 from artifactsmmo_cli.ai.recovery import StuckSignal
 from artifactsmmo_cli.ai.tiers import ObtainItem, ReachCharLevel
-from artifactsmmo_cli.ai.tiers.band_target import BandTarget
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision, StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
-from tests.test_ai.fixtures import make_best_loadout, make_state
+from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions import make_game_data
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema, make_get_character_result
 
@@ -276,7 +274,7 @@ class TestArbiterSelection:
 
         with patch.object(StrategyEngine, "decide", side_effect=_Stop) as spy:
             with pytest.raises(_Stop):
-                player._decide_band(player.state, player.game_data, [], None)
+                player._decide_band(player.state, player.game_data, [])
         live_kwargs = spy.call_args.kwargs
 
         assert set(diagnostic_kwargs) == set(live_kwargs)
@@ -315,34 +313,6 @@ class TestArbiterSelection:
         player.state = replace(state, crafting_target=crafting_target)
         assert player.state.crafting_target is None
 
-    def test_winnable_farm_target_keeps_winnable_path_aligned(self):
-        # A band with a bare fight is taken outright: the windowed picker
-        # (whose cow it would otherwise be) is not even asked.
-        player = self._with_strategy(make_game_data_mock(), level=3)
-        player._path_aligned_monster = lambda: BandTarget("chicken", Fraction(1), True)
-        player._pick_winnable_monster = _unasked
-        assert player._winnable_farm_target() == "chicken"
-        assert player._selection_context("chicken").combat_propped is False
-
-    def test_a_band_on_potions_yields_to_a_bare_pick_that_pays_more(self):
-        """USER 2026-10-10: "we don't pick sub-standard loadouts just because
-        they're available". The band holds nothing winnable bare, so the cascade
-        used to fall through to the windowed pick; the band's potion fight
-        takes that place only by paying more per second."""
-        player = self._with_strategy(make_game_data_mock(), level=3)
-        pick = player._pick_winnable_monster()
-        assert pick is not None
-        xp = player.game_data.xp_per_kill(pick, 3)
-        assert xp > 0
-        band = ({"chicken", "cow"} - {pick}).pop()
-        player._band_loadout = lambda code: make_best_loadout(xp=xp, win=True)
-        player._path_aligned_monster = lambda: BandTarget(band, Fraction(xp, 30), False)
-        assert player._winnable_farm_target() == pick
-        player._path_aligned_monster = lambda: BandTarget(band, Fraction(xp + 1, 30), False)
-        assert player._winnable_farm_target() == band
-        # Bare gear still has the windowed pick: the target is not propped.
-        assert player._selection_context(band).combat_propped is False
-
     def test_selection_context_marks_risky_target(self):
         """A grind target won below SECURE_WIN at max HP is risky (USER
         2026-10-15: below 75% we probably need better gear); a secure one is
@@ -358,31 +328,19 @@ class TestArbiterSelection:
                 return verdict
             return _fake
 
+        player._winnable_farm_target = lambda task, objective: "chicken"
         with patch("artifactsmmo_cli.ai.player.secure_win", _secure(False)):
-            assert player._selection_context("chicken").combat_risky is True
+            assert player._selection_context().combat_risky is True
         with patch("artifactsmmo_cli.ai.player.secure_win", _secure(True)):
-            assert player._selection_context("chicken").combat_risky is False
+            assert player._selection_context().combat_risky is False
         assert asked == [(player.state.max_hp, 0), (player.state.max_hp, 0)]
-        player._path_aligned_monster = lambda: None
-        player._pick_winnable_monster = lambda: None
+        player._winnable_farm_target = lambda task, objective: None
         with patch("artifactsmmo_cli.ai.player.secure_win", _secure(False)):
             assert player._selection_context().combat_risky is False
 
-    def test_a_band_on_potions_with_no_bare_fight_anywhere_is_propped(self):
-        """No bare fight in the band and no windowed pick: the target stands
-        only on consumables, and the context says so for the gear decisions."""
-        player = self._with_strategy(make_game_data_mock(), level=3)
-        player._path_aligned_monster = lambda: BandTarget("cow", Fraction(1), False)
-        player._pick_winnable_monster = lambda: None
-        assert player._winnable_farm_target() == "cow"
-        ctx = player._selection_context()
-        assert ctx.combat_monster == "cow" and ctx.combat_propped is True
-        # Another target handed in is not the propped one.
-        assert player._selection_context("chicken").combat_propped is False
-
     def test_selection_context_carries_combat_monster(self):
         player = self._with_strategy(make_game_data_mock(), level=3)
-        player._path_aligned_monster = lambda: BandTarget("chicken", Fraction(1), True)
+        player._winnable_farm_target = lambda task, objective: "chicken"
         ctx = player._selection_context()
         assert ctx.combat_monster == "chicken"
         assert ctx.task_exchange_min_coins == player._exchange_min_coins()
@@ -2518,7 +2476,3 @@ class TestCraftRebatchRecording:
             assert rows[0].predicted_cost != pytest.approx(requested_cost)
         finally:
             store.close()
-
-
-def _unasked() -> str | None:
-    raise AssertionError("the windowed picker was asked")

@@ -315,7 +315,6 @@ def test_the_triple_starves_the_winnable_cascade(gd: GameData) -> None:
                    for slime in ("green_slime", "blue_slime", "red_slime", "yellow_slime"))
         player = GamePlayer(character=name, history=None)
         player.seed_offline(state, gd)
-        assert player._winnable_farm_target() is None
         player.plan_from_state()
         assert player._last_ctx is not None
         assert player._last_ctx.combat_monster is None
@@ -458,7 +457,7 @@ def test_a_starved_cascade_witnesses_the_standing_arm_end_to_end(gd: GameData) -
     for monster in (STARVED_GEAR, STARVED_OUT_OF_REACH):
         state, player, _ = _starved_run(monster, gd)
         # The three conjuncts of the standing arm, measured rather than passed in.
-        assert player._winnable_farm_target() is None
+        assert player._last_ctx.combat_monster is None
         # ...and the fact the OLD arm read, identical across all three rows.
         assert has_combat_deficit(state, gd) is True
 

@@ -71,10 +71,12 @@ def _player(db: str, name: str, state: WorldState) -> GamePlayer:
     return player
 
 
-WORN_PAIR = {"artifact1_slot": "lich_race_medal", "artifact2_slot": "lich_race_medal"}
+WORN_PAIR = {**make_state().equipment,
+             "artifact1_slot": "lich_race_medal", "artifact2_slot": "lich_race_medal"}
 """Every character in the live fleet wears TWO medals (duplicate artifact
 slots), so five characters hold exactly the price of one trophy and NOTHING
-is in the bank to begin with — the fleet total has to come out of equipment."""
+is in the bank to begin with — the fleet total has to come out of equipment.
+Every other slot is empty: a live character sheet names every slot."""
 
 
 def _publish(db: str, name: str, worn: int) -> None:
@@ -120,7 +122,7 @@ def test_the_live_fleet_of_below_level_medal_wearers_reaches_the_trophy(tmp_path
     assert c3po._turn_in is not None and c3po._turn_in.buyer == "Robby"
     assert c3po._recall == ("lich_race_medal", 2)
     c3po_goal, c3po_plan, _ = c3po._decide_band(
-        c3po.state, gd, c3po._build_actions(), None)
+        c3po.state, gd, c3po._build_actions())
     assert isinstance(c3po_goal, SurrenderCurrencyGoal)
     # Both worn copies come off (the two slots are interchangeable, so the
     # order between them carries no meaning), and the deposit is sized to the
@@ -138,7 +140,7 @@ def test_the_live_fleet_of_below_level_medal_wearers_reaches_the_trophy(tmp_path
     r2d2._resolve_turn_in(r2d2.state, gd)
     assert r2d2._recall == ("lich_race_medal", 2)
     r2d2_goal, r2d2_plan, _ = r2d2._decide_band(
-        r2d2.state, gd, r2d2._build_actions(), None)
+        r2d2.state, gd, r2d2._build_actions())
     assert isinstance(r2d2_goal, SurrenderCurrencyGoal), (
         "a sibling's deposit must not satisfy THIS character's surrender")
     assert sorted(repr(a) for a in r2d2_plan if isinstance(a, UnequipAction)) == [
@@ -154,7 +156,7 @@ def test_the_live_fleet_of_below_level_medal_wearers_reaches_the_trophy(tmp_path
         bank_items={"lich_race_medal": 8})
     robby._resolve_turn_in(robby.state, gd)
     assert robby._turn_in is not None and robby._turn_in.buyer == "Robby"
-    goal, plan, _ = robby._decide_band(robby.state, gd, robby._build_actions(), None)
+    goal, plan, _ = robby._decide_band(robby.state, gd, robby._build_actions())
     assert isinstance(goal, CurrencyTurnInGoal)
     reprs = [repr(a) for a in plan]
     # Its own two worn medals fund 2 of the 10, so the bank supplies 8 — not

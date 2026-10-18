@@ -12,14 +12,16 @@ copies it may bank. `tiers.guards` re-exports the name, so every existing
 Pure data: no behavior, so this module imports nothing else from the package —
 the exceptions are `TurnIn` below, a leaf pure-data class (`ai.currency_turnin`
 imports only stdlib), `ChosenLoadout` (`ai.chosen_loadout`, pure data over
-`thresholds`) and `PartyLease` (`ai.party_lease_core`, pure data over
-`world_state`), none of which carries a cycle risk of its own.
+`thresholds`), `PartyLease` (`ai.party_lease_core`, pure data over
+`world_state`) and `GearObjective` (`ai.gear_objective_result`, pure data over
+`gear_objective_core`), none of which carries a cycle risk of its own.
 """
 
 from dataclasses import dataclass, field
 
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
 
 
@@ -253,6 +255,9 @@ class SelectionContext:
     # pick. The gear decisions (`decisions.root.IsAFightBlockingMe`) read this
     # and never `loadout`, so a potion-propped win never hides a gear upgrade.
     # False (the default) whenever bare gear has a fight, or there is no target.
+    # Since the gear objective names the grind target (`gear_objective` below)
+    # nothing sets it: the band pick it described is no longer the target, and
+    # a target that wins only on potions is `combat_risky` too.
     combat_propped: bool = False
 
     # The grind target wins below SECURE_WIN (USER 2026-10-15: below 75% we
@@ -271,6 +276,14 @@ class SelectionContext:
     # task and the loadout chooser. False (the default) with no items task, no
     # combat target, or a task that does not pay.
     held_task_pays: bool = False
+
+    # The cycle's gear objective `(L*, m*)` (spec 2026-10-18 §2.4,
+    # `gear_objective.gear_objective`), computed ONCE per cycle by the player
+    # from this context's pricing fields, before the grind target is set. While
+    # it is not held no fight is chosen for XP (§6.2), so `combat_monster` is
+    # `m*` only when it is held, else the held monsters task's monster or None.
+    # None when no monster pays, and on every caller that does not compute it.
+    gear_objective: GearObjective | None = None
 
 
 NO_PROFILE_CONTEXT = SelectionContext(

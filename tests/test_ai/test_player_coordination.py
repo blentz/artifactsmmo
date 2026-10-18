@@ -356,7 +356,7 @@ def test_update_coordination_is_a_noop_without_a_store():
     assert p._supply_target is None
     assert p._role is None
     assert p._role_held_cycles == 0
-    ctx = p._selection_context(combat_monster=None)
+    ctx = p._selection_context()
     assert ctx.supply_target is None
 
 
@@ -726,7 +726,7 @@ def test_update_coordination_computes_the_supply_target_from_sibling_demand(tmp_
         p._update_coordination(p.state, p.game_data)
         assert p._role == "miner"
         assert p._supply_target == ("copper_ore", 7, 5)  # banked(2) + demand(5)
-        ctx = p._selection_context(combat_monster=None)
+        ctx = p._selection_context()
         assert ctx.supply_target == ("copper_ore", 7, 5)
     finally:
         store.close()
@@ -1202,7 +1202,7 @@ def test_a_coordinated_supply_target_reaches_a_real_supply_bank_goal(tmp_path):
         p._role_held_cycles = 3  # below ROLE_MIN_HOLD_CYCLES: stays "miner"
 
         p._update_coordination(p.state, p.game_data)
-        ctx = p._selection_context(combat_monster=None)
+        ctx = p._selection_context()
         # The quantity is now the Task 2 batch milestone (`SUPPLY_BATCH`), not
         # `banked + demand`: banked(2) + demand(SUPPLY_DEMAND_MIN + 2) crosses
         # the first batch boundary. The demand element is still reported
@@ -1257,7 +1257,7 @@ def test_a_sub_threshold_coordinated_demand_is_targeted_but_never_fires(tmp_path
         p._role_held_cycles = 3
 
         p._update_coordination(p.state, p.game_data)
-        ctx = p._selection_context(combat_monster=None)
+        ctx = p._selection_context()
         # Same Task 2 batch-target substitution as the test above.
         assert ctx.supply_target == ("copper_ore",
                                      supply_batch_target_pure(2, SUPPLY_DEMAND_MIN - 1),
@@ -1312,7 +1312,7 @@ def test_update_coordination_reads_sibling_bank_claims(tmp_path):
         sibling.claim_bank_stock({"sap": 90}, datetime.now(tz=timezone.utc))
         p._update_coordination(p.state, p.game_data)
         assert p._sibling_bank_claims == {"sap": 90}
-        assert p._selection_context(combat_monster=None).sibling_bank_claims == {"sap": 90}
+        assert p._selection_context().sibling_bank_claims == {"sap": 90}
     finally:
         store.close()
         sibling.close()
@@ -1329,7 +1329,7 @@ def test_update_coordination_clears_sibling_bank_claims_without_a_store():
     p._update_coordination(p.state, p.game_data)
     assert p._coordination is None
     assert p._sibling_bank_claims == {}
-    assert p._selection_context(combat_monster=None).sibling_bank_claims == {}
+    assert p._selection_context().sibling_bank_claims == {}
 
 
 def test_a_character_never_reads_back_its_own_bank_claim(tmp_path):
@@ -1546,8 +1546,7 @@ def test_update_coordination_reads_sibling_order_claims(tmp_path):
         sibling.claim_ge_order("order-1", datetime.now(tz=timezone.utc))
         p._update_coordination(p.state, p.game_data)
         assert p._sibling_order_claims == frozenset({"order-1"})
-        assert p._selection_context(
-            combat_monster=None).sibling_order_claims == frozenset({"order-1"})
+        assert p._selection_context().sibling_order_claims == frozenset({"order-1"})
     finally:
         store.close()
         sibling.close()
@@ -1564,7 +1563,7 @@ def test_update_coordination_clears_sibling_order_claims_without_a_store():
     p._update_coordination(p.state, p.game_data)
     assert p._coordination is None
     assert p._sibling_order_claims == frozenset()
-    assert p._selection_context(combat_monster=None).sibling_order_claims == frozenset()
+    assert p._selection_context().sibling_order_claims == frozenset()
 
 
 def test_a_character_never_reads_back_its_own_order_claim(tmp_path):
@@ -1874,7 +1873,7 @@ def test_the_asymmetric_set_reaches_the_selection_context(tmp_path):
     _publish_sibling_request(tmp_path, "Lor", {"greater_wooden_staff": 1}, self_servable=frozenset())
 
     player._update_coordination(player.state, player.game_data)
-    ctx = player._selection_context(combat_monster=None)
+    ctx = player._selection_context()
 
     assert "greater_wooden_staff" in ctx.asymmetric_demand
 
@@ -2413,7 +2412,8 @@ def test_the_shortfall_reaches_the_selection_context(monkeypatch):
     monkeypatch.setattr("artifactsmmo_cli.ai.player.fight_ahead_loadout", choose)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.supply_shortfall", shortfall)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))
-    ctx = p._selection_context(combat_monster="chicken")
+    monkeypatch.setattr(p, "_winnable_farm_target", lambda *_: "chicken")
+    ctx = p._selection_context()
     assert ctx.loadout is pick
     assert ctx.supply_shortfall == (("cooked_bass", 11),)
     assert p._supply_shortfall == (("cooked_bass", 11),)
@@ -2439,7 +2439,8 @@ def test_the_skill_demand_is_known_when_the_loadout_is_chosen(monkeypatch):
                         lambda roots, s, g, c: (frozenset({"fishing"}), False))
     monkeypatch.setattr("artifactsmmo_cli.ai.player.fight_ahead_loadout", choose)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))
-    ctx = p._selection_context(combat_monster="chicken")
+    monkeypatch.setattr(p, "_winnable_farm_target", lambda *_: "chicken")
+    ctx = p._selection_context()
     assert seen["skills"] == frozenset({"fishing"})
     assert ctx.skill_demand == frozenset({"fishing"})
 
@@ -2452,7 +2453,8 @@ def test_the_role_and_the_fleet_s_roles_reach_the_selection_context(monkeypatch)
     p._fleet_roles = frozenset({"fisher", "miner"})
     monkeypatch.setattr("artifactsmmo_cli.ai.player.fight_ahead_loadout", lambda *a: None)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))
-    ctx = p._selection_context(combat_monster="chicken")
+    monkeypatch.setattr(p, "_winnable_farm_target", lambda *_: "chicken")
+    ctx = p._selection_context()
     assert ctx.role == "fisher"
     assert ctx.fleet_roles == frozenset({"fisher", "miner"})
 

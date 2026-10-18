@@ -135,7 +135,7 @@ def test_the_blocked_ask_reaches_a_sibling_who_can_serve_it(tmp_path) -> None:
     # LINK 5 — the work is due at quantity 1, which the bulk gate alone would
     # have refused (SUPPLY_DEMAND_MIN is 10 and every live request is 1), so
     # the walk offers the fleet objective for it (Phase 5-2c-iv).
-    ctx = supplier._selection_context(None)
+    ctx = supplier._selection_context()
     assert ctx.supply_target is not None
     assert ctx.supply_target[2] < 10
     assert supply_due(ctx)

@@ -225,7 +225,7 @@ def test_the_player_hands_its_turns_to_the_arbiter():
     with (patch.object(player._arbiter, "select", return_value=(None, [], [])) as select,
           patch.object(player, "_record_decision_targets", return_value=None),
           patch.object(player, "_selection_context", return_value=MagicMock())):
-        player._decide_band(make_state(), GameData(), [], None)
+        player._decide_band(make_state(), GameData(), [])
     assert select.call_args.kwargs["turns"] == {YIELDED: 1}
 
 

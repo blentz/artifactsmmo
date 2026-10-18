@@ -313,9 +313,9 @@ def test_a_party_call_breaks_a_cached_plan_that_is_not_its_hold(tmp_path: Path) 
     cache.selected_goal.is_satisfied.return_value = False
     lor._plan_cache = cache
     with patch("artifactsmmo_cli.ai.player.should_replan", side_effect=spy):
-        lor._plan_or_reuse(lor.state, lor.game_data, [], None)
+        lor._plan_or_reuse(lor.state, lor.game_data, [])
         cache.goal_repr = "JoinParty(duskworm)"
-        lor._plan_or_reuse(lor.state, lor.game_data, [], None)
+        lor._plan_or_reuse(lor.state, lor.game_data, [])
     assert seen == [True, False]
 
 
@@ -323,7 +323,7 @@ def test_a_lease_s_boss_and_loadout_are_the_fight_ahead(tmp_path: Path, monkeypa
     """Leader or member, the lease's boss is the fight its potions are stocked
     for, in the party loadout beside the other members' cards (residual R2)."""
     lor, _ = _player(tmp_path, "Lor")
-    monkeypatch.setattr(lor, "_winnable_farm_target", lambda: None)
+    monkeypatch.setattr(lor, "_winnable_farm_target", lambda *_: None)
     lor._draws_enabled = False
     assert lor._party_fight_loadout() is None
     seen: list[object] = []

@@ -65,7 +65,7 @@ def test_the_player_reserves_its_claims_closure(monkeypatch) -> None:
     player = GamePlayer(character="hero")
     player.state = make_state()
     player.game_data = _gd()
-    monkeypatch.setattr(player, "_winnable_farm_target", lambda: None)
+    monkeypatch.setattr(player, "_winnable_farm_target", lambda *_: None)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))
     assert player._selection_context().supply_reserved == frozenset()
     player._supply_target = ("cooked_rat_meat", 10, 20)

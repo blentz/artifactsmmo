@@ -1,13 +1,18 @@
-"""Tests for monster-task grind retargeting in _winnable_farm_target."""
+"""Tests for monster-task grind retargeting in _winnable_farm_target: the held
+monsters task's monster (`_task_aligned_monster`) outranks the gear objective's
+`m*`, and a task that supplies none falls through to it."""
 
 from fractions import Fraction
 from unittest.mock import patch
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.tiers.band_target import BandTarget
 from tests.test_ai.fixtures import make_state
+
+HELD = GearObjective("chicken", {}, Fraction(1), ())
+"""A held gear objective: its `m*` is the grind target below the task."""
 
 
 def _player(tmp_path):
@@ -18,6 +23,10 @@ def _player(tmp_path):
     p.state = None
     p._last_path_plan = None
     return p
+
+
+def _target(p: GamePlayer) -> str | None:
+    return p._winnable_farm_target(p._task_aligned_monster(), HELD)
 
 
 def test_pursue_monster_task_retargets_grind(tmp_path):
@@ -38,13 +47,13 @@ def test_pursue_monster_task_retargets_grind(tmp_path):
     with patch("artifactsmmo_cli.ai.player.task_decision", return_value="pursue"):
         with patch.object(GamePlayer, "_is_winnable", return_value=True):
             with patch.object(type(p.game_data), "xp_per_kill", lambda s, c, lv: 20):
-                result = p._winnable_farm_target()
+                result = _target(p)
     assert result == "yellow_slime"
     p.history.close()
 
 
 def test_pivot_monster_task_does_not_retarget(tmp_path):
-    """PIVOT monster-task: falls through to the normal path-aligned / winnable logic."""
+    """PIVOT monster-task: falls through to the gear objective's monster."""
     p = _player(tmp_path)
     p.state = make_state(
         task_code="yellow_slime",
@@ -54,10 +63,8 @@ def test_pivot_monster_task_does_not_retarget(tmp_path):
     )
     with (
         patch("artifactsmmo_cli.ai.player.task_decision", return_value="pivot"),
-        patch.object(p, "_path_aligned_monster", return_value=None),
-        patch.object(p, "_pick_winnable_monster", return_value="chicken"),
     ):
-        result = p._winnable_farm_target()
+        result = _target(p)
     assert result == "chicken"
     p.history.close()
 
@@ -73,10 +80,8 @@ def test_items_task_does_not_retarget(tmp_path):
     )
     with (
         patch("artifactsmmo_cli.ai.player.task_decision", return_value="pursue"),
-        patch.object(p, "_path_aligned_monster", return_value=None),
-        patch.object(p, "_pick_winnable_monster", return_value="chicken"),
     ):
-        result = p._winnable_farm_target()
+        result = _target(p)
     assert result == "chicken"
     p.history.close()
 
@@ -85,11 +90,7 @@ def test_no_state_does_not_retarget(tmp_path):
     """No state: _task_aligned_monster returns None; normal logic applies."""
     p = _player(tmp_path)
     p.state = None
-    with (
-        patch.object(p, "_path_aligned_monster", return_value=None),
-        patch.object(p, "_pick_winnable_monster", return_value="chicken"),
-    ):
-        result = p._winnable_farm_target()
+    result = _target(p)
     assert result == "chicken"
     p.history.close()
 
@@ -105,10 +106,8 @@ def test_completed_task_does_not_retarget(tmp_path):
     )
     with (
         patch("artifactsmmo_cli.ai.player.task_decision", return_value="pursue"),
-        patch.object(p, "_path_aligned_monster", return_value=None),
-        patch.object(p, "_pick_winnable_monster", return_value="chicken"),
     ):
-        result = p._winnable_farm_target()
+        result = _target(p)
     assert result == "chicken"
     p.history.close()
 
@@ -141,7 +140,7 @@ def test_an_unwinnable_task_monster_is_not_retargeted(tmp_path):
                          task_total=104, task_progress=0)
     with patch("artifactsmmo_cli.ai.player.task_decision", return_value="pursue"):
         with patch.object(GamePlayer, "_is_winnable", return_value=False):
-            result = p._winnable_farm_target()
+            result = _target(p)
     assert result != "pig", "the task still forced an unwinnable fight"
     p.history.close()
 
@@ -155,23 +154,22 @@ def test_a_winnable_task_monster_is_still_retargeted(tmp_path):
     with patch("artifactsmmo_cli.ai.player.task_decision", return_value="pursue"):
         with patch.object(GamePlayer, "_is_winnable", return_value=True):
             with patch.object(type(p.game_data), "xp_per_kill", lambda s, c, lv: 20):
-                result = p._winnable_farm_target()
+                result = _target(p)
     assert result == "yellow_slime"
     p.history.close()
 
 
 def test_an_unwinnable_task_monster_falls_through_to_the_winnable_tiers(tmp_path):
-    """Falling through is the point: tiers 2 and 3 are already winnability-gated,
-    so the character grinds something it CAN beat instead of standing down."""
+    """Falling through is the point: the gear objective's `m*` is a fight its
+    `L*` takes, so the character grinds something it CAN beat instead of
+    standing down."""
     p = _player(tmp_path)
     p.state = make_state(task_code="pig", task_type="monsters",
                          task_total=104, task_progress=0)
     with patch("artifactsmmo_cli.ai.player.task_decision", return_value="pursue"):
         with patch.object(GamePlayer, "_is_winnable",
                           side_effect=lambda m: m != "pig"):
-            with patch.object(GamePlayer, "_path_aligned_monster",
-                              return_value=BandTarget("chicken", Fraction(1), True)):
-                result = p._winnable_farm_target()
+            result = _target(p)
     assert result == "chicken"
     p.history.close()
 
@@ -198,7 +196,7 @@ def test_a_GREY_task_monster_is_not_retargeted(tmp_path):
     with patch("artifactsmmo_cli.ai.player.task_decision", return_value="pursue"):
         with patch.object(GamePlayer, "_is_winnable", return_value=True):
             with patch.object(type(p.game_data), "xp_per_kill", lambda s, c, lv: 0):
-                result = p._winnable_farm_target()
+                result = _target(p)
     assert result != "sheep", "a grey task monster still reached the grind"
     p.history.close()
 
@@ -211,6 +209,6 @@ def test_an_xp_positive_task_monster_is_still_retargeted(tmp_path):
     with patch("artifactsmmo_cli.ai.player.task_decision", return_value="pursue"):
         with patch.object(GamePlayer, "_is_winnable", return_value=True):
             with patch.object(type(p.game_data), "xp_per_kill", lambda s, c, lv: 33):
-                result = p._winnable_farm_target()
+                result = _target(p)
     assert result == "highwayman"
     p.history.close()
