@@ -135,7 +135,8 @@ def _wearing(state: WorldState, loadout: Mapping[str, str | None],
             bag[worn] += 1
     for slot, code in loadout.items():
         if code is not None and equipment[slot] != code:
-            assert bag[code] > 0, f"{code} is not owned to wear in {slot}"
+            if bag[code] <= 0:
+                raise RuntimeError(f"{code} is not owned to wear in {slot}")
             bag[code] -= 1
         equipment[slot] = code
     return replace(state, inventory={code: n for code, n in bag.items() if n > 0},
@@ -268,7 +269,8 @@ def _rate(fighter: WorldState, game_data: GameData, monster: str,
     potion, recovering over `food` (see the module doc's `R`). The no-potion
     loop drinks nothing, so it has no potion price and always runs."""
     loop = loop_rate(fighter, game_data, monster, (), food, {})
-    assert loop is not None, f"the no-potion loop against {monster} did not run"
+    if loop is None:
+        raise RuntimeError(f"the no-potion loop against {monster} did not run")
     return loop.xp_per_second
 
 

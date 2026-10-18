@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 import artifactsmmo_cli.ai.gear_objective as mod
+from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
 from artifactsmmo_cli.ai.combat import fight_loadout, win_probability
 from artifactsmmo_cli.ai.equipment.loadout_picker import _ordered_slots
 from artifactsmmo_cli.ai.game_data import GameData
@@ -42,14 +43,18 @@ ROBBY_WORN = {"weapon_slot": "death_knight_sword", "shield_slot": "slime_shield"
               "helmet_slot": "hard_leather_helmet", "body_armor_slot": "bandit_armor",
               "leg_armor_slot": "hard_leather_pants", "boots_slot": "snakeskin_boots",
               "ring1_slot": "ring_of_chance", "ring2_slot": "ring_of_chance",
-              "amulet_slot": "skull_amulet", "artifact1_slot": "novice_guide"}
+              "amulet_slot": "skull_amulet", "artifact1_slot": "novice_guide",
+              "rune_slot": "lifesteal_rune"}
 """Robby's live loadout (2026-10-18), less `lich_race_medal`, which the
 committed bundle predates."""
 
 
 def _robby(equipment: dict[str, str] = ROBBY_WORN) -> WorldState:
     """Robby's live shape (spec §1.2, his sheet on 2026-10-18): level 41, the
-    server's own stat totals for the worn gear, gearcrafting 23,
+    server's own stat totals for the worn gear less the `lich_race_medal`'s
+    (dmg 5, prospecting 25; its initiative 100 is not here because the
+    fixture's initiative is 0), since `_bare` cannot strip an item the bundle
+    does not know; gearcrafting 23,
     jewelrycrafting 22, weaponcrafting 22, and the alchemy 32 and cooking 34
     that make his potion loadouts stockable (no fight that pays him XP is won
     on bare gear alone)."""
@@ -60,9 +65,9 @@ def _robby(equipment: dict[str, str] = ROBBY_WORN) -> WorldState:
                               "alchemy": 32, "cooking": 34, "mining": 25, "woodcutting": 27,
                               "fishing": 29},
                       equipment=worn, attack={"fire": 37, "earth": 37, "water": 0, "air": 0},
-                      dmg=29, dmg_elements={"fire": 30, "earth": 30, "water": 0, "air": 20},
+                      dmg=24, dmg_elements={"fire": 30, "earth": 30, "water": 0, "air": 20},
                       resistance={"fire": 7, "earth": 13, "water": 21, "air": 21},
-                      critical_strike=40, wisdom=25, prospecting=160)
+                      critical_strike=40, wisdom=25, prospecting=135)
 
 
 def _novice(gd: GameData, equipment: dict[str, str] = COPPER,
@@ -169,8 +174,7 @@ bare takes the other."""
 def test_the_target_ignores_what_is_worn(gd: GameData, worn: dict[str, str], level: int) -> None:
     """The same holdings, worn or carried: the same `L*` and `m*`, and over one
     achievable set the same `L*(m)` for every candidate `m`. (The achievable
-    set itself can differ at the margin: a drop's WINNABLE gate asks the picker,
-    whose purpose reads the worn weapon's attack.)"""
+    set itself is the same too: `test_the_same_holdings_worn_or_carried_give_the_same_layers`.)"""
     wearing = _novice(gd, equipment=worn, level=level)
     carried = _novice(gd, equipment={}, inventory=Counter(worn.values()), level=level)
     objectives = [_objective(state, gd) for state in (wearing, carried)]
@@ -417,3 +421,47 @@ def test_a_drop_monster_is_judged_on_its_own_target(gd: GameData) -> None:
     owned = frozenset().union(*layers[:-1])
     assert not drop_fight_winnable(mod._bare(state, owned, gd), gd, "mushmush")
     assert drop_fight_winnable(mod._fighters(state, owned, gd)("mushmush"), gd, "mushmush")
+
+
+def test_a_party_only_monster_is_no_candidate(gd: GameData) -> None:
+    """A boss pays Robby more per kill than any solo fight, spawns, and is in
+    his level reach; the party path owns it, so it is never `m*`."""
+    state = _robby()
+    candidates = mod._candidates(state, gd)
+    for boss in ("goblin_priestess", "rosenblood"):
+        assert gd.monsters.types[boss] == "boss"
+        assert gd.monster_levels[boss] <= state.level + FIGHT_LEVEL_GAP_CEILING
+        assert gd.monster_spawn_known(boss)
+        assert all(gd.xp_per_kill(boss, state.level) > gd.xp_per_kill(code, state.level)
+                   for code in candidates)
+        assert boss not in candidates
+
+
+def test_a_monster_above_the_fight_ceiling_is_no_candidate(gd: GameData) -> None:
+    """`wolf` (level 15, paying, spawned) is more than `FIGHT_LEVEL_GAP_CEILING`
+    above a level-12 character, which `FightAction` refuses; at level 13 it is
+    exactly the ceiling and a candidate."""
+    assert gd.monster_levels["wolf"] == 12 + FIGHT_LEVEL_GAP_CEILING + 1
+    assert gd.monster_spawn_known("wolf") and gd.xp_per_kill("wolf", 12) > 0
+    assert "wolf" not in mod._candidates(_novice(gd), gd)
+    assert "wolf" in mod._candidates(_novice(gd, level=13), gd)
+
+
+def test_a_grey_monster_is_no_candidate(gd: GameData) -> None:
+    """`chicken` pays a level-12 character no XP: no XP rate to farm."""
+    assert gd.monster_spawn_known("chicken") and gd.xp_per_kill("chicken", 12) == 0
+    candidates = mod._candidates(_novice(gd), gd)
+    assert "chicken" not in candidates
+    assert "yellow_slime" in candidates
+
+
+def test_wearing_an_unowned_piece_raises(gd: GameData) -> None:
+    with pytest.raises(RuntimeError, match="iron_sword is not owned to wear in weapon_slot"):
+        mod._wearing(_novice(gd), {"weapon_slot": "iron_sword"}, gd)
+
+
+def test_a_no_potion_loop_that_never_runs_raises(monkeypatch: pytest.MonkeyPatch,
+                                                 gd: GameData) -> None:
+    monkeypatch.setattr(mod, "loop_rate", lambda *_args: None)
+    with pytest.raises(RuntimeError, match="the no-potion loop against chicken did not run"):
+        mod._rate(_novice(gd), gd, "chicken", ())
