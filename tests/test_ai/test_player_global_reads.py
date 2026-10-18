@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
+from artifactsmmo_cli.ai.live_event import LiveEvent
 from artifactsmmo_cli.ai.player import GamePlayer
 
 
@@ -36,7 +37,7 @@ def test_expired_events_are_dropped_from_a_cached_view():
     player = _player()
     now = datetime.now(timezone.utc)
     cached = {
-        "live_event": now + timedelta(minutes=30),
-        "ended_event": now - timedelta(seconds=1),
+        "live_event": LiveEvent(now + timedelta(minutes=30), ((10, 1, "overworld"),)),
+        "ended_event": LiveEvent(now - timedelta(seconds=1), ((10, 0, "overworld"),)),
     }
     assert player._unexpired(cached, now) == {"live_event": cached["live_event"]}

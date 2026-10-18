@@ -634,6 +634,16 @@ class GameData:
         self.world.active_event_codes = set(codes)
 
     @property
+    def active_event_maps(self) -> dict[str, list[tuple[int, int, str]]]:
+        """Event code -> the tiles (x, y, layer) it stands on now, from the
+        per-cycle active-event read (see `LocationCatalog.active_event_maps`)."""
+        return self.world.active_event_maps
+
+    @active_event_maps.setter
+    def active_event_maps(self, maps: dict[str, list[tuple[int, int, str]]]) -> None:
+        self.world.active_event_maps = {code: list(tiles) for code, tiles in maps.items()}
+
+    @property
     def active_raid_codes(self) -> set[str]:
         """Raid codes live right now. Per-cycle overlay set from
         `WorldState.active_raids()` before planning, mirroring
@@ -665,20 +675,30 @@ class GameData:
 
     # === Public query API (delegates to the domain catalogs) ===
 
+    def _untaken(self, tiles: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        """Static overworld `tiles` less those a live event stands on: the
+        event replaced that tile's content until it ends."""
+        taken = self.world.taken_tiles()
+        if not taken:
+            return tiles
+        return [(x, y) for x, y in tiles if (x, y, "overworld") not in taken]
+
     def monster_locations(self, code: str) -> list[tuple[int, int]]:
-        """Tiles where a monster spawns (static overworld + active event spawns).
+        """Tiles where a monster spawns (static overworld + active event spawns),
+        less the static tiles a live event stands on.
 
         A monster that is BOTH a static spawn and an event spawn can share a tile;
         the merge is order-preserving deduped so a tile is never listed twice."""
-        base = self.monsters.monster_locations(code)
+        base = self._untaken(self.monsters.monster_locations(code))
         extra = self.world.active_event_monster_tiles(code)
         if not extra:
             return base
         return list(dict.fromkeys(base + extra))
 
     def resource_locations(self, code: str) -> list[tuple[int, int]]:
-        """Tiles where a resource appears (static overworld + active event spawns)."""
-        base = self.recipes_catalog.resource_locations(code)
+        """Tiles where a resource appears (static overworld + active event spawns),
+        less the static tiles a live event stands on."""
+        base = self._untaken(self.recipes_catalog.resource_locations(code))
         extra = self.world.active_event_resource_tiles(code)
         if not extra:
             return base
@@ -716,8 +736,13 @@ class GameData:
         return any(self.world.region_of(x, y, layer) in reach for (x, y, layer) in tiles)
 
     def layered_locations(self, code: str) -> list[tuple[int, int, str]]:
-        """ALL-layer (x, y, layer) tiles for a content code (P5b data)."""
-        return self.world.layered_locations(code)
+        """ALL-layer (x, y, layer) tiles for a content code (P5b data), less
+        the tiles a live event stands on."""
+        tiles = self.world.layered_locations(code)
+        taken = self.world.taken_tiles()
+        if not taken:
+            return tiles
+        return [tile for tile in tiles if tile not in taken]
 
     def is_restricted_tile(self, x: int, y: int, layer: str) -> bool:
         """True when the tile is region-gated (access type 'restricted')."""
@@ -1447,16 +1472,26 @@ class GameData:
         """item_code -> ItemStats for every known item."""
         return self.items.stats
 
+    def _untaken_index(self, index: Mapping[str, list[tuple[int, int]]]) -> dict[str, list[tuple[int, int]]]:
+        """A copy of a static code -> tiles index with the taken tiles out and
+        the codes left with no tile dropped."""
+        if not self.world.taken_tiles():
+            return dict(index)
+        return {code: open_tiles for code, tiles in index.items()
+                if (open_tiles := self._untaken(tiles))}
+
     @property
     def all_monster_locations(self) -> Mapping[str, list[tuple[int, int]]]:
         """monster_code -> spawn tiles for every known monster, with active event
         monsters merged in (so the factory emits a FightAction for them only while
-        their event is live). No active events ⇒ identical to the static map."""
+        their event is live), and the static tiles a live event stands on taken
+        out (a monster left with none spawns nowhere). No active events ⇒
+        identical to the static map."""
         active = self.world.active_event_monsters()
         raid_open = self.world.raid_open_monsters()
         if not active and not raid_open:
             return self.monsters.locations
-        merged = dict(self.monsters.locations)
+        merged = self._untaken_index(self.monsters.locations)
         for code, tiles in list(active.items()) + list(raid_open.items()):
             merged[code] = list(dict.fromkeys(merged.get(code, []) + tiles))
         return merged
@@ -1464,12 +1499,13 @@ class GameData:
     @property
     def all_resource_locations(self) -> Mapping[str, list[tuple[int, int]]]:
         """resource_code -> tiles for every known resource, with active event
-        resources merged in. No active events ⇒ identical to the static map."""
+        resources merged in, less the static tiles a live event stands on. No
+        active events ⇒ identical to the static map."""
         active = self.world.active_event_resources()
         raid_open = self.world.raid_open_resources()
         if not active and not raid_open:
             return self.recipes_catalog.locations
-        merged = dict(self.recipes_catalog.locations)
+        merged = self._untaken_index(self.recipes_catalog.locations)
         for code, tiles in list(active.items()) + list(raid_open.items()):
             merged[code] = list(dict.fromkeys(merged.get(code, []) + tiles))
         return merged

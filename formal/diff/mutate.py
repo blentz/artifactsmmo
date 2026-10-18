@@ -340,6 +340,56 @@ EVENT_VISIBILITY_MUTATIONS = [
     ("location_catalog: invert active-event gate (event content visible only when dormant)",
      "        return ev is not None and ev in self.active_event_codes",
      "        return ev is not None and ev not in self.active_event_codes"),
+    ("location_catalog: a live event's read map is ignored",
+     "        if read is None:\n            return catalogue\n",
+     "        if True:\n            return catalogue\n"),
+    ("location_catalog: an ended event still takes its tile",
+     "        return frozenset(tile for code in self.active_event_codes\n",
+     "        return frozenset(tile for code in self.active_event_maps\n"),
+]
+
+# A live event replaces its tile's own content (live Robby 2026-10-18:
+# `Fight(owlbear)` met corrupted_owlbear 17 times).
+EVENT_TAKEN_TILE_MUTATIONS = [
+    ("game_data: a taken tile keeps its static content",
+     '        return [(x, y) for x, y in tiles if (x, y, "overworld") not in taken]',
+     "        return tiles"),
+    ("game_data: a monster with every tile taken still spawns",
+     "                if (open_tiles := self._untaken(tiles))}",
+     "                for open_tiles in [self._untaken(tiles)]}"),
+    ("game_data: the full monster index keeps taken tiles",
+     "        merged = self._untaken_index(self.monsters.locations)",
+     "        merged = dict(self.monsters.locations)"),
+    ("game_data: the full resource index keeps taken tiles",
+     "        merged = self._untaken_index(self.recipes_catalog.locations)",
+     "        merged = dict(self.recipes_catalog.locations)"),
+    ("game_data: the all-layer index keeps taken tiles",
+     "        return [tile for tile in tiles if tile not in taken]",
+     "        return tiles"),
+]
+
+LIVE_EVENT_FETCH_MUTATIONS = [
+    ("player: a second row of one event keeps the first expiry",
+     "LiveEvent(max(seen.expiration, ev.expiration), (*seen.maps, tile)))",
+     "LiveEvent(seen.expiration, (*seen.maps, tile)))"),
+    ("player: a second row of one event drops the first map",
+     "LiveEvent(max(seen.expiration, ev.expiration), (*seen.maps, tile)))",
+     "LiveEvent(max(seen.expiration, ev.expiration), (tile,)))"),
+    ("player: the live maps never reach game_data",
+     "            self.game_data.active_event_maps = {code: list(ev.maps) for code, ev in live_events.items()}",
+     "            self.game_data.active_event_maps = {}"),
+]
+
+FIGHT_OPPONENT_RECORD_MUTATIONS = [
+    ("player: the outcome is filed under the plan's monster",
+     "        monster = action.last_fight.opponent",
+     "        monster = action.monster_code"),
+    ("player: a dry run records its modelled fight",
+     "        if self.history is None or self.game_data is None or self.dry_run:",
+     "        if self.history is None or self.game_data is None:"),
+    ("player: a fight with no record is recorded anyway",
+     "        if action.last_fight is None:\n            raise RuntimeError",
+     "        if False:\n            raise RuntimeError"),
 ]
 
 # Doomed-memo (2026-06-15 feather_coat CPU-peg fix).
@@ -6648,8 +6698,8 @@ FLEET_HOLDINGS_CTX_MUTATIONS = [
 ]
 PARTY_RECORD_MUTATIONS = [
     ("player: a party fight feeds the solo veto",
-     "                party_combat_key(action.monster_code), loadout, True, outcome == \"ok\", state.level)\n",
-     "                combat_key(action.monster_code), loadout, True, outcome == \"ok\", state.level)\n"),
+     "                party_combat_key(monster), loadout, True, outcome == \"ok\", state.level)\n",
+     "                combat_key(monster), loadout, True, outcome == \"ok\", state.level)\n"),
 ]
 # The party arm of the drop gate (docs/PLAN_group_fights.md increment 2). OWN
 # run_groups: unit-killed by tests/test_ai/test_party_win.py and the census's
@@ -9514,10 +9564,10 @@ COMBAT_ODDS_REPORT_MUTATIONS = [
 COMBAT_ODDS_PLAYER_MUTATIONS = [
     ("p_win record: a party fight records the solo odds",
      "            self.history.record_combat_outcome(\n"
-     "                party_combat_key(action.monster_code), loadout, True, outcome == \"ok\", state.level)",
+     "                party_combat_key(monster), loadout, True, outcome == \"ok\", state.level)",
      "            self.history.record_combat_outcome(\n"
-     "                party_combat_key(action.monster_code), loadout, True, outcome == \"ok\", state.level,\n"
-     "                p_win=win_probability(state, self.game_data, action.monster_code))"),
+     "                party_combat_key(monster), loadout, True, outcome == \"ok\", state.level,\n"
+     "                p_win=win_probability(state, self.game_data, monster))"),
 ]
 
 
@@ -11318,6 +11368,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_game_data.py", survivors)
     run_group(LOCATION_CATALOG_SRC, EVENT_VISIBILITY_MUTATIONS,
               "tests/test_ai/test_event_content_visibility.py", survivors)
+    run_group(GAME_DATA_PARSE_SRC, EVENT_TAKEN_TILE_MUTATIONS,
+              "tests/test_ai/test_event_content_visibility.py", survivors)
+    run_group(PLAYER_SRC, LIVE_EVENT_FETCH_MUTATIONS,
+              "tests/test_ai/test_player_active_events.py", survivors)
+    run_group(PLAYER_SRC, FIGHT_OPPONENT_RECORD_MUTATIONS,
+              "tests/test_ai/test_player_learning.py", survivors)
     # Phase 2c-2a — THE ONE WALK differential.
     run_group(DECOMPOSE_CORE_SRC, DECOMPOSE_CORE_MUTATIONS,
               "formal/diff/test_decompose_diff.py", survivors)

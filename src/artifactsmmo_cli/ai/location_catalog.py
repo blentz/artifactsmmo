@@ -105,6 +105,13 @@ class LocationCatalog:
     event_resource_locations: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     event_code_of_content: dict[str, str] = field(default_factory=dict)  # monster/resource code -> event code
     active_event_codes: set[str] = field(default_factory=set)  # per-cycle: events live right now
+    # Per-cycle, from the active-event read: event code -> the tiles (x, y, layer)
+    # it stands on now. An event stands on ONE of its catalogue maps per instance
+    # and replaces that tile's own content while it lasts (live Robby 2026-10-18:
+    # `Fight(owlbear)` at (10, 1) met corrupted_owlbear 17 times running). An
+    # event declared live with no read (an offline world) keeps every catalogue
+    # map and takes no tile.
+    active_event_maps: dict[str, list[tuple[int, int, str]]] = field(default_factory=dict)
     # Content standing on RESTRICTED tiles (the raid areas — the bundle's five
     # restricted tiles carry dryad x2 and enchanted_mushroom). Recorded for every
     # such tile but surfaced to the planner only while a raid is open, exactly as
@@ -331,27 +338,41 @@ class LocationCatalog:
         ev = self.event_code_of_content.get(code)
         return ev is not None and ev in self.active_event_codes
 
+    def _live_tiles(self, code: str, catalogue: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        """The tiles event content `code` stands on now: the read maps of its
+        event, or every `catalogue` map when the event is live with no read."""
+        read = self.active_event_maps.get(self.event_code_of_content[code])
+        if read is None:
+            return catalogue
+        return [(x, y) for x, y, _ in read]
+
     def active_event_monster_tiles(self, monster_code: str) -> list[tuple[int, int]]:
         """Event spawn tiles for `monster_code` while its event is active, else []."""
         if self._content_event_active(monster_code):
-            return self.event_monster_locations.get(monster_code, [])
+            return self._live_tiles(monster_code, self.event_monster_locations.get(monster_code, []))
         return []
 
     def active_event_resource_tiles(self, resource_code: str) -> list[tuple[int, int]]:
         """Event spawn tiles for `resource_code` while its event is active, else []."""
         if self._content_event_active(resource_code):
-            return self.event_resource_locations.get(resource_code, [])
+            return self._live_tiles(resource_code, self.event_resource_locations.get(resource_code, []))
         return []
 
     def active_event_monsters(self) -> dict[str, list[tuple[int, int]]]:
         """{monster_code -> event tiles} for every event monster live right now."""
-        return {code: tiles for code, tiles in self.event_monster_locations.items()
+        return {code: self._live_tiles(code, tiles) for code, tiles in self.event_monster_locations.items()
                 if self._content_event_active(code)}
 
     def active_event_resources(self) -> dict[str, list[tuple[int, int]]]:
         """{resource_code -> event tiles} for every event resource live right now."""
-        return {code: tiles for code, tiles in self.event_resource_locations.items()
+        return {code: self._live_tiles(code, tiles) for code, tiles in self.event_resource_locations.items()
                 if self._content_event_active(code)}
+
+    def taken_tiles(self) -> frozenset[tuple[int, int, str]]:
+        """The tiles (x, y, layer) a live event stands on per the active-event
+        read: their own content is gone until the event ends."""
+        return frozenset(tile for code in self.active_event_codes
+                         for tile in self.active_event_maps.get(code, []))
 
     def raid_open_monsters(self) -> dict[str, list[tuple[int, int]]]:
         """{monster_code -> restricted tiles} once a raid opens the restricted

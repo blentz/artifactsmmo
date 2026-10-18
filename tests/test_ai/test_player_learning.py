@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES, fight_loadout, predict_win
+from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -324,6 +325,14 @@ def _make_chicken_game_data() -> GameData:
     return gd
 
 
+def _fought(action: FightAction, opponent: str, result: str) -> FightAction:
+    """`action` after the server resolved its fight against `opponent`."""
+    action.last_fight = FightRecord(started_at="2026-10-18T01:43:42", result=result, turns=22,
+                                    opponent=opponent, logs=(), hp_before=840, hp_after=0,
+                                    xp=0, gold=0, drops=())
+    return action
+
+
 def test_records_combat_outcome_on_win(tmp_path):
     """_record_combat_outcome stores one row with actual_win=True on 'ok'."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
@@ -340,7 +349,7 @@ def test_records_combat_outcome_on_win(tmp_path):
         "utility1_slot": None, "utility2_slot": None, "bag_slot": None, "rune_slot": None,
     }
     state = make_state(equipment=equipment)
-    action = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
+    action = _fought(FightAction(monster_code="chicken", locations=frozenset({(0, 0)})), "chicken", "win")
 
     player._record_combat_outcome(action, state, "ok")
 
@@ -362,7 +371,7 @@ def test_records_combat_outcome_on_loss(tmp_path):
     player.game_data = gd
 
     state = make_state()
-    action = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
+    action = _fought(FightAction(monster_code="chicken", locations=frozenset({(0, 0)})), "chicken", "loss")
 
     player._record_combat_outcome(action, state, "error:fight_lost")
 
@@ -379,14 +388,63 @@ def test_a_party_fight_is_recorded_apart_from_the_solo_veto(tmp_path):
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
     player.game_data = _make_chicken_game_data()
-    action = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}),
-                         participants=("Lor",))
+    action = _fought(FightAction(monster_code="chicken", locations=frozenset({(0, 0)}),
+                                 participants=("Lor",)), "chicken", "loss")
 
     player._record_combat_outcome(action, make_state(), "error:fight_lost")
 
     rows = store.combat_loadout_outcomes()
     assert [(r.task_key, r.predicted_win, r.actual_win) for r in rows] == [
         ("combat-party:chicken", True, False)]
+    store.close()
+
+
+def test_the_outcome_is_the_server_opponents(tmp_path):
+    """An event standing on the planned monster's tile fights in its place
+    (live Robby 2026-10-18: `Fight(owlbear)` met corrupted_owlbear 17 times);
+    the loss belongs to the monster the server fought, not to the plan's."""
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
+    player = GamePlayer(character="Robby", history=store)
+    gd = _make_chicken_game_data()
+    for table in (gd._monster_attack, gd._monster_resistance):
+        table["corrupted_owlbear"] = dict(table["chicken"])
+    gd._monster_hp["corrupted_owlbear"] = 1500
+    gd.monsters.critical_strike["corrupted_owlbear"] = 0
+    gd.monsters.initiative["corrupted_owlbear"] = 0
+    player.game_data = gd
+    state = make_state()
+    action = _fought(FightAction(monster_code="chicken", locations=frozenset({(0, 0)})),
+                     "corrupted_owlbear", "loss")
+
+    player._record_combat_outcome(action, state, "error:fight_lost")
+
+    (row,) = store.combat_loadout_outcomes()
+    assert (row.task_key, row.actual_win) == ("combat:corrupted_owlbear", False)
+    assert row.predicted_win == predict_win(state, gd, "corrupted_owlbear")
+    store.close()
+
+
+def test_a_resolved_fight_with_no_record_is_refused(tmp_path):
+    """A win or loss always comes from a fight response; without its record
+    the opponent is unknown, so nothing is guessed."""
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
+    player = GamePlayer(character="Robby", history=store)
+    player.game_data = _make_chicken_game_data()
+    action = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
+    with pytest.raises(RuntimeError, match="no fight record"):
+        player._record_combat_outcome(action, make_state(), "ok")
+    store.close()
+
+
+def test_a_dry_run_fight_records_nothing(tmp_path):
+    """A dry run applies the fight's model and calls it "ok": no server fought,
+    so no outcome reaches the learned-loss record."""
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
+    player = GamePlayer(character="Robby", history=store, dry_run=True)
+    player.game_data = _make_chicken_game_data()
+    player._record_combat_outcome(FightAction(monster_code="chicken", locations=frozenset({(0, 0)})),
+                                  make_state(), "ok")
+    assert store.combat_loadout_outcomes() == []
     store.close()
 
 
@@ -475,9 +533,9 @@ def test_a_solo_fight_records_its_win_odds_and_a_party_fight_records_none(tmp_pa
     player.game_data = _make_chicken_game_data()
     monkeypatch.setattr("artifactsmmo_cli.ai.player.win_probability",
                         lambda state, gd, monster: Fraction(1, 2))
-    solo = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
-    party = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}),
-                        participants=("Lor",))
+    solo = _fought(FightAction(monster_code="chicken", locations=frozenset({(0, 0)})), "chicken", "win")
+    party = _fought(FightAction(monster_code="chicken", locations=frozenset({(0, 0)}),
+                                participants=("Lor",)), "chicken", "win")
 
     player._record_combat_outcome(solo, make_state(), "ok")
     player._record_combat_outcome(party, make_state(), "ok")

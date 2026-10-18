@@ -129,8 +129,8 @@ def test_monster_both_static_and_event_dedups_shared_tile() -> None:
 
 
 def test_static_monster_locations_unchanged_by_overlay() -> None:
-    """A normal (non-event) monster's static locations are returned as-is; the
-    overlay only ADDS event tiles, never removes static ones."""
+    """A normal (non-event) monster's static locations are returned as-is when
+    no live event stands on them: an unrelated event takes none of its tiles."""
     gd = GameData()
     gd._monster_level = {"chicken": 1}
     gd._monster_drops = {"chicken": [("feather", 8, 1, 1)]}
@@ -139,3 +139,73 @@ def test_static_monster_locations_unchanged_by_overlay() -> None:
     assert gd.monster_locations("chicken") == [(0, 1)]
     gd.active_event_codes = {"ogre_event"}  # unrelated event active
     assert gd.monster_locations("chicken") == [(0, 1)]
+
+
+def _owlbear_world() -> GameData:
+    """Live 2026-10-18: owlbear stands on (10, 1) and (10, 2); the
+    corrupted_owlbear event lists both as its maps and stands on ONE."""
+    gd = GameData()
+    gd._monster_locations = {"owlbear": [(10, 1), (10, 2)]}
+    gd.world.event_monster_locations["corrupted_owlbear"] = [(10, 2), (10, 1)]
+    gd.world.event_code_of_content["corrupted_owlbear"] = "corrupted_owlbear"
+    gd.active_event_codes = {"corrupted_owlbear"}
+    return gd
+
+
+def test_a_live_event_stands_on_its_read_tile_and_hides_what_was_there() -> None:
+    """The active-event read names the one map the event took: its monster is
+    fought there only, and the owlbear it replaced is gone from that tile
+    (Robby fought `Fight(owlbear)` at (10, 1) and met corrupted_owlbear 17
+    times running)."""
+    gd = _owlbear_world()
+    gd.active_event_maps = {"corrupted_owlbear": [(10, 1, "overworld")]}
+    assert gd.monster_locations("owlbear") == [(10, 2)]
+    assert gd.all_monster_locations["owlbear"] == [(10, 2)]
+    assert gd.monster_locations("corrupted_owlbear") == [(10, 1)]
+    assert gd.all_monster_locations["corrupted_owlbear"] == [(10, 1)]
+
+
+def test_a_monster_whose_every_tile_is_taken_spawns_nowhere() -> None:
+    gd = _owlbear_world()
+    gd.active_event_maps = {"corrupted_owlbear": [(10, 1, "overworld"), (10, 2, "overworld")]}
+    assert gd.monster_locations("owlbear") == []
+    assert "owlbear" not in gd.all_monster_locations
+
+
+def test_an_ended_event_hides_nothing() -> None:
+    """A read tile counts only while its event is active."""
+    gd = _owlbear_world()
+    gd.active_event_maps = {"corrupted_owlbear": [(10, 1, "overworld")]}
+    gd.active_event_codes = set()
+    assert gd.monster_locations("owlbear") == [(10, 1), (10, 2)]
+    assert gd.all_monster_locations["owlbear"] == [(10, 1), (10, 2)]
+    assert gd.monster_locations("corrupted_owlbear") == []
+
+
+def test_a_declared_event_with_no_read_keeps_its_catalogue_maps() -> None:
+    """An offline world declares an event live with no active-event read: its
+    monster stands on every catalogue map and nothing is hidden, since no
+    tile is known taken."""
+    gd = _owlbear_world()
+    assert gd.monster_locations("corrupted_owlbear") == [(10, 2), (10, 1)]
+    assert gd.monster_locations("owlbear") == [(10, 1), (10, 2)]
+
+
+def test_a_live_event_hides_the_resource_on_its_tile() -> None:
+    gd = GameData()
+    gd._resource_locations = {"ash_tree": [(-1, 0), (6, 1)]}
+    gd.world.event_resource_locations["magic_tree"] = [(6, 1)]
+    gd.world.event_code_of_content["magic_tree"] = "magic_event"
+    gd.active_event_codes = {"magic_event"}
+    gd.active_event_maps = {"magic_event": [(6, 1, "overworld")]}
+    assert gd.resource_locations("ash_tree") == [(-1, 0)]
+    assert gd.all_resource_locations["ash_tree"] == [(-1, 0)]
+    assert gd.resource_locations("magic_tree") == [(6, 1)]
+
+
+def test_a_live_event_hides_the_content_on_its_tile_on_any_layer() -> None:
+    """The all-layer index loses the taken tile on the event's own layer only."""
+    gd = _owlbear_world()
+    gd.world.layered_content["bat"] = [(3, 3, "underground"), (3, 3, "overworld")]
+    gd.active_event_maps = {"corrupted_owlbear": [(3, 3, "underground")]}
+    assert gd.layered_locations("bat") == [(3, 3, "overworld")]

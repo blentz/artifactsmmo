@@ -127,6 +127,7 @@ from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.xp_gain import xp_gained
+from artifactsmmo_cli.ai.live_event import LiveEvent
 from artifactsmmo_cli.ai.loadout_profiles import (
     active_profile_gear,
     combat_key,
@@ -1697,8 +1698,10 @@ class GamePlayer:
             print(f"[{self._now()}] Network error during {action!r}: {e!r} — refreshing state")
             return self._fetch_world_state(client), "error:network", action
 
-    def _fetch_active_events(self, client: AuthenticatedClient) -> dict[str, datetime]:
-        """Map of currently-active event code -> expiration. Empty on no/failed data.
+    def _fetch_active_events(self, client: AuthenticatedClient) -> dict[str, LiveEvent]:
+        """Map of currently-active event code -> its expiration and the tiles it
+        stands on (`ActiveEventSchema.map_`; two rows of one code are one event
+        on both maps, live until the later expiry). Empty on no/failed data.
 
         Each page request retries on transient transport errors (e.g. a
         ReadTimeout) with the same backoff schedule as get_character — events
@@ -1707,7 +1710,7 @@ class GamePlayer:
         propagating out of the worker thread and killing the bot (live Robby
         trace 2026-06-29: a single ReadTimeout here crashed the worker thread).
         """
-        active: dict[str, datetime] = {}
+        active: dict[str, LiveEvent] = {}
         page = 1
         while True:
             result = None
@@ -1726,7 +1729,10 @@ class GamePlayer:
             if result is None or not result.data:
                 break
             for ev in result.data:
-                active[ev.code] = ev.expiration
+                tile = (ev.map_.x, ev.map_.y, str(getattr(ev.map_.layer, "value", ev.map_.layer)))
+                seen = active.get(ev.code)
+                active[ev.code] = (LiveEvent(ev.expiration, (tile,)) if seen is None else
+                                   LiveEvent(max(seen.expiration, ev.expiration), (*seen.maps, tile)))
             if len(result.data) < 100:
                 break
             page += 1
@@ -1787,12 +1793,12 @@ class GamePlayer:
 
     @staticmethod
     def _unexpired(
-        events: dict[str, datetime], now: datetime
-    ) -> dict[str, datetime]:
+        events: dict[str, LiveEvent], now: datetime
+    ) -> dict[str, LiveEvent]:
         """Drop events whose expiry has passed. A cached events view is up to
         one TTL stale, so without this the planner could target an event that
         already ended."""
-        return {code: expiry for code, expiry in events.items() if expiry > now}
+        return {code: ev for code, ev in events.items() if ev.expiration > now}
 
     def _fetch_world_state(self, client: AuthenticatedClient) -> WorldState:
         """Query character state from the API. Retries on transient errors."""
@@ -1857,12 +1863,13 @@ class GamePlayer:
         bank_gold = self.state.bank_gold if self.state else None
         bank_capacity = self.state.bank_capacity if self.state else None
         pending_items = self.state.pending_items if self.state else None
-        active_events = self._unexpired(
+        live_events = self._unexpired(
             self._global_reads.get_or_fetch(
                 "active_events", lambda: self._fetch_active_events(client)
             ),
             datetime.now(timezone.utc),
         )
+        active_events = {code: ev.expiration for code, ev in live_events.items()}
         raids = self._global_reads.get_or_fetch(
             "raids", lambda: self._fetch_raids(client)
         )
@@ -1885,6 +1892,7 @@ class GamePlayer:
         # and action-building, both of which read game_data this cycle.
         if self.game_data is not None:
             self.game_data.active_event_codes = set(active_events)
+            self.game_data.active_event_maps = {code: list(ev.maps) for code, ev in live_events.items()}
             self.game_data.active_raid_codes = {r.code for r in state.active_raids}
             # Recycle totals and craft yields are learned, fleet-wide.
             if self.history is not None:
@@ -4341,24 +4349,31 @@ class GamePlayer:
         """Record a resolved fight's worn loadout, level, predict_win verdict, and
         actual result. Fires on win ('ok') and loss ('error:fight_lost') only —
         other outcomes mean no fight resolved. The learned-loss veto reads these
-        rows (`combat.is_winnable`)."""
-        if self.history is None or self.game_data is None:
+        rows (`combat.is_winnable`). A dry run's fight is the model's own
+        guess, never a resolved one, so it records nothing."""
+        if self.history is None or self.game_data is None or self.dry_run:
             return
         if not isinstance(action, FightAction):
             return
         if outcome not in ("ok", "error:fight_lost"):
             return
+        if action.last_fight is None:
+            raise RuntimeError(f"{action!r} resolved ({outcome}) with no fight record")
+        # The server's opponent, not the plan's monster: an event standing on
+        # the planned tile fights in its place (live Robby 2026-10-18: 17
+        # corrupted_owlbear losses filed as owlbear's).
+        monster = action.last_fight.opponent
         loadout = {slot: code for slot, code in state.equipment.items() if code is not None}
         if action.participants:
             # A party fight is its own record (the solo loss veto never reads
             # it); the factory takes a party only where the party model wins.
             self.history.record_combat_outcome(
-                party_combat_key(action.monster_code), loadout, True, outcome == "ok", state.level)
+                party_combat_key(monster), loadout, True, outcome == "ok", state.level)
             return
-        predicted = predict_win(state, self.game_data, action.monster_code)
+        predicted = predict_win(state, self.game_data, monster)
         self.history.record_combat_outcome(
-            combat_key(action.monster_code), loadout, predicted, outcome == "ok", state.level,
-            p_win=win_probability(state, self.game_data, action.monster_code))
+            combat_key(monster), loadout, predicted, outcome == "ok", state.level,
+            p_win=win_probability(state, self.game_data, monster))
 
     def _record_learning_cycle(
         self,
