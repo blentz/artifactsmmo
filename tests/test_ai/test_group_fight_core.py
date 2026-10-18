@@ -125,10 +125,12 @@ def test_a_party_meets_the_refresh_as_a_late_mover_unless_all_move_first():
 
 
 def test_an_all_first_party_refreshes_after_a_round_that_does_not_kill():
-    """50 a round into 400 HP behind 100: the 5th round's 50 goes through
-    before the refresh, so 14 rounds, as alone (`kill_rounds`)."""
-    out = group_outcome(PartyBoss(400, 0, 0, 100), [_m(net=500_000, hit=1)])
-    assert out.win and out.turns == kill_rounds(400, 100, 500_000, True) == 14
+    """80 a round into 101 HP behind 350: four hits leave 30 of the barrier,
+    so each 5th round's 50 goes through before the refresh; 15 rounds, as
+    alone (`kill_rounds`). Refreshed first, the 5th hit would wear the new
+    barrier and the 10th round would kill."""
+    out = group_outcome(PartyBoss(101, 0, 0, 350), [_m(net=800_000, hit=1)])
+    assert out.win and out.turns == kill_rounds(101, 350, 800_000, True) == 15
 
 
 def test_a_barrier_no_block_breaks_is_over_the_cap():

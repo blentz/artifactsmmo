@@ -1111,9 +1111,9 @@ CONSUMABLE_PRICE_CORE_MUTATIONS = [
 # group_fight_core: the party boss-fight walk (group fights increment 1).
 # Killed by formal/diff/test_group_fight_diff.py (exact agreement with
 # `Formal.GroupFight.groupOutcome`).
-# The refresh order of an all-first party only shows in a round-5 lump that
-# does not kill (a killing one ends at the early check), past the
-# differential's short fights: the unit test pins it.
+# The refresh order of an all-first party only shows when four rounds leave
+# some barrier and five do not (a killing round ends at the early check);
+# the differential's short fights never reach it: the unit test pins it.
 GROUP_FIGHT_WALK_MUTATIONS = [
     ("group_fight: an all-first party meets the refresh first",
      "    shield, early = full, all_first(members)",
