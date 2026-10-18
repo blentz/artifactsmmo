@@ -21,8 +21,8 @@ from pathlib import Path
 
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
+from artifactsmmo_cli.ai.gear_objective import gear_objective
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
@@ -130,21 +130,33 @@ def test_swap_precedes_fight_when_loadout_suboptimal() -> None:
         repr(report.selected_goal), report.plan)
 
 
-def test_no_swap_when_loadout_already_optimal() -> None:
-    """The unmodified l10_bag_pursuit scenario (greater_wooden_staff already
-    equipped) plans no leading swap — the control for the test above, and the
-    reason its first-action assertion is about the SWAP rather than about
-    planning a fight at all.
+def _wearing_its_target():
+    """The base scenario wearing its own gear objective's `L*` (its utility
+    slots kept), so the objective is held and `m*` is the grind target (spec
+    2026-10-18 §6.2: with a piece missing, no fight is chosen for XP)."""
+    base = SCENARIOS[BASE_SCENARIO]
+    gd = _bundle()
+    objective = gear_objective(scenario_state(base, gd), gd, NO_PROFILE_CONTEXT, None)
+    assert objective is not None
+    return dataclasses.replace(base, equipment={**base.equipment, **objective.loadout}), \
+        objective.monster
 
-    SPEC 2026-10-18 §6.2: this build is missing pieces of its gear objective's
-    `L*`, so no fight is chosen for XP: the control no longer grinds
-    `flying_snake` (it planned `Fight(flying_snake)` under `GrindCharacterXP`
-    until the gear objective named the grind target)."""
-    report = _run(SCENARIOS[BASE_SCENARIO])
+
+def test_no_swap_when_loadout_already_optimal() -> None:
+    """The base scenario wearing its `L*` plans a fight in what it wears, no
+    leading swap — the control for the test above, and the reason its
+    first-action assertion is about the SWAP rather than about planning a
+    fight at all.
+
+    SPEC 2026-10-18 §6.2: the catalogued scenario is missing pieces of its
+    `L*`, so it fights nothing for XP; the control therefore wears its `L*`,
+    and its fight is `m*` (cow), which the goal fights after withdrawing the
+    banked cowhide."""
+    scenario, monster = _wearing_its_target()
+    report = _run(scenario)
     reprs = [repr(a) for a in report.plan]
+    assert f"Fight({monster})" in reprs, (repr(report.selected_goal), reprs)
     assert not any(r.startswith("OptimizeLoadout(") for r in reprs), reprs
-    assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
-        repr(report.selected_goal), report.plan)
 
 
 class TestFullBagRelief:

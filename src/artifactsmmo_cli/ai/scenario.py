@@ -1659,6 +1659,11 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # `CRITICAL_HP_FRACTION` and preempts this guard outright — the live 50-99 %
     # bucket is therefore split between the two, and this cell is the upper half.
     # D1 derived per §5.3.
+    #
+    # 2026-10-18 (spec global gear objective §6.2): this iron set is missing
+    # pieces of its `L*`, so no fight is chosen for XP; the cell holds a
+    # monsters task on `flying_snake`, whose monster keeps its precedence as
+    # the grind target, so the catalogued cell still reaches the guard.
     "l22_rest_for_combat": ScenarioCharacter(
         name="l22_rest_for_combat", level=22, hp=348,
         skills={"mining": 20, "woodcutting": 20, "weaponcrafting": 15,
@@ -1666,6 +1671,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                 "alchemy": 10, "fishing": 10},
         equipment=dict(_IRON_SET), inventory={"cooked_chicken": 6},
         inventory_max=140, bank={"iron_bar": 4}, gold=900,
+        task=("flying_snake", "monsters", 0, 20),
         derive_combat_stats=True,
         description="Cell 10: 80 % HP against a fight this loadout loses now "
                     "and wins rested — the REST_FOR_COMBAT guard, which no "

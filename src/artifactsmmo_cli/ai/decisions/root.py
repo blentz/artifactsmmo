@@ -505,7 +505,7 @@ class IsAFightBlockingMe(Decision[MetaGoal]):
         this verdict as infeasible (a cancel); this node must not compete.
       * `HORIZON_LEVEL_UP` — one level would close it, and this node only fires
         when bare gear has no monster worth fighting (`ctx.combat_monster` is
-        None, or stands only on consumables: `ctx.combat_propped`).
+        None, or is won below `SECURE_WIN` on bare gear: `ctx.combat_risky`).
         A level goal here would have no beatable monster in its
         `relevant_actions`. That verdict is served from the EDGE instead — a
         real loss or level-up, where the cascade does find something — by
@@ -518,11 +518,12 @@ class IsAFightBlockingMe(Decision[MetaGoal]):
     (`_winnable_farm_target`, from the cycle's gear objective); the sibling node
     `IsThereACombatTarget` already reads `ctx`. One read.
 
-    BARE GEAR (USER 2026-10-10). The grind target may stand only on a potion
-    loadout (`band_target`: the loadout picks the monster); this node asks
-    whether BARE gear has a fight, so a target that exists only on consumables
-    (`ctx.combat_propped`) counts as none and the fight's gear acquisition is
-    still asked for. A potion-propped win never hides a gear upgrade.
+    BARE GEAR (USER 2026-10-10). This node asks whether BARE gear has a fight:
+    a grind target that wins only on consumables is not won on bare gear, so
+    it fails `secure_win` there and is `ctx.combat_risky` (below), and the
+    fight's gear acquisition is still asked for. A potion-propped win never
+    hides a gear upgrade. (`ctx.combat_propped` is read too but nothing sets
+    it since the gear objective names the target; Plan C removes it.)
 
     SECURE (USER 2026-10-15, "if all of our fights are below 75% win rates, we
     probably need better gear"). A target won below `combat.SECURE_WIN`

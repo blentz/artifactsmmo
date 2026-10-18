@@ -112,7 +112,11 @@ def _state(name: str, game_data: GameData):
 def test_the_held_task_dimension_has_a_populated_side(gd: GameData) -> None:
     """The dimension is populated at all — and the fields are wired end to end."""
     holders = [n for n in SCENARIOS if SCENARIOS[n].task is not None]
-    assert sorted(holders) == sorted(TASK_SCENARIOS)
+    # `l22_rest_for_combat` holds a monsters task too (2026-10-18): it is the
+    # REST_FOR_COMBAT cell, whose grind target is the task's monster since the
+    # gear objective names no XP fight while `L*` is missing. It is not a cell
+    # of this dimension.
+    assert sorted(holders) == sorted((*TASK_SCENARIOS, "l22_rest_for_combat"))
     for name in TASK_SCENARIOS:
         code, kind, progress, total = SCENARIOS[name].task
         state = _state(name, gd)

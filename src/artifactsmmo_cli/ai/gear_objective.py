@@ -323,8 +323,14 @@ def _candidates(state: WorldState, game_data: GameData) -> list[str]:
 def _missing(state: WorldState, game_data: GameData, monster: str,
              target: WorldState, loadout: dict[str, str]) -> list[tuple[str, str]]:
     """The `(slot, code)` pieces of `loadout` the character does not hold
-    (§2.4.1), compared against its own fight loadout for `monster` (what it
-    owns, as `FightAction` would wear it).
+    (§2.4.1), compared against the loadout it would wear for `monster` from
+    what it owns (ruling Q): from the real state, wear the fight loadout and
+    pick again until the pick is worn (`_target`), as the fight-loadout gate
+    re-arms before every fight (`FightAction`'s optimal-loadout precondition,
+    sequenced by `OptimizeLoadout`). A piece in the bag is therefore held, an
+    equip and not an acquisition. The bank is not owned here: the picker and
+    the gate read only the bag and the worn slots, and nothing withdraws a
+    piece to wear it before a fight.
 
     Slots of one item type are compared as a GROUP: three artifact slots or two
     ring slots are interchangeable, so a target worn one slot over is held, not
@@ -337,7 +343,7 @@ def _missing(state: WorldState, game_data: GameData, monster: str,
     placed in a group slot the owned loadout leaves unmatched, so its equip
     displaces nothing that is held."""
     purpose = _combat(game_data, monster, target)
-    own = fight_loadout(state, game_data, monster)
+    own = _target(state, game_data, monster)[1]
 
     def benefit(code: str) -> int:
         return _benefit(_stats(code, game_data), purpose)

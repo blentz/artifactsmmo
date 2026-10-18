@@ -27,7 +27,12 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.yield_reprs import grind_xp_repr
 from artifactsmmo_cli.ai.loop_rate import food_menu
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
-from artifactsmmo_cli.ai.scenario import ScenarioCharacter, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.scenario import (
+    SCENARIOS,
+    ScenarioCharacter,
+    load_bundle_game_data,
+    scenario_state,
+)
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
@@ -465,3 +470,26 @@ def test_a_no_potion_loop_that_never_runs_raises(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(mod, "loop_rate", lambda *_args: None)
     with pytest.raises(RuntimeError, match="the no-potion loop against chicken did not run"):
         mod._rate(_novice(gd), gd, "chicken", ())
+
+
+def _carrying_its_target(name: str, gd: GameData) -> tuple[WorldState, GearObjective]:
+    """The catalogued scenario `name` with every missing `L*` piece of its own
+    objective added to its bag, worn nowhere, and that objective."""
+    state = scenario_state(SCENARIOS[name], gd)
+    objective = _objective(state, gd)
+    bag = Counter(state.inventory)
+    bag.update(piece.code for piece in objective.missing)
+    return replace(state, inventory=dict(bag)), objective
+
+
+def test_a_piece_carried_in_the_bag_is_held(gd: GameData) -> None:
+    """Ruling Q: `missing` is what to ACQUIRE. A piece in the bag is an equip,
+    which the fight-loadout gate makes before `m*` is fought (wear and pick
+    again until the pick is worn), so carrying every missing piece holds `L*`
+    without wearing any of it."""
+    carrying, before = _carrying_its_target("l10_bag_pursuit", gd)
+    assert before.missing
+    objective = _objective(carrying, gd)
+    assert objective.monster == before.monster
+    assert objective.missing == ()
+    assert objective.held

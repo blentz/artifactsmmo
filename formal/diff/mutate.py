@@ -5356,6 +5356,9 @@ GEAR_OBJECTIVE_CORE_MUTATIONS = [
 # fixed-supply item with no free copy (no route mints it and none moves it), so
 # dropping the filter is an equivalent mutant; the held arm beside it is.
 GEAR_OBJECTIVE_MUTATIONS = [
+    ("gear objective: a carried piece is missing (one pick from the worn state)",
+     "    own = _target(state, game_data, monster)[1]\n",
+     "    own = fight_loadout(state, game_data, monster)\n"),
     ("gear objective: the worn gear judges every drop fight",
      "        model = ObtainModel(state, game_data, ctx, now, fighter=_fighters(state, owned, game_data))",
      "        model = ObtainModel(state, game_data, ctx, now, fighter=state)"),

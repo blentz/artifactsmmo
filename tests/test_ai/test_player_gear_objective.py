@@ -19,7 +19,7 @@ from artifactsmmo_cli.ai.scenario import load_bundle_game_data
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_gear_objective import BUNDLE, CTX, _robby
+from tests.test_ai.test_gear_objective import BUNDLE, CTX, _carrying_its_target, _robby
 
 PIECE = GearPiece("helmet_slot", "iron_helm", 0, Fraction(1), Fraction(10))
 MISSING = GearObjective("wolf", {"helmet_slot": "iron_helm"}, Fraction(2), (PIECE,))
@@ -150,3 +150,19 @@ def test_objective_cost_on_robbys_shape(capsys: pytest.CaptureFixture[str]) -> N
               f"wall {first_wall:.3f} s; a later cycle cpu {cpu:.3f} s, wall {wall:.3f} s")
     assert first is not None and cycle is not None
     assert cpu < 2.0
+
+
+def test_a_carried_piece_is_equipped_before_m_star_is_fought() -> None:
+    """Ruling Q: carrying every `L*` piece holds the objective, so `m*` is the
+    grind target, and the piece is not left in the bag: the plan arms it
+    (`OptimizeLoadout`, the fight-loadout gate's equip) before the fight."""
+    gd = load_bundle_game_data(BUNDLE)
+    carrying, before = _carrying_its_target("l10_bag_pursuit", gd)
+    player = GamePlayer(character="l10_bag_pursuit", history=None)
+    player.seed_offline(carrying, gd)
+    report = player.plan_from_state()
+    assert player._last_ctx is not None and player._last_ctx.gear_objective is not None
+    assert player._last_ctx.gear_objective.held
+    assert player._last_ctx.combat_monster == before.monster
+    assert [repr(a) for a in report.plan[:2]] == [f"OptimizeLoadout({before.monster})",
+                                                   f"Fight({before.monster})"]
