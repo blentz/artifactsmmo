@@ -172,6 +172,7 @@ GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxono
 POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
 PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
 GEAR_OBJECTIVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective_core.py"
+GEAR_OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective.py"
 PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
 SLOT_OCCUPANCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "slot_occupancy.py"
 REGION_EDGES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "region_edges.py"
@@ -5346,6 +5347,52 @@ GEAR_OBJECTIVE_CORE_MUTATIONS = [
      "    return len(missing) <= 1"),
 ]
 
+# The gear objective adapter (spec 2026-10-18 §2.1-§2.4): `(L*, m*)` from game
+# data. Killed by tests/test_ai/test_gear_objective.py on the bundle world. The
+# `is_suppliable` filter is NOT mutated: feasibility already refuses a
+# fixed-supply item with no free copy (no route mints it and none moves it), so
+# dropping the filter is an equivalent mutant; the held arm beside it is.
+GEAR_OBJECTIVE_MUTATIONS = [
+    ("gear objective: the worn gear judges every drop fight",
+     "                            fighter=fighter_owning(state, owned, game_data))",
+     "                            fighter=state)"),
+    ("gear objective: above-level gear is achievable",
+     "        and stats.level <= state.level",
+     "        and True"),
+    ("gear objective: worn gear with no supplier is not achievable",
+     "        and (code in held or is_suppliable(code, state, game_data)))",
+     "        and is_suppliable(code, state, game_data))"),
+    ("gear objective: one copy of a ring",
+     "RING_COPIES = 2",
+     "RING_COPIES = 1"),
+    ("gear objective: m* is the slowest monster",
+     "    best = max((rate, game_data.monster_levels[code]) for code, rate in rated)",
+     "    best = min((rate, game_data.monster_levels[code]) for code, rate in rated)"),
+    ("gear objective: an equal rate ignores the monster level",
+     "    tied = [code for code, rate in rated if (rate, game_data.monster_levels[code]) == best]",
+     "    tied = [code for code, rate in rated if rate == best[0]]"),
+    ("gear objective: an equal rate and level goes to the dearer pieces",
+     "    monster = min(tied, key=lambda code: sum(prices[code], Fraction(0)))",
+     "    monster = max(tied, key=lambda code: sum(prices[code], Fraction(0)))"),
+    ("gear objective: the measured upkeep of the worn gear rates L*",
+     "    return rank_rate(game_data.xp_per_kill(monster, rested.level, wisdom), None,",
+     "    return rank_rate(game_data.xp_per_kill(monster, rested.level, wisdom),"
+     " history.fight_upkeep(monster) if history is not None else None,"),
+    ("gear objective: L* is picked in the worn gear",
+     "    bare = _wearing(fighter_owning(state, achieved, game_data),\n"
+     "                    dict.fromkeys(_GEAR_SLOTS), game_data)",
+     "    bare = fighter_owning(state, achieved, game_data)"),
+    ("gear objective: L* is the first pick, not the worn fixed point",
+     "        if loadout == {slot: fighter.equipment[slot] for slot in _GEAR_SLOTS}:",
+     "        if True:"),
+    ("gear objective: an equal owned item is not held",
+     "            if strongest is not None and benefit(own[strongest]) >= benefit(code):",
+     "            if strongest is not None and benefit(own[strongest]) > benefit(code):"),
+    ("gear objective: a target worn one slot over is missing",
+     "            strongest = max((slot for slot in free if slot in own),",
+     "            strongest = max((slot for slot in free[:1] if slot in own),"),
+]
+
 # synergy_core.synergy_pure — the purity factor read by the taskmaster choice and
 # the means-worth gate (spec 2026-07-19 §3, Phase 2). Unit-killed by tests/test_ai/test_synergy_core.py;
 # the same core is proven in Formal/Synergy.lean (synergy_le_one/ge_floor/floor_pos/
@@ -7304,6 +7351,8 @@ _ALL_SRCS = [
     PROGRESSION_TREE_SRC,
     # Gear objective core (spec 2026-10-18 §2.3/§2.4): unit-killed group.
     GEAR_OBJECTIVE_CORE_SRC,
+    # Gear objective adapter (spec 2026-10-18 §2.1-§2.4): unit-killed group.
+    GEAR_OBJECTIVE_SRC,
     # Equipment-profile selector (2026-07-08): differential-killed group.
     EQUIPMENT_PROFILE_SRC,
     # Task 7 (role-driven supply): coordination-store asymmetric-demand reader.
@@ -11510,6 +11559,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_progression_tree_core.py", survivors)
     run_group(GEAR_OBJECTIVE_CORE_SRC, GEAR_OBJECTIVE_CORE_MUTATIONS,
               "tests/test_ai/test_gear_objective_core.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, GEAR_OBJECTIVE_MUTATIONS,
+              "tests/test_ai/test_gear_objective.py", survivors)
     run_group(SYNERGY_CORE_SRC, SYNERGY_CORE_MUTATIONS,
               "tests/test_ai/test_synergy_core.py", survivors)
     run_group(ROOT_DECISION_SRC, STEP_DECLINE_MUTATIONS,
