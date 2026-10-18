@@ -24,6 +24,7 @@ from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.yield_reprs import grind_xp_repr
+from artifactsmmo_cli.ai.loop_rate import food_menu
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -43,10 +44,6 @@ ROBBY_WORN = {"weapon_slot": "death_knight_sword", "shield_slot": "slime_shield"
               "amulet_slot": "skull_amulet", "artifact1_slot": "novice_guide"}
 """Robby's live loadout (2026-10-18), less `lich_race_medal`, which the
 committed bundle predates."""
-
-
-def _unit_price(_code: str) -> Fraction:
-    return Fraction(1)
 
 
 def _robby(equipment: dict[str, str] = ROBBY_WORN) -> WorldState:
@@ -72,7 +69,7 @@ def _novice(gd: GameData, equipment: dict[str, str] = COPPER,
 
 def _objective(state: WorldState, gd: GameData,
                history: LearningStore | None = None) -> GearObjective:
-    objective = gear_objective(state, gd, CTX, history, _unit_price)
+    objective = gear_objective(state, gd, CTX, history)
     assert objective is not None
     return objective
 
@@ -263,7 +260,8 @@ def test_m_star_is_the_max_rate_monster(gd: GameData, novice: GearObjective) -> 
     """`R` of every candidate, each on the fighter wearing its own `L*`."""
     state = _novice(gd)
     achieved = frozenset().union(*achievable(state, gd, CTX))
-    rates = {code: mod._rate(fighter, gd, CTX, None, code, _unit_price)
+    food = food_menu(state, gd, CTX)
+    rates = {code: mod._rate(fighter, gd, code, food)
              for code, (fighter, _) in mod._targets(state, gd, achieved).items()}
     assert len(set(rates.values())) > 1
     assert novice.rate == rates[novice.monster] == max(rates.values())
@@ -296,7 +294,7 @@ def test_none_when_no_monster_pays_even_on_the_achievable_fighter(gd: GameData) 
     """Level 41 with nothing worn and the stats of nothing: no achievable
     loadout beats any monster that pays XP at 41."""
     state = _novice(gd, equipment={}, level=41)
-    assert gear_objective(state, gd, CTX, None, _unit_price) is None
+    assert gear_objective(state, gd, CTX, None) is None
 
 
 def test_an_equal_rate_goes_to_the_higher_monster(monkeypatch: pytest.MonkeyPatch,
@@ -337,3 +335,52 @@ def _objective_for(monkeypatch: pytest.MonkeyPatch, state: WorldState, gd: GameD
                    candidates: list[str]) -> GearObjective:
     monkeypatch.setattr(mod, "_candidates", lambda *_args: candidates)
     return _objective(state, gd)
+
+
+def test_a_pick_that_never_settles_raises(monkeypatch: pytest.MonkeyPatch, gd: GameData) -> None:
+    """A fight loadout that flips between two picks has no `L*`: the walk
+    raises after its bound instead of returning a loadout no fight wears."""
+    state = _novice(gd, equipment={}, inventory={"copper_dagger": 1, "iron_sword": 1})
+    flips = iter(range(1_000))
+
+    def flipping(_state: WorldState, _gd: GameData, _monster: str) -> dict[str, str]:
+        return {"weapon_slot": ("copper_dagger", "iron_sword")[next(flips) % 2]}
+
+    monkeypatch.setattr(mod, "fight_loadout", flipping)
+    with pytest.raises(RuntimeError, match="has not converged in"):
+        mod._target(state, gd, "chicken")
+    assert next(flips) == mod.CONVERGE_PASSES
+
+
+def test_potions_change_neither_the_monster_nor_the_target(gd: GameData,
+                                                          novice: GearObjective) -> None:
+    """Every gear decision judges bare gear: a character with health and boost
+    potions worn and in the bag gets the `L*`, `m*` and `R` of one with none."""
+    potions = {"utility1_slot": "small_health_potion", "utility2_slot": "air_boost_potion"}
+    state = scenario_state(ScenarioCharacter(
+        name="novice", level=12, derive_combat_stats=True, equipment={**COPPER, **potions},
+        inventory={"small_health_potion": 50, "air_boost_potion": 50},
+        utility_quantities={"utility1_slot": 50, "utility2_slot": 50}), gd)
+    potioned = _objective(state, gd)
+    assert (potioned.monster, potioned.loadout, potioned.rate) == (
+        novice.monster, novice.loadout, novice.rate)
+
+
+@pytest.mark.parametrize(("worn", "level"), [(COPPER, 12), (LEATHER, 10)])
+def test_the_same_holdings_worn_or_carried_give_the_same_layers(
+        gd: GameData, worn: dict[str, str], level: int) -> None:
+    """Achievability never reads what is worn: the unlock fighter strips the
+    worn gear and dresses from the holdings (the level-10 leather set once
+    reached `forest_staff` worn and not carried)."""
+    wearing = achievable(_novice(gd, equipment=worn, level=level), gd, CTX)
+    carried = achievable(_novice(gd, equipment={}, inventory=Counter(worn.values()), level=level),
+                         gd, CTX)
+    assert wearing == carried
+
+
+def test_a_static_monster_on_another_layer_is_a_candidate(gd: GameData) -> None:
+    """`goblin_guard` stands only underground, in a reachable region, where the
+    action factory builds its `FightAction`; the overworld index never lists
+    it."""
+    assert not gd.monster_locations("goblin_guard")
+    assert "goblin_guard" in mod._candidates(_robby(), gd)

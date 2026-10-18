@@ -5354,8 +5354,18 @@ GEAR_OBJECTIVE_CORE_MUTATIONS = [
 # dropping the filter is an equivalent mutant; the held arm beside it is.
 GEAR_OBJECTIVE_MUTATIONS = [
     ("gear objective: the worn gear judges every drop fight",
-     "                            fighter=fighter_owning(state, owned, game_data))",
-     "                            fighter=state)"),
+     "        model = ObtainModel(state, game_data, ctx, now, fighter=_dressed(state, owned, game_data))",
+     "        model = ObtainModel(state, game_data, ctx, now, fighter=state)"),
+    ("gear objective: the unlock fighter keeps the worn gear on",
+     "        model = ObtainModel(state, game_data, ctx, now, fighter=_dressed(state, owned, game_data))",
+     "        model = ObtainModel(state, game_data, ctx, now,"
+     " fighter=fighter_owning(state, owned, game_data))"),
+    ("gear objective: the unlock fighter fights undressed",
+     "    return _wearing(bare, {slot: pick.get(slot) for slot in _GEAR_SLOTS}, game_data)",
+     "    return bare"),
+    ("gear objective: an item a fighter could still open is dropped from later walks",
+     "            elif not _reachable_by_some_fighter(model, code):",
+     "            else:"),
     ("gear objective: above-level gear is achievable",
      "        and stats.level <= state.level",
      "        and True"),
@@ -5374,17 +5384,28 @@ GEAR_OBJECTIVE_MUTATIONS = [
     ("gear objective: an equal rate and level goes to the dearer pieces",
      "    monster = min(tied, key=lambda code: sum(prices[code], Fraction(0)))",
      "    monster = max(tied, key=lambda code: sum(prices[code], Fraction(0)))"),
-    ("gear objective: the measured upkeep of the worn gear rates L*",
-     "    return rank_rate(game_data.xp_per_kill(monster, rested.level, wisdom), None,",
-     "    return rank_rate(game_data.xp_per_kill(monster, rested.level, wisdom),"
-     " history.fight_upkeep(monster) if history is not None else None,"),
+    ("gear objective: only the most rewarding bound is rated",
+     "        if rates and bound[code] < max(rates.values()):",
+     "        if rates:"),
+    ("gear objective: the worn potions rate L*",
+     "    loop = loop_rate(fighter, game_data, monster, (), food, {})",
+     "    loop = loop_rate(fighter, game_data, monster, tuple((code, n) for code, n in"
+     " fighter.inventory.items() if code.endswith('_potion'))[:2], food,"
+     " dict.fromkeys(fighter.inventory, Fraction(0)))"),
+    ("gear objective: m* only among overworld monsters",
+     "            and game_data.monster_spawn_known(code)]",
+     "            and game_data.monster_locations(code)]"),
     ("gear objective: L* is picked in the worn gear",
-     "    bare = _wearing(fighter_owning(state, achieved, game_data),\n"
-     "                    dict.fromkeys(_GEAR_SLOTS), game_data)",
-     "    bare = fighter_owning(state, achieved, game_data)"),
+     "    return _wearing(fighter_owning(state, items, game_data), dict.fromkeys(_GEAR_SLOTS),\n"
+     "                    game_data)",
+     "    return fighter_owning(state, items, game_data)"),
     ("gear objective: L* is the first pick, not the worn fixed point",
      "        if loadout == {slot: fighter.equipment[slot] for slot in _GEAR_SLOTS}:",
      "        if True:"),
+    ("gear objective: an unsettled pick is returned",
+     '    raise RuntimeError(f"the fight loadout for {monster} has not converged in "\n'
+     '                       f"{CONVERGE_PASSES} passes")',
+     "    return fighter, picked"),
     ("gear objective: an equal owned item is not held",
      "            if strongest is not None and benefit(own[strongest]) >= benefit(code):",
      "            if strongest is not None and benefit(own[strongest]) > benefit(code):"),
