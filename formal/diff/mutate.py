@@ -9175,11 +9175,14 @@ FLEET_WORK_MUTATIONS = [
 # piece is the root, and the trunk is offered only once `L*` is held. Killed by
 # tests/test_ai/test_decisions_which_piece.py.
 WHICH_PIECE_MUTATIONS = [
-    ("which-piece: the held branch takes the first piece instead of the level",
+    # Replaced (equivalent since ruling AI): with `L*` held `missing` is empty,
+    # so skipping the held branch reached the all-declined trunk, the same
+    # `next_level`. The held branch must still answer the trunk, not nothing.
+    ("which-piece: a held objective answers no root",
      "        if target.held:\n"
      "            return next_level(state, game_data)\n",
-     "        if target.held and target.missing:\n"
-     "            return next_level(state, game_data)\n"),
+     "        if target.held:\n"
+     "            return None\n"),
     ("which-piece: a held objective grinds to the current level",
      "    return ReachCharLevel(level=state.level + 1)\n",
      "    return ReachCharLevel(level=state.level)\n"),

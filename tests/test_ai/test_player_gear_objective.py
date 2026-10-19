@@ -189,12 +189,13 @@ def test_a_new_targets_keep_carries_the_in_flight_upgrades(
     the in-flight upgrades (`ctx.near_term_targets`) stay kept at one spare."""
     monkeypatch.setattr(ctx_mod, "gear_objective", lambda *a: HELD)
     monkeypatch.setattr(ctx_mod, "secure_win", lambda *a: True)
-    ctx = replace(CTX, gear_keep={"task_gear": 1}, near_term_targets=frozenset({"iron_helm"}))
+    ctx = replace(CTX, gear_keep={"task_gear": 1}, near_term_targets=frozenset({"iron_boots"}))
     out = ctx_mod.attach_gear_objective(make_state(task_code=None, task_total=0), GameData(),
                                         ctx, None)
     assert out.gear_objective is HELD
     assert out.combat_monster == "wolf"
-    assert out.gear_keep == {"iron_helm": 1}
+    # The in-flight upgrade, plus `L*`'s own iron_helm (ruling AM).
+    assert out.gear_keep == {"iron_boots": 1, "iron_helm": 1}
     assert out.combat_risky is False
 
 
