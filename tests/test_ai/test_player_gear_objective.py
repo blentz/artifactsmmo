@@ -6,18 +6,26 @@ monster, which keeps its precedence."""
 
 import time
 from dataclasses import replace
+from datetime import datetime, timezone
 from fractions import Fraction
+from pathlib import Path
 
 import pytest
 
 import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
 import artifactsmmo_cli.ai.player as player_mod
+from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import gear_objective
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective, gear_keep_for
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
+from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_owned
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.scenario import load_bundle_game_data
-from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
+from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_gear_objective import BUNDLE, CTX, _carrying_its_target, _robby
@@ -116,7 +124,8 @@ def test_the_gear_keep_follows_the_final_target(monkeypatch: pytest.MonkeyPatch)
         return {f"kept_for_{monster}": 1}
     monkeypatch.setattr(player_mod, "gear_keep_for", keep)
     monkeypatch.setattr(ctx_mod, "gear_keep_for", keep)
-    assert player._selection_context().gear_keep == {"kept_for_wolf": 1}
+    # ...plus the `L*` pieces (ruling AM).
+    assert player._selection_context().gear_keep == {"kept_for_wolf": 1, "iron_helm": 1}
 
 
 def test_risk_is_judged_on_the_final_target(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -185,3 +194,55 @@ def test_a_new_targets_keep_carries_the_in_flight_upgrades(
     assert out.combat_monster == "wolf"
     assert out.gear_keep == {"iron_helm": 1}
     assert out.combat_risky is False
+
+
+def _gearing_store(tmp_path: Path) -> LearningStore:
+    """A learning store whose last cycle ground `chicken` in the scenario's
+    copper loadout: the live shape of a character between acquisition steps,
+    whose active combat profile names every armour slot."""
+    store = LearningStore(db_path=str(tmp_path / "keep.db"), character="l10_copper_adequate")
+    store.start_session()
+    worn = scenario_state(SCENARIOS["l10_copper_adequate"], load_bundle_game_data(BUNDLE))
+    store.record_loadout_profile(
+        "combat:chicken", {slot: code for slot, code in worn.equipment.items() if code})
+    store.record_cycle(Cycle(
+        ts=datetime.now(tz=timezone.utc).isoformat(), session_id="t", cycle_index=0,
+        character="l10_copper_adequate", selected_goal="GrindCharacterXP(chicken)",
+        action_repr="<none>", action_class="NoPlan", outcome="ok"))
+    return store
+
+
+@pytest.mark.parametrize("where", ["bank", "bag"])
+def test_an_owned_l_star_piece_is_never_destroyable(tmp_path: Path, where: str) -> None:
+    """Ruling AM (final review F6), on a scenario: `l10_copper_adequate`
+    owns one `iron_armor`, an `L*` piece, while its last fight's combat
+    profile (copper, every armour slot named) is active. The profile switches
+    the blanket equippable keep off for the slots it names, so before the fix
+    the armour kept 0 copies: banked, `bank_drain_excess` drained it; carried
+    (where it counts as held), `recyclable_surplus` recycled it. The keep map
+    now carries every `L*` code, so the piece is kept, missing or held."""
+    gd = load_bundle_game_data(BUNDLE)
+    store = _gearing_store(tmp_path)
+    base = scenario_state(SCENARIOS["l10_copper_adequate"], gd)
+    state = (replace(base, bank_items={**(base.bank_items or {}), "iron_armor": 1})
+             if where == "bank" else replace(base, inventory={**base.inventory, "iron_armor": 1}))
+    arrived = replace(NO_PROFILE_CONTEXT,
+                      gear_keep=gear_keep_for(state, gd, store, None, frozenset()))
+    ctx = attach_gear_objective(state, gd, arrived, store)
+    assert ctx.gear_objective is not None
+    assert ctx.gear_objective.loadout["body_armor_slot"] == "iron_armor"
+    assert "copper_armor" in ctx.gear_keep
+    assert keep_owned("iron_armor", state, gd, ctx) == 1
+    assert destroyable("iron_armor", state, gd, ctx) == 0
+    assert "iron_armor" not in bank_drain_excess(state, gd, ctx)
+    assert "iron_armor" not in recyclable_surplus(state, gd, ctx)
+
+
+def test_the_keep_carries_l_star_at_its_worn_count() -> None:
+    """Ruling AM: every `L*` code at the copies `L*` wears, never lowering a
+    larger demand already in the keep; no objective leaves the keep as is."""
+    rings = GearObjective("wolf", {"ring1_slot": "iron_ring", "ring2_slot": "iron_ring",
+                                   "helmet_slot": "iron_helm"}, Fraction(1), ())
+    keep = ctx_mod.with_objective_keep({"iron_helm": 3, "copper_ring": 1}, rings)
+    assert keep == {"iron_helm": 3, "copper_ring": 1, "iron_ring": 2}
+    assert ctx_mod.with_objective_keep({"copper_ring": 1}, None) == {"copper_ring": 1}

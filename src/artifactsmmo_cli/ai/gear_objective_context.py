@@ -10,6 +10,7 @@ and no second producer of it exists.
 Ruling W (Task 5): the step was the player's own code, moved here whole.
 """
 
+from collections import Counter
 from dataclasses import replace
 
 from artifactsmmo_cli.ai.combat import secure_win, unpotioned
@@ -61,6 +62,24 @@ def gear_keep_for(state: WorldState, game_data: GameData, history: LearningStore
     return keep
 
 
+def with_objective_keep(keep: dict[str, int],
+                        objective: GearObjective | None) -> dict[str, int]:
+    """`keep` with every `L*` code kept at the copies `L*` wears (two of a
+    ring worn twice), held or missing (ruling AM, final review F6).
+
+    A non-empty keep switches the blanket equippable keep off for every slot
+    an active profile names (`inventory_keep._gear_demand`), so an `L*` piece
+    the active profiles do not name kept 0 copies: banked while missing, it
+    was drained; carried, it was recycled or sold. `L*` is what the character
+    is building, so it is never surplus."""
+    if objective is None:
+        return keep
+    out = dict(keep)
+    for code, worn in Counter(objective.loadout.values()).items():
+        out[code] = max(out.get(code, 0), worn)
+    return out
+
+
 def attach_gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext,
                           history: LearningStore | None) -> SelectionContext:
     """`ctx` with the cycle's gear objective and the grind target it names.
@@ -69,16 +88,19 @@ def attach_gear_objective(state: WorldState, game_data: GameData, ctx: Selection
     `combat_monster` — the only grind target known before the objective — and
     its gear keep built for that monster. The objective is priced on that
     context; then the grind target is `farm_target`'s, the keep follows the
-    final target (`ctx.near_term_targets` are the in-flight upgrades), and the
-    risk is judged on it, bare of potions and at full hp."""
+    final target (`ctx.near_term_targets` are the in-flight upgrades) and
+    keeps every `L*` piece (`with_objective_keep`), and the risk is judged on
+    it, bare of potions and at full hp."""
     task_monster = ctx.combat_monster
     objective = gear_objective(state, game_data, ctx, history)
     combat_monster = farm_target(task_monster, objective)
     return replace(
         ctx, gear_objective=objective, combat_monster=combat_monster,
-        gear_keep=(ctx.gear_keep if combat_monster == task_monster
-                   else gear_keep_for(state, game_data, history, combat_monster,
-                                      ctx.near_term_targets)),
+        gear_keep=with_objective_keep(
+            ctx.gear_keep if combat_monster == task_monster
+            else gear_keep_for(state, game_data, history, combat_monster,
+                               ctx.near_term_targets),
+            objective),
         combat_risky=(combat_monster is not None
                       and not secure_win(unpotioned(replace(state, hp=state.max_hp)),
                                          game_data, combat_monster)))
