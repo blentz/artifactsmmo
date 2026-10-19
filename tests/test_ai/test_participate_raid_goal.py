@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.arbiter_select import BAND_RAID
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.participate_raid import (
     RAID_PARTICIPATION_VALUE,
@@ -134,3 +135,17 @@ def test_survivable_raid_with_a_tile_is_offered():
                        attack={"air": 50}, raids=[_raid_info()])
     out = _candidates(_raid_gd(tiles=True, hurts=False), state)
     assert [repr(g) for g in out] == [f"ParticipateRaid({_RAID})"]
+
+
+def test_an_offered_raid_is_filed_at_the_raid_band():
+    """`_append_raid_candidates` files every offered raid at `BAND_RAID`, above
+    the fallback steps (wave 3a fix-round 1). Pinned directly since ruling R
+    (2026-10-18): the l48 raid pole that used to reach it end to end refuses
+    pixie on real stats."""
+    state = make_state(level=48, hp=1000, max_hp=1000,
+                       attack={"air": 50}, raids=[_raid_info()])
+    candidates: list = []
+    StrategyArbiter._append_raid_candidates(StrategyArbiter.__new__(StrategyArbiter),
+                                            candidates, state,
+                                            _raid_gd(tiles=True, hurts=False))
+    assert [(c.repr_, c.band) for c in candidates] == [(f"ParticipateRaid({_RAID})", BAND_RAID)]

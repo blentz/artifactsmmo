@@ -209,3 +209,18 @@ def test_full_grind_cycle_plans_and_pays(player: GamePlayer, game_data: GameData
             assert req is not None
             assert skill_xp_positive(req[1], state.skills[req[0]]) is True, (
                 f"grind plans a zero-xp gather: {action!r}")
+
+
+def test_a_skill_with_no_rung_from_here_declines_its_grind(game_data: GameData) -> None:
+    """`l48_capstone_approach` at weaponcrafting 42: no in-skill item is
+    craftable from what it can reach and weaponcrafting gathers nothing, so the
+    grind has no rung and its decomposition declines by name instead of
+    planning a grind that earns nothing. (Witnessed by the held-task cell's
+    weaponcrafting-43 decline until ruling R moved its rows, 2026-10-18.)"""
+    state = scenario_state(SCENARIOS["l48_capstone_approach"], game_data)
+    assert state.skills["weaponcrafting"] == 42
+    assert grind_rung_goal("weaponcrafting", state, game_data) is None
+    declined: list[str] = []
+    assert decompose(ReachSkillGoal("weaponcrafting", 43), state, game_data, [],
+                     NO_PROFILE_CONTEXT, declined) is None
+    assert declined == ["no_grind_rung:weaponcrafting"]

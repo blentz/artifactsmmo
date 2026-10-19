@@ -37,6 +37,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.audit import drop_wall_census as dwc
 from artifactsmmo_cli.audit.drop_wall_census import (
     GRANT,
     MIN_CELLS,
@@ -291,11 +292,20 @@ def test_a_candidate_with_no_walled_items_is_not_this_censuss_subject(
 
 
 def test_a_root_the_walk_cannot_resolve_is_a_visible_row(
-        results: list[DropResult]) -> None:
+        results: list[DropResult], monkeypatch: pytest.MonkeyPatch) -> None:
     """A scenario whose walk offers nothing contributes a ROW, not silence — but
     it is not a residual, on the same reading its currency sibling takes."""
-    unresolved = [r for r in results if r.gap == DropGap.ROOT_UNRESOLVED.value]
     assert DropGap.ROOT_UNRESOLVED.value not in RESIDUALS
+    # RE-DERIVED 2026-10-18 (ruling R): no committed scenario is unresolved any
+    # more (the unresolved ones were zero-stat sheets under worn gear), so the
+    # row is driven by one scenario whose root walk answers None.
+    assert not [r for r in results if r.gap == DropGap.ROOT_UNRESOLVED.value]
+    monkeypatch.setattr(dwc, "SCENARIOS", {"l8_overstocked": SCENARIOS["l8_overstocked"]})
+    monkeypatch.setattr(dwc, "resolve_root", lambda *_args: dataclasses.replace(
+        resolve_root(*_args), root=None))
+    unresolved = run_census(BUNDLE)
+    assert [(r.scenario, r.gap) for r in unresolved] == [
+        ("l8_overstocked", DropGap.ROOT_UNRESOLVED.value)]
     for row in unresolved:
         assert row.candidate == "-"
         assert row.passed
