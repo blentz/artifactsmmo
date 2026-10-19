@@ -615,10 +615,12 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         bank={"adamantite_ore": 5, "mithril_ore": 10},
         inventory_max=150,
         derive_combat_stats=True,
-        description="Band-ADEQUATE at L48: every slot already holds the "
-                     "best is_attainable_now item, no structural or utility "
-                     "gear candidate exists — the XP/capstone branch, not "
-                     "the gear branch."),
+        description="Built band-ADEQUATE at L48 (every slot holding the best "
+                     "is_attainable_now item on its old zero-stat sheet). On "
+                     "its gear's own totals (ruling R, 2026-10-18) drops of "
+                     "monsters it now beats open structural upgrades, so it "
+                     "is no longer band-adequate: the walk offers gear it "
+                     "cannot yet route, and the cycle Waits."),
 
     "l48_raid_active": ScenarioCharacter(
         name="l48_raid_active", level=48, max_hp=690, gold=800,
@@ -646,11 +648,10 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                      "sits on the OVERWORLD at (-4,10), so it needs no layer "
                      "transition and clears the level+2 suicide cap at L48 — "
                      "unlike god_of_the_sun (sonnengott L55, underground). "
-                     "Deliberately does NOT set derive_combat_stats: that alone "
-                     "unlocks unrelated work (the pair first planned "
-                     "Gather(gold_rocks), not the boss), which would let the "
-                     "positive pole pass for a reason that has nothing to do "
-                     "with raids."),
+                     "Derives its combat stats like its pair (ruling R, "
+                     "2026-10-18); on them pixie reads unsurvivable, so the "
+                     "raid is refused and both poles Wait until that damage "
+                     "estimate is fixed (test_l48_raid_pair)."),
 
     # --- Event-gear pursuit across the L48 wall (2026-07-07 slot-coverage
     # pass): the l48_band_adequate loadout with REAL combat stats
@@ -676,8 +677,10 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # the event the same monsters have no known spawn, the currency leaf
     # stays closed, and (with real stats) the shield/ring2/boots/bag slots
     # also open non-event candidates — so the event-attribution tests
-    # compare the WITH/WITHOUT candidate sets on this same state, and the
-    # Wait isolation witness stays l48_band_adequate (zero-stat, untouched).
+    # compare the WITH/WITHOUT candidate sets on this same state. The
+    # isolation witness is l48_band_adequate, which derives its stats too
+    # since ruling R (2026-10-18): it offers corrupted_skull but declines it
+    # with the event down, so no event gear is pursued there.
     "l48_event_active": ScenarioCharacter(
         name="l48_event_active", level=48, gold=800,
         skills={"mining": 46, "woodcutting": 46, "weaponcrafting": 42,

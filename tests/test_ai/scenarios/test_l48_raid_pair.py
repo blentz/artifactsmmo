@@ -157,14 +157,16 @@ def test_l48_raid_plan_engages_the_boss():
     it back.
 
     RE-DERIVED 2026-10-18 (ruling R): on real stats the boss reads
-    unsurvivable (`raid_survivable_pure` against 1,844,857 expected damage), so
-    the plan is `Wait` and engages nothing. Asserted exactly, so the day the
-    pixie damage defect is fixed this test fails and the positive claim is
-    restored."""
+    unsurvivable (`raid_survivable_pure`: the expected damage exceeds the hp
+    pool), so the plan is `Wait` and engages nothing. Both are asserted, so the
+    day the pixie damage defect is fixed this test fails and the positive claim
+    is restored."""
     report = _report("l48_raid_active")
     assert [repr(a) for a in report.plan] == ["Wait"]
-    assert expected_damage_per_fight(_state("l48_raid_active"), _gd(), _RAID_BOSS) \
-        == 1_844_857
+    # The cause of the refusal, not its magnitude: the estimate exceeds the
+    # character's whole hp pool, so the raid is unsurvivable.
+    state = _state("l48_raid_active")
+    assert expected_damage_per_fight(state, _gd(), _RAID_BOSS) > state.max_hp
 
 
 def test_the_two_poles_differ_only_by_the_raid():

@@ -58,9 +58,10 @@ def _robby(equipment: dict[str, str] = ROBBY_WORN) -> WorldState:
     """Robby's live shape (spec §1.2, his sheet on 2026-10-18): level 41, the
     server's own stat totals for the worn gear less the `lich_race_medal`'s
     (dmg 5, prospecting 25, initiative 100), since `_bare` cannot strip an
-    item the bundle does not know: the totals are the worn gear's own sum,
-    initiative 100 from the helmet and the armour (ruling R: a total below
-    the worn gear's raises); gearcrafting 23,
+    item the bundle does not know. Initiative is 200: a character's base 100
+    (every live sheet stripped of its gear reads 100) plus the hard_leather_helmet's
+    and the bandit_armor's 50 each; the live 300 adds the medal's 100.
+    Gearcrafting 23,
     jewelrycrafting 22, weaponcrafting 22, and the alchemy 32 and cooking 34
     that make his potion loadouts stockable (no fight that pays him XP is won
     on bare gear alone)."""
@@ -73,7 +74,7 @@ def _robby(equipment: dict[str, str] = ROBBY_WORN) -> WorldState:
                       equipment=worn, attack={"fire": 37, "earth": 37, "water": 0, "air": 0},
                       dmg=24, dmg_elements={"fire": 30, "earth": 30, "water": 0, "air": 20},
                       resistance={"fire": 7, "earth": 13, "water": 21, "air": 21},
-                      critical_strike=40, initiative=100, wisdom=25, prospecting=135)
+                      critical_strike=40, initiative=200, wisdom=25, prospecting=135)
 
 
 def _novice(gd: GameData, equipment: dict[str, str] = COPPER,

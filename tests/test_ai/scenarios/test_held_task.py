@@ -526,6 +526,10 @@ def test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work(
     # weaponcrafting-43 decline was the old row's (`corrupted_ogre`), a stat
     # artefact (see `STARVED_GEAR`).
     _, _, gear = _starved_run(STARVED_GEAR, gd)
+    # The ranking head is no longer the arm's row (`WhichSlotClosesTheFight`):
+    # the arm's slime_shield is declined, so the walk's first row is the
+    # control's own gear alternative. Pinned exactly.
+    assert gear.decision.ranking[0].category == "alternative · gear"
     assert gear.decision.declined == (
         ("ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')",
          "infeasible:cloth:no_route:wool"), *control.decision.declined)
