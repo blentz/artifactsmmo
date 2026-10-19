@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 
@@ -29,3 +30,7 @@ class PlanReport:
     # normal plan. Echoed so the printed report is honest that the cycle ran with
     # non-default arbiter state.
     simulated_committed: str | None = None
+    # The cycle's gear objective (`SelectionContext.gear_objective`, the one the
+    # root walk and the arbiter read): m*, whether L* is held, and the missing
+    # pieces in acquisition order. None when the objective found no fight.
+    gear_objective: GearObjective | None = None

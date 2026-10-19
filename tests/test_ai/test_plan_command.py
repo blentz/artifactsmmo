@@ -1,12 +1,15 @@
 """Tests for the offline `plan` CLI command + GamePlayer.plan_once()."""
 
 import contextlib
+from dataclasses import replace
 from fractions import Fraction
 from unittest.mock import MagicMock, patch
 
 import pytest
 import typer
 
+from artifactsmmo_cli.ai import player as player_mod
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
@@ -58,6 +61,24 @@ def test_plan_once_seeds_committed_for_diagnostics():
             stack.enter_context(cm)
         report = player.plan_once(committed="GrindCharacterXP(green_slime)")
     assert report.simulated_committed == "GrindCharacterXP(green_slime)"
+
+
+def test_plan_once_reports_the_cycles_gear_objective():
+    """The report carries the objective the cycle's selection context held —
+    the one the root walk and the arbiter read — not a second computation."""
+    player = GamePlayer(character="hero")
+    state = make_state()
+    objective = GearObjective(monster="chicken", loadout={}, rate=Fraction(1), missing=())
+    real = player_mod.attach_gear_objective
+    with contextlib.ExitStack() as stack:
+        for cm in _plan_once_mocks(player, state):
+            stack.enter_context(cm)
+        stack.enter_context(patch.object(
+            player_mod, "attach_gear_objective",
+            side_effect=lambda *args: replace(real(*args), gear_objective=objective)))
+        report = player.plan_once()
+    assert report.gear_objective is objective
+    assert player._last_ctx.gear_objective is objective
 
 
 def test_plan_once_resumes_the_persisted_intention_like_a_live_bot():
@@ -241,7 +262,44 @@ def test_plan_command_empty_plan_branch(capsys):
                 player.plan_once.return_value = report
                 with patch.object(plan_cmd, "GamePlayer", return_value=player):
                     plan_cmd.plan(character="hero", learn=False, learn_db=None, refresh_game_data=False)
-    assert "<no plan>" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "<no plan>" in out
+    # No objective this cycle (a wall) prints as such, never as a blank line.
+    assert "gear_objective: None" in out
+
+
+def _print_with_objective(objective: GearObjective, capsys) -> str:
+    report = PlanReport(
+        decision=StrategyDecision(interrupt=None, chosen_root=None, chosen_step=None,
+                                  ranking=[]),
+        selected_goal=None, plan=[], goals_tried=[], gear_objective=objective)
+    player = MagicMock()
+    player.state = None
+    plan_cmd._print_report(player, report)
+    return capsys.readouterr().out
+
+
+def test_plan_report_prints_the_missing_pieces_in_order(capsys):
+    """One line names m*, whether L* is held, and every missing piece in the
+    objective's own order as slot:code(layer, gain/price) — gain to 4
+    significant figures, price in whole seconds (the unpriced 10^6+1 stays
+    distinguishable from 10^6)."""
+    objective = GearObjective(
+        monster="cultist_acolyte",
+        loadout={"weapon": "iron_sword", "ring1": "iron_ring"},
+        rate=Fraction(1, 4),
+        missing=(GearPiece("weapon", "iron_sword", 1, Fraction(3, 40), Fraction(901, 2)),
+                 GearPiece("ring1", "iron_ring", 2, Fraction(0), Fraction(1_000_001))))
+    out = _print_with_objective(objective, capsys)
+    assert ("gear_objective: monster=cultist_acolyte, held=False, "
+            "missing=[weapon:iron_sword(1, 0.075/450), ring1:iron_ring(2, 0/1000001)]") in out
+
+
+def test_plan_report_prints_a_held_objective(capsys):
+    objective = GearObjective(monster="cultist_acolyte", loadout={"weapon": "iron_sword"},
+                              rate=Fraction(1, 4), missing=())
+    out = _print_with_objective(objective, capsys)
+    assert "gear_objective: monster=cultist_acolyte, held=True, missing=[]" in out
 
 
 def test_plan_command_learn_uses_default_db(capsys):

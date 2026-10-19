@@ -1059,7 +1059,8 @@ class GamePlayer:
         return PlanReport(decision=decision, selected_goal=selected_goal,
                           plan=list(plan), goals_tried=goals_tried,
                           drop_inputs=drop_inputs,
-                          simulated_committed=committed)
+                          simulated_committed=committed,
+                          gear_objective=ctx.gear_objective)
 
     def run(self) -> None:
         """Main loop: sense → select goal → plan → act."""

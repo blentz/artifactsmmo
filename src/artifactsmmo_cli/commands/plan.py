@@ -10,6 +10,7 @@ from pathlib import Path
 
 import typer
 
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.plan_tree import root_detail
@@ -27,6 +28,17 @@ def _default_learn_db_path() -> str:
     return str(Path.home() / ".cache" / "artifactsmmo" / "learning.db")
 
 
+def _gear_objective_line(objective: GearObjective | None) -> str:
+    """m*, whether L* is held, and each missing piece in the objective's own
+    order as slot:code(layer, gain/price): gain to 4 significant figures,
+    price in whole seconds."""
+    if objective is None:
+        return "gear_objective: None"
+    pieces = ", ".join(f"{p.slot}:{p.code}({p.layer}, {float(p.gain):.4g}/{float(p.price):.0f})"
+                       for p in objective.missing)
+    return f"gear_objective: monster={objective.monster}, held={objective.held}, missing=[{pieces}]"
+
+
 def _print_report(player: GamePlayer, report: PlanReport) -> None:
     s = player.state
     d = report.decision
@@ -41,6 +53,7 @@ def _print_report(player: GamePlayer, report: PlanReport) -> None:
     print(f"chosen_root: {d.chosen_root!r}")
     print(f"chosen_step: {d.chosen_step!r}")
     print(f"selected_goal: {report.selected_goal!r}")
+    print(_gear_objective_line(report.gear_objective))
     print("-" * 70)
     print(f"PLAN ({len(report.plan)} actions):")
     if report.plan:
