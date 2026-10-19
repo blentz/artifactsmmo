@@ -5516,8 +5516,9 @@ STEP_DECLINE_MUTATIONS = [
 ]
 
 # The fight arm's half of the same filter. Killed by
-# tests/test_ai/scenarios/test_held_task.py (the closable row's weaponcrafting
-# gate declines, so the arm must fall through rather than divert).
+# tests/test_ai/scenarios/test_held_task.py (the closable row's slime_shield
+# declines, its cloth having no route, so the arm must fall through rather than
+# divert).
 STEP_DECLINE_FIGHT_ARM_MUTATIONS = [
     ("root: the fight arm heads with a declined target",
      "        if not self.walk.serves(slot, gear, state, game_data, ctx, history):\n",
