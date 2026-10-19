@@ -8,19 +8,24 @@ candidate is silently REJECTED. The raid was unselectable for exactly that reaso
 until the xp floor was added.
 """
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.arbiter_select import BAND_RAID
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.goals.participate_raid import (
     RAID_PARTICIPATION_VALUE,
     ParticipateRaidGoal,
 )
 from artifactsmmo_cli.ai.raid_info import RaidInfo
-from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter, raid_may_fight
+from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachSkillLevel
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -109,9 +114,17 @@ def _raid_gd(*, tiles: bool, hurts: bool) -> GameData:
     return gd
 
 
-def _candidates(gd, state):
+_PIECE = GearPiece("shield_slot", "boss_shield", 0, Fraction(1), Fraction(10))
+"""A missing `L*` piece."""
+_MISSING = GearObjective("wolf", {"shield_slot": "boss_shield"}, Fraction(1), (_PIECE,))
+_HELD = GearObjective("wolf", {"shield_slot": "boss_shield"}, Fraction(1), ())
+
+
+def _candidates(gd, state, objective: GearObjective | None = None,
+                chosen_root: MetaGoal | None = None):
     return StrategyArbiter._raid_candidates(
-        StrategyArbiter.__new__(StrategyArbiter), state, gd)
+        StrategyArbiter.__new__(StrategyArbiter), state, gd,
+        replace(NO_PROFILE_CONTEXT, gear_objective=objective), chosen_root)
 
 
 def test_raid_with_no_known_tile_is_not_offered():
@@ -147,5 +160,49 @@ def test_an_offered_raid_is_filed_at_the_raid_band():
     candidates: list = []
     StrategyArbiter._append_raid_candidates(StrategyArbiter.__new__(StrategyArbiter),
                                             candidates, state,
-                                            _raid_gd(tiles=True, hurts=False))
+                                            _raid_gd(tiles=True, hurts=False),
+                                            NO_PROFILE_CONTEXT, None)
     assert [(c.repr_, c.band) for c in candidates] == [(f"ParticipateRaid({_RAID})", BAND_RAID)]
+
+
+# --- ruling AJ: a raid is an XP fight, so it waits for L* -------------------
+
+def _survivable_state():
+    return make_state(level=48, hp=1000, max_hp=1000,
+                      attack={"air": 50}, raids=[_raid_info()])
+
+
+def test_a_missing_piece_keeps_the_raid_off_the_walk():
+    """Final review F2: while a piece of `L*` is missing a survivable raid is
+    not offered at all — not merely filed behind the step, where an
+    unplannable or turn-spent step handed the cycle to it."""
+    gd = _raid_gd(tiles=True, hurts=False)
+    root = ObtainItem("boss_shield", 1, slot="shield_slot")
+    assert _candidates(gd, _survivable_state(), _MISSING, root) == []
+
+
+def test_a_held_objective_offers_the_raid():
+    gd = _raid_gd(tiles=True, hurts=False)
+    out = _candidates(gd, _survivable_state(), _HELD, None)
+    assert [repr(g) for g in out] == [f"ParticipateRaid({_RAID})"]
+
+
+def test_the_raid_is_offered_when_its_boss_drops_the_chosen_piece():
+    """The raid IS the chosen piece's route: its boss drops the walk's root."""
+    gd = _raid_gd(tiles=True, hurts=False)
+    gd._monster_drops = {_BOSS: [("boss_shield", 10, 1, 1)]}
+    root = ObtainItem("boss_shield", 1, slot="shield_slot")
+    out = _candidates(gd, _survivable_state(), _MISSING, root)
+    assert [repr(g) for g in out] == [f"ParticipateRaid({_RAID})"]
+
+
+def test_raid_may_fight_reads_the_objective_and_the_route():
+    drops = [("boss_shield", 10, 1, 1)]
+    shield = ObtainItem("boss_shield", 1, slot="shield_slot")
+    assert raid_may_fight(None, None, [])
+    assert raid_may_fight(_HELD, None, [])
+    assert not raid_may_fight(_MISSING, None, drops)
+    assert not raid_may_fight(_MISSING, shield, [])
+    assert not raid_may_fight(_MISSING, ObtainItem("other", 1), drops)
+    assert not raid_may_fight(_MISSING, ReachSkillLevel("gearcrafting", 5), drops)
+    assert raid_may_fight(_MISSING, shield, drops)

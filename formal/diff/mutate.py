@@ -9203,6 +9203,30 @@ WHICH_PIECE_ROOT_MUTATIONS = [
 ]
 
 
+# Ruling AJ (final review F2): an open raid is offered only once `L*` is held
+# or as the chosen piece's route. Killed by tests/test_ai/test_participate_raid_goal.py.
+RAID_MAY_FIGHT_MUTATIONS = [
+    ("raid_may_fight: a missing piece no longer holds the raid back",
+     "    if objective is None or objective.held:\n        return True\n",
+     "    if True:\n        return True\n"),
+    ("raid_may_fight: a held objective holds the raid back",
+     "    if objective is None or objective.held:\n        return True\n",
+     "    if objective is None:\n        return True\n"),
+    ("raid_may_fight: no objective holds the raid back",
+     "    if objective is None or objective.held:\n        return True\n",
+     "    if objective is not None and objective.held:\n        return True\n"),
+    ("raid_may_fight: any drop counts as the chosen piece's route",
+     "            and any(item == chosen_root.code for item, *_ in boss_drops))\n",
+     "            and bool(boss_drops))\n"),
+    ("raid_may_fight: the route is never the raid",
+     "    return (isinstance(chosen_root, ObtainItem)\n",
+     "    return (False and isinstance(chosen_root, ObtainItem)\n"),
+    ("raid candidates: the objective gate is skipped",
+     "            if not raid_may_fight(ctx.gear_objective, chosen_root,\n",
+     "            if False and raid_may_fight(ctx.gear_objective, chosen_root,\n"),
+]
+
+
 # Security (ruling AN): the TUI's fatal-error handler never renders frame locals
 # (the API token is one). Killed by tests/test_tui/test_app.py.
 TUI_FATAL_ERROR_MUTATIONS = [
@@ -11320,6 +11344,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_decisions_which_piece.py", survivors)
     run_group(TUI_APP_SRC, TUI_FATAL_ERROR_MUTATIONS,
               "tests/test_tui/test_app.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, RAID_MAY_FIGHT_MUTATIONS,
+              "tests/test_ai/test_participate_raid_goal.py", survivors)
     run_group(ROOT_DECISION_SRC, WHICH_PIECE_ROOT_MUTATIONS,
               "tests/test_ai/test_decisions_which_piece.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, FLEET_STEP_MUTATIONS,

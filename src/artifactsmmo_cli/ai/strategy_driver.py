@@ -37,6 +37,7 @@ from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.fight_tiles import fight_tiles
 from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY, supply_due, turn_in_due
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.cancel_orders import CancelOrdersGoal
@@ -673,6 +674,27 @@ def _turn_in_goal(state: WorldState, ctx: SelectionContext) -> Goal | None:
         return SurrenderCurrencyGoal(currency=currency, units=units)
     # A non-buyer with nothing to surrender has no step.
     return None
+
+
+def raid_may_fight(objective: GearObjective | None, chosen_root: MetaGoal | None,
+                   boss_drops: list[tuple[str, int, int, int]]) -> bool:
+    """Whether an open raid may be fought this cycle (ruling Z, AJ; spec
+    2026-10-18 §2.4, §6.2): a raid is an XP fight, so while a piece of `L*` is
+    missing it is offered only as the chosen piece's ROUTE — its boss drops the
+    walk's root item. Once `L*` is held it is offered as before.
+
+    WHY HERE AND NOT BY POSITION. Filing the raid behind the objective step
+    only ordered it: when the piece's step failed to plan, or `rotate` demoted
+    the step after its turn, the raid (`BAND_RAID`, above the fallback chain)
+    was the next goal tried and the cycle fought the boss for XP while a piece
+    was missing (final review F2).
+
+    No objective at all is the wall: there is no `L*` for a piece to be
+    missing from, so nothing outranks the raid and it stays on offer."""
+    if objective is None or objective.held:
+        return True
+    return (isinstance(chosen_root, ObtainItem)
+            and any(item == chosen_root.code for item, *_ in boss_drops))
 
 
 def _pursue_goal(state: WorldState, game_data: GameData) -> Goal:
@@ -1336,8 +1358,10 @@ class StrategyArbiter:
         # list IN ORDER — `band` governs sticky preemption, not walk order, so
         # raising the band alone moves nothing. A raid yields to a REAL
         # objective step (its docstring's intent) and to nothing below one.
+        # Position only ORDERS it: whether a raid is offered at all while a
+        # piece of `L*` is missing is `raid_may_fight`'s (ruling AJ).
         if not step_is_real:
-            self._append_raid_candidates(candidates, state, game_data)
+            self._append_raid_candidates(candidates, state, game_data, ctx, chosen_root)
         added_reprs: set[str] = set()
         if step_goal is not None:
             r = repr(step_goal)
@@ -1346,7 +1370,7 @@ class StrategyArbiter:
                 band=BAND_STEP if step_is_real else BAND_FALLBACK_STEP))
             added_reprs.add(r)
         if step_is_real:
-            self._append_raid_candidates(candidates, state, game_data)
+            self._append_raid_candidates(candidates, state, game_data, ctx, chosen_root)
         for idx, alt in enumerate(fallback_steps):
             alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
             alt_goal = objective_step_goal(alt, state, game_data, ctx, root=alt_root,
@@ -1389,14 +1413,17 @@ class StrategyArbiter:
         return candidates
 
     def _append_raid_candidates(self, candidates: list[Candidate],
-                                state: WorldState, game_data: GameData) -> None:
+                                state: WorldState, game_data: GameData,
+                                ctx: SelectionContext,
+                                chosen_root: MetaGoal | None) -> None:
         """File every open raid at `BAND_RAID`, at the caller's chosen position
         in the walk order. One call site per position, not two lists."""
-        for raid_goal in self._raid_candidates(state, game_data):
+        for raid_goal in self._raid_candidates(state, game_data, ctx, chosen_root):
             candidates.append(Candidate(goal=raid_goal, repr_=repr(raid_goal), band=BAND_RAID))
 
-    def _raid_candidates(self, state: WorldState,
-                         game_data: GameData) -> list[ParticipateRaidGoal]:
+    def _raid_candidates(self, state: WorldState, game_data: GameData,
+                         ctx: SelectionContext,
+                         chosen_root: MetaGoal | None) -> list[ParticipateRaidGoal]:
         """One participation goal per OPEN raid whose boss is worth engaging.
 
         Deliberately NOT a MeansKind: a new kind ripples through the ladder,
@@ -1413,7 +1440,8 @@ class StrategyArbiter:
         the raid pair's positive pole stopped engaging its boss. See
         `arbiter_select.BAND_RAID`.
 
-        Gated on (window open, tile known, survivable, worth-positive). The worth
+        Gated on (window open, tile known, survivable, `raid_may_fight`,
+        worth-positive). The worth
         gate uses the raid's remaining window in FIGHTS, which is unknown offline,
         so it is skipped when the window is not known -- the survivability gate
         still applies, and a raid the bot cannot survive is never offered.
@@ -1424,6 +1452,9 @@ class StrategyArbiter:
                 continue
             damage = expected_damage_per_fight(state, game_data, raid.monster)
             if not raid_survivable_pure(state.hp, state.max_hp, damage):
+                continue
+            if not raid_may_fight(ctx.gear_objective, chosen_root,
+                                  game_data.monster_drops(raid.monster)):
                 continue
             out.append(ParticipateRaidGoal(raid_code=raid.code,
                                            monster_code=raid.monster,

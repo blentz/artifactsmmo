@@ -64,6 +64,12 @@ piece, `goblin_guard_shield`, and both plan exactly its acquisition:
 it is the route of the chosen piece or once `L*` is held.
 `test_a_survivable_raid_still_yields_to_the_missing_piece` shows the raid
 yields to the piece even when it IS survivable.
+
+RE-DERIVED ruling AJ (final review F2): filing the raid behind the step only
+ORDERED it, so a piece step that failed to plan, or had spent its rotation
+turn, handed the cycle to the boss. The raid is now not offered at all while a
+piece is missing (`strategy_driver.raid_may_fight`); the last two tests pin
+both paths.
 """
 
 from pathlib import Path
@@ -81,6 +87,8 @@ from tests.test_ai.shared_world import shared_world
 _RAID_BOSS = "pixie"
 _SHIELD = ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")
 """Both poles' first missing `L*` piece."""
+_SHIELD_STEP = "UpgradeEquipment(goblin_guard_shield->shield_slot)"
+"""The step goal that acquires `_SHIELD`."""
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
 
@@ -215,7 +223,8 @@ def test_a_survivable_raid_still_yields_to_the_missing_piece(
     survivable, so its candidate is built (the survivability gate is asked of
     the boss) — and still the root is the missing `L*` piece, the selected goal
     is that piece's acquisition, and no action fights the boss. While a piece
-    is missing the raid files behind the objective step (`step_is_real`)."""
+    is missing the raid is not offered at all (`strategy_driver.raid_may_fight`,
+    ruling AJ): only once `L*` is held, or as the chosen piece's route."""
     asked: list[float] = []
 
     def survivable(hp: int, max_hp: int, damage: float) -> bool:
@@ -227,5 +236,62 @@ def test_a_survivable_raid_still_yields_to_the_missing_piece(
     assert asked, "the raid candidate was never built"
     assert report.decision.chosen_root == _SHIELD
     assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)"
+    assert not any(isinstance(a, FightAction) and a.monster_code == _RAID_BOSS
+                   for a in report.plan)
+
+
+def _survivable(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """Patch the pixie damage defect away: the raid reads survivable, so its
+    candidate gate is asked. Returns the damages it was asked with."""
+    asked: list[float] = []
+
+    def survivable(hp: int, max_hp: int, damage: float) -> bool:
+        asked.append(damage)
+        return True
+
+    monkeypatch.setattr(strategy_driver, "raid_survivable_pure", survivable)
+    return asked
+
+
+def _raid_tried(report) -> bool:
+    return any("Raid" in str(g.get("goal")) for g in report.goals_tried)
+
+
+def test_an_unplannable_piece_step_does_not_open_the_raid(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling AJ (final review F2): the piece's step fails to plan, and the raid
+    is still not a fight the character may choose — a raid fights only once
+    `L*` is held or when it is the chosen piece's route. Before the fix the
+    raid sat right behind the step, so an unplannable step handed the cycle to
+    the boss."""
+    _survivable(monkeypatch)
+    real = strategy_driver.StrategyArbiter._plans
+
+    def no_plan_for_the_piece(self, goal, *args, **kwargs):
+        if repr(goal) == _SHIELD_STEP:
+            return []
+        return real(self, goal, *args, **kwargs)
+
+    monkeypatch.setattr(strategy_driver.StrategyArbiter, "_plans", no_plan_for_the_piece)
+    report = _report("l48_raid_active")
+    assert report.decision.chosen_root == _SHIELD
+    assert not _raid_tried(report), [g.get("goal") for g in report.goals_tried]
+    assert not any(isinstance(a, FightAction) and a.monster_code == _RAID_BOSS
+                   for a in report.plan)
+
+
+def test_a_spent_piece_turn_does_not_open_the_raid(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling AJ (final review F2): the piece's step has spent its rotation
+    turn, so `rotate` demotes it to the end of the fallback band — behind the
+    raid's band. The raid still is not built while a piece is missing."""
+    _survivable(monkeypatch)
+    gd = _gd()
+    player = GamePlayer(character="l48_raid_active", history=None)
+    player.seed_offline(scenario_state(SCENARIOS["l48_raid_active"], gd), gd)
+    player._turns = {_SHIELD_STEP: 1}
+    report = player.plan_from_state()
+    assert report.decision.chosen_root == _SHIELD
+    assert not _raid_tried(report), [g.get("goal") for g in report.goals_tried]
     assert not any(isinstance(a, FightAction) and a.monster_code == _RAID_BOSS
                    for a in report.plan)
