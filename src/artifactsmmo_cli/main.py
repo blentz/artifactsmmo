@@ -25,7 +25,12 @@ from artifactsmmo_cli.utils.formatters import format_error_message
 
 # Create the main Typer app
 app = typer.Typer(
-    name="artifactsmmo", help="CLI interface for ArtifactsMMO game", add_completion=True, rich_markup_mode="rich"
+    name="artifactsmmo",
+    help="CLI interface for ArtifactsMMO game",
+    add_completion=True,
+    rich_markup_mode="rich",
+    # Frame locals hold the API token; a crash traceback must never print them.
+    pretty_exceptions_show_locals=False,
 )
 
 console = Console()

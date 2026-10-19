@@ -228,3 +228,10 @@ def test_run_renders_fallback_on_empty_page_text(monkeypatch, capsys):
 def test_run_passes_through_on_normal_exit(monkeypatch):
     monkeypatch.setattr(main_mod, "app", lambda: None)
     main_mod.run()  # no exception, no SystemExit
+
+
+def test_tracebacks_never_print_locals():
+    """A crash traceback must not render frame locals: the API token is one of
+    them (seen live in a `plan` crash). Typer defaults to showing locals, and
+    the root app's setting governs every sub-command it dispatches."""
+    assert app.pretty_exceptions_show_locals is False
