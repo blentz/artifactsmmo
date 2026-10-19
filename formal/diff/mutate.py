@@ -6117,7 +6117,7 @@ CARRY_PREP_MUTATIONS = [
 ]
 FIGHT_STEP_PREP_MUTATIONS = [
     ("fight steps: the grind never preps",
-     "        prep = _fight_step_prep(state, game_data, ctx, ctx.combat_monster)\n",
+     "        prep = _fight_step_prep(state, game_data, ctx, monster)\n",
      "        prep = None\n"),
     ("fight steps: the task kill never preps",
      "        prep = _fight_step_prep(state, game_data, ctx, step.task_code)\n",
@@ -9185,6 +9185,11 @@ WHICH_PIECE_MUTATIONS = [
     ("which-piece: a piece the catalogue does not know is classified, not refused",
      "        if unknown:\n",
      "        if False:\n"),
+    ("which-piece: every piece declined is no root (ruling AI)",
+     "        # offered behind the declined pieces, which stay in `declined` by name.\n"
+     "        return ReachCharLevel(level=state.level + 1)\n",
+     "        # offered behind the declined pieces, which stay in `declined` by name.\n"
+     "        return None\n"),
     ("which-piece: no objective grinds a level instead of the wall",
      "        if target is None:\n"
      "            return None\n",
@@ -9224,6 +9229,15 @@ RAID_MAY_FIGHT_MUTATIONS = [
     ("raid candidates: the objective gate is skipped",
      "            if not raid_may_fight(ctx.gear_objective, chosen_root,\n",
      "            if False and raid_may_fight(ctx.gear_objective, chosen_root,\n"),
+]
+
+
+# Ruling AI (final review F1, INTERIM): the trunk offered behind every declined
+# `L*` piece fights `m*`. Killed by tests/test_ai/test_decisions_which_piece.py.
+TRUNK_DECLINED_STEP_MUTATIONS = [
+    ("objective_step_goal: the trunk behind declined pieces never fights m*",
+     "            monster = ctx.gear_objective.monster\n",
+     "            return None\n"),
 ]
 
 
@@ -11346,6 +11360,8 @@ def _collect_all_groups() -> None:
               "tests/test_tui/test_app.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, RAID_MAY_FIGHT_MUTATIONS,
               "tests/test_ai/test_participate_raid_goal.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, TRUNK_DECLINED_STEP_MUTATIONS,
+              "tests/test_ai/test_decisions_which_piece.py", survivors)
     run_group(ROOT_DECISION_SRC, WHICH_PIECE_ROOT_MUTATIONS,
               "tests/test_ai/test_decisions_which_piece.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, FLEET_STEP_MUTATIONS,

@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -98,18 +99,33 @@ def test_a_declined_piece_yields_to_the_next() -> None:
     assert resolution.alternatives[:2] == (shield_step, ObtainItem("leather", 2))
 
 
-def test_every_piece_declined_is_no_root() -> None:
-    """Nothing servable is no root, never a level grind: every piece stays on
-    offer behind its named reason."""
+def test_every_piece_declined_offers_the_trunk() -> None:
+    """Ruling AI (final review F1), INTERIM until Plan B makes the obtain model
+    and the walk agree: with no servable gear step, the next action that best
+    advances the character is XP, so the root is one more character level.
+    Every piece stays on offer behind its named reason, ahead of the trunk's
+    alternatives — the trunk is the root, never repeated as an alternative."""
     gd = _gd()
     shield_step = ReachSkillLevel(skill="gearcrafting", level=2)
     club_step = ObtainItem("ash_club", 1, slot="weapon_slot")
     resolution = _resolve(make_state(level=15), gd, _missing(SHIELD, CLUB),
                           {shield_step: "a", club_step: "b"})
-    assert resolution.root is None
+    assert resolution.root == ReachCharLevel(level=16)
     assert resolution.declined == ((repr(shield_step), "a"), (repr(club_step), "b"))
     assert resolution.alternatives[:2] == (shield_step, club_step)
     assert not any(isinstance(alt, ReachCharLevel) for alt in resolution.alternatives)
+
+
+def test_a_declined_objective_grinds_its_monster() -> None:
+    """Ruling AI: the trunk offered behind every declined piece fights `m*`.
+    `farm_target` names no grind target while a piece is missing, so the
+    trunk's step reads the objective's monster instead of returning None."""
+    gd = _gd()
+    ctx = replace(_ctx(combat_monster=None), gear_objective=_missing(SHIELD))
+    goal = objective_step_goal(ReachCharLevel(level=16), make_state(level=15), gd, ctx)
+    assert repr(goal) == "GrindCharacterXP(wolf)"
+    assert objective_step_goal(ReachCharLevel(level=16), make_state(level=15), gd,
+                               replace(ctx, gear_objective=None)) is None
 
 
 def test_held_objective_grinds_the_next_level() -> None:

@@ -4,7 +4,8 @@
 While a piece of `L*` is missing the root is the next step on its acquisition
 plan; only once `L*` is held does the character grind character XP, on `m*`.
 A level-up is not an acquisition step (§6.2), so no `ReachCharLevel` heads the
-walk while a piece is missing.
+walk while a piece is missing — except, INTERIM (ruling AI), when every missing
+piece's step is declined and no gear action is available at all.
 """
 
 # MODULE import, the idiom `root.py` uses on its own cycles: `root` imports
@@ -34,7 +35,10 @@ class WhichPieceIsNext(Decision[MetaGoal]):
       served this cycle (`RootWalk.serves`) goes to `IsThisTargetBlocked`: a
       crafting-skill gate becomes the next skill level, a missing material its
       `ObtainItem`. A piece whose step is declined is recorded with its reason
-      and the next piece is asked. Every piece declined is no root.
+      and the next piece is asked.
+    * every piece declined (INTERIM, ruling AI): no gear action is available
+      this cycle, so XP is the next action that best advances the character
+      (§2.4), and the root is `ReachCharLevel(state.level + 1)` on `m*`.
     * no objective: the wall, `None` — no achievable loadout pays XP on any
       monster, so there is neither a piece to build nor a fight to grind.
 
@@ -68,4 +72,11 @@ class WhichPieceIsNext(Decision[MetaGoal]):
             gear = self.objective.classify_target(piece.code, state)
             if self.walk.serves(piece.slot, gear, state, game_data, ctx, history):
                 return _root.IsThisTargetBlocked(piece.slot, gear, self.walk)
-        return None
+        # INTERIM (ruling AI, final review F1): every missing piece is declined,
+        # so no gear step can be served. Returning None here shut the XP trunk
+        # off for good whenever a piece the obtain model calls feasible maps to
+        # no goal the walk can serve (live: `lich_race_trophy`, `no_step_goal`,
+        # heads 3 of 5 objectives). Plan B must make the obtain model and the
+        # walk agree, so `L*` never names such a piece; until then the trunk is
+        # offered behind the declined pieces, which stay in `declined` by name.
+        return ReachCharLevel(level=state.level + 1)

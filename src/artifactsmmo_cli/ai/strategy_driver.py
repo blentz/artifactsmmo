@@ -507,8 +507,16 @@ def objective_step_goal(
         resolved: Goal | None = resolve_node(node, state, game_data, ctx, history)
         return resolved
     if isinstance(step, ReachCharLevel):
-        if ctx.combat_monster is None:
-            return None
+        monster = ctx.combat_monster
+        if monster is None:
+            # The trunk offered behind every declined `L*` piece (ruling AI,
+            # INTERIM): `farm_target` names no grind target while a piece is
+            # missing, and the walk alone knows every piece was declined, so the
+            # step fights the objective's `m*`. No objective, no fight.
+            if ctx.gear_objective is None:
+                return None
+            monster = ctx.gear_objective.monster
+            ctx = replace(ctx, combat_monster=monster)
         # A HELD ITEMS TASK DEFERS THE GRIND ONLY WHILE IT PAYS (spec
         # 2026-10-14 items-task-pays, USER "Price it by useful XP"): a gold or
         # drop verdict, or skill XP the DAG demands at a better rate than the
@@ -536,7 +544,7 @@ def objective_step_goal(
         provision = _marginal_provision_goal(ctx, state, game_data)
         if provision is not None:
             return provision
-        prep = _fight_step_prep(state, game_data, ctx, ctx.combat_monster)
+        prep = _fight_step_prep(state, game_data, ctx, monster)
         if prep is not None:
             # THE FIGHT STEP CARRIES ITS LOADOUT (USER 2026-10-10, "Fight steps
             # prep it"; §3: the leaf builds what it needs). Live 05:16-14:40Z
@@ -544,7 +552,7 @@ def objective_step_goal(
             # ever withdrawn — only skill-grind fight legs prepped — so 652
             # Rests against 13 eats.
             return prep
-        return GrindCharacterXPGoal(target_monster=ctx.combat_monster, initial_xp=state.xp)
+        return GrindCharacterXPGoal(target_monster=monster, initial_xp=state.xp)
     if isinstance(step, ReachSkillLevel):
         # Wave 3a THE FLIP: the root graph's `IsThisTargetBlocked` skill arm is
         # the first thing in this codebase that can put a `ReachSkillLevel` in

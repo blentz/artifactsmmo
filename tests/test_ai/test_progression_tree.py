@@ -248,8 +248,9 @@ class TestStepDeclineInTheWalk:
     (`step_decline`) in the objective's order and lets only a served one head
     it; a declined piece is named and stays on offer in its own place in that
     order (the alternatives are the objective's pieces, never re-sorted).
-    No trunk: a piece is missing, so no level grind is offered (spec
-    2026-10-18 §6.2)."""
+    No trunk while a piece is served: a piece is missing, so no level grind is
+    offered (spec 2026-10-18 §6.2) — unless every piece is declined (ruling
+    AI, INTERIM)."""
 
     SWORD = ObtainItem(code="iron_sword", quantity=1, slot="weapon_slot")
     SKILL_GEAR = ReachSkillLevel(skill="gearcrafting", level=2)
@@ -283,10 +284,12 @@ class TestStepDeclineInTheWalk:
         assert d.chosen_root == self.SKILL_JEWEL
         assert d.fallback_roots == [self.SWORD, self.SKILL_GEAR, self.RING1, self.RING2]
 
-    def test_every_piece_declined_is_no_root(self):
+    def test_every_piece_declined_offers_the_trunk(self):
+        """Ruling AI (INTERIM): with no servable gear step the root is one
+        more character level; every piece stays declined by name, on offer."""
         gear = {self.SWORD, self.SKILL_GEAR, self.SKILL_JEWEL, self.RING1, self.RING2}
         d = self._decide_with(lambda root: "blocked" if root in gear else None)
-        assert d.chosen_root is None
+        assert d.chosen_root == ReachCharLevel(level=11)
         assert {root for root, _reason in d.declined} == {repr(g) for g in gear}
         assert d.fallback_roots[:5] == [self.SWORD, self.SKILL_GEAR, self.SKILL_JEWEL,
                                         self.RING1, self.RING2]
