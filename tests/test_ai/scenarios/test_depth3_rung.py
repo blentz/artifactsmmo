@@ -12,7 +12,10 @@ best candidate in a slot it is behind on (design 2026-08-24 §4.3).
 best catalogue loadout at or below its own level, so `gear_target_tier` is 30,
 and at rung 30 the amulet slot's best candidate is `greater_dreadful_amulet`.
 The slot is empty; every other slot is worn at or above its rung-30 candidate,
-so the amulet is the one slot behind and the walk resolves to it.
+so the amulet is the one slot behind and the walk resolves to it. (Since the
+global gear objective, Task 5, the walk reads the cycle's `L*` instead of the
+rung: its first missing piece is still `greater_dreadful_amulet`. The two
+tests that pinned the rung and the tier walk's trail were deleted, ruling Y.)
 
 The bag holds every root input EXCEPT the depth-2 intermediate. Without that
 the descent stops at `cyclops_eye` — a monster drop one level down — and the
@@ -25,12 +28,6 @@ from pathlib import Path
 
 import pytest
 
-# Imported as a MODULE and listed first on purpose: isort puts a plain `import`
-# ahead of every `from ... import`, and importing `ai.tiers.*` before
-# `ai.decisions.root` is what breaks the tiers <-> decisions import cycle for
-# this module. Same posture as `tests/test_ai/test_decisions_root.py`.
-import artifactsmmo_cli.ai.tiers.tier_progress as tier_progress
-from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import (
@@ -40,7 +37,6 @@ from artifactsmmo_cli.ai.scenario import (
 )
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -111,40 +107,6 @@ def test_the_rung_is_a_depth_three_recipe(bundle_game_data: GameData) -> None:
     assert TIER3 in recipes[TIER2]
     assert LEAF in recipes[TIER3]
     assert bundle_game_data.crafting_recipe(LEAF) is None
-
-
-def test_the_walk_resolves_to_the_depth_three_rung(
-        bundle_game_data: GameData, state: WorldState) -> None:
-    """`resolve_root` — production's own walk — puts the depth-3 amulet on this
-    character's sheet, and the tier that made it a candidate is 30."""
-    assert tier_progress.gear_target_tier(state, bundle_game_data, None) == 30
-    resolution = resolve_root(
-        state, bundle_game_data,
-        CharacterObjective.from_game_data(bundle_game_data),
-        NO_PROFILE_CONTEXT, None)
-    assert resolution.root == _root_node()
-    assert resolution.trail == ("IsAFightBlockingMe",
-                                "IsMyGearBehindMyTier",
-                                "WhichSlotIsFurthestBehind",
-                                "IsThisTargetBlocked")
-
-
-def test_this_is_the_only_scenario_standing_on_a_depth_three_rung(
-        bundle_game_data: GameData) -> None:
-    """The gap this cell closes, measured over the whole set rather than
-    claimed. If a later scenario also lands on one of the nine, this test says
-    so out loud instead of letting the cell quietly become a duplicate."""
-    objective = CharacterObjective.from_game_data(bundle_game_data)
-    standing = {
-        name for name in SCENARIOS
-        if isinstance(
-            (root := resolve_root(_state(name, bundle_game_data),
-                                  bundle_game_data, objective,
-                                  NO_PROFILE_CONTEXT, None).root),
-            ObtainItem)
-        and root.code in DEPTH_3_RECIPES
-    }
-    assert standing == {CELL}
 
 
 # --- the descent walks the depth-3 leg, and flipping it changes the answer ---

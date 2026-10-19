@@ -9,7 +9,9 @@ from artifactsmmo_cli.ai.cycle_snapshot import (
     RootScoreView,
 )
 from artifactsmmo_cli.ai.fight_record import FightRecord
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
 from artifactsmmo_cli.tui.widgets.log_pane import LogPane, build_log_lines
@@ -257,7 +259,8 @@ class TestBuildLogLines:
         gd = load_bundle_game_data(_BUNDLE)
         state = scenario_state(SCENARIOS["l1_fresh"], gd)
         objective = CharacterObjective.from_game_data(gd)
-        decision = decide_tree(state, gd, objective)
+        decision = decide_tree(state, gd, objective,
+                               ctx=attach_gear_objective(state, gd, NO_PROFILE_CONTEXT, None))
         assert decision.chosen_root is not None
         assert decision.ranking, "l1_fresh must produce a rendered descent"
         snap = _ranked_snap(

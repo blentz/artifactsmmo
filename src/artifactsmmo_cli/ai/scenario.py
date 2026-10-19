@@ -27,7 +27,7 @@ that deliberately rely on it (the L48 pair, the gearcrafting ramps) say so in
 their own descriptions."""
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -298,6 +298,19 @@ def scenario_state(sc: ScenarioCharacter,
         prospecting=combat.prospecting,
     )
 
+
+
+def derived_scenario_state(sc: ScenarioCharacter, game_data: GameData) -> WorldState:
+    """`sc` as a WorldState with the combat totals a live character wearing
+    its declared loadout would report (`derive_combat_stats=True` forced).
+
+    With it off the obtainability walk's monster-drop arm is dead for every
+    item in the catalogue and an offline census measures the harness.
+    `scenario_state` RAISES on an equipped code the catalogue does not know,
+    which is what a census wants — a missing catalogue entry must fail
+    loudly, never shrink the grid. (Moved here from the deleted
+    `audit/open_rung_completeness`, whose `census_state` it was.)"""
+    return scenario_state(replace(sc, derive_combat_stats=True), game_data)
 
 def load_bundle_game_data(
     path: Path, *, with_ge_orders: bool = False,
@@ -1814,4 +1827,21 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         description="Cell 13: heal stock AT the level-20 baseline with an "
                     "understocked boost — the only cell that reaches the "
                     "CRAFT_POTIONS guard's boost-stock arm."),
+
+    # --- THE HELD-OBJECTIVE CELL (global gear objective, Task 5, ruling Y).
+    # Every other catalogued character is missing pieces of its `L*`, so none
+    # witnesses the trunk: the root is one more character level ONLY while
+    # `L*` is held (spec 2026-10-18 §2.4.1). This level-14 character wears
+    # exactly its own `L*` — the loadout `gear_objective` names for its `m*`,
+    # highwayman, read off the committed bundle — on its gear's own totals.
+    "l14_wears_its_target": ScenarioCharacter(
+        name="l14_wears_its_target", level=14,
+        equipment={"weapon_slot": "greater_wooden_staff", "shield_slot": "iron_shield",
+                   "helmet_slot": "leather_hat", "body_armor_slot": "leather_armor",
+                   "leg_armor_slot": "leather_legs_armor", "boots_slot": "iron_boots",
+                   "ring1_slot": "forest_ring", "ring2_slot": "forest_ring",
+                   "amulet_slot": "air_and_water_amulet"},
+        derive_combat_stats=True,
+        description="Held objective: wears its own L*, so the root is the "
+                    "next character level, fought on m*."),
 }

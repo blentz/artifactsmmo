@@ -7,6 +7,7 @@ monster was no fight (`FightAction`'s zero-XP gate, lifted for a task fight in
 5-2c-iii-b)."""
 
 import dataclasses
+from fractions import Fraction
 from unittest.mock import patch
 
 import pytest
@@ -20,6 +21,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.decisions import root as root_mod
 from artifactsmmo_cli.ai.decisions.route import route_price
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
@@ -207,8 +209,12 @@ class TestTaskRoot:
         gd = _gd()
         state = _held()
         with patch.object(root_mod, "_task_root", return_value=ReachTaskOutcome("chicken")):
-            resolution = root_mod.resolve_root(state, gd, CharacterObjective.from_game_data(gd),
-                                               NO_PROFILE_CONTEXT, None)
+            # A held gear objective, so the trunk is on offer (it is offered
+            # only while `L*` is held, spec 2026-10-18 §6.2).
+            held = GearObjective("chicken", {}, Fraction(1), ())
+            resolution = root_mod.resolve_root(
+                state, gd, CharacterObjective.from_game_data(gd),
+                dataclasses.replace(NO_PROFILE_CONTEXT, gear_objective=held), None)
         offered = [resolution.root, *resolution.alternatives]
         assert ReachTaskOutcome("chicken") in resolution.alternatives
         trunk = next(i for i, a in enumerate(offered) if isinstance(a, ReachCharLevel))

@@ -60,6 +60,7 @@ from artifactsmmo_cli.ai.decisions.root import (
     resolve_root,
 )
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.inventory_keep import keep_in_bag
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -72,7 +73,7 @@ from artifactsmmo_cli.ai.task_horizon import (
     resolve_task_horizon,
 )
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachTaskOutcome
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 
@@ -340,17 +341,30 @@ def test_the_task_triple_moves_the_gear_review_target(gd: GameData) -> None:
     Both are `deficit_upgrade_target`; only the `actions_of` differs.
 
     WAS `map_guard(GEAR_REVIEW)` until wave 4. The assertions are unchanged: the
-    same cell still names the same priced item, one layer down."""
-    roots = {name: repr(resolve_root(_state(name, gd), gd, _obj(gd),
-                                     NO_PROFILE_CONTEXT, None).root)
-             for name in TRIPLE}
-    assert "earth_boost_potion" in roots[TRIPLE_CLOSABLE]
-    # The two fall-through rows agree with each other and DISAGREE with the
-    # deficit-driven one. They now fall through to the TIER arm rather than to a
-    # monster-blind value scan — that scan was deleted with the guard branch, so
-    # what they agree on is the objective's own next step.
-    assert roots[TRIPLE_WORKABLE] == roots[TRIPLE_OPEN]
-    assert roots[TRIPLE_CLOSABLE] != roots[TRIPLE_WORKABLE]
+    same cell still names the same priced item, one layer down.
+
+    RE-DERIVED Task 5 (global gear objective): the root walk enters at
+    `WhichPieceIsNext`, so a held task no longer moves the ROOT — all three
+    cells head the walk with their `L*`'s first piece. The task's verdict is
+    the TASK ROOT (`_task_root`, which asks the same priced
+    `deficit_upgrade_target`), offered in the alternatives, and it still splits
+    the triple three ways: the closable cell's task asks for the priced
+    `earth_boost_potion`, the workable cell's task is worked, the open cell's
+    task offers nothing (no gear closes it, no coin cancels it)."""
+    resolutions = {}
+    for name in TRIPLE:
+        state = _state(name, gd)
+        resolutions[name] = resolve_root(
+            state, gd, _obj(gd), attach_gear_objective(state, gd, NO_PROFILE_CONTEXT, None),
+            None)
+    first_piece = ObtainItem(code="fire_and_earth_amulet", quantity=1, slot="amulet_slot")
+    assert {r.root for r in resolutions.values()} == {first_piece}
+    potion = ObtainItem(code="earth_boost_potion", quantity=1, slot="utility1_slot")
+    task = ReachTaskOutcome(task_code="wolf")
+    assert potion in resolutions[TRIPLE_CLOSABLE].alternatives
+    assert task in resolutions[TRIPLE_WORKABLE].alternatives
+    assert potion not in resolutions[TRIPLE_WORKABLE].alternatives
+    assert not ({potion, task} & set(resolutions[TRIPLE_OPEN].alternatives))
 
 
 # --- the ONE-LEVEL PLANNING HORIZON over the same three cells ---------------
@@ -525,14 +539,20 @@ def test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work(
     # declines, and the walk continues to the character's own work. The old
     # weaponcrafting-43 decline was the old row's (`corrupted_ogre`), a stat
     # artefact (see `STARVED_GEAR`).
+    #
+    # RE-DERIVED Task 5 (global gear objective): the fight arm is no longer the
+    # walk's entry. The gear row's task asks for its gear through the TASK
+    # root instead (`_task_root`: the `slime_shield` its deficit names),
+    # offered last, after the character's own `L*` pieces; the head is the
+    # control's own first piece, nothing is declined, and the character does
+    # exactly the control's work.
     _, _, gear = _starved_run(STARVED_GEAR, gd)
-    # The ranking head is no longer the arm's row (`WhichSlotClosesTheFight`):
-    # the arm's slime_shield is declined, so the walk's first row is the
-    # control's own gear alternative. Pinned exactly.
-    assert gear.decision.ranking[0].category == "alternative · gear"
-    assert gear.decision.declined == (
-        ("ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')",
-         "infeasible:cloth:no_route:wool"), *control.decision.declined)
+    assert gear.decision.ranking[0].category == "WhichPieceIsNext → IsThisTargetBlocked"
+    assert gear.decision.chosen_root == control.decision.chosen_root
+    assert gear.decision.declined == control.decision.declined == ()
+    assert gear.decision.fallback_roots == [
+        *control.decision.fallback_roots,
+        ObtainItem(code="slime_shield", quantity=1, slot="shield_slot")]
     assert repr(gear.selected_goal) == control_goal
 
 

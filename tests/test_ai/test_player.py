@@ -4,6 +4,7 @@ import json
 import time
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, timedelta, timezone
+from fractions import Fraction
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -14,6 +15,7 @@ from artifactsmmo_api_client.models.error_schema import ErrorSchema
 from artifactsmmo_api_client.types import UNSET
 from sqlmodel import Session, select
 
+import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
 from artifactsmmo_cli.ai.account_read_cache import AccountReadCache
 from artifactsmmo_cli.ai.actions import cooldown_wait
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
@@ -24,6 +26,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import fight_loadout
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -313,7 +316,7 @@ class TestArbiterSelection:
         player.state = replace(state, crafting_target=crafting_target)
         assert player.state.crafting_target is None
 
-    def test_selection_context_marks_risky_target(self):
+    def test_selection_context_marks_risky_target(self, monkeypatch):
         """A grind target won below SECURE_WIN at max HP is risky (USER
         2026-10-15: below 75% we probably need better gear); a secure one is
         not; no target is never risky. Asked of the RESTED state on BARE gear
@@ -328,19 +331,19 @@ class TestArbiterSelection:
                 return verdict
             return _fake
 
-        player._winnable_farm_target = lambda task, objective: "chicken"
-        with patch("artifactsmmo_cli.ai.player.secure_win", _secure(False)):
+        monkeypatch.setattr(ctx_mod, "farm_target", lambda task, objective: "chicken")
+        with patch("artifactsmmo_cli.ai.gear_objective_context.secure_win", _secure(False)):
             assert player._selection_context().combat_risky is True
-        with patch("artifactsmmo_cli.ai.player.secure_win", _secure(True)):
+        with patch("artifactsmmo_cli.ai.gear_objective_context.secure_win", _secure(True)):
             assert player._selection_context().combat_risky is False
         assert asked == [(player.state.max_hp, 0), (player.state.max_hp, 0)]
-        player._winnable_farm_target = lambda task, objective: None
-        with patch("artifactsmmo_cli.ai.player.secure_win", _secure(False)):
+        monkeypatch.setattr(ctx_mod, "farm_target", lambda task, objective: None)
+        with patch("artifactsmmo_cli.ai.gear_objective_context.secure_win", _secure(False)):
             assert player._selection_context().combat_risky is False
 
-    def test_selection_context_carries_combat_monster(self):
+    def test_selection_context_carries_combat_monster(self, monkeypatch):
         player = self._with_strategy(make_game_data_mock(), level=3)
-        player._winnable_farm_target = lambda task, objective: "chicken"
+        monkeypatch.setattr(ctx_mod, "farm_target", lambda task, objective: "chicken")
         ctx = player._selection_context()
         assert ctx.combat_monster == "chicken"
         assert ctx.task_exchange_min_coins == player._exchange_min_coins()
@@ -406,17 +409,26 @@ class TestArbiterSelection:
             turns={"GrindCharacterXP(cow)": 1})
         assert goal is not None and repr(goal) == "AcceptTask"
 
-    def test_idle_no_task_selects_xp_grind_once_no_draw_is_owed(self):
+    def test_idle_no_task_selects_xp_grind_once_no_draw_is_owed(self, monkeypatch):
         """The other half: with the draw spent, the objective step is what runs.
         A taskless character with no draw owed (its pool not worth drawing
-        from, c-2 #5) gets on with the objective."""
+        from, c-2 #5) gets on with the objective.
+
+        RE-DERIVED Task 5 (global gear objective): the objective step is an XP
+        grind only while `L*` is HELD (spec 2026-10-18 §2.4.1), so the cycle's
+        objective here is a held one whose `m*` is the cow: the root is one
+        more level, and its step grinds the cow."""
+        held = GearObjective("cow", {}, Fraction(1), ())
+        monkeypatch.setattr(ctx_mod, "gear_objective", lambda *a: held)
         player = self._with_strategy(make_game_data_mock(), level=3,
                                      task_type=None, task_code=None)
         player._draws_enabled = False
-        decision = player._strategy.decide(player.state, player.game_data)
+        ctx = player._selection_context()
+        decision = player._strategy.decide(player.state, player.game_data, ctx=ctx)
+        assert decision.chosen_root == ReachCharLevel(level=4)
         actions = player._build_actions()
         goal, _plan, _tried = player._arbiter.select(
-            decision, player.state, player.game_data, actions, player._selection_context())
+            decision, player.state, player.game_data, actions, ctx)
         assert goal is not None and repr(goal) == "GrindCharacterXP(cow)"
 
 

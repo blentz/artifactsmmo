@@ -56,7 +56,6 @@ on:
       - "scripts/gen_obtain_parity.py"
       - "scripts/gen_requirement_parity.py"
       - "scripts/gen_shed_reachability.py"
-      - "scripts/gen_open_rung.py"
       - "scripts/gen_one_cost_model.py"
       - "scripts/gen_currency_wall.py"
       - "scripts/gen_drop_wall.py"
@@ -72,7 +71,6 @@ on:
       - "scripts/gen_obtain_parity.py"
       - "scripts/gen_requirement_parity.py"
       - "scripts/gen_shed_reachability.py"
-      - "scripts/gen_open_rung.py"
       - "scripts/gen_one_cost_model.py"
       - "scripts/gen_currency_wall.py"
       - "scripts/gen_drop_wall.py"
@@ -106,15 +104,6 @@ jobs:
       # census in the set (0.7s, `ast` over src/ only), so it runs first.
       - name: reachability-claim census — every no-caller claim is TRUE
         run: uv run python scripts/gen_reachability_claims.py --check
-
-      # Obligation O1 of the wave-3 resolution design (spec 2026-08-23 3.5):
-      # every ReachSkillLevel(S, C+1) reachable across the scenario set has an
-      # open, XP-positive rung, or a NAMED wall. The residual is a closed cell
-      # the root graph actually routes to -- the silent fall-through wave 3
-      # would otherwise turn into a stall, because ReachSkillLevel is the only
-      # path from a skill-gated gear target to work.
-      - name: open-rung census — o1_silent_stall == 0 AND o1_unexplained == 0
-        run: uv run python scripts/gen_open_rung.py --check
 
       - name: shed-reachability census — shed_starvation_bug == 0 AND disposal_contradiction_bug == 0
         run: uv run python scripts/gen_shed_reachability.py --check

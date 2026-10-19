@@ -7,7 +7,12 @@ the head first and promoted past an unservable one afterwards, on
 `is_plannable`'s verdict.
 """
 
+from dataclasses import replace
+from fractions import Fraction
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, no_decline
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
@@ -48,6 +53,16 @@ def _two_root_gd() -> GameData:
     return gd
 
 
+def _two_pieces() -> SelectionContext:
+    """The cycle's gear objective missing both craftables, dagger first. The
+    fixture is too small for `gear_objective` to find a paying monster, so the
+    objective is built explicitly (ruling W)."""
+    pieces = (GearPiece("weapon_slot", "copper_dagger", 0, Fraction(1), Fraction(1)),
+              GearPiece("shield_slot", "wooden_shield", 0, Fraction(1), Fraction(1)))
+    return replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+        "chicken", {p.slot: p.code for p in pieces}, Fraction(1), pieces))
+
+
 class TestDecideStepDecline:
     """decide() never lets a gear target whose step declines head the walk."""
 
@@ -55,29 +70,29 @@ class TestDecideStepDecline:
         gd = _two_root_gd()
         eng = _eng(gd)
         state = make_state(level=5)
-        top = eng.decide(state, gd).chosen_root
+        top = eng.decide(state, gd, ctx=_two_pieces()).chosen_root
         assert isinstance(top, ObtainItem)
 
         def decline(root: MetaGoal) -> str | None:
             return "no_route" if root == top else None
-        filtered = eng.decide(state, gd, step_decline=decline)
+        filtered = eng.decide(state, gd, ctx=_two_pieces(), step_decline=decline)
         assert isinstance(filtered.chosen_root, ObtainItem)
         assert filtered.chosen_root != top
-        # Named, and still offered: after the served sibling, so it heads the
-        # walk again the cycle its blocker clears.
+        # Named, and still offered in its own place, so it heads the walk
+        # again the cycle its blocker clears.
         assert filtered.declined == ((repr(top), "no_route"),)
         assert top in filtered.fallback_roots
 
     def test_every_target_declined_leaves_the_gear_arm(self):
-        """Nothing on the sheet can be served: the walk asks the combat/tier arm,
-        as when the sheet wants nothing, and names every gear target it passed."""
+        """No piece can be served: no root (never a level grind while a piece
+        is missing, spec 2026-10-18 §6.2), and every piece is named."""
         gd = _two_root_gd()
         eng = _eng(gd)
         state = make_state(level=5)
         filtered = eng.decide(
-            state, gd,
+            state, gd, ctx=_two_pieces(),
             step_decline=lambda root: "no_route" if isinstance(root, ObtainItem) else None)
-        assert not isinstance(filtered.chosen_root, ObtainItem)
+        assert filtered.chosen_root is None
         assert len(filtered.declined) == 2
         assert {reason for _root, reason in filtered.declined} == {"no_route"}
 
@@ -85,6 +100,8 @@ class TestDecideStepDecline:
         gd = _two_root_gd()
         eng = _eng(gd)
         state = make_state(level=5)
-        plain = eng.decide(state, gd)
+        plain = eng.decide(state, gd, ctx=_two_pieces())
         assert plain.declined == ()
-        assert eng.decide(state, gd, step_decline=no_decline).chosen_root == plain.chosen_root
+        assert plain.chosen_root is not None
+        assert eng.decide(state, gd, ctx=_two_pieces(),
+                          step_decline=no_decline).chosen_root == plain.chosen_root

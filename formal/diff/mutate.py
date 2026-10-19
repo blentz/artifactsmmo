@@ -173,6 +173,7 @@ POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py
 PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
 GEAR_OBJECTIVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective_core.py"
 GEAR_OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective.py"
+GEAR_OBJECTIVE_CONTEXT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective_context.py"
 PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
 SLOT_OCCUPANCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "slot_occupancy.py"
 REGION_EDGES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "region_edges.py"
@@ -461,6 +462,8 @@ TASK_ACCEPT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_accept.py"
 DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decision.py"
 OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "obtain_item.py"
 ROOT_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "root.py"
+CURRENCY_WALL_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "currency_wall_census.py"
+WHICH_PIECE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "which_piece_is_next.py"
 GATHER_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_demand.py"
 CRAFT_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_demand.py"
 # `_equippable_goal` / `_gather_goal_for_unreachable_equippable` /
@@ -4471,18 +4474,14 @@ ROOT_DECISION_MUTATIONS = [
     ("root: the orphan order runs from the LEAST-behind skill",
      "    orphans.sort(key=lambda skill: (state.skills.get(skill, 1) - state.level,\n",
      "    orphans.sort(key=lambda skill: (state.level - state.skills.get(skill, 1),\n"),
-    # The ORDER is the safety property and it was measured: ahead of the trunk,
-    # a cooking climb displaced `GatherMaterials(mithril_bar)` at
-    # `l48_band_adequate` -- the gear that breaks the L38-48 wall.
-    ("root: the orphan skill roots are offered AHEAD of the trunk, displacing"
-     " the trunk's provisioning step",
-     "    ordered.append(ReachCharLevel(level=milestone_pure(state.level)))\n",
-     "    ordered.extend(_orphan_skill_roots(state, game_data, [root, *ordered], ctx))\n"
-     "    ordered.append(ReachCharLevel(level=milestone_pure(state.level)))\n"),
+    # Global gear objective Task 5 RETIRED the orphans-ahead-of-the-trunk
+    # mutant: the trunk is offered only while `L*` is held, and then it IS the
+    # root, so no orphan root can precede it and the mutant is EQUIVALENT.
+    # `test_the_orphan_roots_sit_behind_the_trunk` still witnesses the order.
     ("root: the sibling conversion reuses the real walk, so converting an"
      " alternative pollutes the trail",
-     "        IsThisTargetBlocked(slot, target, RootWalk()).resolve(\n",
-     "        IsThisTargetBlocked(slot, target, walk).resolve(\n"),
+     "                            RootWalk()).resolve(state, game_data, ctx, history)\n",
+     "                            walk).resolve(state, game_data, ctx, history)\n"),
     # THE FLIP (task 6). Spec 5.3 named `tier_of_level`, the highest rung AT OR
     # BELOW the level -- a root the character has already satisfied, which
     # empties `objective_needs` and switches the arbiter's PURSUE_TASK worth
@@ -4511,10 +4510,11 @@ ROOT_DECISION_MUTATIONS = [
     # single unservable gear step can no longer abandon the whole gear branch
     # for XP while servable gear candidates sit behind the trunk (Robby, 9 of
     # 15 cycles on ReachCharLevel with 7 structural candidates live).
-    ("root: the xp trunk is prepended to the alternatives instead of appended,"
-     " so one unservable gear step abandons the gear branch",
-     "    ordered.append(ReachCharLevel(level=milestone_pure(state.level)))\n",
-     "    ordered.insert(0, ReachCharLevel(level=milestone_pure(state.level)))\n"),
+    # Global gear objective Task 5 (spec 2026-10-18 §6.2) RETIRED the
+    # trunk-prepended mutant: the trunk is offered only while `L*` is held,
+    # when no piece is missing, so nothing precedes it and prepending it is
+    # an EQUIVALENT mutant. "No level grind ahead of a missing piece" is now
+    # `WHICH_PIECE_ROOT_MUTATIONS`' trunk-while-missing mutant.
     # Phase 4-2b-ii deleted the aged head with the focus ledger, and with it
     # four mutants: the dropped head, the smooth-falloff read, the inverted
     # farm window and the sheet-keyed read. The cycle budget and its one-turn
@@ -5497,28 +5497,27 @@ SYNERGY_CORE_MUTATIONS = [
 # The root walk's step-decline filter (Phase 3-2, `decisions/root.py`): a gear
 # target whose step cannot be served never heads the walk, is named, and is
 # offered after the served siblings. Unit-killed by
-# tests/test_ai/test_progression_tree.py's TestStepDeclineInTheWalk, which runs
-# the real walk on `l10_weapon_upgrade`. Replaced FALLBACK_ORDER_MUTATIONS,
+# tests/test_ai/test_decisions_root.py (since Task 5 of the global gear
+# objective: `test_the_tier_sheet_never_lets_a_declined_target_head_it`, on
+# the pre-objective subtree's own node). Replaced FALLBACK_ORDER_MUTATIONS,
 # whose one mutant anchored `promoted_from` in the deleted promotion.
 STEP_DECLINE_MUTATIONS = [
     ("root: a declined gear target may still head the walk",
      "                  if self.walk.serves(slot, target, state, game_data, ctx, history)}",
      "                  if self.walk.serves(slot, target, state, game_data, ctx, history) or True}"),
-    ("root: declined gear targets are dropped from the alternatives",
-     "        for slot, target in (*walk.sibling_targets, *walk.declined_targets)\n",
-     "        for slot, target in walk.sibling_targets\n"),
-    ("root: declined targets go ahead of the served siblings",
-     "        for slot, target in (*walk.sibling_targets, *walk.declined_targets)\n",
-     "        for slot, target in (*walk.declined_targets, *walk.sibling_targets)\n"),
+    # Global gear objective Task 5 retired the two `declined_targets`
+    # ordering mutants with the slot walk's place as the entry: the
+    # alternatives are every missing `L*` piece in the objective's own order,
+    # declined or not (`WHICH_PIECE_ROOT_MUTATIONS` drops them all).
     ("root: the decline's reason is not recorded",
      "        self.declined[repr(root)] = reason\n",
      "        pass\n"),
 ]
 
 # The fight arm's half of the same filter. Killed by
-# tests/test_ai/scenarios/test_held_task.py (the closable row's slime_shield
-# declines, its cloth having no route, so the arm must fall through rather than
-# divert).
+# tests/test_ai/test_decisions_root.py
+# (`test_the_fight_arm_falls_through_on_a_declined_target`: the arm must fall
+# through rather than divert).
 STEP_DECLINE_FIGHT_ARM_MUTATIONS = [
     ("root: the fight arm heads with a declined target",
      "        if not self.walk.serves(slot, gear, state, game_data, ctx, history):\n",
@@ -9143,6 +9142,55 @@ FLEET_WORK_MUTATIONS = [
 ]
 
 
+# The root walk's entry (spec 2026-10-18 §2.4, §6.2): the next missing `L*`
+# piece is the root, and the trunk is offered only once `L*` is held. Killed by
+# tests/test_ai/test_decisions_which_piece.py.
+WHICH_PIECE_MUTATIONS = [
+    ("which-piece: the held branch takes the first piece instead of the level",
+     "        if target.held:\n"
+     "            return ReachCharLevel(level=state.level + 1)\n",
+     "        if target.held and target.missing:\n"
+     "            return ReachCharLevel(level=state.level + 1)\n"),
+    ("which-piece: a held objective grinds to the current level",
+     "            return ReachCharLevel(level=state.level + 1)\n",
+     "            return ReachCharLevel(level=state.level)\n"),
+    ("which-piece: a declined piece is kept as the root",
+     "            if self.walk.serves(piece.slot, gear, state, game_data, ctx, history):\n",
+     "            if self.walk.serves(piece.slot, gear, state, game_data, ctx, history) or True:\n"),
+    ("which-piece: the LAST served piece heads the walk",
+     "        for piece in target.missing:\n",
+     "        for piece in reversed(target.missing):\n"),
+    ("which-piece: no objective grinds a level instead of the wall",
+     "        if target is None:\n"
+     "            return None\n",
+     "        if target is None:\n"
+     "            return ReachCharLevel(level=state.level + 1)\n"),
+]
+WHICH_PIECE_ROOT_MUTATIONS = [
+    ("root/resolve_root: the trunk is offered while a piece is missing",
+     "    if target is not None and target.held:\n"
+     "        ordered.append(ReachCharLevel(level=state.level + 1))\n",
+     "    if target is not None:\n"
+     "        ordered.append(ReachCharLevel(level=state.level + 1))\n"),
+    ("root/resolve_root: the missing pieces are not offered as alternatives",
+     "        for piece in (target.missing if target is not None else ())\n",
+     "        for piece in ()\n"),
+]
+
+
+# Ruling AB (global gear objective Task 5): the O7 currency census prices
+# every root the walk offers, not only the resolved one. Killed by
+# tests/test_audit/test_currency_wall_census.py.
+CURRENCY_WALL_ALT_MUTATIONS = [
+    ("currency census: only the resolved root is priced",
+     "        for index, candidate in enumerate((resolution.root, *resolution.alternatives)):\n",
+     "        for index, candidate in enumerate((resolution.root,)):\n"),
+    ("currency census: every offered root is marked the resolved one",
+     "            results.extend(_candidate_cells(name, candidate, index == 0, state,\n",
+     "            results.extend(_candidate_cells(name, candidate, True, state,\n"),
+]
+
+
 # Phase 5-2c-iv: `resolve_root` offers the fleet objective after the task root,
 # turn-in before supply, only while the context names the work.
 FLEET_ROOT_MUTATIONS = [
@@ -9618,34 +9666,48 @@ BAND_LOADOUT_MUTATIONS = [
 # The grind target's risk (USER 2026-10-15). Killed by
 # tests/test_ai/test_player.py.
 BAND_PICK_MUTATIONS = [
+    # Re-anchored Task 5 (ruling W): the step moved to
+    # `ai/gear_objective_context.attach_gear_objective`.
     ("ctx: a risky target is never marked",
-     "            combat_risky=(combat_monster is not None\n",
-     "            combat_risky=(False\n"),
+     "        combat_risky=(combat_monster is not None\n",
+     "        combat_risky=(False\n"),
     ("ctx: risk is asked at the current hp",
-     "                          and not secure_win(unpotioned(replace(self.state, hp=self.state.max_hp)),\n",
-     "                          and not secure_win(unpotioned(self.state),\n"),
+     "                      and not secure_win(unpotioned(replace(state, hp=state.max_hp)),\n",
+     "                      and not secure_win(unpotioned(state),\n"),
     ("ctx: risk drinks the worn potions",
-     "                          and not secure_win(unpotioned(replace(self.state, hp=self.state.max_hp)),\n",
-     "                          and not secure_win(replace(self.state, hp=self.state.max_hp),\n"),
+     "                      and not secure_win(unpotioned(replace(state, hp=state.max_hp)),\n",
+     "                      and not secure_win(replace(state, hp=state.max_hp),\n"),
 ]
 # One gear objective per cycle names the grind target (spec 2026-10-18 §2.4,
 # §6.2). Killed by tests/test_ai/test_player_gear_objective.py.
+# Task 5 (ruling W) moved the step into the shared
+# `ai/gear_objective_context.attach_gear_objective`, which the player and the
+# offline censuses call; its mutants moved with it. The task-target pricing
+# mutant stays on the player, which builds the context the step receives.
 GEAR_OBJECTIVE_CTX_MUTATIONS = [
     ("target: m* is fought while a piece of L* is missing",
-     "            path_winnable=objective is not None and objective.held,\n",
-     "            path_winnable=objective is not None,\n"),
+     "        path_winnable=objective is not None and objective.held,\n",
+     "        path_winnable=objective is not None,\n"),
     ("target: a held monsters task loses its precedence",
-     "            task_monster=task_monster,\n",
-     "            task_monster=None,\n"),
+     "        task_monster=task_monster,\n",
+     "        task_monster=None,\n"),
+    ("ctx: the gear keep stays the task's for a new target",
+     "        gear_keep=(ctx.gear_keep if combat_monster == task_monster\n",
+     "        gear_keep=(ctx.gear_keep if True\n"),
+    ("ctx: the new target's keep is built for the task's monster",
+     "                   else gear_keep_for(state, game_data, history, combat_monster,\n",
+     "                   else gear_keep_for(state, game_data, history, task_monster,\n"),
+    ("ctx: the new target's keep drops the in-flight upgrades",
+     "                                      ctx.near_term_targets)),\n",
+     "                                      frozenset())),\n"),
+    ("ctx: the objective is not carried",
+     "        ctx, gear_objective=objective, combat_monster=combat_monster,\n",
+     "        ctx, combat_monster=combat_monster,\n"),
+]
+GEAR_OBJECTIVE_CTX_PLAYER_MUTATIONS = [
     ("ctx: the objective is priced without the task's target",
      "            combat_monster=task_monster,\n",
      "            combat_monster=None,\n"),
-    ("ctx: the gear keep stays the task's for a new target",
-     "            gear_keep=(task_keep if combat_monster == task_monster\n",
-     "            gear_keep=(task_keep if True\n"),
-    ("ctx: the objective is not carried",
-     "            ctx, gear_objective=objective, combat_monster=combat_monster,\n",
-     "            ctx, combat_monster=combat_monster,\n"),
 ]
 # The gear decisions judge bare gear (USER 2026-10-10). Killed by
 # tests/test_ai/test_decisions_root.py.
@@ -11218,6 +11280,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_fleet_objective.py", survivors)
     run_group(ROOT_DECISION_SRC, FLEET_ROOT_MUTATIONS,
               "tests/test_ai/test_fleet_objective.py", survivors)
+    run_group(CURRENCY_WALL_SRC, CURRENCY_WALL_ALT_MUTATIONS,
+              "tests/test_audit/test_currency_wall_census.py", survivors)
+    run_group(WHICH_PIECE_SRC, WHICH_PIECE_MUTATIONS,
+              "tests/test_ai/test_decisions_which_piece.py", survivors)
+    run_group(ROOT_DECISION_SRC, WHICH_PIECE_ROOT_MUTATIONS,
+              "tests/test_ai/test_decisions_which_piece.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, FLEET_STEP_MUTATIONS,
               "tests/test_ai/test_fleet_objective.py", survivors)
     run_group(ROUTE_SRC, FLEET_ROUTE_MUTATIONS,
@@ -11575,9 +11643,11 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_fight_upkeep.py", survivors)
     run_group(BAND_TARGET_SRC, BAND_LOADOUT_MUTATIONS,
               "tests/test_ai/test_band_target.py", survivors)
-    run_group(PLAYER_SRC, BAND_PICK_MUTATIONS,
+    run_group(GEAR_OBJECTIVE_CONTEXT_SRC, BAND_PICK_MUTATIONS,
               "tests/test_ai/test_player.py", survivors)
-    run_group(PLAYER_SRC, GEAR_OBJECTIVE_CTX_MUTATIONS,
+    run_group(GEAR_OBJECTIVE_CONTEXT_SRC, GEAR_OBJECTIVE_CTX_MUTATIONS,
+              "tests/test_ai/test_player_gear_objective.py", survivors)
+    run_group(PLAYER_SRC, GEAR_OBJECTIVE_CTX_PLAYER_MUTATIONS,
               "tests/test_ai/test_player_gear_objective.py", survivors)
     run_group(ROOT_DECISION_SRC, PROPPED_GEAR_MUTATIONS,
               "tests/test_ai/test_decisions_root.py", survivors)
@@ -11627,10 +11697,13 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_gear_objective.py", survivors)
     run_group(SYNERGY_CORE_SRC, SYNERGY_CORE_MUTATIONS,
               "tests/test_ai/test_synergy_core.py", survivors)
+    # Task 5 moved both kill-tests: `resolve_root` enters at
+    # `WhichPieceIsNext`, so the pre-objective subtree's declines are driven
+    # from its own nodes in test_decisions_root.py until Plan C deletes it.
     run_group(ROOT_DECISION_SRC, STEP_DECLINE_MUTATIONS,
-              "tests/test_ai/test_progression_tree.py", survivors)
+              "tests/test_ai/test_decisions_root.py", survivors)
     run_group(ROOT_DECISION_SRC, STEP_DECLINE_FIGHT_ARM_MUTATIONS,
-              "tests/test_ai/scenarios/test_held_task.py", survivors)
+              "tests/test_ai/test_decisions_root.py", survivors)
     # Equip-loop closure (2026-08-04): four unit-killed groups, each on its own
     # run_group so a survivor names the exact authority that stopped deferring.
     run_group(SLOT_OCCUPANCY_SRC, SLOT_OCCUPANCY_MUTATIONS,

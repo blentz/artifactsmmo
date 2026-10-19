@@ -168,6 +168,7 @@ import pytest
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -177,6 +178,8 @@ from artifactsmmo_cli.ai.scenario import (
     load_bundle_game_data,
     scenario_state,
 )
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
@@ -185,6 +188,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
+from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
 
@@ -280,6 +284,26 @@ def _run_with(name: str, gd: GameData) -> PlanReport:
     return player.plan_from_state()
 
 
+def _plan_root(name: str, root: ObtainItem) -> tuple[str, list[str], list[str]]:
+    """The goal and plan the arbiter would build for `root` if it headed the
+    walk: its step goal and the decomposition over the cycle's own action pool
+    and context. For an `L*` piece queued behind another, so its route stays
+    covered while it waits its turn. Returns (goal repr, plan reprs, declines)."""
+    gd = _bundle()
+    player = GamePlayer(character=name, history=None)
+    player.seed_offline(_state(name, gd), gd)
+    assert player.state is not None and player.game_data is not None
+    ctx = player._selection_context()
+    step = actionable_step(root, player.state, player.game_data, ctx) or root
+    goal = objective_step_goal(step, player.state, player.game_data, ctx, root=root,
+                               history=None)
+    assert goal is not None, step
+    declined: list[str] = []
+    plan = decompose(goal, player.state, player.game_data, list(player._build_actions()),
+                     ctx, declined)
+    return repr(goal), [repr(a) for a in plan or []], declined
+
+
 @pytest.mark.parametrize("name", NEW_SCENARIOS)
 def test_slot_scenario_registered(name: str) -> None:
     """Registry-first (TDD): the slot-coverage scenarios must exist under
@@ -371,7 +395,14 @@ def test_l48_event_active_pursues_event_gear() -> None:
     (An earlier fix-round draft of this docstring claimed `demon_horn` was
     `corrupted_crown`'s blocker. It is not — it blocks `gold_shield` and
     `conjurer_cloak`. The assertions below read the blocker map rather than
-    restating it, so the claim and the code cannot drift again.)"""
+    restating it, so the claim and the code cannot drift again.)
+
+    RE-DERIVED Task 5 (global gear objective): with the event up its gear is
+    ON the argmax (spec 2026-10-18 §5.3) — `L*` for hellhound wears
+    `corrupted_skull` and `corrupted_crown` — and both are pursued as `L*`
+    pieces, in the objective's order, right behind its first piece
+    `goblin_guard_shield`, whose acquisition the cycle plans. The event
+    changed `L*`; it did not jump the queue."""
     report = _run("l48_event_active")
     # Read the sheet off the SAME event-overlaid game data the run used
     # (`seed_offline` applies the overlay from `state.active_events`).
@@ -395,12 +426,19 @@ def test_l48_event_active_pursues_event_gear() -> None:
     assert any(r.root_repr == "ObtainItem(code='corrupted_skull', quantity=1, "
                "slot='artifact1_slot')" for r in report.decision.ranking), \
         report.decision.ranking
-    assert repr(report.selected_goal) != "Wait", (
+    assert overlay.state is not None and overlay.game_data is not None
+    objective = attach_gear_objective(overlay.state, overlay.game_data,
+                                      NO_PROFILE_CONTEXT, None).gear_objective
+    assert objective is not None
+    assert objective.loadout["artifact1_slot"] == "corrupted_skull"
+    assert objective.loadout["helmet_slot"] == "corrupted_crown"
+    assert report.decision.chosen_root == ObtainItem(
+        code="goblin_guard_shield", quantity=1, slot="shield_slot")
+    assert report.decision.fallback_roots[:2] == [
+        ObtainItem(code="corrupted_skull", quantity=1, slot="artifact1_slot"),
+        ObtainItem(code="corrupted_crown", quantity=1, slot="helmet_slot")]
+    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal).startswith(
-        "GatherMaterials(corrupted_gem"), repr(report.selected_goal)
-    assert report.plan and repr(report.plan[0]).startswith(
-        "Fight(corrupted_ogre"), report.plan
 
 
 def test_l48_no_event_witness_pursues_no_event_gear() -> None:
@@ -435,15 +473,18 @@ def test_l48_no_event_witness_pursues_no_event_gear() -> None:
     the gear its slots want. The event gear `corrupted_skull` is now OFFERED
     for artifact1_slot, and declined because its corrupted_gem has no route
     with the event down: still not pursued, which is the isolation this test
-    owns. Nothing is selected (`L*` is missing pieces and no task is held, so
-    no XP fight: spec 2026-10-18 §6.2), so the cycle Waits."""
+    owns.
+
+    RE-DERIVED Task 5 (global gear objective): with the event down its gear
+    is not achievable, so it is not in `L*` and the walk offers none of it —
+    the same first piece as the event pole (`goblin_guard_shield`) heads the
+    walk, and no `corrupted_*` row is offered at all."""
     report = _run("l48_band_adequate")
-    assert repr(report.selected_goal) == "Wait", (repr(report.selected_goal), report.plan)
-    assert report.decision.chosen_root is None
-    assert [r.root_repr for r in report.decision.ranking if "corrupted" in r.root_repr] == [
-        "ObtainItem(code='corrupted_skull', quantity=1, slot='artifact1_slot')"]
-    assert ("ObtainItem(code='corrupted_skull', quantity=1, slot='artifact1_slot')",
-            "infeasible:corrupted_gem:no_route:corrupted_gem") in report.decision.declined
+    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
+        repr(report.selected_goal), report.plan)
+    assert report.decision.chosen_root == ObtainItem(
+        code="goblin_guard_shield", quantity=1, slot="shield_slot")
+    assert not [r.root_repr for r in report.decision.ranking if "corrupted" in r.root_repr]
 
 
 L47_50_WINDOW_MONSTERS = (
@@ -615,11 +656,16 @@ def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
     # has no grind target and the trunk is NOT the root any more; the
     # backpack is still passed over with its reason, and nothing grinds.
     # Making an `L*` piece the root is the root walk's job (Task 5).
-    assert report.decision.chosen_root is None
-    assert report.decision.declined == (
-        ("ObtainItem(code='backpack', quantity=1, slot='bag_slot')",
-         "infeasible:backpack:no_route:backpack"),)
-    assert not any(r.code == "satchel" for r in report.decision.fallback_roots
+    #
+    # RE-DERIVED Task 5: it is. `L*` for the cow is the iron set; its first
+    # piece, `iron_sword`, is the root, and its step is the ore. The bag slot
+    # is not in `L*` at all (the satchel is not achievable), so neither bag is
+    # offered and nothing is declined.
+    assert report.decision.chosen_root == ObtainItem(
+        code="iron_sword", quantity=1, slot="weapon_slot")
+    assert report.decision.declined == ()
+    assert repr(report.selected_goal) == "GatherMaterials(iron_ore, {iron_ore:10})"
+    assert not any(r.code in ("satchel", "backpack") for r in report.decision.fallback_roots
                    if isinstance(r, ObtainItem)), report.decision.fallback_roots
     assert not any(g["goal"].startswith("GrindCharacterXP") for g in report.goals_tried), \
         report.goals_tried
@@ -692,11 +738,22 @@ def test_l12_bag_pursuit_satchel_becomes_attainable_but_is_no_longer_pursued() -
     # the gate is still a gate. What is no longer covered anywhere is the C4
     # pipeline running end to end, which is written up in
     # `.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md`.
-    assert not any(isinstance(r, ObtainItem) and r.code == "satchel"
+    #
+    # RE-DERIVED Task 5 (global gear objective): the decision half is BACK in
+    # part. The gear objective has no tier cap, so with the trader routable the
+    # satchel is an achievable `L*` piece and is offered, queued in the
+    # objective's order behind the iron sword that heads the walk; the backpack
+    # is not offered at all. The flip of the one achievement bit is the cause.
+    assert report.decision.chosen_root == ObtainItem(
+        code="iron_sword", quantity=1, slot="weapon_slot")
+    assert ObtainItem(code="satchel", quantity=1, slot="bag_slot") in \
+        report.decision.fallback_roots, report.decision.fallback_roots
+    assert not any(isinstance(r, ObtainItem) and r.code == "backpack"
                    for r in report.decision.fallback_roots), \
         report.decision.fallback_roots
-    assert ObtainItem(code="backpack", quantity=1, slot="bag_slot") in \
-        report.decision.fallback_roots, report.decision.fallback_roots
+    shut = _run("l12_bag_pursuit")
+    assert not any(isinstance(r, ObtainItem) and r.code == "satchel"
+                   for r in shut.decision.fallback_roots), shut.decision.fallback_roots
 
 
 # --- Deliverable 3: artifact slots ------------------------------------------
@@ -823,23 +880,23 @@ def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
     # sheet with the suppliability gate); what changed is that the slots are no
     # longer copies of the first, so perfect_pearl gets one and the route
     # reopens.
+    #
+    # RE-DERIVED Task 5 (global gear objective): `perfect_pearl` is an `L*`
+    # piece (artifact1_slot), second in the objective's order behind the
+    # `death_knight_sword`, whose acquisition (fight the death_knight for its
+    # drop) is what the cycle plans. The pearl's route is still covered: as
+    # the arbiter would plan it on its turn, it is the single targeted
+    # secondary-drop gather this docstring derives.
     report = _run("l35_artifact_fill")
+    pearl = ObtainItem(code="perfect_pearl", quantity=1, slot="artifact1_slot")
     assert report.decision.chosen_root == ObtainItem(
-        code="perfect_pearl", quantity=1, slot="artifact2_slot")
-    # One action: the whole step is a single targeted secondary-drop gather, as
-    # the derivation above says. It was a 2-node search; since 2026-09-29
-    # decomposition maps a gather step onto the gather's EFFECTIVE drop, so the
-    # same plan comes from the fast path with no search at all (0 nodes).
-    # Pinned as numbers because the dead-search this replaced was 1 node /
-    # 0-length.
-    tried = [g for g in report.goals_tried
-             if "small_pearls" in str(g.get("goal", ""))]
-    assert len(tried) == 1, report.goals_tried
-    assert (tried[0]["nodes"], tried[0]["plan_len"]) == (0, 1), tried[0]
-    assert repr(report.selected_goal).startswith("GatherMaterials(small_pearls"), (
-        repr(report.selected_goal), report.plan)
-    assert report.plan and repr(report.plan[0]).startswith(
-        "Gather(bass_spot->small_pearls"), report.plan
+        code="death_knight_sword", quantity=1, slot="weapon_slot")
+    assert report.decision.fallback_roots[0] == pearl
+    assert [repr(a) for a in report.plan] == [
+        "Fight(death_knight)", "Equip(death_knight_sword->weapon_slot)"]
+    goal, plan, _declined = _plan_root("l35_artifact_fill", pearl)
+    assert goal.startswith("GatherMaterials(small_pearls"), goal
+    assert len(plan) == 1 and plan[0].startswith("Gather(bass_spot->small_pearls"), plan
 
 
 def test_l35_boots_drop_farm_fights_grey_dropper() -> None:
@@ -920,17 +977,20 @@ def test_l30_rune_gold_buy_chain_plans() -> None:
     finds the one-step buy: NpcBuy(lifesteal_rune×1@rune_vendor) (movement
     to the vendor folds into NpcBuyAction.apply; the equip is the NEXT
     cycle's stepwise leg, per the one-leg-per-cycle idiom). The cycle no
-    longer Waits with the purchase price in hand."""
+    longer Waits with the purchase price in hand.
+
+    RE-DERIVED Task 5 (global gear objective): the rune is an `L*` piece, the
+    first alternative behind the `death_knight_sword` that heads the walk. Its
+    route is asserted as the arbiter would plan it on its turn: still the
+    one-step gold buy."""
     report = _run("l30_rune_fill")
+    rune = ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")
     assert report.decision.chosen_root == ObtainItem(
-        code="lifesteal_rune", quantity=1, slot="rune_slot")
-    assert repr(report.selected_goal).startswith(
-        "GatherMaterials(lifesteal_rune"), (
-        repr(report.selected_goal),
-        [g.get("goal") for g in report.goals_tried])
-    assert report.plan and any(
-        repr(a).startswith("NpcBuy(lifesteal_rune") for a in report.plan
-    ), report.plan
+        code="death_knight_sword", quantity=1, slot="weapon_slot")
+    assert report.decision.fallback_roots[0] == rune
+    goal, plan, _declined = _plan_root("l30_rune_fill", rune)
+    assert goal.startswith("GatherMaterials(lifesteal_rune"), goal
+    assert any(a.startswith("NpcBuy(lifesteal_rune") for a in plan), plan
 
 
 # --- Deliverable 5: both utility slots ---------------------------------------
@@ -965,13 +1025,18 @@ def test_l20_dual_utility_empty_utility_slots_are_not_decision_candidates() -> N
     The verdict this test was named for (XP outranks an empty utility slot) is
     therefore no longer expressible: there is nothing to outrank. What IS
     asserted is the fact that replaced it, so the absence is a pinned claim and
-    not a silently shorter list."""
+    not a silently shorter list.
+
+    RE-DERIVED Task 5 (global gear objective): the root is the weaponcrafting
+    climb in front of `L*`'s first piece (`steel_battleaxe`), and no level
+    grind is offered while `L*` is missing (spec 2026-10-18 §6.2). Still no
+    potion on offer."""
     report = _run("l20_dual_utility")
     assert report.decision.chosen_root == ReachSkillLevel(
-        skill="gearcrafting", level=16)
+        skill="weaponcrafting", level=16)
     assert not any("utility" in repr(r) for r in report.decision.fallback_roots), \
         report.decision.fallback_roots
-    assert ReachCharLevel(level=30) in report.decision.fallback_roots
+    assert not any(isinstance(r, ReachCharLevel) for r in report.decision.fallback_roots)
 
 
 def test_l20_one_stocked_utility2_is_a_candidate_but_not_a_decision_root() -> None:
@@ -1014,7 +1079,9 @@ def test_l20_one_stocked_utility2_is_a_candidate_but_not_a_decision_root() -> No
     }
 
     report = _run("l20_dual_utility_one_stocked")
+    # RE-DERIVED Task 5: the weaponcrafting climb in front of `L*`'s first
+    # piece, as in the empty-slots twin above.
     assert report.decision.chosen_root == ReachSkillLevel(
-        skill="gearcrafting", level=16)
+        skill="weaponcrafting", level=16)
     assert not any("utility" in repr(r) for r in report.decision.fallback_roots), \
         report.decision.fallback_roots

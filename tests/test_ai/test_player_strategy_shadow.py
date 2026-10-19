@@ -1,5 +1,10 @@
+from dataclasses import replace
+from fractions import Fraction
+
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.tracer import Tracer
@@ -68,6 +73,10 @@ def test_emit_trace_strategy_record_keeps_to_trace_shape():
     player._objective = CharacterObjective.from_game_data(player.game_data)
     player._strategy = StrategyEngine(player._objective)
     player.tracer = _CaptureTracer()
+    # The cycle's context carries a held gear objective, so the walk names a
+    # root (one more level) and the ranking has a row to serialize.
+    player._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+        "chicken", {}, Fraction(1), ()))
 
     player._emit_trace(action_name="Gather(x)", goal_name="FarmItems",
                        outcome="ok", planner_stats={})
@@ -77,5 +86,8 @@ def test_emit_trace_strategy_record_keeps_to_trace_shape():
         "interrupt", "chosen_root", "chosen_step",
         "ranking", "fallback_steps", "fallback_roots",
     }
+    row, = rec["strategy"]["ranking"]
+    assert row["root_repr"] == "ReachCharLevel(level=4)"
+    assert row["score"] == 1.0 and isinstance(row["score"], float)
     assert "tree" not in rec
     assert "enacted" not in rec

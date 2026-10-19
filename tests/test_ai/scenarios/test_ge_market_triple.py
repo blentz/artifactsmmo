@@ -43,7 +43,7 @@ from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
@@ -212,13 +212,25 @@ def test_cell5_changes_the_planned_first_action(busy: GameData,
     The same character buys the leg armour off the book in the busy market and
     walks to the iron rocks in the quiet one. This is the strongest evidence in
     the file that the GE bundle key is load-bearing: before it existed, the
-    left-hand side of this assertion was unreachable offline."""
+    left-hand side of this assertion was unreachable offline.
+
+    RE-DERIVED Task 5 (global gear objective): the book now moves the ROOT.
+    The gear objective prices each missing `L*` piece (`route_price`), and the
+    book sells `fire_and_earth_amulet` (3 s against the quiet market's
+    unpriced 10^6 + 1), so in the busy market the amulet heads `L*` and the
+    leg armour follows; in the quiet one the leg armour heads it. The walk
+    turns the amulet into its jewelrycrafting gate (`classify_target` reads
+    the crafting gate first), whose first leg is a chicken fight; the quiet
+    character withdraws its banked iron bars toward the legs."""
     busy_report = _plan(CELL5_BUSY_ADEQUATE, busy)
     quiet_report = _plan(CELL5_BUSY_ADEQUATE, quiet)
-    assert busy_report.plan and quiet_report.plan
-    assert "GeBuy" in repr(busy_report.plan[0])
-    assert LEG_TARGET in repr(busy_report.plan[0])
-    assert "GeBuy" not in repr(quiet_report.plan[0])
+    legs = ObtainItem(code=LEG_TARGET, quantity=1, slot="leg_armor_slot")
+    assert busy_report.decision.chosen_root == ReachSkillLevel(skill="jewelrycrafting", level=6)
+    assert busy_report.decision.blocked_target == "fire_and_earth_amulet"
+    assert busy_report.decision.fallback_roots[0] == legs
+    assert quiet_report.decision.chosen_root == legs
+    assert [repr(a) for a in busy_report.plan][:1] == ["Fight(chicken)"]
+    assert [repr(a) for a in quiet_report.plan][:1] == ["Withdraw(iron_bar×3)"]
     assert repr(busy_report.selected_goal) != repr(quiet_report.selected_goal)
 
 

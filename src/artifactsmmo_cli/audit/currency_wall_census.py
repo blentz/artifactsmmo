@@ -1,12 +1,21 @@
 """O7 — every currency gap on an active link is FUNDED or NAMED.
 
-Obligation O7 of the wave-6 routes design (§7). For every `(scenario, currency)`
-cell: if the price walk charged that currency at `UNOBTAINABLE_PER_UNIT` while
-pricing the scenario's resolved root, the currency must either be task-earnable
+Obligation O7 of the wave-6 routes design (§7). For every
+`(scenario, candidate root, currency)` cell: if the price walk charged that
+currency at `UNOBTAINABLE_PER_UNIT` while pricing a root the walk OFFERS — the
+resolved root or one of its ordered alternatives — the currency must either be task-earnable
 (a funding route exists, and `ReachCurrencyGoal` is the node that takes it) or
 fall into a NAMED wall. A charged currency that is neither is
 `o7_silent_currency_stall` — a root the graph resolved to, priced at a million,
 with nothing in the model saying why.
+
+THE ALTERNATIVES ARE PRICED TOO (ruling AB, global gear objective Task 5).
+Since the root walk's entry is the first missing `L*` piece, every alternative
+is a later `L*` piece the character pursues in turn, and a resolved-root-only
+census measured the argmax and nothing else: on the committed bundle it charged
+NO currency at all and its own `reference_set_empty` alarm fired. The
+drop-wall census sweeps the alternatives for the same reason (its "argmax
+blindness" line), and this census now matches it.
 
 HOW A CHARGE IS DETECTED, AND WHY NOT BY WALKING THE CLOSURE. The pricer does
 not report which code it walled on. Re-deriving the demand closure here to find
@@ -60,6 +69,7 @@ from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     ScenarioCharacter,
@@ -180,7 +190,7 @@ and `NOT_DEMANDED` / `ROOT_UNRESOLVED` are not judgements at all.
 `REFERENCE_SET_EMPTY` is NOT here because it is not a property of any cell —
 see `reference_set_residual`."""
 
-MIN_CELLS = 200
+MIN_CELLS = 1500
 """Blindness floor on the grid, enforced by `gen_currency_wall.py --check` and
 not only by the suite.
 
@@ -189,8 +199,10 @@ would print clean and exit 0. `scripts/*` is coverage-omitted and
 `census-gate.yml` runs the scripts without pytest, so the floor lives here where
 the script and `test_currency_wall_census` read the same number.
 
-200 against a current 264 (44 scenarios x 6 currencies): headroom to retire a
-scenario or two without flapping, far too tight for a collapsed sweep."""
+1500 against a current 1799 (257 offered roots x 7 rows, over 45 scenarios;
+ruling AB raised it from 200 when the census began pricing the alternatives):
+headroom to retire a few scenarios without flapping, and far above the 315
+cells a sweep that collapsed back to the resolved roots would produce."""
 
 
 @dataclass(frozen=True)
@@ -220,11 +232,17 @@ class CurrencyEvidence:
 
 @dataclass(frozen=True)
 class CurrencyResult:
-    """One cell's answer. Flat and render-ready, like `RungResult`."""
+    """One `(scenario, candidate root, currency)` cell's answer. Flat and
+    render-ready, like `DropResult`."""
 
     scenario: str
     currency: str
-    root: str
+    candidate: str
+    """`repr` of the root the walk offers that this cell prices; `-` when the
+    scenario has no root or no currency catalogue."""
+    is_resolved_root: bool
+    """True for the walk's chosen root, False for an alternative — the
+    drop-wall census's column, for the same reason."""
     base_price: int
     granted_price: int
     charged: bool
@@ -409,10 +427,45 @@ def declared_world(scenario: ScenarioCharacter, bundle: Path,
     return cache[key]
 
 
+def _candidate_cells(name: str, candidate: MetaGoal, is_resolved_root: bool,
+                     state: WorldState, game_data: GameData,
+                     currencies: tuple[str, ...]) -> list[CurrencyResult]:
+    """One cell per currency, plus the gold row, for one offered root."""
+    charges = charged_currencies(candidate, state, game_data, currencies)
+    # Only worth asking when NOTHING was attributed: if some currency already
+    # crossed on its own, the gap has a name and the combined probe would
+    # merely re-confirm it at the cost of another price walk.
+    unattributed = (not charges
+                    and unattributed_wall(candidate, state, game_data, currencies))
+    cells: list[CurrencyResult] = []
+    for code in currencies:
+        evidence = currency_evidence(code, state, game_data)
+        base, granted = charges.get(code, (0, 0))
+        gap = (CurrencyGap.O7_MULTI_CURRENCY_WALL if unattributed
+               else classify_gap(code in charges, evidence))
+        cells.append(CurrencyResult(
+            scenario=name, currency=code, candidate=repr(candidate),
+            is_resolved_root=is_resolved_root, base_price=base, granted_price=granted,
+            charged=code in charges, evidence=evidence, gap=gap.value))
+    # THE GOLD ROW, added deliberately because nothing else can produce it:
+    # gold is not in `items.stats`, so `catalogue_currencies` never returns it,
+    # and it is not in `state.inventory`, so the item-currency differential
+    # cannot reveal it. Without this row a root blocked purely on money reads
+    # `not_demanded` in every cell — the silence §2.5 names.
+    gold = gold_charge(candidate, state, game_data)
+    cells.append(CurrencyResult(
+        scenario=name, currency=GOLD_ROW, candidate=repr(candidate),
+        is_resolved_root=is_resolved_root,
+        base_price=gold[0] if gold else 0, granted_price=gold[1] if gold else 0,
+        charged=gold is not None, evidence=None,
+        gap=(CurrencyGap.WALL_GOLD if gold else CurrencyGap.NOT_DEMANDED).value))
+    return cells
+
+
 def run_census(bundle: Path) -> list[CurrencyResult]:
-    """Every `(scenario, currency)` cell, in scenario-declaration order then
-    sorted currency order — both fixed vocabularies, so the matrix is
-    byte-reproducible.
+    """Every `(scenario, candidate root, currency)` cell, in
+    scenario-declaration order, then walk order, then sorted currency order —
+    all fixed, so the matrix is byte-reproducible.
 
     Takes the BUNDLE PATH rather than a `GameData`, unlike its sibling censuses,
     because the world is a per-scenario fact here and a single-`GameData`
@@ -424,52 +477,30 @@ def run_census(bundle: Path) -> list[CurrencyResult]:
         currencies = catalogue_currencies(game_data)
         if not currencies:
             results.append(CurrencyResult(
-                scenario=name, currency="-", root="-", base_price=0,
-                granted_price=0, charged=False, evidence=None,
+                scenario=name, currency="-", candidate="-", is_resolved_root=True,
+                base_price=0, granted_price=0, charged=False, evidence=None,
                 gap=CurrencyGap.CURRENCY_CATALOGUE_EMPTY.value))
             continue
         state = scenario_state(scenario, game_data)
-        root = resolve_root(state, game_data,
-                            CharacterObjective.from_game_data(game_data),
-                            NO_PROFILE_CONTEXT, None).root
-        if root is None:
+        # The walk's context carries the cycle's gear objective, attached by
+        # the one function the player uses (ruling W), so the census roots
+        # are the live cycle's.
+        resolution = resolve_root(state, game_data,
+                                  CharacterObjective.from_game_data(game_data),
+                                  attach_gear_objective(state, game_data,
+                                                        NO_PROFILE_CONTEXT, None),
+                                  None)
+        if resolution.root is None:
             results.extend(
                 CurrencyResult(
-                    scenario=name, currency=code, root="-", base_price=0,
-                    granted_price=0, charged=False, evidence=None,
+                    scenario=name, currency=code, candidate="-", is_resolved_root=True,
+                    base_price=0, granted_price=0, charged=False, evidence=None,
                     gap=CurrencyGap.ROOT_UNRESOLVED.value)
                 for code in (*currencies, GOLD_ROW))
             continue
-        charges = charged_currencies(root, state, game_data, currencies)
-        # Only worth asking when NOTHING was attributed: if some currency already
-        # crossed on its own, the gap has a name and the combined probe would
-        # merely re-confirm it at the cost of another price walk.
-        unattributed = (not charges
-                        and unattributed_wall(root, state, game_data,
-                                              currencies))
-        for code in currencies:
-            evidence = currency_evidence(code, state, game_data)
-            base, granted = charges.get(code, (0, 0))
-            gap = (CurrencyGap.O7_MULTI_CURRENCY_WALL if unattributed
-                   else classify_gap(code in charges, evidence))
-            results.append(CurrencyResult(
-                scenario=name, currency=code, root=repr(root),
-                base_price=base, granted_price=granted,
-                charged=code in charges, evidence=evidence, gap=gap.value))
-
-        # THE GOLD ROW, added deliberately because nothing else can produce it:
-        # gold is not in `items.stats`, so `catalogue_currencies` never returns
-        # it, and it is not in `state.inventory`, so the item-currency
-        # differential cannot reveal it. Without this row a root blocked purely
-        # on money reads `not_demanded` in every cell — the silence §2.5 names.
-        gold = gold_charge(root, state, game_data)
-        results.append(CurrencyResult(
-            scenario=name, currency=GOLD_ROW, root=repr(root),
-            base_price=gold[0] if gold else 0,
-            granted_price=gold[1] if gold else 0,
-            charged=gold is not None, evidence=None,
-            gap=(CurrencyGap.WALL_GOLD if gold
-                 else CurrencyGap.NOT_DEMANDED).value))
+        for index, candidate in enumerate((resolution.root, *resolution.alternatives)):
+            results.extend(_candidate_cells(name, candidate, index == 0, state,
+                                            game_data, currencies))
     return results
 
 
@@ -551,8 +582,9 @@ def render_matrix(results: list[CurrencyResult]) -> str:
         "`uv run python scripts/gen_currency_wall.py`.",
         ">",
         "> Obligation O7 (wave-6 routes design §7): every currency the price "
-        "walk charged at `UNOBTAINABLE_PER_UNIT` while pricing a scenario's "
-        "resolved root is either task-earnable (FUNDED) or falls into a named "
+        "walk charged at `UNOBTAINABLE_PER_UNIT` while pricing a root the walk "
+        "offers (the resolved root or an alternative) is either task-earnable "
+        "(FUNDED) or falls into a named "
         "wall. The residual is a charged currency with a BEATABLE dropper on a "
         "live tile — a route the model can see that the price did not take.",
         ">",
@@ -575,20 +607,20 @@ def render_matrix(results: list[CurrencyResult]) -> str:
     if empty:
         lines.extend([f"**{empty}**", ""])
     lines.extend([
-        "| Scenario | Currency | Verdict | charged | base | granted | "
-        "earnable | droppers | live tiles | winnable | event |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "| Scenario | Candidate | root? | Currency | Verdict | charged | base "
+        "| granted | earnable | droppers | live tiles | winnable | event |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ])
     for result in results:
         verdict = "PASS" if result.passed else f"**{result.gap}**"
         evidence = result.evidence
+        head = (f"| {result.scenario} | `{result.candidate}` "
+                f"| {'root' if result.is_resolved_root else 'alt'} | {result.currency} ")
         if evidence is None:
-            lines.append(
-                f"| {result.scenario} | {result.currency} | {verdict} | - "
-                f"| - | - | - | - | - | - | - |")
+            lines.append(f"{head}| {verdict} | - | - | - | - | - | - | - | - |")
             continue
         lines.append(
-            f"| {result.scenario} | {result.currency} | {verdict} "
+            f"{head}| {verdict} "
             f"| {'yes' if result.charged else '-'} "
             f"| {result.base_price} | {result.granted_price} "
             f"| {'yes' if evidence.task_earnable else '-'} "

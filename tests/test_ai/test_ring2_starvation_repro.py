@@ -16,14 +16,17 @@ walk keeps the craftable ring on offer as the stuck root's first alternative,
 which is what the yielded turn goes to."""
 
 from dataclasses import replace
+from fractions import Fraction
 from pathlib import Path
 
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.scenario import (
     ScenarioCharacter,
     scenario_state,
 )
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
@@ -111,11 +114,20 @@ _RING2 = ObtainItem(code="iron_ring", quantity=1, slot="ring2_slot")
 
 
 def test_without_a_yield_the_stuck_drop_root_heads_every_cycle() -> None:
-    """The walk's slot order is history-free, so wolf_ears heads on EVERY
-    cycle — the starvation the budget answers — and the craftable ring is its
-    FIRST alternative, so a yielded turn goes to the ring."""
+    """The walk's order is history-free, so wolf_ears heads on EVERY cycle —
+    the starvation the budget answers — and the craftable ring is its FIRST
+    alternative, so a yielded turn goes to the ring.
+
+    RE-DERIVED Task 5 (global gear objective): the order is the gear
+    objective's, so the objective is built explicitly with the stuck helmet
+    first and the ring second (this fixture is too small for `gear_objective`
+    to find a paying monster; ruling W)."""
     state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
+    pieces = (GearPiece("helmet_slot", "wolf_ears", 0, Fraction(1), Fraction(1)),
+              GearPiece("ring2_slot", "iron_ring", 0, Fraction(1), Fraction(1)))
+    ctx = replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+        "chicken", {p.slot: p.code for p in pieces}, Fraction(1), pieces))
     engine = StrategyEngine(objective)
-    picks = {engine.decide(state, gd).chosen_root for _ in range(30)}
+    picks = {engine.decide(state, gd, ctx=ctx).chosen_root for _ in range(30)}
     assert picks == {_WOLF_EARS}
-    assert engine.decide(state, gd).fallback_roots[0] == _RING2
+    assert engine.decide(state, gd, ctx=ctx).fallback_roots[0] == _RING2

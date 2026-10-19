@@ -52,10 +52,12 @@ from tests.test_ai.fixtures import coordination_now
 
 BUNDLE = Path(__file__).resolve().parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
-ASKED = "life_amulet"
-"""What the asker cannot make. `l12_deep_chain_grind` holds jewelrycrafting 2
-against this amulet's gate of 5, so the walk answers with a climb and the amulet
-is what it drops — see `test_decisions_root`'s pin on `blocked_target`."""
+ASKED = "iron_sword"
+"""What the asker cannot make. `l12_deep_chain_grind` holds weaponcrafting 5
+against this sword's gate of 10, and the sword is its gear objective's first
+missing piece, so the walk answers with a climb and the sword is what it drops
+— see `test_decisions_root`'s pin on `blocked_target`. (Re-derived Task 5: the
+tier walk's head was the `life_amulet`'s jewelrycrafting gate.)"""
 
 
 def _game_data():
@@ -80,12 +82,12 @@ def _asker(db: str, gd) -> GamePlayer:
 
 
 def _supplier_state(gd) -> WorldState:
-    """A sibling who CAN make the amulet: jewelrycrafting 10 against its gate of
-    5. Everything else is the asker's own scenario, so the only difference
+    """A sibling who CAN make the sword: weaponcrafting 10 against its gate of
+    10. Everything else is the asker's own scenario, so the only difference
     between the two characters is the skill the whole feature turns on."""
     state = scenario_state(SCENARIOS["l12_deep_chain_grind"], gd)
     skills = dict(state.skills)
-    skills["jewelrycrafting"] = 10
+    skills["weaponcrafting"] = 10
     return replace(state, character="Sup", skills=skills)
 
 
@@ -123,7 +125,7 @@ def test_the_blocked_ask_reaches_a_sibling_who_can_serve_it(tmp_path) -> None:
 
     supplier = _supplier(db, gd)
     # LINK 3 — the sibling reads the asymmetry and elects a role that owns the
-    # skill (`jeweler` is the catalog's jewelrycrafting owner).
+    # skill.
     assert ASKED in supplier._asymmetric_demand
     assert supplier._role is not None
 
@@ -162,7 +164,7 @@ def test_a_sibling_without_the_skill_is_not_recruited(tmp_path) -> None:
 
     player = GamePlayer(character="Sup")
     player._coordination = CoordinationStore(db_path=db, character="Sup")
-    # Same jewelrycrafting 2 as the asker: reads the ask, cannot serve it.
+    # Same weaponcrafting 5 as the asker: reads the ask, cannot serve it.
     player.seed_offline(
         replace(scenario_state(SCENARIOS["l12_deep_chain_grind"], gd),
                 character="Sup"), gd)

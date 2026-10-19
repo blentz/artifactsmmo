@@ -70,6 +70,7 @@ from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.drop_evidence import DropEvidence, drop_evidence
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     ScenarioCharacter,
@@ -311,9 +312,13 @@ def run_census(bundle: Path) -> list[DropResult]:
     for name, scenario in SCENARIOS.items():
         game_data = declared_world(scenario, bundle, cache)
         state = scenario_state(scenario, game_data)
+        # The walk's context carries the cycle's gear objective, attached by
+        # the one function the player uses (ruling W).
         resolution = resolve_root(state, game_data,
                                   CharacterObjective.from_game_data(game_data),
-                                  NO_PROFILE_CONTEXT, None)
+                                  attach_gear_objective(state, game_data,
+                                                        NO_PROFILE_CONTEXT, None),
+                                  None)
         if resolution.root is None:
             results.append(DropResult(
                 scenario=name, candidate="-", is_resolved_root=True,

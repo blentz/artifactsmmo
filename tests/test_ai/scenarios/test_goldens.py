@@ -62,8 +62,12 @@ EXPECTATIONS: dict[str, Golden] = {
     # PHASE 2d-a: the first action is the jewelrycrafting grind's first REAL
     # leg (banked ore withdrawn toward the copper_bar rung), not the
     # `LevelSkill` macro a second planner expanded at execution.
+    # RE-DERIVED Task 5 (global gear objective): the root is the first
+    # missing `L*` piece, `iron_sword` (weaponcrafting 10, held), whose step is
+    # the recipe's two feathers: a chicken fight for its drop — an ACQUISITION
+    # fight (spec 2026-10-18 §2.4.3), not one chosen for XP.
     "l10_weapon_upgrade": Golden(
-        goal_class="ReachSkill(jewelrycrafting", first_action="Withdraw(copper_ore"),
+        goal_class="GatherMaterials(feather", first_action="Fight(chicken"),
 
     # l1_fresh: the legacy golden pinned GrindCharacterXP (starter-monster xp
     # grind) for a bare L1 character, but the TREE's rules differ by design:
@@ -84,8 +88,10 @@ EXPECTATIONS: dict[str, Golden] = {
     # gather. `goals_tried` records both, in that order, which is exactly the
     # 2026-06-06 regression `_resolve_step_goal` exists to prevent: a root
     # whose goal does not plan must not drop the cycle into discretionary.
+    # RE-DERIVED Task 5: the root is `L*`'s first piece, `copper_dagger`, and
+    # its step the ore its bars are smelted from — the gather plans directly.
     "l1_fresh": Golden(
-        goal_class="GatherMaterials(ash_wood", first_action="Gather(ash_tree"),
+        goal_class="GatherMaterials(copper_ore", first_action="Gather(copper_rocks"),
 
     # l10_copper_adequate: full copper set but shield_slot is empty. The walk's
     # root is the jewelrycrafting climb (gear-target tier 5), and the arbiter
@@ -93,8 +99,10 @@ EXPECTATIONS: dict[str, Golden] = {
     # potion guard sizing a stock for the first winnable in-band monster. The
     # stock is now for the fight the intention has ahead, and a scenario cycle
     # has no intention — so no fight, no stock, and the climb runs.
+    # RE-DERIVED Task 5: as `l10_weapon_upgrade` — `L*`'s first piece is the
+    # iron sword, and its step is the feathers a chicken drops.
     "l10_copper_adequate": Golden(
-        goal_class="ReachSkill(jewelrycrafting", first_action="Gather(copper_rocks"),
+        goal_class="GatherMaterials(feather", first_action="Fight(chicken"),
 
     # l12_taskgated_bag: GEAR-FIRST re-derivation 2026-07-08 (Task-3
     # pursuit_value; user ruling). The tree's chosen_root is
@@ -129,8 +137,12 @@ EXPECTATIONS: dict[str, Golden] = {
     # 10) against the live catalogue, recorded in the task-6 report — it is
     # this FIXTURE that can no longer exhibit it.
     # PHASE 2d-a: the grind's first real leg (see l10_weapon_upgrade).
+    # RE-DERIVED Task 5: the gear objective restores the weaponcrafting climb
+    # this golden used to witness — `L*`'s first piece is `iron_sword`, gated
+    # at weaponcrafting 10 against 1 — and the grind's first leg withdraws the
+    # banked feathers toward its first craft.
     "l12_taskgated_bag": Golden(
-        goal_class="ReachSkill(jewelrycrafting", first_action="Gather(copper_rocks"),
+        goal_class="ReachSkill(weaponcrafting", first_action="Withdraw(feather"),
 }
 
 

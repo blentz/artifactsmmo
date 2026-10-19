@@ -20,7 +20,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.decisions.root import _orphan_skill_roots
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
+from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
@@ -29,7 +29,7 @@ from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
 from artifactsmmo_cli.audit.grind_cycle_census import earned_skill
-from artifactsmmo_cli.audit.open_rung_completeness import census_state, routed_skills
+from tests.test_ai.scenarios.routing import scenario_resolution, skills_offered
 
 SKILL = "alchemy"
 CELL = "l15_midband"
@@ -94,7 +94,7 @@ def test_no_scenario_produces_a_gear_target_that_names_alchemy(
     objective = CharacterObjective.from_game_data(bundle_game_data)
     named: set[str] = set()
     for scenario in SCENARIOS.values():
-        state = census_state(scenario, bundle_game_data)
+        state = derived_scenario_state(scenario, bundle_game_data)
         for target in objective.gear_targets_with_blockers(state, None).values():
             if target.blocking_skill:
                 named.add(target.blocking_skill)
@@ -150,13 +150,14 @@ def test_the_alchemy_root_plans_a_grind_cycle(
 
 
 def test_no_scenario_routes_alchemy_without_demand(bundle_game_data: GameData) -> None:
-    """`resolve_root`'s natural walk (no demand injected) routes only the three
-    gear-crafting skills the tier walk names: no committed scenario's roots
+    """`resolve_root`'s natural walk (no demand injected), over each scenario's
+    own gear objective, routes the three gear-crafting skills its pieces name
+    and mining, which `l12_taskgated_bag`'s iron pieces demand through
+    `iron_ore` (see `test_fisher_cooking_rung`): no committed scenario's roots
     demand alchemy, so no scenario offers it a climb (USER 2026-10-08)."""
     routed: set[str] = set()
-    for scenario in SCENARIOS.values():
-        cell = routed_skills(census_state(scenario, bundle_game_data),
-                             bundle_game_data)
-        assert SKILL not in cell, scenario.name
+    for name in SCENARIOS:
+        cell = skills_offered(scenario_resolution(name, bundle_game_data))
+        assert SKILL not in cell, name
         routed |= cell
-    assert routed == GEAR_NAMEABLE
+    assert routed == GEAR_NAMEABLE | {"mining"}

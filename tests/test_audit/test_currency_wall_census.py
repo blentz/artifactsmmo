@@ -1,8 +1,9 @@
 """O7: the currency-wall census (wave-6 routes design §7).
 
 The census asserts that every currency the price walk charged at
-`UNOBTAINABLE_PER_UNIT` while pricing a scenario's resolved root is either
-task-earnable or a NAMED wall. These tests exist to stop it becoming decorative,
+`UNOBTAINABLE_PER_UNIT` while pricing a root the walk offers (the resolved root
+or an alternative — ruling AB, since the walk's entry is the first missing `L*`
+piece) is either task-earnable or a NAMED wall. These tests exist to stop it becoming decorative,
 which for THIS census means four things:
 
 * it must actually sweep something — `test_the_sweep_sees_the_whole_grid` pins
@@ -39,6 +40,7 @@ from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     load_bundle_game_data,
@@ -73,6 +75,20 @@ BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
 
 FUNDED_CELL = "l25_currency_leaf_unfunded"
 FUNDED_CURRENCY = "tasks_coin"
+FUNDED_CANDIDATE = ObtainItem(code="dreadful_ring", quantity=1, slot="ring1_slot")
+"""An `L*` piece the walk offers `FUNDED_CELL` as an alternative, priced in
+`tasks_coin` at the tasks_trader."""
+GOLD_CANDIDATE = ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")
+"""The gold-priced rune, an `L*` piece offered as an alternative to 22 cells."""
+
+
+def _offered(state, game_data):  # type: ignore[no-untyped-def]
+    """The roots the walk offers `state`, chosen first: its context carries
+    the cycle's gear objective, attached as the player attaches it (ruling W)."""
+    resolution = resolve_root(state, game_data, CharacterObjective.from_game_data(game_data),
+                              attach_gear_objective(state, game_data, NO_PROFILE_CONTEXT, None),
+                              None)
+    return [g for g in (resolution.root, *resolution.alternatives) if g is not None]
 
 
 @pytest.fixture(scope="module")
@@ -100,7 +116,10 @@ def test_the_sweep_sees_the_whole_grid(results: list[CurrencyResult]) -> None:
     """A census that discovered nothing reports 0 residuals and exits clean, so
     the floor is asserted here AND in the script (which the suite never runs)."""
     assert len(results) >= MIN_CELLS
-    assert len(results) == len(SCENARIOS) * 7
+    # Seven rows per offered root, and every scenario's resolved root is one.
+    assert len(results) % 7 == 0
+    assert sum(1 for r in results if r.is_resolved_root) == len(SCENARIOS) * 7
+    assert sum(1 for r in results if not r.is_resolved_root) > 0
     assert {r.currency for r in results} == {
         "corrupted_gem", "enchanted_coin", "event_ticket", "sandwhisper_coin",
         "sonnengott_coin", "tasks_coin",
@@ -123,9 +142,15 @@ def test_the_funded_arm_has_a_witness(results: list[CurrencyResult]) -> None:
     the test names it, and a fixture change that loses it fails here rather
     than silently turning the census vacuous."""
     funded = [r for r in results if r.gap == CurrencyGap.FUNDED.value]
-    assert len(funded) == 1
-    assert funded[0].scenario == FUNDED_CELL
-    assert funded[0].currency == FUNDED_CURRENCY
+    # 1 -> 3 (ruling AB): the cell's old root, `king_slime_sword`, left with
+    # the tier sheet; its `L*` offers two `dreadful_ring`s and a
+    # `hard_leather_helmet`, each priced in tasks_coin, as alternatives.
+    assert [(r.scenario, r.currency, r.candidate, r.is_resolved_root) for r in funded] == [
+        (FUNDED_CELL, FUNDED_CURRENCY, repr(FUNDED_CANDIDATE), False),
+        (FUNDED_CELL, FUNDED_CURRENCY,
+         repr(ObtainItem(code="dreadful_ring", quantity=1, slot="ring2_slot")), False),
+        (FUNDED_CELL, FUNDED_CURRENCY,
+         repr(ObtainItem(code="hard_leather_helmet", quantity=1, slot="helmet_slot")), False)]
     assert reference_set_residual(results) is None
 
 
@@ -144,12 +169,18 @@ def test_only_the_gold_wall_is_exercised_and_the_matrix_says_so(
 
     4 -> 6 (2026-10-18, ruling R): `l30_band_entry` and `l40_band_entry` now
     derive their combat stats from their gear, so their walks resolve the same
-    gold-walled `lifesteal_rune` root as the other four."""
+    gold-walled `lifesteal_rune` root as the other four.
+
+    6 -> 22 (ruling AB): the census prices the alternatives, and the
+    gold-priced `lifesteal_rune` is an `L*` piece in 22 scenarios — never the
+    first piece, so every one is an alternative."""
     walls = [r for r in results if r.gap.startswith("wall_")]
     assert {r.gap for r in walls} == {CurrencyGap.WALL_GOLD.value}
     assert {r.currency for r in walls} == {GOLD_ROW}
-    assert len(walls) == 6
-    assert "walled 6" in summary_line(results)
+    assert len(walls) == 22
+    assert {r.candidate for r in walls} == {repr(GOLD_CANDIDATE)}
+    assert not any(r.is_resolved_root for r in walls)
+    assert "walled 22" in summary_line(results)
 
 
 # --- the detector is production's own answer --------------------------------
@@ -160,10 +191,8 @@ def test_the_charge_is_the_pricers_own_answer() -> None:
     scenario = SCENARIOS[FUNDED_CELL]
     game_data = declared_world(scenario, BUNDLE, {})
     state = scenario_state(scenario, game_data)
-    root = resolve_root(state, game_data,
-                        CharacterObjective.from_game_data(game_data),
-                        NO_PROFILE_CONTEXT, None).root
-    assert root is not None
+    root = FUNDED_CANDIDATE
+    assert root in _offered(state, game_data)
     charges = charged_currencies(root, state, game_data,
                                  catalogue_currencies(game_data))
     assert set(charges) == {FUNDED_CURRENCY}
@@ -181,11 +210,9 @@ def test_granting_the_currency_clears_the_charge() -> None:
     state = scenario_state(scenario, game_data)
     funded = dataclasses.replace(
         state, inventory={**state.inventory, FUNDED_CURRENCY: 500})
-    root = resolve_root(funded, game_data,
-                        CharacterObjective.from_game_data(game_data),
-                        NO_PROFILE_CONTEXT, None).root
-    assert root is not None
-    assert charged_currencies(root, funded, game_data,
+    assert charged_currencies(FUNDED_CANDIDATE, state, game_data,
+                              catalogue_currencies(game_data))
+    assert charged_currencies(FUNDED_CANDIDATE, funded, game_data,
                               catalogue_currencies(game_data)) == {}
 
 
@@ -203,9 +230,7 @@ def test_a_merely_cheaper_route_is_not_a_charge() -> None:
     for scenario in SCENARIOS.values():
         game_data = declared_world(scenario, BUNDLE, cache)
         state = scenario_state(scenario, game_data)
-        root = resolve_root(state, game_data,
-                            CharacterObjective.from_game_data(game_data),
-                            NO_PROFILE_CONTEXT, None).root
+        root = _offered(state, game_data)[0]
         if root is None:
             continue
         base = route_price(root, state, game_data, NO_PROFILE_CONTEXT, None)
@@ -326,9 +351,7 @@ def test_an_obtainable_root_is_never_an_unattributed_wall() -> None:
     for scenario in SCENARIOS.values():
         game_data = declared_world(scenario, BUNDLE, cache)
         state = scenario_state(scenario, game_data)
-        root = resolve_root(state, game_data,
-                            CharacterObjective.from_game_data(game_data),
-                            NO_PROFILE_CONTEXT, None).root
+        root = _offered(state, game_data)[0]
         if root is None or route_price(root, state, game_data,
                                        NO_PROFILE_CONTEXT,
                                        None) >= UNOBTAINABLE_PER_UNIT:
@@ -363,10 +386,7 @@ def test_the_single_currency_case_is_attributed_not_left_unnamed() -> None:
     scenario = SCENARIOS[FUNDED_CELL]
     game_data = declared_world(scenario, BUNDLE, {})
     state = scenario_state(scenario, game_data)
-    root = resolve_root(state, game_data,
-                        CharacterObjective.from_game_data(game_data),
-                        NO_PROFILE_CONTEXT, None).root
-    assert root is not None
+    root = FUNDED_CANDIDATE
     currencies = catalogue_currencies(game_data)
     assert set(charged_currencies(root, state, game_data, currencies)) == \
         {FUNDED_CURRENCY}
@@ -383,7 +403,8 @@ def test_the_multi_currency_residual_is_a_must_be_zero_class() -> None:
 
 def test_the_reference_set_alarm_fires_on_a_grid_with_no_funded_cell() -> None:
     walled = [CurrencyResult(
-        scenario="s", currency="corrupted_gem", root="r", base_price=1,
+        scenario="s", currency="corrupted_gem", candidate="r", is_resolved_root=True,
+        base_price=1,
         granted_price=0, charged=True, evidence=_evidence(),
         gap=CurrencyGap.WALL_NO_PRODUCER.value)]
     message = reference_set_residual(walled)
@@ -401,23 +422,13 @@ def test_forcing_one_world_hides_the_only_funded_arm() -> None:
     without this test the census could regress to that state and print
     GATE CLEAN."""
     default_world = load_bundle_game_data(BUNDLE)
+    currencies = catalogue_currencies(default_world)
     forced: list[CurrencyResult] = []
     for name, scenario in SCENARIOS.items():
         state = scenario_state(scenario, default_world)
-        root = resolve_root(
-            state, default_world,
-            CharacterObjective.from_game_data(default_world),
-            NO_PROFILE_CONTEXT, None).root
-        if root is None:
-            continue
-        currencies = catalogue_currencies(default_world)
-        charges = charged_currencies(root, state, default_world, currencies)
-        for code in currencies:
-            evidence = currency_evidence(code, state, default_world)
-            forced.append(CurrencyResult(
-                scenario=name, currency=code, root=repr(root), base_price=0,
-                granted_price=0, charged=code in charges, evidence=evidence,
-                gap=classify_gap(code in charges, evidence).value))
+        for index, candidate in enumerate(_offered(state, default_world)):
+            forced.extend(cwc._candidate_cells(name, candidate, index == 0, state,
+                                               default_world, currencies))
 
     assert len(forced) >= MIN_CELLS, "the forced grid must be full-sized"
     assert [r for r in forced if r.gap == CurrencyGap.FUNDED.value] == []
@@ -490,10 +501,12 @@ def test_the_summary_prints_every_residual_class(
 def test_the_demand_breakdown_states_the_residual_scope(
         results: list[CurrencyResult]) -> None:
     """The claim that stops "0 residuals over 264 cells" being read as a sweep:
-    only CHARGED cells can ever be a residual, and there is one."""
+    only CHARGED cells can ever be a residual."""
     line = demand_breakdown(results)
     # 5 -> 7 (2026-10-18, ruling R): the two derived band-entry gold walls.
-    assert "7 of 308 cells are CHARGED" in line
+    # 7 of 308 -> 25 of 1799 (ruling AB): every offered root is priced — 257
+    # offered roots over 45 scenarios, gold 22 and tasks_coin 3.
+    assert "25 of 1799 cells are CHARGED (2 distinct currencies) — gold 22, tasks_coin 3" in line
     assert FUNDED_CURRENCY in line
     assert demand_breakdown([]) .endswith(
         "An uncharged currency can only be not_demanded.")
@@ -512,7 +525,8 @@ def test_the_matrix_shouts_when_the_reference_set_is_empty() -> None:
     """A vacuous grid must say so in the ARTIFACT, not only in the exit code —
     the doc outlives the pipeline run."""
     walled = [CurrencyResult(
-        scenario="s", currency="corrupted_gem", root="r", base_price=1,
+        scenario="s", currency="corrupted_gem", candidate="r", is_resolved_root=True,
+        base_price=1,
         granted_price=0, charged=True, evidence=_evidence(),
         gap=CurrencyGap.WALL_NO_PRODUCER.value)]
     assert "reference_set_empty" in render_matrix(walled)
@@ -522,10 +536,11 @@ def test_a_catalogue_empty_row_renders_without_evidence() -> None:
     """The evidence-less row has its own render path; a matrix that crashed on
     it would hide the data fault it exists to report."""
     empty = [CurrencyResult(
-        scenario="s", currency="-", root="-", base_price=0, granted_price=0,
+        scenario="s", currency="-", candidate="-", is_resolved_root=True, base_price=0,
+        granted_price=0,
         charged=False, evidence=None,
         gap=CurrencyGap.CURRENCY_CATALOGUE_EMPTY.value)]
-    assert "| s | - | **currency_catalogue_empty** | - | - | - |" in \
+    assert "| s | `-` | root | - | **currency_catalogue_empty** | - | - | - |" in \
         render_matrix(empty)
 
 
@@ -551,11 +566,12 @@ def test_the_gold_wall_names_what_no_other_row_can_see(
     (`l30_band_entry` and `l40_band_entry` joined on 2026-10-18, ruling R:
     their sheets now carry their gear's totals)."""
     gold = [r for r in results if r.currency == GOLD_ROW and r.charged]
-    assert len(gold) == 6
+    # 6 -> 22 (ruling AB): the alternatives are priced; see the wall count.
+    assert len(gold) == 22
     assert {r.gap for r in gold} == {CurrencyGap.WALL_GOLD.value}
     assert GOLD_WALLED_CELL in {r.scenario for r in gold}
     for row in gold:
-        assert "lifesteal_rune" in row.root
+        assert "lifesteal_rune" in row.candidate
         assert row.base_price >= UNOBTAINABLE_PER_UNIT > row.granted_price
 
 
@@ -566,10 +582,8 @@ def test_a_rich_character_is_not_gold_walled() -> None:
     scenario = SCENARIOS[GOLD_WALLED_CELL]
     game_data = declared_world(scenario, BUNDLE, {})
     state = scenario_state(scenario, game_data)
-    root = resolve_root(state, game_data,
-                        CharacterObjective.from_game_data(game_data),
-                        NO_PROFILE_CONTEXT, None).root
-    assert root is not None
+    root = GOLD_CANDIDATE
+    assert root in _offered(state, game_data)
     assert gold_charge(root, state, game_data) is not None, "premise: walled"
 
     rich = dataclasses.replace(state, gold=1_000_000)
@@ -584,9 +598,7 @@ def test_an_obtainable_root_is_never_gold_walled() -> None:
     for scenario in SCENARIOS.values():
         game_data = declared_world(scenario, BUNDLE, cache)
         state = scenario_state(scenario, game_data)
-        root = resolve_root(state, game_data,
-                            CharacterObjective.from_game_data(game_data),
-                            NO_PROFILE_CONTEXT, None).root
+        root = _offered(state, game_data)[0]
         if root is None or route_price(root, state, game_data,
                                        NO_PROFILE_CONTEXT,
                                        None) >= UNOBTAINABLE_PER_UNIT:

@@ -8,6 +8,7 @@ new seam: the due predicates (`ai/fleet_work`), the offer (`_fleet_roots`), and
 the step (`objective_step_goal` → `_fleet_step_goal`)."""
 
 import dataclasses
+from fractions import Fraction
 from unittest.mock import patch
 
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
@@ -23,6 +24,7 @@ from artifactsmmo_cli.ai.fleet_work import (
     turn_in_due,
 )
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.goals.currency_turnin import CurrencyTurnInGoal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.goals.surrender_currency import SurrenderCurrencyGoal
@@ -150,8 +152,13 @@ class TestFleetRoots:
         gd = test_grey_farm._gd()
         state = test_grey_farm.make_state(level=12)
         with patch.object(root_mod, "_task_root", return_value=ReachTaskOutcome("chicken")):
+            # A held gear objective, so the trunk is on offer (it is offered
+            # only while `L*` is held, spec 2026-10-18 §6.2): the order under
+            # test is trunk, task, fleet.
+            held = GearObjective("chicken", {}, Fraction(1), ())
             resolution = root_mod.resolve_root(state, gd, CharacterObjective.from_game_data(gd),
-                                               ctx, None)
+                                               dataclasses.replace(ctx, gear_objective=held),
+                                               None)
         return [resolution.root, *resolution.alternatives]
 
     def test_the_walk_offers_it_after_the_task_objective(self) -> None:

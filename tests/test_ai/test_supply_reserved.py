@@ -4,6 +4,7 @@ cooked_rat_meat its SupplyBank claim produced, 4 of 4, 0 deposited."""
 
 import dataclasses
 
+import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
@@ -65,7 +66,7 @@ def test_the_player_reserves_its_claims_closure(monkeypatch) -> None:
     player = GamePlayer(character="hero")
     player.state = make_state()
     player.game_data = _gd()
-    monkeypatch.setattr(player, "_winnable_farm_target", lambda *_: None)
+    monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: None)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))
     assert player._selection_context().supply_reserved == frozenset()
     player._supply_target = ("cooked_rat_meat", 10, 20)

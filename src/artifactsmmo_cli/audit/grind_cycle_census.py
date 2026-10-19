@@ -27,11 +27,10 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
-from artifactsmmo_cli.ai.scenario import SCENARIOS
+from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES
-from artifactsmmo_cli.audit.open_rung_completeness import census_state
 
 
 class GrindCycleGap(Enum):
@@ -86,7 +85,7 @@ def run_census(game_data: GameData) -> list[GrindCycleResult]:
     objective = CharacterObjective.from_game_data(game_data)
     results: list[GrindCycleResult] = []
     for name, scenario in SCENARIOS.items():
-        state = census_state(scenario, game_data)
+        state = derived_scenario_state(scenario, game_data)
         actions = build_actions(game_data, state, objective, bank_accessible=True,
                                 task_exchange_min_coins=0)
         for skill in SKILL_NAMES:

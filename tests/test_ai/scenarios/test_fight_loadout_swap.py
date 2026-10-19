@@ -23,10 +23,10 @@ from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.gear_objective import gear_objective
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -70,21 +70,6 @@ def _bundle():
     return load_bundle_game_data(BUNDLE)
 
 
-def _suboptimal_scenario():
-    """The base scenario with the weak weapon equipped and the real weapon
-    owned (unequipped) — the exact "stale tool in the weapon slot, better
-    weapon in the bag" shape of the live bug, built via `dataclasses.replace`
-    on the SCENARIOS entry (not the derived WorldState) so
-    `derive_combat_stats` recomputes attack/dmg from the swapped-out weapon,
-    not stale optimal-weapon totals."""
-    base = SCENARIOS[BASE_SCENARIO]
-    return dataclasses.replace(
-        base,
-        equipment={**base.equipment, "weapon_slot": WEAK_WEAPON},
-        inventory={OPTIMAL_WEAPON: 1},
-    )
-
-
 def _run(sc):
     gd = _bundle()
     player = GamePlayer(character=sc.name, history=None)
@@ -118,16 +103,28 @@ def test_swap_precedes_fight_when_loadout_suboptimal() -> None:
     puts `weapon_slot` behind on the tier sheet and makes the weapon upgrade the
     honest objective — so requiring GrindCharacterXP would be requiring the bot
     to ignore the very hole this test drilled. The goal class IS pinned, to the
-    class this state should produce, so the line is not merely dropped."""
-    report = _run(_suboptimal_scenario())
+    class this state should produce, so the line is not merely dropped.
+
+    RE-DERIVED Task 5 (global gear objective): the catalogued scenario misses
+    pieces of its `L*`, so its root is the first piece's acquisition (a
+    gather), not a fight. The ORDERING claim is therefore asserted on the
+    control's shape, the scenario WEARING its `L*`, with the `L*` weapon
+    swapped for the stale one and carried in the bag: an owned piece holds the
+    objective (ruling Q), so `m*` is fought for XP, and the plan must arm the
+    carried weapon before the fight."""
+    held, monster = _wearing_its_target()
+    weapon = held.equipment["weapon_slot"]
+    assert weapon is not None and weapon != WEAK_WEAPON
+    stale = dataclasses.replace(
+        held, equipment={**held.equipment, "weapon_slot": WEAK_WEAPON},
+        inventory={**held.inventory, weapon: held.inventory.get(weapon, 0) + 1})
+    report = _run(stale)
     reprs = [repr(a) for a in report.plan]
     assert reprs, (repr(report.selected_goal), report.plan)
-    assert reprs[0] == f"OptimizeLoadout({TARGET_MONSTER})", reprs
-    assert f"Fight({TARGET_MONSTER})" in reprs, reprs
-    assert (reprs.index(f"Fight({TARGET_MONSTER})")
-            > reprs.index(f"OptimizeLoadout({TARGET_MONSTER})"))
-    assert isinstance(report.selected_goal, UpgradeEquipmentGoal), (
-        repr(report.selected_goal), report.plan)
+    assert reprs[0] == f"OptimizeLoadout({monster})", reprs
+    assert f"Fight({monster})" in reprs, reprs
+    assert reprs.index(f"Fight({monster})") > reprs.index(f"OptimizeLoadout({monster})")
+    assert report.decision.chosen_root == ReachCharLevel(level=held.level + 1)
 
 
 def _wearing_its_target():
@@ -163,7 +160,8 @@ class TestFullBagRelief:
     """STRONGLY PREFERRED (brief Step 3): full-bag relief precedes the swap.
 
     Investigated with the real bundle+GamePlayer harness (same construction
-    as `_suboptimal_scenario`, plus `JUNK_STACKS` packing every inventory
+    as `_full_bag_scenario` below — weak weapon worn, the real one carried —
+    plus `JUNK_STACKS` packing every inventory
     slot so `inventory_slots_free == 0`): `GrindCharacterXPGoal` becomes
     completely UNPLANNABLE in that state — `FightAction.is_applicable` is
     blocked by the loadout gate (wooden_stick != optimal) and

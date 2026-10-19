@@ -299,7 +299,9 @@ def test_plan_command_scenario_prints_tree_chosen_root(capsys):
     pins the jewelrycrafting climb that gates its furthest-behind slot (see
     test_progression_tree's per-scenario pins; the gear-target tier here is 5,
     not 1 — that scenario runs `derive_combat_stats`). The Phase-3/4a shadow chrome (compact `tree:` agreement line,
-    `TREE (shadow` block) is gone from the output."""
+    `TREE (shadow` block) is gone from the output. Since the global gear
+    objective (Task 5) the root is `L*`'s first missing piece, the iron
+    sword."""
     with patch.object(plan_cmd, "check_mutation_lock",
                       return_value=MagicMock(state="clear")):
         with patch.object(plan_cmd.Config, "from_token_file") as cfg:
@@ -307,8 +309,7 @@ def test_plan_command_scenario_prints_tree_chosen_root(capsys):
                           refresh_game_data=False, scenario="l10_weapon_upgrade")
             cfg.assert_not_called()
     out = capsys.readouterr().out
-    assert "chosen_root: ReachSkillLevel(" in out
-    assert "jewelrycrafting" in out
+    assert "chosen_root: ObtainItem(code='iron_sword', quantity=1, slot='weapon_slot')" in out
     assert "tree: " not in out
     assert "TREE (shadow" not in out
 

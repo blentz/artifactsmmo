@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
 import artifactsmmo_cli.ai.player as player_mod
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.combat import FightAction
@@ -323,7 +324,7 @@ def test_a_lease_s_boss_and_loadout_are_the_fight_ahead(tmp_path: Path, monkeypa
     """Leader or member, the lease's boss is the fight its potions are stocked
     for, in the party loadout beside the other members' cards (residual R2)."""
     lor, _ = _player(tmp_path, "Lor")
-    monkeypatch.setattr(lor, "_winnable_farm_target", lambda *_: None)
+    monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: None)
     lor._draws_enabled = False
     assert lor._party_fight_loadout() is None
     seen: list[object] = []

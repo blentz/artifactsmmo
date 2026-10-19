@@ -59,8 +59,6 @@ from artifactsmmo_cli.ai.combat import (
     is_winnable,
     lost_fights,
     predict_win,
-    secure_win,
-    unpotioned,
     win_probability,
 )
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
@@ -103,8 +101,7 @@ from artifactsmmo_cli.ai.failure_recovery_core import (
 )
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_objective import gear_objective
-from artifactsmmo_cli.ai.gear_objective_result import GearObjective
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective, gear_keep_for
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
 from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
@@ -130,7 +127,6 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.xp_gain import xp_gained
 from artifactsmmo_cli.ai.live_event import LiveEvent
 from artifactsmmo_cli.ai.loadout_profiles import (
-    active_profile_gear,
     combat_key,
     gather_key,
     party_combat_key,
@@ -205,7 +201,6 @@ from artifactsmmo_cli.ai.tiers.root_group import root_group_of
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.win_threshold_core import THRESHOLD_WINDOW_DAYS, win_thresholds_from_rows
-from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from artifactsmmo_cli.ai.xp_demand import demand_roots, xp_demand
 from artifactsmmo_cli.client_manager import ClientManager
@@ -3023,22 +3018,6 @@ class GamePlayer:
             return None
         return s.task_code
 
-    def _winnable_farm_target(self, task_monster: str | None,
-                              objective: GearObjective | None) -> str | None:
-        """The cycle's grind target (spec 2026-10-18 §2.4, §6.2): the held
-        monsters task's monster (`_task_aligned_monster`) first, as always;
-        otherwise `m*` of the cycle's gear objective while `L*` is held, and
-        None while a piece of it is missing, so no fight is chosen for XP then
-        (acquisition fights still pay theirs). The proved cascade
-        (`winnable_farm_target_pure`) keeps the precedence: `m*` is its path
-        tier, winnable exactly when held, and nothing is picked below it."""
-        return winnable_farm_target_pure(CascadeInputs(
-            task_monster=task_monster,
-            path_monster=objective.monster if objective is not None else None,
-            path_winnable=objective is not None and objective.held,
-            pick_winnable=None,
-        ))
-
     def _step_decline(
         self, state: WorldState, game_data: GameData, ctx: SelectionContext,
         actions: list[Action],
@@ -3084,28 +3063,6 @@ class GamePlayer:
                 >= _BANK_RETRY_SECONDS
                 and self.state.level > bank_blocker.blocked_at_char_level):
             self._blockers.clear("bank")
-
-    def _active_gear_keep(self, combat_monster: str | None,
-                          near_term_targets: frozenset[str]) -> dict[str, int]:
-        """The active-profile gear-demand KEEP map {code: keep_count} threaded to
-        the keep economy (spec 2026-06-28-gear-loadout-profiles): the deduped
-        per-code demand across the active loadout profiles UNION the in-flight
-        upgrade codes (near_term gear + tools currently being pursued, kept at 1
-        spare). Empty when no profiles are recorded and no in-flight upgrade — the
-        consumers then fall back to the legacy blanket equippable keep.
-
-        `gather_skills` is passed empty (mirrors the BANK_EXPAND wiring): the
-        recent-window inside `active_profile_gear` still contributes gather task
-        profiles via the learning history."""
-        assert self.state is not None and self.game_data is not None
-        keep: dict[str, int] = {}
-        if self.history is not None:
-            keep = dict(active_profile_gear(
-                self.state, self.game_data, self.history,
-                combat_monster, frozenset()))
-        for code in near_term_targets:
-            keep.setdefault(code, 1)
-        return keep
 
     def _own_unmet_demand(self, state: "WorldState", game_data: GameData) -> dict[str, int]:
         """This character's unmet closure demand for its chosen root, minus
@@ -4061,7 +4018,7 @@ class GamePlayer:
         # The context is built first with the held monsters task's monster as
         # its grind target (the only one known before the gear objective), the
         # cycle's gear objective is priced on it, and only then is the grind
-        # target the objective names set (`_winnable_farm_target`), before
+        # target the objective names set (`attach_gear_objective`), before
         # anything below reads it.
         task_monster = self._task_aligned_monster()
         # CRAFT_RELIEF guard needs the long-term gear / tool targets so it
@@ -4076,7 +4033,8 @@ class GamePlayer:
             # Usable-now keepers for the skill-grind `wanted` preference.
             near_term_targets = frozenset(
                 self._objective.near_term_gear(self.state).values()) | target_tools
-        task_keep = self._active_gear_keep(task_monster, near_term_targets)
+        task_keep = gear_keep_for(self.state, self.game_data, self.history,
+                                  task_monster, near_term_targets)
         bank_blocker = self._blockers.get("bank")
         ctx = SelectionContext(
             bank_accessible=bank_blocker is None,
@@ -4144,15 +4102,7 @@ class GamePlayer:
             fight_records=(fight_records(self.state, self.game_data, self.history)
                            if self.history is not None else ()),
         )
-        objective = gear_objective(self.state, self.game_data, ctx, self.history)
-        combat_monster = self._winnable_farm_target(task_monster, objective)
-        ctx = replace(
-            ctx, gear_objective=objective, combat_monster=combat_monster,
-            gear_keep=(task_keep if combat_monster == task_monster
-                       else self._active_gear_keep(combat_monster, near_term_targets)),
-            combat_risky=(combat_monster is not None
-                          and not secure_win(unpotioned(replace(self.state, hp=self.state.max_hp)),
-                                             self.game_data, combat_monster)))
+        ctx = attach_gear_objective(self.state, self.game_data, ctx, self.history)
         # Skill demand first (spec 2026-10-13 §2): the loadout's make prices
         # credit the skills it names, and it no longer reads the shortfall.
         skills, level = xp_demand(

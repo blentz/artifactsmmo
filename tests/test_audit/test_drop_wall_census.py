@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -127,9 +128,21 @@ def test_only_the_closes_arm_is_exercised_and_the_matrix_says_so(
     perfect_bow) and `l10_gearcrafting_gap_combat_blocked` (cowhide for
     iron_sword) now derive their stats from their gear, so their walks resolve
     to rows whose dropper the loadout cannot beat but an achievable piece
-    would."""
-    assert sum(1 for r in results if r.gap == CLOSES) == 4
-    assert sum(1 for r in results if r.gap == OUT_OF_REACH) == 0
+    would.
+
+    4 -> 6 CLOSES, 0 -> 9 OUT_OF_REACH (Task 5, global gear objective): the
+    walk's rows are each scenario's `L*` pieces now. `forest_ring` (dropped by
+    `mushmush`) is an `L*` piece in six L10-12 scenarios: CLOSES in
+    `l10_gearcrafting_gap` (both ring slots), OUT_OF_REACH in
+    `l10_weapon_upgrade`, `l12_taskgated_bag` (with its `mushroom`),
+    `l10_gearcrafting_gap_combat_blocked` and `l12_deep_chain_grind` (both ring
+    slots each) — the census judges the dropper from the WORN gear
+    (`drop_evidence`), the objective from the projected fighter wearing `L*`,
+    so a piece the fixed point reaches can read out of reach here. `wooden_club`
+    (dropped by `ogre`) is a CLOSES row in the four `l32_*` cells. The two old
+    rows (`perfect_bow`, `iron_sword`'s cowhide) left with the tier sheet."""
+    assert sum(1 for r in results if r.gap == CLOSES) == 6
+    assert sum(1 for r in results if r.gap == OUT_OF_REACH) == 9
     assert all(not r.is_resolved_root for r in _walls(results))
 
 
@@ -165,7 +178,8 @@ def test_the_crossing_is_the_pricers_own_answer(results: list[DropResult]) -> No
     state = scenario_state(scenario, game_data)
     resolution = resolve_root(state, game_data,
                               CharacterObjective.from_game_data(game_data),
-                              NO_PROFILE_CONTEXT, None)
+                              attach_gear_objective(state, game_data, NO_PROFILE_CONTEXT, None),
+                              None)
     candidate = next(c for c in (resolution.root, *resolution.alternatives)
                      if repr(c) == wall.candidate)
     assert wall.evidence is not None
@@ -316,9 +330,9 @@ def test_a_root_the_walk_cannot_resolve_is_a_visible_row(
 def test_the_summary_reports_the_arm_counts(results: list[DropResult]) -> None:
     line = summary_line(results)
     assert "candidate cells" in line
-    assert "gate opens 1 of 4 walls (store-less)" in line
-    assert "closes 4" in line
-    assert "out_of_reach 0" in line
+    assert "gate opens 0 of 15 walls (store-less)" in line
+    assert "closes 6" in line
+    assert "out_of_reach 9" in line
     assert "on ALTERNATIVES" in line
 
 
@@ -372,11 +386,19 @@ def test_the_census_keeps_counting_a_wall_the_gate_now_prices(
     since the drop gate wore a potion loadout (2026-10-10; 9 and 2 before);
     4 walls, 1 opened, since `l30_band_entry` and
     `l10_gearcrafting_gap_combat_blocked` derive their stats (2026-10-18, ruling
-    R): neither new wall is one the gate opens."""
+    R): neither new wall is one the gate opens.
+
+    15 walls, 0 opened, since the walk's rows are each scenario's `L*` pieces
+    (Task 5, global gear objective; the rows are named in
+    `test_only_the_closes_arm_is_exercised_and_the_matrix_says_so`): the one
+    wall the gate opened left with the tier sheet, so the gate-on price of
+    every wall is the structural one. The census still counts all 15 walls with
+    the gate OFF, which is the guard's subject; its "a wall the gate opens is
+    still counted" half has no witness on the committed set now."""
     walls = _walls(results)
-    assert len(walls) == 4
+    assert len(walls) == 15
     opened = [w for w in walls if w.gate_price < UNOBTAINABLE_PER_UNIT]
-    assert len(opened) == 1
+    assert len(opened) == 0
     for wall in opened:
         assert wall.base_price >= UNOBTAINABLE_PER_UNIT
         assert wall.gate_price < wall.base_price

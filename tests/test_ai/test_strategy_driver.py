@@ -1,5 +1,6 @@
 import dataclasses
 from dataclasses import dataclass
+from fractions import Fraction
 from unittest.mock import patch
 
 import pytest
@@ -24,6 +25,7 @@ from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.fight_tiles import fight_tiles
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict as sd_goal_from_dict
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.cancel_orders import CancelOrdersGoal
@@ -1837,10 +1839,14 @@ def test_arbiter_equips_second_ring_into_empty_slot():
     obj = CharacterObjective.from_game_data(gd)
     state = make_state(level=5, inventory={"copper_ring": 1},
                        equipment={"ring1_slot": "copper_ring"})
-    # The arbiter targets the empty ring2 slot...
+    # Ruling Q (global gear objective): the spare is OWNED, so `L*` (a
+    # copper_ring in each ring slot) misses nothing and the root acquires
+    # nothing — no second copy is bought; the fight-loadout gate equips it.
+    held = GearObjective("chicken", {"ring1_slot": "copper_ring", "ring2_slot": "copper_ring"},
+                         Fraction(1), ())
     eng = StrategyEngine(obj)
-    d = eng.decide(state, gd)
-    assert d.chosen_root == ObtainItem("copper_ring", slot="ring2_slot")
+    d = eng.decide(state, gd, ctx=_ctx(gear_objective=held))
+    assert d.chosen_root == ReachCharLevel(level=6)
     # ...and the equip is ACTUALLY applicable + lands the ring in ring2_slot.
     # (This is what was inert before the guard carve-out — it must FAIL on the
     # pre-2026-06-14 guard and PASS now.)

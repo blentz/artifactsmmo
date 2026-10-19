@@ -1,0 +1,61 @@
+"""The root walk's entry (spec 2026-10-18 §2.4): the next missing `L*` piece.
+
+`ctx.gear_objective` is the cycle's `(L*, m*)`, computed once by the player.
+While a piece of `L*` is missing the root is the next step on its acquisition
+plan; only once `L*` is held does the character grind character XP, on `m*`.
+A level-up is not an acquisition step (§6.2), so no `ReachCharLevel` heads the
+walk while a piece is missing.
+"""
+
+# MODULE import, the idiom `root.py` uses on its own cycles: `root` imports
+# this module to build its entry, so whichever of the two is reached first
+# executes while the other is half built, and a NAME import of `RootWalk` /
+# `IsThisTargetBlocked` would raise ImportError. Binding the module object
+# defers the lookups to CALL time.
+from artifactsmmo_cli.ai.decision import Decision
+from artifactsmmo_cli.ai.decisions import root as _root
+from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ReachCharLevel
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.world_state import WorldState
+
+
+class WhichPieceIsNext(Decision[MetaGoal]):
+    """Which missing `L*` piece does the character acquire next?
+
+    * `L*` held (§2.4.1): `ReachCharLevel(state.level + 1)`, whose step fights
+      `m*` (`ctx.combat_monster` is `m*` exactly while `L*` is held). One level,
+      not a milestone: `(L*, m*)` is recomputed every cycle, so a level-up that
+      makes better gear legal retargets the very next cycle.
+    * a piece missing (§2.4.2): the FIRST piece, in `missing`'s own order
+      (layer, then gain per price — never re-sorted here), whose step can be
+      served this cycle (`RootWalk.serves`) goes to `IsThisTargetBlocked`: a
+      crafting-skill gate becomes the next skill level, a missing material its
+      `ObtainItem`. A piece whose step is declined is recorded with its reason
+      and the next piece is asked. Every piece declined is no root.
+    * no objective: the wall, `None` — no achievable loadout pays XP on any
+      monster, so there is neither a piece to build nor a fight to grind.
+    """
+
+    name = "WhichPieceIsNext"
+
+    def __init__(self, objective: CharacterObjective, walk: "_root.RootWalk") -> None:
+        self.objective = objective
+        self.walk = walk
+
+    def resolve(self, state: WorldState, game_data: GameData,
+                ctx: SelectionContext, history: LearningStore | None
+                ) -> "Decision[MetaGoal] | MetaGoal | None":
+        self.walk.trail.append(self.name)
+        target = ctx.gear_objective
+        if target is None:
+            return None
+        if target.held:
+            return ReachCharLevel(level=state.level + 1)
+        for piece in target.missing:
+            gear = self.objective.classify_target(piece.code, state)
+            if self.walk.serves(piece.slot, gear, state, game_data, ctx, history):
+                return _root.IsThisTargetBlocked(piece.slot, gear, self.walk)
+        return None

@@ -37,6 +37,7 @@ from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.thresholds import CRITICAL_HP_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, active_guards
+from artifactsmmo_cli.ai.tiers.meta_goal import ReachSkillLevel
 from artifactsmmo_cli.ai.world_state import WorldState
 
 CELL = "l22_rest_for_combat"
@@ -114,15 +115,20 @@ def test_the_census_context_can_never_see_this_guard(
 def test_resting_to_full_silences_the_guard_and_moves_the_goal(
         bundle_game_data: GameData, state: WorldState) -> None:
     """Proof it bites. ONE field changes — HP to max — and the guard goes
-    quiet, the goal stops being RestoreHP and the plan becomes the fight the
-    guard was holding back."""
+    quiet and the goal stops being RestoreHP.
+
+    RE-DERIVED Task 5 (global gear objective): the goal the guard was holding
+    back is no longer the task fight. The root walk pursues the first missing
+    `L*` piece — `battlestaff`, weaponcrafting-gated — ahead of the task root,
+    so the rested character climbs weaponcrafting; the task's monster is
+    still the grind target the guard reads."""
     rested = dataclasses.replace(state, hp=state.max_hp)
     player, report = _planned(rested, bundle_game_data)
     assert player._last_ctx.combat_monster == TARGET
     assert GuardKind.REST_FOR_COMBAT not in active_guards(
         rested, bundle_game_data, None, player._last_ctx)
-    assert repr(report.selected_goal) != "RestoreHP"
-    assert report.plan and "Fight(" in repr(report.plan[0])
+    assert report.decision.chosen_root == ReachSkillLevel(skill="weaponcrafting", level=16)
+    assert repr(report.selected_goal) == "ReachSkill(weaponcrafting->16)"
 
 
 def test_no_other_scenario_reaches_this_guard(

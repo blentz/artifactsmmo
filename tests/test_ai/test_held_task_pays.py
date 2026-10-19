@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 from sqlmodel import Session as SqlSession
 
+import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
 import artifactsmmo_cli.ai.held_task_pays as pays_mod
 import artifactsmmo_cli.ai.player as player_mod
 from artifactsmmo_cli.ai.best_loadout import best_loadout
@@ -202,11 +203,11 @@ class TestPlayerPricesThePayOncePerCycle:
         player = GamePlayer(character="probe", history=None)
         player.state = state
         player.game_data = GameData()
-        monkeypatch.setattr(player, "_winnable_farm_target", lambda *_: None)
+        monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: None)
         monkeypatch.setattr(player, "_task_aligned_monster", lambda: None)
         monkeypatch.setattr(player_mod, "pool_draw", lambda *a: (False, None))
         monkeypatch.setattr(player_mod, "fight_ahead_loadout", lambda *a: None)
-        monkeypatch.setattr(player_mod, "secure_win", lambda *a: True)
+        monkeypatch.setattr(ctx_mod, "secure_win", lambda *a: True)
 
         def fake(state_, game_data, ctx, monster, history):  # type: ignore[no-untyped-def]
             pays.append((monster, ctx.combat_monster))
@@ -218,7 +219,7 @@ class TestPlayerPricesThePayOncePerCycle:
             self, monkeypatch: pytest.MonkeyPatch) -> None:
         pays: list[object] = []
         player = self._player(monkeypatch, STATE, pays)
-        monkeypatch.setattr(player, "_winnable_farm_target", lambda *_: "imp")
+        monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: "imp")
         ctx = player._selection_context()
         assert ctx.held_task_pays is True
         assert pays == [("imp", "imp")]
@@ -227,7 +228,7 @@ class TestPlayerPricesThePayOncePerCycle:
         pays: list[object] = []
         monsters = replace(STATE, task_type="monsters")
         player = self._player(monkeypatch, monsters, pays)
-        monkeypatch.setattr(player, "_winnable_farm_target", lambda *_: "imp")
+        monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: "imp")
         assert player._selection_context().held_task_pays is False
         assert pays == []
 

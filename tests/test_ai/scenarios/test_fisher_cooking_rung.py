@@ -56,7 +56,7 @@ from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.grind_cycle_census import earned_skill
-from artifactsmmo_cli.audit.open_rung_completeness import census_state, routed_skills
+from tests.test_ai.scenarios.routing import scenario_resolution, skills_offered
 
 CELL = "l24_fisher_cooking_rung"
 ROLE = "fisher"
@@ -200,14 +200,24 @@ def test_no_scenario_routes_cooking_or_fishing_undemanded(bundle_game_data: Game
     scenario as the unconditional floor, and its grind target pulled fishing in
     (`cooking -> cooked_shrimp -> shrimp -> fishing@N`): live, four characters
     spent ~100 cycles each on `Gather(trout_spot)` with nothing asking for a
-    fish. `resolve_root`'s natural walk (no tier food short) now routes neither,
-    nor any other gathering skill. The demanded half is pinned in
-    `test_orphan_gate_scenarios.TestTierFoodDemandsFishing` and
+    fish. `resolve_root`'s natural walk (no tier food short) now routes neither.
+    The one gathering skill it routes is DEMANDED: `l12_taskgated_bag`'s
+    missing iron pieces are gearcrafting-reachable, and their `iron_bar` needs
+    `iron_ore` at mining 10, above the character's own. The demanded half is
+    pinned in `test_orphan_gate_scenarios.TestTierFoodDemandsFishing` and
     `test_decisions_root.test_cooking_climbs_when_a_better_tier_food_is_due`."""
     routed: set[str] = set()
-    for scenario in SCENARIOS.values():
-        routed |= routed_skills(census_state(scenario, bundle_game_data), bundle_game_data)
-    assert routed.isdisjoint({SKILL, GATHER_SKILL, "mining", "woodcutting", "alchemy"})
+    mining: list[str] = []
+    for name in SCENARIOS:
+        cell = skills_offered(scenario_resolution(name, bundle_game_data))
+        routed |= cell
+        if "mining" in cell:
+            mining.append(name)
+    assert routed.isdisjoint({SKILL, GATHER_SKILL, "woodcutting", "alchemy"})
+    assert mining == ["l12_taskgated_bag"]
+    bag = scenario_resolution("l12_taskgated_bag", bundle_game_data)
+    assert ReachSkillLevel(skill="mining", level=10) in bag.alternatives
+    assert ObtainItem(code="iron_boots", quantity=1, slot="boots_slot") in bag.alternatives
 
 
 def test_the_fishers_cooking_root_plans_a_cooking_grind(

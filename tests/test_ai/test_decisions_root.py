@@ -24,12 +24,14 @@ reached by an empty collection instead. Fix-round-1 found exactly that in two
 of these tests.
 """
 from dataclasses import replace
+from fractions import Fraction
 
 import pytest
 
 import artifactsmmo_cli.ai.decisions.root as _root_mod
 import artifactsmmo_cli.ai.tiers.tier_progress as tier_progress
 from artifactsmmo_cli.ai import gather_demand as _gather_demand
+from artifactsmmo_cli.ai.decision import Decision, resolve_node
 from artifactsmmo_cli.ai.decisions.root import (
     CanIClearMyTier,
     IsAFightBlockingMe,
@@ -47,8 +49,10 @@ from artifactsmmo_cli.ai.decisions.root import (
 )
 from artifactsmmo_cli.ai.drop_evidence import drop_evidence
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.item_catalog import ItemStats
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
+from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.task_horizon import (
@@ -58,6 +62,7 @@ from artifactsmmo_cli.ai.task_horizon import (
     TaskHorizon,
 )
 from artifactsmmo_cli.ai.tiers.meta_goal import (
+    MetaGoal,
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
@@ -65,7 +70,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
 from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, normal_band, tier_of_level
-from artifactsmmo_cli.audit.open_rung_completeness import census_state
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_strategy_driver import _ctx
@@ -724,21 +728,40 @@ def test_an_open_rung_with_nothing_to_do_is_an_honest_wall(monkeypatch):
 # resolve_root — the whole walk
 # ---------------------------------------------------------------------------
 
-def test_resolve_root_walks_gear_to_the_skill_gate_and_names_the_path():
+def _pieces(*codes: tuple[str, str]) -> GearObjective:
+    """A gear objective missing `codes` ((slot, code) pairs), in that order."""
+    pieces = tuple(GearPiece(slot, code, 0, Fraction(1), Fraction(1)) for slot, code in codes)
+    return GearObjective("chicken", {slot: code for slot, code in codes}, Fraction(1), pieces)
+
+
+_FIVE = _pieces(("shield_slot", "iron_shield"), ("weapon_slot", "ash_club"),
+                ("helmet_slot", "copper_helmet"), ("leg_armor_slot", "leather_legs"),
+                ("boots_slot", "leather_boots"))
+"""The fixture's five candidates as missing `L*` pieces, in the order the
+old slot walk ranked them (the skill-gated shield first)."""
+
+_HELD = _pieces()
+"""An objective whose `L*` is held: nothing missing."""
+
+
+def _with(objective: GearObjective | None, **kw):  # type: ignore[no-untyped-def]
+    return replace(_ctx(**kw), gear_objective=objective)
+
+
+def test_resolve_root_walks_the_first_piece_to_its_skill_gate_and_names_the_path():
     gd = _gd()
-    resolution = resolve_root(make_state(level=15), gd, _objective(gd), _ctx(), None)
+    resolution = resolve_root(make_state(level=15), gd, _objective(gd), _with(_FIVE), None)
     assert resolution.root == ReachSkillLevel(skill="gearcrafting", level=2)
-    assert resolution.trail == ("IsAFightBlockingMe", "IsMyGearBehindMyTier",
-                                "WhichSlotIsFurthestBehind",
-                                "IsThisTargetBlocked")
+    assert resolution.trail == ("WhichPieceIsNext", "IsThisTargetBlocked")
 
 
-def test_the_siblings_become_the_alternatives_then_the_trunk_then_the_orphans():
+def test_the_other_pieces_become_the_alternatives_then_the_task_then_the_orphans():
     """leg_armor and boots are both blocked on two `leather`, so they resolve
     to the SAME `ObtainItem` and appear once.
 
-    THREE ORDERED GROUPS, and the order is the whole contract: every gear
-    sibling, then the trunk, then the orphan skill roots
+    ORDERED GROUPS, and the order is the whole contract: every other missing
+    piece in the objective's order, then (no trunk: a piece is missing, spec
+    2026-10-18 §6.2) the task, then the orphan skill roots
     (`_orphan_skill_roots`). The orphan group admits only a skill the DAG
     DEMANDS (USER 2026-10-08): `ash_tree` and `copper_rocks` gate at
     woodcutting@1 and mining@1, this character already stands at the floor,
@@ -746,83 +769,60 @@ def test_the_siblings_become_the_alternatives_then_the_trunk_then_the_orphans():
     `tests/test_ai/test_orphan_skill_roots_demand.py` for the group admitting
     a skill when something genuinely demands it."""
     gd = _gd()
-    resolution = resolve_root(make_state(level=15), gd, _objective(gd), _ctx(), None)
-    # USER 2026-10-08 "Only when demanded": nothing here demands a skill no
-    # root already climbs, so the orphan group is empty.
+    resolution = resolve_root(make_state(level=15), gd, _objective(gd), _with(_FIVE), None)
     assert resolution.alternatives == (
         ObtainItem(code="ash_club", quantity=1, slot="weapon_slot"),
         ObtainItem(code="copper_helmet", quantity=1, slot="helmet_slot"),
         ObtainItem(code="leather", quantity=2),
-        ReachCharLevel(level=20),
-        # The task objective, behind the trunk: the ctx owes a draw (Phase
-        # 5-2c-iii-c-2 #3 — the accept is its step).
+        # The task objective: the ctx owes a draw (Phase 5-2c-iii-c-2 #3 —
+        # the accept is its step).
         ReachTaskOutcome(task_code=None),
     )
 
 
-def test_the_slot_walk_is_history_free():
-    """The head is `_slot_order`'s first entry on every call: the walk holds
+def test_the_walk_is_history_free():
+    """The head is the objective's first piece on every call: the walk holds
     no history. Rotation away from a stuck head is the intention's job (its
     stall and budget end it, and a spent budget's goal yields one turn in the
     arbiter, Phase 4-2b), not the walk's."""
     gd = _gd()
     state = make_state(level=15)
-    heads = {repr(resolve_root(state, gd, _objective(gd), _ctx(), None).root)
+    heads = {repr(resolve_root(state, gd, _objective(gd), _with(_FIVE), None).root)
              for _ in range(10)}
     assert heads == {repr(ReachSkillLevel(skill="gearcrafting", level=2))}
 
 
 def test_converting_a_sibling_does_not_pollute_the_trail():
-    """The four siblings are each resolved through `IsThisTargetBlocked` to
-    become MetaGoals. Those visits use a throwaway walk, so the trail names
+    """The other four pieces are each resolved through `IsThisTargetBlocked`
+    to become MetaGoals. Those visits use a throwaway walk, so the trail names
     only the nodes the real walk went through."""
     gd = _gd()
-    resolution = resolve_root(make_state(level=15), gd, _objective(gd), _ctx(), None)
+    resolution = resolve_root(make_state(level=15), gd, _objective(gd), _with(_FIVE), None)
     assert resolution.trail.count("IsThisTargetBlocked") == 1
 
 
-def test_the_chosen_root_is_never_repeated_as_its_own_alternative(monkeypatch):
+def test_the_chosen_root_is_never_repeated_as_its_own_alternative():
+    """A held objective's root is the trunk, `ReachCharLevel(level + 1)`; the
+    trunk is offered only while held, and here it IS the root, so it is not
+    repeated as its own alternative. The demand gate leaves the orphan group
+    empty for the reason the alternatives test gives."""
     gd = _gd()
-    gd._monster_level = {"chicken": 1}      # see the trunk test: without a
-    gd._monster_type = {"chicken": "normal"}  # monster the patch is inert
-    monkeypatch.setattr(tier_progress, "is_winnable", lambda s, g, c, h: True)
-    resolution = resolve_root(_geared_state(), gd, _objective(gd), _ctx(), None)
-    assert resolution.root == ReachCharLevel(level=20)
-    # The trunk is the ROOT here, so it is not repeated as its own alternative.
-    # `_geared_state` wears every candidate, so `ordered` carries no gear
-    # sibling, and the demand gate leaves the orphan group empty for the same
-    # reason `test_the_siblings_become_the_alternatives_then_the_trunk_then_
-    # the_orphans` does: woodcutting and mining gate at @1 in this catalogue
-    # and this character already stands at the floor, so nothing is UNMET.
-    # USER 2026-10-08 "Only when demanded": nothing here demands a skill no
-    # root already climbs, so the orphan group is empty.
+    resolution = resolve_root(_geared_state(), gd, _objective(gd), _with(_HELD), None)
+    assert resolution.root == ReachCharLevel(level=16)
     assert resolution.alternatives == (
         ReachTaskOutcome(task_code=None),  # the owed draw, behind the trunk-root
     )
-    assert resolution.trail == ("IsAFightBlockingMe", "IsMyGearBehindMyTier",
-                                "IsThereACombatTarget",
-                                "CanIClearMyTier")
+    assert resolution.trail == ("WhichPieceIsNext",)
 
 
-def test_a_wall_still_offers_the_trunk_as_an_alternative(monkeypatch):
+def test_a_wall_offers_no_trunk():
+    """No gear objective (no achievable loadout pays XP anywhere) is the wall:
+    no root, and no trunk on offer, since there is no monster to grind it on.
+    The task and orphan roots are still offered."""
     gd = _gd()
-    gd._monster_level = {"chicken": 1}
-    gd._monster_type = {"chicken": "normal"}
-    monkeypatch.setattr(tier_progress, "is_winnable", lambda s, g, c, h: False)
-    resolution = resolve_root(_geared_state(), gd, _objective(gd), _ctx(), None)
+    resolution = resolve_root(_geared_state(), gd, _objective(gd), _with(None), None)
     assert resolution.root is None
-    # The wall is still `None` — the orphan skill roots are OFFERED behind the
-    # trunk, they do not replace the wall verdict. `CanIClearMyTier`'s
-    # docstring records the measurement that rejected putting them on this arm.
-    # The orphan group itself is empty here for the same reason the sibling
-    # test above is: nobody demands woodcutting or mining past the floor both
-    # gate at in this catalogue.
-    # USER 2026-10-08 "Only when demanded": nothing here demands a skill no
-    # root already climbs, so the orphan group is empty.
-    assert resolution.alternatives == (
-        ReachCharLevel(level=20),
-        ReachTaskOutcome(task_code=None),  # the owed draw, behind the trunk
-    )
+    assert resolution.alternatives == (ReachTaskOutcome(task_code=None),)
 
 
 # ---------------------------------------------------------------------------
@@ -848,7 +848,7 @@ def test_the_rule_admits_exactly_the_demanded_skills(bundle_game_data: GameData)
 
     `l1_fresh` is the tie case (every skill at the floor), so the order is
     `SKILL_NAMES`."""
-    state = census_state(SCENARIOS["l1_fresh"], bundle_game_data)
+    state = derived_scenario_state(SCENARIOS["l1_fresh"], bundle_game_data)
     offered = [ObtainItem(code=code, quantity=1) for code in
               ("birch_wood", "golden_shrimp", "nettle_leaf", "steel_bar")]
     assert _orphan_skill_roots(state, bundle_game_data, offered, NO_PROFILE_CONTEXT) == (
@@ -925,7 +925,7 @@ def test_the_orphan_order_is_the_gap_to_the_character_level(
     a fixed vocabulary order alone could not do that. alchemy and woodcutting
     are parked at their demanded level (20) so the contest is fishing against
     mining and nothing else."""
-    base = census_state(SCENARIOS["l1_fresh"], bundle_game_data)
+    base = derived_scenario_state(SCENARIOS["l1_fresh"], bundle_game_data)
     offered = [ObtainItem(code=code, quantity=1) for code in
               ("birch_wood", "golden_shrimp", "nettle_leaf", "steel_bar")]
     parked = {"alchemy": 20, "woodcutting": 20}
@@ -946,7 +946,7 @@ def test_cooking_climbs_when_a_better_tier_food_is_due(bundle_game_data: GameDat
     the climb to the level the food asks for. `resolve_root` could not yield
     a cooking root at all before the orphan seam: no cooking recipe produces
     an equippable."""
-    state = census_state(SCENARIOS["l24_fisher_cooking_rung"], bundle_game_data)
+    state = derived_scenario_state(SCENARIOS["l24_fisher_cooking_rung"], bundle_game_data)
     objective = CharacterObjective.from_game_data(bundle_game_data)
 
     def skill_roots(ctx):  # type: ignore[no-untyped-def]
@@ -965,13 +965,16 @@ def test_the_orphan_roots_sit_behind_the_trunk(bundle_game_data: GameData):
     objective's own provisioning gets planned; an orphan skill climb placed
     ahead of it displaced `GatherMaterials(mithril_bar)` at
     `l48_band_adequate` — the gear that breaks the L38-48 wall. Behind it, an
-    orphan root is reached exactly when nothing else can be served."""
-    state = census_state(SCENARIOS["l1_fresh"], bundle_game_data)
+    orphan root is reached exactly when nothing else can be served. The trunk
+    is offered only while `L*` is held, so the objective here is held."""
+    state = derived_scenario_state(SCENARIOS["l1_fresh"], bundle_game_data)
     # A short tier food demands cooking and fishing, so the group is not empty.
-    due = replace(_ctx(), supply_shortfall=(("cooked_shrimp", 10),))
-    alts = resolve_root(state, bundle_game_data,
-                        CharacterObjective.from_game_data(bundle_game_data),
-                        due, None).alternatives
+    due = replace(_with(_HELD), supply_shortfall=(("cooked_shrimp", 10),))
+    resolution = resolve_root(state, bundle_game_data,
+                              CharacterObjective.from_game_data(bundle_game_data),
+                              due, None)
+    # Held: the trunk is the root itself, ahead of every alternative.
+    alts = (resolution.root, *resolution.alternatives)
     trunk = next(i for i, alt in enumerate(alts)
                  if isinstance(alt, ReachCharLevel))
     skills = [i for i, alt in enumerate(alts) if isinstance(alt, ReachSkillLevel)]
@@ -998,6 +1001,13 @@ def _horizon(verdict: str | None):
             return None
         return TaskHorizon(monster="pig", verdict=verdict, gear_target=None)
     return _fake
+
+
+def _old_walk(state, gd, ctx, walk=None):  # type: ignore[no-untyped-def]
+    """The pre-objective walk, driven whole from `IsAFightBlockingMe`."""
+    entry: Decision[MetaGoal] | MetaGoal | None = IsAFightBlockingMe(
+        _objective(gd), walk or RootWalk())
+    return resolve_node(entry, state, gd, ctx, None)
 
 
 def _arm(monkeypatch, verdict, combat_monster, gd=None, propped=False, risky=False):
@@ -1074,17 +1084,21 @@ def test_risky_target_without_gear_still_grinds(monkeypatch):
         asked.append("deficit")
         return None
     monkeypatch.setattr(_root_mod, "deficit_upgrade_target", no_gear)
-    resolution = resolve_root(_geared_state(), gd, _objective(gd),
-                              _ctx(combat_monster="chicken", combat_risky=True), None)
+    root = _old_walk(_geared_state(), gd, _ctx(combat_monster="chicken", combat_risky=True))
     assert asked
-    assert resolution.root == ReachCharLevel(level=20)
+    assert root == ReachCharLevel(level=20)
 
 
-def test_a_potion_propped_only_win_keeps_the_gear_root_ahead_of_the_trunk(monkeypatch):
-    """A character whose only win is potion-propped gets the gear root, and the
-    trunk stays behind every gear alternative — exactly the walk of a character
-    with no fight at all. Both gear arms: the tier sheet (no fight held) and the
-    fight's deficit (`HORIZON_GEAR`)."""
+def test_a_potion_propped_only_win_keeps_the_gear_root(monkeypatch):
+    """A character whose only win is potion-propped gets the gear root —
+    exactly the walk of a character with no fight at all. Both gear arms: the
+    tier sheet (no fight held) and the fight's deficit (`HORIZON_GEAR`).
+
+    Driven from `IsAFightBlockingMe` itself: since the global gear objective
+    (Task 5) `resolve_root` enters at `WhichPieceIsNext`, and this subtree is
+    left in place, unreferenced, for Plan C to delete. The trunk-behind-gear
+    half this test also pinned is now structural: no trunk is offered while a
+    piece is missing (`test_decisions_which_piece`)."""
     gd = _gd()
     state = make_state(level=15)
     propped = _ctx(combat_monster="chicken", combat_propped=True)
@@ -1092,15 +1106,13 @@ def test_a_potion_propped_only_win_keeps_the_gear_root_ahead_of_the_trunk(monkey
         monkeypatch.setattr(_root_mod, "resolve_task_horizon", _horizon(verdict))
         monkeypatch.setattr(_root_mod, "deficit_upgrade_target",
                             lambda state, game_data, actions_of=None: ("ash_club", "weapon_slot"))
-        on_potions = resolve_root(state, gd, _objective(gd), propped, None)
-        no_fight = resolve_root(state, gd, _objective(gd), _ctx(), None)
-        assert on_potions.root == no_fight.root
-        assert on_potions.trail == no_fight.trail
-        assert isinstance(on_potions.root, (ObtainItem, ReachSkillLevel))
-        trunk = on_potions.alternatives.index(ReachCharLevel(level=20))
-        assert all(i < trunk for i, alt in enumerate(on_potions.alternatives)
-                   if isinstance(alt, ObtainItem) and alt.slot is not None)
-    assert "WhichSlotClosesTheFight" in on_potions.trail
+        propped_walk, plain_walk = RootWalk(), RootWalk()
+        on_potions = _old_walk(state, gd, propped, propped_walk)
+        no_fight = _old_walk(state, gd, _ctx(), plain_walk)
+        assert on_potions == no_fight
+        assert propped_walk.trail == plain_walk.trail
+        assert isinstance(on_potions, (ObtainItem, ReachSkillLevel))
+    assert "WhichSlotClosesTheFight" in propped_walk.trail
 
 
 def test_a_futile_deficit_does_not_take_the_fight_arm(monkeypatch):
@@ -1165,11 +1177,14 @@ def test_a_skill_gated_pick_records_the_target_it_could_not_build(
     the gate — a re-derivation in the player would be a second classifier."""
     gd = bundle_game_data
     state = scenario_state(SCENARIOS["l12_deep_chain_grind"], gd)
-    resolution = resolve_root(state, gd, CharacterObjective.from_game_data(gd),
-                              NO_PROFILE_CONTEXT, None)
-    assert isinstance(resolution.root, ReachSkillLevel)
-    assert resolution.root.skill == "jewelrycrafting"
-    assert resolution.blocked_target == "life_amulet"
+    ctx = attach_gear_objective(state, gd, NO_PROFILE_CONTEXT, None)
+    assert ctx.gear_objective is not None
+    assert ctx.gear_objective.missing[0].code == "iron_sword"
+    resolution = resolve_root(state, gd, CharacterObjective.from_game_data(gd), ctx, None)
+    # The objective's first piece, `iron_sword`, needs weaponcrafting 10; the
+    # character holds 5, so the walk climbs one level and names the sword.
+    assert resolution.root == ReachSkillLevel(skill="weaponcrafting", level=6)
+    assert resolution.blocked_target == "iron_sword"
 
 
 def test_an_unblocked_walk_records_no_blocked_target(bundle_game_data) -> None:
@@ -1179,6 +1194,59 @@ def test_an_unblocked_walk_records_no_blocked_target(bundle_game_data) -> None:
     gd = bundle_game_data
     state = scenario_state(SCENARIOS["l1_fresh"], gd)
     resolution = resolve_root(state, gd, CharacterObjective.from_game_data(gd),
-                              NO_PROFILE_CONTEXT, None)
-    assert not isinstance(resolution.root, ReachSkillLevel)
+                              attach_gear_objective(state, gd, NO_PROFILE_CONTEXT, None),
+                              None)
+    assert resolution.root == ObtainItem(code="copper_dagger", quantity=1, slot="weapon_slot")
     assert resolution.blocked_target is None
+
+
+# --- the pre-objective subtree's step declines (Plan C deletes the subtree) --
+
+def test_the_tier_sheet_never_lets_a_declined_target_head_it():
+    """`IsMyGearBehindMyTier` hands only SERVED targets to the slot walk; a
+    declined one is named with its reason. Driven from the node itself: since
+    the global gear objective `resolve_root` no longer enters here."""
+    gd = _gd()
+    shield_step = ReachSkillLevel(skill="gearcrafting", level=2)
+    walk = RootWalk(step_decline=lambda root: "no_route" if root == shield_step else None)
+    root = _old_walk(make_state(level=15), gd, _ctx(), walk)
+    assert root != shield_step
+    assert walk.declined == {repr(shield_step): "no_route"}
+
+
+def test_the_fight_arm_falls_through_on_a_declined_target(monkeypatch):
+    """`WhichSlotClosesTheFight`: the fight's best acquisition whose step is
+    declined does not head the walk — the arm falls through to the tier sheet,
+    with the decline named."""
+    gd = _gd()
+    monkeypatch.setattr(_root_mod, "deficit_upgrade_target",
+                        lambda state, game_data, actions_of=None: ("ash_club", "weapon_slot"))
+    club = ObtainItem(code="ash_club", quantity=1, slot="weapon_slot")
+    walk = RootWalk(step_decline=lambda root: "no_route" if root == club else None)
+    child = WhichSlotClosesTheFight(_objective(gd), walk).resolve(
+        make_state(level=5), gd, _ctx(), None)
+    assert isinstance(child, IsMyGearBehindMyTier)
+    assert walk.declined == {repr(club): "no_route"}
+
+
+def test_the_fight_arm_prices_its_candidates_through_route_price(monkeypatch):
+    """`WhichSlotClosesTheFight` hands `deficit_upgrade_target` a pricer that
+    is `route_price` on an `ObtainItem` in the candidate's slot — the one
+    pricing import `ai/decisions/` is allowed (O6)."""
+    gd = _gd()
+    priced: list[object] = []
+
+    def price(goal, state, game_data, ctx, history):  # type: ignore[no-untyped-def]
+        priced.append(goal)
+        return 7
+
+    def deficit(state, game_data, actions_of=None):  # type: ignore[no-untyped-def]
+        assert actions_of is not None and actions_of("ash_club", "weapon_slot") == 7
+        return ("ash_club", "weapon_slot")
+
+    monkeypatch.setattr(_root_mod._route, "route_price", price)
+    monkeypatch.setattr(_root_mod, "deficit_upgrade_target", deficit)
+    child = WhichSlotClosesTheFight(_objective(gd), RootWalk()).resolve(
+        make_state(level=5), gd, _ctx(), None)
+    assert isinstance(child, IsThisTargetBlocked)
+    assert priced[0] == ObtainItem("ash_club", 1, slot="weapon_slot")

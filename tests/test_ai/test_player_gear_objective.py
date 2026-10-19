@@ -10,6 +10,7 @@ from fractions import Fraction
 
 import pytest
 
+import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
 import artifactsmmo_cli.ai.player as player_mod
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import gear_objective
@@ -40,7 +41,7 @@ def _player(monkeypatch: pytest.MonkeyPatch, objective: GearObjective | None,
     monkeypatch.setattr(player, "_path_aligned_monster", _unasked)
     monkeypatch.setattr(player, "_pick_winnable_monster", _unasked)
     monkeypatch.setattr(player_mod, "pool_draw", lambda *a: (False, None))
-    monkeypatch.setattr(player_mod, "secure_win", lambda *a: True)
+    monkeypatch.setattr(ctx_mod, "secure_win", lambda *a: True)
 
     def objective_of(state, game_data, ctx, history):  # type: ignore[no-untyped-def]
         seen.append(ctx)
@@ -49,7 +50,7 @@ def _player(monkeypatch: pytest.MonkeyPatch, objective: GearObjective | None,
     def loadout_of(state, game_data, ctx, history):  # type: ignore[no-untyped-def]
         seen.append(ctx)
 
-    monkeypatch.setattr(player_mod, "gear_objective", objective_of)
+    monkeypatch.setattr(ctx_mod, "gear_objective", objective_of)
     monkeypatch.setattr(player_mod, "fight_ahead_loadout", loadout_of)
     return player
 
@@ -111,15 +112,17 @@ def test_the_gear_keep_follows_the_final_target(monkeypatch: pytest.MonkeyPatch)
     """The objective is priced keeping the task target's profile gear; the
     context the cycle hands on keeps the final target's."""
     player = _player(monkeypatch, HELD, [])
-    monkeypatch.setattr(player, "_active_gear_keep",
-                        lambda monster, near_term: {f"kept_for_{monster}": 1})
+    def keep(state, gd, history, monster, near_term):  # type: ignore[no-untyped-def]
+        return {f"kept_for_{monster}": 1}
+    monkeypatch.setattr(player_mod, "gear_keep_for", keep)
+    monkeypatch.setattr(ctx_mod, "gear_keep_for", keep)
     assert player._selection_context().gear_keep == {"kept_for_wolf": 1}
 
 
 def test_risk_is_judged_on_the_final_target(monkeypatch: pytest.MonkeyPatch) -> None:
     asked: list[str] = []
     player = _player(monkeypatch, HELD, [])
-    monkeypatch.setattr(player_mod, "secure_win",
+    monkeypatch.setattr(ctx_mod, "secure_win",
                         lambda state, gd, monster: asked.append(monster) is not None)
     assert player._selection_context().combat_risky is True
     assert asked == ["wolf"]
@@ -166,3 +169,19 @@ def test_a_carried_piece_is_equipped_before_m_star_is_fought() -> None:
     assert player._last_ctx.combat_monster == before.monster
     assert [repr(a) for a in report.plan[:2]] == [f"OptimizeLoadout({before.monster})",
                                                    f"Fight({before.monster})"]
+
+
+def test_a_new_targets_keep_carries_the_in_flight_upgrades(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shared step (ruling W) on its own: a target the objective names
+    replaces the task keep it arrived with by one built for that target, and
+    the in-flight upgrades (`ctx.near_term_targets`) stay kept at one spare."""
+    monkeypatch.setattr(ctx_mod, "gear_objective", lambda *a: HELD)
+    monkeypatch.setattr(ctx_mod, "secure_win", lambda *a: True)
+    ctx = replace(CTX, gear_keep={"task_gear": 1}, near_term_targets=frozenset({"iron_helm"}))
+    out = ctx_mod.attach_gear_objective(make_state(task_code=None, task_total=0), GameData(),
+                                        ctx, None)
+    assert out.gear_objective is HELD
+    assert out.combat_monster == "wolf"
+    assert out.gear_keep == {"iron_helm": 1}
+    assert out.combat_risky is False

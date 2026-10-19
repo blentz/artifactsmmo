@@ -6,6 +6,7 @@ from fractions import Fraction
 from unittest.mock import patch
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_context import farm_target
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -26,7 +27,7 @@ def _player(tmp_path):
 
 
 def _target(p: GamePlayer) -> str | None:
-    return p._winnable_farm_target(p._task_aligned_monster(), HELD)
+    return farm_target(p._task_aligned_monster(), HELD)
 
 
 def test_pursue_monster_task_retargets_grind(tmp_path):

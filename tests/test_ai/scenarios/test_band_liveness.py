@@ -18,13 +18,14 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree, has_structural_upgrade
-from artifactsmmo_cli.ai.tiers.progression_tree_core import milestone_pure
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
@@ -63,7 +64,10 @@ def _decide(name: str) -> tuple[StrategyDecision, WorldState]:
     # declared zero-stat band scenarios (the parameter is unused there).
     state = scenario_state(SCENARIOS[name], gd)
     objective = CharacterObjective.from_game_data(gd)
-    return decide_tree(state, gd, objective), state
+    # The walk's context carries the cycle's gear objective, attached by the
+    # one function the player uses (ruling W).
+    return decide_tree(state, gd, objective,
+                       ctx=attach_gear_objective(state, gd, NO_PROFILE_CONTEXT, None)), state
 
 
 def _run(name: str) -> PlanReport:
@@ -81,35 +85,17 @@ def test_band_registered(name: str) -> None:
 
 
 @pytest.mark.parametrize("name", BAND_NAMES)
-def test_decide_tree_answers_or_names_the_wall(name: str) -> None:
-    """WAVE 3a re-derived this from "decide_tree always answers" to "decide_tree
-    answers, or says None and offers the trunk".
-
-    Totality was a property of the old assembly: the trunk was ALWAYS the
-    chosen root or a fallback, so a character with nothing to do was handed a
-    level target it could not reach and the pane read as progress. The
-    resolution walk has an explicit wall arm — `CanIClearMyTier` returns None
-    when the gear sheet wants nothing AND no monster in the band is winnable —
-    and reporting that honestly is the behaviour, not a gap in it
-    (`root.py`: "reported as `None` rather than dressed up as a root the
-    character cannot make progress on").
-
-    `l48_band_adequate` is the one band scenario that hits it, and it hits it
-    for the documented L50 difficulty-wall reason (see
-    `test_l48_band_adequate_is_the_honest_wall`). Every other band still
-    resolves a root, so this stays a real assertion rather than a disjunction
-    that can never fail: the trunk alternative is required in BOTH arms, so a
-    walk that returned None with nothing behind it fails here.
-
-    RE-DERIVED 2026-10-18 (ruling R): `l48_band_adequate`'s wall was a STAT
-    ARTEFACT of a sheet whose totals lacked its gear. On its mithril loadout's
-    own totals `hellhound` is winnable and the gear sheet wants more (see
-    `test_l48_band_adequate_is_the_honest_wall`), so the walk resolves a root
-    in every band scenario now. Plan C deletes this band net."""
+def test_decide_tree_answers_with_a_piece_and_no_level_grind(name: str) -> None:
+    """RE-DERIVED Task 5 (global gear objective, spec 2026-10-18 §2.4, §6.2).
+    Every band scenario has a gear objective with pieces missing, so the walk
+    resolves a root and a step — the next piece — and offers NO level grind:
+    no fight is chosen for XP while a piece of `L*` is missing. The old
+    version required the trunk among the alternatives in every arm; that is
+    now exactly what must not be there. Plan C deletes this band net."""
     d, _state = _decide(name)
     assert d.chosen_root is not None
     assert d.chosen_step is not None
-    assert any(isinstance(r, ReachCharLevel) for r in d.fallback_roots)
+    assert not any(isinstance(r, ReachCharLevel) for r in (d.chosen_root, *d.fallback_roots))
 
 
 @pytest.mark.parametrize("name", BAND_NAMES)
@@ -135,36 +121,6 @@ def test_band_search_is_bounded(name: str) -> None:
     # `search_bounds.assert_search_bounded`, which lost its `expect_no_work`
     # flag for that reason.
     assert_search_bounded(_run(name), name)
-
-
-@pytest.mark.parametrize("name", BAND_NAMES)
-def test_band_trunk_row_matches_milestone_pure(name: str) -> None:
-    """decide_tree's trunk row must be exactly
-    ReachCharLevel(level=milestone_pure(scenario.level)) — the tree's own trunk
-    semantics, checked against the pure core directly.
-
-    WAVE 3a moved WHERE the row sits and what its `category` reads. It is no
-    longer `ranking[0]`: `_resolution_rows` leads with the CHOSEN root, and
-    `resolve_root` appends the trunk after every sibling. Its category is
-    `alternative · char_level` — the column now says how a row got there, and
-    the trunk is an alternative in every one of these scenarios. Both facts
-    are asserted, so a walk that promoted the trunk to the head or relabelled
-    the column fails here.
-
-    THE TRUNK IS NO LONGER THE LAST ROW, and that is the restored standalone
-    skill root (`decisions/root._orphan_skill_roots`): a skill no gear target
-    can name is offered BEHIND the trunk, so `ranking[-1]` is a skill row on
-    every character with an open orphan rung. The row is located by its
-    identity instead of by its index — which is what this test was always
-    about. The orphan rows' position relative to the trunk is asserted where
-    it is decided, in
-    `test_decisions_root.test_the_orphan_roots_sit_behind_the_trunk`."""
-    d, state = _decide(name)
-    expected_trunk = ReachCharLevel(level=milestone_pure(state.level))
-    rows = [row for row in d.ranking
-            if row.root_repr == repr(expected_trunk)]
-    assert len(rows) == 1, [row.root_repr for row in d.ranking]
-    assert rows[0].category == "alternative · char_level"
 
 
 def test_l48_band_adequate_is_the_honest_wall() -> None:
@@ -193,26 +149,27 @@ def test_l48_band_adequate_is_the_honest_wall() -> None:
 
     RE-DERIVED 2026-10-18 (ruling R): the wall was a STAT ARTEFACT. The
     scenario's hand stats lacked its loadout's; on the loadout's own totals
-    the drop routes of monsters it now beats open gear its slots want, so
-    `has_structural_upgrade` is True and the walk resolves the first of them
-    (`demon_horn`, a material of an achievable piece) with the rest and the
-    trunk behind it. There is no honest wall in this scenario to rebuild, so
-    the derived resolution is pinned. Plan C deletes this band witness."""
+    the drop routes of monsters it now beats open gear its slots want. There
+    is no honest wall in this scenario to rebuild, so the derived resolution
+    is pinned.
+
+    RE-DERIVED Task 5 (global gear objective): the root is the first missing
+    `L*` piece for `m*` = hellhound, `goblin_guard_shield` (a drop of the
+    underground goblin_guard), with the other pieces behind it — the
+    jewelrycrafting climb the `mithril_ring` needs and the `lifesteal_rune` —
+    and no trunk: no level grind while a piece is missing (§6.2). Plan C
+    deletes this band witness."""
     gd = _bundle()
     state = scenario_state(SCENARIOS[L48_BAND_ADEQUATE], gd)
     objective = CharacterObjective.from_game_data(gd)
-    decision = decide_tree(state, gd, objective)
-    assert decision.chosen_root == ObtainItem(code="demon_horn", quantity=4)
-    assert decision.chosen_step == ObtainItem(code="demon_horn", quantity=4)
+    decision = decide_tree(state, gd, objective,
+                           ctx=attach_gear_objective(state, gd, NO_PROFILE_CONTEXT, None))
+    shield = ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")
+    assert decision.chosen_root == shield
+    assert decision.chosen_step == shield
     assert decision.fallback_roots == [
-        ObtainItem(code="magical_cure", quantity=2),
-        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
-        ObtainItem(code="life_crystal", quantity=1, slot="artifact2_slot"),
-        ObtainItem(code="backpack", quantity=1, slot="bag_slot"),
-        ObtainItem(code="corrupted_skull", quantity=1, slot="artifact1_slot"),
-        ObtainItem(code="lizard_skin", quantity=5),
-        ObtainItem(code="full_moon_vampire_cape", quantity=4),
-        ReachCharLevel(level=milestone_pure(state.level))]
+        ReachSkillLevel(skill="jewelrycrafting", level=36),
+        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")]
 
 
 def test_l48_band_adequate_real_band_adequate_verdict() -> None:
@@ -245,10 +202,13 @@ def test_l48_band_adequate_real_band_adequate_verdict() -> None:
     RE-DERIVED 2026-10-18 (ruling R): the "unwinnable at L48" finding was a
     STAT ARTEFACT of a sheet whose totals lacked its mithril loadout's. On the
     loadout's own totals there IS a structural upgrade and `hellhound` is
-    winnable. The seam names no root (every gear alternative has no route this
-    cycle) and, with `L*` missing pieces and no task, chooses no XP fight (spec
-    2026-10-18 §6.2), so the cycle Waits until the root walk offers an `L*`
-    piece (Plan A Task 5). Plan C deletes this band witness."""
+    winnable.
+
+    RE-DERIVED Task 5: the root walk offers the first `L*` piece, so the cycle
+    no longer Waits — it plans that piece's acquisition: down to the
+    goblin_guard's underground tile, fight it for the shield, equip it. The
+    fight is an ACQUISITION step (spec 2026-10-18 §2.4.3), not one chosen for
+    XP. Plan C deletes this band witness."""
     gd = _bundle()
     state = scenario_state(SCENARIOS[L48_BAND_ADEQUATE], gd)
     objective = CharacterObjective.from_game_data(gd)
@@ -261,7 +221,10 @@ def test_l48_band_adequate_real_band_adequate_verdict() -> None:
 
     report = player.plan_from_state()
     # Pin the EXACT outcome, not just any non-empty plan.
-    assert repr(report.selected_goal) == "Wait", (repr(report.selected_goal), report.plan)
-    assert [repr(a) for a in report.plan] == ["Wait"]
-    assert report.decision.chosen_root is None
-    assert report.decision.chosen_step is None
+    shield = ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")
+    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)"
+    assert [repr(a) for a in report.plan] == [
+        "Transition((5,-3,overworld)->(5,-3,underground))", "Fight(goblin_guard)",
+        "Equip(goblin_guard_shield->shield_slot)"]
+    assert report.decision.chosen_root == shield
+    assert report.decision.chosen_step == shield

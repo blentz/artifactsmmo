@@ -16,6 +16,10 @@ branch; `l48_band_adequate` (no winnable monster in this bundle's L47-50
 window — the documented event-gear wall) pins the `Wait` fallback, NOT a
 skill/craft goal.
 
+Since the global gear objective (Task 5, spec 2026-10-18 §2.4, §6.2) every
+scenario here is MISSING pieces of its `L*`, so none grinds XP and none Waits:
+each pursues its first missing piece (or the skill climb in front of it).
+
 Every scenario here is re-derived directly against the bundle and the real
 `plan_from_state` seam (TDD-flavored: this documents CURRENT, empirically
 observed behavior, not aspiration) — see the SCENARIOS dict in scenario.py
@@ -29,11 +33,12 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
-from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
@@ -65,7 +70,10 @@ def _decide(name: str) -> tuple[StrategyDecision, WorldState]:
     gd = _bundle()
     state = scenario_state(SCENARIOS[name], gd)
     objective = CharacterObjective.from_game_data(gd)
-    return decide_tree(state, gd, objective), state
+    # The walk's context carries the cycle's gear objective, attached by the
+    # one function the player uses (ruling W).
+    return decide_tree(state, gd, objective,
+                       ctx=attach_gear_objective(state, gd, NO_PROFILE_CONTEXT, None)), state
 
 
 def _player(name: str) -> tuple[GamePlayer, GameData]:
@@ -113,12 +121,18 @@ def test_l10_gearcrafting_gap_chosen_root_is_gear_never_the_trunk() -> None:
     the artifact slot falls through, leaving `backpack` — a gear root that can
     actually be obtained. The property under test is unchanged and the other two
     assertions are untouched; only the identity of the winning gear candidate
-    moved, exactly as it did in wave 3a."""
+    moved, exactly as it did in wave 3a.
+
+    RE-DERIVED Task 5 (global gear objective): the root is `L*`'s first
+    missing piece, `iron_sword`, gated at weaponcrafting 10 against 5 — so the
+    root is the weaponcrafting climb in front of it, and the gearcrafting climb
+    `iron_boots` witnesses is the next alternative. No level grind is offered
+    at all while a piece is missing (spec 2026-10-18 §6.2)."""
     d, _state = _decide(CRITERION_1_MAIN)
-    assert d.chosen_root == ObtainItem(code="backpack", quantity=1,
-                                       slot="bag_slot")
-    assert not isinstance(d.chosen_root, ReachCharLevel)
-    assert ReachSkillLevel(skill="gearcrafting", level=6) in d.fallback_roots
+    assert d.chosen_root == ReachSkillLevel(skill="weaponcrafting", level=6)
+    assert d.blocked_target == "iron_sword"
+    assert d.fallback_roots[0] == ReachSkillLevel(skill="gearcrafting", level=6)
+    assert not any(isinstance(r, ReachCharLevel) for r in d.fallback_roots)
 
 
 def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
@@ -143,40 +157,24 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     root the walk emits (via `IsThisTargetBlocked`'s skill arm) and reaches
     through the fallback list, rather than something `objective_step_goal`
     derived from a gear root. That the answer survived a change of mechanism is
-    the point of keeping this test."""
+    the point of keeping this test.
+
+    RE-DERIVED Task 5 (global gear objective): the climb the arbiter takes is
+    the one in front of `L*`'s FIRST piece, `iron_sword` — weaponcrafting, not
+    gearcrafting (which is the next alternative). Never GrindCharacterXP: no
+    fight is chosen for XP while a piece is missing. The plan is one committed
+    weaponcrafting grind cycle: a yellow_slime drop, the copper, then the
+    sticky_sword that earns."""
     report = _run(CRITERION_1_MAIN)
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal) == "ReachSkill(gearcrafting->6)"
-    # PHASE 2d-L3: the plan is one whole grind cycle, committed — the
-    # chicken's feathers, the ash planks, then the feather_coat that earns the
-    # gearcrafting XP — not the opaque LevelSkill macro (2d-a stopped at the
-    # first gather of a descended intermediate). No food leg: the chosen
-    # loadout against the chicken recovers by Rest (no food held, and cooking
-    # a unit costs more seconds than resting), so heal prep stocks nothing
-    # (docs/PLAN_consumable_utility.md increment 5).
+    assert repr(report.selected_goal) == "ReachSkill(weaponcrafting->6)"
     assert [repr(a) for a in report.plan] == [
-        "Fight(chicken)", "Gather(ash_tree×20)", "Craft(ash_plank×2)", "Craft(feather_coat×1)"]
-    # An EQUALITY on chosen_root, as before — only the value moved. A
-    # membership test on a different field would be a weaker claim wearing the
-    # old test's name.
-    #
-    # THE SUPPLIABILITY GATE moved it a second time, and the same sentence
-    # above still applies: `selected_goal` and `plan` are byte-identical for the
-    # third mechanism running. `novice_guide` won artifact1_slot here only
-    # because nothing else could; it is minted by nothing and held by nobody, so
-    # `objective.is_suppliable` drops it and the walk promotes the gearcrafting
-    # climb to the ROOT instead of carrying it as a fallback behind a root that
-    # could never plan. The climb is therefore asserted on `chosen_root` now —
-    # a STRONGER claim than the old membership test, not a weaker one — and the
-    # slot it was preferred over is pinned with its named decline.
-    assert report.decision.chosen_root == ReachSkillLevel(
-        skill="gearcrafting", level=6)
-    # PHASE 3-2: the walk passes the unservable backpack over itself, naming
-    # why, instead of promotion moving the root afterwards.
-    assert report.decision.declined == (
-        ("ObtainItem(code='backpack', quantity=1, slot='bag_slot')",
-         "infeasible:backpack:no_route:backpack"),)
+        "Fight(yellow_slime)", "Gather(copper_rocks×50)", "Craft(copper_bar×5)",
+        "Craft(sticky_sword×1)"]
+    assert report.decision.chosen_root == ReachSkillLevel(skill="weaponcrafting", level=6)
+    assert report.decision.blocked_target == "iron_sword"
+    assert report.decision.declined == ()
 
 
 def test_l10_gearcrafting_gap_search_bounded() -> None:
@@ -230,15 +228,20 @@ def test_l10_gearcrafting_gap_combat_blocked_retargets_not_char_grind() -> None:
     `wooden_shield`/ash_wood re-target was a stat artefact of the zero-attack
     sheet. The walk now passes the cowhide over (no route: cow is not won in
     copper) and climbs jewelrycrafting one level with a copper ring; the
-    guarantee (never GrindCharacterXP) holds on that derived outcome."""
+    guarantee (never GrindCharacterXP) holds on that derived outcome.
+
+    RE-DERIVED Task 5 (global gear objective): the ramp and the main scenario
+    now share their gear objective, so they share its answer — the
+    weaponcrafting climb in front of `L*`'s first piece, `iron_sword`. The
+    guarantee holds: never GrindCharacterXP."""
     report = _run(CRITERION_1_RAMP)
-    # GUARANTEE: re-target to a reachable non-combat goal, never XP-thrash.
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal) == "ReachSkill(jewelrycrafting->2)"
-    assert report.decision.chosen_root == ReachSkillLevel(skill="jewelrycrafting", level=2)
+    assert repr(report.selected_goal) == "ReachSkill(weaponcrafting->6)"
+    assert report.decision.chosen_root == ReachSkillLevel(skill="weaponcrafting", level=6)
     assert [repr(a) for a in report.plan] == [
-        "Gather(copper_rocks×60)", "Craft(copper_bar×6)", "Craft(copper_ring×1)"]
+        "Fight(yellow_slime)", "Gather(copper_rocks×50)", "Craft(copper_bar×5)",
+        "Craft(sticky_sword×1)"]
 
 
 def test_l10_gearcrafting_gap_combat_blocked_search_bounded() -> None:
@@ -292,25 +295,26 @@ def test_l20_dual_utility_climbs_the_blocking_skill_not_the_char_level() -> None
     the fallbacks. What is genuinely lost is the pin that a full build grinds
     XP, and this scenario can no longer witness it because it does not have a
     full build. Recorded in
-    `.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md`."""
+    `.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md`.
+
+    RE-DERIVED Task 5 (global gear objective): `L*`'s first piece is
+    `steel_battleaxe`, weaponcrafting-gated, so the root is the next
+    weaponcrafting level, and the plan is one committed grind cycle ending in
+    the `iron_sword` craft that earns. No level grind is offered while `L*`
+    is missing (spec 2026-10-18 §6.2): the trunk is no longer a fallback."""
     report = _run(CRITERION_2_WINNABLE)
     assert report.decision.chosen_root == ReachSkillLevel(
-        skill="gearcrafting", level=16)
+        skill="weaponcrafting", level=16)
+    assert report.decision.blocked_target == "steel_battleaxe"
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal) == "ReachSkill(gearcrafting->16)"
-    # PHASE 2d-L3: one whole committed grind cycle ending in the craft that
-    # earns. RE-DERIVED 2026-10-18 (ruling R): the scenario's derived sheet now
-    # carries its gear's wisdom (70) and prospecting, which the ranked rung
-    # reads through each fight's XP, so the earning craft moved from
-    # iron_boots (iron_bar x5 + feather x3) to leather_hat (cowhide x5 +
-    # yellow_slimeball x3): two drop fights, then the gearcrafting-10 craft.
+    assert repr(report.selected_goal) == "ReachSkill(weaponcrafting->16)"
     assert [repr(a) for a in report.plan] == [
-        "Fight(cow)", "Fight(yellow_slime)", "Craft(leather_hat×1)"]
-    # The climb is bounded (current + 1, not the whole gate) and the trunk is
-    # still offered, so this is a re-targeting, not a deadlock.
+        "Gather(iron_rocks×60)", "Craft(iron_bar×6)", "Fight(chicken)", "Craft(iron_sword×1)"]
+    # The climb is bounded (current + 1, not the whole gate), and nothing
+    # offers a level grind while a piece is missing.
     assert report.decision.chosen_root.level == 16
-    assert ReachCharLevel(level=30) in report.decision.fallback_roots
+    assert not any(isinstance(r, ReachCharLevel) for r in report.decision.fallback_roots)
 
 
 def test_l20_dual_utility_search_bounded() -> None:
@@ -340,23 +344,23 @@ def test_l48_band_adequate_names_the_wall_when_no_winnable_monster() -> None:
     alternative it reaches has no route this cycle, and the trunk is the LAST
     fallback. With no task held and `L*` missing pieces (its `m*` is
     hellhound), no fight is chosen for XP (spec 2026-10-18 §6.2), so the
-    trunk serves nothing and the cycle Waits until the root walk offers an
-    `L*` piece (Plan A Task 5)."""
+    trunk serves nothing.
+
+    RE-DERIVED Task 5: the root walk offers the first `L*` piece,
+    `goblin_guard_shield`, so the cycle no longer Waits: it plans the shield's
+    acquisition (an acquisition fight against the goblin_guard). Not a
+    deadlock, and not an XP fight: no trunk is offered at all."""
     player, _gd = _player(CRITERION_2_WALLED)
     assert player._pick_winnable_monster() == "hellhound"
     assert player._tree_band_adequate() is False
     report = player.plan_from_state()
-    assert isinstance(report.selected_goal, WaitGoal), (
+    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
         repr(report.selected_goal), report.plan)
-    assert report.decision.chosen_root is None
+    assert report.decision.chosen_root == ObtainItem(
+        code="goblin_guard_shield", quantity=1, slot="shield_slot")
     assert report.decision.fallback_roots == [
-        ObtainItem(code="demon_horn", quantity=4), ObtainItem(code="magical_cure", quantity=2),
-        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
-        ObtainItem(code="life_crystal", quantity=1, slot="artifact2_slot"),
-        ObtainItem(code="backpack", quantity=1, slot="bag_slot"),
-        ObtainItem(code="corrupted_skull", quantity=1, slot="artifact1_slot"),
-        ObtainItem(code="lizard_skin", quantity=5),
-        ObtainItem(code="full_moon_vampire_cape", quantity=4), ReachCharLevel(level=50)]
+        ReachSkillLevel(skill="jewelrycrafting", level=36),
+        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")]
 
 
 def test_l48_band_adequate_search_bounded() -> None:
@@ -396,20 +400,25 @@ def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:
     artifact1_slot only because nothing else could reach it, and nothing mints
     it, so `objective.is_suppliable` drops it and the gearcrafting climb is
     promoted from the alternatives to the ROOT — asserted directly below, which
-    is stronger than the membership test it replaces."""
+    is stronger than the membership test it replaces.
+
+    RE-DERIVED Task 5 (global gear objective): `L*`'s first piece at level 12
+    is `forest_ring`, a mushmush drop, so the root is that ring and the plan
+    is its acquisition: fight the mushmush, equip the ring — an acquisition
+    fight, never GrindCharacterXP. The weaponcrafting and gearcrafting climbs
+    the iron pieces need are behind it, in the objective's order."""
     report = _run("l12_gearcrafting_gap")
     # An EQUALITY on chosen_root, as before — only the value moved.
-    assert report.decision.chosen_root == ReachSkillLevel(
-        skill="gearcrafting", level=6)
-    # PHASE 3-2: the walk passes the unservable backpack over itself, naming
-    # why, instead of promotion moving the root afterwards.
-    assert report.decision.declined == (
-        ("ObtainItem(code='backpack', quantity=1, slot='bag_slot')",
-         "infeasible:backpack:no_route:backpack"),)
+    assert report.decision.chosen_root == ObtainItem(
+        code="forest_ring", quantity=1, slot="ring1_slot")
+    assert report.decision.declined == ()
     goal = repr(report.selected_goal)
     assert "GrindCharacterXP" not in goal, goal  # the criterion-1 guarantee
-    assert goal == "ReachSkill(gearcrafting->6)", goal
-    # PHASE 2d-L3: one whole grind cycle, not the `LevelSkill` macro; it ends
-    # in the feather_coat that earns.
-    assert report.plan and repr(report.plan[-1]) == "Craft(feather_coat×1)", report.plan
+    assert goal == "UpgradeEquipment(forest_ring->ring1_slot)", goal
+    assert [repr(a) for a in report.plan] == [
+        "Fight(mushmush)", "Equip(forest_ring->ring1_slot)"]
+    assert report.decision.fallback_roots[1:4] == [
+        ReachSkillLevel(skill="weaponcrafting", level=6),
+        ReachSkillLevel(skill="gearcrafting", level=6),
+        ReachSkillLevel(skill="jewelrycrafting", level=6)]
     assert_search_bounded(report, "l12_gearcrafting_gap")

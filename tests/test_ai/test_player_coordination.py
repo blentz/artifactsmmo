@@ -24,6 +24,7 @@ from sqlalchemy import text
 from sqlmodel import Session as SqlSession
 from sqlmodel import select
 
+import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.ge_cancel_order import GeCancelOrderAction
@@ -2412,7 +2413,7 @@ def test_the_shortfall_reaches_the_selection_context(monkeypatch):
     monkeypatch.setattr("artifactsmmo_cli.ai.player.fight_ahead_loadout", choose)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.supply_shortfall", shortfall)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))
-    monkeypatch.setattr(p, "_winnable_farm_target", lambda *_: "chicken")
+    monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: "chicken")
     ctx = p._selection_context()
     assert ctx.loadout is pick
     assert ctx.supply_shortfall == (("cooked_bass", 11),)
@@ -2439,7 +2440,7 @@ def test_the_skill_demand_is_known_when_the_loadout_is_chosen(monkeypatch):
                         lambda roots, s, g, c: (frozenset({"fishing"}), False))
     monkeypatch.setattr("artifactsmmo_cli.ai.player.fight_ahead_loadout", choose)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))
-    monkeypatch.setattr(p, "_winnable_farm_target", lambda *_: "chicken")
+    monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: "chicken")
     ctx = p._selection_context()
     assert seen["skills"] == frozenset({"fishing"})
     assert ctx.skill_demand == frozenset({"fishing"})
@@ -2453,7 +2454,7 @@ def test_the_role_and_the_fleet_s_roles_reach_the_selection_context(monkeypatch)
     p._fleet_roles = frozenset({"fisher", "miner"})
     monkeypatch.setattr("artifactsmmo_cli.ai.player.fight_ahead_loadout", lambda *a: None)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))
-    monkeypatch.setattr(p, "_winnable_farm_target", lambda *_: "chicken")
+    monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: "chicken")
     ctx = p._selection_context()
     assert ctx.role == "fisher"
     assert ctx.fleet_roles == frozenset({"fisher", "miner"})

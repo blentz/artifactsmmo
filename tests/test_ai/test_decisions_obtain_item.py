@@ -37,6 +37,7 @@ from artifactsmmo_cli.ai.decision import resolve_node
 from artifactsmmo_cli.ai.decisions.obtain_item import obtain_item_decision
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.provision_marginal_fight import ProvisionMarginalFightGoal
@@ -496,16 +497,24 @@ def test_where_the_wall_is_reached_and_why_no_cycle_acts_on_it(
     through `plan_from_state` over all 44 scenarios, with and without the node:
     **0 cells select a different goal**. The node is the right answer for a state
     the corpus does not reach, and the second assertion below fails the day one
-    does — which is the day this docstring needs rewriting."""
+    does — which is the day this docstring needs rewriting.
+
+    Since the global gear objective (Task 5) the roots are each scenario's
+    `L*` pieces, so which cells reach a wall moved with them; both claims
+    still hold over the corpus and are asserted as before."""
     gd = bundle_game_data
     store = _grind_store()
     reached: list[tuple[str, bool]] = []
     try:
         for name, scenario in SCENARIOS.items():
             state = _with_skill_xp(scenario_state(scenario, gd))
+            # The walk's context carries the cycle's gear objective, attached
+            # by the one function the player uses (ruling W).
             resolution = resolve_root(state, gd,
                                       CharacterObjective.from_game_data(gd),
-                                      NO_PROFILE_CONTEXT, store)
+                                      attach_gear_objective(state, gd, NO_PROFILE_CONTEXT,
+                                                            store),
+                                      store)
             walled = set(unwinnable_drop_items(state, gd))
             for root in [c for c in (resolution.root, *resolution.alternatives)
                          if c is not None]:

@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
 import artifactsmmo_cli.ai.player as player_mod
 import artifactsmmo_cli.ai.task_worth as mod
 from artifactsmmo_cli.ai.game_data import GameData
@@ -99,7 +100,7 @@ class TestPlayerContext:
         player = GamePlayer(character="probe", history=None)
         player.state = make_state(task_code=None, task_total=0)
         player.game_data = GameData()
-        monkeypatch.setattr(player, "_winnable_farm_target", lambda *_: None)
+        monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: None)
         return player
 
     def test_the_pool_verdict_reaches_the_selection_context(self, monkeypatch) -> None:

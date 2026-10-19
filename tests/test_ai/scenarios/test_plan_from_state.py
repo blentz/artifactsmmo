@@ -8,7 +8,7 @@ from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from tests.test_ai.fixtures import make_state
 
@@ -35,14 +35,15 @@ def test_plan_from_state_decision_is_the_tree_decision() -> None:
     died with the flag). Since wave 3a the chosen_root is whatever the
     resolution walk names — here the jewelrycrafting climb that gates this
     character's furthest-behind slot (see test_progression_tree's per-scenario
-    pins)."""
+    pins). Since the global gear objective (Task 5) it is the first missing
+    `L*` piece, the iron sword whose mats are banked."""
     gd = load_bundle_game_data(BUNDLE)
     sc = SCENARIOS["l10_weapon_upgrade"]
     player = GamePlayer(character=sc.name, history=None)
     player.seed_offline(scenario_state(sc, gd), gd)
     report = player.plan_from_state()
-    assert report.decision.chosen_root == ReachSkillLevel(
-        skill="jewelrycrafting", level=2)
+    assert report.decision.chosen_root == ObtainItem(
+        code="iron_sword", quantity=1, slot="weapon_slot")
     # The single decision is what the player stashed for trace/observer use.
     assert player._last_decision is not None
     assert repr(player._last_decision.chosen_root) == repr(report.decision.chosen_root)

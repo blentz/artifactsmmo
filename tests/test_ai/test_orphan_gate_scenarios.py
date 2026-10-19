@@ -7,7 +7,7 @@ when a better tier food is due, not before.
 
 All suites run against the committed bundle
 (`tests/test_ai/scenarios/fixtures/gamedata_bundle.json`, loaded exactly as
-`scripts/gen_open_rung.py` loads it — see `conftest.bundle_game_data`). None
+the deleted open-rung census loaded it — see `conftest.bundle_game_data`). None
 makes an API call.
 
 (A) `TestNoUndemandedCooking`: cooking used to be the unconditional floor,
@@ -27,17 +27,26 @@ shortfall `cooked_shrimp` -> `shrimp` -> fishing@10 — end to end. Across all
 """
 
 import dataclasses
+from fractions import Fraction
 
 from artifactsmmo_cli.ai.decisions.root import resolve_root
-from artifactsmmo_cli.ai.scenario import SCENARIOS
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
+from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.audit.open_rung_completeness import census_state
+from tests.test_ai.scenarios.routing import scenario_resolution, skills_offered
 
 
 def _skills_offered(res) -> set[str]:  # type: ignore[no-untyped-def]
     return {g.skill for g in (res.root, *res.alternatives) if isinstance(g, ReachSkillLevel)}
+
+
+def _cycle(state, gd, ctx):  # type: ignore[no-untyped-def]
+    """`ctx` with the cycle's gear objective attached, as the player attaches
+    it (ruling W): the walk's roots, and so its demand, are the live cycle's."""
+    return attach_gear_objective(state, gd, ctx, None)
 
 
 class TestNoUndemandedCooking:
@@ -46,11 +55,9 @@ class TestNoUndemandedCooking:
 
     def test_cooking_is_never_offered_without_a_tier_food_due(self, bundle_game_data):
         gd = bundle_game_data
-        objective = CharacterObjective.from_game_data(gd)
         cooking = []
-        for name, scenario in SCENARIOS.items():
-            res = resolve_root(census_state(scenario, gd), gd, objective, NO_PROFILE_CONTEXT, None)
-            if "cooking" in _skills_offered(res):
+        for name in SCENARIOS:
+            if "cooking" in skills_offered(scenario_resolution(name, gd)):
                 cooking.append(name)
         assert cooking == []
 
@@ -61,18 +68,23 @@ def _mining_gated_state(bundle_game_data, mining: int):
     `iron_ore`) bottoms out at mining@10 — built from `l24_fisher_cooking_rung`
     by `dataclasses.replace`.
 
-    HAND-BUILT because no committed scenario combines: (1) combat stats that
-    clear `gear_target_tier` past rung 1 to the iron rung (this scenario's
-    `_IRON_SET` does); (2) `gearcrafting >= 10`, so `iron_boots`
-    (crafting_level 10) is not skill-blocked and surfaces as an `ObtainItem`
-    seed; and (3) an empty `boots_slot`, so `iron_boots` is actually assigned
-    as the slot's target. Only those fields change."""
+    HAND-BUILT with `gearcrafting >= 10`, so `iron_boots` (crafting_level 10)
+    is not skill-blocked and surfaces as an `ObtainItem` seed, and an empty
+    `boots_slot`. Only those fields change; the objective naming the boots
+    is `_BOOTS`."""
     base = SCENARIOS["l24_fisher_cooking_rung"]
     sc = dataclasses.replace(
         base,
         skills={**base.skills, "gearcrafting": 10, "mining": mining},
         equipment={**base.equipment, "boots_slot": None})
-    return census_state(sc, bundle_game_data)
+    return derived_scenario_state(sc, bundle_game_data)
+
+
+_BOOTS = dataclasses.replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+    "pig", {"boots_slot": "iron_boots"}, Fraction(1),
+    (GearPiece("boots_slot", "iron_boots", 0, Fraction(1), Fraction(1)),)))
+"""A gear objective missing exactly `iron_boots`: these tests mean that one
+piece, so the objective is built explicitly (ruling W)."""
 
 
 class TestGatheringDemandPositiveBranch:
@@ -86,7 +98,7 @@ class TestGatheringDemandPositiveBranch:
         gd = bundle_game_data
         objective = CharacterObjective.from_game_data(gd)
         state = _mining_gated_state(gd, mining=5)
-        res = resolve_root(state, gd, objective, NO_PROFILE_CONTEXT, None)
+        res = resolve_root(state, gd, objective, _BOOTS, None)
         assert ReachSkillLevel(skill="mining", level=10) in (res.root, *res.alternatives)
         assert "cooking" not in _skills_offered(res)
 
@@ -96,7 +108,7 @@ class TestGatheringDemandPositiveBranch:
         gd = bundle_game_data
         objective = CharacterObjective.from_game_data(gd)
         state = _mining_gated_state(gd, mining=10)
-        res = resolve_root(state, gd, objective, NO_PROFILE_CONTEXT, None)
+        res = resolve_root(state, gd, objective, _BOOTS, None)
         assert "mining" not in _skills_offered(res)
 
 
@@ -118,9 +130,9 @@ class TestTierFoodDemandsFishing:
         floor's demand fishing is not offered: the live 2026-10-08 burn."""
         gd = bundle_game_data
         objective = CharacterObjective.from_game_data(gd)
-        state = census_state(SCENARIOS[CHAIN_CELL], gd)
+        state = derived_scenario_state(SCENARIOS[CHAIN_CELL], gd)
         assert state.skills["fishing"] < CHAIN_RUNG
-        res = resolve_root(state, gd, objective, NO_PROFILE_CONTEXT, None)
+        res = resolve_root(state, gd, objective, _cycle(state, gd, NO_PROFILE_CONTEXT), None)
         assert "fishing" not in _skills_offered(res)
 
     def test_a_short_tier_food_gets_a_fishing_root(self, bundle_game_data):
@@ -128,17 +140,17 @@ class TestTierFoodDemandsFishing:
         roots, and the demanded-level lookup collapsing to `current + 1`."""
         gd = bundle_game_data
         objective = CharacterObjective.from_game_data(gd)
-        state = census_state(SCENARIOS[CHAIN_CELL], gd)
-        res = resolve_root(state, gd, objective, SHORT_SHRIMP, None)
+        state = derived_scenario_state(SCENARIOS[CHAIN_CELL], gd)
+        res = resolve_root(state, gd, objective, _cycle(state, gd, SHORT_SHRIMP), None)
         assert ReachSkillLevel(skill="fishing", level=CHAIN_RUNG) in (res.root, *res.alternatives)
 
     def test_raising_fishing_to_the_gate_removes_the_root(self, bundle_game_data):
         gd = bundle_game_data
         objective = CharacterObjective.from_game_data(gd)
         base = SCENARIOS[CHAIN_CELL]
-        state = census_state(
+        state = derived_scenario_state(
             dataclasses.replace(base, skills={**base.skills, "fishing": CHAIN_RUNG}), gd)
-        res = resolve_root(state, gd, objective, SHORT_SHRIMP, None)
+        res = resolve_root(state, gd, objective, _cycle(state, gd, SHORT_SHRIMP), None)
         assert "fishing" not in _skills_offered(res)
 
     def test_a_demanded_cooking_climb_asks_for_the_fish_its_rung_cooks(
@@ -151,9 +163,9 @@ class TestTierFoodDemandsFishing:
         provisional climbs."""
         gd = bundle_game_data
         objective = CharacterObjective.from_game_data(gd)
-        state = census_state(SCENARIOS[CHAIN_CELL], gd)
+        state = derived_scenario_state(SCENARIOS[CHAIN_CELL], gd)
         due = dataclasses.replace(NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_porkchop", 10),))
-        res = resolve_root(state, gd, objective, due, None)
+        res = resolve_root(state, gd, objective, _cycle(state, gd, due), None)
         offered = (res.root, *res.alternatives)
         assert ReachSkillLevel(skill="cooking", level=20) in offered
         assert ReachSkillLevel(skill="fishing", level=CHAIN_RUNG) in offered
@@ -167,9 +179,9 @@ class TestOnlyTheProducerClimbsForFood:
 
     def _fishing_offered(self, gd, role, fleet_roles) -> bool:  # type: ignore[no-untyped-def]
         objective = CharacterObjective.from_game_data(gd)
-        state = census_state(SCENARIOS[CHAIN_CELL], gd)
+        state = derived_scenario_state(SCENARIOS[CHAIN_CELL], gd)
         ctx = dataclasses.replace(SHORT_SHRIMP, role=role, fleet_roles=fleet_roles)
-        res = resolve_root(state, gd, objective, ctx, None)
+        res = resolve_root(state, gd, objective, _cycle(state, gd, ctx), None)
         return ReachSkillLevel(skill="fishing", level=CHAIN_RUNG) in (res.root, *res.alternatives)
 
     def test_a_sibling_of_a_live_fisher_is_not_offered_the_climb(self, bundle_game_data):
@@ -190,9 +202,9 @@ class TestOnlyTheProducerClimbsForFood:
         row instead of only the FOOD rows."""
         gd = bundle_game_data
         objective = CharacterObjective.from_game_data(gd)
-        state = census_state(SCENARIOS[CHAIN_CELL], gd)
+        state = derived_scenario_state(SCENARIOS[CHAIN_CELL], gd)
         ctx = dataclasses.replace(
             NO_PROFILE_CONTEXT, supply_shortfall=(("minor_health_potion", 10),),
             role="miner", fleet_roles=frozenset({"alchemist", "miner"}))
-        res = resolve_root(state, gd, objective, ctx, None)
+        res = resolve_root(state, gd, objective, _cycle(state, gd, ctx), None)
         assert ReachSkillLevel(skill="alchemy", level=20) in (res.root, *res.alternatives)

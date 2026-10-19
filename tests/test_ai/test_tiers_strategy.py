@@ -1,6 +1,11 @@
+from dataclasses import replace
+from fractions import Fraction
+
 import pytest
 
+import artifactsmmo_cli.ai.decisions.root as _root_mod
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import (
@@ -24,6 +29,16 @@ from artifactsmmo_cli.ai.tiers.strategy import (
 )
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
+
+
+def _missing(slot: str, code: str):  # type: ignore[no-untyped-def]
+    """A context whose gear objective misses one piece, `code` for `slot`:
+    the walk's root is that piece (spec 2026-10-18 §2.4). These fixtures are
+    too small for `gear_objective` to find a paying monster, so the objective
+    is built explicitly (ruling W)."""
+    piece = GearPiece(slot, code, 0, Fraction(1), Fraction(1))
+    return replace(NO_PROFILE_CONTEXT,
+                   gear_objective=GearObjective("chicken", {slot: code}, Fraction(1), (piece,)))
 
 
 def _gd() -> GameData:
@@ -163,43 +178,33 @@ def test_decide_forwards_step_decline_and_it_changes_the_answer():
     obj = CharacterObjective.from_game_data(gd)
     eng = StrategyEngine(objective=obj)
     state = make_state(level=5, skills={"mining": 3})
+    ctx = _missing("weapon_slot", "copper_dagger")
     decline = lambda root: "blocked" if isinstance(root, ObtainItem) else None  # noqa: E731
-    assert eng.decide(state, gd, step_decline=decline) \
-        == decide_tree(state, gd, obj, step_decline=decline)
-    assert eng.decide(state, gd, step_decline=decline) != eng.decide(state, gd)
+    assert eng.decide(state, gd, ctx=ctx, step_decline=decline) \
+        == decide_tree(state, gd, obj, step_decline=decline, ctx=ctx)
+    # The dagger is material-gated on its recipe's copper bars.
+    assert eng.decide(state, gd, ctx=ctx).chosen_root == ObtainItem("copper_bar", 6)
+    assert eng.decide(state, gd, ctx=ctx, step_decline=decline).chosen_root is None
 
 
-class _HistorySpyObjective(CharacterObjective):
-    """A `CharacterObjective` that records the `history` its blocker walk was
-    handed. Not a stand-in for the walk's ANSWER — it returns `{}`, which is a
-    real answer meaning "the gear sheet wants nothing" — only for the argument,
-    which is the one thing the test is about."""
-
-    seen: list[object]
-
-    def gear_targets_with_blockers(self, state, history):  # type: ignore[override]
-        self.seen.append(history)
-        return {}
-
-
-def test_decide_forwards_history_into_the_root_walk():
-    """`history` replaces `store` and must reach the graph's own nodes.
-
-    `IsMyGearBehindMyTier` hands it to `gear_targets_with_blockers` and
-    `CanIClearMyTier` to `next_uncleared_tier`; a delegate that dropped it
-    would silently give every character the state-only verdict, which is a
-    DIFFERENT decision, not a degraded one — `gear_target_tier` reads learned
-    win history to decide which rung to gear for.
+def test_decide_forwards_history_into_the_root_walk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`history` must reach the walk: its task root reads learned task worth
+    (`_task_root`, the one root the walk builds from history). A delegate that
+    dropped it would silently give every character the state-only verdict.
 
     Asserted on the argument rather than on the resulting decision because a
     decision-level assertion needs a store whose contents actually move the
-    tier, and that is a fixture whose own correctness would then be doing the
-    work. Both a real store and None are checked, so a delegate hard-coding
+    task root, and that is a fixture whose own correctness would then be doing
+    the work. Both a real store and None are checked, so a delegate hard-coding
     either one fails."""
+    seen: list[object] = []
+
+    def spy(state, game_data, ctx, history):  # type: ignore[no-untyped-def]
+        seen.append(history)
+
+    monkeypatch.setattr(_root_mod, "_task_root", spy)
     gd = _gd()
-    obj = _HistorySpyObjective.from_game_data(gd)
-    obj.seen = []
-    engine = StrategyEngine(objective=obj)
+    engine = StrategyEngine(objective=CharacterObjective.from_game_data(gd))
     state = make_state(level=5, skills={"mining": 3})
     store = LearningStore(db_path=":memory:", character="probe")
     store.start_session()
@@ -209,7 +214,7 @@ def test_decide_forwards_history_into_the_root_walk():
     finally:
         store.close()
 
-    assert obj.seen == [store, None]
+    assert seen == [store, None]
 
 
 def test_unmet_closure_size_dedups_shared_prereq():
@@ -242,18 +247,20 @@ def test_a_self_blocked_root_is_reported_then_passed_over_when_declined():
     obj = CharacterObjective.from_game_data(gd)
     eng = StrategyEngine(obj)
     blocked = ObtainItem(code="cursed_blade", quantity=1, slot="weapon_slot")
+    ctx = _missing("weapon_slot", "cursed_blade")
 
-    d = eng.decide(make_state(level=5), gd)
+    d = eng.decide(make_state(level=5), gd, ctx=ctx)
     assert d.chosen_root == blocked
     assert any("cursed_blade" in rs.root_repr for rs in d.ranking)
 
     served = eng.decide(
-        make_state(level=5), gd,
+        make_state(level=5), gd, ctx=ctx,
         step_decline=lambda root: "no_route" if root == blocked else None)
-    # No served gear target and no combat target: the walk's own answer is the
-    # wall (None), and the trunk stays on offer behind the named decline.
+    # No served piece: the walk's own answer is no root, and the piece stays
+    # on offer behind its named decline. No level grind is offered while a
+    # piece is missing (spec 2026-10-18 §6.2).
     assert served.chosen_root is None
-    assert served.fallback_roots == [blocked, ReachCharLevel(level=10)]
+    assert served.fallback_roots == [blocked]
     assert served.declined == ((repr(blocked), "no_route"),)
 
 
@@ -402,28 +409,27 @@ def test_actionable_step_descends_to_material_for_underskill_craftable() -> None
     assert step == ObtainItem("thread", 3)
 
 
-def test_an_objective_and_game_data_that_disagree_is_an_error_not_a_skip():
-    """WAVE 3a moved this. It used to assert that a target absent from the
-    game data `decide()` runs against is quietly dropped from the ranking —
-    the old candidate pass did `if stats is None: continue`.
+def test_an_objective_and_game_data_that_disagree_is_neither_skipped_nor_ranked():
+    """WAVE 3a, re-derived Task 5. It used to assert that the old tier walk
+    refused a target the decision's catalogue did not know (`_target_rung`
+    raising), because a silently-substituted rung would rank it.
 
-    The graph does not skip it, and must not: `root._target_rung` raises,
-    because an item the objective picked as a gear target and the catalogue
-    does not know is a DATA FAULT, and a silently-substituted rung would rank
-    it (`_target_rung`'s own docstring, and the project rule that missing API
-    data fails rather than defaults). This pairing — an objective built from
-    one catalogue, a decision run against another — is a shape production
-    never builds: `GamePlayer` loads one `GameData` and hands the same object
-    to both. So the honest statement is not "it is skipped" but "it is
-    refused, by name"."""
+    The walk from `WhichPieceIsNext` ranks nothing: the order is the gear
+    objective's, so no rung is substituted and nothing is skipped. The piece
+    the objective names is the root, classified by the objective's own
+    catalogue, exactly as named. This pairing — an objective built from one
+    catalogue, a decision run against another — is a shape production never
+    builds: `GamePlayer` loads one `GameData` and hands the same object to
+    both."""
     gd_full = _reach_gd()
     obj = CharacterObjective.from_game_data(gd_full)
     assert obj.target_gear.get("helmet_slot") == "iron_helm"
     gd_empty = GameData()
     gd_empty._monster_level = {"chicken": 1}  # char reachable; iron_helm not producible here
     fill_monster_stat_defaults(gd_empty)
-    with pytest.raises(ValueError, match="no item stats in game data"):
-        StrategyEngine(obj).decide(make_state(level=5), gd_empty)
+    d = StrategyEngine(obj).decide(make_state(level=5), gd_empty,
+                                   ctx=_missing("helmet_slot", "iron_helm"))
+    assert d.chosen_root == ObtainItem(code="iron_helm", quantity=1, slot="helmet_slot")
 
 
 def test_a_sourceless_item_is_off_the_target_sheet_AND_off_the_blocker_sheet():
@@ -458,7 +464,8 @@ def test_a_sourceless_item_is_off_the_target_sheet_AND_off_the_blocker_sheet():
     assert "weapon_slot" not in obj.target_gear           # drop_blade excluded at build
     assert obj.target_gear.get("helmet_slot") == "iron_helm"
     assert "weapon_slot" not in obj.gear_targets_with_blockers(make_state(level=5), None)
-    d = StrategyEngine(obj).decide(make_state(level=5), gd)
+    d = StrategyEngine(obj).decide(make_state(level=5), gd,
+                                   ctx=_missing("helmet_slot", "iron_helm"))
     reprs = [rs.root_repr for rs in d.ranking]
     assert any("iron_helm" in r for r in reprs)            # craftable gear is a candidate
     assert not any("drop_blade" in r for r in reprs)
@@ -497,8 +504,11 @@ def test_decide_returns_a_root_when_combat_capable():
     gd = _combat_gd()
     eng = StrategyEngine(_combat_obj(gd))
     state = make_state(level=4, skills={"weaponcrafting": 1, "mining": 1})
-    d = eng.decide(state, gd)
-    assert d.chosen_root is not None
+    d = eng.decide(state, gd, ctx=_missing("weapon_slot", "iron_sword"))
+    # The objective's sword is weaponcrafting 10 against 1: the root is the
+    # next weaponcrafting level, in front of it.
+    assert d.chosen_root == ReachSkillLevel(skill="weaponcrafting", level=2)
+    assert d.blocked_target == "iron_sword"
 
 
 # --- C1: task-currency producibility ---

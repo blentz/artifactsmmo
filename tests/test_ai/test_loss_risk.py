@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
 import artifactsmmo_cli.ai.player as player_mod
 import artifactsmmo_cli.ai.tiers.skill_grind_target as grind_mod
 from artifactsmmo_cli.ai.acquisition_cost import _loss_surcharge, _priced, route_options
@@ -117,7 +118,7 @@ class TestThePlayerContext:
         player = GamePlayer(character="probe", history=history)
         player.state = make_state(task_code=None, task_total=0)
         player.game_data = GameData()
-        monkeypatch.setattr(player, "_winnable_farm_target", lambda *_: None)
+        monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: None)
         player._draws_enabled = False
         return player
 

@@ -109,7 +109,6 @@ echo "== (c''') census (--check x13, + joint-walk report) =="
 ( cd "$ROOT" \
   && uv run python scripts/gen_reachability_claims.py --check \
   && uv run python scripts/gen_liveness.py --check \
-  && uv run python scripts/gen_open_rung.py --check \
   && uv run python scripts/gen_shed_reachability.py --check \
   && uv run python scripts/gen_inventory_completeness.py --check \
   && uv run python scripts/gen_recycle_source_completeness.py --check \

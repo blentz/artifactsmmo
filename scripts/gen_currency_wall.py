@@ -111,7 +111,7 @@ def main() -> None:
             f"live_tiles={list(evidence.on_live_tiles)} "
             f"winnable={list(evidence.winnable)} "
             f"event_gated={list(evidence.event_gated)}")
-        print(f"  {r.scenario} currency={r.currency} root={r.root} "
+        print(f"  {r.scenario} currency={r.currency} candidate={r.candidate} "
               f"gap={r.gap} charged={r.charged} "
               f"price={r.base_price}->{r.granted_price} {detail}",
               file=sys.stderr)

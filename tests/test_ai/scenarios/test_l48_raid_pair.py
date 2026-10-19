@@ -55,16 +55,31 @@ candidate is never built, and BOTH poles Wait (with `L*` missing pieces and no
 task, no fight is chosen for XP either: spec 2026-10-18 §6.2). The pins below
 state that derived outcome; the pair cannot separate the poles again until the
 pixie damage defect is fixed.
+
+RE-DERIVED Task 5 (ruling Z, global gear objective): an `L*` piece outranks an
+active raid (USER: gear before fights; spec 2026-10-18 §2.4: no fight is
+chosen for XP while `L*` is incomplete). Both poles' root is the first missing
+piece, `goblin_guard_shield`, and both plan exactly its acquisition:
+`UpgradeEquipment(goblin_guard_shield->shield_slot)`. A raid fights only when
+it is the route of the chosen piece or once `L*` is held.
+`test_a_survivable_raid_still_yields_to_the_missing_piece` shows the raid
+yields to the piece even when it IS survivable.
 """
 
 from pathlib import Path
 
+import pytest
+
+import artifactsmmo_cli.ai.strategy_driver as strategy_driver
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 
 _RAID_BOSS = "pixie"
+_SHIELD = ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")
+"""Both poles' first missing `L*` piece."""
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
 
@@ -106,15 +121,17 @@ def test_l48_without_a_raid_cannot_fight():
     anything."""
     report = _report("l48_band_adequate")
     assert report.goals_tried, "the walled pole must still reach a bounded means"
-    assert not any("Fight" in str(g.get("goal")) or "Grind" in str(g.get("goal"))
-                   or "Raid" in str(g.get("goal"))
+    assert not any("Grind" in str(g.get("goal")) or "Raid" in str(g.get("goal"))
                    for g in report.goals_tried), (
-        "l48_band_adequate is the no-COMBAT pole: if the arbiter found a fight "
-        "to try, the wall has moved and this pair needs re-deriving"
+        "l48_band_adequate is the no-XP-fight pole: if the arbiter tried a "
+        "grind or a raid, the wall has moved and this pair needs re-deriving"
     )
-    # RE-DERIVED 2026-10-18 (ruling R): on the derived sheet every gear goal
-    # tried has no plan this cycle, so the walled pole Waits.
-    assert repr(report.selected_goal) == "Wait", (repr(report.selected_goal), report.plan)
+    # RE-DERIVED Task 5 (ruling Z): the root is the first missing `L*` piece,
+    # and the pole plans its acquisition — an acquisition fight, not one chosen
+    # for XP.
+    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
+        repr(report.selected_goal), report.plan)
+    assert report.decision.chosen_root == _SHIELD
 
 
 def test_l48_without_a_raid_emits_no_raid_fight():
@@ -138,14 +155,17 @@ def test_l48_with_an_active_raid_can_plan():
 
     RE-DERIVED 2026-10-18 (ruling R): on real stats the raid candidate is
     refused as unsurvivable (see the module docstring), so the open window
-    adds nothing: the raid pole tries exactly the walled pole's goals and
-    Waits."""
+    adds nothing: the raid pole tries exactly the walled pole's goals.
+
+    RE-DERIVED Task 5 (ruling Z): both poles plan exactly the first missing
+    `L*` piece's acquisition."""
     report = _report("l48_raid_active")
     walled = _report("l48_band_adequate")
     assert [g.get("goal") for g in report.goals_tried] == \
         [g.get("goal") for g in walled.goals_tried]
-    assert repr(report.selected_goal) == "Wait", (
+    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
         repr(report.selected_goal), [g.get("goal") for g in report.goals_tried])
+    assert report.decision.chosen_root == _SHIELD
 
 
 def test_l48_raid_plan_engages_the_boss():
@@ -158,11 +178,17 @@ def test_l48_raid_plan_engages_the_boss():
 
     RE-DERIVED 2026-10-18 (ruling R): on real stats the boss reads
     unsurvivable (`raid_survivable_pure`: the expected damage exceeds the hp
-    pool), so the plan is `Wait` and engages nothing. Both are asserted, so the
-    day the pixie damage defect is fixed this test fails and the positive claim
-    is restored."""
+    pool), so the plan engages nothing.
+
+    RE-DERIVED Task 5 (ruling Z): the plan is the `L*` piece's acquisition —
+    down to the goblin_guard, fight it for its shield, equip it — and no
+    action fights the raid boss."""
     report = _report("l48_raid_active")
-    assert [repr(a) for a in report.plan] == ["Wait"]
+    assert [repr(a) for a in report.plan] == [
+        "Transition((5,-3,overworld)->(5,-3,underground))", "Fight(goblin_guard)",
+        "Equip(goblin_guard_shield->shield_slot)"]
+    assert not any(isinstance(a, FightAction) and a.monster_code == _RAID_BOSS
+                   for a in report.plan)
     # The cause of the refusal, not its magnitude: the estimate exceeds the
     # character's whole hp pool, so the raid is unsurvivable.
     state = _state("l48_raid_active")
@@ -177,3 +203,25 @@ def test_the_two_poles_differ_only_by_the_raid():
                  if getattr(a, k) != getattr(b, k)}
     assert differing <= {"name", "raids", "description"}, differing
     assert a.raids == () and b.raids == (("enchanted_fairy", "pixie"),)
+
+
+def test_a_survivable_raid_still_yields_to_the_missing_piece(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling Z, with the pixie damage defect patched away: the raid IS
+    survivable, so its candidate is built (the survivability gate is asked of
+    the boss) — and still the root is the missing `L*` piece, the selected goal
+    is that piece's acquisition, and no action fights the boss. While a piece
+    is missing the raid files behind the objective step (`step_is_real`)."""
+    asked: list[float] = []
+
+    def survivable(hp: int, max_hp: int, damage: float) -> bool:
+        asked.append(damage)
+        return True
+
+    monkeypatch.setattr(strategy_driver, "raid_survivable_pure", survivable)
+    report = _report("l48_raid_active")
+    assert asked, "the raid candidate was never built"
+    assert report.decision.chosen_root == _SHIELD
+    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)"
+    assert not any(isinstance(a, FightAction) and a.monster_code == _RAID_BOSS
+                   for a in report.plan)

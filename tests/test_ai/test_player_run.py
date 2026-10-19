@@ -12,6 +12,7 @@ from artifactsmmo_api_client.models.item_schema import ItemSchema
 from sqlmodel import Session as SqlSession
 from sqlmodel import select
 
+import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
@@ -889,7 +890,7 @@ def test_run_derives_crafting_target_from_fallback_obtain_item():
                             with patch.object(player, "_maybe_periodic_refresh"), \
                                     patch.object(player, "_reconcile_open_orders"):
                                 with patch.object(player, "_build_actions", return_value=[]):
-                                    with patch.object(player, "_winnable_farm_target", return_value=None):
+                                    with patch.object(ctx_mod, "farm_target", return_value=None):
                                         with patch("artifactsmmo_cli.ai.player.time.sleep"):
                                             with pytest.raises(KeyboardInterrupt):
                                                 player.run()
@@ -922,7 +923,7 @@ def _run_one_action_with(player, action, new_state, outcome, client, executed=No
         with patch.object(player, "_maybe_periodic_refresh"), \
                 patch.object(player, "_reconcile_open_orders"):
             with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                with patch.object(player, "_winnable_farm_target", return_value=None):
+                with patch.object(ctx_mod, "farm_target", return_value=None):
                     with patch.object(player, "_execute",
                                       return_value=(new_state, outcome, executed or action)):
                         with patch("artifactsmmo_cli.ai.player.time.sleep"):
@@ -1075,7 +1076,7 @@ def test_run_holds_plan_cursor_through_a_batched_gather():
                                           side_effect=fake_tick), \
                                 patch.object(player, "_reconcile_open_orders"):
                             with patch.object(player, "_build_actions", return_value=[gather]):
-                                with patch.object(player, "_winnable_farm_target", return_value=None):
+                                with patch.object(ctx_mod, "farm_target", return_value=None):
                                     with patch.object(player, "_execute", side_effect=fake_execute):
                                         with patch("artifactsmmo_cli.ai.player.time.sleep"):
                                             with pytest.raises(KeyboardInterrupt):

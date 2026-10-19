@@ -93,6 +93,10 @@ from artifactsmmo_cli.ai.decision import Decision, resolve_node
 # is reached first executes while the other is half built. A NAME import
 # of `route_price` raises ImportError when `decisions.route` is the entry.
 from artifactsmmo_cli.ai.decisions import route as _route
+
+# MODULE import, same idiom and reason: `which_piece_is_next` reads this
+# module's `RootWalk` / `IsThisTargetBlocked`, and this module builds its entry.
+from artifactsmmo_cli.ai.decisions import which_piece_is_next as _which_piece
 from artifactsmmo_cli.ai.drop_evidence import drop_evidence
 from artifactsmmo_cli.ai.fleet_work import (
     FLEET_SUPPLY,
@@ -922,27 +926,36 @@ def resolve_root(state: WorldState, game_data: GameData,
                  objective: CharacterObjective, ctx: SelectionContext,
                  history: LearningStore | None,
                  step_decline: StepDecline = no_decline) -> RootResolution:
-    """Walk the tier graph from `IsAFightBlockingMe` to a root MetaGoal.
+    """Walk the root graph from `WhichPieceIsNext` to a root MetaGoal (spec
+    2026-10-18 §2.4): the next missing `L*` piece, or one more character level
+    once `L*` is held, or None when the cycle has no gear objective (the wall).
 
     `step_decline` is the cycle's answer for a root's step (`StepDecline`); a
-    gear target whose step it declines cannot head the walk and is offered
-    after the served siblings, with its reason in `RootResolution.declined`."""
+    piece whose step it declines cannot head the walk, and its reason is in
+    `RootResolution.declined`.
+
+    The alternatives, in a fixed order and never ranked against each other:
+    every missing piece in `missing`'s own order, the trunk ONLY when `L*` is
+    held (no fight is chosen for XP while a piece is missing, §6.2), then the
+    task, fleet and orphan-skill roots."""
     walk = RootWalk(step_decline=step_decline)
     # Locally annotated, not inlined into the call: mypy 1.18.1 infers
     # `Leaf = Never` for a bare `Decision[X]` argument to `resolve_node` and
     # reports arg-type. Same fix as the `strategy_driver.py` call site.
-    entry: Decision[MetaGoal] | MetaGoal | None = IsAFightBlockingMe(
+    entry: Decision[MetaGoal] | MetaGoal | None = _which_piece.WhichPieceIsNext(
         objective, walk)
     root = resolve_node(entry, state, game_data, ctx, history)
 
+    target = ctx.gear_objective
     ordered: list[MetaGoal] = [
         # A throwaway RootWalk: this is a conversion, not a visit, so it must
         # not append to the trail.
-        IsThisTargetBlocked(slot, target, RootWalk()).resolve(
-            state, game_data, ctx, history)
-        for slot, target in (*walk.sibling_targets, *walk.declined_targets)
+        IsThisTargetBlocked(piece.slot, objective.classify_target(piece.code, state),
+                            RootWalk()).resolve(state, game_data, ctx, history)
+        for piece in (target.missing if target is not None else ())
     ]
-    ordered.append(ReachCharLevel(level=milestone_pure(state.level)))
+    if target is not None and target.held:
+        ordered.append(ReachCharLevel(level=state.level + 1))
     # THE RESTORED SEAM: the orphan skill roots, after the gear siblings and
     # after the trunk. Produced here, beside the trunk, and for the same reason
     # the trunk is produced here — neither is a question the tier walk asks,
@@ -961,7 +974,7 @@ def resolve_root(state: WorldState, game_data: GameData,
     # pinned by three suites — and an orphan skill climb unblocks nothing.
     # Behind it, an orphan root is reached exactly when no gear step and no
     # trunk step can be served, which is where the bot used to emit `Wait`.
-    # `root` can be `None` (the wall case, `CanIClearMyTier`'s own docstring),
+    # `root` can be `None` (the wall case: no gear objective, `WhichPieceIsNext`),
     # which `Sequence[MetaGoal]` cannot type — filtered rather than left in,
     # since `gather_demand._seed` would skip it anyway (neither an `ObtainItem`
     # nor a `ReachSkillLevel`).
