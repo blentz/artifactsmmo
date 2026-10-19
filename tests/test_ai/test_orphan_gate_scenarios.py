@@ -53,11 +53,10 @@ class TestNoUndemandedCooking:
     """NOT marked `integration`: the sweep loads the committed bundle and makes
     no API call, and the pre-commit hook runs `-m "not integration"`."""
 
-    def test_cooking_is_never_offered_without_a_tier_food_due(self, bundle_game_data):
-        gd = bundle_game_data
+    def test_cooking_is_never_offered_without_a_tier_food_due(self):
         cooking = []
         for name in SCENARIOS:
-            if "cooking" in skills_offered(scenario_resolution(name, gd)):
+            if "cooking" in skills_offered(scenario_resolution(name)):
                 cooking.append(name)
         assert cooking == []
 

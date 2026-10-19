@@ -299,7 +299,6 @@ def scenario_state(sc: ScenarioCharacter,
     )
 
 
-
 def derived_scenario_state(sc: ScenarioCharacter, game_data: GameData) -> WorldState:
     """`sc` as a WorldState with the combat totals a live character wearing
     its declared loadout would report (`derive_combat_stats=True` forced).
@@ -311,6 +310,7 @@ def derived_scenario_state(sc: ScenarioCharacter, game_data: GameData) -> WorldS
     loudly, never shrink the grid. (Moved here from the deleted
     `audit/open_rung_completeness`, whose `census_state` it was.)"""
     return scenario_state(replace(sc, derive_combat_stats=True), game_data)
+
 
 def load_bundle_game_data(
     path: Path, *, with_ge_orders: bool = False,

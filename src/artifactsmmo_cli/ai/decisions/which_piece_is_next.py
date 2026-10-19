@@ -37,6 +37,10 @@ class WhichPieceIsNext(Decision[MetaGoal]):
       and the next piece is asked. Every piece declined is no root.
     * no objective: the wall, `None` — no achievable loadout pays XP on any
       monster, so there is neither a piece to build nor a fight to grind.
+
+    A missing piece the decision's game data does not know RAISES: the
+    objective and the catalogue disagree, which is a data fault, and a root
+    classified against other data would hide it (API data or fail).
     """
 
     name = "WhichPieceIsNext"
@@ -54,6 +58,12 @@ class WhichPieceIsNext(Decision[MetaGoal]):
             return None
         if target.held:
             return ReachCharLevel(level=state.level + 1)
+        unknown = [piece.code for piece in target.missing
+                   if game_data.item_stats(piece.code) is None]
+        if unknown:
+            # API data or fail: a piece the decision's catalogue does not know
+            # is a data fault, never a root classified against other data.
+            raise ValueError(f"gear objective names {unknown!r}, absent from game data")
         for piece in target.missing:
             gear = self.objective.classify_target(piece.code, state)
             if self.walk.serves(piece.slot, gear, state, game_data, ctx, history):

@@ -9160,6 +9160,9 @@ WHICH_PIECE_MUTATIONS = [
     ("which-piece: the LAST served piece heads the walk",
      "        for piece in target.missing:\n",
      "        for piece in reversed(target.missing):\n"),
+    ("which-piece: a piece the catalogue does not know is classified, not refused",
+     "        if unknown:\n",
+     "        if False:\n"),
     ("which-piece: no objective grinds a level instead of the wall",
      "        if target is None:\n"
      "            return None\n",

@@ -74,8 +74,9 @@ import artifactsmmo_cli.ai.strategy_driver as strategy_driver
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+from tests.test_ai.shared_world import shared_world
 
 _RAID_BOSS = "pixie"
 _SHIELD = ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")
@@ -84,7 +85,7 @@ BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
 
 def _gd():
-    return load_bundle_game_data(BUNDLE)
+    return shared_world(BUNDLE)
 
 
 def _state(name: str):
@@ -102,8 +103,11 @@ def _report(name: str):
 
 # ─── negative pole: no raid, provably nothing to do ──────────────────────────
 
-def test_l48_without_a_raid_cannot_fight():
-    """The wall, RE-DERIVED BY WAVE 3a. No raid window and no permanent L47-50
+def test_l48_without_a_raid_fights_only_for_its_missing_piece():
+    """RENAMED Task 5 fix round 1 (was `..._cannot_fight`): the pole now plans
+    an ACQUISITION fight for its first missing `L*` piece, never an XP fight.
+
+    The wall, RE-DERIVED BY WAVE 3a. No raid window and no permanent L47-50
     monster, so the character still cannot FIGHT its way out — that is the pole
     this pair is about and it is unchanged.
 
@@ -149,7 +153,7 @@ def test_l48_with_an_active_raid_can_plan():
     work, so the wall is a property of the world rather than a dead end.
 
     The negative pole now also reaches a means (a mithril_bar craft chain, see
-    `test_l48_without_a_raid_cannot_fight`), so "has something to try" alone no
+    `test_l48_without_a_raid_fights_only_for_its_missing_piece`), so "has something to try" alone no
     longer separates the poles — the SELECTED GOAL does, and it is asserted
     below. `test_l48_raid_plan_engages_the_boss` carries the positive claim.
 

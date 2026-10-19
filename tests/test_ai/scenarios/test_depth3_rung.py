@@ -15,7 +15,9 @@ The slot is empty; every other slot is worn at or above its rung-30 candidate,
 so the amulet is the one slot behind and the walk resolves to it. (Since the
 global gear objective, Task 5, the walk reads the cycle's `L*` instead of the
 rung: its first missing piece is still `greater_dreadful_amulet`. The two
-tests that pinned the rung and the tier walk's trail were deleted, ruling Y.)
+tests that pinned the rung and the tier walk's trail were deleted, ruling Y;
+`test_the_objectives_first_missing_piece_is_the_depth_three_amulet` pins
+the new claim.)
 
 The bag holds every root input EXCEPT the depth-2 intermediate. Without that
 the descent stops at `cyclops_eye` — a monster drop one level down — and the
@@ -28,18 +30,20 @@ from pathlib import Path
 
 import pytest
 
+from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
-    load_bundle_game_data,
     scenario_state,
 )
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.shared_world import attached, shared_world
 
 CELL = "l47_depth3_amulet"
 
@@ -84,7 +88,7 @@ def bundle_game_data() -> GameData:
     """Module-scoped: this file resolves the root walk once per scenario in
     `test_this_is_the_only_scenario_standing_on_a_depth_three_rung`, and
     rebuilding the catalogue for each test would cost more than the sweep."""
-    return load_bundle_game_data(BUNDLE)
+    return shared_world(BUNDLE)
 
 
 @pytest.fixture(scope="module")
@@ -158,3 +162,16 @@ def test_the_cell_plans_the_bottom_of_the_chain_inside_the_budget(
     assert not any(t["timed_out"] for t in report.goals_tried), report.goals_tried
     nodes = sum(int(t["nodes"]) for t in report.goals_tried)
     assert nodes <= PLAN_NODE_BUDGET, f"{CELL} searched {nodes} nodes"
+
+
+def test_the_objectives_first_missing_piece_is_the_depth_three_amulet(
+        bundle_game_data: GameData, state: WorldState) -> None:
+    """The docstring's claim since the global gear objective, asserted: the
+    cell's `L*` names the depth-3 amulet as its first missing piece, and the
+    walk resolves it as the root."""
+    ctx = attached(state, bundle_game_data, NO_PROFILE_CONTEXT, None)
+    assert ctx.gear_objective is not None
+    assert ctx.gear_objective.missing[0].code == ROOT
+    resolution = resolve_root(state, bundle_game_data,
+                              CharacterObjective.from_game_data(bundle_game_data), ctx, None)
+    assert resolution.root == _root_node()

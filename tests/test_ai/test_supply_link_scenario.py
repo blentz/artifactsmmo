@@ -42,13 +42,13 @@ from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
-    load_bundle_game_data,
     scenario_state,
 )
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachFleetOutcome
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import coordination_now
+from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path(__file__).resolve().parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
@@ -61,7 +61,7 @@ tier walk's head was the `life_amulet`'s jewelrycrafting gate.)"""
 
 
 def _game_data():
-    return load_bundle_game_data(BUNDLE)
+    return shared_world(BUNDLE)
 
 
 def _asker(db: str, gd) -> GamePlayer:

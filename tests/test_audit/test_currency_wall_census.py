@@ -32,6 +32,7 @@ census could regress to a vacuous sweep and still print GATE CLEAN.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -40,10 +41,8 @@ from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
-    load_bundle_game_data,
     scenario_state,
 )
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
@@ -70,8 +69,27 @@ from artifactsmmo_cli.audit.currency_wall_census import (
     summary_line,
     unattributed_wall,
 )
+from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
+
+pytestmark = pytest.mark.xdist_group("currency_wall_census")
+"""Ruling AD: the whole module on ONE xdist worker (`--dist loadgroup`), so its
+module-scoped census sweep runs once rather than once per worker."""
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _shared_worlds() -> Iterator[None]:
+    """Ruling AD: the census, and every walk this module drives, run on the
+    process-wide bundle worlds with the gear objective memoized per (state,
+    world) — harness only; production still loads its world and attaches its
+    objective once per run. Patched on the census module itself, so
+    `run_census` and `declared_world` read the same objects the tests do."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(cwc, "load_bundle_game_data", shared_world)
+        patch.setattr(cwc, "attach_gear_objective", attached)
+        yield
+
 
 FUNDED_CELL = "l25_currency_leaf_unfunded"
 FUNDED_CURRENCY = "tasks_coin"
@@ -86,7 +104,7 @@ def _offered(state, game_data):  # type: ignore[no-untyped-def]
     """The roots the walk offers `state`, chosen first: its context carries
     the cycle's gear objective, attached as the player attaches it (ruling W)."""
     resolution = resolve_root(state, game_data, CharacterObjective.from_game_data(game_data),
-                              attach_gear_objective(state, game_data, NO_PROFILE_CONTEXT, None),
+                              attached(state, game_data, NO_PROFILE_CONTEXT, None),
                               None)
     return [g for g in (resolution.root, *resolution.alternatives) if g is not None]
 
@@ -421,7 +439,7 @@ def test_forcing_one_world_hides_the_only_funded_arm() -> None:
     sweep is a full-sized grid that proves nothing. The alarm must fire on it —
     without this test the census could regress to that state and print
     GATE CLEAN."""
-    default_world = load_bundle_game_data(BUNDLE)
+    default_world = shared_world(BUNDLE)
     currencies = catalogue_currencies(default_world)
     forced: list[CurrencyResult] = []
     for name, scenario in SCENARIOS.items():

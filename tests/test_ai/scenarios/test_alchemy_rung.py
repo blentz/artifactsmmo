@@ -149,7 +149,7 @@ def test_the_alchemy_root_plans_a_grind_cycle(
     assert plan and earned_skill(plan[-1], bundle_game_data) == SKILL, plan
 
 
-def test_no_scenario_routes_alchemy_without_demand(bundle_game_data: GameData) -> None:
+def test_no_scenario_routes_alchemy_without_demand() -> None:
     """`resolve_root`'s natural walk (no demand injected), over each scenario's
     own gear objective, routes the three gear-crafting skills its pieces name
     and mining, which `l12_taskgated_bag`'s iron pieces demand through
@@ -157,7 +157,7 @@ def test_no_scenario_routes_alchemy_without_demand(bundle_game_data: GameData) -
     demand alchemy, so no scenario offers it a climb (USER 2026-10-08)."""
     routed: set[str] = set()
     for name in SCENARIOS:
-        cell = skills_offered(scenario_resolution(name, bundle_game_data))
+        cell = skills_offered(scenario_resolution(name))
         assert SKILL not in cell, name
         routed |= cell
     assert routed == GEAR_NAMEABLE | {"mining"}

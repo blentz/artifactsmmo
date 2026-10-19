@@ -451,9 +451,10 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
     ahead of it.
 
     "an open, XP-positive rung" is `skill_is_grindable(S, C+1)` — the SAME
-    predicate `ReachSkillGoal`'s only action offers and the O1 census
-    (`audit/open_rung_completeness`) verdicts a cell on, so no unplannable
-    root is emitted.
+    predicate `ReachSkillGoal`'s only action offers (the O1 open-rung census
+    that also verdicted cells on it was deleted with the tier ladder's rungs,
+    ruling X of the global gear objective), so no unplannable root is
+    emitted.
 
     ORDER: ONE INTEGER, `state.level - skill level` — how far the skill trails
     the character, largest first — with ties broken by `SKILL_NAMES`, the

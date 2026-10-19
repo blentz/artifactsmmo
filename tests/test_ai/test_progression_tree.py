@@ -32,7 +32,6 @@ from fractions import Fraction
 from pathlib import Path
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.item_catalog import ItemCatalog
 from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, scenario_state
@@ -51,19 +50,20 @@ from artifactsmmo_cli.ai.tiers.progression_tree import (
 from artifactsmmo_cli.ai.weapon_winnability import marginal_weapon_winnability
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = (Path(__file__).parent / "scenarios" / "fixtures"
           / "gamedata_bundle.json")
 
 
 def _bundle() -> GameData:
-    return GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
+    return shared_world(BUNDLE)
 
 
 def _ctx_for(state, gd: GameData):  # type: ignore[no-untyped-def]
     """The context a live cycle walks: the cycle's gear objective attached by
     the one function the player uses (ruling W)."""
-    return attach_gear_objective(state, gd, NO_PROFILE_CONTEXT, None)
+    return attached(state, gd, NO_PROFILE_CONTEXT, None)
 
 
 def _decide(name: str):

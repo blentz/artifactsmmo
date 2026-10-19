@@ -26,6 +26,7 @@ means five things:
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -34,7 +35,6 @@ from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -56,8 +56,27 @@ from artifactsmmo_cli.audit.drop_wall_census import (
     unwinnable_drop_items,
     witness_residual,
 )
+from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
+
+pytestmark = pytest.mark.xdist_group("drop_wall_census")
+"""Ruling AD: the whole module on ONE xdist worker (`--dist loadgroup`), so its
+module-scoped census sweep runs once rather than once per worker."""
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _shared_worlds() -> Iterator[None]:
+    """Ruling AD: the census, and every walk this module drives, run on the
+    process-wide bundle worlds with the gear objective memoized per (state,
+    world) — harness only; production still loads its world and attaches its
+    objective once per run. Patched on the census module itself, so
+    `run_census` and `declared_world` read the same objects the tests do."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(dwc, "load_bundle_game_data", shared_world)
+        patch.setattr(dwc, "attach_gear_objective", attached)
+        yield
+
 
 CLOSES = DropGap.WALL_DROPPER_UNWINNABLE_CLOSES.value
 OUT_OF_REACH = DropGap.WALL_DROPPER_OUT_OF_REACH.value
@@ -178,7 +197,7 @@ def test_the_crossing_is_the_pricers_own_answer(results: list[DropResult]) -> No
     state = scenario_state(scenario, game_data)
     resolution = resolve_root(state, game_data,
                               CharacterObjective.from_game_data(game_data),
-                              attach_gear_objective(state, game_data, NO_PROFILE_CONTEXT, None),
+                              attached(state, game_data, NO_PROFILE_CONTEXT, None),
                               None)
     candidate = next(c for c in (resolution.root, *resolution.alternatives)
                      if repr(c) == wall.candidate)

@@ -29,6 +29,7 @@ those live entirely in `strategy_driver.py` and are never reached by the
 ObtainItem-only Decision graph at all."""
 import dataclasses
 import json
+from pathlib import Path
 
 import pytest
 
@@ -53,11 +54,14 @@ from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.audit.drop_wall_census import unwinnable_drop_items
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.shared_world import shared_world
 from tests.test_ai.test_strategy_driver import (
     _ctx,
     _gd,
     _gd_with_utility_heal,
 )
+
+BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
 
 def _step_root_pairs(gd):
@@ -478,8 +482,7 @@ def test_an_unreachable_closing_chain_keeps_the_honest_wall(
         store.close()
 
 
-def test_where_the_wall_is_reached_and_why_no_cycle_acts_on_it(
-        bundle_game_data) -> None:
+def test_where_the_wall_is_reached_and_why_no_cycle_acts_on_it() -> None:
     """CORPUS-WIDE, and it pins the limit as hard as the feature.
 
     Two cells over the committed scenarios reach a drop-walled material as a
@@ -501,8 +504,9 @@ def test_where_the_wall_is_reached_and_why_no_cycle_acts_on_it(
 
     Since the global gear objective (Task 5) the roots are each scenario's
     `L*` pieces, so which cells reach a wall moved with them; both claims
-    still hold over the corpus and are asserted as before."""
-    gd = bundle_game_data
+    still hold over the corpus and are asserted as before. Swept on the
+    process-wide bundle world (ruling AD)."""
+    gd = shared_world(BUNDLE)
     store = _grind_store()
     reached: list[tuple[str, bool]] = []
     try:

@@ -409,27 +409,24 @@ def test_actionable_step_descends_to_material_for_underskill_craftable() -> None
     assert step == ObtainItem("thread", 3)
 
 
-def test_an_objective_and_game_data_that_disagree_is_neither_skipped_nor_ranked():
-    """WAVE 3a, re-derived Task 5. It used to assert that the old tier walk
-    refused a target the decision's catalogue did not know (`_target_rung`
-    raising), because a silently-substituted rung would rank it.
-
-    The walk from `WhichPieceIsNext` ranks nothing: the order is the gear
-    objective's, so no rung is substituted and nothing is skipped. The piece
-    the objective names is the root, classified by the objective's own
-    catalogue, exactly as named. This pairing — an objective built from one
-    catalogue, a decision run against another — is a shape production never
-    builds: `GamePlayer` loads one `GameData` and hands the same object to
-    both."""
+def test_an_objective_and_game_data_that_disagree_is_an_error_not_a_skip():
+    """WAVE 3a, restored Task 5 fix round 1 (ruling AF). An item the gear
+    objective names and the decision's catalogue does not know is a DATA
+    FAULT: the walk refuses it by name rather than skipping it or classifying
+    it against the objective's own catalogue (`WhichPieceIsNext`; the project
+    rule that missing API data fails rather than defaults). This pairing — an
+    objective built from one catalogue, a decision run against another — is a
+    shape production never builds: `GamePlayer` loads one `GameData` and hands
+    the same object to both."""
     gd_full = _reach_gd()
     obj = CharacterObjective.from_game_data(gd_full)
     assert obj.target_gear.get("helmet_slot") == "iron_helm"
     gd_empty = GameData()
     gd_empty._monster_level = {"chicken": 1}  # char reachable; iron_helm not producible here
     fill_monster_stat_defaults(gd_empty)
-    d = StrategyEngine(obj).decide(make_state(level=5), gd_empty,
+    with pytest.raises(ValueError, match=r"names \['iron_helm'\], absent from game data"):
+        StrategyEngine(obj).decide(make_state(level=5), gd_empty,
                                    ctx=_missing("helmet_slot", "iron_helm"))
-    assert d.chosen_root == ObtainItem(code="iron_helm", quantity=1, slot="helmet_slot")
 
 
 def test_a_sourceless_item_is_off_the_target_sheet_AND_off_the_blocker_sheet():

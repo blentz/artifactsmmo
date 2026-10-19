@@ -46,7 +46,6 @@ assumed:
 """
 
 import dataclasses
-import json
 from pathlib import Path
 
 import pytest
@@ -76,6 +75,7 @@ from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachTaskOutcome
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
+from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -98,7 +98,7 @@ TASK_SCENARIOS = (WORKABLE, UNWINNABLE_CLOSABLE, UNWINNABLE_OPEN,
 
 @pytest.fixture(scope="module")
 def gd() -> GameData:
-    return GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
+    return shared_world(BUNDLE)
 
 
 def _obj(game_data: GameData) -> CharacterObjective:

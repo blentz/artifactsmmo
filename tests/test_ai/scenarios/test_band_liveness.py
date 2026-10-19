@@ -12,16 +12,14 @@ select a goal and emit a non-empty plan, and the search behind that plan
 must stay bounded (the feather_coat 237K-node flood is the deadlock
 precursor this net exists to catch — see project_feather_coat_cpu_peg)."""
 
-import json
 from pathlib import Path
 
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -29,6 +27,7 @@ from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree, has_structur
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
+from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -54,7 +53,7 @@ BAND_NAMES = [
 ]
 
 def _bundle() -> GameData:
-    return GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
+    return shared_world(BUNDLE)
 
 
 def _decide(name: str) -> tuple[StrategyDecision, WorldState]:
@@ -67,11 +66,11 @@ def _decide(name: str) -> tuple[StrategyDecision, WorldState]:
     # The walk's context carries the cycle's gear objective, attached by the
     # one function the player uses (ruling W).
     return decide_tree(state, gd, objective,
-                       ctx=attach_gear_objective(state, gd, NO_PROFILE_CONTEXT, None)), state
+                       ctx=attached(state, gd, NO_PROFILE_CONTEXT, None)), state
 
 
 def _run(name: str) -> PlanReport:
-    gd = load_bundle_game_data(BUNDLE)
+    gd = shared_world(BUNDLE)
     player = GamePlayer(character=name, history=None)
     player.seed_offline(scenario_state(SCENARIOS[name], gd), gd)
     return player.plan_from_state()
@@ -163,7 +162,7 @@ def test_l48_band_adequate_is_the_honest_wall() -> None:
     state = scenario_state(SCENARIOS[L48_BAND_ADEQUATE], gd)
     objective = CharacterObjective.from_game_data(gd)
     decision = decide_tree(state, gd, objective,
-                           ctx=attach_gear_objective(state, gd, NO_PROFILE_CONTEXT, None))
+                           ctx=attached(state, gd, NO_PROFILE_CONTEXT, None))
     shield = ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")
     assert decision.chosen_root == shield
     assert decision.chosen_step == shield
@@ -215,7 +214,7 @@ def test_l48_band_adequate_real_band_adequate_verdict() -> None:
     assert has_structural_upgrade(state, gd, objective) is True
 
     player = GamePlayer(character=L48_BAND_ADEQUATE, history=None)
-    player.seed_offline(state, load_bundle_game_data(BUNDLE))
+    player.seed_offline(state, shared_world(BUNDLE))
     assert player._pick_winnable_monster() == "hellhound"
     assert player._tree_band_adequate() is False
 

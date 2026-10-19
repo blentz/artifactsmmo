@@ -195,7 +195,7 @@ def test_cooking_cannot_be_routed_by_any_GEAR_TARGET(
         assert not ITEM_TYPE_TO_SLOTS.get(stats.type_), code
 
 
-def test_no_scenario_routes_cooking_or_fishing_undemanded(bundle_game_data: GameData) -> None:
+def test_no_scenario_routes_cooking_or_fishing_undemanded() -> None:
     """USER 2026-10-08, "Only when demanded". Cooking used to be routed in every
     scenario as the unconditional floor, and its grind target pulled fishing in
     (`cooking -> cooked_shrimp -> shrimp -> fishing@N`): live, four characters
@@ -209,13 +209,13 @@ def test_no_scenario_routes_cooking_or_fishing_undemanded(bundle_game_data: Game
     routed: set[str] = set()
     mining: list[str] = []
     for name in SCENARIOS:
-        cell = skills_offered(scenario_resolution(name, bundle_game_data))
+        cell = skills_offered(scenario_resolution(name))
         routed |= cell
         if "mining" in cell:
             mining.append(name)
     assert routed.isdisjoint({SKILL, GATHER_SKILL, "woodcutting", "alchemy"})
     assert mining == ["l12_taskgated_bag"]
-    bag = scenario_resolution("l12_taskgated_bag", bundle_game_data)
+    bag = scenario_resolution("l12_taskgated_bag")
     assert ReachSkillLevel(skill="mining", level=10) in bag.alternatives
     assert ObtainItem(code="iron_boots", quantity=1, slot="boots_slot") in bag.alternatives
 

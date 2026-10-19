@@ -14,13 +14,18 @@ from fractions import Fraction
 
 import pytest
 
-from artifactsmmo_cli.ai.decisions.root import IsThisTargetBlocked, RootWalk, resolve_root
+from artifactsmmo_cli.ai.decisions.root import (
+    IsThisTargetBlocked,
+    RootResolution,
+    RootWalk,
+    resolve_root,
+)
 from artifactsmmo_cli.ai.decisions.which_piece_is_next import WhichPieceIsNext
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import gear_objective
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -31,6 +36,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.shared_world import shared_world
 from tests.test_ai.test_decisions_root import _gd
 from tests.test_ai.test_gear_objective import BUNDLE, COPPER, CTX, _novice, _robby
 from tests.test_ai.test_strategy_driver import _ctx
@@ -50,7 +56,7 @@ def _missing(*pieces: GearPiece) -> GearObjective:
 
 def _resolve(state: WorldState, gd: GameData, objective: GearObjective | None,
              decline: dict[MetaGoal, str] | None = None,
-             ctx: SelectionContext | None = None):  # type: ignore[no-untyped-def]
+             ctx: SelectionContext | None = None) -> RootResolution:
     reasons = decline or {}
     return resolve_root(state, gd, CharacterObjective.from_game_data(gd),
                         replace(ctx or _ctx(), gear_objective=objective), None,
@@ -144,7 +150,7 @@ def test_the_node_reads_only_the_context_objective() -> None:
 
 @pytest.fixture(scope="module")
 def bundle() -> GameData:
-    return load_bundle_game_data(BUNDLE)
+    return shared_world(BUNDLE)
 
 
 def test_robby_climbs_or_builds_never_waits(bundle: GameData) -> None:
@@ -215,3 +221,13 @@ def test_the_held_cell_grinds_exactly_the_next_level(bundle: GameData) -> None:
     report = player.plan_from_state()
     assert report.decision.chosen_root == ReachCharLevel(level=15)
     assert repr(report.selected_goal) == "GrindCharacterXP(highwayman)"
+
+
+def test_a_piece_the_catalogue_does_not_know_is_refused() -> None:
+    """API data or fail (ruling AF): an objective naming an item the
+    decision's game data does not know raises, by name, before any piece is
+    classified — even when a known piece comes first."""
+    gd = _gd()
+    ghost = GearPiece("helmet_slot", "no_such_helmet", 0, Fraction(1), Fraction(1))
+    with pytest.raises(ValueError, match=r"\['no_such_helmet'\], absent from game data"):
+        _resolve(make_state(level=15), gd, _missing(CLUB, ghost))

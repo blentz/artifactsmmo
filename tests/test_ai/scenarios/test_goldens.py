@@ -26,7 +26,8 @@ import pytest
 
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
+from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -148,7 +149,7 @@ EXPECTATIONS: dict[str, Golden] = {
 
 def _run(name: str) -> PlanReport:
     player = GamePlayer(character=name, history=None)
-    gd = load_bundle_game_data(BUNDLE)
+    gd = shared_world(BUNDLE)
     player.seed_offline(scenario_state(SCENARIOS[name], gd), gd)
     return player.plan_from_state()
 

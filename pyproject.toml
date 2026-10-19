@@ -88,7 +88,11 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "--tb=short --strict-markers -W error --cov=src/artifactsmmo_cli --cov-report=term-missing --cov-fail-under=100"
 markers = [
-    "integration: marks tests as integration tests"
+    "integration: marks tests as integration tests",
+    # pytest-xdist registers this itself; declared here too so a run with
+    # `-p no:xdist` (the focused-test command) still collects the census
+    # modules that carry it under --strict-markers.
+    "xdist_group(name): run every test of the group on one xdist worker (--dist loadgroup)",
 ]
 
 [tool.coverage.run]

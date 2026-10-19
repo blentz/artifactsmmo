@@ -27,6 +27,7 @@ max. Measured at this loadout the guard's band is 75-85 % of a 435 max, so 348
 """
 
 import dataclasses
+from pathlib import Path
 
 import pytest
 
@@ -39,6 +40,9 @@ from artifactsmmo_cli.ai.thresholds import CRITICAL_HP_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, active_guards
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachSkillLevel
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.shared_world import shared_world
+
+BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
 CELL = "l22_rest_for_combat"
 TARGET = "flying_snake"
@@ -131,13 +135,14 @@ def test_resting_to_full_silences_the_guard_and_moves_the_goal(
     assert repr(report.selected_goal) == "ReachSkill(weaponcrafting->16)"
 
 
-def test_no_other_scenario_reaches_this_guard(
-        bundle_game_data: GameData) -> None:
+def test_no_other_scenario_reaches_this_guard() -> None:
     """The gap the cell closes, measured over the whole set through the SAME
-    real-context seam — not through the census context, which cannot see it."""
+    real-context seam — not through the census context, which cannot see it.
+    On the process-wide bundle world (ruling AD): `seed_offline` writes each
+    scenario's own event overlay, as the live player does every cycle."""
     holders = set()
     for name in SCENARIOS:
-        scenario_gd = bundle_game_data
+        scenario_gd = shared_world(BUNDLE)
         scenario_world = scenario_state(SCENARIOS[name], scenario_gd)
         player = GamePlayer(character=name, history=None)
         player.seed_offline(scenario_world, scenario_gd)

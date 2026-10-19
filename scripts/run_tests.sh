@@ -39,7 +39,10 @@ CENSUS=tests/test_audit/test_inventory_census.py
 rm -f .coverage .coverage.*
 
 echo "== Lane 1: parallel bulk (-n auto, excludes scenarios + census) =="
-uv run pytest -n auto -p no:cacheprovider tests/ \
+# `--dist loadgroup` (ruling AD, global gear objective Task 5): a module marked
+# `xdist_group` (the currency- and drop-wall censuses) runs on ONE worker, so
+# its module-scoped census sweep is computed once rather than once per worker.
+uv run pytest -n auto --dist loadgroup -p no:cacheprovider tests/ \
   --ignore="$SCENARIOS" --ignore="$CENSUS" \
   --cov-fail-under=0 -q
 

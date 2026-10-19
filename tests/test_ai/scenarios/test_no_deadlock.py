@@ -27,17 +27,15 @@ for the full per-scenario derivation notes (in particular
 `l10_gearcrafting_gap`'s L12->L10 re-derivation, which caught a genuine
 grey-mob drop-farm interaction the original investigation's framing missed)."""
 
-import json
 from pathlib import Path
 
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
@@ -49,6 +47,7 @@ from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
+from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -63,7 +62,7 @@ CRITERION_2_WALLED already exist in SCENARIOS (reused per the task brief)."""
 
 
 def _bundle() -> GameData:
-    return GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
+    return shared_world(BUNDLE)
 
 
 def _decide(name: str) -> tuple[StrategyDecision, WorldState]:
@@ -73,11 +72,11 @@ def _decide(name: str) -> tuple[StrategyDecision, WorldState]:
     # The walk's context carries the cycle's gear objective, attached by the
     # one function the player uses (ruling W).
     return decide_tree(state, gd, objective,
-                       ctx=attach_gear_objective(state, gd, NO_PROFILE_CONTEXT, None)), state
+                       ctx=attached(state, gd, NO_PROFILE_CONTEXT, None)), state
 
 
 def _player(name: str) -> tuple[GamePlayer, GameData]:
-    gd = load_bundle_game_data(BUNDLE)
+    gd = shared_world(BUNDLE)
     player = GamePlayer(character=name, history=None)
     player.seed_offline(scenario_state(SCENARIOS[name], gd), gd)
     return player, gd

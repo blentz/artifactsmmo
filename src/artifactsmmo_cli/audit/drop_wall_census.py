@@ -105,9 +105,8 @@ gathering-demand gate (`decisions/root._orphan_skill_roots`'s third conjunct,
 `gather_demand.gather_demand`) dropped that to 247: `resolve_root`'s
 alternatives no longer carry a standalone gathering-skill root for a scenario
 whose gear siblings and trunk demand nothing from it, which is most of the 44
-— see `tests/test_audit/test_open_rung_completeness.
-test_the_routing_breakdown_scopes_the_residual` for the same shrink on the
-routing side. The TWO-PASS demand fix (the candidate orphans seed
+— the deleted open-rung census (ruling X of the global gear objective)
+measured the same shrink on the routing side. The TWO-PASS demand fix (the candidate orphans seed
 `gather_demand` too, so cooking's rung can ask for the fish it needs) put 4
 back: 251. USER 2026-10-08 "Only when demanded" then removed every undemanded
 standalone skill root — the unconditional cooking climb and the undemanded

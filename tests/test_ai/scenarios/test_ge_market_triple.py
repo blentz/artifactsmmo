@@ -41,13 +41,14 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -76,12 +77,12 @@ cell starts testing the timeout instead of the dimension."""
 
 @pytest.fixture(scope="module")
 def quiet() -> GameData:
-    return load_bundle_game_data(BUNDLE)
+    return shared_world(BUNDLE)
 
 
 @pytest.fixture(scope="module")
 def busy() -> GameData:
-    return load_bundle_game_data(BUNDLE, with_ge_orders=True)
+    return shared_world(BUNDLE, with_ge_orders=True)
 
 
 def _market(name: str, quiet: GameData, busy: GameData) -> GameData:
@@ -205,14 +206,22 @@ def test_cell5_leafs_the_descent_on_the_standing_order(
     ]
 
 
-def test_cell5_changes_the_planned_first_action(busy: GameData,
-                                                quiet: GameData) -> None:
-    """The dimension flip reaching all the way to an ACTION, not a predicate.
+def test_cell5_the_book_reorders_the_objective_and_the_first_action(
+        busy: GameData, quiet: GameData) -> None:
+    """The dimension flip reaching all the way to an ACTION, not a predicate:
+    the same character's root and first action differ between the busy book
+    and the quiet one. This is the strongest evidence in the file that the GE
+    bundle key is load-bearing: before it existed, the busy side of this
+    assertion was unreachable offline. (Until Task 5 the busy side bought the
+    leg armour off the book.)
 
-    The same character buys the leg armour off the book in the busy market and
-    walks to the iron rocks in the quiet one. This is the strongest evidence in
-    the file that the GE bundle key is load-bearing: before it existed, the
-    left-hand side of this assertion was unreachable offline.
+    ⚠️ KNOWN DEFECT, PINNED ON PURPOSE (ruling AE, a Plan B MUST-FIX): the
+    price says BUY, the step CLIMBS. The amulet heads `L*` because the book
+    sells it cheaply, yet the walk serves it with a jewelrycrafting climb,
+    because `classify_target` reads the crafting gate before any buy route.
+    The step that serves a piece must be the route that priced it; Plan B
+    (with ruling J's pricing) fixes it, and this assertion then changes to the
+    buy. Until then the climb still pays the craft XP the user expects.
 
     RE-DERIVED Task 5 (global gear objective): the book now moves the ROOT.
     The gear objective prices each missing `L*` piece (`route_price`), and the

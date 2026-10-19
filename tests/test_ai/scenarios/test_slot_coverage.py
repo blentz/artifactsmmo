@@ -191,6 +191,7 @@ from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
+from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -246,7 +247,7 @@ dominance flips that comparison, which is the intended correction."""
 
 
 def _bundle() -> GameData:
-    return GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
+    return shared_world(BUNDLE)
 
 
 def _state(name: str, gd: GameData) -> WorldState:
@@ -254,7 +255,7 @@ def _state(name: str, gd: GameData) -> WorldState:
 
 
 def _run(name: str) -> PlanReport:
-    gd = load_bundle_game_data(BUNDLE)
+    gd = shared_world(BUNDLE)
     player = GamePlayer(character=name, history=None)
     player.seed_offline(_state(name, gd), gd)
     return player.plan_from_state()
@@ -693,8 +694,12 @@ def test_l12_bag_pursuit_satchel_chain_gated() -> None:
     assert gd.npc_location("tasks_trader") is None
 
 
-def test_l12_bag_pursuit_satchel_becomes_attainable_but_is_no_longer_pursued() -> None:
-    """RENAMED IN WAVE 3a fix-round 1. LOST: the decision half. The achievement
+def test_l12_bag_pursuit_satchel_becomes_attainable_and_is_offered_as_a_piece() -> None:
+    """RENAMED Task 5 fix round 1 (was `..._but_is_no_longer_pursued`): with the
+    gear objective the satchel is an `L*` piece again, offered in the
+    alternatives.
+
+    RENAMED IN WAVE 3a fix-round 1. LOST: the decision half. The achievement
     still opens satchel at the OBJECTIVE layer (asserted below, unchanged), but
     the walk targets `backpack` and the C4 funding route is never planned.
     Wave 4 restores it (task-6 report, R4).
