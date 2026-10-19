@@ -633,8 +633,10 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                      "is_attainable_now item on its old zero-stat sheet). On "
                      "its gear's own totals (ruling R, 2026-10-18) drops of "
                      "monsters it now beats open structural upgrades, so it "
-                     "is no longer band-adequate: the walk offers gear it "
-                     "cannot yet route, and the cycle Waits."),
+                     "is no longer band-adequate. Under the gear objective "
+                     "its root is the first missing L* piece, and the cycle "
+                     "plans its acquisition: "
+                     "UpgradeEquipment(goblin_guard_shield) (test_l48_raid_pair)."),
 
     "l48_raid_active": ScenarioCharacter(
         name="l48_raid_active", level=48, max_hp=690, gold=800,
@@ -664,8 +666,10 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                      "unlike god_of_the_sun (sonnengott L55, underground). "
                      "Derives its combat stats like its pair (ruling R, "
                      "2026-10-18); on them pixie reads unsurvivable, so the "
-                     "raid is refused and both poles Wait until that damage "
-                     "estimate is fixed (test_l48_raid_pair)."),
+                     "raid is refused. Even a survivable raid is not offered "
+                     "while an L* piece is missing (rulings Z, AJ): both poles "
+                     "plan UpgradeEquipment(goblin_guard_shield) "
+                     "(test_l48_raid_pair)."),
 
     # --- Event-gear pursuit across the L48 wall (2026-07-07 slot-coverage
     # pass): the l48_band_adequate loadout with REAL combat stats

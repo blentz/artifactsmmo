@@ -247,3 +247,20 @@ def test_a_piece_the_catalogue_does_not_know_is_refused() -> None:
     ghost = GearPiece("helmet_slot", "no_such_helmet", 0, Fraction(1), Fraction(1))
     with pytest.raises(ValueError, match=r"\['no_such_helmet'\], absent from game data"):
         _resolve(make_state(level=15), gd, _missing(CLUB, ghost))
+
+
+def test_no_trunk_at_the_level_cap() -> None:
+    """Final review F12: at the API's level cap (`GameData.max_character_level`)
+    no `ReachCharLevel` is offered, held or behind declined pieces — it could
+    never be satisfied, and the character would grind `m*` for XP the game no
+    longer awards. One level below the cap the trunk is still offered."""
+    gd = _gd()
+    cap = gd.max_character_level
+    held = _resolve(make_state(level=cap), gd, _missing())
+    assert held.root is None
+    assert not any(isinstance(alt, ReachCharLevel) for alt in held.alternatives)
+    club_step = ObtainItem("ash_club", 1, slot="weapon_slot")
+    declined = _resolve(make_state(level=cap), gd, _missing(CLUB), {club_step: "b"})
+    assert declined.root is None
+    assert declined.alternatives[:1] == (club_step,)
+    assert _resolve(make_state(level=cap - 1), gd, _missing()).root == ReachCharLevel(level=cap)

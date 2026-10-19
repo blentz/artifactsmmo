@@ -62,6 +62,20 @@ def gear_keep_for(state: WorldState, game_data: GameData, history: LearningStore
     return keep
 
 
+def gear_objective_line(objective: GearObjective | None) -> str:
+    """The per-cycle log line naming the target monster `m*` and the first
+    missing `L*` piece (final review F8): nothing measures cycle-to-cycle
+    flips of either, and a flipped root breaks a commitment at once, so the
+    live witness logs both every time the cycle decides."""
+    if objective is None:
+        return "Gear objective: none (no loadout pays XP)"
+    if objective.held:
+        return f"Gear objective: target {objective.monster}; L* held"
+    first = objective.missing[0]
+    return (f"Gear objective: target {objective.monster}; first missing "
+            f"{first.code} ({first.slot}); {len(objective.missing)} missing")
+
+
 def with_objective_keep(keep: dict[str, int],
                         objective: GearObjective | None) -> dict[str, int]:
     """`keep` with every `L*` code kept at the copies `L*` wears (two of a

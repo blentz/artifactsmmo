@@ -26,6 +26,8 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_gear_objective import BUNDLE, CTX, _carrying_its_target, _robby
@@ -246,3 +248,32 @@ def test_the_keep_carries_l_star_at_its_worn_count() -> None:
     keep = ctx_mod.with_objective_keep({"iron_helm": 3, "copper_ring": 1}, rings)
     assert keep == {"iron_helm": 3, "copper_ring": 1, "iron_ring": 2}
     assert ctx_mod.with_objective_keep({"copper_ring": 1}, None) == {"copper_ring": 1}
+
+
+def test_the_objective_line_names_the_target_and_the_first_missing_piece() -> None:
+    """Final review F8: one line per decided cycle names `m*` and the first
+    missing `L*` piece, so a 24 h witness can count flips of either."""
+    assert ctx_mod.gear_objective_line(MISSING) == (
+        "Gear objective: target wolf; first missing iron_helm (helmet_slot); 1 missing")
+    assert ctx_mod.gear_objective_line(HELD) == "Gear objective: target wolf; L* held"
+    assert ctx_mod.gear_objective_line(None) == "Gear objective: none (no loadout pays XP)"
+
+
+def test_every_decided_cycle_logs_its_objective(
+        monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """The line is printed where the cycle's context is built (`_decide_band`),
+    before the decision, so it is there even when the decision raises."""
+    player = _player(monkeypatch, MISSING, [])
+
+    class _Stop(Exception):
+        pass
+
+    def stop(*_: object, **__: object) -> None:
+        raise _Stop
+
+    player._strategy = StrategyEngine(objective=CharacterObjective.from_game_data(GameData()))
+    monkeypatch.setattr(StrategyEngine, "decide", stop)
+    with pytest.raises(_Stop):
+        player._decide_band(player.state, player.game_data, [])
+    assert "Gear objective: target wolf; first missing iron_helm (helmet_slot); 1 missing" \
+        in capsys.readouterr().out

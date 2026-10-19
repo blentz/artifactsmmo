@@ -101,7 +101,11 @@ from artifactsmmo_cli.ai.failure_recovery_core import (
 )
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective, gear_keep_for
+from artifactsmmo_cli.ai.gear_objective_context import (
+    attach_gear_objective,
+    gear_keep_for,
+    gear_objective_line,
+)
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
 from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
@@ -697,6 +701,7 @@ class GamePlayer:
         assert self._strategy is not None
         ctx = self._selection_context()
         self._last_ctx = ctx
+        print(f"[{self._now()}] {gear_objective_line(ctx.gear_objective)}")
         step_decline = self._step_decline(state, game_data, ctx, actions)
         self._notify_planning(True)
         # The search cache spans the WHOLE decision, not just the planner search

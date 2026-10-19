@@ -9177,12 +9177,18 @@ FLEET_WORK_MUTATIONS = [
 WHICH_PIECE_MUTATIONS = [
     ("which-piece: the held branch takes the first piece instead of the level",
      "        if target.held:\n"
-     "            return ReachCharLevel(level=state.level + 1)\n",
+     "            return next_level(state, game_data)\n",
      "        if target.held and target.missing:\n"
-     "            return ReachCharLevel(level=state.level + 1)\n"),
+     "            return next_level(state, game_data)\n"),
     ("which-piece: a held objective grinds to the current level",
-     "            return ReachCharLevel(level=state.level + 1)\n",
-     "            return ReachCharLevel(level=state.level)\n"),
+     "    return ReachCharLevel(level=state.level + 1)\n",
+     "    return ReachCharLevel(level=state.level)\n"),
+    ("which-piece: the trunk is offered at the level cap (F12)",
+     "    if state.level >= game_data.max_character_level:\n",
+     "    if False:\n"),
+    ("which-piece: the trunk stops one level below the cap (F12)",
+     "    if state.level >= game_data.max_character_level:\n",
+     "    if state.level + 1 >= game_data.max_character_level:\n"),
     ("which-piece: a declined piece is kept as the root",
      "            if self.walk.serves(piece.slot, gear, state, game_data, ctx, history):\n",
      "            if self.walk.serves(piece.slot, gear, state, game_data, ctx, history) or True:\n"),
@@ -9194,7 +9200,7 @@ WHICH_PIECE_MUTATIONS = [
      "        if False:\n"),
     ("which-piece: every piece declined is no root (ruling AI)",
      "        # offered behind the declined pieces, which stay in `declined` by name.\n"
-     "        return ReachCharLevel(level=state.level + 1)\n",
+     "        return next_level(state, game_data)\n",
      "        # offered behind the declined pieces, which stay in `declined` by name.\n"
      "        return None\n"),
     ("which-piece: no objective grinds a level instead of the wall",
@@ -9205,10 +9211,13 @@ WHICH_PIECE_MUTATIONS = [
 ]
 WHICH_PIECE_ROOT_MUTATIONS = [
     ("root/resolve_root: the trunk is offered while a piece is missing",
+     "    if target is not None and target.held and trunk is not None:\n",
+     "    if target is not None and trunk is not None:\n"),
+    ("root/resolve_root: the trunk is offered at the level cap (F12)",
+     "    if target is not None and target.held and trunk is not None:\n"
+     "        ordered.append(trunk)\n",
      "    if target is not None and target.held:\n"
-     "        ordered.append(ReachCharLevel(level=state.level + 1))\n",
-     "    if target is not None:\n"
-     "        ordered.append(ReachCharLevel(level=state.level + 1))\n"),
+     "        ordered.append(trunk or ReachCharLevel(level=state.level + 1))\n"),
     ("root/resolve_root: the missing pieces are not offered as alternatives",
      "        for piece in (target.missing if target is not None else ())\n",
      "        for piece in ()\n"),
@@ -9803,6 +9812,9 @@ GEAR_OBJECTIVE_CTX_MUTATIONS = [
     ("ctx: the L* pieces leave the keep (ruling AM)",
      "            objective),\n",
      "            None),\n"),
+    ("log line: a held objective reads as a missing piece (F8)",
+     "    if objective.held:\n        return f\"Gear objective: target {objective.monster}; L* held\"\n",
+     "    if False:\n        return f\"Gear objective: target {objective.monster}; L* held\"\n"),
     ("keep: a ring worn twice keeps one copy (ruling AM)",
      "        out[code] = max(out.get(code, 0), worn)\n",
      "        out[code] = max(out.get(code, 0), 1)\n"),
@@ -9814,6 +9826,9 @@ GEAR_OBJECTIVE_CTX_MUTATIONS = [
      "        ctx, combat_monster=combat_monster,\n"),
 ]
 GEAR_OBJECTIVE_CTX_PLAYER_MUTATIONS = [
+    ("player: the cycle's objective is never logged (F8)",
+     "        print(f\"[{self._now()}] {gear_objective_line(ctx.gear_objective)}\")\n",
+     "        gear_objective_line(ctx.gear_objective)\n"),
     ("ctx: the objective is priced without the task's target",
      "            combat_monster=task_monster,\n",
      "            combat_monster=None,\n"),

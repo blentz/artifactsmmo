@@ -133,10 +133,12 @@ echo "== (c''') census (--check x14, + joint-walk report) =="
 # diagnosis exactly as that script's docstring intends.
 # LIVENESS_MATRIX.md is restored for a DIFFERENT reason: its `observed` column
 # is environment-dependent BY DESIGN. A developer with a learning DB gets live
-# counts; CI and a fresh clone get "unknown". The COMMITTED copy is the no-DB
-# one, so the file in git is reproducible anywhere; a local run overwrites it
-# with the richer view and this restores it. The gate VERDICT is identical
-# either way -- the undeclared/orphan arms read the source, not the store.
+# counts; CI and a fresh clone get "unknown". The COMMITTED copy is NOT the
+# no-DB one: it carries the observed counts of whichever learning DB it was
+# last generated against. A local run overwrites it with this machine's view
+# and this restores the committed copy, so the gate never rewrites it. The
+# gate VERDICT does not depend on which copy is on disk -- the
+# undeclared/orphan arms read the source, not the store.
 ( cd "$ROOT" && git checkout -- docs/craft_completeness/MATRIX.md docs/craft_completeness/BACKLOG.md \
                                 docs/craft_completeness/CONDITIONS.md \
                                 docs/behavioral_completeness/LIVENESS_MATRIX.md )

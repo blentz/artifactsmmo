@@ -955,8 +955,9 @@ def resolve_root(state: WorldState, game_data: GameData,
                             RootWalk()).resolve(state, game_data, ctx, history)
         for piece in (target.missing if target is not None else ())
     ]
-    if target is not None and target.held:
-        ordered.append(ReachCharLevel(level=state.level + 1))
+    trunk = _which_piece.next_level(state, game_data)
+    if target is not None and target.held and trunk is not None:
+        ordered.append(trunk)
     # THE RESTORED SEAM: the orphan skill roots, after the gear siblings and
     # after the trunk. Produced here, beside the trunk, and for the same reason
     # the trunk is produced here — neither is a question the tier walk asks,

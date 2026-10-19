@@ -23,10 +23,21 @@ from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
+def next_level(state: WorldState, game_data: GameData) -> ReachCharLevel | None:
+    """The trunk: one more character level, or None at the API's level cap
+    (`GameData.max_character_level`, final review F12). A `ReachCharLevel`
+    above the cap can never be satisfied, and the character would grind `m*`
+    for XP the game no longer awards."""
+    if state.level >= game_data.max_character_level:
+        return None
+    return ReachCharLevel(level=state.level + 1)
+
+
 class WhichPieceIsNext(Decision[MetaGoal]):
     """Which missing `L*` piece does the character acquire next?
 
-    * `L*` held (§2.4.1): `ReachCharLevel(state.level + 1)`, whose step fights
+    * `L*` held (§2.4.1): `ReachCharLevel(state.level + 1)` (none at the
+      level cap, `next_level`), whose step fights
       `m*` (`ctx.combat_monster` is `m*` exactly while `L*` is held). One level,
       not a milestone: `(L*, m*)` is recomputed every cycle, so a level-up that
       makes better gear legal retargets the very next cycle.
@@ -61,7 +72,7 @@ class WhichPieceIsNext(Decision[MetaGoal]):
         if target is None:
             return None
         if target.held:
-            return ReachCharLevel(level=state.level + 1)
+            return next_level(state, game_data)
         unknown = [piece.code for piece in target.missing
                    if game_data.item_stats(piece.code) is None]
         if unknown:
@@ -79,4 +90,4 @@ class WhichPieceIsNext(Decision[MetaGoal]):
         # heads 3 of 5 objectives). Plan B must make the obtain model and the
         # walk agree, so `L*` never names such a piece; until then the trunk is
         # offered behind the declined pieces, which stay in `declined` by name.
-        return ReachCharLevel(level=state.level + 1)
+        return next_level(state, game_data)
