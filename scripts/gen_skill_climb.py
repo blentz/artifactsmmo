@@ -1,0 +1,96 @@
+"""Generate docs/behavioral_completeness/SKILL_CLIMB_MATRIX.md by running the O1
+skill-climb census (wave-3 resolution design, §3.5 obligation O1 — the
+ACCEPTANCE gate for "the bot cannot raise this skill and cannot say why";
+restored by ruling AK of the global gear objective).
+
+Offline + deterministic (no live API): loads
+tests/test_ai/scenarios/fixtures/gamedata_bundle.json — the same fixture the
+craft, inventory, recycle-source, obtain-parity, shed and requirement censuses
+plan against.
+
+Serial: the grid is `len(SCENARIOS) x len(SKILL_NAMES)` cells, each one
+catalogue arithmetic plus one short-circuiting obtainability walk, with a single
+`resolve_root` drive (and one gear objective, `attach_gear_objective`) amortised
+across each scenario's eight skills. The gear objective dominates the run time
+(about a minute on the committed bundle, one `GameData` for the whole sweep).
+
+    uv run python scripts/gen_skill_climb.py
+
+CI gate: pass `--check` to exit non-zero when the sweep is smaller than
+`MIN_CELLS` (a blind sweep cannot report a clean residual), or when any cell
+classifies `silent_stall`, `unexplained` or `skill_catalogue_empty` —
+the must-be-zero residuals,
+mirroring the craft census's `planner_bug`, the shed census's
+`shed_starvation_bug` and the obtain census's `obtain_parity_bug`. The four
+`WALL_*` classes are EXPLAINED closures (the catalogue, not the graph, stopped
+the climb) and do not fail the gate.
+
+`--check` still writes the doc, so a failing pipeline also surfaces the
+regenerated MATRIX:
+
+    uv run python scripts/gen_skill_climb.py --check
+"""
+
+import json
+import sys
+import time
+from pathlib import Path
+
+from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.audit.skill_climb_completeness import (
+    MIN_CELLS,
+    RESIDUALS,
+    render_matrix,
+    run_census,
+    summary_line,
+)
+
+BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
+OUT_DIR = Path("docs/behavioral_completeness")
+
+
+def main() -> None:
+    check = "--check" in sys.argv[1:]
+    game_data = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
+    start = time.monotonic()
+    results = run_census(game_data)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "SKILL_CLIMB_MATRIX.md").write_text(render_matrix(results))
+    print(f"census done in {time.monotonic() - start:.1f}s", file=sys.stderr)
+    print(summary_line(results))
+    if not check:
+        return
+
+    # BLINDNESS FLOOR, BEFORE the residual test. `[r for r in results if
+    # r.gap in RESIDUALS]` is satisfied by an EMPTY census, so a `run_census`
+    # that discovered nothing would print "0 cells ... PASS 0" and exit 0 --
+    # the flattering-gate failure this repo has shipped once already. The
+    # suite's floors cannot cover this path: `scripts/*` is coverage-omitted
+    # and census-gate.yml runs the scripts without pytest. `MIN_CELLS` is the
+    # SAME constant the suite asserts, so the two cannot drift.
+    if len(results) < MIN_CELLS:
+        print(f"GATE FAILED: census swept {len(results)} cells, floor is "
+              f"{MIN_CELLS} — the sweep went blind, so a clean residual count "
+              f"would mean nothing.", file=sys.stderr)
+        sys.exit(1)
+
+    bugs = [r for r in results if r.gap in RESIDUALS]
+    if not bugs:
+        print(f"GATE CLEAN: {len(results)} cells swept, 0 residual "
+              f"(SILENT_STALL / UNEXPLAINED / SKILL_CATALOGUE_EMPTY).",
+              file=sys.stderr)
+        return
+    print(f"GATE FAILED: {len(bugs)} residual cell(s):", file=sys.stderr)
+    for r in bugs:
+        inv = r.inventory
+        print(f"  {r.scenario} ReachSkillLevel({r.skill}, {r.target}) "
+              f"gap={r.gap} routed={r.routed} in_level={inv.in_level} "
+              f"xp_positive={inv.xp_positive} obtainable={inv.obtainable} "
+              f"above={inv.above} gather_in_level={inv.gather_in_level} "
+              f"gather_xp_positive={inv.gather_xp_positive} "
+              f"gather_drop={inv.gather_drop}", file=sys.stderr)
+    sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

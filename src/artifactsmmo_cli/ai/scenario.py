@@ -307,8 +307,9 @@ def derived_scenario_state(sc: ScenarioCharacter, game_data: GameData) -> WorldS
     item in the catalogue and an offline census measures the harness.
     `scenario_state` RAISES on an equipped code the catalogue does not know,
     which is what a census wants — a missing catalogue entry must fail
-    loudly, never shrink the grid. (Moved here from the deleted
-    `audit/open_rung_completeness`, whose `census_state` it was.)"""
+    loudly, never shrink the grid. (Moved here from
+    `audit/open_rung_completeness`, whose `census_state` it was; that census
+    is now `audit/skill_climb_completeness`.)"""
     return scenario_state(replace(sc, derive_combat_stats=True), game_data)
 
 

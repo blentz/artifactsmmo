@@ -467,6 +467,7 @@ ROOT_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "ro
 CURRENCY_WALL_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "currency_wall_census.py"
 WHICH_PIECE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "which_piece_is_next.py"
 TUI_APP_SRC = ROOT / "src" / "artifactsmmo_cli" / "tui" / "app.py"
+SKILL_CLIMB_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "skill_climb_completeness.py"
 GATHER_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_demand.py"
 CRAFT_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_demand.py"
 # `_equippable_goal` / `_gather_goal_for_unreachable_equippable` /
@@ -9241,6 +9242,27 @@ TRUNK_DECLINED_STEP_MUTATIONS = [
 ]
 
 
+# Ruling AK: the restored skill-climb census (O1). Killed by
+# tests/test_audit/test_skill_climb_completeness.py.
+SKILL_CLIMB_MUTATIONS = [
+    ("skill climb: only the resolved root counts as routed",
+     "        for goal in (resolution.root, *resolution.alternatives)\n",
+     "        for goal in (resolution.root,)\n"),
+    ("skill climb: the walk runs without the gear objective",
+     "        state, game_data, CharacterObjective.from_game_data(game_data), ctx, None)\n",
+     "        state, game_data, CharacterObjective.from_game_data(game_data), NO_PROFILE_CONTEXT, None)\n"),
+    ("skill climb: a routed closure is explained as a wall",
+     "    if routed:\n        return ClimbGap.SILENT_STALL\n",
+     "    if False:\n        return ClimbGap.SILENT_STALL\n"),
+    ("skill climb: an empty catalogue reads as a topped skill",
+     "        return ClimbGap.SKILL_CATALOGUE_EMPTY\n",
+     "        return ClimbGap.WALL_SKILL_TOPPED\n"),
+    ("skill climb: the verdict ignores production's predicate",
+     "            open_climb = skill_is_grindable(skill, level + 1, state, game_data)\n",
+     "            open_climb = True\n"),
+]
+
+
 # Security (ruling AN): the TUI's fatal-error handler never renders frame locals
 # (the API token is one). Killed by tests/test_tui/test_app.py.
 TUI_FATAL_ERROR_MUTATIONS = [
@@ -11358,6 +11380,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_decisions_which_piece.py", survivors)
     run_group(TUI_APP_SRC, TUI_FATAL_ERROR_MUTATIONS,
               "tests/test_tui/test_app.py", survivors)
+    run_group(SKILL_CLIMB_SRC, SKILL_CLIMB_MUTATIONS,
+              "tests/test_audit/test_skill_climb_completeness.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, RAID_MAY_FIGHT_MUTATIONS,
               "tests/test_ai/test_participate_raid_goal.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, TRUNK_DECLINED_STEP_MUTATIONS,

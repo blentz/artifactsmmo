@@ -558,7 +558,7 @@ def objective_step_goal(
         # the first thing in this codebase that can put a `ReachSkillLevel` in
         # `chosen_step`, and until this arm existed the function fell off the
         # end and returned None for it — a SILENT STALL, which is the exact
-        # failure the O1 open-rung census exists to catch. The step already
+        # failure the O1 skill-climb census exists to catch. The step already
         # carries the skill AND the target level (current + 1, re-derived every
         # cycle by the graph), so the mapping is total: `ReachSkillGoal` aims
         # `LevelSkill` at that skill, exactly as `decisions/obtain_item.

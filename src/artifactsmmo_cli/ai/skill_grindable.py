@@ -1,5 +1,5 @@
 """Is there an open rung to grind a skill from here? The one predicate the walk's
-skill-gate sub-task, the orphan-skill roots and the open-rung census ask
+skill-gate sub-task, the orphan-skill roots and the skill-climb census ask
 (Phase 2d; it used to be the `LevelSkill` macro's applicability)."""
 
 from artifactsmmo_cli.ai.game_data import GameData

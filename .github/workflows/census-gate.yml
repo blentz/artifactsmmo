@@ -56,6 +56,7 @@ on:
       - "scripts/gen_obtain_parity.py"
       - "scripts/gen_requirement_parity.py"
       - "scripts/gen_shed_reachability.py"
+      - "scripts/gen_skill_climb.py"
       - "scripts/gen_one_cost_model.py"
       - "scripts/gen_currency_wall.py"
       - "scripts/gen_drop_wall.py"
@@ -71,6 +72,7 @@ on:
       - "scripts/gen_obtain_parity.py"
       - "scripts/gen_requirement_parity.py"
       - "scripts/gen_shed_reachability.py"
+      - "scripts/gen_skill_climb.py"
       - "scripts/gen_one_cost_model.py"
       - "scripts/gen_currency_wall.py"
       - "scripts/gen_drop_wall.py"
@@ -104,6 +106,15 @@ jobs:
       # census in the set (0.7s, `ast` over src/ only), so it runs first.
       - name: reachability-claim census — every no-caller claim is TRUE
         run: uv run python scripts/gen_reachability_claims.py --check
+
+      # Obligation O1 of the wave-3 resolution design (spec 2026-08-23 3.5),
+      # restored by ruling AK of the global gear objective: every
+      # ReachSkillLevel(S, C+1) the root walk routes to across the scenario set
+      # can plan, or is a NAMED wall. The residual is a closed climb the walk
+      # actually routes to -- the gear objective makes ReachSkillLevel the
+      # dominant root for days, so a silent closure is a stall.
+      - name: skill-climb census — silent_stall == 0 AND unexplained == 0
+        run: uv run python scripts/gen_skill_climb.py --check
 
       - name: shed-reachability census — shed_starvation_bug == 0 AND disposal_contradiction_bug == 0
         run: uv run python scripts/gen_shed_reachability.py --check

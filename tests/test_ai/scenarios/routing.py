@@ -2,6 +2,8 @@
 
 Was `audit/open_rung_completeness.routed_skills`, deleted with that audit
 (ruling X); the scenario suites that still ask the question keep it here. The
+restored census (`audit/skill_climb_completeness`, ruling AK) drives the same
+walk for its own routed set. The
 walk's context carries the cycle's gear objective, attached by the one
 function the player uses (`gear_objective_context.attach_gear_objective`),
 through the harness memo `shared_world.attached`.

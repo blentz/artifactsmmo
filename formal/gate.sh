@@ -105,10 +105,11 @@ echo "== (c'') openapi conformance (strict) =="; ( cd "$ROOT" && uv run python f
 # worst on `ai/obtain_sources`, which ELEVEN production modules import and both
 # plan producers run through. Those comments were true when written and were
 # never revisited, which is what makes it a class rather than two incidents.
-echo "== (c''') census (--check x13, + joint-walk report) =="
+echo "== (c''') census (--check x14, + joint-walk report) =="
 ( cd "$ROOT" \
   && uv run python scripts/gen_reachability_claims.py --check \
   && uv run python scripts/gen_liveness.py --check \
+  && uv run python scripts/gen_skill_climb.py --check \
   && uv run python scripts/gen_shed_reachability.py --check \
   && uv run python scripts/gen_inventory_completeness.py --check \
   && uv run python scripts/gen_recycle_source_completeness.py --check \
