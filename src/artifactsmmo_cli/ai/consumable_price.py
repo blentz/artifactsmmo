@@ -67,10 +67,20 @@ def buy_gold(code: str, state: WorldState, game_data: GameData,
 
 
 def gold_per_second(state: WorldState, game_data: GameData, ctx: SelectionContext) -> Fraction:
-    """The grind target's fight gold per second; 0 with no grind target."""
-    if ctx.combat_monster is None:
+    """The grind target's fight gold per second; while there is none, the gear
+    objective's `m*`; 0 with neither.
+
+    The `m*` fallback is ruling AL (final review F5): while a piece of `L*` is
+    missing `farm_target` names no grind target, for days, and a 0 rate left
+    every buy-only consumable unpriced for the acquisition fights it stocks.
+    The rate is a PRICING input (what a second of fighting earns), not a fight
+    choice, so reading `m*` here fights nothing."""
+    monster = ctx.combat_monster
+    if monster is None and ctx.gear_objective is not None:
+        monster = ctx.gear_objective.monster
+    if monster is None:
         return Fraction(0)
-    return fight_gold_rate(state, game_data, ctx.combat_monster) / FIGHT_SECONDS
+    return fight_gold_rate(state, game_data, monster) / FIGHT_SECONDS
 
 
 def replacement_price_of(code: str, state: WorldState, game_data: GameData,

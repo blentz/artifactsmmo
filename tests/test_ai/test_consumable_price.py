@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.consumable_price import (
     replacement_price_of,
 )
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.obtain_sources import UNBOUNDED_CAPACITY, Source, SourceKind
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
@@ -33,6 +34,13 @@ _CTX = NO_PROFILE_CONTEXT
 @pytest.fixture(scope="module")
 def game_data() -> GameData:
     return load_bundle_game_data(_BUNDLE)
+
+
+def _objective(monster: str) -> GearObjective:
+    """A gear objective on `monster` with one piece missing: `farm_target`
+    names no grind target for it."""
+    piece = GearPiece("shield_slot", "wooden_shield", 0, Fraction(1), Fraction(10))
+    return GearObjective(monster, {"shield_slot": "wooden_shield"}, Fraction(1), (piece,))
 
 
 def _source(kind: SourceKind, code: str) -> Source:
@@ -106,6 +114,40 @@ class TestGoldRate:
         rate = fight_gold_rate(state, game_data, "wolf")
         assert rate > 0
         assert gold_per_second(state, game_data, ctx) == rate / 30
+
+    def test_no_grind_target_reads_the_objectives_monster(self, game_data: GameData) -> None:
+        """Ruling AL (final review F5): while a piece of `L*` is missing
+        `farm_target` names no grind target, but buying is still priced at
+        the objective's `m*` gold rate — a pricing input, not a fight choice."""
+        state = scenario_state(SCENARIOS["l20_boost_stock"], game_data)
+        ctx = replace(_CTX, combat_monster=None, gear_objective=_objective("wolf"))
+        assert gold_per_second(state, game_data, ctx) == \
+            fight_gold_rate(state, game_data, "wolf") / 30
+
+    def test_the_grind_target_outranks_the_objectives_monster(
+            self, game_data: GameData) -> None:
+        state = scenario_state(SCENARIOS["l20_boost_stock"], game_data)
+        ctx = replace(_CTX, combat_monster="wolf", gear_objective=_objective("chicken"))
+        assert gold_per_second(state, game_data, ctx) == \
+            fight_gold_rate(state, game_data, "wolf") / 30
+
+
+class TestBuyOnlyWhileGearing:
+    def test_a_buy_only_consumable_keeps_its_price(self) -> None:
+        """Ruling AL on the committed bundle's order book: `lava_fish` is
+        sold on the Grand Exchange and has no make route for l20_boost_stock
+        (no bundle POTION is buy-only, so the buy-only consumable is a food).
+        With no grind target and no objective it is unpriced; with the
+        objective's `m*` it has a price."""
+        world = load_bundle_game_data(_BUNDLE, with_ge_orders=True)
+        state = scenario_state(SCENARIOS["l20_boost_stock"], world)
+        assert make_seconds("lava_fish", replace(state, inventory={}, bank_items={}),
+                            world, _CTX, None) is None
+        assert buy_gold("lava_fish", state, world, _CTX) is not None
+        assert consumable_price_of("lava_fish", state, world, _CTX) is None
+        gearing = replace(_CTX, combat_monster=None, gear_objective=_objective("wolf"))
+        price = consumable_price_of("lava_fish", state, world, gearing)
+        assert price is not None and price > 0
 
 
 class TestPrice:
