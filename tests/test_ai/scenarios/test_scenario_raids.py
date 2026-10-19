@@ -35,8 +35,8 @@ def test_scenario_raids_are_opt_in():
     assert declaring == _DELIBERATE_RAID_SCENARIOS, declaring
 
 
-def test_declared_raid_reaches_world_state_as_active():
-    state = scenario_state(_sc_with_raid())
+def test_declared_raid_reaches_world_state_as_active(bundle_game_data):
+    state = scenario_state(_sc_with_raid(), bundle_game_data)
     assert [r.code for r in state.raids] == ["enchanted_fairy"]
     assert [r.code for r in state.active_raids] == ["enchanted_fairy"], (
         "a scenario-declared raid must read as ACTIVE; is_active() keys on "
@@ -44,8 +44,10 @@ def test_declared_raid_reaches_world_state_as_active():
     )
 
 
-def test_undeclared_scenario_has_no_active_raid():
-    """The negative pole of the l48 pair, at the state level."""
-    state = scenario_state(SCENARIOS["l48_band_adequate"])
+def test_undeclared_scenario_has_no_active_raid(bundle_game_data):
+    """The negative pole of the l48 pair, at the state level. The scenario
+    derives its combat stats from its gear (ruling R), so its state needs the
+    catalogue."""
+    state = scenario_state(SCENARIOS["l48_band_adequate"], bundle_game_data)
     assert state.raids == []
     assert state.active_raids == []

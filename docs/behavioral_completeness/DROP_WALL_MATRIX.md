@@ -8,9 +8,9 @@
 >
 > The crossing is a differential on production's own pricer — the candidate priced as it stands, then again with the walled items granted. No closure is re-derived here; obligation O6 forbids a second cost model and this census must not be one.
 
-207 candidate cells over 44 scenarios; gate opens 1 of 2 walls (store-less); obtainable 84; not_drop_walled 119; walled 2 (2 on ALTERNATIVES); closes 2; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
+253 candidate cells over 44 scenarios; gate opens 1 of 4 walls (store-less); obtainable 87; not_drop_walled 162; walled 4 (4 on ALTERNATIVES); closes 4; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 0
 
-argmax blindness: 0 of 2 walls sit on a RESOLVED root. A census that prices only the argmax sees those 0 and misses 2 — an infinite price is a veto, so a walled candidate never becomes the argmax.
+argmax blindness: 0 of 4 walls sit on a RESOLVED root. A census that prices only the argmax sees those 0 and misses 4 — an infinite price is a veto, so a walled candidate never becomes the argmax.
 
 | Scenario | Candidate | Root? | Verdict | base | granted | gated | item | droppers | live tiles | closes | chain |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -21,8 +21,10 @@ argmax blindness: 0 of 2 walls sit on a RESOLVED root. A census that prices only
 | l1_fresh | ObtainItem(code='copper_ring', quantity=1, slot='ring1_slot') | alt | PASS | 71 | 71 | 71 | - | - | - | - | - |
 | l1_fresh | ObtainItem(code='copper_ring', quantity=1, slot='ring2_slot') | alt | PASS | 71 | 71 | 71 | - | - | - | - | - |
 | l1_fresh | ReachCharLevel(level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l8_overstocked | ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot') | argmax | PASS | 71 | 71 | 71 | - | - | - | - | - |
-| l8_overstocked | ObtainItem(code='wooden_stick', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l8_overstocked | ReachSkillLevel(skill='jewelrycrafting', level=2) | argmax | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l8_overstocked | ReachSkillLevel(skill='gearcrafting', level=2) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l8_overstocked | ReachSkillLevel(skill='weaponcrafting', level=2) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l8_overstocked | ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot') | alt | PASS | 71 | 71 | 71 | - | - | - | - | - |
 | l8_overstocked | ReachCharLevel(level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_copper_adequate | ReachSkillLevel(skill='jewelrycrafting', level=2) | argmax | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_copper_adequate | ObtainItem(code='jasper_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -46,22 +48,63 @@ argmax blindness: 0 of 2 walls sit on a RESOLVED root. A census that prices only
 | l12_taskgated_bag | ReachSkillLevel(skill='weaponcrafting', level=2) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_taskgated_bag | ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot') | alt | PASS | 71 | 71 | 71 | - | - | - | - | - |
 | l12_taskgated_bag | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l15_midband | ObtainItem(code='copper_ring', quantity=1, slot='ring2_slot') | argmax | PASS | 71 | 71 | 71 | - | - | - | - | - |
+| l15_midband | ReachSkillLevel(skill='jewelrycrafting', level=7) | argmax | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l15_midband | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l15_midband | ObtainItem(code='forest_staff', quantity=1, slot='weapon_slot') | alt | PASS | 869 | 869 | 869 | - | - | - | - | - |
+| l15_midband | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 241 | 241 | 241 | - | - | - | - | - |
+| l15_midband | ObtainItem(code='adventurer_vest', quantity=1, slot='body_armor_slot') | alt | PASS | 248 | 248 | 248 | - | - | - | - | - |
 | l15_midband | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l20_band_entry | ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot') | argmax | PASS | 71 | 71 | 71 | - | - | - | - | - |
-| l20_band_entry | ObtainItem(code='copper_ring', quantity=1, slot='ring2_slot') | alt | PASS | 71 | 71 | 71 | - | - | - | - | - |
+| l20_band_entry | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 94 | 94 | 94 | - | - | - | - | - |
+| l20_band_entry | ObtainItem(code='iron_ring', quantity=1, slot='ring2_slot') | alt | PASS | 94 | 94 | 94 | - | - | - | - | - |
+| l20_band_entry | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l20_band_entry | ObtainItem(code='iron_boots', quantity=1, slot='boots_slot') | alt | PASS | 88 | 88 | 88 | - | - | - | - | - |
+| l20_band_entry | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 94 | 94 | 94 | - | - | - | - | - |
+| l20_band_entry | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 107 | 107 | 107 | - | - | - | - | - |
 | l20_band_entry | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l30_band_entry | ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot') | argmax | PASS | 71 | 71 | 71 | - | - | - | - | - |
-| l30_band_entry | ObtainItem(code='copper_ring', quantity=1, slot='ring2_slot') | alt | PASS | 71 | 71 | 71 | - | - | - | - | - |
+| l30_band_entry | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l30_band_entry | ObtainItem(code='king_slimeball', quantity=6) | alt | PASS | 6000000 | 0 | 6000000 | king_slimeball | 1 | 1 | 1 | perfect_bow |
+| l30_band_entry | ReachSkillLevel(skill='jewelrycrafting', level=19) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l30_band_entry | ObtainItem(code='lost_world_map', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l30_band_entry | ObtainItem(code='perfect_pearl', quantity=1, slot='artifact2_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l30_band_entry | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l30_band_entry | ObtainItem(code='snakeskin_boots', quantity=1, slot='boots_slot') | alt | PASS | 233 | 233 | 233 | - | - | - | - | - |
+| l30_band_entry | ObtainItem(code='astralyte_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l30_band_entry | ReachCharLevel(level=40) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l40_band_entry | ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot') | argmax | PASS | 71 | 71 | 71 | - | - | - | - | - |
-| l40_band_entry | ObtainItem(code='copper_ring', quantity=1, slot='ring2_slot') | alt | PASS | 71 | 71 | 71 | - | - | - | - | - |
+| l40_band_entry | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l40_band_entry | ObtainItem(code='slime_shield', quantity=1, slot='shield_slot') | alt | PASS | 306 | 306 | 306 | - | - | - | - | - |
+| l40_band_entry | ObtainItem(code='jasper_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l40_band_entry | ObtainItem(code='lost_world_map', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l40_band_entry | ObtainItem(code='perfect_pearl', quantity=1, slot='artifact2_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l40_band_entry | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l40_band_entry | ReachCharLevel(level=50) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l48_capstone_approach | ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot') | argmax | PASS | 71 | 71 | 71 | - | - | - | - | - |
-| l48_capstone_approach | ObtainItem(code='copper_ring', quantity=1, slot='ring2_slot') | alt | PASS | 71 | 71 | 71 | - | - | - | - | - |
+| l48_capstone_approach | ObtainItem(code='demon_horn', quantity=4) | argmax | PASS | 4000000 | 4000000 | 4000000 | - | - | - | - | - |
+| l48_capstone_approach | ObtainItem(code='magical_cure', quantity=2) | alt | PASS | 2000000 | 2000000 | 2000000 | - | - | - | - | - |
+| l48_capstone_approach | ObtainItem(code='life_crystal', quantity=1, slot='artifact2_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l48_capstone_approach | ObtainItem(code='corrupted_skull', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l48_capstone_approach | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l48_capstone_approach | ObtainItem(code='lost_world_map', quantity=1, slot='artifact3_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l48_capstone_approach | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l48_capstone_approach | ObtainItem(code='lizard_skin', quantity=5) | alt | PASS | 5000000 | 5000000 | 5000000 | - | - | - | - | - |
+| l48_capstone_approach | ObtainItem(code='full_moon_vampire_cape', quantity=4) | alt | PASS | 4000000 | 4000000 | 4000000 | - | - | - | - | - |
 | l48_capstone_approach | ReachCharLevel(level=50) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l48_band_adequate | - | argmax | PASS | 0 | 0 | 0 | - | - | - | - | - |
-| l48_raid_active | - | argmax | PASS | 0 | 0 | 0 | - | - | - | - | - |
+| l48_band_adequate | ObtainItem(code='demon_horn', quantity=4) | argmax | PASS | 4000000 | 4000000 | 4000000 | - | - | - | - | - |
+| l48_band_adequate | ObtainItem(code='magical_cure', quantity=2) | alt | PASS | 2000000 | 2000000 | 2000000 | - | - | - | - | - |
+| l48_band_adequate | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l48_band_adequate | ObtainItem(code='life_crystal', quantity=1, slot='artifact2_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l48_band_adequate | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l48_band_adequate | ObtainItem(code='corrupted_skull', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l48_band_adequate | ObtainItem(code='lizard_skin', quantity=5) | alt | PASS | 5000000 | 5000000 | 5000000 | - | - | - | - | - |
+| l48_band_adequate | ObtainItem(code='full_moon_vampire_cape', quantity=4) | alt | PASS | 4000000 | 4000000 | 4000000 | - | - | - | - | - |
+| l48_band_adequate | ReachCharLevel(level=50) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l48_raid_active | ObtainItem(code='demon_horn', quantity=4) | argmax | PASS | 4000000 | 4000000 | 4000000 | - | - | - | - | - |
+| l48_raid_active | ObtainItem(code='magical_cure', quantity=2) | alt | PASS | 2000000 | 2000000 | 2000000 | - | - | - | - | - |
+| l48_raid_active | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l48_raid_active | ObtainItem(code='life_crystal', quantity=1, slot='artifact2_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l48_raid_active | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l48_raid_active | ObtainItem(code='corrupted_skull', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l48_raid_active | ObtainItem(code='lizard_skin', quantity=5) | alt | PASS | 5000000 | 5000000 | 5000000 | - | - | - | - | - |
+| l48_raid_active | ObtainItem(code='full_moon_vampire_cape', quantity=4) | alt | PASS | 4000000 | 4000000 | 4000000 | - | - | - | - | - |
+| l48_raid_active | ReachCharLevel(level=50) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l48_event_active | ObtainItem(code='life_crystal', quantity=1, slot='artifact2_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l48_event_active | ObtainItem(code='demon_horn', quantity=4) | alt | PASS | 4000000 | 4000000 | 4000000 | - | - | - | - | - |
 | l48_event_active | ObtainItem(code='corrupted_skull', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
@@ -85,10 +128,10 @@ argmax blindness: 0 of 2 walls sit on a RESOLVED root. A census that prices only
 | l35_boots_drop_farm | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_boots_drop_farm | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_boots_drop_farm | ObtainItem(code='astralyte_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l35_boots_drop_farm | ObtainItem(code='dreadful_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 330 | 330 | 330 | - | - | - | - | - |
+| l35_boots_drop_farm | ObtainItem(code='dreadful_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 276 | 276 | 276 | - | - | - | - | - |
 | l35_boots_drop_farm | ReachCharLevel(level=40) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l30_rune_fill | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | argmax | PASS | 3 | 3 | 3 | - | - | - | - | - |
-| l30_rune_fill | ObtainItem(code='slime_shield', quantity=1, slot='shield_slot') | alt | PASS | 378 | 378 | 378 | - | - | - | - | - |
+| l30_rune_fill | ObtainItem(code='slime_shield', quantity=1, slot='shield_slot') | alt | PASS | 312 | 312 | 312 | - | - | - | - | - |
 | l30_rune_fill | ObtainItem(code='astralyte_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l30_rune_fill | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l30_rune_fill | ReachSkillLevel(skill='jewelrycrafting', level=19) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -103,7 +146,7 @@ argmax blindness: 0 of 2 walls sit on a RESOLVED root. A census that prices only
 | l20_dual_utility_one_stocked | ReachSkillLevel(skill='jewelrycrafting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility_one_stocked | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l20_dual_utility_one_stocked | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l13_drop_recipe_grind | ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot') | argmax | PASS | 47 | 47 | 47 | - | - | - | - | - |
+| l13_drop_recipe_grind | ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot') | argmax | PASS | 45 | 45 | 45 | - | - | - | - | - |
 | l13_drop_recipe_grind | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_gearcrafting_gap | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l10_gearcrafting_gap | ReachSkillLevel(skill='gearcrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -112,22 +155,24 @@ argmax blindness: 0 of 2 walls sit on a RESOLVED root. A census that prices only
 | l12_gearcrafting_gap | ReachSkillLevel(skill='gearcrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_gearcrafting_gap | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_gearcrafting_gap | ReachTaskOutcome(task_code='cow') | alt | PASS | 22 | 22 | 22 | - | - | - | - | - |
-| l10_gearcrafting_gap_combat_blocked | ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot') | argmax | PASS | 71 | 71 | 71 | - | - | - | - | - |
-| l10_gearcrafting_gap_combat_blocked | ObtainItem(code='wooden_stick', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l10_gearcrafting_gap_combat_blocked | ReachSkillLevel(skill='jewelrycrafting', level=2) | argmax | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l10_gearcrafting_gap_combat_blocked | ObtainItem(code='cowhide', quantity=5) | alt | PASS | 5000000 | 0 | 5000000 | cowhide | 1 | 1 | 1 | iron_sword |
+| l10_gearcrafting_gap_combat_blocked | ObtainItem(code='water_bow', quantity=1, slot='weapon_slot') | alt | PASS | 143 | 143 | 143 | - | - | - | - | - |
+| l10_gearcrafting_gap_combat_blocked | ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot') | alt | PASS | 71 | 71 | 71 | - | - | - | - | - |
 | l10_gearcrafting_gap_combat_blocked | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l21_grey_material_grind | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 46 | 46 | 46 | - | - | - | - | - |
-| l21_grey_material_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring2_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
+| l21_grey_material_grind | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 43 | 43 | 43 | - | - | - | - | - |
+| l21_grey_material_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring2_slot') | alt | PASS | 33 | 33 | 33 | - | - | - | - | - |
 | l21_grey_material_grind | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l21_grey_material_grind | ObtainItem(code='iron_boots', quantity=1, slot='boots_slot') | alt | PASS | 37 | 37 | 37 | - | - | - | - | - |
-| l21_grey_material_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
-| l21_grey_material_grind | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 66 | 66 | 66 | - | - | - | - | - |
+| l21_grey_material_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 33 | 33 | 33 | - | - | - | - | - |
+| l21_grey_material_grind | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 64 | 64 | 64 | - | - | - | - | - |
 | l21_grey_material_grind | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l22_grey_rung_grind | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 97 | 97 | 97 | - | - | - | - | - |
-| l22_grey_rung_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring2_slot') | alt | PASS | 96 | 96 | 96 | - | - | - | - | - |
+| l22_grey_rung_grind | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 94 | 94 | 94 | - | - | - | - | - |
+| l22_grey_rung_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring2_slot') | alt | PASS | 94 | 94 | 94 | - | - | - | - | - |
 | l22_grey_rung_grind | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l22_grey_rung_grind | ObtainItem(code='iron_boots', quantity=1, slot='boots_slot') | alt | PASS | 88 | 88 | 88 | - | - | - | - | - |
-| l22_grey_rung_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 96 | 96 | 96 | - | - | - | - | - |
-| l22_grey_rung_grind | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 107 | 107 | 107 | - | - | - | - | - |
+| l22_grey_rung_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 94 | 94 | 94 | - | - | - | - | - |
+| l22_grey_rung_grind | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 105 | 105 | 105 | - | - | - | - | - |
 | l22_grey_rung_grind | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_deep_chain_grind | ReachSkillLevel(skill='jewelrycrafting', level=3) | argmax | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_deep_chain_grind | ObtainItem(code='cowhide', quantity=5) | alt | PASS | 5000000 | 0 | 5000000 | cowhide | 1 | 1 | 1 | iron_sword |
@@ -135,11 +180,11 @@ argmax blindness: 0 of 2 walls sit on a RESOLVED root. A census that prices only
 | l12_deep_chain_grind | ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot') | alt | PASS | 71 | 71 | 71 | - | - | - | - | - |
 | l12_deep_chain_grind | ObtainItem(code='copper_ring', quantity=1, slot='ring2_slot') | alt | PASS | 70 | 70 | 70 | - | - | - | - | - |
 | l12_deep_chain_grind | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l19_band_edge | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 46 | 46 | 46 | - | - | - | - | - |
-| l19_band_edge | ObtainItem(code='iron_ring', quantity=1, slot='ring2_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
+| l19_band_edge | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 43 | 43 | 43 | - | - | - | - | - |
+| l19_band_edge | ObtainItem(code='iron_ring', quantity=1, slot='ring2_slot') | alt | PASS | 33 | 33 | 33 | - | - | - | - | - |
 | l19_band_edge | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l19_band_edge | ObtainItem(code='iron_boots', quantity=1, slot='boots_slot') | alt | PASS | 37 | 37 | 37 | - | - | - | - | - |
-| l19_band_edge | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
+| l19_band_edge | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 33 | 33 | 33 | - | - | - | - | - |
 | l19_band_edge | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 66 | 66 | 66 | - | - | - | - | - |
 | l19_band_edge | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l11_band_floor | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 46 | 46 | 46 | - | - | - | - | - |
@@ -210,6 +255,7 @@ argmax blindness: 0 of 2 walls sit on a RESOLVED root. A census that prices only
 | l22_rest_for_combat | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 253 | 253 | 253 | - | - | - | - | - |
 | l22_rest_for_combat | ObtainItem(code='adventurer_vest', quantity=1, slot='body_armor_slot') | alt | PASS | 200 | 200 | 200 | - | - | - | - | - |
 | l22_rest_for_combat | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l22_rest_for_combat | ReachTaskOutcome(task_code='flying_snake') | alt | PASS | 78 | 78 | 78 | - | - | - | - | - |
 | l25_currency_leaf_unfunded | ObtainItem(code='king_slime_sword', quantity=1, slot='weapon_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l25_currency_leaf_unfunded | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l24_fisher_cooking_rung | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |

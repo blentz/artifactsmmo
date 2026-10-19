@@ -416,8 +416,14 @@ def test_the_open_task_is_offered_for_its_cancel_with_a_coin(gd: GameData) -> No
 # — the same entry point production uses.
 
 STARVED = "l48_capstone_approach"
-STARVED_GEAR = "corrupted_ogre"
-STARVED_OUT_OF_REACH = "baby_red_dragon"
+STARVED_GEAR = "baby_red_dragon"
+STARVED_OUT_OF_REACH = "red_dragon"
+# RE-DERIVED 2026-10-18 (ruling R): the cell's hand stats lacked its loadout's.
+# On the loadout's own totals the old gear row `corrupted_ogre` (L20) is
+# winnable and holds no deficit, and the old out-of-reach row `baby_red_dragon`
+# is gear-closable (hell_staff); both rows were stat artefacts. The rows are now
+# `baby_red_dragon` (L50, gear: hell_staff) and `red_dragon` (L51, out of
+# reach), both lost on the derived sheet.
 # There was a level-up row, dryad. Since the fight gates read the odds
 # (spec 2026-10-15 fight-gates-odds §1) this cell has no level-up monster:
 # every one of the 58 reads gear or out of reach. The level-up arm keeps its
@@ -511,11 +517,16 @@ def test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work(
     # The walk now asks that step first; it declines (no recipe grinds
     # weaponcrafting from here), so the arm names the blocker and the walk
     # continues to the character's own work.
+    #
+    # RE-DERIVED 2026-10-18 (ruling R): on the derived sheet the gear row's arm
+    # (`baby_red_dragon`, closed by hell_staff behind weaponcrafting 45) offers
+    # no step this cycle, so the walk is the control's to the row: same
+    # ranking, same declines, same goal. The old weaponcrafting-43 decline was
+    # the old row's (`corrupted_ogre`), a stat artefact (see `STARVED_GEAR`).
     _, _, gear = _starved_run(STARVED_GEAR, gd)
-    assert "WhichSlotClosesTheFight" in gear.decision.ranking[0].category
-    assert gear.decision.declined == (
-        ("ReachSkillLevel(skill='weaponcrafting', level=43)",
-         "no_grind_rung:weaponcrafting"),)
+    assert [row.root_repr for row in gear.decision.ranking] == \
+        [row.root_repr for row in control.decision.ranking]
+    assert gear.decision.declined == control.decision.declined
     assert repr(gear.selected_goal) == control_goal
 
 

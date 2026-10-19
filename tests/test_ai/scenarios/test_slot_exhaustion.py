@@ -84,6 +84,10 @@ def _slot_exhaustion_character() -> ScenarioCharacter:
         inventory_max=124,          # ample QUANTITY headroom (used 21/124)
         inventory_slots_max=20,     # 20/20 SLOTS full -> slots_free == 0
         bank={},                    # empty, accessible bank
+        # The sheet's totals are its copper set's (ruling R, 2026-10-18): a
+        # zero-stat sheet under worn gear is a world the API never serves, and
+        # the gear objective raises on it.
+        derive_combat_stats=True,
         description="20/20 slots full, quantity headroom, held adventurer_vest "
                     "upgrade blocked by the occupied body slot + zero free "
                     "slots — the slot-exhaustion livelock.",

@@ -44,7 +44,11 @@ def test_a_wisdom_ITEM_NOW_REACHES_THE_PROJECTION(game_data) -> None:
     wearable — so the only thing under test is whether the stat reaches the
     projection.
 
-    Before increment 3 this was 0. It is now 20."""
+    Before increment 3 this was 0. It is now 20.
+
+    RE-DERIVED 2026-10-18 (ruling R): the scenario's sheet now carries its
+    worn gear's wisdom too (`copper_boots`, 10), so the projection reads the
+    worn 10 plus the vest's 20 (it replaces copper_armor, which has none)."""
     state = scenario_state(SCENARIOS["l12_deep_chain_grind"], game_data)
     vest = game_data.item_stats("adventurer_vest")
     assert vest.wisdom == 20
@@ -54,8 +58,8 @@ def test_a_wisdom_ITEM_NOW_REACHES_THE_PROJECTION(game_data) -> None:
                       hp=state.max_hp)
     projected = project_loadout_stats(
         holding, pick_loadout_cached(Rank(), holding, game_data), game_data)
-    assert state.wisdom == 0
-    assert projected.wisdom == 20
+    assert state.wisdom == 10
+    assert projected.wisdom == 30
 
 
 def test_wisdom_makes_a_COMPLETING_walk_cheaper(game_data) -> None:

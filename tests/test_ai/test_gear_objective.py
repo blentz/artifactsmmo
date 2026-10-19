@@ -57,9 +57,10 @@ committed bundle predates."""
 def _robby(equipment: dict[str, str] = ROBBY_WORN) -> WorldState:
     """Robby's live shape (spec §1.2, his sheet on 2026-10-18): level 41, the
     server's own stat totals for the worn gear less the `lich_race_medal`'s
-    (dmg 5, prospecting 25; its initiative 100 is not here because the
-    fixture's initiative is 0), since `_bare` cannot strip an item the bundle
-    does not know; gearcrafting 23,
+    (dmg 5, prospecting 25, initiative 100), since `_bare` cannot strip an
+    item the bundle does not know: the totals are the worn gear's own sum,
+    initiative 100 from the helmet and the armour (ruling R: a total below
+    the worn gear's raises); gearcrafting 23,
     jewelrycrafting 22, weaponcrafting 22, and the alchemy 32 and cooking 34
     that make his potion loadouts stockable (no fight that pays him XP is won
     on bare gear alone)."""
@@ -72,7 +73,7 @@ def _robby(equipment: dict[str, str] = ROBBY_WORN) -> WorldState:
                       equipment=worn, attack={"fire": 37, "earth": 37, "water": 0, "air": 0},
                       dmg=24, dmg_elements={"fire": 30, "earth": 30, "water": 0, "air": 20},
                       resistance={"fire": 7, "earth": 13, "water": 21, "air": 21},
-                      critical_strike=40, wisdom=25, prospecting=135)
+                      critical_strike=40, initiative=100, wisdom=25, prospecting=135)
 
 
 def _novice(gd: GameData, equipment: dict[str, str] = COPPER,
@@ -493,3 +494,36 @@ def test_a_piece_carried_in_the_bag_is_held(gd: GameData) -> None:
     assert objective.monster == before.monster
     assert objective.missing == ()
     assert objective.held
+
+
+def test_a_sheet_whose_totals_lack_its_gear_raises(gd: GameData) -> None:
+    """Ruling R: stripping the worn gear from the sheet's totals gives what the
+    character is without it, never below zero. Below zero the totals did not
+    include that gear: impossible API data, which raises naming the stat and
+    the character instead of reading as a fighter that wins nothing."""
+    state = replace(_robby(), critical_strike=0)
+    with pytest.raises(ValueError, match=r"^testchar: bare critical_strike -40 < 0"):
+        gear_objective(state, gd, CTX, None)
+
+
+def test_a_bare_element_below_zero_raises(gd: GameData) -> None:
+    """The per-element totals are checked too: a sheet missing its gear's fire
+    attack raises on `attack.fire`."""
+    state = replace(_robby(), attack={**_robby().attack, "fire": 0})
+    with pytest.raises(ValueError, match=r"^testchar: bare attack\.fire -37 < 0"):
+        gear_objective(state, gd, CTX, None)
+
+
+@pytest.mark.parametrize(("name", "monster"), [
+    ("l8_overstocked", "red_slime"), ("l20_band_entry", "pig"), ("l30_band_entry", "ogre"),
+    ("l40_band_entry", "cultist_acolyte"), ("l48_capstone_approach", "hellhound"),
+    ("l48_band_adequate", "hellhound"), ("l48_raid_active", "hellhound"),
+    ("l10_gearcrafting_gap_combat_blocked", "cow")])
+def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str,
+                                                        monster: str) -> None:
+    """Ruling R: these scenarios' hand stats lacked their worn gear's, so the
+    bare fighter won nothing and the objective read None. On the gear's own
+    totals (`derive_combat_stats`) each has an `m*` and pieces to acquire."""
+    objective = _objective(scenario_state(SCENARIOS[name], gd), gd)
+    assert objective.monster == monster
+    assert objective.missing

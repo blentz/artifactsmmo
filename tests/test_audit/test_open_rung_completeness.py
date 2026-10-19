@@ -136,8 +136,8 @@ def test_the_zero_stat_harness_would_measure_the_fixture(
     then unreachable, so cells wall for a reason that belongs to the harness.
 
     Three counts, pinned exactly because `open_rung_completeness`'s module
-    docstring quotes them: 62 closed with the flag off everywhere, 20 closed
-    on the scenarios AS COMMITTED (35 of the 44 opt in), 9 with the census's
+    docstring quotes them: 62 closed with the flag off everywhere, 9 closed
+    on the scenarios AS COMMITTED (43 of the 44 opt in), 9 with the census's
     forced-on states. The as-committed number is the one that matters — it is
     what this census would report if `census_state` were `scenario_state`.
 
@@ -162,19 +162,25 @@ def test_the_zero_stat_harness_would_measure_the_fixture(
     34 -> 35 opt in (2026-10-18): `l15_midband` derives its combat stats, as
     the gear objective strips worn gear from a sheet's totals; AS COMMITTED
     stayed at 20.
+
+    20 -> 9 AS COMMITTED, 35 -> 43 opt in (2026-10-18, ruling R): the eight
+    zero-stat scenarios (l8_overstocked, l20/l30/l40_band_entry, the three l48
+    scenarios, l10_gearcrafting_gap_combat_blocked) derive their combat stats,
+    so the as-committed census is the forced-on one. Plan C deletes this rung
+    census.
     """
     all_off = _closed_cells(bundle_game_data, derive_combat_stats=False)
     as_committed = _closed_cells(bundle_game_data, derive_combat_stats=None)
     derived = _closed_cells(bundle_game_data, derive_combat_stats=True)
-    assert (all_off, as_committed, derived) == (62, 20, 9), \
-        "update the module docstring's 62/20/9 note"
+    assert (all_off, as_committed, derived) == (62, 9, 9), \
+        "update the module docstring's 62/9/9 note"
     # The opt-in count is PINNED, not merely restated. Both docstrings quote it,
     # and it silently rotted from 11 to 20 as scenarios were added — caught only
     # by a coverage audit, months later. A quoted number with no assertion behind
     # it is the same defect class the reachability census now gates.
     opted_in = sum(1 for s in SCENARIOS.values() if s.derive_combat_stats)
-    assert opted_in == 35, (
-        "update the '35 of the 44 opt in' count in this docstring AND in "
+    assert opted_in == 43, (
+        "update the '43 of the 44 opt in' count in this docstring AND in "
         "open_rung_completeness's module docstring")
     assert sum(1 for r in results if not r.open_rung) == derived
 

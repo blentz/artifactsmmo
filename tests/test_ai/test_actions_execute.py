@@ -51,6 +51,13 @@ def make_char_schema(x=0, y=0, hp=100, max_hp=150, xp=0, max_xp=500, level=5, go
                  "mining_level", "woodcutting_level", "fishing_level", "weaponcrafting_level",
                  "gearcrafting_level", "jewelrycrafting_level", "cooking_level", "alchemy_level"]:
         setattr(char, slot, 1 if "_level" in slot else "")
+    # Combat totals of a character wearing nothing: zero (ruling R, 2026-10-18 —
+    # the gear objective strips worn gear from these totals and raises below
+    # zero, so a MagicMock total cannot stand in for one).
+    for stat in ["dmg", "critical_strike", "initiative", "wisdom", "prospecting",
+                 *(f"{kind}_{elem}" for kind in ("attack", "dmg", "res")
+                   for elem in ("fire", "earth", "water", "air"))]:
+        setattr(char, stat, 0)
     return char
 
 

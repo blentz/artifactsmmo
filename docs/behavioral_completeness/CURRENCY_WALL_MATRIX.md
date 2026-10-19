@@ -8,9 +8,9 @@
 >
 > Every field `classify_gap` reads is a column: `droppers`, `live tiles` and `winnable` are the two conjuncts `ObtainModel._drop` gates on, and `event` separates a dormant event from a permanent monster with no tile.
 
-308 cells over 7 currencies; charged 5; FUNDED 1; walled 4; not_demanded 289; root_unresolved 14; o7_silent_currency_stall 0; o7_multi_currency_wall 0; o7_unexplained 0; currency_catalogue_empty 0
+308 cells over 7 currencies; charged 7; FUNDED 1; walled 6; not_demanded 301; root_unresolved 0; o7_silent_currency_stall 0; o7_multi_currency_wall 0; o7_unexplained 0; currency_catalogue_empty 0
 
-residual scope: 5 of 308 cells are CHARGED (2 distinct currencies) — gold 4, tasks_coin 1. An uncharged currency can only be not_demanded.
+residual scope: 7 of 308 cells are CHARGED (2 distinct currencies) — gold 6, tasks_coin 1. An uncharged currency can only be not_demanded.
 
 | Scenario | Currency | Verdict | charged | base | granted | earnable | droppers | live tiles | winnable | event |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -76,14 +76,14 @@ residual scope: 5 of 308 cells are CHARGED (2 distinct currencies) — gold 4, t
 | l30_band_entry | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
 | l30_band_entry | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l30_band_entry | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l30_band_entry | gold | PASS | - | - | - | - | - | - | - | - |
+| l30_band_entry | gold | **wall_gold** | - | - | - | - | - | - | - | - |
 | l40_band_entry | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l40_band_entry | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l40_band_entry | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l40_band_entry | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
 | l40_band_entry | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l40_band_entry | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l40_band_entry | gold | PASS | - | - | - | - | - | - | - | - |
+| l40_band_entry | gold | **wall_gold** | - | - | - | - | - | - | - | - |
 | l48_capstone_approach | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l48_capstone_approach | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l48_capstone_approach | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -91,19 +91,19 @@ residual scope: 5 of 308 cells are CHARGED (2 distinct currencies) — gold 4, t
 | l48_capstone_approach | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l48_capstone_approach | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l48_capstone_approach | gold | PASS | - | - | - | - | - | - | - | - |
-| l48_band_adequate | corrupted_gem | PASS | - | - | - | - | - | - | - | - |
-| l48_band_adequate | enchanted_coin | PASS | - | - | - | - | - | - | - | - |
-| l48_band_adequate | event_ticket | PASS | - | - | - | - | - | - | - | - |
-| l48_band_adequate | sandwhisper_coin | PASS | - | - | - | - | - | - | - | - |
-| l48_band_adequate | sonnengott_coin | PASS | - | - | - | - | - | - | - | - |
-| l48_band_adequate | tasks_coin | PASS | - | - | - | - | - | - | - | - |
+| l48_band_adequate | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l48_band_adequate | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_band_adequate | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_band_adequate | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l48_band_adequate | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_band_adequate | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l48_band_adequate | gold | PASS | - | - | - | - | - | - | - | - |
-| l48_raid_active | corrupted_gem | PASS | - | - | - | - | - | - | - | - |
-| l48_raid_active | enchanted_coin | PASS | - | - | - | - | - | - | - | - |
-| l48_raid_active | event_ticket | PASS | - | - | - | - | - | - | - | - |
-| l48_raid_active | sandwhisper_coin | PASS | - | - | - | - | - | - | - | - |
-| l48_raid_active | sonnengott_coin | PASS | - | - | - | - | - | - | - | - |
-| l48_raid_active | tasks_coin | PASS | - | - | - | - | - | - | - | - |
+| l48_raid_active | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l48_raid_active | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_raid_active | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_raid_active | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l48_raid_active | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_raid_active | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l48_raid_active | gold | PASS | - | - | - | - | - | - | - | - |
 | l48_event_active | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l48_event_active | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |

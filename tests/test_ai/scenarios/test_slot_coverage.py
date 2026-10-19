@@ -428,13 +428,22 @@ def test_l48_no_event_witness_pursues_no_event_gear() -> None:
     this Wait — `_pick_winnable_monster()` finds 'goblin_wolfrider' (L40) via
     the xp-fallback arm and grinds L40s toward 50 instead. This test's job is
     narrower: isolating the event-gear pursuit result above from the
-    zero-stat harness default, nothing more."""
+    zero-stat harness default, nothing more.
+
+    RE-DERIVED 2026-10-18 (ruling R): the scenario now derives its stats from
+    its mithril loadout, so the zero-stat tripwire is gone and the walk sees
+    the gear its slots want. The event gear `corrupted_skull` is now OFFERED
+    for artifact1_slot, and declined because its corrupted_gem has no route
+    with the event down: still not pursued, which is the isolation this test
+    owns. Nothing is selected (`L*` is missing pieces and no task is held, so
+    no XP fight: spec 2026-10-18 §6.2), so the cycle Waits."""
     report = _run("l48_band_adequate")
-    assert repr(report.selected_goal) == "GatherMaterials(mithril_bar, {mithril_bar:11})", (
-        repr(report.selected_goal), report.plan)
+    assert repr(report.selected_goal) == "Wait", (repr(report.selected_goal), report.plan)
     assert report.decision.chosen_root is None
-    assert not any("corrupted" in r.root_repr for r in report.decision.ranking), \
-        report.decision.ranking
+    assert [r.root_repr for r in report.decision.ranking if "corrupted" in r.root_repr] == [
+        "ObtainItem(code='corrupted_skull', quantity=1, slot='artifact1_slot')"]
+    assert ("ObtainItem(code='corrupted_skull', quantity=1, slot='artifact1_slot')",
+            "infeasible:corrupted_gem:no_route:corrupted_gem") in report.decision.declined
 
 
 L47_50_WINDOW_MONSTERS = (

@@ -21,7 +21,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree, has_structural_upgrade
 from artifactsmmo_cli.ai.tiers.progression_tree_core import milestone_pure
@@ -38,7 +38,9 @@ slots are stocked, so has_structural_upgrade is False by construction — the
 only band scenario that forces decide_tree's XP branch instead of GEAR. See
 scenario.py's SCENARIOS entry docstring for how the equipment set was
 derived (fixed-point iteration against near_term_gear, verified empirically
-before this test was written)."""
+before this test was written). That held only on its hand stats, which lacked
+the loadout's: on its derived totals (ruling R, 2026-10-18) the slots want more,
+so it is no longer band-adequate (`test_l48_band_adequate_is_the_honest_wall`)."""
 
 BAND_NAMES = [
     "l15_midband", "l20_band_entry", "l30_band_entry",
@@ -97,13 +99,16 @@ def test_decide_tree_answers_or_names_the_wall(name: str) -> None:
     `test_l48_band_adequate_is_the_honest_wall`). Every other band still
     resolves a root, so this stays a real assertion rather than a disjunction
     that can never fail: the trunk alternative is required in BOTH arms, so a
-    walk that returned None with nothing behind it fails here."""
+    walk that returned None with nothing behind it fails here.
+
+    RE-DERIVED 2026-10-18 (ruling R): `l48_band_adequate`'s wall was a STAT
+    ARTEFACT of a sheet whose totals lacked its gear. On its mithril loadout's
+    own totals `hellhound` is winnable and the gear sheet wants more (see
+    `test_l48_band_adequate_is_the_honest_wall`), so the walk resolves a root
+    in every band scenario now. Plan C deletes this band net."""
     d, _state = _decide(name)
-    if name == L48_BAND_ADEQUATE:
-        assert d.chosen_root is None and d.chosen_step is None
-    else:
-        assert d.chosen_root is not None
-        assert d.chosen_step is not None
+    assert d.chosen_root is not None
+    assert d.chosen_step is not None
     assert any(isinstance(r, ReachCharLevel) for r in d.fallback_roots)
 
 
@@ -184,17 +189,30 @@ def test_l48_band_adequate_is_the_honest_wall() -> None:
     walled character has left after the trunk. Both are asserted, because the
     ORDER is the safety property — an orphan root ahead of the trunk displaced
     this scenario's `GatherMaterials(mithril_bar)`, the gear that breaks the
-    L38-48 wall."""
+    L38-48 wall.
+
+    RE-DERIVED 2026-10-18 (ruling R): the wall was a STAT ARTEFACT. The
+    scenario's hand stats lacked its loadout's; on the loadout's own totals
+    the drop routes of monsters it now beats open gear its slots want, so
+    `has_structural_upgrade` is True and the walk resolves the first of them
+    (`demon_horn`, a material of an achievable piece) with the rest and the
+    trunk behind it. There is no honest wall in this scenario to rebuild, so
+    the derived resolution is pinned. Plan C deletes this band witness."""
     gd = _bundle()
-    state = scenario_state(SCENARIOS[L48_BAND_ADEQUATE])
+    state = scenario_state(SCENARIOS[L48_BAND_ADEQUATE], gd)
     objective = CharacterObjective.from_game_data(gd)
     decision = decide_tree(state, gd, objective)
-    assert decision.chosen_root is None
-    assert decision.chosen_step is None
-    assert decision.fallback_roots[0] == ReachCharLevel(
-        level=milestone_pure(state.level))
-    assert all(isinstance(root, ReachSkillLevel)
-               for root in decision.fallback_roots[1:]), decision.fallback_roots
+    assert decision.chosen_root == ObtainItem(code="demon_horn", quantity=4)
+    assert decision.chosen_step == ObtainItem(code="demon_horn", quantity=4)
+    assert decision.fallback_roots == [
+        ObtainItem(code="magical_cure", quantity=2),
+        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
+        ObtainItem(code="life_crystal", quantity=1, slot="artifact2_slot"),
+        ObtainItem(code="backpack", quantity=1, slot="bag_slot"),
+        ObtainItem(code="corrupted_skull", quantity=1, slot="artifact1_slot"),
+        ObtainItem(code="lizard_skin", quantity=5),
+        ObtainItem(code="full_moon_vampire_cape", quantity=4),
+        ReachCharLevel(level=milestone_pure(state.level))]
 
 
 def test_l48_band_adequate_real_band_adequate_verdict() -> None:
@@ -222,24 +240,28 @@ def test_l48_band_adequate_real_band_adequate_verdict() -> None:
     test exists to record is UNCHANGED — at L48 with a complete non-event
     loadout this bundle's monster catalogue cannot carry a character to L50 by
     combat alone — but the bot no longer idles on it, which is why the pinned
-    outcome moved from `Wait` to a plan."""
+    outcome moved from `Wait` to a plan.
+
+    RE-DERIVED 2026-10-18 (ruling R): the "unwinnable at L48" finding was a
+    STAT ARTEFACT of a sheet whose totals lacked its mithril loadout's. On the
+    loadout's own totals there IS a structural upgrade and `hellhound` is
+    winnable. The seam names no root (every gear alternative has no route this
+    cycle) and, with `L*` missing pieces and no task, chooses no XP fight (spec
+    2026-10-18 §6.2), so the cycle Waits until the root walk offers an `L*`
+    piece (Plan A Task 5). Plan C deletes this band witness."""
     gd = _bundle()
-    state = scenario_state(SCENARIOS[L48_BAND_ADEQUATE])
+    state = scenario_state(SCENARIOS[L48_BAND_ADEQUATE], gd)
     objective = CharacterObjective.from_game_data(gd)
-    assert has_structural_upgrade(state, gd, objective) is False
+    assert has_structural_upgrade(state, gd, objective) is True
 
     player = GamePlayer(character=L48_BAND_ADEQUATE, history=None)
     player.seed_offline(state, load_bundle_game_data(BUNDLE))
-    assert player._pick_winnable_monster() is None, (
-        "no L47-50 window monster should be winnable against this "
-        "non-event loadout in this bundle; if this now finds one, the "
-        "L50-difficulty-wall finding above is stale and must be revised")
+    assert player._pick_winnable_monster() == "hellhound"
     assert player._tree_band_adequate() is False
 
     report = player.plan_from_state()
     # Pin the EXACT outcome, not just any non-empty plan.
-    assert repr(report.selected_goal) == "GatherMaterials(mithril_bar, {mithril_bar:11})", (
-        repr(report.selected_goal), report.plan)
-    assert report.plan, (repr(report.selected_goal), report.plan)
+    assert repr(report.selected_goal) == "Wait", (repr(report.selected_goal), report.plan)
+    assert [repr(a) for a in report.plan] == ["Wait"]
     assert report.decision.chosen_root is None
     assert report.decision.chosen_step is None

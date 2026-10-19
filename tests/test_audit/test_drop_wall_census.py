@@ -120,8 +120,14 @@ def test_only_the_closes_arm_is_exercised_and_the_matrix_says_so(
     brewable potion wins, docs/PLAN_drop_fight_loadout.md). The zero is asserted
     deliberately: `WALL_DROPPER_OUT_OF_REACH` classifies nothing here, which is a
     fact about the fixture set and not a success, and the arm is kept honest by a
-    positive control below rather than by this grid."""
-    assert sum(1 for r in results if r.gap == CLOSES) == 2
+    positive control below rather than by this grid.
+
+    2 -> 4 CLOSES (2026-10-18, ruling R): `l30_band_entry` (king_slimeball for
+    perfect_bow) and `l10_gearcrafting_gap_combat_blocked` (cowhide for
+    iron_sword) now derive their stats from their gear, so their walks resolve
+    to rows whose dropper the loadout cannot beat but an achievable piece
+    would."""
+    assert sum(1 for r in results if r.gap == CLOSES) == 4
     assert sum(1 for r in results if r.gap == OUT_OF_REACH) == 0
     assert all(not r.is_resolved_root for r in _walls(results))
 
@@ -300,8 +306,8 @@ def test_a_root_the_walk_cannot_resolve_is_a_visible_row(
 def test_the_summary_reports_the_arm_counts(results: list[DropResult]) -> None:
     line = summary_line(results)
     assert "candidate cells" in line
-    assert "gate opens 1 of 2 walls (store-less)" in line
-    assert "closes 2" in line
+    assert "gate opens 1 of 4 walls (store-less)" in line
+    assert "closes 4" in line
     assert "out_of_reach 0" in line
     assert "on ALTERNATIVES" in line
 
@@ -353,9 +359,12 @@ def test_the_census_keeps_counting_a_wall_the_gate_now_prices(
 
     Store-less, so this is the floor rather than the live figure: every unlock in
     the committed set is gear whose own craft is skill-gated. 2 walls, 1 opened,
-    since the drop gate wore a potion loadout (2026-10-10; 9 and 2 before)."""
+    since the drop gate wore a potion loadout (2026-10-10; 9 and 2 before);
+    4 walls, 1 opened, since `l30_band_entry` and
+    `l10_gearcrafting_gap_combat_blocked` derive their stats (2026-10-18, ruling
+    R): neither new wall is one the gate opens."""
     walls = _walls(results)
-    assert len(walls) == 2
+    assert len(walls) == 4
     opened = [w for w in walls if w.gate_price < UNOBTAINABLE_PER_UNIT]
     assert len(opened) == 1
     for wall in opened:

@@ -149,9 +149,30 @@ def _wearing(state: WorldState, loadout: Mapping[str, str | None],
 
 def _bare(state: WorldState, items: frozenset[str], game_data: GameData) -> WorldState:
     """`state` owning `items` (`fighter_owning`) and wearing no gear: every worn
-    piece in the bag, its stats stripped from the totals."""
-    return _wearing(fighter_owning(state, items, game_data), dict.fromkeys(_GEAR_SLOTS),
+    piece in the bag, its stats stripped from the totals.
+
+    The sheet's totals include what it wears, so the stripped totals are the
+    character without its gear, never below zero (ruling R). A total below
+    zero means the sheet did not include a worn piece: impossible API data,
+    which raises naming the stat, never a fighter that wins nothing."""
+    bare = _wearing(fighter_owning(state, items, game_data), dict.fromkeys(_GEAR_SLOTS),
                     game_data)
+    for stat, value in _totals(bare):
+        if value < 0:
+            raise ValueError(f"{state.character}: bare {stat} {value} < 0: the sheet's "
+                             "totals do not include its worn gear")
+    return bare
+
+
+def _totals(state: WorldState) -> list[tuple[str, int]]:
+    """Every combat stat total `_wearing` projects, by name."""
+    totals = [("dmg", state.dmg), ("critical_strike", state.critical_strike),
+              ("initiative", state.initiative), ("max_hp", state.max_hp),
+              ("wisdom", state.wisdom), ("prospecting", state.prospecting)]
+    for name, by_element in (("attack", state.attack), ("dmg_elements", state.dmg_elements),
+                             ("resistance", state.resistance)):
+        totals.extend((f"{name}.{element}", value) for element, value in by_element.items())
+    return totals
 
 
 def _target(bare: WorldState, game_data: GameData,

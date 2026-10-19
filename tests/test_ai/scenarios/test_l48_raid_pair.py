@@ -45,11 +45,22 @@ matter of taste: at real stats `expected_damage_per_fight` against `pixie`
 returns 1,844,857 against a 1570-hp character, so `raid_survivable_pure`
 refuses and the raid candidate is never built at all. That number is its own
 defect and is reported separately.
+
+RE-DERIVED 2026-10-18 (ruling R): the pair now runs on real combat stats. A
+sheet whose totals lack its worn mithril set is a world the API never serves,
+and the gear objective raises on it, so both scenarios derive their stats. The
+positive pole therefore fails exactly as the paragraph above predicted:
+`expected_damage_per_fight(pixie)` reads 1,844,857 against 1570 hp, the raid
+candidate is never built, and BOTH poles Wait (with `L*` missing pieces and no
+task, no fight is chosen for XP either: spec 2026-10-18 §6.2). The pins below
+state that derived outcome; the pair cannot separate the poles again until the
+pixie damage defect is fixed.
 """
 
 from pathlib import Path
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 
@@ -57,9 +68,18 @@ _RAID_BOSS = "pixie"
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
 
+def _gd():
+    return load_bundle_game_data(BUNDLE)
+
+
+def _state(name: str):
+    """The scenario's state on the bundle catalogue."""
+    return scenario_state(SCENARIOS[name], _gd())
+
+
 def _report(name: str):
     """Same offline full-stack seam test_band_liveness uses."""
-    gd = load_bundle_game_data(BUNDLE)
+    gd = _gd()
     player = GamePlayer(character=name, history=None)
     player.seed_offline(scenario_state(SCENARIOS[name], gd), gd)
     return player.plan_from_state()
@@ -92,8 +112,9 @@ def test_l48_without_a_raid_cannot_fight():
         "l48_band_adequate is the no-COMBAT pole: if the arbiter found a fight "
         "to try, the wall has moved and this pair needs re-deriving"
     )
-    assert repr(report.selected_goal) == "GatherMaterials(mithril_bar, {mithril_bar:11})", (
-        repr(report.selected_goal), report.plan)
+    # RE-DERIVED 2026-10-18 (ruling R): on the derived sheet every gear goal
+    # tried has no plan this cycle, so the walled pole Waits.
+    assert repr(report.selected_goal) == "Wait", (repr(report.selected_goal), report.plan)
 
 
 def test_l48_without_a_raid_emits_no_raid_fight():
@@ -113,13 +134,17 @@ def test_l48_with_an_active_raid_can_plan():
     The negative pole now also reaches a means (a mithril_bar craft chain, see
     `test_l48_without_a_raid_cannot_fight`), so "has something to try" alone no
     longer separates the poles — the SELECTED GOAL does, and it is asserted
-    below. `test_l48_raid_plan_engages_the_boss` carries the positive claim."""
+    below. `test_l48_raid_plan_engages_the_boss` carries the positive claim.
+
+    RE-DERIVED 2026-10-18 (ruling R): on real stats the raid candidate is
+    refused as unsurvivable (see the module docstring), so the open window
+    adds nothing: the raid pole tries exactly the walled pole's goals and
+    Waits."""
     report = _report("l48_raid_active")
-    assert report.goals_tried, (
-        "an open raid window must give the arbiter something to try; if this is "
-        "empty the raid fight never became selectable"
-    )
-    assert repr(report.selected_goal) == "ParticipateRaid(enchanted_fairy)", (
+    walled = _report("l48_band_adequate")
+    assert [g.get("goal") for g in report.goals_tried] == \
+        [g.get("goal") for g in walled.goals_tried]
+    assert repr(report.selected_goal) == "Wait", (
         repr(report.selected_goal), [g.get("goal") for g in report.goals_tried])
 
 
@@ -129,10 +154,17 @@ def test_l48_raid_plan_engages_the_boss():
 
     RESTORED in wave 3a fix-round 1. For one commit this asserted the negation;
     see the module docstring for what broke it and the two fixes that brought
-    it back."""
+    it back.
+
+    RE-DERIVED 2026-10-18 (ruling R): on real stats the boss reads
+    unsurvivable (`raid_survivable_pure` against 1,844,857 expected damage), so
+    the plan is `Wait` and engages nothing. Asserted exactly, so the day the
+    pixie damage defect is fixed this test fails and the positive claim is
+    restored."""
     report = _report("l48_raid_active")
-    assert any(isinstance(a, FightAction) and a.monster_code == _RAID_BOSS
-               for a in report.plan), [repr(a) for a in report.plan]
+    assert [repr(a) for a in report.plan] == ["Wait"]
+    assert expected_damage_per_fight(_state("l48_raid_active"), _gd(), _RAID_BOSS) \
+        == 1_844_857
 
 
 def test_the_two_poles_differ_only_by_the_raid():

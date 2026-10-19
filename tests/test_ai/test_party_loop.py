@@ -52,12 +52,17 @@ def test_three_farm_duskworm_at_the_party_rate() -> None:
 
 def test_the_party_xp_reads_the_average_level() -> None:
     """A level-40 and a level-50 member against rosenblood (40): XP at 45, as
-    a level-45 party — 473, not the 680 a level-40 character earns alone."""
+    a level-45 party — 520, not the 748 a level-40 character earns alone.
+
+    RE-DERIVED 2026-10-18 (ruling R): the census character's sheet now carries
+    its gear's wisdom (100, conjurer_cloak and conjurer_skirt), which every kill
+    reads; at wisdom 0 the pair was 473 and 680."""
     gd = _gd()
     low, high = _hero(gd, 40), _hero(gd, 50)
     loop = best_party_loop(replace(low, party=(high,)), gd, "rosenblood", _prices(low, gd), ())
-    assert gd.xp_per_kill("rosenblood", 40, low.wisdom) == 680
-    assert loop is not None and loop.rate.xp_per_kill == gd.xp_per_kill("rosenblood", 45, low.wisdom) == 473
+    assert low.wisdom == 100
+    assert gd.xp_per_kill("rosenblood", 40, low.wisdom) == 748
+    assert loop is not None and loop.rate.xp_per_kill == gd.xp_per_kill("rosenblood", 45, low.wisdom) == 520
 
 
 def test_no_party_no_loop_and_only_bosses() -> None:

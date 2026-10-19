@@ -185,6 +185,8 @@ class _CombatTotals:
     critical_strike: int = 0
     initiative: int = 0
     hp_bonus: int = 0
+    wisdom: int = 0
+    prospecting: int = 0
 
 
 def _derived_combat_totals(
@@ -204,6 +206,8 @@ def _derived_combat_totals(
     critical_strike = 0
     initiative = 0
     hp_bonus = 0
+    wisdom = 0
+    prospecting = 0
     for slot, code in equipment.items():
         if code is None or slot.startswith("utility"):
             continue
@@ -220,6 +224,8 @@ def _derived_combat_totals(
         critical_strike += stats.critical_strike
         initiative += stats.initiative
         hp_bonus += stats.hp_bonus
+        wisdom += stats.wisdom
+        prospecting += stats.prospecting
     return _CombatTotals(
         attack={k: v for k, v in attack.items() if v},
         dmg=dmg,
@@ -228,6 +234,8 @@ def _derived_combat_totals(
         critical_strike=critical_strike,
         initiative=initiative,
         hp_bonus=hp_bonus,
+        wisdom=wisdom,
+        prospecting=prospecting,
     )
 
 
@@ -286,6 +294,8 @@ def scenario_state(sc: ScenarioCharacter,
         resistance=combat.resistance,
         critical_strike=combat.critical_strike,
         initiative=combat.initiative,
+        wisdom=combat.wisdom,
+        prospecting=combat.prospecting,
     )
 
 
@@ -440,6 +450,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         skills={"mining": 5, "woodcutting": 5},
         equipment=dict(_COPPER_SET),
         inventory={"feather": 90, "raw_chicken": 6}, inventory_max=100,
+        derive_combat_stats=True,
         description="96/100 bag of loot — the deposit guard must preempt."),
     "l10_copper_adequate": ScenarioCharacter(
         name="l10_copper_adequate", level=10, max_hp=240,
@@ -510,6 +521,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         },
         bank={"coal": 10, "wolf_bone": 5, "wolf_hair": 5, "green_cloth": 5},
         inventory_max=130,
+        derive_combat_stats=True,
         description="Entering L20-30 band: L15 gear, L20 upgrades on offer."),
     "l30_band_entry": ScenarioCharacter(
         name="l30_band_entry", level=30, max_hp=480, gold=200,
@@ -524,6 +536,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         },
         bank={"gold_ore": 15, "sap": 5, "red_cloth": 5},
         inventory_max=140,
+        derive_combat_stats=True,
         description="Entering L30-40 band: L25 gear (L20 boots — no L25 boots "
                      "exist in the catalog), L30 upgrades on offer."),
     "l40_band_entry": ScenarioCharacter(
@@ -539,6 +552,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         },
         bank={"mithril_ore": 10, "magic_wood": 5},
         inventory_max=150,
+        derive_combat_stats=True,
         description="Entering L40-50 band: L35 gear, L40 upgrades on offer."),
     "l48_capstone_approach": ScenarioCharacter(
         name="l48_capstone_approach", level=48, max_hp=690, gold=800,
@@ -553,6 +567,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         },
         bank={"adamantite_ore": 5, "mithril_ore": 10},
         inventory_max=150,
+        derive_combat_stats=True,
         description="Approaching the L50 capstone: L40 gear, L45 upgrades on "
                      "offer — empirical capstone-reachability evidence."),
 
@@ -599,6 +614,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         utility_quantities={"utility1_slot": 20, "utility2_slot": 20},
         bank={"adamantite_ore": 5, "mithril_ore": 10},
         inventory_max=150,
+        derive_combat_stats=True,
         description="Band-ADEQUATE at L48: every slot already holds the "
                      "best is_attainable_now item, no structural or utility "
                      "gear candidate exists — the XP/capstone branch, not "
@@ -623,6 +639,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         bank={"adamantite_ore": 5, "mithril_ore": 10},
         inventory_max=150,
         raids=(("enchanted_fairy", "pixie"),),
+        derive_combat_stats=True,
         description="l48_band_adequate WITH an active raid. The POSITIVE pole "
                      "of the L48 wall pair: byte-identical state except that a "
                      "raid window is open. enchanted_fairy's boss (pixie, L40) "
@@ -1250,23 +1267,24 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                      "the unrelated lowest feather consumer)."),
 
     # --- Criterion-1 ramp: the same character, but the iron_boots material
-    # closure's feather leaf is now combat-blocked (no winnable dropper) —
-    # chicken is removed from this scenario's reachable monster set by
-    # leaving combat stats at the harness's zero-stat default
-    # (derive_combat_stats=False; l1_fresh/l8_overstocked use the same
-    # convention for "no monster is winnable here" — is_winnable sees 0
-    # attack against every monster). Pins the ramp: the planner must
-    # re-target a reachable candidate or Wait, never thrash GrindCharacterXP
-    # against an unwinnable monster.
+    # closure's feather leaf was combat-blocked (no winnable dropper) by
+    # leaving combat stats at the harness's zero-stat default. Pins the ramp:
+    # the planner must re-target a reachable candidate or Wait, never thrash
+    # GrindCharacterXP against an unwinnable monster.
+    #
+    # 2026-10-18 (ruling R): zero totals under a worn copper set are impossible
+    # API data (the gear objective strips the worn gear from the sheet and
+    # raises below zero), so the sheet now carries its gear's totals
+    # (derive_combat_stats=True) and the zero-stat block is gone.
     "l10_gearcrafting_gap_combat_blocked": ScenarioCharacter(
         name="l10_gearcrafting_gap_combat_blocked", level=10, max_hp=240,
         skills={"mining": 10, "weaponcrafting": 5, "gearcrafting": 5},
         equipment=dict(_COPPER_SET),
-        description="Criterion-1 ramp: l10_gearcrafting_gap with combat "
-                     "stats at the harness's zero-attack default (no "
-                     "derive_combat_stats) so every monster including the "
-                     "feather-dropping chicken reads unwinnable — the "
-                     "iron_boots closure is combat-blocked. Pins that the "
+        derive_combat_stats=True,
+        description="Criterion-1 ramp: l10_gearcrafting_gap, once with "
+                     "zero-attack stats so the iron_boots closure was "
+                     "combat-blocked; its sheet now carries its copper set's "
+                     "totals (ruling R, 2026-10-18). Pins that the "
                      "planner re-targets to a reachable candidate (the "
                      "utility-potion branch) instead of thrashing "
                      "GrindCharacterXP against an unwinnable monster."),

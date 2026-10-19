@@ -488,11 +488,15 @@ def test_every_monster_that_pays_gold_is_a_gold_route(world: tuple[WorldState, G
         assert r.yield_per == max(1, (gd.monster_min_gold(r.via) + gd.monster_max_gold(r.via)) // 2)
         assert {g.kind for g in r.gates} == {GateKind.SPAWN_LIVE, GateKind.SPAWN_KNOWN,
                                              GateKind.WINNABLE, GateKind.XP_POSITIVE}
-    # A geared character can earn any amount of gold by fighting; the world
-    # fixture is a zero-stat state (no fight winnable), so it cannot.
-    geared = scenario_state(replace(SCENARIOS["l20_band_entry"], derive_combat_stats=True), gd)
-    assert ObtainModel(replace(geared, gold=0), gd, _ctx(), NOW).feasible(GOLD_CODE, 10**6, OPEN)
-    assert not ObtainModel(replace(state, gold=0), gd, _ctx(), NOW).feasible(GOLD_CODE, 1, OPEN)
+    # A geared character can earn any amount of gold by fighting; the same
+    # character wearing nothing has zero attack (its honest totals), wins no
+    # fight, and so cannot. RE-DERIVED 2026-10-18 (ruling R): the world fixture
+    # derives its gear's totals now, so it is the geared side, and the
+    # zero-stat side is the scenario with no gear rather than a zero-stat sheet
+    # under worn gear.
+    bare = scenario_state(replace(SCENARIOS["l20_band_entry"], equipment={}), gd)
+    assert ObtainModel(replace(state, gold=0), gd, _ctx(), NOW).feasible(GOLD_CODE, 10**6, OPEN)
+    assert not ObtainModel(replace(bare, gold=0), gd, _ctx(), NOW).feasible(GOLD_CODE, 1, OPEN)
 
 
 class TestGatedBy:

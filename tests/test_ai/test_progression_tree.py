@@ -208,14 +208,24 @@ class TestPerScenarioPins:
         not gear targets at all. The rows are shield, the weapon slot's
         blocking material, and the trunk. This test passed under both regimes
         for different reasons, so the rows are now spelled out rather than
-        counted."""
+        counted.
+
+        RE-DERIVED 2026-10-18 (ruling R): the scenario's sheet carries its gear's
+        totals now. On them the character wins fights a zero-stat sheet lost,
+        so the drops behind `life_amulet` open and its jewelrycrafting gate is
+        the furthest-behind thing the walk can serve: the root is that climb,
+        the gearcrafting and weaponcrafting climbs follow, and the shield is an
+        alternative. The shield root was an artefact of the zero-stat sheet.
+        Plan C deletes this tree pin."""
         d, _ = _decide("l8_overstocked")
-        assert d.chosen_root == ObtainItem(code="wooden_shield", quantity=1,
-                                           slot="shield_slot")
-        assert d.chosen_step == ObtainItem(code="ash_wood", quantity=10)
+        assert d.chosen_root == ReachSkillLevel(skill="jewelrycrafting", level=2)
+        assert d.chosen_step == ReachSkillLevel(skill="jewelrycrafting", level=2)
+        assert d.blocked_target == "life_amulet"
         assert [r.root_repr for r in d.ranking] == [
+            "ReachSkillLevel(skill='jewelrycrafting', level=2)",
+            "ReachSkillLevel(skill='gearcrafting', level=2)",
+            "ReachSkillLevel(skill='weaponcrafting', level=2)",
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
-            "ObtainItem(code='wooden_stick', quantity=1)",
             "ReachCharLevel(level=10)"]
 
     def test_l10_copper_adequate_pins_gear_branch_not_xp(self):

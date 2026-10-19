@@ -303,7 +303,10 @@ def test_the_level_up_arm_has_real_witnesses() -> None:
     apart. If a catalogue change ever takes this to zero the middle clause has
     become unreachable and should be deleted, not left as decoration.
 
-    THE SWEEP IS WHOLE: all 34 `derive_combat_stats` scenarios against all 58
+    Eight until 2026-10-18 (ruling R): `l30_band_entry` derives its combat
+    stats from its gear now, and its demon pair is a ninth witness.
+
+    THE SWEEP IS WHOLE: all 43 `derive_combat_stats` scenarios against all 58
     catalogue monsters, 1,972 pairs, nothing sampled and nothing memoized at the
     test level. It is fanned out over processes only because it is the single
     largest test in the suite (150.4s serial, 39 % of the pre-commit hook) and
@@ -338,7 +341,8 @@ def test_the_level_up_arm_has_real_witnesses() -> None:
         per_scenario = list(executor.map(_level_up_witnesses, names))
 
     witnesses = sorted(pair for scenario in per_scenario for pair in scenario)
-    assert len(witnesses) == 8, witnesses
+    assert len(witnesses) == 9, witnesses
+    assert ("l30_band_entry", "demon") in witnesses
     assert (LEVEL_UP_CELL, LEVEL_UP_MONSTER) in witnesses
 
 

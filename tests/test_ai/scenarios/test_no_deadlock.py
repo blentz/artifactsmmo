@@ -184,16 +184,19 @@ def test_l10_gearcrafting_gap_search_bounded() -> None:
 
 
 def test_l10_gearcrafting_gap_combat_blocked_no_winnable_monster() -> None:
-    """Tripwire (mirrors test_band_liveness's l48 tripwire): the ramp is
-    constructed with zero derived combat stats so no monster — including
-    the feather-dropping chicken — is winnable. If this ever finds a
-    winnable monster, the scenario's "combat-blocked" construction is stale
-    and the ramp test below no longer isolates what it claims to."""
+    """Tripwire (mirrors test_band_liveness's l48 tripwire). The ramp was
+    constructed with zero combat stats under a worn copper set so no monster
+    — including the feather-dropping chicken — was winnable.
+
+    RE-DERIVED 2026-10-18 (ruling R): that block was a STAT ARTEFACT. Zero
+    totals under worn gear are a sheet the API never serves (the gear objective
+    raises on it), and on its copper set's own totals the character beats the
+    level-window `blue_slime`. The scenario has no honest combat block, so the
+    tripwire now pins the derived pick: the ramp below no longer isolates a
+    combat-blocked closure, and its guarantee (no XP thrash) is asserted on the
+    derived outcome."""
     player, _gd = _player(CRITERION_1_RAMP)
-    assert player._pick_winnable_monster() is None, (
-        "no monster should be winnable against this zero-combat-stat "
-        "loadout in this bundle; if this now finds one, the ramp's "
-        "combat-blocked construction is stale and must be revised")
+    assert player._pick_winnable_monster() == "blue_slime"
 
 
 def test_l10_gearcrafting_gap_combat_blocked_retargets_not_char_grind() -> None:
@@ -220,14 +223,22 @@ def test_l10_gearcrafting_gap_combat_blocked_retargets_not_char_grind() -> None:
     production callers by wave 3a and wave 3b deleted both. The shield/potion
     comparison above is retained as the historical reason the pin exists;
     the current mechanism no longer runs it, but the GUARANTEE this test
-    checks does not depend on which mechanism produced the answer."""
+    checks does not depend on which mechanism produced the answer.
+
+    RE-DERIVED 2026-10-18 (ruling R): on its copper set's own totals the
+    character is not combat-blocked (see the tripwire above), so the
+    `wooden_shield`/ash_wood re-target was a stat artefact of the zero-attack
+    sheet. The walk now passes the cowhide over (no route: cow is not won in
+    copper) and climbs jewelrycrafting one level with a copper ring; the
+    guarantee (never GrindCharacterXP) holds on that derived outcome."""
     report = _run(CRITERION_1_RAMP)
     # GUARANTEE: re-target to a reachable non-combat goal, never XP-thrash.
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal) == "GatherMaterials(ash_wood, {ash_wood:10})"
-    assert report.decision.chosen_root == ObtainItem(
-        code="wooden_shield", quantity=1, slot="shield_slot")
+    assert repr(report.selected_goal) == "ReachSkill(jewelrycrafting->2)"
+    assert report.decision.chosen_root == ReachSkillLevel(skill="jewelrycrafting", level=2)
+    assert [repr(a) for a in report.plan] == [
+        "Gather(copper_rocks×60)", "Craft(copper_bar×6)", "Craft(copper_ring×1)"]
 
 
 def test_l10_gearcrafting_gap_combat_blocked_search_bounded() -> None:
@@ -288,12 +299,14 @@ def test_l20_dual_utility_climbs_the_blocking_skill_not_the_char_level() -> None
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "ReachSkill(gearcrafting->16)"
-    # PHASE 2d-L3: one whole committed grind cycle ending in the iron_boots that
-    # earn. It holds a fight (chicken, for the feather); the chosen loadout
-    # against the chicken recovers by Rest, so no food is stocked first
-    # (docs/PLAN_consumable_utility.md increment 5).
+    # PHASE 2d-L3: one whole committed grind cycle ending in the craft that
+    # earns. RE-DERIVED 2026-10-18 (ruling R): the scenario's derived sheet now
+    # carries its gear's wisdom (70) and prospecting, which the ranked rung
+    # reads through each fight's XP, so the earning craft moved from
+    # iron_boots (iron_bar x5 + feather x3) to leather_hat (cowhide x5 +
+    # yellow_slimeball x3): two drop fights, then the gearcrafting-10 craft.
     assert [repr(a) for a in report.plan] == [
-        "Gather(iron_rocks×50)", "Craft(iron_bar×5)", "Fight(chicken)", "Craft(iron_boots×1)"]
+        "Fight(cow)", "Fight(yellow_slime)", "Craft(leather_hat×1)"]
     # The climb is bounded (current + 1, not the whole gate) and the trunk is
     # still offered, so this is a re-targeting, not a deadlock.
     assert report.decision.chosen_root.level == 16
@@ -318,29 +331,32 @@ def test_l48_band_adequate_names_the_wall_when_no_winnable_monster() -> None:
     trunk fallback now goes through `actionable_step`, so it descends to its
     weapon prerequisite and the arbiter reaches a real craft chain instead of
     idling. Criterion 2's guarantee — NOT a deadlock, and not an unexplained
-    dead end — holds in a stronger form than before."""
+    dead end — holds in a stronger form than before.
+
+    RE-DERIVED 2026-10-18 (ruling R): the L47-50 wall was a STAT ARTEFACT. The
+    scenario's hand stats lacked its mithril loadout's, and on that loadout's
+    own totals `hellhound` is winnable, so this scenario has no honest wall.
+    The pins now state the derived outcome: the walk names no root, every gear
+    alternative it reaches has no route this cycle, and the trunk is the LAST
+    fallback. With no task held and `L*` missing pieces (its `m*` is
+    hellhound), no fight is chosen for XP (spec 2026-10-18 §6.2), so the
+    trunk serves nothing and the cycle Waits until the root walk offers an
+    `L*` piece (Plan A Task 5)."""
     player, _gd = _player(CRITERION_2_WALLED)
-    assert player._pick_winnable_monster() is None, (
-        "no L47-50 window monster should be winnable against this "
-        "non-event loadout in this bundle; if this now finds one, the "
-        "L50-difficulty-wall finding is stale and must be revised")
+    assert player._pick_winnable_monster() == "hellhound"
     assert player._tree_band_adequate() is False
     report = player.plan_from_state()
-    assert not isinstance(report.selected_goal, WaitGoal), (
+    assert isinstance(report.selected_goal, WaitGoal), (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal) == "GatherMaterials(mithril_bar, {mithril_bar:11})"
-    assert report.plan, (repr(report.selected_goal), report.plan)
     assert report.decision.chosen_root is None
-    # The trunk is still the FIRST fallback, which is what makes
-    # `GatherMaterials(mithril_bar)` above the selected goal — the trunk arm of
-    # `objective_step_goal` runs `_marginal_provision_goal` first. Behind it
-    # sit the restored standalone skill roots (`_orphan_skill_roots`), offered
-    # but not preferred: ahead of the trunk they displaced that mithril gather,
-    # which is the gear that breaks the L38-48 wall.
-    assert report.decision.fallback_roots[0] == ReachCharLevel(level=50)
-    assert all(isinstance(root, ReachSkillLevel)
-               for root in report.decision.fallback_roots[1:]), (
-        report.decision.fallback_roots)
+    assert report.decision.fallback_roots == [
+        ObtainItem(code="demon_horn", quantity=4), ObtainItem(code="magical_cure", quantity=2),
+        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
+        ObtainItem(code="life_crystal", quantity=1, slot="artifact2_slot"),
+        ObtainItem(code="backpack", quantity=1, slot="bag_slot"),
+        ObtainItem(code="corrupted_skull", quantity=1, slot="artifact1_slot"),
+        ObtainItem(code="lizard_skin", quantity=5),
+        ObtainItem(code="full_moon_vampire_cape", quantity=4), ReachCharLevel(level=50)]
 
 
 def test_l48_band_adequate_search_bounded() -> None:
