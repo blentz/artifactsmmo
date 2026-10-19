@@ -16,6 +16,9 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.arbiter_select import BAND_RAID
+from artifactsmmo_cli.ai.combat import combat_terms
+from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS, FightExit
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.goals.participate_raid import (
@@ -147,6 +150,24 @@ def test_survivable_raid_with_a_tile_is_offered():
     state = make_state(level=48, hp=1000, max_hp=1000,
                        attack={"air": 50}, raids=[_raid_info()])
     out = _candidates(_raid_gd(tiles=True, hurts=False), state)
+    assert [repr(g) for g in out] == [f"ParticipateRaid({_RAID})"]
+
+
+def test_a_weak_unkillable_raid_boss_is_offered():
+    """A raid is won by surviving all 100 turns OR finishing the boss
+    (`raid_participation`: upstream's win condition; the boss's HP pool is
+    shared across accounts). So a boss the character cannot finish inside
+    `MAX_TURNS` is not a loss: here 50 air a hit into 600,000 HP is far over
+    the cap (`combat_terms` exits `OVER_CAP`), and the boss's 1 air a hit for
+    the capped 100 turns leaves the character above the floor, so the raid is
+    offered. Plan B Task 1, ruling BD: the uncapped estimate (1 x 12,000 rounds)
+    refused it."""
+    gd = _raid_gd(tiles=True, hurts=False)
+    gd._monster_hp = {_BOSS: 600_000}
+    state = _survivable_state()
+    assert combat_terms(state, gd, _BOSS).exit is FightExit.OVER_CAP
+    assert expected_damage_per_fight(state, gd, _BOSS) == 1 * MAX_TURNS
+    out = _candidates(gd, state)
     assert [repr(g) for g in out] == [f"ParticipateRaid({_RAID})"]
 
 
