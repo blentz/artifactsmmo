@@ -8,7 +8,7 @@ in the learning store.  The computation reuses ``_expected_hit`` from
 from artifactsmmo_cli.ai.combat import _expected_hit, moves_first
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
-from artifactsmmo_cli.ai.fight_terms_core import SCALE, kill_rounds
+from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS, SCALE, kill_rounds
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -38,6 +38,14 @@ def expected_damage_per_fight(
     guard fired — brewing a 30-potion stack to survive a fight that equipping the
     bow already in the bag wins outright.
 
+    The fight stops at ``MAX_TURNS``: a monster the player cannot kill by
+    then lands at most ``MAX_TURNS`` hits, so the rounds are
+    ``min(rounds_to_kill, MAX_TURNS)``. Uncapped, a 600,000-HP raid boss read
+    2,933 rounds (1,844,857 damage). A kill step that rounds to 0 at ``SCALE``
+    never kills, so it counts the whole ``MAX_TURNS``. The damage is NOT
+    clamped at the fighter's HP: ``raid_survivable_pure`` reads "unsurvivable"
+    from damage above the HP pool, and a clamp would hide it.
+
     Guard: ``game_data.monster_levels`` returns 0 for unknown codes, so the
     membership check avoids calling the raising stat accessors.
     """
@@ -57,6 +65,9 @@ def expected_damage_per_fight(
     if player_kill_step <= 0:
         return 0
     first = moves_first(p.initiative, state.hp, game_data.monster_initiative(monster_code), m_hp)
+    kill_step = round(player_kill_step * SCALE)
+    if kill_step == 0:
+        return round(monster_per_turn) * MAX_TURNS
     rounds_to_kill = kill_rounds(m_hp, game_data.monster_barrier(monster_code),
-                                 round(player_kill_step * SCALE), first)
-    return round(monster_per_turn) * rounds_to_kill
+                                 kill_step, first)
+    return round(monster_per_turn) * min(rounds_to_kill, MAX_TURNS)

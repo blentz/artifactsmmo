@@ -144,7 +144,7 @@
   - `potion_supply` ladder;
   - the `macro` segment bands;
   - the `inventory_*` `IN_BAND`;
-  - the package name `tiers` in import paths. Its rename is a separate user decision, recorded in the report.
+  - nothing for the package: it is renamed (USER 2026-10-19: "yes" to renaming `ai/tiers/`). Rename `src/artifactsmmo_cli/ai/tiers/` to `src/artifactsmmo_cli/ai/progression/` with `git mv`. Rewrite every import in `src/`, `tests/`, `formal/diff/`, `scripts/` and `formal/diff/mutate.py` (its `*_SRC` paths). Do the rename as its own commit before the gate commit, with the full suite green.
   Each allowed name must still exist (an orphan entry fails), like `liveness_completeness`'s `DORMANT`.
 - Modify: `formal/gate.sh`. Add `gen_vocabulary_gate.py --check` to the census block.
 - Modify: `src/artifactsmmo_cli/ai/weapon_winnability.py` (`BAND_MARGIN`, `_band_monsters`). Rename these to level-window names rather than allow-listing them: they name a band of monsters around the character, which is the deleted concept.

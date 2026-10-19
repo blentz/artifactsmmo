@@ -70,6 +70,16 @@ ORDERED it, so a piece step that failed to plan, or had spent its rotation
 turn, handed the cycle to the boss. The raid is now not offered at all while a
 piece is missing (`strategy_driver.raid_may_fight`); the last two tests pin
 both paths.
+
+RE-DERIVED plan B Task 1 (the pixie damage defect, fixed): the estimate now
+stops at the turn cap, `MAX_TURNS` hits. Pixie has 600,000 HP and this sheet
+needs 2,933 rounds to kill it, so the old 629 x 2,933 = 1,844,857 is now
+629 x 100 = 62,900. That is still far above the 1570-hp pool, so
+`raid_survivable_pure` still refuses the raid on its merits: the monster kills
+the character in 3 turns. The raid stays unsurvivable, and both poles still
+plan exactly the missing piece's acquisition. The poles separate only once a
+sheet survives the boss, so the tests that patch the gate stay the positive
+evidence that a survivable raid still yields to the piece.
 """
 
 from pathlib import Path
@@ -79,6 +89,7 @@ import pytest
 import artifactsmmo_cli.ai.strategy_driver as strategy_driver
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
@@ -170,6 +181,7 @@ def test_l48_with_an_active_raid_can_plan():
     RE-DERIVED 2026-10-18 (ruling R): on real stats the raid candidate is
     refused as unsurvivable (see the module docstring), so the open window
     adds nothing: the raid pole tries exactly the walled pole's goals.
+    RE-DERIVED plan B Task 1: still refused once the estimate is turn-capped.
 
     RE-DERIVED Task 5 (ruling Z): both poles plan exactly the first missing
     `L*` piece's acquisition."""
@@ -194,6 +206,9 @@ def test_l48_raid_plan_engages_the_boss():
     unsurvivable (`raid_survivable_pure`: the expected damage exceeds the hp
     pool), so the plan engages nothing.
 
+    RE-DERIVED plan B Task 1: the turn-capped estimate (62,900) still
+    exceeds the hp pool, so the refusal stands on its merits.
+
     RE-DERIVED Task 5 (ruling Z): the plan is the `L*` piece's acquisition —
     down to the goblin_guard, fight it for its shield, equip it — and no
     action fights the raid boss."""
@@ -203,10 +218,13 @@ def test_l48_raid_plan_engages_the_boss():
         "Equip(goblin_guard_shield->shield_slot)"]
     assert not any(isinstance(a, FightAction) and a.monster_code == _RAID_BOSS
                    for a in report.plan)
-    # The cause of the refusal, not its magnitude: the estimate exceeds the
-    # character's whole hp pool, so the raid is unsurvivable.
+    # The cause of the refusal: the estimate exceeds the character's whole hp
+    # pool, so the raid is unsurvivable. RE-DERIVED plan B Task 1: the estimate
+    # is the turn-capped 629 x MAX_TURNS, no longer 1,844,857, and still
+    # refuses on its merits.
     state = _state("l48_raid_active")
-    assert expected_damage_per_fight(state, _gd(), _RAID_BOSS) > state.max_hp
+    assert state.max_hp == 1570
+    assert expected_damage_per_fight(state, _gd(), _RAID_BOSS) == 629 * MAX_TURNS
 
 
 def test_the_two_poles_differ_only_by_the_raid():
@@ -221,7 +239,8 @@ def test_the_two_poles_differ_only_by_the_raid():
 
 def test_a_survivable_raid_still_yields_to_the_missing_piece(
         monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ruling Z, with the pixie damage defect patched away: the raid IS
+    """Ruling Z, with the survivability gate patched to pass (plan B Task 1:
+    the turn-capped pixie estimate still refuses this sheet): the raid IS
     survivable, so its candidate is built (the survivability gate is asked of
     the boss) — and still the root is the missing `L*` piece, the selected goal
     is that piece's acquisition, and no action fights the boss. While a piece
@@ -243,7 +262,7 @@ def test_a_survivable_raid_still_yields_to_the_missing_piece(
 
 
 def _survivable(monkeypatch: pytest.MonkeyPatch) -> list[float]:
-    """Patch the pixie damage defect away: the raid reads survivable, so its
+    """Patch the survivability gate to pass: the raid reads survivable, so its
     candidate gate is asked. Returns the damages it was asked with."""
     asked: list[float] = []
 

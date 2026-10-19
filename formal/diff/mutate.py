@@ -800,12 +800,18 @@ FIGHT_TERMS_PREDICT_MUTATIONS = [
      "        return terms.rounds_to_kill < terms.rounds_to_die"),
 ]
 
-# The cold-start damage seed counts the hits behind the barrier.
+# The cold-start damage seed counts the hits behind the barrier, up to the turn cap.
 # Killed by tests/test_ai/test_expected_damage.py.
 EXPECTED_DAMAGE_MUTATIONS = [
     ("expected_damage: the barrier is ignored",
      "    rounds_to_kill = kill_rounds(m_hp, game_data.monster_barrier(monster_code),\n",
      "    rounds_to_kill = kill_rounds(m_hp, 0,\n"),
+    ("expected_damage: the turn cap is dropped",
+     "    return round(monster_per_turn) * min(rounds_to_kill, MAX_TURNS)",
+     "    return round(monster_per_turn) * rounds_to_kill"),
+    ("expected_damage: the zero-step guard is dropped",
+     "    if kill_step == 0:\n",
+     "    if False:\n"),
 ]
 
 # Killed by tests/test_ai/test_combat.py (the reconstitution and dead-start cases).
