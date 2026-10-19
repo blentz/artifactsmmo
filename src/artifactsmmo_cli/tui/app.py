@@ -3,7 +3,10 @@
 from collections.abc import Callable
 from functools import partial
 
+import rich
 from artifactsmmo_api_client.models.log_type import LogType
+from rich.segment import Segments
+from rich.traceback import Traceback
 from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.screen import Screen
@@ -110,6 +113,22 @@ class WatchApp(App[None]):
         self._pool: SupervisorPool | None = None
         self._bind_character_keys()
         SpriteCoverageAudit().run(game_data)
+
+    def _fatal_error(self) -> None:
+        """Exit after an unhandled exception, rendering the traceback WITHOUT locals.
+
+        Textual's stock handler renders `Traceback(show_locals=True)`, and Rich
+        keeps the first 80 characters of every string local: the API token, a
+        `Bearer` header dict, a `Config` repr. The traceback names the error and
+        its frames; locals never reach the terminal. Same steps as the stock
+        handler otherwise (bell, queue the render, close without waiting).
+        """
+        self.bell()
+        traceback = Traceback(show_locals=False, width=None, suppress=[rich])
+        self._exit_renderables.append(
+            Segments(self.console.render(traceback, self.console.options))
+        )
+        self._close_messages_no_wait()
 
     def _bind_character_keys(self) -> None:
         """Give every character in the roster a focus key LABELLED with its name.

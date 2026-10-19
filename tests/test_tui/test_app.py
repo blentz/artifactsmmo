@@ -576,3 +576,30 @@ class TestFightBackfill:
 
             detail = app.screen.query_one("#fight-detail", RichLog)
             assert "chicken" in str(detail.lines[0])
+
+
+_SECRET = "eyJsecret-token-value-that-must-never-print"
+
+
+def _crash_holding_a_secret() -> None:
+    token = _SECRET
+    raise RuntimeError(f"boom ({len(token)} chars)")
+
+
+class TestWatchAppFatalError:
+    async def test_a_fatal_error_never_renders_locals(self, capsys):
+        """An unhandled error in the TUI renders its traceback WITHOUT frame locals.
+
+        Textual's stock handler renders `Traceback(show_locals=True)`, which prints
+        the first 80 characters of every string local: the API token, a `Bearer`
+        header dict. The crashing frame here holds the token in a local; the
+        exit text Textual prints to stderr names the error but never the secret.
+        """
+        app = _make_app()
+        with pytest.raises(RuntimeError, match="boom"):
+            async with app.run_test() as pilot:
+                app.call_later(_crash_holding_a_secret)
+                await pilot.pause()
+        rendered = capsys.readouterr().err
+        assert "boom" in rendered
+        assert "eyJsecret" not in rendered

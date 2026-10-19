@@ -466,6 +466,7 @@ OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions
 ROOT_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "root.py"
 CURRENCY_WALL_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "currency_wall_census.py"
 WHICH_PIECE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "which_piece_is_next.py"
+TUI_APP_SRC = ROOT / "src" / "artifactsmmo_cli" / "tui" / "app.py"
 GATHER_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_demand.py"
 CRAFT_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_demand.py"
 # `_equippable_goal` / `_gather_goal_for_unreachable_equippable` /
@@ -7342,7 +7343,7 @@ _ALL_SRCS = [
     FIGHT_TERMS_CORE_SRC, FIGHT_OUTCOME_CORE_SRC, FIGHT_ODDS_CORE_SRC, GROUP_FIGHT_CORE_SRC,
     CONSUMABLE_PRICE_CORE_SRC, CONSUMABLE_PRICE_SRC, LOOP_RATE_CORE_SRC, LOOP_RATE_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
-    ROOT_DECISION_SRC, GATHER_DEMAND_SRC,
+    ROOT_DECISION_SRC, GATHER_DEMAND_SRC, TUI_APP_SRC,
     OBTAIN_ITEM_ROUTING_SRC, COOLDOWN_WAIT_SRC, EQUIP_VALUE_SRC,
     GEAR_VALUE_CORE_SRC,
     GAME_DATA_PARSE_SRC, LOCATION_CATALOG_SRC,
@@ -9199,6 +9200,15 @@ WHICH_PIECE_ROOT_MUTATIONS = [
     ("root/resolve_root: the missing pieces are not offered as alternatives",
      "        for piece in (target.missing if target is not None else ())\n",
      "        for piece in ()\n"),
+]
+
+
+# Security (ruling AN): the TUI's fatal-error handler never renders frame locals
+# (the API token is one). Killed by tests/test_tui/test_app.py.
+TUI_FATAL_ERROR_MUTATIONS = [
+    ("tui/_fatal_error: the traceback renders frame locals",
+     "        traceback = Traceback(show_locals=False, width=None, suppress=[rich])\n",
+     "        traceback = Traceback(show_locals=True, width=None, suppress=[rich])\n"),
 ]
 
 
@@ -11308,6 +11318,8 @@ def _collect_all_groups() -> None:
               "tests/test_audit/test_currency_wall_census.py", survivors)
     run_group(WHICH_PIECE_SRC, WHICH_PIECE_MUTATIONS,
               "tests/test_ai/test_decisions_which_piece.py", survivors)
+    run_group(TUI_APP_SRC, TUI_FATAL_ERROR_MUTATIONS,
+              "tests/test_tui/test_app.py", survivors)
     run_group(ROOT_DECISION_SRC, WHICH_PIECE_ROOT_MUTATIONS,
               "tests/test_ai/test_decisions_which_piece.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, FLEET_STEP_MUTATIONS,
