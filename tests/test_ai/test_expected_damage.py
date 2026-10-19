@@ -102,15 +102,24 @@ def test_expected_damage_uses_the_loadout_the_bot_would_equip():
         expected_damage_per_fight(equipped, gd, "brute")
 
 
-def test_damage_never_exceeds_the_turn_cap(monkeypatch: pytest.MonkeyPatch):
-    """A kill step that is positive but below 1/SCALE rounds to 0 at SCALE, so
-    `kill_rounds` would divide by it. The fight is still unresolved at the turn
-    cap (`MAX_TURNS`), so the monster hits for `MAX_TURNS` rounds and no more.
+def test_damage_never_exceeds_the_turn_cap():
+    """1 fire a hit into 10,000 HP takes 10,000 rounds, but a fight unresolved
+    by turn `MAX_TURNS` is over: the monster hits for `MAX_TURNS` rounds and
+    no more (10 x 100, not 10 x 10,000)."""
+    gd = _gd(hp=10_000, attack={"fire": 10}, code="slime")
+    gd._monster_level = {"slime": 1}
+    state = make_state(level=5, hp=200, max_hp=200, attack={"fire": 1})
+    monster_per_turn = _expected_hit({"fire": 10}, 0, {}, {}, 0)
+    assert expected_damage_per_fight(state, gd, "slime") == round(monster_per_turn) * MAX_TURNS
+    assert round(monster_per_turn) * MAX_TURNS == 1000
 
-    The player's 10 water a hit is replaced by a step of 1/(2 x SCALE): integer
-    stats cannot produce one (the smallest positive `_expected_hit` is 0.005),
-    so the seam stands in for it. A 0 step is outside `kill_rounds`'
-    contract (a positive step), so the guard answers before calling it."""
+
+def test_a_kill_step_below_the_scale_breaks_the_precondition(
+        monkeypatch: pytest.MonkeyPatch):
+    """`kill_rounds` takes a POSITIVE step (x SCALE). Integer stats cannot make a
+    positive hit round to 0 at SCALE (the smallest positive `_expected_hit` is
+    0.005, i.e. 50), so a step that does is a broken precondition and raises,
+    rather than being priced. The seam stands in for that impossible step."""
     gd = _gd(hp=30, attack={"fire": 10}, code="slime")
     gd._monster_level = {"slime": 1}
     state = make_state(level=5, hp=200, max_hp=200, attack={"water": 10})
@@ -121,19 +130,9 @@ def test_damage_never_exceeds_the_turn_cap(monkeypatch: pytest.MonkeyPatch):
             return 1 / (2 * SCALE)
         return real(attack, dmg, dmg_elements, resist, crit)
 
-    steps: list[int] = []
-    real_rounds = expected_damage.kill_rounds
-
-    def recording_rounds(monster_hp, barrier, kill_step, player_first):
-        steps.append(kill_step)
-        return real_rounds(monster_hp, barrier, kill_step, player_first)
-
     monkeypatch.setattr(expected_damage, "_expected_hit", tiny_player_step)
-    monkeypatch.setattr(expected_damage, "kill_rounds", recording_rounds)
-    monster_per_turn = _expected_hit({"fire": 10}, 0, {}, {}, 0)
-    assert expected_damage_per_fight(state, gd, "slime") == round(monster_per_turn) * MAX_TURNS
-    # `kill_rounds` takes a POSITIVE step: a 0 step never reaches it.
-    assert steps == []
+    with pytest.raises(AssertionError, match="positive kill step"):
+        expected_damage_per_fight(state, gd, "slime")
 
 
 def test_pixie_on_the_l48_raid_sheet_is_bounded():

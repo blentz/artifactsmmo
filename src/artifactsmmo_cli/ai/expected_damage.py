@@ -41,8 +41,9 @@ def expected_damage_per_fight(
     The fight stops at ``MAX_TURNS``: a monster the player cannot kill by
     then lands at most ``MAX_TURNS`` hits, so the rounds are
     ``min(rounds_to_kill, MAX_TURNS)``. Uncapped, a 600,000-HP raid boss read
-    2,933 rounds (1,844,857 damage). A kill step that rounds to 0 at ``SCALE``
-    never kills, so it counts the whole ``MAX_TURNS``. The damage is NOT
+    2,933 rounds (1,844,857 damage). A positive kill step is at least 50 at
+    ``SCALE`` (an integer hit at the lowest integer crit), so ``kill_rounds``'
+    positive-step precondition is asserted, not priced. The damage is NOT
     clamped at the fighter's HP: ``raid_survivable_pure`` reads "unsurvivable"
     from damage above the HP pool, and a clamp would hide it.
 
@@ -66,8 +67,7 @@ def expected_damage_per_fight(
         return 0
     first = moves_first(p.initiative, state.hp, game_data.monster_initiative(monster_code), m_hp)
     kill_step = round(player_kill_step * SCALE)
-    if kill_step == 0:
-        return round(monster_per_turn) * MAX_TURNS
+    assert kill_step > 0, f"kill_rounds needs a positive kill step, got {player_kill_step}"
     rounds_to_kill = kill_rounds(m_hp, game_data.monster_barrier(monster_code),
                                  kill_step, first)
     return round(monster_per_turn) * min(rounds_to_kill, MAX_TURNS)

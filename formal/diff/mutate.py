@@ -809,9 +809,9 @@ EXPECTED_DAMAGE_MUTATIONS = [
     ("expected_damage: the turn cap is dropped",
      "    return round(monster_per_turn) * min(rounds_to_kill, MAX_TURNS)",
      "    return round(monster_per_turn) * rounds_to_kill"),
-    ("expected_damage: the zero-step guard is dropped",
-     "    if kill_step == 0:\n",
-     "    if False:\n"),
+    ("expected_damage: the positive-step precondition is dropped",
+     "    assert kill_step > 0, f\"kill_rounds needs a positive kill step, got {player_kill_step}\"\n",
+     "    assert True\n"),
 ]
 
 # Killed by tests/test_ai/test_combat.py (the reconstitution and dead-start cases).
