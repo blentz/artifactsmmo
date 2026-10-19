@@ -42,6 +42,8 @@ SHED_URGENCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "shed_urgency.py"
 DRAIN_BANK_JUNK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "drain_bank_junk.py"
 SHED_CENSUS_SRC = (ROOT / "src" / "artifactsmmo_cli" / "audit"
                    / "shed_reachability_completeness.py")
+LIVENESS_CENSUS_SRC = (ROOT / "src" / "artifactsmmo_cli" / "audit"
+                       / "liveness_completeness.py")
 GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "guards.py"
 GATHERING_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gathering.py"
 CRAFT_PLAN_GEN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_gen.py"
@@ -4945,6 +4947,24 @@ SELL_BANK_ARM_MUTATIONS = [
 # The shed-reachability census's own verdict (2026-08-05). A census that cannot
 # go red is decoration, so each mutant blinds it to one residual it gates.
 # Killed by tests/test_ai/test_shed_reachability_census.py.
+# Liveness stall report mutations. A stall is one character's run of
+# consecutive Wait cycles spanning STALL_MIN_SPAN or more. Each mutant breaks one
+# of the three rules that make that definition: the inclusive threshold, the
+# split on a non-Wait cycle, and the per-character run. Killed by
+# tests/test_audit/test_liveness_completeness.py.
+LIVENESS_STALL_MUTATIONS = [
+    ("stall report: a run of exactly STALL_MIN_SPAN is not a stall (>= -> >)",
+     "    if stamps[-1] - stamps[0] >= STALL_MIN_SPAN:",
+     "    if stamps[-1] - stamps[0] > STALL_MIN_SPAN:"),
+    ("stall report: a non-Wait cycle no longer ends the run",
+     "        _close_run(key, open_runs, found)\n        previous[key] = goal",
+     "        previous[key] = goal"),
+    ("stall report: every character shares one run",
+     "        key = character\n",
+     "        key = \"\"\n"),
+]
+
+
 SHED_CENSUS_MUTATIONS = [
     ("shed census: a selected rung with NO plan passes (band-only check)",
      "    if chosen != _EXPECTED_RUNG[cell.kind] or not plan:\n        return False",
@@ -7311,6 +7331,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
+    LIVENESS_CENSUS_SRC,
     LOADOUT_CALIBRATION_SRC,
     TIER_PROGRESS_SRC, COMBAT_TARGETS_SRC, WIN_THRESHOLD_CORE_SRC,
     ROLE_SELECTION_SRC,
@@ -11578,6 +11599,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_shed_hoists.py", survivors)
     run_group(SHED_CENSUS_SRC, SHED_CENSUS_MUTATIONS,
               "tests/test_ai/test_shed_reachability_census.py", survivors)
+    run_group(LIVENESS_CENSUS_SRC, LIVENESS_STALL_MUTATIONS,
+              "tests/test_audit/test_liveness_completeness.py", survivors)
     run_group(RECYCLE_SURPLUS_SRC, RECYCLE_KIT_MUTATIONS,
               "tests/test_ai/test_recycle_protection.py", survivors)
     run_group(GATHERING_GOAL_SRC, GATHER_REARM_MUTATIONS[4:],

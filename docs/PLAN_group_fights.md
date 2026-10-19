@@ -478,7 +478,8 @@ Also seen on the way: C3P0 lost 8 straight `Fight(rat)` (19:43-19:58,
 `SupplyBank(cooked_rat_meat)` / slime_shield chain, predicted loss, no
 utility potion worn) — the drop gate's potion-loadout arm admitted a fight
 fought without its potions. Residual, not fixed here.
-A third fix on the way (the local gate's liveness alarm, HAL 21:35Z): 12 Wait
+A third fix on the way (the local gate's liveness alarm — retired 2026-10-19
+for the liveness census's stall report — HAL 21:35Z): 12 Wait
 cycles with every plan declined `bag_overflow` at 61/164 items, 17/20 slots,
 far below DEPOSIT_FULL. An overflowing plan now banks the bag's surplus in
 front of itself when that makes it fit (`craft_plan_gen._bank_first`).

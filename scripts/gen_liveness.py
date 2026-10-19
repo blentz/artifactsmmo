@@ -18,6 +18,9 @@ CI gate: pass `--check` to exit non-zero on the must-be-zero residuals —
   * ORPHAN: a `DORMANT` entry naming a class that no longer exists, which would
     silently excuse the wrong thing if the name were reused.
 
+The STALL section (each character's run of consecutive Wait cycles spanning
+`STALL_MIN_SPAN` or longer) is REPORT ONLY and never fails `--check`.
+
 RUNS WITHOUT A LEARNING DB, and that is deliberate. The class roster comes from
 the SOURCE, so the completeness of the declaration is checkable in CI or a fresh
 clone with no observations at all; only the STALE arm needs a store. A census that
@@ -31,7 +34,7 @@ import sys
 from pathlib import Path
 
 from artifactsmmo_cli.audit.liveness_completeness import (
-    liveness_alarms,
+    find_stalls,
     orphan_declarations,
     render_matrix,
     run_census,
@@ -53,28 +56,25 @@ def _db_path(argv: list[str]) -> str:
 def main() -> None:
     argv = sys.argv[1:]
     check = "--check" in argv
-    rows = run_census(_db_path(argv))
+    db_path = _db_path(argv)
+    rows = run_census(db_path)
+    stalls = find_stalls(db_path)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    (OUT_DIR / "LIVENESS_MATRIX.md").write_text(render_matrix(rows))
+    (OUT_DIR / "LIVENESS_MATRIX.md").write_text(render_matrix(rows, stalls))
     print(summary_line(rows))
+    print("stalls: no store read" if stalls is None
+          else f"stalls: {len(stalls)} (report only)")
     if not check:
         return
 
     bad_undeclared = undeclared(rows)
     bad_stale = stale(rows)
     bad_orphans = orphan_declarations(rows)
-    alarms = liveness_alarms(rows)
-    if not (bad_undeclared or bad_stale or bad_orphans or alarms):
+    if not (bad_undeclared or bad_stale or bad_orphans):
         print("GATE CLEAN: 0 undeclared, 0 stale, 0 orphan declarations.",
               file=sys.stderr)
         return
 
-    for row in alarms:
-        print(f"GATE FAILED (LIVENESS ALARM): {row.kind} {row.name} is a PROOF "
-              f"WITNESS and the store shows it firing {row.observed} times. The "
-              f"bot had nothing to do. Do NOT remove the declaration — find out "
-              f"why every rung above the witness had nothing to offer.",
-              file=sys.stderr)
     for row in bad_undeclared:
         print(f"GATE FAILED (UNDECLARED): {row.kind} {row.name} has never run and "
               f"carries no reason. Add one to "

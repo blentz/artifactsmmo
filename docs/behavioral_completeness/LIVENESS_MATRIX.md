@@ -9,7 +9,7 @@ observed live or carry a reason in
 `docs/PLAN_priority_ladder_unification.md` for why the `unreachable:`
 rows are a defect being tracked rather than a design.
 
-70 classes; LIVE 59; declared-dormant 13 (of which unreachable 4, unclassified 0); undeclared 0; stale 0; liveness alarms 0
+70 classes; LIVE 59; declared-dormant 13 (of which unreachable 4, unclassified 0); undeclared 0; stale 0
 
 | class | kind | observed | status | reason |
 |---|---|---|---|---|
@@ -24,62 +24,91 @@ rows are a defect being tracked rather than a design.
 | `TeleportAction` | action | 0 | dormant | conditional: needs an unlocked teleport destination |
 | `UnlockBankGoal` | goal | 0 | dormant | conditional: the bank is already unlocked for every live character |
 | `UseGoldBagAction` | action | 0 | dormant | conditional: no gold bag has dropped |
-| `WaitAction` | action | 1982 | dormant | witness: the action WaitGoal emits; same proof obligation |
-| `WaitGoal` | goal | 1982 | dormant | witness: MeansKind.WAIT is the unconditional last resort that proves the ladder total (Liveness.NoDeadlockV2) |
-| `AcceptTaskAction` | action | 169 | live |  |
-| `AcceptTaskGoal` | goal | 169 | live |  |
+| `WaitAction` | action | 13140 | dormant | witness: the action WaitGoal emits; same proof obligation |
+| `WaitGoal` | goal | 13140 | dormant | witness: MeansKind.WAIT is the unconditional last resort that proves the ladder total (Liveness.NoDeadlockV2) |
+| `AcceptTaskAction` | action | 242 | live |  |
+| `AcceptTaskGoal` | goal | 242 | live |  |
 | `BuyBankExpansionAction` | action | 23 | live |  |
-| `CancelOrdersGoal` | goal | 1993 | live |  |
+| `CancelOrdersGoal` | goal | 2010 | live |  |
 | `ClaimPendingGoal` | goal | 9 | live |  |
 | `ClaimPendingItemAction` | action | 9 | live |  |
-| `CompleteTaskAction` | action | 51 | live |  |
-| `CompleteTaskGoal` | goal | 53 | live |  |
-| `CraftAction` | action | 13538 | live |  |
-| `CraftPotionsGoal` | goal | 17970 | live |  |
-| `CraftReliefGoal` | goal | 1566 | live |  |
+| `CompleteTaskAction` | action | 79 | live |  |
+| `CompleteTaskGoal` | goal | 82 | live |  |
+| `CraftAction` | action | 16499 | live |  |
+| `CraftPotionsGoal` | goal | 21315 | live |  |
+| `CraftReliefGoal` | goal | 1610 | live |  |
 | `CurrencyTurnInGoal` | goal | 3 | live |  |
-| `DeleteItemAction` | action | 2456 | live |  |
-| `DepositAllAction` | action | 1895 | live |  |
-| `DepositInventoryGoal` | goal | 791 | live |  |
-| `DepositItemAction` | action | 301 | live |  |
-| `DiscardOverstockGoal` | goal | 3356 | live |  |
-| `DrainBankJunkGoal` | goal | 1642 | live |  |
-| `EquipAction` | action | 4298 | live |  |
-| `EquipOwnedGoal` | goal | 407 | live |  |
+| `DeleteItemAction` | action | 2879 | live |  |
+| `DepositAllAction` | action | 2002 | live |  |
+| `DepositInventoryGoal` | goal | 829 | live |  |
+| `DepositItemAction` | action | 733 | live |  |
+| `DiscardOverstockGoal` | goal | 3695 | live |  |
+| `DrainBankJunkGoal` | goal | 1954 | live |  |
+| `EquipAction` | action | 4584 | live |  |
+| `EquipOwnedGoal` | goal | 453 | live |  |
 | `ExpandBankGoal` | goal | 23 | live |  |
-| `FightAction` | action | 69128 | live |  |
-| `GatherAction` | action | 84691 | live |  |
-| `GatherMaterialsGoal` | goal | 19580 | live |  |
-| `GeCancelOrderAction` | action | 1992 | live |  |
+| `FightAction` | action | 86714 | live |  |
+| `GatherAction` | action | 105056 | live |  |
+| `GatherMaterialsGoal` | goal | 32776 | live |  |
+| `GeCancelOrderAction` | action | 2009 | live |  |
 | `GeFillBuyOrderAction` | action | 270 | live |  |
-| `GeFillSellOrderAction` | action | 990 | live |  |
-| `GePostSellOrderAction` | action | 1107 | live |  |
-| `GrindCharacterXPGoal` | goal | 49307 | live |  |
-| `HoldForPartyAction` | action | 109 | live |  |
-| `JoinPartyGoal` | goal | 13 | live |  |
-| `MapTransitionAction` | action | 1515 | live |  |
-| `NpcBuyAction` | action | 146 | live |  |
-| `NpcSellAction` | action | 288 | live |  |
-| `OptimizeLoadoutAction` | action | 1244 | live |  |
+| `GeFillSellOrderAction` | action | 1202 | live |  |
+| `GePostSellOrderAction` | action | 1124 | live |  |
+| `GrindCharacterXPGoal` | goal | 60423 | live |  |
+| `HoldForPartyAction` | action | 224 | live |  |
+| `JoinPartyGoal` | goal | 72 | live |  |
+| `MapTransitionAction` | action | 1739 | live |  |
+| `NpcBuyAction` | action | 168 | live |  |
+| `NpcSellAction` | action | 300 | live |  |
+| `OptimizeLoadoutAction` | action | 1322 | live |  |
 | `ProvisionMarginalFightGoal` | goal | 1 | live |  |
-| `PursueTaskGoal` | goal | 1802 | live |  |
-| `ReachSkillGoal` | goal | 216890 | live |  |
-| `RecycleAction` | action | 1395 | live |  |
-| `RecycleSurplusGoal` | goal | 689 | live |  |
-| `RestAction` | action | 54576 | live |  |
-| `RestoreHPGoal` | goal | 82019 | live |  |
-| `SellInventoryGoal` | goal | 440 | live |  |
-| `SupplyBankGoal` | goal | 10685 | live |  |
-| `SurrenderCurrencyGoal` | goal | 134 | live |  |
-| `TaskCancelAction` | action | 303 | live |  |
-| `TaskCancelGoal` | goal | 302 | live |  |
-| `TaskExchangeAction` | action | 12 | live |  |
-| `TaskExchangeGoal` | goal | 12 | live |  |
-| `TaskKillsGoal` | goal | 2968 | live |  |
-| `TaskTradeAction` | action | 457 | live |  |
-| `UnequipAction` | action | 68 | live |  |
-| `UpgradeEquipmentGoal` | goal | 23328 | live |  |
-| `UseConsumableAction` | action | 21403 | live |  |
+| `PursueTaskGoal` | goal | 2054 | live |  |
+| `ReachSkillGoal` | goal | 225997 | live |  |
+| `RecycleAction` | action | 1484 | live |  |
+| `RecycleSurplusGoal` | goal | 700 | live |  |
+| `RestAction` | action | 65625 | live |  |
+| `RestoreHPGoal` | goal | 96724 | live |  |
+| `SellInventoryGoal` | goal | 459 | live |  |
+| `SupplyBankGoal` | goal | 14121 | live |  |
+| `SurrenderCurrencyGoal` | goal | 188 | live |  |
+| `TaskCancelAction` | action | 348 | live |  |
+| `TaskCancelGoal` | goal | 347 | live |  |
+| `TaskExchangeAction` | action | 21 | live |  |
+| `TaskExchangeGoal` | goal | 21 | live |  |
+| `TaskKillsGoal` | goal | 5551 | live |  |
+| `TaskTradeAction` | action | 562 | live |  |
+| `UnequipAction` | action | 95 | live |  |
+| `UpgradeEquipmentGoal` | goal | 23919 | live |  |
+| `UseConsumableAction` | action | 24286 | live |  |
 | `WithdrawGoldAction` | action | 2 | live |  |
-| `WithdrawItemAction` | action | 5279 | live |  |
+| `WithdrawItemAction` | action | 7540 | live |  |
 | `WithdrawToolsGoal` | goal | 51 | live |  |
+
+## Stalls
+
+A stall is one character's run of consecutive `Wait` cycles whose first and
+last cycle are at least 10 minutes apart; any other cycle by that
+character ends the run. Report only: a stall never fails `--check`.
+Newest first; `preceding goal` is the character's last non-Wait goal before
+the run.
+
+16 stalls.
+
+| character | start | end | Wait cycles | preceding goal |
+|---|---|---|---|---|
+| Robby | 2026-10-18T16:15:15+00:00 | 2026-10-18T16:27:11+00:00 | 74 | `DrainBankJunk` |
+| Robby | 2026-10-18T15:53:10+00:00 | 2026-10-18T16:12:21+00:00 | 100 | `GrindCharacterXP(owlbear)` |
+| R2D2 | 2026-10-14T04:12:41+00:00 | 2026-10-14T07:46:21+00:00 | 4473 | `RecycleSurplus` |
+| C3P0 | 2026-10-14T04:01:29+00:00 | 2026-10-14T07:52:18+00:00 | 710 | `RecycleSurplus` |
+| HAL | 2026-10-14T03:56:25+00:00 | 2026-10-14T07:48:04+00:00 | 5661 | `RecycleSurplus` |
+| C3P0 | 2026-10-10T04:36:56+00:00 | 2026-10-10T04:47:45+00:00 | 182 | `DrainBankJunk` |
+| C3P0 | 2026-10-10T04:15:38+00:00 | 2026-10-10T04:34:16+00:00 | 341 | `RecycleSurplus` |
+| C3P0 | 2026-10-09T23:17:22+00:00 | 2026-10-10T01:10:33+00:00 | 398 | `DrainBankJunk` |
+| C3P0 | 2026-10-09T22:26:00+00:00 | 2026-10-09T23:15:11+00:00 | 340 | `RecycleSurplus` |
+| C3P0 | 2026-10-09T20:52:53+00:00 | 2026-10-09T21:09:58+00:00 | 53 | `GatherMaterials(coal, {coal:7})` |
+| C3P0 | 2026-10-09T20:30:00+00:00 | 2026-10-09T20:47:19+00:00 | 55 | `RecycleSurplus` |
+| Robby | 2026-09-13T09:11:50+00:00 | 2026-09-13T09:23:02+00:00 | 14 | `ExpandBank` |
+| Robby | 2026-09-12T14:45:37+00:00 | 2026-09-12T15:44:37+00:00 | 5 | `ReachSkill(cooking->19)` |
+| C3P0 | 2026-08-21T00:52:43+00:00 | 2026-08-21T01:21:07+00:00 | 32 | `<none>` |
+| HAL | 2026-08-20T23:42:35+00:00 | 2026-08-21T00:17:21+00:00 | 14 | `RecycleSurplus` |
+| C3P0 | 2026-08-20T23:22:56+00:00 | 2026-08-21T00:14:30+00:00 | 14 | `DrainBankJunk` |

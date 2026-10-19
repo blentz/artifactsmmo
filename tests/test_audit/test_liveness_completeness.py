@@ -8,7 +8,10 @@ mocked store would test the arithmetic while skipping the question.
 """
 
 import sqlite3
+import subprocess
+import sys
 from contextlib import closing
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -16,9 +19,11 @@ import pytest
 from artifactsmmo_cli.audit.liveness_completeness import (
     DORMANT,
     REPR_ALIASES,
-    WITNESS_BASELINE,
+    STALL_MIN_SPAN,
     LivenessRow,
+    Stall,
     defined_classes,
+    find_stalls,
     observed_counts,
     orphan_declarations,
     render_matrix,
@@ -27,6 +32,8 @@ from artifactsmmo_cli.audit.liveness_completeness import (
     summary_line,
     undeclared,
 )
+
+GEN_LIVENESS = Path(__file__).resolve().parents[2] / "scripts" / "gen_liveness.py"
 
 
 def _store(path: Path, goals: dict[str, int], actions: dict[str, int]) -> str:
@@ -167,7 +174,7 @@ class TestReport:
             _row("StaleGoal", 5, "conditional: never happens"),
             _row("DeadGoal", 0),
         ]
-        body = render_matrix(rows)
+        body = render_matrix(rows, None)
         order = [body.index(n) for n in ("DeadGoal", "StaleGoal", "UnknownGoal",
                                          "TrackedGoal", "BenignGoal", "LiveGoal")]
         assert order == sorted(order), body
@@ -228,26 +235,16 @@ def test_a_proof_witness_is_never_reclassified_as_deletable():
     assert DORMANT["WaitAction"].startswith("witness:")
 
 
-# ---------------------------------------------------------------------------
-# LIVENESS ALARM — a proof witness FIRING is a different fact from a stale
-# declaration, and needs the opposite remedy.
-# ---------------------------------------------------------------------------
-
-
-def test_a_firing_witness_is_an_alarm_not_a_stale_declaration() -> None:
+def test_a_firing_witness_is_not_a_stale_declaration() -> None:
     """STALE says "remove the declaration". For a `witness:` row that is exactly
     the wrong advice — removing `WaitGoal`'s declaration invites deleting the
     witness that proves the ladder total, which
     `test_a_proof_witness_is_never_reclassified_as_deletable` exists to stop.
-
-    Same detection, opposite remedy: the declaration STAYS and the question is
-    why every rung above the witness had nothing to offer.
-    """
-    row = _row("WaitGoal", observed=WITNESS_BASELINE["WaitGoal"] + 1,
+    How long the bot sat in Wait is the stall report's question, not this one."""
+    row = _row("WaitGoal", observed=5,
                declared="witness: the ladder's totality witness")
 
-    assert row.liveness_alarm is True
-    assert row.stale_declaration is False, "must not double-report as STALE"
+    assert row.stale_declaration is False
 
 
 def test_a_firing_non_witness_is_still_stale() -> None:
@@ -256,43 +253,164 @@ def test_a_firing_non_witness_is_still_stale() -> None:
     row = _row("SomeGoal", observed=3, declared="unreachable: never selected")
 
     assert row.stale_declaration is True
-    assert row.liveness_alarm is False
 
 
-def test_the_baseline_acknowledges_investigated_firings_only() -> None:
-    """An alarm nothing can clear is an alarm everyone learns to ignore — the 24
-    cycles are in the store permanently. At the baseline it is silent; ONE above
-    it, something deadlocked again and the gate fails.
-    """
-    base = WITNESS_BASELINE["WaitGoal"]
-    declared = "witness: the ladder's totality witness"
-
-    assert _row("WaitGoal", base, declared).liveness_alarm is False
-    assert _row("WaitGoal", base + 1, declared).liveness_alarm is True
+# ---------------------------------------------------------------------------
+# STALL REPORT — how long a character sat in Wait, one stretch at a time.
+# Report only: a stall never fails `--check`.
+# ---------------------------------------------------------------------------
 
 
-def test_the_matrix_renders_an_alarm_at_the_top_and_names_it() -> None:
-    """The report's only affordance is ORDER — a reader scans the top of a diff.
-    A deadlock belongs there with UNDECLARED, and it must not read as `dormant`
-    (which is what it looked like before the category existed).
-    """
-    rows = [
-        _row("LiveGoal", 9),
-        _row("BenignGoal", 0, "conditional: needs a raid"),
-        _row("StuckWitnessGoal", 5, "witness: the ladder's totality witness"),
-    ]
-
-    matrix = render_matrix(rows)
-    lines = [ln for ln in matrix.splitlines() if ln.startswith("| `")]
-
-    assert "**LIVENESS ALARM**" in matrix
-    assert "StuckWitnessGoal" in lines[0], "the alarm must sort to the top"
-    assert "liveness alarms 1" in matrix
+def _cycles_db(path: Path, cycles: list[tuple[str, str, str | None]]) -> str:
+    """A `cycles` table with the columns the stall report reads, filled in the
+    given order: `(character, "HH:MM" on 2026-10-14 UTC, selected_goal)`."""
+    with closing(sqlite3.connect(path)) as conn:
+        conn.execute("create table cycles (id integer primary key, ts text not null, "
+                     "character text not null, selected_goal text, action_class text)")
+        conn.executemany(
+            "insert into cycles (ts, character, selected_goal, action_class) "
+            "values (?, ?, ?, ?)",
+            [(f"2026-10-14T{hhmm}:00.000000+00:00", char, goal,
+              "WaitAction" if goal == "Wait" else None)
+             for char, hhmm, goal in cycles])
+        conn.commit()
+    return str(path)
 
 
-def test_an_unbaselined_witness_alarms_on_its_very_first_firing() -> None:
-    """A witness with no baseline entry has never been investigated, so one
-    firing is already news."""
-    row = _row("SomeFutureWitness", observed=1, declared="witness: something")
+def _at(hhmm: str) -> datetime:
+    return datetime.fromisoformat(f"2026-10-14T{hhmm}:00+00:00")
 
-    assert row.liveness_alarm is True
+
+class TestStalls:
+    def test_the_threshold_is_ten_minutes(self):
+        """The user's ruling: "report only, 10 minutes is fine"."""
+        assert STALL_MIN_SPAN.total_seconds() == 600
+
+    def test_a_nine_minute_wait_run_is_not_a_stall(self, tmp_path):
+        db = _cycles_db(tmp_path / "s.db", [
+            ("HAL", "03:00", "GrindCharacterXP(pig)"),
+            ("HAL", "03:01", "Wait"), ("HAL", "03:05", "Wait"),
+            ("HAL", "03:10", "Wait"),
+        ])
+        assert find_stalls(db) == []
+
+    def test_a_ten_minute_wait_run_is_a_stall(self, tmp_path):
+        db = _cycles_db(tmp_path / "s.db", [
+            ("HAL", "03:00", "GrindCharacterXP(pig)"),
+            ("HAL", "03:01", "Wait"), ("HAL", "03:05", "Wait"),
+            ("HAL", "03:11", "Wait"),
+        ])
+        assert find_stalls(db) == [
+            Stall(character="HAL", start=_at("03:01"), end=_at("03:11"), waits=3,
+                  preceding_goal="GrindCharacterXP(pig)")]
+
+    def test_an_interleaved_non_wait_cycle_splits_a_run(self, tmp_path):
+        """Two 5-minute runs with a fight between are two short pauses, not one
+        11-minute stall."""
+        db = _cycles_db(tmp_path / "s.db", [
+            ("HAL", "03:00", "Wait"), ("HAL", "03:05", "Wait"),
+            ("HAL", "03:06", "GrindCharacterXP(pig)"),
+            ("HAL", "03:07", "Wait"), ("HAL", "03:11", "Wait"),
+        ])
+        assert find_stalls(db) == []
+
+    def test_a_null_goal_cycle_also_splits_a_run(self, tmp_path):
+        """A cycle that selected nothing is still not a Wait cycle."""
+        db = _cycles_db(tmp_path / "s.db", [
+            ("HAL", "03:00", "Wait"), ("HAL", "03:05", "Wait"),
+            ("HAL", "03:06", None),
+            ("HAL", "03:07", "Wait"), ("HAL", "03:11", "Wait"),
+        ])
+        assert find_stalls(db) == []
+
+    def test_two_characters_waits_do_not_merge(self, tmp_path):
+        """HAL waits 4 minutes and R2D2 waits 5, overlapping. Merged they would
+        span 10 minutes; neither character stalled."""
+        db = _cycles_db(tmp_path / "s.db", [
+            ("HAL", "03:00", "Wait"), ("R2D2", "03:01", "Wait"),
+            ("HAL", "03:02", "Wait"), ("HAL", "03:04", "Wait"),
+            ("R2D2", "03:06", "Wait"), ("HAL", "03:10", "GrindCharacterXP(pig)"),
+        ])
+        assert find_stalls(db) == []
+
+    def test_one_characters_cycle_does_not_split_anothers_run(self, tmp_path):
+        db = _cycles_db(tmp_path / "s.db", [
+            ("R2D2", "03:00", "Wait"), ("HAL", "03:05", "GrindCharacterXP(pig)"),
+            ("R2D2", "03:10", "Wait"),
+        ])
+        assert [(s.character, s.waits) for s in find_stalls(db)] == [("R2D2", 2)]
+
+    def test_the_preceding_goal_is_the_last_non_wait_before_the_run(self, tmp_path):
+        """What the character was doing when it got stuck is the first lead.
+        A character whose store opens in Wait has none."""
+        db = _cycles_db(tmp_path / "s.db", [
+            ("C3P0", "02:00", "Wait"), ("C3P0", "02:10", "Wait"),
+            ("C3P0", "02:20", "RestoreHP"),
+            ("C3P0", "02:30", "GrindCharacterXP(chicken)"),
+            ("C3P0", "02:40", "Wait"), ("C3P0", "02:55", "Wait"),
+        ])
+        assert [(s.start, s.preceding_goal) for s in find_stalls(db)] == [
+            (_at("02:40"), "GrindCharacterXP(chicken)"),
+            (_at("02:00"), None),
+        ]
+
+    def test_stalls_are_listed_newest_first(self, tmp_path):
+        db = _cycles_db(tmp_path / "s.db", [
+            ("HAL", "01:00", "Wait"), ("HAL", "01:30", "Wait"),
+            ("R2D2", "02:00", "Wait"), ("R2D2", "02:30", "Wait"),
+        ])
+        assert [s.character for s in find_stalls(db)] == ["R2D2", "HAL"]
+
+    def test_no_store_is_not_an_empty_store(self, tmp_path):
+        """No DB means nothing was read — not that nothing ever stalled."""
+        assert find_stalls(str(tmp_path / "absent.db")) is None
+
+
+class TestStallSection:
+    def test_rows_render_with_their_preceding_goal(self):
+        stalls = [Stall("HAL", _at("03:56"), _at("07:48"), 5661, "FightLoop"),
+                  Stall("R2D2", _at("01:00"), _at("01:30"), 4, None)]
+        body = render_matrix([_row("LiveGoal", 9)], stalls)
+        assert ("| HAL | 2026-10-14T03:56:00+00:00 | 2026-10-14T07:48:00+00:00 "
+                "| 5661 | `FightLoop` |") in body
+        assert "| R2D2 | 2026-10-14T01:00:00+00:00 | 2026-10-14T01:30:00+00:00 " \
+               "| 4 | none |" in body
+        assert "2 stalls" in body
+
+    def test_no_store_says_so(self):
+        body = render_matrix([_row("LiveGoal", -1)], None)
+        assert "No store was read" in body
+
+    def test_an_empty_store_reads_as_no_stalls(self):
+        body = render_matrix([_row("LiveGoal", 9)], [])
+        assert "0 stalls" in body
+
+
+def test_check_passes_with_stalls_present(tmp_path):
+    """The stall report is REPORT ONLY. A store holding a 30-minute HAL stall
+    must leave `gen_liveness.py --check` green, and the stall must reach the
+    regenerated doc. Every non-dormant class gets one cycle so the roster arms
+    stay clean and the exit code isolates the stall report."""
+    fill = [("Filler", "00:00", name) for name, kind in defined_classes().items()
+            if kind == "goal" and name not in DORMANT]
+    db = _cycles_db(tmp_path / "s.db", [
+        *fill,
+        ("HAL", "03:00", "GrindCharacterXP(pig)"),
+        ("HAL", "03:10", "Wait"), ("HAL", "03:40", "Wait"),
+    ])
+    with closing(sqlite3.connect(db)) as conn:
+        conn.executemany(
+            "insert into cycles (ts, character, action_class) values (?, ?, ?)",
+            [("2026-10-14T00:00:00.000000+00:00", "Filler", name)
+             for name, kind in defined_classes().items()
+             if kind == "action" and name not in DORMANT])
+        conn.commit()
+
+    done = subprocess.run(
+        [sys.executable, str(GEN_LIVENESS), "--check", "--learn-db", db],
+        cwd=tmp_path, capture_output=True, text=True)
+
+    assert done.returncode == 0, done.stderr
+    matrix = (tmp_path / "docs/behavioral_completeness/LIVENESS_MATRIX.md").read_text()
+    assert "| HAL | 2026-10-14T03:10:00+00:00 | 2026-10-14T03:40:00+00:00 | 2 " \
+           "| `GrindCharacterXP(pig)` |" in matrix

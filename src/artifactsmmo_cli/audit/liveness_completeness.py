@@ -36,197 +36,38 @@ comes from the SOURCE, so completeness of the declaration is checkable without a
 observations at all. A DB, when present, adds the live counts and the
 stale-declaration arm. That is deliberate — a census that could only run where the
 bot had already played would be exactly the kind of thing that never runs.
+
+THE STALL REPORT. The census used to raise a gate alarm whenever the lifetime
+count of `Wait` cycles grew past a hand-bumped baseline. A lifetime tally cannot
+tell a ten-second spin from a four-hour deadlock, and it never fell, so every
+incident meant editing a number. It is replaced by a REPORT of stalls: each
+character's stretch of consecutive `Wait` cycles lasting `STALL_MIN_SPAN` or
+longer, with the goal the character was on before it stuck. The report never
+fails `--check`; it is there to be read.
 """
 
 import re
 import sqlite3
+from collections.abc import Iterable
 from contextlib import closing
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 
 AI_ROOT = Path(__file__).resolve().parents[1] / "ai"
 
+#: The shortest run of consecutive `Wait` cycles, first to last, that the report
+#: lists as a stall. The user's ruling (2026-10-19): Waiting is not itself a
+#: defect, so this is "report only, 10 minutes is fine". It replaces a gate on
+#: the lifetime Wait tally against a hand-bumped baseline, which the user ruled
+#: not a useful test.
+STALL_MIN_SPAN = timedelta(minutes=10)
+
+#: The store's `selected_goal` repr of `WaitGoal`.
+WAIT_GOAL_REPR = "Wait"
+
 #: Classes with no observed run and a REASON. The key is the class name; the
 #: value says why dormancy is expected and what would end it. A reason of the
-#: Witness firings already investigated, per class. The alarm fires only ABOVE
-#: this count.
-#:
-#: An alarm nothing can clear is an alarm everyone learns to ignore, and these
-#: cycles are in the store permanently. Raising a number here is not a way to
-#: silence it: it requires writing down what was found, exactly as `DORMANT`
-#: requires a reason. If the count grows, something deadlocked AGAIN.
-WITNESS_BASELINE: dict[str, int] = {
-    # 2026-08-20 23:22-23:51, 24 cycles out of 66,250 ever, all within 40 minutes
-    # of the tier-1 winnability gate (e4df6bef) shipping. Two causes:
-    #   C3P0 x12 — the gear latch armed only on a LOSS, and the gate stopped the
-    #              bot taking the fight it was losing, so the cure lost its
-    #              trigger. FIXED: the latch now arms on the deficit FACT.
-    #   HAL  x12 — `GrindCharacterXP(sheep)` ranked at 30.0 but planned to
-    #              plan_len 0 in 3 nodes. NOT the inventory dead band it first
-    #              looked like (23 slots free, hp 83%): sheep is level 5 against
-    #              HAL's 17, so `xp_per_kill == 0` and
-    #              `FightAction._structurally_applicable` refuses a zero-xp
-    #              fight. Tier 1 supplied a GREY monster to a character-XP grind.
-    #              FIXED: tier 1 now requires xp-positive as well as winnable,
-    #              the filter tier 3 always had.
-    #
-    # The count keeps rising until the fleet RESTARTS on both fixes — the running
-    # children are on older code. Raise this only after a restart shows it flat;
-    # raising it while the cause is still live is how a baseline becomes a mute
-    # button.
-    #
-    # 2026-08-19, +70 (28 -> 98). C3P0 x84 across cycle ids 66,120-67,157 and HAL
-    # x14, against a max id of 67,318 — i.e. right up to the point the fleet was
-    # stopped, so this was the CURRENT behaviour and not an old scar. One cause,
-    # two independent halves, both needed before anything could move:
-    #   PHANTOM ROUTE — `obtain_sources` emits `SourceKind.GE_FILL` for any item
-    #              with a live sell order, and there was one for adventurer_pants
-    #              at 1,498 gold against C3P0's 14,532. That source told
-    #              `forced_craft_grind` the craft was AVOIDABLE, which zeroes
-    #              `UpgradeEquipmentGoal.heuristic` — while NOTHING admitted the
-    #              matching action, because `GatherMaterialsGoal` synthesizes it
-    #              only for a closure MATERIAL that an NPC also sells, and
-    #              nothing sells crafted gear. h=0 AND no access to the route
-    #              that zeroed it, so an unguided search over a mandatory
-    #              250-cost skill grind timed out at 449 nodes.
-    #              FIXED: the goal synthesizes the GE fill for its own target.
-    #   UNFUNDABLE RESERVE — with the action admitted it was still inapplicable:
-    #              `reserve_floor` returned 75,745 against 30,532 of account
-    #              gold. Measured fleet-wide, the reserve exceeded the balance on
-    #              ALL FIVE characters (57,307-78,750 reserved, 28,511-35,768
-    #              held), so every gold purchase was refused — including the one
-    #              that buys the item being reserved for.
-    #              FIXED: a reserve the account cannot fund falls back to the
-    #              safety floor.
-    #
-    # Raised WITHOUT a restart, deliberately, and here is the evidence that is
-    # not a mute button: the fleet is STOPPED, so the count cannot grow, and all
-    # five characters were re-planned from their live states after the fixes —
-    # Robby GrindCharacterXP(pig), R2D2 and C3P0 two-action GE purchases, HAL
-    # CraftPotions, Lor GrindCharacterXP(red_slime). Nothing Waits. If a restart
-    # disagrees, this number is wrong and the alarm is right.
-    #
-    # 2026-09-13, +25 (98 -> 123). Robby alone, in two clusters, and BOTH are
-    # scars of bugs already fixed — each cluster ENDS at the fix that closed it
-    # (store timestamps are UTC, commit dates -04:00):
-    #   x11, 09-12 13:55-15:44 UTC. Bag pinned at 157/158 with gold flat at
-    #              3,797 and `LevelSkill` reporting `ok` at cooldown 0.0 — the
-    #              full-bank silent-deposit livelock itself. `DepositAll`
-    #              swallowed every 462 and returned the unchanged state as a
-    #              success, so nothing ever shed the bag and the ladder ran out
-    #              of rungs. FIXED by dff7198a (09-12 23:28 UTC), which raises
-    #              the rejection; the last Wait of this cluster is 7h44m before
-    #              it.
-    #   x14, 09-13 09:11-09:23 UTC. `BuyBankExpansionAction` SUCCEEDED at
-    #              09:11:47 — gold 4,640 -> 1,140 — and the very next cycle
-    #              Waits, still at 158/158. The expansion bought slots the bot
-    #              then could not see: the action did not refresh the bank state
-    #              it had just changed, so `_acceptable` kept filtering every
-    #              deposit against the pre-expansion capacity. 14 Waits, then
-    #              `no_plan`. FIXED by 4e565aba (09-13 15:03 UTC), 5h40m after
-    #              the last Wait of the cluster.
-    #
-    # THE FLEET DID RESTART, which is what the note above demands before a
-    # raise. Since 4e565aba: 2,201 cycles across all five characters, still
-    # running at 2026-09-14 00:37 UTC, with ZERO WaitAction and ZERO `no_plan`.
-    # Both causes are flat, not merely quiet.
-    # 2026-09-21, +11 (123 -> 134). Robby alone, 00:37:49-00:37:57 UTC, eleven
-    # Waits in EIGHT SECONDS at cooldown 0.0 — a spin, not a pause. One cause,
-    # and it is a scar of the region model going live rather than a new class:
-    #   x11, Robby stranded in `interior:-3,12`. `_state_key` carried no
-    #              `layer`, so a co-located portal — the Abandoned House sits
-    #              ON the Forest tile — produced a child byte-identical to its
-    #              own parent, which collided in the visited set and was
-    #              pruned. The way IN planned (he entered from the bank at
-    #              (7,13), so x/y changed); the way OUT never could. At 179/710
-    #              with `Rest` an overworld action and `FightAction`'s HP floor
-    #              refusing another rat, every rung above the witness genuinely
-    #              had nothing to offer. FIXED by 4a3c9efe.
-    #
-    # NO RESTART YET, and the same justification the 2026-08-19 entry used
-    # applies: the fleet is STOPPED, so the count cannot grow, and Robby was
-    # re-planned from his LIVE stranded state on the fix — `RestoreHP` now
-    # returns `Transition((-3,12,interior)->(-3,12,overworld)) ->
-    # UseConsumable` in 4 nodes where it returned nothing before. If a restart
-    # disagrees, this number is wrong and the alarm is right.
-    # 2026-10-09, +177 (134 -> 311). C3P0 alone, 20:11-21:25 UTC, between bag
-    # chores, until the fleet was stopped. One cause, a regression of c7b2573f
-    # (walks priced in seconds) — every one of the 177 Wait cycles carries a
-    # timed-out TaskCancel search in the same cycle:
-    #   x177, the task objective's step was `TaskCancel` (a worthless iron_bar
-    #              items task, 3 pocket coins). `TaskCancelGoal` planned over
-    #              the WHOLE pool (1,877 actions); the planner is Dijkstra with
-    #              h = 0, and the cancel's 13-tile walk now costs 65 instead of
-    #              13, so every cheaper sequence was expanded first: 30 of 35
-    #              cancel searches timed out (232,181 nodes), the budget was
-    #              spent, and the arbiter fell to Wait. `CompleteTaskGoal` had
-    #              the same shape (C3P0 425,814 nodes, Robby 140,384). FIXED by
-    #              narrowing both bookings to task + movement actions.
-    #
-    # NO RESTART YET, but the fleet is STOPPED (the 2026-08-19 justification),
-    # so the count cannot grow; and C3P0 was re-planned from its LIVE state on
-    # the fix: `[TaskCancel]` in 17 nodes where it timed out at 295,500. If a
-    # restart disagrees, this number is wrong and the alarm is right.
-    # 2026-10-09/10, +778 (311 -> 1089). C3P0 alone, 22:26 UTC onward on the
-    # 7f7b18d6 fleet — the booking fix worked (iron_bar cancelled), and the
-    # NEXT draw exposed the next wall. Every one of the 778 Wait cycles carries
-    # a `PursueTask(spruce_plank)` search with plan_len 0:
-    #   x778, the items-task step was `PursueTaskGoal`, which only A* plans,
-    #              over the factory's UNSIZED single gathers. A batch of 10
-    #              planks at 10 spruce_wood each is 100 gathers + crafts +
-    #              trades, past the depth-100 cap, so it never planned. FIXED
-    #              by producing the batch through decomposition first
-    #              (`GatherMaterials(task item x batch)`: sized gathers,
-    #              banked stock withdrawn), then trading it.
-    #
-    # Fleet STOPPED before the raise; C3P0's live state re-planned on the fix:
-    # `[Gather(spruce_tree×100), Craft(spruce_plank×10)]` in 14 nodes.
-    # 2026-10-10, +651 (1089 -> 1740). C3P0 alone, on the b6f4587f and
-    # 9eedc404 fleets, until stopped. The fix above made the items task's step
-    # `GatherMaterials(spruce_plank)`; it ran (20+ gathers) until the bag held
-    # the spruce_wood it had gathered, and then `_suppress_step_for_task`
-    # read the step's own plank craft as eating the task's reserved wood and
-    # dropped the step SILENTLY — no search, no decline, the character waited
-    # out its turn (one cycle trace: 03:21-03:25Z, `intention_budget` at 100).
-    # FIXED: the step that makes the task item is never deferred.
-    # 2026-10-10, +230 (1740 -> 1970). R2D2 alone, 15:34-16:52 UTC on the
-    # 2dcd4583 fleet. That commit made a fight step return its loadout's heal
-    # prep, `GatherMaterials(cooked_rat_meat x20)`, ahead of the grind; but the
-    # fleet floor had BANKED the meat, and a gather goal counts banked stock,
-    # so the step was satisfied before it began: every Wait cycle's trace ends
-    # `decompose_decline SupplyBank(...) satisfied` then `wait_fallback`, with
-    # no ReachCharLevel goal tried (and no GrindCharacterXP cycle anywhere in
-    # the fleet since the restart). FIXED: the prep goal is a CARRY, satisfied
-    # by the bag only.
-    #
-    # Fleet still running at the raise, but R2D2's last Wait was 16:52 and its
-    # live state re-planned on the fix (17:00Z): `GatherMaterials(
-    # cooked_rat_meat, {cooked_rat_meat:20}, carry)` -> `[Withdraw(x12)]`. If a
-    # restart disagrees, this number is wrong and the alarm is right.
-    # 2026-10-11, +12 (1970 -> 1982). HAL alone, 21:35:43-21:36:12 UTC on the
-    # 9585e542/d079a1ca fleet. A recycle left the bag at 61/164 items in 17/20
-    # slots: every plan declined `bag_overflow` (the shrimp carry
-    # `qty=181/164:slots=18/20`) while the bag sat far below DEPOSIT_FULL
-    # (0.90), so no relief guard fired and `wait_fallback` ran until 21:37:30.
-    # `decompose`'s docstring assumed "the deposit guard or the search then
-    # serves the cycle"; neither did. FIXED: an overflowing plan banks the
-    # bag's surplus in front of itself when that makes it fit (`_bank_first`;
-    # `test_a_plan_that_fits_after_banking_banks_first`).
-    # 2026-10-14, +10874 (1982 -> 12856). HAL x5661 (03:56-07:48 UTC), R2D2
-    # x4473 (04:12-07:46), C3P0 x740 (03:46-07:52), on the 398f3cd7 fleet.
-    # That commit priced a made food from empty holdings, so the chosen food
-    # became a HELD one (banked cooked_chicken, free), and its 20-fight carry
-    # was one `Withdraw(cooked_chicken×100)` into a bag with 67 units of room:
-    # `first_leg_inapplicable`, the fight step had no other goal, and the
-    # character waited. FIXED (35329d03): the carry is capped at the bag's
-    # held units plus its free room, and a new stack needs a free slot.
-    #
-    # Fleet RESTARTED on 35329d03 at 13:20 UTC before the raise: 0 Wait
-    # cycles in 5.5 h after it (2,283 cycles, five characters).
-    "WaitGoal": 12856,
-    "WaitAction": 12856,
-}
-
 #: form "unreachable: ..." is a DEFECT that is being tracked, not an excuse —
 #: the census reports those separately so they cannot hide among the benign.
 DORMANT: dict[str, str] = {
@@ -400,36 +241,23 @@ class LivenessRow:
         A `witness:` row is deliberately EXCLUDED. Its declaration is not a claim
         that the rung is unused — it is a claim that the rung firing means
         something is WRONG — so observing it does not make the declaration stale
-        and "remove the declaration" is the wrong remedy. See
-        `liveness_alarm`.
+        and "remove the declaration" is the wrong remedy. How long the bot sat
+        in Wait is the stall report's question (`find_stalls`).
         """
         return (self.observed > 0 and self.declared is not None
                 and not self.declared.startswith("witness:"))
 
-    @property
-    def liveness_alarm(self) -> bool:
-        """A PROOF WITNESS fired — the bot did the thing that means it was stuck.
 
-        The census had exactly one signal for "the bot deadlocked" and it was
-        `WaitGoal`'s declaration going stale. That framing gave the wrong advice:
-        STALE says "remove the declaration", and removing this one invites
-        deleting the witness that proves the ladder total — which
-        `test_a_proof_witness_is_never_reclassified_as_deletable` exists to stop,
-        after it nearly happened on 2026-08-18.
+@dataclass(frozen=True)
+class Stall:
+    """One character's run of consecutive `Wait` cycles spanning `STALL_MIN_SPAN`
+    or longer."""
 
-        Same detection, opposite remedy. The declaration STAYS; what needs
-        attention is why everything above the witness had nothing to offer.
-
-        Live 2026-08-20: `Wait` fired 24 times out of 66,250 cycles ever, all of
-        them in the 40 minutes after the tier-1 winnability gate shipped — C3P0
-        x12 (its gear latch armed only on a LOSS, and the gate stopped it taking
-        the fight it was losing, so the cure lost its trigger) and HAL x12
-        (`GrindCharacterXP(sheep)` ranked but planned to plan_len 0 at inventory
-        109/132, a dead band below the 85% deposit guard).
-        """
-        return (self.declared is not None
-                and self.declared.startswith("witness:")
-                and self.observed > WITNESS_BASELINE.get(self.name, 0))
+    character: str
+    start: datetime           # the run's first Wait cycle
+    end: datetime             # the run's last Wait cycle
+    waits: int                # Wait cycles in the run
+    preceding_goal: str | None  # the last non-Wait cycle's goal; None when there is none
 
 
 def defined_classes() -> dict[str, str]:
@@ -445,6 +273,11 @@ def defined_classes() -> dict[str, str]:
             name, base = match.group(1), match.group(2)
             out[name] = "goal" if (base == "Goal" or name.endswith("Goal")) else "action"
     return out
+
+
+def _goal_stem(goal: str) -> str:
+    """The repr's class name before any `(` or `[`."""
+    return re.split(r"[(\[]", goal)[0].strip()
 
 
 def observed_counts(db_path: str) -> dict[str, int]:
@@ -464,7 +297,7 @@ def observed_counts(db_path: str) -> dict[str, int]:
         for goal, n in conn.execute(
                 "select selected_goal, count(*) from cycles "
                 "where selected_goal is not null group by 1"):
-            stem = re.split(r"[(\[]", goal)[0].strip()
+            stem = _goal_stem(goal)
             counts[stem] = counts.get(stem, 0) + n
             # `UpgradeEquipment` is the repr of `UpgradeEquipmentGoal`; the store
             # records reprs, the roster records class names. Credit both spellings
@@ -482,6 +315,52 @@ def observed_counts(db_path: str) -> dict[str, int]:
     return counts
 
 
+def stall_runs(cycles: Iterable[tuple[str, str, str | None]]) -> list[Stall]:
+    """Stalls in `(character, ts, selected_goal)` cycles given in timestamp order,
+    newest first.
+
+    Each character keeps its own run: another character's cycle neither extends
+    nor ends it. Any non-Wait cycle by the same character — including one that
+    selected nothing — ends the run and becomes the next run's preceding goal."""
+    previous: dict[str, str | None] = {}
+    open_runs: dict[str, tuple[str | None, list[datetime]]] = {}
+    found: list[Stall] = []
+    for character, ts, goal in cycles:
+        key = character
+        if goal is not None and _goal_stem(goal) == WAIT_GOAL_REPR:
+            open_runs.setdefault(key, (previous.get(key), []))[1].append(
+                datetime.fromisoformat(ts))
+            continue
+        _close_run(key, open_runs, found)
+        previous[key] = goal
+    for key in list(open_runs):
+        _close_run(key, open_runs, found)
+    return sorted(found, key=lambda s: s.start, reverse=True)
+
+
+def _close_run(key: str, open_runs: dict[str, tuple[str | None, list[datetime]]],
+               found: list[Stall]) -> None:
+    """End `key`'s open run, keeping it when it spans `STALL_MIN_SPAN`."""
+    if key not in open_runs:
+        return
+    preceding, stamps = open_runs.pop(key)
+    if stamps[-1] - stamps[0] >= STALL_MIN_SPAN:
+        found.append(Stall(character=key, start=stamps[0], end=stamps[-1],
+                           waits=len(stamps), preceding_goal=preceding))
+
+
+def find_stalls(db_path: str) -> list[Stall] | None:
+    """Stalls in a learning DB, newest first, or None when there is no DB —
+    nothing read is not the same as nothing stalled. Read-only, like
+    `observed_counts`."""
+    if not Path(db_path).exists():
+        return None
+    with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn:
+        cycles = conn.execute(
+            "select character, ts, selected_goal from cycles order by ts, id").fetchall()
+    return stall_runs(cycles)
+
+
 def run_census(db_path: str) -> list[LivenessRow]:
     """One row per defined class, in name order."""
     counts = observed_counts(db_path)
@@ -497,12 +376,6 @@ def run_census(db_path: str) -> list[LivenessRow]:
 def undeclared(rows: list[LivenessRow]) -> list[LivenessRow]:
     """The gate's must-be-zero residual."""
     return [r for r in rows if r.undeclared_dormant]
-
-
-def liveness_alarms(rows: list[LivenessRow]) -> list[LivenessRow]:
-    """Proof witnesses the store shows FIRING — the bot was stuck. See
-    `LivenessRow.liveness_alarm`."""
-    return [r for r in rows if r.liveness_alarm]
 
 
 def stale(rows: list[LivenessRow]) -> list[LivenessRow]:
@@ -534,13 +407,14 @@ def summary_line(rows: list[LivenessRow]) -> str:
     return (f"{len(rows)} classes; LIVE {live}; declared-dormant "
             f"{sum(1 for r in rows if r.declared)} (of which unreachable {tracked}, "
             f"unclassified {unclassified}); undeclared {len(undeclared(rows))}; "
-            f"stale {len(stale(rows))}; liveness alarms {len(liveness_alarms(rows))}"
+            f"stale {len(stale(rows))}"
             + (f"; no store read ({unknown} unknown)" if unknown else ""))
 
 
-def render_matrix(rows: list[LivenessRow]) -> str:
+def render_matrix(rows: list[LivenessRow], stalls: list[Stall] | None) -> str:
     """The generated report. Ordered dead-first: the rows that need a decision
-    are the ones worth seeing at the top of a diff."""
+    are the ones worth seeing at the top of a diff. The stall section follows;
+    `stalls` is None when no store was read."""
     out = [
         "# Liveness census — has every Goal and Action ever actually run?",
         "",
@@ -561,8 +435,6 @@ def render_matrix(rows: list[LivenessRow]) -> str:
     def sort_key(r: LivenessRow) -> tuple[int, str]:
         if r.undeclared_dormant:
             return (0, r.name)
-        if r.liveness_alarm:
-            return (0, r.name)
         if r.stale_declaration:
             return (1, r.name)
         if r.declared and r.declared.startswith("UNCLASSIFIED:"):
@@ -575,8 +447,6 @@ def render_matrix(rows: list[LivenessRow]) -> str:
     for r in sorted(rows, key=sort_key):
         if r.undeclared_dormant:
             status = "**UNDECLARED**"
-        elif r.liveness_alarm:
-            status = "**LIVENESS ALARM**"
         elif r.stale_declaration:
             status = "**STALE**"
         elif r.declared:
@@ -585,4 +455,29 @@ def render_matrix(rows: list[LivenessRow]) -> str:
             status = "live"
         seen = "unknown" if r.observed < 0 else str(r.observed)
         out.append(f"| `{r.name}` | {r.kind} | {seen} | {status} | {r.declared or ''} |")
+    out += [
+        "",
+        "## Stalls",
+        "",
+        "A stall is one character's run of consecutive `Wait` cycles whose first and",
+        f"last cycle are at least {STALL_MIN_SPAN.total_seconds() / 60:g} minutes "
+        "apart; any other cycle by that",
+        "character ends the run. Report only: a stall never fails `--check`.",
+        "Newest first; `preceding goal` is the character's last non-Wait goal before",
+        "the run.",
+        "",
+    ]
+    if stalls is None:
+        out.append("No store was read, so no stalls can be reported.")
+        return "\n".join(out) + "\n"
+    out += [
+        f"{len(stalls)} stalls.",
+        "",
+        "| character | start | end | Wait cycles | preceding goal |",
+        "|---|---|---|---|---|",
+    ]
+    for st in stalls:
+        goal = "none" if st.preceding_goal is None else f"`{st.preceding_goal}`"
+        out.append(f"| {st.character} | {st.start.isoformat(timespec='seconds')} "
+                   f"| {st.end.isoformat(timespec='seconds')} | {st.waits} | {goal} |")
     return "\n".join(out) + "\n"

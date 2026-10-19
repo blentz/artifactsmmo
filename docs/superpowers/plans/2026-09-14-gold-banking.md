@@ -1092,7 +1092,8 @@ The claim was false when written — `DepositAllAction.execute` called
 
 Run: `uv run python scripts/gen_liveness.py --check`
 Expected: "GATE CLEAN: 0 undeclared, 0 stale, 0 orphan declarations." and
-"liveness alarms 0". Then restore the regenerated doc, which the gate rewrites
+"liveness alarms 0" (that count was retired 2026-10-19 for the
+report-only stall section). Then restore the regenerated doc, which the gate rewrites
 with live counts: `git checkout -- docs/behavioral_completeness/LIVENESS_MATRIX.md`
 
 - [ ] **Step 3: Add the mutants**

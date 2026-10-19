@@ -168,6 +168,8 @@ must pin the ordering rather than the two numbers independently.
 
 * Raising `WITNESS_BASELINE` as part of this work — unrelated, and it is now
   independently clearable (0 `WaitAction` firings since the restart).
+  (`WITNESS_BASELINE` was retired 2026-10-19; the liveness census now reports
+  stalls — Wait runs of 10+ minutes — instead of gating a lifetime Wait count.)
 
 
 ## Outcome notes (2026-09-13)
