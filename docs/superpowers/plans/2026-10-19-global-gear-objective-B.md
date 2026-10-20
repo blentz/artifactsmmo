@@ -250,6 +250,35 @@
   - `test_the_second_copy_is_cheaper_than_the_first`: with `k > 0`, the price of the remaining work after wearing one prospecting copy is lower than before. This is the user's perfect_pearl example, as a property and not a computed rule.
 - [ ] **Step 2–4:** FAIL, implement, then run the full suite and rewrite moved outcomes exactly. Add mutants. Commit `feat(pricing): drop routes priced from the learned chance; prospecting is a drop tool`.
 
+### Task 13: The loop counts its bank trips, so a bag has a gain
+
+**Execution order:** after Task 12, because it reads the learned drop chance (spec §2.10, USER 2026-10-20).
+
+**Files:**
+- Modify: `src/artifactsmmo_cli/ai/loop_rate.py`. Add the trip term to the loop's `extra`: `trip_seconds × drops_per_fight ÷ capacity` (spec §2.10).
+  - `drops_per_fight` = `p_win × Σ` over the monster's drops of `chance_at(...)` (Task 11) × the drop's mean quantity. Use the fighter's prospecting.
+  - `capacity` = `state.inventory_max` minus the units the loop keeps carried. Those are the food the menu eats, the loadout's held stock, and the gear keep (`inventory_keep`).
+  - `trip_seconds` = `2 × travel_seconds(monster_tile, nearest bank tile)` plus one deposit cooldown per distinct drop code. Use the existing bank-tile lookup and deposit cost (grep `cost_core` and `bank_selection`); add no new constant.
+  - When `capacity ≤ 0`, `loop_rate` returns None.
+  - The arithmetic goes into `loop_rate_core` with its Lean twin (`Formal.LoopRate`) and its differential, as the rest of the loop does.
+- Check: whether the gather-batch climb pricing (§2.5) reads free capacity. Record what you find in the report. If it does not, add the same trip term to the climb's per-unit price in this task.
+- Test: `tests/test_ai/test_loop_rate.py`, `tests/test_ai/test_gear_objective.py`
+
+- [ ] **Step 1: Failing tests:**
+  - `test_a_bag_has_a_gain`: on a sheet whose `L*` includes a bag, `_gain` of the bag is `> 0`. Use `l12_taskgated_bag` or the satchel sheet that was re-pinned in 42bd2dee.
+  - `test_far_bank_values_the_bag_more`: the same fighter and bag against two monsters with equal drops; the farther monster from the bank gives the bag the larger gain.
+  - `test_a_loop_with_no_room_is_unrunnable`: `capacity ≤ 0` gives None.
+  - `test_prospecting_adds_trips`: a higher `P` with `k > 0` gives an `R` that is no higher (spec §2.10).
+- [ ] **Step 2–4:** FAIL, implement, then run the full suite and rewrite moved outcomes exactly. Each moved pin gets its reason in the commit body. Expect bags to come back into `missing`. Add mutants: trip term dropped, capacity ignored, one deposit for all codes. Commit `feat(objective): the loop counts its bank trips; a bag has a gain`.
+
+### Task 14: Parked defects from the zero-gain review
+
+**Execution order:** after Task 13.
+
+- ZC: `fight_walk.wear` / `project_equip` subtracts a worn boost's stats that the sheet totals never held (offline: −11.7% `R` with `earth_boost_potion` worn). First, check the sheet's totals against a live character that wears a boost. Then fix it at the one projection point, not at the 13 call sites listed in the ledger.
+- M-5: every `_timing()` reads about 0.25 s of SQL and refits over all recorded fights. Cache the fit per process and refit it only when a new fight is recorded, incrementally from sufficient statistics.
+- Each fix gets a test that fails first and a mutant. Commit one per defect.
+
 ### Task 9: Gate, live check, merge
 
 - [ ] **Step 1:** `ARTIFACTSMMO_TOKEN="$(cat /home/blentz/git/artifactsmmo/TOKEN)" bash formal/gate.sh > $S/gate-B.log 2>&1; echo "gate rc=$?" > $S/gate-B.rc` (in the background). Read the rc in its own call. It must be green.

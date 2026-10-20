@@ -275,6 +275,43 @@ test outcomes moved).
 - What emerges: a faster-killing piece raises `R`, so it is a real gain. A
   prospecting-only piece still reads 0 and is not missing (§2.8).
 
+### 2.10 `R` counts the whole loop, so meta-benefits score (USER 2026-10-20)
+
+> gear score should model meta-benefits so that bags receive a score
+
+After §2.8, gain counts only what moves `R`. `R` modelled a loop of a fight, its
+recovery, the potions it drank and the walk back after a loss. It left out the
+bank trips the loop forces: drops fill the bag, and a full bag stops the grind
+until the character deposits. So a bag (`inventory_space`) read gain 0, and the
+fleet stopped pursuing bags.
+
+- **The loop includes bank trips.** Per fight, the loop adds
+  `trip_seconds × drops_per_fight ÷ capacity`:
+  - `drops_per_fight` is the expected item units one fight adds, summed over
+    the monster's drops at the learned chance (§2.8), times `p_win`.
+  - `capacity` is the units the bag holds for drops: `inventory_max` minus the
+    units the loop keeps carried (worn-out stock, the gear keep, food).
+  - `trip_seconds` is the walk from the monster tile to the nearest bank and
+    back, plus one deposit request per distinct drop code (the server charges
+    one cooldown per code).
+- **A loop whose capacity is ≤ 0 is unrunnable** (None), like a loop that
+  would drink a potion it cannot replace.
+- **Every stat that moves loop time but not XP per kill is named.** Each one is
+  modelled, or out of scope with a reason:
+  - `haste`: fight seconds (§2.9). Modelled.
+  - `wisdom`: XP per kill. Modelled.
+  - HP, restore, lifesteal and resistances: win odds and recovery. Modelled.
+  - `inventory_space`: bank trips (this section). Modelled.
+  - `prospecting`: more drops per fight means more trips, so its `R` gain is
+    honestly ≤ 0. Its benefit is on drop routes (§2.8), priced there and not
+    in `R`.
+  - Gathering tools and skill-climb loops: they are priced by the climb's own
+    cost (§2.5), not `R`. Task 13 checks that the gather batch reads free
+    capacity. If it does not, the climb's price gains the same trip term.
+- What emerges: a bigger bag means fewer trips and a positive gain. A
+  monster with heavy drops far from a bank values a bag more than one next to
+  the bank. Neither preference is computed; both fall out of `R`.
+
 ### 2.7 What emerges (and must NOT be computed)
 
 - "Grinding a band": `m*` moves up as `L*` improves and the level rises.
