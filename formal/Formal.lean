@@ -199,6 +199,7 @@ import Formal.FightOutcome
 import Formal.FightOdds
 import Formal.GroupFight
 import Formal.ConsumablePrice
+import Formal.FightSeconds
 import Formal.LoopRate
 import Formal.BestLoadout
 import Formal.CurrencyAffordFastFail

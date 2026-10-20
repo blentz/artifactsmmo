@@ -60,6 +60,18 @@ class TestFromCharacterSchema:
         with pytest.raises(MissingApiData, match="critical_strike"):
             WorldState.from_character_schema(char)
 
+    def test_haste_is_read_from_the_sheet(self):
+        """A fight's seconds read the fighter's haste (spec 2026-10-18 §2.9)."""
+        char = make_char()
+        char.haste = 12
+        assert WorldState.from_character_schema(char).haste == 12
+
+    def test_unset_haste_raises(self):
+        char = make_char()
+        char.haste = UNSET
+        with pytest.raises(MissingApiData, match="haste"):
+            WorldState.from_character_schema(char)
+
     def test_unset_required_skill_field_raises(self):
         """A required skill xp field arriving UNSET must fail loudly."""
         char = make_char()

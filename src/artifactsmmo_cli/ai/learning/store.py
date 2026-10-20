@@ -224,6 +224,15 @@ class LearningStore:
                 conn.exec_driver_sql("ALTER TABLE cycles ADD COLUMN root_group TEXT")
             if cols and "root_repr" not in cols:
                 conn.exec_driver_sql("ALTER TABLE cycles ADD COLUMN root_repr TEXT")
+            # Fight-seconds migration (2026-10-19, spec §2.9): cycles gains a
+            # fight's server `turns` and the fighter's haste. NULLABLE with no
+            # DEFAULT — the fights in the wild were recorded without their
+            # length, and back-filling one would fabricate an observation for
+            # the fit. A consumer excludes NULL.
+            if cols and "fight_turns" not in cols:
+                conn.exec_driver_sql("ALTER TABLE cycles ADD COLUMN fight_turns INTEGER")
+            if cols and "fight_haste" not in cols:
+                conn.exec_driver_sql("ALTER TABLE cycles ADD COLUMN fight_haste INTEGER")
             # Craft-xp numerator migration (2026-08-15): craft_yield gains the
             # skill level its xp was measured at. NULLABLE with no DEFAULT --
             # the rows already in the wild were measured at a level nobody
@@ -962,6 +971,31 @@ class LearningStore:
             if produced > 0 and produced % runs == 0:
                 seen.setdefault(code, Counter())[produced // runs] += 1
         return {code: yields.most_common(1)[0][0] for code, yields in seen.items()}
+
+    def fleet_fight_samples(self) -> list[tuple[int, int, float]]:
+        """`(turns, haste, cooldown)` of every fight any character recorded
+        with its length (`Cycle.fight_turns`) and a positive cooldown: the
+        fight-seconds observations (spec 2026-10-18 §2.9), in id order. Rows
+        written before the length was recorded have none and are not read."""
+        with SqlSession(self._engine) as s:
+            rows = s.exec(
+                select(Cycle.fight_turns, Cycle.fight_haste, Cycle.actual_cooldown_seconds)
+                .where(col(Cycle.fight_turns).is_not(None))
+                .order_by(col(Cycle.id)))
+            return [(turns, haste, seconds) for turns, haste, seconds in rows
+                    if turns is not None and haste is not None
+                    and seconds is not None and seconds > 0]
+
+    def fleet_mean_action_seconds(self) -> float | None:
+        """Mean cooldown seconds of one executed action over every character's
+        cycles of every class with a positive cooldown, or None when the fleet
+        has recorded none: the seconds in one planner ACTION, learned (spec
+        2026-10-18 §2.9, ruling CA)."""
+        with SqlSession(self._engine) as s:
+            mean = s.exec(
+                select(func.avg(Cycle.actual_cooldown_seconds))
+                .where(col(Cycle.actual_cooldown_seconds) > 0)).one()
+        return None if mean is None else float(mean)
 
     def fleet_recycle_totals(self) -> dict[str, int]:
         """item_code -> units one recycled copy returns, MEASURED over every

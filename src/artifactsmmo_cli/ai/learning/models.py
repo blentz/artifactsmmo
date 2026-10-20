@@ -141,6 +141,21 @@ class CycleBase(SQLModel):
     walk chose gear and promotion moved it to the trunk" (`gear` + a
     `ReachCharLevel` repr)."""
 
+    fight_turns: int | None = Field(default=None)
+    """The server's `fight.turns` of this cycle's fight, or None on a cycle
+    that did not fight or a row written before this column existed
+    (2026-10-19). With `actual_cooldown_seconds` beside it, the observation the
+    fight-seconds fit reads (spec 2026-10-18 §2.9).
+
+    NULLABLE, NOT BACK-FILLED, like `skill_levels_json`: the fights already in
+    the wild were recorded without their length, and inventing one would hand
+    the fit a fabricated observation. Consumers exclude NULL."""
+
+    fight_haste: int | None = Field(default=None)
+    """The fighter's `haste` BEFORE this cycle's fight, beside `fight_turns`
+    (None when it is None): the cooldown reduction the fit separates from
+    the turns. NULLABLE, NOT BACK-FILLED, for the same reason."""
+
     # Goal completion tracking
     cycles_to_satisfy: int | None = None
 

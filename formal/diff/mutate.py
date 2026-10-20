@@ -425,6 +425,9 @@ WIN_THRESHOLD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "win_thresho
 GROUP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "group_fight_core.py"
 EXPECTED_DAMAGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "expected_damage.py"
 CONSUMABLE_PRICE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price_core.py"
+FIGHT_SECONDS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_seconds_core.py"
+FIGHT_SECONDS_MODEL_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
+                           / "fight_seconds_model.py")
 CONSUMABLE_PRICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price.py"
 LOOP_RATE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate_core.py"
 LOOP_RATE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate.py"
@@ -1147,6 +1150,54 @@ FIGHT_SPLIT_MUTATIONS = [
 ]
 
 # consumable_price_core: the build/buy price (consumable utility increment 2).
+# Spec 2026-10-18 §2.9: a fight's seconds from its turns and haste, and the fit
+# of its coefficients. Killed by tests/test_ai/test_fight_seconds_core.py; the
+# `fight_seconds` arms also by formal/diff/test_fight_seconds_diff.py (exact
+# agreement with the proved Formal.FightSeconds.fightSeconds).
+FIGHT_SECONDS_CORE_MUTATIONS = [
+    ("fight seconds: no floor",
+     "    return max(floor, turns * s_turn * (1 - h * haste))",
+     "    return turns * s_turn * (1 - h * haste)"),
+    ("fight seconds: haste is ignored",
+     "    return max(floor, turns * s_turn * (1 - h * haste))",
+     "    return max(floor, turns * s_turn)"),
+    ("fight seconds fit: a zero cooldown is an observation",
+     "            if cooldown > 0]",
+     "            if cooldown >= 0]"),
+    ("fight seconds fit: the floor is the longest fight",
+     "    floor = min(c for _, _, c in kept)",
+     "    floor = max(c for _, _, c in kept)"),
+    ("fight seconds fit: a haste that slows is kept",
+     "    if h < 0:\n        return y1 / s11, Fraction(0), floor",
+     "    if False:\n        return y1 / s11, Fraction(0), floor"),
+    ("fight seconds fit: a constant haste is solved as two terms",
+     "    if det == 0:\n        return y1 / s11, Fraction(0), floor",
+     "    if False:\n        return y1 / s11, Fraction(0), floor"),
+    ("fight seconds fit: a negative slope is accepted",
+     "    if a <= 0:",
+     "    if False:"),
+]
+
+# The learned model's adapter (spec §2.9, rulings CA, CC). Killed by
+# tests/test_ai/test_fight_seconds_model.py.
+FIGHT_SECONDS_MODEL_MUTATIONS = [
+    ("fight seconds model: the cache ignores its store",
+     "    if _LEARNED and _LEARNED[0][0] is store and _LEARNED[0][1:3] == (len(recorded), key):",
+     "    if _LEARNED and _LEARNED[0][1:3] == (len(recorded), key):"),
+    ("fight seconds model: the cache ignores new fights",
+     "    if _LEARNED and _LEARNED[0][0] is store and _LEARNED[0][1:3] == (len(recorded), key):",
+     "    if _LEARNED and _LEARNED[0][0] is store and _LEARNED[0][2] == key:"),
+    ("fight seconds model: one haste identifies its effect",
+     "    return FightSecondsModel(s_turn, h, floor, len(set(kept)) > 1, len(kept))",
+     "    return FightSecondsModel(s_turn, h, floor, len(set(kept)) >= 1, len(kept))"),
+    ("fight seconds model: the bootstrap is ignored",
+     "    model = fit_model([*recorded, *bootstrap])",
+     "    model = fit_model(recorded)"),
+    ("fight seconds model: an unlearned action has no seconds check",
+     "    if mean is None:\n        raise ValueError(\"no executed action",
+     "    if False:\n        raise ValueError(\"no executed action"),
+]
+
 # Killed by formal/diff/test_consumable_price_diff.py (exact agreement with the
 # proved Formal.ConsumablePrice.consumablePrice).
 CONSUMABLE_PRICE_CORE_MUTATIONS = [
@@ -7349,6 +7400,7 @@ _ALL_SRCS = [
     TASK_CANCEL_GOAL_SRC, COMPLETE_TASK_GOAL_SRC,
     FIGHT_TERMS_CORE_SRC, FIGHT_OUTCOME_CORE_SRC, FIGHT_ODDS_CORE_SRC, GROUP_FIGHT_CORE_SRC,
     CONSUMABLE_PRICE_CORE_SRC, CONSUMABLE_PRICE_SRC, LOOP_RATE_CORE_SRC, LOOP_RATE_SRC,
+    FIGHT_SECONDS_CORE_SRC, FIGHT_SECONDS_MODEL_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
     ROOT_DECISION_SRC, GATHER_DEMAND_SRC, TUI_APP_SRC,
     OBTAIN_ITEM_ROUTING_SRC, COOLDOWN_WAIT_SRC, EQUIP_VALUE_SRC,
@@ -11185,6 +11237,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_party_terms.py", survivors)
     run_group(CONSUMABLE_PRICE_CORE_SRC, CONSUMABLE_PRICE_CORE_MUTATIONS,
               "formal/diff/test_consumable_price_diff.py", survivors)
+    run_group(FIGHT_SECONDS_CORE_SRC, FIGHT_SECONDS_CORE_MUTATIONS,
+              "tests/test_ai/test_fight_seconds_core.py", survivors)
+    run_group(FIGHT_SECONDS_MODEL_SRC, FIGHT_SECONDS_MODEL_MUTATIONS,
+              "tests/test_ai/test_fight_seconds_model.py", survivors)
     run_group(CONSUMABLE_PRICE_SRC, CONSUMABLE_PRICE_READER_MUTATIONS,
               "tests/test_ai/test_consumable_price.py", survivors)
     run_group(SKILL_CREDIT_SRC, SKILL_CREDIT_MUTATIONS,

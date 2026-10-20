@@ -1938,6 +1938,13 @@ def runConsumablePrice (args : Array Json) : Json :=
   | some (a, b) => Json.mkObj [("none", Json.bool false), ("num", Json.num (Int.ofNat a)),
                                ("den", Json.num (Int.ofNat b))]
 
+/-- A fight's seconds (`Formal.FightSeconds.fightSeconds`). Args: `[turnsNum,
+turnsDen, sNum, sDen, hNum, hDen, haste, floorNum, floorDen]`. Emits `num` / `den`. -/
+def runFightSeconds (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let r := Formal.FightSeconds.fightSeconds (n 0, n 1) (n 2, n 3) (n 4, n 5) (n 6) (n 7, n 8)
+  Json.mkObj [("num", Json.num (Int.ofNat r.1)), ("den", Json.num (Int.ofNat r.2))]
+
 /-- The foods of a recovery row: `count` at `[4]`, then `[restore, priceTag,
 price, held]` each, a tag of 0 meaning no replacement. -/
 def loopFoods (n : Nat → Nat) : List Formal.LoopRate.Food :=
@@ -3169,6 +3176,8 @@ def runOne (item : Json) : Json :=
     runKillRounds args
   else if kind == "consumable_price" then
     runConsumablePrice args
+  else if kind == "fight_seconds" then
+    runFightSeconds args
   else if kind == "loop_recovery" then
     runLoopRecovery args
   else if kind == "loop_xp_rate" then

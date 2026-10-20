@@ -1285,6 +1285,7 @@ class GamePlayer:
                     planner_timed_out=self.planner.last_stats.timed_out if replanned else False,
                     plan_len=len(plan),
                     cycles_to_satisfy=cycles_to_satisfy,
+                    fight=self._fight_of(executed_action),
                 )
                 # Auto-record loadout profile for fight/gather tasks so the
                 # active-profile keep economy can protect the correct gear.
@@ -4307,9 +4308,12 @@ class GamePlayer:
         planner_timed_out: bool,
         plan_len: int,
         cycles_to_satisfy: int | None = None,
+        fight: FightRecord | None = None,
     ) -> None:
         """Build a Cycle row and persist via LearningStore. No-op when history is
-        None or in dry_run.
+        None or in dry_run. `fight` is this cycle's fight transcript: its server
+        `turns` and the PRE-fight haste are the fight-seconds observation
+        (spec 2026-10-18 §2.9).
 
         Dry-run cycles are SIMULATED (action.apply, no real cooldown), so their
         actual_cooldown_seconds is 0 and their state deltas are projections, not
@@ -4410,6 +4414,8 @@ class GamePlayer:
                                          sort_keys=True),
             consumables_expended_json=json.dumps(consumables, ensure_ascii=False, sort_keys=True),
             cycles_to_satisfy=cycles_to_satisfy,
+            fight_turns=fight.turns if fight is not None else None,
+            fight_haste=prev_state.haste if fight is not None else None,
         )
         # Read before `record_cycle`: its commit expires the instance.
         cycle_index = cycle.cycle_index

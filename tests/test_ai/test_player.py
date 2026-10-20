@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, timedelta, timezone
 from fractions import Fraction
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -25,6 +26,7 @@ from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import fight_loadout
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
+from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -189,6 +191,44 @@ class TestRecordLearningCycleSkillLevels:
             assert json.loads(rows[0].skill_levels_json) == {"mining": 3, "woodcutting": 2}
         finally:
             store.close()
+
+
+class TestRecordLearningCycleFightLength:
+    """Spec 2026-10-18 §2.9: a fight cycle records the server's `turns` and the
+    PRE-fight haste beside its cooldown (the fight-seconds observation). `prev`
+    and `new` differ in haste so a prev/new swap reads a different value."""
+
+    def _record(self, tmp_path: Path, fight: FightRecord | None) -> Cycle:
+        store = LearningStore(db_path=str(tmp_path / "turns.db"), character="hero")
+        try:
+            store.start_session()
+            player = GamePlayer(character="hero", dry_run=False, history=store)
+            prev = make_state(level=5, haste=8)
+            new = make_state(level=5, xp=prev.xp + 10, haste=12)
+            player._record_learning_cycle(
+                prev_state=prev, new_state=new,
+                action_repr="Fight(green_slime)", action_class="FightAction",
+                outcome="ok", selected_goal="GrindCharacterXP(green_slime)",
+                predicted_cost=0.0, actual_cooldown_seconds=9.0,
+                planner_nodes=1, planner_depth=1, planner_timed_out=False,
+                plan_len=1, fight=fight,
+            )
+            with Session(store._engine) as s:
+                (row,) = s.exec(select(Cycle))
+            return row
+        finally:
+            store.close()
+
+    def test_a_fight_records_its_turns_and_the_pre_fight_haste(self, tmp_path):
+        fight = FightRecord(started_at="2026-10-19T00:00:00+00:00", result="win", turns=5,
+                            opponent="green_slime", logs=(), hp_before=100, hp_after=90,
+                            xp=10, gold=0, drops=())
+        row = self._record(tmp_path, fight)
+        assert (row.fight_turns, row.fight_haste) == (5, 8)
+
+    def test_a_cycle_that_did_not_fight_records_no_length(self, tmp_path):
+        row = self._record(tmp_path, None)
+        assert (row.fight_turns, row.fight_haste) == (None, None)
 
 
 class TestBuildActions:

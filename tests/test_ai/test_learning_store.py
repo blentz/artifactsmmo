@@ -2021,3 +2021,71 @@ class TestTaskWorkXpRate:
         self._add(store, 0, xp='{"cooking": 300}')
         self._add(store, 1, xp='{"cooking": 30}')
         assert store.task_work_xp_per_second("cooked_shrimp", frozenset({"cooking"}), window=1) == 1.0
+
+
+class TestFightSecondsObservations:
+    """Spec 2026-10-18 §2.9: the fleet's recorded fight lengths and the mean
+    seconds of one executed action, the observations fight seconds are learned
+    from."""
+
+    def _stores(self, tmp_path):
+        db = str(tmp_path / "fleet.db")
+        stores = [LearningStore(db_path=db, character=name) for name in ("hero", "sidekick")]
+        for store in stores:
+            store.start_session()
+        return stores
+
+    def test_fight_samples_pool_the_fleet_and_skip_rows_without_a_length(self, tmp_path):
+        hero, sidekick = self._stores(tmp_path)
+        hero.record_cycle(Cycle(ts="2026-10-19T00:00:00+00:00", cycle_index=0, outcome="ok",
+                                actual_cooldown_seconds=9.0, fight_turns=5, fight_haste=8))
+        sidekick.record_cycle(Cycle(ts="2026-10-19T00:00:01+00:00", cycle_index=0,
+                                    outcome="ok", actual_cooldown_seconds=16.0,
+                                    fight_turns=9, fight_haste=12))
+        hero.record_cycle(Cycle(ts="2026-10-19T00:00:02+00:00", cycle_index=1, outcome="ok",
+                                actual_cooldown_seconds=0.0, fight_turns=5, fight_haste=8))
+        hero.record_cycle(Cycle(ts="2026-10-19T00:00:03+00:00", cycle_index=2, outcome="ok",
+                                actual_cooldown_seconds=30.0))
+        try:
+            assert hero.fleet_fight_samples() == [(5, 8, 9.0), (9, 12, 16.0)]
+        finally:
+            hero.close()
+            sidekick.close()
+
+    def test_the_mean_action_seconds_read_every_positive_cooldown_in_the_fleet(self, tmp_path):
+        hero, sidekick = self._stores(tmp_path)
+        assert hero.fleet_mean_action_seconds() is None
+        hero.record_cycle(Cycle(ts="2026-10-19T00:00:00+00:00", cycle_index=0, outcome="ok",
+                                actual_cooldown_seconds=9.0))
+        sidekick.record_cycle(Cycle(ts="2026-10-19T00:00:01+00:00", cycle_index=0,
+                                    outcome="ok", actual_cooldown_seconds=25.0))
+        hero.record_cycle(Cycle(ts="2026-10-19T00:00:02+00:00", cycle_index=1, outcome="ok",
+                                actual_cooldown_seconds=0.0))
+        try:
+            assert hero.fleet_mean_action_seconds() == 17.0
+        finally:
+            hero.close()
+            sidekick.close()
+
+    def test_an_old_cycles_table_gains_the_fight_length_columns(self, tmp_path):
+        db_path = str(tmp_path / "old.db")
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE cycles (
+                id INTEGER PRIMARY KEY, ts TEXT NOT NULL, session_id TEXT NOT NULL,
+                cycle_index INTEGER NOT NULL, character TEXT NOT NULL,
+                selected_goal TEXT, action_repr TEXT, action_class TEXT, outcome TEXT,
+                delta_skill_xp_json TEXT NOT NULL DEFAULT '{}',
+                consumables_expended_json TEXT NOT NULL DEFAULT '{}'
+            )
+        """)
+        conn.commit()
+        conn.close()
+        store = LearningStore(db_path=db_path, character="hero")
+        check = sqlite3.connect(db_path)
+        try:
+            cols = {r[1] for r in check.execute("PRAGMA table_info(cycles)")}
+        finally:
+            check.close()
+        store.close()
+        assert {"fight_turns", "fight_haste"} <= cols
