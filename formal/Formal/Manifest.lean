@@ -1574,3 +1574,8 @@ open Formal.PriorityBand
 #check @Formal.GearObjective.slot_rank_breaks_tie      -- equal ratio and gain: the smaller slot rank orders first
 #check @Formal.GearObjective.keyLt_irrefl              -- the key order is strict
 #check @Formal.GearObjective.held_iff_empty            -- the objective is held iff nothing is missing
+-- FightSeconds (spec 2026-10-18 §2.9 — a fight's seconds from its length,
+-- `ai/fight_seconds_core.py`):
+#check @Formal.FightSeconds.floor_le                   -- a fight never costs less than the floor
+#check @Formal.FightSeconds.mono_turns                 -- more turns never cost fewer seconds
+#check @Formal.FightSeconds.anti_haste                 -- more haste never costs more seconds

@@ -40,6 +40,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | FallbackChain | core, planner | totality, dominance |
 | FightOdds | combat, consumables | validity, monotonicity |
 | FightOutcome | combat, consumables | validity, monotonicity, boundedness |
+| FightSeconds | combat, cost | monotonicity, validity |
 | GameDataAccessors | core | safety |
 | GatherApply | resources, items | safety |
 | GatherCost | planner, action, cost | monotonicity, safety |

@@ -1228,3 +1228,6 @@ open Formal.PriorityBand
 #print axioms Formal.GearObjective.slot_rank_breaks_tie
 #print axioms Formal.GearObjective.keyLt_irrefl
 #print axioms Formal.GearObjective.held_iff_empty
+#print axioms Formal.FightSeconds.floor_le
+#print axioms Formal.FightSeconds.mono_turns
+#print axioms Formal.FightSeconds.anti_haste
