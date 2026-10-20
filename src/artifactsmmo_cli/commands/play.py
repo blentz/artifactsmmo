@@ -5,6 +5,7 @@ import sys
 import threading
 import traceback
 from datetime import datetime
+from pathlib import Path
 
 import httpx
 import typer
@@ -13,6 +14,7 @@ from artifactsmmo_cli.ai.account_read_cache import AccountReadCache
 from artifactsmmo_cli.ai.file_tracer import FileTracer
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
+from artifactsmmo_cli.ai.learning.fight_seconds_model import FleetBootstrap
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -70,6 +72,11 @@ def play(
         None, "--coordination-db",
         help="Cross-character coordination DB path (set by `play --all`'s "
              "supervisor for every child; not meant to be passed by hand)"),
+    fight_bootstrap: str | None = typer.Option(
+        None, "--fight-bootstrap",
+        help="The fleet's fight-seconds bootstrap, fetched once from the "
+             "account's /my/logs (set by `play --all`'s supervisor for every "
+             "child; not meant to be passed by hand)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show full plan each cycle"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Plan only, do not execute actions"),
     trace: bool = typer.Option(False, "--trace", help="Emit per-cycle JSONL to --trace-file"),
@@ -152,6 +159,8 @@ def play(
         game_data_ttl_minutes=config.game_data_ttl_minutes,
         refresh_game_data=refresh_game_data,
         fleet_order=tuple(fleet_order) if fleet_order is not None else None,
+        fight_bootstrap=(FleetBootstrap.from_json(Path(fight_bootstrap).read_text())
+                         if fight_bootstrap is not None else None),
     )
     # The budget is the WHOLE per-IP budget, and the governors police it
     # fleet-wide through a request log in the shared coordination DB -- so a

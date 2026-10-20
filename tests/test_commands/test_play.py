@@ -15,7 +15,7 @@ from typer.testing import CliRunner
 from artifactsmmo_cli.ai.file_tracer import FileTracer
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.intention_progress import EXIT_CYCLES
-from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
+from artifactsmmo_cli.ai.learning.fight_seconds_model import FleetBootstrap, committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -126,6 +126,20 @@ class TestPlayCommandWiring:
                 mock_store.start_session.assert_called_once_with()
                 mock_store.end_session.assert_called_once_with(exit_reason="normal")
                 mock_store.close.assert_called_once_with()
+
+    def test_fight_bootstrap_file_is_handed_to_the_player(self, runner, tmp_path):
+        """Ruling ZD: a `play --all` child reads the fleet's one account-log
+        bootstrap from the file its supervisor wrote; a lone `play` passes
+        none, and the player fetches its own at start."""
+        bootstrap = FleetBootstrap(fights=((5, 8, 10.0),), cooldowns=(10, 25))
+        path = tmp_path / "bootstrap.json"
+        path.write_text(bootstrap.to_json())
+        with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
+            mock_player_cls.return_value = Mock()
+            assert runner.invoke(app, ["hero", "--fight-bootstrap", str(path)]).exit_code == 0
+            assert mock_player_cls.call_args.kwargs["fight_bootstrap"] == bootstrap
+            assert runner.invoke(app, ["hero"]).exit_code == 0
+            assert mock_player_cls.call_args.kwargs["fight_bootstrap"] is None
 
     def test_verbose_and_dry_run_flags_forwarded(self, runner):
         """--verbose and --dry-run are passed through to the GamePlayer."""

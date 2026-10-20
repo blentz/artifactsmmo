@@ -32,3 +32,19 @@ class TestGetCharacterLogs:
         with patch("artifactsmmo_cli.api_wrapper.get_character_logs_sync",
                    return_value=page):
             assert wrapper.get_character_logs("Robby") is page
+
+
+class TestGetAllCharactersLogs:
+    """GET /my/logs: the whole account's log (ruling ZD's fight-seconds
+    bootstrap)."""
+
+    def test_delegates_to_the_generated_client(self):
+        client = MagicMock()
+        wrapper = APIWrapper(client)
+        page = MagicMock()
+
+        with patch("artifactsmmo_cli.api_wrapper.get_all_characters_logs_sync",
+                   return_value=page) as sync:
+            assert wrapper.get_all_characters_logs(page=3, size=100) is page
+
+        sync.assert_called_once_with(client=client, page=3, size=100)

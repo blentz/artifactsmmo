@@ -13,22 +13,31 @@ from artifactsmmo_api_client.models.map_layer import MapLayer
 
 from artifactsmmo_cli.ai.best_loadout import BestLoadout
 from artifactsmmo_cli.ai.item_catalog import ItemStats
-from artifactsmmo_cli.ai.learning.fight_seconds_model import FIGHT_LOGS, LogEntry, offline_context
+from artifactsmmo_cli.ai.learning.fight_seconds_model import (
+    FIGHT_LOGS,
+    FleetBootstrap,
+    log_fights,
+    offline_context,
+)
 from artifactsmmo_cli.ai.loop_rate import LoopRate
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 
-LOG_PAGE: list[LogEntry] = [
-    (kind, cooldown, turns) for kind, cooldown, turns
-    in json.loads(FIGHT_LOGS.read_text())["characters"]["Robby"]["entries"][:100]]
-"""The newest `/my/logs` page of Robby in the committed live capture: what a
-mocked `fetch_log_entries` returns to a player driven through `_initialize`."""
+_ROBBY = json.loads(FIGHT_LOGS.read_text())["characters"]["Robby"]
+BOOTSTRAP = FleetBootstrap(
+    fights=tuple(log_fights(_ROBBY["haste"], [(kind, cooldown, turns) for kind, cooldown, turns
+                                              in _ROBBY["entries"][:100]])),
+    cooldowns=tuple(cooldown for _, cooldown, _ in _ROBBY["entries"][:100]))
+"""Robby's newest 100 `/my/logs` entries in the committed live capture, at his
+captured haste: the account-log bootstrap a player driven through
+`_initialize` against a mocked client is handed (ruling ZD)."""
 
 def patched_logs() -> Any:
-    """`fetch_log_entries` patched to `LOG_PAGE` for a player driven through
-    `_initialize` against a mocked client."""
-    return patch("artifactsmmo_cli.ai.player.fetch_log_entries", return_value=LOG_PAGE)
+    """`GamePlayer._fetch_bootstrap` patched to `BOOTSTRAP` for a player
+    driven through `_initialize` against a mocked client."""
+    return patch("artifactsmmo_cli.ai.player.GamePlayer._fetch_bootstrap",
+                 return_value=BOOTSTRAP)
 
 
 TIMED_NO_PROFILE_CONTEXT = offline_context(NO_PROFILE_CONTEXT)

@@ -126,9 +126,9 @@ from artifactsmmo_cli.ai.intention_progress import (
 )
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
-    LogEntry,
+    FleetBootstrap,
     committed_timing,
-    fetch_log_entries,
+    fetch_fleet_bootstrap,
     timing_of,
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -286,6 +286,7 @@ class GamePlayer:
         game_data_ttl_minutes: int = 30,
         refresh_game_data: bool = False,
         fleet_order: tuple[str, ...] | None = None,
+        fight_bootstrap: FleetBootstrap | None = None,
     ) -> None:
         self.character = character
         # The characters sharing the account's bank in the account's
@@ -450,11 +451,12 @@ class GamePlayer:
         # epic's bespoke `recoverable` map). `NO_PROFILE_CONTEXT` until the first
         # decide/plan cycle runs.
         self._last_ctx: SelectionContext = NO_PROFILE_CONTEXT
-        # The fight-seconds bootstrap (spec 2026-10-18 §2.9): the newest page
-        # of this character's `/my/logs`, fetched once at `_initialize`; and
-        # the offline worlds' fit from the committed live capture, set by
+        # The fight-seconds bootstrap (spec 2026-10-18 §2.9, ruling ZD): the
+        # account's `/my/logs`, fetched once for the fleet (`play --all`
+        # passes it to every child) or, when none is given, at `_initialize`;
+        # and the offline worlds' fit from the committed live capture, set by
         # `seed_offline`, which replaces the live fit entirely.
-        self._log_entries: list[LogEntry] = []
+        self._bootstrap: FleetBootstrap | None = fight_bootstrap
         self._offline_timing: tuple[FightSecondsModel, Fraction] | None = None
         # Why the last executed action failed. `outcome` alone collapses
         # distinct dead-ends onto one label, so the message rides the trace too.
@@ -917,8 +919,8 @@ class GamePlayer:
 
         print(f"[{self._now()}] Fetching character state...")
         self.state = self._fetch_world_state(client)
-        self._acquire_data()
-        self._log_entries = fetch_log_entries(APIWrapper(client), self.character)
+        if self._bootstrap is None:
+            self._bootstrap = self._fetch_bootstrap(APIWrapper(client))
         self._last_ctx = self._timed(self._last_ctx)
 
         # Persistent blocker memory: if a previous session learned that the
@@ -4048,12 +4050,21 @@ class GamePlayer:
 
     def _timing(self) -> tuple[FightSecondsModel, Fraction]:
         """The learned fight-seconds model and the seconds of one action (spec
-        2026-10-18 §2.9): the fleet store's record and this character's
-        `/my/logs` bootstrap, or the committed capture offline."""
+        2026-10-18 §2.9): the fleet store's record and the account-log
+        bootstrap (ruling ZD), or the committed capture offline."""
         if self._offline_timing is not None:
             return self._offline_timing
-        assert self.state is not None
-        return timing_of(self.history, self.state.haste, self._log_entries)
+        assert self._bootstrap is not None
+        return timing_of(self.history, self._bootstrap)
+
+    def _fetch_bootstrap(self, api: APIWrapper) -> FleetBootstrap:
+        """The account-log bootstrap (ruling ZD), each fight at its
+        character's sheet haste from `GET /my/characters`; every request is
+        charged to the account bucket."""
+        self._acquire_account()
+        roster = api.get_my_characters()
+        hastes = {character.name: character.haste for character in roster.data}
+        return fetch_fleet_bootstrap(api, hastes, self._acquire_account)
 
     def _selection_context(self) -> SelectionContext:
         assert self.state is not None

@@ -1,5 +1,7 @@
 """MultiRun: roster discovery, budget split, child argv, headless vs TUI."""
 
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -7,6 +9,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
+from artifactsmmo_cli.ai.learning.fight_seconds_model import FleetBootstrap
 from artifactsmmo_cli.learning_db_path import default_learn_db_path
 from artifactsmmo_cli.multi.child_event import PlanningEvent, SnapshotEvent
 from artifactsmmo_cli.multi.multi_run import MultiRun
@@ -37,7 +40,20 @@ def _snap(character: str = "a") -> CycleSnapshot:
 
 
 def _characters_response(*names: str) -> SimpleNamespace:
-    return SimpleNamespace(data=[SimpleNamespace(name=n) for n in names])
+    return SimpleNamespace(data=[SimpleNamespace(name=n, haste=index)
+                                 for index, n in enumerate(names)])
+
+
+_BOOTSTRAP = FleetBootstrap(fights=((5, 0, 10.0),), cooldowns=(10,))
+
+
+@pytest.fixture(autouse=True)
+def _fleet_bootstrap():
+    """`run()` fetches the fleet's fight-seconds bootstrap from the account
+    log before the pool starts (ruling ZD); the mocked API has no log."""
+    with patch("artifactsmmo_cli.multi.multi_run.fetch_fleet_bootstrap",
+               return_value=_BOOTSTRAP) as fetch:
+        yield fetch
 
 
 def _rates_response(payload: dict = _RATES) -> SimpleNamespace:
@@ -572,10 +588,14 @@ def test_run_cleans_up_even_when_the_roster_call_fails_after_a_path_was_prepared
 def test_run_does_not_delete_the_persisted_learn_db_on_exit(tmp_path):
     """When `--learn` is on, coordination reuses the learning DB path — that
     file must survive `run()`'s cleanup, since it holds real learned data
-    the NEXT session reads."""
+    the NEXT session reads. It is a real SQLite file: since ruling ZD the
+    run charges its one account-log fetch to the request log in that DB."""
     fake_pool = _FakePool()
     learn_db = tmp_path / "learning.db"
-    learn_db.write_text("real learned data")
+    with closing(sqlite3.connect(learn_db)) as conn:
+        conn.execute("CREATE TABLE learned (fact TEXT)")
+        conn.execute("INSERT INTO learned VALUES ('real learned data')")
+        conn.commit()
     with (
         patch("artifactsmmo_cli.multi.multi_run.Config"),
         patch("artifactsmmo_cli.multi.multi_run.ClientManager"),
@@ -591,4 +611,53 @@ def test_run_does_not_delete_the_persisted_learn_db_on_exit(tmp_path):
             mrun.run()
 
     assert learn_db.exists()
-    assert learn_db.read_text() == "real learned data"
+    with closing(sqlite3.connect(learn_db)) as conn:
+        assert conn.execute("SELECT fact FROM learned").fetchall() == [("real learned data",)]
+
+
+def test_run_fetches_the_fight_bootstrap_once_and_hands_every_child_its_file(
+        _fleet_bootstrap, tmp_path, monkeypatch):
+    """Ruling ZD: ONE account-log fetch for the fleet, before any child
+    starts, charged to the account bucket the children share, each fight at
+    its character's haste; every child reads it from `--fight-bootstrap`,
+    and the file goes when the run ends."""
+    monkeypatch.setattr(
+        "artifactsmmo_cli.multi.multi_run.tempfile.gettempdir", lambda: str(tmp_path))
+    seen: dict[str, object] = {}
+
+    def build(characters, rates):
+        path = mrun._fight_bootstrap
+        assert path is not None
+        seen["text"] = path.read_text()
+        seen["argv"] = mrun.child_argv("b", parse_rate_limits(rates), characters)
+        seen["path"] = path
+        return _FakePool()
+
+    with (
+        patch("artifactsmmo_cli.multi.multi_run.Config"),
+        patch("artifactsmmo_cli.multi.multi_run.ClientManager"),
+        patch("artifactsmmo_cli.multi.multi_run.APIWrapper") as mock_api_cls,
+    ):
+        mock_api = Mock()
+        mock_api.get_my_characters.return_value = _characters_response("a", "b")
+        mock_api.get_rate_limits.return_value = _rates_response()
+        mock_api_cls.return_value = mock_api
+        mrun = _run(tui=False)
+        with patch.object(mrun, "build_pool", side_effect=build):
+            mrun.run()
+
+    _fleet_bootstrap.assert_called_once()
+    api, hastes, acquire = _fleet_bootstrap.call_args.args
+    assert (api, hastes) == (mock_api, {"a": 0, "b": 1})
+    governor = acquire.__self__
+    assert (governor._bucket, governor._windows) == (
+        "account", parse_rate_limits(_RATES).account.as_windows())
+    assert FleetBootstrap.from_json(seen["text"]) == _BOOTSTRAP
+    argv = seen["argv"]
+    assert argv[argv.index("--fight-bootstrap") + 1] == str(seen["path"])
+    assert not Path(seen["path"]).exists()
+
+
+def test_child_argv_omits_the_fight_bootstrap_before_one_is_fetched():
+    budget = parse_rate_limits(_RATES)
+    assert "--fight-bootstrap" not in _run().child_argv("a", budget, ["a"])

@@ -2,7 +2,6 @@
 to the fleet's recorded fights and a `/my/logs` bootstrap, refitted only when
 either changes, and fitted offline from the committed live capture."""
 
-import json
 from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,12 +12,14 @@ from artifactsmmo_api_client.models.log_type import LogType
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.learning import fight_seconds_model as mod
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
-    fetch_log_entries,
+    BOOTSTRAP_FIGHTS,
+    BOOTSTRAP_PAGE,
+    FleetBootstrap,
+    fetch_fleet_bootstrap,
     fit_model,
     learned_action_seconds,
     learned_model,
     log_fights,
-    offline_timing,
     timing_of,
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -53,18 +54,81 @@ def test_log_fights_keep_the_fights_at_the_sheet_haste() -> None:
     assert log_fights(8, [("fight", 9, 5), ("gathering", 25, None)]) == [(5, 8, 9.0)]
 
 
-def test_a_log_page_is_read_as_typed_entries() -> None:
-    entries = [SimpleNamespace(type_=LogType.FIGHT, cooldown=9, content={"fight": {"turns": 5}}),
-               SimpleNamespace(type_=LogType.GATHERING, cooldown=25, content={})]
-    calls: list[tuple[str, int, int]] = []
+def _entry(character: str, kind: LogType, cooldown: int, turns: int | None = None) -> SimpleNamespace:
+    content = {"fight": {"turns": turns}} if kind == LogType.FIGHT else {}
+    return SimpleNamespace(character=character, type_=kind, cooldown=cooldown, content=content)
 
-    class Api:
-        def get_character_logs(self, name: str, page: int, size: int) -> SimpleNamespace:
-            calls.append((name, page, size))
-            return SimpleNamespace(data=entries)
 
-    assert fetch_log_entries(Api(), "hero") == [("fight", 9, 5), ("gathering", 25, None)]  # type: ignore[arg-type]
-    assert calls == [("hero", 1, 100)]
+class _Api:
+    """`/my/logs` (the account's, `pages` pages) and `/my/logs/{name}`."""
+
+    def __init__(self, pages: list[list[SimpleNamespace]],
+                 own: list[SimpleNamespace] | None = None) -> None:
+        self.pages = pages
+        self.own = own or []
+        self.calls: list[tuple[int, int]] = []
+
+    def get_all_characters_logs(self, page: int, size: int) -> SimpleNamespace:
+        self.calls.append((page, size))
+        return SimpleNamespace(data=self.pages[page - 1], pages=len(self.pages))
+
+    def get_character_logs(self, name: str, page: int, size: int) -> SimpleNamespace:
+        return SimpleNamespace(data=[e for e in self.own if e.character == name], pages=1)
+
+
+def _fights(character: str, n: int) -> list[SimpleNamespace]:
+    return [_entry(character, LogType.FIGHT, 10, 5) for _ in range(n)]
+
+
+def test_a_character_without_fights_bootstraps_from_the_account_log() -> None:
+    """Ruling ZD (live 2026-10-20: R2D2's and C3P0's newest 100 entries held
+    no fight, and their `plan` raised "no fight with a positive cooldown").
+    The bootstrap is the account's log, each fight at its character's sheet
+    haste; a gathering character fits on its siblings' fights."""
+    own = [_entry("R2D2", LogType.GATHERING, 25)]
+    account = [_entry("R2D2", LogType.GATHERING, 25), _entry("Robby", LogType.FIGHT, 9, 5),
+               _entry("Lor", LogType.FIGHT, 0, 4), _entry("Lor", LogType.FIGHT, 20, 10)]
+    api = _Api([account], own)
+    calls: list[str] = []
+    bootstrap = fetch_fleet_bootstrap(api, {"R2D2": 0, "Robby": 8, "Lor": 2},  # type: ignore[arg-type]
+                                      lambda: calls.append("acquire"))
+    assert bootstrap == FleetBootstrap(fights=((5, 8, 9.0), (10, 2, 20.0)),
+                                       cooldowns=(25, 9, 0, 20))
+    assert calls == ["acquire"] and api.calls == [(1, BOOTSTRAP_PAGE)]
+    model, seconds = timing_of(None, bootstrap)
+    assert (model.samples, model.haste_identified, seconds) == (2, True, 18)
+
+
+def test_paging_stops_once_the_fit_has_enough_fights_at_two_hastes() -> None:
+    first = _fights("Robby", BOOTSTRAP_FIGHTS)
+    second = _fights("Lor", 1)
+    api = _Api([first, second, _fights("Lor", 3)])
+    bootstrap = fetch_fleet_bootstrap(api, {"Robby": 8, "Lor": 2}, lambda: None)  # type: ignore[arg-type]
+    assert api.calls == [(1, BOOTSTRAP_PAGE), (2, BOOTSTRAP_PAGE)]
+    assert len(bootstrap.fights) == BOOTSTRAP_FIGHTS + 1
+
+
+def test_one_haste_in_the_fleet_needs_no_spread() -> None:
+    api = _Api([_fights("Robby", BOOTSTRAP_FIGHTS), _fights("Lor", 1)])
+    bootstrap = fetch_fleet_bootstrap(api, {"Robby": 8, "Lor": 8}, lambda: None)  # type: ignore[arg-type]
+    assert api.calls == [(1, BOOTSTRAP_PAGE)]
+    assert not fit_model(bootstrap.fights).haste_identified
+
+
+def test_a_log_that_runs_out_first_is_all_the_bootstrap() -> None:
+    api = _Api([_fights("Robby", 2), [_entry("Lor", LogType.GATHERING, 25)]])
+    bootstrap = fetch_fleet_bootstrap(api, {"Robby": 8, "Lor": 2}, lambda: None)  # type: ignore[arg-type]
+    assert api.calls == [(1, BOOTSTRAP_PAGE), (2, BOOTSTRAP_PAGE)]
+    assert len(bootstrap.fights) == 2
+    empty = fetch_fleet_bootstrap(_Api([[_entry("Lor", LogType.GATHERING, 25)]]),  # type: ignore[arg-type]
+                                  {"Lor": 2}, lambda: None)
+    with pytest.raises(ValueError, match="no fight with a positive cooldown"):
+        timing_of(None, empty)
+
+
+def test_a_bootstrap_round_trips_through_json() -> None:
+    bootstrap = FleetBootstrap(fights=((5, 8, 9.0),), cooldowns=(9, 25))
+    assert FleetBootstrap.from_json(bootstrap.to_json()) == bootstrap
 
 
 def test_the_learned_model_refits_only_when_its_observations_change(tmp_path: Path) -> None:
@@ -121,38 +185,19 @@ def test_the_action_seconds_are_learned_then_bootstrapped_or_raise(tmp_path: Pat
         store.close()
 
 
-def test_timing_without_a_store_fits_the_page_alone(tmp_path: Path) -> None:
-    entries = [("fight", 10, 5), ("fight", 20, 10), ("gathering", 30, None)]
-    model, seconds = timing_of(None, 0, entries)
+def test_timing_without_a_store_fits_the_bootstrap_alone(tmp_path: Path) -> None:
+    bootstrap = FleetBootstrap(fights=((5, 0, 10.0), (10, 0, 20.0)), cooldowns=(10, 20, 30))
+    model, seconds = timing_of(None, bootstrap)
     assert (model.s_turn, model.samples, seconds) == (Fraction(2), 2, Fraction(20))
     with pytest.raises(ValueError, match="the /my/logs bootstrap: no action with a cooldown"):
-        timing_of(None, 0, [("gathering", 0, None), ("move", 0, None)])
+        timing_of(None, FleetBootstrap(fights=(), cooldowns=(0, 0)))
 
 
-def test_timing_with_a_store_pools_the_fleet_and_the_page(tmp_path: Path) -> None:
+def test_timing_with_a_store_pools_the_fleet_and_the_bootstrap(tmp_path: Path) -> None:
     store = _store(tmp_path)
     try:
         _fight(store, 0, 5, 0, 15.0)
-        model, seconds = timing_of(store, 0, [("fight", 10, 5)])
+        model, seconds = timing_of(store, FleetBootstrap(fights=((5, 0, 10.0),), cooldowns=(10,)))
         assert (model.s_turn, model.samples, seconds) == (Fraction(5, 2), 2, Fraction(15))
     finally:
         store.close()
-
-
-def test_the_committed_capture_fits_two_seconds_a_turn_less_a_percent_a_haste() -> None:
-    """The live capture (2026-10-19, five characters at haste 8 and 12, 1180
-    fights): about 2 s a turn, about 1% less per point of haste, a 5 s floor."""
-    model, action_seconds = offline_timing()
-    assert model.samples == 1180 and model.haste_identified
-    assert round(model.s_turn, 2) == Fraction(199, 100)
-    assert round(model.h, 4) == Fraction(97, 10000)
-    assert model.floor == 5
-    assert round(action_seconds, 1) == Fraction(358, 10)
-
-
-def test_a_capture_with_no_cooldown_raises(tmp_path: Path) -> None:
-    path = tmp_path / "logs.json"
-    path.write_text(json.dumps({"characters": {"hero": {"haste": 0, "entries": [
-        ["fight", 0, 5]]}}}))
-    with pytest.raises(ValueError, match="no action with a cooldown"):
-        offline_timing(path)

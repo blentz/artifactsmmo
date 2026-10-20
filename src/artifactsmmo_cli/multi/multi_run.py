@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import fetch_fleet_bootstrap
 from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
@@ -53,6 +54,11 @@ class MultiRun:
         # never be removed, only a temp file this instance itself created.
         self._coordination_db: str | None = None
         self._owns_coordination_db = False
+        # The fleet's fight-seconds bootstrap (ruling ZD), fetched ONCE from
+        # the account's `/my/logs` before any child starts and handed to every
+        # child as a file (`--fight-bootstrap`): one fetch and one fit for the
+        # whole fleet. A temp file this MultiRun creates and removes.
+        self._fight_bootstrap: Path | None = None
 
     def _coordination_db_path(self) -> str:
         """The shared coordination DB path every child receives via
@@ -83,11 +89,14 @@ class MultiRun:
         return self._coordination_db
 
     def _cleanup_coordination_db(self) -> None:
-        """Remove the temp coordination DB (and its WAL/SHM sidecars) this
-        MultiRun generated, if any. A no-op when coordination reused the
+        """Remove the fight-seconds bootstrap file this MultiRun wrote, if
+        any, and the temp coordination DB (and its WAL/SHM sidecars) it
+        generated, if any. A no-op when coordination reused the
         persisted `--learn` DB path (`_owns_coordination_db` is False) --
         that file must survive for the next session -- or when
         `_coordination_db_path` was never called at all."""
+        if self._fight_bootstrap is not None:
+            self._fight_bootstrap.unlink(missing_ok=True)
         if not self._owns_coordination_db or self._coordination_db is None:
             return
         for suffix in ("", "-wal", "-shm"):
@@ -104,6 +113,8 @@ class MultiRun:
         for name in fleet:
             argv += ["--fleet-order", name]
         argv += ["--coordination-db", self._coordination_db_path()]
+        if self._fight_bootstrap is not None:
+            argv += ["--fight-bootstrap", str(self._fight_bootstrap)]
         if self._verbose:
             argv.append("--verbose")
         if self._dry_run:
@@ -214,6 +225,8 @@ class MultiRun:
                     "GET /my/rates returned no data -- cannot divide the account's "
                     "rate budget across children")
             rates = rates_response.to_dict()
+            self._write_fight_bootstrap(
+                api, {c.name: c.haste for c in characters_response.data}, rates)
 
             pool = self.build_pool(characters, rates)
             if not self._tui:
@@ -237,6 +250,22 @@ class MultiRun:
             self._app.run()
         finally:
             self._cleanup_coordination_db()
+
+    def _write_fight_bootstrap(self, api: APIWrapper, hastes: dict[str, int],
+                               rates: dict[str, Any]) -> None:
+        """Fetch the fleet's fight-seconds bootstrap once, charged to the
+        account bucket the children share, and write it where every child's
+        `--fight-bootstrap` reads it."""
+        request_log = RequestLog(self._coordination_db_path())
+        try:
+            acquire = RateGovernor(parse_rate_limits(rates).account, 1, request_log,
+                                   "account").acquire
+            bootstrap = fetch_fleet_bootstrap(api, hastes, acquire)
+        finally:
+            request_log.close()
+        path = Path(tempfile.gettempdir()) / f"artifactsmmo-fight-bootstrap-{uuid.uuid4().hex}.json"
+        path.write_text(bootstrap.to_json())
+        self._fight_bootstrap = path
 
     async def _run_headless(self, pool: SupervisorPool) -> None:
         await pool.run()

@@ -7,9 +7,14 @@ and the fighter's haste, with `(s_turn, h, floor)` fitted
 
 * the fleet's recorded fights (`LearningStore.fleet_fight_samples`: every
   cycle that stored its server `fight.turns` beside its cooldown), and
-* a bootstrap from the server's own history (`GET /my/logs/{name}`, whose fight
-  entries carry `turns` and the cooldown), so the fit starts from data on a
-  store that has not yet recorded a fight's length.
+* a bootstrap from the server's own history of the whole account
+  (`GET /my/logs`, whose fight entries carry `turns`, the cooldown and the
+  character), so the fit starts from data on a store that has not yet
+  recorded a fight's length (`fetch_fleet_bootstrap`, ruling ZD). The fleet
+  fetches it once: `play --all` before its children start, a lone `play` or
+  `plan` at its own start. A character's own log is not enough: one that has
+  only gathered lately holds no fight, and its fit raised at startup (live
+  2026-10-20, R2D2 and C3P0).
 
 The seconds of one planner ACTION (the unit the acquisition walk counts in) are
 the store's mean cooldown over every executed action
@@ -23,8 +28,8 @@ capture of the live `/my/logs` (`FIGHT_LOGS`, written once by
 """
 
 import json
-from collections.abc import Iterable, Sequence
-from dataclasses import replace
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from fractions import Fraction
 from functools import cache
 from pathlib import Path
@@ -63,12 +68,64 @@ def log_fights(haste: int, entries: Iterable[LogEntry]) -> list[Sample]:
             if turns is not None]
 
 
-def fetch_log_entries(api: APIWrapper, name: str) -> list[LogEntry]:
-    """The newest page of `name`'s `/my/logs` (one request)."""
-    result = api.get_character_logs(name, page=1, size=100)
-    return [(str(entry.type_), entry.cooldown,
-             entry.content["fight"]["turns"] if entry.type_ == LogType.FIGHT else None)
-            for entry in result.data]
+BOOTSTRAP_PAGE = 100
+"""Entries per `/my/logs` page: the API's largest page, so the fewest requests."""
+
+BOOTSTRAP_FIGHTS = 50
+"""Fights with a positive cooldown the bootstrap pages for before it stops.
+Two parameters are fitted on them (`s_turn`, `h`) and the committed capture
+fits at R² 0.9998 on 1,180, so 50 leaves the fit well determined while one
+page usually holds them."""
+
+_HASTE_SPREAD = 2
+"""Distinct hastes the bootstrap's fights must span when the fleet has them:
+one haste cannot tell `h` from `s_turn` (`FightSecondsModel.haste_identified`)."""
+
+
+@dataclass(frozen=True)
+class FleetBootstrap:
+    """The account log's observations for the fit: its fights as `Sample`s and
+    every entry's cooldown (the action-seconds bootstrap)."""
+
+    fights: tuple[Sample, ...]
+    cooldowns: tuple[int, ...]
+
+    def to_json(self) -> str:
+        return json.dumps({"fights": [list(f) for f in self.fights],
+                           "cooldowns": list(self.cooldowns)})
+
+    @classmethod
+    def from_json(cls, text: str) -> "FleetBootstrap":
+        data = json.loads(text)
+        return cls(tuple((int(t), int(a), float(c)) for t, a, c in data["fights"]),
+                   tuple(int(c) for c in data["cooldowns"]))
+
+
+def fetch_fleet_bootstrap(api: APIWrapper, hastes: Mapping[str, int],
+                          acquire: Callable[[], None]) -> FleetBootstrap:
+    """The account's `/my/logs`, newest first, paged until its fights with a
+    positive cooldown number `BOOTSTRAP_FIGHTS` and span `_HASTE_SPREAD`
+    hastes (or every haste in `hastes`, when the fleet has fewer), or until
+    the log runs out. Each fight is at its character's sheet haste in
+    `hastes`: the log does not carry the haste a fight was fought at.
+    `acquire` charges each request to the account bucket."""
+    spread = min(_HASTE_SPREAD, len(set(hastes.values())))
+    fights: list[Sample] = []
+    cooldowns: list[int] = []
+    page = 1
+    while True:
+        acquire()
+        result = api.get_all_characters_logs(page=page, size=BOOTSTRAP_PAGE)
+        for entry in result.data:
+            cooldowns.append(entry.cooldown)
+            if entry.type_ == LogType.FIGHT and entry.cooldown > 0:
+                fights.append((entry.content["fight"]["turns"], hastes[entry.character],
+                               float(entry.cooldown)))
+        enough = (len(fights) >= BOOTSTRAP_FIGHTS
+                  and len({haste for _, haste, _ in fights}) >= spread)
+        if enough or page >= result.pages:
+            return FleetBootstrap(tuple(fights), tuple(cooldowns))
+        page += 1
 
 
 _LEARNED: list[tuple[LearningStore, int, tuple[Sample, ...], FightSecondsModel]] = []
@@ -104,17 +161,16 @@ def learned_action_seconds(store: LearningStore, bootstrap: Iterable[int]) -> Fr
     return _mean_cooldown(bootstrap, "no executed action is recorded and the bootstrap has")
 
 
-def timing_of(store: LearningStore | None, haste: int,
-              entries: Sequence[LogEntry]) -> tuple[FightSecondsModel, Fraction]:
-    """The fight-seconds model and the seconds of one action for a character at
-    `haste` whose `/my/logs` page is `entries`: fitted with the store's fleet
-    record when there is a store, on the page alone when there is none."""
-    fights = log_fights(haste, entries)
-    cooldowns = [cooldown for _, cooldown, _ in entries]
+def timing_of(store: LearningStore | None,
+              bootstrap: FleetBootstrap) -> tuple[FightSecondsModel, Fraction]:
+    """The fight-seconds model and the seconds of one action: fitted with the
+    store's fleet record when there is a store, on the account-log
+    `bootstrap` alone when there is none."""
     if store is None:
-        seconds = _mean_cooldown(cooldowns, "the /my/logs bootstrap")
-        return fit_model(fights), seconds
-    return learned_model(store, fights), learned_action_seconds(store, cooldowns)
+        seconds = _mean_cooldown(bootstrap.cooldowns, "the /my/logs bootstrap")
+        return fit_model(bootstrap.fights), seconds
+    return learned_model(store, bootstrap.fights), learned_action_seconds(store,
+                                                                        bootstrap.cooldowns)
 
 
 def offline_timing(path: Path = FIGHT_LOGS) -> tuple[FightSecondsModel, Fraction]:

@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
-from tests.test_ai.fixtures import LOG_PAGE, make_state, one_equippable_item_page
+from tests.test_ai.fixtures import BOOTSTRAP, make_state, one_equippable_item_page
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
@@ -221,7 +221,7 @@ class TestGameDataPaginationContinues:
 
 
 class TestPlayerRunVerboseAndExecute:
-    @patch("artifactsmmo_cli.ai.player.fetch_log_entries", new=lambda *_args: LOG_PAGE)
+    @patch("artifactsmmo_cli.ai.player.GamePlayer._fetch_bootstrap", new=lambda *_args: BOOTSTRAP)
     def test_run_finds_plan_and_executes(self):
         """Test run() when a plan is found and executed (non-dry-run)."""
         player = GamePlayer(character="hero", verbose=True)
@@ -278,7 +278,7 @@ class TestPlayerRunVerboseAndExecute:
         assert player.state is not None
         assert player.state.hp == 150  # Rest was executed
 
-    @patch("artifactsmmo_cli.ai.player.fetch_log_entries", new=lambda *_args: LOG_PAGE)
+    @patch("artifactsmmo_cli.ai.player.GamePlayer._fetch_bootstrap", new=lambda *_args: BOOTSTRAP)
     def test_run_dry_run_finds_plan_and_applies(self):
         """Test run() dry_run path when a plan is found."""
         player = GamePlayer(character="hero", dry_run=True)

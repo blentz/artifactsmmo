@@ -1214,8 +1214,12 @@ TIMED_PRICE_MUTATIONS = [
 # tests/test_ai/test_player_timing.py.
 PLAYER_TIMING_MUTATIONS = [
     ("player timing: the fleet store is ignored",
-     "        return timing_of(self.history, self.state.haste, self._log_entries)",
-     "        return timing_of(None, self.state.haste, self._log_entries)"),
+     "        return timing_of(self.history, self._bootstrap)",
+     "        return timing_of(None, self._bootstrap)"),
+    # Ruling ZD: the account log is an account-bucket read.
+    ("player timing: the bootstrap's roster read is charged to the data bucket",
+     "        self._acquire_account()\n        roster = api.get_my_characters()",
+     "        self._acquire_data()\n        roster = api.get_my_characters()"),
     ("player timing: offline seeding leaves the cycle's context untimed",
      "        self._offline_timing = committed_timing()\n        self._last_ctx = self._timed(self._last_ctx)\n",
      "        self._offline_timing = committed_timing()\n"),
@@ -1243,8 +1247,24 @@ FIGHT_SECONDS_MODEL_MUTATIONS = [
      "    positive = [cooldown for cooldown in cooldowns if cooldown > 0]",
      "    positive = [cooldown for cooldown in cooldowns if cooldown >= 0]"),
     ("fight seconds model: a store-less timing reads no page",
-     "        return fit_model(fights), seconds",
+     "        return fit_model(bootstrap.fights), seconds",
      "        return fit_model([]), seconds"),
+    # Ruling ZD (live 2026-10-20: R2D2's and C3P0's own logs held no fight).
+    ("fight seconds model: the bootstrap reads one character's log, not the account's",
+     "        result = api.get_all_characters_logs(page=page, size=BOOTSTRAP_PAGE)",
+     "        result = api.get_character_logs(next(iter(hastes)), page=page, size=BOOTSTRAP_PAGE)"),
+    ("fight seconds model: paging ignores the haste spread",
+     "                  and len({haste for _, haste, _ in fights}) >= spread)",
+     "                  and True)"),
+    ("fight seconds model: paging stops after the first page",
+     "        if enough or page >= result.pages:",
+     "        if True:"),
+    ("fight seconds model: paging never stops once there are enough fights",
+     "        if enough or page >= result.pages:",
+     "        if page >= result.pages:"),
+    ("fight seconds model: a zero-cooldown fight joins the bootstrap",
+     "            if entry.type_ == LogType.FIGHT and entry.cooldown > 0:",
+     "            if entry.type_ == LogType.FIGHT and entry.cooldown >= 0:"),
 ]
 
 # Killed by formal/diff/test_consumable_price_diff.py (exact agreement with the
@@ -6497,6 +6517,13 @@ CONSUMABLE_NEED_LEDGER_MUTATIONS = [
 # The account order reaches every child. Killed by tests/test_multi/test_multi_run.py
 # and tests/test_commands/test_play_rate_budget.py.
 FLEET_ORDER_MULTI_MUTATIONS = [
+    # Ruling ZD: one account-log bootstrap for the fleet, handed to every child.
+    ("multi run: a child is not handed the fleet's fight bootstrap",
+     "            argv += [\"--fight-bootstrap\", str(self._fight_bootstrap)]\n",
+     "            pass\n"),
+    ("multi run: the fight bootstrap file outlives the run",
+     "            self._fight_bootstrap.unlink(missing_ok=True)\n",
+     "            pass\n"),
     ("fleet order: a child is told only its own name",
      "                    argv=self.child_argv(name, limits, characters),\n",
      "                    argv=self.child_argv(name, limits, [name]),\n"),
