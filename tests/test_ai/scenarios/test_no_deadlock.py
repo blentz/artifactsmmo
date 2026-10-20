@@ -135,10 +135,15 @@ def test_l10_gearcrafting_gap_chosen_root_is_gear_never_the_trunk() -> None:
     first of its pieces in the walk's order that is blocked is the
     `leather_legs_armor`, gated at gearcrafting 10 against 5 — so the root is
     the gearcrafting climb this test's name has always meant, and the two
-    rings follow."""
+    rings follow.
+
+    RE-DERIVED spec 2026-10-18 §2.8 (a piece that adds no XP is not missing):
+    the `leather_legs_armor` adds nothing to `R` on `red_slime` over the
+    character's own legs, so the first blocked piece is the `leather_boots`,
+    gated at the same gearcrafting 10: the same climb."""
     d, _state = _decide(CRITERION_1_MAIN)
     assert d.chosen_root == ReachSkillLevel(skill="gearcrafting", level=6)
-    assert d.blocked_target == "leather_legs_armor"
+    assert d.blocked_target == "leather_boots"
     assert d.fallback_roots == [
         ObtainItem(code="forest_ring", quantity=1, slot="ring1_slot"),
         ObtainItem(code="forest_ring", quantity=1, slot="ring2_slot")]
@@ -179,7 +184,9 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     RE-DERIVED spec 2026-10-18 §2.9: the root is the gearcrafting climb in
     front of `L*`'s `leather_legs_armor`, so the committed grind cycle is
     gearcrafting's: the copper, a chicken's feather, then the
-    copper_legs_armor that earns."""
+    copper_legs_armor that earns. Since spec §2.8 the piece the climb is in
+    front of is the `leather_boots` (the legs add no XP): the same climb and
+    the same grind."""
     report = _run(CRITERION_1_MAIN)
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
@@ -188,7 +195,7 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
         "Gather(copper_rocks×50)", "Craft(copper_bar×5)", "Fight(chicken)",
         "Craft(copper_legs_armor×1)"]
     assert report.decision.chosen_root == ReachSkillLevel(skill="gearcrafting", level=6)
-    assert report.decision.blocked_target == "leather_legs_armor"
+    assert report.decision.blocked_target == "leather_boots"
     assert report.decision.declined == ()
 
 
@@ -421,7 +428,10 @@ def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:
     is `forest_ring`, a mushmush drop, so the root is that ring and the plan
     is its acquisition: fight the mushmush, equip the ring — an acquisition
     fight, never GrindCharacterXP. The weaponcrafting and gearcrafting climbs
-    the iron pieces need are behind it, in the objective's order."""
+    the iron pieces need are behind it, in the objective's order. Since spec
+    §2.8 every gain is `R` over the owned item for the slot, and the amulet's
+    (jewelrycrafting) out-gains the iron boots and armour (gearcrafting) at the
+    same price, so that climb comes first."""
     report = _run("l12_gearcrafting_gap")
     # An EQUALITY on chosen_root, as before — only the value moved.
     assert report.decision.chosen_root == ObtainItem(
@@ -434,6 +444,6 @@ def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:
         "Fight(mushmush)", "Equip(forest_ring->ring1_slot)"]
     assert report.decision.fallback_roots[1:4] == [
         ReachSkillLevel(skill="weaponcrafting", level=6),
-        ReachSkillLevel(skill="gearcrafting", level=6),
-        ReachSkillLevel(skill="jewelrycrafting", level=6)]
+        ReachSkillLevel(skill="jewelrycrafting", level=6),
+        ReachSkillLevel(skill="gearcrafting", level=6)]
     assert_search_bounded(report, "l12_gearcrafting_gap")

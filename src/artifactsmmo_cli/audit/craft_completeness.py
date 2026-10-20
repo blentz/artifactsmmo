@@ -410,7 +410,7 @@ def _advances_grind_of(item: str, first: Action, state: WorldState, game_data: G
         if gate is not None and gate[1] > state.skills.get(gate[0], 1):
             gated.add(gate[0])
     for skill in sorted(gated - grinding):
-        rung = grind_rung_goal(skill, state, game_data)
+        rung = grind_rung_goal(skill, state, game_data, _OFFLINE_CONTEXT)
         if rung is None:
             continue
         for rung_item in rung.needed:

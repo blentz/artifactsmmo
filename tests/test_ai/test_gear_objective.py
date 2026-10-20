@@ -16,11 +16,13 @@ import pytest
 
 import artifactsmmo_cli.ai.gear_objective as mod
 from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.combat import fight_loadout, win_probability
 from artifactsmmo_cli.ai.equipment.loadout_picker import _ordered_slots
+from artifactsmmo_cli.ai.equipment.realizable_loadout import ownership
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import achievable, fighter_owning, gear_objective
-from artifactsmmo_cli.ai.gear_objective_core import piece_order_key
+from artifactsmmo_cli.ai.gear_objective_core import objective_held, piece_order_key
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -115,9 +117,15 @@ def test_robbys_shape_names_level_40_gear_not_level_20(gd: GameData, robby: Gear
     gear above level 20, and some piece needs a crafting skill above Robby's own
     (the climb is a cost, never a veto). In the committed bundle the achievable
     set tops out at level 30: the level-40 recipes need drops of monsters no
-    achievable loadout beats, or of event monsters that are not up."""
+    achievable loadout beats, or of event monsters that are not up. Against
+    `cultist_acolyte` the pants, both rings, the helmet and the amulet each add
+    to `R` over Robby's own item for the slot (§2.8); the `perfect_pearl` adds
+    nothing and is not missing."""
     state = _robby()
-    assert robby.missing
+    assert [(piece.slot, piece.code) for piece in robby.missing] == [
+        ("leg_armor_slot", "royal_skeleton_pants"), ("ring1_slot", "royal_skeleton_ring"),
+        ("ring2_slot", "royal_skeleton_ring"), ("helmet_slot", "royal_skeleton_helmet"),
+        ("amulet_slot", "lost_amulet")]
     for piece in robby.missing:
         stats = gd.item_stats(piece.code)
         assert stats is not None and stats.level <= state.level
@@ -125,10 +133,108 @@ def test_robbys_shape_names_level_40_gear_not_level_20(gd: GameData, robby: Gear
         worn_stats = gd.item_stats(worn) if worn else None
         if worn_stats is not None and worn_stats.level <= 20:
             assert stats.level > 20, piece
-    assert {"helmet_slot", "leg_armor_slot"} <= {piece.slot for piece in robby.missing}
     assert any((stats := gd.item_stats(piece.code)) is not None and stats.crafting_skill
                and stats.crafting_level > state.skills.get(stats.crafting_skill, 1)
                for piece in robby.missing)
+
+
+def test_a_zero_gain_piece_is_not_missing(gd: GameData, robby: GearObjective) -> None:
+    """Spec §2.8 (live 2026-10-19: the fleet fished `trout_spot` 383 times for 2
+    `small_pearls` toward one). `perfect_pearl` adds only prospecting; `L*`
+    names it in an artifact slot Robby leaves empty. Emptying that slot of `L*`
+    leaves `R` where it is: its gain is 0, so it is held-equivalent, not
+    missing, and `held` reads the missing slots without it."""
+    stats = gd.item_stats("perfect_pearl")
+    assert stats is not None and stats.type_ == "artifact" and stats.prospecting == 100
+    assert (stats.attack, stats.dmg, stats.dmg_elements, stats.resistance) == ({}, 0, {}, {})
+    state = _robby()
+    at = [slot for slot, code in robby.loadout.items() if code == "perfect_pearl"]
+    assert at == ["artifact1_slot"]
+    fighter, loadout = mod._targets(state, gd, frozenset().union(*achievable(state, gd, CTX)))[
+        robby.monster]
+    assert loadout == robby.loadout
+    emptied = _without(state, fighter, "artifact1_slot", gd)
+    assert mod._rate(emptied, gd, robby.monster, food_menu(state, gd, CTX),
+                     CTX.timing()) == robby.rate
+    assert all(piece.code != "perfect_pearl" for piece in robby.missing)
+    assert {piece.slot for piece in robby.missing}.isdisjoint(
+        {"artifact1_slot", "artifact2_slot", "artifact3_slot"})
+    assert robby.held is objective_held(frozenset(piece.slot for piece in robby.missing))
+
+
+def _without(state: WorldState, fighter: WorldState, slot: str, gd: GameData) -> WorldState:
+    """`fighter` (wearing `L*`) with `slot` taken off and, of the items that fit
+    it, carrying only the copies the real character `state` holds (bag or
+    worn) and `fighter` does not wear in another slot."""
+    emptied = mod._wearing(fighter, {slot: None}, gd)
+    bag = Counter(emptied.inventory)
+    for item in list(bag):
+        stats = gd.item_stats(item)
+        assert stats is not None
+        if slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
+            worn = list(emptied.equipment.values()).count(item)
+            bag[item] = min(bag[item], max(ownership(item, state.inventory, state.equipment)
+                                           - worn, 0))
+    return replace(emptied, inventory={item: n for item, n in bag.items() if n > 0})
+
+
+@pytest.mark.parametrize("name", ["robby", "novice"])
+def test_gain_is_measured_against_the_target_not_a_bare_fighter(
+        request: pytest.FixtureRequest, gd: GameData, name: str) -> None:
+    """Spec §2.8: a piece's gain is `R(L*)` less `R` of `L*` with its slot
+    holding the best item the character owns for it, or nothing. Every fight
+    re-picks its loadout from what the fighter holds, and the fighter wearing
+    `L*` carries the whole achievable set, so the fighter it is measured
+    against holds, for that slot, only what the character owns. Adding one
+    piece to a bare fighter that wins nothing gave 0 for every piece."""
+    objective: GearObjective = request.getfixturevalue(name)
+    state = _robby() if name == "robby" else _novice(gd)
+    fighter, _ = mod._targets(state, gd, frozenset().union(*achievable(state, gd, CTX)))[
+        objective.monster]
+    food = food_menu(state, gd, CTX)
+    assert objective.missing
+    for piece in objective.missing:
+        assert objective.loadout[piece.slot] == piece.code
+        without = _without(state, fighter, piece.slot, gd)
+        assert piece.gain == objective.rate - mod._rate(without, gd, objective.monster,
+                                                        food, CTX.timing()), piece
+    assert any(piece.gain > 0 for piece in objective.missing)
+
+
+def test_a_fresh_character_wants_its_first_weapon(gd: GameData) -> None:
+    """Ruling ZA (2026-10-20): a level-1 character owning nothing wants the
+    `copper_dagger` of its `L*`. Measured with the dagger taken off into the
+    bag, every fight re-picks it from there and the gain read 0, so a fresh
+    character armed nothing. It owns no weapon, so without the dagger it
+    holds none: it kills nothing, and the gain is all of `R`."""
+    state = scenario_state(SCENARIOS["l1_fresh"], gd)
+    objective = _objective(state, gd)
+    fighter, _ = mod._targets(state, gd, frozenset().union(*achievable(state, gd, CTX)))[
+        objective.monster]
+    food = food_menu(state, gd, CTX)
+    dagger = [piece for piece in objective.missing if piece.code == "copper_dagger"]
+    assert [piece.slot for piece in dagger] == ["weapon_slot"]
+    unarmed = mod._wearing(fighter, {"weapon_slot": None}, gd)
+    unarmed = replace(unarmed, inventory={
+        item: n for item, n in unarmed.inventory.items()
+        if (stats := gd.item_stats(item)) is not None and stats.type_ != "weapon"})
+    assert mod._rate(unarmed, gd, objective.monster, food, CTX.timing()) == 0
+    assert dagger[0].gain == objective.rate > 0
+    carried = mod._wearing(fighter, {"weapon_slot": None}, gd)
+    assert mod._rate(carried, gd, objective.monster, food, CTX.timing()) == objective.rate
+    assert not objective.held
+
+
+def test_a_ring_pair_keeps_both_rings(gd: GameData, novice: GearObjective) -> None:
+    """`L*` names one ring for both ring slots and the character owns neither
+    copy: each copy is a missing piece with a gain of its own (one slot
+    emptied, the other still wearing its copy)."""
+    ring = novice.loadout["ring1_slot"]
+    assert novice.loadout["ring2_slot"] == ring
+    assert ownership(ring, _novice(gd).inventory, _novice(gd).equipment) == 0
+    rings = [piece for piece in novice.missing if piece.code == ring]
+    assert sorted(piece.slot for piece in rings) == ["ring1_slot", "ring2_slot"]
+    assert all(piece.gain > 0 for piece in rings)
 
 
 def test_an_item_worn_one_slot_over_is_held(gd: GameData, robby: GearObjective,
@@ -335,12 +441,15 @@ def test_an_equal_rate_and_level_goes_to_the_cheaper_pieces(monkeypatch: pytest.
     """Two level-15 monsters at one rate: `m*` is the one whose missing pieces
     cost less in all, whichever the catalogue lists first. Every piece is
     priced 1 but one that only one monster's `L*` names, priced 2. Every
-    fight is a second long, so the walk's bound prunes neither."""
+    priced 1 but one that only one monster's `L*` names, priced 2. Every
+    piece gains 1, so none is held-equivalent (§2.8). Every fight is a second
+    long, so the walk's bound prunes neither."""
     state = _novice(gd, level=15)
     tied = [code for code in mod._candidates(state, gd) if gd.monster_levels[code] == 15]
     assert len(tied) == 2
     monkeypatch.setattr(mod, "_rate", lambda *_args: Fraction(1))
     monkeypatch.setattr(mod, "walk_seconds", lambda *_args: Fraction(1))
+    monkeypatch.setattr(mod, "_gain", lambda *_args: Fraction(1))
     for dear, cheap in (tied, tied[::-1]):
         dear_only = set(_objective_for(monkeypatch, state, gd, [dear]).loadout.values())
         dear_only -= set(_objective_for(monkeypatch, state, gd, [cheap]).loadout.values())
@@ -355,6 +464,7 @@ def test_an_equal_rate_and_level_goes_to_the_cheaper_pieces(monkeypatch: pytest.
         monkeypatch.undo()
         monkeypatch.setattr(mod, "_rate", lambda *_args: Fraction(1))
         monkeypatch.setattr(mod, "walk_seconds", lambda *_args: Fraction(1))
+        monkeypatch.setattr(mod, "_gain", lambda *_args: Fraction(1))
 
 
 def _objective_for(monkeypatch: pytest.MonkeyPatch, state: WorldState, gd: GameData,
@@ -552,19 +662,51 @@ def test_a_bare_element_below_zero_raises(gd: GameData) -> None:
         gear_objective(state, gd, CTX, None)
 
 
-@pytest.mark.parametrize(("name", "monster"), [
-    ("l8_overstocked", "green_slime"), ("l20_band_entry", "pig"), ("l30_band_entry", "ogre"),
-    ("l40_band_entry", "cultist_acolyte"), ("l48_capstone_approach", "hellhound"),
-    ("l48_band_adequate", "hellhound"), ("l48_raid_active", "hellhound"),
-    ("l10_gearcrafting_gap_combat_blocked", "red_slime")])
-def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str,
-                                                        monster: str) -> None:
+_L48_MISSING = [("shield_slot", "goblin_guard_shield"), ("ring2_slot", "mithril_ring"),
+                ("rune_slot", "lifesteal_rune")]
+
+
+@pytest.mark.parametrize(("name", "monster", "missing"), [
+    ("l8_overstocked", "green_slime", [("weapon_slot", "water_bow"),
+                                       ("body_armor_slot", "feather_coat"),
+                                       ("amulet_slot", "life_amulet")]),
+    ("l20_band_entry", "pig", [
+        ("amulet_slot", "fire_and_earth_amulet"), ("shield_slot", "iron_shield"),
+        ("weapon_slot", "steel_battleaxe"), ("leg_armor_slot", "hard_leather_pants"),
+        ("ring1_slot", "earth_ring"), ("ring2_slot", "earth_ring"),
+        ("rune_slot", "lifesteal_rune"), ("helmet_slot", "steel_helm")]),
+    ("l30_band_entry", "ogre", [
+        ("weapon_slot", "skull_staff"), ("shield_slot", "iron_shield"),
+        ("boots_slot", "steel_boots"), ("amulet_slot", "fire_and_earth_amulet"),
+        ("ring1_slot", "gold_ring"), ("ring2_slot", "gold_ring"),
+        ("rune_slot", "lifesteal_rune")]),
+    ("l40_band_entry", "cultist_acolyte", [
+        ("shield_slot", "slime_shield"), ("leg_armor_slot", "royal_skeleton_pants"),
+        ("helmet_slot", "royal_skeleton_helmet"), ("body_armor_slot", "royal_skeleton_armor"),
+        ("ring2_slot", "malefic_ring"), ("rune_slot", "lifesteal_rune")]),
+    ("l48_capstone_approach", "hellhound", _L48_MISSING),
+    ("l48_band_adequate", "hellhound", _L48_MISSING),
+    ("l48_raid_active", "hellhound", _L48_MISSING),
+    ("l10_gearcrafting_gap_combat_blocked", "red_slime", [
+        ("weapon_slot", "greater_wooden_staff"), ("amulet_slot", "air_and_water_amulet"),
+        ("body_armor_slot", "leather_armor"), ("boots_slot", "leather_boots"),
+        ("leg_armor_slot", "leather_legs_armor"), ("shield_slot", "iron_shield"),
+        ("helmet_slot", "adventurer_helmet"), ("ring1_slot", "forest_ring"),
+        ("ring2_slot", "forest_ring")])])
+def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str, monster: str,
+                                                        missing: list[tuple[str, str]]) -> None:
     """Ruling R: these scenarios' hand stats lacked their worn gear's, so the
     bare fighter won nothing and the objective read None. On the gear's own
-    totals (`derive_combat_stats`) each has an `m*` and pieces to acquire.
-    Since spec 2026-10-18 §2.9 (a fight's seconds are its learned length) the
-    level-8 sheet farms `green_slime` and the level-10 one `red_slime`, the
-    fights their `L*` kills fastest."""
+    totals (`derive_combat_stats`) each has an `m*`, and exactly the pieces
+    that add to `R` on it over the character's own item for the slot to
+    acquire (§2.8), in pursuit order. Since spec 2026-10-18 §2.9 (a fight's
+    seconds are its learned length) the level-8 sheet farms `green_slime` and
+    the level-10 one `red_slime`, the fights their `L*` kills fastest. Every
+    `L*` above level 20 names a `perfect_pearl`, and none is missing: it adds
+    only prospecting. The level-48 sheets own no shield, rune or second
+    `mithril_ring` that matches `L*`'s (a `wooden_shield` and a `copper_ring`
+    at most)."""
     objective = _objective(scenario_state(SCENARIOS[name], gd), gd)
     assert objective.monster == monster
-    assert objective.missing
+    assert [(piece.slot, piece.code) for piece in objective.missing] == missing
+    assert objective.held is (not missing)

@@ -5489,8 +5489,8 @@ GEAR_OBJECTIVE_CORE_MUTATIONS = [
 # dropping the filter is an equivalent mutant; the held arm beside it is.
 GEAR_OBJECTIVE_MUTATIONS = [
     ("gear objective: a carried piece is missing (one pick from the worn state)",
-     "    own = _target(state, game_data, monster)[1]\n",
-     "    own = fight_loadout(state, game_data, monster)\n"),
+     "        own = _target(state, game_data, code)[1]\n",
+     "        own = fight_loadout(state, game_data, code)\n"),
     # A worn boost is not in the sheet's totals; left on, the no-potion fight
     # took it off and subtracted it (the novice's earth boost on `cow`).
     ("gear objective: the bare fighter keeps its potions worn",
@@ -5502,6 +5502,33 @@ GEAR_OBJECTIVE_MUTATIONS = [
     ("gear objective: a potion taken off keeps its slot's quantity",
      "                   utility1_slot_quantity=0, utility2_slot_quantity=0)",
      "                   )"),
+    # Spec §2.8 (live 2026-10-19: the fleet fished 383 times toward a
+    # `perfect_pearl` that adds no XP): a piece is missing only if it adds to
+    # `R`, measured on `L*` with its slot holding the owned item.
+    ("gear objective: a piece that adds nothing to R is missing",
+     "        pieces_of[code] = [piece for piece in gained if piece[2] > 0]",
+     "        pieces_of[code] = [piece for piece in gained if True]"),
+    ("gear objective: a piece's gain is measured on a bare fighter",
+     "    return rate - _rate(_without(state, target, game_data, at), game_data, monster, food,\n",
+     "    return rate - _rate(_wearing(target, dict.fromkeys(_GEAR_SLOTS), game_data), game_data,"
+     " monster, food,\n"),
+    # Ruling ZA (2026-10-20): every fight re-picks from the bag, so the fighter
+    # a gain is measured against holds, for the slot, only what is owned.
+    ("gear objective: the vacated slot is re-picked from the achievable bag",
+     "            bag[item] = min(bag[item], max(owned, 0))\n",
+     "            bag[item] = bag[item]\n"),
+    ("gear objective: the vacated slot holds nothing, not the owned item",
+     "            bag[item] = min(bag[item], max(owned, 0))\n",
+     "            bag[item] = 0\n"),
+    ("gear objective: a copy worn in another slot is free for the vacated one",
+     "            owned = ownership(item, state.inventory, state.equipment) - elsewhere\n",
+     "            owned = ownership(item, state.inventory, state.equipment)\n"),
+    ("gear objective: every item is capped to what is owned, not only the slot's",
+     "        if at in ITEM_TYPE_TO_SLOTS.get(_stats(item, game_data).type_, []):\n",
+     "        if True:\n"),
+    ("gear objective: the gain vacates the placement slot, not the L* slot",
+     "                   _gain(state, target, game_data, code, food, timing, best[0], at))\n",
+     "                   _gain(state, target, game_data, code, food, timing, best[0], slot))\n"),
     ("gear objective: a bare total below zero is accepted",
      "        if value < 0:\n            raise ValueError(f\"{state.character}: bare {stat}",
      "        if False:\n            raise ValueError(f\"{state.character}: bare {stat}"),
@@ -6561,6 +6588,11 @@ CENSUS_CROSSING_MUTATIONS = [
 ]
 # Census fidelity (USER 2026-10-10: "fix both faults", "add event-active cells").
 CENSUS_FIDELITY_MUTATIONS = [
+    # Spec 2026-10-18 §2.9: a grind rung priced through a drop fight reads the
+    # census's learned seconds (forest_bank_potion at alchemy 15 raised).
+    ("census fidelity: the grind rung is picked on a context with no learned seconds",
+     "        rung = grind_rung_goal(skill, state, game_data, _OFFLINE_CONTEXT)\n",
+     "        rung = grind_rung_goal(skill, state, game_data)\n"),
     ("census: an underground rock is not a gather source",
      "                and game_data.resource_spawn_known(resource)):\n"
      "            return True\n"

@@ -195,7 +195,7 @@ and `NOT_DEMANDED` / `ROOT_UNRESOLVED` are not judgements at all.
 `REFERENCE_SET_EMPTY` is NOT here because it is not a property of any cell —
 see `reference_set_residual`."""
 
-MIN_CELLS = 1500
+MIN_CELLS = 1200
 """Blindness floor on the grid, enforced by `gen_currency_wall.py --check` and
 not only by the suite.
 
@@ -204,10 +204,12 @@ would print clean and exit 0. `scripts/*` is coverage-omitted and
 `census-gate.yml` runs the scripts without pytest, so the floor lives here where
 the script and `test_currency_wall_census` read the same number.
 
-1500 against a current 1799 (257 offered roots x 7 rows, over 45 scenarios;
-ruling AB raised it from 200 when the census began pricing the alternatives):
-headroom to retire a few scenarios without flapping, and far above the 315
-cells a sweep that collapsed back to the resolved roots would produce."""
+1200 against a current 1456 (208 offered roots x 7 rows, over 45 scenarios;
+ruling AB raised it from 200 when the census began pricing the alternatives,
+to 1500 against 1799; spec 2026-10-18 §2.8 dropped the pieces that add no XP
+from the offered roots): headroom to retire a few scenarios without flapping,
+and far above the 315 cells a sweep that collapsed back to the resolved roots
+would produce."""
 
 
 @dataclass(frozen=True)

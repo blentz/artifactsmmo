@@ -149,6 +149,14 @@ class TestGoldRate:
         with pytest.raises(ValueError, match="carries no fighter"):
             gold_per_second(state, game_data, ctx)
 
+    def test_an_unlearned_fight_has_no_seconds(self, game_data: GameData) -> None:
+        """Spec 2026-10-18 §2.9: a fight's seconds are learned; a context that
+        carries none prices no fight, rather than stand a constant in."""
+        state = scenario_state(SCENARIOS["l20_boost_stock"], game_data)
+        ctx = replace(NO_PROFILE_CONTEXT, combat_monster="wolf")
+        with pytest.raises(ValueError, match="no learned fight seconds"):
+            gold_per_second(state, game_data, ctx)
+
     def test_the_grind_target_outranks_the_objectives_monster(
             self, game_data: GameData) -> None:
         state = scenario_state(SCENARIOS["l20_boost_stock"], game_data)

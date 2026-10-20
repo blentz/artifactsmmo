@@ -352,14 +352,18 @@ def test_the_task_triple_moves_the_gear_review_target(gd: GameData) -> None:
     `deficit_upgrade_target`), offered in the alternatives, and it still splits
     the triple three ways: the closable cell's task asks for the priced
     `earth_boost_potion`, the workable cell's task is worked, the open cell's
-    task offers nothing (no gear closes it, no coin cancels it)."""
+    task offers nothing (no gear closes it, no coin cancels it).
+
+    Spec §2.8: `L*`'s `fire_and_earth_amulet` adds nothing to `R` on `rat`
+    over the `life_amulet` the triple owns (gain -0.0025), so it is not
+    missing, and the walk heads with the rune."""
     resolutions = {}
     for name in TRIPLE:
         state = _state(name, gd)
         resolutions[name] = resolve_root(
             state, gd, _obj(gd), attach_gear_objective(state, gd, TIMED_NO_PROFILE_CONTEXT, None),
             None)
-    first_piece = ObtainItem(code="fire_and_earth_amulet", quantity=1, slot="amulet_slot")
+    first_piece = ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")
     assert {r.root for r in resolutions.values()} == {first_piece}
     potion = ObtainItem(code="earth_boost_potion", quantity=1, slot="utility1_slot")
     task = ReachTaskOutcome(task_code="wolf")

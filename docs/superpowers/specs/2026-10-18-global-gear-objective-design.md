@@ -207,6 +207,74 @@ changes the inputs, not the design:
 - **Full reset**: everything here must hold from level 1. Nothing in 2.1–2.5
   depends on a level range, which is the point of deleting the ladder.
 
+### 2.8 Drops priced from observation; prospecting is a drop tool (USER 2026-10-19)
+
+> raising drop-chances should be considered an improvement to that skill's
+> recipes; this needs to be modeled correctly because it impacts things like how
+> quickly we can get a perfect_pearl. it's faster to get a second perfect_pearl
+> than it is to get the first one. second, because don't have the server-side
+> drop rate oracle, we must price drops based on observed drop-rates and improve
+> our pricing accuracy over time.
+
+Live trigger (2026-10-19 restart): all five characters fished `trout_spot` 383
+times for 2 `small_pearls` (the API `rate` is 300, about 1 in 300). They were
+working toward 20 pearls to buy `perfect_pearl`, a prospecting-only artifact
+with zero XP gain, priced at 24 actions.
+
+- **An `L*` piece is missing only if it adds to `R`.** The gain of the piece in
+  slot `s` is `R(L*) − R(L* with s holding the character's best owned item for
+  s, or empty)`. A piece with gain 0 is held-equivalent, the same as an item
+  the per-slot argmax ranks equal (§2.4.1). `L*` is chosen for fight XP. A slot
+  whose best item adds no XP is not a missing piece.
+- **Drop chance is an estimate that learns.** For each (source, item) — a
+  resource or monster and one of its drops — the chance per attempt is a
+  Beta posterior:
+  - Prior: the API `rate` (`1/rate`), with the weight of one observed hit.
+  - Update: every recorded attempt at that source, fleet-pooled. A hit is
+    the item appearing in that cycle's `drops_json`.
+
+  Each cycle records the character's prospecting, so prospecting's effect is
+  learned too. One fleet-wide multiplier `1 + k·P` is fitted on all
+  observed attempts. Its prior is `k = 0`: no prospecting bonus is assumed
+  until the data shows one.
+- **A drop route's price is `quantity ÷ chance(P)`** attempts, where `P` is the
+  prospecting of the loadout used for that gather or fight. This one price
+  feeds every consumer: `route_price`, `acquisition_cost`, the piece ordering
+  and the fleet climb.
+- **Prospecting gear is a tool for drop routes** (§2.2 `T*`, on the drop axis).
+  Acquire a prospecting item `t` before remaining drop work `W` only if
+  `price(t) + price(W | P + P(t)) < price(W | P)`. Then a second pearl is
+  cheaper than the first, because the first, once worn, raises `P` for the
+  rest. Nothing about "second" is computed; it falls out of the price.
+
+### 2.9 A fight's seconds come from its length, learned (USER 2026-10-19: "do the complete fix")
+
+`R` charged every fight a flat 30 s (`FIGHT_SECONDS` /
+`TYPICAL_FIGHT_COOLDOWN_SECONDS`). So gear moved `R` only through win odds and
+recovery, never through kill speed. Once P(win) = 1, nearly every piece read
+gain 0. On `l1_fresh`, a weaponless fighter scored the same `R` as one with a
+`copper_dagger`, and the §2.8 zero-gain rule then dropped real upgrades (56
+test outcomes moved).
+
+- **Fight seconds = `turns × s_turn × (1 − h·haste)`**, floored at the
+  server's minimum observed cooldown:
+  - `turns` is the expected length from the existing combat model (`combat_terms`
+    rounds, capped at `MAX_TURNS`).
+  - `s_turn` (seconds per turn) and `h` (haste effect) are fitted fleet-wide
+    from observed fights.
+- **Observations.** Each fight cycle records `fight_turns`, the server's
+  `fight.turns`, beside the `actual_cooldown_seconds` it already records. The
+  historical fight logs (`/my/logs/{name}`, which carry `turns` and the
+  cooldown) bootstrap the fit, so it starts from data. Fit by least squares on
+  `cooldown ~ turns × (1 − h·haste)`. The prior is the fit on the bootstrap.
+  With no observation at all, the fit raises; no constant stands in for it.
+- **Every consumer of the flat constant moves to this one function**:
+  `loop_rate`, `gear_objective._rate`, `rest_first`, `fight_loop_cost`,
+  `equip_actions_core`, `strategic_weights`, `projections` and `bid_vs_craft`.
+  There is one fight-seconds function, as there is one pricer.
+- What emerges: a faster-killing piece raises `R`, so it is a real gain. A
+  prospecting-only piece still reads 0 and is not missing (§2.8).
+
 ### 2.7 What emerges (and must NOT be computed)
 
 - "Grinding a band": `m*` moves up as `L*` improves and the level rises.

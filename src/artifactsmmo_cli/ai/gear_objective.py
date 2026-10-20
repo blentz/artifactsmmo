@@ -23,6 +23,10 @@ in the order they are pursued. Three questions, each answered from game data:
 * In what order (§2.4)? Dependency (the layer) first, then gain in `R` per unit
   of acquisition price (`gear_objective_core.piece_order_key`). The price only
   orders the pieces; it never changes `L*`.
+* Which pieces (§2.8)? A piece's gain is `R(L*)` less `R` of `L*` with its slot
+  holding the best item the character owns for it, or nothing (`_gain`). A
+  piece that adds nothing to `R` is held-equivalent, never missing: `L*` is
+  chosen for fight XP, and a prospecting-only artifact adds none.
 
 WHY EVERY FIGHTER WEARS NOTHING TO START. The picker's purpose reads the
 wearer's attack (`fight_loadout`'s `Combat(..., state.attack)`) and keeps a worn
@@ -363,12 +367,13 @@ def _candidates(state: WorldState, game_data: GameData) -> list[str]:
             and game_data.monster_spawn_known(code)]
 
 
-def _missing(state: WorldState, game_data: GameData, monster: str,
-             target: WorldState, loadout: dict[str, str]) -> list[tuple[str, str]]:
-    """The `(slot, code)` pieces of `loadout` the character does not hold
-    (§2.4.1), compared against the loadout it would wear for `monster` from
-    what it owns (ruling Q): from the real state, wear the fight loadout and
-    pick again until the pick is worn (`_target`), as the fight-loadout gate
+def _missing(game_data: GameData, monster: str, target: WorldState, loadout: dict[str, str],
+             own: dict[str, str]) -> list[tuple[str, str, str]]:
+    """The `(slot, code, at)` pieces of `loadout` the character does not hold
+    (§2.4.1), `at` being the `L*` slot that names `code`. They are compared
+    against `own`, the loadout it would wear for `monster` from what it owns
+    (ruling Q): from the real state, wear the fight loadout and pick again
+    until the pick is worn (`_target`), as the fight-loadout gate
     re-arms before every fight (`FightAction`'s optimal-loadout precondition,
     sequenced by `OptimizeLoadout`). A piece in the bag is therefore held, an
     equip and not an acquisition. The bank is not owned here: the picker and
@@ -386,29 +391,64 @@ def _missing(state: WorldState, game_data: GameData, monster: str,
     placed in a group slot the owned loadout leaves unmatched, so its equip
     displaces nothing that is held."""
     purpose = _combat(game_data, monster, target)
-    own = _target(state, game_data, monster)[1]
 
     def benefit(code: str) -> int:
         return _benefit(_stats(code, game_data), purpose)
 
-    missing: list[tuple[str, str]] = []
+    missing: list[tuple[str, str, str]] = []
     for slots in _SLOT_GROUPS:
         free = list(slots)
-        unplaced: list[str] = []
+        unplaced: list[tuple[str, str]] = []
         # Strongest target first against the strongest unmatched owned item: the
         # greedy pairing that holds the most targets.
-        wanted = [loadout[slot] for slot in slots if slot in loadout]
-        for code in sorted(wanted, key=benefit, reverse=True):
+        wanted = [(slot, loadout[slot]) for slot in slots if slot in loadout]
+        for at, code in sorted(wanted, key=lambda pair: benefit(pair[1]), reverse=True):
             strongest = max((slot for slot in free if slot in own),
                             key=lambda slot: benefit(own[slot]), default=None)
             if strongest is not None and benefit(own[strongest]) >= benefit(code):
                 free.remove(strongest)
             else:
-                unplaced.append(code)
+                unplaced.append((at, code))
         # Every pairing removed one free slot and settled one target, so the
         # free slots outnumber the unplaced targets or match them.
-        missing.extend(zip(free, unplaced, strict=False))
+        missing.extend((slot, code, at)
+                       for slot, (at, code) in zip(free, unplaced, strict=False))
     return missing
+
+
+def _without(state: WorldState, target: WorldState, game_data: GameData,
+             at: str) -> WorldState:
+    """`target` (the fighter wearing `L*`) with `L*`'s slot `at` taken off and
+    holding only what `state`, the real character, owns for that slot: of every
+    item that fits `at`, the bag keeps no more copies than the character holds
+    (bag or worn, never the bank, as `_missing` reads it) beyond those `target`
+    still wears in another slot.
+
+    Every fight re-picks its loadout from what the fighter holds
+    (`combat._fight_projection`), and `target` carries the whole achievable set.
+    Taken off into its bag, the piece went straight back into the slot and read
+    every combat gain as 0; dropped alone, the slot was filled from the next
+    achievable item, which is not owned either (ruling ZA). The re-pick may
+    still move another slot among what the fighter holds."""
+    fighter = _wearing(target, {at: None}, game_data)
+    bag = Counter(fighter.inventory)
+    for item in list(bag):
+        if at in ITEM_TYPE_TO_SLOTS.get(_stats(item, game_data).type_, []):
+            elsewhere = sum(1 for code in fighter.equipment.values() if code == item)
+            owned = ownership(item, state.inventory, state.equipment) - elsewhere
+            bag[item] = min(bag[item], max(owned, 0))
+    return replace(fighter, inventory={item: n for item, n in bag.items() if n > 0})
+
+
+def _gain(state: WorldState, target: WorldState, game_data: GameData, monster: str,
+          food: tuple[FoodOffer, ...], timing: FightSecondsModel, rate: Fraction,
+          at: str) -> Fraction:
+    """A piece's gain (§2.8): `rate`, `R(L*)` on `target` (the fighter wearing
+    `L*`), less `R` of `target` with `L*`'s slot `at` holding the best item the
+    character owns for it, or nothing (`_without`), each fight lasting its
+    learned seconds (`timing`, §2.9: a faster kill is a gain)."""
+    return rate - _rate(_without(state, target, game_data, at), game_data, monster, food,
+                        timing)
 
 
 def _price(state: WorldState, game_data: GameData, ctx: SelectionContext,
@@ -426,8 +466,8 @@ def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext
 
     `m*` is the max-`R` monster; a tie goes to the higher monster level, then to
     the lower total acquisition price of its missing pieces, then to catalogue
-    order — never to a code. A piece's gain is `R` on `m*` of the character
-    owning it against owning only what it holds, each on its own `L*(m*)`."""
+    order — never to a code. A piece's gain is `_gain`; a piece whose gain is
+    not above 0 is held-equivalent (§2.8), so it is neither missing nor priced."""
     layers = achievable(state, game_data, ctx)
     depth = layer_of(layers)
     food = food_menu(state, game_data, ctx, history)
@@ -439,25 +479,23 @@ def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext
     best = max((rate, game_data.monster_levels[code]) for code, rate in rated)
     tied = [code for code, rate in rated if (rate, game_data.monster_levels[code]) == best]
     loadouts = {code: targets[code][1] for code in tied}
-    pieces_of = {code: _missing(state, game_data, code, targets[code][0], loadouts[code])
-                 for code in tied}
+    pieces_of: dict[str, list[tuple[str, str, Fraction]]] = {}
+    for code in tied:
+        target = targets[code][0]
+        own = _target(state, game_data, code)[1]
+        gained = [(slot, item,
+                   _gain(state, target, game_data, code, food, timing, best[0], at))
+                  for slot, item, at in _missing(game_data, code, target, loadouts[code], own)]
+        pieces_of[code] = [piece for piece in gained if piece[2] > 0]
     prices = {code: [_price(state, game_data, ctx, history, slot, item)
-                     for slot, item in pieces_of[code]] for code in tied}
+                     for slot, item, _ in pieces_of[code]] for code in tied}
     # `min` keeps the first of equal totals: catalogue order, as `_candidates` lists.
     monster = min(tied, key=lambda code: sum(prices[code], Fraction(0)))
-
-    def rate_owning(items: frozenset[str]) -> Fraction:
-        fighter, _ = _target(_bare(state, items, game_data), game_data, monster)
-        return _rate(fighter, game_data, monster, food, timing)
-
-    owned = rate_owning(frozenset())
-    gains = {code: rate_owning(frozenset({code})) - owned for _, code in pieces_of[monster]}
     rank = _ordered_slots()
-    pieces = [GearPiece(slot, code, depth[code], gains[code], price)
-              for (slot, code), price in zip(pieces_of[monster], prices[monster], strict=True)]
-    # A piece whose modelled gain is negative is still an `L*` piece; it orders
-    # as zero gain, last within its layer (ruling E: no floor above zero).
-    pieces.sort(key=lambda piece: piece_order_key(piece.layer, max(piece.gain, Fraction(0)),
-                                                  piece.price, rank.index(piece.slot)))
+    pieces = [GearPiece(slot, code, depth[code], gain, price)
+              for (slot, code, gain), price in zip(pieces_of[monster], prices[monster],
+                                                   strict=True)]
+    pieces.sort(key=lambda piece: piece_order_key(piece.layer, piece.gain, piece.price,
+                                                  rank.index(piece.slot)))
     return GearObjective(monster, loadouts[monster], best[0], tuple(pieces),
                          fighter=targets[monster][0])

@@ -703,7 +703,7 @@ def test_l12_bag_pursuit_satchel_chain_gated() -> None:
     assert gd.npc_location("tasks_trader") is None
 
 
-def test_l12_bag_pursuit_satchel_becomes_attainable_and_is_offered_as_a_piece() -> None:
+def test_l12_bag_pursuit_satchel_becomes_attainable_but_adds_no_xp() -> None:
     """RENAMED Task 5 fix round 1 (was `..._but_is_no_longer_pursued`): with the
     gear objective the satchel is an `L*` piece again, offered in the
     alternatives.
@@ -758,10 +758,18 @@ def test_l12_bag_pursuit_satchel_becomes_attainable_and_is_offered_as_a_piece() 
     # satchel is an achievable `L*` piece and is offered, queued in the
     # objective's order behind the iron sword that heads the walk; the backpack
     # is not offered at all. The flip of the one achievement bit is the cause.
+    #
+    # RE-DERIVED spec 2026-10-18 §2.8 (a piece that adds no XP is not missing):
+    # the satchel is still `L*`'s bag, but a bag moves no fight, so its gain in
+    # `R` is 0 and it is not offered. The gear objective no longer pursues a bag
+    # on any sheet; the objective-level half above still bites.
     assert report.decision.chosen_root == ObtainItem(
         code="iron_sword", quantity=1, slot="weapon_slot")
-    assert ObtainItem(code="satchel", quantity=1, slot="bag_slot") in \
-        report.decision.fallback_roots, report.decision.fallback_roots
+    assert report.decision.fallback_roots == [
+        ObtainItem(code="iron_armor", quantity=1, slot="body_armor_slot"),
+        ObtainItem(code="forest_ring", quantity=1, slot="ring1_slot"),
+        ObtainItem(code="forest_ring", quantity=1, slot="ring2_slot"),
+        ReachSkillLevel(skill="jewelrycrafting", level=2)], report.decision.fallback_roots
     assert not any(isinstance(r, ObtainItem) and r.code == "backpack"
                    for r in report.decision.fallback_roots), \
         report.decision.fallback_roots
@@ -906,6 +914,10 @@ def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
     # length): the gain per price now reads kill speed, so the boots, the
     # helmet, the jewelrycrafting climb and the rune order before the pearl,
     # fifth in the objective's order behind the sword.
+    #
+    # RE-DERIVED spec 2026-10-18 §2.8 (a piece that adds no XP is not missing):
+    # the pearl adds only prospecting, so it is no longer offered. Its route is
+    # still planned below, as it would be were it pursued.
     report = _run("l35_artifact_fill")
     pearl = ObtainItem(code="perfect_pearl", quantity=1, slot="artifact1_slot")
     assert report.decision.chosen_root == ObtainItem(
@@ -915,7 +927,6 @@ def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
         ObtainItem(code="mushmush_wizard_hat", quantity=1, slot="helmet_slot"),
         ReachSkillLevel(skill="jewelrycrafting", level=21),
         ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
-        pearl,
         ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")]
     assert [repr(a) for a in report.plan] == [
         "Fight(death_knight)", "Equip(death_knight_sword->weapon_slot)"]
@@ -1008,12 +1019,18 @@ def test_l30_rune_gold_buy_chain_plans() -> None:
     RE-DERIVED Task 5 (global gear objective): the rune is an `L*` piece, the
     first alternative behind the `death_knight_sword` that heads the walk. Its
     route is asserted as the arbiter would plan it on its turn: still the
-    one-step gold buy."""
+    one-step gold buy.
+
+    RE-DERIVED spec 2026-10-18 §2.8: each gain is now `R` over the owned item
+    for the slot. The rune (gain 0.041 at a price of 3) out-gains the sword
+    (0.838 at 2059) per unit of price, so it heads the walk and the cycle
+    plans its buy."""
     report = _run("l30_rune_fill")
     rune = ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")
-    assert report.decision.chosen_root == ObtainItem(
+    assert report.decision.chosen_root == rune
+    assert report.decision.fallback_roots[0] == ObtainItem(
         code="death_knight_sword", quantity=1, slot="weapon_slot")
-    assert report.decision.fallback_roots[0] == rune
+    assert [repr(a) for a in report.plan] == ["NpcBuy(lifesteal_rune×1@rune_vendor)"]
     goal, plan, _declined = _plan_root("l30_rune_fill", rune)
     assert goal.startswith("GatherMaterials(lifesteal_rune"), goal
     assert any(a.startswith("NpcBuy(lifesteal_rune") for a in plan), plan

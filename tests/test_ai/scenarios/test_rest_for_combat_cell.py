@@ -38,7 +38,7 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.thresholds import CRITICAL_HP_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, active_guards
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import shared_world
@@ -127,14 +127,20 @@ def test_resting_to_full_silences_the_guard_and_moves_the_goal(
     back is no longer the task fight. The root walk pursues the first missing
     `L*` piece — `battlestaff`, weaponcrafting-gated — ahead of the task root,
     so the rested character climbs weaponcrafting; the task's monster is
-    still the grind target the guard reads."""
+    still the grind target the guard reads.
+
+    RE-DERIVED spec 2026-10-18 §2.8: each gain is `R` over the owned item for
+    the slot, and the walled `battlestaff` (priced 1000001) now orders behind
+    the `air_and_water_amulet`, which adds as much `R` per slot as the rings
+    at a price of 80. The rested character gathers the amulet's slimeballs."""
     rested = dataclasses.replace(state, hp=state.max_hp)
     player, report = _planned(rested, bundle_game_data)
     assert player._last_ctx.combat_monster == TARGET
     assert GuardKind.REST_FOR_COMBAT not in active_guards(
         rested, bundle_game_data, None, player._last_ctx)
-    assert report.decision.chosen_root == ReachSkillLevel(skill="weaponcrafting", level=16)
-    assert repr(report.selected_goal) == "ReachSkill(weaponcrafting->16)"
+    assert report.decision.chosen_root == ObtainItem(code="air_and_water_amulet", quantity=1,
+                                                     slot="amulet_slot")
+    assert repr(report.selected_goal) == "GatherMaterials(blue_slimeball, {blue_slimeball:2})"
 
 
 def test_no_other_scenario_reaches_this_guard() -> None:

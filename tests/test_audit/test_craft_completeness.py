@@ -125,6 +125,19 @@ def test_a_leg_of_the_grind_that_opens_a_rung_is_directional() -> None:
     assert advances_a_closure_grind("maple_syrup", plan[0], state, gd)
 
 
+def test_a_grind_rung_whose_route_fights_is_priced_in_learned_seconds() -> None:
+    """forest_bank_potion at alchemy 15 is gated in a skill whose grind rung
+    is priced through a drop fight. The rung is picked on the census's own
+    offline context, which carries the committed capture's fight seconds
+    (spec 2026-10-18 §2.9); the bare no-profile context carried none and the
+    conditions census raised "this context carries no learned fight
+    seconds"."""
+    gd = _gd()
+    state = census_state("forest_bank_potion", CraftCell(18, "alchemy", 15), gd)
+    leg = GatherAction(resource_code="gudgeon_spot", locations=frozenset({(0, 0)}))
+    assert not advances_a_closure_grind("forest_bank_potion", leg, state, gd)
+
+
 def test_no_grind_rung_means_no_grind_leg() -> None:
     gd = _gd()
     state = census_state("fried_eggs", CraftCell(1, "cooking", 1), gd)

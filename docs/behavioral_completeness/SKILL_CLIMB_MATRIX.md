@@ -8,9 +8,9 @@
 >
 > `g-in`/`g-above` are the in-range and above-range resource counts and `g-xp+` is whether the HIGHEST in-range resource still pays XP.
 
-360 cells over 92 distinct (skill, level) pairs; PASS 351; routed 72; walled 9; silent_stall 0; unexplained 0; skill_catalogue_empty 0
+360 cells over 92 distinct (skill, level) pairs; PASS 351; routed 71; walled 9; silent_stall 0; unexplained 0; skill_catalogue_empty 0
 
-residual scope: 72 of 360 cells are ROUTED (4 of 8 skills) — jewelrycrafting 31, gearcrafting 24, weaponcrafting 16, mining 1. A closure in an unrouted skill can only be an explained wall.
+residual scope: 71 of 360 cells are ROUTED (4 of 8 skills) — jewelrycrafting 30, gearcrafting 24, weaponcrafting 16, mining 1. A closure in an unrouted skill can only be an explained wall.
 
 | Scenario | Skill | C | Target | Verdict | routed | in-level | xp+ | obtainable | above | g-in | g-above | g-xp+ | gather drop |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -186,7 +186,7 @@ residual scope: 72 of 360 cells are ROUTED (4 of 8 skills) — jewelrycrafting 3
 | l13_drop_recipe_grind | cooking | 5 | 6 | PASS | - | 4 | 4 | 4 | 16 | 0 | 0 | - | `None` |
 | l13_drop_recipe_grind | fishing | 3 | 4 | PASS | - | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
 | l13_drop_recipe_grind | gearcrafting | 10 | 11 | PASS | - | 18 | 18 | 17 | 114 | 0 | 0 | - | `None` |
-| l13_drop_recipe_grind | jewelrycrafting | 5 | 6 | PASS | yes | 2 | 2 | 2 | 48 | 0 | 0 | - | `None` |
+| l13_drop_recipe_grind | jewelrycrafting | 5 | 6 | PASS | - | 2 | 2 | 2 | 48 | 0 | 0 | - | `None` |
 | l13_drop_recipe_grind | mining | 12 | 13 | PASS | - | 2 | 1 | 1 | 12 | 2 | 5 | yes | `iron_ore` |
 | l13_drop_recipe_grind | weaponcrafting | 5 | 6 | PASS | yes | 10 | 10 | 9 | 59 | 0 | 0 | - | `None` |
 | l13_drop_recipe_grind | woodcutting | 10 | 11 | PASS | - | 2 | 2 | 2 | 9 | 2 | 5 | yes | `spruce_wood` |

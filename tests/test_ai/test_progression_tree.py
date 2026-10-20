@@ -126,24 +126,24 @@ class TestPerScenarioPins:
     def test_l1_fresh_pins_the_first_copper_piece(self):
         """Level 1, nothing worn: `L*` is the copper set and the wooden shield,
         the dagger first. Every copper piece's step is the ore it is smelted
-        from; the shield's is its ash wood."""
+        from. Against `yellow_slime` the shield and the two rings add nothing to
+        `R` over owning none (spec §2.8), so they are not missing; the helmet
+        out-gains the boots per unit of price."""
         d, _ = _decide("l1_fresh")
         assert d.chosen_root == ObtainItem(code="copper_dagger", quantity=1, slot="weapon_slot")
         assert d.chosen_step == ObtainItem(code="copper_ore", quantity=10)
         assert [r.root_repr for r in d.ranking] == [
             "ObtainItem(code='copper_dagger', quantity=1, slot='weapon_slot')",
-            "ObtainItem(code='copper_boots', quantity=1, slot='boots_slot')",
             "ObtainItem(code='copper_helmet', quantity=1, slot='helmet_slot')",
-            "ObtainItem(code='copper_ring', quantity=1, slot='ring1_slot')",
-            "ObtainItem(code='copper_ring', quantity=1, slot='ring2_slot')",
-            "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')"]
+            "ObtainItem(code='copper_boots', quantity=1, slot='boots_slot')"]
         assert d.ranking[0].category == self.TRAIL
 
     def test_l8_overstocked_pins_the_weapon_climb(self):
         """`L*`'s first piece is `water_bow`, weaponcrafting-gated: the root is
         the next weaponcrafting level and the bow is the published ask. The
-        feather coat's gearcrafting climb, the shield and the life amulet's
-        jewelrycrafting climb follow in the objective's order."""
+        feather coat's gearcrafting climb and the life amulet's jewelrycrafting
+        climb follow in the objective's order. The `wooden_shield` adds nothing
+        to `R` on `green_slime` (spec §2.8): it is not missing."""
         d, _ = _decide("l8_overstocked")
         assert d.chosen_root == ReachSkillLevel(skill="weaponcrafting", level=2)
         assert d.chosen_step == d.chosen_root
@@ -151,7 +151,6 @@ class TestPerScenarioPins:
         assert [r.root_repr for r in d.ranking] == [
             "ReachSkillLevel(skill='weaponcrafting', level=2)",
             "ReachSkillLevel(skill='gearcrafting', level=2)",
-            "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
             "ReachSkillLevel(skill='jewelrycrafting', level=2)"]
 
     def test_l10_copper_adequate_pins_the_greater_wooden_staff(self):
@@ -166,10 +165,10 @@ class TestPerScenarioPins:
         assert d.chosen_step == ObtainItem(code="blue_slimeball", quantity=2)
         assert [r.root_repr for r in d.ranking] == [
             "ObtainItem(code='greater_wooden_staff', quantity=1, slot='weapon_slot')",
-            "ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')",
-            "ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')",
-            "ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')",
             "ObtainItem(code='leather_armor', quantity=1, slot='body_armor_slot')",
+            "ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')",
+            "ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')",
+            "ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')",
             "ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot')",
@@ -198,13 +197,14 @@ class TestPerScenarioPins:
         """Same objective as l1_fresh (raising state.level to 3 admits nothing
         new) -> the tree still answers with the same first piece. The survival
         guard that would preempt this at the arbiter has no seam in decide_tree
-        itself (semantics: guards preempt at the ARBITER, not here)."""
+        itself (semantics: guards preempt at the ARBITER, not here). As there,
+        only the dagger, helmet and boots add to `R` (spec §2.8)."""
         d, _ = _decide("l3_low_hp")
         assert d.chosen_root == ObtainItem(code="copper_dagger", quantity=1, slot="weapon_slot")
         assert d.chosen_step == ObtainItem(code="copper_ore", quantity=10)
-        assert len(d.ranking) == 6
+        assert len(d.ranking) == 3
         assert d.ranking[-1].root_repr == (
-            "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')")
+            "ObtainItem(code='copper_boots', quantity=1, slot='boots_slot')")
 
     def test_l12_taskgated_bag_pins_the_weaponcrafting_climb(self):
         """The iron sword heads `L*`, and at weaponcrafting 1 it is a climb:
@@ -217,12 +217,12 @@ class TestPerScenarioPins:
         assert d.blocked_target == "iron_sword"
         assert [r.root_repr for r in d.ranking] == [
             "ReachSkillLevel(skill='weaponcrafting', level=2)",
+            "ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')",
             "ObtainItem(code='iron_armor', quantity=1, slot='body_armor_slot')",
             "ObtainItem(code='iron_boots', quantity=1, slot='boots_slot')",
-            "ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')",
             "ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')",
-            "ReachSkillLevel(skill='jewelrycrafting', level=2)",
             "ObtainItem(code='mushroom', quantity=4)",
+            "ReachSkillLevel(skill='jewelrycrafting', level=2)",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot')",
             "ReachSkillLevel(skill='mining', level=10)",
