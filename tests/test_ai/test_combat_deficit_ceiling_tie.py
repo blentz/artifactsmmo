@@ -58,8 +58,8 @@ from artifactsmmo_cli.ai.scenario import (
     load_bundle_game_data,
     scenario_state,
 )
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
@@ -110,7 +110,7 @@ def _priced_improvers(
             continue
         rows.append((order.index(code), code, margin - base,
                      acquisition_actions(code, 1, state, gd,
-                                         NO_PROFILE_CONTEXT, equip=True)))
+                                         TIMED_NO_PROFILE_CONTEXT, equip=True)))
     return sorted(rows)
 
 
@@ -119,7 +119,7 @@ def _actions_of(state: WorldState) -> Callable[[str, str], int]:
     and the `combat-deficit` diagnostic build it."""
     def priced(code: str, slot: str) -> int:
         return acquisition_actions(code, 1, state, _gd(),
-                                   NO_PROFILE_CONTEXT, equip=slot is not None)
+                                   TIMED_NO_PROFILE_CONTEXT, equip=slot is not None)
     return priced
 
 

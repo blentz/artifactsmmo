@@ -15,19 +15,19 @@ import artifactsmmo_cli.ai.player as player_mod
 from artifactsmmo_cli.ai.best_loadout import best_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.held_task_pays import held_task_pays
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.task_worth import task_worth_for
 from artifactsmmo_cli.ai.task_worth_core import TaskWorth
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 
 _BUNDLE = Path(__file__).resolve().parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
 STATE = make_state(task_code="cooked_shrimp", task_type="items", task_total=200, task_progress=20)
-CTX = replace(NO_PROFILE_CONTEXT, combat_monster="imp", skill_demand=frozenset({"cooking"}))
+CTX = replace(TIMED_NO_PROFILE_CONTEXT, combat_monster="imp", skill_demand=frozenset({"cooking"}))
 GRIND = Fraction(15, 31)   # HAL vs imp, live 2026-10-14
 
 
@@ -156,7 +156,7 @@ class TestAgainstTheRealPrices:
         state = replace(scenario_state(SCENARIOS["l20_boost_stock"], game_data),
                         task_code=self.TASK, task_type="items",
                         task_total=100, task_progress=10)
-        ctx = replace(NO_PROFILE_CONTEXT, combat_monster="chicken",
+        ctx = replace(TIMED_NO_PROFILE_CONTEXT, combat_monster="chicken",
                       skill_demand=frozenset({"cooking"}))
         return state, ctx
 
@@ -201,6 +201,7 @@ class TestPlayerPricesThePayOncePerCycle:
 
     def _player(self, monkeypatch: pytest.MonkeyPatch, state, pays: list[object]):  # type: ignore[no-untyped-def]
         player = GamePlayer(character="probe", history=None)
+        player._offline_timing = committed_timing()
         player.state = state
         player.game_data = GameData()
         monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: None)

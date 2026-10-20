@@ -294,7 +294,8 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     # One model for the whole sweep: its routes are memoised per item, and the
     # rungs of one skill share most of their materials.
     model = grind_model(state, game_data)
-    pricing_ctx = replace(NO_PROFILE_CONTEXT, fight_records=ctx.fight_records)
+    pricing_ctx = replace(NO_PROFILE_CONTEXT, fight_records=ctx.fight_records,
+                          fight_seconds=ctx.fight_seconds, action_seconds=ctx.action_seconds)
     # The SAME `current_level` `skill_grind_target` hands the selection core.
     current_level = state.skills.get(skill, 0)
     for code, stats in game_data.all_item_stats.items():

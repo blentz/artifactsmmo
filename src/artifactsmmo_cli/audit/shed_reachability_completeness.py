@@ -64,6 +64,7 @@ from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.disposal_route import overstock_disposal
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
@@ -196,10 +197,10 @@ def census_ctx(bank_accessible: bool = True) -> SelectionContext:
     licence in this census) reads. Pre-binding it would fork that derivation.
 
     `combat_monster=None` keeps the REST_FOR_COMBAT guard quiet."""
-    return SelectionContext(
+    return offline_context(SelectionContext(
         bank_accessible=bank_accessible, bank_required_level=0,
         bank_unlock_monster=None, initial_xp=0, task_exchange_min_coins=0,
-        combat_monster=None)
+        combat_monster=None))
 
 
 def _require(code: str, game_data: GameData) -> str:

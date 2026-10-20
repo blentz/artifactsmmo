@@ -16,9 +16,8 @@ from dataclasses import replace
 from artifactsmmo_cli.ai.craft_demand import craft_demand
 from artifactsmmo_cli.ai.decisions.root import _orphan_skill_roots
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 from tests.test_ai.test_gather_demand import _gd as _gather_gd
 
 
@@ -74,7 +73,7 @@ def _state():
                               "mining": 25, "fishing": 25})
 
 
-def _skills(state, gd, offered, ctx=NO_PROFILE_CONTEXT):
+def _skills(state, gd, offered, ctx=TIMED_NO_PROFILE_CONTEXT):
     return [g.skill for g in _orphan_skill_roots(state, gd, offered, ctx)]
 
 
@@ -85,15 +84,15 @@ class TestOnlyWhenDemanded:
         gd = _gd()
         state = _state()
         offered = [ReachCharLevel(level=40)]
-        assert craft_demand(offered, state, gd, NO_PROFILE_CONTEXT) == {}
+        assert craft_demand(offered, state, gd, TIMED_NO_PROFILE_CONTEXT) == {}
         assert _skills(state, gd, offered) == []
 
     def test_a_demanded_skill_climbs_to_the_level_asked_for(self):
         gd = _gd()
         state = _state()
         offered = [ObtainItem(code="steel_sword", quantity=1)]
-        assert craft_demand(offered, state, gd, NO_PROFILE_CONTEXT) == {"weaponcrafting": 25}
-        assert _orphan_skill_roots(state, gd, offered, NO_PROFILE_CONTEXT) == (
+        assert craft_demand(offered, state, gd, TIMED_NO_PROFILE_CONTEXT) == {"weaponcrafting": 25}
+        assert _orphan_skill_roots(state, gd, offered, TIMED_NO_PROFILE_CONTEXT) == (
             ReachSkillLevel(skill="weaponcrafting", level=25),)
 
     def test_a_met_demand_is_no_demand(self):
@@ -102,7 +101,7 @@ class TestOnlyWhenDemanded:
                            skills={"weaponcrafting": 25, "cooking": 21,
                                    "mining": 25, "fishing": 25})
         offered = [ObtainItem(code="steel_sword", quantity=1)]
-        assert craft_demand(offered, state, gd, NO_PROFILE_CONTEXT) == {}
+        assert craft_demand(offered, state, gd, TIMED_NO_PROFILE_CONTEXT) == {}
         assert _skills(state, gd, offered) == []
 
     def test_a_skill_a_root_already_climbs_is_left_to_it(self):
@@ -119,7 +118,7 @@ class TestOnlyWhenDemanded:
         gd = _gd_with_trout()
         state = _state()
         assert _skills(state, gd, []) == []
-        ctx = replace(NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_trout", 10),))
+        ctx = replace(TIMED_NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_trout", 10),))
         assert _orphan_skill_roots(state, gd, [], ctx) == (
             ReachSkillLevel(skill="cooking", level=25),)
 
@@ -128,6 +127,6 @@ class TestOnlyWhenDemanded:
         at -19 ahead of cooking at -9."""
         gd = _gd_with_trout()
         state = _state()
-        ctx = replace(NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_trout", 10),))
+        ctx = replace(TIMED_NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_trout", 10),))
         offered = [ObtainItem(code="steel_sword", quantity=1)]
         assert _skills(state, gd, offered, ctx) == ["weaponcrafting", "cooking"]

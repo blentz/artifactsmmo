@@ -67,7 +67,6 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.min_crafts import min_crafts
 from artifactsmmo_cli.ai.min_gathers import min_gathers
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
     GRIND_POLICY,
@@ -76,6 +75,7 @@ from artifactsmmo_cli.ai.tiers.skill_grind_target import (
     skill_grind_target,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -104,7 +104,7 @@ def _steps(code: str, state: WorldState, game_data: GameData) -> int:
 
 def _routed(code: str, state: WorldState, game_data: GameData) -> int:
     """The live measure: every route the executor can currently serve."""
-    return acquisition_actions(code, 1, state, game_data, NO_PROFILE_CONTEXT,
+    return acquisition_actions(code, 1, state, game_data, TIMED_NO_PROFILE_CONTEXT,
                                equip=False)
 
 
@@ -151,7 +151,7 @@ def test_grind_picks_the_chain_that_is_actually_cheap(game_data: GameData,
     chicken drop — ~48 kills — and the bot duly farmed chickens for hours. The
     rung that is genuinely cheapest here is `sticky_sword`, and neither of the
     two earlier proxies could see it."""
-    assert skill_grind_target(SKILL, state, game_data) == "sticky_sword"
+    assert skill_grind_target(SKILL, state, game_data, ctx=TIMED_NO_PROFILE_CONTEXT) == "sticky_sword"
 
 
 def test_a_drop_fed_rung_is_dearer_than_its_recipe_lines_suggest(
@@ -194,14 +194,14 @@ def test_selected_rung_is_the_rate_maximal_feasible_one(game_data: GameData,
     cross-multiplication to stay in integers, mirroring `_beats` itself) and
     then states the coincidence explicitly rather than leaving it implicit."""
     lvl = state.skills[SKILL]
-    feasible = [c for c in build_selectable_grind_candidates(SKILL, state, game_data)
+    feasible = [c for c in build_selectable_grind_candidates(SKILL, state, game_data, TIMED_NO_PROFILE_CONTEXT)
                 if c.craft_skill == SKILL and c.craft_level <= lvl
                 and c.obtainable and c.xp_positive]
     assert feasible, "scenario must offer at least one feasible rung"
     assert not any(c.wanted for c in feasible), (
         "this scenario's default context has no wanted rungs -- the rate "
         "check below is meaningless if that premise drifts")
-    rung = skill_grind_target(SKILL, state, game_data)
+    rung = skill_grind_target(SKILL, state, game_data, ctx=TIMED_NO_PROFILE_CONTEXT)
     chosen = next(c for c in feasible if c.code == rung)
     for c in feasible:
         assert c.craft_level * chosen.acquire_steps <= chosen.craft_level * c.acquire_steps, (
@@ -219,7 +219,7 @@ def test_hoisted_cost_counts_the_whole_chain(game_data: GameData,
     ore behind the bars — the term the first proxy omitted — and the gloves' cost
     has to include the chicken kills behind the feathers, which is the term the
     second proxy omitted."""
-    cands = {c.code: c for c in build_selectable_grind_candidates(SKILL, state, game_data)}
+    cands = {c.code: c for c in build_selectable_grind_candidates(SKILL, state, game_data, TIMED_NO_PROFILE_CONTEXT)}
     sword = cands["sticky_sword"]
     # 5 bars x 10 ore each, less the single ore held, plus the crafts and hops.
     assert sword.acquire_steps >= 45, sword.acquire_steps
@@ -241,9 +241,9 @@ def test_tier_gathered_costs_one_action_per_unit(game_data: GameData,
     assert "copper_ore" in game_data.gatherable_drop_items()
     bare = replace(state, inventory={}, bank_items={})
     one = acquisition_actions("copper_ore", 1, bare, game_data,
-                              NO_PROFILE_CONTEXT, equip=False)
+                              TIMED_NO_PROFILE_CONTEXT, equip=False)
     ten = acquisition_actions("copper_ore", 10, bare, game_data,
-                              NO_PROFILE_CONTEXT, equip=False)
+                              TIMED_NO_PROFILE_CONTEXT, equip=False)
     assert 1 <= one <= 3, one          # one hop plus a gather
     assert ten > one, "quantity must cost more"
     # The hop is paid ONCE however many units, so ten units is not ten times one.

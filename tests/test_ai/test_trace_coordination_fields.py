@@ -17,6 +17,7 @@ serving alchemy" needed a live API query instead of the trace.
 from unittest.mock import MagicMock
 
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 
@@ -25,6 +26,7 @@ PLANNER_STATS = {"nodes": 0, "depth": 0, "timed_out": False, "plan_len": 1}
 
 def _player(**state_overrides) -> GamePlayer:
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     player.state = make_state(level=17, **state_overrides)
     player.tracer = MagicMock()
     return player

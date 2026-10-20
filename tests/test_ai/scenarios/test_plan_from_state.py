@@ -4,13 +4,13 @@ import json
 from pathlib import Path
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -20,6 +20,7 @@ def test_plan_from_state_runs_offline() -> None:
     populated PlanReport — the seam every scenario golden runs through."""
     gd = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
     player = GamePlayer(character="scenario", history=None)
+    player._offline_timing = committed_timing()
     state = make_state(level=1, hp=120, max_hp=120,
                        inventory={}, bank_items={}, gold=0)
     player.seed_offline(state, gd)
@@ -36,14 +37,15 @@ def test_plan_from_state_decision_is_the_tree_decision() -> None:
     resolution walk names — here the jewelrycrafting climb that gates this
     character's furthest-behind slot (see test_progression_tree's per-scenario
     pins). Since the global gear objective (Task 5) it is the first missing
-    `L*` piece, the iron sword whose mats are banked."""
+    `L*` piece; since spec 2026-10-18 §2.9 that piece is the
+    `greater_wooden_staff`, whose blocked `blue_slimeball` drop is the root."""
     gd = load_bundle_game_data(BUNDLE)
     sc = SCENARIOS["l10_weapon_upgrade"]
     player = GamePlayer(character=sc.name, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(scenario_state(sc, gd), gd)
     report = player.plan_from_state()
-    assert report.decision.chosen_root == ObtainItem(
-        code="iron_sword", quantity=1, slot="weapon_slot")
+    assert report.decision.chosen_root == ObtainItem(code="blue_slimeball", quantity=2)
     # The single decision is what the player stashed for trace/observer use.
     assert player._last_decision is not None
     assert repr(player._last_decision.chosen_root) == repr(report.decision.chosen_root)
@@ -72,13 +74,14 @@ def test_plan_from_state_wires_the_real_selection_context() -> None:
     gd._bank_location = (0, 0)
     gd._taskmaster_location = (0, 0)
     player = GamePlayer(character="scenario", history=None)
+    player._offline_timing = committed_timing()
     state = make_state(level=5, inventory={"fishing_net": 7}, bank_items={})
     player.seed_offline(state, gd)
 
-    assert player._last_ctx == NO_PROFILE_CONTEXT  # nothing computed before the first cycle
+    assert player._last_ctx == TIMED_NO_PROFILE_CONTEXT  # nothing computed before the first cycle
 
     player.plan_from_state()
 
-    assert player._last_ctx != NO_PROFILE_CONTEXT  # a real per-cycle ctx was computed
+    assert player._last_ctx != TIMED_NO_PROFILE_CONTEXT  # a real per-cycle ctx was computed
     assert prerequisites(ObtainItem("ash_plank", 6), player.state, gd,
                          player._last_ctx) == []

@@ -17,15 +17,16 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree, has_structural_upgrade
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
 from tests.test_ai.shared_world import attached, shared_world
 
@@ -66,12 +67,13 @@ def _decide(name: str) -> tuple[StrategyDecision, WorldState]:
     # The walk's context carries the cycle's gear objective, attached by the
     # one function the player uses (ruling W).
     return decide_tree(state, gd, objective,
-                       ctx=attached(state, gd, NO_PROFILE_CONTEXT, None)), state
+                       ctx=attached(state, gd, TIMED_NO_PROFILE_CONTEXT, None)), state
 
 
 def _run(name: str) -> PlanReport:
     gd = shared_world(BUNDLE)
     player = GamePlayer(character=name, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(scenario_state(SCENARIOS[name], gd), gd)
     return player.plan_from_state()
 
@@ -162,7 +164,7 @@ def test_l48_band_adequate_is_the_honest_wall() -> None:
     state = scenario_state(SCENARIOS[L48_BAND_ADEQUATE], gd)
     objective = CharacterObjective.from_game_data(gd)
     decision = decide_tree(state, gd, objective,
-                           ctx=attached(state, gd, NO_PROFILE_CONTEXT, None))
+                           ctx=attached(state, gd, TIMED_NO_PROFILE_CONTEXT, None))
     shield = ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")
     assert decision.chosen_root == shield
     assert decision.chosen_step == shield
@@ -214,6 +216,10 @@ def test_l48_band_adequate_real_band_adequate_verdict() -> None:
     assert has_structural_upgrade(state, gd, objective) is True
 
     player = GamePlayer(character=L48_BAND_ADEQUATE, history=None)
+
+    player._offline_timing = committed_timing()
+
+    player._offline_timing = committed_timing()
     player.seed_offline(state, shared_world(BUNDLE))
     assert player._pick_winnable_monster() == "hellhound"
     assert player._tree_band_adequate() is False

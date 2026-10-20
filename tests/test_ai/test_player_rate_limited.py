@@ -30,11 +30,12 @@ from sqlmodel import select
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, patched_logs
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema, make_get_character_result
 from tests.test_ai.test_player_run import _patch_game_data_load
 
@@ -55,6 +56,7 @@ class TestExecuteHandlesRateLimitedError:
 
     def test_outcome_is_rate_limited_and_state_is_unchanged(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         state = make_state(x=0, y=0)
         player.state = state
         client = MagicMock()
@@ -71,6 +73,7 @@ class TestExecuteHandlesRateLimitedError:
 
     def test_a_missing_retry_after_header_falls_back_to_backoff(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(x=0, y=0)
         client = MagicMock()
         action = MoveAction(x=3, y=5)
@@ -85,6 +88,7 @@ class TestExecuteHandlesRateLimitedError:
         """_rate_limit_attempts persists across calls with no success between
         them, so retry_after_seconds sees attempt=0, then attempt=1, ..."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(x=0, y=0)
         client = MagicMock()
         action = MoveAction(x=3, y=5)
@@ -102,6 +106,7 @@ class TestExecuteHandlesRateLimitedError:
         ramped-up backoff — an isolated 429 or two must not slow the bot down
         for the rest of the session."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(x=0, y=0)
         client = MagicMock()
         action = MoveAction(x=3, y=5)
@@ -123,6 +128,7 @@ class TestExecuteHandlesRateLimitedError:
         loop — unmodified by Task 18 — already treats a 429 on get_character
         as a retryable condition, same as a timeout, with zero new code."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         char = make_char_schema()
         with patch("artifactsmmo_cli.ai.player.get_character",
@@ -144,6 +150,7 @@ def test_run_survives_a_429_and_keeps_cycling():
     history = LearningStore(db_path=":memory:", character="hero")
     history.start_session()
     player = GamePlayer(character="hero", history=history)
+    player._offline_timing = committed_timing()
     client = MagicMock()
 
     call_count = [0]
@@ -158,7 +165,7 @@ def test_run_survives_a_429_and_keeps_cycling():
 
     try:
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
-            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):

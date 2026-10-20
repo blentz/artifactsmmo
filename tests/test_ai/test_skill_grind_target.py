@@ -9,7 +9,6 @@ import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
     _CACHES,
     CACHE_MAX_ENTRIES,
@@ -23,7 +22,7 @@ from artifactsmmo_cli.ai.tiers.skill_grind_target import (
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 
 
 def _gd() -> GameData:
@@ -59,14 +58,14 @@ def _gd() -> GameData:
 def test_picks_highest_craftable_at_current_level():
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    assert skill_grind_target("weaponcrafting", state, gd) == "wooden_staff"
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) == "wooden_staff"
 
 
 def test_prefers_materials_in_hand_over_higher_level():
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3},
                        inventory={"copper_bar": 6})
-    assert skill_grind_target("weaponcrafting", state, gd) == "copper_dagger"
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) == "copper_dagger"
 
 
 def test_the_BAG_is_free_but_the_BANK_is_a_priced_withdraw():
@@ -101,13 +100,13 @@ def test_the_BAG_is_free_but_the_BANK_is_a_priced_withdraw():
 def test_none_when_nothing_craftable_at_level():
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 0})
-    assert skill_grind_target("weaponcrafting", state, gd) is None
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) is None
 
 
 def test_none_for_skill_with_no_recipes():
     gd = _gd()
     state = make_state(skills={"alchemy": 5})
-    assert skill_grind_target("alchemy", state, gd) is None
+    assert skill_grind_target("alchemy", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) is None
 
 
 def test_in_skill_item_without_recipe_is_skipped():
@@ -118,7 +117,7 @@ def test_in_skill_item_without_recipe_is_skipped():
         code="copper_axe", level=3, type_="weapon",
         crafting_skill="weaponcrafting", crafting_level=3)
     state = make_state(skills={"weaponcrafting": 3})
-    assert skill_grind_target("weaponcrafting", state, gd) == "wooden_staff"
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) == "wooden_staff"
 
 
 def test_reserved_materials_exclude_recipe():
@@ -130,7 +129,7 @@ def test_reserved_materials_exclude_recipe():
     # (ash_plank) must win even though dagger has fewer mats missing.
     state = make_state(skills={"weaponcrafting": 3},
                        inventory={"copper_bar": 6})
-    assert skill_grind_target("weaponcrafting", state, gd) == "copper_dagger"
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) == "copper_dagger"
     assert skill_grind_target(
         "weaponcrafting", state, gd, reserved=frozenset({"copper_bar"}),
     ) == "wooden_staff"
@@ -180,7 +179,7 @@ def test_skips_unobtainable_inskill_item_for_obtainable_one():
     # ash_wood on hand makes wooden_staff "fewer missing" under the old ranking.
     state = make_state(skills={"weaponcrafting": 1, "mining": 1},
                        inventory={"ash_wood": 4, "wooden_stick": 0})
-    assert skill_grind_target("weaponcrafting", state, gd) == "copper_dagger"
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) == "copper_dagger"
 
 
 def test_cyclic_recipe_is_not_obtainable():
@@ -194,7 +193,7 @@ def test_cyclic_recipe_is_not_obtainable():
     }
     gd._crafting_recipes = {"cyc_a": {"cyc_b": 1}, "cyc_b": {"cyc_a": 1}}
     state = make_state(skills={"weaponcrafting": 1})
-    assert skill_grind_target("weaponcrafting", state, gd) is None
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) is None
 
 
 def test_craft_level_breaks_tie_when_materials_equal():
@@ -205,7 +204,7 @@ def test_craft_level_breaks_tie_when_materials_equal():
     # both have 0 missing -> tie on mats -> wooden_staff (higher level) wins.
     state = make_state(skills={"weaponcrafting": 3},
                        inventory={"copper_bar": 6, "ash_plank": 4})
-    assert skill_grind_target("weaponcrafting", state, gd) == "wooden_staff"
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) == "wooden_staff"
 
 
 def test_the_memo_returns_a_hit_for_an_identical_state():
@@ -352,7 +351,7 @@ def test_the_in_level_hoist_leaves_the_chosen_rung_alone():
     into the ranking would change this answer to `iron_dagger`."""
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3}, inventory={"iron_bar": 6})
-    assert skill_grind_target("weaponcrafting", state, gd) == "wooden_staff"
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) == "wooden_staff"
 
 
 def test_a_HELD_rung_is_not_free_because_the_grind_must_CRAFT_another():
@@ -393,7 +392,7 @@ def test_a_gear_target_rung_is_marked_wanted_and_a_plain_one_is_not():
     is the wiring that lets it."""
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    ctx = dataclasses.replace(NO_PROFILE_CONTEXT,
+    ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT,
                               near_term_targets=frozenset({"copper_dagger"}))
     cands = build_selectable_grind_candidates("weaponcrafting", state, gd, ctx)
     by_code = {c.code: c for c in cands}
@@ -406,7 +405,7 @@ def test_a_siblings_supply_target_is_marked_wanted():
     keeper for the fleet even when this character does not want it."""
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    ctx = dataclasses.replace(NO_PROFILE_CONTEXT,
+    ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT,
                               supply_target=("copper_dagger", 1, 3))
     cands = build_selectable_grind_candidates("weaponcrafting", state, gd, ctx)
     by_code = {c.code: c for c in cands}
@@ -423,9 +422,9 @@ def test_the_candidate_cache_is_not_keyed_by_context():
     """
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    ctx_a = dataclasses.replace(NO_PROFILE_CONTEXT,
+    ctx_a = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT,
                                 near_term_targets=frozenset({"copper_dagger"}))
-    ctx_b = NO_PROFILE_CONTEXT
+    ctx_b = TIMED_NO_PROFILE_CONTEXT
     first = build_selectable_grind_candidates("weaponcrafting", state, gd, ctx_a)
     second = build_selectable_grind_candidates("weaponcrafting", state, gd, ctx_b)
     assert [c.code for c in first] == [c.code for c in second]
@@ -443,10 +442,10 @@ def test_context_changes_the_rank_but_never_whether_a_grind_exists():
     """
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    ctx = dataclasses.replace(NO_PROFILE_CONTEXT,
+    ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT,
                               near_term_targets=frozenset({"copper_dagger"}))
     with_ctx = skill_grind_target("weaponcrafting", state, gd, ctx=ctx)
-    without = skill_grind_target("weaponcrafting", state, gd)
+    without = skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT)
     assert (with_ctx is None) == (without is None)
 
 
@@ -518,7 +517,7 @@ def test_has_grind_target_agrees_with_the_full_selection(skills, inventory, bank
     gd = _gd()
     state = make_state(skills=skills, inventory=inventory, bank_items=bank)
     assert has_grind_target("weaponcrafting", state, gd) is (
-        skill_grind_target("weaponcrafting", state, gd) is not None)
+        skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) is not None)
 
 
 def test_has_grind_target_is_false_when_the_chain_is_ungettable():
@@ -530,7 +529,7 @@ def test_has_grind_target_is_false_when_the_chain_is_ungettable():
     gd._resource_drops_full = {}
     state = make_state(skills={"weaponcrafting": 3})
     assert has_grind_target("weaponcrafting", state, gd) is False
-    assert skill_grind_target("weaponcrafting", state, gd) is None
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) is None
 
 
 def test_has_grind_target_skips_an_in_skill_item_with_no_recipe():
@@ -558,7 +557,7 @@ def test_has_grind_target_skips_a_grey_rung_but_finds_a_paying_one():
     # copper_dagger (1) and wooden_staff (3) are grey at 20; iron_dagger (10)
     # is not, so existence still holds and the grey ones were skipped.
     assert has_grind_target("weaponcrafting", grey, gd) is True
-    assert skill_grind_target("weaponcrafting", grey, gd) == "iron_dagger"
+    assert skill_grind_target("weaponcrafting", grey, gd, ctx=TIMED_NO_PROFILE_CONTEXT) == "iron_dagger"
 
     # Drop the only paying rung: every survivor is grey, so nothing qualifies.
     # A FRESH GameData, not a mutation of the one above —
@@ -568,7 +567,7 @@ def test_has_grind_target_skips_a_grey_rung_but_finds_a_paying_one():
     lean = _gd()
     del lean._item_stats["iron_dagger"]
     assert has_grind_target("weaponcrafting", grey, lean) is False
-    assert skill_grind_target("weaponcrafting", grey, lean) is None
+    assert skill_grind_target("weaponcrafting", grey, lean, ctx=TIMED_NO_PROFILE_CONTEXT) is None
 
 
 # --- the grind's obtain policy ----------------------------------------------

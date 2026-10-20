@@ -41,6 +41,7 @@ from math import ceil
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
@@ -168,7 +169,7 @@ TOTAL over `META_GOAL_KINDS` since wave 6. The two climbs return
         # (`projections.py:263`) and counts the WHOLE combat loop.
         if history is None:
             return UNOBTAINABLE_PER_UNIT
-        plan = cheapest_path_to_level(goal.level, state, history, game_data)
+        plan = cheapest_path_to_level(goal.level, state, history, game_data, ctx.timing())
         # `blocked` -> UNOBTAINABLE_PER_UNIT, never `inf`: the walk needs a
         # TOTAL ORDER, which is why UNOBTAINABLE_PER_UNIT is a large number and
         # not infinity. A blocked climb means every beatable monster is grey —
@@ -188,7 +189,8 @@ TOTAL over `META_GOAL_KINDS` since wave 6. The two climbs return
         if state.task_progress >= state.task_total:
             return 1  # met: the step is the turn-in
         per_kill = cycles_per_kill(
-            expected_damage_per_fight(state, game_data, goal.task_code), state.max_hp)
+            expected_damage_per_fight(state, game_data, goal.task_code), state.max_hp,
+            walk_seconds(state, game_data, goal.task_code, (), ctx.timing()))
         return ceil((state.task_total - state.task_progress) * per_kill)
     if isinstance(goal, ReachFleetOutcome):
         # A supply run costs what obtaining the unmet demand costs; a turn-in

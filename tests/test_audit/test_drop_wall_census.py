@@ -36,7 +36,6 @@ from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.audit import drop_wall_census as dwc
 from artifactsmmo_cli.audit.drop_wall_census import (
@@ -56,6 +55,7 @@ from artifactsmmo_cli.audit.drop_wall_census import (
     unwinnable_drop_items,
     witness_residual,
 )
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
@@ -159,10 +159,17 @@ def test_only_the_closes_arm_is_exercised_and_the_matrix_says_so(
     (`drop_evidence`), the objective from the projected fighter wearing `L*`,
     so a piece the fixed point reaches can read out of reach here. `wooden_club`
     (dropped by `ogre`) is a CLOSES row in the four `l32_*` cells. The two old
-    rows (`perfect_bow`, `iron_sword`'s cowhide) left with the tier sheet."""
-    assert sum(1 for r in results if r.gap == CLOSES) == 6
+    rows (`perfect_bow`, `iron_sword`'s cowhide) left with the tier sheet.
+
+    6 -> 7 CLOSES (spec 2026-10-18 §2.9, a fight's seconds are its learned
+    length): `l10_weapon_upgrade`'s `L*` weapon is the `greater_wooden_staff`
+    now, and its `blue_slimeball` (dropped by `blue_slime`, which the worn
+    copper loses to and the banked iron sword beats) is the walk's RESOLVED
+    root — the one wall on a chosen root, and a CLOSES row."""
+    assert sum(1 for r in results if r.gap == CLOSES) == 7
     assert sum(1 for r in results if r.gap == OUT_OF_REACH) == 9
-    assert all(not r.is_resolved_root for r in _walls(results))
+    assert [(r.scenario, r.candidate) for r in _walls(results) if r.is_resolved_root] == [
+        ("l10_weapon_upgrade", "ObtainItem(code='blue_slimeball', quantity=2)")]
 
 
 def test_every_wall_names_an_item_a_dropper_and_a_chain(
@@ -197,23 +204,23 @@ def test_the_crossing_is_the_pricers_own_answer(results: list[DropResult]) -> No
     state = scenario_state(scenario, game_data)
     resolution = resolve_root(state, game_data,
                               CharacterObjective.from_game_data(game_data),
-                              attached(state, game_data, NO_PROFILE_CONTEXT, None),
+                              attached(state, game_data, TIMED_NO_PROFILE_CONTEXT, None),
                               None)
     candidate = next(c for c in (resolution.root, *resolution.alternatives)
                      if repr(c) == wall.candidate)
     assert wall.evidence is not None
-    base = route_price(candidate, state, game_data, NO_PROFILE_CONTEXT, None,
+    base = route_price(candidate, state, game_data, TIMED_NO_PROFILE_CONTEXT, None,
                        gated_drop=False)
     rich = dataclasses.replace(state, inventory={
         **state.inventory,
         wall.evidence.item: state.inventory.get(wall.evidence.item, 0) + GRANT})
-    granted = route_price(candidate, rich, game_data, NO_PROFILE_CONTEXT, None,
+    granted = route_price(candidate, rich, game_data, TIMED_NO_PROFILE_CONTEXT, None,
                           gated_drop=False)
     assert base >= UNOBTAINABLE_PER_UNIT
     assert granted < base
     assert (base, granted) == (wall.base_price, wall.granted_price)
     assert wall.gate_price == route_price(candidate, state, game_data,
-                                          NO_PROFILE_CONTEXT, None,
+                                          TIMED_NO_PROFILE_CONTEXT, None,
                                           gated_drop=True)
 
 
@@ -349,8 +356,8 @@ def test_a_root_the_walk_cannot_resolve_is_a_visible_row(
 def test_the_summary_reports_the_arm_counts(results: list[DropResult]) -> None:
     line = summary_line(results)
     assert "candidate cells" in line
-    assert "gate opens 0 of 15 walls (store-less)" in line
-    assert "closes 6" in line
+    assert "gate opens 1 of 16 walls (store-less)" in line
+    assert "closes 7" in line
     assert "out_of_reach 9" in line
     assert "on ALTERNATIVES" in line
 
@@ -413,11 +420,16 @@ def test_the_census_keeps_counting_a_wall_the_gate_now_prices(
     wall the gate opened left with the tier sheet, so the gate-on price of
     every wall is the structural one. The census still counts all 15 walls with
     the gate OFF, which is the guard's subject; its "a wall the gate opens is
-    still counted" half has no witness on the committed set now."""
+    still counted" half has no witness on the committed set now.
+
+    16 walls, 1 opened, since spec 2026-10-18 §2.9: `l10_weapon_upgrade`'s
+    `blue_slimeball` is a wall the gate opens (the banked iron sword beats
+    its dropper), so that half has its witness again."""
     walls = _walls(results)
-    assert len(walls) == 15
+    assert len(walls) == 16
     opened = [w for w in walls if w.gate_price < UNOBTAINABLE_PER_UNIT]
-    assert len(opened) == 0
+    assert [(w.scenario, w.candidate) for w in opened] == [
+        ("l10_weapon_upgrade", "ObtainItem(code='blue_slimeball', quantity=2)")]
     for wall in opened:
         assert wall.base_price >= UNOBTAINABLE_PER_UNIT
         assert wall.gate_price < wall.base_price

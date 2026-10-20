@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import (
     ScenarioCharacter,
@@ -98,6 +99,7 @@ def _report():
     gd = load_bundle_game_data(BUNDLE)
     sc = _slot_exhaustion_character()
     player = GamePlayer(character=sc.name, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(scenario_state(sc, gd), gd)
     return player.plan_from_state()
 

@@ -71,6 +71,7 @@ from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.drop_evidence import DropEvidence, drop_evidence
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     ScenarioCharacter,
@@ -81,6 +82,10 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
+
+_OFFLINE_CONTEXT = offline_context(NO_PROFILE_CONTEXT)
+"""The no-profile context carrying the committed capture's fight and action
+seconds (spec 2026-10-18 §2.9): this offline sweep prices time like a live cycle."""
 
 GRANT = 10_000
 """Units of a walled item handed to the character for the differential probe.
@@ -274,21 +279,21 @@ def classify(candidate: MetaGoal, state: WorldState, game_data: GameData,
     Asking the cheap question first is also what makes `DROP_WALL_UNATTRIBUTED`
     expressible — it is precisely "the collective probe crossed and no single one
     did", which a per-item-only sweep could not distinguish from a clean pass."""
-    base = route_price(candidate, state, game_data, NO_PROFILE_CONTEXT, None,
+    base = route_price(candidate, state, game_data, _OFFLINE_CONTEXT, None,
                        gated_drop=False)
     if base < UNOBTAINABLE_PER_UNIT:
         return (DropGap.OBTAINABLE.value, base, base, base, None)
     if not walled:
         return (DropGap.NOT_DROP_WALLED.value, base, base, base, None)
     collective = route_price(candidate, _granted(state, walled), game_data,
-                             NO_PROFILE_CONTEXT, None, gated_drop=False)
+                             _OFFLINE_CONTEXT, None, gated_drop=False)
     if collective >= base:
         return (DropGap.NOT_DROP_WALLED.value, base, collective, base, None)
-    gate_price = route_price(candidate, state, game_data, NO_PROFILE_CONTEXT,
+    gate_price = route_price(candidate, state, game_data, _OFFLINE_CONTEXT,
                              None, gated_drop=True)
     for item in walled:
         single = route_price(candidate, _granted(state, (item,)), game_data,
-                             NO_PROFILE_CONTEXT, None, gated_drop=False)
+                             _OFFLINE_CONTEXT, None, gated_drop=False)
         if single >= base:
             continue
         evidence = drop_evidence(item, state, game_data)
@@ -317,7 +322,7 @@ def run_census(bundle: Path) -> list[DropResult]:
         resolution = resolve_root(state, game_data,
                                   CharacterObjective.from_game_data(game_data),
                                   attach_gear_objective(state, game_data,
-                                                        NO_PROFILE_CONTEXT, None),
+                                                        _OFFLINE_CONTEXT, None),
                                   None)
         if resolution.root is None:
             results.append(DropResult(

@@ -35,8 +35,9 @@ the ranking could not see it. That is the defect this module was written to fix,
 reintroduced one layer down.
 
 So the unit stays actions and the conversion is declared: a Rest costs its
-published cooldown divided by `TYPICAL_FIGHT_COOLDOWN_SECONDS`, i.e. it is priced
-in FIGHT-EQUIVALENTS. This is not the seconds/cycles confusion returning. That bug
+published cooldown divided by the seconds of the fight it follows (learned from
+the fight's length, spec 2026-10-18 §2.9: `fight_walk.walk_seconds`), i.e. it
+is priced in FIGHT-EQUIVALENTS of THAT fight. This is not the seconds/cycles confusion returning. That bug
 was a number denominated in seconds while NAMED cycles, so consumers divided a
 duration into an XP figure and ran 80x high. Here the number is in fight-
 equivalents, is named so, and the one action whose duration is not roughly uniform
@@ -73,18 +74,6 @@ from artifactsmmo_cli.ai.thresholds import CRITICAL_HP_FRACTION
 FIGHT_ACTIONS_PER_KILL = 1.0
 """The Fight action itself. One kill is one Fight, and one Fight is the UNIT —
 every other action in this module is priced as a multiple of it."""
-
-TYPICAL_FIGHT_COOLDOWN_SECONDS = 30.0
-"""Wall-clock cooldown of one Fight, in seconds. Corroborated at 29.10s mean /
-29.85s median over 2483 observed fights in the committed traces.
-
-This is both the fallback duration callers reasoning about elapsed time want
-(`tiers/strategic_weights` combines it with move and deposit cooldowns into a
-round-trip time) AND the seconds-per-unit of this module's cost. Those are the
-same number by DEFINITION rather than by coincidence: the unit is one Fight, so
-the seconds in a unit are the seconds in a Fight. Naming it once and deriving both
-readings from that definition is the opposite of the mistake that named a 30-second
-cooldown `DEFAULT_FIGHT_CYCLES` and let two meanings hide under one word."""
 
 USABLE_HP_FRACTION = 1.0 - CRITICAL_HP_FRACTION
 """Share of max HP a character will actually spend before resting.
@@ -125,8 +114,9 @@ def fights_per_rest(expected_damage: int, max_hp: int) -> int:
     return int(USABLE_HP_FRACTION * max_hp // expected_damage) + 1
 
 
-def rest_actions_per_fight(expected_damage: int, max_hp: int) -> float:
-    """Rest cost one Fight forces, in Fight-equivalents.
+def rest_actions_per_fight(expected_damage: int, max_hp: int, fight_seconds: Fraction) -> float:
+    """Rest cost one Fight forces, in Fight-equivalents: `fight_seconds` is that
+    fight's learned duration (spec 2026-10-18 §2.9).
 
     One Rest is paid at the end of each chain and amortised over the fights in
     it. Its cooldown is the published one for the damage the whole chain
@@ -135,16 +125,16 @@ def rest_actions_per_fight(expected_damage: int, max_hp: int) -> float:
 
         chain    = fights_per_rest(damage, max_hp)
         seconds  = rest_cooldown_seconds(chain * damage, max_hp)
-        per fight = seconds / (chain * TYPICAL_FIGHT_COOLDOWN_SECONDS)
+        per fight = seconds / (chain * fight_seconds)
 
     The result is monotone in damage across the WHOLE range and does not
     saturate, which is the property the capped version lacked and the reason
     armour can now pay continuously instead of in one step. Its ceiling is
-    100 / 30 = 3.33 — a character rests off a full bar after every fight and
-    spends three fights' worth of time doing it.
+    100 / `fight_seconds` — a character rests off a full bar after every fight.
 
-    Calibration, live states against the 2026-08-07 traces (this model / the
-    superseded capped one / measured rest ACTIONS per fight):
+    Calibration, live states against the 2026-08-07 traces at the 30 s fight the
+    model then assumed (this model / the superseded capped one / measured rest
+    ACTIONS per fight):
         Robby  vs pig        damage 462, max_hp 525 -> 2.93 / 1.00 / 1.00
         C3P0   vs red_slime  damage 144, max_hp 280 -> 1.73 / 1.00 / 0.95
         Lor    vs red_slime  damage 108, max_hp 280 -> 1.29 / 1.00 / 0.94
@@ -161,10 +151,10 @@ def rest_actions_per_fight(expected_damage: int, max_hp: int) -> float:
         return 0.0
     chain = fights_per_rest(expected_damage, max_hp)
     seconds = rest_cooldown_seconds(chain * expected_damage, max_hp)
-    return seconds / (chain * TYPICAL_FIGHT_COOLDOWN_SECONDS)
+    return seconds / (chain * float(fight_seconds))
 
 
-def cycles_per_kill(expected_damage: int, max_hp: int) -> float:
+def cycles_per_kill(expected_damage: int, max_hp: int, fight_seconds: Fraction) -> float:
     """Total planner actions one kill costs: the Fight plus the Rest it forces.
 
     This is the denominator `cheapest_path_to_level` divides xp-per-kill by, so
@@ -172,15 +162,15 @@ def cycles_per_kill(expected_damage: int, max_hp: int) -> float:
     equivalents, never raw seconds and never a mix (`FIGHT_CYCLES_PER_KILL` was a
     30-second cooldown named cycles until 2026-08-07, and the projection ran ~80x
     high)."""
-    return FIGHT_ACTIONS_PER_KILL + rest_actions_per_fight(expected_damage, max_hp)
+    return FIGHT_ACTIONS_PER_KILL + rest_actions_per_fight(expected_damage, max_hp, fight_seconds)
 
 
-def loss_cost(max_hp: int) -> Fraction:
+def loss_cost(max_hp: int, fight_seconds: Fraction) -> Fraction:
     """What one LOST fight costs, in Fight-equivalents: the Fight itself plus
     the recovery from the 1 hp a loss leaves (live 2026-10-08: every
     `error:fight_lost` row ends at the respawn tile with `hp = 1`), priced as
     the published Rest for `max_hp - 1` missing hit points — the policy-free
     recovery, as `rest_actions_per_fight` prices it. The walk back from the
-    respawn tile is not priced (`docs/PLAN_loss_risk.md` residual)."""
-    seconds = int(TYPICAL_FIGHT_COOLDOWN_SECONDS)
-    return Fraction(seconds + rest_cooldown_seconds(max_hp - 1, max_hp), seconds)
+    respawn tile is not priced (`docs/PLAN_loss_risk.md` residual).
+    `fight_seconds` is the lost fight's learned duration (spec §2.9)."""
+    return (fight_seconds + rest_cooldown_seconds(max_hp - 1, max_hp)) / fight_seconds

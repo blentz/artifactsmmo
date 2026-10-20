@@ -3,6 +3,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -33,6 +34,7 @@ def _gd() -> GameData:
 
 def test_emit_trace_includes_strategy_without_changing_selected_goal():
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     player.game_data = _gd()
     player.state = make_state(level=3)
     player._objective = CharacterObjective.from_game_data(player.game_data)
@@ -50,6 +52,7 @@ def test_emit_trace_includes_strategy_without_changing_selected_goal():
 
 def test_emit_trace_omits_strategy_when_engine_absent():
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     player.state = make_state(level=3)
     player.tracer = _CaptureTracer()
     player._emit_trace(action_name="a", goal_name="g", outcome="ok", planner_stats={})
@@ -68,6 +71,7 @@ def test_emit_trace_strategy_record_keeps_to_trace_shape():
     the shape. This is a schema change, not a coincidence of the field
     deletion: a reader keying off either name now gets a `KeyError`."""
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     player.game_data = _gd()
     player.state = make_state(level=3)
     player._objective = CharacterObjective.from_game_data(player.game_data)

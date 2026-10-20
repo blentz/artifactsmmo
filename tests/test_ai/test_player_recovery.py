@@ -6,6 +6,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.failure_recovery_core import TRANSPORT_RETRY_CYCLES, blocked
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import (
     REPEATED_ACTION_FAILURE_THRESHOLD,
@@ -25,6 +26,7 @@ def _cycle(goal: str = "GoalA", action: str = "X", succeeded: bool = True,
 
 def test_player_has_detector_after_init():
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     assert isinstance(player._detector, StuckDetector)
     assert player._cycles_without_progress == 0
@@ -34,6 +36,7 @@ def test_player_has_detector_after_init():
 def test_detector_record_helper_creates_cycle_record():
     """The helper _make_cycle_record should produce a CycleRecord with state_key from planner."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     player.state = make_state(x=4, y=2)
     record = player._make_cycle_record(
@@ -59,6 +62,7 @@ def test_detector_record_helper_creates_cycle_record():
 def test_make_cycle_record_keys_a_gather_without_its_quantity():
     """The one action whose repr and key diverge — the reason `action_key` exists."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     player.state = make_state()
     record = player._make_cycle_record(
@@ -73,6 +77,7 @@ def test_make_cycle_record_no_plan_sentinel():
     """No action means no plan: both fields carry the sentinel the stuck rules
     exclude, so a no-plan flood cannot masquerade as a repeated action."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     player.state = make_state()
     record = player._make_cycle_record(
@@ -86,6 +91,7 @@ def test_make_cycle_record_no_plan_sentinel():
 def test_handle_stuck_acknowledges_signal():
     """_handle_stuck should acknowledge the signal to prevent re-fire."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     player.state = make_state()
     # Record some cycles to populate detector internal counter
@@ -103,6 +109,7 @@ def test_handle_stuck_acknowledges_signal():
 def test_handle_stuck_state_frozen_level1_triggers_full_refresh():
     """Level 1 STATE_FROZEN should call full refresh (via _fetch_world_state for now)."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     player.state = make_state()
 
@@ -121,6 +128,7 @@ def test_handle_stuck_state_frozen_only_refreshes_at_any_level():
     """Phase 4-3c: STATE_FROZEN is a perception fact. Every fire refreshes; the
     L2/L3 goal-suppression rungs are gone."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     player.state = make_state()
     player._recovery_level[StuckSignal.STATE_FROZEN] = 2
@@ -137,6 +145,7 @@ def test_handle_stuck_state_frozen_only_refreshes_at_any_level():
 
 def test_handle_stuck_no_progress_level1_triggers_refresh():
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     player.state = make_state()
 
@@ -155,6 +164,7 @@ def test_handle_stuck_no_progress_never_exits():
     """Phase 4-3c: NO_PROGRESS refreshes and clears the bank blocker at every
     level; the only StuckExit is the intention one."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     player.state = make_state()
     player._fetch_world_state = lambda c: player.state  # type: ignore
@@ -192,6 +202,7 @@ def test_a_transport_failure_blocks_for_a_short_retry():
     TRANSPORT_RETRY_CYCLES and acknowledges the signal. It suppresses no goal
     (Phase 4-3c)."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     _wedge(player, goal="GatherMaterials", fails=10)
     player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
@@ -205,6 +216,7 @@ def test_a_transport_retry_never_escalates():
     any recovery level, and L3 still raises nothing (the only exit is the
     intention one, Phase 4-3c)."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     _wedge(player, goal="GatherMaterials", fails=10, use_record_cycle=True)
     player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
@@ -218,6 +230,7 @@ def test_a_structural_failure_blocks_until_the_active_events_change():
     the active-event set (the premise) does. Live 2026-10-08 the countdown
     re-admitted Robby's wrong-master TaskCancel every 10/30 cycles."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     _wedge(player, fails=10, outcome="error:HTTP_598")
     player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
@@ -234,6 +247,7 @@ def test_a_state_failure_refreshes_instead_of_blocking(monkeypatch):
     """A sibling took the bank stock (HTTP 404): the belief is stale, so the
     answer is a full refresh, not a block."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     refreshed = []
     monkeypatch.setattr(player, "_full_refresh", lambda client: refreshed.append(client))
@@ -246,6 +260,7 @@ def test_a_state_failure_refreshes_instead_of_blocking(monkeypatch):
 def test_a_learned_failure_adds_no_block(monkeypatch):
     """A lost fight is the learned-loss veto's and the loss price's."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     monkeypatch.setattr(player, "_full_refresh", lambda client: pytest.fail("no refresh"))
     _wedge(player, fails=10, outcome="error:fight_lost")
@@ -259,6 +274,7 @@ def test_build_actions_excludes_a_blocked_action():
     deadlock (2026-07-02: RestoreHP guard looped UseConsumable) is why the block
     is action-level."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     gd = GameData()
     gd._bank_location = (4, 0)
@@ -292,6 +308,7 @@ def test_repeated_action_failure_tallies_across_varying_batch_sizes():
     overrides to be quantity-free.
     """
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     quantities = [60, 47, 31, 22, 18, 13, 9, 6, 4, 2]
     assert len({repr(_sized_gather(q)) for q in quantities}) == len(quantities), \
@@ -321,6 +338,7 @@ def test_backoff_blocks_a_gather_built_at_a_different_quantity():
     factory's unsized one, so a repr-keyed filter can never match. Filtering on
     `learning_key()` makes the two halves agree."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     gd = GameData()
     gd._resource_locations = {"copper_rocks": [(2, 0)]}
@@ -345,6 +363,7 @@ def test_a_transport_block_decrements_per_cycle():
     """A transport block decays each cycle, so a transient failure is not
     blocked forever; a structural one does not decay."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     player._failure_blocks = {"Withdraw(ash_plank)": (3, None), "UseConsumable": (1, None),
                               "TaskCancel": (0, frozenset())}
@@ -374,6 +393,7 @@ class TestEscalationDecay:
     def test_productive_run_resets_escalation(self):
         """L2, then 20+ productive cycles, then a fire → L1, not L3."""
         player = GamePlayer(character="testchar")
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
         for i in range(22):  # 22 consecutive productive cycles >= window 20
@@ -388,6 +408,7 @@ class TestEscalationDecay:
         """Trace-locked: the 67 productive cycles between L2 and L3 in the
         2026-06-10 session must clear escalation history."""
         player = GamePlayer(character="testchar")
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
         for i in range(67):
@@ -402,6 +423,7 @@ class TestEscalationDecay:
         """A genuine livelock refill window (all failures) provides no
         counter-evidence: L2 escalates to L3."""
         player = GamePlayer(character="testchar")
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
         self._flap_window(player, start=0)  # refill is itself the evidence
@@ -412,6 +434,7 @@ class TestEscalationDecay:
         """Fewer than window-size consecutive successes is not a full window
         of counter-evidence — escalation history is kept."""
         player = GamePlayer(character="testchar")
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
         for i in range(19):  # one short of the 20-cycle window
@@ -426,6 +449,7 @@ class TestEscalationDecay:
         """The counter-evidence run must be CONSECUTIVE: successes split by a
         failure never reach the window size, so no decay."""
         player = GamePlayer(character="testchar")
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
         for i in range(40):  # 4 ok, 1 fail, repeated: max streak 4 < 20
@@ -441,6 +465,7 @@ class TestEscalationDecay:
         the NEXT fire without counter-evidence unless a fresh full window
         accumulates."""
         player = GamePlayer(character="testchar")
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
         for i in range(22):
@@ -459,6 +484,7 @@ class TestEscalationDecay:
         """NO_PROGRESS counter-evidence is 'a real plan existed', regardless
         of outcome: 4+ consecutive planned cycles reset its escalation."""
         player = GamePlayer(character="testchar")
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player._recovery_level[StuckSignal.NO_PROGRESS] = 2
         for i in range(4):  # planned but FAILED cycles still refute no-plan
@@ -474,6 +500,7 @@ class TestEscalationDecay:
         """STATE_FROZEN counter-evidence is a CHANGED state key — succeeding
         actions that leave the state frozen prove nothing, so no decay."""
         player = GamePlayer(character="testchar")
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player._recovery_level[StuckSignal.STATE_FROZEN] = 1
         frozen_key = (1, 1, 5, (), (), None, 0, False)
@@ -490,6 +517,7 @@ class TestEscalationDecay:
         """10+ consecutive state CHANGES since the last fire reset frozen
         escalation."""
         player = GamePlayer(character="testchar")
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player.state = make_state()
         player._fetch_world_state = lambda c: player.state  # type: ignore
@@ -535,6 +563,7 @@ def test_cooldown_outcome_does_not_count_as_failure_for_stuck_detection():
 def test_a_repeating_key_is_classified_by_its_latest_failure():
     """Nine network blips then a 598: what the action fails with NOW decides."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     for i in range(20):
         failing = i % 2 == 0

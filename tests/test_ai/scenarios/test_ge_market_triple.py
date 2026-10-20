@@ -39,15 +39,16 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
@@ -58,11 +59,19 @@ CELL5_BUSY_ADEQUATE = "l12_ge_book_adequate"
 TRIPLE = (CELL4_BUSY_GRIND, CELL7_QUIET_GRIND, CELL5_BUSY_ADEQUATE)
 
 SKILL = "gearcrafting"
-RUNG = "feather_coat"
+RUNG = "copper_legs_armor"
 """The grind rung both `gearcrafting 9` cells land on. Depth-2 and DROP-FED
-(`{feather: 5, ash_plank: 2}`; feather off the chicken, ash_plank from
-ash_wood) — the shape that is 70.7 % of the catalogue and 87.2 % of live
-`UpgradeEquipment` cycles and carried 4 of the 30 committed scenarios."""
+(copper bars and a chicken's feather). It was `feather_coat` until spec
+2026-10-18 §2.9 priced a fight's seconds by its learned length, which made
+the copper rung the faster climb; the busy book carries a standing sell order
+on it too."""
+
+BOOK_ITEM = "feather_coat"
+"""The depth-2 drop-fed item (`{feather: 5, ash_plank: 2}`; feather off the
+chicken, ash_plank from ash_wood) whose plain descent the order book moves:
+the busy book leafs it at the item, the quiet one descends to the material.
+The shape that is 70.7 % of the catalogue and 87.2 % of live
+`UpgradeEquipment` cycles."""
 
 LEG_TARGET = "iron_legs_armor"
 """Cell 5's rung: `{iron_bar: 5, cowhide: 3}`, also depth-2 drop-fed, and the
@@ -95,7 +104,7 @@ def _state(name: str, game_data: GameData) -> WorldState:
 
 
 def _kinds(code: str, state: WorldState, game_data: GameData) -> set[SourceKind]:
-    return {s.kind for s in obtain_sources(code, state, game_data, NO_PROFILE_CONTEXT)}
+    return {s.kind for s in obtain_sources(code, state, game_data, TIMED_NO_PROFILE_CONTEXT)}
 
 
 # --- the dimension is real, and the control really is a control -------------
@@ -124,7 +133,7 @@ def test_the_declared_market_is_the_market_the_harness_builds(
     for name in TRIPLE:
         game_data = _market(name, quiet, busy)
         state = _state(name, game_data)
-        rung = skill_grind_target(SKILL, state, game_data)
+        rung = skill_grind_target(SKILL, state, game_data, ctx=TIMED_NO_PROFILE_CONTEXT)
         assert rung is not None
         kinds = _kinds(rung, state, game_data)
         assert (SourceKind.GE_FILL in kinds) is SCENARIOS[name].ge_market, (
@@ -146,6 +155,7 @@ def test_the_control_market_really_is_empty(quiet: GameData) -> None:
 def _grind(name: str, game_data: GameData) -> list[str]:
     """The grind's committed plan, the arbiter's own call."""
     player = GamePlayer(character=name, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(_state(name, game_data), game_data)
     plan = decompose(ReachSkillGoal(SKILL, 10), player.state, game_data,
                      player._build_actions(), player._last_ctx)
@@ -171,13 +181,20 @@ def test_the_busy_book_leafs_the_plain_descent_at_the_rung(
     In the BUSY book the plain descent (no grind) leafs AT the rung, since the
     standing order hands the finished item over; in the QUIET book it descends
     to the material. The grind's walk reaches the same rung legs in both books,
-    so the order book IS load-bearing here and `produce` is what neutralises it."""
-    node = ObtainItem(code=RUNG, quantity=1)
+    so the order book IS load-bearing here and `produce` is what neutralises it.
+
+    Since spec 2026-10-18 §2.9 the grind's rung (`copper_legs_armor`) leafs
+    the plain descent in BOTH books; the book's load still shows on
+    `feather_coat`, the rung before it, which is what this pins."""
+    node = ObtainItem(code=BOOK_ITEM, quantity=1)
     busy_state = _state(CELL4_BUSY_GRIND, busy)
     quiet_state = _state(CELL7_QUIET_GRIND, quiet)
-    assert actionable_step(node, busy_state, busy, NO_PROFILE_CONTEXT) == node
-    assert actionable_step(node, quiet_state, quiet, NO_PROFILE_CONTEXT) != node
-    rung_legs = ["Fight(chicken)", "Gather(ash_tree×20)", "Craft(ash_plank×2)",
+    assert actionable_step(node, busy_state, busy, TIMED_NO_PROFILE_CONTEXT) == node
+    assert actionable_step(node, quiet_state, quiet, TIMED_NO_PROFILE_CONTEXT) != node
+    rung = ObtainItem(code=RUNG, quantity=1)
+    assert actionable_step(rung, busy_state, busy, TIMED_NO_PROFILE_CONTEXT) == rung
+    assert actionable_step(rung, quiet_state, quiet, TIMED_NO_PROFILE_CONTEXT) == rung
+    rung_legs = ["Gather(copper_rocks×50)", "Craft(copper_bar×5)", "Fight(chicken)",
                  f"Craft({RUNG}×1)"]
     assert _grind(CELL4_BUSY_GRIND, busy)[-4:] == rung_legs
     assert _grind(CELL7_QUIET_GRIND, quiet)[-4:] == rung_legs
@@ -199,8 +216,8 @@ def test_cell5_leafs_the_descent_on_the_standing_order(
     assert SourceKind.GE_FILL in _kinds(LEG_TARGET, busy_state, busy)
     assert _kinds(LEG_TARGET, quiet_state, quiet) == {SourceKind.CRAFT}
 
-    assert prerequisites(node, busy_state, busy, NO_PROFILE_CONTEXT) == []
-    assert prerequisites(node, quiet_state, quiet, NO_PROFILE_CONTEXT) == [
+    assert prerequisites(node, busy_state, busy, TIMED_NO_PROFILE_CONTEXT) == []
+    assert prerequisites(node, quiet_state, quiet, TIMED_NO_PROFILE_CONTEXT) == [
         ObtainItem(code="iron_bar", quantity=5),
         ObtainItem(code="cowhide", quantity=3),
     ]
@@ -245,6 +262,7 @@ def test_cell5_the_book_reorders_the_objective_and_the_first_action(
 
 def _plan(name: str, game_data: GameData):
     player = GamePlayer(character=name, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(_state(name, game_data), game_data)
     return player.plan_from_state()
 

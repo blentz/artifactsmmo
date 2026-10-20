@@ -45,7 +45,6 @@ from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     scenario_state,
 )
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.audit import currency_wall_census as cwc
@@ -69,6 +68,7 @@ from artifactsmmo_cli.audit.currency_wall_census import (
     summary_line,
     unattributed_wall,
 )
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
@@ -93,9 +93,10 @@ def _shared_worlds() -> Iterator[None]:
 
 FUNDED_CELL = "l25_currency_leaf_unfunded"
 FUNDED_CURRENCY = "tasks_coin"
-FUNDED_CANDIDATE = ObtainItem(code="dreadful_ring", quantity=1, slot="ring1_slot")
+FUNDED_CANDIDATE = ObtainItem(code="skull_ring", quantity=1, slot="ring1_slot")
 """An `L*` piece the walk offers `FUNDED_CELL` as an alternative, priced in
-`tasks_coin` at the tasks_trader."""
+`tasks_coin` at the tasks_trader. The `dreadful_ring` until spec 2026-10-18
+§2.9 re-derived `L*` by kill speed."""
 GOLD_CANDIDATE = ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")
 """The gold-priced rune, an `L*` piece offered as an alternative to 22 cells."""
 
@@ -104,7 +105,7 @@ def _offered(state, game_data):  # type: ignore[no-untyped-def]
     """The roots the walk offers `state`, chosen first: its context carries
     the cycle's gear objective, attached as the player attaches it (ruling W)."""
     resolution = resolve_root(state, game_data, CharacterObjective.from_game_data(game_data),
-                              attached(state, game_data, NO_PROFILE_CONTEXT, None),
+                              attached(state, game_data, TIMED_NO_PROFILE_CONTEXT, None),
                               None)
     return [g for g in (resolution.root, *resolution.alternatives) if g is not None]
 
@@ -163,12 +164,14 @@ def test_the_funded_arm_has_a_witness(results: list[CurrencyResult]) -> None:
     # 1 -> 3 (ruling AB): the cell's old root, `king_slime_sword`, left with
     # the tier sheet; its `L*` offers two `dreadful_ring`s and a
     # `hard_leather_helmet`, each priced in tasks_coin, as alternatives.
+    # Spec 2026-10-18 §2.9: `L*`'s rings are two `skull_ring`s now, still
+    # tasks_coin-priced, and the helmet orders first.
     assert [(r.scenario, r.currency, r.candidate, r.is_resolved_root) for r in funded] == [
+        (FUNDED_CELL, FUNDED_CURRENCY,
+         repr(ObtainItem(code="hard_leather_helmet", quantity=1, slot="helmet_slot")), False),
         (FUNDED_CELL, FUNDED_CURRENCY, repr(FUNDED_CANDIDATE), False),
         (FUNDED_CELL, FUNDED_CURRENCY,
-         repr(ObtainItem(code="dreadful_ring", quantity=1, slot="ring2_slot")), False),
-        (FUNDED_CELL, FUNDED_CURRENCY,
-         repr(ObtainItem(code="hard_leather_helmet", quantity=1, slot="helmet_slot")), False)]
+         repr(ObtainItem(code="skull_ring", quantity=1, slot="ring2_slot")), False)]
     assert reference_set_residual(results) is None
 
 
@@ -215,7 +218,7 @@ def test_the_charge_is_the_pricers_own_answer() -> None:
                                  catalogue_currencies(game_data))
     assert set(charges) == {FUNDED_CURRENCY}
     base, granted = charges[FUNDED_CURRENCY]
-    assert base == route_price(root, state, game_data, NO_PROFILE_CONTEXT,
+    assert base == route_price(root, state, game_data, TIMED_NO_PROFILE_CONTEXT,
                                None)
     assert base >= 1_000_000 > granted
 
@@ -251,7 +254,7 @@ def test_a_merely_cheaper_route_is_not_a_charge() -> None:
         root = _offered(state, game_data)[0]
         if root is None:
             continue
-        base = route_price(root, state, game_data, NO_PROFILE_CONTEXT, None)
+        base = route_price(root, state, game_data, TIMED_NO_PROFILE_CONTEXT, None)
         if base >= UNOBTAINABLE_PER_UNIT:
             continue
         obtainable += 1
@@ -371,7 +374,7 @@ def test_an_obtainable_root_is_never_an_unattributed_wall() -> None:
         state = scenario_state(scenario, game_data)
         root = _offered(state, game_data)[0]
         if root is None or route_price(root, state, game_data,
-                                       NO_PROFILE_CONTEXT,
+                                       TIMED_NO_PROFILE_CONTEXT,
                                        None) >= UNOBTAINABLE_PER_UNIT:
             continue
         checked += 1
@@ -391,7 +394,7 @@ def test_a_root_walled_on_a_non_currency_leaf_is_not_an_unattributed_wall(
     state = scenario_state(scenario, game_data)
     # A target whose closure contains no currency at all.
     root = ObtainItem(code="mithril_bar", quantity=99)
-    assert route_price(root, state, game_data, NO_PROFILE_CONTEXT,
+    assert route_price(root, state, game_data, TIMED_NO_PROFILE_CONTEXT,
                        None) >= UNOBTAINABLE_PER_UNIT
     assert not unattributed_wall(root, state, game_data,
                                  catalogue_currencies(game_data))
@@ -524,7 +527,9 @@ def test_the_demand_breakdown_states_the_residual_scope(
     # 5 -> 7 (2026-10-18, ruling R): the two derived band-entry gold walls.
     # 7 of 308 -> 25 of 1799 (ruling AB): every offered root is priced — 257
     # offered roots over 45 scenarios, gold 22 and tasks_coin 3.
-    assert "25 of 1799 cells are CHARGED (2 distinct currencies) — gold 22, tasks_coin 3" in line
+    # 1799 -> 1771 (spec 2026-10-18 §2.9): the walks offer fewer roots once
+    # `L*` is chosen by kill speed.
+    assert "25 of 1771 cells are CHARGED (2 distinct currencies) — gold 22, tasks_coin 3" in line
     assert FUNDED_CURRENCY in line
     assert demand_breakdown([]) .endswith(
         "An uncharged currency can only be not_demanded.")
@@ -618,7 +623,7 @@ def test_an_obtainable_root_is_never_gold_walled() -> None:
         state = scenario_state(scenario, game_data)
         root = _offered(state, game_data)[0]
         if root is None or route_price(root, state, game_data,
-                                       NO_PROFILE_CONTEXT,
+                                       TIMED_NO_PROFILE_CONTEXT,
                                        None) >= UNOBTAINABLE_PER_UNIT:
             continue
         checked += 1

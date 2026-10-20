@@ -48,7 +48,7 @@ executor's and the loadout selection's problem (S-020 places both in background)
 not a component of what it costs when it can.
 """
 
-from artifactsmmo_cli.ai.learning.fight_loop_cost import TYPICAL_FIGHT_COOLDOWN_SECONDS
+from fractions import Fraction
 
 EQUIP_SECONDS_PER_ITEM = 3.0
 """Published cooldown contributed by ONE item moved, in seconds.
@@ -82,12 +82,14 @@ def items_moved(worn: dict[str, str | None], target: dict[str, str | None]) -> i
     )
 
 
-def equip_cost(worn: dict[str, str | None], target: dict[str, str | None]) -> float:
+def equip_cost(worn: dict[str, str | None], target: dict[str, str | None],
+               fight_seconds: Fraction) -> float:
     """Cost of the loadout change, in Fight-equivalents (S-004).
 
-    Each item movement is a published 3 seconds, converted by the duration of one
-    Fight because that is the unit. A whole sixteen-slot outfitting therefore costs
-    about 1.6 fights' worth of time rather than sixteen fights.
+    Each item movement is a published 3 seconds, converted by `fight_seconds`,
+    the learned duration of the fight the loadout is changed for (spec
+    2026-10-18 §2.9), because one Fight is the unit. A whole sixteen-slot
+    outfitting before a 30-second fight therefore costs about 1.6 fights' worth
+    of time rather than sixteen fights.
     """
-    return (items_moved(worn, target) * EQUIP_SECONDS_PER_ITEM
-            / TYPICAL_FIGHT_COOLDOWN_SECONDS)
+    return items_moved(worn, target) * EQUIP_SECONDS_PER_ITEM / float(fight_seconds)

@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import achievable, fighter_owning, gear_objective
 from artifactsmmo_cli.ai.gear_objective_core import piece_order_key
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.yield_reprs import grind_xp_repr
@@ -38,8 +39,9 @@ from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
-CTX = SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
-                       initial_xp=0, task_exchange_min_coins=0, combat_monster=None)
+CTX = offline_context(SelectionContext(
+    bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
+    initial_xp=0, task_exchange_min_coins=0, combat_monster=None))
 COPPER = {"weapon_slot": "copper_dagger", "helmet_slot": "copper_helmet",
           "boots_slot": "copper_boots", "ring1_slot": "copper_ring"}
 """A level-12 character's worn copper set."""
@@ -60,7 +62,8 @@ def _robby(equipment: dict[str, str] = ROBBY_WORN) -> WorldState:
     (dmg 5, prospecting 25, initiative 100), since `_bare` cannot strip an
     item the bundle does not know. Initiative is 200: a character's base 100
     (every live sheet stripped of its gear reads 100) plus the hard_leather_helmet's
-    and the bandit_armor's 50 each; the live 300 adds the medal's 100.
+    and the bandit_armor's 50 each; the live 300 adds the medal's 100. Haste 8
+    is the hard_leather_pants' 2 and the snakeskin_boots' 6 (the live sheet's 8).
     Gearcrafting 23,
     jewelrycrafting 22, weaponcrafting 22, and the alchemy 32 and cooking 34
     that make his potion loadouts stockable (no fight that pays him XP is won
@@ -74,7 +77,7 @@ def _robby(equipment: dict[str, str] = ROBBY_WORN) -> WorldState:
                       equipment=worn, attack={"fire": 37, "earth": 37, "water": 0, "air": 0},
                       dmg=24, dmg_elements={"fire": 30, "earth": 30, "water": 0, "air": 20},
                       resistance={"fire": 7, "earth": 13, "water": 21, "air": 21},
-                      critical_strike=40, initiative=200, wisdom=25, prospecting=135)
+                      critical_strike=40, initiative=200, wisdom=25, prospecting=135, haste=8)
 
 
 def _novice(gd: GameData, equipment: dict[str, str] = COPPER,
@@ -277,7 +280,7 @@ def test_m_star_is_the_max_rate_monster(gd: GameData, novice: GearObjective) -> 
     state = _novice(gd)
     achieved = frozenset().union(*achievable(state, gd, CTX))
     food = food_menu(state, gd, CTX)
-    rates = {code: mod._rate(fighter, gd, code, food)
+    rates = {code: mod._rate(fighter, gd, code, food, CTX.timing())
              for code, (fighter, _) in mod._targets(state, gd, achieved).items()}
     assert len(set(rates.values())) > 1
     assert novice.rate == rates[novice.monster] == max(rates.values())
@@ -315,8 +318,12 @@ def test_none_when_no_monster_pays_even_on_the_achievable_fighter(gd: GameData) 
 
 def test_an_equal_rate_goes_to_the_higher_monster(monkeypatch: pytest.MonkeyPatch,
                                                   gd: GameData) -> None:
+    """Every rate is 1, and every fight a second long, so the walk's bound
+    (`_rated`: the odds times a kill's XP over the fight's seconds) prunes
+    no winnable candidate the patched rate could tie."""
     state = _novice(gd)
     monkeypatch.setattr(mod, "_rate", lambda *_args: Fraction(1))
+    monkeypatch.setattr(mod, "walk_seconds", lambda *_args: Fraction(1))
     objective = _objective(state, gd)
     levels = [gd.monster_levels[code] for code in mod._candidates(state, gd)]
     assert len(set(levels)) > 1
@@ -327,11 +334,13 @@ def test_an_equal_rate_and_level_goes_to_the_cheaper_pieces(monkeypatch: pytest.
                                                            gd: GameData) -> None:
     """Two level-15 monsters at one rate: `m*` is the one whose missing pieces
     cost less in all, whichever the catalogue lists first. Every piece is
-    priced 1 but one that only one monster's `L*` names, priced 2."""
+    priced 1 but one that only one monster's `L*` names, priced 2. Every
+    fight is a second long, so the walk's bound prunes neither."""
     state = _novice(gd, level=15)
     tied = [code for code in mod._candidates(state, gd) if gd.monster_levels[code] == 15]
     assert len(tied) == 2
     monkeypatch.setattr(mod, "_rate", lambda *_args: Fraction(1))
+    monkeypatch.setattr(mod, "walk_seconds", lambda *_args: Fraction(1))
     for dear, cheap in (tied, tied[::-1]):
         dear_only = set(_objective_for(monkeypatch, state, gd, [dear]).loadout.values())
         dear_only -= set(_objective_for(monkeypatch, state, gd, [cheap]).loadout.values())
@@ -345,6 +354,7 @@ def test_an_equal_rate_and_level_goes_to_the_cheaper_pieces(monkeypatch: pytest.
             assert _objective_for(monkeypatch, state, gd, order).monster == cheap
         monkeypatch.undo()
         monkeypatch.setattr(mod, "_rate", lambda *_args: Fraction(1))
+        monkeypatch.setattr(mod, "walk_seconds", lambda *_args: Fraction(1))
 
 
 def _objective_for(monkeypatch: pytest.MonkeyPatch, state: WorldState, gd: GameData,
@@ -471,7 +481,7 @@ def test_a_no_potion_loop_that_never_runs_raises(monkeypatch: pytest.MonkeyPatch
                                                  gd: GameData) -> None:
     monkeypatch.setattr(mod, "loop_rate", lambda *_args: None)
     with pytest.raises(RuntimeError, match="the no-potion loop against chicken did not run"):
-        mod._rate(_novice(gd), gd, "chicken", ())
+        mod._rate(_novice(gd), gd, "chicken", (), CTX.timing())
 
 
 def _carrying_its_target(name: str, gd: GameData) -> tuple[WorldState, GearObjective]:
@@ -516,15 +526,18 @@ def test_a_bare_element_below_zero_raises(gd: GameData) -> None:
 
 
 @pytest.mark.parametrize(("name", "monster"), [
-    ("l8_overstocked", "red_slime"), ("l20_band_entry", "pig"), ("l30_band_entry", "ogre"),
+    ("l8_overstocked", "green_slime"), ("l20_band_entry", "pig"), ("l30_band_entry", "ogre"),
     ("l40_band_entry", "cultist_acolyte"), ("l48_capstone_approach", "hellhound"),
     ("l48_band_adequate", "hellhound"), ("l48_raid_active", "hellhound"),
-    ("l10_gearcrafting_gap_combat_blocked", "cow")])
+    ("l10_gearcrafting_gap_combat_blocked", "red_slime")])
 def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str,
                                                         monster: str) -> None:
     """Ruling R: these scenarios' hand stats lacked their worn gear's, so the
     bare fighter won nothing and the objective read None. On the gear's own
-    totals (`derive_combat_stats`) each has an `m*` and pieces to acquire."""
+    totals (`derive_combat_stats`) each has an `m*` and pieces to acquire.
+    Since spec 2026-10-18 §2.9 (a fight's seconds are its learned length) the
+    level-8 sheet farms `green_slime` and the level-10 one `red_slime`, the
+    fights their `L*` kills fastest."""
     objective = _objective(scenario_state(SCENARIOS[name], gd), gd)
     assert objective.monster == monster
     assert objective.missing

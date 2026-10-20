@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -81,17 +82,20 @@ def make_game_data_mock() -> GameData:
 class TestGamePlayerInit:
     def test_default_flags(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         assert player.character == "hero"
         assert player.verbose is False
         assert player.dry_run is False
 
     def test_verbose_and_dry_run(self):
         player = GamePlayer(character="hero", verbose=True, dry_run=True)
+        player._offline_timing = committed_timing()
         assert player.verbose is True
         assert player.dry_run is True
 
     def test_game_data_cache_controls_default(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         assert player._game_data_ttl_minutes == 30
         assert player._refresh_game_data is False
 
@@ -99,6 +103,7 @@ class TestGamePlayerInit:
         player = GamePlayer(
             character="hero", game_data_ttl_minutes=45, refresh_game_data=True
         )
+        player._offline_timing = committed_timing()
         assert player._game_data_ttl_minutes == 45
         assert player._refresh_game_data is True
 
@@ -117,6 +122,7 @@ class TestDryRunDoesNotPersistLearning:
         try:
             store.start_session()
             player = GamePlayer(character="hero", dry_run=True, history=store)
+            player._offline_timing = committed_timing()
             prev = make_state(level=5)
             new = make_state(level=5, xp=prev.xp + 10)
             player._record_learning_cycle(
@@ -139,6 +145,7 @@ class TestDryRunDoesNotPersistLearning:
         try:
             store.start_session()
             player = GamePlayer(character="hero", dry_run=False, history=store)
+            player._offline_timing = committed_timing()
             prev = make_state(level=5)
             new = make_state(level=5, xp=prev.xp + 10)
             player._record_learning_cycle(
@@ -173,6 +180,7 @@ class TestRecordLearningCycleSkillLevels:
         try:
             store.start_session()
             player = GamePlayer(character="hero", dry_run=False, history=store)
+            player._offline_timing = committed_timing()
             prev = make_state(level=5, skills={"mining": 3, "woodcutting": 2})
             new = make_state(level=5, xp=prev.xp + 10,
                              skills={"mining": 4, "woodcutting": 2})
@@ -203,6 +211,7 @@ class TestRecordLearningCycleFightLength:
         try:
             store.start_session()
             player = GamePlayer(character="hero", dry_run=False, history=store)
+            player._offline_timing = committed_timing()
             prev = make_state(level=5, haste=8)
             new = make_state(level=5, xp=prev.xp + 10, haste=12)
             player._record_learning_cycle(
@@ -234,6 +243,7 @@ class TestRecordLearningCycleFightLength:
 class TestBuildActions:
     def test_includes_rest_and_deposit(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.game_data = make_game_data_mock()
         actions = player._build_actions()
         from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
@@ -243,6 +253,7 @@ class TestBuildActions:
 
     def test_includes_fight_actions_for_all_monsters(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.game_data = make_game_data_mock()
         actions = player._build_actions()
         from artifactsmmo_cli.ai.actions.combat import FightAction
@@ -252,6 +263,7 @@ class TestBuildActions:
 
     def test_fight_actions_carry_locations(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.game_data = make_game_data_mock()
         actions = player._build_actions()
         from artifactsmmo_cli.ai.actions.combat import FightAction
@@ -266,6 +278,7 @@ class TestArbiterSelection:
 
     def _with_strategy(self, gd: GameData, **state_kw) -> GamePlayer:
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.game_data = gd
         player._objective = CharacterObjective.from_game_data(gd)
         player._strategy = StrategyEngine(player._objective)
@@ -278,6 +291,7 @@ class TestArbiterSelection:
 
     def test_cycle_uses_arbiter_not_select_goal(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         assert hasattr(player, "_arbiter")
         assert not hasattr(player, "_select_goal")
         assert not hasattr(player, "_build_goals")
@@ -286,6 +300,7 @@ class TestArbiterSelection:
         """`_band_party` hands `best_party_loop` the band's prices and food menu:
         a character with no `party` gets no party loop."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.seed_offline(make_state(level=5), make_game_data_mock())
         assert player._band_party("chicken") is None
 
@@ -303,6 +318,7 @@ class TestArbiterSelection:
         forgotten at the other fails here without anyone remembering to extend
         this test."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.seed_offline(make_state(level=5), make_game_data_mock())
 
         class _Stop(Exception):
@@ -532,6 +548,7 @@ class TestWinnable:
 
     def _player(self, gd: GameData, state, history=None) -> GamePlayer:
         player = GamePlayer(character="hero", history=history)
+        player._offline_timing = committed_timing()
         player.game_data = gd
         player.state = state
         return player
@@ -598,16 +615,19 @@ class TestWinnable:
 class TestWaitForCooldown:
     def test_no_wait_when_state_is_none(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = None
         player._wait_for_cooldown()  # should not raise or sleep
 
     def test_no_wait_when_cooldown_none(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(cooldown_expires=None)
         player._wait_for_cooldown()
 
     def test_sleeps_for_remaining_cooldown(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         future = datetime.now(tz=timezone.utc) + timedelta(seconds=2.5)
         player.state = make_state(cooldown_expires=future)
         with patch("artifactsmmo_cli.ai.player.time.sleep") as mock_sleep:
@@ -618,6 +638,7 @@ class TestWaitForCooldown:
 
     def test_logs_cooldown_duration(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         future = datetime.now(tz=timezone.utc) + timedelta(seconds=3.0)
         player.state = make_state(cooldown_expires=future)
         import io
@@ -630,6 +651,7 @@ class TestWaitForCooldown:
 
     def test_no_sleep_when_cooldown_expired(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         past = datetime.now(tz=timezone.utc) - timedelta(seconds=5)
         player.state = make_state(cooldown_expires=past)
         with patch("artifactsmmo_cli.ai.player.time.sleep") as mock_sleep:
@@ -640,6 +662,7 @@ class TestWaitForCooldown:
 class TestMaybePeriodicRefresh:
     def test_does_not_refresh_below_threshold(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state()
         player._actions_since_full_refresh = 19
         refresh_calls = []
@@ -649,6 +672,7 @@ class TestMaybePeriodicRefresh:
 
     def test_refreshes_at_threshold(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state()
         player._actions_since_full_refresh = 20
         refresh_calls = []
@@ -665,6 +689,7 @@ class TestMaybePeriodicRefresh:
 class TestFetchWorldState:
     def test_returns_world_state(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = None
         char = make_char_schema()
         client = MagicMock()
@@ -678,6 +703,7 @@ class TestFetchWorldState:
 
     def test_preserves_bank_state_from_current_state(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(bank_items={"gold": 100}, bank_gold=50)
         char = make_char_schema()
         client = MagicMock()
@@ -700,6 +726,7 @@ class TestFetchWorldState:
         pinned here: silently patching it out would let the backoff be deleted
         from production with this test still green."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = None
         client = MagicMock()
         with patch("artifactsmmo_cli.ai.player.get_character", return_value=None):
@@ -718,6 +745,7 @@ class TestFetchWorldState:
         Raised as a plain RuntimeError from the refetch in `_execute`'s except
         handlers, it stopped HAL and Robby for good (2026-09-28)."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = None
         client = MagicMock()
         mock = MagicMock(side_effect=answer) if isinstance(answer, Exception) else MagicMock(return_value=answer)
@@ -732,6 +760,7 @@ class TestFetchWorldState:
         """A 4xx is the request being wrong (no such character, a token for
         another account), which a restart cannot fix."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = None
         client = MagicMock()
         missing = ErrorResponseSchema(error=ErrorSchema(code=498, message="Character not found."))
@@ -760,6 +789,7 @@ class TestFetchOpenOrders:
 
     def test_maps_api_rows_to_open_orders_at_age_zero(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         page = MagicMock()
         page.data = [_make_ge_order_row("o1", "iron_ore", 3, 19, OrderSide.SELL)]
@@ -769,6 +799,7 @@ class TestFetchOpenOrders:
 
     def test_paginates_when_full_page_returned(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         row = _make_ge_order_row("o1", "iron_ore", 1, 19, OrderSide.SELL)
         page1 = MagicMock()
@@ -784,6 +815,7 @@ class TestFetchOpenOrders:
         """A poll that never succeeds must return None (not an empty tuple), so
         the caller cannot mistake "we couldn't ask" for "every order filled"."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         with patch("artifactsmmo_cli.ai.player.get_my_ge_orders",
                    side_effect=httpx.ReadTimeout("timed out")):
@@ -801,6 +833,7 @@ class TestReconcileOpenOrders:
 
     def test_noop_when_state_is_none(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = None
         client = MagicMock()
         with patch("artifactsmmo_cli.ai.player.get_my_ge_orders") as mock_fetch:
@@ -811,6 +844,7 @@ class TestReconcileOpenOrders:
     def test_keeps_prior_open_orders_on_fetch_failure(self):
         prior = (OpenOrder(id="o1", code="iron_ore", qty=5, price=19, side=OrderSide.SELL, age=1),)
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(open_orders=prior, gold=50)
         client = MagicMock()
         with patch("artifactsmmo_cli.ai.player.get_my_ge_orders",
@@ -827,6 +861,7 @@ class TestReconcileOpenOrders:
         double-count. Reconcile only removes the order from the tracked list."""
         prior = (OpenOrder(id="o1", code="iron_ore", qty=3, price=19, side=OrderSide.SELL, age=0),)
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player._open_orders = prior
         player.state = make_state(
             open_orders=prior, gold=50, pending_items=(("p1", "small_health_potion"),),
@@ -847,6 +882,7 @@ class TestReconcileOpenOrders:
         append, and gold is untouched."""
         prior = (OpenOrder(id="o2", code="copper_ore", qty=2, price=5, side=OrderSide.BUY, age=0),)
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player._open_orders = prior
         player.state = make_state(open_orders=prior, gold=50)
         client = MagicMock()
@@ -868,6 +904,7 @@ class TestReconcileOpenOrders:
         repeatedly wiped."""
         order = OpenOrder(id="o1", code="iron_ore", qty=5, price=19, side=OrderSide.SELL, age=0)
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player._open_orders = (order,)
         player.state = make_state(open_orders=(), gold=50)  # simulate the non-GE wipe
         client = MagicMock()
@@ -894,6 +931,7 @@ class TestFullRefreshNetworkResilience:
         sync failure must keep the carried-over bank view and leave the
         refresh counter unreset so the next cycle retries the refresh."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         player._actions_since_full_refresh = 20
         # _fetch_world_state carries bank_items over from the prior state.
@@ -911,6 +949,7 @@ class TestFullRefreshNetworkResilience:
         """Same guarantee when the failure comes from the pending-items sync
         (the second call inside the refresh)."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         player._actions_since_full_refresh = 20
         fetched = make_state(bank_items={"ash_wood": 59})
@@ -933,6 +972,7 @@ class TestFullRefreshNetworkResilience:
 
     def test_successful_refresh_resets_counter(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         player._actions_since_full_refresh = 20
         fetched = make_state()
@@ -959,6 +999,7 @@ class TestFullRefreshNetworkResilience:
 class TestSyncBank:
     def test_syncs_bank_items_and_gold(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         state = make_state()
         client = MagicMock()
 
@@ -984,6 +1025,7 @@ class TestSyncBank:
 
     def test_empty_bank(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         state = make_state()
         client = MagicMock()
 
@@ -1010,6 +1052,7 @@ class TestSyncBank:
         refresh (combat_capable flap, doomed gather probes). `_sync_bank`
         must change ONLY bank_items/bank_gold/bank_capacity."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         state = make_state(
             attack={"air": 5, "fire": 3}, dmg=18, dmg_elements={"air": 7},
             resistance={"earth": 4}, critical_strike=12, initiative=21,
@@ -1052,6 +1095,7 @@ class TestSyncBank:
 class TestExecute:
     def test_execute_success_updates_state(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(x=0, y=0)
         player.game_data = make_game_data_mock()
         client = MagicMock()
@@ -1074,6 +1118,7 @@ class TestExecute:
             crafting_skill="weaponcrafting", crafting_level=1,
         )
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(
             x=0, y=0, skills={"weaponcrafting": 5}, inventory={"copper_ore": 12})
         player.game_data = make_game_data(
@@ -1094,6 +1139,7 @@ class TestExecute:
 
     def test_execute_api_error_refreshes_state(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state()
         player.game_data = make_game_data_mock()
         client = MagicMock()
@@ -1120,6 +1166,7 @@ class TestExecute:
         leave `_execute` as ServerUnavailableError, the restartable exit, not
         be recorded as one more error cycle or turned into a plain crash."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state()
         player.game_data = make_game_data_mock()
         client = MagicMock()
@@ -1140,6 +1187,7 @@ class TestExecute:
         The re-sync BYPASSES the fleet cache: a fresh cached bank that still
         claims the planks is exactly the stale view that drove the withdraw."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         # Stale bank view claims 7 ash_plank are banked; the real bank is empty.
         player.state = make_state(x=4, y=0, bank_items={"ash_plank": 7})
         cache = AccountReadCache(str(tmp_path / "fleet.db"), "hero", account_interval=12.0)
@@ -1186,6 +1234,7 @@ class TestExecute:
         """If the bank re-sync itself network-fails, the 478 cycle still returns
         (no crash) — the periodic refresh retries next cycle."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(x=4, y=0, bank_items={"ash_plank": 7})
         player.game_data = make_game_data_mock()
         client = MagicMock()
@@ -1214,6 +1263,7 @@ class TestExecute:
 
     def test_execute_http_499_logs_server_cooldown(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state()
         player.game_data = make_game_data_mock()
         client = MagicMock()
@@ -1244,6 +1294,7 @@ class TestExecute:
         it returned. The 499's remainder must reach the wait, or every next
         cycle races the same 499."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state()
         player.game_data = make_game_data_mock()
         empty_events = MagicMock()
@@ -1276,6 +1327,7 @@ class TestExecute:
         silent worker-thread death; ANY future 485 must complete the cycle
         so replanning and the stuck detector can react)."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state()
         player.game_data = make_game_data_mock()
         client = MagicMock()
@@ -1301,6 +1353,7 @@ class TestExecute:
         must NOT crash the player. _execute should refetch state and surface
         outcome=error:network so the next cycle replans against current truth."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state()
         player.game_data = make_game_data_mock()
         client = MagicMock()
@@ -1325,6 +1378,7 @@ class TestExecute:
         """The post-deposit sync BYPASSES the fleet cache: the cached bank
         predates the deposit, so serving it would hide what was just banked."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(x=4, y=0, inventory={"copper_ore": 5})
         cache = AccountReadCache(str(tmp_path / "fleet.db"), "hero", account_interval=12.0)
         cache.publish("bank", json.dumps({"items": {}, "gold": 0, "slots": 50,
@@ -1359,6 +1413,7 @@ class TestExecute:
     def test_execute_fight_lost_outcome(self):
         """FightAction raising 'fight_lost: ...' should yield outcome=error:fight_lost."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(x=1, y=1, hp=100, max_hp=100)
         player.game_data = make_game_data_mock()
         client = MagicMock()
@@ -1388,6 +1443,7 @@ class TestExecute:
 
         store = LearningStore(db_path=str(tmp_path / "l.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
+        player._offline_timing = committed_timing()
         player.state = make_state(x=3, y=0)
         player.game_data = make_game_data_mock()
 
@@ -1424,6 +1480,7 @@ class TestExecute:
 
         store = LearningStore(db_path=str(tmp_path / "l.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
+        player._offline_timing = committed_timing()
         player.state = make_state(x=3, y=0, skills={"weaponcrafting": 8})
         player.game_data = make_game_data_mock()
 
@@ -1453,6 +1510,7 @@ class TestExecute:
 
         store = LearningStore(db_path=str(tmp_path / "l.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
+        player._offline_timing = committed_timing()
         player.state = make_state(x=3, y=0, skills={"weaponcrafting": 8})
         player.game_data = make_game_data_mock()
 
@@ -1512,6 +1570,7 @@ class TestFormatPlan:
 class TestBuildGoalsTier1:
     def _make_player_with_gd(self, extra_stats=None, extra_recipes=None) -> GamePlayer:
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         gd = GameData()
         gd._monster_locations = {"chicken": [(1, 0)]}
         gd._monster_level = {"chicken": 1}
@@ -1640,6 +1699,7 @@ class TestBuildGoalsTier1:
 class TestLogAction:
     def test_log_with_single_action(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state()
         from artifactsmmo_cli.ai.actions.rest import RestAction
         from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
@@ -1679,6 +1739,10 @@ def test_sync_pending_iterates_items_list(monkeypatch):
     )
 
     player = GamePlayer(character="testchar")
+
+    player._offline_timing = committed_timing()
+
+    player._offline_timing = committed_timing()
     player.state = make_state()
     new_state = player._sync_pending(client=None, state=player.state)
     assert new_state.pending_items is not None
@@ -1712,6 +1776,10 @@ def test_sync_pending_drops_no_field(monkeypatch):
     )
 
     player = GamePlayer(character="testchar")
+
+    player._offline_timing = committed_timing()
+
+    player._offline_timing = committed_timing()
     state = make_state(
         attack={"air": 5}, dmg=18, dmg_elements={"air": 7},
         resistance={"earth": 4}, critical_strike=12, initiative=21,
@@ -1758,6 +1826,10 @@ def test_sync_pending_handles_unset_items_list(monkeypatch):
     )
 
     player = GamePlayer(character="testchar")
+
+    player._offline_timing = committed_timing()
+
+    player._offline_timing = committed_timing()
     player.state = make_state()
     new_state = player._sync_pending(client=None, state=player.state)
     assert new_state.pending_items == (("p2", "diamond"),)
@@ -1768,6 +1840,7 @@ class TestExecuteHttp496BankLock:
 
     def test_http496_on_deposit_sets_bank_inaccessible(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(x=4, y=0, inventory={"copper_ore": 5})
         player.game_data = make_game_data_mock()
         client = MagicMock()
@@ -1791,6 +1864,7 @@ class TestExecuteHttp496BankLock:
 
     def test_http496_without_achievement_code_leaves_unlock_monster_none(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(x=4, y=0, inventory={"copper_ore": 1})
         player.game_data = make_game_data_mock()
         client = MagicMock()
@@ -1814,6 +1888,7 @@ class TestExecuteHttp496BankLock:
 
     def test_http496_does_not_mark_inaccessible_for_non_bank_action(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state()
         player.game_data = make_game_data_mock()
         client = MagicMock()
@@ -1837,6 +1912,7 @@ class TestExecuteHttp496BankLock:
     def test_http496_with_achievement_code_calls_resolve(self):
         """When achievement code is in the 496 error, _resolve_bank_unlock_monster is called."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(x=4, y=0, inventory={"copper_ore": 1})
         player.game_data = make_game_data_mock()
         client = MagicMock()
@@ -1868,6 +1944,7 @@ class TestExecuteHttp496BankLock:
     def test_http496_skips_resolve_when_monster_already_set(self):
         """Once bank_unlock_monster is set, _resolve_bank_unlock_monster is not called again."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(x=4, y=0, inventory={"copper_ore": 1})
         player.game_data = make_game_data_mock()
         player._blockers.mark_blocked("bank", char_level=0,
@@ -1906,6 +1983,7 @@ class TestExecuteClaimPendingSync:
     def test_execute_claim_pending_calls_sync_pending(self):
         from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(pending_items=(("id1", "copper_ore"),))
         player.game_data = make_game_data_mock()
         client = MagicMock()
@@ -1941,6 +2019,7 @@ class TestResolveBankUnlockMonster:
 
     def test_returns_none_when_api_returns_none(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         with patch("artifactsmmo_cli.ai.player.get_achievement", return_value=None):
             result = player._resolve_bank_unlock_monster(client, "some_achievement")
@@ -1948,6 +2027,7 @@ class TestResolveBankUnlockMonster:
 
     def test_returns_combat_kill_target(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
 
         obj = MagicMock()
@@ -1965,6 +2045,7 @@ class TestResolveBankUnlockMonster:
 
     def test_returns_none_when_no_combat_kill_objective(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
 
         obj = MagicMock()
@@ -1983,6 +2064,7 @@ class TestResolveBankUnlockMonster:
 
     def test_returns_none_when_result_has_no_data(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
 
         result_obj = MagicMock()
@@ -1999,6 +2081,7 @@ class TestEmitTrace:
 
     def test_returns_early_when_state_is_none(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = None
         tracer = MagicMock()
         player.tracer = tracer
@@ -2009,6 +2092,7 @@ class TestEmitTrace:
     def test_computes_cooldown_remaining_when_cooldown_set(self):
         from datetime import datetime, timedelta, timezone
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         future = datetime.now(tz=timezone.utc) + timedelta(seconds=5.0)
         player.state = make_state(cooldown_expires=future)
         tracer = MagicMock()
@@ -2033,6 +2117,7 @@ class TestHandleStuckExtended:
 
     def test_no_progress_level2_refreshes_and_clears_blockers(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player._recovery_level[StuckSignal.NO_PROGRESS] = 1
         refreshed = make_state(level=2)
         player._fetch_world_state = lambda client: refreshed
@@ -2049,6 +2134,7 @@ class TestHandleStuckExtended:
 class TestBuildGoalsExtended:
     def _make_minimal_player(self) -> GamePlayer:
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         gd = GameData()
         gd._monster_locations = {"chicken": [(1, 0)]}
         gd._monster_level = {"chicken": 1}
@@ -2106,12 +2192,14 @@ class TestBuildGoalsExtended:
 def test_game_player_accepts_history_kwarg():
     from artifactsmmo_cli.ai.player import GamePlayer
     player = GamePlayer(character="testchar", history=None)
+    player._offline_timing = committed_timing()
     assert player.history is None
 
 
 def test_game_player_default_history_is_none():
     from artifactsmmo_cli.ai.player import GamePlayer
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     assert player.history is None
 
 
@@ -2119,6 +2207,7 @@ class TestBuildActionsExtended:
     def test_delete_actions_skip_equipped_items(self):
         """Items in equipment slots must not get delete actions."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         gd = GameData()
         gd._monster_locations = {}
         gd._resource_locations = {}
@@ -2159,6 +2248,7 @@ class TestBuildActionsExtended:
         layer must surface the full surface; the goal/planner layer decides
         whether to buy."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         gd = GameData()
         gd._monster_locations = {}
         gd._resource_locations = {}
@@ -2197,11 +2287,13 @@ class TestComputeCyclesToSatisfy:
     def test_returns_none_when_never_selected(self):
         """_compute_cycles_to_satisfy returns None for an unseen goal (line 1216)."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         assert player._compute_cycles_to_satisfy("NeverSeenGoal", current_cycle=10) is None
 
     def test_returns_delta_after_selection(self):
         """After _note_goal_selection, returns cycles elapsed then clears the entry."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player._note_goal_selection("ReachCharLevel(5)", cycle_index=3)
         assert player._compute_cycles_to_satisfy("ReachCharLevel(5)", current_cycle=8) == 5
         # Entry cleared -> a second call returns None.
@@ -2214,6 +2306,10 @@ class TestPathTraceSnapshot:
         from artifactsmmo_cli.ai.learning.projections import PathPlan, PathSegment
 
         player = GamePlayer(character="hero")
+
+        player._offline_timing = committed_timing()
+
+        player._offline_timing = committed_timing()
         player.game_data = make_game_data_mock()
         player.state = make_state(level=4)
         player._last_path_plan = PathPlan(
@@ -2234,6 +2330,10 @@ class TestPathTraceSnapshot:
         from artifactsmmo_cli.ai.learning.projections import PathPlan
 
         player = GamePlayer(character="hero")
+
+        player._offline_timing = committed_timing()
+
+        player._offline_timing = committed_timing()
         player.game_data = make_game_data_mock()
         player.state = make_state(level=4)
         player._last_path_plan = PathPlan(
@@ -2249,6 +2349,7 @@ class TestNotifyObserverCooldown:
         """_notify_observer computes cooldown_remaining from state.cooldown_expires (line 987)."""
         captured = []
         player = GamePlayer(character="hero", cycle_observer=captured.append)
+        player._offline_timing = committed_timing()
         player.game_data = make_game_data_mock()
         future = datetime.now(tz=timezone.utc) + timedelta(seconds=12)
         player.state = make_state(level=4, cooldown_expires=future)
@@ -2264,6 +2365,7 @@ class TestNotifyObserverCooldown:
         True branch of the plan_tree=... conditional in player.py)."""
         captured = []
         player = GamePlayer(character="hero", cycle_observer=captured.append)
+        player._offline_timing = committed_timing()
         player.game_data = make_game_data_mock()
         player.state = make_state(level=4)
         player._last_decision = StrategyDecision(
@@ -2297,6 +2399,7 @@ class TestNotifyObserverChosenRoot:
     def test_chosen_root_present_when_decision_present(self):
         captured = []
         player = GamePlayer(character="hero", cycle_observer=captured.append)
+        player._offline_timing = committed_timing()
         player.game_data = make_game_data_mock()
         player.state = make_state(level=4)
         player._last_decision = StrategyDecision(
@@ -2312,6 +2415,7 @@ class TestNotifyObserverChosenRoot:
         """The engine can run and choose no root (e.g. an interrupt cycle)."""
         captured = []
         player = GamePlayer(character="hero", cycle_observer=captured.append)
+        player._offline_timing = committed_timing()
         player.game_data = make_game_data_mock()
         player.state = make_state(level=4)
         player._last_decision = StrategyDecision(
@@ -2327,6 +2431,7 @@ class TestNotifyObserverChosenRoot:
         root (never guessed at)."""
         captured = []
         player = GamePlayer(character="hero", cycle_observer=captured.append)
+        player._offline_timing = committed_timing()
         player.game_data = make_game_data_mock()
         player.state = make_state(level=4)
         player._notify_observer("ReachCharLevel(5)", "FightAction(cow)", "ok", [])
@@ -2382,6 +2487,7 @@ def _batch_gd() -> GameData:
 class TestConsumableBatchDispatch:
     def _player(self, gd: GameData, state) -> GamePlayer:
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.game_data = gd
         player.state = state
         return player
@@ -2411,6 +2517,7 @@ class TestConsumableBatchDispatch:
 
     def test_no_game_data_leaves_quantity_unchanged(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.game_data = None
         player.state = make_state(inventory={"raw_chicken": 9})
         cap: list = []
@@ -2471,6 +2578,7 @@ class TestCraftRebatchRecording:
         gd = _batch_gd()
         state = make_state(inventory={"raw_chicken": 9})
         player = GamePlayer(character="hero", dry_run=False)
+        player._offline_timing = committed_timing()
         player.game_data = gd
         player.state = state
         action = CraftAction(code="cooked_chicken", quantity=12, workshop_location=(0, 0))
@@ -2500,6 +2608,7 @@ class TestCraftRebatchRecording:
             gd = _batch_gd()
             state = make_state(inventory={"raw_chicken": 9})
             player = GamePlayer(character="hero", dry_run=False, history=store)
+            player._offline_timing = committed_timing()
             player.game_data = gd
             player.state = state
             action = CraftAction(code="cooked_chicken", quantity=12, workshop_location=(0, 0))

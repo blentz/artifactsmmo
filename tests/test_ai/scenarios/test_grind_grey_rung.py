@@ -49,12 +49,13 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -75,6 +76,7 @@ def state(game_data: GameData) -> WorldState:
 @pytest.fixture
 def player(game_data: GameData, state: WorldState) -> GamePlayer:
     p = GamePlayer(character=SCENARIO, history=None)
+    p._offline_timing = committed_timing()
     p.seed_offline(state, game_data)
     return p
 
@@ -105,7 +107,7 @@ def test_the_premise_straight_from_the_catalog(game_data: GameData,
 def test_grind_rung_pays_xp(game_data: GameData, state: WorldState) -> None:
     """DEFECT A, at the selector. The rung must be the one that pays, even
     though the grey one has zero missing materials."""
-    rung = skill_grind_target(SKILL, state, game_data)
+    rung = skill_grind_target(SKILL, state, game_data, ctx=TIMED_NO_PROFILE_CONTEXT)
     assert rung != "ash_plank", "the zero-xp rung was selected — defect A is back"
     assert rung == "spruce_plank"
     stats = game_data.item_stats(rung)
@@ -146,14 +148,14 @@ def test_reservation_reaches_the_grind_through_the_context(
     failing if the reservation stops being consulted. What must hold is the
     BEHAVIOUR: reserving the chosen rung's materials moves the grind onto a
     different chain."""
-    rung = skill_grind_target(_RESERVE_SKILL, state, game_data)
+    rung = skill_grind_target(_RESERVE_SKILL, state, game_data, ctx=TIMED_NO_PROFILE_CONTEXT)
     assert rung is not None
     mats = sorted(game_data.crafting_recipe(rung))
 
-    plain = grind_rung_goal(_RESERVE_SKILL, state, game_data, NO_PROFILE_CONTEXT)
+    plain = grind_rung_goal(_RESERVE_SKILL, state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert plain is not None
 
-    ctx = dataclasses.replace(NO_PROFILE_CONTEXT,
+    ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT,
                               step_profile={m: 1 for m in mats})
     reserved = grind_rung_goal(_RESERVE_SKILL, state, game_data, ctx)
     assert reserved is not None, "grind must still produce a goal under reservation"
@@ -174,7 +176,7 @@ def test_reservation_never_creates_a_dead_end(game_data: GameData,
     every_material = {code: 1 for code in (
         "copper_bar", "feather", "iron_bar", "wool", "cowhide",
         "yellow_slimeball", "blue_slimeball", "green_slimeball", "red_slimeball")}
-    ctx = dataclasses.replace(NO_PROFILE_CONTEXT, step_profile=every_material)
+    ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, step_profile=every_material)
     assert grind_rung_goal(_RESERVE_SKILL, state, game_data, ctx) is not None
     # ...and the woodcutting grind at the heart of this scenario likewise.
     assert grind_rung_goal(SKILL, state, game_data, ctx) is not None
@@ -219,8 +221,8 @@ def test_a_skill_with_no_rung_from_here_declines_its_grind(game_data: GameData) 
     weaponcrafting-43 decline until ruling R moved its rows, 2026-10-18.)"""
     state = scenario_state(SCENARIOS["l48_capstone_approach"], game_data)
     assert state.skills["weaponcrafting"] == 42
-    assert grind_rung_goal("weaponcrafting", state, game_data) is None
+    assert grind_rung_goal("weaponcrafting", state, game_data, ctx=TIMED_NO_PROFILE_CONTEXT) is None
     declined: list[str] = []
     assert decompose(ReachSkillGoal("weaponcrafting", 43), state, game_data, [],
-                     NO_PROFILE_CONTEXT, declined) is None
+                     TIMED_NO_PROFILE_CONTEXT, declined) is None
     assert declined == ["no_grind_rung:weaponcrafting"]

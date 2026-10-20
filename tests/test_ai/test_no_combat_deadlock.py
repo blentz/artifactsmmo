@@ -24,6 +24,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
@@ -72,6 +73,7 @@ def _trace_state() -> WorldState:
 
 def _player(gd: GameData, state: WorldState) -> GamePlayer:
     player = GamePlayer(character="Robby")
+    player._offline_timing = committed_timing()
     player.game_data = gd
     player.state = state
     return player

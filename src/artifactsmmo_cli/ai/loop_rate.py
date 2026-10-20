@@ -24,9 +24,10 @@ renewal-reward: `p_win x xp / (fight + expected recovery + consumed + walk)`.
   boost into the slot).
 * THE FIGHT — `combat.combat_terms` over the projected state, walked by
   `fight_outcome` from the projected max HP (`combat.fight_max_hp`, the max the
-  terms are built over) with the restore's stock. Its duration is ONE
-  `TYPICAL_FIGHT_COOLDOWN_SECONDS` (30 s): the code has no per-round seconds,
-  and the fight cooldown it already prices is per fight.
+  terms are built over) with the restore's stock. Its duration is the learned
+  fight seconds at the walk's expected server turns and the loadout's haste
+  (`fight_walk.walk_seconds`, spec 2026-10-18 §2.9): a faster kill is a
+  shorter fight, so kill speed pays.
 * CONSUMED — the restore potions the walk drank, and one of each boost (the
   increment-0 data: one boost per fight). USER 2026-10-09, "free until used
   up": the drinks up to the units HELD (`held_stock.held_count`: bag,
@@ -49,11 +50,12 @@ from dataclasses import dataclass
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.cost_core import CONSUMABLE_COOLDOWN_SECONDS, travel_seconds
-from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS, replacement_price_of
+from artifactsmmo_cli.ai.consumable_price import replacement_price_of
 from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
+from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.fight_terms_core import SCALE
 from artifactsmmo_cli.ai.fight_tiles import fight_tiles
-from artifactsmmo_cli.ai.fight_walk import fight_walk, odds_walk
+from artifactsmmo_cli.ai.fight_walk import fight_walk, odds_walk, walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.heal_catalog import FOOD, heal_candidates
 from artifactsmmo_cli.ai.held_stock import held_count
@@ -141,12 +143,14 @@ def monster_tile(state: WorldState, game_data: GameData, monster: str) -> tuple[
 
 def loop_rate(state: WorldState, game_data: GameData, monster: str,
               loadout: Sequence[tuple[str, int]], food: Sequence[FoodOffer],
-              prices: Mapping[str, Fraction | None]) -> LoopRate | None:
+              prices: Mapping[str, Fraction | None],
+              timing: FightSecondsModel) -> LoopRate | None:
     """The loop's expected XP per second against `monster` wearing `loadout` and
     recovering over `food` (see the module doc): every crit ending of the fight
-    is priced (`odds_walk`), a loss walks back from `RESPAWN_TILE`. `prices`
-    holds every loadout potion's replacement price. None when a potion with no
-    replacement is expected (rounded up) to be drunk past the held units."""
+    is priced (`odds_walk`), a loss walks back from `RESPAWN_TILE`, and the
+    fight lasts `walk_seconds` under `timing`. `prices` holds every loadout
+    potion's replacement price. None when a potion with no replacement is
+    expected (rounded up) to be drunk past the held units."""
     outcome, max_hp, restore_code = fight_walk(state, game_data, monster, loadout)
     endings, _, _ = odds_walk(state, game_data, monster, loadout)
     p_win = odds_win(endings)
@@ -177,10 +181,11 @@ def loop_rate(state: WorldState, game_data: GameData, monster: str,
             eaten_mean[i] += e.prob * k
     extra += recovery_mean + consumed_mean
     xp = game_data.xp_per_kill(monster, state.level, state.wisdom)
-    rate = expected_xp_per_second(xp, p_win, FIGHT_SECONDS, extra)
+    fight = walk_seconds(state, game_data, monster, loadout, timing)
+    rate = expected_xp_per_second(xp, p_win, fight, extra)
     used_units = tuple((code, math.ceil(used_mean[code])) for code, _ in loadout)
     if any(prices[code] is None and n > held[code] for code, n in used_units):
         return None
     eaten = tuple((f.code, math.ceil(k)) for f, k in zip(food, eaten_mean, strict=True) if k > 0)
-    return LoopRate(rate, xp if p_win > 0 else 0, outcome.win, p_win, FIGHT_SECONDS, recovery_mean,
+    return LoopRate(rate, xp if p_win > 0 else 0, outcome.win, p_win, fight, recovery_mean,
                     consumed_mean, max_hp, math.floor(hp_end_mean), used_units, eaten)

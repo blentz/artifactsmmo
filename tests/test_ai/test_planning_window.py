@@ -21,9 +21,10 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS
 from artifactsmmo_cli.ai.player import GamePlayer
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, patched_logs
 from tests.test_ai.test_player_run import _patch_game_data_load
 from tests.test_ai.test_strategy_driver import _ctx, _FakeDecision, _make_planner_gd, _with_task_root
 from tests.test_ai.test_strategy_driver_tiered import _arbiter_with, _ScriptedPlanner
@@ -113,17 +114,20 @@ class TestAttemptElapsed:
 class TestPlanningDeadline:
     def test_none_when_no_cooldown_is_recorded(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state()
         assert player._planning_deadline() is None
 
     def test_none_when_the_cooldown_has_already_expired(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(
             cooldown_expires=datetime.now(tz=timezone.utc) - timedelta(seconds=5))
         assert player._planning_deadline() is None
 
     def test_tracks_the_remaining_cooldown(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(
             cooldown_expires=datetime.now(tz=timezone.utc) + timedelta(seconds=40))
         deadline = player._planning_deadline()
@@ -136,6 +140,7 @@ class TestRunLoopOrder:
         """The window the arbiter searches in comes from the live cooldown, not
         from a constant."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         seen: list[float | None] = []
 
@@ -147,7 +152,7 @@ class TestRunLoopOrder:
             hp=100, max_hp=150,
             cooldown_expires=datetime.now(tz=timezone.utc) + timedelta(seconds=25))
         with patch.object(mgr := MagicMock(), "client", client), \
-                patch("artifactsmmo_cli.ai.player.ClientManager", return_value=mgr), \
+                patch("artifactsmmo_cli.ai.player.ClientManager", return_value=mgr), patched_logs(), \
                 _patch_game_data_load(), \
                 patch.object(player, "_fetch_world_state", return_value=initial_state), \
                 patch.object(player, "_wait_for_cooldown"), \
@@ -167,6 +172,7 @@ class TestRunLoopOrder:
         Pre-fix `_wait_for_cooldown` ran before `_plan_or_reuse`, so this
         recorded ["wait", "plan", "execute"]."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         order: list[str] = []
         action = WaitAction()
@@ -186,7 +192,7 @@ class TestRunLoopOrder:
 
         initial_state = make_state(hp=100, max_hp=150)
         with patch.object(mgr := MagicMock(), "client", client), \
-                patch("artifactsmmo_cli.ai.player.ClientManager", return_value=mgr), \
+                patch("artifactsmmo_cli.ai.player.ClientManager", return_value=mgr), patched_logs(), \
                 _patch_game_data_load(), \
                 patch.object(player, "_fetch_world_state", return_value=initial_state), \
                 patch.object(player, "_wait_for_cooldown", side_effect=fake_wait), \

@@ -10,12 +10,13 @@ import typer
 
 from artifactsmmo_cli.ai import player as player_mod
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
 from artifactsmmo_cli.commands import plan as plan_cmd
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, patched_logs
 from tests.test_ai.test_player_run import _patch_game_data_load
 
 
@@ -23,10 +24,11 @@ def test_plan_once_returns_report_without_executing():
     """plan_once senses + plans ONE cycle and returns a PlanReport; it never calls
     _execute (no server mutation)."""
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     client = MagicMock()
     state = make_state(hp=100, max_hp=150)
     with patch.object(ClientManager_mock := MagicMock(), "client", client):
-        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
             with _patch_game_data_load():
                 with patch.object(player, "_fetch_world_state", return_value=state):
                     with patch.object(player, "_maybe_periodic_refresh"):
@@ -43,7 +45,7 @@ def _plan_once_mocks(player, state):
     cm = MagicMock()
     return [
         patch.object(cm, "client", MagicMock()),
-        patch("artifactsmmo_cli.ai.player.ClientManager", return_value=cm),
+        patch("artifactsmmo_cli.ai.player.ClientManager", return_value=cm), patched_logs(),
         _patch_game_data_load(),
         patch.object(player, "_fetch_world_state", return_value=state),
         patch.object(player, "_maybe_periodic_refresh"),
@@ -55,6 +57,7 @@ def test_plan_once_seeds_committed_for_diagnostics():
     """plan_once(committed=REPR) seeds the arbiter's sticky commitment before select,
     reproducing a live committed-goal hold; the injection is echoed on the report."""
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     state = make_state()
     with contextlib.ExitStack() as stack:
         for cm in _plan_once_mocks(player, state):
@@ -67,6 +70,7 @@ def test_plan_once_reports_the_cycles_gear_objective():
     """The report carries the objective the cycle's selection context held —
     the one the root walk and the arbiter read — not a second computation."""
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     state = make_state()
     objective = GearObjective(monster="chicken", loadout={}, rate=Fraction(1), missing=())
     real = player_mod.attach_gear_objective
@@ -85,6 +89,7 @@ def test_plan_once_resumes_the_persisted_intention_like_a_live_bot():
     """Phase 4-1b: a live bot starts committed to the intention it persisted,
     so the diagnostic does too — before its own `--committed` override."""
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     state = make_state()
     with contextlib.ExitStack() as stack:
         for cm in _plan_once_mocks(player, state):
@@ -98,6 +103,7 @@ def test_plan_once_crafting_target_from_fallback():
     """When chosen_step is None, plan_once derives the bank keep-set crafting_target
     from the first ObtainItem fallback (mirrors run())."""
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     client = MagicMock()
     state = make_state()
     decision = StrategyDecision(
@@ -106,7 +112,7 @@ def test_plan_once_crafting_target_from_fallback():
     fake_strategy = MagicMock()
     fake_strategy.decide.return_value = decision
     with patch.object(ClientManager_mock := MagicMock(), "client", client):
-        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
             with _patch_game_data_load():
                 with patch.object(player, "_fetch_world_state", return_value=state):
                     with patch.object(player, "_maybe_periodic_refresh"):
@@ -140,8 +146,9 @@ def test_plan_once_reports_drop_input_winnability():
     fake_strategy = MagicMock()
     fake_strategy.decide.return_value = decision
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     with patch.object(ClientManager_mock := MagicMock(), "client", MagicMock()):
-        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
             with patch("artifactsmmo_cli.ai.player.GameData.load", return_value=gd):
                 with patch.object(player, "_fetch_world_state", return_value=state):
                     with patch.object(player, "_maybe_periodic_refresh"):
@@ -358,8 +365,10 @@ def test_plan_command_scenario_prints_tree_chosen_root(capsys):
     test_progression_tree's per-scenario pins; the gear-target tier here is 5,
     not 1 — that scenario runs `derive_combat_stats`). The Phase-3/4a shadow chrome (compact `tree:` agreement line,
     `TREE (shadow` block) is gone from the output. Since the global gear
-    objective (Task 5) the root is `L*`'s first missing piece, the iron
-    sword."""
+    objective (Task 5) the root is `L*`'s first missing piece; since spec
+    2026-10-18 §2.9 (a fight's seconds are its learned length) that piece is
+    the `greater_wooden_staff`, and its blocked `blue_slimeball` drop is the
+    root."""
     with patch.object(plan_cmd, "check_mutation_lock",
                       return_value=MagicMock(state="clear")):
         with patch.object(plan_cmd.Config, "from_token_file") as cfg:
@@ -367,7 +376,7 @@ def test_plan_command_scenario_prints_tree_chosen_root(capsys):
                           refresh_game_data=False, scenario="l10_weapon_upgrade")
             cfg.assert_not_called()
     out = capsys.readouterr().out
-    assert "chosen_root: ObtainItem(code='iron_sword', quantity=1, slot='weapon_slot')" in out
+    assert "chosen_root: ObtainItem(code='blue_slimeball', quantity=2)" in out
     assert "tree: " not in out
     assert "TREE (shadow" not in out
 
@@ -376,6 +385,7 @@ def test_plan_once_reads_the_learned_record_like_a_live_bot():
     """The diagnostic fills `state.lost_fights` as the live loop does, so its
     drop gate refuses the solo fights the record refuses."""
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     with contextlib.ExitStack() as stack:
         for cm in _plan_once_mocks(player, make_state(hp=100, max_hp=150)):
             stack.enter_context(cm)

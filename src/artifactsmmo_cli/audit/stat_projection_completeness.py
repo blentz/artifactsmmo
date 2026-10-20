@@ -44,8 +44,10 @@ See `docs/PLAN_unified_acquisition_objective.md`. `wisdom` GRADUATED in incremen
 3 — the numbers above are history, not the current state. `prospecting` GRADUATED in increment 4, where
 it reduces expected kills in the DROP-route cost. `inventory_space` and `lifesteal` are expressible in
 actions but have no `WorldState` base total to project a delta from, so they wait
-on that. `haste` is a PERMANENT exclusion and is the one entry here that is not a
-defect — see its justification.
+on that. `haste` GRADUATED with spec 2026-10-18 §2.9: a fight's seconds are
+learned from its length and haste (`fight_seconds_core`), and the gear
+objective's rate is XP per SECOND, so a hasted fight is priced where it pays
+rather than smuggled into an action count.
 """
 
 from dataclasses import dataclass, fields
@@ -80,6 +82,7 @@ WORN_EFFECT_TO_PROJECTED = {
     "hp_bonus": "max_hp",
     "wisdom": "wisdom",
     "prospecting": "prospecting",
+    "haste": "haste",
 }
 """Worn-gear effects `ProjectedStats` carries, mapped to the field that carries
 them. `hp_bonus` -> `max_hp` is the one rename: the item grants a BONUS, the
@@ -89,7 +92,7 @@ than a set membership test."""
 UNPRICED: dict[str, str] = {
     "inventory_space": (
         "+bag slots. Pays in avoided bank round-trips, which are actions — so "
-        "this IS expressible in J's currency, unlike haste. Needs a model of "
+        "this IS expressible in J's currency. Needs a model of "
         "how often a full bag forces a deposit trip; not yet built. Scheduled: "
         "no increment assigned."
     ),
@@ -106,18 +109,6 @@ UNPRICED: dict[str, str] = {
         "changes nothing in a solo fight, so a solo loadout projection has no "
         "delta to price; the party fight walk (`group_fight_core`) reads it. "
         "Scheduled: group fights increment 3 (party routes rank the gear)."
-    ),
-    "haste": (
-        "PERMANENT EXCLUSION — not a defect. Haste reduces action COOLDOWN, "
-        "which is measured in SECONDS. `J` is denominated in ACTIONS. A hasted "
-        "character performs the same number of actions, faster. Admitting haste "
-        "would mix seconds into an action count, which is the exact confusion "
-        "that has produced four separate bugs here (`mats_missing` as cost, "
-        "`DEFAULT_FIGHT_CYCLES` as cycles, `cycles_to_fifty` as whole-loop "
-        "cycles, `cheapest_path_to_level` in seconds). Wall-clock deserves its "
-        "own objective with an explicit conversion, never a term smuggled into "
-        "this one. Travel distance is excluded for the identical reason — see "
-        "decision 2 in the plan."
     ),
 }
 """Worn-gear effects `ProjectedStats` does NOT carry, each with the reason and,

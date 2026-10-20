@@ -6,7 +6,8 @@ from fractions import Fraction
 
 import pytest
 
-from artifactsmmo_cli.ai.fight_seconds_core import fight_seconds, fit
+from artifactsmmo_cli.ai.fight_seconds_core import expected_turns, fight_seconds, fit, server_turns
+from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS
 
 
 def test_seconds_are_turns_times_the_hasted_turn() -> None:
@@ -80,3 +81,24 @@ def test_a_negative_turn_or_haste_raises() -> None:
 def test_fights_of_no_turns_raise() -> None:
     with pytest.raises(ValueError, match="0 turns"):
         fit([(0, 0, 5.0)])
+
+
+@pytest.mark.parametrize(("rounds", "win", "player_first", "turns"), [
+    (3, True, True, 5),    # live Robby v wolf: the player's third attack, turn 5
+    (3, True, False, 6),
+    (3, False, True, 6),
+    (3, False, False, 5),
+    (0, False, True, 0),
+])
+def test_a_round_is_one_turn_of_each_side(rounds: int, win: bool, player_first: bool,
+                                         turns: int) -> None:
+    assert server_turns(rounds, win, player_first) == turns
+
+
+def test_expected_turns_weigh_the_endings() -> None:
+    endings = [(Fraction(1, 4), True, 3), (Fraction(3, 4), False, 2)]
+    assert expected_turns(endings, True) == Fraction(1, 4) * 5 + Fraction(3, 4) * 4
+
+
+def test_expected_turns_are_capped() -> None:
+    assert expected_turns([(Fraction(1), False, 100)], True) == MAX_TURNS

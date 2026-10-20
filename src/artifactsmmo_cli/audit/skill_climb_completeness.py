@@ -76,6 +76,7 @@ from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
@@ -84,6 +85,10 @@ from artifactsmmo_cli.ai.tiers.meta_goal import ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.skill_grind_target import grind_model, is_obtainable
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
+
+_OFFLINE_CONTEXT = offline_context(NO_PROFILE_CONTEXT)
+"""The no-profile context carrying the committed capture's fight and action
+seconds (spec 2026-10-18 §2.9): this offline sweep prices time like a live cycle."""
 
 
 class ClimbGap(Enum):
@@ -192,7 +197,7 @@ def routed_skills(state: WorldState, game_data: GameData) -> frozenset[str]:
     `ReachSkillLevel` it offers, root AND alternatives, on a context carrying
     the cycle's gear objective (`attach_gear_objective`, the player's own
     step). `history=None`: offline and deterministic."""
-    ctx = attach_gear_objective(state, game_data, NO_PROFILE_CONTEXT, None)
+    ctx = attach_gear_objective(state, game_data, _OFFLINE_CONTEXT, None)
     resolution = resolve_root(
         state, game_data, CharacterObjective.from_game_data(game_data), ctx, None)
     return frozenset(

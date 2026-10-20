@@ -1176,6 +1176,49 @@ FIGHT_SECONDS_CORE_MUTATIONS = [
     ("fight seconds fit: a negative slope is accepted",
      "    if a <= 0:",
      "    if False:"),
+    ("fight seconds: a round is one server turn",
+     "    return 2 * rounds - (1 if ends_on_first_mover else 0)",
+     "    return rounds"),
+    ("fight seconds: who moves first is ignored",
+     "    return 2 * rounds - (1 if ends_on_first_mover else 0)",
+     "    return 2 * rounds - 1"),
+    ("fight seconds: expected turns are uncapped",
+     "    return min(Fraction(MAX_TURNS), total)",
+     "    return total"),
+]
+
+# The one fight-seconds function's readers (spec 2026-10-18 §2.9): the walk's
+# fight lasts its learned seconds at its expected turns and its loadout's
+# haste. Killed by tests/test_ai/test_loop_rate.py.
+FIGHT_SECONDS_READER_MUTATIONS = [
+    ("walk seconds: the loadout's haste is ignored",
+     "    return endings_seconds(endings, terms, fight_haste(projected, game_data, monster), timing)",
+     "    return endings_seconds(endings, terms, 0, timing)"),
+    ("loop rate: the fight lasts the floor",
+     "    fight = walk_seconds(state, game_data, monster, loadout, timing)",
+     "    fight = timing.floor"),
+]
+
+# The learned seconds a context carries (rulings CA/CC). Killed by
+# tests/test_ai/test_consumable_price.py.
+TIMED_PRICE_MUTATIONS = [
+    ("consumable price: gold is earned in the character's gear, not L*",
+     "        fighter = ctx.gear_objective.fighter\n",
+     "        fighter = state\n"),
+    ("consumable price: an action is one second",
+     "    return actions * ctx.action_seconds_of()",
+     "    return actions * 1"),
+]
+
+# The player's timing source (ruling CC). Killed by
+# tests/test_ai/test_player_timing.py.
+PLAYER_TIMING_MUTATIONS = [
+    ("player timing: the fleet store is ignored",
+     "        return timing_of(self.history, self.state.haste, self._log_entries)",
+     "        return timing_of(None, self.state.haste, self._log_entries)"),
+    ("player timing: offline seeding leaves the cycle's context untimed",
+     "        self._offline_timing = committed_timing()\n        self._last_ctx = self._timed(self._last_ctx)\n",
+     "        self._offline_timing = committed_timing()\n"),
 ]
 
 # The learned model's adapter (spec §2.9, rulings CA, CC). Killed by
@@ -1193,9 +1236,15 @@ FIGHT_SECONDS_MODEL_MUTATIONS = [
     ("fight seconds model: the bootstrap is ignored",
      "    model = fit_model([*recorded, *bootstrap])",
      "    model = fit_model(recorded)"),
-    ("fight seconds model: an unlearned action has no seconds check",
-     "    if mean is None:\n        raise ValueError(\"no executed action",
-     "    if False:\n        raise ValueError(\"no executed action"),
+    ("fight seconds model: a learned action mean is ignored",
+     "    if mean is not None:\n        return Fraction(mean)",
+     "    if False:\n        return Fraction(mean)"),
+    ("fight seconds model: a zero cooldown counts toward an action's seconds",
+     "    positive = [cooldown for cooldown in cooldowns if cooldown > 0]",
+     "    positive = [cooldown for cooldown in cooldowns if cooldown >= 0]"),
+    ("fight seconds model: a store-less timing reads no page",
+     "        return fit_model(fights), seconds",
+     "        return fit_model([]), seconds"),
 ]
 
 # Killed by formal/diff/test_consumable_price_diff.py (exact agreement with the
@@ -1346,8 +1395,8 @@ CONSUMABLE_PRICE_READER_MUTATIONS = [
      "            prices.append(ge_price_of(code, source.code, game_data))",
      "            prices.extend(())"),
     ("consumable_price reader: gold per cycle read as gold per second",
-     "    return fight_gold_rate(state, game_data, monster) / FIGHT_SECONDS",
-     "    return fight_gold_rate(state, game_data, monster)"),
+     "    return fight_gold_rate(fighter, game_data, monster, seconds) / seconds",
+     "    return fight_gold_rate(fighter, game_data, monster, seconds)"),
     ("consumable_price reader: no grind target never reads m* (ruling AL)",
      "        monster = ctx.gear_objective.monster\n",
      "        monster = None\n"),
@@ -1493,8 +1542,8 @@ LOOP_RATE_READER_MUTATIONS = [
      "    used_units = tuple((code, math.ceil(used_mean[code])) for code, _ in loadout)",
      "    used_units = tuple((code, math.floor(used_mean[code])) for code, _ in loadout)"),
     ("loop_rate reader: the rate ignores the odds",
-     "    rate = expected_xp_per_second(xp, p_win, FIGHT_SECONDS, extra)",
-     "    rate = expected_xp_per_second(xp, Fraction(1), FIGHT_SECONDS, extra)"),
+     "    rate = expected_xp_per_second(xp, p_win, fight, extra)",
+     "    rate = expected_xp_per_second(xp, Fraction(1), fight, extra)"),
     ("loop_rate reader: the farthest spawn tile",
      "    return min(tiles, key=lambda tile: (travel_seconds(RESPAWN_TILE, tile), tile))",
      "    return max(tiles, key=lambda tile: (travel_seconds(RESPAWN_TILE, tile), tile))"),
@@ -1525,8 +1574,8 @@ BEST_LOADOUT_READER_MUTATIONS = [
      "        if held_count(code, state) > 0 or (price is not None\n",
      "        if True or (price is not None\n"),
     ("best_loadout reader: a restore is walked with one unit",
-     "                         [(code, UTILITY_SLOT_MAX_STACK) for code in codes], food, prices)",
-     "                         [(code, 1) for code in codes], food, prices)"),
+     "                         [(code, UTILITY_SLOT_MAX_STACK) for code in codes], food, prices, timing)",
+     "                         [(code, 1) for code in codes], food, prices, timing)"),
     ("best_loadout reader: the pick ignores the units",
      "    index = pick_best([(rate.xp_per_second, units_used(rate)) for _, rate in scored])",
      "    index = pick_best([(rate.xp_per_second, 0) for _, rate in scored])"),
@@ -5485,10 +5534,10 @@ GEAR_OBJECTIVE_MUTATIONS = [
      "        if rates and bound[code] < max(rates.values()):",
      "        if rates:"),
     ("gear objective: the worn potions rate L*",
-     "    loop = loop_rate(fighter, game_data, monster, (), food, {})",
+     "    loop = loop_rate(fighter, game_data, monster, (), food, {}, timing)",
      "    loop = loop_rate(fighter, game_data, monster, tuple((code, n) for code, n in"
      " fighter.inventory.items() if code.endswith('_potion'))[:2], food,"
-     " dict.fromkeys(fighter.inventory, Fraction(0)))"),
+     " dict.fromkeys(fighter.inventory, Fraction(0)), timing)"),
     ("gear objective: m* only among overworld monsters",
      "            and game_data.monster_spawn_known(code)]",
      "            and game_data.monster_locations(code)]"),
@@ -6264,8 +6313,8 @@ LOSS_RISK_CORE_MUTATIONS = [
 ]
 LOSS_RISK_COST_MUTATIONS = [
     ("loss risk: a loss costs only its recovery, not the lost fight",
-     "    return Fraction(seconds + rest_cooldown_seconds(max_hp - 1, max_hp), seconds)\n",
-     "    return Fraction(rest_cooldown_seconds(max_hp - 1, max_hp), seconds)\n"),
+     "    return (fight_seconds + rest_cooldown_seconds(max_hp - 1, max_hp)) / fight_seconds\n",
+     "    return Fraction(rest_cooldown_seconds(max_hp - 1, max_hp)) / fight_seconds\n"),
 ]
 SKILL_CREDIT_MUTATIONS = [
     ("skill credit: a gather trains nothing",
@@ -6288,19 +6337,19 @@ SKILL_CREDIT_PRICE_MUTATIONS = [
 ]
 LOSS_RISK_ACQUISITION_MUTATIONS = [
     ("loss risk: the drop price ignores the learned losses",
-     "    per_kill += _loss_surcharge(monster_code, state.max_hp, records)\n",
+     "    per_kill += _loss_surcharge(monster_code, state.max_hp, records, fight)\n",
      "    per_kill += 0.0\n"),
     ("loss risk: the routes drop the context's records",
-     "    routes = [_priced(item, s, state, game_data, store, ctx.fight_records)\n",
-     "    routes = [_priced(item, s, state, game_data, store)\n"),
+     "                                                  store, ctx.fight_records),\n",
+     "                                                  store, ()),\n"),
     ("loss risk: the surcharge reads any monster's record",
      "        if monster == monster_code:\n",
      "        if True:\n"),
 ]
 LOSS_RISK_GRIND_MUTATIONS = [
     ("loss risk: the grind rungs are priced without the records",
-     "    pricing_ctx = replace(NO_PROFILE_CONTEXT, fight_records=ctx.fight_records)\n",
-     "    pricing_ctx = NO_PROFILE_CONTEXT\n"),
+     "    pricing_ctx = replace(NO_PROFILE_CONTEXT, fight_records=ctx.fight_records,\n",
+     "    pricing_ctx = replace(NO_PROFILE_CONTEXT, fight_records=(),\n"),
     ("loss risk: the grind memo ignores the records",
      "        fight_records,\n        tuple(sorted(state.win_thresholds.items())),\n",
      "        (),\n        tuple(sorted(state.win_thresholds.items())),\n"),
@@ -7283,19 +7332,20 @@ PROVISION_LOADOUT_MUTATIONS = [
 FIGHT_READY_MUTATIONS = [
     ("fight ready: a cached fight is reused whatever the hp",
      "        return (predict_win(state, game_data, step.monster_code)\n"
-     "                and not rest_pays(state, game_data, step.monster_code))\n",
+     "                and not rest_pays(state, game_data, step.monster_code, timing))\n",
      "        return True\n"),
     ("fight ready: a fight the odds admit never rests first",
-     "                and not rest_pays(state, game_data, step.monster_code))\n",
+     "                and not rest_pays(state, game_data, step.monster_code, timing))\n",
      "                and True)\n"),
     ("fight ready: the cached step's readiness is not asked",
      "        step_applicable = (step is not None and step.is_applicable(state, game_data)\n"
-     "                           and self._fight_ready(step, state, game_data))\n",
+     "                           and self._fight_ready(step, state, game_data, self._timing()[0]))\n",
      "        step_applicable = (step is not None and step.is_applicable(state, game_data))\n"),
 ]
 REST_FIGHT_AHEAD_MUTATIONS = [
     ("rest guard: a fight the odds admit never rests first",
-     "        if predict_win(state, game_data, monster) and not rest_pays(state, game_data, monster):\n",
+     "        if predict_win(state, game_data, monster) and not rest_pays(state, game_data, monster,\n"
+     "                                                                    ctx.timing()):\n",
      "        if predict_win(state, game_data, monster):\n"),
     ("rest guard: asks about the grind target, not the fight ahead",
      "        monster = ctx.fight_monster or ctx.combat_monster\n",
@@ -7329,11 +7379,11 @@ REST_FIRST_MUTATIONS = [
      "        walk = (1 - p_win) * travel_seconds(RESPAWN_TILE, monster_tile(state, game_data, monster))\n",
      "        walk = Fraction(0)\n"),
     ("rest_pays: the fight itself costs nothing",
-     "    return kill_seconds(p_win, FIGHT_SECONDS + recovery + walk)\n",
+     "    return kill_seconds(p_win, fight + recovery + walk)\n",
      "    return kill_seconds(p_win, recovery + walk)\n"),
     ("rest_pays: compares against the current hp twice",
-     "                      fight_kill_seconds(replace(state, hp=state.max_hp), game_data, monster))\n",
-     "                      fight_kill_seconds(state, game_data, monster))\n"),
+     "                      fight_kill_seconds(replace(state, hp=state.max_hp), game_data, monster,\n",
+     "                      fight_kill_seconds(state, game_data, monster,\n"),
 ]
 ROLE_WORK_MUTATIONS = [
     ("role work: rows count units",
@@ -10293,8 +10343,7 @@ EQUIP_ACTIONS_MUTATIONS = [
     # Killed by test_cost_is_the_published_three_seconds_per_item and
     # test_outfitting_a_bare_character_is_not_sixteen_fights.
     ("equip_actions_core: one whole action per item, not the published 3s",
-     "    return (items_moved(worn, target) * EQUIP_SECONDS_PER_ITEM\n"
-     "            / TYPICAL_FIGHT_COOLDOWN_SECONDS)",
+     "    return items_moved(worn, target) * EQUIP_SECONDS_PER_ITEM / float(fight_seconds)",
      "    return float(items_moved(worn, target))"),
 ]
 
@@ -10312,7 +10361,7 @@ FIGHT_LOOP_COST_MUTATIONS = [
     ("fight_loop_cost: restore the saturating flat one-action rest charge",
      "    chain = fights_per_rest(expected_damage, max_hp)\n"
      "    seconds = rest_cooldown_seconds(chain * expected_damage, max_hp)\n"
-     "    return seconds / (chain * TYPICAL_FIGHT_COOLDOWN_SECONDS)",
+     "    return seconds / (chain * float(fight_seconds))",
      "    return min(1.0, expected_damage / (USABLE_HP_FRACTION * max_hp))"),
     # Price the Rest for ONE fight's damage rather than the whole chain's, while
     # still amortising over the chain. Recovery then looks cheaper the longer the
@@ -10338,7 +10387,7 @@ FIGHT_LOOP_COST_MUTATIONS = [
     # named-for-one-thing-denominated-in-another defect S-004 exists to forbid.
     # Killed by test_a_full_bar_rest_costs_more_than_three_fights.
     ("fight_loop_cost: convert by the rest floor instead of a fight's duration",
-     "    return seconds / (chain * TYPICAL_FIGHT_COOLDOWN_SECONDS)",
+     "    return seconds / (chain * float(fight_seconds))",
      "    return seconds / (chain * 3.0)"),
 ]
 
@@ -11241,6 +11290,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_fight_seconds_core.py", survivors)
     run_group(FIGHT_SECONDS_MODEL_SRC, FIGHT_SECONDS_MODEL_MUTATIONS,
               "tests/test_ai/test_fight_seconds_model.py", survivors)
+    run_group(FIGHT_WALK_SRC, FIGHT_SECONDS_READER_MUTATIONS[:1],
+              "tests/test_ai/test_loop_rate.py", survivors)
+    run_group(LOOP_RATE_SRC, FIGHT_SECONDS_READER_MUTATIONS[1:],
+              "tests/test_ai/test_loop_rate.py", survivors)
+    run_group(CONSUMABLE_PRICE_SRC, TIMED_PRICE_MUTATIONS,
+              "tests/test_ai/test_consumable_price.py", survivors)
+    run_group(PLAYER_SRC, PLAYER_TIMING_MUTATIONS,
+              "tests/test_ai/test_player_timing.py", survivors)
     run_group(CONSUMABLE_PRICE_SRC, CONSUMABLE_PRICE_READER_MUTATIONS,
               "tests/test_ai/test_consumable_price.py", survivors)
     run_group(SKILL_CREDIT_SRC, SKILL_CREDIT_MUTATIONS,

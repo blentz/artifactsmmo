@@ -310,6 +310,10 @@ def test_the_level_up_arm_has_real_witnesses() -> None:
     (global gear objective Task 5, ruling Y): its pig and skeleton pairs are
     the tenth and eleventh.
 
+    Ten since spec 2026-10-18 §2.9 re-derived that cell to its new `L*` (the
+    set that kills `blue_slime` fastest): in it the pig is no longer a level-up
+    witness, the skeleton still is.
+
     THE SWEEP IS WHOLE: all 44 `derive_combat_stats` scenarios against all 58
     catalogue monsters, 1,972 pairs, nothing sampled and nothing memoized at the
     test level. It is fanned out over processes only because it is the single
@@ -345,9 +349,12 @@ def test_the_level_up_arm_has_real_witnesses() -> None:
         per_scenario = list(executor.map(_level_up_witnesses, names))
 
     witnesses = sorted(pair for scenario in per_scenario for pair in scenario)
-    assert len(witnesses) == 11, witnesses
-    assert ("l30_band_entry", "demon") in witnesses
-    assert {("l14_wears_its_target", "pig"), ("l14_wears_its_target", "skeleton")} <= set(witnesses)
+    assert witnesses == [
+        ("l11_band_floor", "pig"), ("l12_ge_book_adequate", "mushmush"),
+        ("l12_ge_book_grind", "mushmush"), ("l12_quiet_book_grind", "mushmush"),
+        ("l14_wears_its_target", "skeleton"), ("l1_fresh", "green_slime"),
+        ("l20_boost_stock", "ogre"), ("l24_fisher_cooking_rung", "spider"),
+        ("l30_band_entry", "demon"), ("l35_boots_drop_farm", "goblin_wolfrider")], witnesses
     assert (LEVEL_UP_CELL, LEVEL_UP_MONSTER) in witnesses
 
 

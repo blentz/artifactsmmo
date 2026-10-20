@@ -66,6 +66,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.inventory_keep import destroyable
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
@@ -354,9 +355,9 @@ def census_ctx() -> SelectionContext:
 
     `combat_monster=None` keeps the REST_FOR_COMBAT guard quiet; the bank is
     accessible, which the BANKED cell's `Withdraw` needs."""
-    return SelectionContext(
+    return offline_context(SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
-        initial_xp=0, task_exchange_min_coins=0, combat_monster=None)
+        initial_xp=0, task_exchange_min_coins=0, combat_monster=None))
 
 
 def census_decision(cell: RecycleSourceCell) -> StrategyDecision:

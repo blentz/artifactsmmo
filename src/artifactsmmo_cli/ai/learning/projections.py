@@ -17,6 +17,8 @@ from artifactsmmo_cli.ai.equipment.equip_actions_core import equip_cost
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
+from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat, Rank
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
@@ -177,7 +179,7 @@ Wall-clock cost per action is a real quantity and the learning store still
 records it (`action_cost` -> median actual_cooldown_seconds). It is simply not
 this projection's unit. Callers that DO want the duration — `tiers/
 strategic_weights`, which combines it with move and deposit cooldowns into a
-round-trip time — take `fight_loop_cost.TYPICAL_FIGHT_COOLDOWN_SECONDS`. One
+round-trip time — take the store's learned seconds per action. One
 constant serving both meanings under one wrong name is what made the confusion
 invisible.
 
@@ -192,6 +194,7 @@ def cheapest_path_to_level(
     state: WorldState,
     store: LearningStore,
     game_data: GameData,
+    timing: FightSecondsModel,
 ) -> PathPlan:
     """Walk levels current → target picking the cheapest beatable monster
     at each step.
@@ -323,7 +326,8 @@ def cheapest_path_to_level(
             # filter above: both ask what happens starting from full HP, which is
             # what the runtime does (the planner inserts a Rest before FightAction).
             monster_cycles = cycles_per_kill(
-                expected_damage_per_fight(rung, game_data, code), rung.max_hp)
+                expected_damage_per_fight(rung, game_data, code), rung.max_hp,
+                walk_seconds(rung, game_data, code, (), timing))
             if (observed.sample_count > 0 and observed.char_xp > 0
                     and observed.char_xp_level is not None):
                 # Already per-CYCLE, and per REAL cycle: `expected_yield_per_cycle`
@@ -399,7 +403,8 @@ def cheapest_path_to_level(
             Combat(game_data.monster_attack(best_code),
                    game_data.monster_resistance(best_code), dict(rung.attack)),
             rung, game_data)
-        equips = equip_cost(worn, rung_loadout)
+        equips = equip_cost(worn, rung_loadout,
+                            walk_seconds(rung, game_data, best_code, (), timing))
         worn = rung_loadout
 
         cycles_for_this_level = xp_to_next / best_xp_per_cycle + equips

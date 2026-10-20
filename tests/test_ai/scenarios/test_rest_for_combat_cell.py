@@ -6,7 +6,7 @@ full HP and the one that was not was already below `CRITICAL_HP_FRACTION`,
 where `HP_CRITICAL` preempts.
 
 **A design correction, recorded rather than papered over.** The design measured
-this guard at 0/30 with `active_guards(state, gd, None, NO_PROFILE_CONTEXT)`,
+this guard at 0/30 with `active_guards(state, gd, None, TIMED_NO_PROFILE_CONTEXT)`,
 and that context has `combat_monster=None` — the guard's FIRST conjunct. Under
 that context it can never fire whatever the character's HP is, so the 0/30 was
 partly a property of the measuring instrument. The guard IS reachable: the real
@@ -33,13 +33,14 @@ import pytest
 
 from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.thresholds import CRITICAL_HP_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, active_guards
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachSkillLevel
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
@@ -59,6 +60,7 @@ def _planned(state: WorldState, game_data: GameData):
     """`plan_from_state` AND the context it built, because the guard reads the
     context and the assertion has to be about the same one production used."""
     player = GamePlayer(character=CELL, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(state, game_data)
     report = player.plan_from_state()
     return player, report
@@ -106,14 +108,14 @@ def test_the_census_context_can_never_see_this_guard(
         bundle_game_data: GameData, state: WorldState) -> None:
     """The design correction, as a failing-when-false assertion.
 
-    `NO_PROFILE_CONTEXT.combat_monster` is None and that is the guard's first
+    `TIMED_NO_PROFILE_CONTEXT.combat_monster` is None and that is the guard's first
     conjunct, so the guard-coverage sweep that reported 0/30 could not have
     reported anything else. The day that context gains a combat monster this
     test fails and the sweep's number becomes meaningful — which is the only
     honest way to hold a measurement this one depends on."""
-    assert NO_PROFILE_CONTEXT.combat_monster is None
+    assert TIMED_NO_PROFILE_CONTEXT.combat_monster is None
     assert GuardKind.REST_FOR_COMBAT not in active_guards(
-        state, bundle_game_data, None, NO_PROFILE_CONTEXT)
+        state, bundle_game_data, None, TIMED_NO_PROFILE_CONTEXT)
 
 
 def test_resting_to_full_silences_the_guard_and_moves_the_goal(
@@ -145,6 +147,7 @@ def test_no_other_scenario_reaches_this_guard() -> None:
         scenario_gd = shared_world(BUNDLE)
         scenario_world = scenario_state(SCENARIOS[name], scenario_gd)
         player = GamePlayer(character=name, history=None)
+        player._offline_timing = committed_timing()
         player.seed_offline(scenario_world, scenario_gd)
         if GuardKind.REST_FOR_COMBAT in active_guards(
                 scenario_world, scenario_gd, None, player._selection_context()):

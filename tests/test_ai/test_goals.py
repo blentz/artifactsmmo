@@ -30,6 +30,7 @@ from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
@@ -117,6 +118,7 @@ class TestRestoreHPGoal:
         assert exit_layer == "overworld"
         assert abs(1 - exit_x) + abs(1 - exit_y) == 15
         player = GamePlayer(character="l20_relief_full_bank", history=None)
+        player._offline_timing = committed_timing()
         player.seed_offline(state, gd)
         planner = GOAPPlanner()
         plan = planner.plan(state, RestoreHPGoal(), list(player._build_actions()), gd,

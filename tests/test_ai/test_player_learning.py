@@ -17,6 +17,7 @@ from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES, fight_loadout, predict_win
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import combat_key
@@ -38,6 +39,8 @@ def test_player_records_cycle_with_deltas(tmp_db_path):
     store.start_session()
 
     player = GamePlayer(character="testchar", history=store)
+
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     # inventory_used is sum(inventory.values()), so use inventory dicts
     prev_state = make_state(gold=50, xp=100, hp=80, inventory={"iron_ore": 10})
@@ -72,6 +75,7 @@ def test_player_records_cycle_with_deltas(tmp_db_path):
 
 def test_player_no_history_does_not_write(tmp_db_path):
     player = GamePlayer(character="testchar", history=None)
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     # Should not raise
     player._record_learning_cycle(
@@ -86,6 +90,7 @@ def test_player_no_history_does_not_write(tmp_db_path):
 def test_goal_cycles_to_satisfy_tracked():
     """First-select timestamps tracked; satisfaction returns delta and clears."""
     player = GamePlayer(character="testchar", history=None)
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     player._note_goal_selection("G1", cycle_index=0)
     assert player._goal_first_selected_at == {"G1": 0}
@@ -106,6 +111,7 @@ def test_record_learning_cycle_captures_per_skill_xp_delta(tmp_path):
     prev = make_state(skill_xp={"weaponcrafting": 10, "fishing": 50})
     new = make_state(skill_xp={"weaponcrafting": 14, "fishing": 50})
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     player.history = store
     player._record_learning_cycle(
         prev_state=prev, new_state=new,
@@ -129,6 +135,7 @@ def test_record_learning_cycle_empty_skill_delta_when_no_change(tmp_path):
     prev = make_state(skill_xp={"weaponcrafting": 10})
     new = make_state(skill_xp={"weaponcrafting": 10})
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     player.history = store
     player._record_learning_cycle(
         prev_state=prev, new_state=new,
@@ -156,6 +163,7 @@ def test_record_learning_cycle_char_xp_across_a_level_up(tmp_path):
     prev = make_state(level=10, xp=2097, max_xp=2100)
     new = make_state(level=11, xp=3, max_xp=2400)
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     player.history = store
     player._record_learning_cycle(
         prev_state=prev, new_state=new,
@@ -180,6 +188,7 @@ def test_record_learning_cycle_skill_xp_across_a_level_up(tmp_path):
     new = make_state(skills={"woodcutting": 6}, skill_xp={"woodcutting": 15},
                      skill_max_xp={"woodcutting": 250})
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     player.history = store
     player._record_learning_cycle(
         prev_state=prev, new_state=new,
@@ -206,6 +215,7 @@ def test_record_learning_cycle_omits_an_unresolvable_skill_delta(tmp_path):
     new = make_state(skills={"mining": 6}, skill_xp={"mining": 5},
                      skill_max_xp={"mining": 300})
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     player.history = store
     player._record_learning_cycle(
         prev_state=prev, new_state=new,
@@ -224,6 +234,7 @@ def test_fight_records_combat_loadout_profile(tmp_path):
     """_record_loadout_for_action stores 'combat:<monster>' for a FightAction."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
+    player._offline_timing = committed_timing()
 
     gd = GameData()
     gd._monster_attack = {"chicken": {"fire": 0, "water": 0, "earth": 0, "air": 0}}
@@ -250,6 +261,7 @@ def test_gather_records_gather_loadout_profile(tmp_path):
     """_record_loadout_for_action stores 'gather:<skill>' for a GatherAction."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
+    player._offline_timing = committed_timing()
 
     gd = GameData()
     gd._resource_skill = {"copper_ore": ("mining", 1)}
@@ -268,6 +280,7 @@ def test_record_loadout_skips_unknown_resource(tmp_path):
     """_record_loadout_for_action does not record when resource has no skill."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
+    player._offline_timing = committed_timing()
 
     gd = GameData()
     gd._resource_skill = {}   # copper_ore has no skill data
@@ -286,6 +299,7 @@ def test_record_loadout_skips_non_combat_gather_actions(tmp_path):
     """_record_loadout_for_action is a no-op for other action types."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
 
     state = make_state()
@@ -299,6 +313,7 @@ def test_record_loadout_skips_non_combat_gather_actions(tmp_path):
 def test_record_loadout_no_op_without_history():
     """_record_loadout_for_action is a no-op when history is None."""
     player = GamePlayer(character="Robby", history=None)
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     state = make_state()
     action = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
@@ -337,6 +352,7 @@ def test_records_combat_outcome_on_win(tmp_path):
     """_record_combat_outcome stores one row with actual_win=True on 'ok'."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
+    player._offline_timing = committed_timing()
     gd = _make_chicken_game_data()
     player.game_data = gd
 
@@ -367,6 +383,7 @@ def test_records_combat_outcome_on_loss(tmp_path):
     """_record_combat_outcome stores one row with actual_win=False on 'error:fight_lost'."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
+    player._offline_timing = committed_timing()
     gd = _make_chicken_game_data()
     player.game_data = gd
 
@@ -387,6 +404,7 @@ def test_a_party_fight_is_recorded_apart_from_the_solo_veto(tmp_path):
     solo `combat:<monster>` key the learned-loss veto reads."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
+    player._offline_timing = committed_timing()
     player.game_data = _make_chicken_game_data()
     action = _fought(FightAction(monster_code="chicken", locations=frozenset({(0, 0)}),
                                  participants=("Lor",)), "chicken", "loss")
@@ -405,6 +423,7 @@ def test_the_outcome_is_the_server_opponents(tmp_path):
     the loss belongs to the monster the server fought, not to the plan's."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
+    player._offline_timing = committed_timing()
     gd = _make_chicken_game_data()
     for table in (gd._monster_attack, gd._monster_resistance):
         table["corrupted_owlbear"] = dict(table["chicken"])
@@ -429,6 +448,7 @@ def test_a_resolved_fight_with_no_record_is_refused(tmp_path):
     the opponent is unknown, so nothing is guessed."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
+    player._offline_timing = committed_timing()
     player.game_data = _make_chicken_game_data()
     action = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
     with pytest.raises(RuntimeError, match="no fight record"):
@@ -441,6 +461,7 @@ def test_a_dry_run_fight_records_nothing(tmp_path):
     so no outcome reaches the learned-loss record."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store, dry_run=True)
+    player._offline_timing = committed_timing()
     player.game_data = _make_chicken_game_data()
     player._record_combat_outcome(FightAction(monster_code="chicken", locations=frozenset({(0, 0)})),
                                   make_state(), "ok")
@@ -452,6 +473,7 @@ def test_no_combat_outcome_on_cooldown_or_nonfight(tmp_path):
     """_record_combat_outcome is a no-op for error:cooldown outcomes or non-FightAction."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
+    player._offline_timing = committed_timing()
     gd = _make_chicken_game_data()
     player.game_data = gd
 
@@ -468,6 +490,7 @@ def test_no_combat_outcome_on_cooldown_or_nonfight(tmp_path):
 
 def test_compute_consumables_expended_counts_utility_drop():
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     prev = make_state(equipment={"utility1_slot": "small_health_potion"})
     prev = dataclasses.replace(prev, utility1_slot_quantity=5, utility2_slot_quantity=0)
     new = dataclasses.replace(prev, utility1_slot_quantity=2)
@@ -476,6 +499,7 @@ def test_compute_consumables_expended_counts_utility_drop():
 
 def test_compute_consumables_expended_empty_when_no_drop():
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     prev = make_state(equipment={"utility1_slot": "small_health_potion"})
     prev = dataclasses.replace(prev, utility1_slot_quantity=5)
     assert player._compute_consumables_expended(prev, prev) == {}
@@ -511,6 +535,7 @@ def test_the_learned_record_fills_lost_fights(tmp_path):
     read; without history there are none."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
+    player._offline_timing = committed_timing()
     gd = _make_chicken_game_data()
     player.game_data = gd
     player.state = make_state()
@@ -520,6 +545,7 @@ def test_the_learned_record_fills_lost_fights(tmp_path):
     player._refresh_fight_record()
     assert player.state.lost_fights == frozenset({"chicken"})
     cold = GamePlayer(character="Robby")
+    cold._offline_timing = committed_timing()
     cold.game_data = gd
     cold.state = dataclasses.replace(make_state(), lost_fights=frozenset({"chicken"}))
     cold._refresh_fight_record()
@@ -530,6 +556,7 @@ def test_the_learned_record_fills_lost_fights(tmp_path):
 def test_a_solo_fight_records_its_win_odds_and_a_party_fight_records_none(tmp_path, monkeypatch):
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
+    player._offline_timing = committed_timing()
     player.game_data = _make_chicken_game_data()
     monkeypatch.setattr("artifactsmmo_cli.ai.player.win_probability",
                         lambda state, gd, monster: Fraction(1, 2))
@@ -561,12 +588,14 @@ def test_the_learned_record_fills_win_thresholds(tmp_path):
             session_id="x", cycle_index=i, character="x", outcome=outcome,
             action_class=cls, action_repr=rep, actual_cooldown_seconds=secs))
     player = GamePlayer(character="Robby", history=store)
+    player._offline_timing = committed_timing()
     player.game_data = _make_chicken_game_data()
     player.state = make_state()
     player._refresh_fight_record()
     # wins 60 s, losses 120 s: theta = 120 / 180
     assert player.state.win_thresholds == {"chicken": Fraction(2, 3)}
     cold = GamePlayer(character="Robby")
+    cold._offline_timing = committed_timing()
     cold.game_data = player.game_data
     cold.state = dataclasses.replace(make_state(), win_thresholds={"chicken": Fraction(1, 2)})
     cold._refresh_fight_record()

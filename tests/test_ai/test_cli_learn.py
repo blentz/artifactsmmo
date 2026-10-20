@@ -5,6 +5,8 @@ import re
 import subprocess
 import sys
 
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
+
 
 def test_default_learn_db_path_format():
     from artifactsmmo_cli.commands.play import default_learn_db_path
@@ -60,6 +62,7 @@ def test_play_marks_exit_reason_crash_when_run_raises(monkeypatch, tmp_path):
     exit_reason = "crash"
     try:
         player = GamePlayer(character="TestChar", history=store)
+        player._offline_timing = committed_timing()
         try:
             player.run()
             exit_reason = "normal"

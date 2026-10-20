@@ -34,9 +34,9 @@ import pytest
 
 from artifactsmmo_cli.ai.bank_room import bank_has_room
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.thresholds import (
     CRAFT_RELIEF_FRACTION,
     DEPOSIT_FULL_FRACTION,
@@ -45,6 +45,7 @@ from artifactsmmo_cli.ai.thresholds import (
 )
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, active_guards
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 
 RELIEF_CELL = "l20_relief_full_bank"
 CRITICAL_CELL = "l20_bag_critical_empty_bank"
@@ -59,7 +60,7 @@ def _state(name: str, game_data: GameData) -> WorldState:
 
 
 def _fired(state: WorldState, game_data: GameData) -> frozenset[GuardKind]:
-    return frozenset(active_guards(state, game_data, None, NO_PROFILE_CONTEXT))
+    return frozenset(active_guards(state, game_data, None, TIMED_NO_PROFILE_CONTEXT))
 
 
 def _quantity_fraction(state: WorldState) -> float:
@@ -138,6 +139,7 @@ def test_cell8_reaches_a_relief_goal_end_to_end(
     the craft-relief goal and plans the craft that frees the slot."""
     state = _state(RELIEF_CELL, bundle_game_data)
     player = GamePlayer(character=RELIEF_CELL, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(state, bundle_game_data)
     report = player.plan_from_state()
     assert repr(report.selected_goal) == "CraftRelief(copper_bar)"
@@ -203,6 +205,7 @@ def test_cell9_reaches_the_discard_goal_end_to_end(
     rather than only in the ladder's own tests."""
     state = _state(CRITICAL_CELL, bundle_game_data)
     player = GamePlayer(character=CRITICAL_CELL, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(state, bundle_game_data)
     report = player.plan_from_state()
     assert repr(report.selected_goal) == "DiscardOverstock"

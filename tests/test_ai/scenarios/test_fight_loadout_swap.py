@@ -23,10 +23,11 @@ from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.gear_objective import gear_objective
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
@@ -74,6 +75,7 @@ def _bundle():
 def _run(sc):
     gd = _bundle()
     player = GamePlayer(character=sc.name, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(scenario_state(sc, gd), gd)
     return player.plan_from_state()
 
@@ -134,7 +136,7 @@ def _wearing_its_target():
     2026-10-18 §6.2: with a piece missing, no fight is chosen for XP)."""
     base = SCENARIOS[BASE_SCENARIO]
     gd = _bundle()
-    objective = gear_objective(scenario_state(base, gd), gd, NO_PROFILE_CONTEXT, None)
+    objective = gear_objective(scenario_state(base, gd), gd, TIMED_NO_PROFILE_CONTEXT, None)
     assert objective is not None
     return dataclasses.replace(base, equipment={**base.equipment, **objective.loadout}), \
         objective.monster
@@ -275,10 +277,11 @@ def _gather_materials_plan(sc, needed: dict[str, int]):
     gd = _bundle()
     state = scenario_state(sc, gd)
     player = GamePlayer(character=sc.name, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(state, gd)
     actions = list(player._build_actions())
     goal = GatherMaterialsGoal(target_item="feather", needed=needed)
-    plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
+    plan = (decompose(goal, state, gd, list(actions), TIMED_NO_PROFILE_CONTEXT) or [])
     return state, gd, actions, goal, plan
 
 
@@ -302,6 +305,7 @@ class TestDropDemandCompanionSwap:
         sc = _drop_demand_suboptimal_scenario()
         state = scenario_state(sc, gd)
         player = GamePlayer(character=sc.name, history=None)
+        player._offline_timing = committed_timing()
         player.seed_offline(state, gd)
         actions = list(player._build_actions())
         goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 5})

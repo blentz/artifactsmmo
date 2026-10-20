@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable, fightable_droppers
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -182,6 +183,7 @@ def dropped_items(game_data: GameData) -> list[str]:
 
 def _pool(scenario: str, state: WorldState, game_data: GameData) -> list:
     player = GamePlayer(character=scenario, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(state, game_data)
     return player._build_actions()
 

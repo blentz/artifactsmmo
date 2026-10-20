@@ -25,6 +25,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -35,11 +36,13 @@ from artifactsmmo_cli.ai.task_worth_core import TaskWorth, TaskWorthInputs, canc
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 
-def fight_gold_rate(state: WorldState, game_data: GameData, monster: str) -> Fraction:
-    """Mean fight gold per cycle of farming `monster`."""
+def fight_gold_rate(state: WorldState, game_data: GameData, monster: str,
+                    fight_seconds: Fraction) -> Fraction:
+    """Mean fight gold per cycle of farming `monster`, each fight lasting
+    `fight_seconds` (its rests priced in fights of that length)."""
     gold = Fraction(game_data.monster_min_gold(monster) + game_data.monster_max_gold(monster), 2)
     per_kill = Fraction(cycles_per_kill(expected_damage_per_fight(state, game_data, monster),
-                                        state.max_hp))
+                                        state.max_hp, fight_seconds))
     return gold / per_kill
 
 
@@ -81,7 +84,8 @@ def _task_gold_rate(code: str, task_type: str | None, remaining: int, state: Wor
     reward = game_data.task_gold_reward(code)
     if task_type == "monsters":
         per_kill = Fraction(cycles_per_kill(expected_damage_per_fight(state, game_data, code),
-                                            state.max_hp))
+                                            state.max_hp,
+                                            walk_seconds(state, game_data, code, (), ctx.timing())))
         fight_gold = Fraction(game_data.monster_min_gold(code) + game_data.monster_max_gold(code), 2)
         return (reward + remaining * fight_gold) / (remaining * per_kill)
     actions = acquisition_actions(code, remaining, state, game_data, ctx, equip=False,
@@ -123,7 +127,9 @@ def task_worth_for(code: str, task_type: str | None, remaining: int, state: Worl
     if ctx.gold_short:
         task_rate = _task_gold_rate(code, task_type, remaining, state, game_data, ctx, history)
         if ctx.combat_monster is not None:
-            other = fight_gold_rate(state, game_data, ctx.combat_monster)
+            other = fight_gold_rate(state, game_data, ctx.combat_monster,
+                                    walk_seconds(state, game_data, ctx.combat_monster, (),
+                                                 ctx.timing()))
     return task_worth(TaskWorthInputs(
         feasible=feasible,
         xp_positive=_xp_demanded(code, task_type, probe, game_data, ctx),

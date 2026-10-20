@@ -43,6 +43,7 @@ from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
@@ -62,6 +63,7 @@ def _bundle() -> GameData:
 def _player(name: str) -> GamePlayer:
     gd = load_bundle_game_data(BUNDLE)
     player = GamePlayer(character=name, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(scenario_state(SCENARIOS[name], gd), gd)
     return player
 
@@ -206,6 +208,7 @@ def bare_sweep_env() -> tuple[WorldState, GameData, list[Action], SelectionConte
     state = scenario_state(SCENARIOS[L13], gd)
     bare: WorldState = dataclasses.replace(state, inventory={}, bank_items={})
     player = GamePlayer(character=L13, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(bare, gd)
     return bare, gd, list(player._build_actions()), player._selection_context()
 

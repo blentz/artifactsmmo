@@ -70,6 +70,7 @@ from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     ScenarioCharacter,
@@ -80,6 +81,10 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
+
+_OFFLINE_CONTEXT = offline_context(NO_PROFILE_CONTEXT)
+"""The no-profile context carrying the committed capture's fight and action
+seconds (spec 2026-10-18 §2.9): this offline sweep prices time like a live cycle."""
 
 GRANT = 10_000
 """Units of a currency handed to the character for the differential probe.
@@ -348,13 +353,13 @@ def charged_currencies(root: MetaGoal, state: WorldState, game_data: GameData,
     question per scenario, granting every currency at once; a root that crosses
     only then is a real gap this probe cannot attribute, and is reported as
     `O7_MULTI_CURRENCY_WALL` rather than passed over."""
-    base = route_price(root, state, game_data, NO_PROFILE_CONTEXT, None)
+    base = route_price(root, state, game_data, _OFFLINE_CONTEXT, None)
     out: dict[str, tuple[int, int]] = {}
     if base < UNOBTAINABLE_PER_UNIT:
         return out
     for code in currencies:
         price = route_price(root, _granted(state, (code,)), game_data,
-                            NO_PROFILE_CONTEXT, None)
+                            _OFFLINE_CONTEXT, None)
         if price < UNOBTAINABLE_PER_UNIT:
             out[code] = (base, price)
     return out
@@ -379,11 +384,11 @@ def gold_charge(root: MetaGoal, state: WorldState,
     `state.gold`, which is where gold lives. That difference is the entire
     reason gold needed its own row: it is never an entry in `state.inventory`,
     so no amount of granting item currencies can reveal it."""
-    base = route_price(root, state, game_data, NO_PROFILE_CONTEXT, None)
+    base = route_price(root, state, game_data, _OFFLINE_CONTEXT, None)
     if base < UNOBTAINABLE_PER_UNIT:
         return None
     rich = dataclasses.replace(state, gold=state.gold + GOLD_GRANT)
-    price = route_price(root, rich, game_data, NO_PROFILE_CONTEXT, None)
+    price = route_price(root, rich, game_data, _OFFLINE_CONTEXT, None)
     if price >= UNOBTAINABLE_PER_UNIT:
         return None
     return (base, price)
@@ -403,11 +408,11 @@ def unattributed_wall(root: MetaGoal, state: WorldState, game_data: GameData,
     A root walled on a non-currency leaf — the ordinary case, and most of the
     grid — is unaffected: granting every currency leaves it exactly as
     unobtainable as it was."""
-    base = route_price(root, state, game_data, NO_PROFILE_CONTEXT, None)
+    base = route_price(root, state, game_data, _OFFLINE_CONTEXT, None)
     if base < UNOBTAINABLE_PER_UNIT:
         return False
     everything = route_price(root, _granted(state, currencies), game_data,
-                             NO_PROFILE_CONTEXT, None)
+                             _OFFLINE_CONTEXT, None)
     return everything < UNOBTAINABLE_PER_UNIT
 
 
@@ -488,7 +493,7 @@ def run_census(bundle: Path) -> list[CurrencyResult]:
         resolution = resolve_root(state, game_data,
                                   CharacterObjective.from_game_data(game_data),
                                   attach_gear_objective(state, game_data,
-                                                        NO_PROFILE_CONTEXT, None),
+                                                        _OFFLINE_CONTEXT, None),
                                   None)
         if resolution.root is None:
             results.extend(

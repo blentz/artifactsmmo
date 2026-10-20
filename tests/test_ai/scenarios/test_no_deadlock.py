@@ -33,10 +33,10 @@ import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
@@ -46,6 +46,7 @@ from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
 from tests.test_ai.shared_world import attached, shared_world
 
@@ -72,12 +73,13 @@ def _decide(name: str) -> tuple[StrategyDecision, WorldState]:
     # The walk's context carries the cycle's gear objective, attached by the
     # one function the player uses (ruling W).
     return decide_tree(state, gd, objective,
-                       ctx=attached(state, gd, NO_PROFILE_CONTEXT, None)), state
+                       ctx=attached(state, gd, TIMED_NO_PROFILE_CONTEXT, None)), state
 
 
 def _player(name: str) -> tuple[GamePlayer, GameData]:
     gd = shared_world(BUNDLE)
     player = GamePlayer(character=name, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(scenario_state(SCENARIOS[name], gd), gd)
     return player, gd
 
@@ -126,11 +128,20 @@ def test_l10_gearcrafting_gap_chosen_root_is_gear_never_the_trunk() -> None:
     missing piece, `iron_sword`, gated at weaponcrafting 10 against 5 — so the
     root is the weaponcrafting climb in front of it, and the gearcrafting climb
     `iron_boots` witnesses is the next alternative. No level grind is offered
-    at all while a piece is missing (spec 2026-10-18 §6.2)."""
+    at all while a piece is missing (spec 2026-10-18 §6.2).
+
+    RE-DERIVED spec 2026-10-18 §2.9 (a fight's seconds are its learned
+    length): `L*` is now the set that kills `red_slime` fastest, and the
+    first of its pieces in the walk's order that is blocked is the
+    `leather_legs_armor`, gated at gearcrafting 10 against 5 — so the root is
+    the gearcrafting climb this test's name has always meant, and the two
+    rings follow."""
     d, _state = _decide(CRITERION_1_MAIN)
-    assert d.chosen_root == ReachSkillLevel(skill="weaponcrafting", level=6)
-    assert d.blocked_target == "iron_sword"
-    assert d.fallback_roots[0] == ReachSkillLevel(skill="gearcrafting", level=6)
+    assert d.chosen_root == ReachSkillLevel(skill="gearcrafting", level=6)
+    assert d.blocked_target == "leather_legs_armor"
+    assert d.fallback_roots == [
+        ObtainItem(code="forest_ring", quantity=1, slot="ring1_slot"),
+        ObtainItem(code="forest_ring", quantity=1, slot="ring2_slot")]
     assert not any(isinstance(r, ReachCharLevel) for r in d.fallback_roots)
 
 
@@ -163,16 +174,21 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     gearcrafting (which is the next alternative). Never GrindCharacterXP: no
     fight is chosen for XP while a piece is missing. The plan is one committed
     weaponcrafting grind cycle: a yellow_slime drop, the copper, then the
-    sticky_sword that earns."""
+    sticky_sword that earns.
+
+    RE-DERIVED spec 2026-10-18 §2.9: the root is the gearcrafting climb in
+    front of `L*`'s `leather_legs_armor`, so the committed grind cycle is
+    gearcrafting's: the copper, a chicken's feather, then the
+    copper_legs_armor that earns."""
     report = _run(CRITERION_1_MAIN)
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal) == "ReachSkill(weaponcrafting->6)"
+    assert repr(report.selected_goal) == "ReachSkill(gearcrafting->6)"
     assert [repr(a) for a in report.plan] == [
-        "Fight(yellow_slime)", "Gather(copper_rocks×50)", "Craft(copper_bar×5)",
-        "Craft(sticky_sword×1)"]
-    assert report.decision.chosen_root == ReachSkillLevel(skill="weaponcrafting", level=6)
-    assert report.decision.blocked_target == "iron_sword"
+        "Gather(copper_rocks×50)", "Craft(copper_bar×5)", "Fight(chicken)",
+        "Craft(copper_legs_armor×1)"]
+    assert report.decision.chosen_root == ReachSkillLevel(skill="gearcrafting", level=6)
+    assert report.decision.blocked_target == "leather_legs_armor"
     assert report.decision.declined == ()
 
 

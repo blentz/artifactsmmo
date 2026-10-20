@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
 from artifactsmmo_cli.ai.strategy_driver import map_guard
@@ -37,7 +38,7 @@ def _ctx(**kw) -> SelectionContext:
     base = dict(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
                 initial_xp=0, task_exchange_min_coins=1, combat_monster=None)
     base.update(kw)
-    return SelectionContext(**base)
+    return offline_context(SelectionContext(**base))
 
 
 def test_selection_context_supply_target_defaults_to_none():

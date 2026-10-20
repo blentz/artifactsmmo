@@ -100,6 +100,7 @@ from artifactsmmo_cli.ai.failure_recovery_core import (
     tick,
 )
 from artifactsmmo_cli.ai.fight_record import FightRecord
+from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import (
     attach_gear_objective,
@@ -124,6 +125,12 @@ from artifactsmmo_cli.ai.intention_progress import (
     turn_key,
 )
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
+from artifactsmmo_cli.ai.learning.fight_seconds_model import (
+    LogEntry,
+    committed_timing,
+    fetch_log_entries,
+    timing_of,
+)
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
@@ -207,6 +214,7 @@ from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.win_threshold_core import THRESHOLD_WINDOW_DAYS, win_thresholds_from_rows
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from artifactsmmo_cli.ai.xp_demand import demand_roots, xp_demand
+from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
@@ -442,6 +450,12 @@ class GamePlayer:
         # epic's bespoke `recoverable` map). `NO_PROFILE_CONTEXT` until the first
         # decide/plan cycle runs.
         self._last_ctx: SelectionContext = NO_PROFILE_CONTEXT
+        # The fight-seconds bootstrap (spec 2026-10-18 §2.9): the newest page
+        # of this character's `/my/logs`, fetched once at `_initialize`; and
+        # the offline worlds' fit from the committed live capture, set by
+        # `seed_offline`, which replaces the live fit entirely.
+        self._log_entries: list[LogEntry] = []
+        self._offline_timing: tuple[FightSecondsModel, Fraction] | None = None
         # Why the last executed action failed. `outcome` alone collapses
         # distinct dead-ends onto one label, so the message rides the trace too.
         # Cleared at the start of every `_execute`.
@@ -770,7 +784,7 @@ class GamePlayer:
         step = cache.current() if cache is not None else None
         goal_satisfied = cache is not None and cache.selected_goal.is_satisfied(state)
         step_applicable = (step is not None and step.is_applicable(state, game_data)
-                           and self._fight_ready(step, state, game_data))
+                           and self._fight_ready(step, state, game_data, self._timing()[0]))
         # A party lease calling this member preempts a cached plan that is not
         # its hold (should_replan trigger 7).
         party_called = (self._party_hold is not None and (
@@ -819,7 +833,8 @@ class GamePlayer:
         return cache.selected_goal, cache.plan[cache.cursor:], [], False
 
     @staticmethod
-    def _fight_ready(step: Action, state: WorldState, game_data: GameData) -> bool:
+    def _fight_ready(step: Action, state: WorldState, game_data: GameData,
+                     timing: FightSecondsModel) -> bool:
         """A cached Fight step still wins at the CURRENT hp (`predict_win`). A
         drop farm's fight leg repeats "until N drops", and reusing it skipped
         every guard: live 2026-10-08, R2D2's supply fights against rat ran the
@@ -833,7 +848,7 @@ class GamePlayer:
         if not isinstance(step, FightAction):
             return True
         return (predict_win(state, game_data, step.monster_code)
-                and not rest_pays(state, game_data, step.monster_code))
+                and not rest_pays(state, game_data, step.monster_code, timing))
 
     def _resume_plan_cache(self, state: WorldState, game_data: GameData | None) -> None:
         """Restore a persisted commitment iff the goal rehydrates and every remaining
@@ -902,6 +917,9 @@ class GamePlayer:
 
         print(f"[{self._now()}] Fetching character state...")
         self.state = self._fetch_world_state(client)
+        self._acquire_data()
+        self._log_entries = fetch_log_entries(APIWrapper(client), self.character)
+        self._last_ctx = self._timed(self._last_ctx)
 
         # Persistent blocker memory: if a previous session learned that the
         # bank requires level N to unlock and we're still below N, mark the
@@ -970,6 +988,8 @@ class GamePlayer:
         self.state = state
         seed_documented_blockers(self._blockers, game_data, state)
         self._actions_since_full_refresh = BANK_REFRESH_FORCE_SENTINEL
+        self._offline_timing = committed_timing()
+        self._last_ctx = self._timed(self._last_ctx)
 
     def plan_once(self, committed: str | None = None) -> PlanReport:
         """Sense the world via the API, then compute one planning cycle —
@@ -2840,6 +2860,7 @@ class GamePlayer:
         if self.history is not None:
             self._last_path_plan = cheapest_path_to_level(
                 self.game_data.max_character_level, self.state, self.history, self.game_data,
+                self._timing()[0],
             )
         return band_combat_target(self.state, self.game_data, self.history,
                                   self._consumable_price, self._band_loadout, self._band_party)
@@ -2872,10 +2893,15 @@ class GamePlayer:
 
     def _band_context(self, monster: str) -> SelectionContext:
         """The pricing context of a band candidate (see `_band_loadout`)."""
-        return replace(NO_PROFILE_CONTEXT,
-                       bank_accessible=self._blockers.get("bank") is None,
-                       sibling_skills=self._sibling_skills,
-                       combat_monster=monster)
+        return self._timed(replace(NO_PROFILE_CONTEXT,
+                                   bank_accessible=self._blockers.get("bank") is None,
+                                   sibling_skills=self._sibling_skills,
+                                   combat_monster=monster))
+
+    def _timed(self, ctx: SelectionContext) -> SelectionContext:
+        """`ctx` carrying this cycle's learned fight and action seconds."""
+        fight_seconds, action_seconds = self._timing()
+        return replace(ctx, fight_seconds=fight_seconds, action_seconds=action_seconds)
 
     def _consumable_price(self, code: str) -> Fraction:
         """Acquisition actions per unit to REPLACE a consumable a fight used —
@@ -2902,9 +2928,9 @@ class GamePlayer:
                         else {c: q for c, q in state.bank_items.items() if c != code}),
             equipment={slot: (None if worn == code else worn)
                        for slot, worn in state.equipment.items()})
-        ctx = replace(NO_PROFILE_CONTEXT,
-                      bank_accessible=self._blockers.get("bank") is None,
-                      sibling_skills=self._sibling_skills)
+        ctx = self._timed(replace(NO_PROFILE_CONTEXT,
+                                  bank_accessible=self._blockers.get("bank") is None,
+                                  sibling_skills=self._sibling_skills))
         batch = potion_level_ramp(state.level)
         actions = acquisition_actions(code, batch, stripped, self.game_data, ctx, equip=False,
                                       store=self.history, gated_drop=False,
@@ -3431,7 +3457,8 @@ class GamePlayer:
         against the profile-free context: a board weight, not a plan. A code with
         no route at all is left out and so recruits no one."""
         bare = replace(state, inventory={}, bank_items={})
-        work = {code: acquisition_actions(code, 1, bare, game_data, NO_PROFILE_CONTEXT,
+        work = {code: acquisition_actions(code, 1, bare, game_data,
+                                          self._timed(NO_PROFILE_CONTEXT),
                                           equip=False, store=self.history)
                 for code in item_demand}
         return {code: actions for code, actions in work.items()
@@ -4019,9 +4046,19 @@ class GamePlayer:
             return None
         return self._intention_fight[1]
 
+    def _timing(self) -> tuple[FightSecondsModel, Fraction]:
+        """The learned fight-seconds model and the seconds of one action (spec
+        2026-10-18 §2.9): the fleet store's record and this character's
+        `/my/logs` bootstrap, or the committed capture offline."""
+        if self._offline_timing is not None:
+            return self._offline_timing
+        assert self.state is not None
+        return timing_of(self.history, self.state.haste, self._log_entries)
+
     def _selection_context(self) -> SelectionContext:
         assert self.state is not None
         assert self.game_data is not None
+        fight_seconds, action_seconds = self._timing()
         # The context is built first with the held monsters task's monster as
         # its grind target (the only one known before the gear objective), the
         # cycle's gear objective is priced on it, and only then is the grind
@@ -4108,6 +4145,8 @@ class GamePlayer:
             # "Price the loss risk"); none without history.
             fight_records=(fight_records(self.state, self.game_data, self.history)
                            if self.history is not None else ()),
+            fight_seconds=fight_seconds,
+            action_seconds=action_seconds,
         )
         ctx = attach_gear_objective(self.state, self.game_data, ctx, self.history)
         # Skill demand first (spec 2026-10-13 §2): the loadout's make prices

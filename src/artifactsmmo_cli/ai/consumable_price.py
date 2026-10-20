@@ -6,9 +6,9 @@ this module only reads its four inputs. Not wired into any decision yet.
 * HELD — bag + bank + the utility slots that wear it (the USER's ruling: "held
   stock (bag, bank, utility slots) is free").
 * MAKE — the acquisition walk (`acquisition_cost.acquisition_actions`, one unit,
-  not equipped) in fight-equivalent actions, times
-  `TYPICAL_FIGHT_COOLDOWN_SECONDS` (the walk's unit is one Fight, as
-  `fight_loop_cost` declares). A walk at or past `UNOBTAINABLE_PER_UNIT` has no
+  not equipped) in actions, times the seconds of one executed action LEARNED
+  by the store (`SelectionContext.action_seconds`, spec 2026-10-18 §2.9,
+  ruling CA). A walk at or past `UNOBTAINABLE_PER_UNIT` has no
   route: no make side. The walk prices EVERY route `obtain_sources` names,
   including a gold vendor paid from the pocket, so "make" is the cheapest way to
   obtain it in actions, not only crafting.
@@ -20,8 +20,8 @@ this module only reads its four inputs. Not wired into any decision yet.
   them. A vendor charging another currency is not a gold price.
 * GOLD RATE — the grind target's fight gold per loop cycle
   (`task_worth.fight_gold_rate` over `ctx.combat_monster`, the rate task worth
-  reads) over `TYPICAL_FIGHT_COOLDOWN_SECONDS`; 0 with no grind target, which
-  makes buying unpriceable."""
+  reads) over that fight's learned seconds, fought in `L*(m*)` (ruling CB); 0
+  with no grind target, which makes buying unpriceable."""
 
 from dataclasses import replace
 from fractions import Fraction
@@ -29,17 +29,14 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, ge_price_of, npc_price_of
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.consumable_price_core import consumable_price
+from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.held_stock import held_count
-from artifactsmmo_cli.ai.learning.fight_loop_cost import TYPICAL_FIGHT_COOLDOWN_SECONDS
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.task_worth import fight_gold_rate
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
-
-FIGHT_SECONDS = Fraction(TYPICAL_FIGHT_COOLDOWN_SECONDS)
-"""Seconds in one fight-equivalent action, exact."""
 
 
 def make_seconds(code: str, state: WorldState, game_data: GameData, ctx: SelectionContext,
@@ -49,7 +46,7 @@ def make_seconds(code: str, state: WorldState, game_data: GameData, ctx: Selecti
                                   credit_skills=ctx.skill_demand)
     if actions >= UNOBTAINABLE_PER_UNIT:
         return None
-    return actions * FIGHT_SECONDS
+    return actions * ctx.action_seconds_of()
 
 
 def buy_gold(code: str, state: WorldState, game_data: GameData,
@@ -74,13 +71,23 @@ def gold_per_second(state: WorldState, game_data: GameData, ctx: SelectionContex
     missing `farm_target` names no grind target, for days, and a 0 rate left
     every buy-only consumable unpriced for the acquisition fights it stocks.
     The rate is a PRICING input (what a second of fighting earns), not a fight
-    choice, so reading `m*` here fights nothing."""
+    choice, so reading `m*` here fights nothing.
+
+    A second of fighting is one in `L*(m*)` (ruling CB): the objective's own
+    fighter, wearing the loadout the rate is earned in; the character as it is
+    without an objective."""
     monster = ctx.combat_monster
     if monster is None and ctx.gear_objective is not None:
         monster = ctx.gear_objective.monster
     if monster is None:
         return Fraction(0)
-    return fight_gold_rate(state, game_data, monster) / FIGHT_SECONDS
+    fighter = state
+    if ctx.gear_objective is not None:
+        if ctx.gear_objective.fighter is None:
+            raise ValueError("the gear objective carries no fighter to price fight gold in")
+        fighter = ctx.gear_objective.fighter
+    seconds = walk_seconds(fighter, game_data, monster, (), ctx.timing())
+    return fight_gold_rate(fighter, game_data, monster, seconds) / seconds
 
 
 def replacement_price_of(code: str, state: WorldState, game_data: GameData,

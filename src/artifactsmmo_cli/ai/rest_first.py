@@ -1,7 +1,7 @@
 """Rest before a fight, or fight now, read from the world (`rest_first_core`).
 
-A try's seconds are the fight (`FIGHT_SECONDS`, the loop rate's per-fight
-duration), the expected rest back to full over the fight's endings (a win
+A try's seconds are the fight (its learned seconds at its expected turns,
+`combat.fight_seconds_now`, spec 2026-10-18 §2.9), the expected rest back to full over the fight's endings (a win
 from the HP it ends at, a loss from `LOSS_HP`) and, when a loss is possible,
 its share of the walk back from `RESPAWN_TILE` to the monster's nearest tile.
 Recovery is priced as a Rest (`loop_rate_core.rest_part`) on both sides of
@@ -15,9 +15,9 @@ from dataclasses import replace
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.cost_core import travel_seconds
-from artifactsmmo_cli.ai.combat import fight_endings
-from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS
+from artifactsmmo_cli.ai.combat import fight_endings, fight_seconds_now
 from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
+from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.fight_terms_core import SCALE
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.loop_rate import LOSS_HP, RESPAWN_TILE, monster_tile
@@ -26,7 +26,8 @@ from artifactsmmo_cli.ai.rest_first_core import kill_seconds, rest_first
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
-def fight_kill_seconds(state: WorldState, game_data: GameData, monster: str) -> Fraction | None:
+def fight_kill_seconds(state: WorldState, game_data: GameData, monster: str,
+                       timing: FightSecondsModel) -> Fraction | None:
     """Expected seconds to one kill of `monster` from `state.hp` and back to
     full (see the module doc); None when the fight cannot be won."""
     endings = fight_endings(state, game_data, monster)
@@ -37,14 +38,17 @@ def fight_kill_seconds(state: WorldState, game_data: GameData, monster: str) -> 
     walk = Fraction(0)
     if 0 < p_win < 1:
         walk = (1 - p_win) * travel_seconds(RESPAWN_TILE, monster_tile(state, game_data, monster))
-    return kill_seconds(p_win, FIGHT_SECONDS + recovery + walk)
+    fight = fight_seconds_now(state, game_data, monster, timing)
+    return kill_seconds(p_win, fight + recovery + walk)
 
 
-def rest_pays(state: WorldState, game_data: GameData, monster: str) -> bool:
+def rest_pays(state: WorldState, game_data: GameData, monster: str,
+              timing: FightSecondsModel) -> bool:
     """Resting to full before fighting `monster` costs less per kill than
     fighting now (`rest_first_core.rest_first`); never at full HP."""
     if state.hp >= state.max_hp:
         return False
     rest = rest_part(state.max_hp - state.hp, state.max_hp)
-    return rest_first(rest, fight_kill_seconds(state, game_data, monster),
-                      fight_kill_seconds(replace(state, hp=state.max_hp), game_data, monster))
+    return rest_first(rest, fight_kill_seconds(state, game_data, monster, timing),
+                      fight_kill_seconds(replace(state, hp=state.max_hp), game_data, monster,
+                                         timing))

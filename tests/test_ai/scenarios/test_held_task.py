@@ -61,10 +61,10 @@ from artifactsmmo_cli.ai.decisions.root import (
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.inventory_keep import keep_in_bag
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.task_horizon import (
     HORIZON_GEAR,
@@ -75,6 +75,7 @@ from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachTaskOutcome
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
@@ -290,7 +291,7 @@ def test_the_task_triple_arms_the_fight_arm(gd: GameData) -> None:
         child = IsAFightBlockingMe(
             _obj(gd), RootWalk()).resolve(
                 state, gd,
-                dataclasses.replace(NO_PROFILE_CONTEXT, combat_monster=monster),
+                dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, combat_monster=monster),
                 None)
         return isinstance(child, WhichSlotClosesTheFight)
 
@@ -319,6 +320,7 @@ def test_the_triple_starves_the_winnable_cascade(gd: GameData) -> None:
         assert all(gd.xp_per_kill(slime, state.level) == 0
                    for slime in ("green_slime", "blue_slime", "red_slime", "yellow_slime"))
         player = GamePlayer(character=name, history=None)
+        player._offline_timing = committed_timing()
         player.seed_offline(state, gd)
         player.plan_from_state()
         assert player._last_ctx is not None
@@ -355,7 +357,7 @@ def test_the_task_triple_moves_the_gear_review_target(gd: GameData) -> None:
     for name in TRIPLE:
         state = _state(name, gd)
         resolutions[name] = resolve_root(
-            state, gd, _obj(gd), attach_gear_objective(state, gd, NO_PROFILE_CONTEXT, None),
+            state, gd, _obj(gd), attach_gear_objective(state, gd, TIMED_NO_PROFILE_CONTEXT, None),
             None)
     first_piece = ObtainItem(code="fire_and_earth_amulet", quantity=1, slot="amulet_slot")
     assert {r.root for r in resolutions.values()} == {first_piece}
@@ -402,9 +404,9 @@ def test_the_open_task_is_offered_for_its_cancel_with_a_coin(gd: GameData) -> No
         state, inventory={**state.inventory, TASKS_COIN_CODE: 1})
     assert state.task_code is not None
     task = ReachTaskOutcome(state.task_code)
-    res = resolve_root(state, gd, _obj(gd), NO_PROFILE_CONTEXT, None)
+    res = resolve_root(state, gd, _obj(gd), TIMED_NO_PROFILE_CONTEXT, None)
     assert task in [res.root, *res.alternatives]
-    goal = objective_step_goal(task, state, gd, NO_PROFILE_CONTEXT, history=None)
+    goal = objective_step_goal(task, state, gd, TIMED_NO_PROFILE_CONTEXT, history=None)
     assert repr(goal) == "TaskCancel"
     assert goal.value(state, gd, None) > 0.0
 
@@ -461,6 +463,7 @@ def _starved_run(monster: str | None, game_data: GameData):
     state = (_state(STARVED, game_data) if monster is None
              else _starved_state(monster, game_data))
     player = GamePlayer(character=STARVED, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(state, game_data)
     report = player.plan_from_state()
     assert player._last_ctx is not None
@@ -494,7 +497,7 @@ def test_a_starved_cascade_witnesses_the_standing_arm_end_to_end(gd: GameData) -
     # WHERE EACH VERDICT IS SERVED: the gear verdict by the walk's fight arm.
     armed = {m: isinstance(
                  IsAFightBlockingMe(_obj(gd), RootWalk()).resolve(
-                     _starved_state(m, gd), gd, NO_PROFILE_CONTEXT, None),
+                     _starved_state(m, gd), gd, TIMED_NO_PROFILE_CONTEXT, None),
                  WhichSlotClosesTheFight)
              for m in (STARVED_GEAR, STARVED_OUT_OF_REACH)}
     assert armed == {STARVED_GEAR: True,
@@ -594,9 +597,9 @@ def test_inventory_keep_holds_the_task_item(gd: GameData) -> None:
     Measured 0 -> 8 (10 total, 2 done). Asserted against the no-task control so
     a consumer that ignored the task would fail here."""
     state = _state(ITEMS_CELL, gd)
-    assert keep_in_bag("apprentice_gloves", state, gd, NO_PROFILE_CONTEXT) \
-        > keep_in_bag("apprentice_gloves", _no_task(state), gd, NO_PROFILE_CONTEXT)
-    assert keep_in_bag("apprentice_gloves", state, gd, NO_PROFILE_CONTEXT) \
+    assert keep_in_bag("apprentice_gloves", state, gd, TIMED_NO_PROFILE_CONTEXT) \
+        > keep_in_bag("apprentice_gloves", _no_task(state), gd, TIMED_NO_PROFILE_CONTEXT)
+    assert keep_in_bag("apprentice_gloves", state, gd, TIMED_NO_PROFILE_CONTEXT) \
         == state.task_total - state.task_progress
 
 

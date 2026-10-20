@@ -9,9 +9,10 @@ from sqlmodel import Session
 import artifactsmmo_cli.ai.learning.projections as proj
 from artifactsmmo_cli.ai.equipment.equip_actions_core import EQUIP_SECONDS_PER_ITEM
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemStats
-from artifactsmmo_cli.ai.learning.fight_loop_cost import TYPICAL_FIGHT_COOLDOWN_SECONDS
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.projections import (
@@ -23,6 +24,10 @@ from artifactsmmo_cli.ai.learning.projections import (
 from artifactsmmo_cli.ai.learning.rung_state_core import HP_PER_LEVEL
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
+
+TIMING = committed_timing()[0]
+"""The committed live capture's fight-seconds fit (spec 2026-10-18 §2.9)."""
+
 
 
 def _harmless(gd: GameData) -> GameData:
@@ -233,7 +238,7 @@ class TestCheapestPathToLevel:
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         state = make_state(level=10)
-        plan = cheapest_path_to_level(10, state, store, self._gd_with_monsters({}))
+        plan = cheapest_path_to_level(10, state, store, self._gd_with_monsters({}), TIMING)
         store.close()
         assert plan.total_cycles == 0.0
         assert plan.segments == []
@@ -248,7 +253,7 @@ class TestCheapestPathToLevel:
         gd._monster_hp = {"chicken": 60}
         gd._monster_type = {"chicken": "normal"}
         state = make_state(level=1, xp=0, max_xp=100)
-        plan = cheapest_path_to_level(2, state, store, gd)
+        plan = cheapest_path_to_level(2, state, store, gd, TIMING)
         store.close()
         # xp_per_kill(chicken, L1) = 22 per documented formula, and ONE KILL IS
         # ONE CYCLE, so xp_per_cycle = 22 and gaining 100 XP costs ceil(100/22)
@@ -279,7 +284,7 @@ class TestCheapestPathToLevel:
         gd._monster_hp = {"chicken": 60}
         gd._monster_type = {"chicken": "normal"}
         state = make_state(level=1, xp=0, max_xp=100)
-        plan = cheapest_path_to_level(2, state, store, gd)
+        plan = cheapest_path_to_level(2, state, store, gd, TIMING)
         store.close()
 
         xp_per_kill = gd.xp_per_kill("chicken", 1, wisdom=state.wisdom)
@@ -322,7 +327,7 @@ class TestCheapestPathToLevel:
             "fixture drift: the bloody monster must be the better one PER KILL, "
             "or this proves nothing about the divisor"
         )
-        plan = cheapest_path_to_level(4, state, store, gd)
+        plan = cheapest_path_to_level(4, state, store, gd, TIMING)
         store.close()
         assert plan.segments[0].monster_code == "pushover"
         assert plan.segments[0].cycles_per_kill == 1.0
@@ -332,10 +337,11 @@ class TestCheapestPathToLevel:
         """The magnitude, not just the ordering.
 
         This monster takes the character's whole bar, so recovery is a 100-second
-        Rest — 3.33 fights' worth of elapsed time against a ~30s Fight. The level
-        therefore costs 4.33x the bare fight count, not the 2.0x the superseded
-        flat-one-action-per-rest model reported. Pinning 2.0 here was pinning the
-        cap that shut the defensive-gear channel."""
+        Rest — 100 s over the fight's own learned seconds (spec 2026-10-18 §2.9;
+        this two-hit kill is the 5 s floor), so 20 fights' worth of elapsed
+        time. The level therefore costs 21x the bare fight count, not the 2.0x
+        the superseded flat-one-action-per-rest model reported. Pinning 2.0 here
+        was pinning the cap that shut the defensive-gear channel."""
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"chicken": 1})
@@ -343,14 +349,16 @@ class TestCheapestPathToLevel:
         gd._monster_type = {"chicken": "normal"}
         state = make_state(level=1, xp=0, max_xp=100, attack={"earth": 40})
         self._bloody(gd, "chicken", {"earth": 500})
-        plan = cheapest_path_to_level(2, state, store, gd)
+        plan = cheapest_path_to_level(2, state, store, gd, TIMING)
         store.close()
 
         xp_per_kill = gd.xp_per_kill("chicken", 1, wisdom=state.wisdom)
         # Premise: the damage really does take the whole bar, or the rest term
         # is not at its ceiling and this measures some milder regime instead.
         assert expected_damage_per_fight(state, gd, "chicken") >= state.max_hp
-        expected = 1.0 + 100 / TYPICAL_FIGHT_COOLDOWN_SECONDS
+        fight = walk_seconds(state, gd, "chicken", (), TIMING)
+        assert fight == TIMING.floor == 5
+        expected = 1.0 + 100 / 5
         assert plan.segments[0].cycles_per_kill == pytest.approx(expected)
         assert plan.total_cycles == pytest.approx(100 / xp_per_kill * expected)
 
@@ -372,7 +380,7 @@ class TestCheapestPathToLevel:
         gd._monster_type = {"chicken": "normal"}
         state = make_state(level=1, xp=0, max_xp=100, attack={"earth": 40})
         for target in (2, 5, 50):
-            plan = cheapest_path_to_level(target, state, store, gd)
+            plan = cheapest_path_to_level(target, state, store, gd, TIMING)
             reached = (plan.segments[-1].to_level if plan.segments else state.level)
             assert math.isfinite(plan.total_cycles) == (reached >= target), (
                 target, reached, plan.total_cycles)
@@ -389,7 +397,7 @@ class TestCheapestPathToLevel:
         gd = self._gd_with_monsters({"chicken": 1})
         state = make_state(level=7, xp=0, max_xp=100)
         for target in (7, 3):
-            plan = cheapest_path_to_level(target, state, store, gd)
+            plan = cheapest_path_to_level(target, state, store, gd, TIMING)
             assert plan.segments == []
             assert plan.total_cycles == 0.0
             assert math.isfinite(plan.total_cycles)
@@ -406,7 +414,7 @@ class TestCheapestPathToLevel:
         gd._monster_hp = {"chicken": 60}
         gd._monster_type = {"chicken": "normal"}
         state = make_state(level=1, xp=0, max_xp=100, attack={"earth": 40})
-        plan = cheapest_path_to_level(6, state, store, gd)
+        plan = cheapest_path_to_level(6, state, store, gd, TIMING)
         froms = [s.from_level for s in plan.segments]
         assert froms == sorted(set(froms)), froms
         assert all(s.to_level == s.from_level + 1 for s in plan.segments)
@@ -431,7 +439,7 @@ class TestCheapestPathToLevel:
         gd._monster_hp = {"chicken": 60, "cow": 60}
         gd._monster_type = {"chicken": "normal", "cow": "normal"}
         state = make_state(level=1, xp=0, max_xp=100)
-        plan = cheapest_path_to_level(2, state, store, gd)
+        plan = cheapest_path_to_level(2, state, store, gd, TIMING)
         store.close()
 
         # cow has no observations, so it is costed by the formula (22 xp/kill).
@@ -455,7 +463,7 @@ class TestCheapestPathToLevel:
         # branch this exercises without turning it red.
         gd._monster_hp = {"chicken": 60}
         state = make_state(level=1, xp=0, max_xp=100)
-        plan = cheapest_path_to_level(2, state, store, gd)
+        plan = cheapest_path_to_level(2, state, store, gd, TIMING)
         store.close()
         assert gd.xp_per_kill("chicken", 1) == 22, "premise: the two arms differ"
         # 100 xp at the OBSERVED 20/cycle = 5 cycles (the formula would give 22).
@@ -470,7 +478,7 @@ class TestCheapestPathToLevel:
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"ogre": 50, "dragon": 80})
         state = make_state(level=1, xp=0, max_xp=100)
-        plan = cheapest_path_to_level(50, state, store, gd)
+        plan = cheapest_path_to_level(50, state, store, gd, TIMING)
         store.close()
         assert plan.blocked
         assert plan.total_cycles == float("inf")
@@ -484,7 +492,7 @@ class TestCheapestPathToLevel:
         ))
         gd = self._gd_with_monsters({"chicken": 1, "yellow_slime": 2})
         state = make_state(level=1, xp=0, max_xp=100)
-        plan = cheapest_path_to_level(2, state, store, gd)
+        plan = cheapest_path_to_level(2, state, store, gd, TIMING)
         store.close()
         # yellow_slime (lvl 2, char L1) is beatable due to +1 margin, gives 15xp/cyc
         assert plan.segments[0].monster_code == "yellow_slime"
@@ -494,7 +502,7 @@ class TestCheapestPathToLevel:
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"chicken": 1, "wolf": 5})
         state = make_state(level=1, xp=0, max_xp=100)
-        plan = cheapest_path_to_level(3, state, store, gd)
+        plan = cheapest_path_to_level(3, state, store, gd, TIMING)
         store.close()
         # Should have 2 segments (level 1→2, level 2→3)
         assert len(plan.segments) == 2
@@ -504,11 +512,11 @@ class TestCheapestPathToLevel:
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"chicken": 1})
         state = make_state(level=1, xp=0, max_xp=100)
-        plan = cheapest_path_to_level(2, state, store, gd)
+        plan = cheapest_path_to_level(2, state, store, gd, TIMING)
         store.close()
         assert plan.next_action_monster == "chicken"
         # Empty path → None
-        empty = cheapest_path_to_level(1, make_state(level=1), store, gd)
+        empty = cheapest_path_to_level(1, make_state(level=1), store, gd, TIMING)
         assert empty.next_action_monster is None
 
     def test_blocked_when_all_beatable_yield_zero_xp(self, monkeypatch, tmp_path):
@@ -521,7 +529,7 @@ class TestCheapestPathToLevel:
         gd._monster_hp = {"chicken": 0}
         gd._monster_type = {"chicken": "normal"}
         state = make_state(level=20, xp=0, max_xp=100)
-        plan = cheapest_path_to_level(21, state, store, gd)
+        plan = cheapest_path_to_level(21, state, store, gd, TIMING)
         store.close()
         assert plan.blocked is True
         assert plan.total_cycles == float("inf")
@@ -551,7 +559,7 @@ class TestPathSuccessRateFilter:
         _harmless(gd)
         state = make_state(level=1, xp=0, max_xp=100)
 
-        plan = cheapest_path_to_level(2, state, store, gd)
+        plan = cheapest_path_to_level(2, state, store, gd, TIMING)
         store.close()
         # yellow_slime excluded by is_winnable; chicken is the only option.
         assert plan.segments[0].monster_code == "chicken"
@@ -570,7 +578,7 @@ class TestIsWinnableFilter:
                             lambda s, g, code, h: code == "green_slime")
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="r")
         state = make_state(level=8, xp=0, max_xp=100)
-        plan = cheapest_path_to_level(9, state, store, gd)
+        plan = cheapest_path_to_level(9, state, store, gd, TIMING)
         store.close()
         assert plan.next_action_monster == "green_slime"
         assert plan.blocked is False
@@ -582,7 +590,7 @@ class TestIsWinnableFilter:
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: False)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="r")
         state = make_state(level=8, xp=0, max_xp=100)
-        plan = cheapest_path_to_level(9, state, store, gd)
+        plan = cheapest_path_to_level(9, state, store, gd, TIMING)
         store.close()
         assert plan.blocked is True
 
@@ -599,7 +607,7 @@ class TestIsWinnableFilter:
                             lambda s, g, code, h: s.hp == s.max_hp)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="r")
         damaged = make_state(level=8, xp=0, max_xp=100, hp=10, max_hp=200)
-        plan = cheapest_path_to_level(9, damaged, store, gd)
+        plan = cheapest_path_to_level(9, damaged, store, gd, TIMING)
         store.close()
         assert plan.next_action_monster == "green_slime"
         assert plan.blocked is False
@@ -614,7 +622,7 @@ class TestIsWinnableFilter:
                             lambda s, g, code, h: code == "green_slime")
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="r")
         state = make_state(level=8, xp=0, max_xp=100)
-        nxt = cheapest_path_to_level(9, state, store, gd).next_action_monster
+        nxt = cheapest_path_to_level(9, state, store, gd, TIMING).next_action_monster
         store.close()
         assert nxt is not None
         assert proj.is_winnable(state, gd, nxt, store) is True
@@ -680,7 +688,7 @@ class TestLearnedRateIsLevelScoped:
         gd = self._gd({"green_slime": 4})
         state = make_state(level=12, xp=0, max_xp=100)
 
-        plan = cheapest_path_to_level(30, state, store, gd)
+        plan = cheapest_path_to_level(30, state, store, gd, TIMING)
         store.close()
 
         assert plan.blocked is True, (
@@ -715,7 +723,7 @@ class TestLearnedRateIsLevelScoped:
         gd._monster_hp = {"green_slime": 60, "peer_slime": 60}
         state = make_state(level=12, xp=0, max_xp=100)
 
-        plan = cheapest_path_to_level(30, state, store, gd)
+        plan = cheapest_path_to_level(30, state, store, gd, TIMING)
         store.close()
 
         chosen = [s.monster_code for s in plan.segments]
@@ -737,7 +745,7 @@ class TestLearnedRateIsLevelScoped:
         gd._monster_hp = {"green_slime": 60}
         state = make_state(level=4, xp=0, max_xp=100)
 
-        plan = cheapest_path_to_level(5, state, store, gd)
+        plan = cheapest_path_to_level(5, state, store, gd, TIMING)
         store.close()
 
         assert plan.segments
@@ -831,7 +839,7 @@ class TestTheWalkCarriesAGrowingBody:
         gd._monster_hp = {"wolf": 200}
         state = make_state(level=5, xp=0, max_xp=100, max_hp=100)
 
-        cheapest_path_to_level(9, state, store, gd)
+        cheapest_path_to_level(9, state, store, gd, TIMING)
         store.close()
 
         assert seen, "the predicate was never consulted"
@@ -850,7 +858,7 @@ class TestTheWalkCarriesAGrowingBody:
         gd._monster_hp = {"wolf": 200, "troll": 3000}
         state = make_state(level=5, xp=0, max_xp=100, max_hp=100)
 
-        plan = cheapest_path_to_level(20, state, store, gd)
+        plan = cheapest_path_to_level(20, state, store, gd, TIMING)
         store.close()
 
         assert plan.blocked is False, (
@@ -885,7 +893,7 @@ class TestTheWalkCarriesAGrowingBody:
         state = make_state(level=5, xp=0, max_xp=100, max_hp=100,
                            attack={"earth": 40})
 
-        plan = cheapest_path_to_level(12, state, store, gd)
+        plan = cheapest_path_to_level(12, state, store, gd, TIMING)
         store.close()
 
         per_kill = [s.cycles_per_kill for s in plan.segments]
@@ -899,7 +907,7 @@ class TestTheWalkCarriesAGrowingBody:
         seen = self._hp_gated(monkeypatch, {"wolf": 0})
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         plan = cheapest_path_to_level(5, make_state(level=5, max_hp=100),
-                                      store, self._gd({"wolf": 6}))
+                                      store, self._gd({"wolf": 6}), TIMING)
         store.close()
         assert plan.segments == []
         assert seen == []
@@ -936,7 +944,7 @@ class TestProgressCarriesAcrossRungs:
         gd._monster_hp = {"chicken": 60}
         state = make_state(level=1, xp=0, max_xp=100)
 
-        plan = cheapest_path_to_level(2, state, store, gd)
+        plan = cheapest_path_to_level(2, state, store, gd, TIMING)
         store.close()
 
         rate = plan.segments[0].xp_per_cycle
@@ -954,7 +962,7 @@ class TestProgressCarriesAcrossRungs:
         gd._monster_hp = {"chicken": 60}
         state = make_state(level=1, xp=0, max_xp=100)
 
-        plan = cheapest_path_to_level(6, state, store, gd)
+        plan = cheapest_path_to_level(6, state, store, gd, TIMING)
         store.close()
 
         exact = sum(s.estimated_cycles for s in plan.segments)
@@ -973,7 +981,7 @@ class TestProgressCarriesAcrossRungs:
         gd._monster_hp = {"chicken": 60}
         state = make_state(level=1, xp=90, max_xp=100)
 
-        plan = cheapest_path_to_level(3, state, store, gd)
+        plan = cheapest_path_to_level(3, state, store, gd, TIMING)
         store.close()
 
         # Each rung has its OWN rate — `xp_per_kill` reads the simulated level, so
@@ -1018,7 +1026,8 @@ class TestTheEquipIsCharged:
         start.
 
         The charge is the published three seconds, not a whole Fight: an empty
-        slot takes one movement, and one movement is a tenth of the unit."""
+        slot takes one movement, three seconds over the rung's fight's learned
+        seconds (spec 2026-10-18 §2.9)."""
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_weapon()
@@ -1026,13 +1035,14 @@ class TestTheEquipIsCharged:
         armed = make_state(level=1, xp=0, max_xp=100,
                            inventory={"iron_sword": 1})
 
-        bare_plan = cheapest_path_to_level(4, bare, store, gd)
-        armed_plan = cheapest_path_to_level(4, armed, store, gd)
+        bare_plan = cheapest_path_to_level(4, bare, store, gd, TIMING)
+        armed_plan = cheapest_path_to_level(4, armed, store, gd, TIMING)
         store.close()
 
         bare_first, armed_first = (bare_plan.segments[0].estimated_cycles,
                                    armed_plan.segments[0].estimated_cycles)
-        one_movement = EQUIP_SECONDS_PER_ITEM / TYPICAL_FIGHT_COOLDOWN_SECONDS
+        fight = walk_seconds(armed, gd, armed_plan.segments[0].monster_code, (), TIMING)
+        one_movement = EQUIP_SECONDS_PER_ITEM / float(fight)
         assert armed_first == pytest.approx(bare_first + one_movement), (
             "the first rung must carry exactly one item movement")
         # Premise: the charge is genuinely below a whole action, or this passes
@@ -1054,7 +1064,7 @@ class TestTheEquipIsCharged:
         gd = self._gd_with_weapon()
         state = make_state(level=1, xp=0, max_xp=100)
 
-        plan = cheapest_path_to_level(2, state, store, gd)
+        plan = cheapest_path_to_level(2, state, store, gd, TIMING)
         store.close()
 
         rate = plan.segments[0].xp_per_cycle

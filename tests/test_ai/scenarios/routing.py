@@ -17,10 +17,10 @@ from pathlib import Path
 from artifactsmmo_cli.ai.decisions.root import RootResolution, resolve_root
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
@@ -32,7 +32,7 @@ def resolution_of(state: WorldState, game_data: GameData) -> RootResolution:
     """The walk over `state` with its cycle's gear objective attached.
     Offline and deterministic: `history=None`."""
     return resolve_root(state, game_data, CharacterObjective.from_game_data(game_data),
-                        attached(state, game_data, NO_PROFILE_CONTEXT, None), None)
+                        attached(state, game_data, TIMED_NO_PROFILE_CONTEXT, None), None)
 
 
 def scenario_resolution(name: str) -> RootResolution:

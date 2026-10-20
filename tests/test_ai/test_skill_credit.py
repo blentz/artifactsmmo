@@ -12,8 +12,8 @@ from artifactsmmo_cli.ai.consumable_price import make_seconds
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.obtain_sources import UNBOUNDED_CAPACITY
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_credit import credit_demanded_skills, route_skill
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 
 _BUNDLE = (Path(__file__).resolve().parent / "scenarios" / "fixtures" / "gamedata_bundle.json")
 
@@ -73,8 +73,9 @@ def test_the_make_price_drops_the_demanded_skills_actions():
 
     def price(skills: frozenset[str]):  # type: ignore[no-untyped-def]
         return make_seconds("cooked_gudgeon", state, gd,
-                            dataclasses.replace(NO_PROFILE_CONTEXT, skill_demand=skills), None)
+                            dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, skill_demand=skills), None)
 
-    assert price(frozenset()) == 120
-    assert price(frozenset({"fishing"})) == 90
-    assert price(frozenset({"fishing", "cooking"})) == 60
+    action = TIMED_NO_PROFILE_CONTEXT.action_seconds_of()
+    assert price(frozenset()) == 4 * action
+    assert price(frozenset({"fishing"})) == 3 * action
+    assert price(frozenset({"fishing", "cooking"})) == 2 * action

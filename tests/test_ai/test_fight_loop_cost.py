@@ -1,6 +1,7 @@
 """What one kill really costs — the Fight plus the share of a Rest it forces."""
 
 import math
+from fractions import Fraction
 from itertools import pairwise
 
 import pytest
@@ -8,9 +9,9 @@ import pytest
 from artifactsmmo_cli.ai.combat import _element_damage
 from artifactsmmo_cli.ai.learning.fight_loop_cost import (
     FIGHT_ACTIONS_PER_KILL,
-    TYPICAL_FIGHT_COOLDOWN_SECONDS,
     cycles_per_kill,
     fights_per_rest,
+    loss_cost,
     rest_actions_per_fight,
 )
 from artifactsmmo_cli.ai.rest_cooldown_core import (
@@ -19,12 +20,16 @@ from artifactsmmo_cli.ai.rest_cooldown_core import (
 )
 from artifactsmmo_cli.ai.thresholds import CRITICAL_HP_FRACTION
 
+FIGHT = Fraction(30)
+"""A 30-second fight: the length these conversions are pinned at (a fight's
+seconds are learned since spec 2026-10-18 §2.9; the conversion divides by them)."""
+
 
 def test_no_damage_forces_no_rest():
     """A monster that costs nothing keeps the kill priced at the bare Fight —
     which is what the projection charged for EVERY monster until 2026-08-07."""
-    assert rest_actions_per_fight(0, 280) == 0.0
-    assert cycles_per_kill(0, 280) == FIGHT_ACTIONS_PER_KILL
+    assert rest_actions_per_fight(0, 280, FIGHT) == 0.0
+    assert cycles_per_kill(0, 280, FIGHT) == FIGHT_ACTIONS_PER_KILL
 
 
 def test_damage_is_never_negative_so_zero_is_the_boundary():
@@ -36,15 +41,15 @@ def test_damage_is_never_negative_so_zero_is_the_boundary():
     backstop rather than a priced case."""
     assert _element_damage(10, 0, 500) == 0
     assert _element_damage(0, 0, 0) == 0
-    assert rest_actions_per_fight(0, 285) == 0.0
-    assert cycles_per_kill(0, 285) == FIGHT_ACTIONS_PER_KILL
+    assert rest_actions_per_fight(0, 285, FIGHT) == 0.0
+    assert cycles_per_kill(0, 285, FIGHT) == FIGHT_ACTIONS_PER_KILL
 
 
 def test_degenerate_max_hp_is_not_free():
     """A zero/negative HP pool must not read as a costless fight — it is the one
     case where the ratio is undefined, and 'free' is the dangerous answer."""
-    assert rest_actions_per_fight(10, 0) == 0.0
-    assert rest_actions_per_fight(-5, 280) == 0.0
+    assert rest_actions_per_fight(10, 0, FIGHT) == 0.0
+    assert rest_actions_per_fight(-5, 280, FIGHT) == 0.0
 
 
 def test_a_full_bar_rest_costs_more_than_three_fights():
@@ -53,8 +58,8 @@ def test_a_full_bar_rest_costs_more_than_three_fights():
     A character rested off a whole bar takes 100 seconds to do it. Against a
     ~30s Fight that is 3.33 fights' worth of elapsed time, and pricing it at a
     single action understated the heaviest loops by that whole factor."""
-    assert rest_actions_per_fight(10_000, 280) == pytest.approx(100 / 30)
-    assert cycles_per_kill(10_000, 280) == pytest.approx(1 + 100 / 30)
+    assert rest_actions_per_fight(10_000, 280, FIGHT) == pytest.approx(100 / 30)
+    assert cycles_per_kill(10_000, 280, FIGHT) == pytest.approx(1 + 100 / 30)
 
 
 def test_the_term_does_not_saturate_so_armour_keeps_paying():
@@ -69,7 +74,7 @@ def test_the_term_does_not_saturate_so_armour_keeps_paying():
     # Premise: every one of these is past the point the old model saturated, so
     # this cannot pass vacuously by testing the sub-band regime.
     assert all(d > band for d in over)
-    costs = [rest_actions_per_fight(d, 280) for d in over]
+    costs = [rest_actions_per_fight(d, 280, FIGHT) for d in over]
     assert all(a < b for a, b in pairwise(costs))
 
 
@@ -85,11 +90,11 @@ def test_the_ceiling_regime_is_flat_and_that_is_the_published_rule():
     losing its whole bar per fight — a regime `is_winnable` keeps out of the
     walk, not one this cost model is asked to rank."""
     max_hp = 100
-    ceiling = [rest_actions_per_fight(d, max_hp) for d in (100, 110, 150, 300)]
+    ceiling = [rest_actions_per_fight(d, max_hp, FIGHT) for d in (100, 110, 150, 300)]
     assert ceiling == [pytest.approx(100 / 30)] * 4
     # Premise: strictly below the bar the term is still strictly increasing, so
     # the flatness above is a boundary and not the term having gone dead.
-    interior = [rest_actions_per_fight(d, max_hp) for d in (70, 80, 90, 99)]
+    interior = [rest_actions_per_fight(d, max_hp, FIGHT) for d in (70, 80, 90, 99)]
     assert all(a < b for a, b in pairwise(interior))
 
 
@@ -98,24 +103,24 @@ def test_rest_term_is_monotone_in_damage():
     armour rank better rather than merely differently."""
     prev = -1.0
     for damage in range(0, 400, 10):
-        cur = rest_actions_per_fight(damage, 280)
+        cur = rest_actions_per_fight(damage, 280, FIGHT)
         assert cur >= prev
         prev = cur
 
 
 def test_rest_term_is_monotone_in_max_hp():
     """A bigger HP pool absorbs the same damage with less recovery."""
-    assert (rest_actions_per_fight(100, 200) >= rest_actions_per_fight(100, 400)
-            >= rest_actions_per_fight(100, 800))
+    assert (rest_actions_per_fight(100, 200, FIGHT) >= rest_actions_per_fight(100, 400, FIGHT)
+            >= rest_actions_per_fight(100, 800, FIGHT))
 
 
 def test_the_live_2026_08_07_boards_cost_what_their_rests_took():
     """The three characters measured that day each rested after nearly every
     fight — one ACTION, which the capped model reproduced exactly and which is
     why it looked calibrated. Those rests took 88, 52 and 39 seconds."""
-    assert rest_actions_per_fight(462, 525) == pytest.approx(88 / 30)   # Robby/pig
-    assert rest_actions_per_fight(144, 280) == pytest.approx(52 / 30)   # C3P0/red_slime
-    assert rest_actions_per_fight(108, 280) == pytest.approx(39 / 30)   # Lor/red_slime
+    assert rest_actions_per_fight(462, 525, FIGHT) == pytest.approx(88 / 30)   # Robby/pig
+    assert rest_actions_per_fight(144, 280, FIGHT) == pytest.approx(52 / 30)   # C3P0/red_slime
+    assert rest_actions_per_fight(108, 280, FIGHT) == pytest.approx(39 / 30)   # Lor/red_slime
     # Premise: all three exceed the usable band, so all three are cases the
     # superseded model priced identically at 1.0. The spread here is the point.
     band = 1.0 - CRITICAL_HP_FRACTION
@@ -146,7 +151,7 @@ def test_batching_is_neutral_above_the_three_second_floor():
 
     Checked by pricing the same damage under chains of very different lengths:
     at a fixed damage-to-bar ratio the per-fight cost is invariant."""
-    per_fight = [rest_actions_per_fight(d, d * 40) for d in (5, 10, 20, 50)]
+    per_fight = [rest_actions_per_fight(d, d * 40, FIGHT) for d in (5, 10, 20, 50)]
     # Premise: these really are different batch sizes, or invariance is trivial.
     chains = [fights_per_rest(d, d * 40) for d in (5, 10, 20, 50)]
     assert len(set(chains)) == 1 and chains[0] > 1
@@ -160,8 +165,8 @@ def test_the_charge_is_the_published_cooldown_amortised():
     damage, max_hp = 37, 620
     chain = fights_per_rest(damage, max_hp)
     expected = rest_cooldown_seconds(chain * damage, max_hp) / (
-        chain * TYPICAL_FIGHT_COOLDOWN_SECONDS)
-    assert rest_actions_per_fight(damage, max_hp) == pytest.approx(expected)
+        chain * FIGHT)
+    assert rest_actions_per_fight(damage, max_hp, FIGHT) == pytest.approx(expected)
     # Premise: a real chain, not the degenerate one-fight case where any
     # amortisation formula agrees with any other.
     assert chain > 1
@@ -193,7 +198,7 @@ def test_the_per_kill_recovery_share_never_decreases_with_damage():
     cost LESS per kill -- meaning better armour could raise a rung's price, which
     inverts the one channel defensive gear has into the objective."""
     for max_hp in (20, 97, 100, 101, 200, 512, 1000):
-        shares = [rest_actions_per_fight(d, max_hp)
+        shares = [rest_actions_per_fight(d, max_hp, FIGHT)
                   for d in range(1, max_hp + 1)]
         assert all(b >= a for a, b in pairwise(shares)), max_hp
 
@@ -224,7 +229,7 @@ def test_a_bar_of_one_hundred_is_blind_to_what_this_module_decides():
     the same. Real bars are full of such ties, and it is those ties that the
     monotonicity and band-independence claims are really about."""
     def ties(max_hp):
-        shares = [rest_actions_per_fight(d, max_hp) for d in range(1, max_hp + 1)]
+        shares = [rest_actions_per_fight(d, max_hp, FIGHT) for d in range(1, max_hp + 1)]
         return sum(a == b for a, b in pairwise(shares))
 
     assert ties(100) == 0
@@ -250,12 +255,12 @@ def test_the_guard_band_is_a_ratio_not_a_floored_hit_point_count():
     # over.
     assert fights_per_rest(134, max_hp) == 1
     assert int(floored_band // 134) + 1 == 2
-    assert rest_actions_per_fight(134, max_hp) == pytest.approx(0.866667, abs=1e-6)
+    assert rest_actions_per_fight(134, max_hp, FIGHT) == pytest.approx(0.866667, abs=1e-6)
 
     # damage 67 likewise: chain 2 against 3.
     assert fights_per_rest(67, max_hp) == 2
     assert int(floored_band // 67) + 1 == 3
-    assert rest_actions_per_fight(67, max_hp) == pytest.approx(0.433333, abs=1e-6)
+    assert rest_actions_per_fight(67, max_hp, FIGHT) == pytest.approx(0.433333, abs=1e-6)
 
 
 def test_the_published_second_makes_adjacent_damages_cost_the_same():
@@ -265,11 +270,11 @@ def test_the_published_second_makes_adjacent_damages_cost_the_same():
     an oracle that manufactured a difference here would be charging what the game
     does not."""
     max_hp = 535
-    assert rest_actions_per_fight(30, max_hp) == rest_actions_per_fight(31, max_hp)
-    assert rest_actions_per_fight(39, max_hp) == rest_actions_per_fight(40, max_hp)
+    assert rest_actions_per_fight(30, max_hp, FIGHT) == rest_actions_per_fight(31, max_hp, FIGHT)
+    assert rest_actions_per_fight(39, max_hp, FIGHT) == rest_actions_per_fight(40, max_hp, FIGHT)
     # ...and the cost still moves across a wider step, so this is a quantum and not
     # the saturation the clause forbids.
-    assert rest_actions_per_fight(39, max_hp) < rest_actions_per_fight(43, max_hp)
+    assert rest_actions_per_fight(39, max_hp, FIGHT) < rest_actions_per_fight(43, max_hp, FIGHT)
 
 
 def test_the_exact_division_case_cannot_arise_on_an_off_lattice_bar():
@@ -286,8 +291,16 @@ def test_every_live_bar_keeps_the_properties_the_clause_claims():
     """Monotone in damage, and the three-second floor unreachable -- re-checked on
     the real bars rather than on the exhibit's 100."""
     for max_hp in LIVE_BARS:
-        shares = [rest_actions_per_fight(d, max_hp) for d in range(1, max_hp + 1)]
+        shares = [rest_actions_per_fight(d, max_hp, FIGHT) for d in range(1, max_hp + 1)]
         assert all(b >= a for a, b in pairwise(shares)), max_hp
         for d in range(1, max_hp + 1):
             missing = min(fights_per_rest(d, max_hp) * d, max_hp)
             assert rest_cooldown_seconds(missing, max_hp) > REST_MINIMUM_SECONDS
+
+
+def test_a_rest_is_priced_in_fights_of_the_fight_it_follows() -> None:
+    """Spec 2026-10-18 §2.9: the unit is one fight of THAT fight's learned
+    length, so the same rest is twice the fights after a fight half as long."""
+    assert rest_actions_per_fight(462, 525, Fraction(15)) == pytest.approx(
+        2 * rest_actions_per_fight(462, 525, FIGHT))
+    assert loss_cost(695, Fraction(15)) == Fraction(15 + 100, 15)

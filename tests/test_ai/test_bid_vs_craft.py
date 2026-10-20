@@ -22,8 +22,8 @@ from artifactsmmo_cli.ai.bid_vs_craft import should_bid
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 
 _BUNDLE = (Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json")
 CELL = "l32_held_task_closable"
@@ -47,11 +47,11 @@ def test_should_bid_compares_two_action_counts() -> None:
     gd = _gd()
     state = _state(gd)
     priced = route_price(ObtainItem("iron_sword", 1), state, gd,
-                         NO_PROFILE_CONTEXT, None)
+                         TIMED_NO_PROFILE_CONTEXT, None)
     assert should_bid("iron_sword", 1, priced - 1, state, gd,
-                      NO_PROFILE_CONTEXT) is True
+                      TIMED_NO_PROFILE_CONTEXT) is True
     assert should_bid("iron_sword", 1, priced, state, gd,
-                      NO_PROFILE_CONTEXT) is False
+                      TIMED_NO_PROFILE_CONTEXT) is False
 
 
 def test_the_boundary_is_strictly_greater_than() -> None:
@@ -62,11 +62,11 @@ def test_the_boundary_is_strictly_greater_than() -> None:
     gd = _gd()
     state = _state(gd)
     priced = route_price(ObtainItem("iron_ore", 3), state, gd,
-                         NO_PROFILE_CONTEXT, None)
+                         TIMED_NO_PROFILE_CONTEXT, None)
     assert should_bid("iron_ore", 3, priced, state, gd,
-                      NO_PROFILE_CONTEXT) is False
+                      TIMED_NO_PROFILE_CONTEXT) is False
     assert should_bid("iron_ore", 3, priced - 1, state, gd,
-                      NO_PROFILE_CONTEXT) is True
+                      TIMED_NO_PROFILE_CONTEXT) is True
 
 
 def test_an_unroutable_item_bids() -> None:
@@ -81,9 +81,9 @@ def test_an_unroutable_item_bids() -> None:
     gd = _gd()
     state = _state(gd)
     assert route_price(ObtainItem("no_such_item_xyzzy", 1), state, gd,
-                       NO_PROFILE_CONTEXT, None) == UNOBTAINABLE_PER_UNIT
+                       TIMED_NO_PROFILE_CONTEXT, None) == UNOBTAINABLE_PER_UNIT
     assert should_bid("no_such_item_xyzzy", 1, 20, state, gd,
-                      NO_PROFILE_CONTEXT) is True
+                      TIMED_NO_PROFILE_CONTEXT) is True
 
 
 def test_quantity_moves_the_decision() -> None:
@@ -91,8 +91,8 @@ def test_quantity_moves_the_decision() -> None:
     that declines one unit can accept many."""
     gd = _gd()
     state = _state(gd)
-    one = route_price(ObtainItem("iron_ore", 1), state, gd, NO_PROFILE_CONTEXT, None)
-    many = route_price(ObtainItem("iron_ore", 40), state, gd, NO_PROFILE_CONTEXT, None)
+    one = route_price(ObtainItem("iron_ore", 1), state, gd, TIMED_NO_PROFILE_CONTEXT, None)
+    many = route_price(ObtainItem("iron_ore", 40), state, gd, TIMED_NO_PROFILE_CONTEXT, None)
     assert many > one, (one, many)
-    assert should_bid("iron_ore", 1, one, state, gd, NO_PROFILE_CONTEXT) is False
-    assert should_bid("iron_ore", 40, one, state, gd, NO_PROFILE_CONTEXT) is True
+    assert should_bid("iron_ore", 1, one, state, gd, TIMED_NO_PROFILE_CONTEXT) is False
+    assert should_bid("iron_ore", 40, one, state, gd, TIMED_NO_PROFILE_CONTEXT) is True

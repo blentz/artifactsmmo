@@ -37,6 +37,7 @@ from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.goals.currency_turnin import CurrencyTurnInGoal
 from artifactsmmo_cli.ai.goals.surrender_currency import SurrenderCurrencyGoal
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import coordination_now, make_state
@@ -66,6 +67,7 @@ def _player(db: str, name: str, state: WorldState) -> GamePlayer:
     (strategy_driver.map_means), so a state left on the fixture's default name
     would make every character look like a non-buyer."""
     player = GamePlayer(character=name)
+    player._offline_timing = committed_timing()
     player._coordination = CoordinationStore(db_path=db, character=name)
     player.seed_offline(replace(state, character=name), _bank_gd())
     return player

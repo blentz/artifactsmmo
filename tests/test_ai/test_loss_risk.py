@@ -17,14 +17,20 @@ from artifactsmmo_cli.ai.acquisition_cost import _loss_surcharge, _priced, route
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_loop_cost import loss_cost
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loss_risk_core import loss_surcharge
 from artifactsmmo_cli.ai.obtain_sources import UNBOUNDED_CAPACITY, Source, SourceKind
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.skill_grind_target import _cache_key, build_selectable_grind_candidates
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+
+CTX = TIMED_NO_PROFILE_CONTEXT
+
+FIGHT = Fraction(30)
+"""A 30-second fight: the length these conversions are pinned at (a fight's
+seconds are learned since spec 2026-10-18 §2.9; the conversion divides by them)."""
 
 _BUNDLE = Path(__file__).resolve().parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
@@ -60,24 +66,24 @@ class TestCore:
 def test_a_loss_is_the_fight_plus_a_full_bar_rest() -> None:
     """A loss leaves 1 hp: the Rest for `max_hp - 1` missing, 100 s, is 10/3
     fights; plus the lost Fight."""
-    assert loss_cost(695) == Fraction(130, 30)
+    assert loss_cost(695, FIGHT) == Fraction(130, 30)
 
 
 class TestTheDropPrice:
     def test_a_monster_lost_to_costs_more_per_unit(self, state, game_data) -> None:
         feather = Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY)
-        cold = _priced("feather", feather, state, game_data).actions_per_application
-        lost = _priced("feather", feather, state, game_data, None,
-                       (("chicken", 10, 5),)).actions_per_application
+        cold = _priced("feather", feather, state, game_data, CTX).actions_per_application
+        lost = _priced("feather", feather, state, game_data,
+                       replace(CTX, fight_records=(("chicken", 10, 5),)), None).actions_per_application
         assert lost > cold
 
     def test_another_monsters_record_or_no_evidence_changes_nothing(self, state, game_data) -> None:
         feather = Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY)
-        cold = _priced("feather", feather, state, game_data).actions_per_application
-        assert _priced("feather", feather, state, game_data, None,
-                       (("cow", 10, 5),)).actions_per_application == cold
-        assert _priced("feather", feather, state, game_data, None,
-                       (("chicken", MIN_WIN_SAMPLES - 1, 0),)).actions_per_application == cold
+        cold = _priced("feather", feather, state, game_data, CTX).actions_per_application
+        cow = replace(CTX, fight_records=(("cow", 10, 5),))
+        thin = replace(CTX, fight_records=(("chicken", MIN_WIN_SAMPLES - 1, 0),))
+        assert _priced("feather", feather, state, game_data, cow, None).actions_per_application == cold
+        assert _priced("feather", feather, state, game_data, thin, None).actions_per_application == cold
 
     def test_the_routes_read_the_records_off_the_context(self, state, game_data) -> None:
         def drop(ctx):  # type: ignore[no-untyped-def]
@@ -85,14 +91,14 @@ class TestTheDropPrice:
                         for o in route_options("feather", state, game_data, ctx)
                         if o.kind == SourceKind.DROP.value and o.venue == "chicken")
 
-        lost = replace(NO_PROFILE_CONTEXT, fight_records=(("chicken", 10, 5),))
-        assert drop(lost) > drop(NO_PROFILE_CONTEXT)
+        lost = replace(CTX, fight_records=(("chicken", 10, 5),))
+        assert drop(lost) > drop(TIMED_NO_PROFILE_CONTEXT)
 
     def test_the_surcharge_reads_the_named_monster(self) -> None:
-        cost = loss_cost(695)
-        assert _loss_surcharge("king_slime", 695, (("rat", 80, 45), ("king_slime", 16, 8))) \
+        cost = loss_cost(695, FIGHT)
+        assert _loss_surcharge("king_slime", 695, (("rat", 80, 45), ("king_slime", 16, 8)), FIGHT) \
             == float(Fraction(8, 8) * cost)
-        assert _loss_surcharge("pig", 695, (("rat", 80, 45),)) == 0.0
+        assert _loss_surcharge("pig", 695, (("rat", 80, 45),), FIGHT) == 0.0
 
 
 class TestTheGrindRungs:
@@ -108,7 +114,7 @@ class TestTheGrindRungs:
 
         monkeypatch.setattr(grind_mod, "acquisition_actions", spy)
         records = (("chicken", 9, 4),)
-        ctx = replace(NO_PROFILE_CONTEXT, fight_records=records)
+        ctx = replace(TIMED_NO_PROFILE_CONTEXT, fight_records=records)
         build_selectable_grind_candidates("weaponcrafting", state, game_data, ctx)
         assert seen and set(seen) == {records}
 
@@ -116,6 +122,7 @@ class TestTheGrindRungs:
 class TestThePlayerContext:
     def _player(self, monkeypatch, history):  # type: ignore[no-untyped-def]
         player = GamePlayer(character="probe", history=history)
+        player._offline_timing = committed_timing()
         player.state = make_state(task_code=None, task_total=0)
         player.game_data = GameData()
         monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: None)

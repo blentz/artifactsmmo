@@ -24,6 +24,7 @@ from artifactsmmo_cli.ai.decisions.which_piece_is_next import WhichPieceIsNext
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import gear_objective
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -226,17 +227,19 @@ def test_a_level_up_retargets_without_an_xp_fight(bundle: GameData) -> None:
 def test_the_held_cell_grinds_exactly_the_next_level(bundle: GameData) -> None:
     """Ruling Y: the one catalogued scenario that wears its own `L*`. Its
     objective is held, so the root is exactly `ReachCharLevel(level + 1)` —
-    and the live cycle grinds `m*` for it."""
+    and the live cycle grinds `m*` for it. Since spec 2026-10-18 §2.9 its
+    `L*` is the set that kills `blue_slime` fastest (the scenario wears it)."""
     state = scenario_state(SCENARIOS["l14_wears_its_target"], bundle)
     objective = gear_objective(state, bundle, CTX, None)
     assert objective is not None and objective.held
-    assert objective.monster == "highwayman"
+    assert objective.monster == "blue_slime"
     assert _resolve(state, bundle, objective, ctx=CTX).root == ReachCharLevel(level=15)
     player = GamePlayer(character="l14_wears_its_target", history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(state, bundle)
     report = player.plan_from_state()
     assert report.decision.chosen_root == ReachCharLevel(level=15)
-    assert repr(report.selected_goal) == "GrindCharacterXP(highwayman)"
+    assert repr(report.selected_goal) == "GrindCharacterXP(blue_slime)"
 
 
 def test_a_piece_the_catalogue_does_not_know_is_refused() -> None:

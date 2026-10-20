@@ -20,16 +20,17 @@ from artifactsmmo_cli.ai.gear_objective import gear_objective
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective, gear_keep_for
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_owned
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 from tests.test_ai.test_gear_objective import BUNDLE, CTX, _carrying_its_target, _robby
 
 PIECE = GearPiece("helmet_slot", "iron_helm", 0, Fraction(1), Fraction(10))
@@ -46,6 +47,7 @@ def _player(monkeypatch: pytest.MonkeyPatch, objective: GearObjective | None,
     """A player whose objective is `objective`; `seen` collects the context the
     objective was computed from, then the one the loadout was chosen against."""
     player = GamePlayer(character="probe", history=None)
+    player._offline_timing = committed_timing()
     player.state = make_state(task_code=None, task_total=0)
     player.game_data = GameData()
     monkeypatch.setattr(player, "_path_aligned_monster", _unasked)
@@ -173,6 +175,7 @@ def test_a_carried_piece_is_equipped_before_m_star_is_fought() -> None:
     gd = load_bundle_game_data(BUNDLE)
     carrying, before = _carrying_its_target("l10_bag_pursuit", gd)
     player = GamePlayer(character="l10_bag_pursuit", history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(carrying, gd)
     report = player.plan_from_state()
     assert player._last_ctx is not None and player._last_ctx.gear_objective is not None
@@ -218,7 +221,8 @@ def _gearing_store(tmp_path: Path) -> LearningStore:
 @pytest.mark.parametrize("where", ["bank", "bag"])
 def test_an_owned_l_star_piece_is_never_destroyable(tmp_path: Path, where: str) -> None:
     """Ruling AM (final review F6), on a scenario: `l10_copper_adequate`
-    owns one `iron_armor`, an `L*` piece, while its last fight's combat
+    owns one `leather_armor`, an `L*` piece (the `iron_armor` until spec
+    2026-10-18 §2.9 re-derived `L*` by kill speed), while its last fight's combat
     profile (copper, every armour slot named) is active. The profile switches
     the blanket equippable keep off for the slots it names, so before the fix
     the armour kept 0 copies: banked, `bank_drain_excess` drained it; carried
@@ -227,18 +231,18 @@ def test_an_owned_l_star_piece_is_never_destroyable(tmp_path: Path, where: str) 
     gd = load_bundle_game_data(BUNDLE)
     store = _gearing_store(tmp_path)
     base = scenario_state(SCENARIOS["l10_copper_adequate"], gd)
-    state = (replace(base, bank_items={**(base.bank_items or {}), "iron_armor": 1})
-             if where == "bank" else replace(base, inventory={**base.inventory, "iron_armor": 1}))
-    arrived = replace(NO_PROFILE_CONTEXT,
+    state = (replace(base, bank_items={**(base.bank_items or {}), "leather_armor": 1})
+             if where == "bank" else replace(base, inventory={**base.inventory, "leather_armor": 1}))
+    arrived = replace(TIMED_NO_PROFILE_CONTEXT,
                       gear_keep=gear_keep_for(state, gd, store, None, frozenset()))
     ctx = attach_gear_objective(state, gd, arrived, store)
     assert ctx.gear_objective is not None
-    assert ctx.gear_objective.loadout["body_armor_slot"] == "iron_armor"
+    assert ctx.gear_objective.loadout["body_armor_slot"] == "leather_armor"
     assert "copper_armor" in ctx.gear_keep
-    assert keep_owned("iron_armor", state, gd, ctx) == 1
-    assert destroyable("iron_armor", state, gd, ctx) == 0
-    assert "iron_armor" not in bank_drain_excess(state, gd, ctx)
-    assert "iron_armor" not in recyclable_surplus(state, gd, ctx)
+    assert keep_owned("leather_armor", state, gd, ctx) == 1
+    assert destroyable("leather_armor", state, gd, ctx) == 0
+    assert "leather_armor" not in bank_drain_excess(state, gd, ctx)
+    assert "leather_armor" not in recyclable_surplus(state, gd, ctx)
 
 
 def test_the_keep_carries_l_star_at_its_worn_count() -> None:

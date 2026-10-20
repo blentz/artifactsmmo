@@ -18,9 +18,11 @@ imports only stdlib), `ChosenLoadout` (`ai.chosen_loadout`, pure data over
 """
 
 from dataclasses import dataclass, field
+from fractions import Fraction
 
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
+from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
 
@@ -284,6 +286,28 @@ class SelectionContext:
     # `m*` only when it is held, else the held monsters task's monster or None.
     # None when no monster pays, and on every caller that does not compute it.
     gear_objective: GearObjective | None = None
+
+    # The learned seconds of a fight and of one planner action (spec
+    # 2026-10-18 §2.9, rulings CA/CC): the fleet's recorded fights and a
+    # `/my/logs` bootstrap, fitted once per cycle by the player
+    # (`learning.fight_seconds_model`), or the committed live capture offline.
+    # None on a context that never prices time: reading one there raises
+    # (`timing` / `action_seconds_of`), never a constant.
+    fight_seconds: FightSecondsModel | None = None
+    action_seconds: Fraction | None = None
+
+    def timing(self) -> FightSecondsModel:
+        """The learned fight-seconds model; raises when this context has none."""
+        if self.fight_seconds is None:
+            raise ValueError("this context carries no learned fight seconds")
+        return self.fight_seconds
+
+    def action_seconds_of(self) -> Fraction:
+        """The learned seconds of one planner action; raises when this context
+        has none."""
+        if self.action_seconds is None:
+            raise ValueError("this context carries no learned action seconds")
+        return self.action_seconds
 
 
 NO_PROFILE_CONTEXT = SelectionContext(

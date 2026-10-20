@@ -47,7 +47,7 @@ from artifactsmmo_cli.ai.obtain_sources import (
     obtain_sources,
 )
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 
 _BUNDLE = (Path(__file__).resolve().parent / "scenarios" / "fixtures"
            / "gamedata_bundle.json")
@@ -69,7 +69,7 @@ def test_withdraw_is_a_bank_hop_and_one_action(state, game_data) -> None:
     has no withdraw action at all."""
     opt = _priced("copper_ore",
                   Source(SourceKind.WITHDRAW, "copper_ore", 1, 7),
-                  state, game_data)
+                  state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert opt.venue == BANK_VENUE
     assert opt.actions_per_application == 1
     assert opt.capacity == 7
@@ -82,7 +82,7 @@ def test_craft_carries_its_recipe_as_inputs_and_a_workshop_venue(
     here, so a recipe change cannot leave the price describing the old one."""
     opt = _priced("iron_sword",
                   Source(SourceKind.CRAFT, "iron_sword", 1, UNBOUNDED_CAPACITY),
-                  state, game_data)
+                  state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert opt.venue == _workshop_venue("weaponcrafting")
     assert opt.inputs == game_data.crafting_recipe("iron_sword")
 
@@ -92,7 +92,7 @@ def test_recycle_consumes_the_source_item_not_the_target(state, game_data) -> No
     the one place that distinction becomes an input edge."""
     opt = _priced("iron",
                   Source(SourceKind.RECYCLE, "iron_sword", 3, 6),
-                  state, game_data)
+                  state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert opt.inputs == {"iron_sword": 1}
     assert opt.yield_per == 3
     assert opt.venue == _workshop_venue("weaponcrafting")
@@ -103,7 +103,7 @@ def test_gather_uses_the_resource_tile_as_its_venue(state, game_data) -> None:
     the venue is the RESOURCE code rather than a per-item token."""
     opt = _priced("copper_ore",
                   Source(SourceKind.GATHER, "copper_rocks", 1, UNBOUNDED_CAPACITY),
-                  state, game_data)
+                  state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert opt.venue == "copper_rocks"
     assert (opt.actions_per_application, opt.yield_per) == (1, 1)
 
@@ -116,9 +116,9 @@ def test_a_secondary_drop_costs_its_expected_gathers(state, game_data, monkeypat
         **game_data.recipes_catalog.resource_drops_full,
         "ash_tree": [("ash_wood", 1, 1, 1), ("apple", 20, 1, 1)]})
     apple = _priced("apple", Source(SourceKind.GATHER, "ash_tree", 1, UNBOUNDED_CAPACITY),
-                    state, game_data)
+                    state, game_data, TIMED_NO_PROFILE_CONTEXT)
     wood = _priced("ash_wood", Source(SourceKind.GATHER, "ash_tree", 1, UNBOUNDED_CAPACITY),
-                   state, game_data)
+                   state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert (apple.actions_per_application, apple.yield_per) == (20, 1)
     assert (wood.actions_per_application, wood.yield_per) == (1, 1)
 
@@ -130,12 +130,12 @@ def test_a_multi_unit_drop_is_priced_in_lowest_terms(state, game_data, monkeypat
         **game_data.recipes_catalog.resource_drops_full,
         "copper_rocks": [("copper_ore", 1, 1, 2)]})
     opt = _priced("copper_ore", Source(SourceKind.GATHER, "copper_rocks", 1, UNBOUNDED_CAPACITY),
-                  state, game_data)
+                  state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert (opt.actions_per_application, opt.yield_per) == (2, 3)
 
 
 def _ctx_with_siblings(**skills):  # type: ignore[no-untyped-def]
-    return replace(NO_PROFILE_CONTEXT, sibling_skills=dict(skills))
+    return replace(TIMED_NO_PROFILE_CONTEXT, sibling_skills=dict(skills))
 
 
 class _SupplyStore:
@@ -201,7 +201,7 @@ def test_a_sibling_who_is_merely_CLOSE_is_not_a_route(state, game_data) -> None:
 def test_no_siblings_at_all_is_no_route(state, game_data) -> None:
     """Every single-character run takes this path."""
     st = replace(state, skills={**state.skills, "weaponcrafting": 1})
-    routes = route_options("iron_sword", st, game_data, NO_PROFILE_CONTEXT,
+    routes = route_options("iron_sword", st, game_data, TIMED_NO_PROFILE_CONTEXT,
                            _SupplyStore())
 
     assert not [r for r in routes if r.unlock.startswith("sibling:")]
@@ -250,7 +250,7 @@ def test_ge_fill_is_priced_in_gold_at_the_standing_order(state, game_data) -> No
     gd._ge_sell_orders = {"backpack": ("ord-x", 137, 4)}
     opt = _priced("backpack",
                   Source(SourceKind.GE_FILL, "ord-x", 1, 4),
-                  state, gd)
+                  state, gd, TIMED_NO_PROFILE_CONTEXT)
     assert opt.venue == "ord-x"
     assert opt.actions_per_application == 1
     assert opt.capacity == 4, "a standing order is FINITE, unlike a vendor"
@@ -268,7 +268,7 @@ def test_ge_fill_without_a_standing_order_raises_rather_than_defaulting(
     gd = game_data
     gd._ge_sell_orders = {}
     with pytest.raises(KeyError, match="no standing GE sell order"):
-        _priced("backpack", Source(SourceKind.GE_FILL, "ord-gone", 1, 4), state, gd)
+        _priced("backpack", Source(SourceKind.GE_FILL, "ord-gone", 1, 4), state, gd, TIMED_NO_PROFILE_CONTEXT)
 
 
 def test_buy_carries_its_price_as_a_currency_input(state, game_data) -> None:
@@ -278,7 +278,7 @@ def test_buy_carries_its_price_as_a_currency_input(state, game_data) -> None:
     gather."""
     opt = _priced("backpack",
                   Source(SourceKind.BUY, "nomadic_merchant", 1, UNBOUNDED_CAPACITY),
-                  state, game_data)
+                  state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert opt.venue == "nomadic_merchant"
     assert opt.inputs == {"gold": 50000}
 
@@ -291,7 +291,7 @@ def test_drop_costs_expected_kills_times_whole_loop_cycles(state, game_data) -> 
     farm and a level grind are quoted in identical units."""
     opt = _priced("feather",
                   Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                  state, game_data)
+                  state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert opt.venue == "chicken"
     assert opt.actions_per_application > 1
 
@@ -310,10 +310,10 @@ def test_prospecting_makes_a_drop_farm_cheaper(state, game_data) -> None:
     assert gear.prospecting > 0, "fixture drift: expected a prospecting item"
     plain = _priced("feather",
                     Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                    state, game_data)
+                    state, game_data, TIMED_NO_PROFILE_CONTEXT)
     lucky = _priced("feather",
                     Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                    replace(state, prospecting=500), game_data)
+                    replace(state, prospecting=500), game_data, TIMED_NO_PROFILE_CONTEXT)
     assert lucky.actions_per_application < plain.actions_per_application
 
 
@@ -343,13 +343,13 @@ def test_an_observed_drop_rate_replaces_the_static_table(state, game_data) -> No
     (14.8% observed vs 12.5% static)."""
     static = _priced("feather",
                      Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                     state, game_data)
+                     state, game_data, TIMED_NO_PROFILE_CONTEXT)
     store = _store_with_kills("chicken", 100, {"feather": 25})
     try:
         assert store.observed_drop_rate("chicken", "feather") == 0.25
         learned = _priced("feather",
                           Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                          state, game_data, store)
+                          state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -371,10 +371,10 @@ def test_a_learned_rate_is_NOT_also_given_prospecting_relief(
     try:
         plain = _priced("feather",
                         Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                        state, game_data, store)
+                        state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
         lucky = _priced("feather",
                         Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                        replace(state, prospecting=500), game_data, store)
+                        replace(state, prospecting=500), game_data, TIMED_NO_PROFILE_CONTEXT, store)
         assert plain.actions_per_application == lucky.actions_per_application
     finally:
         store.end_session(exit_reason="normal")
@@ -382,10 +382,10 @@ def test_a_learned_rate_is_NOT_also_given_prospecting_relief(
     # ...and without observations, prospecting still pays.
     static_plain = _priced("feather",
                            Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                           state, game_data)
+                           state, game_data, TIMED_NO_PROFILE_CONTEXT)
     static_lucky = _priced("feather",
                            Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                           replace(state, prospecting=500), game_data)
+                           replace(state, prospecting=500), game_data, TIMED_NO_PROFILE_CONTEXT)
     assert static_lucky.actions_per_application < static_plain.actions_per_application
 
 
@@ -399,13 +399,13 @@ def test_too_few_kills_falls_back_to_the_static_table(state, game_data) -> None:
         assert store.observed_drop_rate("chicken", "feather") is None
         sparse = _priced("feather",
                          Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                         state, game_data, store)
+                         state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
     finally:
         store.end_session(exit_reason="normal")
         store.close()
     static = _priced("feather",
                      Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                     state, game_data)
+                     state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert sparse.actions_per_application == static.actions_per_application
 
 
@@ -418,13 +418,13 @@ def test_a_monster_that_never_drops_the_item_falls_back(state, game_data) -> Non
         assert store.observed_drop_rate("chicken", "feather") == 0.0
         zero = _priced("feather",
                        Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                       state, game_data, store)
+                       state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
     finally:
         store.end_session(exit_reason="normal")
         store.close()
     static = _priced("feather",
                      Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                     state, game_data)
+                     state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert zero.actions_per_application == static.actions_per_application
 
 
@@ -450,7 +450,7 @@ def test_an_item_with_no_crafting_skill_still_prices(state, game_data) -> None:
     whole decision for a route nobody was going to take."""
     opt = _priced("feather",
                   Source(SourceKind.RECYCLE, "copper_ore", 1, 2),
-                  state, game_data)
+                  state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert opt.venue == _workshop_venue("")
 
 
@@ -479,7 +479,7 @@ def test_a_buyer_with_no_known_location_is_skipped(state, game_data,
     monkeypatch.setattr(game_data, "npc_location",
                         lambda npc: None if npc == "gemstone_merchant" else real(npc))
     held = _selling(state, game_data, diamond=2)
-    assert obtain_sources("gold", held, game_data, NO_PROFILE_CONTEXT) == []
+    assert obtain_sources("gold", held, game_data, TIMED_NO_PROFILE_CONTEXT) == []
     with pytest.raises(KeyError):
         _sale_of("diamond", held, game_data)
 
@@ -492,7 +492,7 @@ def test_a_buyer_offering_nothing_is_skipped(state, game_data,
                         lambda code: [("gemstone_merchant", 0)]
                         if code == "diamond" else [])
     held = _selling(state, game_data, diamond=2)
-    assert obtain_sources("gold", held, game_data, NO_PROFILE_CONTEXT) == []
+    assert obtain_sources("gold", held, game_data, TIMED_NO_PROFILE_CONTEXT) == []
     with pytest.raises(KeyError):
         _sale_of("diamond", held, game_data)
 
@@ -510,7 +510,7 @@ def test_the_closure_follows_currency_edges(state, game_data) -> None:
     options = {"medal": [_priced("backpack",
                                  Source(SourceKind.BUY, "nomadic_merchant", 1,
                                         UNBOUNDED_CAPACITY),
-                                 state, game_data)]}
+                                 state, game_data, TIMED_NO_PROFILE_CONTEXT)]}
     assert "gold" in options["medal"][0].inputs
 
 
@@ -519,16 +519,16 @@ def test_a_gatherable_prices_end_to_end(state, game_data) -> None:
     wrapper prices it, the core walks it."""
     bare = replace(state, inventory={})
     cost = acquisition_actions("copper_ore", 3, bare, game_data,
-                               NO_PROFILE_CONTEXT, equip=False)
+                               TIMED_NO_PROFILE_CONTEXT, equip=False)
     assert cost == 1 + 3   # hop to the node, three gathers
 
 
 def test_equip_adds_exactly_one_action(state, game_data) -> None:
     bare = replace(state, inventory={})
     without = acquisition_actions("copper_ore", 1, bare, game_data,
-                                  NO_PROFILE_CONTEXT, equip=False)
+                                  TIMED_NO_PROFILE_CONTEXT, equip=False)
     with_equip = acquisition_actions("copper_ore", 1, bare, game_data,
-                                     NO_PROFILE_CONTEXT, equip=True)
+                                     TIMED_NO_PROFILE_CONTEXT, equip=True)
     assert with_equip == without + 1
 
 
@@ -541,7 +541,7 @@ def test_a_gold_priced_vendor_route_is_paid_for_with_gold(state, game_data)\
     chosen. Crediting the pocket is what pays it down."""
     rich = replace(state, inventory={}, gold=50_000)
     cost = acquisition_actions("healing_rune", 1, rich, game_data,
-                               NO_PROFILE_CONTEXT, equip=False)
+                               TIMED_NO_PROFILE_CONTEXT, equip=False)
     assert cost == 2      # hop to the vendor, one purchase
 
     # ...and the shortfall beyond the pocket is charged a million per gold piece,
@@ -552,7 +552,7 @@ def test_a_gold_priced_vendor_route_is_paid_for_with_gold(state, game_data)\
     # prices at exactly what a missing one does, and never worse.
     broke = replace(state, inventory={}, gold=0)
     unaffordable = acquisition_actions("healing_rune", 1, broke, game_data,
-                                       NO_PROFILE_CONTEXT, equip=False)
+                                       TIMED_NO_PROFILE_CONTEXT, equip=False)
     assert unaffordable == UNOBTAINABLE_PER_UNIT, unaffordable
 
 
@@ -580,7 +580,7 @@ def test_gold_is_obtained_by_selling_what_the_authority_licenses(
     buyer whose window is open, the shortfall is one sale."""
     short = replace(_selling(state, game_data, diamond=4), gold=9_000)
     cost = acquisition_actions("healing_rune", 1, short, game_data,
-                               NO_PROFILE_CONTEXT, equip=False)
+                               TIMED_NO_PROFILE_CONTEXT, equip=False)
     assert cost < UNOBTAINABLE_PER_UNIT, cost
     assert cost == 4, cost     # hop + sale to raise the 1,000, then hop + buy
 
@@ -590,7 +590,7 @@ def test_the_sale_consumes_the_copy_it_sells(state, game_data) -> None:
     shortfall bigger than the licensed stock can cover stays unpayable."""
     one = replace(_selling(state, game_data, diamond=1), gold=0)
     assert acquisition_actions("healing_rune", 1, one, game_data,
-                               NO_PROFILE_CONTEXT, equip=False) \
+                               TIMED_NO_PROFILE_CONTEXT, equip=False) \
         >= UNOBTAINABLE_PER_UNIT
 
 
@@ -600,7 +600,7 @@ def test_no_sellable_stock_leaves_gold_with_no_route(state, game_data) -> None:
     — S-046: where gold replaces nothing, it is worth nothing."""
     broke = replace(_selling(state, game_data), gold=9_000)
     assert acquisition_actions("healing_rune", 1, broke, game_data,
-                               NO_PROFILE_CONTEXT, equip=False) \
+                               TIMED_NO_PROFILE_CONTEXT, equip=False) \
         >= UNOBTAINABLE_PER_UNIT
 
 
@@ -609,9 +609,9 @@ def test_a_closed_window_leaves_gold_with_no_route(state, game_data) -> None:
     route. This is what makes the previous test's licence check meaningful
     rather than incidental — the stock alone is not enough."""
     shut = replace(state, inventory={"diamond": 4}, gold=9_000, active_events={})
-    assert obtain_sources("gold", shut, game_data, NO_PROFILE_CONTEXT) == []
+    assert obtain_sources("gold", shut, game_data, TIMED_NO_PROFILE_CONTEXT) == []
     assert acquisition_actions("healing_rune", 1, shut, game_data,
-                               NO_PROFILE_CONTEXT, equip=False) \
+                               TIMED_NO_PROFILE_CONTEXT, equip=False) \
         >= UNOBTAINABLE_PER_UNIT
 
 
@@ -619,7 +619,7 @@ def test_a_sell_source_names_the_item_sold(state, game_data) -> None:
     """`Source.code` for SELL is the item DESTROYED by the sale, the same
     convention RECYCLE uses — not the gold, and not the buyer."""
     held = _selling(state, game_data, diamond=2)
-    sources = obtain_sources("gold", held, game_data, NO_PROFILE_CONTEXT)
+    sources = obtain_sources("gold", held, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert [(s.kind, s.code, s.yield_per) for s in sources] \
         == [(SourceKind.SELL, "diamond", 5_000)]
     assert sources[0].capacity == 2 * 5_000
@@ -631,7 +631,7 @@ def test_gold_has_no_sources_for_any_other_code(state, game_data) -> None:
     held = _selling(state, game_data, diamond=2)
     assert all(s.kind is not SourceKind.SELL
                for s in obtain_sources("copper_ore", held, game_data,
-                                       NO_PROFILE_CONTEXT))
+                                       TIMED_NO_PROFILE_CONTEXT))
 
 
 def test_gold_is_consumed_by_the_route_that_spends_it(state, game_data) -> None:
@@ -639,9 +639,9 @@ def test_gold_is_consumed_by_the_route_that_spends_it(state, game_data) -> None:
     10,000 each are not affordable out of 15,000."""
     one = replace(state, inventory={}, gold=15_000)
     assert acquisition_actions("healing_rune", 1, one, game_data,
-                               NO_PROFILE_CONTEXT, equip=False) == 2
+                               TIMED_NO_PROFILE_CONTEXT, equip=False) == 2
     assert acquisition_actions("healing_rune", 2, one, game_data,
-                               NO_PROFILE_CONTEXT, equip=False) \
+                               TIMED_NO_PROFILE_CONTEXT, equip=False) \
         >= UNOBTAINABLE_PER_UNIT
 
 
@@ -651,7 +651,7 @@ def test_banked_gold_is_not_credited_to_the_pocket(state, game_data) -> None:
     and it under-credits rather than pricing the trip to the bank at nothing."""
     banked_only = replace(state, inventory={}, gold=0, bank_gold=50_000)
     assert acquisition_actions("healing_rune", 1, banked_only, game_data,
-                               NO_PROFILE_CONTEXT, equip=False) \
+                               TIMED_NO_PROFILE_CONTEXT, equip=False) \
         >= UNOBTAINABLE_PER_UNIT
 
 
@@ -660,7 +660,7 @@ def test_held_stock_makes_an_item_free(state, game_data) -> None:
     withdraw route instead)."""
     held = replace(state, inventory={"copper_ore": 5})
     assert acquisition_actions("copper_ore", 3, held, game_data,
-                               NO_PROFILE_CONTEXT, equip=False) == 0
+                               TIMED_NO_PROFILE_CONTEXT, equip=False) == 0
 
 
 def test_a_drop_farm_prices_end_to_end(state, game_data) -> None:
@@ -669,7 +669,7 @@ def test_a_drop_farm_prices_end_to_end(state, game_data) -> None:
     `min_plan_length` charged 2."""
     bare = replace(state, inventory={})
     cost = acquisition_actions("feather", 1, bare, game_data,
-                               NO_PROFILE_CONTEXT, equip=False)
+                               TIMED_NO_PROFILE_CONTEXT, equip=False)
     assert cost > 2
 
 
@@ -681,9 +681,9 @@ def test_an_unwinnable_drop_is_unobtainable_right_now(state, game_data) -> None:
     This is the STATE-AWARENESS caveat recorded on `UNOBTAINABLE_PER_UNIT`
     made concrete: the verdict is about this cycle, and a consumer that cached
     it across cycles would turn a temporary prune into a permanent one."""
-    assert not route_options("wolf_hair", state, game_data, NO_PROFILE_CONTEXT)
+    assert not route_options("wolf_hair", state, game_data, TIMED_NO_PROFILE_CONTEXT)
     cost = acquisition_actions("wolf_hair", 1, state, game_data,
-                               NO_PROFILE_CONTEXT, equip=False)
+                               TIMED_NO_PROFILE_CONTEXT, equip=False)
     assert cost >= UNOBTAINABLE_PER_UNIT
 
 
@@ -703,7 +703,7 @@ def test_an_unmet_skill_gate_reads_as_a_WALL_not_a_price(state, game_data) -> No
     stats = game_data.item_stats("iron_sword")
     assert state.skills["weaponcrafting"] < stats.crafting_level
     assert game_data.workshop_location("weaponcrafting") is not None
-    assert not route_options("iron_sword", state, game_data, NO_PROFILE_CONTEXT)
+    assert not route_options("iron_sword", state, game_data, TIMED_NO_PROFILE_CONTEXT)
 
 
 @pytest.fixture(scope="module")
@@ -761,9 +761,9 @@ def test_an_unmet_gate_becomes_a_PRICE_once_a_grind_rate_is_known(
     store = _store_with_rate("weaponcrafting", 40)
     try:
         assert not route_options("iron_sword", gated_state, game_data,
-                                 NO_PROFILE_CONTEXT)
+                                 TIMED_NO_PROFILE_CONTEXT)
         gated = route_options("iron_sword", gated_state, game_data,
-                              NO_PROFILE_CONTEXT, store)
+                              TIMED_NO_PROFILE_CONTEXT, store)
         assert [r.kind for r in gated] == ["craft"]
         assert gated[0].unlock == "skill:weaponcrafting:10"
         assert gated[0].unlock_actions > 0
@@ -793,7 +793,7 @@ def test_an_undiscovered_workshop_leaves_the_route_excluded(
     store = _store_with_rate("weaponcrafting", 40)
     try:
         assert not route_options("iron_sword", gated_state, benchless,
-                                 NO_PROFILE_CONTEXT, store)
+                                 TIMED_NO_PROFILE_CONTEXT, store)
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -811,7 +811,7 @@ def test_no_skill_max_xp_DECLINES_the_route(state, game_data) -> None:
     store = _store_with_rate("weaponcrafting", 40)
     try:
         assert not route_options("iron_sword", state, game_data,
-                                 NO_PROFILE_CONTEXT, store)
+                                 TIMED_NO_PROFILE_CONTEXT, store)
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -847,7 +847,7 @@ def test_a_NON_POSITIVE_observed_rate_declines_the_route(
         # goes uncovered.
         assert store.skill_grind_rate("weaponcrafting") == 0.0
         assert not route_options("iron_sword", gated_state, game_data,
-                                 NO_PROFILE_CONTEXT, store)
+                                 TIMED_NO_PROFILE_CONTEXT, store)
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -881,7 +881,7 @@ def test_the_UNCONDITIONAL_rate_is_what_prices_a_grind(gated_state, game_data) -
         assert store.skill_xp_per_cycle_all("weaponcrafting") == 5.0
         assert store.skill_grind_rate("weaponcrafting") == 5.0
         routes = route_options("iron_sword", gated_state, game_data,
-                               NO_PROFILE_CONTEXT, store)
+                               TIMED_NO_PROFILE_CONTEXT, store)
         assert [r.kind for r in routes] == ["craft"]
         # Priced on 5/cycle, not 50 — so the grind is the larger, honest number.
         assert routes[0].unlock_actions > 0
@@ -902,9 +902,9 @@ def test_the_sword_finally_has_a_price_neither_model_could_give(
     store = _store_with_rate("weaponcrafting", 40)
     try:
         walled = acquisition_actions("iron_sword", 1, bare, game_data,
-                                     NO_PROFILE_CONTEXT, equip=True)
+                                     TIMED_NO_PROFILE_CONTEXT, equip=True)
         priced = acquisition_actions("iron_sword", 1, bare, game_data,
-                                     NO_PROFILE_CONTEXT, equip=True, store=store)
+                                     TIMED_NO_PROFILE_CONTEXT, equip=True, store=store)
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -923,7 +923,7 @@ def test_no_observed_rate_declines_the_route(gated_state, game_data) -> None:
         assert store.skill_grind_rate("weaponcrafting") is None
         assert store.fleet_skill_grind_rate("weaponcrafting") is None
         assert not route_options("iron_sword", gated_state, game_data,
-                                 NO_PROFILE_CONTEXT, store)
+                                 TIMED_NO_PROFILE_CONTEXT, store)
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -943,7 +943,7 @@ def test_a_met_gate_adds_no_second_craft_route(gated_state, game_data) -> None:
                  and s.crafting_level <= gated_state.skills["gearcrafting"]]
         assert ready, "fixture drift: no gearcrafting recipe within reach"
         for code in ready[:5]:
-            routes = route_options(code, gated_state, game_data, NO_PROFILE_CONTEXT,
+            routes = route_options(code, gated_state, game_data, TIMED_NO_PROFILE_CONTEXT,
                                    store)
             assert sum(1 for r in routes if r.kind == "craft") <= 1
     finally:
@@ -970,8 +970,8 @@ def test_the_pricer_adds_nothing_but_gated_routes(gated_state, game_data) -> Non
                   "wisdom_amulet", "wolf_hair"]
         for code in probes:
             ready = {s.kind.value for s in
-                     obtain_sources(code, gated_state, game_data, NO_PROFILE_CONTEXT)}
-            priced = route_options(code, gated_state, game_data, NO_PROFILE_CONTEXT,
+                     obtain_sources(code, gated_state, game_data, TIMED_NO_PROFILE_CONTEXT)}
+            priced = route_options(code, gated_state, game_data, TIMED_NO_PROFILE_CONTEXT,
                                    store)
             extra = [r for r in priced if not r.unlock]
             assert {r.kind for r in extra} <= ready, (
@@ -988,7 +988,7 @@ def test_the_closure_terminates_on_real_data(state, game_data) -> None:
     The cost walk's fuel bound handles the cycle when pricing; this only has to
     finish."""
     options = acquisition_options("copper_dagger", state, game_data,
-                                  NO_PROFILE_CONTEXT)
+                                  TIMED_NO_PROFILE_CONTEXT)
     assert "copper_dagger" in options
     assert all(isinstance(v, list) for v in options.values())
 
@@ -1005,10 +1005,10 @@ def test_the_closure_survives_a_genuine_cycle_in_real_game_data(
     guard unreachable."""
     holding = replace(state, inventory={"copper_helmet": 3})
     kinds = {s.kind for s in
-             obtain_sources("copper_bar", holding, game_data, NO_PROFILE_CONTEXT)}
+             obtain_sources("copper_bar", holding, game_data, TIMED_NO_PROFILE_CONTEXT)}
     assert SourceKind.RECYCLE in kinds, "fixture drift: the cycle is gone"
     options = acquisition_options("copper_bar", holding, game_data,
-                                  NO_PROFILE_CONTEXT)
+                                  TIMED_NO_PROFILE_CONTEXT)
     assert {"copper_bar", "copper_helmet", "copper_ore"} <= set(options)
 
 
@@ -1057,7 +1057,7 @@ def test_pricing_stays_affordable_on_a_LIVE_SIZED_HOLDING(state, game_data) -> N
         started = time.monotonic()
         for code in targets:
             acquisition_actions(code, 1, live_sized, game_data,
-                                NO_PROFILE_CONTEXT, equip=True, store=store)
+                                TIMED_NO_PROFILE_CONTEXT, equip=True, store=store)
         elapsed = time.monotonic() - started
     finally:
         store.end_session(exit_reason="normal")
@@ -1078,7 +1078,7 @@ def test_recipe_FAN_OUT_does_not_explode(state, game_data) -> None:
     try:
         started = time.monotonic()
         acquisition_actions(widest, 1, live_sized, game_data,
-                            NO_PROFILE_CONTEXT, equip=True, store=store)
+                            TIMED_NO_PROFILE_CONTEXT, equip=True, store=store)
         elapsed = time.monotonic() - started
     finally:
         store.end_session(exit_reason="normal")
@@ -1128,11 +1128,11 @@ def test_a_shared_skill_unlock_is_what_makes_the_iron_set_affordable(
     store = _store_with_rate("gearcrafting", 5, cycles=5)
     try:
         singly = {c: acquisition_actions(c, 1, unlock_state, game_data,
-                                         NO_PROFILE_CONTEXT, equip=True, store=store)
+                                         TIMED_NO_PROFILE_CONTEXT, equip=True, store=store)
                   for c in _IRON_SET}
         together, paid = bundle_acquisition_actions(
             [(c, 1) for c in _IRON_SET], unlock_state, game_data,
-            NO_PROFILE_CONTEXT, equip=True, store=store)
+            TIMED_NO_PROFILE_CONTEXT, equip=True, store=store)
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -1157,11 +1157,11 @@ def test_bundling_saves_nothing_when_there_is_nothing_to_share(
     try:
         codes = ["iron_boots"]
         singly = sum(acquisition_actions(c, 1, unlock_state, game_data,
-                                         NO_PROFILE_CONTEXT, equip=True, store=store)
+                                         TIMED_NO_PROFILE_CONTEXT, equip=True, store=store)
                      for c in codes)
         together, _paid = bundle_acquisition_actions(
             [(c, 1) for c in codes], unlock_state, game_data,
-            NO_PROFILE_CONTEXT, equip=True, store=store)
+            TIMED_NO_PROFILE_CONTEXT, equip=True, store=store)
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -1176,10 +1176,10 @@ def test_the_bundle_charges_one_equip_per_root(unlock_state, game_data) -> None:
     try:
         roots = [(c, 1) for c in _IRON_SET]
         bare, _ = bundle_acquisition_actions(roots, unlock_state, game_data,
-                                             NO_PROFILE_CONTEXT, equip=False,
+                                             TIMED_NO_PROFILE_CONTEXT, equip=False,
                                              store=store)
         worn, _ = bundle_acquisition_actions(roots, unlock_state, game_data,
-                                             NO_PROFILE_CONTEXT, equip=True,
+                                             TIMED_NO_PROFILE_CONTEXT, equip=True,
                                              store=store)
     finally:
         store.end_session(exit_reason="normal")
@@ -1213,7 +1213,7 @@ def test_a_window_of_fighting_no_longer_hides_the_grind(
         assert store.skill_xp_per_cycle_all("weaponcrafting") == 0.0, \
             "the retired estimator no longer reads 0 — this pins nothing"
         routes = route_options("iron_sword", gated_state, game_data,
-                               NO_PROFILE_CONTEXT, store)
+                               TIMED_NO_PROFILE_CONTEXT, store)
         assert [r.kind for r in routes] == ["craft"]
         assert routes[0].unlock == "skill:weaponcrafting:10"
         assert routes[0].unlock_actions > 0
@@ -1233,7 +1233,7 @@ def test_a_sibling_that_has_ground_the_skill_prices_it_for_one_that_has_not(
         assert store.skill_grind_rate("weaponcrafting") is None
         assert store.fleet_skill_grind_rate("weaponcrafting") is None
         assert not route_options("iron_sword", gated_state, game_data,
-                                 NO_PROFILE_CONTEXT, store)
+                                 TIMED_NO_PROFILE_CONTEXT, store)
     finally:
         veteran.close()
         store.end_session(exit_reason="normal")
@@ -1280,7 +1280,7 @@ def test_own_zero_evidence_is_not_overridden_by_the_fleet(
         assert store.fleet_skill_grind_rate("weaponcrafting") > 0, \
             "no positive fleet rate to be overridden BY — this cannot bite"
         assert not route_options("iron_sword", gated_state, game_data,
-                                 NO_PROFILE_CONTEXT, store)
+                                 TIMED_NO_PROFILE_CONTEXT, store)
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -1302,11 +1302,11 @@ def test_an_unwinnable_dropper_is_a_PRICE_not_a_wall(gated_state, game_data) -> 
     rested = replace(gated_state, hp=gated_state.max_hp)
     assert not any(
         s.kind is SourceKind.DROP
-        for s in obtain_sources("cowhide", rested, game_data, NO_PROFILE_CONTEXT))
+        for s in obtain_sources("cowhide", rested, game_data, TIMED_NO_PROFILE_CONTEXT))
     store = _store_with_rate("weaponcrafting", 40)
     try:
         routes = route_options("cowhide", gated_state, game_data,
-                               NO_PROFILE_CONTEXT, store)
+                               TIMED_NO_PROFILE_CONTEXT, store)
         gated = [r for r in routes if r.unlock.startswith("gear:")]
         assert len(gated) == 1
         assert gated[0].kind == SourceKind.DROP.value
@@ -1331,12 +1331,12 @@ def test_the_gated_drop_makes_the_walled_item_obtainable(
     transitive, not direct: nothing in THIS route reads the store, and a chain
     that is already craftable prices without one."""
     without = acquisition_actions("cowhide", 1, gated_state, game_data,
-                                  NO_PROFILE_CONTEXT, equip=False)
+                                  TIMED_NO_PROFILE_CONTEXT, equip=False)
     assert without == UNOBTAINABLE_PER_UNIT
     store = _store_with_rate("weaponcrafting", 40)
     try:
         assert acquisition_actions("cowhide", 1, gated_state, game_data,
-                                   NO_PROFILE_CONTEXT, equip=False,
+                                   TIMED_NO_PROFILE_CONTEXT, equip=False,
                                    store=store) < UNOBTAINABLE_PER_UNIT
     finally:
         store.end_session(exit_reason="normal")
@@ -1351,8 +1351,8 @@ def test_a_winnable_dropper_adds_NO_second_route(gated_state, game_data) -> None
         item for item in ("yellow_slimeball", "red_slimeball", "feather")
         if any(s.kind is SourceKind.DROP for s in obtain_sources(
             item, replace(gated_state, hp=gated_state.max_hp), game_data,
-            NO_PROFILE_CONTEXT)))
-    routes = route_options(winnable, gated_state, game_data, NO_PROFILE_CONTEXT)
+            TIMED_NO_PROFILE_CONTEXT)))
+    routes = route_options(winnable, gated_state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert [r for r in routes if r.kind == SourceKind.DROP.value]
     assert not [r for r in routes if r.unlock.startswith("gear:")]
 
@@ -1361,7 +1361,7 @@ def test_an_item_with_no_dropper_is_not_this_gates_business(
         gated_state, game_data) -> None:
     """`copper_ore` is gathered, not dropped. The gate must not invent a fight."""
     routes = route_options("copper_ore", gated_state, game_data,
-                           NO_PROFILE_CONTEXT)
+                           TIMED_NO_PROFILE_CONTEXT)
     assert not [r for r in routes if r.unlock.startswith("gear:")]
 
 
@@ -1385,9 +1385,9 @@ def test_a_chain_that_cannot_be_priced_DECLINES_the_route(
     try:
         assert "king_slimeball" in (game_data.crafting_recipe("forest_whip") or {})
         assert acquisition_actions("king_slimeball", 1, state, game_data,
-                                   NO_PROFILE_CONTEXT, equip=False, store=store,
+                                   TIMED_NO_PROFILE_CONTEXT, equip=False, store=store,
                                    gated_drop=False) >= UNOBTAINABLE_PER_UNIT
-        routes = route_options("mushroom", state, game_data, NO_PROFILE_CONTEXT,
+        routes = route_options("mushroom", state, game_data, TIMED_NO_PROFILE_CONTEXT,
                                store)
         assert not [r for r in routes if r.unlock.startswith("gear:")]
     finally:
@@ -1407,10 +1407,10 @@ def test_the_inner_walk_does_not_re_enter_this_gate(gated_state, game_data) -> N
     store = _store_with_rate("weaponcrafting", 40)
     try:
         assert acquisition_actions("cowhide", 1, gated_state, game_data,
-                                   NO_PROFILE_CONTEXT, equip=False, store=store,
+                                   TIMED_NO_PROFILE_CONTEXT, equip=False, store=store,
                                    gated_drop=False) == UNOBTAINABLE_PER_UNIT
         assert acquisition_actions("cowhide", 1, gated_state, game_data,
-                                   NO_PROFILE_CONTEXT, equip=False, store=store,
+                                   TIMED_NO_PROFILE_CONTEXT, equip=False, store=store,
                                    gated_drop=True) < UNOBTAINABLE_PER_UNIT
     finally:
         store.end_session(exit_reason="normal")
@@ -1432,7 +1432,7 @@ def test_the_unlock_is_keyed_on_the_MONSTER_not_the_item(
         keys = set()
         for item in drops:
             routes = route_options(item, gated_state, game_data,
-                                   NO_PROFILE_CONTEXT, store)
+                                   TIMED_NO_PROFILE_CONTEXT, store)
             keys |= {r.unlock for r in routes if r.unlock.startswith("gear:")}
         assert keys == {"gear:cow"}
     finally:
@@ -1452,13 +1452,13 @@ def test_an_under_skill_gather_is_priced_by_its_grind_not_offered_as_ready(
         if (gd_skill := game_data.resource_skill_level(res)) is not None
         and gated_state.skills.get(gd_skill[0], 1) < gd_skill[1]
         and game_data.all_resource_locations.get(res))
-    assert not [s for s in obtain_sources(item, gated_state, game_data, NO_PROFILE_CONTEXT)
+    assert not [s for s in obtain_sources(item, gated_state, game_data, TIMED_NO_PROFILE_CONTEXT)
                 if s.kind is SourceKind.GATHER and s.code == resource]
-    assert not [r for r in route_options(item, gated_state, game_data, NO_PROFILE_CONTEXT)
+    assert not [r for r in route_options(item, gated_state, game_data, TIMED_NO_PROFILE_CONTEXT)
                 if r.kind == "gather" and r.venue == resource]
     store = _store_with_rate(skill, 40)
     try:
-        [gated] = [r for r in route_options(item, gated_state, game_data, NO_PROFILE_CONTEXT, store)
+        [gated] = [r for r in route_options(item, gated_state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
                    if r.kind == "gather" and r.venue == resource]
         assert gated.unlock == f"skill:{skill}:{level}" and gated.unlock_actions > 0
     finally:

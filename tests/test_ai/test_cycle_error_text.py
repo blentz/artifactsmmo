@@ -19,6 +19,7 @@ from contextlib import closing
 
 from sqlmodel import Session, select
 
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -31,6 +32,7 @@ GRIND_FAILURE = ("LevelSkill(jewelrycrafting) grind sub-plan EXHAUSTED the 15.0s
 
 def _record(store: LearningStore, outcome: str, last_error: str | None) -> list[Cycle]:
     player = GamePlayer(character="hero", dry_run=False, history=store)
+    player._offline_timing = committed_timing()
     player._last_error = last_error
     prev = make_state(level=5)
     player._record_learning_cycle(

@@ -79,6 +79,7 @@ import pytest
 import artifactsmmo_cli.ai.strategy_driver as strategy_driver
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
@@ -105,6 +106,7 @@ def _report(name: str):
     """Same offline full-stack seam test_band_liveness uses."""
     gd = _gd()
     player = GamePlayer(character=name, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(scenario_state(SCENARIOS[name], gd), gd)
     return player.plan_from_state()
 
@@ -288,6 +290,7 @@ def test_a_spent_piece_turn_does_not_open_the_raid(
     _survivable(monkeypatch)
     gd = _gd()
     player = GamePlayer(character="l48_raid_active", history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(scenario_state(SCENARIOS["l48_raid_active"], gd), gd)
     player._turns = {_SHIELD_STEP: 1}
     report = player.plan_from_state()

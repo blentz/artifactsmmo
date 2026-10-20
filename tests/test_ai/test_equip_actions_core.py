@@ -1,5 +1,7 @@
 """What a loadout change costs — item movements at the published cooldown."""
 
+from fractions import Fraction
+
 import pytest
 
 from artifactsmmo_cli.ai.equipment.equip_actions_core import (
@@ -7,14 +9,17 @@ from artifactsmmo_cli.ai.equipment.equip_actions_core import (
     equip_cost,
     items_moved,
 )
-from artifactsmmo_cli.ai.learning.fight_loop_cost import TYPICAL_FIGHT_COOLDOWN_SECONDS
+
+FIGHT = Fraction(30)
+"""A 30-second fight: the length these conversions are pinned at (a fight's
+seconds are learned since spec 2026-10-18 §2.9; the conversion divides by them)."""
 
 
 def test_no_change_costs_nothing():
     """A loadout held across rungs is paid for once, not once per rung."""
     worn = {"weapon_slot": "iron_sword", "shield_slot": "wooden_shield"}
     assert items_moved(worn, dict(worn)) == 0
-    assert equip_cost(worn, dict(worn)) == 0.0
+    assert equip_cost(worn, dict(worn), FIGHT) == 0.0
 
 
 def test_filling_an_empty_slot_is_one_movement():
@@ -59,9 +64,9 @@ def test_cost_is_the_published_three_seconds_per_item():
     per piece over-priced a loadout change by roughly ten times."""
     worn = {"shield_slot": "wooden_shield"}
     target = {"shield_slot": "iron_shield"}
-    expected = 2 * EQUIP_SECONDS_PER_ITEM / TYPICAL_FIGHT_COOLDOWN_SECONDS
-    assert equip_cost(worn, target) == pytest.approx(expected)
-    assert equip_cost(worn, target) == pytest.approx(0.2)
+    expected = 2 * EQUIP_SECONDS_PER_ITEM / FIGHT
+    assert equip_cost(worn, target, FIGHT) == pytest.approx(expected)
+    assert equip_cost(worn, target, FIGHT) == pytest.approx(0.2)
 
 
 def test_outfitting_a_bare_character_is_not_sixteen_fights():
@@ -71,5 +76,13 @@ def test_outfitting_a_bare_character_is_not_sixteen_fights():
     bare = {f"slot{i}": None for i in range(16)}
     dressed = {f"slot{i}": f"item{i}" for i in range(16)}
     assert items_moved(bare, dressed) == 16
-    assert equip_cost(bare, dressed) == pytest.approx(16 * 3 / 30)
-    assert equip_cost(bare, dressed) < 2.0
+    assert equip_cost(bare, dressed, FIGHT) == pytest.approx(16 * 3 / 30)
+    assert equip_cost(bare, dressed, FIGHT) < 2.0
+
+
+def test_a_loadout_change_is_priced_in_fights_of_the_fight_it_serves() -> None:
+    """Spec 2026-10-18 §2.9: three seconds an item over the learned seconds of
+    the fight the loadout is changed for."""
+    worn = {"weapon_slot": "copper_dagger"}
+    target = {"weapon_slot": "iron_sword"}
+    assert equip_cost(worn, target, Fraction(10)) == pytest.approx(2 * 3 / 10)

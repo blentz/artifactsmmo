@@ -35,7 +35,6 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.item_catalog import ItemCatalog
 from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
@@ -49,7 +48,7 @@ from artifactsmmo_cli.ai.tiers.progression_tree import (
 )
 from artifactsmmo_cli.ai.weapon_winnability import marginal_weapon_winnability
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = (Path(__file__).parent / "scenarios" / "fixtures"
@@ -63,7 +62,7 @@ def _bundle() -> GameData:
 def _ctx_for(state, gd: GameData):  # type: ignore[no-untyped-def]
     """The context a live cycle walks: the cycle's gear objective attached by
     the one function the player uses (ruling W)."""
-    return attached(state, gd, NO_PROFILE_CONTEXT, None)
+    return attached(state, gd, TIMED_NO_PROFILE_CONTEXT, None)
 
 
 def _decide(name: str):
@@ -74,13 +73,14 @@ def _decide(name: str):
 
 
 def test_weapon_upgrade_scenario_builds_the_weapon_its_objective_names_first():
-    """RE-DERIVED Task 5 (global gear objective): the root is the first
-    missing `L*` piece, `iron_sword`, whose mats are banked; its step is the
-    one material still short (`feather`). The old jewelrycrafting root came
-    from the tier sheet's furthest-behind slot."""
+    """RE-DERIVED Task 5 (global gear objective), then spec 2026-10-18 §2.9: a
+    fight's seconds are its learned length, so `L*` is the set that kills
+    `red_slime` fastest and its weapon is `greater_wooden_staff`. Its
+    `blue_slimeball` drops from a monster the worn copper does not beat, so the
+    blocked target names that drop as the root (`IsThisTargetBlocked`)."""
     d, _ = _decide("l10_weapon_upgrade")
-    assert d.chosen_root == ObtainItem(code="iron_sword", quantity=1, slot="weapon_slot")
-    assert d.chosen_step == ObtainItem(code="feather", quantity=2)
+    assert d.chosen_root == ObtainItem(code="blue_slimeball", quantity=2)
+    assert d.chosen_step == ObtainItem(code="blue_slimeball", quantity=2)
 
 
 def test_low_hp_scenario_still_produces_a_decision():
@@ -154,36 +154,40 @@ class TestPerScenarioPins:
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
             "ReachSkillLevel(skill='jewelrycrafting', level=2)"]
 
-    def test_l10_copper_adequate_pins_the_iron_sword(self):
-        """"Adequate" copper is not `L*`: the level-10 objective is the iron
-        set for the cow, and the first piece, `iron_sword`, is in reach at
-        weaponcrafting 10; its step is the recipe's two feathers. No XP grind
-        is offered while the set is missing."""
+    def test_l10_copper_adequate_pins_the_greater_wooden_staff(self):
+        """"Adequate" copper is not `L*`: since spec 2026-10-18 §2.9 (a fight's
+        seconds are its learned length) the level-10 objective is the set that
+        kills `red_slime` fastest, and its first piece, `greater_wooden_staff`,
+        steps to the recipe's two `blue_slimeball`s (blue_slime is beaten in
+        copper). No XP grind is offered while the set is missing."""
         d, _ = _decide("l10_copper_adequate")
-        assert d.chosen_root == ObtainItem(code="iron_sword", quantity=1, slot="weapon_slot")
-        assert d.chosen_step == ObtainItem(code="feather", quantity=2)
+        assert d.chosen_root == ObtainItem(code="greater_wooden_staff", quantity=1,
+                                           slot="weapon_slot")
+        assert d.chosen_step == ObtainItem(code="blue_slimeball", quantity=2)
         assert [r.root_repr for r in d.ranking] == [
-            "ObtainItem(code='iron_sword', quantity=1, slot='weapon_slot')",
-            "ReachSkillLevel(skill='jewelrycrafting', level=2)",
-            "ObtainItem(code='iron_armor', quantity=1, slot='body_armor_slot')",
-            "ObtainItem(code='iron_boots', quantity=1, slot='boots_slot')",
+            "ObtainItem(code='greater_wooden_staff', quantity=1, slot='weapon_slot')",
+            "ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')",
             "ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')",
-            "ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')",
+            "ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')",
+            "ObtainItem(code='leather_armor', quantity=1, slot='body_armor_slot')",
+            "ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot')",
-            "ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')",
+            "ReachSkillLevel(skill='jewelrycrafting', level=2)",
         ]
         assert not any(isinstance(r, ReachCharLevel) for r in d.fallback_roots)
 
     def test_l10_weapon_upgrade_pins_the_weapon_then_the_climbs(self):
-        """The weapon whose mats are banked heads the walk; the gearcrafting
-        and jewelrycrafting climbs the iron armour and amulet need follow, then
-        the two rings. Distinguishable from `l10_copper_adequate` by its board:
-        at gearcrafting 1 every gearcrafting-10 armour piece is the one climb."""
+        """`L*`'s weapon (`greater_wooden_staff`, spec §2.9) needs a drop the
+        worn copper cannot win, so its blocked drop heads the walk; the
+        gearcrafting and jewelrycrafting climbs the armour and amulet need
+        follow, then the two rings. Distinguishable from `l10_copper_adequate`
+        by its board: at gearcrafting 1 every gearcrafting-10 armour piece is
+        the one climb."""
         d, _ = _decide("l10_weapon_upgrade")
-        assert d.chosen_root == ObtainItem(code="iron_sword", quantity=1, slot="weapon_slot")
+        assert d.chosen_root == ObtainItem(code="blue_slimeball", quantity=2)
         assert [r.root_repr for r in d.ranking] == [
-            "ObtainItem(code='iron_sword', quantity=1, slot='weapon_slot')",
+            "ObtainItem(code='blue_slimeball', quantity=2)",
             "ReachSkillLevel(skill='gearcrafting', level=2)",
             "ReachSkillLevel(skill='jewelrycrafting', level=2)",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')",
@@ -240,7 +244,8 @@ class TestPerScenarioPins:
 
 class TestStepDeclineInTheWalk:
     """l10_weapon_upgrade pins (see TestPerScenarioPins): chosen =
-    ObtainItem(iron_sword, weapon_slot); alternatives = [
+    ObtainItem(blue_slimeball, 2), the blocked drop of `L*`'s
+    `greater_wooden_staff` (spec 2026-10-18 §2.9); alternatives = [
     ReachSkillLevel(gearcrafting, 2), ReachSkillLevel(jewelrycrafting, 2),
     ObtainItem(forest_ring, ring1_slot), ObtainItem(forest_ring, ring2_slot)].
 
@@ -252,7 +257,7 @@ class TestStepDeclineInTheWalk:
     offered (spec 2026-10-18 §6.2) — unless every piece is declined (ruling
     AI, INTERIM)."""
 
-    SWORD = ObtainItem(code="iron_sword", quantity=1, slot="weapon_slot")
+    HEAD = ObtainItem(code="blue_slimeball", quantity=2)
     SKILL_GEAR = ReachSkillLevel(skill="gearcrafting", level=2)
     SKILL_JEWEL = ReachSkillLevel(skill="jewelrycrafting", level=2)
     RING1 = ObtainItem(code="forest_ring", quantity=1, slot="ring1_slot")
@@ -266,32 +271,32 @@ class TestStepDeclineInTheWalk:
 
     def test_default_no_decline_is_untouched(self):
         d = self._decide_with(lambda root: None)
-        assert d.chosen_root == self.SWORD
+        assert d.chosen_root == self.HEAD
         assert d.fallback_roots == [self.SKILL_GEAR, self.SKILL_JEWEL, self.RING1, self.RING2]
         assert d.declined == ()
 
     def test_a_declined_head_lets_the_next_piece_head(self):
         """One declined piece hands the head to the next PIECE, never to a
         level grind, and is offered in its own place with its reason."""
-        d = self._decide_with(lambda root: "blocked" if root == self.SWORD else None)
+        d = self._decide_with(lambda root: "blocked" if root == self.HEAD else None)
         assert d.chosen_root == self.SKILL_GEAR
-        assert d.fallback_roots == [self.SWORD, self.SKILL_JEWEL, self.RING1, self.RING2]
-        assert d.declined == ((repr(self.SWORD), "blocked"),)
+        assert d.fallback_roots == [self.HEAD, self.SKILL_JEWEL, self.RING1, self.RING2]
+        assert d.declined == ((repr(self.HEAD), "blocked"),)
 
     def test_declined_pieces_keep_the_objectives_order(self):
-        declined = {self.SWORD, self.SKILL_GEAR}
+        declined = {self.HEAD, self.SKILL_GEAR}
         d = self._decide_with(lambda root: "blocked" if root in declined else None)
         assert d.chosen_root == self.SKILL_JEWEL
-        assert d.fallback_roots == [self.SWORD, self.SKILL_GEAR, self.RING1, self.RING2]
+        assert d.fallback_roots == [self.HEAD, self.SKILL_GEAR, self.RING1, self.RING2]
 
     def test_every_piece_declined_offers_the_trunk(self):
         """Ruling AI (INTERIM): with no servable gear step the root is one
         more character level; every piece stays declined by name, on offer."""
-        gear = {self.SWORD, self.SKILL_GEAR, self.SKILL_JEWEL, self.RING1, self.RING2}
+        gear = {self.HEAD, self.SKILL_GEAR, self.SKILL_JEWEL, self.RING1, self.RING2}
         d = self._decide_with(lambda root: "blocked" if root in gear else None)
         assert d.chosen_root == ReachCharLevel(level=11)
         assert {root for root, _reason in d.declined} == {repr(g) for g in gear}
-        assert d.fallback_roots[:5] == [self.SWORD, self.SKILL_GEAR, self.SKILL_JEWEL,
+        assert d.fallback_roots[:5] == [self.HEAD, self.SKILL_GEAR, self.SKILL_JEWEL,
                                         self.RING1, self.RING2]
         assert not any(isinstance(r, ReachCharLevel) for r in d.fallback_roots)
 
@@ -302,11 +307,11 @@ class TestStepDeclineInTheWalk:
 
         def spy(root):
             seen.append(root)
-            return "blocked" if root in (self.SWORD, self.SKILL_GEAR) else None
+            return "blocked" if root in (self.HEAD, self.SKILL_GEAR) else None
 
         d = self._decide_with(spy)
         assert d.chosen_root == self.SKILL_JEWEL
-        assert list(dict.fromkeys(seen)) == [self.SWORD, self.SKILL_GEAR, self.SKILL_JEWEL]
+        assert list(dict.fromkeys(seen)) == [self.HEAD, self.SKILL_GEAR, self.SKILL_JEWEL]
 
 
 # --- Synthetic-GameData unit tests (coverage of branches the 6 scenarios
@@ -347,7 +352,7 @@ class TestSyntheticBranches:
             equipment={"weapon_slot": "wooden_stick"}))
         held = GearObjective("chicken", {"weapon_slot": "wooden_stick"}, Fraction(1), ())
         d = decide_tree(state, gd, objective,
-                        ctx=replace(NO_PROFILE_CONTEXT, gear_objective=held))
+                        ctx=replace(TIMED_NO_PROFILE_CONTEXT, gear_objective=held))
         assert d.chosen_root == ReachCharLevel(level=6)
         assert d.chosen_step == d.chosen_root
         assert d.fallback_roots == []

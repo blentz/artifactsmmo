@@ -30,13 +30,13 @@ from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.task_kills import PRIORITY, TaskKillsGoal
 from artifactsmmo_cli.ai.plan_tree import _label
 from artifactsmmo_cli.ai.planner import GOAPPlanner
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.task_worth_core import WORTHLESS, TaskWorth
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachTaskOutcome
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.tiers.strategy import root_category
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.test_grey_farm import _gd, make_state
 
 
@@ -107,40 +107,40 @@ class TestReachTaskOutcome:
     def test_its_price_is_the_remaining_kills(self) -> None:
         gd = _gd()
         node = ReachTaskOutcome("chicken")
-        assert route_price(node, _held(10, 10), gd, NO_PROFILE_CONTEXT, None) == 1  # the turn-in
-        assert route_price(node, _held(3, task_code="cow"), gd, NO_PROFILE_CONTEXT, None) == 0
-        one = route_price(node, _held(9, 10), gd, NO_PROFILE_CONTEXT, None)
-        seven = route_price(node, _held(3, 10), gd, NO_PROFILE_CONTEXT, None)
+        assert route_price(node, _held(10, 10), gd, TIMED_NO_PROFILE_CONTEXT, None) == 1  # the turn-in
+        assert route_price(node, _held(3, task_code="cow"), gd, TIMED_NO_PROFILE_CONTEXT, None) == 0
+        one = route_price(node, _held(9, 10), gd, TIMED_NO_PROFILE_CONTEXT, None)
+        seven = route_price(node, _held(3, 10), gd, TIMED_NO_PROFILE_CONTEXT, None)
         assert 1 <= one <= seven
         assert seven >= 7
 
     def test_its_step_is_one_more_kill(self) -> None:
         gd = _gd()
         node = ReachTaskOutcome("chicken")
-        goal = objective_step_goal(node, _held(3), gd, NO_PROFILE_CONTEXT)
+        goal = objective_step_goal(node, _held(3), gd, TIMED_NO_PROFILE_CONTEXT)
         assert isinstance(goal, TaskKillsGoal) and repr(goal) == "TaskKills(chicken)"
 
     def test_a_met_task_is_turned_in_on_its_turn(self) -> None:
         """c-2 #6 (was the COMPLETE_TASK collect rung)."""
         gd = _gd()
         node = ReachTaskOutcome("chicken")
-        assert isinstance(objective_step_goal(node, _held(10, 10), gd, NO_PROFILE_CONTEXT),
+        assert isinstance(objective_step_goal(node, _held(10, 10), gd, TIMED_NO_PROFILE_CONTEXT),
                           CompleteTaskGoal)
-        assert objective_step_goal(node, _held(3, task_code="cow"), gd, NO_PROFILE_CONTEXT) is None
+        assert objective_step_goal(node, _held(3, task_code="cow"), gd, TIMED_NO_PROFILE_CONTEXT) is None
 
 
 class TestTaskRoot:
     def test_no_root_without_a_task(self) -> None:
         gd = _gd()
-        assert root_mod._task_root(make_state(level=12), gd, NO_PROFILE_CONTEXT, None) is None
+        assert root_mod._task_root(make_state(level=12), gd, TIMED_NO_PROFILE_CONTEXT, None) is None
 
     def test_a_met_task_is_its_own_root(self) -> None:
         """c-2 #6: the turn-in is the task objective's step, whatever the type."""
         gd = _gd()
-        assert root_mod._task_root(_held(10, 10), gd, NO_PROFILE_CONTEXT, None) \
+        assert root_mod._task_root(_held(10, 10), gd, TIMED_NO_PROFILE_CONTEXT, None) \
             == ReachTaskOutcome("chicken")
         met_items = _held(10, 10, task_type="items")
-        assert root_mod._task_root(met_items, gd, NO_PROFILE_CONTEXT, None) == ReachTaskOutcome("chicken")
+        assert root_mod._task_root(met_items, gd, TIMED_NO_PROFILE_CONTEXT, None) == ReachTaskOutcome("chicken")
 
     def test_a_worthless_coinless_items_task_is_held_not_worked(self) -> None:
         """Spec 2026-10-14 items-task-pays §4: with no coin to cancel it, a
@@ -148,25 +148,25 @@ class TestTaskRoot:
         turns. An XP/gold/drops verdict makes it a root again."""
         held = _held(3, task_type="items")
         with patch.object(root_mod, "task_worth_for", return_value=WORTHLESS) as worth:
-            assert root_mod._task_root(held, _gd(), NO_PROFILE_CONTEXT, None) is None
+            assert root_mod._task_root(held, _gd(), TIMED_NO_PROFILE_CONTEXT, None) is None
         assert worth.call_args.args[:3] == ("chicken", "items", 7)
         for verdict in (TaskWorth(xp=True, gold=False, drops=False),
                         TaskWorth(xp=False, gold=True, drops=False),
                         TaskWorth(xp=False, gold=False, drops=True)):
             with patch.object(root_mod, "task_worth_for", return_value=verdict):
-                assert root_mod._task_root(held, _gd(), NO_PROFILE_CONTEXT, None) \
+                assert root_mod._task_root(held, _gd(), TIMED_NO_PROFILE_CONTEXT, None) \
                     == ReachTaskOutcome("chicken")
 
     def test_a_worthless_coinless_monsters_task_is_still_worked(self) -> None:
         with (patch.object(root_mod, "task_worth_for", return_value=WORTHLESS),
               patch.object(root_mod, "is_winnable", return_value=True)):
-            assert root_mod._task_root(_held(3), _gd(), NO_PROFILE_CONTEXT, None) \
+            assert root_mod._task_root(_held(3), _gd(), TIMED_NO_PROFILE_CONTEXT, None) \
                 == ReachTaskOutcome("chicken")
 
     def test_a_met_worthless_items_task_is_still_turned_in(self) -> None:
         with patch.object(root_mod, "task_worth_for", return_value=WORTHLESS):
             assert root_mod._task_root(_held(10, 10, task_type="items"), _gd(),
-                                       NO_PROFILE_CONTEXT, None) == ReachTaskOutcome("chicken")
+                                       TIMED_NO_PROFILE_CONTEXT, None) == ReachTaskOutcome("chicken")
 
     def test_a_phantom_task_without_a_total_is_no_root(self) -> None:
         """The API briefly reports a task code with no total
@@ -177,15 +177,15 @@ class TestTaskRoot:
         phantom = _held(0, 0)
         with (patch.object(root_mod, "is_winnable", return_value=True),
               patch.object(root_mod._route, "task_cancel_due", return_value=False)):
-            assert root_mod._task_root(phantom, _gd(), NO_PROFILE_CONTEXT, None) is None
+            assert root_mod._task_root(phantom, _gd(), TIMED_NO_PROFILE_CONTEXT, None) is None
             # The same task with a total is worked: the phantom's total is the
             # only reason it is refused.
-            assert root_mod._task_root(_held(0, 10), _gd(), NO_PROFILE_CONTEXT, None) \
+            assert root_mod._task_root(_held(0, 10), _gd(), TIMED_NO_PROFILE_CONTEXT, None) \
                 == ReachTaskOutcome("chicken")
 
     def test_a_winnable_task_is_its_own_root(self) -> None:
         with patch.object(root_mod, "is_winnable", return_value=True):
-            got = root_mod._task_root(_held(), _gd(), NO_PROFILE_CONTEXT, None)
+            got = root_mod._task_root(_held(), _gd(), TIMED_NO_PROFILE_CONTEXT, None)
         assert got == ReachTaskOutcome("chicken")
 
     def test_an_unwinnable_task_asks_for_gear(self) -> None:
@@ -193,7 +193,7 @@ class TestTaskRoot:
         with (patch.object(root_mod, "is_winnable", return_value=False),
               patch.object(root_mod, "deficit_upgrade_target",
                            return_value=("iron_sword", "weapon_slot")) as deficit):
-            got = root_mod._task_root(_held(), _gd(), NO_PROFILE_CONTEXT, None)
+            got = root_mod._task_root(_held(), _gd(), TIMED_NO_PROFILE_CONTEXT, None)
         assert got == ObtainItem("iron_sword", 1, slot="weapon_slot")
         actions_of = deficit.call_args.kwargs["actions_of"]
         with patch.object(root_mod._route, "route_price", return_value=17) as price:
@@ -203,7 +203,7 @@ class TestTaskRoot:
     def test_an_unwinnable_task_no_gear_closes_waits(self) -> None:
         with (patch.object(root_mod, "is_winnable", return_value=False),
               patch.object(root_mod, "deficit_upgrade_target", return_value=None)):
-            assert root_mod._task_root(_held(), _gd(), NO_PROFILE_CONTEXT, None) is None
+            assert root_mod._task_root(_held(), _gd(), TIMED_NO_PROFILE_CONTEXT, None) is None
 
     def test_the_walk_offers_it_after_the_trunk(self) -> None:
         gd = _gd()
@@ -214,7 +214,7 @@ class TestTaskRoot:
             held = GearObjective("chicken", {}, Fraction(1), ())
             resolution = root_mod.resolve_root(
                 state, gd, CharacterObjective.from_game_data(gd),
-                dataclasses.replace(NO_PROFILE_CONTEXT, gear_objective=held), None)
+                dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, gear_objective=held), None)
         offered = [resolution.root, *resolution.alternatives]
         assert ReachTaskOutcome("chicken") in resolution.alternatives
         trunk = next(i for i, a in enumerate(offered) if isinstance(a, ReachCharLevel))
@@ -232,21 +232,21 @@ class TestWorthCancelFold:
         with (patch.object(root_mod, "is_winnable", return_value=False),
               patch.object(root_mod, "deficit_upgrade_target", return_value=None)):
             with patch.object(root_mod._route, "task_cancel_due", return_value=True):
-                got = root_mod._task_root(_held(), _gd(), NO_PROFILE_CONTEXT, None)
+                got = root_mod._task_root(_held(), _gd(), TIMED_NO_PROFILE_CONTEXT, None)
             assert got == ReachTaskOutcome("chicken")
             with patch.object(root_mod._route, "task_cancel_due", return_value=False):
-                assert root_mod._task_root(_held(), _gd(), NO_PROFILE_CONTEXT, None) is None
+                assert root_mod._task_root(_held(), _gd(), TIMED_NO_PROFILE_CONTEXT, None) is None
 
     def test_its_step_is_the_cancel(self) -> None:
         node = ReachTaskOutcome("chicken")
         with patch.object(driver_mod, "task_cancel_due", return_value=True):
-            goal = objective_step_goal(node, _held(), _gd(), NO_PROFILE_CONTEXT)
+            goal = objective_step_goal(node, _held(), _gd(), TIMED_NO_PROFILE_CONTEXT)
         assert isinstance(goal, TaskCancelGoal)
 
     def test_the_funnel_asks_the_worth_verdict(self) -> None:
         with patch("artifactsmmo_cli.ai.decisions.route.held_task_cancel_due",
                    return_value=True) as due:
-            assert root_mod._route.task_cancel_due(_held(), _gd(), NO_PROFILE_CONTEXT, None)
+            assert root_mod._route.task_cancel_due(_held(), _gd(), TIMED_NO_PROFILE_CONTEXT, None)
         assert due.called
 
 
@@ -264,7 +264,7 @@ class TestExchangeFold:
     objective's to exchange, task held or not."""
 
     def test_coins_offer_the_objective_with_or_without_a_task(self) -> None:
-        from_ctx = dataclasses.replace(NO_PROFILE_CONTEXT, task_exchange_min_coins=3)
+        from_ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, task_exchange_min_coins=3)
         rich = dataclasses.replace(make_state(level=12), inventory={"tasks_coin": 3})
         assert root_mod._task_root(rich, _gd(), from_ctx, None) == ReachTaskOutcome(None)
         held = dataclasses.replace(_held(task_type="items"), inventory={"tasks_coin": 3})
@@ -273,23 +273,23 @@ class TestExchangeFold:
         assert root_mod._task_root(poor, _gd(), from_ctx, None) is None
 
     def test_the_offline_context_offers_no_exchange_on_zero_coins(self) -> None:
-        """`NO_PROFILE_CONTEXT`'s floor is one coin, production's own default:
+        """`TIMED_NO_PROFILE_CONTEXT`'s floor is one coin, production's own default:
         a zero floor read `coins >= 0` and fired for every coinless character
         (44 of 44 offline scenarios, before 2026-08)."""
-        assert root_mod._task_root(make_state(level=12), _gd(), NO_PROFILE_CONTEXT, None) is None
+        assert root_mod._task_root(make_state(level=12), _gd(), TIMED_NO_PROFILE_CONTEXT, None) is None
 
     def test_no_task_and_no_exchange_has_no_step(self) -> None:
         assert objective_step_goal(ReachTaskOutcome(None), make_state(level=12), _gd(),
-                                   NO_PROFILE_CONTEXT) is None
+                                   TIMED_NO_PROFILE_CONTEXT) is None
         assert not ReachTaskOutcome(None).is_satisfied(make_state(level=12), _gd())
 
     def test_the_no_task_objective_prices_one_exchange_and_labels_coins(self) -> None:
         node = ReachTaskOutcome(None)
-        assert route_price(node, make_state(level=12), _gd(), NO_PROFILE_CONTEXT, None) == 1
+        assert route_price(node, make_state(level=12), _gd(), TIMED_NO_PROFILE_CONTEXT, None) == 1
         assert _label(node) == ("task (coins)", "task")
 
     def test_the_step_is_the_exchange(self) -> None:
-        ctx = dataclasses.replace(NO_PROFILE_CONTEXT, task_exchange_min_coins=3)
+        ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, task_exchange_min_coins=3)
         rich = dataclasses.replace(_held(3), inventory={"tasks_coin": 3})
         goal = objective_step_goal(ReachTaskOutcome("chicken"), rich, _gd(), ctx)
         assert isinstance(goal, TaskExchangeGoal)
@@ -300,21 +300,21 @@ class TestAcceptFold:
     the task objective has its turn. The owed draw is the objective's step."""
 
     def test_an_owed_draw_offers_the_objective(self) -> None:
-        owed = dataclasses.replace(NO_PROFILE_CONTEXT, draw_owed=True)
+        owed = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, draw_owed=True)
         assert root_mod._task_root(make_state(level=12), _gd(), owed, None) == ReachTaskOutcome(None)
-        assert root_mod._task_root(make_state(level=12), _gd(), NO_PROFILE_CONTEXT, None) is None
+        assert root_mod._task_root(make_state(level=12), _gd(), TIMED_NO_PROFILE_CONTEXT, None) is None
 
     def test_the_draw_goes_to_the_chosen_master(self) -> None:
         """c-2 #5 (USER "Higher worthy share"): the master `pool_draw` chose."""
         gd = _gd()
         gd.world.taskmaster_tiles = {"monsters": (1, 2), "items": (4, 5)}
-        owed = dataclasses.replace(NO_PROFILE_CONTEXT, draw_owed=True, draw_master="items")
+        owed = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, draw_owed=True, draw_master="items")
         goal = objective_step_goal(ReachTaskOutcome(None), make_state(level=12), gd, owed)
         assert isinstance(goal, AcceptTaskGoal)
         assert (goal._taskmaster_code, goal._taskmaster_location) == ("items", (4, 5))
 
     def test_its_step_is_the_accept_ahead_of_the_exchange(self) -> None:
-        owed = dataclasses.replace(NO_PROFILE_CONTEXT, draw_owed=True, task_exchange_min_coins=1)
+        owed = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, draw_owed=True, task_exchange_min_coins=1)
         rich = dataclasses.replace(make_state(level=12), inventory={"tasks_coin": 3})
         goal = objective_step_goal(ReachTaskOutcome(None), rich, _gd(), owed)
         assert isinstance(goal, AcceptTaskGoal)
@@ -329,12 +329,12 @@ class TestItemsTaskIsWorked:
         held = _held(task_type="items")
         with patch.object(root_mod, "task_worth_for",
                           return_value=TaskWorth(xp=True, gold=False, drops=False)):
-            assert root_mod._task_root(held, _gd(), NO_PROFILE_CONTEXT, None) \
+            assert root_mod._task_root(held, _gd(), TIMED_NO_PROFILE_CONTEXT, None) \
                 == ReachTaskOutcome("chicken")
 
     def test_its_step_is_the_pursuit(self) -> None:
         held = dataclasses.replace(_held(task_type="items"), inventory={"chicken": 10})
-        goal = objective_step_goal(ReachTaskOutcome("chicken"), held, _gd(), NO_PROFILE_CONTEXT)
+        goal = objective_step_goal(ReachTaskOutcome("chicken"), held, _gd(), TIMED_NO_PROFILE_CONTEXT)
         assert repr(goal) == "PursueTask(chicken)"
 
 

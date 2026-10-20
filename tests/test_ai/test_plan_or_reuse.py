@@ -4,10 +4,11 @@ from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
-from tests.test_ai.fixtures import make_state, one_equippable_item_page
-from tests.test_ai.test_rest_first import TILE
+from tests.test_ai.fixtures import make_state, one_equippable_item_page, patched_logs
+from tests.test_ai.test_rest_first import TILE, TIMING
 from tests.test_ai.test_rest_first import _gd as _rest_gd
 from tests.test_ai.test_rest_first import _state as _rest_state
 
@@ -36,6 +37,7 @@ class _Act:
 
 def _player_with_stub_plan(plan, goal):
     player = GamePlayer(character="hero", dry_run=True)
+    player._offline_timing = committed_timing()
     calls = {"n": 0}
 
     def _fake_decide(state, game_data, actions):
@@ -79,6 +81,7 @@ def test_replan_persists_body_and_commitment(tmp_path):
     store = LearningStore(db_path=str(tmp_path / "l.db"), character="hero")
     store.start_session()
     player = GamePlayer(character="hero", dry_run=True, history=store)
+    player._offline_timing = committed_timing()
 
     def _fake_decide(state, game_data, actions):
         return goal, list(plan), [{"goal": repr(goal)}]
@@ -97,6 +100,7 @@ def test_advance_with_history_persists_cursor(tmp_path):
     store = LearningStore(db_path=str(tmp_path / "l.db"), character="hero")
     store.start_session()
     player = GamePlayer(character="hero", dry_run=True, history=store)
+    player._offline_timing = committed_timing()
 
     initial_state = make_state(hp=20, max_hp=150)
     call_count = [0]
@@ -125,7 +129,7 @@ def test_advance_with_history_persists_cursor(tmp_path):
 
     with (
         patch.object(MagicMock(), "client", MagicMock()) as _cm,
-        patch("artifactsmmo_cli.ai.player.ClientManager", return_value=MagicMock(client=MagicMock())),
+        patch("artifactsmmo_cli.ai.player.ClientManager", return_value=MagicMock(client=MagicMock())), patched_logs(),
         patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=MagicMock(data=[])),
         patch("artifactsmmo_cli.ai.game_data.get_all_items",
               return_value=one_equippable_item_page()),
@@ -166,7 +170,7 @@ def test_a_cached_fight_that_would_now_be_lost_is_replanned(monkeypatch):
     monkeypatch.setattr(FightAction, "is_applicable", lambda self, s, g: True)
     wins = {"now": True}
     monkeypatch.setattr("artifactsmmo_cli.ai.player.predict_win", lambda s, g, m: wins["now"])
-    monkeypatch.setattr("artifactsmmo_cli.ai.player.rest_pays", lambda s, g, m: False)
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.rest_pays", lambda s, g, m, t: False)
     state = make_state()
     player._plan_or_reuse(state, None, [])
     player._plan_or_reuse(state, None, [])
@@ -177,7 +181,7 @@ def test_a_cached_fight_that_would_now_be_lost_is_replanned(monkeypatch):
 
 
 def test_a_non_fight_step_needs_no_fight_check():
-    assert GamePlayer._fight_ready(_Act(), make_state(), None) is True
+    assert GamePlayer._fight_ready(_Act(), make_state(), None, TIMING) is True
 
 
 def test_a_cached_fight_the_threshold_admits_is_unready_when_resting_pays():
@@ -185,5 +189,5 @@ def test_a_cached_fight_the_threshold_admits_is_unready_when_resting_pays():
     (P 0.633 over θ 0.552) and lost; a rest first costs less per kill."""
     fight = FightAction(monster_code="mob", locations=frozenset({TILE}))
     gd = _rest_gd()
-    assert GamePlayer._fight_ready(fight, _rest_state(40), gd) is False
-    assert GamePlayer._fight_ready(fight, _rest_state(60), gd) is True
+    assert GamePlayer._fight_ready(fight, _rest_state(40), gd, TIMING) is False
+    assert GamePlayer._fight_ready(fight, _rest_state(60), gd, TIMING) is True

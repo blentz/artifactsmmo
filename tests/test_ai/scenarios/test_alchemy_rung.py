@@ -19,9 +19,9 @@ from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.decisions.root import _orphan_skill_roots
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
 from artifactsmmo_cli.audit.grind_cycle_census import earned_skill
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.scenarios.routing import scenario_resolution, skills_offered
 
 SKILL = "alchemy"
@@ -111,11 +112,11 @@ def test_alchemy_heads_the_orphan_list_for_this_cell(
     the group's one ordering integer is `skill level - character level`, and
     alchemy at 6 trails this level-15 character furthest. Only the demanded
     skills appear (USER 2026-10-08, "Only when demanded")."""
-    orphans = _orphan_skill_roots(state, bundle_game_data, _OFFERED, NO_PROFILE_CONTEXT)
+    orphans = _orphan_skill_roots(state, bundle_game_data, _OFFERED, TIMED_NO_PROFILE_CONTEXT)
     assert orphans[0] == ReachSkillLevel(skill=SKILL, level=20)
     assert [goal.skill for goal in orphans] == [SKILL, "fishing", "mining", "woodcutting"]
     assert all(goal.skill != SKILL for goal in _orphan_skill_roots(
-        state, bundle_game_data, [], NO_PROFILE_CONTEXT))
+        state, bundle_game_data, [], TIMED_NO_PROFILE_CONTEXT))
 
 
 def test_the_alchemy_rung_is_open_and_is_a_potion(
@@ -124,7 +125,7 @@ def test_the_alchemy_rung_is_open_and_is_a_potion(
     recipe at or below the current level, and `skill_is_grindable(alchemy, C+1)` —
     the orphan rule's second conjunct and the O1 census's verdict predicate —
     holds through it."""
-    assert skill_grind_target(SKILL, state, bundle_game_data) == RUNG
+    assert skill_grind_target(SKILL, state, bundle_game_data, ctx=TIMED_NO_PROFILE_CONTEXT) == RUNG
     stats = bundle_game_data.item_stats(RUNG)
     assert stats is not None
     assert (stats.crafting_skill, stats.type_) == (SKILL, "utility")
@@ -140,12 +141,13 @@ def test_the_alchemy_root_plans_a_grind_cycle(
     2d), ending in the leg that earns alchemy."""
     root = ReachSkillLevel(skill=SKILL, level=state.skills[SKILL] + 1)
     goal = objective_step_goal(root, state, bundle_game_data,
-                               NO_PROFILE_CONTEXT, root=root, history=None)
+                               TIMED_NO_PROFILE_CONTEXT, root=root, history=None)
     assert repr(goal) == f"ReachSkill({SKILL}->{state.skills[SKILL] + 1})"
     player = GamePlayer(character=CELL, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(state, bundle_game_data)
     plan = decompose(goal, state, bundle_game_data, list(player._build_actions()),
-                     NO_PROFILE_CONTEXT)
+                     TIMED_NO_PROFILE_CONTEXT)
     assert plan and earned_skill(plan[-1], bundle_game_data) == SKILL, plan
 
 

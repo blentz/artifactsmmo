@@ -43,8 +43,9 @@ from artifactsmmo_cli.ai.constants import (
     GE_ORDER_REFRESH_INTERVAL_SECONDS,
 )
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, patched_logs
 from tests.test_ai.test_actions_execute import (
     make_char_schema,
     make_get_character_result,
@@ -175,6 +176,7 @@ class TestPlayerRefreshesOn404:
     @staticmethod
     def _run_fill_against_404(gd: GameData | None):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(x=5, y=1)
         player.game_data = gd
         action = GeFillSellOrderAction(
@@ -252,6 +254,7 @@ class TestPeriodicReload:
         """A player whose GE clock last ticked `elapsed` seconds ago (None = the
         clock has never been set, i.e. the first cycle of a run)."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.game_data = gd
         if elapsed is not None:
             player._ge_orders_reloaded_at = 1000.0 - elapsed
@@ -388,6 +391,7 @@ def test_the_run_loop_actually_calls_the_periodic_reload():
     """Runtime activation: a timer nothing drives is dead code. The reload must
     fire from run()'s own cycle, not merely be callable."""
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     client = MagicMock()
     seen: list[str] = []
 
@@ -396,7 +400,7 @@ def test_the_run_loop_actually_calls_the_periodic_reload():
 
     manager = MagicMock()
     with patch.object(manager, "client", client), \
-            patch("artifactsmmo_cli.ai.player.ClientManager", return_value=manager), \
+            patch("artifactsmmo_cli.ai.player.ClientManager", return_value=manager), patched_logs(), \
             _patch_game_data_load(), \
             patch.object(player, "_fetch_world_state", return_value=make_state(hp=100, max_hp=150)), \
             patch.object(player, "_wait_for_cooldown", side_effect=stop_after_one_cycle), \
@@ -431,6 +435,7 @@ class TestOfferShortRefresh:
     @staticmethod
     def _run_fill_against(code: int, message: str, gd: GameData | None):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(x=5, y=1)
         player.game_data = gd
         action = GeFillSellOrderAction(

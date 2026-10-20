@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 
@@ -30,6 +31,7 @@ class TestCycleSnapshot:
 class TestObserverHook:
     def test_set_cycle_observer_attaches_later(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         assert player._cycle_observer is None
         cb = MagicMock()
         player.set_cycle_observer(cb)
@@ -38,12 +40,14 @@ class TestObserverHook:
     def test_observer_passed_in_constructor(self):
         cb = MagicMock()
         player = GamePlayer(character="hero", cycle_observer=cb)
+        player._offline_timing = committed_timing()
         assert player._cycle_observer is cb
 
     def test_notify_observer_builds_snapshot(self):
         """_notify_observer composes a CycleSnapshot and calls the observer."""
         calls: list[CycleSnapshot] = []
         player = GamePlayer(character="hero", cycle_observer=calls.append)
+        player._offline_timing = committed_timing()
         player.state = make_state(level=3, xp=120, max_xp=600, hp=80, max_hp=130, gold=42,
                                    x=2, y=-1, inventory={"copper_ore": 5})
         player._cycle_counter = 7
@@ -74,6 +78,7 @@ class TestObserverHook:
         right tiles without it."""
         calls: list[CycleSnapshot] = []
         player = GamePlayer(character="hero", cycle_observer=calls.append)
+        player._offline_timing = committed_timing()
         player.state = make_state(x=5, y=5, layer="underground")
         player._notify_observer("G", "A", "ok", goal_rank_trace=[])
         assert calls[0].layer == "underground"
@@ -82,6 +87,7 @@ class TestObserverHook:
         """planner_stats threads the trace internals onto the snapshot."""
         calls: list[CycleSnapshot] = []
         player = GamePlayer(character="hero", cycle_observer=calls.append)
+        player._offline_timing = committed_timing()
         player.state = make_state(level=3)
         player._notify_observer(
             "CraftEquipment", "MoveTo(1,2)", "ok",
@@ -119,6 +125,7 @@ class TestObserverHook:
         did not exist; the snapshot must carry it now."""
         calls: list[CycleSnapshot] = []
         player = GamePlayer(character="hero", cycle_observer=calls.append)
+        player._offline_timing = committed_timing()
         player.state = make_state(level=3)
         player._notify_observer(
             "GrindCharacterXP(red_slime)", "Fight(red_slime)", "ok",
@@ -146,6 +153,7 @@ class TestObserverHook:
     def test_notify_observer_noop_when_unset(self):
         """No observer = silent skip; no exception."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state()
         player._notify_observer("X", "Y", "ok", goal_rank_trace=[])
         # No assertion needed — just verifying no crash.
@@ -153,6 +161,7 @@ class TestObserverHook:
     def test_notify_observer_noop_when_state_none(self):
         cb = MagicMock()
         player = GamePlayer(character="hero", cycle_observer=cb)
+        player._offline_timing = committed_timing()
         player.state = None
         player._notify_observer("X", "Y", "ok", goal_rank_trace=[])
         cb.assert_not_called()

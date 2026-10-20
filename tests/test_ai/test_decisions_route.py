@@ -22,11 +22,11 @@ from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.decisions import route as route_mod
 from artifactsmmo_cli.ai.decisions.route import route_exists, route_price
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import Cycle, LearningStore
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     META_GOAL_KINDS,
@@ -34,6 +34,10 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachCharLevel,
     ReachSkillLevel,
 )
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+
+TIMING = committed_timing()[0]
+"""The committed live capture's fight-seconds fit (spec 2026-10-18 §2.9)."""
 
 BUNDLE = (Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json")
 CELL = "l32_held_task_closable"
@@ -53,8 +57,8 @@ def test_obtain_item_prices_through_acquisition_actions(gd: GameData) -> None:
     function it forwards to, so a divergence in either is a failure here."""
     state = _state(gd)
     goal = ObtainItem("iron_sword", 1)
-    assert route_price(goal, state, gd, NO_PROFILE_CONTEXT, None) == \
-        acquisition_actions("iron_sword", 1, state, gd, NO_PROFILE_CONTEXT,
+    assert route_price(goal, state, gd, TIMED_NO_PROFILE_CONTEXT, None) == \
+        acquisition_actions("iron_sword", 1, state, gd, TIMED_NO_PROFILE_CONTEXT,
                             equip=False, store=None)
 
 
@@ -66,13 +70,13 @@ def test_equip_is_derived_from_slot_and_nothing_else(gd: GameData) -> None:
     parameter and let it disagree with the slot."""
     state = _state(gd)
     slotted = route_price(ObtainItem("iron_sword", 1, slot="weapon_slot"),
-                          state, gd, NO_PROFILE_CONTEXT, None)
+                          state, gd, TIMED_NO_PROFILE_CONTEXT, None)
     bare = route_price(ObtainItem("iron_sword", 1), state, gd,
-                       NO_PROFILE_CONTEXT, None)
+                       TIMED_NO_PROFILE_CONTEXT, None)
     assert slotted == acquisition_actions(
-        "iron_sword", 1, state, gd, NO_PROFILE_CONTEXT, equip=True, store=None)
+        "iron_sword", 1, state, gd, TIMED_NO_PROFILE_CONTEXT, equip=True, store=None)
     assert bare == acquisition_actions(
-        "iron_sword", 1, state, gd, NO_PROFILE_CONTEXT, equip=False, store=None)
+        "iron_sword", 1, state, gd, TIMED_NO_PROFILE_CONTEXT, equip=False, store=None)
     # NOT VACUOUS: the two arms genuinely differ, by exactly the equip action.
     # Measured 10 vs 9 here. Without this line the test above would pass even
     # if `equip` made no difference to the price, which is the shape that makes
@@ -84,8 +88,8 @@ def test_quantity_is_forwarded(gd: GameData) -> None:
     """Not pinned by the two tests above, both of which use quantity=1."""
     state = _state(gd)
     assert route_price(ObtainItem("iron_ore", 5), state, gd,
-                       NO_PROFILE_CONTEXT, None) == \
-        acquisition_actions("iron_ore", 5, state, gd, NO_PROFILE_CONTEXT,
+                       TIMED_NO_PROFILE_CONTEXT, None) == \
+        acquisition_actions("iron_ore", 5, state, gd, TIMED_NO_PROFILE_CONTEXT,
                             equip=False, store=None)
 
 
@@ -101,7 +105,7 @@ def test_the_climbs_are_walled_without_a_learning_store(gd: GameData, goal) -> N
     root outrank every gear root; infinity would break the total order the walk
     needs. This is the "free-looking grind" that captured R2D2 for 4.5 hours,
     refused at the funnel."""
-    assert route_price(goal, _state(gd), gd, NO_PROFILE_CONTEXT, None) \
+    assert route_price(goal, _state(gd), gd, TIMED_NO_PROFILE_CONTEXT, None) \
         == UNOBTAINABLE_PER_UNIT
 
 
@@ -128,15 +132,15 @@ def test_route_exists_forwards_to_obtain_sources(gd: GameData) -> None:
     so the two cannot drift."""
     state = _state(gd)
     for code in ("iron_sword", "iron_ore"):
-        assert route_exists(code, state, gd, NO_PROFILE_CONTEXT) \
-            is bool(obtain_sources(code, state, gd, NO_PROFILE_CONTEXT))
+        assert route_exists(code, state, gd, TIMED_NO_PROFILE_CONTEXT) \
+            is bool(obtain_sources(code, state, gd, TIMED_NO_PROFILE_CONTEXT))
 
 
 def test_route_exists_is_not_vacuous(gd: GameData) -> None:
     """The two arms of `route_exists` are both reachable on real bundle data —
     without this the test above passes on an all-True or all-False oracle."""
     state = _state(gd)
-    answers = {c: route_exists(c, state, gd, NO_PROFILE_CONTEXT)
+    answers = {c: route_exists(c, state, gd, TIMED_NO_PROFILE_CONTEXT)
                for c in ("iron_sword", "iron_ore", "no_such_item_xyzzy")}
     assert answers["no_such_item_xyzzy"] is False
     assert any(answers[c] for c in ("iron_sword", "iron_ore"))
@@ -180,7 +184,7 @@ def test_reach_skill_level_prices_the_climb_in_cycles(gd: GameData, tmp_path) ->
         assert rate and rate > 0, "fixture must yield a measurable rate"
         goal = ReachSkillLevel(skill="weaponcrafting",
                                level=state.skills.get("weaponcrafting", 1) + 2)
-        priced = route_price(goal, state, gd, NO_PROFILE_CONTEXT, store)
+        priced = route_price(goal, state, gd, TIMED_NO_PROFILE_CONTEXT, store)
         assert priced == skill_grind_cycles(
             state.skills.get("weaponcrafting", 1),
             state.skill_xp.get("weaponcrafting", 0), max_xp, goal.level, rate)
@@ -198,7 +202,7 @@ def test_reach_skill_level_is_walled_without_a_measured_rate(
     store = _store(tmp_path)
     try:
         goal = ReachSkillLevel(skill="weaponcrafting", level=40)
-        assert route_price(goal, _state(gd), gd, NO_PROFILE_CONTEXT, store) \
+        assert route_price(goal, _state(gd), gd, TIMED_NO_PROFILE_CONTEXT, store) \
             == UNOBTAINABLE_PER_UNIT
     finally:
         store.close()
@@ -231,7 +235,7 @@ def test_a_grind_that_gained_nothing_is_walled_whatever_the_fleet_measured(
         assert fleet is not None and fleet > 0, "the fleet must have paying evidence"
         goal = ReachSkillLevel(skill="weaponcrafting",
                                level=state.skills.get("weaponcrafting", 1) + 2)
-        assert route_price(goal, state, gd, NO_PROFILE_CONTEXT, store) == UNOBTAINABLE_PER_UNIT
+        assert route_price(goal, state, gd, TIMED_NO_PROFILE_CONTEXT, store) == UNOBTAINABLE_PER_UNIT
     finally:
         store.close()
 
@@ -248,8 +252,8 @@ def test_reach_char_level_prices_or_walls_by_the_path_plan(
     store = _store(tmp_path)
     try:
         goal = ReachCharLevel(level=state.level + 1)
-        plan = cheapest_path_to_level(goal.level, state, store, gd)
-        priced = route_price(goal, state, gd, NO_PROFILE_CONTEXT, store)
+        plan = cheapest_path_to_level(goal.level, state, store, gd, TIMING)
+        priced = route_price(goal, state, gd, TIMED_NO_PROFILE_CONTEXT, store)
         if plan.blocked:
             assert priced == UNOBTAINABLE_PER_UNIT
         else:
@@ -271,7 +275,7 @@ def test_route_price_raises_on_an_unhandled_metagoal_kind(gd: GameData) -> None:
     know is the `objective_needs` failure — an unpriced root that outranks
     everything. "API data or fail" applied to a dispatch."""
     with pytest.raises(AssertionError, match="unhandled MetaGoal kind"):
-        route_price(_UnknownMetaGoal(), _state(gd), gd, NO_PROFILE_CONTEXT, None)
+        route_price(_UnknownMetaGoal(), _state(gd), gd, TIMED_NO_PROFILE_CONTEXT, None)
 
 
 def test_reach_char_level_forwards_total_cycles_when_the_path_is_open(
@@ -285,12 +289,12 @@ def test_reach_char_level_forwards_total_cycles_when_the_path_is_open(
     from artifactsmmo_cli.ai.learning.projections import PathPlan
     monkeypatch.setattr(
         route_mod, "cheapest_path_to_level",
-        lambda target, state, store, game_data: PathPlan(
+        lambda target, state, store, game_data, timing: PathPlan(
             target_level=target, total_cycles=41.0, blocked=False))
     store = _store(tmp_path)
     try:
         assert route_price(ReachCharLevel(level=33), _state(gd), gd,
-                           NO_PROFILE_CONTEXT, store) == 41
+                           TIMED_NO_PROFILE_CONTEXT, store) == 41
     finally:
         store.close()
 
@@ -303,11 +307,11 @@ def test_reach_char_level_walls_a_blocked_path(
     from artifactsmmo_cli.ai.learning.projections import PathPlan
     monkeypatch.setattr(
         route_mod, "cheapest_path_to_level",
-        lambda target, state, store, game_data: PathPlan(
+        lambda target, state, store, game_data, timing: PathPlan(
             target_level=target, total_cycles=41.0, blocked=True))
     store = _store(tmp_path)
     try:
         assert route_price(ReachCharLevel(level=33), _state(gd), gd,
-                           NO_PROFILE_CONTEXT, store) == UNOBTAINABLE_PER_UNIT
+                           TIMED_NO_PROFILE_CONTEXT, store) == UNOBTAINABLE_PER_UNIT
     finally:
         store.close()

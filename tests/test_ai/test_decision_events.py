@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog, search_deta
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.planner import PlanStats
@@ -134,6 +135,7 @@ class TestArbiter:
 class TestPlayer:
     def test_decide_notes_each_root_decline(self) -> None:
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player._strategy = MagicMock()
         decision = MagicMock(chosen_root="Root(b)", chosen_step=None,
                              declined=(("Root(a)", "no_route:x"),))
@@ -147,6 +149,7 @@ class TestPlayer:
 
     def test_stuck_recovery_notes_every_action_block_it_sets(self) -> None:
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player._failure_blocks = {"Old": (3, None)}
 
         def recover(signal: StuckSignal, client: object) -> None:
@@ -166,6 +169,7 @@ class TestPlayer:
         store = LearningStore(str(tmp_path / "l.db"), character="hero")
         store.start_session()
         player = GamePlayer(character="hero", history=store)
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player._events.note(Mechanism.REPLAN, "G")
         state = make_state()
@@ -182,6 +186,7 @@ class TestPlayer:
 
     def test_a_cycle_that_persists_nothing_still_empties_the_buffer(self) -> None:
         player = GamePlayer(character="hero", history=None)
+        player._offline_timing = committed_timing()
         player._events.note(Mechanism.REPLAN, "G")
         state = make_state()
         player._record_learning_cycle(
@@ -193,6 +198,7 @@ class TestPlayer:
 
     def test_replan_and_cache_hit_are_noted(self) -> None:
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         goal = MagicMock()
         goal.__repr__ = lambda self: "Goal(x)"  # type: ignore[method-assign,assignment]
         state = make_state()
@@ -212,6 +218,7 @@ class TestPlayer:
         the arbiter picks the same goal the committed plan stays (its cursor
         too); a different goal replaces it."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         goal = MagicMock()
         goal.__repr__ = lambda self: "Goal(x)"  # type: ignore[method-assign,assignment]
         goal.is_satisfied.return_value = False

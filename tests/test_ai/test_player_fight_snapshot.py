@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.fight_record import FightRecord
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 
@@ -32,6 +33,7 @@ def _notify(action) -> CycleSnapshot:
     """Drive _notify_observer and return the snapshot handed to the observer."""
     calls: list[CycleSnapshot] = []
     player = GamePlayer(character="hero", cycle_observer=calls.append)
+    player._offline_timing = committed_timing()
     player.state = make_state(level=17)
     player._notify_observer(
         "FarmMonster(mushmush)", repr(action), "ok", goal_rank_trace=[],
@@ -77,6 +79,7 @@ def test_fight_survives_the_snapshot_round_trip():
 
 def _emit(action, tracer):
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     player.state = make_state(level=17)
     player.tracer = tracer
     player._emit_trace(

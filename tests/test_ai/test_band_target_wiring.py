@@ -7,6 +7,7 @@ import artifactsmmo_cli.ai.player as player_mod
 import artifactsmmo_cli.ai.tiers.band_target as band_target_mod
 import artifactsmmo_cli.ai.tiers.tier_progress as tier_progress_mod
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.tiers.band_target import BandTarget
 from tests.test_ai.fixtures import make_state
@@ -17,6 +18,7 @@ def test_the_band_asks_the_band_target_not_the_unbounded_projection(monkeypatch)
     """`_path_aligned_monster` used `cheapest_path_to_level`, whose candidate
     floor is 1. It must consult `band_combat_target` instead."""
     player = GamePlayer(character="Robby")
+    player._offline_timing = committed_timing()
     player.state = make_state(level=30)
     player.game_data = _make_planner_gd()
 
@@ -32,6 +34,7 @@ def test_the_band_asks_the_band_target_not_the_unbounded_projection(monkeypatch)
 def test_no_band_target_yields_no_band_pick(monkeypatch):
     """A gear wall surfaces as None."""
     player = GamePlayer(character="Robby")
+    player._offline_timing = committed_timing()
     player.state = make_state(level=30)
     player.game_data = _make_planner_gd()
 
@@ -74,6 +77,10 @@ def test_an_unfightable_band_target_is_no_band_pick(monkeypatch):
     gd._monster_hp = {"chicken": 60, "mushmush": 350, "highwayman": 500, "pig": 600}
 
     player = GamePlayer(character="Robby")
+
+    player._offline_timing = committed_timing()
+
+    player._offline_timing = committed_timing()
     player.state = make_state(level=10)
     player.game_data = gd
 
@@ -86,6 +93,7 @@ def test_unseeded_player_yields_no_path_aligned_monster():
     that has not yet been seeded must not reach `band_combat_target` (or
     `cheapest_path_to_level`) at all."""
     player = GamePlayer(character="Robby")
+    player._offline_timing = committed_timing()
     assert player.state is None
     assert player.game_data is None
     assert player._path_aligned_monster() is None
@@ -95,6 +103,7 @@ def test_a_band_candidate_is_priced_as_the_grind_target(monkeypatch):
     """`_band_loadout` prices each band candidate's loadout as if it were the
     grind target: the band context names it, on this cycle's bank access."""
     player = GamePlayer(character="Robby")
+    player._offline_timing = committed_timing()
     player.state = make_state(level=30)
     player.game_data = _make_planner_gd()
     seen = []

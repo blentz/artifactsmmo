@@ -15,6 +15,7 @@ import httpx
 import pytest
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 
@@ -23,6 +24,7 @@ PLANNER_STATS = {"nodes": 0, "depth": 0, "timed_out": False, "plan_len": 1}
 
 def _player() -> GamePlayer:
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     player.state = make_state(level=17)
     player.tracer = MagicMock()
     return player

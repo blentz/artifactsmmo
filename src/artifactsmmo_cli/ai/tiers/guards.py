@@ -205,7 +205,8 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
             return False
         if state.hp >= state.max_hp:
             return False
-        if predict_win(state, game_data, monster) and not rest_pays(state, game_data, monster):
+        if predict_win(state, game_data, monster) and not rest_pays(state, game_data, monster,
+                                                                    ctx.timing()):
             return False
         return predict_win(replace(state, hp=state.max_hp), game_data, monster)
     if kind is GuardKind.BANK_UNLOCK:

@@ -32,17 +32,18 @@ import pytest
 
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     scenario_state,
 )
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import attached, shared_world
 
 CELL = "l47_depth3_amulet"
@@ -125,9 +126,9 @@ def test_the_descent_reaches_two_levels_below_the_root(
     crafts further down. No other scenario produces a step that far from its
     root."""
     node = _root_node()
-    prereqs = prerequisites(node, state, bundle_game_data, NO_PROFILE_CONTEXT)
+    prereqs = prerequisites(node, state, bundle_game_data, TIMED_NO_PROFILE_CONTEXT)
     assert ObtainItem(code=TIER2, quantity=1) in prereqs
-    step = actionable_step(node, state, bundle_game_data, NO_PROFILE_CONTEXT)
+    step = actionable_step(node, state, bundle_game_data, TIMED_NO_PROFILE_CONTEXT)
     assert step == ObtainItem(code=LEAF, quantity=4)
 
 
@@ -141,10 +142,14 @@ def test_owning_the_intermediate_collapses_the_depth_and_the_answer(
     the depth-3 leg, not by anything else about this character."""
     held = dataclasses.replace(
         state, inventory={**state.inventory, TIER2: 1})
-    step = actionable_step(_root_node(), held, bundle_game_data, NO_PROFILE_CONTEXT)
+    step = actionable_step(_root_node(), held, bundle_game_data, TIMED_NO_PROFILE_CONTEXT)
     assert step == ObtainItem(code=TIER2, quantity=1)
 
     player = GamePlayer(character=CELL, history=None)
+
+    player._offline_timing = committed_timing()
+
+    player._offline_timing = committed_timing()
     player.seed_offline(held, bundle_game_data)
     report = player.plan_from_state()
     assert "EquipOwnedGear" in repr(report.selected_goal)
@@ -155,6 +160,7 @@ def test_the_cell_plans_the_bottom_of_the_chain_inside_the_budget(
     """End to end: the selected goal is the raw material at the bottom of a
     three-deep closure, and the plan is the gather that starts it."""
     player = GamePlayer(character=CELL, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(state, bundle_game_data)
     report = player.plan_from_state()
     assert repr(report.selected_goal) == f"GatherMaterials({LEAF}, {{{LEAF}:4}})"
@@ -169,7 +175,7 @@ def test_the_objectives_first_missing_piece_is_the_depth_three_amulet(
     """The docstring's claim since the global gear objective, asserted: the
     cell's `L*` names the depth-3 amulet as its first missing piece, and the
     walk resolves it as the root."""
-    ctx = attached(state, bundle_game_data, NO_PROFILE_CONTEXT, None)
+    ctx = attached(state, bundle_game_data, TIMED_NO_PROFILE_CONTEXT, None)
     assert ctx.gear_objective is not None
     assert ctx.gear_objective.missing[0].code == ROOT
     resolution = resolve_root(state, bundle_game_data,

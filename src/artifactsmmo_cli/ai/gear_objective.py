@@ -53,14 +53,14 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.combat import fight_loadout
-from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.decompose_core import can_obtain
 from artifactsmmo_cli.ai.equipment.loadout_picker import _benefit, _ordered_slots
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.equipment.realizable_loadout import ownership
 from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
-from artifactsmmo_cli.ai.fight_walk import odds_walk
+from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
+from artifactsmmo_cli.ai.fight_walk import odds_walk, walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_core import achievable_layers, layer_of, piece_order_key
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
@@ -144,7 +144,7 @@ def _wearing(state: WorldState, loadout: Mapping[str, str | None],
                    dmg_elements=stats.dmg_elements, resistance=stats.resistance,
                    critical_strike=stats.critical_strike, initiative=stats.initiative,
                    max_hp=stats.max_hp, hp=stats.max_hp, wisdom=stats.wisdom,
-                   prospecting=stats.prospecting)
+                   prospecting=stats.prospecting, haste=stats.haste)
 
 
 def _bare(state: WorldState, items: frozenset[str], game_data: GameData) -> WorldState:
@@ -168,7 +168,8 @@ def _totals(state: WorldState) -> list[tuple[str, int]]:
     """Every combat stat total `_wearing` projects, by name."""
     totals = [("dmg", state.dmg), ("critical_strike", state.critical_strike),
               ("initiative", state.initiative), ("max_hp", state.max_hp),
-              ("wisdom", state.wisdom), ("prospecting", state.prospecting)]
+              ("wisdom", state.wisdom), ("prospecting", state.prospecting),
+              ("haste", state.haste)]
     for name, by_element in (("attack", state.attack), ("dmg_elements", state.dmg_elements),
                              ("resistance", state.resistance)):
         totals.extend((f"{name}.{element}", value) for element, value in by_element.items())
@@ -285,18 +286,19 @@ def _combat(game_data: GameData, monster: str, state: WorldState) -> Combat:
 
 
 def _rate(fighter: WorldState, game_data: GameData, monster: str,
-          food: tuple[FoodOffer, ...]) -> Fraction:
+          food: tuple[FoodOffer, ...], timing: FightSecondsModel) -> Fraction:
     """`R`: XP per second of farming `monster` in `fighter`'s worn gear with no
-    potion, recovering over `food` (see the module doc's `R`). The no-potion
-    loop drinks nothing, so it has no potion price and always runs."""
-    loop = loop_rate(fighter, game_data, monster, (), food, {})
+    potion, recovering over `food`, each fight lasting its learned seconds
+    (`timing`, spec §2.9; see the module doc's `R`). The no-potion loop drinks
+    nothing, so it has no potion price and always runs."""
+    loop = loop_rate(fighter, game_data, monster, (), food, {}, timing)
     if loop is None:
         raise RuntimeError(f"the no-potion loop against {monster} did not run")
     return loop.xp_per_second
 
 
 def _rated(targets: Mapping[str, tuple[WorldState, dict[str, str]]], game_data: GameData,
-           food: tuple[FoodOffer, ...]) -> list[tuple[str, Fraction]]:
+           food: tuple[FoodOffer, ...], timing: FightSecondsModel) -> list[tuple[str, Fraction]]:
     """`(m, R)` for every candidate that can be the argmax, in candidate order.
 
     A candidate is a fight the executor will take once `L*(m)` is worn: the
@@ -308,14 +310,16 @@ def _rated(targets: Mapping[str, tuple[WorldState, dict[str, str]]], game_data: 
     would read "held" while every fight against it is refused.
 
     `R` is the no-potion loop's win odds times a kill's XP over the fight's
-    seconds plus a non-negative recovery and walk back (`loop_rate`), so it
-    never exceeds the odds times the XP over the fight alone. Candidates are
+    seconds (`walk_seconds`, the same the loop reads) plus a non-negative
+    recovery and walk back (`loop_rate`), so it never exceeds the odds times
+    the XP over the fight alone. Candidates are
     rated in falling order of that bound, and the walk stops at the first whose
     bound is below the best `R` found: it and every later one can neither reach
     nor tie it. The answer is the one rating them all gives; only the work
     differs (the recovery programme is most of the objective's time)."""
     bound = {code: odds_win(odds_walk(fighter, game_data, code, ())[0])
-             * game_data.xp_per_kill(code, fighter.level, fighter.wisdom) / FIGHT_SECONDS
+             * game_data.xp_per_kill(code, fighter.level, fighter.wisdom)
+             / walk_seconds(fighter, game_data, code, (), timing)
              for code, (fighter, _) in targets.items()}
     rates: dict[str, Fraction] = {}
     for code in sorted(targets, key=bound.__getitem__, reverse=True):
@@ -323,7 +327,7 @@ def _rated(targets: Mapping[str, tuple[WorldState, dict[str, str]]], game_data: 
             break
         if not drop_fight_winnable(targets[code][0], game_data, code):
             continue
-        rates[code] = _rate(targets[code][0], game_data, code, food)
+        rates[code] = _rate(targets[code][0], game_data, code, food, timing)
     return [(code, rates[code]) for code in targets if code in rates]
 
 
@@ -409,8 +413,9 @@ def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext
     layers = achievable(state, game_data, ctx)
     depth = layer_of(layers)
     food = food_menu(state, game_data, ctx, history)
+    timing = ctx.timing()
     targets = _targets(state, game_data, frozenset(depth))
-    rated = _rated(targets, game_data, food)
+    rated = _rated(targets, game_data, food, timing)
     if not rated or max(rate for _, rate in rated) <= 0:
         return None
     best = max((rate, game_data.monster_levels[code]) for code, rate in rated)
@@ -425,7 +430,7 @@ def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext
 
     def rate_owning(items: frozenset[str]) -> Fraction:
         fighter, _ = _target(_bare(state, items, game_data), game_data, monster)
-        return _rate(fighter, game_data, monster, food)
+        return _rate(fighter, game_data, monster, food, timing)
 
     owned = rate_owning(frozenset())
     gains = {code: rate_owning(frozenset({code})) - owned for _, code in pieces_of[monster]}
@@ -436,4 +441,5 @@ def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext
     # as zero gain, last within its layer (ruling E: no floor above zero).
     pieces.sort(key=lambda piece: piece_order_key(piece.layer, max(piece.gain, Fraction(0)),
                                                   piece.price, rank.index(piece.slot)))
-    return GearObjective(monster, loadouts[monster], best[0], tuple(pieces))
+    return GearObjective(monster, loadouts[monster], best[0], tuple(pieces),
+                         fighter=targets[monster][0])

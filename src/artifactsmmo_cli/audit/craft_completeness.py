@@ -28,6 +28,7 @@ from artifactsmmo_cli.ai.goals.reach_currency import funding_step_goal
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
@@ -42,6 +43,10 @@ from artifactsmmo_cli.ai.tiers.objective import (
     is_suppliable,
 )
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
+
+_OFFLINE_CONTEXT = offline_context(NO_PROFILE_CONTEXT)
+"""The no-profile context carrying the committed capture's fight and action
+seconds (spec 2026-10-18 §2.9): this offline sweep prices time like a live cycle."""
 
 CRAFT_AUDIT_BUDGET_SECONDS = 10.0
 """Per-cell planner budget — the arbiter's cheap first-pass value; keeps the
@@ -161,10 +166,10 @@ def plan_craft(recipe: str, state: WorldState, game_data: GameData, grey: bool =
     goal = GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}, skill_grind=grey,
                                exclude_recycle=keep)
     arbiter = StrategyArbiter(GOAPPlanner(), None)
-    ctx = SelectionContext(
+    ctx = offline_context(SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=0, combat_monster=None,
-    )
+    ))
     return arbiter._plans(goal, state, game_data, actions, ctx,
                           budget_seconds=CRAFT_AUDIT_BUDGET_SECONDS)
 
@@ -185,8 +190,8 @@ def funding_plan(recipe: str, state: WorldState, game_data: GameData) -> list[Ac
     goal = funding_step_goal(currency, amount, state, game_data)
     actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
                             bank_accessible=True, task_exchange_min_coins=0)
-    ctx = SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
-                           initial_xp=0, task_exchange_min_coins=0, combat_monster=None)
+    ctx = offline_context(SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
+                           initial_xp=0, task_exchange_min_coins=0, combat_monster=None))
     return StrategyArbiter(GOAPPlanner(), None)._plans(
         goal, state, game_data, actions, ctx,
         budget_seconds=CRAFT_AUDIT_BUDGET_SECONDS)
@@ -427,7 +432,7 @@ def advances_a_heal_prep(first: Action, plan: list[Action], state: WorldState,
     fight = next((a for a in plan if isinstance(a, FightAction)), None)
     if fight is None:
         return False
-    prep = heal_prep_goal(state, game_data, NO_PROFILE_CONTEXT, fight.monster_code)
+    prep = heal_prep_goal(state, game_data, _OFFLINE_CONTEXT, fight.monster_code)
     if prep is None:
         return False
     for item in prep.needed:
@@ -894,8 +899,8 @@ def _crossing_unaffordable(recipe: str, state: WorldState, game_data: GameData) 
         return False
     actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
                             bank_accessible=True, task_exchange_min_coins=0)
-    ctx = SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
-                           initial_xp=0, task_exchange_min_coins=0, combat_monster=None)
+    ctx = offline_context(SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
+                           initial_xp=0, task_exchange_min_coins=0, combat_monster=None))
     declined: list[str] = []
     decompose(GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}), state, game_data,
               actions, ctx, declined)

@@ -14,9 +14,10 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
-from tests.test_ai.fixtures import make_state, one_equippable_item_page
+from tests.test_ai.fixtures import LOG_PAGE, make_state, one_equippable_item_page
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
@@ -220,9 +221,11 @@ class TestGameDataPaginationContinues:
 
 
 class TestPlayerRunVerboseAndExecute:
+    @patch("artifactsmmo_cli.ai.player.fetch_log_entries", new=lambda *_args: LOG_PAGE)
     def test_run_finds_plan_and_executes(self):
         """Test run() when a plan is found and executed (non-dry-run)."""
         player = GamePlayer(character="hero", verbose=True)
+        player._offline_timing = committed_timing()
         char_after_rest = make_char_schema(hp=150, max_hp=150)
         client = MagicMock()
 
@@ -275,9 +278,11 @@ class TestPlayerRunVerboseAndExecute:
         assert player.state is not None
         assert player.state.hp == 150  # Rest was executed
 
+    @patch("artifactsmmo_cli.ai.player.fetch_log_entries", new=lambda *_args: LOG_PAGE)
     def test_run_dry_run_finds_plan_and_applies(self):
         """Test run() dry_run path when a plan is found."""
         player = GamePlayer(character="hero", dry_run=True)
+        player._offline_timing = committed_timing()
         client = MagicMock()
 
         # Below the 25% critical-HP guard threshold so RestoreHP fires as a guard.
@@ -392,6 +397,7 @@ class TestBuildActionsWithCraftingRecipes:
             workshop_locs={"weaponcrafting": (3, 0)},
         )
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.game_data = gd
         player.state = make_state()
 
@@ -418,6 +424,7 @@ class TestBuildActionsWithCraftingRecipes:
             recipes={"mystery_item": {"copper_ore": 6}},
         )
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.game_data = gd
         player.state = make_state()
 

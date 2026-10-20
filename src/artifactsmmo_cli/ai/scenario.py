@@ -187,6 +187,7 @@ class _CombatTotals:
     hp_bonus: int = 0
     wisdom: int = 0
     prospecting: int = 0
+    haste: int = 0
 
 
 def _derived_combat_totals(
@@ -208,6 +209,7 @@ def _derived_combat_totals(
     hp_bonus = 0
     wisdom = 0
     prospecting = 0
+    haste = 0
     for slot, code in equipment.items():
         if code is None or slot.startswith("utility"):
             continue
@@ -226,6 +228,7 @@ def _derived_combat_totals(
         hp_bonus += stats.hp_bonus
         wisdom += stats.wisdom
         prospecting += stats.prospecting
+        haste += stats.haste
     return _CombatTotals(
         attack={k: v for k, v in attack.items() if v},
         dmg=dmg,
@@ -236,6 +239,7 @@ def _derived_combat_totals(
         hp_bonus=hp_bonus,
         wisdom=wisdom,
         prospecting=prospecting,
+        haste=haste,
     )
 
 
@@ -296,6 +300,7 @@ def scenario_state(sc: ScenarioCharacter,
         initiative=combat.initiative,
         wisdom=combat.wisdom,
         prospecting=combat.prospecting,
+        haste=combat.haste,
     )
 
 
@@ -1841,11 +1846,14 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # highwayman, read off the committed bundle — on its gear's own totals.
     "l14_wears_its_target": ScenarioCharacter(
         name="l14_wears_its_target", level=14,
-        equipment={"weapon_slot": "greater_wooden_staff", "shield_slot": "iron_shield",
-                   "helmet_slot": "leather_hat", "body_armor_slot": "leather_armor",
-                   "leg_armor_slot": "leather_legs_armor", "boots_slot": "iron_boots",
+        # RE-FIXED-POINT spec 2026-10-18 §2.9 (a fight's seconds are its
+        # learned length): `L*` moved from the highwayman set to the one that
+        # kills `blue_slime` fastest; this is that set, worn.
+        equipment={"weapon_slot": "forest_staff", "shield_slot": "iron_shield",
+                   "helmet_slot": "adventurer_helmet", "body_armor_slot": "iron_armor",
+                   "leg_armor_slot": "iron_legs_armor", "boots_slot": "iron_boots",
                    "ring1_slot": "forest_ring", "ring2_slot": "forest_ring",
-                   "amulet_slot": "air_and_water_amulet"},
+                   "amulet_slot": "fire_and_earth_amulet"},
         derive_combat_stats=True,
         description="Held objective: wears its own L*, so the root is the "
                     "next character level, fought on m*."),

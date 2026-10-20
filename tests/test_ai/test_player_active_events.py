@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.live_event import LiveEvent
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -24,6 +25,7 @@ def _event(code, expiry, x=10, y=1, layer="overworld"):
 class TestFetchActiveEvents:
     def test_returns_empty_on_none_response(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=None):
             result = player._fetch_active_events(client)
@@ -31,6 +33,7 @@ class TestFetchActiveEvents:
 
     def test_returns_empty_on_empty_data(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         page = MagicMock()
         page.data = []
@@ -40,6 +43,7 @@ class TestFetchActiveEvents:
 
     def test_maps_code_to_expiration(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         expiry = datetime(2026, 5, 20, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -55,6 +59,7 @@ class TestFetchActiveEvents:
         """Two rows of one event (two instances) are one event on both maps,
         live until the later expiry."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         early = datetime(2026, 10, 18, 2, 0, tzinfo=timezone.utc)
         late = datetime(2026, 10, 18, 2, 30, tzinfo=timezone.utc)
         page = MagicMock()
@@ -67,6 +72,7 @@ class TestFetchActiveEvents:
 
     def test_paginates_when_full_page_returned(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         expiry1 = datetime(2026, 5, 20, 12, 0, 0, tzinfo=timezone.utc)
         expiry2 = datetime(2026, 5, 20, 13, 0, 0, tzinfo=timezone.utc)
@@ -89,6 +95,7 @@ class TestFetchActiveEvents:
     def test_stops_after_partial_page(self):
         """Stops pagination when page returns fewer than 100 items."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         expiry = datetime(2026, 5, 20, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -107,6 +114,7 @@ class TestFetchActiveEvents:
     def test_retries_transient_httperror_then_succeeds(self):
         """A one-off ReadTimeout is retried, not fatal — matches get_character resilience."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         expiry = datetime(2026, 5, 20, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -126,6 +134,7 @@ class TestFetchActiveEvents:
     def test_returns_empty_when_httperror_persists(self):
         """A persistent transient error returns empty (events are non-critical), never raises."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
 
         with patch(
@@ -142,6 +151,7 @@ class TestFetchWorldStateActiveEvents:
     def test_active_events_in_returned_world_state(self):
         """_fetch_world_state passes active_events into WorldState."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = None
         char = make_char_schema()
         client = MagicMock()
@@ -166,6 +176,7 @@ class TestFetchWorldStateActiveEvents:
         """Each world fetch hands the planner the tiles the live events stand
         on; an expired one (a cached read up to a TTL stale) stands nowhere."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = None
         player.game_data = GameData()
         now = datetime.now(timezone.utc)
@@ -190,6 +201,7 @@ class TestFetchWorldStateActiveEvents:
         history.fleet_recycle_totals.return_value = {"copper_helmet": 2}
         history.fleet_craft_yields.return_value = {"copper_bar": 1}
         player = GamePlayer(character="hero", history=history)
+        player._offline_timing = committed_timing()
         player.state = None
         player.game_data = GameData()
         empty_page = MagicMock()
@@ -205,6 +217,7 @@ class TestFetchWorldStateActiveEvents:
     def test_active_events_empty_when_no_events(self):
         """_fetch_world_state yields empty active_events when API returns nothing."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = None
         char = make_char_schema()
         client = MagicMock()

@@ -17,12 +17,17 @@ from artifactsmmo_cli.ai.goals.reach_unlock_level import (
     PRIORITY_WHEN_BLOCKER_ACTIVE,
     ReachUnlockLevelGoal,
 )
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import combat_key
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.tiers.band_target import BandTarget
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
+
+TIMING = committed_timing()[0]
+"""The committed live capture's fight-seconds fit (spec 2026-10-18 §2.9)."""
 
 
 class TestBlockerPersistence:
@@ -98,6 +103,7 @@ class TestDropStaleBankLock:
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         store.set_blocker("bank", "sea_marauder", required_level=44)
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.history = store
         player._blockers = BlockerRegistry.load(store, known_codes=["bank"])
         gd = GameData()
@@ -201,6 +207,7 @@ class TestPickWinnableMonster:
         The player is a capable fire attacker."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
+        player._offline_timing = committed_timing()
         gd = GameData()
         gd._monster_level = monster_levels
         gd._monster_locations = {c: [(i, 0)] for i, c in enumerate(gd._monster_level)}
@@ -299,6 +306,7 @@ class TestPathAlignedMonster:
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player.game_data._monster_level = {"chicken": 1, "yellow_slime": 2}
         player.game_data._monster_locations = {c: [(i, 0)] for i, c in enumerate(player.game_data._monster_level)}
@@ -311,13 +319,14 @@ class TestPathAlignedMonster:
         player.game_data._monster_attack = {"chicken": {}, "yellow_slime": {}}
         player.game_data._monster_resistance = {"chicken": {}, "yellow_slime": {}}
         player.game_data._monster_critical_strike = {"chicken": 0, "yellow_slime": 0}
+        fill_monster_stat_defaults(player.game_data)
         player.state = make_state(level=1, xp=0, max_xp=100, character="hero")
 
         # Sanity: the REAL projection picks yellow_slime, not chicken, for
         # this fixture — confirmed directly, not assumed — so asserting
         # "chicken" below can only be explained by the delegation.
         real_plan = cheapest_path_to_level(
-            player.game_data.max_character_level, player.state, store, player.game_data)
+            player.game_data.max_character_level, player.state, store, player.game_data, TIMING)
         assert real_plan.next_action_monster == "yellow_slime", (
             "fixture's real projection must disagree with the mock below "
             f"for this test to say anything about the delegation; got "
@@ -349,6 +358,7 @@ class TestPathAlignedMonster:
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player.game_data._monster_level = {"chicken": 1, "yellow_slime": 2}
         player.game_data._monster_locations = {c: [(i, 0)] for i, c in enumerate(player.game_data._monster_level)}
@@ -357,13 +367,14 @@ class TestPathAlignedMonster:
         player.game_data._monster_attack = {"chicken": {}, "yellow_slime": {}}
         player.game_data._monster_resistance = {"chicken": {}, "yellow_slime": {}}
         player.game_data._monster_critical_strike = {"chicken": 0, "yellow_slime": 0}
+        fill_monster_stat_defaults(player.game_data)
         player.state = make_state(level=1, xp=0, max_xp=100, character="hero")
 
         # Sanity: the REAL projection has a non-None recommendation for this
         # fixture — confirmed directly, not assumed — so a None result below
         # cannot be explained by the projection being blocked anyway.
         real_plan = cheapest_path_to_level(
-            player.game_data.max_character_level, player.state, store, player.game_data)
+            player.game_data.max_character_level, player.state, store, player.game_data, TIMING)
         assert real_plan.next_action_monster is not None, (
             "fixture must have a real, non-None projection recommendation "
             "for this test to say anything about the delegation")
@@ -380,6 +391,7 @@ class TestPathAlignedMonster:
         unlike the old projection-only tier, a missing store no longer
         forces a fall-through to the windowed picker."""
         player = GamePlayer(character="hero", history=None)
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player.game_data._monster_level = {"chicken": 1}
         player.game_data._monster_locations = {c: [(i, 0)] for i, c in enumerate(player.game_data._monster_level)}

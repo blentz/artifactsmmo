@@ -47,13 +47,13 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, TurnIn
+from artifactsmmo_cli.ai.selection_context import TurnIn
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.audit.drop_wall_census import unwinnable_drop_items
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 from tests.test_ai.shared_world import shared_world
 from tests.test_ai.test_strategy_driver import (
     _ctx,
@@ -88,11 +88,11 @@ def test_objective_step_goal_forwards_to_the_graph(scenario_name, bundle_game_da
     for step_code, root_code in _step_root_pairs(gd):
         step = ObtainItem(code=step_code, quantity=1)
         root = ObtainItem(code=root_code, quantity=1)
-        production = objective_step_goal(step, state, gd, NO_PROFILE_CONTEXT,
+        production = objective_step_goal(step, state, gd, TIMED_NO_PROFILE_CONTEXT,
                                          root=root,
                                          history=None)
         graph = resolve_node(obtain_item_decision(step, root), state, gd,
-                             NO_PROFILE_CONTEXT, None)
+                             TIMED_NO_PROFILE_CONTEXT, None)
         assert repr(production) == repr(graph), (
             f"{scenario_name}/step={step_code}/root={root_code}: "
             f"objective_step_goal={production!r} graph={graph!r}")
@@ -112,7 +112,7 @@ def test_a_skill_gated_root_raises_the_skill_by_one(bundle_game_data):
     state = make_state(level=30, skills={"weaponcrafting": 10})
 
     goal = resolve_node(obtain_item_decision(step, root), state, gd,
-                        NO_PROFILE_CONTEXT, None)
+                        TIMED_NO_PROFILE_CONTEXT, None)
 
     assert repr(goal) == "ReachSkill(weaponcrafting->11)"
 
@@ -143,7 +143,7 @@ def test_a_skill_gated_step_that_is_itself_the_equippable_raises_the_skill(
     state = make_state(level=30, skills={"weaponcrafting": 10})
 
     goal = resolve_node(obtain_item_decision(step, step), state, gd,
-                        NO_PROFILE_CONTEXT, None)
+                        TIMED_NO_PROFILE_CONTEXT, None)
 
     assert repr(goal) == "ReachSkill(weaponcrafting->11)"
 
@@ -162,7 +162,7 @@ def test_a_skill_gated_equippable_ALREADY_OWNED_is_not_ground_for(
                        inventory={"gold_sword": 1})
 
     goal = resolve_node(obtain_item_decision(step, step), state, gd,
-                        NO_PROFILE_CONTEXT, None)
+                        TIMED_NO_PROFILE_CONTEXT, None)
 
     assert "ReachSkill" not in repr(goal), (
         "owned gear needs equipping, not a skill grind")
@@ -178,7 +178,7 @@ def test_a_skill_gated_equippable_held_in_the_BANK_is_not_ground_for(
                        inventory={}, bank_items={"gold_sword": 1})
 
     goal = resolve_node(obtain_item_decision(step, step), state, gd,
-                        NO_PROFILE_CONTEXT, None)
+                        TIMED_NO_PROFILE_CONTEXT, None)
 
     assert "ReachSkill" not in repr(goal)
 
@@ -210,7 +210,7 @@ def test_a_skill_gated_equippable_a_VENDOR_SELLS_is_not_ground_for():
                        inventory={}, bank_items={})
 
     goal = resolve_node(obtain_item_decision(step, step), state, gd,
-                        NO_PROFILE_CONTEXT, None)
+                        TIMED_NO_PROFILE_CONTEXT, None)
 
     assert "ReachSkill" not in repr(goal), (
         "a permanent vendor sells it — buy it rather than grinding 20 levels")
@@ -230,9 +230,9 @@ def test_a_dormant_event_vendor_does_not_suppress_the_skill_gate(
     state = make_state(level=30, skills={"alchemy": 1}, gold=10_000)
 
     assert obtain_sources("minor_health_potion", state, gd,
-                          NO_PROFILE_CONTEXT) == []
+                          TIMED_NO_PROFILE_CONTEXT) == []
     goal = resolve_node(obtain_item_decision(step, step), state, gd,
-                        NO_PROFILE_CONTEXT, None)
+                        TIMED_NO_PROFILE_CONTEXT, None)
 
     assert repr(goal) == "ReachSkill(alchemy->2)"
 
@@ -248,7 +248,7 @@ def test_an_equippable_step_whose_skill_is_adequate_still_routes_to_gear(
     state = make_state(level=30, skills={"weaponcrafting": 30})
 
     goal = resolve_node(obtain_item_decision(step, step), state, gd,
-                        NO_PROFILE_CONTEXT, None)
+                        TIMED_NO_PROFILE_CONTEXT, None)
 
     assert "ReachSkill" not in repr(goal)
 
@@ -271,9 +271,9 @@ def test_objective_step_goal_funds_the_currency_leaf():
     gd._npc_locations = {"tasks_trader": (4, 1)}
     state = make_state(skills={"gearcrafting": 5}, inventory={}, bank_items={}, x=0, y=0)
     step = ObtainItem("satchel", 1)
-    production = objective_step_goal(step, state, gd, NO_PROFILE_CONTEXT, root=step)
+    production = objective_step_goal(step, state, gd, TIMED_NO_PROFILE_CONTEXT, root=step)
     graph = resolve_node(obtain_item_decision(step, step), state, gd,
-                         NO_PROFILE_CONTEXT, None)
+                         TIMED_NO_PROFILE_CONTEXT, None)
     assert isinstance(production, ReachCurrencyGoal)
     assert repr(graph) == repr(production)
 
@@ -288,9 +288,9 @@ def test_objective_step_goal_returns_the_reachable_root_chunk():
     state = make_state()
     step = ObtainItem("ash_plank", 6)
     root = ObtainItem("wooden_shield", 1)
-    production = objective_step_goal(step, state, gd, NO_PROFILE_CONTEXT, root=root)
+    production = objective_step_goal(step, state, gd, TIMED_NO_PROFILE_CONTEXT, root=root)
     graph = resolve_node(obtain_item_decision(step, root), state, gd,
-                         NO_PROFILE_CONTEXT, None)
+                         TIMED_NO_PROFILE_CONTEXT, None)
     assert isinstance(production, UpgradeEquipmentGoal)
     assert repr(graph) == repr(production)
 
@@ -415,11 +415,11 @@ def test_a_material_walled_by_an_unbeatable_dropper_routes_to_the_GEAR(
     gd = bundle_game_data
     state = _with_skill_xp(scenario_state(SCENARIOS["l12_deep_chain_grind"], gd))
     step = ObtainItem(code="cowhide", quantity=5)
-    assert not obtain_sources("cowhide", state, gd, NO_PROFILE_CONTEXT)
+    assert not obtain_sources("cowhide", state, gd, TIMED_NO_PROFILE_CONTEXT)
     store = _grind_store()
     try:
         goal = resolve_node(obtain_item_decision(step, step), state, gd,
-                            NO_PROFILE_CONTEXT, store)
+                            TIMED_NO_PROFILE_CONTEXT, store)
         assert "cowhide" not in repr(goal), (
             f"still routing to the walled material itself: {goal!r}")
         assert "weaponcrafting" in repr(goal) or "iron_sword" in repr(goal), (
@@ -441,7 +441,7 @@ def test_without_a_grind_rate_the_node_declines(bundle_game_data) -> None:
     state = _with_skill_xp(scenario_state(SCENARIOS["l12_deep_chain_grind"], gd))
     step = ObtainItem(code="cowhide", quantity=5)
     goal = resolve_node(obtain_item_decision(step, step), state, gd,
-                        NO_PROFILE_CONTEXT, None)
+                        TIMED_NO_PROFILE_CONTEXT, None)
     assert repr(goal) == "GatherMaterials(cowhide, {cowhide:5})"
 
 
@@ -451,9 +451,9 @@ def test_a_material_with_a_route_is_untouched(bundle_game_data) -> None:
     gd = bundle_game_data
     state = scenario_state(SCENARIOS["l12_deep_chain_grind"], gd)
     step = ObtainItem(code="copper_ore", quantity=5)
-    assert obtain_sources("copper_ore", state, gd, NO_PROFILE_CONTEXT)
+    assert obtain_sources("copper_ore", state, gd, TIMED_NO_PROFILE_CONTEXT)
     goal = resolve_node(obtain_item_decision(step, step), state, gd,
-                        NO_PROFILE_CONTEXT, None)
+                        TIMED_NO_PROFILE_CONTEXT, None)
     assert "copper_ore" in repr(goal)
 
 
@@ -472,10 +472,10 @@ def test_an_unreachable_closing_chain_keeps_the_honest_wall(
     step = ObtainItem(code="king_slimeball", quantity=4)
     store = _grind_store()
     try:
-        assert [s.code for s in obtain_sources("mushroom", state, gd, NO_PROFILE_CONTEXT)] == ["mushmush"]
-        assert not obtain_sources("king_slimeball", state, gd, NO_PROFILE_CONTEXT)
+        assert [s.code for s in obtain_sources("mushroom", state, gd, TIMED_NO_PROFILE_CONTEXT)] == ["mushmush"]
+        assert not obtain_sources("king_slimeball", state, gd, TIMED_NO_PROFILE_CONTEXT)
         goal = resolve_node(obtain_item_decision(step, step), state, gd,
-                            NO_PROFILE_CONTEXT, store)
+                            TIMED_NO_PROFILE_CONTEXT, store)
         assert repr(goal) == "GatherMaterials(king_slimeball, {king_slimeball:4})"
     finally:
         store.end_session(exit_reason="normal")
@@ -505,7 +505,15 @@ def test_where_the_wall_is_reached_and_why_no_cycle_acts_on_it() -> None:
     Since the global gear objective (Task 5) the roots are each scenario's
     `L*` pieces, so which cells reach a wall moved with them; both claims
     still hold over the corpus and are asserted as before. Swept on the
-    process-wide bundle world (ruling AD)."""
+    process-wide bundle world (ruling AD).
+
+    THAT DAY CAME with spec 2026-10-18 §2.9 (a fight's seconds are its
+    learned length). `l10_weapon_upgrade`'s `L*` weapon is now the
+    `greater_wooden_staff`, and its walled `blue_slimeball` is the CHOSEN root
+    (`IsThisTargetBlocked`): the one cell in the corpus that acts on this
+    node. The arbiter serves it with `UpgradeEquipment(iron_sword)`, the banked
+    gear that beats the dropper (`test_goldens`). Every other reach is still an
+    alternative."""
     gd = shared_world(BUNDLE)
     store = _grind_store()
     reached: list[tuple[str, bool]] = []
@@ -516,15 +524,15 @@ def test_where_the_wall_is_reached_and_why_no_cycle_acts_on_it() -> None:
             # by the one function the player uses (ruling W).
             resolution = resolve_root(state, gd,
                                       CharacterObjective.from_game_data(gd),
-                                      attach_gear_objective(state, gd, NO_PROFILE_CONTEXT,
+                                      attach_gear_objective(state, gd, TIMED_NO_PROFILE_CONTEXT,
                                                             store),
                                       store)
             walled = set(unwinnable_drop_items(state, gd))
             for root in [c for c in (resolution.root, *resolution.alternatives)
                          if c is not None]:
-                step = actionable_step(root, state, gd, NO_PROFILE_CONTEXT) or root
+                step = actionable_step(root, state, gd, TIMED_NO_PROFILE_CONTEXT) or root
                 if (not isinstance(step, ObtainItem) or step.code not in walled
-                        or obtain_sources(step.code, state, gd, NO_PROFILE_CONTEXT)):
+                        or obtain_sources(step.code, state, gd, TIMED_NO_PROFILE_CONTEXT)):
                     continue
                 reached.append((name, root is resolution.root))
     finally:
@@ -533,9 +541,9 @@ def test_where_the_wall_is_reached_and_why_no_cycle_acts_on_it() -> None:
     assert len(reached) >= 2, (
         f"only {len(reached)} walled steps reached — the fixture set moved and "
         "this test now measures less than it claims")
-    assert not any(is_chosen for _name, is_chosen in reached), (
-        "a walled step is now on a CHOSEN root's path — this node finally acts "
-        "on a live cycle, and the docstring above needs rewriting")
+    assert [name for name, is_chosen in reached if is_chosen] == ["l10_weapon_upgrade"], (
+        "the walled steps on a CHOSEN root's path moved — the docstring above "
+        "needs rewriting")
 
 
 def test_a_currency_under_a_live_turn_in_is_not_routed_to_an_equip(
@@ -578,14 +586,14 @@ def test_a_currency_under_a_live_turn_in_is_not_routed_to_an_equip(
     step = ObtainItem(code=code, quantity=1, slot="artifact1_slot")
     state = make_state(level=30, inventory={code: 1})
     live = dataclasses.replace(
-        NO_PROFILE_CONTEXT,
+        TIMED_NO_PROFILE_CONTEXT,
         turn_in=TurnIn(item_code="lich_race_trophy", npc_code="archaeologist",
                        price=10, currency=code, buyer="HAL", fleet_total=11))
 
     # Vacuity guard: with no live claim this step DOES route to the equip, so
     # the difference below is the reservation and nothing else.
     unreserved = resolve_node(obtain_item_decision(step, step), state, gd,
-                              NO_PROFILE_CONTEXT, None)
+                              TIMED_NO_PROFILE_CONTEXT, None)
     assert unreserved is not None and "UpgradeEquipment" in repr(unreserved), \
         f"fixture drift: the unreserved step no longer equips ({unreserved!r})"
 

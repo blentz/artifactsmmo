@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import (
     FAR_FUTURE,
@@ -150,9 +151,11 @@ def test_seed_offline_seeds_active_event_codes_from_state() -> None:
     gd = load_bundle_game_data(BUNDLE)
     sc = ScenarioCharacter(name="t", level=5, active_events=("corrupted_ogre",))
     player = GamePlayer(character="t", history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(scenario_state(sc), gd)
     assert gd.active_event_codes == {"corrupted_ogre"}
     # and an event-less state clears any stale overlay
     player2 = GamePlayer(character="t", history=None)
+    player2._offline_timing = committed_timing()
     player2.seed_offline(scenario_state(ScenarioCharacter(name="t", level=5)), gd)
     assert gd.active_event_codes == set()

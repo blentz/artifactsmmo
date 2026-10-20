@@ -16,6 +16,7 @@ import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
 import artifactsmmo_cli.ai.player as player_mod
 import artifactsmmo_cli.ai.task_worth as mod
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.task_worth import pool_draw
@@ -98,6 +99,7 @@ def test_an_empty_or_out_of_level_pool_is_never_drawn(worthy) -> None:
 class TestPlayerContext:
     def _player(self, monkeypatch) -> GamePlayer:  # type: ignore[no-untyped-def]
         player = GamePlayer(character="probe", history=None)
+        player._offline_timing = committed_timing()
         player.state = make_state(task_code=None, task_total=0)
         player.game_data = GameData()
         monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: None)

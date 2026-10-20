@@ -16,7 +16,10 @@ Proved in `Formal.FightSeconds` (monotone in turns, antitone in haste for
 """
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from fractions import Fraction
+
+from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS
 
 
 def fight_seconds(turns: Fraction, s_turn: Fraction, h: Fraction, haste: int,
@@ -27,6 +30,43 @@ def fight_seconds(turns: Fraction, s_turn: Fraction, h: Fraction, haste: int,
         raise ValueError(f"fight_seconds out of range: turns {turns}, s_turn {s_turn}, "
                          f"h {h}, haste {haste}, floor {floor}")
     return max(floor, turns * s_turn * (1 - h * haste))
+
+
+def server_turns(rounds: int, win: bool, player_first: bool) -> int:
+    """The server's `fight.turns` of a fight the combat model ends in round
+    `rounds` (each round is one turn of each side; the server counts each
+    side's turn). A win ends on the player's turn and a loss on the monster's,
+    so the side that moves first ends its own round one turn early. A fight
+    that never started (round 0) has no turns."""
+    if rounds <= 0:
+        return 0
+    ends_on_first_mover = win == player_first
+    return 2 * rounds - (1 if ends_on_first_mover else 0)
+
+
+def expected_turns(endings: Sequence[tuple[Fraction, bool, int]], player_first: bool) -> Fraction:
+    """The probability-weighted mean of `server_turns` over a fight's
+    `(prob, win, rounds)` endings, capped at `MAX_TURNS`."""
+    total = sum((prob * server_turns(rounds, win, player_first)
+                 for prob, win, rounds in endings), Fraction(0))
+    return min(Fraction(MAX_TURNS), total)
+
+
+@dataclass(frozen=True)
+class FightSecondsModel:
+    """`(s_turn, h, floor)` fitted to `samples` observed fights.
+    `haste_identified` is False when every observation had the same haste: `h`
+    is then 0 and `s_turn` the seconds per turn at that haste."""
+
+    s_turn: Fraction
+    h: Fraction
+    floor: Fraction
+    haste_identified: bool
+    samples: int
+
+    def seconds(self, turns: Fraction, haste: int) -> Fraction:
+        """A fight's seconds at `turns` (expected) for a fighter with `haste`."""
+        return fight_seconds(turns, self.s_turn, self.h, haste, self.floor)
 
 
 def fit(samples: Sequence[tuple[int, int, float]]) -> tuple[Fraction, Fraction, Fraction]:

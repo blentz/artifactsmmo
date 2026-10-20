@@ -26,6 +26,7 @@ from unittest.mock import MagicMock, patch
 
 from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 
@@ -47,6 +48,7 @@ class TestSyncBankCarriesTheExpansionPrice:
         sibling's gate reads has to come from the same read that already
         refreshes capacity — not from its own session-start snapshot."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player.game_data._next_expansion_cost = 7000
         items, details = _bank_reads(slots=110, cost=28000)
@@ -64,6 +66,7 @@ class TestBuyingAnExpansionResyncsTheBank:
         """Without this the buyer re-fires on its own stale fill ratio — the
         21,000-gold double purchase."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.game_data = GameData()
         player.state = make_state(bank_items={}, bank_capacity=70, gold=22167)
         player.game_data._next_expansion_cost = 7000

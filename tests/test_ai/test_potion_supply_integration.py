@@ -30,14 +30,14 @@ from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext, active_guards
 from artifactsmmo_cli.ai.tiers.guards import _fires as guard_fires
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 
 _POTION = "small_health_potion"
 _INGREDIENT = "sunflower"
@@ -49,11 +49,11 @@ _LOADOUT = ChosenLoadout(monster=_MONSTER, potions=((_POTION, 1),), food=(), mad
 
 def _ctx(fight_monster: str | None = None,
          loadout: ChosenLoadout | None = _LOADOUT) -> SelectionContext:
-    return SelectionContext(
+    return offline_context(SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=1, combat_monster=None,
         fight_monster=fight_monster, loadout=loadout,
-    )
+    ))
 
 
 def _gd_with_potion() -> GameData:
@@ -116,7 +116,7 @@ def test_understocked_producible_fires_guard_maps_goal_and_plans_craft_and_equip
         FightAction(monster_code="mob", locations=frozenset({(7, 7)})),
         MoveAction(x=0, y=0),
     ]
-    plan = decompose(goal, state, gd, catalog, NO_PROFILE_CONTEXT) or []
+    plan = decompose(goal, state, gd, catalog, TIMED_NO_PROFILE_CONTEXT) or []
     assert any(isinstance(a, CraftAction) and a.code == _POTION for a in plan)
     assert any(isinstance(a, EquipAction) and a.slot == "utility1_slot" for a in plan)
     # The potion-supply goal never routes through combat.
@@ -133,7 +133,7 @@ def test_no_alchemy_potion_leaves_guard_quiet_so_grind_proceeds():
     # And the goal itself has no batch, so the walk declines it.
     declined: list[str] = []
     assert decompose(CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=state), state, gd,
-                     [MoveAction(x=0, y=0)], NO_PROFILE_CONTEXT, declined) is None
+                     [MoveAction(x=0, y=0)], TIMED_NO_PROFILE_CONTEXT, declined) is None
     assert declined == ["potion:no_batch"]
 
 
@@ -234,7 +234,7 @@ def test_a_chosen_boost_is_planned_into_the_free_slot():
     catalog = [CraftAction(code=_BOOST, quantity=1, workshop_location=(3, 0)),
                GatherAction(resource_code=_RESOURCE, locations=frozenset({(2, 0)})),
                MoveAction(x=0, y=0)]
-    plan = decompose(goal, state, gd, catalog, NO_PROFILE_CONTEXT) or []
+    plan = decompose(goal, state, gd, catalog, TIMED_NO_PROFILE_CONTEXT) or []
     assert any(isinstance(a, CraftAction) and a.code == _BOOST for a in plan)
     assert plan[-1] == EquipAction(code=_BOOST, slot="utility2_slot", quantity=10)
 

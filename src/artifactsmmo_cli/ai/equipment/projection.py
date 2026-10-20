@@ -42,6 +42,10 @@ class ProjectedStats:
     makes every DROP-route acquisition cheaper — see
     `ai/acquisition_cost._drop_actions`. Unlike the three stats named above it
     HAS a `WorldState` base total to project a delta from."""
+    haste: int = 0
+    """The fight-cooldown reduction a fight's seconds read
+    (`fight_seconds_core`, spec 2026-10-18 §2.9). Projected since that spec
+    priced a fight by its length: a haste piece shortens every fight."""
 
 
 def _drop_zeros(d: dict[str, int]) -> dict[str, int]:
@@ -62,6 +66,7 @@ def project_loadout_stats(
     max_hp = state.max_hp
     wisdom = state.wisdom
     prospecting = state.prospecting
+    haste = state.haste
 
     for slot, new_code in loadout.items():
         old_code = state.equipment.get(slot)
@@ -85,12 +90,11 @@ def project_loadout_stats(
         # max_hp may fall below current hp on a downgrade; intentional (conservative survivability) — do not clamp.
         max_hp += (new_s.hp_bonus if new_s else 0) - (old_s.hp_bonus if old_s else 0)
         # Same delta form as everything above -- the server reports TOTALS, so a
-        # swap is (new contribution - old contribution). `haste` is deliberately
-        # absent: it reduces cooldown SECONDS against an objective denominated in
-        # ACTIONS. See `audit/stat_projection_completeness.UNPRICED`.
+        # swap is (new contribution - old contribution).
         wisdom += (new_s.wisdom if new_s else 0) - (old_s.wisdom if old_s else 0)
         prospecting += ((new_s.prospecting if new_s else 0)
                         - (old_s.prospecting if old_s else 0))
+        haste += (new_s.haste if new_s else 0) - (old_s.haste if old_s else 0)
 
     return ProjectedStats(
         attack=_drop_zeros(attack),
@@ -102,4 +106,5 @@ def project_loadout_stats(
         max_hp=max_hp,
         wisdom=wisdom,
         prospecting=prospecting,
+        haste=haste,
     )

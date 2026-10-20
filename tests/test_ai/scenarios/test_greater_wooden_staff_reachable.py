@@ -54,11 +54,10 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 """The REAL 321-recipe catalog, same loader every other scenario uses. A
@@ -187,7 +186,7 @@ def test_from_scratch_routes_to_the_achievable_step_not_the_equippable():
     assert goal.needed == {"spruce_wood": 10}
 
     # Since Phase 2e the routed goal is the walk's.
-    plan = decompose(goal, state, gd, _build_actions(state, gd), NO_PROFILE_CONTEXT)
+    plan = decompose(goal, state, gd, _build_actions(state, gd), TIMED_NO_PROFILE_CONTEXT)
     assert plan, "the routed goal must actually plan, not merely look small"
 
 

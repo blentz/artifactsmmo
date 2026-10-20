@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.intention_progress import (
     progress_measure,
     progressed,
 )
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -60,6 +61,7 @@ def test_the_stall_bound_outlasts_a_fight_rest_cycle():
 
 def _player_committed_to(goal) -> GamePlayer:
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     player._arbiter._committed_repr = repr(goal)
     return player
 

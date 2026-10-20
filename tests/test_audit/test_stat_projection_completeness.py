@@ -73,30 +73,28 @@ def test_every_unpriced_entry_carries_a_justification() -> None:
         assert len(reason) > 80, f"{name}: justification too thin to be a decision"
 
 
-def test_haste_is_excluded_for_the_unit_reason() -> None:
-    """Pins the ONE permanent exclusion to its actual argument.
-
-    `haste` is not a scheduling oversight — it is denominated in seconds against
-    an objective denominated in actions. If someone later 'fixes' it by adding
-    haste to `ProjectedStats`, `test_no_stale_exclusions` fires and this
-    docstring is what they should read before deleting the entry."""
-    assert "PERMANENT" in UNPRICED["haste"]
-    assert "SECONDS" in UNPRICED["haste"]
-    assert "ACTIONS" in UNPRICED["haste"]
+def test_haste_graduated_with_the_learned_fight_seconds() -> None:
+    """`haste` was the one PERMANENT exclusion while every fight cost a flat
+    30 seconds: a cooldown reduction had nothing to shorten. Spec 2026-10-18
+    §2.9 learns a fight's seconds from its turns and the fighter's haste, and
+    the gear objective's rate is XP per second, so haste is projected now."""
+    assert WORN_EFFECT_TO_PROJECTED["haste"] == "haste"
+    assert "haste" not in UNPRICED
 
 
-def test_the_census_prices_nine_of_thirteen_worn_stats() -> None:
+def test_the_census_prices_ten_of_thirteen_worn_stats() -> None:
     """7 -> 8 when `wisdom` graduated (increment 3), 8 -> 9 when `prospecting`
-    did (increment 4). Each change IS the deliverable, and this assertion is what
-    makes the graduation visible rather than silent.
+    did (increment 4), 9 -> 10 when `haste` did (spec 2026-10-18 §2.9). Each
+    change IS the deliverable, and this assertion is what makes the graduation
+    visible rather than silent.
 
-    Of the four remaining, exactly one (`haste`) is permanent; `threat` (group
-    fights) acts only in a party fight; the other two wait on `WorldState`
-    gaining a base total to project a delta from."""
+    Of the three remaining, `threat` (group fights) acts only in a party fight;
+    the other two wait on `WorldState` gaining a base total to project a delta
+    from."""
     census = run_census()
-    assert len(census.projected) == 9
-    assert len(census.unpriced) == 4
-    assert {"wisdom", "prospecting"} <= census.projected
+    assert len(census.projected) == 10
+    assert len(census.unpriced) == 3
+    assert {"wisdom", "prospecting", "haste"} <= census.projected
     assert census.ok
 
 

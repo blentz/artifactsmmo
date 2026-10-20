@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
@@ -35,7 +36,7 @@ from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, patched_logs
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
@@ -107,6 +108,7 @@ def _patch_game_data_load():
 class TestSyncBankPagination:
     def test_paginates_when_full_page_returned(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         state = make_state()
         client = MagicMock()
 
@@ -137,6 +139,7 @@ class TestPlayerRun:
     def test_run_executes_one_action_then_stops(self):
         """Test run() executes the plan loop once then exits via KeyboardInterrupt."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
 
         # The run loop calls: GameData.load, _fetch_world_state, then loops
@@ -150,7 +153,7 @@ class TestPlayerRun:
 
         initial_state = make_state(hp=100, max_hp=150)
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
-            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
@@ -165,6 +168,7 @@ class TestPlayerRun:
         """Phase 4-1b: the commitment a previous process persisted is adopted
         on start, so a restart resumes instead of choosing from scratch."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         order: list[str] = []
 
@@ -176,7 +180,7 @@ class TestPlayerRun:
             raise KeyboardInterrupt
 
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
-            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=make_state()), \
                             patch.object(player, "_wait_for_cooldown", side_effect=fake_wait), \
@@ -198,6 +202,7 @@ class TestPlayerRun:
         (the bank-aware penalty / shopping_list credit / withdraw applicability
         are all inert when bank_items is None)."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
 
         call_count = [0]
@@ -218,7 +223,7 @@ class TestPlayerRun:
             player._actions_since_full_refresh = 0
 
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
-            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_full_refresh", side_effect=fake_full_refresh):
@@ -237,6 +242,7 @@ class TestPlayerRun:
         """Periodic refresh must run BEFORE _build_actions so a batched plan's K
         is baked from the same post-refresh inventory the goal/map_means sees."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         order: list[str] = []
 
@@ -245,7 +251,7 @@ class TestPlayerRun:
 
         initial_state = make_state(hp=100, max_hp=150)
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
-            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait), \
@@ -264,6 +270,7 @@ class TestPlayerRun:
         factory takes a party to a boss whose solo fight the record refuses
         (`party_win.party_participants`)."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         client = MagicMock()
         order: list[str] = []
 
@@ -272,7 +279,7 @@ class TestPlayerRun:
 
         initial_state = make_state(hp=100, max_hp=150)
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
-            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait), \
@@ -290,6 +297,7 @@ class TestPlayerRun:
     def test_run_dry_run_uses_apply_not_execute(self):
         """In dry_run mode, the player calls action.apply() instead of action.execute()."""
         player = GamePlayer(character="hero", dry_run=True)
+        player._offline_timing = committed_timing()
         client = MagicMock()
 
         call_count = [0]
@@ -302,7 +310,7 @@ class TestPlayerRun:
         state_with_low_hp = make_state(hp=50, max_hp=150)
 
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
-            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=state_with_low_hp):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
@@ -325,6 +333,7 @@ class TestPlayerRun:
         suppress Wait, was deleted in Phase 4-3c).
         """
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player._arbiter.select = lambda *a, **k: (None, [], [])  # type: ignore[method-assign]
         client = MagicMock()
 
@@ -343,7 +352,7 @@ class TestPlayerRun:
         # game data no actions are applicable, so the plan is empty → sleep
         initial_state = make_state(hp=150, max_hp=150)
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
-            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown"):
@@ -363,6 +372,7 @@ class TestPlayerRun:
         The arbiter is stubbed to select nothing so the no-plan branch is
         reached (Wait otherwise always plans)."""
         player = GamePlayer(character="hero", verbose=True)
+        player._offline_timing = committed_timing()
         player._arbiter.select = lambda *a, **k: (None, [], [])  # type: ignore[method-assign]
         client = MagicMock()
 
@@ -378,7 +388,7 @@ class TestPlayerRun:
         initial_state = make_state(hp=150, max_hp=150)
 
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
-            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown"):
@@ -397,6 +407,7 @@ class TestPlayerRun:
 def test_player_builds_sell_actions_for_sellable_inventory():
     """When bank is locked and inventory has sellable items, _build_actions should include NpcSell."""
     player = GamePlayer(character="testchar", verbose=False, dry_run=True)
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     player.game_data._npc_locations = {"cook": (2, 1)}
     player.game_data._npc_sell_prices = {"cook": {"chicken": 5}}
@@ -423,6 +434,7 @@ def test_sell_means_maps_to_sell_inventory_goal():
 def test_player_builds_phase_b_actions():
     """All Phase B actions should appear in _build_actions output."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     player.game_data._bank_location = (4, 0)
     player.game_data._taskmaster_location = (1, 2)
@@ -463,6 +475,7 @@ def test_refresh_if_stale_method_removed():
 def test_maybe_periodic_refresh_triggers_at_20_actions():
     """_maybe_periodic_refresh should call _full_refresh when counter >= 20, then reset."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     refresh_calls = []
 
     def fake_full_refresh(c):
@@ -487,6 +500,7 @@ def test_maybe_periodic_refresh_triggers_at_20_actions():
 def test_full_refresh_resets_counter():
     """_full_refresh itself should reset the action counter to 0."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.state = make_state()
     player._actions_since_full_refresh = 15
 
@@ -515,6 +529,7 @@ def test_run_calls_handle_stuck_in_no_plan_path():
     in the no-plan branch fires NO_PROGRESS → calls _handle_stuck → increments the level.
     """
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     # Stub the arbiter to select nothing so the no-plan branch is reached;
     # the always-firing WaitGoal would otherwise short-circuit it.
     player._arbiter.select = lambda *a, **k: (None, [], [])  # type: ignore[method-assign]
@@ -542,7 +557,7 @@ def test_run_calls_handle_stuck_in_no_plan_path():
 
     initial_state = make_state(hp=150, max_hp=150)
     with patch.object(ClientManager_mock := MagicMock(), "client", client):
-        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
             with _patch_game_data_load():
                 with patch.object(player, "_fetch_world_state", return_value=initial_state):
                     with patch.object(player, "_wait_for_cooldown"):
@@ -567,6 +582,7 @@ def test_run_calls_handle_stuck_after_successful_action():
     with the same state key, detect() returns STATE_FROZEN → _handle_stuck is called.
     """
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     client = MagicMock()
 
     frozen_key = (0, 0, 5, (), (), None, 0, False)
@@ -593,7 +609,7 @@ def test_run_calls_handle_stuck_after_successful_action():
 
     # _fetch_world_state is called by STATE_FROZEN L1 recovery — return the same state
     with patch.object(ClientManager_mock := MagicMock(), "client", client):
-        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
             with _patch_game_data_load():
                 with patch.object(player, "_fetch_world_state", return_value=initial_state):
                     with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
@@ -621,6 +637,7 @@ def test_run_survives_http_485_and_keeps_cycling():
     history = LearningStore(db_path=":memory:", character="hero")
     history.start_session()
     player = GamePlayer(character="hero", history=history)
+    player._offline_timing = committed_timing()
     client = MagicMock()
 
     call_count = [0]
@@ -639,7 +656,7 @@ def test_run_survives_http_485_and_keeps_cycling():
 
     try:
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
-            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
@@ -696,6 +713,7 @@ def test_run_records_gather_cycle_under_learning_key_not_repr():
     history = LearningStore(db_path=db_path, character="hero")
     history.start_session()
     player = GamePlayer(character="hero", history=history)
+    player._offline_timing = committed_timing()
     client = MagicMock()
 
     # Already standing on the resource tile -- no MoveAction, no need to also
@@ -726,7 +744,7 @@ def test_run_records_gather_cycle_under_learning_key_not_repr():
 
     try:
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
-            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_maybe_periodic_refresh"), \
@@ -774,6 +792,8 @@ def test_run_loads_remembered_bank_blocker(capsys):
     history.set_blocker("bank", unlock_monster="dragon", required_level=99)
 
     player = GamePlayer(character="hero", history=history)
+
+    player._offline_timing = committed_timing()
     client = MagicMock()
     initial_state = make_state(hp=120, max_hp=150, level=5)
 
@@ -782,7 +802,7 @@ def test_run_loads_remembered_bank_blocker(capsys):
 
     try:
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
-            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_maybe_periodic_refresh"), \
@@ -807,6 +827,7 @@ def test_run_logs_seeded_documented_blockers(capsys):
     """run() logs the count when seed_documented_blockers seeds near-future
     blockers from game data (line 264)."""
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     client = MagicMock()
     initial_state = make_state(hp=120, max_hp=150, level=5)
 
@@ -814,7 +835,7 @@ def test_run_logs_seeded_documented_blockers(capsys):
         raise KeyboardInterrupt
 
     with patch.object(ClientManager_mock := MagicMock(), "client", client):
-        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
             with _patch_game_data_load():
                 with patch.object(player, "_fetch_world_state", return_value=initial_state):
                     with patch("artifactsmmo_cli.ai.player.seed_documented_blockers", return_value=3):
@@ -860,6 +881,8 @@ def test_run_derives_crafting_target_from_fallback_obtain_item():
             return {}
 
     player = GamePlayer(character="hero")
+
+    player._offline_timing = committed_timing()
     client = MagicMock()
     initial_state = make_state(hp=100, max_hp=150, level=5)
     captured: dict[str, object] = {}
@@ -882,7 +905,7 @@ def test_run_derives_crafting_target_from_fallback_obtain_item():
     player._arbiter.select.side_effect = capture_select
 
     with patch.object(ClientManager_mock := MagicMock(), "client", client):
-        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
             with patch("artifactsmmo_cli.ai.player.StrategyEngine", return_value=strategy_mock):
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
@@ -937,6 +960,8 @@ def test_run_records_post_action_cooldown_and_handles_stuck():
     from artifactsmmo_cli.ai.recovery import CycleRecord
 
     player = GamePlayer(character="hero")
+
+    player._offline_timing = committed_timing()
     client = MagicMock()
 
     # Game data + initial state so the loop's asserts pass.
@@ -954,7 +979,7 @@ def test_run_records_post_action_cooldown_and_handles_stuck():
             planned_depth=1, planner_timed_out=False, succeeded=True, outcome="ok"))
 
     with patch.object(ClientManager_mock := MagicMock(), "client", client):
-        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
             with _patch_game_data_load():
                 with patch.object(player, "_fetch_world_state", return_value=initial_state):
                     _run_one_action_with(player, RestAction(), post_action_state, "ok", client)
@@ -967,6 +992,7 @@ def test_items_task_builds_batched_craft_and_trade():
     """For an items task the task-item Craft and TaskTrade are built with
     quantity == task_batch_size, so the planner can produce/deliver a batch."""
     player = GamePlayer(character="testchar")
+    player._offline_timing = committed_timing()
     player.game_data = GameData()
     player.game_data._bank_location = (4, 0)
     player.game_data._taskmaster_location = (1, 2)
@@ -1022,6 +1048,7 @@ def test_run_holds_plan_cursor_through_a_batched_gather():
     `snapshots[1] == (1, None)` instead of the asserted `(0, 3)`.
     """
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     client = MagicMock()
 
     gather = GatherAction(resource_code="spruce_tree", quantity=3,
@@ -1068,7 +1095,7 @@ def test_run_holds_plan_cursor_through_a_batched_gather():
             raise KeyboardInterrupt
 
     with patch.object(ClientManager_mock := MagicMock(), "client", client):
-        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
             with _patch_game_data_load():
                 with patch.object(player, "_fetch_world_state", return_value=initial_state):
                     with patch.object(player, "_wait_for_cooldown"):
@@ -1107,13 +1134,14 @@ def test_run_records_the_fight_outcome_of_the_action_that_ran():
     loadout of the action `_execute` RAN: recording the plan's fight logged
     every hold as a party WIN (live C3P0 2026-10-12: 134 "wins", 0 fights)."""
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     client = MagicMock()
     initial_state = make_state(hp=120, max_hp=150, level=5)
     lease = PartyLease("king_slime", "hero", ("HAL",), "overworld", 3, -1)
     fight = FightAction(monster_code="king_slime", locations=frozenset({(3, -1)}), participants=("HAL",))
     hold = HoldForPartyAction(lease=lease)
     with patch.object(ClientManager_mock := MagicMock(), "client", client):
-        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
             with _patch_game_data_load():
                 with patch.object(player, "_fetch_world_state", return_value=initial_state), \
                         patch.object(player, "_record_combat_outcome") as combat, \
@@ -1128,11 +1156,12 @@ def test_run_republishes_the_party_card_after_the_action():
     set; the run loop publishes the post-action state too (live 2026-10-12: a
     leader read a member cooling down from the party fight as ready)."""
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     client = MagicMock()
     initial_state = make_state(hp=120, max_hp=150, level=5)
     post = replace(initial_state, cooldown_expires=datetime.now(tz=timezone.utc) + timedelta(seconds=60))
     with patch.object(ClientManager_mock := MagicMock(), "client", client):
-        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
             with _patch_game_data_load():
                 with patch.object(player, "_fetch_world_state", return_value=initial_state), \
                         patch.object(player, "_publish_party_card") as publish:

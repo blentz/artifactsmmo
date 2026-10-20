@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import ProjectedStats, project_loadout_stats
 from artifactsmmo_cli.ai.fight_odds_core import Ending, RoundDamage, burn_ticks, fight_odds, odds_clear
 from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
+from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel, expected_turns
 from artifactsmmo_cli.ai.fight_terms_core import LOSE_MARGIN as LOSE_MARGIN
 from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS as MAX_TURNS
 from artifactsmmo_cli.ai.fight_terms_core import SCALE, FightTerms, fight_terms, terms_margin
@@ -245,6 +246,21 @@ def _fight_projection(state: WorldState, game_data: GameData,
         state, game_data,
     )
     return loadout, project_loadout_stats(state, loadout, game_data)
+
+
+def fight_haste(state: WorldState, game_data: GameData, monster_code: str) -> int:
+    """The haste a fight against `monster_code` is fought at: the projected
+    loadout's, the loadout `combat_terms` resolves."""
+    return _fight_projection(state, game_data, monster_code)[1].haste
+
+
+def endings_seconds(endings: tuple[Ending, ...], terms: FightTerms, haste: int,
+                    timing: FightSecondsModel) -> Fraction:
+    """The seconds of a fight with these `endings` under `terms` (who moves
+    first) at `haste`: the learned fight seconds (spec 2026-10-18 §2.9) at the
+    endings' expected server turns."""
+    return timing.seconds(expected_turns([(e.prob, e.win, e.turns) for e in endings],
+                                         terms.player_first), haste)
 
 
 def fight_max_hp(state: WorldState, game_data: GameData, monster_code: str) -> int:
@@ -510,6 +526,14 @@ def fight_endings(state: WorldState, game_data: GameData, monster_code: str) -> 
     restore, stock = worn_restore(state, game_data)
     return fight_odds(terms, damage, state.hp,
                       fight_max_hp(state, game_data, monster_code), restore, stock)
+
+
+def fight_seconds_now(state: WorldState, game_data: GameData, monster_code: str,
+                      timing: FightSecondsModel) -> Fraction:
+    """The seconds of fighting now (`fight_endings`'s fight)."""
+    terms, _ = fight_split(state, game_data, monster_code)
+    return endings_seconds(fight_endings(state, game_data, monster_code), terms,
+                           fight_haste(state, game_data, monster_code), timing)
 
 
 def win_probability(state: WorldState, game_data: GameData, monster_code: str) -> Fraction:

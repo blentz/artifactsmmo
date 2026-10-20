@@ -24,6 +24,7 @@ from pathlib import Path
 
 import pytest
 
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
@@ -67,8 +68,14 @@ EXPECTATIONS: dict[str, Golden] = {
     # missing `L*` piece, `iron_sword` (weaponcrafting 10, held), whose step is
     # the recipe's two feathers: a chicken fight for its drop — an ACQUISITION
     # fight (spec 2026-10-18 §2.4.3), not one chosen for XP.
+    # RE-DERIVED spec 2026-10-18 §2.9 (a fight's seconds are its learned
+    # length): `L*` is the set that kills `red_slime` fastest, its weapon
+    # `greater_wooden_staff`, and its `blue_slimeball` drops from a monster
+    # the copper does not beat. That blocked drop is the root, and the step
+    # that serves it is the banked iron sword's craft (the gear that opens the
+    # drop): withdraw its ore first.
     "l10_weapon_upgrade": Golden(
-        goal_class="GatherMaterials(feather", first_action="Fight(chicken"),
+        goal_class="UpgradeEquipment(iron_sword", first_action="Withdraw(iron_ore"),
 
     # l1_fresh: the legacy golden pinned GrindCharacterXP (starter-monster xp
     # grind) for a bare L1 character, but the TREE's rules differ by design:
@@ -102,8 +109,11 @@ EXPECTATIONS: dict[str, Golden] = {
     # has no intention — so no fight, no stock, and the climb runs.
     # RE-DERIVED Task 5: as `l10_weapon_upgrade` — `L*`'s first piece is the
     # iron sword, and its step is the feathers a chicken drops.
+    # RE-DERIVED spec 2026-10-18 §2.9: `L*`'s first piece is the
+    # `greater_wooden_staff` (it kills `red_slime` fastest), and its step is
+    # the two `blue_slimeball`s a blue_slime drops, which the copper beats.
     "l10_copper_adequate": Golden(
-        goal_class="GatherMaterials(feather", first_action="Fight(chicken"),
+        goal_class="GatherMaterials(blue_slimeball", first_action="Fight(blue_slime"),
 
     # l12_taskgated_bag: GEAR-FIRST re-derivation 2026-07-08 (Task-3
     # pursuit_value; user ruling). The tree's chosen_root is
@@ -149,6 +159,7 @@ EXPECTATIONS: dict[str, Golden] = {
 
 def _run(name: str) -> PlanReport:
     player = GamePlayer(character=name, history=None)
+    player._offline_timing = committed_timing()
     gd = shared_world(BUNDLE)
     player.seed_offline(scenario_state(SCENARIOS[name], gd), gd)
     return player.plan_from_state()

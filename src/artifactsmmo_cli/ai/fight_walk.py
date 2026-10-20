@@ -17,12 +17,14 @@ gate can ask it without a cycle through the obtain model
   terms are built over) with the restore's stock."""
 
 from collections.abc import Sequence
+from fractions import Fraction
 
 from artifactsmmo_cli.ai.boost_selection import project_equip
 from artifactsmmo_cli.ai.combat import SPLASH_RESTORE as SPLASH_RESTORE
-from artifactsmmo_cli.ai.combat import combat_terms, fight_max_hp, fight_split
+from artifactsmmo_cli.ai.combat import combat_terms, endings_seconds, fight_haste, fight_max_hp, fight_split
 from artifactsmmo_cli.ai.fight_odds_core import Ending, fight_odds
 from artifactsmmo_cli.ai.fight_outcome_core import FightOutcome, fight_outcome
+from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.heal_catalog import POTION
 from artifactsmmo_cli.ai.utility_slot import UTILITY_SLOTS
@@ -99,6 +101,19 @@ def fight_walk(state: WorldState, game_data: GameData, monster: str,
     outcome = fight_outcome(combat_terms(projected, game_data, monster),
                             max_hp, max_hp, restore_hp, restore_stock)
     return outcome, max_hp, restore_code
+
+
+def walk_seconds(state: WorldState, game_data: GameData, monster: str,
+                 loadout: Sequence[tuple[str, int]], timing: FightSecondsModel) -> Fraction:
+    """The seconds of `odds_walk`'s fight: the learned fight seconds at its
+    expected server turns and the projected loadout's haste (spec 2026-10-18
+    §2.9). The one fight-seconds function every site timing a fight from full
+    HP reads."""
+    projected, _, restore_hp, restore_stock = wear(state, game_data, loadout)
+    max_hp = fight_max_hp(projected, game_data, monster)
+    terms, damage = fight_split(projected, game_data, monster)
+    endings = fight_odds(terms, damage, max_hp, max_hp, restore_hp, restore_stock)
+    return endings_seconds(endings, terms, fight_haste(projected, game_data, monster), timing)
 
 
 def odds_walk(state: WorldState, game_data: GameData, monster: str,

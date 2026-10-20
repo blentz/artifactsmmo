@@ -23,14 +23,13 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
 from artifactsmmo_cli.ai.loop_rate import FoodOffer, LoopRate, food_menu, loop_rate
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import _fight_step_prep
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 
-_CTX = NO_PROFILE_CONTEXT
+_CTX = TIMED_NO_PROFILE_CONTEXT
 _UTILITY = dict(level=1, type_="utility")
 
 
@@ -122,7 +121,7 @@ class TestBest:
         assert best.loadout == ("fire_res_potion",)
         food = food_menu(state, gd, _CTX)
         expected = loop_rate(state, gd, "ogre", [("fire_res_potion", UTILITY_SLOT_MAX_STACK)],
-                             food, {"fire_res_potion": None})
+                             food, {"fire_res_potion": None}, _CTX.timing())
         assert best.rate == expected
         assert best.rate.win is True
         # one boost a fight, and the held apples the recovery eats
@@ -187,7 +186,7 @@ class TestBest:
         state = _state(bank_items={"fire_res_potion": 40, "water_boost": 40})
         assert list(candidate_potions(state, gd, _CTX)) == ["water_boost", "fire_res_potion"]
         pair = loop_rate(state, gd, "ogre", [("water_boost", 1), ("fire_res_potion", 1)], (),
-                         {"water_boost": None, "fire_res_potion": None})
+                         {"water_boost": None, "fire_res_potion": None}, _CTX.timing())
         best = best_loadout(state, gd, _CTX, "ogre")
         assert pair is not None and pair.xp_per_second == best.rate.xp_per_second > 0
         assert best.loadout == ("fire_res_potion",)
@@ -207,7 +206,7 @@ class TestBest:
         assert best.loadout == ()
         bare_units = units_used(best.bare)
         fire = loop_rate(state, _gd(), "ogre", [("fire_res_potion", UTILITY_SLOT_MAX_STACK)],
-                         food_menu(state, _gd(), _CTX), {"fire_res_potion": None})
+                         food_menu(state, _gd(), _CTX), {"fire_res_potion": None}, _CTX.timing())
         assert fire is not None
         assert seen == [[(best.bare.xp_per_second, bare_units), (fire.xp_per_second, 3)]]
 
@@ -327,7 +326,7 @@ def test_the_made_recovery_holds_nothing_and_drops_unpriced_food(monkeypatch: py
     seen: list[tuple[FoodOffer, ...]] = []
 
     def fake_loop_rate(state: object, gd: object, monster: object, loadout: object,
-                       food: tuple[FoodOffer, ...], prices: object) -> LoopRate:
+                       food: tuple[FoodOffer, ...], prices: object, timing: object) -> LoopRate:
         seen.append(tuple(food))
         return _rate(used=(), eaten=())
 

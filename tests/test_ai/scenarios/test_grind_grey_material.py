@@ -45,6 +45,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
@@ -54,6 +55,7 @@ from artifactsmmo_cli.ai.tiers.skill_grind_target import (
     skill_grind_target,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -74,6 +76,7 @@ def state(game_data: GameData) -> WorldState:
 @pytest.fixture
 def player(game_data: GameData, state: WorldState) -> GamePlayer:
     p = GamePlayer(character=SCENARIO, history=None)
+    p._offline_timing = committed_timing()
     p.seed_offline(state, game_data)
     return p
 
@@ -98,7 +101,7 @@ def test_the_grind_rung_is_the_live_iron_ring(game_data: GameData,
                                               state: WorldState) -> None:
     """The scenario reproduces the live decision: rung iron_ring, whose recipe
     holds the mob-drop wool."""
-    assert skill_grind_target(SKILL, state, game_data) == "iron_ring"
+    assert skill_grind_target(SKILL, state, game_data, ctx=TIMED_NO_PROFILE_CONTEXT) == "iron_ring"
     assert "wool" in game_data.crafting_recipes["iron_ring"]
 
 

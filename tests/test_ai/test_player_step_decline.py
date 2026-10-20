@@ -4,6 +4,7 @@ answered the way the arbiter answers it (Phase 3-2)."""
 from unittest.mock import MagicMock, patch
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
@@ -17,6 +18,7 @@ def _decline(goal: object, decompose_result: object, reasons: list[str]) -> str 
     """Run the player's answer for ROOT with the step goal and the walk's
     result stubbed, and record what reached `decompose`."""
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
 
     def fake_decompose(g, state, game_data, actions, ctx, declined):
         declined.extend(reasons)

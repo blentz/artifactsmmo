@@ -53,7 +53,6 @@ from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.task_horizon import (
     HORIZON_GEAR,
@@ -71,7 +70,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
 from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, normal_band, tier_of_level
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 from tests.test_ai.test_strategy_driver import _ctx
 
 # The five gear candidates below are chosen so that ONE slot lands in each of
@@ -851,12 +850,12 @@ def test_the_rule_admits_exactly_the_demanded_skills(bundle_game_data: GameData)
     state = derived_scenario_state(SCENARIOS["l1_fresh"], bundle_game_data)
     offered = [ObtainItem(code=code, quantity=1) for code in
               ("birch_wood", "golden_shrimp", "nettle_leaf", "steel_bar")]
-    assert _orphan_skill_roots(state, bundle_game_data, offered, NO_PROFILE_CONTEXT) == (
+    assert _orphan_skill_roots(state, bundle_game_data, offered, TIMED_NO_PROFILE_CONTEXT) == (
         ReachSkillLevel(skill="alchemy", level=20),
         ReachSkillLevel(skill="fishing", level=10),
         ReachSkillLevel(skill="mining", level=20),
         ReachSkillLevel(skill="woodcutting", level=20))
-    assert _orphan_skill_roots(state, bundle_game_data, [], NO_PROFILE_CONTEXT) == ()
+    assert _orphan_skill_roots(state, bundle_game_data, [], TIMED_NO_PROFILE_CONTEXT) == ()
 
 
 def test_an_orphan_skill_with_no_open_rung_gets_no_root():
@@ -899,9 +898,9 @@ def test_an_orphan_skill_with_no_open_rung_gets_no_root():
               ObtainItem(code="yew_wood", quantity=1)]
     grinding = make_state(level=15, skills={"woodcutting": 2})
     assert [r.skill for r in _orphan_skill_roots(
-        grinding, gd, offered, NO_PROFILE_CONTEXT)] == ["mining", "woodcutting"]
+        grinding, gd, offered, TIMED_NO_PROFILE_CONTEXT)] == ["mining", "woodcutting"]
     topped = make_state(level=15, skills={"woodcutting": 50, "mining": 50})
-    assert _orphan_skill_roots(topped, gd, offered, NO_PROFILE_CONTEXT) == ()
+    assert _orphan_skill_roots(topped, gd, offered, TIMED_NO_PROFILE_CONTEXT) == ()
     # DEMANDED BUT NO OPEN RUNG: `gold_ore` asks for mining@20 while mining 16
     # stands past the zero-XP band of every lower rock (copper@1, silver@5,
     # gap >= 11) and below gold. The demand stands; the open-rung conjunct
@@ -912,9 +911,9 @@ def test_an_orphan_skill_with_no_open_rung_gets_no_root():
     gd._resource_skill["gold_rocks"] = ("mining", 20)
     walled = make_state(level=30, skills={"woodcutting": 50, "mining": 16})
     gold = [ObtainItem(code="gold_ore", quantity=1)]
-    assert _gather_demand.gather_demand(gold, walled, gd, NO_PROFILE_CONTEXT) == {"mining": 20}
+    assert _gather_demand.gather_demand(gold, walled, gd, TIMED_NO_PROFILE_CONTEXT) == {"mining": 20}
     assert not skill_is_grindable("mining", 17, walled, gd)
-    assert _orphan_skill_roots(walled, gd, gold, NO_PROFILE_CONTEXT) == ()
+    assert _orphan_skill_roots(walled, gd, gold, TIMED_NO_PROFILE_CONTEXT) == ()
 
 
 def test_the_orphan_order_is_the_gap_to_the_character_level(
@@ -932,11 +931,11 @@ def test_the_orphan_order_is_the_gap_to_the_character_level(
     fish_ahead = replace(base, level=20,
                          skills={**base.skills, **parked, "fishing": 8, "mining": 5})
     assert [r.skill for r in _orphan_skill_roots(
-        fish_ahead, bundle_game_data, offered, NO_PROFILE_CONTEXT)] == ["mining", "fishing"]
+        fish_ahead, bundle_game_data, offered, TIMED_NO_PROFILE_CONTEXT)] == ["mining", "fishing"]
     mine_ahead = replace(base, level=20,
                          skills={**base.skills, **parked, "fishing": 5, "mining": 15})
     assert [r.skill for r in _orphan_skill_roots(
-        mine_ahead, bundle_game_data, offered, NO_PROFILE_CONTEXT)] == ["fishing", "mining"]
+        mine_ahead, bundle_game_data, offered, TIMED_NO_PROFILE_CONTEXT)] == ["fishing", "mining"]
 
 
 def test_cooking_climbs_when_a_better_tier_food_is_due(bundle_game_data: GameData):
@@ -1177,7 +1176,7 @@ def test_a_skill_gated_pick_records_the_target_it_could_not_build(
     the gate — a re-derivation in the player would be a second classifier."""
     gd = bundle_game_data
     state = scenario_state(SCENARIOS["l12_deep_chain_grind"], gd)
-    ctx = attach_gear_objective(state, gd, NO_PROFILE_CONTEXT, None)
+    ctx = attach_gear_objective(state, gd, TIMED_NO_PROFILE_CONTEXT, None)
     assert ctx.gear_objective is not None
     assert ctx.gear_objective.missing[0].code == "iron_sword"
     resolution = resolve_root(state, gd, CharacterObjective.from_game_data(gd), ctx, None)
@@ -1194,7 +1193,7 @@ def test_an_unblocked_walk_records_no_blocked_target(bundle_game_data) -> None:
     gd = bundle_game_data
     state = scenario_state(SCENARIOS["l1_fresh"], gd)
     resolution = resolve_root(state, gd, CharacterObjective.from_game_data(gd),
-                              attach_gear_objective(state, gd, NO_PROFILE_CONTEXT, None),
+                              attach_gear_objective(state, gd, TIMED_NO_PROFILE_CONTEXT, None),
                               None)
     assert resolution.root == ObtainItem(code="copper_dagger", quantity=1, slot="weapon_slot")
     assert resolution.blocked_target is None

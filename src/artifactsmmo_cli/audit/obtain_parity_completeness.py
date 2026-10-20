@@ -85,6 +85,7 @@ from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.obtain_sources import (
     SourceKind,
     obtain_sources,
@@ -339,9 +340,9 @@ def census_ctx() -> SelectionContext:
     same derivation production uses — and `_drive` reproduces that binding so the
     licence is applied against the same ctx. `combat_monster=None` keeps the
     REST_FOR_COMBAT guard quiet; the bank is accessible for the WITHDRAW cell."""
-    return SelectionContext(
+    return offline_context(SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
-        initial_xp=0, task_exchange_min_coins=0, combat_monster=None)
+        initial_xp=0, task_exchange_min_coins=0, combat_monster=None))
 
 
 def census_state(cell: ParityCell, game_data: GameData) -> WorldState:

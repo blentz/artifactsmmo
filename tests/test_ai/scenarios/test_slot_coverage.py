@@ -170,6 +170,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import (
@@ -178,7 +179,6 @@ from artifactsmmo_cli.ai.scenario import (
     load_bundle_game_data,
     scenario_state,
 )
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
@@ -190,6 +190,7 @@ from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainabl
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
 from tests.test_ai.shared_world import shared_world
 
@@ -257,6 +258,7 @@ def _state(name: str, gd: GameData) -> WorldState:
 def _run(name: str) -> PlanReport:
     gd = shared_world(BUNDLE)
     player = GamePlayer(character=name, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(_state(name, gd), gd)
     return player.plan_from_state()
 
@@ -281,6 +283,7 @@ def _bundle_with_tasks_farmer_completed() -> GameData:
 def _run_with(name: str, gd: GameData) -> PlanReport:
     """`_run`, against a caller-supplied catalog."""
     player = GamePlayer(character=name, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(_state(name, gd), gd)
     return player.plan_from_state()
 
@@ -292,6 +295,7 @@ def _plan_root(name: str, root: ObtainItem) -> tuple[str, list[str], list[str]]:
     covered while it waits its turn. Returns (goal repr, plan reprs, declines)."""
     gd = _bundle()
     player = GamePlayer(character=name, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(_state(name, gd), gd)
     assert player.state is not None and player.game_data is not None
     ctx = player._selection_context()
@@ -409,6 +413,7 @@ def test_l48_event_active_pursues_event_gear() -> None:
     # (`seed_offline` applies the overlay from `state.active_events`).
     gd_event = load_bundle_game_data(BUNDLE)
     overlay = GamePlayer(character="l48_event_active", history=None)
+    overlay._offline_timing = committed_timing()
     overlay.seed_offline(_state("l48_event_active", gd_event), gd_event)
     assert overlay._objective is not None
     targets = overlay._objective.gear_targets_with_blockers(overlay.state, None)
@@ -429,7 +434,7 @@ def test_l48_event_active_pursues_event_gear() -> None:
         report.decision.ranking
     assert overlay.state is not None and overlay.game_data is not None
     objective = attach_gear_objective(overlay.state, overlay.game_data,
-                                      NO_PROFILE_CONTEXT, None).gear_objective
+                                      TIMED_NO_PROFILE_CONTEXT, None).gear_objective
     assert objective is not None
     assert objective.loadout["artifact1_slot"] == "corrupted_skull"
     assert objective.loadout["helmet_slot"] == "corrupted_crown"
@@ -662,10 +667,14 @@ def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
     # piece, `iron_sword`, is the root, and its step is the ore. The bag slot
     # is not in `L*` at all (the satchel is not achievable), so neither bag is
     # offered and nothing is declined.
+    #
+    # RE-DERIVED spec 2026-10-18 §2.9 (a fight's seconds are its learned
+    # length): `L*` is now the set that kills fastest, and its first missing
+    # piece is the `leather_boots`, whose step is the ash wood.
     assert report.decision.chosen_root == ObtainItem(
-        code="iron_sword", quantity=1, slot="weapon_slot")
+        code="leather_boots", quantity=1, slot="boots_slot")
     assert report.decision.declined == ()
-    assert repr(report.selected_goal) == "GatherMaterials(iron_ore, {iron_ore:10})"
+    assert repr(report.selected_goal) == "GatherMaterials(ash_wood, {ash_wood:10})"
     assert not any(r.code in ("satchel", "backpack") for r in report.decision.fallback_roots
                    if isinstance(r, ObtainItem)), report.decision.fallback_roots
     assert not any(g["goal"].startswith("GrindCharacterXP") for g in report.goals_tried), \
@@ -892,11 +901,22 @@ def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
     # drop) is what the cycle plans. The pearl's route is still covered: as
     # the arbiter would plan it on its turn, it is the single targeted
     # secondary-drop gather this docstring derives.
+    #
+    # RE-DERIVED spec 2026-10-18 §2.9 (a fight's seconds are its learned
+    # length): the gain per price now reads kill speed, so the boots, the
+    # helmet, the jewelrycrafting climb and the rune order before the pearl,
+    # fifth in the objective's order behind the sword.
     report = _run("l35_artifact_fill")
     pearl = ObtainItem(code="perfect_pearl", quantity=1, slot="artifact1_slot")
     assert report.decision.chosen_root == ObtainItem(
         code="death_knight_sword", quantity=1, slot="weapon_slot")
-    assert report.decision.fallback_roots[0] == pearl
+    assert report.decision.fallback_roots == [
+        ObtainItem(code="steel_boots", quantity=1, slot="boots_slot"),
+        ObtainItem(code="mushmush_wizard_hat", quantity=1, slot="helmet_slot"),
+        ReachSkillLevel(skill="jewelrycrafting", level=21),
+        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
+        pearl,
+        ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")]
     assert [repr(a) for a in report.plan] == [
         "Fight(death_knight)", "Equip(death_knight_sword->weapon_slot)"]
     goal, plan, _declined = _plan_root("l35_artifact_fill", pearl)
@@ -936,6 +956,7 @@ def test_l35_boots_drop_farm_fights_grey_dropper() -> None:
     gd = load_bundle_game_data(BUNDLE)
     state = _state("l35_boots_drop_farm", gd)
     player = GamePlayer(character="l35_boots_drop_farm", history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(state, gd)
     actions = player._build_actions()
     goal = UpgradeEquipmentGoal(committed_target=("wooden_club", "weapon_slot"))

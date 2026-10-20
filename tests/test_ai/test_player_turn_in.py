@@ -2,6 +2,7 @@
 
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import coordination_now, make_state
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
@@ -10,6 +11,7 @@ from tests.test_ai.test_dual_role_fixtures import medal_game_data
 def _player_with(tmp_path, name):
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character=name)
     player = GamePlayer(character=name)
+    player._offline_timing = committed_timing()
     player._coordination = store
     player.game_data = medal_game_data()
     return player, store
@@ -21,6 +23,7 @@ def _player_with_gd(tmp_path, name, game_data):
     shared `medal_game_data` fixture doesn't carry."""
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character=name)
     player = GamePlayer(character=name)
+    player._offline_timing = committed_timing()
     player._coordination = store
     player.game_data = game_data
     return player, store
@@ -216,6 +219,7 @@ def test_no_coordination_store_is_inert(tmp_path):
     """The common case (single-character `play <name>`, no `--all`): no
     crash, no turn-in, no recall."""
     player = GamePlayer(character="Robby")
+    player._offline_timing = committed_timing()
     assert player._coordination is None
     gd = medal_game_data()
     state = make_state(level=27, inventory={"lich_race_medal": 20})

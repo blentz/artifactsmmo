@@ -13,8 +13,9 @@ and the fighter's haste, with `(s_turn, h, floor)` fitted
 
 The seconds of one planner ACTION (the unit the acquisition walk counts in) are
 the store's mean cooldown over every executed action
-(`LearningStore.fleet_mean_action_seconds`). With no observation of either,
-the answer raises: no constant stands in for it.
+(`LearningStore.fleet_mean_action_seconds`), or the bootstrap's while the
+store has recorded none. With no observation of either, the answer raises: no
+constant stands in for it.
 
 Offline worlds (tests, scenarios, censuses) fit the same way from a committed
 capture of the live `/my/logs` (`FIGHT_LOGS`, written once by
@@ -23,14 +24,16 @@ capture of the live `/my/logs` (`FIGHT_LOGS`, written once by
 
 import json
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import replace
 from fractions import Fraction
+from functools import cache
 from pathlib import Path
 
 from artifactsmmo_api_client.models.log_type import LogType
 
-from artifactsmmo_cli.ai.fight_seconds_core import fight_seconds, fit
+from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel, fit
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.api_wrapper import APIWrapper
 
 FIGHT_LOGS = (Path(__file__).resolve().parents[4] / "tests" / "test_ai" / "fixtures"
@@ -43,23 +46,6 @@ LogEntry = tuple[str, int, int | None]
 
 Sample = tuple[int, int, float]
 """`(turns, haste, cooldown)` of one observed fight."""
-
-
-@dataclass(frozen=True)
-class FightSecondsModel:
-    """`(s_turn, h, floor)` fitted to `samples` observed fights.
-    `haste_identified` is False when every observation had the same haste: `h`
-    is then 0 and `s_turn` the seconds per turn at that haste."""
-
-    s_turn: Fraction
-    h: Fraction
-    floor: Fraction
-    haste_identified: bool
-    samples: int
-
-    def seconds(self, turns: Fraction, haste: int) -> Fraction:
-        """A fight's seconds at `turns` (expected) for a fighter with `haste`."""
-        return fight_seconds(turns, self.s_turn, self.h, haste, self.floor)
 
 
 def fit_model(samples: Sequence[Sample]) -> FightSecondsModel:
@@ -102,14 +88,33 @@ def learned_model(store: LearningStore, bootstrap: Sequence[Sample]) -> FightSec
     return model
 
 
-def learned_action_seconds(store: LearningStore) -> Fraction:
-    """The fleet's mean seconds per executed action; raises when none is
-    recorded."""
+def _mean_cooldown(cooldowns: Iterable[int], source: str) -> Fraction:
+    positive = [cooldown for cooldown in cooldowns if cooldown > 0]
+    if not positive:
+        raise ValueError(f"{source}: no action with a cooldown")
+    return Fraction(sum(positive), len(positive))
+
+
+def learned_action_seconds(store: LearningStore, bootstrap: Iterable[int]) -> Fraction:
+    """The fleet's mean seconds per executed action, or the `bootstrap`
+    cooldowns' while the store has recorded none; raises with neither."""
     mean = store.fleet_mean_action_seconds()
-    if mean is None:
-        raise ValueError("no executed action with a cooldown is recorded: the seconds "
-                         "of one planner action are not learned")
-    return Fraction(mean)
+    if mean is not None:
+        return Fraction(mean)
+    return _mean_cooldown(bootstrap, "no executed action is recorded and the bootstrap has")
+
+
+def timing_of(store: LearningStore | None, haste: int,
+              entries: Sequence[LogEntry]) -> tuple[FightSecondsModel, Fraction]:
+    """The fight-seconds model and the seconds of one action for a character at
+    `haste` whose `/my/logs` page is `entries`: fitted with the store's fleet
+    record when there is a store, on the page alone when there is none."""
+    fights = log_fights(haste, entries)
+    cooldowns = [cooldown for _, cooldown, _ in entries]
+    if store is None:
+        seconds = _mean_cooldown(cooldowns, "the /my/logs bootstrap")
+        return fit_model(fights), seconds
+    return learned_model(store, fights), learned_action_seconds(store, cooldowns)
 
 
 def offline_timing(path: Path = FIGHT_LOGS) -> tuple[FightSecondsModel, Fraction]:
@@ -121,7 +126,19 @@ def offline_timing(path: Path = FIGHT_LOGS) -> tuple[FightSecondsModel, Fraction
     for character in capture["characters"].values():
         entries = [(kind, cooldown, turns) for kind, cooldown, turns in character["entries"]]
         samples.extend(log_fights(character["haste"], entries))
-        cooldowns.extend(cooldown for _, cooldown, _ in entries if cooldown > 0)
-    if not cooldowns:
-        raise ValueError(f"{path}: no action with a cooldown")
-    return fit_model(samples), Fraction(sum(cooldowns), len(cooldowns))
+        cooldowns.extend(cooldown for _, cooldown, _ in entries)
+    seconds = _mean_cooldown(cooldowns, str(path))
+    return fit_model(samples), seconds
+
+
+@cache
+def committed_timing() -> tuple[FightSecondsModel, Fraction]:
+    """`offline_timing` of the committed capture, fitted once per process."""
+    return offline_timing()
+
+
+def offline_context(ctx: SelectionContext) -> SelectionContext:
+    """`ctx` carrying the committed capture's timing: the context an offline
+    world (scenario, census) prices time in."""
+    model, seconds = committed_timing()
+    return replace(ctx, fight_seconds=model, action_seconds=seconds)

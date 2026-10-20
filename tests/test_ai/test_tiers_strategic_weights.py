@@ -47,12 +47,13 @@ def test_cold_history_none_gives_zero_efficiency():
     assert budget == EFFICIENCY_BUDGET
 
 
-def test_cold_no_observations_gives_zero_efficiency(tmp_db_path):
+def test_cold_no_observations_raises(tmp_db_path):
+    """No cycles: a fight's cooldown is unlearned, and so is the seconds of one
+    action that stands in for it (spec 2026-10-18 §2.9, ruling CA). No
+    constant does instead."""
     store = _store(tmp_db_path)
-    # No cycles → fractions 0 → every efficiency rate 0.
-    weights, budget = strategic_weights(make_state(), store)
-    assert weights == (COMBAT_WEIGHT, 0, 0, 0, 0)
-    assert budget == EFFICIENCY_BUDGET
+    with pytest.raises(ValueError, match="no executed action is recorded"):
+        strategic_weights(make_state(), store)
     store.close()
 
 

@@ -44,11 +44,11 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.role_catalog import ROLES_BY_NAME, role_skills
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
@@ -56,6 +56,7 @@ from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.grind_cycle_census import earned_skill
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.scenarios.routing import scenario_resolution, skills_offered
 
 CELL = "l24_fisher_cooking_rung"
@@ -91,10 +92,11 @@ def _gather_plan(state: WorldState, game_data: GameData,
     assertion is about the fishing gate and not about which root the arbiter
     happens to prefer for a fisher."""
     player = GamePlayer(character=CELL, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(state, game_data)
     actions = list(player._build_actions())
     goal = GatherMaterialsGoal(target_item=code, needed={code: quantity})
-    return decompose(goal, state, game_data, actions, NO_PROFILE_CONTEXT) or []
+    return decompose(goal, state, game_data, actions, TIMED_NO_PROFILE_CONTEXT) or []
 
 
 @pytest.fixture
@@ -124,7 +126,7 @@ def test_the_grind_stands_on_a_cooking_rung(
     holds through it. Cooking has no gather arm (`GatheringSkill` does not
     contain it), so the craftable rung is the ONLY thing that can open the
     skill: this is the cooking-rung dimension, undiluted."""
-    rung = skill_grind_target(SKILL, state, bundle_game_data)
+    rung = skill_grind_target(SKILL, state, bundle_game_data, ctx=TIMED_NO_PROFILE_CONTEXT)
     assert rung == RUNG
     stats = bundle_game_data.item_stats(RUNG)
     assert stats is not None
@@ -143,7 +145,7 @@ def test_the_descent_lands_on_the_fishing_gather(
     assert state.inventory == {}
     assert state.bank_items == {}
     step = actionable_step(ObtainItem(code=RUNG, quantity=1), state,
-                           bundle_game_data, NO_PROFILE_CONTEXT)
+                           bundle_game_data, TIMED_NO_PROFILE_CONTEXT)
     assert step == ObtainItem(code=RAW, quantity=1)
     resource, _rate = bundle_game_data.resource_for_drop(RAW)
     assert bundle_game_data.resource_skill_level(resource) == (
@@ -166,7 +168,7 @@ def test_the_role_is_what_makes_the_gather_plannable(
         SCENARIOS[CELL],
         skills={**SCENARIOS[CELL].skills, GATHER_SKILL: 5})
     other = scenario_state(landlubber, bundle_game_data)
-    assert skill_grind_target(SKILL, other, bundle_game_data) == RUNG
+    assert skill_grind_target(SKILL, other, bundle_game_data, ctx=TIMED_NO_PROFILE_CONTEXT) == RUNG
     other_plan = _gather_plan(other, bundle_game_data, RAW, 1)
     assert other_plan and isinstance(other_plan[-1], GatherAction)
     gate = bundle_game_data.resource_skill_level(other_plan[-1].resource_code)
@@ -231,12 +233,13 @@ def test_the_fishers_cooking_root_plans_a_cooking_grind(
     rung's input needs."""
     root = ReachSkillLevel(skill=SKILL, level=state.skills[SKILL] + 1)
     goal = objective_step_goal(root, state, bundle_game_data,
-                               NO_PROFILE_CONTEXT, root=root, history=None)
+                               TIMED_NO_PROFILE_CONTEXT, root=root, history=None)
     assert repr(goal) == f"ReachSkill({SKILL}->{state.skills[SKILL] + 1})"
     player = GamePlayer(character=CELL, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(state, bundle_game_data)
     plan = decompose(goal, state, bundle_game_data, list(player._build_actions()),
-                     NO_PROFILE_CONTEXT)
+                     TIMED_NO_PROFILE_CONTEXT)
     assert plan and earned_skill(plan[-1], bundle_game_data) in (SKILL, GATHER_SKILL), plan
 
 
@@ -280,6 +283,7 @@ def _wounded(game_data: GameData) -> WorldState:
 
 def _restore_plan(state: WorldState, game_data: GameData) -> list:
     player = GamePlayer(character=COOK_CELL, history=None)
+    player._offline_timing = committed_timing()
     player.seed_offline(state, game_data)
     planner = GOAPPlanner()
     plan = planner.plan(state, RestoreHPGoal(), list(player._build_actions()),

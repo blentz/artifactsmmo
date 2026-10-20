@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -76,8 +77,8 @@ def classify(skill: str, plan: list[Action] | None, game_data: GameData,
     return GrindCycleGap.NO_EARNING_LEG
 
 
-_CTX = SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
-                        initial_xp=0, task_exchange_min_coins=0, combat_monster=None)
+_CTX = offline_context(SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
+                        initial_xp=0, task_exchange_min_coins=0, combat_monster=None))
 
 
 def run_census(game_data: GameData) -> list[GrindCycleResult]:

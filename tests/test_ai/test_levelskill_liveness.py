@@ -14,7 +14,7 @@ no-livelock path is LIV-SKILL-2 below, over `skill_grind_target`.
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 
 
 def _progression_gd() -> GameData:
@@ -42,7 +42,7 @@ def test_liv_skill_1_gate_yields_a_forward_action():
     LevelSkill leg into GatherMaterials(<this target>)."""
     gd = _progression_gd()
     state = make_state(skills={"weaponcrafting": 2})
-    target = skill_grind_target("weaponcrafting", state, gd)
+    target = skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT)
     assert target is not None
     goal = GatherMaterialsGoal(target_item=target, needed={target: 1})
     assert isinstance(goal, GatherMaterialsGoal)
@@ -53,4 +53,4 @@ def test_liv_skill_2_grind_target_total_over_progression():
     gd = _progression_gd()
     for lvl in range(1, 5):
         state = make_state(skills={"weaponcrafting": lvl})
-        assert skill_grind_target("weaponcrafting", state, gd) is not None
+        assert skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) is not None

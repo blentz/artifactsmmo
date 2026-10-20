@@ -9,11 +9,11 @@ import artifactsmmo_cli.ai.loop_rate as loop_mod
 from artifactsmmo_cli.ai.actions.cost_core import travel_seconds
 from artifactsmmo_cli.ai.boost_selection import project_equip
 from artifactsmmo_cli.ai.combat import combat_terms, fight_max_hp
-from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS
 from artifactsmmo_cli.ai.fight_odds_core import win_probability
 from artifactsmmo_cli.ai.fight_outcome_core import fight_outcome
-from artifactsmmo_cli.ai.fight_walk import fight_walk, odds_walk
+from artifactsmmo_cli.ai.fight_walk import fight_walk, odds_walk, walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.loop_rate import EAT_SECONDS, FoodOffer, LoopRate, food_menu, loop_rate
 from artifactsmmo_cli.ai.loop_rate_core import consumed_seconds, recovery_choice, recovery_seconds, xp_per_second
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
@@ -22,6 +22,8 @@ from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 _CTX = NO_PROFILE_CONTEXT
+_TIMING = committed_timing()[0]
+"""The committed live capture's fight-seconds fit (spec 2026-10-18 §2.9)."""
 _UTILITY = dict(level=1, type_="utility")
 
 
@@ -57,7 +59,8 @@ _FREE: dict[str, Fraction | None] = {
 def _rate(state: WorldState, gd: GameData, loadout: list[tuple[str, int]],
           prices: dict[str, Fraction | None] | None = None,
           food: tuple[FoodOffer, ...] = ()) -> LoopRate | None:
-    return loop_rate(state, gd, "ogre", loadout, food, _FREE if prices is None else prices)
+    return loop_rate(state, gd, "ogre", loadout, food, _FREE if prices is None else prices,
+                     _TIMING)
 
 
 def _state(**kw: object) -> WorldState:
@@ -104,9 +107,11 @@ class TestLoop:
         assert rate.consumed_seconds == 0
         assert rate.hp_end == expected.hp_end // 10_000
         assert rate.xp_per_kill == gd.xp_per_kill("ogre", 5) > 0
-        assert rate.fight_seconds == 30
+        # Five rounds, the player first: the kill is the ninth server turn.
+        fight = _TIMING.seconds(Fraction(9), 0)
+        assert rate.fight_seconds == fight
         assert rate.recovery_seconds == recovery_seconds(100 - rate.hp_end, 100, [], EAT_SECONDS)
-        assert rate.xp_per_second == Fraction(rate.xp_per_kill, 30 + rate.recovery_seconds)
+        assert rate.xp_per_second == rate.xp_per_kill / (fight + rate.recovery_seconds)
 
     def test_a_boost_is_projected_and_one_is_consumed(self) -> None:
         gd = _gd()
@@ -129,7 +134,7 @@ class TestLoop:
         gd = _gd()
         worn = _state(inventory={"fire_res_potion": 1})
         worn = project_equip(worn, "fire_res_potion", gd)
-        assert loop_mod.loop_rate(worn, gd, "ogre", [], (), {}).win is False  # type: ignore[union-attr]
+        assert loop_mod.loop_rate(worn, gd, "ogre", [], (), {}, _TIMING).win is False  # type: ignore[union-attr]
 
     def test_a_priced_consumable_costs_its_price(self) -> None:
         rate = _rate(_state(), _gd(), [("fire_res_potion", 1)], prices={"fire_res_potion": Fraction(7)})
@@ -204,7 +209,9 @@ class TestOdds:
         xp = gd.xp_per_kill("ogre", 5)
         rate = _rate(state, gd, loadout, prices=prices, food=food)
         assert rate is not None and rate.p_win == 1
-        assert rate.xp_per_second == xp_per_second(xp, FIGHT_SECONDS, recovery, consumed)
+        fight = walk_seconds(state, gd, "ogre", loadout, _TIMING)
+        assert rate.fight_seconds == fight
+        assert rate.xp_per_second == xp_per_second(xp, fight, recovery, consumed)
         assert rate.used == (("heal_potion", outcome.used),)
         assert rate.eaten == tuple(("apple", k) for k in counts if k > 0)
         assert rate.hp_end == outcome.hp_end // 10_000
@@ -265,7 +272,8 @@ class TestOdds:
         assert rate.p_win == p
         assert rate.xp_per_kill == gd.xp_per_kill("ogre", 5) > 0
         assert rate.recovery_seconds == recovery
-        assert rate.xp_per_second == p * rate.xp_per_kill / (FIGHT_SECONDS + recovery + (1 - p) * walk)
+        fight = walk_seconds(state, gd, "ogre", [], _TIMING)
+        assert rate.xp_per_second == p * rate.xp_per_kill / (fight + recovery + (1 - p) * walk)
 
     def test_a_loss_still_pays_its_drinks(self) -> None:
         gd = _gd()
@@ -328,7 +336,8 @@ class TestOdds:
         assert loop_mod.monster_tile(state, gd, "ogre") == (-3, 12)
         walk = travel_seconds((0, 0), (-3, 12))
         assert rate.xp_per_second == rate.p_win * rate.xp_per_kill / (
-            FIGHT_SECONDS + rate.recovery_seconds + (1 - rate.p_win) * walk)
+            walk_seconds(state, gd, "ogre", [], _TIMING) + rate.recovery_seconds
+            + (1 - rate.p_win) * walk)
 
 
 class TestFoodMenu:
@@ -370,3 +379,31 @@ def test_effect_codes_tell_a_splash_from_a_restore() -> None:
     assert gd.effect_codes("heal_potion") == ("restore",)
     assert gd.effect_codes("splash_potion") == ("splash_restore",)
     assert gd.effect_codes("apple") == ()
+
+
+class TestFightSeconds:
+    """Spec 2026-10-18 §2.9: the loop's fight lasts the learned seconds at the
+    walk's expected server turns, so a faster kill is a shorter fight."""
+
+    def test_the_fight_is_its_turns_at_the_learned_seconds(self) -> None:
+        """The ogre falls in 3 rounds to 40 fire with the player first: the
+        kill is the fifth server turn."""
+        rate = _rate(_state(attack={"fire": 40}), _gd(), [])
+        assert rate is not None and rate.p_win == 1
+        assert rate.fight_seconds == _TIMING.seconds(Fraction(5), 0)
+
+    def test_a_faster_kill_is_a_shorter_fight_and_a_better_rate(self) -> None:
+        """More attack, fewer rounds: fewer seconds a fight, more XP a second."""
+        gd = _gd()
+        slow = _rate(_state(attack={"fire": 25}), gd, [])
+        fast = _rate(_state(attack={"fire": 40}), gd, [])
+        assert slow is not None and fast is not None
+        assert fast.fight_seconds < slow.fight_seconds
+        assert fast.xp_per_second > slow.xp_per_second
+
+    def test_haste_shortens_the_fight(self) -> None:
+        gd = _gd()
+        plain = _rate(_state(attack={"fire": 40}), gd, [])
+        hasted = _rate(_state(attack={"fire": 40}, haste=20), gd, [])
+        assert plain is not None and hasted is not None
+        assert hasted.fight_seconds == _TIMING.seconds(Fraction(5), 20) < plain.fight_seconds

@@ -20,6 +20,7 @@ from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.join_party import JOIN_PARTY_VALUE, JoinPartyGoal
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.party_card import card_json
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
 from artifactsmmo_cli.ai.planner import GOAPPlanner
@@ -127,6 +128,7 @@ T0 = datetime.now(tz=timezone.utc)
 def _player(tmp_path: Path, name: str) -> tuple[GamePlayer, CoordinationStore]:
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character=name)
     player = GamePlayer(character=name)
+    player._offline_timing = committed_timing()
     player.set_coordination_store(store)
     player.state = make_state(character=name, x=3, y=-1)
     player.game_data = GameData()
@@ -135,6 +137,7 @@ def _player(tmp_path: Path, name: str) -> tuple[GamePlayer, CoordinationStore]:
 
 def test_without_a_store_there_is_no_party(tmp_path: Path) -> None:
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     player.state = make_state(character="hero")
     player._refresh_party(T0)
     assert player._party_hold is None and player.state.party == ()

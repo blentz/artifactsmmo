@@ -33,9 +33,9 @@ from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.scenarios.routing import scenario_resolution, skills_offered
 
 
@@ -79,7 +79,7 @@ def _mining_gated_state(bundle_game_data, mining: int):
     return derived_scenario_state(sc, bundle_game_data)
 
 
-_BOOTS = dataclasses.replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+_BOOTS = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, gear_objective=GearObjective(
     "pig", {"boots_slot": "iron_boots"}, Fraction(1),
     (GearPiece("boots_slot", "iron_boots", 0, Fraction(1), Fraction(1)),)))
 """A gear objective missing exactly `iron_boots`: these tests mean that one
@@ -118,7 +118,7 @@ under a shrimp demand) at this cell's own levels."""
 CHAIN_RUNG = 10
 """The fishing level `cooked_shrimp`'s closure asks for. NOT `current + 1`."""
 
-SHORT_SHRIMP = dataclasses.replace(NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_shrimp", 10),))
+SHORT_SHRIMP = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_shrimp", 10),))
 """The fleet consumable floor short of its tier food, as
 `consumable_floor.supply_shortfall` publishes it."""
 
@@ -131,7 +131,7 @@ class TestTierFoodDemandsFishing:
         objective = CharacterObjective.from_game_data(gd)
         state = derived_scenario_state(SCENARIOS[CHAIN_CELL], gd)
         assert state.skills["fishing"] < CHAIN_RUNG
-        res = resolve_root(state, gd, objective, _cycle(state, gd, NO_PROFILE_CONTEXT), None)
+        res = resolve_root(state, gd, objective, _cycle(state, gd, TIMED_NO_PROFILE_CONTEXT), None)
         assert "fishing" not in _skills_offered(res)
 
     def test_a_short_tier_food_gets_a_fishing_root(self, bundle_game_data):
@@ -163,7 +163,7 @@ class TestTierFoodDemandsFishing:
         gd = bundle_game_data
         objective = CharacterObjective.from_game_data(gd)
         state = derived_scenario_state(SCENARIOS[CHAIN_CELL], gd)
-        due = dataclasses.replace(NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_porkchop", 10),))
+        due = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_porkchop", 10),))
         res = resolve_root(state, gd, objective, _cycle(state, gd, due), None)
         offered = (res.root, *res.alternatives)
         assert ReachSkillLevel(skill="cooking", level=20) in offered
@@ -203,7 +203,7 @@ class TestOnlyTheProducerClimbsForFood:
         objective = CharacterObjective.from_game_data(gd)
         state = derived_scenario_state(SCENARIOS[CHAIN_CELL], gd)
         ctx = dataclasses.replace(
-            NO_PROFILE_CONTEXT, supply_shortfall=(("minor_health_potion", 10),),
+            TIMED_NO_PROFILE_CONTEXT, supply_shortfall=(("minor_health_potion", 10),),
             role="miner", fleet_roles=frozenset({"alchemist", "miner"}))
         res = resolve_root(state, gd, objective, _cycle(state, gd, ctx), None)
         assert ReachSkillLevel(skill="alchemy", level=20) in (res.root, *res.alternatives)

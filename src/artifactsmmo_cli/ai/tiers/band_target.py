@@ -70,7 +70,6 @@ from functools import cache, partial
 from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
 from artifactsmmo_cli.ai.best_loadout import BestLoadout
 from artifactsmmo_cli.ai.combat import is_winnable, loss_vetoed, unpotioned, win_threshold
-from artifactsmmo_cli.ai.consumable_price import FIGHT_SECONDS
 from artifactsmmo_cli.ai.fight_odds_core import odds_clear
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_upkeep_core import FightUpkeep, xp_per_action
@@ -79,6 +78,12 @@ from artifactsmmo_cli.ai.party_loop import PARTY_XP_TYPES, PartyLoop
 from artifactsmmo_cli.ai.tiers.tier_ladder import normal_band
 from artifactsmmo_cli.ai.tiers.tier_progress import next_uncleared_tier
 from artifactsmmo_cli.ai.world_state import WorldState
+
+FIGHT_SECONDS = Fraction(30)
+"""The flat seconds of one fight-equivalent action this ranking's MEASURED arm
+divides by. Spec 2026-10-18 §2.9 learns every other fight's seconds from its
+length; this module is dead (deleted in Plan C, ruling CA), so its constant is
+left here, local, rather than migrated."""
 
 
 @dataclass(frozen=True)

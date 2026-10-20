@@ -90,10 +90,11 @@ def best_loadout(state: WorldState, game_data: GameData, ctx: SelectionContext, 
     """The loadout with the most XP per second against `monster` (see the module doc)."""
     prices = candidate_potions(state, game_data, ctx, store)
     food = food_menu(state, game_data, ctx, store)
+    timing = ctx.timing()
     scored: list[tuple[tuple[str, ...], LoopRate]] = []
     for codes in loadouts(list(prices), game_data):
         rate = loop_rate(state, game_data, monster,
-                         [(code, UTILITY_SLOT_MAX_STACK) for code in codes], food, prices)
+                         [(code, UTILITY_SLOT_MAX_STACK) for code in codes], food, prices, timing)
         if rate is not None:
             scored.append((codes, rate))
     index = pick_best([(rate.xp_per_second, units_used(rate)) for _, rate in scored])
@@ -101,7 +102,8 @@ def best_loadout(state: WorldState, game_data: GameData, ctx: SelectionContext, 
     assert index is not None and scored[0][0] == ()
     codes, rate = scored[index]
     made = loop_rate(state, game_data, monster,
-                     [(code, UTILITY_SLOT_MAX_STACK) for code in codes], unheld(food), prices)
+                     [(code, UTILITY_SLOT_MAX_STACK) for code in codes], unheld(food), prices,
+                     timing)
     # The chosen potions were payable over the real menu, and food never
     # changes what a fight drinks: the same potions are payable here.
     assert made is not None

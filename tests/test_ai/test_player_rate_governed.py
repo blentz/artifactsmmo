@@ -25,6 +25,7 @@ import httpx
 import pytest
 
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.utils.rate_budget import WindowBudget
 from artifactsmmo_cli.utils.rate_governor import RateGovernor
@@ -71,6 +72,7 @@ def _empty_page() -> MagicMock:
 
 def test_governors_default_to_none_so_single_character_play_is_unthrottled():
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     assert player._data_governor is None
     assert player._action_governor is None
     assert player._account_governor is None
@@ -79,6 +81,7 @@ def test_governors_default_to_none_so_single_character_play_is_unthrottled():
 def test_a_data_read_acquires_from_the_data_governor():
     fake = _FakeTime()
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     governor = RateGovernor(
         WindowBudget(second=1, minute=None, hour=None, day=None), sharers=1, log=_log(), bucket="data",
         clock=fake.clock, sleep=fake.sleep,
@@ -97,6 +100,7 @@ def test_wiring_governors_prices_the_planner_in_requests():
     per request."""
     fake = _FakeTime()
     player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
     action_governor = RateGovernor(
         WindowBudget(second=10, minute=None, hour=300, day=None), sharers=1, log=_log(), bucket="data",
         clock=fake.clock, sleep=fake.sleep,
@@ -129,6 +133,7 @@ class TestGovernorConsultedOnRealDataReadPaths:
 
     def test_fetch_world_state_acquires_for_character_events_and_raids(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         governor = MagicMock()
         player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
@@ -149,6 +154,7 @@ class TestGovernorConsultedOnRealDataReadPaths:
         this: the character read (never cached) acquires again, but the
         events/raids fetch functions are not even invoked."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         governor = MagicMock()
         player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
@@ -167,6 +173,7 @@ class TestGovernorConsultedOnRealDataReadPaths:
 
     def test_fetch_active_events_acquires_once_per_page(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         governor = MagicMock()
         player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
@@ -190,6 +197,7 @@ class TestGovernorConsultedOnRealDataReadPaths:
         attempt's bytes went out even though it timed out), so it must also
         consult the governor — acquire() is not just a once-per-page gate."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         governor = MagicMock()
         player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
@@ -206,6 +214,7 @@ class TestGovernorConsultedOnRealDataReadPaths:
 
     def test_fetch_raids_acquires_once_per_page(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         governor = MagicMock()
         player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
@@ -222,6 +231,7 @@ class TestAccountScopedReadsUseTheAccountGovernor:
 
     def test_sync_bank_acquires_from_the_account_governor_not_data(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         data_governor = MagicMock()
         account_governor = MagicMock()
         player.set_rate_governors(data=data_governor, action=MagicMock(), account=account_governor)
@@ -252,6 +262,7 @@ class TestAccountScopedReadsUseTheAccountGovernor:
 
     def test_fetch_open_orders_acquires_from_the_account_governor_not_data(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         data_governor = MagicMock()
         account_governor = MagicMock()
         player.set_rate_governors(data=data_governor, action=MagicMock(), account=account_governor)
@@ -269,6 +280,7 @@ class TestAccountScopedReadsUseTheAccountGovernor:
         tightest bucket by roughly half at the periodic-refresh site where
         it runs immediately after `_sync_bank`."""
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         data_governor = MagicMock()
         account_governor = MagicMock()
         player.set_rate_governors(data=data_governor, action=MagicMock(), account=account_governor)
@@ -288,6 +300,7 @@ class TestAchievementLookupUsesTheDataGovernor:
 
     def test_resolve_bank_unlock_monster_acquires_from_the_data_governor_not_account(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         data_governor = MagicMock()
         account_governor = MagicMock()
         player.set_rate_governors(data=data_governor, action=MagicMock(), account=account_governor)
@@ -301,6 +314,7 @@ class TestAchievementLookupUsesTheDataGovernor:
 class TestGovernorConsultedBeforeActionDispatch:
     def test_execute_acquires_from_the_action_governor_once_and_not_the_data_governor(self):
         player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
         player.state = make_state(x=0, y=0)
         data_governor = MagicMock()
         action_governor = MagicMock()

@@ -10,15 +10,16 @@ from types import SimpleNamespace
 import pytest
 from artifactsmmo_api_client.models.log_type import LogType
 
+from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.learning import fight_seconds_model as mod
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
-    FightSecondsModel,
     fetch_log_entries,
     fit_model,
     learned_action_seconds,
     learned_model,
     log_fights,
     offline_timing,
+    timing_of,
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -104,15 +105,36 @@ def test_no_fight_anywhere_raises(tmp_path: Path) -> None:
         store.close()
 
 
-def test_the_action_seconds_are_learned_or_raise(tmp_path: Path) -> None:
+def test_the_action_seconds_are_learned_then_bootstrapped_or_raise(tmp_path: Path) -> None:
+    """The store's mean once it has one; the bootstrap's (positive cooldowns
+    only) until then; neither raises."""
     store = _store(tmp_path)
     try:
-        with pytest.raises(ValueError, match="seconds of one planner action are not learned"):
-            learned_action_seconds(store)
+        with pytest.raises(ValueError, match="the bootstrap has: no action with a cooldown"):
+            learned_action_seconds(store, [0])
+        assert learned_action_seconds(store, [9, 0, 25]) == 17
         _fight(store, 0, 5, 0, 10.0)
         store.record_cycle(Cycle(ts="2026-10-19T00:01:00+00:00", cycle_index=1, outcome="ok",
                                  actual_cooldown_seconds=30.0))
-        assert learned_action_seconds(store) == 20
+        assert learned_action_seconds(store, [9, 25]) == 20
+    finally:
+        store.close()
+
+
+def test_timing_without_a_store_fits_the_page_alone(tmp_path: Path) -> None:
+    entries = [("fight", 10, 5), ("fight", 20, 10), ("gathering", 30, None)]
+    model, seconds = timing_of(None, 0, entries)
+    assert (model.s_turn, model.samples, seconds) == (Fraction(2), 2, Fraction(20))
+    with pytest.raises(ValueError, match="the /my/logs bootstrap: no action with a cooldown"):
+        timing_of(None, 0, [("gathering", 0, None), ("move", 0, None)])
+
+
+def test_timing_with_a_store_pools_the_fleet_and_the_page(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    try:
+        _fight(store, 0, 5, 0, 15.0)
+        model, seconds = timing_of(store, 0, [("fight", 10, 5)])
+        assert (model.s_turn, model.samples, seconds) == (Fraction(5, 2), 2, Fraction(15))
     finally:
         store.close()
 

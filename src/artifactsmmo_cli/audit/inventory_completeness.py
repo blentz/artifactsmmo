@@ -90,6 +90,7 @@ from artifactsmmo_cli.ai.inventory_keep import (
     keep_owned,
     reason_quantity,
 )
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.strategy_driver import (
@@ -472,7 +473,7 @@ def census_ctx(reason: KeepReason, state: WorldState,
     it re-binds the ctx from `census_decision`'s step. One source, so the cell's
     `keep` and the planner's protection cannot drift apart."""
     scenario = scenario_for(reason, game_data)
-    ctx = SelectionContext(
+    ctx = offline_context(SelectionContext(
         bank_accessible=True,
         bank_required_level=0,
         bank_unlock_monster=None,
@@ -480,7 +481,7 @@ def census_ctx(reason: KeepReason, state: WorldState,
         task_exchange_min_coins=0,
         combat_monster=None,
         gear_keep=dict(scenario.gear_keep),
-    )
+    ))
     if scenario.step is None:
         return ctx
     step_goal = objective_step_goal(scenario.step, state, game_data, ctx,

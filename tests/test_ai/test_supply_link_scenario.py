@@ -39,6 +39,7 @@ from artifactsmmo_cli.ai.decisions.root import _fleet_roots
 from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY, supply_due
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
@@ -74,6 +75,7 @@ def _asker(db: str, gd) -> GamePlayer:
     state = replace(scenario_state(SCENARIOS["l12_deep_chain_grind"], gd),
                     character="Ask")
     player = GamePlayer(character="Ask")
+    player._offline_timing = committed_timing()
     player._coordination = CoordinationStore(db_path=db, character="Ask")
     player.seed_offline(state, gd)
     player.plan_from_state()
@@ -93,6 +95,7 @@ def _supplier_state(gd) -> WorldState:
 
 def _supplier(db: str, gd) -> GamePlayer:
     player = GamePlayer(character="Sup")
+    player._offline_timing = committed_timing()
     player._coordination = CoordinationStore(db_path=db, character="Sup")
     player.seed_offline(_supplier_state(gd), gd)
     player._update_coordination(player.state, gd)
@@ -163,6 +166,8 @@ def test_a_sibling_without_the_skill_is_not_recruited(tmp_path) -> None:
     _asker(db, gd)
 
     player = GamePlayer(character="Sup")
+
+    player._offline_timing = committed_timing()
     player._coordination = CoordinationStore(db_path=db, character="Sup")
     # Same weaponcrafting 5 as the asker: reads the ask, cannot serve it.
     player.seed_offline(

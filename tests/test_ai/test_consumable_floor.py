@@ -15,10 +15,9 @@ from artifactsmmo_cli.ai.consumable_floor import consumable_need, supply_shortfa
 from artifactsmmo_cli.ai.consumable_floor_core import REFILL_HORIZON_FIGHTS, share
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.heal_catalog import FOOD, POTION, heal_candidates
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.task_worth import short_items
 from artifactsmmo_cli.ai.xp_demand import demand_roots
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 from tests.test_ai.test_best_loadout import _gd as _ogre_gd
 from tests.test_ai.test_best_loadout import _prices, _state
 
@@ -63,7 +62,7 @@ class TestNeed:
         one fight drinks × 20."""
         _prices(monkeypatch, {"heal_potion": Fraction(2)})
         state, gd = _state(), _ogre_gd()
-        ctx = dataclasses.replace(NO_PROFILE_CONTEXT, combat_monster="ogre")
+        ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, combat_monster="ogre")
         pick = fight_ahead_loadout(state, gd, ctx, None)
         assert pick is not None
         drunk = dict(pick.potions)["heal_potion"]
@@ -105,7 +104,7 @@ class TestShortfall:
 class TestShortfallIsDemand:
     def test_it_seeds_no_dag_root(self) -> None:
         """The shortfall no longer seeds a DAG root (spec 2026-10-13 §2)."""
-        ctx = dataclasses.replace(NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_bass", 12),))
+        ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_bass", 12),))
         assert demand_roots(None, make_state(), ctx) == []
 
     def test_it_makes_its_ingredients_short(self) -> None:
@@ -114,7 +113,7 @@ class TestShortfallIsDemand:
                                                    hp_restore=200)}
         gd._crafting_recipes = {"cooked_bass": {"bass": 1}}
         gd._craft_yields = {"cooked_bass": 1}
-        ctx = dataclasses.replace(NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_bass", 12),))
+        ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, supply_shortfall=(("cooked_bass", 12),))
         assert short_items(make_state(bank_items={"bass": 5}), gd, ctx) == {"cooked_bass", "bass"}
         enough = make_state(bank_items={"bass": 12})
         assert short_items(enough, gd, ctx) == {"cooked_bass"}

@@ -54,7 +54,7 @@ def make_char_schema(x=0, y=0, hp=100, max_hp=150, xp=0, max_xp=500, level=5, go
     # Combat totals of a character wearing nothing: zero (ruling R, 2026-10-18 —
     # the gear objective strips worn gear from these totals and raises below
     # zero, so a MagicMock total cannot stand in for one).
-    for stat in ["dmg", "critical_strike", "initiative", "wisdom", "prospecting",
+    for stat in ["dmg", "critical_strike", "initiative", "wisdom", "prospecting", "haste",
                  *(f"{kind}_{elem}" for kind in ("attack", "dmg", "res")
                    for elem in ("fire", "earth", "water", "air"))]:
         setattr(char, stat, 0)
