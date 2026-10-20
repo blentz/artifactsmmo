@@ -103,6 +103,8 @@
 
 ### Task 4: Gain is what the piece adds to `L*`, not to a bare fighter
 
+**SUPERSEDED (2026-10-19)** by the `zero-gain` hotfix branch, which implements spec §2.8 bullet 1 and merges to main first. This branch rebases onto it. Skip this task; the ledger records the hotfix commit.
+
 **Files:**
 - Modify: `src/artifactsmmo_cli/ai/gear_objective.py:431` (the `gains` computation)
 - Test: `tests/test_ai/test_gear_objective.py`
@@ -189,6 +191,64 @@
   - `test_an_owned_tool_is_never_reacquired`: the same state with the net banked gives the climb root.
   - `test_a_craft_skill_tool_qualifies_by_its_effect`: a synthetic item with `skill_effects={"gearcrafting": -10}` in a test-built `GameData` is the target for a gearcrafting climb.
 - [ ] **Step 2–4: FAIL, implement, PASS.** Add mutants (the owned check removed; the tool step skipped), then commit `feat(objective): a climb fetches its best tool first`.
+
+### Task 10: Each cycle records the character's prospecting
+
+**Execution order:** Tasks 10–12 run after Task 3 and before Task 5 (spec §2.8, USER 2026-10-19).
+
+**Files:**
+- Modify: `src/artifactsmmo_cli/ai/learning/models.py` (`Cycle`). Add a nullable `prospecting INTEGER` column, migrated the way earlier added columns were (grep `skill_levels_json` for the pattern). Rows recorded before this change stay NULL.
+- Modify: the cycle recorder (grep where `drops_json` is written). It writes `state.prospecting` from the server's character sheet, the total with gear. If `WorldState` lacks the field, add it from the character schema; it is API data.
+- Test: `tests/test_ai/test_learning_store.py`
+
+- [ ] **Step 1:** Failing tests: `test_a_recorded_cycle_carries_prospecting` and `test_an_old_row_reads_null_prospecting`.
+- [ ] **Step 2–4:** FAIL, implement, PASS. Commit `feat(learning): record prospecting per cycle`.
+
+### Task 11: The drop chance is a learned estimate
+
+**Files:**
+- Create: `src/artifactsmmo_cli/ai/drop_chance_core.py` (pure):
+  - `posterior_chance(api_rate: int, attempts: int, hits: int) -> Fraction`, the Beta posterior mean `(1 + hits) / (api_rate + attempts)`. This is a prior of one hit in `api_rate` attempts, then the observations. It asserts `api_rate >= 1` and `0 <= hits <= attempts`.
+  - `prospecting_multiplier(k: Fraction, prospecting: int) -> Fraction`, which is `1 + k·P`, floored at 1.
+  - `chance_at(api_rate, attempts, hits, k, prospecting) -> Fraction`, which is `min(1, posterior_chance(...) · prospecting_multiplier(...))`.
+  - `fit_k(samples: Sequence[tuple[int, int, int, int]]) -> Fraction`. Each sample is `(api_rate, prospecting, attempts, hits)`, grouped by (source, item, prospecting). It returns the least-squares `k ≥ 0` of observed/posterior ratio against `P`, and `0` when no sample has `P > 0` and `attempts > 0`.
+- Create: `formal/Formal/DropChance.lean`. Theorems:
+  - `posterior_in_unit` (the result is in (0, 1]).
+  - `posterior_converges_hits`: more hits at fixed attempts never lowers it.
+  - `multiplier_monotone` in P for k ≥ 0.
+  - `chance_le_one`.
+
+  Register it, add the oracle entry, and add `formal/diff/test_drop_chance_diff.py`.
+- Create: `src/artifactsmmo_cli/ai/learning/drop_observations.py`, with `drop_counts(store, source: str, item: str) -> tuple[int, int]` (fleet-pooled attempts and hits from `cycles`: rows whose `action_repr` names the source, a hit being `item` in `drops_json`) and `fleet_k(store) -> Fraction`.
+  - Read-only queries.
+  - Cache per cycle, keyed on the store object, held by reference (memory: cache key must pin its object).
+- Test: `tests/test_ai/test_drop_chance_core.py`, `tests/test_ai/test_drop_observations.py`
+
+- [ ] **Step 1: Failing tests:**
+  - `posterior_chance(300, 0, 0) == Fraction(1, 300)`.
+  - `posterior_chance(300, 383, 2) == Fraction(3, 683)`.
+  - `fit_k([]) == 0`.
+  - `chance_at` never exceeds 1.
+  - `drop_counts` on a temp DB seeded with 383 `Gather(trout_spot->small_pearls)` rows, 2 of them with `small_pearls` in `drops_json`, returns `(383, 2)`.
+- [ ] **Step 2–4:** FAIL, then implement the core, Lean, differential and adapter, then PASS. Add a mutant for each core branch. Commit `feat(pricing): drop chance learned from observed drops`.
+
+### Task 12: Drop routes are priced from the learned chance
+
+**Files:**
+- Modify: the `GATHER` and `DROP` route pricing in `src/artifactsmmo_cli/ai/acquisition_cost.py`. Find where a resource or monster drop's attempts per unit are computed, and the rate's current use (memory: rare-drop pricing, apple 1/20).
+  - Attempts per unit = `1 / chance_at(api_rate, *drop_counts(store, source, item), fleet_k(store), P)`.
+  - `P` is the prospecting of the loadout used for that attempt: the worn total for an executor price, the fighter's for a gear-objective price.
+  - With `store is None`, use the prior alone: `posterior_chance(api_rate, 0, 0)`.
+- Modify: `src/artifactsmmo_cli/ai/tool_objective.py` (Task 8) to add the drop axis (spec §2.8, last bullet). Add `drop_tool_target(work: Sequence[tuple[str, str, int]], state, game_data, ctx, store) -> str | None`. `work` is (source, item, qty) for the remaining drop work of the chosen piece's route. It returns the achievable, unowned, level-legal item `t` maximising prospecting such that `price(t) + Σ price(w | P + prospecting(t)) < Σ price(w | P)`, or None. `WhichPieceIsNext` offers `ObtainItem(t)` before that drop work, the same way Task 8 offers a skill tool before a climb.
+- Test: `tests/test_ai/test_acquisition_cost.py`, `tests/test_ai/test_tool_objective.py`
+
+- [ ] **Step 1: Failing tests:**
+  - `test_a_rare_drop_is_priced_by_its_chance`: 20 `small_pearls` from `trout_spot` with no store prices about 20 × 300 gathers, not 20.
+  - `test_observations_reprice_the_drop`: with (383, 2) observed, the price is 20 × 683/3.
+  - `test_prospecting_lowers_the_price_once_k_is_learned`: with fitted `k > 0` and `P = 100` the price is strictly lower than with `P = 0`.
+  - `test_a_prospecting_item_comes_first_only_when_it_saves_time`: the same drop work, with a cheap prospecting item, gives `drop_tool_target` that item. With an item whose own price exceeds the saving, it gives None.
+  - `test_the_second_copy_is_cheaper_than_the_first`: with `k > 0`, the price of the remaining work after wearing one prospecting copy is lower than before. This is the user's perfect_pearl example, as a property and not a computed rule.
+- [ ] **Step 2–4:** FAIL, implement, then run the full suite and rewrite moved outcomes exactly. Add mutants. Commit `feat(pricing): drop routes priced from the learned chance; prospecting is a drop tool`.
 
 ### Task 9: Gate, live check, merge
 
