@@ -8,7 +8,7 @@ in the order they are pursued. Three questions, each answered from game data:
   `gear_objective_core.achievable_layers`. The universe is every level-legal
   gear item `is_suppliable` admits, plus everything held, worn or banked. An
   item is achievable when `ObtainModel` finds it feasible under
-  `GEAR_OBJECTIVE_POLICY` with the DROP fights judged against a projected
+  `PIECE_POLICY` with the DROP fights judged against a projected
   fighter: the character owning one copy of every item achievable so far (two
   of a ring), stripped of what it wears and, for each dropping monster,
   wearing that monster's own `L*` over those holdings (`_fighters`). So a drop
@@ -75,7 +75,7 @@ from artifactsmmo_cli.ai.loop_rate import FoodOffer, food_menu, loop_rate
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.obtain_model.gate import GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
-from artifactsmmo_cli.ai.obtain_model.policy import GEAR_OBJECTIVE_POLICY
+from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import is_suppliable
@@ -266,7 +266,7 @@ def achievable(state: WorldState, game_data: GameData,
         model = ObtainModel(state, game_data, ctx, now, fighter=_fighters(state, owned, game_data))
         fresh = set()
         for code in open_items - owned:
-            if model.feasible(code, 1, GEAR_OBJECTIVE_POLICY):
+            if model.feasible(code, 1, PIECE_POLICY):
                 fresh.add(code)
             elif not _reachable_by_some_fighter(model, code):
                 open_items.discard(code)
@@ -296,7 +296,7 @@ def _fighters(state: WorldState, owned: frozenset[str],
 def _reachable_by_some_fighter(model: ObtainModel, code: str) -> bool:
     """Would `code` be feasible with every WINNABLE gate open: the most any
     fighter could make of this snapshot?"""
-    graph = model.walk_graph(code, GEAR_OBJECTIVE_POLICY,
+    graph = model.walk_graph(code, PIECE_POLICY,
                              openable=lambda gate: gate.kind is GateKind.WINNABLE)
     return can_obtain(code, 1, graph.on_hand, graph.routes)
 
@@ -359,7 +359,7 @@ def _candidates(state: WorldState, game_data: GameData) -> list[str]:
     and with a tile the fight pool reaches on any layer (`monster_spawn_known`:
     a static tile in a reachable region, interiors and the underground
     included, for which the action factory builds a `FightAction`, or a live
-    event tile), the same predicate `GEAR_OBJECTIVE_POLICY`'s drops ask."""
+    event tile), the same predicate `PIECE_POLICY`'s drops ask."""
     ceiling = state.level + FIGHT_LEVEL_GAP_CEILING
     return [code for code, kind in game_data.monsters.types.items()
             if kind not in PARTY_ONLY_TYPES and game_data.monster_levels[code] <= ceiling
@@ -454,8 +454,10 @@ def _gain(state: WorldState, target: WorldState, game_data: GameData, monster: s
 def _price(state: WorldState, game_data: GameData, ctx: SelectionContext,
            history: LearningStore | None, slot: str, code: str) -> Fraction:
     """Acquisition price of wearing `code` in `slot`: `route_price` of the slotted
-    `ObtainItem` (its equip included)."""
-    return Fraction(route_price(ObtainItem(code, 1, slot=slot), state, game_data, ctx, history))
+    `ObtainItem` (its equip included), under `PIECE_POLICY`, the policy the
+    piece was judged achievable by and is served by."""
+    return Fraction(route_price(ObtainItem(code, 1, slot=slot), state, game_data, ctx, history,
+                                policy=PIECE_POLICY))
 
 
 def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext,

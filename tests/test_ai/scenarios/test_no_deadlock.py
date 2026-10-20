@@ -371,7 +371,10 @@ def test_l48_band_adequate_names_the_wall_when_no_winnable_monster() -> None:
     RE-DERIVED Task 5: the root walk offers the first `L*` piece,
     `goblin_guard_shield`, so the cycle no longer Waits: it plans the shield's
     acquisition (an acquisition fight against the goblin_guard). Not a
-    deadlock, and not an XP fight: no trunk is offered at all."""
+    deadlock, and not an XP fight: no trunk is offered at all.
+    RE-DERIVED plan B Task 2 (`PIECE_POLICY`, ruling T2a): the 20000-gold
+    `lifesteal_rune` is priced through gold earned by fighting, a finite price,
+    so it orders ahead of the piece behind an unpriced climb."""
     player, _gd = _player(CRITERION_2_WALLED)
     assert player._pick_winnable_monster() == "hellhound"
     assert player._tree_band_adequate() is False
@@ -381,8 +384,8 @@ def test_l48_band_adequate_names_the_wall_when_no_winnable_monster() -> None:
     assert report.decision.chosen_root == ObtainItem(
         code="goblin_guard_shield", quantity=1, slot="shield_slot")
     assert report.decision.fallback_roots == [
-        ReachSkillLevel(skill="jewelrycrafting", level=36),
-        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")]
+        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
+        ReachSkillLevel(skill="jewelrycrafting", level=36)]
 
 
 def test_l48_band_adequate_search_bounded() -> None:

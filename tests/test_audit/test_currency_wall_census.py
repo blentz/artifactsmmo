@@ -201,7 +201,16 @@ def test_only_the_gold_wall_is_exercised_and_the_matrix_says_so(
     four level-32 sheets the `fire_and_earth_amulet` that headed the walk adds
     nothing over their `life_amulet`, so the walled rune, the other layer-0
     piece, is the first piece and the resolved root. The arbiter declines it
-    (`infeasible:lifesteal_rune:no_route`) and climbs gearcrafting."""
+    (`infeasible:lifesteal_rune:no_route`) and climbs gearcrafting.
+
+    4 -> 7 resolved roots (plan B Task 2, ruling T2h): under `PIECE_POLICY`
+    the rune's 20000 gold is earned by fighting, a finite price (about 19900),
+    so it orders ahead of every piece behind an unpriced skill climb and heads
+    the walk on `l20_dual_utility`, `l20_dual_utility_one_stocked` and
+    `l24_fisher_cooking_rung` too. It is achievable, the arbiter declines it
+    (`infeasible:lifesteal_rune:no_route`: the executor buys from the pocket)
+    and the walk falls through to the next piece. Serving it (fight for the
+    gold, then buy) is Task 3's."""
     walls = [r for r in results if r.gap.startswith("wall_")]
     assert {r.gap for r in walls} == {CurrencyGap.WALL_GOLD.value}
     assert {r.currency for r in walls} == {GOLD_ROW}
@@ -209,7 +218,8 @@ def test_only_the_gold_wall_is_exercised_and_the_matrix_says_so(
     assert {r.candidate for r in walls} == {repr(GOLD_CANDIDATE)}
     assert {r.scenario for r in walls if r.is_resolved_root} == {
         "l32_items_task", "l32_held_task_workable", "l32_held_task_closable",
-        "l32_held_task_open"}
+        "l32_held_task_open", "l20_dual_utility", "l20_dual_utility_one_stocked",
+        "l24_fisher_cooking_rung"}
     assert "walled 21" in summary_line(results)
 
 

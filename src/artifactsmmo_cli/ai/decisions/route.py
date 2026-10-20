@@ -47,6 +47,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
@@ -106,7 +107,7 @@ def route_is_acquirable(goal: MetaGoal, state: WorldState, game_data: GameData,
 def route_price(goal: MetaGoal, state: WorldState, game_data: GameData,
                 ctx: SelectionContext,
                 history: LearningStore | None,
-                gated_drop: bool = True) -> int:
+                gated_drop: bool = True, policy: Policy = LEGACY) -> int:
     """Lower bound on planner actions to satisfy `goal` by its cheapest route.
 
     A FORWARDER, not a second cost model. For `ObtainItem` this is
@@ -121,6 +122,11 @@ def route_price(goal: MetaGoal, state: WorldState, game_data: GameData,
     `equip` — the caller that used to (`strategy_driver.py`'s GEAR_REVIEW arm,
     `equip=True` by hand) was asserting a second time a fact the slot already
     carried, and the two could drift.
+
+    `policy` is the obtain policy an `ObtainItem` is priced under, forwarded to
+    `acquisition_actions`. `LEGACY` (what the executor serves now) is the
+    default every executor-side caller keeps; the gear objective prices an
+    `L*` piece under `PIECE_POLICY`, the policy it judges and serves it by.
 
 TOTAL over `META_GOAL_KINDS` since wave 6. The two climbs return
     `UNOBTAINABLE_PER_UNIT` — never 0 and never `inf` — when they cannot be
@@ -138,7 +144,7 @@ TOTAL over `META_GOAL_KINDS` since wave 6. The two climbs return
         # on success — which is exactly what happened the day the gate landed.
         return acquisition_actions(goal.code, goal.quantity, state, game_data,
                                    ctx, equip=goal.slot is not None,
-                                   store=history, gated_drop=gated_drop)
+                                   store=history, gated_drop=gated_drop, policy=policy)
     if isinstance(goal, ReachSkillLevel):
         # Cycles ARE actions — `skill_grind_cost_core`'s own headline. This is
         # the same term `acquisition_cost._gated_skill_option` charges as

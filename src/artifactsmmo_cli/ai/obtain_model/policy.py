@@ -54,7 +54,13 @@ class Policy:
     the pocket holds or a sale raises, as `obtain_sources` and near-term
     attainability ask).
     `drop_routes`: a DROP route is offered (True) or not (False, for a caller
-    whose emission cannot fight: the potion supply emits no FightAction)."""
+    whose emission cannot fight: the potion supply emits no FightAction).
+    `price_climbs`: a CRAFT or GATHER route whose own skill requirement exceeds
+    the character's skill is priced with the climb to it even though this
+    policy admits it as ready (True: the gate decides achievability, the climb
+    is price; ruling T2c') or priced as the ready route the policy admits
+    (False: a caller that opens a skill gate on purpose, such as the skill
+    grind's ranking pricing a fish-gated rung as "gather the fish")."""
 
     all_gather_routes: bool
     gather_skill_gate: bool
@@ -67,6 +73,7 @@ class Policy:
     task_rewards: bool
     fight_gold: bool
     drop_routes: bool
+    price_climbs: bool = False
 
     def admits(self, route: Route) -> bool:
         """Is `route` offered at all under this policy?"""
@@ -153,26 +160,38 @@ switches.
   from 2c-2b until 2026-10-02)."""
 
 
-GEAR_OBJECTIVE_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False,
-                               craft_skill_gate=False, event_vendors=True, spawn_known=True,
-                               allow_grey=True, vendor_routes=True, ge_routes=False,
-                               task_rewards=True, fight_gold=True, drop_routes=True)
-"""What the global gear objective counts as achievable "in principle"
-(docs/superpowers/specs/2026-10-18-global-gear-objective-design.md §2.1).
+PIECE_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False, craft_skill_gate=False,
+                      event_vendors=True, spawn_known=True, allow_grey=True, vendor_routes=True,
+                      ge_routes=True, task_rewards=True, fight_gold=True, drop_routes=True,
+                      price_climbs=True)
+"""The ONE policy an `L*` piece is judged, priced and served under
+(docs/superpowers/specs/2026-10-18-global-gear-objective-design.md §2.1,
+§2.3, §2.4): what the global gear objective counts as achievable
+(`gear_objective.achievable`), what it prices a piece by
+(`gear_objective._price`) and what the step graph counts as a leaf it can
+produce (`tiers/strategy.actionable_step`). Three policies answered those
+three questions before (plan B), and they disagreed: `lich_race_trophy` was
+achievable through its live event vendor and then declined `no_step_goal`,
+because the step graph refused every event NPC.
 
 - No skill gate on a GATHER or CRAFT route: any skill level is climbable, so a
-  climb is a cost, never a veto.
+  climb is a cost, never a veto (`price_climbs`: the price carries it).
 - An event vendor counts while it is tradeable now, and an event monster only
   while its event is live: event-only routes are not completable otherwise.
+- A standing GE sell order counts while it stands (USER 2026-10-19: "yes, live
+  sell order counts as a route just like an event"). The route exists only
+  while the book holds an open sell order (`ObtainModel._ge_fill` reads
+  `ge_best_sell_order`, None when the order is gone), as an event vendor's
+  route is ready only while `VENDOR_TRADEABLE` holds.
 - A routable spawn (`spawn_known`): a tile on any layer in a reachable region.
   It admits a static underground or interior monster, which the overworld-only
   live index cannot see, and it does NOT admit an event monster whose event is
   not live: `monster_spawn_known` reads the event tiles only while the event is
   live, and an event's candidate maps carry no static content in the map data.
 - Grey droppers count: the objective asks what can be had, not what pays XP.
-- No GE fill, as `DECOMPOSE_POLICY`: a standing order is not a supply route the
-  catalogue guarantees.
-- Gold is earned by fighting (`fight_gold`), and task-earned currency counts.
+- Gold is earned by fighting (`fight_gold`), and task-earned currency counts:
+  a vendor leaf is a step the character can work toward however far the
+  pocket falls short.
 
 The WINNABLE gate on a drop is the caller's projected fighter, not the worn
 gear (`ObtainModel(..., fighter=...)`, §2.3)."""

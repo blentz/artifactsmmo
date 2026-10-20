@@ -9,7 +9,7 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
-from artifactsmmo_cli.ai.obtain_model.policy import Policy
+from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import progression_tree
 from artifactsmmo_cli.ai.tiers.meta_goal import (
@@ -22,10 +22,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     StepDecline,
     no_decline,
 )
-from artifactsmmo_cli.ai.tiers.objective import (
-    ATTAINABILITY_ALLOWS_GREY,
-    CharacterObjective,
-)
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -129,28 +126,18 @@ def root_cost(root: MetaGoal, state: WorldState, game_data: GameData,
     return unmet_closure_size(root, state, game_data, ctx)
 
 
-STEP_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False, craft_skill_gate=False,
-                     event_vendors=False, spawn_known=True,
-                     allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=True, ge_routes=False,
-                     task_rewards=True, fight_gold=True, drop_routes=True)
-"""What the step graph counts as a way to produce a leaf, as an obtain-model
-policy (step 4 of docs/PLAN_decision_architecture_redesign.md): every
-gatherer, a routable spawn, a winnable dropper (grey allowed:
-`ATTAINABILITY_ALLOWS_GREY`), a permanent vendor, the task board, and gold
-earned by fighting. Gold is RENEWABLE here, as it always was for this test
-("gold is producible"): a vendor leaf is a step the character can work toward
-however far the pocket falls short, which is exactly what near-term
-attainability (pocket gold only) must not say. No GE fill: goal emission fills
-an order only as the cheaper venue for an item an NPC also sells (D-E). No
-skill gate: an under-skill craft's gate is a sub-task the walk opens by a grind."""
-
-
 def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
     """Can the step graph treat `code` as a leaf it can produce? A craftable
     item always can: `prerequisites` decomposes its recipe, so its inputs are
     the step graph's own business, not this test's. Anything else is
-    `ObtainModel.feasible(code, 1, STEP_POLICY)`: in hand (bag or bank), or a
-    ready route whose inputs can be had.
+    `ObtainModel.feasible(code, 1, PIECE_POLICY)`: in hand (bag or bank), or a
+    ready route whose inputs can be had. It is the policy the gear objective
+    judges and prices an `L*` piece by, so a piece the objective calls
+    achievable is a leaf this graph can produce (plan B: three policies once
+    disagreed, and `lich_race_trophy` was achievable through its live event
+    vendor yet declined `no_step_goal`). Gold is renewable here, earned by
+    fighting, as it always was for this test ("gold is producible"); a live
+    event vendor and a standing GE sell order count while they last.
 
     The winnability gate is load-bearing: a drop from an unwinnable monster must
     NOT read as producible, else the planner would emit an unreachable FightAction
@@ -166,7 +153,7 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
     if game_data.crafting_recipe(code) is not None:
         return True
     model = ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
-    return model.feasible(code, 1, STEP_POLICY)
+    return model.feasible(code, 1, PIECE_POLICY)
 
 
 def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,

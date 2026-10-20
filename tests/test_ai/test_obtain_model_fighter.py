@@ -16,7 +16,7 @@ import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
-from artifactsmmo_cli.ai.obtain_model.policy import GEAR_OBJECTIVE_POLICY
+from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -55,9 +55,9 @@ def test_a_fighter_that_wins_opens_the_drop_the_wearer_cannot(gd: GameData) -> N
     state = _character(gd)
     fighter = _character(gd, equipment={"weapon_slot": "iron_sword"},
                          inventory={"iron_sword": 1})
-    assert not ObtainModel(state, gd, CTX, NOW).feasible("feather", 1, GEAR_OBJECTIVE_POLICY)
+    assert not ObtainModel(state, gd, CTX, NOW).feasible("feather", 1, PIECE_POLICY)
     assert ObtainModel(state, gd, CTX, NOW, fighter=fighter).feasible(
-        "feather", 1, GEAR_OBJECTIVE_POLICY)
+        "feather", 1, PIECE_POLICY)
 
 
 def test_the_fighters_inventory_is_never_stock(gd: GameData) -> None:
@@ -68,8 +68,8 @@ def test_the_fighters_inventory_is_never_stock(gd: GameData) -> None:
     fighter = _character(gd, inventory={"feather": 5})
     model = ObtainModel(state, gd, CTX, NOW, fighter=fighter)
     assert model.in_bag("feather") == 0
-    assert model.walk_graph("feather", GEAR_OBJECTIVE_POLICY).on_hand.get("feather", 0) == 0
-    assert not model.feasible("feather", 1, GEAR_OBJECTIVE_POLICY)
+    assert model.walk_graph("feather", PIECE_POLICY).on_hand.get("feather", 0) == 0
+    assert not model.feasible("feather", 1, PIECE_POLICY)
 
 
 def test_an_event_monster_that_is_not_live_drops_nothing(fresh_gd: GameData) -> None:
@@ -82,12 +82,12 @@ def test_an_event_monster_that_is_not_live_drops_nothing(fresh_gd: GameData) -> 
     event = fresh_gd.world.event_code_of_content["bandit_lizard"]
     with patch(WINS, return_value=True):
         assert not ObtainModel(state, fresh_gd, CTX, NOW).feasible(
-            "lizard_eye", 1, GEAR_OBJECTIVE_POLICY)
+            "lizard_eye", 1, PIECE_POLICY)
         x, y = fresh_gd.world.event_monster_locations["bandit_lizard"][0]
         fresh_gd.active_event_codes = {event}
         fresh_gd.active_event_maps = {event: [(x, y, "overworld")]}
         assert ObtainModel(state, fresh_gd, CTX, NOW).feasible(
-            "lizard_eye", 1, GEAR_OBJECTIVE_POLICY)
+            "lizard_eye", 1, PIECE_POLICY)
 
 
 def test_a_static_monster_on_another_layer_still_drops(gd: GameData) -> None:
@@ -99,9 +99,9 @@ def test_a_static_monster_on_another_layer_still_drops(gd: GameData) -> None:
     assert not gd.all_monster_locations.get("goblin_guard")
     with patch(WINS, return_value=True):
         model = ObtainModel(state, gd, CTX, NOW)
-        assert model.feasible("goblin_guard_foot", 1, GEAR_OBJECTIVE_POLICY)
+        assert model.feasible("goblin_guard_foot", 1, PIECE_POLICY)
         assert not model.feasible("goblin_guard_foot", 1,
-                                  replace(GEAR_OBJECTIVE_POLICY, spawn_known=False))
+                                  replace(PIECE_POLICY, spawn_known=False))
 
 
 def test_skill_gates_are_a_cost_not_a_veto(gd: GameData) -> None:
@@ -113,9 +113,9 @@ def test_skill_gates_are_a_cost_not_a_veto(gd: GameData) -> None:
     assert (stats.crafting_skill, stats.crafting_level) == ("gearcrafting", 40)
     state = _character(gd, skills={"gearcrafting": 23}, inventory=dict(recipe))
     model = ObtainModel(state, gd, CTX, NOW)
-    assert model.feasible("mithril_shield", 1, GEAR_OBJECTIVE_POLICY)
+    assert model.feasible("mithril_shield", 1, PIECE_POLICY)
     assert not model.feasible("mithril_shield", 1,
-                              replace(GEAR_OBJECTIVE_POLICY, craft_skill_gate=True))
+                              replace(PIECE_POLICY, craft_skill_gate=True))
 
 
 def test_grey_droppers_count(gd: GameData) -> None:
@@ -124,8 +124,8 @@ def test_grey_droppers_count(gd: GameData) -> None:
     state = _character(gd, level=40, equipment={"weapon_slot": "iron_sword"})
     assert gd.xp_per_kill("chicken", 40) == 0
     model = ObtainModel(state, gd, CTX, NOW)
-    assert model.feasible("feather", 1, GEAR_OBJECTIVE_POLICY)
-    assert not model.feasible("feather", 1, replace(GEAR_OBJECTIVE_POLICY, allow_grey=False))
+    assert model.feasible("feather", 1, PIECE_POLICY)
+    assert not model.feasible("feather", 1, replace(PIECE_POLICY, allow_grey=False))
 
 
 def test_a_fighter_per_monster_judges_each_dropper_on_its_own(gd: GameData) -> None:
@@ -141,8 +141,8 @@ def test_a_fighter_per_monster_judges_each_dropper_on_its_own(gd: GameData) -> N
         return armed if monster == "chicken" else state
 
     model = ObtainModel(state, gd, CTX, NOW, fighter=per_monster)
-    assert model.feasible("feather", 1, GEAR_OBJECTIVE_POLICY)
+    assert model.feasible("feather", 1, PIECE_POLICY)
     assert "chicken" in asked
     assert model.in_bag("iron_sword") == 0
     assert not ObtainModel(state, gd, CTX, NOW, fighter=lambda _monster: state).feasible(
-        "feather", 1, GEAR_OBJECTIVE_POLICY)
+        "feather", 1, PIECE_POLICY)

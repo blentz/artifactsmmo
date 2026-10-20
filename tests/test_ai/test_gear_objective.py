@@ -669,8 +669,8 @@ def test_a_bare_element_below_zero_raises(gd: GameData) -> None:
         gear_objective(state, gd, CTX, None)
 
 
-_L48_MISSING = [("shield_slot", "goblin_guard_shield"), ("ring2_slot", "mithril_ring"),
-                ("rune_slot", "lifesteal_rune")]
+_L48_MISSING = [("shield_slot", "goblin_guard_shield"), ("rune_slot", "lifesteal_rune"),
+                ("ring2_slot", "mithril_ring")]
 
 
 @pytest.mark.parametrize(("name", "monster", "missing"), [
@@ -679,18 +679,18 @@ _L48_MISSING = [("shield_slot", "goblin_guard_shield"), ("ring2_slot", "mithril_
                                        ("amulet_slot", "life_amulet")]),
     ("l20_band_entry", "pig", [
         ("amulet_slot", "fire_and_earth_amulet"), ("shield_slot", "iron_shield"),
-        ("weapon_slot", "steel_battleaxe"), ("leg_armor_slot", "hard_leather_pants"),
-        ("ring1_slot", "earth_ring"), ("ring2_slot", "earth_ring"),
-        ("rune_slot", "lifesteal_rune"), ("helmet_slot", "steel_helm")]),
+        ("rune_slot", "lifesteal_rune"), ("weapon_slot", "steel_battleaxe"),
+        ("leg_armor_slot", "hard_leather_pants"), ("ring1_slot", "earth_ring"),
+        ("ring2_slot", "earth_ring"), ("helmet_slot", "steel_helm")]),
     ("l30_band_entry", "ogre", [
         ("weapon_slot", "skull_staff"), ("shield_slot", "iron_shield"),
         ("boots_slot", "steel_boots"), ("amulet_slot", "fire_and_earth_amulet"),
-        ("ring1_slot", "gold_ring"), ("ring2_slot", "gold_ring"),
-        ("rune_slot", "lifesteal_rune")]),
+        ("rune_slot", "lifesteal_rune"), ("ring1_slot", "gold_ring"),
+        ("ring2_slot", "gold_ring")]),
     ("l40_band_entry", "cultist_acolyte", [
         ("shield_slot", "slime_shield"), ("leg_armor_slot", "royal_skeleton_pants"),
         ("helmet_slot", "royal_skeleton_helmet"), ("body_armor_slot", "royal_skeleton_armor"),
-        ("ring2_slot", "malefic_ring"), ("rune_slot", "lifesteal_rune")]),
+        ("rune_slot", "lifesteal_rune"), ("ring2_slot", "malefic_ring")]),
     ("l48_capstone_approach", "hellhound", _L48_MISSING),
     ("l48_band_adequate", "hellhound", _L48_MISSING),
     ("l48_raid_active", "hellhound", _L48_MISSING),
@@ -712,7 +712,12 @@ def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str
     `L*` above level 20 names a `perfect_pearl`, and none is missing: it adds
     only prospecting. The level-48 sheets own no shield, rune or second
     `mithril_ring` that matches `L*`'s (a `wooden_shield` and a `copper_ring`
-    at most)."""
+    at most).
+
+    RE-DERIVED plan B Task 2 (`PIECE_POLICY`, ruling T2a): the 20000-gold
+    `lifesteal_rune` is priced through gold earned by fighting (19204-19904),
+    so within its layer it orders ahead of every piece behind an unpriced
+    skill climb (`UNOBTAINABLE_PER_UNIT + 1` with no grind rate, ruling T2c')."""
     objective = _objective(scenario_state(SCENARIOS[name], gd), gd)
     assert objective.monster == monster
     assert [(piece.slot, piece.code) for piece in objective.missing] == missing

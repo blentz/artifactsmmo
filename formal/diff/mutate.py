@@ -3776,16 +3776,74 @@ OBTAIN_MODEL_FIGHTER_MUTATIONS = [
      "        bag: dict[str, int] = dict(self._state.inventory) | "
      "(dict(self._fighter.inventory) if self._fighter is not None else {})"),
 ]
-GEAR_OBJECTIVE_POLICY_MUTATIONS = [
-    ("GEAR_OBJECTIVE_POLICY: grey droppers refused",
-     "                               allow_grey=True, vendor_routes=True, ge_routes=False,",
-     "                               allow_grey=False, vendor_routes=True, ge_routes=False,"),
-    ("GEAR_OBJECTIVE_POLICY: only a live overworld spawn counts",
-     "                               craft_skill_gate=False, event_vendors=True, spawn_known=True,",
-     "                               craft_skill_gate=False, event_vendors=True, spawn_known=False,"),
-    ("GEAR_OBJECTIVE_POLICY: the crafting skill is a veto",
-     "                               craft_skill_gate=False, event_vendors=True, spawn_known=True,",
-     "                               craft_skill_gate=True, event_vendors=True, spawn_known=True,"),
+PIECE_POLICY_MUTATIONS = [
+    ("PIECE_POLICY: grey droppers refused",
+     '                      event_vendors=True, spawn_known=True, allow_grey=True, vendor_routes=True,',
+     '                      event_vendors=True, spawn_known=True, allow_grey=False, vendor_routes=True,'),
+    ("PIECE_POLICY: only a live overworld spawn counts",
+     '                      event_vendors=True, spawn_known=True, allow_grey=True, vendor_routes=True,',
+     '                      event_vendors=True, spawn_known=False, allow_grey=True, vendor_routes=True,'),
+    ("PIECE_POLICY: the crafting skill is a veto",
+     'PIECE_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False, craft_skill_gate=False,',
+     'PIECE_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False, craft_skill_gate=True,'),
+]
+# plan B Task 2: one policy prices, judges and serves an L* piece. The
+# policy's GE and event switches, each consumer back on its old policy, and
+# the pricer's arms for every route the policy admits (rulings T2a-T2c),
+# killed by tests/test_ai/test_piece_policy.py.
+PIECE_POLICY_ROUTE_MUTATIONS = [
+    ("PIECE_POLICY: no GE fill",
+     '                      ge_routes=True, task_rewards=True, fight_gold=True, drop_routes=True,',
+     '                      ge_routes=False, task_rewards=True, fight_gold=True, drop_routes=True,'),
+    ("PIECE_POLICY: a climb is not priced",
+     "                      price_climbs=True)",
+     "                      price_climbs=False)"),
+    ("PIECE_POLICY: no event vendor",
+     '                      event_vendors=True, spawn_known=True, allow_grey=True, vendor_routes=True,',
+     '                      event_vendors=False, spawn_known=True, allow_grey=True, vendor_routes=True,'),
+]
+PIECE_POLICY_STRATEGY_MUTATIONS = [
+    ("strategy: the step graph back on STEP_POLICY (no event vendor, no GE fill)",
+     "    return model.feasible(code, 1, PIECE_POLICY)",
+     "    return model.feasible(code, 1, type(PIECE_POLICY)(**{**vars(PIECE_POLICY), "
+     "'event_vendors': False, 'ge_routes': False}))"),
+]
+PIECE_POLICY_OBJECTIVE_MUTATIONS = [
+    ("gear_objective: achievability back on GEAR_OBJECTIVE_POLICY (no GE fill)",
+     "            if model.feasible(code, 1, PIECE_POLICY):",
+     "            if model.feasible(code, 1, type(PIECE_POLICY)(**{**vars(PIECE_POLICY), "
+     "'ge_routes': False})):"),
+    ("gear_objective: the price back on LEGACY",
+     "    return Fraction(route_price(ObtainItem(code, 1, slot=slot), state, game_data, ctx, history,\n"
+     "                                policy=PIECE_POLICY))",
+     "    return Fraction(route_price(ObtainItem(code, 1, slot=slot), state, game_data, ctx, history))"),
+]
+# ruling T2c': only a policy that sets `price_climbs` charges a climb for a
+# gate it opens; the skill grind's ranking (GRIND_PRICING) opens the gathering
+# gate on purpose. Killed by tests/test_ai/scenarios/test_fisher_cooking_rung.py.
+PRICE_CLIMBS_SWITCH_MUTATIONS = [
+    ("acquisition_cost: every policy prices a climb (price_climbs ignored)",
+     "    if not policy.price_climbs:\n        return policy\n",
+     "    if False:\n        return policy\n"),
+]
+PIECE_POLICY_ROUTE_PRICE_MUTATIONS = [
+    ("route: route_price drops its policy",
+     "                                   store=history, gated_drop=gated_drop, policy=policy)",
+     "                                   store=history, gated_drop=gated_drop)"),
+]
+PIECE_POLICY_PRICER_MUTATIONS = [
+    ("acquisition_cost: fight gold priced at the max gold, not the mean",
+     "            capacity=source.capacity, yield_per=source.yield_per)",
+     "            capacity=source.capacity, yield_per=game_data.monster_max_gold(source.code))"),
+    ("acquisition_cost: a climb dropped from a gated price",
+     "    climbs = _climbs(item, model, policy)",
+     "    climbs: frozenset[tuple[SourceKind, str]] = frozenset()"),
+    ("acquisition_cost: the climb read from the policy's refusal",
+     "    return replace(policy, gather_skill_gate=True, craft_skill_gate=True)",
+     "    return policy"),
+    ("acquisition_cost: a task reward priced finite",
+     "                           actions_per_application=UNOBTAINABLE_PER_UNIT,",
+     "                           actions_per_application=1,"),
 ]
 # The GATHER spawn gate (obtain_model.py) and its predicate (game_data.py),
 # killed by tests/test_ai/test_obtain_model.py and test_game_data.py.
@@ -4352,14 +4410,15 @@ NEAR_TERM_POLICY_MUTATIONS = [
      "                          event_vendors=False, spawn_known=True,",
      "                          event_vendors=False, spawn_known=False,"),
 ]
-# strategy.STEP_POLICY, killed by tests/test_ai/test_producible_gatherable_currency.py.
+# strategy._producible's PIECE_POLICY, killed by
+# tests/test_ai/test_producible_gatherable_currency.py.
 STEP_POLICY_MUTATIONS = [
-    ("strategy: the step graph earns no gold by fighting",
-     "                     task_rewards=True, fight_gold=True, drop_routes=True)",
-     "                     task_rewards=True, fight_gold=False, drop_routes=True)"),
-    ("strategy: the step graph ignores vendors",
-     "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=True, ge_routes=False,",
-     "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=False, ge_routes=False,"),
+    ("PIECE_POLICY: the step graph earns no gold by fighting",
+     "                      ge_routes=True, task_rewards=True, fight_gold=True, drop_routes=True,",
+     "                      ge_routes=True, task_rewards=True, fight_gold=False, drop_routes=True,"),
+    ("PIECE_POLICY: the step graph ignores vendors",
+     "                      event_vendors=True, spawn_known=True, allow_grey=True, vendor_routes=True,",
+     "                      event_vendors=True, spawn_known=True, allow_grey=True, vendor_routes=False,"),
 ]
 GRIND_OBTAINABLE_GREY_MUTATIONS = [
     ("skill_grind_target: the grind refuses a grey dropper",
@@ -6409,8 +6468,8 @@ SKILL_CREDIT_PRICE_MUTATIONS = [
 ]
 LOSS_RISK_ACQUISITION_MUTATIONS = [
     ("loss risk: the drop price ignores the learned losses",
-     "    per_kill += _loss_surcharge(monster_code, state.max_hp, records, fight)\n",
-     "    per_kill += 0.0\n"),
+     "    return per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight)\n",
+     "    return per_kill + 0.0\n"),
     ("loss risk: the routes drop the context's records",
      "                                                  store, ctx.fight_records),\n",
      "                                                  store, ()),\n"),
@@ -11758,8 +11817,20 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_obtain_model_fighter.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_FIGHTER_MUTATIONS,
               "tests/test_ai/test_obtain_model_fighter.py", survivors)
-    run_group(OBTAIN_MODEL_POLICY_SRC, GEAR_OBJECTIVE_POLICY_MUTATIONS,
+    run_group(OBTAIN_MODEL_POLICY_SRC, PIECE_POLICY_MUTATIONS,
               "tests/test_ai/test_obtain_model_fighter.py", survivors)
+    run_group(OBTAIN_MODEL_POLICY_SRC, PIECE_POLICY_ROUTE_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(STRATEGY_SRC, PIECE_POLICY_STRATEGY_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, PIECE_POLICY_OBJECTIVE_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(ROUTE_SRC, PIECE_POLICY_ROUTE_PRICE_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(ACQUISITION_COST_SRC, PIECE_POLICY_PRICER_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(ACQUISITION_COST_SRC, PRICE_CLIMBS_SWITCH_MUTATIONS,
+              "tests/test_ai/scenarios/test_fisher_cooking_rung.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_QUANTITY_MUTATIONS,
               "tests/test_ai/test_obtain_model.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_MINTS_MUTATIONS,
@@ -11850,7 +11921,7 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_skill_grind_target.py", survivors)
     run_group(OBJECTIVE_SRC, NEAR_TERM_POLICY_MUTATIONS,
               "tests/test_ai/test_tiers_objective.py", survivors)
-    run_group(STRATEGY_SRC, STEP_POLICY_MUTATIONS,
+    run_group(OBTAIN_MODEL_POLICY_SRC, STEP_POLICY_MUTATIONS,
               "tests/test_ai/test_producible_gatherable_currency.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_OBTAINABLE_GREY_MUTATIONS,
               "tests/test_ai/scenarios/test_grind_grey_material.py", survivors)

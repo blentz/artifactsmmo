@@ -159,7 +159,10 @@ def test_l48_band_adequate_is_the_honest_wall() -> None:
     underground goblin_guard), with the other pieces behind it — the
     jewelrycrafting climb the `mithril_ring` needs and the `lifesteal_rune` —
     and no trunk: no level grind while a piece is missing (§6.2). Plan C
-    deletes this band witness."""
+    deletes this band witness.
+    RE-DERIVED plan B Task 2 (`PIECE_POLICY`, ruling T2a): the 20000-gold
+    `lifesteal_rune` is priced through gold earned by fighting, a finite price,
+    so it orders ahead of the piece behind an unpriced climb."""
     gd = _bundle()
     state = scenario_state(SCENARIOS[L48_BAND_ADEQUATE], gd)
     objective = CharacterObjective.from_game_data(gd)
@@ -169,8 +172,8 @@ def test_l48_band_adequate_is_the_honest_wall() -> None:
     assert decision.chosen_root == shield
     assert decision.chosen_step == shield
     assert decision.fallback_roots == [
-        ReachSkillLevel(skill="jewelrycrafting", level=36),
-        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")]
+        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
+        ReachSkillLevel(skill="jewelrycrafting", level=36)]
 
 
 def test_l48_band_adequate_real_band_adequate_verdict() -> None:

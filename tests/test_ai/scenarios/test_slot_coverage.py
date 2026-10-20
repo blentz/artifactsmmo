@@ -440,8 +440,12 @@ def test_l48_event_active_pursues_event_gear() -> None:
     assert objective.loadout["helmet_slot"] == "corrupted_crown"
     assert report.decision.chosen_root == ObtainItem(
         code="goblin_guard_shield", quantity=1, slot="shield_slot")
-    assert report.decision.fallback_roots[:2] == [
+    # RE-DERIVED plan B Task 2 (`PIECE_POLICY`, ruling T2a): the 20000-gold
+    # rune is priced through gold earned by fighting, so it orders between the
+    # event's two pieces.
+    assert report.decision.fallback_roots == [
         ObtainItem(code="corrupted_skull", quantity=1, slot="artifact1_slot"),
+        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
         ObtainItem(code="corrupted_crown", quantity=1, slot="helmet_slot")]
     assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
         repr(report.selected_goal), report.plan)
@@ -918,6 +922,10 @@ def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
     # RE-DERIVED spec 2026-10-18 §2.8 (a piece that adds no XP is not missing):
     # the pearl adds only prospecting, so it is no longer offered. Its route is
     # still planned below, as it would be were it pursued.
+    #
+    # RE-DERIVED plan B Task 2 (`PIECE_POLICY`, ruling T2a): the rune's 20000
+    # gold is earned by fighting, a finite price, so it orders ahead of the
+    # jewelrycrafting climb, which has no grind rate offline and so no price.
     report = _run("l35_artifact_fill")
     pearl = ObtainItem(code="perfect_pearl", quantity=1, slot="artifact1_slot")
     assert report.decision.chosen_root == ObtainItem(
@@ -925,8 +933,8 @@ def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
     assert report.decision.fallback_roots == [
         ObtainItem(code="steel_boots", quantity=1, slot="boots_slot"),
         ObtainItem(code="mushmush_wizard_hat", quantity=1, slot="helmet_slot"),
-        ReachSkillLevel(skill="jewelrycrafting", level=21),
         ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
+        ReachSkillLevel(skill="jewelrycrafting", level=21),
         ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")]
     assert [repr(a) for a in report.plan] == [
         "Fight(death_knight)", "Equip(death_knight_sword->weapon_slot)"]

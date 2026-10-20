@@ -1,0 +1,316 @@
+"""One route policy judges, prices and serves an `L*` piece (plan B Task 2).
+
+`PIECE_POLICY` is the policy `gear_objective.achievable` judges a piece by,
+`gear_objective._price` prices it by and `tiers/strategy.actionable_step`
+counts a leaf by. Three policies once answered those three questions, and
+they disagreed: an event vendor's item was achievable and then declined
+`no_step_goal`, because the step graph refused every event NPC; a GE order
+was a route to the pricer and not to the objective.
+
+`lich_race_trophy`, the live piece that showed the split, is NOT in the
+committed bundle (no item stats, no NPC sells it, and the archaeologist is a
+permanent NPC there). The bundle's own event-gated vendor item stands in for it:
+`lost_world_map`, an L19 artifact (wisdom 100) that only the event NPC
+`nomadic_merchant` sells, for 15000 gold.
+"""
+
+import json
+from dataclasses import replace
+from fractions import Fraction
+from math import ceil
+from pathlib import Path
+
+import pytest
+
+from artifactsmmo_cli.ai.acquisition_cost import _kill_actions, route_options
+from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
+from artifactsmmo_cli.ai.decisions.route import route_price
+from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective import achievable
+from artifactsmmo_cli.ai.gear_objective_core import layer_of
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, PIECE_POLICY
+from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.scenario import (
+    FAR_FUTURE,
+    SCENARIOS,
+    derived_scenario_state,
+    scenario_state,
+)
+from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.strategy import actionable_step
+from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.shared_world import attached, shared_world
+
+BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
+
+EVENT_ITEM = "lost_world_map"
+EVENT_NPC = "nomadic_merchant"
+EVENT_SLOT = "artifact1_slot"
+EVENT_CELL = "l20_band_entry"
+"""A level-20 character whose `L*` takes the event vendor's map while the
+event is live."""
+
+GE_CELL = "l12_ge_book_adequate"
+AMULET = ObtainItem("fire_and_earth_amulet", 1, slot="amulet_slot")
+"""Cell 5's amulet: the busy book sells it at 213 gold, and its craft needs
+jewelrycrafting 10 against the character's 5."""
+
+GE_ONLY = frozenset({"iron_pickaxe", "spruce_fishing_rod", "wooden_staff", "iron_axe",
+                     "satchel", "leather_gloves"})
+"""The level-legal gear cell 5 can have only from the busy book's sell orders."""
+
+CLIMB_CELL = "l10_weapon_upgrade"
+LEATHER = ObtainItem("leather_armor", 1, slot="body_armor_slot")
+"""`{spruce_plank: 4, cowhide: 4}` at gearcrafting 10; spruce_plank is a
+woodcutting-10 craft from woodcutting-10 spruce_wood. The character has 1 in
+both."""
+
+RUNE_CELL = "l20_dual_utility"
+"""A level-20 character whose `L*` heads with the 20000-gold `lifesteal_rune`."""
+
+MAX_XP = 150
+"""The `<skill>_max_xp` the climb tests give the character: the API's xp to the
+next level, which a scenario state does not carry."""
+
+
+def _world(name: str) -> GameData:
+    """The world `name` declares (its market and achievements), its event overlay
+    seeded from the scenario as `GamePlayer.seed_offline` does."""
+    sc = SCENARIOS[name]
+    world = shared_world(BUNDLE, with_ge_orders=sc.ge_market,
+                         completed_achievements=frozenset(sc.unlocked_achievements))
+    world.active_event_codes = set(sc.active_events)
+    world.active_raid_codes = {code for code, _boss in sc.raids}
+    return world
+
+
+def _store(*skills: str) -> LearningStore:
+    """A store that has watched each skill's grind gain 30 xp a cycle."""
+    store = LearningStore(db_path=":memory:", character="piece")
+    store.start_session()
+    index = 0
+    for skill in skills:
+        for _ in range(4):
+            store.record_cycle(Cycle(
+                ts=f"2026-10-20T00:00:{index:02d}+00:00", session_id="s", cycle_index=index,
+                character="piece", outcome="ok", action_repr=f"LevelSkill({skill}->10)",
+                delta_skill_xp_json=json.dumps({skill: 30})))
+            index += 1
+    return store
+
+
+def _event(state: WorldState, world: GameData, live: bool) -> WorldState:
+    """`state` with the event vendor's event live or down, and the world's
+    overlay to match."""
+    events = {EVENT_NPC: FAR_FUTURE} if live else {}
+    world.active_event_codes = set(events)
+    return replace(state, active_events=events)
+
+
+# --- the three answers agree ------------------------------------------------
+
+def test_a_layer_zero_piece_is_served_or_climbs() -> None:
+    """For every missing piece of every catalogued scenario's objective, a piece
+    in the fixed point's first layer is served: the step graph names a step for
+    it, or its own crafting skill stands in front (`classify_target`, served as
+    the `ReachSkillLevel`). A later-layer piece is a drop from a monster only an
+    achievable loadout beats (§2.3), so it waits on the layer that opens it
+    (§2.4, dependency first) and the real fighter has no step for it yet."""
+    served = 0
+    for name, sc in SCENARIOS.items():
+        world = _world(name)
+        state = derived_scenario_state(sc, world)
+        ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
+        if ctx.gear_objective is None:
+            continue
+        objective = CharacterObjective.from_game_data(world)
+        for piece in ctx.gear_objective.missing:
+            if piece.layer != 0:
+                continue
+            step = actionable_step(ObtainItem(piece.code, 1, slot=piece.slot), state, world,
+                                   ctx)
+            gated = objective.classify_target(piece.code, state).blocking_skill is not None
+            assert step is not None or gated, (name, piece)
+            served += 1
+    assert served > 100, served
+
+
+def test_an_event_vendor_counts_only_while_live() -> None:
+    """Live: the map is achievable in the first layer, a missing piece of `L*`,
+    and the step graph serves it as itself (a buy, not a decline). Down: it is
+    neither achievable nor in `L*`, and the step graph has no step for it."""
+    world = _world(EVENT_CELL)
+    base = derived_scenario_state(SCENARIOS[EVENT_CELL], world)
+    node = ObtainItem(EVENT_ITEM, 1, slot=EVENT_SLOT)
+
+    live = _event(base, world, True)
+    assert layer_of(achievable(live, world, TIMED_NO_PROFILE_CONTEXT))[EVENT_ITEM] == 0
+    objective = attached(live, world, TIMED_NO_PROFILE_CONTEXT, None).gear_objective
+    assert objective is not None
+    assert objective.loadout[EVENT_SLOT] == EVENT_ITEM
+    assert [(p.code, p.layer, p.price) for p in objective.missing if p.code == EVENT_ITEM] == [
+        (EVENT_ITEM, 0, Fraction(14904))]
+    assert actionable_step(node, live, world, TIMED_NO_PROFILE_CONTEXT) == node
+
+    down = _event(base, world, False)
+    assert EVENT_ITEM not in layer_of(achievable(down, world, TIMED_NO_PROFILE_CONTEXT))
+    objective = attached(down, world, TIMED_NO_PROFILE_CONTEXT, None).gear_objective
+    assert objective is not None
+    assert EVENT_ITEM not in objective.loadout.values()
+    assert actionable_step(node, down, world, TIMED_NO_PROFILE_CONTEXT) is None
+
+
+def test_a_standing_order_is_a_route_while_it_stands() -> None:
+    """USER 2026-10-19: a live sell order is a route, just like an event. With
+    the order the amulet prices through `GE_FILL` (a hop, the fill, the equip)
+    and the step graph serves it as itself. The same character with the order
+    gone reprices it through its next route, the craft behind its
+    jewelrycrafting climb, and the step graph descends to the recipe: no fill is
+    planned against a vanished order."""
+    busy = shared_world(BUNDLE, with_ge_orders=True)
+    quiet = shared_world(BUNDLE)
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    with_order = scenario_state(SCENARIOS[GE_CELL], busy)
+    gone = scenario_state(SCENARIOS[GE_CELL], quiet)
+
+    order = busy.ge_best_sell_order(AMULET.code)
+    assert order is not None
+    assert [(r.kind, r.venue, r.inputs) for r in route_options(
+        AMULET.code, with_order, busy, ctx, None, policy=PIECE_POLICY)] == [
+        ("ge_fill", order[0], {"gold": 213})]
+    assert route_price(AMULET, with_order, busy, ctx, None, policy=PIECE_POLICY) == 3
+    assert actionable_step(AMULET, with_order, busy, ctx) == AMULET
+
+    assert quiet.ge_best_sell_order(AMULET.code) is None
+    store = _store("jewelrycrafting")
+    climbing = replace(gone, skill_max_xp={"jewelrycrafting": MAX_XP})
+    assert [(r.kind, r.unlock, r.unlock_actions) for r in route_options(
+        AMULET.code, climbing, quiet, ctx, store, policy=PIECE_POLICY)] == [
+        ("craft", "skill:jewelrycrafting:10", 25)]
+    assert route_price(AMULET, climbing, quiet, ctx, store, policy=PIECE_POLICY) == 113
+    assert actionable_step(AMULET, gone, quiet, ctx) == ObtainItem("iron_bar", 4)
+
+
+def test_a_standing_order_makes_its_item_achievable() -> None:
+    """The objective counts what only the book sells: the same character holds
+    six more level-legal pieces in its first layer in the busy book than in the
+    quiet one, each sold by a standing order and by no other route it has."""
+    busy = shared_world(BUNDLE, with_ge_orders=True)
+    quiet = shared_world(BUNDLE)
+    with_book = layer_of(achievable(scenario_state(SCENARIOS[GE_CELL], busy), busy,
+                                    TIMED_NO_PROFILE_CONTEXT))
+    without = layer_of(achievable(scenario_state(SCENARIOS[GE_CELL], quiet), quiet,
+                                  TIMED_NO_PROFILE_CONTEXT))
+    assert frozenset(with_book) - frozenset(without) == GE_ONLY
+    assert {code: with_book[code] for code in GE_ONLY} == dict.fromkeys(GE_ONLY, 0)
+    assert all(busy.ge_best_sell_order(code) is not None for code in GE_ONLY)
+
+
+# --- pricing every route the policy admits ----------------------------------
+
+def test_a_climb_is_priced_though_the_policy_admits_the_craft() -> None:
+    """Ruling T2c: a route whose own skill requirement exceeds the character's
+    skill costs the climb, whether or not the policy refuses it. `PIECE_POLICY`
+    admits the gearcrafting and woodcutting routes as ready, and the price still
+    carries both climbs: the price with both skills already at 10, plus each
+    grind, exactly as `LEGACY` (which refuses the routes) prices it."""
+    world = _world(CLIMB_CELL)
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    state = replace(derived_scenario_state(SCENARIOS[CLIMB_CELL], world),
+                    skill_max_xp={"gearcrafting": MAX_XP, "woodcutting": MAX_XP})
+    store = _store("gearcrafting", "woodcutting")
+    skilled = replace(state, skills={**state.skills, "gearcrafting": 10, "woodcutting": 10})
+    rates = {skill: store.skill_grind_rate(skill) for skill in ("gearcrafting", "woodcutting")}
+    assert rates == {"gearcrafting": 30.0, "woodcutting": 30.0}
+    climbs = sum(skill_grind_cycles(1, 0, MAX_XP, 10, 30.0) for _ in rates)
+
+    assert route_price(LEATHER, skilled, world, ctx, store, policy=PIECE_POLICY) == 214
+    assert climbs == 90
+    assert route_price(LEATHER, state, world, ctx, store, policy=PIECE_POLICY) == 214 + 90
+    assert route_price(LEATHER, state, world, ctx, store, policy=LEGACY) == 214 + 90
+
+
+def test_an_unpriceable_climb_leaves_the_piece_unpriced() -> None:
+    """No grind rate (no store): the climb cannot be priced, so the gated craft
+    is no priced route (`_gated_skill_option`'s decline), never a free one."""
+    world = _world(CLIMB_CELL)
+    state = derived_scenario_state(SCENARIOS[CLIMB_CELL], world)
+    assert route_price(LEATHER, state, world, TIMED_NO_PROFILE_CONTEXT, None,
+                       policy=PIECE_POLICY) == UNOBTAINABLE_PER_UNIT + 1
+
+
+def test_fight_gold_is_priced_per_kill_at_the_mean_gold() -> None:
+    """Ruling T2a: a GOLD_DROP route is one win, paying the API's mean gold
+    `(min_gold + max_gold) // 2`, priced as a drop farm's kill is
+    (`_kill_actions`: the learned fight seconds, the forced rest, the learned
+    losses)."""
+    world = _world(EVENT_CELL)
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    state = derived_scenario_state(SCENARIOS[EVENT_CELL], world)
+    options = route_options("gold", state, world, ctx, None, policy=PIECE_POLICY)
+    assert options
+    assert {option.kind for option in options} == {"gold_drop"}
+    for option in options:
+        low, high = world.monster_min_gold(option.venue), world.monster_max_gold(option.venue)
+        assert option.yield_per == max(1, (low + high) // 2), option.venue
+        assert option.actions_per_application == max(1, ceil(_kill_actions(
+            option.venue, state, world, ctx.timing(), ctx.fight_records))), option.venue
+    assert any(world.monster_min_gold(option.venue) < world.monster_max_gold(option.venue)
+               for option in options)
+    assert route_options("gold", state, world, ctx, None) == []
+
+
+def test_a_task_reward_is_achievable_and_priced_last() -> None:
+    """Ruling T2b: no API datum gives a task's length, so a TASK_REWARD route is
+    priced at the unpriced sentinel. It is still a route: the coin is
+    achievable."""
+    world = _world(EVENT_CELL)
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    state = derived_scenario_state(SCENARIOS[EVENT_CELL], world)
+    assert ObtainModel(state, world, ctx, FAR_FUTURE).feasible("tasks_coin", 1, PIECE_POLICY)
+    assert [(r.kind, r.actions_per_application, r.yield_per) for r in route_options(
+        "tasks_coin", state, world, ctx, None, policy=PIECE_POLICY)] == [
+        ("task_reward", UNOBTAINABLE_PER_UNIT, 1)]
+
+
+@pytest.mark.parametrize("policy", [LEGACY, PIECE_POLICY])
+def test_route_price_forwards_its_policy(policy) -> None:  # type: ignore[no-untyped-def]
+    """`route_price` prices under the policy it is given, `LEGACY` by default:
+    under `PIECE_POLICY` the live event vendor sells the map and its 15000 gold
+    is earned by fighting; `LEGACY` refuses every event vendor (and holds gold to
+    the pocket's 100), so the map has no route."""
+    world = _world(EVENT_CELL)
+    live = _event(derived_scenario_state(SCENARIOS[EVENT_CELL], world), world, True)
+    node = ObtainItem(EVENT_ITEM, 1, slot=EVENT_SLOT)
+    price = route_price(node, live, world, TIMED_NO_PROFILE_CONTEXT, None, policy=policy)
+    assert price == {LEGACY: UNOBTAINABLE_PER_UNIT + 1, PIECE_POLICY: 14904}[policy]
+    if policy is LEGACY:
+        assert route_price(node, live, world, TIMED_NO_PROFILE_CONTEXT, None) == price
+
+
+def test_a_gold_funded_piece_is_achievable_and_declined_until_served() -> None:
+    """Ruling T2h, pinned as it stands: the 20000-gold `lifesteal_rune` is
+    achievable under `PIECE_POLICY` (its gold earned by fighting), priced and
+    first in `L*`'s order; the executor buys from the pocket, so the arbiter
+    declines it as having no route, and the walk falls through to the next
+    piece's climb. Serving it (fight for the gold, then buy) is Task 3's."""
+    world = _world(RUNE_CELL)
+    player = GamePlayer(character=RUNE_CELL, history=None)
+    player._offline_timing = committed_timing()
+    player.seed_offline(scenario_state(SCENARIOS[RUNE_CELL], world), world)
+    report = player.plan_from_state()
+    rune = ObtainItem("lifesteal_rune", 1, slot="rune_slot")
+    objective = attached(player.state, world, TIMED_NO_PROFILE_CONTEXT, None).gear_objective
+    assert objective is not None
+    assert (objective.missing[0].slot, objective.missing[0].code) == (rune.slot, rune.code)
+    assert objective.missing[0].price < UNOBTAINABLE_PER_UNIT
+    assert report.decision.declined == ((repr(rune), "infeasible:lifesteal_rune:no_route:"),)
+    assert report.decision.chosen_root == ReachSkillLevel(skill="weaponcrafting", level=16)
+    assert repr(report.selected_goal) == "ReachSkill(weaponcrafting->16)"

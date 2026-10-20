@@ -170,11 +170,21 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
         state, pick_loadout_cached(Rank(), state, game_data), game_data)
     kills = _expected_kills_per_unit(item, monster_code, rate, min_q, max_q,
                                      projected.prospecting, store)
+    return max(1, ceil(float(kills) * _kill_actions(monster_code, state, game_data, timing,
+                                                    records)))
+
+
+def _kill_actions(monster_code: str, state: WorldState, game_data: GameData,
+                  timing: FightSecondsModel, records: Sequence[tuple[str, int, int]]) -> float:
+    """Whole-loop actions ONE win against `monster_code` costs: the fight at
+    its learned seconds plus the rest it forces (`cycles_per_kill`), and the
+    learned losses expected per win (`_loss_surcharge`). The per-kill factor of
+    every fight-priced route: a drop farm (`_drop_actions`) and a gold farm
+    (`_priced`'s GOLD_DROP arm)."""
     fight = walk_seconds(state, game_data, monster_code, (), timing)
     per_kill = cycles_per_kill(
         expected_damage_per_fight(state, game_data, monster_code), state.max_hp, fight)
-    per_kill += _loss_surcharge(monster_code, state.max_hp, records, fight)
-    return max(1, ceil(float(kills) * per_kill))
+    return per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight)
 
 
 def _gather_rate(item: str, resource: str, game_data: GameData) -> tuple[int, int]:
@@ -259,6 +269,25 @@ def _priced(item: str, source: Source, state: WorldState,
                                                   max_q, state, game_data, ctx.timing(),
                                                   store, ctx.fight_records),
             yield_per=source.yield_per, capacity=source.capacity)
+    if source.kind is SourceKind.GOLD_DROP:
+        # Gold minted by fighting (ruling T2a): one application is one win
+        # against the monster (`Source.code`), paying the route's expected gold,
+        # the mean `(min_gold + max_gold) // 2` of the API's range
+        # (`drop_routes.gold_drop_routes`). The walk takes `gold needed / mean
+        # gold per kill` applications, each priced as a drop farm's kill is.
+        return RouteOption(
+            kind=source.kind.value, venue=source.code,
+            actions_per_application=max(1, ceil(_kill_actions(
+                source.code, state, game_data, ctx.timing(), ctx.fight_records))),
+            capacity=source.capacity, yield_per=source.yield_per)
+    if source.kind is SourceKind.TASK_REWARD:
+        # The task board (ruling T2b): no API datum gives a task's length, so
+        # the route is priced at the unpriced sentinel. It stays a route (the
+        # item is achievable) and orders after every priced one; a length is
+        # never invented.
+        return RouteOption(kind=source.kind.value, venue=source.code,
+                           actions_per_application=UNOBTAINABLE_PER_UNIT,
+                           yield_per=source.yield_per, capacity=source.capacity)
     # DROP is now an EXPLICIT branch rather than the fallthrough it used to be.
     # As the fallthrough it silently swallowed every unclassified kind: adding
     # GE_FILL passed the entire gate and then broke the live bot on the first
@@ -335,8 +364,11 @@ def _drop_table(item: str, monster_code: str,
 def _gated_skill_option(item: str, state: WorldState, game_data: GameData,
                         store: LearningStore, model: ObtainModel,
                         kind: SourceKind, policy: Policy) -> RouteOption | None:
-    """The CRAFT or GATHER route `obtain_sources` withholds because its skill
-    gate is unmet — priced with the grind that would open it. A CRAFT route's
+    """The CRAFT or GATHER route whose skill requirement is unmet, priced with
+    the grind that would open it. `obtain_sources` withholds it under a policy
+    that enforces the skill gate; under one that does not (`PIECE_POLICY`) it
+    names the route as ready, and under `price_climbs` `route_options` drops
+    that ready copy, so the climb is paid either way (ruling T2c'). A CRAFT route's
     gate is the crafting skill; a GATHER route's is the gathering skill, which
     `obtain_sources` enforces since D-A (docs/PLAN_decision_architecture_redesign.md):
     a resource the character cannot yet gather is no ready route, but it is
@@ -431,14 +463,39 @@ _SKILL_GATE = {SourceKind.CRAFT: GateKind.CRAFT_SKILL, SourceKind.GATHER: GateKi
 """The skill gate on each route kind a grind can open."""
 
 
+def _climbing(policy: Policy) -> Policy:
+    """The policy a PRICE reads a skill requirement under. With `price_climbs`
+    (ruling T2c'), `policy` with both skill gates enforced: a route whose own
+    skill requirement exceeds the character's skill costs the climb to it,
+    whether or not `policy` refuses the route for it, so the gate flag decides
+    achievability, not price. Without it, `policy` itself: a gate the policy
+    opens on purpose prices as the ready route."""
+    if not policy.price_climbs:
+        return policy
+    return replace(policy, gather_skill_gate=True, craft_skill_gate=True)
+
+
+def _climbs(item: str, model: ObtainModel, policy: Policy) -> frozenset[tuple[SourceKind, str]]:
+    """`(kind, via)` of every CRAFT or GATHER route to `item` that its own skill
+    requirement alone keeps closed (`_climbing`). Such a route is never priced
+    as ready: `route_options` prices it with its climb, or not at all. Empty
+    without `price_climbs`: every such route is then one `policy` refuses, so
+    `obtain_sources` never names it."""
+    return frozenset((route.kind, route.via)
+                     for kind, gate_kind in _SKILL_GATE.items()
+                     for route in model.gated_by(item, _climbing(policy), gate_kind)
+                     if route.kind is kind)
+
+
 def _skill_gated(item: str, model: ObtainModel, kind: SourceKind,
                  policy: Policy) -> tuple[Route, str, int] | None:
     """`(route, skill, level)` for the first `kind` route to `item` that its
-    skill gate alone keeps closed under `policy` (the one being priced), or
-    None. A policy that does not enforce the gate has no such route: the craft
-    or gather is then a ready route already."""
+    skill requirement alone keeps closed (`_climbing(policy)`), or None. Under
+    `price_climbs` the requirement is the route's own, read whether or not
+    `policy` enforces the gate: a policy that admits the route as ready still
+    pays the climb. Otherwise only a gate `policy` enforces is a climb."""
     gate_kind = _SKILL_GATE[kind]
-    for route in model.gated_by(item, policy, gate_kind):
+    for route in model.gated_by(item, _climbing(policy), gate_kind):
         if route.kind is kind:
             [gate] = [g for g in route.gates if g.kind is gate_kind]
             assert gate.level is not None, f"{item!r}: a skill gate carries its level"
@@ -604,16 +661,22 @@ def route_options(item: str, state: WorldState, game_data: GameData,
                   ctx: SelectionContext,
                   store: LearningStore | None = None,
                   gated_drop: bool = True, *, policy: Policy = LEGACY) -> list[RouteOption]:
-    """Every route to `item`, priced: the ones `obtain_sources` names, plus —
-    only when a `store` is supplied — the skill-gated craft it withholds.
+    """Every route to `item`, priced: the ones `obtain_sources` names, less any
+    whose own skill requirement is unmet, plus — only when a `store` is
+    supplied — the skill-gated craft or gather priced with its climb.
 
     `store` defaults to None so every existing caller keeps today's behaviour
     exactly. Neither deferred route can be priced without the store: a gated
     craft needs an observed grind rate, and a sibling craft needs the observed
     cost of a fleet supply request."""
-    routes = [_priced(item, s, state, game_data, ctx, store)
-              for s in obtain_sources(item, state, game_data, ctx, policy=policy)]
     model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc))
+    # A route its own skill requirement keeps closed is priced only with its
+    # climb (`_gated_skill_option`, ruling T2c), never as the ready route a
+    # policy without the skill gate names it.
+    climbs = _climbs(item, model, policy)
+    routes = [_priced(item, s, state, game_data, ctx, store)
+              for s in obtain_sources(item, state, game_data, ctx, policy=policy)
+              if (s.kind, s.code) not in climbs]
     if store is not None:
         for kind in (SourceKind.CRAFT, SourceKind.GATHER):
             gated = _gated_skill_option(item, state, game_data, store, model, kind, policy)
