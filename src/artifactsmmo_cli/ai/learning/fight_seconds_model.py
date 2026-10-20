@@ -107,7 +107,8 @@ def fetch_fleet_bootstrap(api: APIWrapper, hastes: Mapping[str, int],
     positive cooldown number `BOOTSTRAP_FIGHTS` and span `_HASTE_SPREAD`
     hastes (or every haste in `hastes`, when the fleet has fewer), or until
     the log runs out. Each fight is at its character's sheet haste in
-    `hastes`: the log does not carry the haste a fight was fought at.
+    `hastes`: the log does not carry the haste a fight was fought at. An
+    entry of a character not in `hastes` is left out.
     `acquire` charges each request to the account bucket."""
     spread = min(_HASTE_SPREAD, len(set(hastes.values())))
     fights: list[Sample] = []
@@ -117,6 +118,10 @@ def fetch_fleet_bootstrap(api: APIWrapper, hastes: Mapping[str, int],
         acquire()
         result = api.get_all_characters_logs(page=page, size=BOOTSTRAP_PAGE)
         for entry in result.data:
+            if entry.character not in hastes:
+                # Off the roster (a deleted or renamed character): no sheet,
+                # so no haste to put its fights at, and not this fleet's.
+                continue
             cooldowns.append(entry.cooldown)
             if entry.type_ == LogType.FIGHT and entry.cooldown > 0:
                 fights.append((entry.content["fight"]["turns"], hastes[entry.character],

@@ -57,7 +57,8 @@ class MultiRun:
         # The fleet's fight-seconds bootstrap (ruling ZD), fetched ONCE from
         # the account's `/my/logs` before any child starts and handed to every
         # child as a file (`--fight-bootstrap`): one fetch and one fit for the
-        # whole fleet. A temp file this MultiRun creates and removes.
+        # whole fleet. A file this MultiRun creates beside the learning DB and
+        # removes at exit.
         self._fight_bootstrap: Path | None = None
 
     def _coordination_db_path(self) -> str:
@@ -263,7 +264,12 @@ class MultiRun:
             bootstrap = fetch_fleet_bootstrap(api, hastes, acquire)
         finally:
             request_log.close()
-        path = Path(tempfile.gettempdir()) / f"artifactsmmo-fight-bootstrap-{uuid.uuid4().hex}.json"
+        # Beside the learning DB, never in the temp dir: systemd-tmpfiles empties
+        # /tmp of files older than 10 days, and this one is written once and
+        # read at every child (re)start for the life of the run.
+        directory = Path(default_learn_db_path()).parent
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"fight-bootstrap-{uuid.uuid4().hex}.json"
         path.write_text(bootstrap.to_json())
         self._fight_bootstrap = path
 

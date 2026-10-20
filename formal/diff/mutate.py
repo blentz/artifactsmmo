@@ -1262,6 +1262,10 @@ FIGHT_SECONDS_MODEL_MUTATIONS = [
     ("fight seconds model: paging never stops once there are enough fights",
      "        if enough or page >= result.pages:",
      "        if page >= result.pages:"),
+    # Review M-2: a character off the roster has no haste.
+    ("fight seconds model: an entry off the roster is read",
+     "            if entry.character not in hastes:\n",
+     "            if False:\n"),
     ("fight seconds model: a zero-cooldown fight joins the bootstrap",
      "            if entry.type_ == LogType.FIGHT and entry.cooldown > 0:",
      "            if entry.type_ == LogType.FIGHT and entry.cooldown >= 0:"),
@@ -6521,6 +6525,10 @@ FLEET_ORDER_MULTI_MUTATIONS = [
     ("multi run: a child is not handed the fleet's fight bootstrap",
      "            argv += [\"--fight-bootstrap\", str(self._fight_bootstrap)]\n",
      "            pass\n"),
+    # Review I-1: /tmp is emptied of files older than 10 days.
+    ("multi run: the fight bootstrap is written to the temp dir",
+     "        directory = Path(default_learn_db_path()).parent\n",
+     "        directory = Path(tempfile.gettempdir())\n"),
     ("multi run: the fight bootstrap file outlives the run",
      "            self._fight_bootstrap.unlink(missing_ok=True)\n",
      "            pass\n"),

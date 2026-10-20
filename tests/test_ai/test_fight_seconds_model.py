@@ -126,6 +126,16 @@ def test_a_log_that_runs_out_first_is_all_the_bootstrap() -> None:
         timing_of(None, empty)
 
 
+def test_a_character_off_the_roster_is_no_observation() -> None:
+    """Review M-2: the account log can keep a deleted or renamed character's
+    entries. It has no sheet, so no haste to put its fights at; its entries
+    are left out rather than raise a KeyError at every fleet start."""
+    api = _Api([[_entry("Ghost", LogType.FIGHT, 30, 15), _entry("Ghost", LogType.GATHERING, 40),
+                 _entry("Robby", LogType.FIGHT, 9, 5)]])
+    bootstrap = fetch_fleet_bootstrap(api, {"Robby": 8}, lambda: None)  # type: ignore[arg-type]
+    assert bootstrap == FleetBootstrap(fights=((5, 8, 9.0),), cooldowns=(9,))
+
+
 def test_a_bootstrap_round_trips_through_json() -> None:
     bootstrap = FleetBootstrap(fights=((5, 8, 9.0),), cooldowns=(9, 25))
     assert FleetBootstrap.from_json(bootstrap.to_json()) == bootstrap

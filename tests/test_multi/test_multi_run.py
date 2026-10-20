@@ -621,6 +621,9 @@ def test_run_fetches_the_fight_bootstrap_once_and_hands_every_child_its_file(
     starts, charged to the account bucket the children share, each fight at
     its character's haste; every child reads it from `--fight-bootstrap`,
     and the file goes when the run ends."""
+    data = tmp_path / "cache" / "artifactsmmo"
+    monkeypatch.setattr("artifactsmmo_cli.multi.multi_run.default_learn_db_path",
+                        lambda: str(data / "learning.db"))
     monkeypatch.setattr(
         "artifactsmmo_cli.multi.multi_run.tempfile.gettempdir", lambda: str(tmp_path))
     seen: dict[str, object] = {}
@@ -655,6 +658,10 @@ def test_run_fetches_the_fight_bootstrap_once_and_hands_every_child_its_file(
     assert FleetBootstrap.from_json(seen["text"]) == _BOOTSTRAP
     argv = seen["argv"]
     assert argv[argv.index("--fight-bootstrap") + 1] == str(seen["path"])
+    # Review I-1: beside the learning DB, not in /tmp, which systemd-tmpfiles
+    # empties of files older than 10 days while the fleet still runs (a child
+    # restarted after an outage then crashed on the missing file).
+    assert Path(seen["path"]).parent == data
     assert not Path(seen["path"]).exists()
 
 
