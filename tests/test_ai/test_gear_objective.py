@@ -378,14 +378,38 @@ def test_a_pick_that_never_settles_raises(monkeypatch: pytest.MonkeyPatch, gd: G
     assert next(flips) == mod.CONVERGE_PASSES
 
 
-def test_potions_change_neither_the_monster_nor_the_target(gd: GameData,
-                                                          novice: GearObjective) -> None:
-    """Every gear decision judges bare gear: a character with health and boost
-    potions worn and in the bag gets the `L*`, `m*` and `R` of one with none."""
-    potions = {"utility1_slot": "small_health_potion", "utility2_slot": "air_boost_potion"}
+def test_the_bare_fighter_carries_its_worn_potions(gd: GameData) -> None:
+    """The bare fighter wears no potion: each utility stack goes to the bag
+    whole, beside the units already carried, and the totals stay the sheet's."""
+    potions = {"utility1_slot": "small_health_potion", "utility2_slot": "earth_boost_potion"}
     state = scenario_state(ScenarioCharacter(
         name="novice", level=12, derive_combat_stats=True, equipment={**COPPER, **potions},
-        inventory={"small_health_potion": 50, "air_boost_potion": 50},
+        inventory={"small_health_potion": 7}, utility_quantities={"utility1_slot": 50,
+                                                                    "utility2_slot": 30}), gd)
+    bare = mod._bare(state, frozenset(), gd)
+    assert (bare.equipment["utility1_slot"], bare.equipment["utility2_slot"]) == (None, None)
+    assert (bare.utility1_slot_quantity, bare.utility2_slot_quantity) == (0, 0)
+    assert (bare.inventory["small_health_potion"], bare.inventory["earth_boost_potion"]) == (57, 30)
+    assert bare.dmg_elements == mod._bare(scenario_state(ScenarioCharacter(
+        name="novice", level=12, derive_combat_stats=True, equipment=COPPER), gd),
+        frozenset(), gd).dmg_elements
+
+
+@pytest.mark.parametrize("boost", ["air_boost_potion", "earth_boost_potion"])
+def test_potions_change_neither_the_monster_nor_the_target(gd: GameData, novice: GearObjective,
+                                                          boost: str) -> None:
+    """Every gear decision judges bare gear: a character with health and boost
+    potions worn and in the bag gets the `L*`, `m*` and `R` of one with none.
+    The sheet's totals leave out a worn boost (a combat-time effect), so the
+    bare fighter takes its potions off without touching the totals. The
+    novice's `m*` is `cow`, fought with earth: a worn `earth_boost_potion`
+    taken off by the no-potion fight subtracted a boost the totals never held,
+    and since a fight's seconds are its length (spec §2.9) the weaker hits
+    lowered `R`."""
+    potions = {"utility1_slot": "small_health_potion", "utility2_slot": boost}
+    state = scenario_state(ScenarioCharacter(
+        name="novice", level=12, derive_combat_stats=True, equipment={**COPPER, **potions},
+        inventory={"small_health_potion": 50, boost: 50},
         utility_quantities={"utility1_slot": 50, "utility2_slot": 50}), gd)
     potioned = _objective(state, gd)
     assert (potioned.monster, potioned.loadout, potioned.rate) == (
@@ -494,12 +518,15 @@ def _carrying_its_target(name: str, gd: GameData) -> tuple[WorldState, GearObjec
     return replace(state, inventory=dict(bag)), objective
 
 
-def test_a_piece_carried_in_the_bag_is_held(gd: GameData) -> None:
+@pytest.mark.parametrize("name", ["l10_bag_pursuit", "l30_rune_fill"])
+def test_a_piece_carried_in_the_bag_is_held(gd: GameData, name: str) -> None:
     """Ruling Q: `missing` is what to ACQUIRE. A piece in the bag is an equip,
     which the fight-loadout gate makes before `m*` is fought (wear and pick
     again until the pick is worn), so carrying every missing piece holds `L*`
-    without wearing any of it."""
-    carrying, before = _carrying_its_target("l10_bag_pursuit", gd)
+    without wearing any of it. Carrying `l30_rune_fill`'s pieces, one pick
+    from the worn state leaves its helmet unworn; only the fixed point holds
+    it."""
+    carrying, before = _carrying_its_target(name, gd)
     assert before.missing
     objective = _objective(carrying, gd)
     assert objective.monster == before.monster

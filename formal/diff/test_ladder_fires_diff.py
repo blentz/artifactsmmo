@@ -159,6 +159,7 @@ from artifactsmmo_cli.ai.fleet_work import SUPPLY_DEMAND_MIN
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
@@ -1616,11 +1617,13 @@ def _rest_combat_gd() -> GameData:
 
 
 def _rest_combat_ctx() -> SelectionContext:
-    return SelectionContext(
+    # REST_FOR_COMBAT prices the fight it rests for in learned seconds (spec
+    # 2026-10-18 §2.9): the committed live capture's, as every offline world.
+    return offline_context(SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster="mob",
         target_gear=frozenset(), target_tools=frozenset(),
-        draw_owed=True)
+        draw_owed=True))
 
 
 def _rest_combat_world(hp: int, max_hp: int) -> WorldState:

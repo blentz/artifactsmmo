@@ -3634,6 +3634,10 @@ def _execute_parallel(units: list[_Unit], survivors: list[str]) -> None:
     n = max(1, min(_WORKERS, len(units)))
     tmp = Path(tempfile.mkdtemp(prefix="mutate-workers-"))
     lease: queue.Queue[Path] = queue.Queue()
+    # Each `w{k}` stands for `src`, so `tmp` stands for the repo root: a module
+    # that finds committed data beside it (`fight_seconds_model.FIGHT_LOGS`,
+    # `commands/plan.py`'s scenarios) climbs to `tmp` and must find `tests` there.
+    (tmp / "tests").symlink_to(ROOT / "tests", target_is_directory=True)
     try:
         for k in range(n):
             copy_root = tmp / f"w{k}"
@@ -5487,6 +5491,17 @@ GEAR_OBJECTIVE_MUTATIONS = [
     ("gear objective: a carried piece is missing (one pick from the worn state)",
      "    own = _target(state, game_data, monster)[1]\n",
      "    own = fight_loadout(state, game_data, monster)\n"),
+    # A worn boost is not in the sheet's totals; left on, the no-potion fight
+    # took it off and subtracted it (the novice's earth boost on `cow`).
+    ("gear objective: the bare fighter keeps its potions worn",
+     "    bare = _wearing(fighter_owning(_potions_off(state), items, game_data),\n",
+     "    bare = _wearing(fighter_owning(state, items, game_data),\n"),
+    ("gear objective: a potion taken off leaves its stack behind",
+     "            bag[code] += utility_slot_quantity(state, slot)\n",
+     "            bag[code] += 1\n"),
+    ("gear objective: a potion taken off keeps its slot's quantity",
+     "                   utility1_slot_quantity=0, utility2_slot_quantity=0)",
+     "                   )"),
     ("gear objective: a bare total below zero is accepted",
      "        if value < 0:\n            raise ValueError(f\"{state.character}: bare {stat}",
      "        if False:\n            raise ValueError(f\"{state.character}: bare {stat}"),
@@ -5542,9 +5557,9 @@ GEAR_OBJECTIVE_MUTATIONS = [
      "            and game_data.monster_spawn_known(code)]",
      "            and game_data.monster_locations(code)]"),
     ("gear objective: L* is picked in the worn gear",
-     "    bare = _wearing(fighter_owning(state, items, game_data), dict.fromkeys(_GEAR_SLOTS),\n"
-     "                    game_data)",
-     "    bare = fighter_owning(state, items, game_data)"),
+     "    bare = _wearing(fighter_owning(_potions_off(state), items, game_data),\n"
+     "                    dict.fromkeys(_GEAR_SLOTS), game_data)",
+     "    bare = fighter_owning(_potions_off(state), items, game_data)"),
     ("gear objective: L* is the first pick, not the worn fixed point",
      "        if loadout == {slot: fighter.equipment[slot] for slot in _GEAR_SLOTS}:",
      "        if True:"),

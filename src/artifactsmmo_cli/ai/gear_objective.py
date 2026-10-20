@@ -75,6 +75,7 @@ from artifactsmmo_cli.ai.obtain_model.policy import GEAR_OBJECTIVE_POLICY
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import is_suppliable
+from artifactsmmo_cli.ai.utility_slot import UTILITY_SLOTS, utility_slot_quantity
 from artifactsmmo_cli.ai.world_state import WorldState
 
 PARTY_ONLY_TYPES = frozenset({"boss", "raid_boss"})
@@ -147,16 +148,33 @@ def _wearing(state: WorldState, loadout: Mapping[str, str | None],
                    prospecting=stats.prospecting, haste=stats.haste)
 
 
+def _potions_off(state: WorldState) -> WorldState:
+    """`state` with its utility slots emptied into the bag, every unit of their
+    stacks with them. The totals do not move: the sheet leaves a worn potion's
+    boost out of them (a combat-time effect, `scenario._derived_combat_totals`),
+    so taking one off strips nothing. Left on, the no-potion fight takes it off
+    by `project_equip`, which subtracts a boost the totals never held."""
+    bag = Counter(state.inventory)
+    for slot in UTILITY_SLOTS:
+        code = state.equipment[slot]
+        if code is not None:
+            bag[code] += utility_slot_quantity(state, slot)
+    return replace(state, inventory=dict(bag),
+                   equipment={**state.equipment, **dict.fromkeys(UTILITY_SLOTS)},
+                   utility1_slot_quantity=0, utility2_slot_quantity=0)
+
+
 def _bare(state: WorldState, items: frozenset[str], game_data: GameData) -> WorldState:
     """`state` owning `items` (`fighter_owning`) and wearing no gear: every worn
-    piece in the bag, its stats stripped from the totals.
+    piece in the bag, its stats stripped from the totals, and no potion worn
+    (`_potions_off`).
 
     The sheet's totals include what it wears, so the stripped totals are the
     character without its gear, never below zero (ruling R). A total below
     zero means the sheet did not include a worn piece: impossible API data,
     which raises naming the stat, never a fighter that wins nothing."""
-    bare = _wearing(fighter_owning(state, items, game_data), dict.fromkeys(_GEAR_SLOTS),
-                    game_data)
+    bare = _wearing(fighter_owning(_potions_off(state), items, game_data),
+                    dict.fromkeys(_GEAR_SLOTS), game_data)
     for stat, value in _totals(bare):
         if value < 0:
             raise ValueError(f"{state.character}: bare {stat} {value} < 0: the sheet's "

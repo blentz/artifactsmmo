@@ -38,9 +38,11 @@ from hypothesis import strategies as st
 
 import artifactsmmo_cli.ai.learning.projections as projections_module
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from formal.diff.oracle_client import run_oracle
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 
@@ -72,6 +74,9 @@ def _make_game_data(monsters: list[tuple[str, int, int]]) -> GameData:
     gd._monster_attack = {code: {} for code, _, _ in monsters}
     gd._monster_resistance = {code: {} for code, _, _ in monsters}
     gd._monster_critical_strike = {code: 0 for code, _, _ in monsters}
+    # A fight's learned seconds read its expected turns off the combat model
+    # (spec 2026-10-18 §2.9), which reads every monster stat.
+    fill_monster_stat_defaults(gd)
     return gd
 
 
@@ -113,11 +118,11 @@ def _run_python(current: int, target: int, monsters: list[tuple[str, int, int]],
         orig = projections_module.is_winnable
         projections_module.is_winnable = winnable_stub
         try:
-            plan = cheapest_path_to_level(target, state, store, gd)
+            plan = cheapest_path_to_level(target, state, store, gd, committed_timing()[0])
         finally:
             projections_module.is_winnable = orig
     else:
-        plan = cheapest_path_to_level(target, state, store, gd)
+        plan = cheapest_path_to_level(target, state, store, gd, committed_timing()[0])
     store.close()
     return _python_structural(plan)
 
@@ -310,7 +315,7 @@ def test_zero_xp_per_kill_blocks(tmp_path):
     orig = projections_module.is_winnable
     projections_module.is_winnable = winnable_stub
     try:
-        plan = cheapest_path_to_level(13, state, store, gd)
+        plan = cheapest_path_to_level(13, state, store, gd, committed_timing()[0])
     finally:
         projections_module.is_winnable = orig
     store.close()
