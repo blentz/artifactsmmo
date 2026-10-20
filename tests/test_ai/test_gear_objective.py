@@ -178,7 +178,7 @@ def _without(state: WorldState, fighter: WorldState, slot: str, gd: GameData) ->
     return replace(emptied, inventory={item: n for item, n in bag.items() if n > 0})
 
 
-@pytest.mark.parametrize("name", ["robby", "novice"])
+@pytest.mark.parametrize("name", ["robby", "novice", "l10_copper_adequate"])
 def test_gain_is_measured_against_the_target_not_a_bare_fighter(
         request: pytest.FixtureRequest, gd: GameData, name: str) -> None:
     """Spec §2.8: a piece's gain is `R(L*)` less `R` of `L*` with its slot
@@ -186,9 +186,16 @@ def test_gain_is_measured_against_the_target_not_a_bare_fighter(
     re-picks its loadout from what the fighter holds, and the fighter wearing
     `L*` carries the whole achievable set, so the fighter it is measured
     against holds, for that slot, only what the character owns. Adding one
-    piece to a bare fighter that wins nothing gave 0 for every piece."""
-    objective: GearObjective = request.getfixturevalue(name)
-    state = _robby() if name == "robby" else _novice(gd)
+    piece to a bare fighter that wins nothing gave 0 for every piece. Only
+    the vacated slot is held to what is owned: on `l10_copper_adequate`,
+    without the `greater_wooden_staff` the re-pick also moves the helmet and
+    the amulet, among the achievable items the fighter carries."""
+    if name in SCENARIOS:
+        state = scenario_state(SCENARIOS[name], gd)
+        objective = _objective(state, gd)
+    else:
+        objective = request.getfixturevalue(name)
+        state = _robby() if name == "robby" else _novice(gd)
     fighter, _ = mod._targets(state, gd, frozenset().union(*achievable(state, gd, CTX)))[
         objective.monster]
     food = food_menu(state, gd, CTX)
