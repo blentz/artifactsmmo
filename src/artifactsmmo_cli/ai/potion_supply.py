@@ -114,6 +114,7 @@ def bootstrap_potion_target(
 POTION_POLICY = Policy(all_gather_routes=True, gather_skill_gate=True, craft_skill_gate=True,
                        event_vendors=False, spawn_known=True, allow_grey=True,
                        vendor_routes=True, ge_routes=False, task_rewards=False,
+                       price_climbs=False,
                        fight_gold=False, drop_routes=False)
 """What the potion supply (the walk under this policy, Phase 2e) can serve, as an
 obtain-model policy: the recipe's crafts, every gatherer of an ingredient (the

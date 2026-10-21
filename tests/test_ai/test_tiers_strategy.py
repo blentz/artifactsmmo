@@ -8,6 +8,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -36,7 +37,7 @@ def _missing(slot: str, code: str):  # type: ignore[no-untyped-def]
     the walk's root is that piece (spec 2026-10-18 §2.4). These fixtures are
     too small for `gear_objective` to find a paying monster, so the objective
     is built explicitly (ruling W)."""
-    piece = GearPiece(slot, code, 0, Fraction(1), Fraction(1))
+    piece = GearPiece(slot, code, 0, Fraction(1), Fraction(1), SourceKind.CRAFT)
     return replace(NO_PROFILE_CONTEXT,
                    gear_objective=GearObjective("chicken", {slot: code}, Fraction(1), (piece,)))
 

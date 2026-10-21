@@ -54,10 +54,10 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from fractions import Fraction
 
+from artifactsmmo_cli.ai.acquisition_cost import EQUIP_ACTIONS, cheapest_route
 from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.combat import fight_loadout
-from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.decompose_core import can_obtain
 from artifactsmmo_cli.ai.equipment.loadout_picker import _benefit, _ordered_slots
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
@@ -77,7 +77,7 @@ from artifactsmmo_cli.ai.obtain_model.gate import GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.objective import is_suppliable
 from artifactsmmo_cli.ai.utility_slot import UTILITY_SLOTS, utility_slot_quantity
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -452,12 +452,14 @@ def _gain(state: WorldState, target: WorldState, game_data: GameData, monster: s
 
 
 def _price(state: WorldState, game_data: GameData, ctx: SelectionContext,
-           history: LearningStore | None, slot: str, code: str) -> Fraction:
-    """Acquisition price of wearing `code` in `slot`: `route_price` of the slotted
-    `ObtainItem` (its equip included), under `PIECE_POLICY`, the policy the
-    piece was judged achievable by and is served by."""
-    return Fraction(route_price(ObtainItem(code, 1, slot=slot), state, game_data, ctx, history,
-                                policy=PIECE_POLICY))
+           history: LearningStore | None, code: str) -> tuple[Fraction, SourceKind | None]:
+    """`(price, route)` of wearing `code`: its `cheapest_route` under
+    `PIECE_POLICY`, the policy the piece was judged achievable by and is served
+    by, plus the equip (the price `route_price` gives the slotted `ObtainItem`),
+    and the route that price takes, the one the piece is served by (plan B
+    Task 3)."""
+    price, route = cheapest_route(code, 1, state, game_data, ctx, history, policy=PIECE_POLICY)
+    return Fraction(price + EQUIP_ACTIONS), route
 
 
 def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext,
@@ -489,14 +491,15 @@ def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext
                    _gain(state, target, game_data, code, food, timing, best[0], at))
                   for slot, item, at in _missing(game_data, code, target, loadouts[code], own)]
         pieces_of[code] = [piece for piece in gained if piece[2] > 0]
-    prices = {code: [_price(state, game_data, ctx, history, slot, item)
-                     for slot, item, _ in pieces_of[code]] for code in tied}
+    prices = {code: [_price(state, game_data, ctx, history, item)
+                     for _, item, _ in pieces_of[code]] for code in tied}
     # `min` keeps the first of equal totals: catalogue order, as `_candidates` lists.
-    monster = min(tied, key=lambda code: sum(prices[code], Fraction(0)))
+    monster = min(tied, key=lambda code: sum((price for price, _ in prices[code]),
+                                             Fraction(0)))
     rank = _ordered_slots()
-    pieces = [GearPiece(slot, code, depth[code], gain, price)
-              for (slot, code, gain), price in zip(pieces_of[monster], prices[monster],
-                                                   strict=True)]
+    pieces = [GearPiece(slot, code, depth[code], gain, price, route)
+              for (slot, code, gain), (price, route) in zip(pieces_of[monster],
+                                                            prices[monster], strict=True)]
     pieces.sort(key=lambda piece: piece_order_key(piece.layer, piece.gain, piece.price,
                                                   rank.index(piece.slot)))
     return GearObjective(monster, loadouts[monster], best[0], tuple(pieces),

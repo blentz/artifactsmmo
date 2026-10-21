@@ -16,10 +16,11 @@ piece's step is declined and no gear action is available at all.
 from artifactsmmo_cli.ai.decision import Decision
 from artifactsmmo_cli.ai.decisions import root as _root
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_result import GearPiece
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ReachCharLevel
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -33,6 +34,20 @@ def next_level(state: WorldState, game_data: GameData) -> ReachCharLevel | None:
     return ReachCharLevel(level=state.level + 1)
 
 
+def piece_target(piece: GearPiece, objective: CharacterObjective, state: WorldState) -> GearTarget:
+    """The piece's target as the route that priced it serves it (plan B Task
+    3), for the walk's entry and the alternatives `resolve_root` offers alike.
+    A crafted piece (`GearPiece.crafted`) is classified (`classify_target`:
+    the crafting gate first, then the materials). Any other route is the piece
+    itself, its own blocker, so `IsThisTargetBlocked` roots `ObtainItem(code,
+    1, slot)` and the step graph owns the rest: a piece the book or a vendor
+    sells is bought, never climbed to (cell 5's amulet, 213 gold on the book,
+    once rooted the jewelrycrafting climb its craft needs)."""
+    if piece.crafted:
+        return objective.classify_target(piece.code, state)
+    return GearTarget(code=piece.code, attainable=False, blocker=piece.code)
+
+
 class WhichPieceIsNext(Decision[MetaGoal]):
     """Which missing `L*` piece does the character acquire next?
 
@@ -43,8 +58,10 @@ class WhichPieceIsNext(Decision[MetaGoal]):
       makes better gear legal retargets the very next cycle.
     * a piece missing (§2.4.2): the FIRST piece, in `missing`'s own order
       (layer, then gain per price — never re-sorted here), whose step can be
-      served this cycle (`RootWalk.serves`) goes to `IsThisTargetBlocked`: a
+      served this cycle (`RootWalk.serves`) goes to `IsThisTargetBlocked`,
+      served by the route that priced it (`piece_target`): a crafted piece's
       crafting-skill gate becomes the next skill level, a missing material its
+      `ObtainItem`; a piece priced by any other route is its own
       `ObtainItem`. A piece whose step is declined is recorded with its reason
       and the next piece is asked.
     * every piece declined (INTERIM, ruling AI): no gear action is available
@@ -80,7 +97,7 @@ class WhichPieceIsNext(Decision[MetaGoal]):
             # is a data fault, never a root classified against other data.
             raise ValueError(f"gear objective names {unknown!r}, absent from game data")
         for piece in target.missing:
-            gear = self.objective.classify_target(piece.code, state)
+            gear = piece_target(piece, self.objective, state)
             if self.walk.serves(piece.slot, gear, state, game_data, ctx, history):
                 return _root.IsThisTargetBlocked(piece.slot, gear, self.walk)
         # INTERIM (ruling AI, final review F1): every missing piece is declined,

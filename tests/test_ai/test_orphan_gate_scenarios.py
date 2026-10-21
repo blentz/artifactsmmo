@@ -33,6 +33,7 @@ from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
@@ -81,7 +82,7 @@ def _mining_gated_state(bundle_game_data, mining: int):
 
 _BOOTS = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, gear_objective=GearObjective(
     "pig", {"boots_slot": "iron_boots"}, Fraction(1),
-    (GearPiece("boots_slot", "iron_boots", 0, Fraction(1), Fraction(1)),)))
+    (GearPiece("boots_slot", "iron_boots", 0, Fraction(1), Fraction(1), SourceKind.CRAFT),)))
 """A gear objective missing exactly `iron_boots`: these tests mean that one
 piece, so the objective is built explicitly (ruling W)."""
 

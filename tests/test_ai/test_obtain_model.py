@@ -30,7 +30,7 @@ NOW = datetime(2026, 9, 27, tzinfo=UTC)
 OPEN = Policy(all_gather_routes=True, gather_skill_gate=True, craft_skill_gate=True,
               event_vendors=True,
               spawn_known=True, allow_grey=False, vendor_routes=True, ge_routes=True,
-              task_rewards=True, fight_gold=True, drop_routes=True)
+              task_rewards=True, fight_gold=True, drop_routes=True, price_climbs=False)
 
 
 def census_items(gd: GameData) -> list[str]:

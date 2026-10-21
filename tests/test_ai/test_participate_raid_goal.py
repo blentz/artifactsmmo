@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.goals.participate_raid import (
 )
 from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter, raid_may_fight
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachSkillLevel
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -117,7 +118,7 @@ def _raid_gd(*, tiles: bool, hurts: bool) -> GameData:
     return gd
 
 
-_PIECE = GearPiece("shield_slot", "boss_shield", 0, Fraction(1), Fraction(10))
+_PIECE = GearPiece("shield_slot", "boss_shield", 0, Fraction(1), Fraction(10), SourceKind.DROP)
 """A missing `L*` piece."""
 _MISSING = GearObjective("wolf", {"shield_slot": "boss_shield"}, Fraction(1), (_PIECE,))
 _HELD = GearObjective("wolf", {"shield_slot": "boss_shield"}, Fraction(1), ())

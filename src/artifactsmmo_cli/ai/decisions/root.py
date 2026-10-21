@@ -951,7 +951,7 @@ def resolve_root(state: WorldState, game_data: GameData,
     ordered: list[MetaGoal] = [
         # A throwaway RootWalk: this is a conversion, not a visit, so it must
         # not append to the trail.
-        IsThisTargetBlocked(piece.slot, objective.classify_target(piece.code, state),
+        IsThisTargetBlocked(piece.slot, _which_piece.piece_target(piece, objective, state),
                             RootWalk()).resolve(state, game_data, ctx, history)
         for piece in (target.missing if target is not None else ())
     ]

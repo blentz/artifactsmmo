@@ -73,7 +73,7 @@ class Policy:
     task_rewards: bool
     fight_gold: bool
     drop_routes: bool
-    price_climbs: bool = False
+    price_climbs: bool
 
     def admits(self, route: Route) -> bool:
         """Is `route` offered at all under this policy?"""
@@ -116,6 +116,7 @@ class Policy:
 LEGACY = Policy(all_gather_routes=False, gather_skill_gate=True, craft_skill_gate=True,
                 event_vendors=False,
                 spawn_known=True, allow_grey=True, vendor_routes=True, ge_routes=True,
+                price_climbs=False,
                 task_rewards=False, fight_gold=False, drop_routes=True)
 """What `obtain_sources` answers: the routes the executor can serve now.
 Phase 1 step 1 proved the model reproduced the old walk under this policy

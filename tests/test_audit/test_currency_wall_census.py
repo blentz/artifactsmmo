@@ -551,7 +551,12 @@ def test_the_demand_breakdown_states_the_residual_scope(
     # 1771 -> 1456 (spec 2026-10-18 §2.8): a piece that adds no XP is not
     # offered (every `perfect_pearl`, and shields, rings and bags that do not
     # move `R`), and `l22_rest_for_combat`'s gold-walled rune is one of them.
-    assert "24 of 1456 cells are CHARGED (2 distinct currencies) — gold 21, tasks_coin 3" in line
+    # 1456 -> 1484 (plan B Task 3): the walks offer 28 more cells once a piece
+    # a fill or a vendor priced is offered as its own `ObtainItem` (held gold
+    # free up to the pocket) rather than as the crafting climb behind it, and
+    # fight gold is priced at its exact cost (ruling T2m M1). No charged cell
+    # moves.
+    assert "24 of 1484 cells are CHARGED (2 distinct currencies) — gold 21, tasks_coin 3" in line
     assert FUNDED_CURRENCY in line
     assert demand_breakdown([]) .endswith(
         "An uncharged currency can only be not_demanded.")

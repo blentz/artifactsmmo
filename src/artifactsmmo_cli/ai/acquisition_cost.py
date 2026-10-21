@@ -32,8 +32,8 @@ from artifactsmmo_cli.ai.acquisition_cost_core import (
     BANK_VENUE,
     UNOBTAINABLE_PER_UNIT,
     RouteOption,
-    acquisition_cost,
     bundle_acquisition_cost,
+    priced_route,
 )
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
 from artifactsmmo_cli.ai.combat_deficit import combat_deficit
@@ -65,7 +65,7 @@ from artifactsmmo_cli.ai.obtain_sources import (
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_credit import credit_demanded_skills
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 EQUIP_ACTIONS = 1
 """One `EquipAction`. Carries no venue: equipping happens wherever the character
@@ -175,16 +175,18 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
 
 
 def _kill_actions(monster_code: str, state: WorldState, game_data: GameData,
-                  timing: FightSecondsModel, records: Sequence[tuple[str, int, int]]) -> float:
-    """Whole-loop actions ONE win against `monster_code` costs: the fight at
-    its learned seconds plus the rest it forces (`cycles_per_kill`), and the
-    learned losses expected per win (`_loss_surcharge`). The per-kill factor of
-    every fight-priced route: a drop farm (`_drop_actions`) and a gold farm
-    (`_priced`'s GOLD_DROP arm)."""
+                  timing: FightSecondsModel, records: Sequence[tuple[str, int, int]]) -> Fraction:
+    """Whole-loop actions ONE win against `monster_code` costs, exact: the
+    fight at its learned seconds plus the rest it forces (`cycles_per_kill`),
+    and the learned losses expected per win (`_loss_surcharge`). The per-kill
+    factor of every fight-priced route: a drop farm (`_drop_actions`) and a
+    gold farm (`_priced`'s GOLD_DROP arm, which rounds up once per route, not
+    per win: ruling T2m M1)."""
     fight = walk_seconds(state, game_data, monster_code, (), timing)
     per_kill = cycles_per_kill(
         expected_damage_per_fight(state, game_data, monster_code), state.max_hp, fight)
-    return per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight)
+    return Fraction(per_kill) + Fraction(_loss_surcharge(monster_code, state.max_hp, records,
+                                                         fight))
 
 
 def _gather_rate(item: str, resource: str, game_data: GameData) -> tuple[int, int]:
@@ -274,11 +276,12 @@ def _priced(item: str, source: Source, state: WorldState,
         # against the monster (`Source.code`), paying the route's expected gold,
         # the mean `(min_gold + max_gold) // 2` of the API's range
         # (`drop_routes.gold_drop_routes`). The walk takes `gold needed / mean
-        # gold per kill` applications, each priced as a drop farm's kill is.
+        # gold per kill` applications, each priced as a drop farm's kill is,
+        # at its exact cost: the walk rounds the wins up once (ruling T2m M1).
         return RouteOption(
             kind=source.kind.value, venue=source.code,
-            actions_per_application=max(1, ceil(_kill_actions(
-                source.code, state, game_data, ctx.timing(), ctx.fight_records))),
+            actions_per_application=_kill_actions(
+                source.code, state, game_data, ctx.timing(), ctx.fight_records),
             capacity=source.capacity, yield_per=source.yield_per)
     if source.kind is SourceKind.TASK_REWARD:
         # The task board (ruling T2b): no API datum gives a task's length, so
@@ -479,8 +482,11 @@ def _climbs(item: str, model: ObtainModel, policy: Policy) -> frozenset[tuple[So
     """`(kind, via)` of every CRAFT or GATHER route to `item` that its own skill
     requirement alone keeps closed (`_climbing`). Such a route is never priced
     as ready: `route_options` prices it with its climb, or not at all. Empty
-    without `price_climbs`: every such route is then one `policy` refuses, so
-    `obtain_sources` never names it."""
+    without `price_climbs`, by return: a route a gate keeps closed is then one
+    `policy` itself refuses, so `obtain_sources` never names it, and there is
+    nothing to drop (ruling T2m M2)."""
+    if not policy.price_climbs:
+        return frozenset()
     return frozenset((route.kind, route.via)
                      for kind, gate_kind in _SKILL_GATE.items()
                      for route in model.gated_by(item, _climbing(policy), gate_kind)
@@ -773,6 +779,39 @@ def _owned_with_gold(state: WorldState) -> dict[str, int]:
     return owned
 
 
+def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
+                   ctx: SelectionContext, store: LearningStore | None,
+                   gated_drop: bool = True, *, policy: Policy,
+                   credit_skills: frozenset[str] = frozenset()) -> tuple[int, SourceKind | None]:
+    """`(price, route)`: the lower bound on planner actions to obtain `qty` of
+    `item` (`acquisition_actions` without the equip), and the kind of the route
+    that price takes for `item` itself (plan B Task 3: a piece is served by the
+    route that priced it).
+
+    The route is the argmin of `item`'s `acquisition_options`, first of equal
+    prices as `acquisition_cost` takes it (`priced_route`). An item whose only
+    routes are climbs no grind rate can price (no store, or no observed rate)
+    has no priced route, and is priced at the no-route sentinel; its route is
+    then the climb's own kind, CRAFT before GATHER, as `route_options` would
+    have priced it. None only when the item has no route at all.
+
+    Held gold is free up to the pocket (ruling T2k, `_owned_with_gold`): the
+    choice credits it as the walk does, so a fill or a buy the pocket covers
+    is not priced at gold's fight cost against a dearer craft."""
+    owned: dict[str, int] = _owned_with_gold(state)
+    options: Mapping[str, list[RouteOption]] = credit_demanded_skills(
+        acquisition_options(item, state, game_data, ctx, store, gated_drop, policy=policy),
+        credit_skills, game_data)
+    price, route = priced_route(item, qty, options, owned, frozenset({GOLD_CODE}))
+    if route is not None:
+        return price, SourceKind(route.kind)
+    model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc))
+    for kind in _SKILL_GATE:
+        if _skill_gated(item, model, kind, policy) is not None:
+            return price, kind
+    return price, None
+
+
 def acquisition_actions(item: str, qty: int, state: WorldState,
                         game_data: GameData, ctx: SelectionContext,
                         equip: bool,
@@ -796,13 +835,12 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
     which is what it costs.
 
     `credit_skills` — routes training one of these skills cost no actions
-    (`skill_credit`); empty by default, so every existing caller is unchanged."""
-    owned: dict[str, int] = _owned_with_gold(state)
-    options: Mapping[str, list[RouteOption]] = credit_demanded_skills(
-        acquisition_options(item, state, game_data, ctx, store, gated_drop, policy=policy),
-        credit_skills, game_data)
-    return acquisition_cost(item, qty, options, owned) + (
-        EQUIP_ACTIONS if equip else 0)
+    (`skill_credit`); empty by default, so every existing caller is unchanged.
+
+    The price is `cheapest_route`'s, so there is one pricer."""
+    price, _route = cheapest_route(item, qty, state, game_data, ctx, store, gated_drop,
+                                   policy=policy, credit_skills=credit_skills)
+    return price + (EQUIP_ACTIONS if equip else 0)
 
 
 def bundle_acquisition_actions(
@@ -828,5 +866,5 @@ def bundle_acquisition_actions(
     options: dict[str, list[RouteOption]] = {}
     for item, _qty in roots:
         options.update(acquisition_options(item, state, game_data, ctx, store))
-    total, paid = bundle_acquisition_cost(roots, options, owned)
+    total, paid = bundle_acquisition_cost(roots, options, owned, frozenset({GOLD_CODE}))
     return total + (EQUIP_ACTIONS * len(roots) if equip else 0), paid

@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
 from artifactsmmo_cli.commands import plan as plan_cmd
@@ -295,8 +296,8 @@ def test_plan_report_prints_the_missing_pieces_in_order(capsys):
         monster="cultist_acolyte",
         loadout={"weapon": "iron_sword", "ring1": "iron_ring"},
         rate=Fraction(1, 4),
-        missing=(GearPiece("weapon", "iron_sword", 1, Fraction(3, 40), Fraction(901, 2)),
-                 GearPiece("ring1", "iron_ring", 2, Fraction(0), Fraction(1_000_001))))
+        missing=(GearPiece("weapon", "iron_sword", 1, Fraction(3, 40), Fraction(901, 2), SourceKind.CRAFT),
+                 GearPiece("ring1", "iron_ring", 2, Fraction(0), Fraction(1_000_001), SourceKind.CRAFT)))
     out = _print_with_objective(objective, capsys)
     assert ("gear_objective: monster=cultist_acolyte, held=False, "
             "missing=[weapon:iron_sword(1, 0.075/450), ring1:iron_ring(2, 0/1000001)]") in out

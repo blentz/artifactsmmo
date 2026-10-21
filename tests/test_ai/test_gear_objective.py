@@ -37,6 +37,7 @@ from artifactsmmo_cli.ai.scenario import (
     scenario_state,
 )
 from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 
@@ -462,8 +463,8 @@ def test_an_equal_rate_and_level_goes_to_the_cheaper_pieces(monkeypatch: pytest.
         dear_only -= set(_objective_for(monkeypatch, state, gd, [cheap]).loadout.values())
         priced = dear_only.pop()
 
-        def price(*args: object, item: str = priced) -> Fraction:
-            return Fraction(2 if args[-1] == item else 1)
+        def price(*args: object, item: str = priced) -> tuple[Fraction, SourceKind]:
+            return Fraction(2 if args[-1] == item else 1), SourceKind.CRAFT
 
         monkeypatch.setattr(mod, "_price", price)
         for order in ([dear, cheap], [cheap, dear]):

@@ -39,7 +39,8 @@ def game_data() -> GameData:
 def _objective(monster: str, fighter: WorldState | None = None) -> GearObjective:
     """A gear objective on `monster` with one piece missing: `farm_target`
     names no grind target for it. `fighter` is the one wearing its `L*`."""
-    piece = GearPiece("shield_slot", "wooden_shield", 0, Fraction(1), Fraction(10))
+    piece = GearPiece("shield_slot", "wooden_shield", 0, Fraction(1), Fraction(10),
+                      SourceKind.CRAFT)
     return GearObjective(monster, {"shield_slot": "wooden_shield"}, Fraction(1), (piece,),
                          fighter=fighter)
 

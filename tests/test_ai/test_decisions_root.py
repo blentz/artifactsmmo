@@ -54,6 +54,7 @@ from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state, scenario_state
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.task_horizon import (
     HORIZON_GEAR,
     HORIZON_LEVEL_UP,
@@ -729,7 +730,8 @@ def test_an_open_rung_with_nothing_to_do_is_an_honest_wall(monkeypatch):
 
 def _pieces(*codes: tuple[str, str]) -> GearObjective:
     """A gear objective missing `codes` ((slot, code) pairs), in that order."""
-    pieces = tuple(GearPiece(slot, code, 0, Fraction(1), Fraction(1)) for slot, code in codes)
+    pieces = tuple(GearPiece(slot, code, 0, Fraction(1), Fraction(1), SourceKind.CRAFT)
+                   for slot, code in codes)
     return GearObjective("chicken", {slot: code for slot, code in codes}, Fraction(1), pieces)
 
 

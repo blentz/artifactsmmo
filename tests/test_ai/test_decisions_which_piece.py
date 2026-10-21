@@ -14,6 +14,7 @@ from fractions import Fraction
 
 import pytest
 
+from artifactsmmo_cli.ai.acquisition_cost import EQUIP_ACTIONS, acquisition_actions, cheapest_route
 from artifactsmmo_cli.ai.decisions.root import (
     IsThisTargetBlocked,
     RootResolution,
@@ -25,9 +26,11 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import gear_objective
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
+from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -43,11 +46,11 @@ from tests.test_ai.test_decisions_root import _gd
 from tests.test_ai.test_gear_objective import BUNDLE, COPPER, CTX, _novice, _robby
 from tests.test_ai.test_strategy_driver import _ctx
 
-SHIELD = GearPiece("shield_slot", "iron_shield", 0, Fraction(3), Fraction(10))
+SHIELD = GearPiece("shield_slot", "iron_shield", 0, Fraction(3), Fraction(10), SourceKind.CRAFT)
 """Gearcrafting 10 on a gearcrafting-1 character: skill-gated."""
-CLUB = GearPiece("weapon_slot", "ash_club", 0, Fraction(2), Fraction(10))
+CLUB = GearPiece("weapon_slot", "ash_club", 0, Fraction(2), Fraction(10), SourceKind.CRAFT)
 """Its ash_plank chain is gatherable: attainable."""
-LEGS = GearPiece("leg_armor_slot", "leather_legs", 1, Fraction(1), Fraction(10))
+LEGS = GearPiece("leg_armor_slot", "leather_legs", 1, Fraction(1), Fraction(10), SourceKind.CRAFT)
 """Leather has no source: material-gated on `leather`."""
 
 
@@ -247,7 +250,7 @@ def test_a_piece_the_catalogue_does_not_know_is_refused() -> None:
     decision's game data does not know raises, by name, before any piece is
     classified — even when a known piece comes first."""
     gd = _gd()
-    ghost = GearPiece("helmet_slot", "no_such_helmet", 0, Fraction(1), Fraction(1))
+    ghost = GearPiece("helmet_slot", "no_such_helmet", 0, Fraction(1), Fraction(1), SourceKind.CRAFT)
     with pytest.raises(ValueError, match=r"\['no_such_helmet'\], absent from game data"):
         _resolve(make_state(level=15), gd, _missing(CLUB, ghost))
 
@@ -267,3 +270,49 @@ def test_no_trunk_at_the_level_cap() -> None:
     assert declined.root is None
     assert declined.alternatives[:1] == (club_step,)
     assert _resolve(make_state(level=cap - 1), gd, _missing()).root == ReachCharLevel(level=cap)
+
+
+# --- plan B Task 3: a piece is served by the route that priced it ------------
+
+@pytest.mark.parametrize("route", [SourceKind.BUY, SourceKind.GE_FILL])
+def test_a_bought_piece_is_never_a_climb(route: SourceKind) -> None:
+    """A piece the book or a vendor priced is bought, not climbed to: the
+    shield's gearcrafting 10 is unmet at 1, yet the root is the shield itself,
+    slotted, and no crafting demand is published. Behind another piece, the
+    alternative it offers is the same `ObtainItem`."""
+    gd = _gd()
+    state = make_state(level=15)
+    bought = replace(SHIELD, route=route)
+    shield = ObtainItem("iron_shield", 1, slot="shield_slot")
+    first = _resolve(state, gd, _missing(bought, CLUB))
+    assert (first.root, first.blocked_target) == (shield, None)
+    behind = _resolve(state, gd, _missing(CLUB, bought))
+    assert behind.root == ObtainItem("ash_club", 1, slot="weapon_slot")
+    assert behind.alternatives[:1] == (shield,)
+
+
+def test_a_crafted_piece_still_climbs() -> None:
+    """A piece its craft priced keeps its crafting gate in front: the next
+    gearcrafting level, its code the published demand, and the same climb among
+    the alternatives behind another piece."""
+    gd = _gd()
+    state = make_state(level=15)
+    climb = ReachSkillLevel(skill="gearcrafting", level=state.skills.get("gearcrafting", 1) + 1)
+    first = _resolve(state, gd, _missing(SHIELD))
+    assert (first.root, first.blocked_target) == (climb, "iron_shield")
+    assert _resolve(state, gd, _missing(CLUB, SHIELD)).alternatives[:1] == (climb,)
+
+
+def test_cheapest_route_matches_the_price(bundle: GameData) -> None:
+    """One pricer: for each missing piece of Robby's objective, `cheapest_route`
+    is `acquisition_actions` less the equip, and it is the piece's own price
+    and route."""
+    state = _robby()
+    objective = gear_objective(state, bundle, CTX, None)
+    assert objective is not None and objective.missing
+    for piece in objective.missing:
+        price, route = cheapest_route(piece.code, 1, state, bundle, CTX, None,
+                                      policy=PIECE_POLICY)
+        assert price == acquisition_actions(piece.code, 1, state, bundle, CTX, equip=True,
+                                            policy=PIECE_POLICY) - EQUIP_ACTIONS, piece
+        assert (Fraction(price + EQUIP_ACTIONS), route) == (piece.price, piece.route), piece

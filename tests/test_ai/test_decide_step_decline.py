@@ -13,6 +13,7 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel, no_decline
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
@@ -57,8 +58,8 @@ def _two_pieces() -> SelectionContext:
     """The cycle's gear objective missing both craftables, dagger first. The
     fixture is too small for `gear_objective` to find a paying monster, so the
     objective is built explicitly (ruling W)."""
-    pieces = (GearPiece("weapon_slot", "copper_dagger", 0, Fraction(1), Fraction(1)),
-              GearPiece("shield_slot", "wooden_shield", 0, Fraction(1), Fraction(1)))
+    pieces = (GearPiece("weapon_slot", "copper_dagger", 0, Fraction(1), Fraction(1), SourceKind.CRAFT),
+              GearPiece("shield_slot", "wooden_shield", 0, Fraction(1), Fraction(1), SourceKind.CRAFT))
     return replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
         "chicken", {p.slot: p.code for p in pieces}, Fraction(1), pieces))
 

@@ -252,19 +252,34 @@ def test_cell5_the_book_reorders_the_objective_and_the_first_action(
     RE-DERIVED plan B Task 2 (`PIECE_POLICY`, USER 2026-10-19: a standing order
     is a route): the busy book also sells `forest_ring`, now priced through its
     order (3) rather than its drop, so both rings follow the amulet ahead of
-    the leg armour. The climb that serves the amulet is still the Plan A
-    defect; Task 3 turns it into the `GeBuy` (ruling T2f)."""
+    the leg armour.
+
+    RE-DERIVED plan B Task 3 (a piece is served by the route that priced it;
+    ruling T2k, held gold is free up to the pocket): the defect is gone. The
+    pocket's 3000 gold covers every order, so the book's leg armour prices at
+    3 like the amulet (a hop, the fill, the equip; its craft, dearer, was the
+    price before), and its larger gain heads `L*`. Each book piece is served
+    by its fill: the first action is the `GeBuy` of the legs, and the amulet
+    behind it is an `ObtainItem`, not the jewelrycrafting climb. The quiet
+    book still withdraws its banked iron bars toward the legs' craft, behind
+    which its unsold amulet keeps its climb."""
     busy_report = _plan(CELL5_BUSY_ADEQUATE, busy)
     quiet_report = _plan(CELL5_BUSY_ADEQUATE, quiet)
     legs = ObtainItem(code=LEG_TARGET, quantity=1, slot="leg_armor_slot")
-    assert busy_report.decision.chosen_root == ReachSkillLevel(skill="jewelrycrafting", level=6)
-    assert busy_report.decision.blocked_target == "fire_and_earth_amulet"
+    assert busy_report.decision.chosen_root == legs
+    assert busy_report.decision.blocked_target is None
     assert busy_report.decision.fallback_roots[:3] == [
+        ObtainItem(code="fire_and_earth_amulet", quantity=1, slot="amulet_slot"),
         ObtainItem(code="forest_ring", quantity=1, slot="ring1_slot"),
-        ObtainItem(code="forest_ring", quantity=1, slot="ring2_slot"), legs]
+        ObtainItem(code="forest_ring", quantity=1, slot="ring2_slot")]
     assert quiet_report.decision.chosen_root == legs
-    assert [repr(a) for a in busy_report.plan][:1] == ["Fight(chicken)"]
+    order = busy.ge_best_sell_order(LEG_TARGET)
+    assert order is not None
+    assert [repr(a) for a in busy_report.plan][:2] == [
+        f"GeBuy({LEG_TARGET}×1@{order[0]})", f"Equip({LEG_TARGET}->leg_armor_slot)"]
     assert [repr(a) for a in quiet_report.plan][:1] == ["Withdraw(iron_bar×3)"]
+    assert quiet_report.decision.fallback_roots[3] == ReachSkillLevel(skill="jewelrycrafting",
+                                                                      level=6)
     assert repr(busy_report.selected_goal) != repr(quiet_report.selected_goal)
 
 

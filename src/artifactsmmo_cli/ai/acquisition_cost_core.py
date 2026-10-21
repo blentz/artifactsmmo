@@ -60,6 +60,8 @@ with its own live-trace check.
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from fractions import Fraction
+from math import ceil
 
 BANK_VENUE = "bank"
 """Venue code for a bank tile. A constant rather than a per-tile code because
@@ -160,7 +162,10 @@ class RouteOption:
             route, EXCLUDING travel and excluding the inputs it consumes. One
             gather, one craft, one purchase, one withdraw, one unit-recycle are
             each 1; a DROP is `ceil(expected_kills) * cycles_per_kill`, already
-            rounded to whole actions by the wrapper.
+            rounded to whole actions by the wrapper. A fight for gold is one
+            win's exact cost, a `Fraction` (ruling T2m M1): a gold demand takes
+            many wins, and rounding each one up overpriced the gold 2-45%, so
+            `_accumulate` rounds the route's applications up ONCE.
         yield_per: Units of the target obtained per application. `>= 1`.
         capacity: Units of the target this route can deliver right now.
             WITHDRAW and RECYCLE are genuinely stock-limited; the rest carry
@@ -184,7 +189,7 @@ class RouteOption:
 
     kind: str
     venue: str
-    actions_per_application: int
+    actions_per_application: int | Fraction
     yield_per: int
     capacity: int
     inputs: Mapping[str, int] = field(default_factory=dict)
@@ -193,8 +198,9 @@ class RouteOption:
 
 
 def _cheapest_route(item: str, options: Mapping[str, list[RouteOption]],
-                    memo: dict[str, tuple[int, RouteOption | None]],
-                    active: frozenset[str]) -> tuple[int, RouteOption | None]:
+                    memo: dict[str, tuple[int | Fraction, RouteOption | None]],
+                    active: frozenset[str],
+                    free: Mapping[str, int]) -> tuple[int | Fraction, RouteOption | None]:
     """`(unit cost, route)` for the cheapest way to obtain ONE `item`, memoised.
 
     THE FIX FOR THE BLOW-UP. The first version of this walk chose a route by
@@ -220,19 +226,33 @@ def _cheapest_route(item: str, options: Mapping[str, list[RouteOption]],
 
     `active` guards recipe cycles (`copper_bar` recycles out of a
     `copper_dagger`, which crafts from `copper_bar`): an item already being
-    priced on this path is treated as unobtainable rather than recursed into."""
+    priced on this path is treated as unobtainable rather than recursed into.
+
+    `free` is the stock the CHOICE credits (ruling T2k, "free until used up",
+    as held potions are): an input's units up to its `free` count cost nothing,
+    and only the units beyond it pay their production price. Without it a
+    213-gold GE fill the pocket covers was priced at 213 gold's fight cost and
+    lost to a dearer craft (cell 5's amulet: 3 without a store, 39 with one)."""
     if item in memo:
         return memo[item]
     routes = options.get(item, [])
     if not routes or item in active:
         return (UNOBTAINABLE_PER_UNIT, None)
     inner = active | {item}
-    best: tuple[int, RouteOption | None] | None = None
+    best: tuple[int | Fraction, RouteOption | None] | None = None
     for route in routes:
-        per_unit = -(-route.actions_per_application // max(1, route.yield_per))
+        cost = route.actions_per_application
+        # An exact cost (a win for gold, ruling T2m M1) is compared exactly:
+        # rounded up per unit of gold, every paying monster cost one action a
+        # gold piece and the first in catalogue order was farmed, not the
+        # cheapest. A whole-action route keeps its per-unit ceiling.
+        per_unit = (cost / max(1, route.yield_per) if isinstance(cost, Fraction)
+                    else -(-cost // max(1, route.yield_per)))
         for material, per_application in route.inputs.items():
-            unit, _ = _cheapest_route(material, options, memo, inner)
-            per_unit += unit * per_application
+            short = max(0, per_application - free.get(material, 0))
+            if short:
+                unit, _ = _cheapest_route(material, options, memo, inner, free)
+                per_unit += unit * short
         if route.unlock:
             per_unit += route.unlock_actions
         if best is None or per_unit < best[0]:
@@ -250,9 +270,9 @@ def _cheapest_route(item: str, options: Mapping[str, list[RouteOption]],
 
 
 def _accumulate(item: str, qty: int, options: Mapping[str, list[RouteOption]],
-                memo: dict[str, tuple[int, RouteOption | None]],
+                memo: dict[str, tuple[int | Fraction, RouteOption | None]],
                 owned: dict[str, int], paid: dict[str, int],
-                actions: list[int], fuel: int) -> None:
+                actions: list[int], fuel: int, free: Mapping[str, int]) -> None:
     """Walk the demand closure once, crediting holdings and collecting the
     PAY-ONCE keys the plan touches.
 
@@ -281,19 +301,21 @@ def _accumulate(item: str, qty: int, options: Mapping[str, list[RouteOption]],
     remaining = qty - used
     if remaining <= 0:
         return
-    _unit, route = _cheapest_route(item, options, memo, frozenset())
+    _unit, route = _cheapest_route(item, options, memo, frozenset(), free)
     if route is None:
         actions[0] += UNOBTAINABLE_PER_UNIT * remaining
         return
     applications = -(-remaining // max(1, route.yield_per))
-    actions[0] += applications * route.actions_per_application
+    # Rounded up ONCE for the route's applications: an exact `Fraction` cost
+    # (a fight for gold) pays its fraction of an action once, not per win.
+    actions[0] += ceil(applications * route.actions_per_application)
     if route.venue:
         paid.setdefault(route.venue, 1)
     if route.unlock:
         paid.setdefault(route.unlock, route.unlock_actions)
     for material, per_application in sorted(route.inputs.items()):
         _accumulate(material, per_application * applications, options, memo,
-                    owned, paid, actions, fuel - 1)
+                    owned, paid, actions, fuel - 1, free)
 
 
 def acquisition_cost(
@@ -301,8 +323,25 @@ def acquisition_cost(
     qty: int,
     options: Mapping[str, list[RouteOption]],
     owned: Mapping[str, int],
+    free_codes: frozenset[str] = frozenset(),
 ) -> int:
-    """Lower bound on planner actions to obtain `qty` of `item`.
+    """Lower bound on planner actions to obtain `qty` of `item`: the price
+    `priced_route` answers, without the route."""
+    return priced_route(item, qty, options, owned, free_codes)[0]
+
+
+def priced_route(
+    item: str,
+    qty: int,
+    options: Mapping[str, list[RouteOption]],
+    owned: Mapping[str, int],
+    free_codes: frozenset[str] = frozenset(),
+) -> tuple[int, RouteOption | None]:
+    """`(price, route)`: the lower bound on planner actions to obtain `qty`
+    of `item`, and the route the walk takes for `item` itself, the argmin of
+    its options (first of equal prices, in `options` order), or None when it
+    has no route at all. The route is the argmin whether or not the bag
+    already covers `qty`.
 
     `options[code]` is every route that can currently produce `code`; a code
     absent from the mapping has no route and is charged
@@ -312,6 +351,9 @@ def acquisition_cost(
     THAT PER-UNIT CHARGE IS ALSO THE CEILING: the answer never exceeds
     `UNOBTAINABLE_PER_UNIT * qty`, so a real route the character cannot currently
     pay for is never ranked below one that does not exist. See `_capped`.
+
+    `free_codes` names the holdings the route CHOICE credits up to the units
+    held (`_cheapest_route`'s `free`); empty, the choice ignores holdings.
 
     TWO PASSES, BOTH LINEAR. `_cheapest_route` memoises a per-item unit cost;
     `_accumulate` then walks the demand closure once, crediting holdings and
@@ -324,17 +366,21 @@ def acquisition_cost(
     distinct code along its path."""
     actions = [0]
     paid: dict[str, int] = {}
-    _accumulate(item, qty, options, {}, dict(owned), paid, actions,
-                len(options) + 1)
+    memo: dict[str, tuple[int | Fraction, RouteOption | None]] = {}
+    free = {code: owned.get(code, 0) for code in free_codes}
+    _accumulate(item, qty, options, memo, dict(owned), paid, actions,
+                len(options) + 1, free)
     # `max(0, qty)`: `_accumulate` already answers 0 for a non-positive demand,
     # and a negative ceiling would turn that 0 into a negative price.
-    return _capped(actions[0] + sum(paid.values()), max(0, qty))
+    return (_capped(actions[0] + sum(paid.values()), max(0, qty)),
+            _cheapest_route(item, options, memo, frozenset(), free)[1])
 
 
 def bundle_acquisition_cost(
     roots: Sequence[tuple[str, int]],
     options: Mapping[str, list[RouteOption]],
     owned: Mapping[str, int],
+    free_codes: frozenset[str] = frozenset(),
 ) -> tuple[int, dict[str, int]]:
     """Lower bound on planner actions to obtain EVERY root in `roots`, as ONE
     plan, plus the pay-once keys that plan touched.
@@ -368,12 +414,13 @@ def bundle_acquisition_cost(
     caller comparing two bundles must pass them in the same order."""
     actions = [0]
     paid: dict[str, int] = {}
-    memo: dict[str, tuple[int, RouteOption | None]] = {}
+    memo: dict[str, tuple[int | Fraction, RouteOption | None]] = {}
     holdings = dict(owned)
+    free = {code: owned.get(code, 0) for code in free_codes}
     fuel = len(options) + 1
     units = 0
     for item, qty in roots:
-        _accumulate(item, qty, options, memo, holdings, paid, actions, fuel)
+        _accumulate(item, qty, options, memo, holdings, paid, actions, fuel, free)
         units += max(0, qty)
     # The ceiling is over the WHOLE bundle's demand, not per root: a bundle is
     # one plan, and the alternative it is being held against is that same plan

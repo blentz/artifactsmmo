@@ -469,6 +469,7 @@ OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions
 ROOT_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "root.py"
 CURRENCY_WALL_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "currency_wall_census.py"
 WHICH_PIECE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "which_piece_is_next.py"
+GEAR_OBJECTIVE_RESULT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective_result.py"
 TUI_APP_SRC = ROOT / "src" / "artifactsmmo_cli" / "tui" / "app.py"
 SKILL_CLIMB_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "skill_climb_completeness.py"
 GATHER_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_demand.py"
@@ -3813,10 +3814,11 @@ PIECE_POLICY_OBJECTIVE_MUTATIONS = [
      "            if model.feasible(code, 1, PIECE_POLICY):",
      "            if model.feasible(code, 1, type(PIECE_POLICY)(**{**vars(PIECE_POLICY), "
      "'ge_routes': False})):"),
-    ("gear_objective: the price back on LEGACY",
-     "    return Fraction(route_price(ObtainItem(code, 1, slot=slot), state, game_data, ctx, history,\n"
-     "                                policy=PIECE_POLICY))",
-     "    return Fraction(route_price(ObtainItem(code, 1, slot=slot), state, game_data, ctx, history))"),
+    ("gear_objective: the price back on LEGACY's switches (no event vendor, no fight gold)",
+     "    price, route = cheapest_route(code, 1, state, game_data, ctx, history, policy=PIECE_POLICY)",
+     "    price, route = cheapest_route(code, 1, state, game_data, ctx, history, "
+     "policy=type(PIECE_POLICY)(**{**vars(PIECE_POLICY), 'event_vendors': False, "
+     "'fight_gold': False}))"),
 ]
 # ruling T2c': only a policy that sets `price_climbs` charges a climb for a
 # gate it opens; the skill grind's ranking (GRIND_PRICING) opens the gathering
@@ -3844,6 +3846,74 @@ PIECE_POLICY_PRICER_MUTATIONS = [
     ("acquisition_cost: a task reward priced finite",
      "                           actions_per_application=UNOBTAINABLE_PER_UNIT,",
      "                           actions_per_application=1,"),
+]
+# plan B Task 3: a piece is served by the route that priced it. The route
+# check on the walk's entry and its alternatives, the piece's own route, the
+# held-gold pocket rule (ruling T2k), the exact fight cost rounded once (T2m
+# M1), `_climbs`' early return (M2), `price_climbs` required (M3) and the
+# reachability walk's policy (M4).
+SERVED_BY_ITS_ROUTE_WHICH_PIECE_MUTATIONS = [
+    ("which-piece: every piece classified behind its crafting gate",
+     "    if piece.crafted:\n        return objective.classify_target(piece.code, state)\n",
+     "    if True:\n        return objective.classify_target(piece.code, state)\n"),
+    ("which-piece: no piece classified behind its crafting gate",
+     "    if piece.crafted:\n        return objective.classify_target(piece.code, state)\n",
+     "    if False:\n        return objective.classify_target(piece.code, state)\n"),
+]
+SERVED_BY_ITS_ROUTE_RESULT_MUTATIONS = [
+    ("gear_objective_result: a GE fill counts as crafted",
+     "        return self.route is SourceKind.CRAFT\n",
+     "        return self.route is not SourceKind.BUY\n"),
+]
+SERVED_BY_ITS_ROUTE_ROOT_MUTATIONS = [
+    ("root: the alternatives classify every piece behind its crafting gate",
+     "        IsThisTargetBlocked(piece.slot, _which_piece.piece_target(piece, objective, state),",
+     "        IsThisTargetBlocked(piece.slot, objective.classify_target(piece.code, state),"),
+]
+SERVED_BY_ITS_ROUTE_PRICE_MUTATIONS = [
+    ("gear_objective: the piece forgets the route that priced it",
+     "    return Fraction(price + EQUIP_ACTIONS), route\n",
+     "    return Fraction(price + EQUIP_ACTIONS), SourceKind.CRAFT\n"),
+]
+SERVED_BY_ITS_ROUTE_REACH_MUTATIONS = [
+    ("gear_objective: the reachability walk refuses the drops later layers open (M4)",
+     "    graph = model.walk_graph(code, PIECE_POLICY,\n",
+     "    graph = model.walk_graph(code, replace(PIECE_POLICY, drop_routes=False),\n"),
+]
+SERVED_BY_ITS_ROUTE_CORE_MUTATIONS = [
+    ("acquisition_cost_core: held gold is not free to the choice",
+     "            short = max(0, per_application - free.get(material, 0))\n",
+     "            short = per_application\n"),
+    ("acquisition_cost_core: an exact fight cost is rounded up per unit in the choice",
+     "        per_unit = (cost / max(1, route.yield_per) if isinstance(cost, Fraction)\n",
+     "        per_unit = (-(-cost // max(1, route.yield_per)) if isinstance(cost, Fraction)\n"),
+    ("acquisition_cost_core: each application rounded up on its own",
+     "    actions[0] += ceil(applications * route.actions_per_application)\n",
+     "    actions[0] += applications * ceil(route.actions_per_application)\n"),
+    ("acquisition_cost_core: the priced route is not the walk's argmin",
+     "            _cheapest_route(item, options, memo, frozenset(), free)[1])\n",
+     "            next(iter(options.get(item, [])), None))\n"),
+]
+SERVED_BY_ITS_ROUTE_PRICER_MUTATIONS = [
+    ("acquisition_cost: the pocket's gold is not free to the choice (T2k)",
+     "    price, route = priced_route(item, qty, options, owned, frozenset({GOLD_CODE}))\n",
+     "    price, route = priced_route(item, qty, options, owned)\n"),
+    ("acquisition_cost: each win for gold rounded up on its own (M1)",
+     "            actions_per_application=_kill_actions(\n"
+     "                source.code, state, game_data, ctx.timing(), ctx.fight_records),\n",
+     "            actions_per_application=ceil(_kill_actions(\n"
+     "                source.code, state, game_data, ctx.timing(), ctx.fight_records)),\n"),
+    ("acquisition_cost: an unpriced climb has no route",
+     "    for kind in _SKILL_GATE:\n        if _skill_gated(item, model, kind, policy) is not None:\n",
+     "    for kind in ():\n        if _skill_gated(item, model, kind, policy) is not None:\n"),
+    ("acquisition_cost: _climbs scans the gates without price_climbs (M2)",
+     "    if not policy.price_climbs:\n        return frozenset()\n",
+     "    if False:\n        return frozenset()\n"),
+]
+SERVED_BY_ITS_ROUTE_POLICY_MUTATIONS = [
+    ("policy: price_climbs defaults to off (M3)",
+     "    price_climbs: bool\n",
+     "    price_climbs: bool = False\n"),
 ]
 # The GATHER spawn gate (obtain_model.py) and its predicate (game_data.py),
 # killed by tests/test_ai/test_obtain_model.py and test_game_data.py.
@@ -5656,8 +5726,8 @@ GEAR_OBJECTIVE_MUTATIONS = [
      "    tied = [code for code, rate in rated if (rate, game_data.monster_levels[code]) == best]",
      "    tied = [code for code, rate in rated if rate == best[0]]"),
     ("gear objective: an equal rate and level goes to the dearer pieces",
-     "    monster = min(tied, key=lambda code: sum(prices[code], Fraction(0)))",
-     "    monster = max(tied, key=lambda code: sum(prices[code], Fraction(0)))"),
+     "    monster = min(tied, key=lambda code: sum((price for price, _ in prices[code]),",
+     "    monster = max(tied, key=lambda code: sum((price for price, _ in prices[code]),"),
     ("gear objective: m* may be a fight the gates refuse in its L*",
      "        if not drop_fight_winnable(targets[code][0], game_data, code):",
      "        if False:"),
@@ -6468,8 +6538,9 @@ SKILL_CREDIT_PRICE_MUTATIONS = [
 ]
 LOSS_RISK_ACQUISITION_MUTATIONS = [
     ("loss risk: the drop price ignores the learned losses",
-     "    return per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight)\n",
-     "    return per_kill + 0.0\n"),
+     "    return Fraction(per_kill) + Fraction(_loss_surcharge(monster_code, state.max_hp, records,\n"
+     "                                                         fight))\n",
+     "    return Fraction(per_kill)\n"),
     ("loss risk: the routes drop the context's records",
      "                                                  store, ctx.fight_records),\n",
      "                                                  store, ()),\n"),
@@ -11828,6 +11899,22 @@ def _collect_all_groups() -> None:
     run_group(ROUTE_SRC, PIECE_POLICY_ROUTE_PRICE_MUTATIONS,
               "tests/test_ai/test_piece_policy.py", survivors)
     run_group(ACQUISITION_COST_SRC, PIECE_POLICY_PRICER_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(WHICH_PIECE_SRC, SERVED_BY_ITS_ROUTE_WHICH_PIECE_MUTATIONS,
+              "tests/test_ai/test_decisions_which_piece.py", survivors)
+    run_group(GEAR_OBJECTIVE_RESULT_SRC, SERVED_BY_ITS_ROUTE_RESULT_MUTATIONS,
+              "tests/test_ai/test_decisions_which_piece.py", survivors)
+    run_group(ROOT_DECISION_SRC, SERVED_BY_ITS_ROUTE_ROOT_MUTATIONS,
+              "tests/test_ai/test_decisions_which_piece.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, SERVED_BY_ITS_ROUTE_PRICE_MUTATIONS,
+              "tests/test_ai/scenarios/test_ge_market_triple.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, SERVED_BY_ITS_ROUTE_REACH_MUTATIONS,
+              "tests/test_ai/test_gear_objective.py", survivors)
+    run_group(ACQUISITION_COST_CORE_SRC, SERVED_BY_ITS_ROUTE_CORE_MUTATIONS,
+              "tests/test_ai/test_acquisition_cost_core.py", survivors)
+    run_group(ACQUISITION_COST_SRC, SERVED_BY_ITS_ROUTE_PRICER_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(OBTAIN_MODEL_POLICY_SRC, SERVED_BY_ITS_ROUTE_POLICY_MUTATIONS,
               "tests/test_ai/test_piece_policy.py", survivors)
     run_group(ACQUISITION_COST_SRC, PRICE_CLIMBS_SWITCH_MUTATIONS,
               "tests/test_ai/scenarios/test_fisher_cooking_rung.py", survivors)

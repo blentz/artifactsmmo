@@ -99,7 +99,10 @@
   - `test_a_bought_piece_is_never_a_climb`: a piece whose `route` is `BUY` or `GE_FILL` and whose craft gate is unmet gives root `ObtainItem`, not `ReachSkillLevel`.
   - `test_a_crafted_piece_still_climbs`: `route` is `CRAFT` with the gate unmet, so the root is `ReachSkillLevel(skill, current+1)`.
   - `test_cheapest_route_matches_the_price`: for each piece in the Robby fixture, `cheapest_route(...)[0] == acquisition_actions(...) - EQUIP_ACTIONS`.
-- [ ] **Step 2–4: FAIL, implement, PASS.** Add mutants for the route check, then commit `feat(objective): a piece is served by the route that priced it`.
+  - `test_ge_market_triple` cell 5, moved here from Task 2 (ruling T2f): the first planned action is the `GeBuy` of the amulet.
+  - `test_a_gold_funded_buy_is_served` (ruling T2h): `lifesteal_rune` in `l20_dual_utility`, priced through fight gold, roots a plan that fights for the gold and then buys. The arbiter no longer declines it `infeasible:…:no_route:`. Re-pin the Task 2 outcomes that recorded the decline.
+  - `test_held_gold_is_free_up_to_the_pocket` (ruling T2k): with a store, a GE fill or NPC buy whose gold the pocket covers prices its gold at 0. Only gold beyond the pocket costs its production price, the same "free until used up" rule as held potions. The cell-5 amulet prices the same with and without a store.
+- [ ] **Step 2–4: FAIL, implement, PASS.** Add mutants for the route check, the gold-funded serve and the pocket rule, then commit `feat(objective): a piece is served by the route that priced it`.
 
 ### Task 4: Gain is what the piece adds to `L*`, not to a bare fighter
 

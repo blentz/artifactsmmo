@@ -442,10 +442,13 @@ def test_l48_event_active_pursues_event_gear() -> None:
         code="goblin_guard_shield", quantity=1, slot="shield_slot")
     # RE-DERIVED plan B Task 2 (`PIECE_POLICY`, ruling T2a): the 20000-gold
     # rune is priced through gold earned by fighting, so it orders between the
-    # event's two pieces.
+    # event's two pieces. RE-DERIVED plan B Task 3 (ruling T2m M1): its gold
+    # is farmed at the monster whose exact win cost per gold is least, and its
+    # wins are rounded up once, so it prices at 4142 and heads the
+    # event's two pieces (7054, 20684).
     assert report.decision.fallback_roots == [
-        ObtainItem(code="corrupted_skull", quantity=1, slot="artifact1_slot"),
         ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
+        ObtainItem(code="corrupted_skull", quantity=1, slot="artifact1_slot"),
         ObtainItem(code="corrupted_crown", quantity=1, slot="helmet_slot")]
     assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
         repr(report.selected_goal), report.plan)

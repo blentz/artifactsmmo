@@ -7,11 +7,14 @@ modelling choice could go either way it is resolved DOWNWARD, and the tests say
 which direction they are protecting.
 """
 
+from fractions import Fraction
+
 from artifactsmmo_cli.ai.acquisition_cost_core import (
     UNOBTAINABLE_PER_UNIT,
     RouteOption,
     acquisition_cost,
     bundle_acquisition_cost,
+    priced_route,
 )
 
 UNBOUNDED = 10**9
@@ -465,3 +468,59 @@ class TestBundleAcquisitionCost:
                                       capacity=UNBOUNDED)]}
         total, _paid = bundle_acquisition_cost([("ok", 1), ("nope", 1)], options, {})
         assert total >= UNOBTAINABLE_PER_UNIT
+
+
+# --- plan B Task 3: the route the price takes, held gold, exact fights --------
+
+def fight_for(venue: str, cost: Fraction, gold: int) -> RouteOption:
+    """One win against `venue` for `gold`, at its exact action cost."""
+    return RouteOption(kind="gold_drop", venue=venue, actions_per_application=cost,
+                       yield_per=gold, capacity=UNBOUNDED)
+
+
+def test_the_priced_route_is_the_walks_argmin_and_its_price() -> None:
+    """`priced_route` answers `acquisition_cost`'s price and the route that price
+    takes for the item itself: the cheaper of two, the FIRST of two equal ones
+    (the order `acquisition_cost` keeps), and None with no route at all."""
+    options = {"ore": [RouteOption(kind="drop", venue="far", actions_per_application=3,
+                                   yield_per=1, capacity=UNBOUNDED), gather("near")]}
+    assert priced_route("ore", 2, options, {}) == (acquisition_cost("ore", 2, options, {}),
+                                                   options["ore"][1])
+    tied = {"ore": [gather("first"), gather("second")]}
+    assert priced_route("ore", 1, tied, {}) == (2, tied["ore"][0])
+    assert priced_route("mystery", 1, {}, {}) == (UNOBTAINABLE_PER_UNIT, None)
+    held = {"ore": [gather("near")]}
+    assert priced_route("ore", 1, held, {"ore": 1}) == (0, held["ore"][0])
+
+
+def test_held_gold_is_free_to_the_choice_up_to_the_pocket() -> None:
+    """Ruling T2k ("free until used up"): a buy the pocket covers costs the
+    choice no gold, so it beats a dearer craft; the walk then spends the
+    pocket. Without `free_codes` the choice prices the gold at its fight cost
+    and takes the craft, though the buy is the cheaper plan."""
+    options = {"amulet": [buy("book", "gold", 200), craft("bench", {"bar": 4})],
+               "bar": [gather("mine")],
+               "gold": [fight_for("wolf", Fraction(5, 2), 4)]}
+    pocket = {"gold": 3000}
+    assert priced_route("amulet", 1, options, pocket, frozenset({"gold"})) == (
+        2, options["amulet"][0])
+    assert priced_route("amulet", 1, options, pocket) == (7, options["amulet"][1])
+
+
+def test_gold_beyond_the_pocket_costs_its_production() -> None:
+    """Only the shortfall is priced: 200 gold with 120 held fights for 80, 20
+    wins at exactly 5/2 actions (50, rounded once), plus the wolf's tile, the
+    book's tile and the buy."""
+    options = {"amulet": [buy("book", "gold", 200)],
+               "gold": [fight_for("wolf", Fraction(5, 2), 4)]}
+    assert acquisition_cost("amulet", 1, options, {"gold": 120}, frozenset({"gold"})) == 53
+
+
+def test_an_exact_fight_cost_is_rounded_once_per_route() -> None:
+    """Ruling T2m M1: 7 wins at 13/10 actions cost ceil(91/10) = 10 actions,
+    not 7 * ceil(13/10) = 14; and the choice compares the exact cost per gold,
+    so the dearer win that pays more gold per action is farmed (13/40 a gold
+    against 7/20), not the first monster in the list."""
+    cheap = fight_for("wolf", Fraction(13, 10), 4)
+    options = {"gold": [fight_for("slime", Fraction(7, 10), 2), cheap]}
+    assert priced_route("gold", 28, options, {}) == (10 + 1, cheap)

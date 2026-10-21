@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.scenario import (
     scenario_state,
 )
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
@@ -123,8 +124,8 @@ def test_without_a_yield_the_stuck_drop_root_heads_every_cycle() -> None:
     first and the ring second (this fixture is too small for `gear_objective`
     to find a paying monster; ruling W)."""
     state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
-    pieces = (GearPiece("helmet_slot", "wolf_ears", 0, Fraction(1), Fraction(1)),
-              GearPiece("ring2_slot", "iron_ring", 0, Fraction(1), Fraction(1)))
+    pieces = (GearPiece("helmet_slot", "wolf_ears", 0, Fraction(1), Fraction(1), SourceKind.DROP),
+              GearPiece("ring2_slot", "iron_ring", 0, Fraction(1), Fraction(1), SourceKind.CRAFT))
     ctx = replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
         "chicken", {p.slot: p.code for p in pieces}, Fraction(1), pieces))
     engine = StrategyEngine(objective)
