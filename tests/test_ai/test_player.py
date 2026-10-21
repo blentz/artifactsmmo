@@ -206,14 +206,15 @@ class TestRecordLearningCycleFightLength:
     PRE-fight haste beside its cooldown (the fight-seconds observation). `prev`
     and `new` differ in haste so a prev/new swap reads a different value."""
 
-    def _record(self, tmp_path: Path, fight: FightRecord | None) -> Cycle:
+    def _record(self, tmp_path: Path, fight: FightRecord | None,
+                prev_prospecting: int = 0, new_prospecting: int = 0) -> Cycle:
         store = LearningStore(db_path=str(tmp_path / "turns.db"), character="hero")
         try:
             store.start_session()
             player = GamePlayer(character="hero", dry_run=False, history=store)
             player._offline_timing = committed_timing()
-            prev = make_state(level=5, haste=8)
-            new = make_state(level=5, xp=prev.xp + 10, haste=12)
+            prev = make_state(level=5, haste=8, prospecting=prev_prospecting)
+            new = make_state(level=5, xp=prev.xp + 10, haste=12, prospecting=new_prospecting)
             player._record_learning_cycle(
                 prev_state=prev, new_state=new,
                 action_repr="Fight(green_slime)", action_class="FightAction",
@@ -238,6 +239,12 @@ class TestRecordLearningCycleFightLength:
     def test_a_cycle_that_did_not_fight_records_no_length(self, tmp_path):
         row = self._record(tmp_path, None)
         assert (row.fight_turns, row.fight_haste) == (None, None)
+
+    def test_every_cycle_records_the_prospecting_it_ran_with(self, tmp_path):
+        """`prev` and `new` differ in prospecting: the drop chance applied at
+        the state the action ran against, so a prev/new swap reads 150."""
+        row = self._record(tmp_path, None, prev_prospecting=120, new_prospecting=150)
+        assert row.prospecting == 120
 
 
 class TestBuildActions:

@@ -156,6 +156,18 @@ class CycleBase(SQLModel):
     (None when it is None): the cooldown reduction the fit separates from
     the turns. NULLABLE, NOT BACK-FILLED, for the same reason."""
 
+    prospecting: int | None = Field(default=None)
+    """The character's `prospecting` BEFORE this cycle's action (the server's
+    total with gear), or None on a row written before this column existed
+    (2026-10-21). PRE-ACTION like `skill_levels_json`: the drop chance applies
+    at the prospecting held when the drop rolls, and an action that equips gear
+    changes it. With `drops_json` beside it, the observation a drop chance is
+    learned from with prospecting as a tool (spec 2026-10-18 §2.8).
+
+    NULLABLE, NOT BACK-FILLED, like `skill_levels_json`: the rows already in
+    the wild were written without it and inventing one would fabricate an
+    observation. Consumers exclude NULL."""
+
     # Goal completion tracking
     cycles_to_satisfy: int | None = None
 

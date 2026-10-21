@@ -233,6 +233,12 @@ class LearningStore:
                 conn.exec_driver_sql("ALTER TABLE cycles ADD COLUMN fight_turns INTEGER")
             if cols and "fight_haste" not in cols:
                 conn.exec_driver_sql("ALTER TABLE cycles ADD COLUMN fight_haste INTEGER")
+            # Prospecting migration (2026-10-21, spec §2.8): cycles gains the
+            # prospecting held before the action. NULLABLE with no DEFAULT — the
+            # rows in the wild were written without it and back-filling one
+            # would fabricate an observation. A consumer excludes NULL.
+            if cols and "prospecting" not in cols:
+                conn.exec_driver_sql("ALTER TABLE cycles ADD COLUMN prospecting INTEGER")
             # Craft-xp numerator migration (2026-08-15): craft_yield gains the
             # skill level its xp was measured at. NULLABLE with no DEFAULT --
             # the rows already in the wild were measured at a level nobody

@@ -4463,6 +4463,9 @@ class GamePlayer:
             skill_levels_json=json.dumps(prev_state.skills, ensure_ascii=False,
                                          sort_keys=True),
             consumables_expended_json=json.dumps(consumables, ensure_ascii=False, sort_keys=True),
+            # PRE-action, like the levels above: the drop chance applied at the
+            # prospecting the action ran with.
+            prospecting=prev_state.prospecting,
             cycles_to_satisfy=cycles_to_satisfy,
             fight_turns=fight.turns if fight is not None else None,
             fight_haste=prev_state.haste if fight is not None else None,

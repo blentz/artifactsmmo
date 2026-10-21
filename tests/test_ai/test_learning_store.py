@@ -2089,3 +2089,42 @@ class TestFightSecondsObservations:
             check.close()
         store.close()
         assert {"fight_turns", "fight_haste"} <= cols
+
+
+class TestProspectingColumn:
+    """Spec 2026-10-18 §2.8: each cycle records the prospecting held when it
+    ran, so a drop chance can be learned from observed rates with prospecting
+    as a tool."""
+
+    def test_a_recorded_cycle_carries_prospecting(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        store.record_cycle(Cycle(ts="2026-10-21T00:00:00+00:00", cycle_index=0,
+                                 outcome="ok", prospecting=120))
+        with SqlSession(store._engine) as s:
+            rows = s.execute(text("SELECT prospecting FROM cycles")).all()
+        store.close()
+        assert rows[0][0] == 120
+
+    def test_an_old_row_reads_null_prospecting(self, tmp_path):
+        db_path = str(tmp_path / "old_prospecting.db")
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE cycles (
+                id INTEGER PRIMARY KEY, ts TEXT NOT NULL, session_id TEXT NOT NULL,
+                cycle_index INTEGER NOT NULL, character TEXT NOT NULL,
+                selected_goal TEXT, action_repr TEXT, action_class TEXT, outcome TEXT,
+                delta_skill_xp_json TEXT NOT NULL DEFAULT '{}',
+                consumables_expended_json TEXT NOT NULL DEFAULT '{}'
+            )
+        """)
+        conn.execute(
+            "INSERT INTO cycles (ts, session_id, cycle_index, character, outcome) "
+            "VALUES ('2026-10-01T00:00:00+00:00', 's', 0, 'hero', 'ok')")
+        conn.commit()
+        conn.close()
+        store = LearningStore(db_path=db_path, character="hero")
+        with SqlSession(store._engine) as s:
+            rows = s.execute(text("SELECT prospecting FROM cycles")).all()
+        store.close()
+        assert rows == [(None,)]
