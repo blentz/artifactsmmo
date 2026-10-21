@@ -28,7 +28,10 @@ _route = st.builds(
     st.sampled_from(list(SourceKind)), st.integers(0, 3), st.booleans(),
     st.lists(_gate, max_size=4))
 _POLICY_FIELDS = 11
-_policy = st.builds(Policy, *[st.booleans()] * _POLICY_FIELDS)
+"""The switches readiness reads. `price_climbs` (plan B Task 2, ruling T2c') is
+a pricing switch `ready_routes` never reads, so every policy here sets it
+explicitly and both values are drawn."""
+_policy = st.builds(Policy, *[st.booleans()] * _POLICY_FIELDS, price_climbs=st.booleans())
 
 
 def _encode(route: Route) -> list:
@@ -61,8 +64,12 @@ def test_every_single_gate_route_matches_oracle() -> None:
     kind x gate kind x verdict x primary, one gate per route. Random lists
     reach a BUY route whose only relevant gate is false too rarely to pin the
     vendor switches (two mutants survived 400 random examples); this does not
-    rely on luck. One oracle batch: 2048 policies x 10 kinds x 13 gates x 2 x 2."""
-    policies = [Policy(*flags) for flags in itertools.product((False, True), repeat=_POLICY_FIELDS)]
+    rely on luck. One oracle batch: 2048 readiness policies (each with
+    `price_climbs` both ways, which readiness ignores) x 10 kinds x 13 gates
+    x 2 x 2."""
+    policies = [Policy(*flags, price_climbs=climbs)
+                for flags in itertools.product((False, True), repeat=_POLICY_FIELDS)
+                for climbs in (False, True)]
     cases = [(policy, Route("item", kind, "v0", 1, 1, (Gate(gate, "subject", sat),), primary=primary))
              for policy, kind, gate, sat, primary in itertools.product(
                  policies, SourceKind, GateKind, (False, True), (False, True))]

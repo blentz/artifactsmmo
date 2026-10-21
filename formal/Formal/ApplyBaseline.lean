@@ -482,18 +482,21 @@ theorem buyBankExpansionApply_preserves_baseline (s : WorldStateLean) (g : Int)
 /-! ## Family 7 — Fight
 
 `FightAction`: combat resolves → hp decreases, task_progress may advance,
-cooldown cleared, inventory may grow with drops. -/
+cooldown cleared, inventory may grow with drops, and the pocket gains the
+gold one win pays (plan B Task 15, ruling T15d: `win_gold`, the mean of the
+API's `min_gold`/`max_gold`, so the planner sees a gold leg's progress). -/
 
-/-- `FightAction.apply` model: hp/inventory/task_progress mutated; cooldown. -/
-def fightApply (s : WorldStateLean) (newHp : Nat)
+/-- `FightAction.apply` model: hp/gold/inventory/task_progress mutated;
+    cooldown. `newGold` is `s.gold + win_gold`. -/
+def fightApply (s : WorldStateLean) (newHp : Nat) (newGold : Int)
     (newInv : List (String × Nat)) (newProgress : Nat)
     (newX newY : Int) : WorldStateLean :=
-  { s with hp := newHp, inventory := newInv, task_progress := newProgress
+  { s with hp := newHp, gold := newGold, inventory := newInv, task_progress := newProgress
          , x := newX, y := newY, cooldown_expires := none }
 
-theorem fightApply_preserves_baseline (s : WorldStateLean) (h : Nat)
+theorem fightApply_preserves_baseline (s : WorldStateLean) (h : Nat) (g : Int)
     (i : List (String × Nat)) (p : Nat) (x y : Int) :
-    preservesBaseline s (fightApply s h i p x y) := by
+    preservesBaseline s (fightApply s h g i p x y) := by
   unfold preservesBaseline fightApply
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
@@ -563,7 +566,7 @@ inductive ModeledApply where
                       (b : Option (List (String × Nat)))
                       (x y : Int) : ModeledApply
   -- Family 7: fight
-  | fight             (h : Nat) (i : List (String × Nat)) (p : Nat)
+  | fight             (h : Nat) (g : Int) (i : List (String × Nat)) (p : Nat)
                       (x y : Int) : ModeledApply
 
 /-- Dispatch: run an enumerated action on a state. -/
@@ -596,7 +599,7 @@ def ModeledApply.run (a : ModeledApply) (s : WorldStateLean) : WorldStateLean :=
   | .taskTrade i p x y              => taskTradeApply s i p x y
   | .rest                           => restApply s
   | .buyBankExpansion g c b x y     => buyBankExpansionApply s g c b x y
-  | .fight h i p x y                => fightApply s h i p x y
+  | .fight h g i p x y              => fightApply s h g i p x y
 
 /-- **HEADLINE — Phase-14 disclosed-gap closure**: every one of the 25 modeled
     apply transitions preserves the 8-field baseline. -/
@@ -630,7 +633,7 @@ theorem all_actions_preserve_baseline (s : WorldStateLean) (a : ModeledApply) :
   | taskTrade i p x y             => exact taskTradeApply_preserves_baseline s i p x y
   | rest                          => exact restApply_preserves_baseline s
   | buyBankExpansion g c b x y    => exact buyBankExpansionApply_preserves_baseline s g c b x y
-  | fight h i p x y               => exact fightApply_preserves_baseline s h i p x y
+  | fight h g i p x y             => exact fightApply_preserves_baseline s h g i p x y
 
 /-- Backwards-compatible alias: the pre-Phase-14 headline name referenced from
     Manifest/Contracts. Same content, now covering all 24. -/
@@ -713,12 +716,13 @@ theorem claim_mutates_only_declared_fields (s : WorldStateLean)
   unfold claimApply
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- Fight only mutates (hp, inventory, task_progress, x, y, cooldown). Equipment,
-    gold, max_hp, task_code/type/total, banking, pending all preserved. -/
-theorem fight_mutates_only_declared_fields (s : WorldStateLean) (h : Nat)
+/-- Fight only mutates (hp, gold, inventory, task_progress, x, y, cooldown):
+    gold becomes the declared `g` (`s.gold + win_gold`, ruling T15d).
+    Equipment, max_hp, task_code/type/total, banking, pending all preserved. -/
+theorem fight_mutates_only_declared_fields (s : WorldStateLean) (h : Nat) (g : Int)
     (i : List (String × Nat)) (p : Nat) (x y : Int) :
-    let s' := fightApply s h i p x y
-    s'.max_hp = s.max_hp ∧ s'.gold = s.gold ∧
+    let s' := fightApply s h g i p x y
+    s'.gold = g ∧ s'.max_hp = s.max_hp ∧
     s'.equipment = s.equipment ∧
     s'.task_code = s.task_code ∧ s'.task_type = s.task_type ∧
     s'.task_total = s.task_total ∧
@@ -762,8 +766,8 @@ example : preservesBaseline witnessState (equipApply witnessState [] [("weapon_s
   equipApply_preserves_baseline witnessState [] [("weapon_slot", some "sword")]
 
 /-- Witness: Fight preserves the baseline. -/
-example : preservesBaseline witnessState (fightApply witnessState 30 [("egg", 1)] 1 0 0) :=
-  fightApply_preserves_baseline witnessState 30 [("egg", 1)] 1 0 0
+example : preservesBaseline witnessState (fightApply witnessState 30 104 [("egg", 1)] 1 0 0) :=
+  fightApply_preserves_baseline witnessState 30 104 [("egg", 1)] 1 0 0
 
 /-- Witness: Rest preserves the baseline. -/
 example : preservesBaseline witnessState (restApply witnessState) :=
@@ -780,6 +784,11 @@ example : (moveApply witnessState 1 0).x ≠ witnessState.x := by decide
 
 /-- Witness: Rest mutates hp (so the theorem is non-vacuous). -/
 example : (restApply witnessState).hp ≠ witnessState.hp := by decide
+
+/-- Witness: Fight mutates gold (a win's 4 gold, ruling T15d), so its declared
+    gold mutation is non-vacuous. -/
+example : (fightApply witnessState 30 104 [("egg", 1)] 1 0 0).gold ≠ witnessState.gold := by
+  decide
 
 /-- Witness: BuyBankExpansion mutates bank_capacity. -/
 example : (buyBankExpansionApply witnessState 0 (some 30) (some []) 4 0).bank_capacity

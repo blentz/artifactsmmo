@@ -821,10 +821,17 @@ def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
 def fight_gold_monster(state: WorldState, game_data: GameData, ctx: SelectionContext,
                        *, policy: Policy) -> str | None:
     """The monster a price under `policy` fights for gold: the argmin of
-    gold's routes (`priced_route`), the exact cost per gold of each win
-    (ruling T2m M1), first of equal costs. A piece priced through fight gold
-    is served by fighting this monster (plan B Task 15: served by the route
-    that priced it). None when gold's cheapest route is not a fight.
+    gold's fight routes (`priced_route` over its GOLD_DROP routes only), the
+    exact cost per gold of each win (ruling T2m M1), first of equal costs. A
+    piece priced through fight gold is served by fighting this monster (plan
+    B Task 15: served by the route that priced it). None only when no fight
+    pays gold under `policy`.
+
+    Fight routes only (ruling T15e): when a sale is gold's cheapest route, the
+    walk's GOLD_DROP leg is still a fight, and it fights the monster the price
+    would have, the cheapest fight. A choice over every route would name no
+    monster then, and the piece would be declined every cycle a licensed
+    surplus sells.
 
     The route a price picks for gold is gold's own choice, whatever is bought
     with it and however much (`_cheapest_route` is per unit, memoised per
@@ -832,10 +839,10 @@ def fight_gold_monster(state: WorldState, game_data: GameData, ctx: SelectionCon
     route's price reads the timing model and the fight records on `ctx`, not
     an observed rate."""
     options = acquisition_options(GOLD_CODE, state, game_data, ctx, None, policy=policy)
-    _price, route = priced_route(GOLD_CODE, 1, options, {})
-    if route is None or route.kind != SourceKind.GOLD_DROP.value:
-        return None
-    return route.venue
+    fights = {**options, GOLD_CODE: [route for route in options.get(GOLD_CODE, [])
+                                     if route.kind == SourceKind.GOLD_DROP.value]}
+    _price, route = priced_route(GOLD_CODE, 1, fights, {})
+    return None if route is None else route.venue
 
 
 def acquisition_actions(item: str, qty: int, state: WorldState,

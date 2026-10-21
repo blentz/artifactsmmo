@@ -28,7 +28,7 @@ from hypothesis import strategies as st
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
-from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.combat import FightAction, win_gold
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
@@ -417,6 +417,20 @@ def test_fight() -> None:
     )
 
 
+def test_fight_gold_is_its_declared_mutation() -> None:
+    """Ruling T15d: Lean `fightApply` declares gold mutated to `s.gold + win_gold`
+    (`fight_mutates_only_declared_fields`). The Python apply adds exactly one
+    win's mean gold, `(min + max) // 2`, and an odd range rounds down."""
+    gd = _make_game_data_basic()
+    gd._monster_min_gold.update({"chicken": 3})
+    gd._monster_max_gold.update({"chicken": 6})
+    state = _make_state(hp=100, max_hp=100, equipment={"weapon_slot": "sword"})
+    gd._item_stats = {"sword": ItemStats(code="sword", level=1, type_="weapon")}
+    after = FightAction(monster_code="chicken", locations=frozenset({(0, 0)})).apply(state, gd)
+    _assert_preserved(state, after)
+    assert after.gold - state.gold == win_gold("chicken", gd) == 4
+
+
 def test_optimize_loadout() -> None:
     """OptimizeLoadout returns identity when no swap is beneficial (or no
     target). The contract still holds — preservation is trivial on identity
@@ -498,3 +512,4 @@ def test_fight_preserves_baseline_property(bkw) -> None:
     gd._item_stats = {"sword": ItemStats(code="sword", level=1, type_="weapon")}
     after = FightAction(monster_code="chicken", locations=frozenset({(0, 0)})).apply(state, gd)
     _assert_preserved(state, after)
+    assert after.gold - state.gold == win_gold("chicken", gd)

@@ -716,9 +716,11 @@ def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str
     at most).
 
     RE-DERIVED plan B Task 2 (`PIECE_POLICY`, ruling T2a): the 20000-gold
-    `lifesteal_rune` is priced through gold earned by fighting (19204-19904),
-    so within its layer it orders ahead of every piece behind an unpriced
-    skill climb (`UNOBTAINABLE_PER_UNIT + 1` with no grind rate, ruling T2c')."""
+    `lifesteal_rune` is priced through gold earned by fighting (a finite
+    price, which moves with the fight ceiling of ruling T15a and the reserve
+    of T3e m3), so within its layer it orders ahead of every piece behind an
+    unpriced skill climb (`UNOBTAINABLE_PER_UNIT + 1` with no grind rate,
+    ruling T2c')."""
     objective = _objective(scenario_state(SCENARIOS[name], gd), gd)
     assert objective.monster == monster
     assert [(piece.slot, piece.code) for piece in objective.missing] == missing

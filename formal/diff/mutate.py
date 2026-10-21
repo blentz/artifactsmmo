@@ -3914,14 +3914,6 @@ SERVED_BY_ITS_ROUTE_PRICER_MUTATIONS = [
 # plan B Task 15: a gold-funded piece is served by fighting for its gold
 # (rulings T3a, T15a, T15b, T3e). Killed by
 # tests/test_ai/test_gold_funded_piece.py unless a group names another file.
-GOLD_FUNDED_COMBAT_MUTATIONS = [
-    ("combat: a win is planned at the most gold it can pay, not the mean",
-     "    return (game_data.monster_min_gold(monster_code) + game_data.monster_max_gold(monster_code)) // 2\n",
-     "    return game_data.monster_max_gold(monster_code)\n"),
-    ("combat: FightAction.apply projects no gold",
-     "            gold=state.gold + win_gold(self.monster_code, game_data),\n",
-     ""),
-]
 GOLD_FUNDED_PLAN_CACHE_MUTATIONS = [
     ("plan_cache: the cache counts the bag, not the pocket",
      "    return {**state.inventory, GOLD_CODE: state.gold}\n",
@@ -3945,8 +3937,8 @@ GOLD_FUNDED_DECOMPOSE_MUTATIONS = [
      "              if policy.fight_gold else state)\n",
      "    walked = state\n"),
     ("craft_plan_gen: the gold fight is the walk's monster, not the price's",
-     "                      and a.monster_code == gold_monster and not a.participants), None)\n",
-     "                      and a.monster_code == route.via and not a.participants), None)\n"),
+     "        fight = fights.get(gold_monster) if gold_monster is not None else None\n",
+     "        fight = fights.get(route.via)\n"),
     ("craft_plan_gen: the plan goes on past the gold fight (no re-decide)",
      "                # committed to all of them would not see the objective move.\n"
      "                break\n",
@@ -3961,8 +3953,11 @@ GOLD_FUNDED_DECOMPOSE_MUTATIONS = [
 ]
 GOLD_FUNDED_ROUTING_MUTATIONS = [
     ("obtain_item_routing: no L* piece fights for its gold",
-     "    return objective is not None and any(\n",
-     "    return objective is None and any(\n"),
+     "    return objective is not None and any(piece.code == code for piece in objective.missing)\n",
+     "    return objective is None and any(piece.code == code for piece in objective.missing)\n"),
+    ("obtain_item_routing: any L* piece flags every gold buy",
+     "    return objective is not None and any(piece.code == code for piece in objective.missing)\n",
+     "    return objective is not None and any(True for piece in objective.missing)\n"),
 ]
 GOLD_FUNDED_DROP_ROUTES_MUTATIONS = [
     ("drop_routes: a gold route above the fight ceiling (T15a)",
@@ -3980,12 +3975,23 @@ GOLD_FUNDED_PRICE_MUTATIONS = [
      "                                  pocket=state.gold)\n"),
 ]
 GOLD_FUNDED_MONSTER_MUTATIONS = [
-    # The kind arm alone (`if route is None:`) is EQUIVALENT on the bundle: no
-    # state there gives gold a cheapest route that is not a fight (no SELL
-    # route arises), so it was replaced by this mutant of the None arm.
     ("acquisition_cost: a policy with no gold route still names a gold monster",
-     "    if route is None or route.kind != SourceKind.GOLD_DROP.value:\n        return None\n",
-     "    if route.kind != SourceKind.GOLD_DROP.value:\n        return None\n"),
+     "    return None if route is None else route.venue\n",
+     "    return route.venue\n"),
+    ("acquisition_cost: the gold monster is chosen over every gold route (T15e)",
+     "    fights = {**options, GOLD_CODE: [route for route in options.get(GOLD_CODE, [])\n"
+     "                                     if route.kind == SourceKind.GOLD_DROP.value]}\n",
+     "    fights = options\n"),
+]
+# Ruling T15d: the Python half of Lean `fightApply`'s declared gold mutation.
+# Killed by formal/diff/test_apply_baseline_diff.py.
+GOLD_FUNDED_APPLY_DIFF_MUTATIONS = [
+    ("combat: FightAction.apply projects no gold (Lean declares s.gold + win_gold)",
+     "            gold=state.gold + win_gold(self.monster_code, game_data),\n",
+     ""),
+    ("combat: a win pays its best case (max_gold)",
+     "    return (game_data.monster_min_gold(monster_code) + game_data.monster_max_gold(monster_code)) // 2\n",
+     "    return game_data.monster_max_gold(monster_code)\n"),
 ]
 GOLD_FUNDED_EXACT_MUTATIONS = [
     ("fight_loop_cost: the rest share through a float again (T3e m1)",
@@ -12000,8 +12006,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_piece_policy.py", survivors)
     run_group(OBTAIN_MODEL_POLICY_SRC, SERVED_BY_ITS_ROUTE_POLICY_MUTATIONS,
               "tests/test_ai/test_piece_policy.py", survivors)
-    run_group(APPLY_FIGHT_SRC, GOLD_FUNDED_COMBAT_MUTATIONS,
-              "tests/test_ai/test_gold_funded_piece.py", survivors)
     run_group(PLAN_CACHE_SRC, GOLD_FUNDED_PLAN_CACHE_MUTATIONS,
               "tests/test_ai/test_gold_funded_piece.py", survivors)
     run_group(OBTAIN_MODEL_POLICY_SRC, GOLD_FUNDED_POLICY_MUTATIONS,
@@ -12018,6 +12022,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_piece_policy.py", survivors)
     run_group(ACQUISITION_COST_SRC, GOLD_FUNDED_MONSTER_MUTATIONS,
               "tests/test_ai/test_gold_funded_piece.py", survivors)
+    run_group(APPLY_FIGHT_SRC, GOLD_FUNDED_APPLY_DIFF_MUTATIONS,
+              "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(FIGHT_LOOP_COST_SRC, GOLD_FUNDED_EXACT_MUTATIONS,
               "tests/test_ai/test_fight_loop_cost.py", survivors)
     run_group(ACQUISITION_COST_SRC, PRICE_CLIMBS_SWITCH_MUTATIONS,

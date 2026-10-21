@@ -274,7 +274,7 @@ def test_l10_gearcrafting_gap_combat_blocked_search_bounded() -> None:
 # band-adequate — the trunk (char-level grind, or Wait when no monster in
 # the level window is winnable) must win instead. ---------------------------
 
-def test_l20_dual_utility_climbs_the_blocking_skill_not_the_char_level() -> None:
+def test_l20_dual_utility_serves_the_gold_funded_rune_not_the_char_level() -> None:
     """RENAMED IN WAVE 3a fix-round 1. LOST: this scenario no longer witnesses
     "a full build grinds XP" — it is not a full build on the TIER sheet. The
     criterion-2 guarantee it protects (never DEADLOCK on skilling) is asserted

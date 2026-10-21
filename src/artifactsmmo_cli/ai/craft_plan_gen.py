@@ -579,8 +579,11 @@ def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool:
                     and a.npc_code == route.via and a.item_code == step.item), None)
         return None if buy is None else dataclasses.replace(buy, quantity=step.amount)
     if route.kind is SourceKind.GOLD_DROP:
-        fight = next((a for a in (*pool, *relevant) if isinstance(a, FightAction)
-                      and a.monster_code == gold_monster and not a.participants), None)
+        # The goal's own actions come last so their fight wins for the monster,
+        # as in the DROP arm below.
+        fights = {a.monster_code: a for a in (*pool, *relevant)
+                  if isinstance(a, FightAction) and not a.participants}
+        fight = fights.get(gold_monster) if gold_monster is not None else None
         if fight is None:
             return None
         # A grey monster may pay the gold (`PIECE_POLICY` priced it); the

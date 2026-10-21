@@ -131,12 +131,15 @@ def _gather_goal_for_unreachable_equippable(
 
 
 def _is_bought_piece(code: str, ctx: SelectionContext) -> bool:
-    """`code` is a missing piece of the cycle's `L*` that its price does not
-    craft (`GearPiece.crafted`): the piece is served by the route that priced
-    it, and a fight for gold is one (plan B Task 15)."""
+    """`code` is a missing piece of the cycle's `L*`: the piece is served by the
+    route that priced it, and a fight for gold is one (plan B Task 15).
+
+    Asked only on the recipe-less vendor arm of `_equippable_goal`, so the
+    piece is never CRAFT-routed there: every CRAFT route, the climbed and the
+    sibling one included, comes from `ObtainModel._craft`, which has none for
+    an item without a recipe."""
     objective = ctx.gear_objective
-    return objective is not None and any(
-        piece.code == code and not piece.crafted for piece in objective.missing)
+    return objective is not None and any(piece.code == code for piece in objective.missing)
 
 
 def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameData,

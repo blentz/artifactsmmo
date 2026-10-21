@@ -14,17 +14,27 @@ from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 
+import pytest
+
+from artifactsmmo_cli.ai import accumulation_sell
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_options, fight_gold_monster
+from artifactsmmo_cli.ai.acquisition_cost_core import priced_route
 from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING, FightAction, win_gold
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
+from artifactsmmo_cli.ai.obtain_item_routing import _equippable_goal
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, PIECE_POLICY
 from artifactsmmo_cli.ai.plan_cache import PlanCache, cache_holdings
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
+from artifactsmmo_cli.ai.scenario import (
+    FAR_FUTURE,
+    SCENARIOS,
+    load_bundle_game_data,
+    scenario_state,
+)
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
@@ -49,6 +59,14 @@ GOLD_MONSTER = "highwayman"
 CAPPED = "imp"
 """Cheaper gold per action than the highwayman, and level 28: above the
 level-20 character's fight ceiling, so no price counts its gold."""
+
+SOLD = "sap"
+SELLER = "timber_merchant"
+"""An item and its (event) buyer: the SELL fixture of ruling T15e."""
+
+OTHER_RUNE = "healing_rune"
+"""A recipe-less rune sold for gold (10000 at the rune vendor) that is not in
+the cell's `L*`."""
 
 
 def _world() -> GameData:
@@ -245,3 +263,42 @@ def test_no_fight_for_the_gold_monster_is_a_named_decline() -> None:
     piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True)
     assert decompose(piece, state, world, actions, ctx, declined) is None
     assert len(declined) == 1 and declined[0].startswith("unmapped_step:Act(item='gold'"), declined
+
+
+def test_a_cheaper_sale_still_names_the_cheapest_fight(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling T15e: when a licensed sale is gold's cheapest route, the gold leg
+    is still a fight, against the cheapest fight, never no monster. The
+    fixture: ten saps licensed to sell to the live timber merchant (a sap
+    gathers in about 11 actions, so a gold piece by sale costs 12), and a
+    fight record that loses almost every fight, so every win costs more per
+    gold than that."""
+    world = load_bundle_game_data(BUNDLE, with_ge_orders=SCENARIOS[CELL].ge_market,
+                                  completed_achievements=frozenset(
+                                      SCENARIOS[CELL].unlocked_achievements))
+    world.active_event_codes = {SELLER}
+    monkeypatch.setattr(accumulation_sell, "sellable_surplus", lambda *_args: {SOLD: 10})
+    state = replace(scenario_state(SCENARIOS[CELL], world), active_events={SELLER: FAR_FUTURE})
+    ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
+    ctx = replace(ctx, fight_records=tuple((code, 100, 1) for code in world.monsters.levels))
+    gold = acquisition_options("gold", state, world, ctx, None, policy=PIECE_POLICY)
+    _price, cheapest = priced_route("gold", 1, gold, {})
+    assert cheapest is not None and (cheapest.kind, cheapest.venue) == ("sell", SELLER)
+    fights = [r for r in gold["gold"] if r.kind == "gold_drop"]
+    best = min(fights, key=lambda r: Fraction(r.actions_per_application) / r.yield_per)
+    assert fight_gold_monster(state, world, ctx, policy=PIECE_POLICY) == best.venue
+
+
+def test_only_the_piece_is_flagged() -> None:
+    """The flag is the piece's own: another recipe-less gold buy for the same
+    slot, `healing_rune`, is not in `L*` and its goal does not fight for gold."""
+    world = _world()
+    state = _state(world)
+    ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
+    assert ctx.gear_objective is not None
+    assert OTHER_RUNE not in {piece.code for piece in ctx.gear_objective.missing}
+    assert world.crafting_recipe(OTHER_RUNE) is None
+    assert world.npc_purchases(OTHER_RUNE) == [("rune_vendor", 10000, "gold")]
+    piece = _equippable_goal(RUNE.code, "rune_slot", state, world, ctx)
+    other = _equippable_goal(OTHER_RUNE, "rune_slot", state, world, ctx)
+    assert isinstance(piece, GatherMaterialsGoal) and piece.fight_gold is True
+    assert isinstance(other, GatherMaterialsGoal) and other.fight_gold is False
