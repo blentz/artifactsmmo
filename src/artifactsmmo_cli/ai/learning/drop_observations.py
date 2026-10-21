@@ -17,6 +17,12 @@ The tally is read once per recorded cycle: it is held against the store it was
 read from (the store itself, so the key cannot outlive its object) and the
 newest cycle id, and a newer id folds in only the rows past the last one read
 (the table is append-only).
+
+Inside a `LearningStore.search_cache` episode the tally and each count are
+memoised through the store (`LearningStore.cached`): the pricing walk asks for
+every drop it prices, and each ask would otherwise read the newest cycle id
+again. `fleet_k` is fitted afresh on the memoised tally: it reads the
+catalogue, and a memo keyed on a `GameData` belongs to `CatalogueScope` alone.
 """
 
 import json
@@ -70,7 +76,12 @@ def _fold(tally: Tally, rows: list[tuple[str, str, int | None, str | None]]) -> 
 
 
 def _tally(store: LearningStore) -> Tally:
-    """The fleet's attempts and hits through the newest cycle."""
+    """The fleet's attempts and hits through the newest cycle, read once per
+    search episode."""
+    return store.cached(("drop_tally",), lambda: _read_tally(store))
+
+
+def _read_tally(store: LearningStore) -> Tally:
     last = store.last_cycle_id()
     # A newest id below the one last read means the table was replaced or
     # pruned under this store (a season reset): the tally is read afresh.
@@ -88,6 +99,11 @@ def _tally(store: LearningStore) -> Tally:
 def drop_counts(store: LearningStore, source: str, item: str) -> tuple[int, int]:
     """`(attempts, hits)` of `item` at `source`, pooled over the fleet and
     every prospecting."""
+    return store.cached(("drop_counts", source, item),
+                        lambda: _drop_counts(store, source, item))
+
+
+def _drop_counts(store: LearningStore, source: str, item: str) -> tuple[int, int]:
     attempts, hits = _tally(store)
     keys = [key for key in attempts if key[1] == source]
     return (sum(attempts[key] for key in keys),

@@ -689,7 +689,7 @@ _L48_MISSING = [("shield_slot", "goblin_guard_shield"), ("rune_slot", "lifesteal
         ("rune_slot", "lifesteal_rune"), ("ring1_slot", "gold_ring"),
         ("ring2_slot", "gold_ring")]),
     ("l40_band_entry", "cultist_acolyte", [
-        ("shield_slot", "slime_shield"), ("leg_armor_slot", "royal_skeleton_pants"),
+        ("leg_armor_slot", "royal_skeleton_pants"), ("shield_slot", "slime_shield"),
         ("helmet_slot", "royal_skeleton_helmet"), ("body_armor_slot", "royal_skeleton_armor"),
         ("rune_slot", "lifesteal_rune"), ("ring2_slot", "malefic_ring")]),
     ("l48_capstone_approach", "hellhound", _L48_MISSING),
@@ -720,7 +720,12 @@ def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str
     price, which moves with the fight ceiling of ruling T15a and the reserve
     of T3e m3), so within its layer it orders ahead of every piece behind an
     unpriced skill climb (`UNOBTAINABLE_PER_UNIT + 1` with no grind rate,
-    ruling T2c')."""
+    ruling T2c').
+
+    RE-DERIVED plan B Task 12a (§2.8: a drop is priced at its learned chance,
+    prospecting at a learned slope whose prior is 0): the level-40 sheet's 160
+    prospecting no longer discounts its drops by `1000/1160`, so the pants
+    (445 -> 482) order ahead of the shield (291 -> 327)."""
     objective = _objective(scenario_state(SCENARIOS[name], gd), gd)
     assert objective.monster == monster
     assert [(piece.slot, piece.code) for piece in objective.missing] == missing

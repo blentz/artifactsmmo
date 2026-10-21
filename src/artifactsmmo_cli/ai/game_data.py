@@ -872,18 +872,24 @@ class GameData:
         """Full (item, rate, min_q, max_q) drop rows for a resource; [] if unknown."""
         return self.recipes_catalog.resource_drop_table(code)
 
-    def gathers_per_unit(self, resource: str, item: str) -> Fraction:
-        """Expected gathers of `resource` to obtain ONE `item`
-        (`gather_selection.expected_gathers` over its drop row): 1 for a primary
-        drop, 20 for `apple` off `ash_tree` (rate 20).
+    def gather_drop_row(self, resource: str, item: str) -> tuple[int, int, int]:
+        """`(rate, min_quantity, max_quantity)` of `item` in `resource`'s drop
+        table.
 
         A resource known only from the primary-drop map has no drop-table row;
         it is a sure drop, rated 1 — the same convention
         `ObtainModel._ranked_gathers` and `_gather` apply to such a resource."""
         row = next((r for r in self.resource_drop_table(resource) if r[0] == item), None)
         if row is None:
-            return Fraction(1)
-        return expected_gathers(row[1], row[2], row[3])
+            return 1, 1, 1
+        return row[1], row[2], row[3]
+
+    def gathers_per_unit(self, resource: str, item: str) -> Fraction:
+        """Expected gathers of `resource` to obtain ONE `item`
+        (`gather_selection.expected_gathers` over its drop row,
+        `gather_drop_row`): 1 for a primary drop, 20 for `apple` off `ash_tree`
+        (rate 20)."""
+        return expected_gathers(*self.gather_drop_row(resource, item))
 
     MAX_CHARACTER_LEVEL = 50
     """Documented character level cap.

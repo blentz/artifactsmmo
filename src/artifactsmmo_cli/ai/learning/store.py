@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from fractions import Fraction
 from pathlib import Path
 from statistics import median
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
@@ -125,21 +125,6 @@ def _parse_skill_xp_value(raw: str | None, skill: str) -> int:
         return int(delta.get(skill, 0))
     except (TypeError, ValueError):
         return 0
-
-
-MIN_DROP_KILLS = 50
-"""Kills of one monster required before its OBSERVED drop rate replaces the
-static API table.
-
-Below this the estimate is noise, and noise here is expensive because it feeds a
-cost the planner ranks on. Measured 2026-08-08: at n=199 `green_slime/apple`
-read 0.60x its static rate — comfortably inside sampling error for p=0.083, and
-taken literally a 40% price rise on every recipe using apples. At n>=700 the
-observed rates sat within ~3% of static.
-
-50 is a floor on ARRIVING at a usable number, not a claim that 50 is precise;
-the fallback below it is the static table, which the same measurement shows is
-close to right."""
 
 
 class LearningStore:
@@ -413,7 +398,11 @@ class LearningStore:
         finally:
             self._search_cache = prev
 
-    def _cached(self, key: tuple[object, ...], compute: Callable[[], _T]) -> _T:
+    def cached(self, key: tuple[object, ...], compute: Callable[[], _T]) -> _T:
+        """`compute()`, memoised under `key` while a `search_cache` episode is
+        open, computed afresh outside one. Public so a reader of the store's
+        rows outside this class (`learning.drop_observations`) memoises through
+        the same episode, not a second cache."""
         if self._search_cache is None:
             return compute()
         if key not in self._search_cache:
@@ -422,7 +411,7 @@ class LearningStore:
 
     def action_cost(self, action_repr: str, default: float, window: int = WINDOW_ACTION) -> float:
         """Median actual_cooldown_seconds over last `window` ok cycles, or default if < 5 samples."""
-        median = self._cached(
+        median = self.cached(
             ("action_cost", action_repr, window),
             lambda: self._action_cost_median(action_repr, window),
         )
@@ -459,7 +448,7 @@ class LearningStore:
         / move / deposit cooldown from gameplay rather than assuming a static
         figure (no fight-cooldown formula exists in the API). Companion to
         `action_cost`, which keys on the specific `action_repr`."""
-        median = self._cached(
+        median = self.cached(
             ("action_class_cost", action_class, window),
             lambda: self._action_class_cost_median(action_class, window),
         )
@@ -495,7 +484,7 @@ class LearningStore:
         saved rates must be weighted by HOW OFTEN each action type actually runs.
         That frequency is learned here from the action mix rather than derived
         from an (untracked) char-level xp curve."""
-        return self._cached(
+        return self.cached(
             ("action_class_fraction", action_class, window),
             lambda: self._action_class_fraction_uncached(action_class, window),
         )
@@ -523,7 +512,7 @@ class LearningStore:
 
     def success_rate(self, action_repr: str, window: int = WINDOW_ACTION) -> float:
         """Fraction of last `window` cycles with outcome=='ok'. 1.0 if < 5 samples."""
-        return self._cached(
+        return self.cached(
             ("success_rate", action_repr, window),
             lambda: self._success_rate_uncached(action_repr, window),
         )
@@ -573,7 +562,7 @@ class LearningStore:
 
     def goal_avg_cycles_to_satisfy(self, goal_repr: str, window: int = WINDOW_GOAL) -> float | None:
         """Median cycles-to-satisfy over last `window` completions. None if < 5 samples."""
-        return self._cached(
+        return self.cached(
             ("goal_avg", goal_repr, window),
             lambda: self._goal_avg_cycles_uncached(goal_repr, window),
         )
@@ -648,7 +637,7 @@ class LearningStore:
         `recent_goal_cycles` attributes to the grind. `consumed_per_kill` is
         what every fight of it used (`consumables_expended_json`), lost fights
         included: a potion spent on a loss was still spent."""
-        return self._cached(
+        return self.cached(
             ("fight_upkeep", monster_code, window),
             lambda: self._fight_upkeep_uncached(monster_code, window),
         )
@@ -777,61 +766,6 @@ class LearningStore:
             if not values:
                 return None
             return float(sum(values)) / len(values)
-        except SQLAlchemyError:
-            return None
-
-
-    def observed_drop_rate(self, monster_code: str, item_code: str,
-                           window: int = 2000,
-                           min_kills: int = MIN_DROP_KILLS) -> float | None:
-        """Units of `item_code` obtained per kill of `monster_code`, MEASURED.
-
-        Replaces the static API drop table wherever there is enough evidence,
-        and deliberately carries the character's PROSPECTING effect with it: the
-        server applies prospecting when it rolls the drop, so an observation is
-        already the post-bonus rate. That is why `acquisition_cost` applies its
-        prospecting relief ONLY on the static fallback — applying both would
-        count the bonus twice.
-
-        Measured 2026-08-08 over 4,000+ recorded kills, observed vs API static:
-        `chicken/raw_chicken` 48.3% vs 50.0%, `red_slime/red_slimeball` 9.6% vs
-        10.0%, `chicken/egg` 8.6% vs 8.3% — the table is accurate to ~3% on large
-        samples. The exceptions are the ones that matter: `chicken/feather` 14.8%
-        vs 12.5% (1.18x) and `sheep/wool` 11.8% vs 8.3% (1.42x), both saying the
-        drop route is CHEAPER than the static model priced it.
-
-        Scoped to this store's character, because prospecting is per-character
-        and is baked into the number.
-
-        `None` below `min_kills`, where the estimate is noise: at n=199
-        `green_slime/apple` read 0.60x of its static rate, which is inside
-        ordinary sampling error for p=0.083 and would otherwise be taken as a
-        40% price rise."""
-        try:
-            with SqlSession(self._engine) as s:
-                stmt = (
-                    select(Cycle.drops_json)
-                    .where(col(Cycle.character) == self._character)
-                    .where(col(Cycle.action_repr) == f"Fight({monster_code})")
-                    .order_by(col(Cycle.id).desc())
-                    .limit(window)
-                )
-                rows = list(s.exec(stmt))
-            if len(rows) < min_kills:
-                return None
-            total = 0
-            for raw in rows:
-                if not raw:
-                    continue
-                try:
-                    drops = json.loads(raw)
-                except (ValueError, TypeError):
-                    continue
-                if isinstance(drops, dict):
-                    value = drops.get(item_code, 0)
-                    if isinstance(value, int):
-                        total += max(0, value)
-            return float(total) / len(rows)
         except SQLAlchemyError:
             return None
 
@@ -1029,9 +963,11 @@ class LearningStore:
                 .order_by(col(Cycle.id)))
             out: list[tuple[str, str, int | None, str | None]] = []
             for action_class, action_repr, prospecting, drops_json in rows:
-                if action_class is None or action_repr is None:
+                if action_repr is None:
                     raise ValueError(f"a {action_class} cycle with no action_repr")
-                out.append((action_class, action_repr, prospecting, drops_json))
+                # The `in_` filter above admits only the two named classes, so
+                # the column is never NULL here; the cast only tells the checker.
+                out.append((cast(str, action_class), action_repr, prospecting, drops_json))
             return out
 
     def fleet_recycle_totals(self) -> dict[str, int]:
@@ -1469,7 +1405,7 @@ class LearningStore:
         veto may use (`combat.is_winnable`). SEARCH-CACHED like `action_cost`: the
         veto runs inside every winnability walk. (0, 0) on a DB error."""
         encoded = json.dumps(loadout, sort_keys=True)
-        return self._cached(("combat_record", task_key, level, encoded),
+        return self.cached(("combat_record", task_key, level, encoded),
                             lambda: self._combat_record_uncached(task_key, level, encoded))
 
     def _combat_record_uncached(self, task_key: str, level: int,

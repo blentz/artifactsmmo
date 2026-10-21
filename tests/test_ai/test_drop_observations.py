@@ -181,3 +181,30 @@ def test_a_shrunken_table_is_read_afresh(tmp_path: Path) -> None:
         conn.execute("DELETE FROM cycles")
     conn.close()
     assert drop_counts(store, "trout_spot", "trout") == (0, 0)
+
+
+def test_an_ok_cycle_without_drops_is_an_attempt_with_no_hit(tmp_path: Path) -> None:
+    """A won gather whose `drops_json` is NULL (the bag gained nothing) rolled
+    the table and missed: an attempt, with no hit."""
+    store = _store(tmp_path / "learn.db")
+    _record(store, "Gather(trout_spot)", "GatherAction", None)
+    _record(store, "Gather(trout_spot)", "GatherAction", '{"small_pearls": 1}')
+    assert drop_counts(store, "trout_spot", "small_pearls") == (2, 1)
+
+
+def test_a_search_episode_reads_each_answer_once(tmp_path: Path) -> None:
+    """Inside `search_cache` every answer is memoised per (source, item) and
+    per catalogue: a cycle recorded inside the episode is not seen until it
+    closes."""
+    store = _store(tmp_path / "learn.db")
+    _record(store, "Gather(trout_spot)", "GatherAction", '{"small_pearls": 1}', prospecting=10)
+    with store.search_cache():
+        assert drop_counts(store, "trout_spot", "small_pearls") == (1, 1)
+        assert drop_counts(store, "trout_spot", "trout") == (1, 0)
+        assert fleet_k(store, _world()) == Fraction(149, 10)
+        _record(store, "Gather(trout_spot)", "GatherAction", '{"trout": 1}', prospecting=10,
+                count=9)
+        assert drop_counts(store, "trout_spot", "small_pearls") == (1, 1)
+        assert fleet_k(store, _world()) == Fraction(149, 10)
+    assert drop_counts(store, "trout_spot", "small_pearls") == (10, 1)
+    assert fleet_k(store, _world()) == Fraction(7, 5)

@@ -1358,6 +1358,16 @@ DROP_OBSERVATIONS_MUTATIONS = [
     ("drop observations: a cycle without drops is parsed",
      "        drops = json.loads(drops_json) if drops_json else {}",
      "        drops = json.loads(drops_json) if True else {}"),
+    ("drop observations: counts bypass the search cache",
+     "    return store.cached((\"drop_counts\", source, item),\n"
+     "                        lambda: _drop_counts(store, source, item))",
+     "    return _drop_counts(store, source, item)"),
+    ("drop observations: the counts' memo ignores the item",
+     "    return store.cached((\"drop_counts\", source, item),",
+     "    return store.cached((\"drop_counts\", source),"),
+    ("drop observations: the tally bypasses the search cache",
+     "    return store.cached((\"drop_tally\",), lambda: _read_tally(store))",
+     "    return _read_tally(store)"),
     ("drop observations: a malformed gather key is read",
      "        if gather is None:\n            raise ValueError",
      "        if False:\n            raise ValueError"),
@@ -1367,6 +1377,40 @@ DROP_OBSERVATIONS_MUTATIONS = [
     ("drop observations: a shrunken table keeps its stale tally",
      "    if _COUNTS and _COUNTS[0][0] is store and _COUNTS[0][1] <= last:",
      "    if _COUNTS and _COUNTS[0][0] is store:"),
+]
+
+# Drop and gather routes priced from the learned chance (spec 2026-10-18 §2.8,
+# plan B Task 12a). Killed by tests/test_ai/test_acquisition_cost_wrapper.py.
+DROP_PRICE_MUTATIONS = [
+    ("drop price: a storeless price ignores the API rate",
+     "        chance = posterior_chance(rate, 0, 0)",
+     "        chance = posterior_chance(1, 0, 0)"),
+    ("drop price: a store prices the prior alone",
+     "    if store is None:\n        chance = posterior_chance(rate, 0, 0)",
+     "    if True:\n        chance = posterior_chance(rate, 0, 0)"),
+    ("drop price: the observations are ignored",
+     "        chance = chance_at(rate, attempts, hits, fleet_k(",
+     "        chance = chance_at(rate, 0, 0, fleet_k("),
+    ("drop price: prospecting is ignored",
+     "fleet_k(store, game_data), state.prospecting)",
+     "fleet_k(store, game_data), 0)"),
+    ("drop price: a unit is the most an attempt yields",
+     "    return chance * Fraction(min_q + max_q, 2)",
+     "    return chance * max_q"),
+    ("drop price: a farm is one win a unit",
+     "    kills = 1 / _units_per_attempt(monster_code, item,",
+     "    kills = 0 * _units_per_attempt(monster_code, item,"),
+    ("gather price: a ready gather yields two a gather",
+     "                           yield_per=1, capacity=source.capacity)",
+     "                           yield_per=2, capacity=source.capacity)"),
+]
+
+# The gear objective prices a drop at the fighter's prospecting (spec §2.8,
+# plan B Task 12a). Killed by tests/test_ai/test_acquisition_cost_wrapper.py.
+FIGHTER_PROSPECTING_MUTATIONS = [
+    ("gear price: a drop reads the character's prospecting",
+     "replace(state, prospecting=fighter.prospecting)",
+     "replace(state, prospecting=state.prospecting)"),
 ]
 
 DROP_ROWS_STORE_MUTATIONS = [
@@ -1383,8 +1427,8 @@ DROP_ROWS_STORE_MUTATIONS = [
     ("drop rows: the lower mark is included",
      "                .where(col(Cycle.id) > after_id)",
      "                .where(col(Cycle.id) >= after_id)"),
-    ("drop rows: a row without its learning key is skipped",
-     "                if action_class is None or action_repr is None:\n                    raise ValueError",
+    ("drop rows: a row without its learning key is not raised",
+     "                if action_repr is None:\n                    raise ValueError",
      "                if False:\n                    raise ValueError"),
     ("drop rows: an empty table has no zero mark",
      "        return 0 if last is None else int(last)",
@@ -3928,8 +3972,8 @@ PIECE_POLICY_OBJECTIVE_MUTATIONS = [
      "            if model.feasible(code, 1, type(PIECE_POLICY)(**{**vars(PIECE_POLICY), "
      "'ge_routes': False})):"),
     ("gear_objective: the price back on LEGACY's switches (no event vendor, no fight gold)",
-     "    price, route = cheapest_route(code, 1, state, game_data, ctx, history, policy=PIECE_POLICY,",
-     "    price, route = cheapest_route(code, 1, state, game_data, ctx, history, "
+     "                                  game_data, ctx, history, policy=PIECE_POLICY,",
+     "                                  game_data, ctx, history, "
      "policy=type(PIECE_POLICY)(**{**vars(PIECE_POLICY), 'event_vendors': False, "
      "'fight_gold': False}),"),
 ]
@@ -4176,11 +4220,11 @@ GATED_GATHER_MUTATIONS = [
      "        for kind in (SourceKind.CRAFT,):"),
     # The apple bug (2026-10-05): a secondary drop priced at one gather a unit.
     ("acquisition_cost: a GATHER route ignores its drop rate (one gather a unit)",
-     "    return per_unit.numerator, per_unit.denominator",
-     "    return 1, 1"),
+     "    return 1 / _units_per_attempt(resource, item, rate, min_q, max_q, state, game_data, store)",
+     "    return Fraction(1)"),
     ("acquisition_cost: a GATHER route's ratio inverted (yield per action as actions)",
-     "    return per_unit.numerator, per_unit.denominator",
-     "    return per_unit.denominator, per_unit.numerator"),
+     "    return 1 / _units_per_attempt(resource, item, rate, min_q, max_q, state, game_data, store)",
+     "    return _units_per_attempt(resource, item, rate, min_q, max_q, state, game_data, store)"),
 ]
 # The grind ranks under its own pricing policy. Killed by
 # tests/test_ai/scenarios/test_fisher_cooking_rung.py.
@@ -11716,6 +11760,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_drop_observations.py", survivors)
     run_group(LEARNING_STORE_SRC, DROP_ROWS_STORE_MUTATIONS,
               "tests/test_ai/test_drop_observations.py", survivors)
+    run_group(ACQUISITION_COST_SRC, DROP_PRICE_MUTATIONS,
+              "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, FIGHTER_PROSPECTING_MUTATIONS,
+              "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
     run_group(FIGHT_WALK_SRC, FIGHT_SECONDS_READER_MUTATIONS[:1],
               "tests/test_ai/test_loop_rate.py", survivors)
     run_group(LOOP_RATE_SRC, FIGHT_SECONDS_READER_MUTATIONS[1:],

@@ -20,6 +20,7 @@ import time
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from fractions import Fraction
+from math import ceil
 from pathlib import Path
 
 import pytest
@@ -27,9 +28,10 @@ import pytest
 from artifactsmmo_cli.ai.acquisition_cost import (
     BANK_VENUE,
     _drop_table,
+    _kill_actions,
     _priced,
-    _prospecting_relief,
     _sale_of,
+    _units_per_attempt,
     _workshop_venue,
     acquisition_actions,
     acquisition_options,
@@ -37,9 +39,11 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     npc_price_of,
     route_options,
 )
-from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
+from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT, acquisition_cost
+from artifactsmmo_cli.ai.gear_objective import _price
+from artifactsmmo_cli.ai.learning.drop_observations import fleet_k
 from artifactsmmo_cli.ai.learning.models import Cycle
-from artifactsmmo_cli.ai.learning.store import MIN_DROP_KILLS, LearningStore
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_sources import (
     UNBOUNDED_CAPACITY,
     Source,
@@ -124,14 +128,16 @@ def test_a_secondary_drop_costs_its_expected_gathers(state, game_data, monkeypat
 
 
 def test_a_multi_unit_drop_is_priced_in_lowest_terms(state, game_data, monkeypatch) -> None:
-    """1 to 2 units a gather is 2/3 of a gather a unit: two gathers yield three,
-    exactly, rather than rounding the ratio to a whole action either way."""
+    """1 to 2 units a gather is 2/3 of a gather a unit, exactly, rather than
+    rounding the ratio to a whole action either way: the walk rounds the
+    route's gathers up once (three units are two gathers)."""
     monkeypatch.setattr(game_data.recipes_catalog, "resource_drops_full", {
         **game_data.recipes_catalog.resource_drops_full,
         "copper_rocks": [("copper_ore", 1, 1, 2)]})
     opt = _priced("copper_ore", Source(SourceKind.GATHER, "copper_rocks", 1, UNBOUNDED_CAPACITY),
                   state, game_data, TIMED_NO_PROFILE_CONTEXT)
-    assert (opt.actions_per_application, opt.yield_per) == (2, 3)
+    assert (opt.actions_per_application, opt.yield_per) == (Fraction(2, 3), 1)
+    assert acquisition_cost("copper_ore", 3, {"copper_ore": [opt]}, {}) == 2 + 1
 
 
 def _ctx_with_siblings(**skills):  # type: ignore[no-untyped-def]
@@ -285,8 +291,8 @@ def test_buy_carries_its_price_as_a_currency_input(state, game_data) -> None:
 
 def test_drop_costs_expected_kills_times_whole_loop_cycles(state, game_data) -> None:
     """A farm is priced as the farm. Both factors are proved elsewhere and
-    reused rather than restated: `expected_kills` (exact `Fraction`,
-    `Formal.MonsterDropSelection`) and `cycles_per_kill` — the same
+    reused rather than restated: the wins per unit (the learned chance,
+    `Formal.DropChance`) and `cycles_per_kill` — the same
     fight-plus-forced-rest figure `cheapest_path_to_level` spends, so a drop
     farm and a level grind are quoted in identical units."""
     opt = _priced("feather",
@@ -296,151 +302,154 @@ def test_drop_costs_expected_kills_times_whole_loop_cycles(state, game_data) -> 
     assert opt.actions_per_application > 1
 
 
-def test_prospecting_makes_a_drop_farm_cheaper(state, game_data) -> None:
-    """INCREMENT 4. The two halves meet with no new term.
-
-    Prospecting's entire value is reducing kills-per-drop, which is a cost in the
-    DROP route. Until increment 2 priced that route there was nothing for the
-    stat to reduce — pricing it earlier would have given it a coefficient on
-    zero. That is why it is last, not an afterthought.
-
-    A character wearing prospecting gear farms the same monster in strictly fewer
-    actions. `vital_armor` carries prospecting 60."""
-    gear = game_data.item_stats("vital_armor")
-    assert gear.prospecting > 0, "fixture drift: expected a prospecting item"
-    plain = _priced("feather",
-                    Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                    state, game_data, TIMED_NO_PROFILE_CONTEXT)
-    lucky = _priced("feather",
-                    Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                    replace(state, prospecting=500), game_data, TIMED_NO_PROFILE_CONTEXT)
-    assert lucky.actions_per_application < plain.actions_per_application
-
-
-def _store_with_kills(monster: str, kills: int, drops: dict[str, int]) -> LearningStore:
-    """A real store carrying `kills` recorded `Fight(<monster>)` cycles, the first
-    `drops[item]` of which dropped that item. Rows, not a stub — the rate the
-    production query computes is the thing under test."""
-    store = LearningStore(db_path=":memory:", character="drop_probe")
+def _fleet(path: Path, rows: list[tuple[str, str, str, int | None, int]]) -> LearningStore:
+    """A real store carrying `(action_repr, action_class, drops_json,
+    prospecting, count)` ok cycles: the fleet's drop observations."""
+    store = LearningStore(db_path=str(path), character="drop_probe")
     store.start_session()
-    for i in range(kills):
-        got = {item: 1 for item, n in drops.items() if i < n}
-        store.record_cycle(Cycle(
-            ts=f"2026-08-08T00:{i // 60:02d}:{i % 60:02d}+00:00", session_id="s",
-            cycle_index=i, character="drop_probe", outcome="ok",
-            action_repr=f"Fight({monster})",
-            drops_json=json.dumps(got),
-        ))
+    for action_repr, action_class, drops, prospecting, count in rows:
+        for _ in range(count):
+            store.record_cycle(Cycle(ts="2026-10-21T00:00:00+00:00", cycle_index=0,
+                                     action_repr=action_repr, action_class=action_class,
+                                     outcome="ok", drops_json=drops,
+                                     prospecting=prospecting))
     return store
 
 
-def test_an_observed_drop_rate_replaces_the_static_table(state, game_data) -> None:
-    """The learned rate wins where there is enough of it.
+_PEARLS_383_FOR_2 = [
+    ("Gather(trout_spot)", "GatherAction", '{"trout": 1}', None, 381),
+    ("Gather(trout_spot->small_pearls)", "GatherAction",
+     '{"trout": 1, "small_pearls": 1}', None, 2),
+]
+"""The live 2026-10-19 trigger: 383 gathers at `trout_spot` for 2 pearls."""
 
-    `chicken/feather` is 1-in-8 in the API table. Recording 100 kills that
-    dropped 25 feathers (25%, twice the static rate) must make the farm cheaper —
-    the whole point of learning, and the direction the live measurement pointed
-    (14.8% observed vs 12.5% static)."""
-    static = _priced("feather",
-                     Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                     state, game_data, TIMED_NO_PROFILE_CONTEXT)
-    store = _store_with_kills("chicken", 100, {"feather": 25})
-    try:
-        assert store.observed_drop_rate("chicken", "feather") == 0.25
-        learned = _priced("feather",
-                          Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                          state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
-    finally:
-        store.end_session(exit_reason="normal")
-        store.close()
-    assert learned.actions_per_application < static.actions_per_application
+_PROSPECTING_SLOPE = [
+    ("Gather(trout_spot)", "GatherAction", '{"trout": 1, "algae": 1, "small_pearls": 1}', 10, 1),
+    ("Gather(trout_spot)", "GatherAction", '{"trout": 1, "algae": 1}', 10, 9),
+    ("Gather(trout_spot->algae)", "GatherAction", '{"trout": 1}', 10, 90),
+]
+"""100 gathers at prospecting 10, 1 pearl: `fleet_k` fits `k = 1/10`
+(`test_drop_observations.test_fleet_k_fits_every_drop_of_each_observed_source`)."""
 
 
-def test_a_learned_rate_is_NOT_also_given_prospecting_relief(
-        state, game_data) -> None:
-    """THE DOUBLE-COUNT GUARD, and the reason these two terms were unified.
-
-    The server applies prospecting when it ROLLS the drop, so a recorded
-    observation is already the post-bonus rate. Applying `_prospecting_relief` on
-    top would count the bonus twice.
-
-    So with a learned rate in hand, prospecting must change NOTHING — while on
-    the static fallback (no observations) it must still help, because there the
-    bonus is genuinely absent from the number."""
-    store = _store_with_kills("chicken", 100, {"feather": 25})
-    try:
-        plain = _priced("feather",
-                        Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                        state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
-        lucky = _priced("feather",
-                        Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                        replace(state, prospecting=500), game_data, TIMED_NO_PROFILE_CONTEXT, store)
-        assert plain.actions_per_application == lucky.actions_per_application
-    finally:
-        store.end_session(exit_reason="normal")
-        store.close()
-    # ...and without observations, prospecting still pays.
-    static_plain = _priced("feather",
-                           Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                           state, game_data, TIMED_NO_PROFILE_CONTEXT)
-    static_lucky = _priced("feather",
-                           Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                           replace(state, prospecting=500), game_data, TIMED_NO_PROFILE_CONTEXT)
-    assert static_lucky.actions_per_application < static_plain.actions_per_application
+def _pearl_gather(state, game_data, store=None):  # type: ignore[no-untyped-def]
+    return _priced("small_pearls", Source(SourceKind.GATHER, "trout_spot", 1, UNBOUNDED_CAPACITY),
+                   state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
 
 
-def test_too_few_kills_falls_back_to_the_static_table(state, game_data) -> None:
-    """Below the sample floor the estimate is noise, and noise here feeds a cost
-    the planner ranks on. Measured live: at n=199 `green_slime/apple` read 0.60x
-    its static rate, inside ordinary sampling error for p=0.083 and worth a 40%
-    phantom price rise if believed."""
-    store = _store_with_kills("chicken", MIN_DROP_KILLS - 1, {"feather": 20})
-    try:
-        assert store.observed_drop_rate("chicken", "feather") is None
-        sparse = _priced("feather",
-                         Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                         state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
-    finally:
-        store.end_session(exit_reason="normal")
-        store.close()
-    static = _priced("feather",
-                     Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                     state, game_data, TIMED_NO_PROFILE_CONTEXT)
-    assert sparse.actions_per_application == static.actions_per_application
+def test_a_rare_drop_is_priced_by_its_chance(state, game_data) -> None:
+    """Spec 2026-10-18 §2.8. `small_pearls` drop off `trout_spot` at 1 in 300.
+    With nothing observed the chance is the API prior alone: 300 gathers a
+    pearl, so 20 pearls are 6,000 gathers and one walk to the spot, not 20."""
+    pearls = _pearl_gather(state, game_data)
+    assert pearls.actions_per_application == 300
+    assert pearls.yield_per == 1
+    assert acquisition_cost("small_pearls", 20, {"small_pearls": [pearls]}, {}) == 20 * 300 + 1
 
 
-def test_a_monster_that_never_drops_the_item_falls_back(state, game_data) -> None:
-    """An observed rate of exactly 0 is not a usable divisor — it would mean
-    infinite kills. Falls back to the static table rather than pricing the route
-    out of existence on a run of bad luck."""
-    store = _store_with_kills("chicken", 100, {})
-    try:
-        assert store.observed_drop_rate("chicken", "feather") == 0.0
-        zero = _priced("feather",
-                       Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                       state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
-    finally:
-        store.end_session(exit_reason="normal")
-        store.close()
-    static = _priced("feather",
-                     Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                     state, game_data, TIMED_NO_PROFILE_CONTEXT)
-    assert zero.actions_per_application == static.actions_per_application
+def test_observations_reprice_the_drop(tmp_path, state, game_data) -> None:
+    """383 gathers for 2 pearls: the posterior is `(1 + 2) / (300 + 383)`, so
+    a pearl is 683/3 gathers and 20 of them `ceil(20 × 683/3)`, rounded once
+    for the route (the walk's exact arm), plus the walk to the spot."""
+    store = _fleet(tmp_path / "learn.db", _PEARLS_383_FOR_2)
+    pearls = _pearl_gather(state, game_data, store)
+    assert pearls.actions_per_application == Fraction(683, 3)
+    assert acquisition_cost("small_pearls", 20, {"small_pearls": [pearls]}, {}) == 4554 + 1
 
 
-def test_the_prospecting_rate_mirrors_the_wisdom_rate(state, game_data) -> None:
-    """"1% extra per 10 points" is decided in ONE place.
+def test_a_sure_primary_drop_still_costs_one_gather(tmp_path, state, game_data) -> None:
+    """Every observed gather of `trout_spot` landed a trout (rate 1): the
+    posterior `(1 + 383) / (1 + 383)` is 1, so a trout is one gather, as
+    before the chance was learned."""
+    store = _fleet(tmp_path / "learn.db", _PEARLS_383_FOR_2)
+    trout = _priced("trout", Source(SourceKind.GATHER, "trout_spot", 1, UNBOUNDED_CAPACITY),
+                    state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
+    assert trout.actions_per_application == 1
 
-    `MonsterCatalog.xp_per_kill` scales xp by `(1000 + wisdom) / 1000`; this
-    scales kills by the reciprocal of the same form. Restating the rate as a
-    literal here would let the two drift, and a rate that means one thing for xp
-    and another for drops is the unit-confusion this epic keeps finding.
 
-    Exact `Fraction`, never a float: it multiplies a `Fraction` that
-    `Formal.MonsterDropSelection` proves things about."""
-    assert _prospecting_relief(0) == Fraction(1)
-    assert _prospecting_relief(1000) == Fraction(1, 2)
-    assert isinstance(_prospecting_relief(60), Fraction)
+def test_a_unit_is_the_chance_times_the_mean_quantity(state, game_data) -> None:
+    """A drop of 1 to 3 units at 1 in 8 yields `(1/8) · 2` units an attempt."""
+    assert _units_per_attempt("chicken", "feather", 8, 1, 3, state, game_data,
+                              None) == Fraction(1, 4)
+
+
+def test_an_observed_monster_drop_reprices_the_farm(tmp_path, state, game_data) -> None:
+    """`feather` drops off `chicken` at 1 in 8. 100 recorded wins with 50
+    feathers make the posterior `(1 + 50) / (8 + 100)`: the farm is the wins a
+    feather takes at that chance, times one win's whole-loop actions."""
+    store = _fleet(tmp_path / "learn.db",
+                   [("Fight(chicken)", "FightAction", '{"feather": 1}', None, 50),
+                    ("Fight(chicken)", "FightAction", '{"raw_chicken": 1}', None, 50)])
+    learned = _priced("feather", Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
+                      state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
+    win = _kill_actions("chicken", state, game_data, TIMED_NO_PROFILE_CONTEXT.timing(), ())
+    assert learned.actions_per_application == max(1, ceil(Fraction(108, 51) * win))
+    prior = _priced("feather", Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
+                    state, game_data, TIMED_NO_PROFILE_CONTEXT)
+    assert prior.actions_per_application == max(1, ceil(8 * win))
+
+
+def test_prospecting_is_worth_nothing_until_k_is_learned(tmp_path, state, game_data) -> None:
+    """The slope's prior is `k = 0` (§2.8): without a store, or with
+    observations at no recorded prospecting, a prospecting total changes no
+    price."""
+    lucky = replace(state, prospecting=500)
+    assert (_pearl_gather(lucky, game_data).actions_per_application
+            == _pearl_gather(state, game_data).actions_per_application)
+    store = _fleet(tmp_path / "learn.db", _PEARLS_383_FOR_2)
+    assert fleet_k(store, game_data) == 0
+    assert (_pearl_gather(lucky, game_data, store).actions_per_application
+            == _pearl_gather(state, game_data, store).actions_per_application)
+
+
+def test_prospecting_lowers_the_price_once_k_is_learned(tmp_path, state, game_data) -> None:
+    """With `k = 1/10` learned, a pearl at prospecting 0 is `(300 + 100) / (1 +
+    1)` = 200 gathers, and at prospecting 100 the chance is `1 + 10` times
+    that: 200/11 gathers."""
+    store = _fleet(tmp_path / "learn.db", _PROSPECTING_SLOPE)
+    assert fleet_k(store, game_data) == Fraction(1, 10)
+    plain = _pearl_gather(replace(state, prospecting=0), game_data, store)
+    lucky = _pearl_gather(replace(state, prospecting=100), game_data, store)
+    assert plain.actions_per_application == 200
+    assert lucky.actions_per_application == Fraction(200, 11)
+
+
+def test_the_second_copy_is_cheaper_than_the_first(tmp_path, state, game_data) -> None:
+    """The USER's perfect_pearl (2026-10-19): it costs 20 `small_pearls` at
+    the `archaeologist`, and it carries prospecting. Once the first is worn,
+    the pearls for the second drop at the higher prospecting, so the second
+    copy is cheaper. Nothing counts copies: it is the price at the worn
+    total."""
+    store = _fleet(tmp_path / "learn.db", _PROSPECTING_SLOPE)
+    assert fleet_k(store, game_data) > 0
+
+    def price(st) -> int:  # type: ignore[no-untyped-def]
+        buy = _priced("perfect_pearl",
+                      Source(SourceKind.BUY, "archaeologist", 1, UNBOUNDED_CAPACITY),
+                      st, game_data, TIMED_NO_PROFILE_CONTEXT, store)
+        assert buy.inputs == {"small_pearls": 20}
+        return acquisition_cost("perfect_pearl", 1,
+                                {"perfect_pearl": [buy],
+                                 "small_pearls": [_pearl_gather(st, game_data, store)]}, {})
+
+    gem = game_data.item_stats("perfect_pearl")
+    assert gem is not None and gem.prospecting > 0
+    first = price(state)
+    second = price(replace(state, prospecting=state.prospecting + gem.prospecting))
+    assert second < first
+
+
+def test_a_gear_price_reads_the_fighters_prospecting(tmp_path, state, game_data) -> None:
+    """A gear-objective price prices a drop at the prospecting of the fighter
+    wearing `L*` (§2.8), not the character's own: with `k` learned on chicken
+    kills, a fighter at prospecting 100 farms feathers cheaper than one at 0."""
+    store = _fleet(tmp_path / "learn.db",
+                   [("Fight(chicken)", "FightAction", '{"feather": 1}', 5, 4)])
+    assert fleet_k(store, game_data) == Fraction(1, 5)
+    own = _price(state, game_data, TIMED_NO_PROFILE_CONTEXT, store, state, "feather")
+    lucky = _price(state, game_data, TIMED_NO_PROFILE_CONTEXT, store,
+                   replace(state, prospecting=100), "feather")
+    assert lucky[0] < own[0]
 
 
 def test_an_item_with_no_crafting_skill_still_prices(state, game_data) -> None:

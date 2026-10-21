@@ -37,21 +37,16 @@ from artifactsmmo_cli.ai.acquisition_cost_core import (
 )
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
 from artifactsmmo_cli.ai.combat_deficit import combat_deficit
-from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
-from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
+from artifactsmmo_cli.ai.drop_chance_core import chance_at, posterior_chance
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_value_core import Rank
+from artifactsmmo_cli.ai.learning.drop_observations import drop_counts, fleet_k
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill, loss_cost
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loss_risk_core import loss_surcharge
-from artifactsmmo_cli.ai.monster_drop_selection import (
-    MonsterDropCandidate,
-    expected_kills,
-)
 from artifactsmmo_cli.ai.obtain_model.gate import GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
@@ -79,53 +74,31 @@ def _workshop_venue(skill: str) -> str:
     return f"workshop:{skill}"
 
 
-def _prospecting_relief(prospecting: int) -> Fraction:
-    """Factor by which prospecting reduces expected kills per unit dropped.
+def _units_per_attempt(source: str, item: str, rate: int, min_q: int, max_q: int,
+                       state: WorldState, game_data: GameData,
+                       store: LearningStore | None) -> Fraction:
+    """Units of `item` one attempt at `source` (a gather of the resource, a win
+    against the monster) yields, expected: the drop's chance per attempt times
+    its mean quantity `(min + max) / 2` (spec 2026-10-18 §2.8).
 
-    The server grants "1% extra per 10 prospecting", so the drop chance is scaled
-    by `(1000 + prospecting) / 1000` and the kills needed are scaled by its
-    RECIPROCAL. Mirrors `MonsterCatalog.xp_per_kill`'s wisdom term exactly
-    (`(1000 + wisdom) / 1000`) rather than restating the rate — one place decides
-    what "1% per 10 points" means, so the two cannot drift.
+    The chance is LEARNED (`drop_chance_core.chance_at`): the API `rate` is a
+    prior with the weight of one hit, updated by every attempt the fleet
+    recorded at `source` (`drop_observations.drop_counts`), and raised by the
+    fleet's prospecting slope (`drop_observations.fleet_k`, 0 until the data
+    shows a bonus) at `state.prospecting`, the worn total of the loadout the
+    attempt is made in: the character's own for an executor price, the
+    fighter's for a gear-objective price (`gear_objective._price`). Without a
+    store there is nothing observed: the prior alone, which is the API rate.
 
-    Exact `Fraction`, never a float: this multiplies a `Fraction` that
-    `Formal.MonsterDropSelection` proves things about, and a float here would
-    quietly make that proof about a different number.
-
-    THIS IS WHY PROSPECTING WAITED FOR INCREMENT 2. Its entire value is making a
-    DROP farm cheaper, and until the drop route was priced at all there was
-    nothing for it to reduce. Pricing the stat first would have given it a
-    coefficient on zero."""
-    return Fraction(1000, 1000 + prospecting)
-
-
-def _expected_kills_per_unit(item: str, monster_code: str, rate: int, min_q: int,
-                             max_q: int, prospecting: int,
-                             store: LearningStore | None) -> Fraction:
-    """Kills needed for ONE unit, from OBSERVATION where there is enough of it.
-
-    THE TWO CORRECTIONS ARE ONE CORRECTION. The server applies prospecting when
-    it rolls a drop, so a recorded observation is ALREADY the post-bonus rate.
-    Using a learned rate AND `_prospecting_relief` would count the bonus twice —
-    so the relief applies only on the static fallback, where nothing has been
-    observed and the bonus is therefore absent from the number.
-
-    That is also why the learned branch needs no prospecting argument of its own:
-    the character whose cycles were recorded is the character being priced, and
-    its gear is baked in. A different character's rate would not be transferable
-    for exactly the same reason.
-
-    Measured 2026-08-08 over 4,000+ kills: the static table is accurate to ~3% on
-    large samples, so this mostly CONFIRMS it. The exceptions are the ones worth
-    having — `chicken/feather` 14.8% observed vs 12.5% static, `sheep/wool` 11.8%
-    vs 8.3% — both saying a drop route is cheaper than it was being priced."""
-    observed = (store.observed_drop_rate(monster_code, item)
-                if store is not None else None)
-    if observed is not None and observed > 0:
-        return 1 / Fraction(observed).limit_denominator(10 ** 6)
-    return expected_kills(MonsterDropCandidate(
-        monster_code=monster_code, rate=rate, min_quantity=min_q,
-        max_quantity=max_q, distance=0)) * _prospecting_relief(prospecting)
+    A rare drop is priced at its chance, not at one attempt a unit: 20
+    `small_pearls` (1 in 300) off `trout_spot` are about 6,000 gathers (live
+    2026-10-19: the fleet fished 383 times for 2)."""
+    if store is None:
+        chance = posterior_chance(rate, 0, 0)
+    else:
+        attempts, hits = drop_counts(store, source, item)
+        chance = chance_at(rate, attempts, hits, fleet_k(store, game_data), state.prospecting)
+    return chance * Fraction(min_q + max_q, 2)
 
 
 def _loss_surcharge(monster_code: str, max_hp: int,
@@ -157,9 +130,9 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
                   records: Sequence[tuple[str, int, int]] = ()) -> int:
     """Whole-loop actions to farm ONE unit off `monster_code`.
 
-    Two proved pieces, multiplied, and neither is restated here:
-    `expected_kills` (`rate / avg_yield`, exact `Fraction`, proved in
-    `Formal.MonsterDropSelection`) times `cycles_per_kill` — the SAME
+    Two pieces, multiplied, and neither is restated here: the wins one unit
+    takes (the reciprocal of `_units_per_attempt`, the learned chance proved
+    in `Formal.DropChance`) times `cycles_per_kill` — the SAME
     fight-plus-forced-rest figure `cheapest_path_to_level` spends, so a drop farm
     and a level grind are quoted in identical units. Using a bare kill count here
     would price the farm at roughly half its real cost, which is the defect
@@ -170,10 +143,8 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
 
     Rounded UP: a fractional action is still an action the character spends, and
     the objective is an exact integer (S-013)."""
-    projected = project_loadout_stats(
-        state, pick_loadout_cached(Rank(), state, game_data), game_data)
-    kills = _expected_kills_per_unit(item, monster_code, rate, min_q, max_q,
-                                     projected.prospecting, store)
+    kills = 1 / _units_per_attempt(monster_code, item, rate, min_q, max_q, state,
+                                   game_data, store)
     return max(1, ceil(kills * _kill_actions(monster_code, state, game_data, timing, records)))
 
 
@@ -191,18 +162,21 @@ def _kill_actions(monster_code: str, state: WorldState, game_data: GameData,
     return per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight)
 
 
-def _gather_rate(item: str, resource: str, game_data: GameData) -> tuple[int, int]:
-    """`(actions, yield)` of one GATHER application: `actions` gathers deliver
-    `yield` units, the exact ratio `GameData.gathers_per_unit` (rate over average
-    quantity) in lowest terms.
+def _gather_actions(item: str, resource: str, state: WorldState, game_data: GameData,
+                    store: LearningStore | None) -> Fraction:
+    """Gathers of `resource` to obtain ONE `item`, exact: the reciprocal of
+    `_units_per_attempt` over the item's drop row (`GameData.gather_drop_row`).
 
     A secondary drop is the case this exists for. `apple` drops off `ash_tree` at
-    1 in 20, so one application is 20 gathers for 1 apple; priced as one gather a
-    unit — which every GATHER route was, at `max_gather_yield` units an action —
-    an apple looked as cheap as the tree's wood (live 2026-10-05: 554 gathers for
-    25 apples). A primary drop is `(1, 1)`, its price unchanged."""
-    per_unit = game_data.gathers_per_unit(resource, item)
-    return per_unit.numerator, per_unit.denominator
+    1 in 20, so a unit is 20 gathers; priced as one gather a unit — which every
+    GATHER route once was, at `max_gather_yield` units an action — an apple
+    looked as cheap as the tree's wood (live 2026-10-05: 554 gathers for 25
+    apples). A sure primary drop of one unit is 1, its price unchanged.
+
+    Exact, as a fight for gold is (ruling T2m M1): a learned chance is no whole
+    number of gathers, and the walk rounds the route's applications up once."""
+    rate, min_q, max_q = game_data.gather_drop_row(resource, item)
+    return 1 / _units_per_attempt(resource, item, rate, min_q, max_q, state, game_data, store)
 
 
 def _priced(item: str, source: Source, state: WorldState,
@@ -236,11 +210,10 @@ def _priced(item: str, source: Source, state: WorldState,
                            actions_per_application=1, yield_per=source.yield_per,
                            capacity=source.capacity, inputs=dict(recipe))
     if source.kind is SourceKind.GATHER:
-        actions, yield_per = _gather_rate(item, source.code, game_data)
         return RouteOption(kind=source.kind.value, venue=source.code,
-                           actions_per_application=actions,
-                           yield_per=yield_per,
-                           capacity=source.capacity)
+                           actions_per_application=_gather_actions(
+                               item, source.code, state, game_data, store),
+                           yield_per=1, capacity=source.capacity)
     if source.kind is SourceKind.SELL:
         npc_code, price = _sale_of(source.code, state, game_data)
         # One sale: one action, at the buyer's tile, yielding `price` gold and
@@ -450,10 +423,10 @@ def _gated_skill_option(item: str, state: WorldState, game_data: GameData,
         state.skills.get(skill, 1), state.skill_xp.get(skill, 0),
         max_xp, level, rate)
     if kind is SourceKind.GATHER:
-        actions, yield_per = _gather_rate(item, route.via, game_data)
         return RouteOption(
-            kind=kind.value, venue=route.via, actions_per_application=actions,
-            yield_per=yield_per, capacity=UNBOUNDED_CAPACITY,
+            kind=kind.value, venue=route.via,
+            actions_per_application=_gather_actions(item, route.via, state, game_data, store),
+            yield_per=1, capacity=UNBOUNDED_CAPACITY,
             unlock=f"skill:{skill}:{level}", unlock_actions=grind)
     return RouteOption(
         kind=SourceKind.CRAFT.value, venue=_workshop_venue(skill),
