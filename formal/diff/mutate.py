@@ -1326,8 +1326,8 @@ DROP_CHANCE_CORE_MUTATIONS = [
 # T11b). Killed by tests/test_ai/test_drop_observations.py.
 DROP_OBSERVATIONS_MUTATIONS = [
     ("drop observations: the cache ignores its store",
-     "    if _COUNTS and _COUNTS[0][0] is store:",
-     "    if _COUNTS:"),
+     "    if _COUNTS and _COUNTS[0][0] is store and _COUNTS[0][1] <= last:",
+     "    if _COUNTS and _COUNTS[0][1] <= last:"),
     ("drop observations: the cache ignores new cycles",
      "        if seen == last:\n            return tally",
      "        if True:\n            return tally"),
@@ -1352,6 +1352,21 @@ DROP_OBSERVATIONS_MUTATIONS = [
     ("drop observations: a fight reads the resource table",
      "    return game_data.monster_drops(source)",
      "    return game_data.resource_drop_table(source)"),
+    ("drop observations: a rate-1 drop is a sample",
+     "                       if rate > 1)",
+     "                       if rate >= 1)"),
+    ("drop observations: a cycle without drops is parsed",
+     "        drops = json.loads(drops_json) if drops_json else {}",
+     "        drops = json.loads(drops_json) if True else {}"),
+    ("drop observations: a malformed gather key is read",
+     "        if gather is None:\n            raise ValueError",
+     "        if False:\n            raise ValueError"),
+    ("drop observations: a malformed fight key is read",
+     "    if fight is None:\n        raise ValueError",
+     "    if False:\n        raise ValueError"),
+    ("drop observations: a shrunken table keeps its stale tally",
+     "    if _COUNTS and _COUNTS[0][0] is store and _COUNTS[0][1] <= last:",
+     "    if _COUNTS and _COUNTS[0][0] is store:"),
 ]
 
 DROP_ROWS_STORE_MUTATIONS = [
@@ -1368,6 +1383,12 @@ DROP_ROWS_STORE_MUTATIONS = [
     ("drop rows: the lower mark is included",
      "                .where(col(Cycle.id) > after_id)",
      "                .where(col(Cycle.id) >= after_id)"),
+    ("drop rows: a row without its learning key is skipped",
+     "                if action_class is None or action_repr is None:\n                    raise ValueError",
+     "                if False:\n                    raise ValueError"),
+    ("drop rows: an empty table has no zero mark",
+     "        return 0 if last is None else int(last)",
+     "        return -1 if last is None else int(last)"),
 ]
 
 # Killed by formal/diff/test_consumable_price_diff.py (exact agreement with the

@@ -72,7 +72,9 @@ def _fold(tally: Tally, rows: list[tuple[str, str, int | None, str | None]]) -> 
 def _tally(store: LearningStore) -> Tally:
     """The fleet's attempts and hits through the newest cycle."""
     last = store.last_cycle_id()
-    if _COUNTS and _COUNTS[0][0] is store:
+    # A newest id below the one last read means the table was replaced or
+    # pruned under this store (a season reset): the tally is read afresh.
+    if _COUNTS and _COUNTS[0][0] is store and _COUNTS[0][1] <= last:
         _, seen, tally = _COUNTS[0]
         if seen == last:
             return tally
@@ -109,7 +111,12 @@ def fleet_k(store: LearningStore, game_data: GameData) -> Fraction:
     """The fleet's prospecting slope `k` (`drop_chance_core.fit_k`), on one
     sample per (source, item, prospecting): every drop in the catalogue table of
     each observed source, at its API rate. Attempts without a recorded
-    prospecting are no sample."""
+    prospecting are no sample.
+
+    A drop at API rate 1 is no sample either (ruling T11e): its chance is capped
+    at 1 for every `k >= 0`, so its observed ratio is 1 whatever `k` is. It
+    carries nothing about the slope, yet it would add `attempts·P²` to the
+    denominator and pull `k` toward 0 with full weight."""
     attempts, hits = _tally(store)
     samples: list[tuple[int, int, int, int]] = []
     for key, count in attempts.items():
@@ -117,5 +124,6 @@ def fleet_k(store: LearningStore, game_data: GameData) -> Fraction:
         if prospecting is None:
             continue
         samples.extend((rate, prospecting, count, hits[key][item])
-                       for item, rate, _, _ in _drop_table(game_data, action_class, source))
+                       for item, rate, _, _ in _drop_table(game_data, action_class, source)
+                       if rate > 1)
     return fit_k(samples)

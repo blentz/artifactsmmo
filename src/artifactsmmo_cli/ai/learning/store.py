@@ -1016,7 +1016,8 @@ class LearningStore:
         character's successful gather and fight with `after_id < id <=
         through_id`, in id order: the drop observations (spec 2026-10-18 §2.8).
         A failed gather rolled no drop and a lost fight drops nothing, so only
-        an `ok` outcome is an attempt."""
+        an `ok` outcome is an attempt. A gather or fight row without its
+        learning key is corrupt and raises: it never drops out of the count."""
         with SqlSession(self._engine) as s:
             rows = s.exec(
                 select(Cycle.action_class, Cycle.action_repr, Cycle.prospecting,
@@ -1026,9 +1027,12 @@ class LearningStore:
                 .where(col(Cycle.outcome) == "ok")
                 .where(col(Cycle.action_class).in_(("GatherAction", "FightAction")))
                 .order_by(col(Cycle.id)))
-            return [(action_class, action_repr, prospecting, drops_json)
-                    for action_class, action_repr, prospecting, drops_json in rows
-                    if action_class is not None and action_repr is not None]
+            out: list[tuple[str, str, int | None, str | None]] = []
+            for action_class, action_repr, prospecting, drops_json in rows:
+                if action_class is None or action_repr is None:
+                    raise ValueError(f"a {action_class} cycle with no action_repr")
+                out.append((action_class, action_repr, prospecting, drops_json))
+            return out
 
     def fleet_recycle_totals(self) -> dict[str, int]:
         """item_code -> units one recycled copy returns, MEASURED over every

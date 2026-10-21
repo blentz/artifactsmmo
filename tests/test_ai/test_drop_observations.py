@@ -2,6 +2,7 @@
 attempts and hits at a (source, item), pooled over the fleet, and the fleet's
 prospecting slope `k`, read once per recorded cycle."""
 
+import sqlite3
 from fractions import Fraction
 from pathlib import Path
 
@@ -95,8 +96,10 @@ def test_the_cache_is_held_against_its_store(tmp_path: Path) -> None:
 def test_fleet_k_fits_every_drop_of_each_observed_source(tmp_path: Path) -> None:
     """100 gathers at `trout_spot` at prospecting 10: trout every time (rate 1),
     algae 10 times (rate 10) and pearls once (rate 300). Observed over API
-    rate is 1, 1 and 3, so only the pearls pull: `k = 100·10·2 / (3·100·10²)
-    = 1/15`. Rows without a recorded prospecting are no sample."""
+    rate is 1 for the algae and 3 for the pearls, so only the pearls pull:
+    `k = 100·10·2 / (2·100·10²) = 1/10`. The trout, at rate 1, is capped at
+    chance 1 for any `k` and is no sample (with it, k would read 1/15). Rows
+    without a recorded prospecting are no sample."""
     store = _store(tmp_path / "learn.db")
     _record(store, "Gather(trout_spot)", "GatherAction",
             '{"trout": 1, "algae": 1, "small_pearls": 1}', prospecting=10)
@@ -105,7 +108,7 @@ def test_fleet_k_fits_every_drop_of_each_observed_source(tmp_path: Path) -> None
     _record(store, "Gather(trout_spot->algae)", "GatherAction", '{"trout": 1}',
             prospecting=10, count=90)
     _record(store, "Gather(trout_spot)", "GatherAction", '{"small_pearls": 1}', count=5)
-    assert fleet_k(store, _world()) == Fraction(1, 15)
+    assert fleet_k(store, _world()) == Fraction(1, 10)
 
 
 def test_fleet_k_reads_a_fight_from_the_monster_drops(tmp_path: Path) -> None:
@@ -158,3 +161,23 @@ def test_the_rows_read_are_the_ones_between_the_marks(tmp_path: Path) -> None:
     _record(store, "Gather(trout_spot)", "GatherAction", '{"trout": 1}', count=3)
     assert store.fleet_drop_rows(1, 2) == [("GatherAction", "Gather(trout_spot)", None,
                                             '{"trout": 1}')]
+
+
+def test_a_gather_without_its_learning_key_raises(tmp_path: Path) -> None:
+    store = _store(tmp_path / "learn.db")
+    store.record_cycle(Cycle(ts="2026-10-21T00:00:00+00:00", cycle_index=0,
+                             action_class="GatherAction", outcome="ok"))
+    with pytest.raises(ValueError, match="a GatherAction cycle with no action_repr"):
+        drop_counts(store, "trout_spot", "trout")
+
+
+def test_a_shrunken_table_is_read_afresh(tmp_path: Path) -> None:
+    """The cycles were pruned under a live store: the tally restarts instead
+    of keeping the rows that are gone."""
+    store = _store(tmp_path / "learn.db")
+    _record(store, "Gather(trout_spot)", "GatherAction", '{"trout": 1}', count=2)
+    assert drop_counts(store, "trout_spot", "trout") == (2, 2)
+    with sqlite3.connect(tmp_path / "learn.db") as conn:
+        conn.execute("DELETE FROM cycles")
+    conn.close()
+    assert drop_counts(store, "trout_spot", "trout") == (0, 0)
