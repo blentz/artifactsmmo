@@ -1358,13 +1358,6 @@ DROP_OBSERVATIONS_MUTATIONS = [
     ("drop observations: a cycle without drops is parsed",
      "        drops = json.loads(drops_json) if drops_json else {}",
      "        drops = json.loads(drops_json) if True else {}"),
-    ("drop observations: counts bypass the search cache",
-     "    return store.cached((\"drop_counts\", source, item),\n"
-     "                        lambda: _drop_counts(store, source, item))",
-     "    return _drop_counts(store, source, item)"),
-    ("drop observations: the counts' memo ignores the item",
-     "    return store.cached((\"drop_counts\", source, item),",
-     "    return store.cached((\"drop_counts\", source),"),
     ("drop observations: the tally bypasses the search cache",
      "    return store.cached((\"drop_tally\",), lambda: _read_tally(store))",
      "    return _read_tally(store)"),
