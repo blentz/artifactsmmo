@@ -3980,9 +3980,12 @@ GOLD_FUNDED_PRICE_MUTATIONS = [
      "                                  pocket=state.gold)\n"),
 ]
 GOLD_FUNDED_MONSTER_MUTATIONS = [
-    ("acquisition_cost: a gold monster is named whatever gold's cheapest route is",
+    # The kind arm alone (`if route is None:`) is EQUIVALENT on the bundle: no
+    # state there gives gold a cheapest route that is not a fight (no SELL
+    # route arises), so it was replaced by this mutant of the None arm.
+    ("acquisition_cost: a policy with no gold route still names a gold monster",
      "    if route is None or route.kind != SourceKind.GOLD_DROP.value:\n        return None\n",
-     "    if route is None:\n        return None\n"),
+     "    if route.kind != SourceKind.GOLD_DROP.value:\n        return None\n"),
 ]
 GOLD_FUNDED_EXACT_MUTATIONS = [
     ("fight_loop_cost: the rest share through a float again (T3e m1)",
