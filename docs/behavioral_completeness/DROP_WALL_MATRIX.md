@@ -50,34 +50,34 @@ argmax blindness: 1 of 16 walls sit on a RESOLVED root. A census that prices onl
 | l15_midband | ObtainItem(code='highwayman_dagger', quantity=1, slot='weapon_slot') | argmax | PASS | 569 | 569 | 569 | - | - | - | - | - |
 | l15_midband | ReachSkillLevel(skill='gearcrafting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l15_midband | ReachSkillLevel(skill='jewelrycrafting', level=7) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l20_band_entry | ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot') | argmax | PASS | 121 | 121 | 121 | - | - | - | - | - |
-| l20_band_entry | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | alt | PASS | 103 | 103 | 103 | - | - | - | - | - |
+| l20_band_entry | ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot') | argmax | PASS | 123 | 123 | 123 | - | - | - | - | - |
+| l20_band_entry | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | alt | PASS | 106 | 106 | 106 | - | - | - | - | - |
 | l20_band_entry | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l20_band_entry | ReachSkillLevel(skill='weaponcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_band_entry | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_band_entry | ReachSkillLevel(skill='jewelrycrafting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l30_band_entry | ObtainItem(code='skull_staff', quantity=1, slot='weapon_slot') | argmax | PASS | 224 | 224 | 224 | - | - | - | - | - |
-| l30_band_entry | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | alt | PASS | 97 | 97 | 97 | - | - | - | - | - |
-| l30_band_entry | ObtainItem(code='steel_boots', quantity=1, slot='boots_slot') | alt | PASS | 314 | 314 | 314 | - | - | - | - | - |
-| l30_band_entry | ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 111 | 111 | 111 | - | - | - | - | - |
+| l30_band_entry | ObtainItem(code='skull_staff', quantity=1, slot='weapon_slot') | argmax | PASS | 230 | 230 | 230 | - | - | - | - | - |
+| l30_band_entry | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | alt | PASS | 100 | 100 | 100 | - | - | - | - | - |
+| l30_band_entry | ObtainItem(code='steel_boots', quantity=1, slot='boots_slot') | alt | PASS | 328 | 328 | 328 | - | - | - | - | - |
+| l30_band_entry | ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 115 | 115 | 115 | - | - | - | - | - |
 | l30_band_entry | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l30_band_entry | ReachSkillLevel(skill='jewelrycrafting', level=19) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l40_band_entry | ObtainItem(code='slime_shield', quantity=1, slot='shield_slot') | argmax | PASS | 291 | 291 | 291 | - | - | - | - | - |
-| l40_band_entry | ObtainItem(code='royal_skeleton_pants', quantity=1, slot='leg_armor_slot') | alt | PASS | 445 | 445 | 445 | - | - | - | - | - |
-| l40_band_entry | ObtainItem(code='royal_skeleton_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 629 | 629 | 629 | - | - | - | - | - |
-| l40_band_entry | ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot') | alt | PASS | 459 | 459 | 459 | - | - | - | - | - |
+| l40_band_entry | ObtainItem(code='royal_skeleton_pants', quantity=1, slot='leg_armor_slot') | argmax | PASS | 482 | 482 | 482 | - | - | - | - | - |
+| l40_band_entry | ObtainItem(code='slime_shield', quantity=1, slot='shield_slot') | alt | PASS | 327 | 327 | 327 | - | - | - | - | - |
+| l40_band_entry | ObtainItem(code='royal_skeleton_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 691 | 691 | 691 | - | - | - | - | - |
+| l40_band_entry | ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot') | alt | PASS | 505 | 505 | 505 | - | - | - | - | - |
 | l40_band_entry | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l40_band_entry | ReachSkillLevel(skill='jewelrycrafting', level=26) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l48_capstone_approach | ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot') | argmax | PASS | 1709 | 1709 | 1709 | - | - | - | - | - |
+| l48_capstone_approach | ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot') | argmax | PASS | 1897 | 1897 | 1897 | - | - | - | - | - |
 | l48_capstone_approach | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l48_capstone_approach | ReachSkillLevel(skill='jewelrycrafting', level=36) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l48_band_adequate | ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot') | argmax | PASS | 1328 | 1328 | 1328 | - | - | - | - | - |
+| l48_band_adequate | ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot') | argmax | PASS | 1871 | 1871 | 1871 | - | - | - | - | - |
 | l48_band_adequate | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l48_band_adequate | ReachSkillLevel(skill='jewelrycrafting', level=36) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l48_raid_active | ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot') | argmax | PASS | 1328 | 1328 | 1328 | - | - | - | - | - |
+| l48_raid_active | ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot') | argmax | PASS | 1871 | 1871 | 1871 | - | - | - | - | - |
 | l48_raid_active | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l48_raid_active | ReachSkillLevel(skill='jewelrycrafting', level=36) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l48_event_active | ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot') | argmax | PASS | 1532 | 1532 | 1532 | - | - | - | - | - |
+| l48_event_active | ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot') | argmax | PASS | 1792 | 1792 | 1792 | - | - | - | - | - |
 | l48_event_active | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l10_bag_pursuit | ObtainItem(code='leather_boots', quantity=1, slot='boots_slot') | argmax | PASS | 54 | 54 | 54 | - | - | - | - | - |
 | l10_bag_pursuit | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 630 | 630 | 630 | - | - | - | - | - |
@@ -93,15 +93,15 @@ argmax blindness: 1 of 16 walls sit on a RESOLVED root. A census that prices onl
 | l35_artifact_fill | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_artifact_fill | ReachSkillLevel(skill='jewelrycrafting', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l35_artifact_fill | ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l35_boots_drop_farm | ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot') | argmax | PASS | 1784 | 1784 | 1784 | - | - | - | - | - |
-| l35_boots_drop_farm | ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot') | alt | PASS | 154 | 154 | 154 | - | - | - | - | - |
-| l35_boots_drop_farm | ObtainItem(code='steel_boots', quantity=1, slot='boots_slot') | alt | PASS | 267 | 267 | 267 | - | - | - | - | - |
+| l35_boots_drop_farm | ObtainItem(code='steel_boots', quantity=1, slot='boots_slot') | argmax | PASS | 304 | 304 | 304 | - | - | - | - | - |
+| l35_boots_drop_farm | ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot') | alt | PASS | 2318 | 2318 | 2318 | - | - | - | - | - |
+| l35_boots_drop_farm | ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot') | alt | PASS | 198 | 198 | 198 | - | - | - | - | - |
 | l35_boots_drop_farm | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_boots_drop_farm | ReachSkillLevel(skill='jewelrycrafting', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l35_boots_drop_farm | ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l30_rune_fill | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | argmax | PASS | 3 | 3 | 3 | - | - | - | - | - |
-| l30_rune_fill | ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot') | alt | PASS | 2059 | 2059 | 2059 | - | - | - | - | - |
-| l30_rune_fill | ObtainItem(code='slime_shield', quantity=1, slot='shield_slot') | alt | PASS | 276 | 276 | 276 | - | - | - | - | - |
+| l30_rune_fill | ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot') | alt | PASS | 2676 | 2676 | 2676 | - | - | - | - | - |
+| l30_rune_fill | ObtainItem(code='slime_shield', quantity=1, slot='shield_slot') | alt | PASS | 333 | 333 | 333 | - | - | - | - | - |
 | l30_rune_fill | ReachSkillLevel(skill='gearcrafting', level=26) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l30_rune_fill | ReachSkillLevel(skill='jewelrycrafting', level=19) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
@@ -113,8 +113,8 @@ argmax blindness: 1 of 16 walls sit on a RESOLVED root. A census that prices onl
 | l20_dual_utility_one_stocked | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility_one_stocked | ReachSkillLevel(skill='jewelrycrafting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l13_drop_recipe_grind | ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot') | argmax | PASS | 43 | 43 | 43 | - | - | - | - | - |
-| l13_drop_recipe_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 617 | 617 | 617 | - | - | - | - | - |
-| l13_drop_recipe_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot') | alt | PASS | 617 | 617 | 617 | - | - | - | - | - |
+| l13_drop_recipe_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 632 | 632 | 632 | - | - | - | - | - |
+| l13_drop_recipe_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot') | alt | PASS | 632 | 632 | 632 | - | - | - | - | - |
 | l13_drop_recipe_grind | ReachSkillLevel(skill='weaponcrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l13_drop_recipe_grind | ObtainItem(code='leather_armor', quantity=1, slot='body_armor_slot') | alt | PASS | 56 | 56 | 56 | - | - | - | - | - |
 | l13_drop_recipe_grind | ObtainItem(code='leather_hat', quantity=1, slot='helmet_slot') | alt | PASS | 118 | 118 | 118 | - | - | - | - | - |
@@ -134,14 +134,14 @@ argmax blindness: 1 of 16 walls sit on a RESOLVED root. A census that prices onl
 | l10_gearcrafting_gap_combat_blocked | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 1000001 | 1 | 1000001 | forest_ring | 1 | 1 | 0 | - |
 | l10_gearcrafting_gap_combat_blocked | ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot') | alt | PASS | 1000001 | 1 | 1000001 | forest_ring | 1 | 1 | 0 | - |
 | l21_grey_material_grind | ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot') | argmax | PASS | 80 | 80 | 80 | - | - | - | - | - |
-| l21_grey_material_grind | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | alt | PASS | 52 | 52 | 52 | - | - | - | - | - |
+| l21_grey_material_grind | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | alt | PASS | 55 | 55 | 55 | - | - | - | - | - |
 | l21_grey_material_grind | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l21_grey_material_grind | ReachSkillLevel(skill='weaponcrafting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l21_grey_material_grind | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l21_grey_material_grind | ReachSkillLevel(skill='jewelrycrafting', level=15) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l22_grey_rung_grind | ObtainItem(code='earth_ring', quantity=1, slot='ring1_slot') | argmax | PASS | 187 | 187 | 187 | - | - | - | - | - |
 | l22_grey_rung_grind | ObtainItem(code='earth_ring', quantity=1, slot='ring2_slot') | alt | PASS | 187 | 187 | 187 | - | - | - | - | - |
-| l22_grey_rung_grind | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | alt | PASS | 103 | 103 | 103 | - | - | - | - | - |
+| l22_grey_rung_grind | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | alt | PASS | 106 | 106 | 106 | - | - | - | - | - |
 | l22_grey_rung_grind | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l22_grey_rung_grind | ReachSkillLevel(skill='weaponcrafting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l22_grey_rung_grind | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -150,8 +150,8 @@ argmax blindness: 1 of 16 walls sit on a RESOLVED root. A census that prices onl
 | l12_deep_chain_grind | ReachSkillLevel(skill='gearcrafting', level=9) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_deep_chain_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 1000001 | 1 | 1000001 | forest_ring | 1 | 1 | 0 | - |
 | l12_deep_chain_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot') | alt | PASS | 1000001 | 1 | 1000001 | forest_ring | 1 | 1 | 0 | - |
-| l19_band_edge | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 52 | 52 | 52 | - | - | - | - | - |
-| l19_band_edge | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 80 | 80 | 80 | - | - | - | - | - |
+| l19_band_edge | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 55 | 55 | 55 | - | - | - | - | - |
+| l19_band_edge | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 84 | 84 | 84 | - | - | - | - | - |
 | l19_band_edge | ReachSkillLevel(skill='jewelrycrafting', level=15) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l11_band_floor | ObtainItem(code='leather_boots', quantity=1, slot='boots_slot') | argmax | PASS | 102 | 102 | 102 | - | - | - | - | - |
 | l11_band_floor | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | alt | PASS | 55 | 55 | 55 | - | - | - | - | - |
@@ -209,7 +209,7 @@ argmax blindness: 1 of 16 walls sit on a RESOLVED root. A census that prices onl
 | l22_rest_for_combat | ReachSkillLevel(skill='weaponcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l22_rest_for_combat | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l22_rest_for_combat | ReachTaskOutcome(task_code='flying_snake') | alt | PASS | 58 | 58 | 58 | - | - | - | - | - |
-| l25_currency_leaf_unfunded | ObtainItem(code='skeleton_armor', quantity=1, slot='body_armor_slot') | argmax | PASS | 267 | 267 | 267 | - | - | - | - | - |
+| l25_currency_leaf_unfunded | ObtainItem(code='skeleton_armor', quantity=1, slot='body_armor_slot') | argmax | PASS | 289 | 289 | 289 | - | - | - | - | - |
 | l25_currency_leaf_unfunded | ReachSkillLevel(skill='gearcrafting', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l25_currency_leaf_unfunded | ReachSkillLevel(skill='jewelrycrafting', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l25_currency_leaf_unfunded | ObtainItem(code='hard_leather_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |

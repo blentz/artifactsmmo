@@ -82,7 +82,7 @@
 | l40_band_entry | cooking | 35 | earns | Gather(bass_spot×1) → Craft(cooked_bass×1) |
 | l40_band_entry | fishing | 35 | earns | Gather(bass_spot×1) |
 | l40_band_entry | gearcrafting | 35 | earns | Transition((5,-3,overworld)->(5,-3,underground)) → Gather(gold_rocks×80) → Transition((5,-3,underground)->(5,-3,overworld)) → Craft(gold_bar×8) → Fight(wolf) → Fight(skeleton) → Fight(wolf) → Gather(ash_tree×70) → Craft(ash_plank×7) → Craft(skeleton_pants×1) → Fight(owlbear) → Fight(vampire) → Craft(royal_skeleton_pants×1) |
-| l40_band_entry | jewelrycrafting | 25 | earns | Gather(iron_rocks×50) → Craft(iron_bar×5) → Fight(green_slime) → Fight(flying_snake) → Craft(air_ring×1) |
+| l40_band_entry | jewelrycrafting | 25 | earns | Gather(iron_rocks×50) → Craft(iron_bar×5) → Fight(yellow_slime) → Fight(flying_snake) → Craft(earth_ring×1) |
 | l40_band_entry | mining | 38 | earns | Transition((5,-3,overworld)->(5,-3,underground)) → Gather(gold_rocks×10) → Transition((5,-3,underground)->(5,-3,overworld)) → Craft(gold_bar×1) |
 | l40_band_entry | weaponcrafting | 35 | declined |  |
 | l40_band_entry | woodcutting | 38 | earns | Gather(ash_tree×5) → Gather(spruce_tree×5) → Gather(dead_tree×5) → Craft(sap×1) |
@@ -161,7 +161,7 @@
 | l20_dual_utility | alchemy | 20 | earns | Withdraw(nettle_leaf×2) → Withdraw(algae×1) → Craft(minor_health_potion×1) |
 | l20_dual_utility | cooking | 15 | earns | Gather(shrimp_spot×1) → Craft(cooked_shrimp×1) |
 | l20_dual_utility | fishing | 15 | earns | Gather(shrimp_spot×1) |
-| l20_dual_utility | gearcrafting | 15 | earns | Fight(cow) → Fight(yellow_slime) → Craft(leather_hat×1) |
+| l20_dual_utility | gearcrafting | 15 | earns | Gather(iron_rocks×50) → Craft(iron_bar×5) → Fight(chicken) → Craft(iron_boots×1) |
 | l20_dual_utility | jewelrycrafting | 10 | earns | Gather(iron_rocks×60) → Craft(iron_bar×6) → Fight(sheep) → Craft(iron_ring×1) |
 | l20_dual_utility | mining | 18 | earns | Gather(iron_rocks×10) → Craft(iron_bar×1) |
 | l20_dual_utility | weaponcrafting | 15 | earns | Gather(iron_rocks×60) → Craft(iron_bar×6) → Fight(chicken) → Craft(iron_sword×1) |
@@ -169,7 +169,7 @@
 | l20_dual_utility_one_stocked | alchemy | 20 | earns | Withdraw(nettle_leaf×2) → Withdraw(algae×1) → Craft(minor_health_potion×1) |
 | l20_dual_utility_one_stocked | cooking | 15 | earns | Gather(shrimp_spot×1) → Craft(cooked_shrimp×1) |
 | l20_dual_utility_one_stocked | fishing | 15 | earns | Gather(shrimp_spot×1) |
-| l20_dual_utility_one_stocked | gearcrafting | 15 | earns | Fight(cow) → Fight(yellow_slime) → Craft(leather_hat×1) |
+| l20_dual_utility_one_stocked | gearcrafting | 15 | earns | Gather(iron_rocks×50) → Craft(iron_bar×5) → Fight(chicken) → Craft(iron_boots×1) |
 | l20_dual_utility_one_stocked | jewelrycrafting | 10 | earns | Gather(iron_rocks×60) → Craft(iron_bar×6) → Fight(sheep) → Craft(iron_ring×1) |
 | l20_dual_utility_one_stocked | mining | 18 | earns | Gather(iron_rocks×10) → Craft(iron_bar×1) |
 | l20_dual_utility_one_stocked | weaponcrafting | 15 | earns | Gather(iron_rocks×60) → Craft(iron_bar×6) → Fight(chicken) → Craft(iron_sword×1) |
