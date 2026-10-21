@@ -1579,3 +1579,11 @@ open Formal.PriorityBand
 #check @Formal.FightSeconds.floor_le                   -- a fight never costs less than the floor
 #check @Formal.FightSeconds.mono_turns                 -- more turns never cost fewer seconds
 #check @Formal.FightSeconds.anti_haste                 -- more haste never costs more seconds
+-- DropChance (spec 2026-10-18 §2.8 — a drop's chance learned from observed drops,
+-- `ai/drop_chance_core.py`):
+#check @Formal.DropChance.posterior_in_unit            -- the posterior chance is in (0, 1]
+#check @Formal.DropChance.posterior_converges_hits     -- more hits at fixed attempts never lower it
+#check @Formal.DropChance.multiplier_ge_one            -- prospecting never lowers a chance
+#check @Formal.DropChance.multiplier_monotone          -- the multiplier is monotone in P for k >= 0
+#check @Formal.DropChance.chance_le_one                -- the chance never exceeds 1
+#check @Formal.DropChance.fitK_nonneg                  -- the fitted k is never negative

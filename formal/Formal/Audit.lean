@@ -1231,3 +1231,9 @@ open Formal.PriorityBand
 #print axioms Formal.FightSeconds.floor_le
 #print axioms Formal.FightSeconds.mono_turns
 #print axioms Formal.FightSeconds.anti_haste
+#print axioms Formal.DropChance.posterior_in_unit
+#print axioms Formal.DropChance.posterior_converges_hits
+#print axioms Formal.DropChance.multiplier_ge_one
+#print axioms Formal.DropChance.multiplier_monotone
+#print axioms Formal.DropChance.chance_le_one
+#print axioms Formal.DropChance.fitK_nonneg

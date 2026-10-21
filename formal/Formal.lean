@@ -200,6 +200,7 @@ import Formal.FightOdds
 import Formal.GroupFight
 import Formal.ConsumablePrice
 import Formal.FightSeconds
+import Formal.DropChance
 import Formal.LoopRate
 import Formal.BestLoadout
 import Formal.CurrencyAffordFastFail

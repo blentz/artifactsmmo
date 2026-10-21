@@ -1945,6 +1945,26 @@ def runFightSeconds (args : Array Json) : Json :=
   let r := Formal.FightSeconds.fightSeconds (n 0, n 1) (n 2, n 3) (n 4, n 5) (n 6) (n 7, n 8)
   Json.mkObj [("num", Json.num (Int.ofNat r.1)), ("den", Json.num (Int.ofNat r.2))]
 
+/-- A learned drop chance (`Formal.DropChance.chance`) and its posterior. Args:
+`[apiRate, attempts, hits, kNum, kDen, prospecting]`. Emits `num` / `den` (the
+chance) and `postNum` / `postDen` (the posterior). -/
+def runDropChance (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let k : Formal.DropChance.Q := (intArg args 3, intArg args 4)
+  let c := Formal.DropChance.chance (n 0) (n 1) (n 2) k (intArg args 5)
+  let p := Formal.DropChance.posterior (n 0) (n 1) (n 2)
+  Json.mkObj [("num", Json.num c.1), ("den", Json.num c.2),
+              ("postNum", Json.num p.1), ("postDen", Json.num p.2)]
+
+/-- The fitted prospecting slope (`Formal.DropChance.fitK`). Args: `[count]`,
+then `[apiRate, prospecting, attempts, hits]` per sample. Emits `num` / `den`. -/
+def runDropFitK (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let samples : List Formal.DropChance.Sample := (List.range (n 0)).map fun i =>
+    (n (1 + 4 * i), intArg args (2 + 4 * i), n (3 + 4 * i), n (4 + 4 * i))
+  let r := Formal.DropChance.fitK samples
+  Json.mkObj [("num", Json.num r.1), ("den", Json.num r.2)]
+
 /-- The foods of a recovery row: `count` at `[4]`, then `[restore, priceTag,
 price, held]` each, a tag of 0 meaning no replacement. -/
 def loopFoods (n : Nat → Nat) : List Formal.LoopRate.Food :=
@@ -3178,6 +3198,10 @@ def runOne (item : Json) : Json :=
     runConsumablePrice args
   else if kind == "fight_seconds" then
     runFightSeconds args
+  else if kind == "drop_chance" then
+    runDropChance args
+  else if kind == "drop_fit_k" then
+    runDropFitK args
   else if kind == "loop_recovery" then
     runLoopRecovery args
   else if kind == "loop_xp_rate" then

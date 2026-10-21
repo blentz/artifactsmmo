@@ -1003,6 +1003,33 @@ class LearningStore:
                 .where(col(Cycle.actual_cooldown_seconds) > 0)).one()
         return None if mean is None else float(mean)
 
+    def last_cycle_id(self) -> int:
+        """The id of the newest cycle any character recorded, 0 on an empty
+        table: the mark a per-cycle reader refreshes on."""
+        with SqlSession(self._engine) as s:
+            last = s.exec(select(func.max(Cycle.id))).one()
+        return 0 if last is None else int(last)
+
+    def fleet_drop_rows(self, after_id: int,
+                        through_id: int) -> list[tuple[str, str, int | None, str | None]]:
+        """`(action_class, action_repr, prospecting, drops_json)` of every
+        character's successful gather and fight with `after_id < id <=
+        through_id`, in id order: the drop observations (spec 2026-10-18 §2.8).
+        A failed gather rolled no drop and a lost fight drops nothing, so only
+        an `ok` outcome is an attempt."""
+        with SqlSession(self._engine) as s:
+            rows = s.exec(
+                select(Cycle.action_class, Cycle.action_repr, Cycle.prospecting,
+                       Cycle.drops_json)
+                .where(col(Cycle.id) > after_id)
+                .where(col(Cycle.id) <= through_id)
+                .where(col(Cycle.outcome) == "ok")
+                .where(col(Cycle.action_class).in_(("GatherAction", "FightAction")))
+                .order_by(col(Cycle.id)))
+            return [(action_class, action_repr, prospecting, drops_json)
+                    for action_class, action_repr, prospecting, drops_json in rows
+                    if action_class is not None and action_repr is not None]
+
     def fleet_recycle_totals(self) -> dict[str, int]:
         """item_code -> units one recycled copy returns, MEASURED over every
         character's successful recycles (the bag gains `drops_json` records).

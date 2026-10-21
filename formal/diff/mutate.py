@@ -429,6 +429,9 @@ CONSUMABLE_PRICE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumab
 FIGHT_SECONDS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_seconds_core.py"
 FIGHT_SECONDS_MODEL_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
                            / "fight_seconds_model.py")
+DROP_CHANCE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "drop_chance_core.py"
+DROP_OBSERVATIONS_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
+                         / "drop_observations.py")
 CONSUMABLE_PRICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price.py"
 LOOP_RATE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate_core.py"
 LOOP_RATE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate.py"
@@ -1277,6 +1280,94 @@ FIGHT_SECONDS_MODEL_MUTATIONS = [
     ("fight seconds model: a zero-cooldown fight joins the bootstrap",
      "            if entry.type_ == LogType.FIGHT and entry.cooldown > 0:",
      "            if entry.type_ == LogType.FIGHT and entry.cooldown >= 0:"),
+]
+
+# Spec 2026-10-18 §2.8: a drop's chance learned from observed drops, and the
+# fleet's prospecting slope. Killed by tests/test_ai/test_drop_chance_core.py;
+# also by formal/diff/test_drop_chance_diff.py (exact agreement with the proved
+# Formal.DropChance.chance / fitK).
+DROP_CHANCE_CORE_MUTATIONS = [
+    ("drop chance: no prior hit",
+     "    return Fraction(1 + hits, api_rate + attempts)",
+     "    return Fraction(hits, api_rate + attempts)"),
+    ("drop chance: an impossible observation is accepted",
+     "    if api_rate < 1 or not 0 <= hits <= attempts:\n        raise ValueError(f\"posterior_chance",
+     "    if False:\n        raise ValueError(f\"posterior_chance"),
+    ("drop chance: the multiplier has no floor",
+     "    return max(Fraction(1), 1 + k * prospecting)",
+     "    return 1 + k * prospecting"),
+    ("drop chance: no cap at 1",
+     "    return min(Fraction(1), posterior_chance(",
+     "    return max(Fraction(0), posterior_chance("),
+    ("drop chance: prospecting is ignored",
+     "               * prospecting_multiplier(k, prospecting))",
+     "               * 1)"),
+    ("fit k: an impossible sample is accepted",
+     "        if api_rate < 1 or not 0 <= hits <= attempts:\n            raise ValueError(f\"fit_k",
+     "        if False:\n            raise ValueError(f\"fit_k"),
+    ("fit k: a sample without attempts is an observation",
+     "    kept = [sample for sample in samples if sample[2] > 0]",
+     "    kept = [sample for sample in samples if sample[2] >= 0]"),
+    ("fit k: a negative prospecting is enough to fit",
+     "    if not any(prospecting > 0 for _, prospecting, _, _ in kept):",
+     "    if not any(prospecting != 0 for _, prospecting, _, _ in kept):"),
+    ("fit k: the residuals are not weighted by attempts",
+     "    num = sum((attempts * prospecting * (Fraction(hits, attempts) * api_rate - 1)",
+     "    num = sum((prospecting * (Fraction(hits, attempts) * api_rate - 1)"),
+    ("fit k: the ratio is over the posterior, not the API rate",
+     "(Fraction(hits, attempts) * api_rate - 1)",
+     "(Fraction(hits, attempts) / posterior_chance(api_rate, attempts, hits) - 1)"),
+    ("fit k: a negative slope is kept",
+     "    return max(Fraction(0), num / den)",
+     "    return num / den"),
+]
+
+# The drop observations adapter and its store reads (spec §2.8, rulings T10b,
+# T11b). Killed by tests/test_ai/test_drop_observations.py.
+DROP_OBSERVATIONS_MUTATIONS = [
+    ("drop observations: the cache ignores its store",
+     "    if _COUNTS and _COUNTS[0][0] is store:",
+     "    if _COUNTS:"),
+    ("drop observations: the cache ignores new cycles",
+     "        if seen == last:\n            return tally",
+     "        if True:\n            return tally"),
+    ("drop observations: a refresh re-reads every cycle",
+     "    _fold(tally, store.fleet_drop_rows(seen, last))",
+     "    _fold(tally, store.fleet_drop_rows(0, last))"),
+    ("drop observations: a party fight is a solo attempt",
+     "    if fight.group(2) is not None:\n        return None",
+     "    if False:\n        return None"),
+    ("drop observations: counts ignore the source",
+     "    keys = [key for key in attempts if key[1] == source]",
+     "    keys = list(attempts)"),
+    ("drop observations: an unrecorded prospecting is a sample",
+     "        if prospecting is None:\n            continue",
+     "        if False:\n            continue"),
+    ("drop observations: an unknown resource has an empty table",
+     "        if source not in game_data.resource_drops_full:",
+     "        if False:"),
+    ("drop observations: an unknown monster has an empty table",
+     "    if source not in game_data.monster_levels:",
+     "    if False:"),
+    ("drop observations: a fight reads the resource table",
+     "    return game_data.monster_drops(source)",
+     "    return game_data.resource_drop_table(source)"),
+]
+
+DROP_ROWS_STORE_MUTATIONS = [
+    ("drop rows: a failed action is an attempt",
+     "                .where(col(Cycle.outcome) == \"ok\")\n"
+     "                .where(col(Cycle.action_class).in_((\"GatherAction\", \"FightAction\")))",
+     "                .where(col(Cycle.action_class).in_((\"GatherAction\", \"FightAction\")))"),
+    ("drop rows: every action class is an attempt",
+     "                .where(col(Cycle.action_class).in_((\"GatherAction\", \"FightAction\")))",
+     "                .where(col(Cycle.action_class).is_not(None))"),
+    ("drop rows: no upper mark",
+     "                .where(col(Cycle.id) <= through_id)",
+     "                .where(col(Cycle.id) <= through_id + 1)"),
+    ("drop rows: the lower mark is included",
+     "                .where(col(Cycle.id) > after_id)",
+     "                .where(col(Cycle.id) >= after_id)"),
 ]
 
 # Killed by formal/diff/test_consumable_price_diff.py (exact agreement with the
@@ -7757,7 +7848,7 @@ _ALL_SRCS = [
     TASK_CANCEL_GOAL_SRC, COMPLETE_TASK_GOAL_SRC,
     FIGHT_TERMS_CORE_SRC, FIGHT_OUTCOME_CORE_SRC, FIGHT_ODDS_CORE_SRC, GROUP_FIGHT_CORE_SRC,
     CONSUMABLE_PRICE_CORE_SRC, CONSUMABLE_PRICE_SRC, LOOP_RATE_CORE_SRC, LOOP_RATE_SRC,
-    FIGHT_SECONDS_CORE_SRC, FIGHT_SECONDS_MODEL_SRC,
+    FIGHT_SECONDS_CORE_SRC, FIGHT_SECONDS_MODEL_SRC, DROP_CHANCE_CORE_SRC, DROP_OBSERVATIONS_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
     ROOT_DECISION_SRC, GATHER_DEMAND_SRC, TUI_APP_SRC,
     OBTAIN_ITEM_ROUTING_SRC, COOLDOWN_WAIT_SRC, EQUIP_VALUE_SRC,
@@ -11598,6 +11689,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_fight_seconds_core.py", survivors)
     run_group(FIGHT_SECONDS_MODEL_SRC, FIGHT_SECONDS_MODEL_MUTATIONS,
               "tests/test_ai/test_fight_seconds_model.py", survivors)
+    run_group(DROP_CHANCE_CORE_SRC, DROP_CHANCE_CORE_MUTATIONS,
+              "tests/test_ai/test_drop_chance_core.py", survivors)
+    run_group(DROP_OBSERVATIONS_SRC, DROP_OBSERVATIONS_MUTATIONS,
+              "tests/test_ai/test_drop_observations.py", survivors)
+    run_group(LEARNING_STORE_SRC, DROP_ROWS_STORE_MUTATIONS,
+              "tests/test_ai/test_drop_observations.py", survivors)
     run_group(FIGHT_WALK_SRC, FIGHT_SECONDS_READER_MUTATIONS[:1],
               "tests/test_ai/test_loop_rate.py", survivors)
     run_group(LOOP_RATE_SRC, FIGHT_SECONDS_READER_MUTATIONS[1:],
