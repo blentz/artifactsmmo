@@ -262,3 +262,20 @@ def can_spend(state: WorldState, game_data: GameData, buying: str | None,
     the right place to be spent at this venue — is a separate question and stays
     with the caller."""
     return account_gold(state) - cost >= reserve_floor(state, game_data, buying)
+
+
+def spendable_pocket(state: WorldState, game_data: GameData,
+                     buying: frozenset[str]) -> int:
+    """The pocket gold a purchase of `buying` may spend: the pocket, less what
+    the account must keep above its reserve floor (`reserve_floor_multi`),
+    never below zero.
+
+    The pricer's side of `can_spend` (plan B Task 15, ruling T3e m3): a
+    gold buy of `cost` passes the reserve and the pocket exactly when `cost`
+    is at most this, so a price that credits held gold up to it charges the
+    fight for the gold the executor will actually refuse to spend, and no
+    more. The pocket bounds it because a vendor is paid from the pocket; the
+    bank counts toward the account the floor is asked of, as in `can_spend`."""
+    floor = reserve_floor_multi(state, game_data, buying)
+    return max(0, min(state.gold, account_gold(state) - floor))
+

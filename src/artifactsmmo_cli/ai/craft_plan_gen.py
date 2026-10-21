@@ -34,8 +34,9 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 
+from artifactsmmo_cli.ai.acquisition_cost import fight_gold_monster
 from artifactsmmo_cli.ai.actions.base import Action, serves_region
-from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.combat import FightAction, win_gold
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
@@ -61,10 +62,11 @@ from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY, heal_prep_goal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
-from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, Policy
+from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, PIECE_POLICY, Policy
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
 from artifactsmmo_cli.ai.obtain_sources import SourceKind
 from artifactsmmo_cli.ai.potion_supply import POTION_POLICY
+from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
 from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG, admit_region_edges
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
@@ -249,6 +251,12 @@ def _dispatch(goal: Goal, state: WorldState, game_data: GameData, actions: list[
         return _decompose_supply(goal, state, game_data, actions, ctx, declined, policy)
     if not isinstance(goal, GatherMaterialsGoal):
         return None
+    if goal.fight_gold:
+        # An `L*` piece priced through fight gold (plan B Task 15, ruling
+        # T3a): only its goal's walk may fight for gold, and a grey monster
+        # may pay it, as `PIECE_POLICY` priced it.
+        return _walk_plan(goal, state, game_data, actions, ctx, declined, subtasks, frozenset(),
+                          replace(policy, fight_gold=True), frozenset({GOLD_CODE}))
     return _walk_plan(goal, state, game_data, actions, ctx, declined, subtasks, frozenset(), policy)
 
 
@@ -425,9 +433,18 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
 
     relevant = admit_region_edges(goal.relevant_actions(actions, state, game_data),
                                   actions, state, game_data)
+    # A walk that may fight for gold counts only the pocket its buy may spend
+    # (`spendable_pocket`, the reserve `NpcBuy` keeps through `can_spend`), so
+    # the buy is planned only once it will pass, and the gold the reserve
+    # keeps is fought for. Its gold leg fights the monster the piece's price
+    # fought (`fight_gold_monster` under `PIECE_POLICY`).
+    walked = (replace(state, gold=spendable_pocket(state, game_data, frozenset(goal.needed)))
+              if policy.fight_gold else state)
+    gold_monster = (fight_gold_monster(state, game_data, ctx, policy=PIECE_POLICY)
+                    if policy.fight_gold else None)
     for item, needed in goal.needed.items():
         qty = _bag_target(item, needed, goal.exclude_recycle, state)
-        model = ObtainModel(state, game_data, ctx, datetime.now(UTC))
+        model = ObtainModel(walked, game_data, ctx, datetime.now(UTC))
         answer = model.walk(item, qty, policy, goal.exclude_recycle, openable,
                             frozenset(goal.needed), grey_ok)
         trip = _one_trip(item, qty, answer, state, game_data)
@@ -454,12 +471,17 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
                 legs.extend(sub)
                 break
             action = _action_for(leg, answer.graph, relevant, actions, state, game_data,
-                                 ctx.bank_accessible, grey_ok)
+                                 ctx.bank_accessible, grey_ok, gold_monster)
             if action is None:
                 if legs:
                     break
                 return _decline(declined, f"unmapped_step:{leg!r}")
             legs.append(action)
+            if isinstance(action, FightAction) and action.gold_target is not None:
+                # One fight for gold, then the next cycle re-decides (ruling
+                # T15b): a 20000-gold buy is thousands of wins, and a plan
+                # committed to all of them would not see the objective move.
+                break
             if action.is_applicable(sim, game_data):
                 sim = action.apply(sim, game_data)
         if legs:
@@ -514,11 +536,16 @@ def _bag_target(item: str, needed: int, produce: frozenset[str], state: WorldSta
 
 def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool: list[Action],
                 state: WorldState, game_data: GameData, bank_accessible: bool,
-                grey_ok: Callable[[str], bool]) -> Action | None:
+                grey_ok: Callable[[str], bool], gold_monster: str | None = None) -> Action | None:
     """The concrete action a walk step names, sized to it: the goal's own
     sized actions first, then the whole pool, and a withdraw built at the bank
     tile when neither has one. None for a route no action serves yet (GE fill,
-    sale, fight gold, task reward: 2c-2d constructs them)."""
+    sale, task reward: 2c-2d constructs them).
+
+    A fight-gold step is ONE win against `gold_monster`, the monster the
+    piece's price fought (plan B Task 15), whichever monster the walk's own
+    route names: the walk only proved fights can pay the gold. Its plan-cache
+    target is that win's mean gold in the pocket (`gold_target`)."""
     candidates = (*relevant, *pool)
     assert isinstance(step, Act), "an open gate is expanded by `_walk_plan`"
     route = graph.sources[step.item][step.route]
@@ -551,6 +578,17 @@ def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool:
         buy = next((a for a in candidates if isinstance(a, NpcBuyAction)
                     and a.npc_code == route.via and a.item_code == step.item), None)
         return None if buy is None else dataclasses.replace(buy, quantity=step.amount)
+    if route.kind is SourceKind.GOLD_DROP:
+        fight = next((a for a in (*pool, *relevant) if isinstance(a, FightAction)
+                      and a.monster_code == gold_monster and not a.participants), None)
+        if fight is None:
+            return None
+        # A grey monster may pay the gold (`PIECE_POLICY` priced it); the
+        # plain fight fails the zero-xp gate, so it is the drop_farm variant,
+        # as `select_drop_fight` hunts a grey dropper.
+        grey = game_data.xp_per_kill(fight.monster_code, state.level) <= 0
+        return dataclasses.replace(fight, drop_farm=fight.drop_farm or grey,
+                                   gold_target=win_gold(fight.monster_code, game_data))
     if route.kind is SourceKind.DROP:
         # Which dropper to fight is the proved selection's (expected kills,
         # then distance; the grey drop_farm variant): the route only proved a

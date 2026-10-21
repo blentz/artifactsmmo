@@ -1,0 +1,247 @@
+"""A gold-funded piece is served by fighting for its gold (plan B Task 15).
+
+`lifesteal_rune` sells for 20000 gold, and `PIECE_POLICY` prices it through
+gold earned by fighting (ruling T2a). Until this task the executor's walk had
+no gold-fight leg, so the rune headed `L*` and was declined
+`infeasible:lifesteal_rune:no_route:` every cycle. Ruling T3a: only that
+piece's goal may fight for gold; its leg fights the monster the price fought;
+one fight a cycle, re-decided each cycle (T15b); the buy keeps the reserve.
+Ruling T15a: the gold a price counts is gold from a fight the executor would
+take, at most `FIGHT_LEVEL_GAP_CEILING` levels above the character.
+"""
+
+from dataclasses import replace
+from fractions import Fraction
+from pathlib import Path
+
+from artifactsmmo_cli.ai.acquisition_cost import acquisition_options, fight_gold_monster
+from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING, FightAction, win_gold
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
+from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
+from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, PIECE_POLICY
+from artifactsmmo_cli.ai.plan_cache import PlanCache, cache_holdings
+from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.shared_world import attached, shared_world
+
+BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
+
+CELL = "l20_dual_utility"
+"""A level-20 character with 100 gold whose `L*` heads with the rune."""
+
+RUNE = ObtainItem("lifesteal_rune", 1, slot="rune_slot")
+PRICE = 20000
+COVERED = 20100
+"""The pocket at which the buy passes the reserve: the price plus the 100-gold
+safety floor (the rune is itself the reserved target, so its own price is
+credited back)."""
+
+GOLD_MONSTER = "highwayman"
+"""The cheapest gold per action a level-20 character would fight: level 15,
+4 gold a win."""
+
+CAPPED = "imp"
+"""Cheaper gold per action than the highwayman, and level 28: above the
+level-20 character's fight ceiling, so no price counts its gold."""
+
+
+def _world() -> GameData:
+    sc = SCENARIOS[CELL]
+    world = shared_world(BUNDLE, with_ge_orders=sc.ge_market,
+                         completed_achievements=frozenset(sc.unlocked_achievements))
+    world.active_event_codes = set(sc.active_events)
+    world.active_raid_codes = {code for code, _boss in sc.raids}
+    return world
+
+
+def _player(world: GameData, gold: int | None = None) -> GamePlayer:
+    player = GamePlayer(character=CELL, history=None)
+    player._offline_timing = committed_timing()
+    state = scenario_state(SCENARIOS[CELL], world)
+    player.seed_offline(state if gold is None else replace(state, gold=gold), world)
+    return player
+
+
+def _state(world: GameData) -> WorldState:
+    player = _player(world)
+    assert player.state is not None
+    return player.state
+
+
+def test_a_gold_funded_buy_is_served() -> None:
+    """The rune roots a plan whose one action is a win against the price's gold
+    monster, armed on one win's mean gold; nothing is declined."""
+    world = _world()
+    report = _player(world).plan_from_state()
+    assert report.decision.declined == ()
+    assert report.decision.chosen_root == RUNE
+    assert [repr(a) for a in report.plan] == [f"Fight({GOLD_MONSTER})"]
+    fight = report.plan[0]
+    assert isinstance(fight, FightAction)
+    assert fight.gold_target == win_gold(GOLD_MONSTER, world) == 4
+    assert fight.drop_farm is False
+
+
+def test_the_buy_follows_once_the_pocket_covers_it() -> None:
+    """The buy is planned once the pocket covers the price above the reserve
+    `NpcBuy` keeps (`can_spend`); one gold short, the plan still fights."""
+    world = _world()
+    state = _state(world)
+    assert spendable_pocket(replace(state, gold=COVERED), world, frozenset({RUNE.code})) == PRICE
+    assert spendable_pocket(replace(state, gold=COVERED - 1), world,
+                            frozenset({RUNE.code})) == PRICE - 1
+    covered = _player(world, COVERED).plan_from_state()
+    assert [repr(a) for a in covered.plan] == ["NpcBuy(lifesteal_rune×1@rune_vendor)"]
+    short = _player(world, COVERED - 1).plan_from_state()
+    assert [repr(a) for a in short.plan] == [f"Fight({GOLD_MONSTER})"]
+
+
+def test_the_gold_monster_is_the_one_that_priced_it() -> None:
+    """The served monster is the argmin of the rune's own priced gold routes,
+    by exact cost per gold, first of equal costs."""
+    world = _world()
+    state = _state(world)
+    ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
+    gold = acquisition_options(RUNE.code, state, world, ctx, None, policy=PIECE_POLICY)["gold"]
+    best = min(gold, key=lambda r: Fraction(r.actions_per_application) / r.yield_per)
+    assert best.venue == GOLD_MONSTER
+    assert fight_gold_monster(state, world, ctx, policy=PIECE_POLICY) == GOLD_MONSTER
+    # A policy that earns no gold by fighting names no gold monster.
+    assert fight_gold_monster(state, world, ctx, policy=DECOMPOSE_POLICY) is None
+
+
+def test_gold_fights_stay_under_the_fight_ceiling() -> None:
+    """Ruling T15a: the imp pays gold cheaper per action than any other monster,
+    and is 8 levels above the character; no gold route counts it, so the price
+    and the served fight are the highwayman's."""
+    world = _world()
+    state = _state(world)
+    ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
+    ceiling = state.level + FIGHT_LEVEL_GAP_CEILING
+    assert world.monster_level(CAPPED) > ceiling
+    assert world.monster_max_gold(CAPPED) > 0
+    gold = acquisition_options("gold", state, world, ctx, None, policy=PIECE_POLICY)["gold"]
+    assert all(world.monster_level(r.venue) <= ceiling for r in gold if r.kind == "gold_drop")
+    assert CAPPED not in {r.venue for r in gold}
+    lifted = replace(state, level=world.monster_level(CAPPED) - FIGHT_LEVEL_GAP_CEILING)
+    lifted_ctx = attached(lifted, world, TIMED_NO_PROFILE_CONTEXT, None)
+    assert CAPPED in {r.venue for r in acquisition_options(
+        "gold", lifted, world, lifted_ctx, None, policy=PIECE_POLICY)["gold"]}
+
+
+def test_gold_fight_is_only_for_the_piece() -> None:
+    """`DECOMPOSE_POLICY` still has no gold fight: the same rune goal without
+    the piece's flag is declined as before, and only the flagged goal fights."""
+    assert DECOMPOSE_POLICY.fight_gold is False
+    world = _world()
+    player = _player(world)
+    state = player.state
+    assert state is not None
+    ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
+    actions = player._build_actions()
+    declined: list[str] = []
+    plain = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1})
+    assert decompose(plain, state, world, actions, ctx, declined) is None
+    assert declined == ["infeasible:lifesteal_rune:no_route:"]
+    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True)
+    plan = decompose(piece, state, world, actions, ctx)
+    assert plan is not None and [repr(a) for a in plan] == [f"Fight({GOLD_MONSTER})"]
+
+
+def test_a_win_projects_its_mean_gold() -> None:
+    """`FightAction.apply` adds one win's mean gold, `(min + max) // 2` of the
+    API's range, not its best case."""
+    world = _world()
+    state = _state(world)
+    low, high = world.monster_min_gold(GOLD_MONSTER), world.monster_max_gold(GOLD_MONSTER)
+    assert low < high
+    fight = FightAction(monster_code=GOLD_MONSTER,
+                        locations=frozenset(world.all_monster_locations[GOLD_MONSTER]))
+    assert fight.apply(state, world).gold == state.gold + (low + high) // 2
+
+
+def test_the_gold_leg_counts_the_pocket() -> None:
+    """The cache arms a gold fight on the pocket: it advances once one win's
+    gold has arrived in `state.gold`, which no bag count ever shows."""
+    world = _world()
+    state = _state(world)
+    fight = FightAction(monster_code=GOLD_MONSTER, gold_target=4,
+                        locations=frozenset(world.all_monster_locations[GOLD_MONSTER]))
+    cache = PlanCache(selected_goal=GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}),
+                      plan=[fight], crafting_target=None, plan_level=state.level,
+                      goal_repr="g")
+    cache.arm_step(cache_holdings(state), world)
+    assert cache.step_target == state.gold + 4
+    assert cache.batch_satisfied(cache_holdings(replace(state, gold=state.gold + 3)), world) is False
+    assert cache.batch_satisfied(cache_holdings(replace(state, gold=state.gold + 4)), world) is True
+
+
+def test_each_gold_fight_cycle_re_decides() -> None:
+    """Ruling T15b: one fight per cycle. Two consecutive cycles each decide
+    afresh: the first plans one win, the win's gold ends its plan, and the
+    second cycle re-decides rather than repeating a committed leg."""
+    world = _world()
+    player = _player(world)
+    state = player.state
+    assert state is not None
+    player._last_ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
+    actions = player._build_actions()
+    for _cycle in range(2):
+        _goal, plan, _tried, replanned = player._plan_or_reuse(state, world, actions)
+        assert replanned is True
+        assert [repr(a) for a in plan] == [f"Fight({GOLD_MONSTER})"]
+        state = plan[0].apply(state, world)
+        cache = player._plan_cache
+        assert cache is not None
+        assert cache.batch_satisfied(cache_holdings(state), world) is True
+        cache.advance()
+        assert cache.exhausted()
+        player._last_outcome = "ok"
+        player.state = state
+
+
+def test_a_grey_gold_monster_is_fought_as_a_drop_farm() -> None:
+    """At level 39 the imp is still the cheapest gold, and pays no XP: the gold
+    fight is the drop_farm variant, which the zero-XP gate lets through, as
+    `select_drop_fight` hunts a grey dropper."""
+    world = _world()
+    seeded = _player(world)
+    assert seeded.state is not None
+    player = GamePlayer(character=CELL, history=None)
+    player._offline_timing = committed_timing()
+    player.seed_offline(replace(seeded.state, level=39), world)
+    state = player.state
+    assert state is not None
+    ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
+    assert fight_gold_monster(state, world, ctx, policy=PIECE_POLICY) == CAPPED
+    assert world.xp_per_kill(CAPPED, state.level) == 0
+    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True)
+    plan = decompose(piece, state, world, player._build_actions(), ctx)
+    assert plan is not None
+    fights = [a for a in plan if isinstance(a, FightAction)]
+    assert [(repr(a), a.drop_farm, a.gold_target) for a in fights] == [
+        (f"Fight({CAPPED})", True, win_gold(CAPPED, world))]
+    assert plan[-1] is fights[0]
+
+
+def test_no_fight_for_the_gold_monster_is_a_named_decline() -> None:
+    """A pool with no fight against the price's gold monster cannot serve the
+    gold leg: the walk names the unmapped step rather than fighting another
+    monster for it."""
+    world = _world()
+    player = _player(world)
+    state = player.state
+    assert state is not None
+    ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
+    actions = [a for a in player._build_actions()
+               if not (isinstance(a, FightAction) and a.monster_code == GOLD_MONSTER)]
+    declined: list[str] = []
+    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True)
+    assert decompose(piece, state, world, actions, ctx, declined) is None
+    assert len(declined) == 1 and declined[0].startswith("unmapped_step:Act(item='gold'"), declined

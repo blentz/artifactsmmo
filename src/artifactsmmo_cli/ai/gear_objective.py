@@ -76,6 +76,7 @@ from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.obtain_model.gate import GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
+from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.objective import is_suppliable
@@ -457,8 +458,14 @@ def _price(state: WorldState, game_data: GameData, ctx: SelectionContext,
     `PIECE_POLICY`, the policy the piece was judged achievable by and is served
     by, plus the equip (the price `route_price` gives the slotted `ObtainItem`),
     and the route that price takes, the one the piece is served by (plan B
-    Task 3)."""
-    price, route = cheapest_route(code, 1, state, game_data, ctx, history, policy=PIECE_POLICY)
+    Task 3).
+
+    Held gold is credited only above the reserve the piece's buy must keep
+    (`spendable_pocket`, ruling T3e m3): the gold the executor's buy refuses
+    to spend (`can_spend`) is priced as gold to fight for, the same pocket the
+    served fight counts toward (`gold_funded_buy`)."""
+    price, route = cheapest_route(code, 1, state, game_data, ctx, history, policy=PIECE_POLICY,
+                                  pocket=spendable_pocket(state, game_data, frozenset({code})))
     return Fraction(price + EQUIP_ACTIONS), route
 
 

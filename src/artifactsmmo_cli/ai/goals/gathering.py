@@ -69,8 +69,15 @@ class GatherMaterialsGoal(Goal):
     def __init__(self, target_item: str, needed: dict[str, int],
                  skill_grind: bool = False,
                  exclude_recycle: frozenset[str] = frozenset(),
-                 carry: bool = False) -> None:
+                 carry: bool = False, fight_gold: bool = False) -> None:
         self._target_item = target_item
+        # fight_gold: the goal serves an `L*` piece priced through gold earned
+        # by fighting (plan B Task 15, ruling T3a), so its walk may fight for
+        # the gold the pocket lacks (`craft_plan_gen._dispatch`). Only that
+        # piece's goal sets it; every other walk keeps `DECOMPOSE_POLICY`'s
+        # "gold is what the pocket holds". Not part of goal identity, like
+        # `skill_grind`: the piece and its `needed` map already name it.
+        self.fight_gold = fight_gold
         # carry: the goal is to HAVE the units IN THE BAG (heal prep: food a
         # fight will eat), so banked copies do not satisfy it — the walk
         # withdraws them. Without it a banked stock read as already satisfied

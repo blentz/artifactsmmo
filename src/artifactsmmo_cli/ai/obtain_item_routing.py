@@ -130,6 +130,15 @@ def _gather_goal_for_unreachable_equippable(
     return GatherMaterialsGoal(target_item=code, needed=dict(recipe))
 
 
+def _is_bought_piece(code: str, ctx: SelectionContext) -> bool:
+    """`code` is a missing piece of the cycle's `L*` that its price does not
+    craft (`GearPiece.crafted`): the piece is served by the route that priced
+    it, and a fight for gold is one (plan B Task 15)."""
+    objective = ctx.gear_objective
+    return objective is not None and any(
+        piece.code == code and not piece.crafted for piece in objective.missing)
+
+
 def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameData,
                      ctx: SelectionContext = NO_PROFILE_CONTEXT) -> Goal | None:
     """Map an equippable target to UpgradeEquipment when it is reachable, else to
@@ -251,7 +260,11 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
             # tickets as a drop (live 2026-10-13: HAL and Lor, 163 gathers).
             # Buy once held tickets pay for it; until then, level.
             return None
-        return GatherMaterialsGoal(target_item=code, needed={code: 1})
+        # An `L*` piece the objective prices through fight gold is served by
+        # that fight (plan B Task 15): its walk may earn the gold the pocket
+        # lacks. Any other gold-priced buy still waits for the pocket.
+        return GatherMaterialsGoal(target_item=code, needed={code: 1},
+                                   fight_gold=_is_bought_piece(code, ctx))
     # Route on the STEP, not on a depth-bound proxy for it (see the docstring:
     # the deleted `is_plannable` depth gate never rejected on real data).
     #

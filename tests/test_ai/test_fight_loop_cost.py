@@ -304,3 +304,14 @@ def test_a_rest_is_priced_in_fights_of_the_fight_it_follows() -> None:
     assert rest_actions_per_fight(462, 525, Fraction(15)) == pytest.approx(
         2 * rest_actions_per_fight(462, 525, FIGHT))
     assert loss_cost(695, Fraction(15)) == Fraction(15 + 100, 15)
+
+
+def test_the_kill_cost_is_exact() -> None:
+    """Ruling T3e m1: the rest share and the kill cost are exact `Fraction`s, so
+    a price that rounds a route up once rounds the true value. A seventh of a
+    fight has no exact binary float."""
+    share = rest_actions_per_fight(462, 525, Fraction(21))
+    assert isinstance(share, Fraction)
+    assert share == Fraction(88, 21)
+    assert cycles_per_kill(462, 525, Fraction(21)) == 1 + Fraction(88, 21)
+    assert isinstance(cycles_per_kill(0, 525, Fraction(21)), Fraction)

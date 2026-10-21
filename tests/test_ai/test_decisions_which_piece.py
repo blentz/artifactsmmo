@@ -14,7 +14,7 @@ from fractions import Fraction
 
 import pytest
 
-from artifactsmmo_cli.ai.acquisition_cost import EQUIP_ACTIONS, acquisition_actions, cheapest_route
+from artifactsmmo_cli.ai.acquisition_cost import EQUIP_ACTIONS, cheapest_route
 from artifactsmmo_cli.ai.decisions.root import (
     IsThisTargetBlocked,
     RootResolution,
@@ -28,6 +28,7 @@ from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
@@ -304,15 +305,15 @@ def test_a_crafted_piece_still_climbs() -> None:
 
 
 def test_cheapest_route_matches_the_price(bundle: GameData) -> None:
-    """One pricer: for each missing piece of Robby's objective, `cheapest_route`
-    is `acquisition_actions` less the equip, and it is the piece's own price
-    and route."""
+    """One pricer: for each missing piece of Robby's objective, the piece's
+    own price and route are `cheapest_route`'s answer plus the equip (ruling
+    T3e m6a: `acquisition_actions` is `cheapest_route` by construction, so
+    only the piece's fields are asked)."""
     state = _robby()
     objective = gear_objective(state, bundle, CTX, None)
     assert objective is not None and objective.missing
     for piece in objective.missing:
-        price, route = cheapest_route(piece.code, 1, state, bundle, CTX, None,
-                                      policy=PIECE_POLICY)
-        assert price == acquisition_actions(piece.code, 1, state, bundle, CTX, equip=True,
-                                            policy=PIECE_POLICY) - EQUIP_ACTIONS, piece
+        price, route = cheapest_route(
+            piece.code, 1, state, bundle, CTX, None, policy=PIECE_POLICY,
+            pocket=spendable_pocket(state, bundle, frozenset({piece.code})))
         assert (Fraction(price + EQUIP_ACTIONS), route) == (piece.price, piece.route), piece

@@ -323,19 +323,24 @@ def test_l20_dual_utility_climbs_the_blocking_skill_not_the_char_level() -> None
     `steel_battleaxe`, weaponcrafting-gated, so the root is the next
     weaponcrafting level, and the plan is one committed grind cycle ending in
     the `iron_sword` craft that earns. No level grind is offered while `L*`
-    is missing (spec 2026-10-18 §6.2): the trunk is no longer a fallback."""
+    is missing (spec 2026-10-18 §6.2): the trunk is no longer a fallback.
+
+    RE-DERIVED plan B Task 15: `L*`'s first piece, the 20000-gold
+    `lifesteal_rune`, is served now (its gold earned by fighting), so it is
+    the root and the plan is one gold fight against the highwayman, the
+    cheapest gold the character would fight; the weaponcrafting climb for
+    `steel_battleaxe` is the first fallback. The fight serves the piece, not
+    character XP."""
     report = _run(CRITERION_2_WINNABLE)
-    assert report.decision.chosen_root == ReachSkillLevel(
-        skill="weaponcrafting", level=16)
-    assert report.decision.blocked_target == "steel_battleaxe"
+    assert report.decision.chosen_root == ObtainItem("lifesteal_rune", 1, slot="rune_slot")
+    assert report.decision.blocked_target is None
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal) == "ReachSkill(weaponcrafting->16)"
-    assert [repr(a) for a in report.plan] == [
-        "Gather(iron_rocks×60)", "Craft(iron_bar×6)", "Fight(chicken)", "Craft(iron_sword×1)"]
-    # The climb is bounded (current + 1, not the whole gate), and nothing
-    # offers a level grind while a piece is missing.
-    assert report.decision.chosen_root.level == 16
+    assert repr(report.selected_goal) == "GatherMaterials(lifesteal_rune, {lifesteal_rune:1})"
+    assert [repr(a) for a in report.plan] == ["Fight(highwayman)"]
+    # The climb behind it is bounded (current + 1, not the whole gate), and
+    # nothing offers a level grind while a piece is missing.
+    assert report.decision.fallback_roots[0] == ReachSkillLevel(skill="weaponcrafting", level=16)
     assert not any(isinstance(r, ReachCharLevel) for r in report.decision.fallback_roots)
 
 

@@ -32,6 +32,7 @@ The gates on a fight, whatever it pays:
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
+from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING, win_gold
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.loadout_win import wins_with_a_loadout
@@ -109,14 +110,22 @@ def gold_drop_routes(state: WorldState, game_data: GameData) -> list[Route]:
     Gold is minted by fighting: every win pays between the monster's
     `min_gold` and `max_gold` (API data). The route yields the expected
     amount, `(min + max) // 2`, at least 1 (D-R: expected yields); a monster
-    whose `max_gold` is 0 pays nothing and has no route."""
+    whose `max_gold` is 0 pays nothing and has no route.
+
+    Only a monster the executor would fight (plan B Task 15, ruling T15a):
+    at most `FIGHT_LEVEL_GAP_CEILING` above the character, `FightAction`'s
+    suicide guard, the same ceiling `gear_objective._candidates` puts on `m*`.
+    The gold a piece is priced by is the gold the fight that serves it earns:
+    in `l20_dual_utility` the level-28 imp paid gold cheapest, and the level-20
+    character could never fight it."""
     rested = _Rested(state)
+    ceiling = state.level + FIGHT_LEVEL_GAP_CEILING
     out: list[Route] = []
     for monster in game_data.monsters.levels:
         top = game_data.monster_max_gold(monster)
-        if top <= 0:
+        if top <= 0 or game_data.monster_level(monster) > ceiling:
             continue
-        paid = max(1, (game_data.monster_min_gold(monster) + top) // 2)
+        paid = max(1, win_gold(monster, game_data))
         out.append(Route(GOLD_CODE, SourceKind.GOLD_DROP, monster, paid, UNBOUNDED_CAPACITY,
                          _fight_gates(monster, state, game_data, rested)))
     return out

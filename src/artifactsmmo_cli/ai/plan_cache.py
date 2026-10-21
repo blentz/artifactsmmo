@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 
 @dataclass
@@ -39,6 +40,11 @@ class PlanCache:
     repeats until the bag holds the units the plan counted on, and the legs
     after it find their inputs.
 
+    A fight planned for gold (`FightAction.gold_target`, plan B Task 15) is
+    armed on the POCKET: gold is `state.gold`, never a bag item, so the holding
+    is `cache_holdings`' gold entry. It repeats until one win's mean gold has
+    arrived; the plan then ends and the next cycle re-decides (ruling T15b).
+
     None for every other step, which is then trivially satisfied.
     """
 
@@ -54,20 +60,27 @@ class PlanCache:
     def exhausted(self) -> bool:
         return self.cursor >= len(self.plan)
 
-    def arm_step(self, inventory: Mapping[str, int], game_data: GameData) -> None:
+    def arm_step(self, holdings: Mapping[str, int], game_data: GameData) -> None:
         """Snapshot the current step's completion target. Call on every advance
-        and on every plan install (fresh decide or resumed commitment)."""
+        and on every plan install (fresh decide or resumed commitment).
+        `holdings` is `cache_holdings(state)`: the bag, and the pocket's gold."""
         output = _output(self.current(), game_data)
-        self.step_target = None if output is None else inventory.get(output[0], 0) + output[1]
+        self.step_target = None if output is None else holdings.get(output[0], 0) + output[1]
 
-    def batch_satisfied(self, inventory: Mapping[str, int], game_data: GameData) -> bool:
+    def batch_satisfied(self, holdings: Mapping[str, int], game_data: GameData) -> bool:
         """True when the armed step's target holding has been reached. Always
         True for a step with no target (step_target is None), so such an
         advance behaves exactly as it did before batching existed."""
         output = _output(self.current(), game_data)
         if self.step_target is None or output is None:
             return True
-        return inventory.get(output[0], 0) >= self.step_target
+        return holdings.get(output[0], 0) >= self.step_target
+
+
+def cache_holdings(state: WorldState) -> dict[str, int]:
+    """What a step's target counts: the bag, plus the pocket's gold under
+    `GOLD_CODE` (as the walk's on hand counts it, `ObtainModel.in_bag`)."""
+    return {**state.inventory, GOLD_CODE: state.gold}
 
 
 def _output(action: Action | None, game_data: GameData) -> tuple[str, int] | None:
@@ -76,9 +89,12 @@ def _output(action: Action | None, game_data: GameData) -> tuple[str, int] | Non
     is armed too: a secondary drop (algae from a gudgeon spot) can come up
     empty, and the leg after it needs what it was planned to deliver. The
     walk's gather and drop routes yield one per application, so a gather's
-    quantity IS the units its leg was planned for (`CommittedLoop`)."""
+    quantity IS the units its leg was planned for (`CommittedLoop`). A gold
+    fight's units are gold (`GOLD_CODE`, read from the pocket)."""
     if isinstance(action, GatherAction):
         return action.drop_item(game_data), action.quantity
     if isinstance(action, FightAction):
+        if action.gold_target is not None:
+            return GOLD_CODE, action.gold_target
         return action.drop_target
     return None

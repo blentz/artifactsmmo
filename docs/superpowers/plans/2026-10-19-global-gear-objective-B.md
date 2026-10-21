@@ -104,6 +104,27 @@
   - `test_held_gold_is_free_up_to_the_pocket` (ruling T2k): with a store, a GE fill or NPC buy whose gold the pocket covers prices its gold at 0. Only gold beyond the pocket costs its production price, the same "free until used up" rule as held potions. The cell-5 amulet prices the same with and without a store.
 - [ ] **Step 2–4: FAIL, implement, PASS.** Add mutants for the route check, the gold-funded serve and the pocket rule, then commit `feat(objective): a piece is served by the route that priced it`.
 
+### Task 15: A gold-funded piece is served by fighting for its gold (ruling T3a)
+
+**Execution order:** directly after Task 3. Task 3 prices a piece through fight gold (`GOLD_DROP`), but the executor has no gold-fight path, so such a piece is declined `no_route`.
+
+**Files:**
+- Modify: `src/artifactsmmo_cli/ai/obtain_model/policy.py`. `DECOMPOSE_POLICY` keeps `fight_gold=False`. The step that serves an `L*` piece decomposes under a policy with `fight_gold=True`, only for that piece's goal.
+- Modify: `src/artifactsmmo_cli/ai/craft_plan_gen.py` (`_action_for`) and the plan cache's `drop_target`.
+  - A `GOLD_DROP` leg maps to the `FightAction` of the monster the pricer chose. That is the pricer's exact cost-per-gold argmin, so the piece is served by the route that priced it.
+  - The cache target for that leg is `state.gold` reaching the buy price plus the reserve, not a bag count.
+- Modify: `FightAction.apply` projects the gold one win yields, at the mean of `min_gold`/`max_gold` (API data), so the planner can see progress.
+- Plan shape: one fight per cycle, re-decided each cycle. Do not plan a several-hundred-fight leg.
+- The final buy honours the existing gold reserve, exactly as `NpcBuy` does today.
+- Test: `tests/test_ai/test_gold_funded_piece.py`. Re-pin the 7 `lifesteal_rune` decline pins from Task 2.
+
+- [ ] **Step 1: Failing tests:**
+  - `test_a_gold_funded_buy_is_served`: `lifesteal_rune` in `l20_dual_utility` roots a plan whose first action is a `Fight` of the pricer's gold monster. It is no longer declined `infeasible:lifesteal_rune:no_route:`.
+  - `test_the_buy_follows_once_the_pocket_covers_it`: with `state.gold` at the price plus the reserve, the first action is the `NpcBuy`.
+  - `test_the_gold_monster_is_the_one_that_priced_it`: the served monster equals `cheapest_route`'s monster for that piece.
+  - `test_gold_fight_is_only_for_the_piece`: with no `L*` piece on a gold route, no plan contains a gold leg (DECOMPOSE unchanged).
+- [ ] **Step 2–4:** FAIL, implement, then run the full suite and rewrite moved outcomes exactly. Add mutants: max instead of mean gold, the cache counting the bag, `fight_gold` on globally, and the reserve ignored. Commit `feat(objective): a gold-funded piece is served by fighting for its gold`.
+
 ### Task 4: Gain is what the piece adds to `L*`, not to a bare fighter
 
 **SUPERSEDED (2026-10-19)** by the `zero-gain` hotfix branch, which implements spec §2.8 bullet 1 and merges to main first. This branch rebases onto it. Skip this task; the ledger records the hotfix commit.

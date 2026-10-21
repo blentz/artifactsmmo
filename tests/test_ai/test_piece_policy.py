@@ -48,7 +48,7 @@ from artifactsmmo_cli.ai.scenario import (
 )
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -84,6 +84,11 @@ MAP_PRICE = 9715
 fought for at the wolf's exact win cost and rounded once (ruling T2m M1;
 14904 when each win was rounded up), plus the wolf's tile, the vendor's tile,
 the buy and the equip."""
+
+PIECE_MAP_PRICE = 9780
+"""The map's price as a piece of `L*` (ruling T3e m3): its 100-gold pocket sits
+under the 100-gold safety floor its buy must keep, so all 15000 gold is fought
+for, 25 more wolf wins than `MAP_PRICE`'s 14900."""
 
 RUNE_CELL = "l20_dual_utility"
 """A level-20 character whose `L*` heads with the 20000-gold `lifesteal_rune`."""
@@ -169,7 +174,7 @@ def test_an_event_vendor_counts_only_while_live() -> None:
     assert objective is not None
     assert objective.loadout[EVENT_SLOT] == EVENT_ITEM
     assert [(p.code, p.layer, p.price) for p in objective.missing if p.code == EVENT_ITEM] == [
-        (EVENT_ITEM, 0, Fraction(MAP_PRICE))]
+        (EVENT_ITEM, 0, Fraction(PIECE_MAP_PRICE))]
     assert actionable_step(node, live, world, TIMED_NO_PROFILE_CONTEXT) == node
 
     down = _event(base, world, False)
@@ -309,15 +314,12 @@ def test_route_price_forwards_its_policy(policy) -> None:  # type: ignore[no-unt
         assert route_price(node, live, world, TIMED_NO_PROFILE_CONTEXT, None) == price
 
 
-def test_a_gold_funded_piece_is_achievable_and_declined_until_served() -> None:
-    """Ruling T2h, pinned as it stands: the 20000-gold `lifesteal_rune` is
+def test_a_gold_funded_piece_is_achievable_and_served() -> None:
+    """Ruling T2h, served by plan B Task 15: the 20000-gold `lifesteal_rune` is
     achievable under `PIECE_POLICY` (its gold earned by fighting), priced and
-    first in `L*`'s order; the executor buys from the pocket, so the arbiter
-    declines it as having no route, and the walk falls through to the next
-    piece's climb. Serving it (fight for the gold, then buy) is Task 3's and
-    waits on a ruling: the executor's walk has no gold-fight leg (Task 3
-    report, NEEDS_CONTEXT). Task 3 routes it as its BUY, so its root is the
-    rune itself, as before."""
+    first in `L*`'s order, and no longer declined: its root is the rune itself
+    (Task 3 routes it as its BUY) and its goal fights for the gold
+    (`test_gold_funded_piece`)."""
     world = _world(RUNE_CELL)
     player = GamePlayer(character=RUNE_CELL, history=None)
     player._offline_timing = committed_timing()
@@ -328,9 +330,9 @@ def test_a_gold_funded_piece_is_achievable_and_declined_until_served() -> None:
     assert objective is not None
     assert (objective.missing[0].slot, objective.missing[0].code) == (rune.slot, rune.code)
     assert objective.missing[0].price < UNOBTAINABLE_PER_UNIT
-    assert report.decision.declined == ((repr(rune), "infeasible:lifesteal_rune:no_route:"),)
-    assert report.decision.chosen_root == ReachSkillLevel(skill="weaponcrafting", level=16)
-    assert repr(report.selected_goal) == "ReachSkill(weaponcrafting->16)"
+    assert report.decision.declined == ()
+    assert report.decision.chosen_root == rune
+    assert repr(report.selected_goal) == "GatherMaterials(lifesteal_rune, {lifesteal_rune:1})"
 
 
 # --- plan B Task 3: the price's route, held gold, exact fights --------------
@@ -361,7 +363,12 @@ def test_held_gold_is_free_up_to_the_pocket() -> None:
     store as without one, under either policy; with a store the priced climb
     no longer outbids it. Only gold beyond the pocket costs its production:
     200 held leaves 13 to fight for under `PIECE_POLICY`, while `LEGACY`, with
-    no gold route, takes the climbed craft."""
+    no gold route, takes the climbed craft.
+
+    The 13 are 7 yellow_slime wins (11 actions, rounded once): ruling T15a
+    takes the level-15 highwayman, whose gold per action was the cheapest, out
+    of a level-12 character's gold routes (above its fight ceiling), and its
+    4 wins cost 12."""
     busy = shared_world(BUNDLE, with_ge_orders=True)
     ctx = TIMED_NO_PROFILE_CONTEXT
     climbing = replace(scenario_state(SCENARIOS[GE_CELL], busy),
@@ -371,11 +378,13 @@ def test_held_gold_is_free_up_to_the_pocket() -> None:
     for policy in (PIECE_POLICY, LEGACY):
         for history in (None, store):
             assert route_price(AMULET, climbing, busy, ctx, history, policy=policy) == 3
-    assert cheapest_route(AMULET.code, 1, climbing, busy, ctx, store, policy=PIECE_POLICY) == (
+    assert cheapest_route(AMULET.code, 1, climbing, busy, ctx, store, policy=PIECE_POLICY,
+                          pocket=climbing.gold) == (
         2, SourceKind.GE_FILL)
     short = replace(climbing, gold=200)
-    assert route_price(AMULET, short, busy, ctx, store, policy=PIECE_POLICY) == 16
-    assert cheapest_route(AMULET.code, 1, short, busy, ctx, store, policy=LEGACY) == (
+    assert route_price(AMULET, short, busy, ctx, store, policy=PIECE_POLICY) == 15
+    assert cheapest_route(AMULET.code, 1, short, busy, ctx, store, policy=LEGACY,
+                          pocket=short.gold) == (
         38, SourceKind.CRAFT)
 
 
@@ -388,9 +397,11 @@ def test_an_unpriced_climb_is_served_as_its_craft() -> None:
     ctx = TIMED_NO_PROFILE_CONTEXT
     state = derived_scenario_state(SCENARIOS[CLIMB_CELL], world)
     for policy in (PIECE_POLICY, LEGACY):
-        assert cheapest_route(LEATHER.code, 1, state, world, ctx, None, policy=policy) == (
+        assert cheapest_route(LEATHER.code, 1, state, world, ctx, None, policy=policy,
+                              pocket=state.gold) == (
             UNOBTAINABLE_PER_UNIT, SourceKind.CRAFT)
-    assert cheapest_route("tasks_coin", 1, state, world, ctx, None, policy=LEGACY) == (
+    assert cheapest_route("tasks_coin", 1, state, world, ctx, None, policy=LEGACY,
+                          pocket=state.gold) == (
         UNOBTAINABLE_PER_UNIT, None)
 
 

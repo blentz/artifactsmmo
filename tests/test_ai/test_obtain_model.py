@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
 from artifactsmmo_cli.ai.decompose_core import Act
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
@@ -477,13 +478,17 @@ def test_mints_is_capability_not_stock(world: tuple[WorldState, GameData]) -> No
 
 def test_every_monster_that_pays_gold_is_a_gold_route(world: tuple[WorldState, GameData]) -> None:
     """Gold is earned by winning fights: one GOLD_DROP route per paying
-    monster, yielding the expected (min + max) // 2 per win, with the same
-    fight gates as an item drop. A monster that pays nothing has no route."""
+    monster the executor would fight (at most `FIGHT_LEVEL_GAP_CEILING` above
+    the character, ruling T15a), yielding the expected (min + max) // 2 per
+    win, with the same fight gates as an item drop. A monster that pays
+    nothing has no route, and neither has one above the ceiling."""
     state, gd = world
     routes = [r for r in ObtainModel(state, gd, _ctx(), NOW).routes(GOLD_CODE)
               if r.kind is SourceKind.GOLD_DROP]
+    ceiling = state.level + FIGHT_LEVEL_GAP_CEILING
     paying = [m for m in gd.monsters.levels if gd.monster_max_gold(m) > 0]
-    assert [r.via for r in routes] == paying and len(paying) < len(gd.monsters.levels)
+    fought = [m for m in paying if gd.monster_level(m) <= ceiling]
+    assert [r.via for r in routes] == fought and len(fought) < len(paying) < len(gd.monsters.levels)
     for r in routes:
         assert r.yield_per == max(1, (gd.monster_min_gold(r.via) + gd.monster_max_gold(r.via)) // 2)
         assert {g.kind for g in r.gates} == {GateKind.SPAWN_LIVE, GateKind.SPAWN_KNOWN,

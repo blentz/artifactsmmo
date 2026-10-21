@@ -71,7 +71,7 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.rest_cooldown_core import rest_cooldown_seconds
 from artifactsmmo_cli.ai.thresholds import CRITICAL_HP_FRACTION
 
-FIGHT_ACTIONS_PER_KILL = 1.0
+FIGHT_ACTIONS_PER_KILL = Fraction(1)
 """The Fight action itself. One kill is one Fight, and one Fight is the UNIT —
 every other action in this module is priced as a multiple of it."""
 
@@ -114,7 +114,7 @@ def fights_per_rest(expected_damage: int, max_hp: int) -> int:
     return int(USABLE_HP_FRACTION * max_hp // expected_damage) + 1
 
 
-def rest_actions_per_fight(expected_damage: int, max_hp: int, fight_seconds: Fraction) -> float:
+def rest_actions_per_fight(expected_damage: int, max_hp: int, fight_seconds: Fraction) -> Fraction:
     """Rest cost one Fight forces, in Fight-equivalents: `fight_seconds` is that
     fight's learned duration (spec 2026-10-18 §2.9).
 
@@ -146,15 +146,21 @@ def rest_actions_per_fight(expected_damage: int, max_hp: int, fight_seconds: Fra
 
     Zero damage costs no rest, which is what keeps a genuinely trivial monster
     priced at the bare Fight action.
+
+    Exact (plan B Task 15, ruling T3e m1): the cooldown is whole seconds and
+    the fight's seconds an exact `Fraction` (the fitted timing model, whose
+    fit is where the store's float samples become exact), so the share is a
+    `Fraction` too, and the price that rounds a route up once rounds the true
+    value, not its binary approximation.
     """
     if expected_damage <= 0 or max_hp <= 0:
-        return 0.0
+        return Fraction(0)
     chain = fights_per_rest(expected_damage, max_hp)
     seconds = rest_cooldown_seconds(chain * expected_damage, max_hp)
-    return seconds / (chain * float(fight_seconds))
+    return Fraction(seconds) / (chain * fight_seconds)
 
 
-def cycles_per_kill(expected_damage: int, max_hp: int, fight_seconds: Fraction) -> float:
+def cycles_per_kill(expected_damage: int, max_hp: int, fight_seconds: Fraction) -> Fraction:
     """Total planner actions one kill costs: the Fight plus the Rest it forces.
 
     This is the denominator `cheapest_path_to_level` divides xp-per-kill by, so

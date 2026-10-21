@@ -1084,9 +1084,14 @@ def test_l20_dual_utility_empty_utility_slots_are_not_decision_candidates() -> N
     RE-DERIVED Task 5 (global gear objective): the root is the weaponcrafting
     climb in front of `L*`'s first piece (`steel_battleaxe`), and no level
     grind is offered while `L*` is missing (spec 2026-10-18 §6.2). Still no
-    potion on offer."""
+    potion on offer.
+
+    RE-DERIVED plan B Task 15: the first piece, the gold-funded
+    `lifesteal_rune`, is served (fight for its gold, then buy), so it is the
+    root; the weaponcrafting climb is the first fallback."""
     report = _run("l20_dual_utility")
-    assert report.decision.chosen_root == ReachSkillLevel(
+    assert report.decision.chosen_root == ObtainItem("lifesteal_rune", 1, slot="rune_slot")
+    assert report.decision.fallback_roots[0] == ReachSkillLevel(
         skill="weaponcrafting", level=16)
     assert not any("utility" in repr(r) for r in report.decision.fallback_roots), \
         report.decision.fallback_roots
@@ -1134,8 +1139,10 @@ def test_l20_one_stocked_utility2_is_a_candidate_but_not_a_decision_root() -> No
 
     report = _run("l20_dual_utility_one_stocked")
     # RE-DERIVED Task 5: the weaponcrafting climb in front of `L*`'s first
-    # piece, as in the empty-slots twin above.
-    assert report.decision.chosen_root == ReachSkillLevel(
+    # piece, as in the empty-slots twin above. RE-DERIVED plan B Task 15: the
+    # gold-funded rune is served, so it is the root and the climb follows it.
+    assert report.decision.chosen_root == ObtainItem("lifesteal_rune", 1, slot="rune_slot")
+    assert report.decision.fallback_roots[0] == ReachSkillLevel(
         skill="weaponcrafting", level=16)
     assert not any("utility" in repr(r) for r in report.decision.fallback_roots), \
         report.decision.fallback_roots

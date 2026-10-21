@@ -151,7 +151,7 @@ from artifactsmmo_cli.ai.party_card import card_json, card_state
 from artifactsmmo_cli.ai.party_lease_core import PartyLease, assembled
 from artifactsmmo_cli.ai.party_loop import PartyLoop, best_party_loop
 from artifactsmmo_cli.ai.party_win import party_chosen_loadout, wears_party_loadout
-from artifactsmmo_cli.ai.plan_cache import PlanCache
+from artifactsmmo_cli.ai.plan_cache import PlanCache, cache_holdings
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.plan_tree import build_plan_tree
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
@@ -816,7 +816,7 @@ class GamePlayer:
                     plan_level=state.level,
                     goal_repr=repr(selected_goal),
                 )
-                self._plan_cache.arm_step(state.inventory, game_data)
+                self._plan_cache.arm_step(cache_holdings(state), game_data)
                 if self.history is not None:
                     plan_reprs = [repr(a) for a in plan]
                     goal_json = json.dumps(goal_to_dict(selected_goal) or {})
@@ -896,7 +896,7 @@ class GamePlayer:
         # fails SAFE (discard -> cold replan on the next cycle), never
         # incorrectly. The real fix is the action codec scheduled for the
         # macro-edge work, not a change to this repr-matching scheme.
-        self._plan_cache.arm_step(state.inventory, game_data)
+        self._plan_cache.arm_step(cache_holdings(state), game_data)
 
     def _initialize(self, client: AuthenticatedClient) -> None:
         """Load game data, build the strategy engine, fetch state, and seed blocker
@@ -1331,10 +1331,10 @@ class GamePlayer:
                 # (live 2026-10-12).
                 self._publish_party_card(new_state)
                 if outcome == "ok" and self._plan_cache is not None:
-                    if self._plan_cache.batch_satisfied(new_state.inventory,
+                    if self._plan_cache.batch_satisfied(cache_holdings(new_state),
                                                         self.game_data):
                         self._plan_cache.advance()
-                        self._plan_cache.arm_step(new_state.inventory,
+                        self._plan_cache.arm_step(cache_holdings(new_state),
                                                   self.game_data)
                         if self.history is not None:
                             self.history.update_commitment_cursor(

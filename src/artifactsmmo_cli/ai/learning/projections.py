@@ -325,9 +325,13 @@ def cheapest_path_to_level(
             # `rested` (not `state`) is the judging state, matching the `is_winnable`
             # filter above: both ask what happens starting from full HP, which is
             # what the runtime does (the planner inserts a Rest before FightAction).
-            monster_cycles = cycles_per_kill(
+            #
+            # A float here, once: this walk's XP rates and cycle totals are
+            # floats (`total_cycles` is infinite when blocked), while the kill
+            # cost is exact at its source for the pricer (ruling T3e m1).
+            monster_cycles = float(cycles_per_kill(
                 expected_damage_per_fight(rung, game_data, code), rung.max_hp,
-                walk_seconds(rung, game_data, code, (), timing))
+                walk_seconds(rung, game_data, code, (), timing)))
             if (observed.sample_count > 0 and observed.char_xp > 0
                     and observed.char_xp_level is not None):
                 # Already per-CYCLE, and per REAL cycle: `expected_yield_per_cycle`

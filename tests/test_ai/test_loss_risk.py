@@ -96,9 +96,13 @@ class TestTheDropPrice:
 
     def test_the_surcharge_reads_the_named_monster(self) -> None:
         cost = loss_cost(695, FIGHT)
-        assert _loss_surcharge("king_slime", 695, (("rat", 80, 45), ("king_slime", 16, 8)), FIGHT) \
-            == float(Fraction(8, 8) * cost)
-        assert _loss_surcharge("pig", 695, (("rat", 80, 45),), FIGHT) == 0.0
+        # Exact (ruling T3e m1): the surcharge is the proved `Fraction`, not
+        # its float.
+        surcharge = _loss_surcharge("king_slime", 695, (("rat", 80, 45), ("king_slime", 16, 8)),
+                                    FIGHT)
+        assert isinstance(surcharge, Fraction)
+        assert surcharge == Fraction(8, 8) * cost
+        assert _loss_surcharge("pig", 695, (("rat", 80, 45),), FIGHT) == Fraction(0)
 
 
 class TestTheGrindRungs:

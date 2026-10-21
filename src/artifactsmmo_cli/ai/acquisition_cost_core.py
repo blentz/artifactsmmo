@@ -380,7 +380,6 @@ def bundle_acquisition_cost(
     roots: Sequence[tuple[str, int]],
     options: Mapping[str, list[RouteOption]],
     owned: Mapping[str, int],
-    free_codes: frozenset[str] = frozenset(),
 ) -> tuple[int, dict[str, int]]:
     """Lower bound on planner actions to obtain EVERY root in `roots`, as ONE
     plan, plus the pay-once keys that plan touched.
@@ -416,11 +415,10 @@ def bundle_acquisition_cost(
     paid: dict[str, int] = {}
     memo: dict[str, tuple[int | Fraction, RouteOption | None]] = {}
     holdings = dict(owned)
-    free = {code: owned.get(code, 0) for code in free_codes}
     fuel = len(options) + 1
     units = 0
     for item, qty in roots:
-        _accumulate(item, qty, options, memo, holdings, paid, actions, fuel, free)
+        _accumulate(item, qty, options, memo, holdings, paid, actions, fuel, {})
         units += max(0, qty)
     # The ceiling is over the WHOLE bundle's demand, not per root: a bundle is
     # one plan, and the alternative it is being held against is that same plan

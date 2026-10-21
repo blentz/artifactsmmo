@@ -129,7 +129,7 @@ def _expected_kills_per_unit(item: str, monster_code: str, rate: int, min_q: int
 
 
 def _loss_surcharge(monster_code: str, max_hp: int,
-                    records: Sequence[tuple[str, int, int]], fight_seconds: Fraction) -> float:
+                    records: Sequence[tuple[str, int, int]], fight_seconds: Fraction) -> Fraction:
     """Fight-equivalents the learned losses add to one win against
     `monster_code` (`loss_risk_core`, proved in `Formal.LossRisk`). USER
     2026-10-08, "Price the loss risk": expected fights per win is `1/p`, and
@@ -138,13 +138,17 @@ def _loss_surcharge(monster_code: str, max_hp: int,
 
     Live R2D2 2026-10-08 fought king_slime 22 times at L30 for 14 wins (64%)
     for its jewelrycrafting rung's `king_slimeball`; the veto (< 40%) never
-    fired, and the rung was priced as if every fight were a win."""
+    fired, and the rung was priced as if every fight were a win.
+
+    Exact, as `loss_surcharge` proves it (ruling T3e m1): the win's cost is a
+    `Fraction` from its source, so the once-per-route ceiling rounds the true
+    value."""
     cost = loss_cost(max_hp, fight_seconds)
     for monster, samples, wins in records:
         if monster == monster_code:
-            return float(loss_surcharge(samples, wins, MIN_WIN_SAMPLES,
-                                        cost.numerator, cost.denominator))
-    return 0.0
+            return loss_surcharge(samples, wins, MIN_WIN_SAMPLES,
+                                  cost.numerator, cost.denominator)
+    return Fraction(0)
 
 
 def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: int,
@@ -170,8 +174,7 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
         state, pick_loadout_cached(Rank(), state, game_data), game_data)
     kills = _expected_kills_per_unit(item, monster_code, rate, min_q, max_q,
                                      projected.prospecting, store)
-    return max(1, ceil(float(kills) * _kill_actions(monster_code, state, game_data, timing,
-                                                    records)))
+    return max(1, ceil(kills * _kill_actions(monster_code, state, game_data, timing, records)))
 
 
 def _kill_actions(monster_code: str, state: WorldState, game_data: GameData,
@@ -185,8 +188,7 @@ def _kill_actions(monster_code: str, state: WorldState, game_data: GameData,
     fight = walk_seconds(state, game_data, monster_code, (), timing)
     per_kill = cycles_per_kill(
         expected_damage_per_fight(state, game_data, monster_code), state.max_hp, fight)
-    return Fraction(per_kill) + Fraction(_loss_surcharge(monster_code, state.max_hp, records,
-                                                         fight))
+    return per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight)
 
 
 def _gather_rate(item: str, resource: str, game_data: GameData) -> tuple[int, int]:
@@ -757,8 +759,10 @@ def acquisition_options(item: str, state: WorldState, game_data: GameData,
     return options
 
 
-def _owned_with_gold(state: WorldState) -> dict[str, int]:
-    """The bag, plus the gold in it.
+def _owned_with_gold(state: WorldState, pocket: int) -> dict[str, int]:
+    """The bag, plus `pocket` gold: the gold in it the caller lets the price
+    spend (the whole pocket, or only what the reserve lets a piece's buy
+    spend: `progression_reserve.spendable_pocket`, ruling T3e m3).
 
     A gold-priced BUY route carries `inputs={"gold": price}` and the walk prices
     an input it cannot obtain at `UNOBTAINABLE_PER_UNIT` PER UNIT — so without
@@ -775,13 +779,13 @@ def _owned_with_gold(state: WorldState) -> dict[str, int]:
     separate increment (`WithdrawGoldAction` exists and is dormant precisely
     because no goal has ever needed banked gold — which is what this wall did)."""
     owned = dict(state.inventory)
-    owned["gold"] = owned.get("gold", 0) + state.gold
+    owned["gold"] = owned.get("gold", 0) + pocket
     return owned
 
 
 def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
                    ctx: SelectionContext, store: LearningStore | None,
-                   gated_drop: bool = True, *, policy: Policy,
+                   gated_drop: bool = True, *, policy: Policy, pocket: int,
                    credit_skills: frozenset[str] = frozenset()) -> tuple[int, SourceKind | None]:
     """`(price, route)`: the lower bound on planner actions to obtain `qty` of
     `item` (`acquisition_actions` without the equip), and the kind of the route
@@ -795,10 +799,12 @@ def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
     then the climb's own kind, CRAFT before GATHER, as `route_options` would
     have priced it. None only when the item has no route at all.
 
-    Held gold is free up to the pocket (ruling T2k, `_owned_with_gold`): the
+    Held gold is free up to `pocket` (ruling T2k, `_owned_with_gold`): the
     choice credits it as the walk does, so a fill or a buy the pocket covers
-    is not priced at gold's fight cost against a dearer craft."""
-    owned: dict[str, int] = _owned_with_gold(state)
+    is not priced at gold's fight cost against a dearer craft. A piece's
+    price passes the pocket above the reserve its buy must keep (ruling T3e
+    m3), so gold the executor will not spend is priced as gold to earn."""
+    owned: dict[str, int] = _owned_with_gold(state, pocket)
     options: Mapping[str, list[RouteOption]] = credit_demanded_skills(
         acquisition_options(item, state, game_data, ctx, store, gated_drop, policy=policy),
         credit_skills, game_data)
@@ -810,6 +816,26 @@ def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
         if _skill_gated(item, model, kind, policy) is not None:
             return price, kind
     return price, None
+
+
+def fight_gold_monster(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                       *, policy: Policy) -> str | None:
+    """The monster a price under `policy` fights for gold: the argmin of
+    gold's routes (`priced_route`), the exact cost per gold of each win
+    (ruling T2m M1), first of equal costs. A piece priced through fight gold
+    is served by fighting this monster (plan B Task 15: served by the route
+    that priced it). None when gold's cheapest route is not a fight.
+
+    The route a price picks for gold is gold's own choice, whatever is bought
+    with it and however much (`_cheapest_route` is per unit, memoised per
+    item), so it is the one inside every piece's price. No store: a gold
+    route's price reads the timing model and the fight records on `ctx`, not
+    an observed rate."""
+    options = acquisition_options(GOLD_CODE, state, game_data, ctx, None, policy=policy)
+    _price, route = priced_route(GOLD_CODE, 1, options, {})
+    if route is None or route.kind != SourceKind.GOLD_DROP.value:
+        return None
+    return route.venue
 
 
 def acquisition_actions(item: str, qty: int, state: WorldState,
@@ -839,7 +865,8 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
 
     The price is `cheapest_route`'s, so there is one pricer."""
     price, _route = cheapest_route(item, qty, state, game_data, ctx, store, gated_drop,
-                                   policy=policy, credit_skills=credit_skills)
+                                   policy=policy, pocket=state.gold,
+                                   credit_skills=credit_skills)
     return price + (EQUIP_ACTIONS if equip else 0)
 
 
@@ -862,9 +889,9 @@ def bundle_acquisition_actions(
     making it compare bundles is the epic, not a diagnostic.
 
     `equip` is charged PER ROOT, not once: every piece has to be put on."""
-    owned: dict[str, int] = _owned_with_gold(state)
+    owned: dict[str, int] = _owned_with_gold(state, state.gold)
     options: dict[str, list[RouteOption]] = {}
     for item, _qty in roots:
         options.update(acquisition_options(item, state, game_data, ctx, store))
-    total, paid = bundle_acquisition_cost(roots, options, owned, frozenset({GOLD_CODE}))
+    total, paid = bundle_acquisition_cost(roots, options, owned)
     return total + (EQUIP_ACTIONS * len(roots) if equip else 0), paid

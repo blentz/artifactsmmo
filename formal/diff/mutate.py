@@ -169,6 +169,7 @@ CRAFT_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "craft
 LEARNING_STORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "store.py"
 LOCATION_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 PROGRESSION_RESERVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression_reserve_core.py"
+PROGRESSION_RESERVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression_reserve.py"
 DECOMPOSE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decompose_core.py"
 GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxonomy_core.py"
 POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
@@ -3751,11 +3752,11 @@ OBTAIN_MODEL_DROP_MUTATIONS = [
      "    winnable = (live or known) and drop_fight_winnable(",
      "    winnable = live and drop_fight_winnable("),
     ("drop_routes: a monster that pays no gold is a gold route",
-     "        if top <= 0:\n            continue",
-     "        if top < 0:\n            continue"),
+     "        if top <= 0 or game_data.monster_level(monster) > ceiling:\n            continue",
+     "        if top < 0 or game_data.monster_level(monster) > ceiling:\n            continue"),
     ("drop_routes: fight gold yields the most a win pays",
-     "        paid = max(1, (game_data.monster_min_gold(monster) + top) // 2)",
-     "        paid = max(1, top)"),
+     "        paid = max(1, win_gold(monster, game_data))",
+     "        paid = max(1, game_data.monster_max_gold(monster))"),
 ]
 # The projected fighter (global gear objective, spec 2026-10-18 §2.3): a DROP
 # route's WINNABLE gate asks it, stock never reads it. Killed by
@@ -3815,10 +3816,10 @@ PIECE_POLICY_OBJECTIVE_MUTATIONS = [
      "            if model.feasible(code, 1, type(PIECE_POLICY)(**{**vars(PIECE_POLICY), "
      "'ge_routes': False})):"),
     ("gear_objective: the price back on LEGACY's switches (no event vendor, no fight gold)",
-     "    price, route = cheapest_route(code, 1, state, game_data, ctx, history, policy=PIECE_POLICY)",
+     "    price, route = cheapest_route(code, 1, state, game_data, ctx, history, policy=PIECE_POLICY,",
      "    price, route = cheapest_route(code, 1, state, game_data, ctx, history, "
      "policy=type(PIECE_POLICY)(**{**vars(PIECE_POLICY), 'event_vendors': False, "
-     "'fight_gold': False}))"),
+     "'fight_gold': False}),"),
 ]
 # ruling T2c': only a policy that sets `price_climbs` charges a climb for a
 # gate it opens; the skill grind's ranking (GRIND_PRICING) opens the gathering
@@ -3909,6 +3910,84 @@ SERVED_BY_ITS_ROUTE_PRICER_MUTATIONS = [
     ("acquisition_cost: _climbs scans the gates without price_climbs (M2)",
      "    if not policy.price_climbs:\n        return frozenset()\n",
      "    if False:\n        return frozenset()\n"),
+]
+# plan B Task 15: a gold-funded piece is served by fighting for its gold
+# (rulings T3a, T15a, T15b, T3e). Killed by
+# tests/test_ai/test_gold_funded_piece.py unless a group names another file.
+GOLD_FUNDED_COMBAT_MUTATIONS = [
+    ("combat: a win is planned at the most gold it can pay, not the mean",
+     "    return (game_data.monster_min_gold(monster_code) + game_data.monster_max_gold(monster_code)) // 2\n",
+     "    return game_data.monster_max_gold(monster_code)\n"),
+    ("combat: FightAction.apply projects no gold",
+     "            gold=state.gold + win_gold(self.monster_code, game_data),\n",
+     ""),
+]
+GOLD_FUNDED_PLAN_CACHE_MUTATIONS = [
+    ("plan_cache: the cache counts the bag, not the pocket",
+     "    return {**state.inventory, GOLD_CODE: state.gold}\n",
+     "    return dict(state.inventory)\n"),
+    ("plan_cache: a gold fight is not armed",
+     "        if action.gold_target is not None:\n            return GOLD_CODE, action.gold_target\n",
+     ""),
+]
+GOLD_FUNDED_POLICY_MUTATIONS = [
+    ("policy: fight gold on for every decomposed walk",
+     "DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False, allow_grey=False,\n",
+     "DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False, allow_grey=False,\n"
+     "                           fight_gold=True,\n"),
+]
+GOLD_FUNDED_DECOMPOSE_MUTATIONS = [
+    ("craft_plan_gen: every gather goal fights for gold",
+     "    if goal.fight_gold:\n",
+     "    if True:\n"),
+    ("craft_plan_gen: the walk counts the pocket the reserve keeps (reserve ignored)",
+     "    walked = (replace(state, gold=spendable_pocket(state, game_data, frozenset(goal.needed)))\n"
+     "              if policy.fight_gold else state)\n",
+     "    walked = state\n"),
+    ("craft_plan_gen: the gold fight is the walk's monster, not the price's",
+     "                      and a.monster_code == gold_monster and not a.participants), None)\n",
+     "                      and a.monster_code == route.via and not a.participants), None)\n"),
+    ("craft_plan_gen: the plan goes on past the gold fight (no re-decide)",
+     "                # committed to all of them would not see the objective move.\n"
+     "                break\n",
+     "                # committed to all of them would not see the objective move.\n"
+     "                pass\n"),
+    ("craft_plan_gen: a grey gold monster is fought as a plain fight",
+     "        return dataclasses.replace(fight, drop_farm=fight.drop_farm or grey,\n",
+     "        return dataclasses.replace(fight, drop_farm=fight.drop_farm,\n"),
+    ("craft_plan_gen: the gold fight carries no gold target",
+     "                                   gold_target=win_gold(fight.monster_code, game_data))\n",
+     "                                   gold_target=None)\n"),
+]
+GOLD_FUNDED_ROUTING_MUTATIONS = [
+    ("obtain_item_routing: no L* piece fights for its gold",
+     "    return objective is not None and any(\n",
+     "    return objective is None and any(\n"),
+]
+GOLD_FUNDED_DROP_ROUTES_MUTATIONS = [
+    ("drop_routes: a gold route above the fight ceiling (T15a)",
+     "        if top <= 0 or game_data.monster_level(monster) > ceiling:\n",
+     "        if top <= 0:\n"),
+]
+GOLD_FUNDED_RESERVE_MUTATIONS = [
+    ("progression_reserve: the whole pocket is spendable (reserve ignored)",
+     "    return max(0, min(state.gold, account_gold(state) - floor))\n",
+     "    return max(0, state.gold)\n"),
+]
+GOLD_FUNDED_PRICE_MUTATIONS = [
+    ("gear_objective: the piece price credits the reserve's gold (T3e m3)",
+     "                                  pocket=spendable_pocket(state, game_data, frozenset({code})))\n",
+     "                                  pocket=state.gold)\n"),
+]
+GOLD_FUNDED_MONSTER_MUTATIONS = [
+    ("acquisition_cost: a gold monster is named whatever gold's cheapest route is",
+     "    if route is None or route.kind != SourceKind.GOLD_DROP.value:\n        return None\n",
+     "    if route is None:\n        return None\n"),
+]
+GOLD_FUNDED_EXACT_MUTATIONS = [
+    ("fight_loop_cost: the rest share through a float again (T3e m1)",
+     "    return Fraction(seconds) / (chain * fight_seconds)\n",
+     "    return Fraction(seconds / (chain * float(fight_seconds)))\n"),
 ]
 SERVED_BY_ITS_ROUTE_POLICY_MUTATIONS = [
     ("policy: price_climbs defaults to off (M3)",
@@ -4314,9 +4393,11 @@ GRIND_HEAL_PREP_POLICY_MUTATIONS = [
 # The committed plan (Phase 2d-L1c). Killed by tests/test_ai/test_craft_plan_gen.py.
 COMMITTED_PLAN_MUTATIONS = [
     ("craft_plan_gen: the plan stops after a fight again (a forecast, re-walked)",
-     "            legs.append(action)\n            if action.is_applicable(sim, game_data):",
-     "            legs.append(action)\n            if isinstance(action, FightAction):\n                break\n"
-     "            if action.is_applicable(sim, game_data):"),
+     "                break\n            if action.is_applicable(sim, game_data):\n"
+     "                sim = action.apply(sim, game_data)\n        if legs:",
+     "                break\n            if isinstance(action, FightAction):\n                break\n"
+     "            if action.is_applicable(sim, game_data):\n"
+     "                sim = action.apply(sim, game_data)\n        if legs:"),
     ("craft_plan_gen: a drop fight carries no drop target",
      "        return None if fight is None else dataclasses.replace(fight, drop_target=(step.item, step.amount))",
      "        return fight"),
@@ -4324,8 +4405,8 @@ COMMITTED_PLAN_MUTATIONS = [
 # A committed leg repeats until it delivers. Killed by tests/test_ai/test_plan_cache.py.
 PLAN_CACHE_TARGET_MUTATIONS = [
     ("plan_cache: a planned fight advances after one win (its drop not awaited)",
-     "    if isinstance(action, FightAction):\n        return action.drop_target",
-     "    if False:\n        return action.drop_target"),
+     "        return action.drop_target\n",
+     "        return None\n"),
     ("plan_cache: a single gather is not armed (an empty secondary drop advances)",
      "    if isinstance(action, GatherAction):",
      "    if isinstance(action, GatherAction) and action.quantity > 1:"),
@@ -6538,9 +6619,8 @@ SKILL_CREDIT_PRICE_MUTATIONS = [
 ]
 LOSS_RISK_ACQUISITION_MUTATIONS = [
     ("loss risk: the drop price ignores the learned losses",
-     "    return Fraction(per_kill) + Fraction(_loss_surcharge(monster_code, state.max_hp, records,\n"
-     "                                                         fight))\n",
-     "    return Fraction(per_kill)\n"),
+     "    return per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight)\n",
+     "    return per_kill\n"),
     ("loss risk: the routes drop the context's records",
      "                                                  store, ctx.fight_records),\n",
      "                                                  store, ()),\n"),
@@ -9938,6 +10018,7 @@ APPLY_FIGHT_MUTATIONS = [
         "        return dataclasses.replace(\n"
         "            state,\n"
         "            xp=state.xp + 10,\n"
+        "            gold=state.gold + win_gold(self.monster_code, game_data),\n"
         "            hp=new_hp,\n"
         "            x=dest[0],\n"
         "            y=dest[1],\n"
@@ -10579,8 +10660,8 @@ FIGHT_LOOP_COST_MUTATIONS = [
     ("fight_loop_cost: restore the saturating flat one-action rest charge",
      "    chain = fights_per_rest(expected_damage, max_hp)\n"
      "    seconds = rest_cooldown_seconds(chain * expected_damage, max_hp)\n"
-     "    return seconds / (chain * float(fight_seconds))",
-     "    return min(1.0, expected_damage / (USABLE_HP_FRACTION * max_hp))"),
+     "    return Fraction(seconds) / (chain * fight_seconds)",
+     "    return Fraction(min(1.0, expected_damage / (USABLE_HP_FRACTION * max_hp)))"),
     # Price the Rest for ONE fight's damage rather than the whole chain's, while
     # still amortising over the chain. Recovery then looks cheaper the longer the
     # character chains, which is the batching arbitrage the published cooldown
@@ -10605,8 +10686,8 @@ FIGHT_LOOP_COST_MUTATIONS = [
     # named-for-one-thing-denominated-in-another defect S-004 exists to forbid.
     # Killed by test_a_full_bar_rest_costs_more_than_three_fights.
     ("fight_loop_cost: convert by the rest floor instead of a fight's duration",
-     "    return seconds / (chain * float(fight_seconds))",
-     "    return seconds / (chain * 3.0)"),
+     "    return Fraction(seconds) / (chain * fight_seconds)",
+     "    return Fraction(seconds) / (chain * 3)"),
 ]
 
 
@@ -11916,6 +11997,26 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_piece_policy.py", survivors)
     run_group(OBTAIN_MODEL_POLICY_SRC, SERVED_BY_ITS_ROUTE_POLICY_MUTATIONS,
               "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(APPLY_FIGHT_SRC, GOLD_FUNDED_COMBAT_MUTATIONS,
+              "tests/test_ai/test_gold_funded_piece.py", survivors)
+    run_group(PLAN_CACHE_SRC, GOLD_FUNDED_PLAN_CACHE_MUTATIONS,
+              "tests/test_ai/test_gold_funded_piece.py", survivors)
+    run_group(OBTAIN_MODEL_POLICY_SRC, GOLD_FUNDED_POLICY_MUTATIONS,
+              "tests/test_ai/test_gold_funded_piece.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, GOLD_FUNDED_DECOMPOSE_MUTATIONS,
+              "tests/test_ai/test_gold_funded_piece.py", survivors)
+    run_group(OBTAIN_ITEM_ROUTING_SRC, GOLD_FUNDED_ROUTING_MUTATIONS,
+              "tests/test_ai/test_gold_funded_piece.py", survivors)
+    run_group(OBTAIN_MODEL_DROP_SRC, GOLD_FUNDED_DROP_ROUTES_MUTATIONS,
+              "tests/test_ai/test_gold_funded_piece.py", survivors)
+    run_group(PROGRESSION_RESERVE_SRC, GOLD_FUNDED_RESERVE_MUTATIONS,
+              "tests/test_ai/test_gold_funded_piece.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, GOLD_FUNDED_PRICE_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(ACQUISITION_COST_SRC, GOLD_FUNDED_MONSTER_MUTATIONS,
+              "tests/test_ai/test_gold_funded_piece.py", survivors)
+    run_group(FIGHT_LOOP_COST_SRC, GOLD_FUNDED_EXACT_MUTATIONS,
+              "tests/test_ai/test_fight_loop_cost.py", survivors)
     run_group(ACQUISITION_COST_SRC, PRICE_CLIMBS_SWITCH_MUTATIONS,
               "tests/test_ai/scenarios/test_fisher_cooking_rung.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_QUANTITY_MUTATIONS,

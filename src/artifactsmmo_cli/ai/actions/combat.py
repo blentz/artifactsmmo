@@ -53,6 +53,12 @@ Must stay < one swap's cost (optimize_loadout.SWAP_COST_PER_SLOT * 2) so the
 penalty orders swap-before-fight without making the swap itself non-favorable."""
 
 
+def win_gold(monster_code: str, game_data: GameData) -> int:
+    """The gold one win against `monster_code` is planned to pay: the mean of
+    the API's `min_gold` and `max_gold`, rounded down."""
+    return (game_data.monster_min_gold(monster_code) + game_data.monster_max_gold(monster_code)) // 2
+
+
 @dataclass
 class FightAction(Action):
     """Move to and fight a monster. Movement is folded into cost and execute."""
@@ -78,6 +84,12 @@ class FightAction(Action):
     # until the bag holds that many more, as it does for a batched gather.
     # Excluded from compare/repr like `drop_farm`.
     drop_target: tuple[str, int] | None = field(default=None, compare=False, repr=False)
+    # The gold this fight is planned to earn, when it is the gold leg of an
+    # `L*` piece's plan (plan B Task 15, ruling T15b): one win's mean gold. The
+    # plan cache repeats the fight until the POCKET (`state.gold`, not the bag)
+    # holds that much more, then the plan ends and the next cycle re-decides.
+    # Excluded from compare/repr like `drop_target`.
+    gold_target: int | None = field(default=None, compare=False, repr=False)
     # The transcript of the fight this instance most recently executed, for the
     # TUI. Excluded from compare so a fought action stays equal to its freshly
     # planned twin (otherwise the planner reads its cached plan as invalidated
@@ -198,9 +210,13 @@ class FightAction(Action):
                         item_count=state.inventory)
         drops = tuple(d for d, _rate, _mn, _mx in game_data.monster_drops(self.monster_code))
         inv = apply_monster_drops_pure(inv, drops)
+        # The gold one win pays, at the mean of the API's `min_gold`/`max_gold`
+        # (plan B Task 15): the gold leg of a gold-funded piece shows progress,
+        # and a buy after it sees the pocket the fight filled.
         return dataclasses.replace(
             state,
             xp=state.xp + 10,
+            gold=state.gold + win_gold(self.monster_code, game_data),
             hp=new_hp,
             x=dest[0],
             y=dest[1],
