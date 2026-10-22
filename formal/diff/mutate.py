@@ -2529,14 +2529,14 @@ SKILL_GRIND_TARGET_MUTATIONS = [
     ("skill_grind_target: acquire_steps back to counting recipe lines",
      "        acquire_steps = acquisition_actions(\n"
      "            code, 1, grind_probe_state(state, code), game_data,\n"
-     "            pricing_ctx, equip=False, policy=GRIND_PRICING)\n",
+     "            pricing_ctx, equip=False, policy=GRIND_PRICING, produce=frozenset({code}))\n",
      "        acquire_steps = len(recipe)\n"),
     # Cost-blind: every rung ties, so the selection falls through to craft_level
     # and the cheapest chain stops mattering at all.
     ("skill_grind_target: acquire_steps stops costing anything",
      "        acquire_steps = acquisition_actions(\n"
      "            code, 1, grind_probe_state(state, code), game_data,\n"
-     "            pricing_ctx, equip=False, policy=GRIND_PRICING)\n",
+     "            pricing_ctx, equip=False, policy=GRIND_PRICING, produce=frozenset({code}))\n",
      "        acquire_steps = 0\n"),
     # DELETED 2026-08-15: "acquire_steps caps the unobtainable bound", which
     # replaced the hoist with `min(999, acquisition_actions(...))` on the theory
@@ -4249,8 +4249,19 @@ GATED_GATHER_MUTATIONS = [
 # tests/test_ai/scenarios/test_fisher_cooking_rung.py.
 GRIND_PRICING_MUTATIONS = [
     ("skill_grind_target: the grind ranks under the executor's gather gate",
-     "GRIND_PRICING = replace(LEGACY, gather_skill_gate=False)",
-     "GRIND_PRICING = LEGACY"),
+     "GRIND_PRICING = replace(GRIND_POLICY, price_climbs=False, gather_skill_gate=False)",
+     "GRIND_PRICING = replace(GRIND_POLICY, price_climbs=False, gather_skill_gate=True)"),
+]
+# Priced = served (rulings T12j, T12k). Killed by
+# tests/test_ai/scenarios/test_ge_market_triple.py.
+GRIND_SERVED_PRICE_MUTATIONS = [
+    ("skill_grind_target: the grind prices a rung it would buy or withdraw",
+     "            pricing_ctx, equip=False, policy=GRIND_PRICING, produce=frozenset({code}))",
+     "            pricing_ctx, equip=False, policy=GRIND_PRICING, produce=frozenset())"),
+    ("skill_grind_target: the grind prices a GE fill its descent never takes",
+     "GRIND_PRICING = replace(GRIND_POLICY, price_climbs=False, gather_skill_gate=False)",
+     "GRIND_PRICING = replace(GRIND_POLICY, price_climbs=False, gather_skill_gate=False, "
+     "ge_routes=True)"),
 ]
 # The route-driven producer on the one walk (Phase 2b gaps, restated for 2c-2b).
 # Killed by tests/test_ai/test_craft_plan_gen.py.
@@ -12228,6 +12239,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_obtain_model.py", survivors)
     run_group(ACQUISITION_COST_SRC, GATED_GATHER_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, GRIND_SERVED_PRICE_MUTATIONS,
+              "tests/test_ai/scenarios/test_ge_market_triple.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_PRICING_MUTATIONS,
               "tests/test_ai/scenarios/test_fisher_cooking_rung.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, UPGRADE_DECOMPOSE_MUTATIONS,

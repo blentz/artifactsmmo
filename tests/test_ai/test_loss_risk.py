@@ -112,7 +112,8 @@ class TestTheGrindRungs:
     def test_the_rung_prices_see_the_records(self, state, game_data, monkeypatch) -> None:
         seen = []
 
-        def spy(code, qty, probe, gd, ctx, equip, policy):  # type: ignore[no-untyped-def]
+        def spy(code, qty, probe, gd, ctx, equip, policy, produce):  # type: ignore[no-untyped-def]
+            assert produce == frozenset({code})
             seen.append(ctx.fight_records)
             return 1
 

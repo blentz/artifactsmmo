@@ -700,10 +700,15 @@ def route_options(item: str, state: WorldState, game_data: GameData,
     return routes
 
 
+_PRODUCING = frozenset({SourceKind.CRAFT.value, SourceKind.GATHER.value})
+"""The route kinds that MAKE an item: the only routes a `produce` item keeps."""
+
+
 def acquisition_options(item: str, state: WorldState, game_data: GameData,
                         ctx: SelectionContext,
                         store: LearningStore | None = None,
-                        gated_drop: bool = True, *, policy: Policy = LEGACY
+                        gated_drop: bool = True, *, policy: Policy = LEGACY,
+                        produce: frozenset[str] = frozenset()
                         ) -> dict[str, list[RouteOption]]:
     """`route_options` over the whole closure reachable from `item`.
 
@@ -719,7 +724,13 @@ def acquisition_options(item: str, state: WorldState, game_data: GameData,
     filtered at push, which made the pop guard unreachable — two guards where
     one is correct, and the redundant one hid the fact that the other was doing
     nothing. The cost walk's own fuel bound handles the cycle when it comes to
-    PRICE it; this only has to enumerate."""
+    PRICE it; this only has to enumerate.
+
+    `produce` names items that must be MADE (ruling T12j), as
+    `ObtainModel.walk_graph` takes it: only their CRAFT and GATHER routes are
+    priced. A skill grind's rung earns its XP in the craft, so buying it, filling
+    it on the GE, withdrawing it or taking it as a drop is no price of the rung;
+    its ingredients keep every route."""
     options: dict[str, list[RouteOption]] = {}
     frontier = [item]
     while frontier:
@@ -727,6 +738,8 @@ def acquisition_options(item: str, state: WorldState, game_data: GameData,
         if code in options:
             continue
         routes = route_options(code, state, game_data, ctx, store, gated_drop, policy=policy)
+        if code in produce:
+            routes = [route for route in routes if route.kind in _PRODUCING]
         options[code] = routes
         for route in routes:
             frontier.extend(route.inputs)
@@ -760,7 +773,8 @@ def _owned_with_gold(state: WorldState, pocket: int) -> dict[str, int]:
 def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
                    ctx: SelectionContext, store: LearningStore | None,
                    gated_drop: bool = True, *, policy: Policy, pocket: int,
-                   credit_skills: frozenset[str] = frozenset()) -> tuple[int, SourceKind | None]:
+                   credit_skills: frozenset[str] = frozenset(),
+                   produce: frozenset[str] = frozenset()) -> tuple[int, SourceKind | None]:
     """`(price, route)`: the lower bound on planner actions to obtain `qty` of
     `item` (`acquisition_actions` without the equip), and the kind of the route
     that price takes for `item` itself (plan B Task 3: a piece is served by the
@@ -780,7 +794,8 @@ def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
     m3), so gold the executor will not spend is priced as gold to earn."""
     owned: dict[str, int] = _owned_with_gold(state, pocket)
     options: Mapping[str, list[RouteOption]] = credit_demanded_skills(
-        acquisition_options(item, state, game_data, ctx, store, gated_drop, policy=policy),
+        acquisition_options(item, state, game_data, ctx, store, gated_drop, policy=policy,
+                            produce=produce),
         credit_skills, game_data)
     price, route = priced_route(item, qty, options, owned, frozenset({GOLD_CODE}))
     if route is not None:
@@ -824,7 +839,8 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
                         equip: bool,
                         store: LearningStore | None = None,
                         gated_drop: bool = True, *, policy: Policy = LEGACY,
-                        credit_skills: frozenset[str] = frozenset()) -> int:
+                        credit_skills: frozenset[str] = frozenset(),
+                        produce: frozenset[str] = frozenset()) -> int:
     """Lower bound on planner actions to obtain (and optionally equip) `qty` of
     `item`, over every route the executor can currently serve.
 
@@ -843,11 +859,12 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
 
     `credit_skills` — routes training one of these skills cost no actions
     (`skill_credit`); empty by default, so every existing caller is unchanged.
+    `produce` — items priced only by making them (`acquisition_options`).
 
     The price is `cheapest_route`'s, so there is one pricer."""
     price, _route = cheapest_route(item, qty, state, game_data, ctx, store, gated_drop,
                                    policy=policy, pocket=state.gold,
-                                   credit_skills=credit_skills)
+                                   credit_skills=credit_skills, produce=produce)
     return price + (EQUIP_ACTIONS if equip else 0)
 
 

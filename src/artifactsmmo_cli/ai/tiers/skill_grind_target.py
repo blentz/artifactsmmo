@@ -41,7 +41,7 @@ from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.grind_probe_state import grind_probe_state
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
-from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
+from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.source_kind import SourceKind
@@ -94,15 +94,26 @@ it), a craft needs a known workshop, and a resource with no spawn anywhere no
 longer counts."""
 
 
-GRIND_PRICING = replace(LEGACY, gather_skill_gate=False)
-"""The policy the grind RANKS its rungs under: the executor's (LEGACY) with the
-gathering-skill gate open, the same stance `GRIND_POLICY` takes on
-obtainability. A rung whose fish needs more fishing than the character has is
-still a candidate priced as "gather the fish": the gate is a level the
-character can grind, and `gather_demand` reads the grind target to surface
-exactly that demand ("a cooking rung that needs a fish gets a fishing root").
-Under LEGACY, which enforces the gate since D-A, that rung prices as
-unreachable and the fishing demand disappears."""
+GRIND_PRICING = replace(GRIND_POLICY, price_climbs=False, gather_skill_gate=False)
+"""The policy the grind RANKS its rungs under: priced = served (ruling T12k).
+Every route switch is `GRIND_POLICY`'s, derived rather than restated so the
+two cannot drift: the rung's whole closure is priced the way the grind's
+descent serves it, with no GE_FILL and no BUY (`GRIND_POLICY`: the descent
+buys a material only when nothing yields it, and such a rung is not
+obtainable under `GRIND_POLICY` at all). Pricing a fill the descent never
+takes ranked rungs on a plan nobody runs: a busy order book priced a
+`copper_armor` rung from GE wool at 11 actions against the 92 its descent
+spends. The rung itself is priced only by PRODUCING it (`produce={rung}` at
+the call, ruling T12j): a withdrawn or dropped rung earns no skill XP.
+
+Only the pricing-specific fields are set here: no climb is priced (the walk
+has no store to rate one), and the gathering-skill gate is open, so a rung
+whose fish needs more fishing than the character has is still a candidate
+priced as "gather the fish": the gate is a level the character can grind, and
+`gather_demand` reads the grind target to surface exactly that demand ("a
+cooking rung that needs a fish gets a fishing root"). Under LEGACY, which
+enforces the gate since D-A, that rung prices as unreachable and the fishing
+demand disappears."""
 
 
 def grind_model(state: WorldState, game_data: GameData) -> ObtainModel:
@@ -322,7 +333,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
         # (USER 2026-10-08, "Price the loss risk").
         acquire_steps = acquisition_actions(
             code, 1, grind_probe_state(state, code), game_data,
-            pricing_ctx, equip=False, policy=GRIND_PRICING)
+            pricing_ctx, equip=False, policy=GRIND_PRICING, produce=frozenset({code}))
         candidates.append(GrindCandidate(
             code=code,
             craft_skill=stats.crafting_skill,

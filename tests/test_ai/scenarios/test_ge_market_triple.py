@@ -59,25 +59,14 @@ CELL5_BUSY_ADEQUATE = "l12_ge_book_adequate"
 TRIPLE = (CELL4_BUSY_GRIND, CELL7_QUIET_GRIND, CELL5_BUSY_ADEQUATE)
 
 SKILL = "gearcrafting"
-RUNG = "copper_legs_armor"
-"""The grind rung the busy `gearcrafting 9` cell lands on. Depth-2 and
-DROP-FED (copper bars and a chicken's feather). It was `feather_coat` until
-spec 2026-10-18 §2.9 priced a fight's seconds by its learned length, which
-made the copper rung the faster climb; the busy book carries a standing sell
-order on it too. Since plan B Task 12a prices a drop farm exactly (rounded
-once a route, not once a unit), the QUIET cell's feathers are cheaper and its
-grind lands on `feather_coat` (`QUIET_RUNG`); the busy cell ranks both rungs
-by their standing orders' gold, which the drop price does not move."""
-
-QUIET_RUNG = "feather_coat"
-"""The grind rung the quiet `gearcrafting 9` cell lands on (see `RUNG`)."""
-
-BOOK_ITEM = "feather_coat"
-"""The depth-2 drop-fed item (`{feather: 5, ash_plank: 2}`; feather off the
-chicken, ash_plank from ash_wood) whose plain descent the order book moves:
-the busy book leafs it at the item, the quiet one descends to the material.
-The shape that is 70.7 % of the catalogue and 87.2 % of live
-`UpgradeEquipment` cycles."""
+RUNG = "feather_coat"
+"""The grind rung both `gearcrafting 9` cells land on. Depth-2 and DROP-FED
+(`{feather: 5, ash_plank: 2}`; feather off the chicken, ash_plank from
+ash_wood) — the shape that is 70.7 % of the catalogue and 87.2 % of live
+`UpgradeEquipment` cycles. It was `copper_legs_armor` from spec 2026-10-18
+§2.9 until plan B Task 12a, which prices a drop farm exactly and ranks a
+rung as its descent serves it (rulings T12j, T12k: produced, its closure
+with no GE fill), so the book cannot move the rung."""
 
 LEG_TARGET = "iron_legs_armor"
 """Cell 5's rung: `{iron_bar: 5, cowhide: 3}`, also depth-2 drop-fed, and the
@@ -158,16 +147,15 @@ def test_the_control_market_really_is_empty(quiet: GameData) -> None:
 
 # --- cell 4: the grind crafts past the standing order ---------------------
 
-def _grind(name: str, game_data: GameData, rung: str = RUNG) -> list[str]:
-    """The grind's committed plan, the arbiter's own call, ending in `rung`'s
-    craft."""
+def _grind(name: str, game_data: GameData) -> list[str]:
+    """The grind's committed plan, the arbiter's own call."""
     player = GamePlayer(character=name, history=None)
     player._offline_timing = committed_timing()
     player.seed_offline(_state(name, game_data), game_data)
     plan = decompose(ReachSkillGoal(SKILL, 10), player.state, game_data,
                      player._build_actions(), player._last_ctx)
     assert plan, f"{name}: the grind produced no plan"
-    assert isinstance(plan[-1], CraftAction) and plan[-1].code == rung
+    assert isinstance(plan[-1], CraftAction) and plan[-1].code == RUNG
     return [repr(a) for a in plan]
 
 
@@ -189,24 +177,18 @@ def test_the_busy_book_leafs_the_plain_descent_at_the_rung(
     standing order hands the finished item over; in the QUIET book it descends
     to the material. The grind's walk reaches the same rung legs in both books,
     so the order book IS load-bearing here and `produce` is what neutralises it.
-
-    Since spec 2026-10-18 §2.9 the busy grind's rung (`copper_legs_armor`)
-    leafs the plain descent in BOTH books; the book's load still shows on
-    `feather_coat`, which is what this pins. Since plan B Task 12a (a drop farm
-    priced exactly) the quiet grind's rung IS `feather_coat`, and its craft
-    legs are the feather and the planks."""
-    node = ObtainItem(code=BOOK_ITEM, quantity=1)
+    Since plan B Task 12a the grind's RANKING neutralises it too: the rung is
+    priced as its descent serves it (rulings T12j, T12k), so the busy book's
+    standing orders on the rung and on its rivals' materials price nothing."""
+    node = ObtainItem(code=RUNG, quantity=1)
     busy_state = _state(CELL4_BUSY_GRIND, busy)
     quiet_state = _state(CELL7_QUIET_GRIND, quiet)
     assert actionable_step(node, busy_state, busy, TIMED_NO_PROFILE_CONTEXT) == node
     assert actionable_step(node, quiet_state, quiet, TIMED_NO_PROFILE_CONTEXT) != node
-    rung = ObtainItem(code=RUNG, quantity=1)
-    assert actionable_step(rung, busy_state, busy, TIMED_NO_PROFILE_CONTEXT) == rung
-    assert actionable_step(rung, quiet_state, quiet, TIMED_NO_PROFILE_CONTEXT) == rung
-    assert _grind(CELL4_BUSY_GRIND, busy)[-4:] == [
-        "Gather(copper_rocks×50)", "Craft(copper_bar×5)", "Fight(chicken)", f"Craft({RUNG}×1)"]
-    assert _grind(CELL7_QUIET_GRIND, quiet, QUIET_RUNG)[-4:] == [
-        "Fight(chicken)", "Gather(ash_tree×20)", "Craft(ash_plank×2)", f"Craft({QUIET_RUNG}×1)"]
+    rung_legs = ["Fight(chicken)", "Gather(ash_tree×20)", "Craft(ash_plank×2)",
+                 f"Craft({RUNG}×1)"]
+    assert _grind(CELL4_BUSY_GRIND, busy)[-4:] == rung_legs
+    assert _grind(CELL7_QUIET_GRIND, quiet)[-4:] == rung_legs
 
 
 # --- cell 5: the other arm — a GE_FILL outside a grind DOES leaf ------------

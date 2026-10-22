@@ -107,7 +107,6 @@ def _patch_game_data_load():
         yield
 
 
-
 class TestSyncBankPagination:
     def test_paginates_when_full_page_returned(self):
         player = GamePlayer(character="hero")
