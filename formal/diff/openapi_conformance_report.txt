@@ -18,7 +18,7 @@ Tracked schemas: 4
 
 ## 14b — GameData.load schema imports
 
-Schemas imported by game_data.py: 16
+Schemas imported by game_data.py: 17
   - AccountAchievementSchema
   - BankSchema
   - CraftSkill
@@ -34,6 +34,7 @@ Schemas imported by game_data.py: 16
   - MonsterSchema
   - NPCItemSchema
   - ResourceSchema
+  - StatusSchema
   - TaskFullSchema
 
 ## 14c — Replay coverage
