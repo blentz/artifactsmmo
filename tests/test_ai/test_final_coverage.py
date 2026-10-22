@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
-from tests.test_ai.fixtures import BOOTSTRAP, make_state, one_equippable_item_page
+from tests.test_ai.fixtures import BOOTSTRAP, make_state, one_equippable_item_page, season_8_status
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
@@ -256,10 +256,12 @@ class TestPlayerRunVerboseAndExecute:
                                                      return_value=MagicMock(data=[])):
                                             with patch("artifactsmmo_cli.ai.game_data.get_ge_orders",
                                                        return_value=MagicMock(data=[])):
-                                              with patch("artifactsmmo_cli.ai.game_data.get_bank_details",
-                                                         return_value=None), \
-                                                   patch("artifactsmmo_cli.ai.game_data.get_account_details",
-                                                         return_value=None):
+                                              with patch.multiple(
+                                                      "artifactsmmo_cli.ai.game_data",
+                                                      get_bank_details=MagicMock(return_value=None),
+                                                      get_account_details=MagicMock(return_value=None),
+                                                      get_server_details=MagicMock(
+                                                          return_value=MagicMock(data=season_8_status()))):
                                                 with patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache):
                                                   with patch.object(player, "_fetch_world_state",
                                                                     return_value=initial_state):
@@ -312,10 +314,12 @@ class TestPlayerRunVerboseAndExecute:
                                                      return_value=MagicMock(data=[])):
                                             with patch("artifactsmmo_cli.ai.game_data.get_ge_orders",
                                                        return_value=MagicMock(data=[])):
-                                              with patch("artifactsmmo_cli.ai.game_data.get_bank_details",
-                                                         return_value=None), \
-                                                   patch("artifactsmmo_cli.ai.game_data.get_account_details",
-                                                         return_value=None):
+                                              with patch.multiple(
+                                                      "artifactsmmo_cli.ai.game_data",
+                                                      get_bank_details=MagicMock(return_value=None),
+                                                      get_account_details=MagicMock(return_value=None),
+                                                      get_server_details=MagicMock(
+                                                          return_value=MagicMock(data=season_8_status()))):
                                                 with patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache):
                                                   with patch.object(player, "_fetch_world_state",
                                                                     return_value=initial_state):

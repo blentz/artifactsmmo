@@ -689,7 +689,7 @@ _L48_MISSING = [("shield_slot", "goblin_guard_shield"), ("rune_slot", "lifesteal
         ("rune_slot", "lifesteal_rune"), ("ring1_slot", "gold_ring"),
         ("ring2_slot", "gold_ring")]),
     ("l40_band_entry", "cultist_acolyte", [
-        ("leg_armor_slot", "royal_skeleton_pants"), ("shield_slot", "slime_shield"),
+        ("shield_slot", "slime_shield"), ("leg_armor_slot", "royal_skeleton_pants"),
         ("helmet_slot", "royal_skeleton_helmet"), ("body_armor_slot", "royal_skeleton_armor"),
         ("rune_slot", "lifesteal_rune"), ("ring2_slot", "malefic_ring")]),
     ("l48_capstone_approach", "hellhound", _L48_MISSING),
@@ -723,10 +723,32 @@ def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str
     ruling T2c').
 
     RE-DERIVED plan B Task 12a (§2.8: a drop is priced at its learned chance,
-    prospecting at a learned slope whose prior is 0): the level-40 sheet's 160
-    prospecting no longer discounts its drops by `1000/1160`, so the pants
-    (445 -> 482) order ahead of the shield (291 -> 327)."""
+    prospecting at a learned slope whose prior is 0, and a drop farm exactly,
+    rounded once a route): the level-40 sheet's 160 prospecting no longer
+    discounts its drops by `1000/1160`, so its pieces are dearer (shield 291 ->
+    319, pants 445 -> 481), and the shield still orders first."""
     objective = _objective(scenario_state(SCENARIOS[name], gd), gd)
     assert objective.monster == monster
     assert [(piece.slot, piece.code) for piece in objective.missing] == missing
     assert objective.held is (not missing)
+
+
+def test_a_piece_is_priced_at_the_fighters_prospecting(monkeypatch: pytest.MonkeyPatch,
+                                                       gd: GameData) -> None:
+    """Spec §2.8: a drop's chance is read at the prospecting of the loadout the
+    attempt is made in, and for the objective that is the fighter wearing
+    `L*`, not the character's worn total. Every piece's price is asked at
+    the fighter's."""
+    state = scenario_state(SCENARIOS["l40_band_entry"], gd)
+    asked: list[int] = []
+    real = mod.cheapest_route
+
+    def recording(code, qty, priced, *args, **kwargs):  # type: ignore[no-untyped-def]
+        asked.append(priced.prospecting)
+        return real(code, qty, priced, *args, **kwargs)
+
+    monkeypatch.setattr(mod, "cheapest_route", recording)
+    objective = _objective(state, gd)
+    assert objective.fighter is not None
+    assert objective.fighter.prospecting != state.prospecting
+    assert asked and set(asked) == {objective.fighter.prospecting}

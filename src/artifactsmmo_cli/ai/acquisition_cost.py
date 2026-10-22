@@ -26,7 +26,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timezone
 from fractions import Fraction
-from math import ceil
 
 from artifactsmmo_cli.ai.acquisition_cost_core import (
     BANK_VENUE,
@@ -96,7 +95,7 @@ def _units_per_attempt(source: str, item: str, rate: int, min_q: int, max_q: int
     if store is None:
         chance = posterior_chance(rate, 0, 0)
     else:
-        attempts, hits = drop_counts(store, source, item)
+        attempts, hits = drop_counts(store, game_data, source, item)
         chance = chance_at(rate, attempts, hits, fleet_k(store, game_data), state.prospecting)
     return chance * Fraction(min_q + max_q, 2)
 
@@ -127,8 +126,8 @@ def _loss_surcharge(monster_code: str, max_hp: int,
 def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: int,
                   state: WorldState, game_data: GameData, timing: FightSecondsModel,
                   store: LearningStore | None,
-                  records: Sequence[tuple[str, int, int]] = ()) -> int:
-    """Whole-loop actions to farm ONE unit off `monster_code`.
+                  records: Sequence[tuple[str, int, int]] = ()) -> Fraction:
+    """Whole-loop actions to farm ONE unit off `monster_code`, exact.
 
     Two pieces, multiplied, and neither is restated here: the wins one unit
     takes (the reciprocal of `_units_per_attempt`, the learned chance proved
@@ -141,11 +140,13 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
     Each kill also carries the learned loss surcharge (`_loss_surcharge`): a
     kill is a WIN, and the losses expected per win are paid with it.
 
-    Rounded UP: a fractional action is still an action the character spends, and
-    the objective is an exact integer (S-013)."""
+    Exact, as a gather and a fight for gold are (ruling T2m M1, T12g m1): a
+    fractional action is still an action the character spends, so the walk
+    rounds the route's applications up ONCE; rounding each unit up overpriced a
+    farm whose win yields more than a unit's worth of its cost."""
     kills = 1 / _units_per_attempt(monster_code, item, rate, min_q, max_q, state,
                                    game_data, store)
-    return max(1, ceil(kills * _kill_actions(monster_code, state, game_data, timing, records)))
+    return kills * _kill_actions(monster_code, state, game_data, timing, records)
 
 
 def _kill_actions(monster_code: str, state: WorldState, game_data: GameData,

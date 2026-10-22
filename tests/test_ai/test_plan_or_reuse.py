@@ -7,7 +7,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
-from tests.test_ai.fixtures import make_state, one_equippable_item_page, patched_logs
+from tests.test_ai.fixtures import make_state, one_equippable_item_page, patched_logs, season_8_status
 from tests.test_ai.test_rest_first import TILE, TIMING
 from tests.test_ai.test_rest_first import _gd as _rest_gd
 from tests.test_ai.test_rest_first import _state as _rest_state
@@ -140,8 +140,10 @@ def test_advance_with_history_persists_cursor(tmp_path):
         patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=MagicMock(data=[])),
         patch("artifactsmmo_cli.ai.game_data.get_all_effects", return_value=MagicMock(data=[])),
         patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=MagicMock(data=[])),
-        patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None),
-        patch("artifactsmmo_cli.ai.game_data.get_account_details", return_value=None),
+        patch.multiple("artifactsmmo_cli.ai.game_data",
+                       get_bank_details=MagicMock(return_value=None),
+                       get_account_details=MagicMock(return_value=None),
+                       get_server_details=MagicMock(return_value=MagicMock(data=season_8_status()))),
         patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache),
         patch.object(player, "_fetch_world_state", return_value=initial_state),
         patch.object(player, "_wait_for_cooldown"),

@@ -60,11 +60,17 @@ TRIPLE = (CELL4_BUSY_GRIND, CELL7_QUIET_GRIND, CELL5_BUSY_ADEQUATE)
 
 SKILL = "gearcrafting"
 RUNG = "copper_legs_armor"
-"""The grind rung both `gearcrafting 9` cells land on. Depth-2 and DROP-FED
-(copper bars and a chicken's feather). It was `feather_coat` until spec
-2026-10-18 §2.9 priced a fight's seconds by its learned length, which made
-the copper rung the faster climb; the busy book carries a standing sell order
-on it too."""
+"""The grind rung the busy `gearcrafting 9` cell lands on. Depth-2 and
+DROP-FED (copper bars and a chicken's feather). It was `feather_coat` until
+spec 2026-10-18 §2.9 priced a fight's seconds by its learned length, which
+made the copper rung the faster climb; the busy book carries a standing sell
+order on it too. Since plan B Task 12a prices a drop farm exactly (rounded
+once a route, not once a unit), the QUIET cell's feathers are cheaper and its
+grind lands on `feather_coat` (`QUIET_RUNG`); the busy cell ranks both rungs
+by their standing orders' gold, which the drop price does not move."""
+
+QUIET_RUNG = "feather_coat"
+"""The grind rung the quiet `gearcrafting 9` cell lands on (see `RUNG`)."""
 
 BOOK_ITEM = "feather_coat"
 """The depth-2 drop-fed item (`{feather: 5, ash_plank: 2}`; feather off the
@@ -152,15 +158,16 @@ def test_the_control_market_really_is_empty(quiet: GameData) -> None:
 
 # --- cell 4: the grind crafts past the standing order ---------------------
 
-def _grind(name: str, game_data: GameData) -> list[str]:
-    """The grind's committed plan, the arbiter's own call."""
+def _grind(name: str, game_data: GameData, rung: str = RUNG) -> list[str]:
+    """The grind's committed plan, the arbiter's own call, ending in `rung`'s
+    craft."""
     player = GamePlayer(character=name, history=None)
     player._offline_timing = committed_timing()
     player.seed_offline(_state(name, game_data), game_data)
     plan = decompose(ReachSkillGoal(SKILL, 10), player.state, game_data,
                      player._build_actions(), player._last_ctx)
     assert plan, f"{name}: the grind produced no plan"
-    assert isinstance(plan[-1], CraftAction) and plan[-1].code == RUNG
+    assert isinstance(plan[-1], CraftAction) and plan[-1].code == rung
     return [repr(a) for a in plan]
 
 
@@ -183,9 +190,11 @@ def test_the_busy_book_leafs_the_plain_descent_at_the_rung(
     to the material. The grind's walk reaches the same rung legs in both books,
     so the order book IS load-bearing here and `produce` is what neutralises it.
 
-    Since spec 2026-10-18 §2.9 the grind's rung (`copper_legs_armor`) leafs
-    the plain descent in BOTH books; the book's load still shows on
-    `feather_coat`, the rung before it, which is what this pins."""
+    Since spec 2026-10-18 §2.9 the busy grind's rung (`copper_legs_armor`)
+    leafs the plain descent in BOTH books; the book's load still shows on
+    `feather_coat`, which is what this pins. Since plan B Task 12a (a drop farm
+    priced exactly) the quiet grind's rung IS `feather_coat`, and its craft
+    legs are the feather and the planks."""
     node = ObtainItem(code=BOOK_ITEM, quantity=1)
     busy_state = _state(CELL4_BUSY_GRIND, busy)
     quiet_state = _state(CELL7_QUIET_GRIND, quiet)
@@ -194,10 +203,10 @@ def test_the_busy_book_leafs_the_plain_descent_at_the_rung(
     rung = ObtainItem(code=RUNG, quantity=1)
     assert actionable_step(rung, busy_state, busy, TIMED_NO_PROFILE_CONTEXT) == rung
     assert actionable_step(rung, quiet_state, quiet, TIMED_NO_PROFILE_CONTEXT) == rung
-    rung_legs = ["Gather(copper_rocks×50)", "Craft(copper_bar×5)", "Fight(chicken)",
-                 f"Craft({RUNG}×1)"]
-    assert _grind(CELL4_BUSY_GRIND, busy)[-4:] == rung_legs
-    assert _grind(CELL7_QUIET_GRIND, quiet)[-4:] == rung_legs
+    assert _grind(CELL4_BUSY_GRIND, busy)[-4:] == [
+        "Gather(copper_rocks×50)", "Craft(copper_bar×5)", "Fight(chicken)", f"Craft({RUNG}×1)"]
+    assert _grind(CELL7_QUIET_GRIND, quiet, QUIET_RUNG)[-4:] == [
+        "Fight(chicken)", "Gather(ash_tree×20)", "Craft(ash_plank×2)", f"Craft({QUIET_RUNG}×1)"]
 
 
 # --- cell 5: the other arm — a GE_FILL outside a grind DOES leaf ------------

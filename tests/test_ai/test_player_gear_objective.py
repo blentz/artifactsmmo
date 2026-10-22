@@ -283,3 +283,19 @@ def test_every_decided_cycle_logs_its_objective(
         player._decide_band(player.state, player.game_data, [])
     assert "Gear objective: target wolf; first missing iron_helm (helmet_slot); 1 missing" \
         in capsys.readouterr().out
+
+
+def test_the_objective_is_priced_inside_one_search_episode(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Every route the objective prices reads the learned drop tally and slope;
+    inside one `search_cache` episode they are read once, not once a route."""
+    store = LearningStore(db_path=str(tmp_path / "learn.db"), character="hero")
+    seen: list[bool] = []
+
+    def objective(state, game_data, ctx, history):  # type: ignore[no-untyped-def]
+        seen.append(history._search_cache is not None)
+
+    monkeypatch.setattr(ctx_mod, "gear_objective", objective)
+    attach_gear_objective(make_state(), GameData(), CTX, store)
+    assert seen == [True]
+    assert store._search_cache is None

@@ -13,6 +13,7 @@ from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
 from artifactsmmo_api_client.models.map_content_type import MapContentType
 from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.models.static_data_page_event_schema import StaticDataPageEventSchema
+from artifactsmmo_api_client.models.status_schema import StatusSchema
 from artifactsmmo_api_client.models.transition_schema import TransitionSchema
 from artifactsmmo_api_client.types import UNSET
 
@@ -1322,6 +1323,18 @@ def test_grand_exchange_location_accessor():
     assert gd.grand_exchange_location() == (3, 4)
 
 
+def _status(season: dict | None = None) -> StatusSchema:  # type: ignore[type-arg]
+    """A server status page (`GET /`) for season 8, begun 2026-06-27."""
+    return StatusSchema.from_dict({
+        "version": "8.2.4", "server_time": "2026-10-21T00:00:00+00:00", "max_level": 50,
+        "max_skill_level": 50, "characters_online": 1, "rate_limits": [],
+        **({"season": season} if season is not None else {})})
+
+
+_SEASON_8 = {"name": "God of the Sun", "number": 8,
+             "start_date": "2026-06-27T00:00:00+00:00", "rewards": []}
+
+
 class TestGameDataLoad:
     def test_load_calls_all_sub_loaders(self, tmp_path):
         client = MagicMock()
@@ -1340,9 +1353,26 @@ class TestGameDataLoad:
             patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None),
             patch("artifactsmmo_cli.ai.game_data.get_account_details", return_value=None),
             patch("artifactsmmo_cli.ai.game_data.get_account_achievements", return_value=empty_page),
+            patch("artifactsmmo_cli.ai.game_data.get_server_details",
+                  return_value=SimpleNamespace(data=_status(_SEASON_8))),
         ):
             gd = GameData.load(client, cache=cache)
         assert isinstance(gd, GameData)
+        assert gd.season_start.isoformat() == "2026-06-27T00:00:00+00:00"
+
+
+def test_a_status_page_that_returns_nothing_raises(monkeypatch):
+    """No status page, no season start: the load fails rather than invent one."""
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_server_details",
+                        lambda client: None)
+    with pytest.raises(ValueError, match="returned nothing"):
+        GameData()._fetch_server(client=None)
+
+
+@pytest.mark.parametrize("season", [None, {"name": "x", "number": 8, "rewards": []}])
+def test_a_status_page_without_a_season_start_raises(season):  # type: ignore[no-untyped-def]
+    with pytest.raises(ValueError, match="no season start date"):
+        GameData()._build_server(_status(season))
 
 
 def test_load_bank_metadata_captures_capacity_and_expansion_cost(monkeypatch):
@@ -1923,6 +1953,7 @@ def _stub_fetch_build(monkeypatch):
                             lambda self, items, *extra: None)
     monkeypatch.setattr(GameData, "_fetch_bank", lambda self, client, *hooks, **kw_hooks: None)
     monkeypatch.setattr(GameData, "_build_bank", lambda self, item: None)
+    monkeypatch.setattr(GameData, "_fetch_server", lambda self, client, *hooks, **kw_hooks: None)
     ge = {"n": 0}
     monkeypatch.setattr(
         GameData, "load_ge_orders", lambda self, client, *hooks, **kw_hooks: ge.__setitem__("n", ge["n"] + 1)
@@ -2142,6 +2173,8 @@ def test_warm_and_cold_events_build_equal(monkeypatch, tmp_path):
     for name in ("maps", "items", "resources", "monsters", "npcs", "tasks", "achievements"):
         monkeypatch.setattr(GameData, f"_fetch_{name}", lambda self, client, *hooks, **kw_hooks: [])
     monkeypatch.setattr(GameData, "_fetch_bank", lambda self, client, *hooks, **kw_hooks: None)
+    monkeypatch.setattr(GameData, "_fetch_server",
+                        lambda self, client, *hooks, **kw_hooks: _status(_SEASON_8))
     monkeypatch.setattr(GameData, "load_ge_orders", lambda self, client, *hooks, **kw_hooks: None)
     cache = _RecordingCache(tmp_path, seeded=None)
     cold = GameData.load(client=MagicMock(), ttl_minutes=30, cache=cache)  # writes cache
@@ -2149,6 +2182,7 @@ def test_warm_and_cold_events_build_equal(monkeypatch, tmp_path):
     assert cold._npc_event_code == warm._npc_event_code
     assert cold._event_npc_spawns == warm._event_npc_spawns
     assert warm._event_npc_spawns  # non-empty -> the round-trip really happened
+    assert cold.season_start == warm.season_start
 
 
 def test_craft_yield_reads_quantity_default_one():
@@ -2662,6 +2696,7 @@ class TestLoadChargesTheFleetGovernor:
             get_all_events=api("events", []), get_all_effects=api("effects", []),
             get_bank_details=api("bank", None), get_account_details=api("details", details),
             get_account_achievements=api("achievements", []), get_ge_orders=api("ge", []),
+            get_server_details=api("server", _status(_SEASON_8)),
         ):
             GameData.load(MagicMock(), cache=cache, force_refresh=True,
                           acquire_data=lambda: charged.append("data"),
@@ -2671,5 +2706,5 @@ class TestLoadChargesTheFleetGovernor:
         assert {n for n, b in buckets.items() if b == "account"} == {"bank", "details"}
         assert {n for n, b in buckets.items() if b == "data"} == {
             "maps", "items", "resources", "monsters", "npcs", "tasks", "events",
-            "effects", "achievements", "ge"}
+            "effects", "achievements", "ge", "server"}
         assert sent.count("maps") == len(MapLayer)  # one page per layer, each charged

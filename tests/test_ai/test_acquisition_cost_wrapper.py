@@ -20,7 +20,6 @@ import time
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from fractions import Fraction
-from math import ceil
 from pathlib import Path
 
 import pytest
@@ -383,10 +382,10 @@ def test_an_observed_monster_drop_reprices_the_farm(tmp_path, state, game_data) 
     learned = _priced("feather", Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
                       state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
     win = _kill_actions("chicken", state, game_data, TIMED_NO_PROFILE_CONTEXT.timing(), ())
-    assert learned.actions_per_application == max(1, ceil(Fraction(108, 51) * win))
+    assert learned.actions_per_application == Fraction(108, 51) * win
     prior = _priced("feather", Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
                     state, game_data, TIMED_NO_PROFILE_CONTEXT)
-    assert prior.actions_per_application == max(1, ceil(8 * win))
+    assert prior.actions_per_application == 8 * win
 
 
 def test_prospecting_is_worth_nothing_until_k_is_learned(tmp_path, state, game_data) -> None:
@@ -1470,6 +1469,19 @@ def test_an_under_skill_gather_is_priced_by_its_grind_not_offered_as_ready(
         [gated] = [r for r in route_options(item, gated_state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
                    if r.kind == "gather" and r.venue == resource]
         assert gated.unlock == f"skill:{skill}:{level}" and gated.unlock_actions > 0
+        assert gated.actions_per_application == 1
+        # The climb's gather is priced at the learned chance too: three
+        # recorded gathers that missed the item make it 1 in 4 (`(1 + 0) /
+        # (1 + 3)`), so a unit is 4 gathers.
+        for i in range(3):
+            store.record_cycle(Cycle(
+                ts=f"2026-08-09T00:00:{i:02d}+00:00", session_id="s", cycle_index=i,
+                character="grind_probe", outcome="ok", action_class="GatherAction",
+                action_repr=f"Gather({resource})", drops_json=None))
+        [learned] = [r for r in route_options(item, gated_state, game_data,
+                                              TIMED_NO_PROFILE_CONTEXT, store)
+                     if r.kind == "gather" and r.venue == resource]
+        assert learned.actions_per_application == 4
     finally:
         store.end_session(exit_reason="normal")
         store.close()

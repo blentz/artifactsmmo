@@ -1326,14 +1326,23 @@ DROP_CHANCE_CORE_MUTATIONS = [
 # T11b). Killed by tests/test_ai/test_drop_observations.py.
 DROP_OBSERVATIONS_MUTATIONS = [
     ("drop observations: the cache ignores its store",
-     "    if _COUNTS and _COUNTS[0][0] is store and _COUNTS[0][1] <= last:",
-     "    if _COUNTS and _COUNTS[0][1] <= last:"),
+     "    if (_COUNTS and _COUNTS[0][0] is store and _COUNTS[0][1] == since",
+     "    if (_COUNTS and _COUNTS[0][1] == since"),
+    ("drop observations: the cache ignores a new season start",
+     "    if (_COUNTS and _COUNTS[0][0] is store and _COUNTS[0][1] == since",
+     "    if (_COUNTS and _COUNTS[0][0] is store"),
+    ("drop observations: k bypasses the search cache",
+     "    fitted_on, k = store.cached((\"fleet_k\",), lambda: (game_data, _fleet_k(store, game_data)))",
+     "    fitted_on, k = game_data, _fleet_k(store, game_data)"),
+    ("drop observations: k serves another catalogue's fit",
+     "    if fitted_on is not game_data:\n        return _fleet_k(store, game_data)",
+     "    if False:\n        return _fleet_k(store, game_data)"),
     ("drop observations: the cache ignores new cycles",
      "        if seen == last:\n            return tally",
      "        if True:\n            return tally"),
     ("drop observations: a refresh re-reads every cycle",
-     "    _fold(tally, store.fleet_drop_rows(seen, last))",
-     "    _fold(tally, store.fleet_drop_rows(0, last))"),
+     "    _fold(tally, store.fleet_drop_rows(seen, last, since))",
+     "    _fold(tally, store.fleet_drop_rows(0, last, since))"),
     ("drop observations: a party fight is a solo attempt",
      "    if fight.group(2) is not None:\n        return None",
      "    if False:\n        return None"),
@@ -1359,8 +1368,8 @@ DROP_OBSERVATIONS_MUTATIONS = [
      "        drops = json.loads(drops_json) if drops_json else {}",
      "        drops = json.loads(drops_json) if True else {}"),
     ("drop observations: the tally bypasses the search cache",
-     "    return store.cached((\"drop_tally\",), lambda: _read_tally(store))",
-     "    return _read_tally(store)"),
+     "    return store.cached((\"drop_tally\", since), lambda: _read_tally(store, since))",
+     "    return _read_tally(store, since)"),
     ("drop observations: a malformed gather key is read",
      "        if gather is None:\n            raise ValueError",
      "        if False:\n            raise ValueError"),
@@ -1368,8 +1377,8 @@ DROP_OBSERVATIONS_MUTATIONS = [
      "    if fight is None:\n        raise ValueError",
      "    if False:\n        raise ValueError"),
     ("drop observations: a shrunken table keeps its stale tally",
-     "    if _COUNTS and _COUNTS[0][0] is store and _COUNTS[0][1] <= last:",
-     "    if _COUNTS and _COUNTS[0][0] is store:"),
+     "            and _COUNTS[0][2] <= last):",
+     "            ):"),
 ]
 
 # Drop and gather routes priced from the learned chance (spec 2026-10-18 §2.8,
@@ -1406,6 +1415,14 @@ FIGHTER_PROSPECTING_MUTATIONS = [
      "replace(state, prospecting=state.prospecting)"),
 ]
 
+# The objective asks each piece's price at its L* fighter (spec §2.8, ruling
+# T12g m3). Killed by tests/test_ai/test_gear_objective.py.
+FIGHTER_PIECE_PRICE_MUTATIONS = [
+    ("gear objective: a piece is priced at the character's worn prospecting",
+     "_price(state, game_data, ctx, history, targets[code][0], item)",
+     "_price(state, game_data, ctx, history, state, item)"),
+]
+
 DROP_ROWS_STORE_MUTATIONS = [
     ("drop rows: a failed action is an attempt",
      "                .where(col(Cycle.outcome) == \"ok\")\n"
@@ -1414,6 +1431,12 @@ DROP_ROWS_STORE_MUTATIONS = [
     ("drop rows: every action class is an attempt",
      "                .where(col(Cycle.action_class).in_((\"GatherAction\", \"FightAction\")))",
      "                .where(col(Cycle.action_class).is_not(None))"),
+    ("drop rows: last season's cycles are attempts",
+     "                .where(col(Cycle.ts) >= since.astimezone(timezone.utc).isoformat())\n",
+     ""),
+    ("drop rows: a cycle at the season start is no attempt",
+     "                .where(col(Cycle.ts) >= since.astimezone(timezone.utc).isoformat())",
+     "                .where(col(Cycle.ts) > since.astimezone(timezone.utc).isoformat())"),
     ("drop rows: no upper mark",
      "                .where(col(Cycle.id) <= through_id)",
      "                .where(col(Cycle.id) <= through_id + 1)"),
@@ -4208,6 +4231,9 @@ LEGACY_GATHER_SKILL_MUTATIONS = [
 # The pricer offers an under-skill gather priced by its grind. Killed by
 # tests/test_ai/test_acquisition_cost_wrapper.py.
 GATED_GATHER_MUTATIONS = [
+    ("acquisition_cost: a climb's gather ignores the observations",
+     "            actions_per_application=_gather_actions(item, route.via, state, game_data, store),",
+     "            actions_per_application=_gather_actions(item, route.via, state, game_data, None),"),
     ("acquisition_cost: no gated gather route",
      "        for kind in (SourceKind.CRAFT, SourceKind.GATHER):",
      "        for kind in (SourceKind.CRAFT,):"),
@@ -10356,6 +10382,9 @@ BAND_PICK_MUTATIONS = [
 # offline censuses call; its mutants moved with it. The task-target pricing
 # mutant stays on the player, which builds the context the step receives.
 GEAR_OBJECTIVE_CTX_MUTATIONS = [
+    ("ctx: the objective is priced outside a search episode",
+     "    with history.search_cache() if history is not None else nullcontext():",
+     "    with nullcontext():"),
     ("target: m* is fought while a piece of L* is missing",
      "        path_winnable=objective is not None and objective.held,\n",
      "        path_winnable=objective is not None,\n"),
@@ -11757,6 +11786,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
     run_group(GEAR_OBJECTIVE_SRC, FIGHTER_PROSPECTING_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, FIGHTER_PIECE_PRICE_MUTATIONS,
+              "tests/test_ai/test_gear_objective.py", survivors)
     run_group(FIGHT_WALK_SRC, FIGHT_SECONDS_READER_MUTATIONS[:1],
               "tests/test_ai/test_loop_rate.py", survivors)
     run_group(LOOP_RATE_SRC, FIGHT_SECONDS_READER_MUTATIONS[1:],

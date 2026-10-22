@@ -10,6 +10,7 @@ import attrs
 from artifactsmmo_api_client.models.character_schema import CharacterSchema
 from artifactsmmo_api_client.models.item_schema import ItemSchema
 from artifactsmmo_api_client.models.map_layer import MapLayer
+from artifactsmmo_api_client.models.status_schema import StatusSchema
 
 from artifactsmmo_cli.ai.best_loadout import BestLoadout
 from artifactsmmo_cli.ai.item_catalog import ItemStats
@@ -197,3 +198,13 @@ def make_best_loadout(loadout: tuple[str, ...] = (), **loop: object) -> BestLoad
     `loadout`; its bare loop loses."""
     loop_rate = make_loop(**loop)  # type: ignore[arg-type]
     return BestLoadout(loadout, loop_rate, make_loop(), loop_rate)
+
+
+def season_8_status() -> StatusSchema:
+    """The server status page (`GET /`): season 8, begun 2026-06-27, as the
+    live server reported it on 2026-10-21."""
+    return StatusSchema.from_dict({
+        "version": "8.2.4", "server_time": "2026-10-21T00:00:00+00:00", "max_level": 50,
+        "max_skill_level": 50, "characters_online": 1, "rate_limits": [],
+        "season": {"name": "God of the Sun", "number": 8,
+                   "start_date": "2026-06-27T00:00:00+00:00", "rewards": []}})

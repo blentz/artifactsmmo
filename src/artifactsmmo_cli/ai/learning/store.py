@@ -944,11 +944,15 @@ class LearningStore:
             last = s.exec(select(func.max(Cycle.id))).one()
         return 0 if last is None else int(last)
 
-    def fleet_drop_rows(self, after_id: int,
-                        through_id: int) -> list[tuple[str, str, int | None, str | None]]:
+    def fleet_drop_rows(self, after_id: int, through_id: int,
+                        since: datetime) -> list[tuple[str, str, int | None, str | None]]:
         """`(action_class, action_repr, prospecting, drops_json)` of every
         character's successful gather and fight with `after_id < id <=
-        through_id`, in id order: the drop observations (spec 2026-10-18 §2.8).
+        through_id`, recorded at or after `since`, in id order: the drop
+        observations (spec 2026-10-18 §2.8). `since` is the current season's
+        start (ruling T12f): a cycle of an earlier season is no evidence about
+        this one's rates or content. `ts` is a UTC ISO string, so it compares
+        with `since` in UTC as text.
         A failed gather rolled no drop and a lost fight drops nothing, so only
         an `ok` outcome is an attempt. A gather or fight row without its
         learning key is corrupt and raises: it never drops out of the count."""
@@ -958,6 +962,7 @@ class LearningStore:
                        Cycle.drops_json)
                 .where(col(Cycle.id) > after_id)
                 .where(col(Cycle.id) <= through_id)
+                .where(col(Cycle.ts) >= since.astimezone(timezone.utc).isoformat())
                 .where(col(Cycle.outcome) == "ok")
                 .where(col(Cycle.action_class).in_(("GatherAction", "FightAction")))
                 .order_by(col(Cycle.id)))

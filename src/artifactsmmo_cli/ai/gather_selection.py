@@ -21,10 +21,12 @@ class GatherCandidate:
 def expected_gathers(rate: int, min_quantity: int, max_quantity: int) -> Fraction:
     """Expected gathers to acquire one unit of a drop row: rate / average yield.
     Exact rational (never float) so the proof is about the real ordering, not a
-    surrogate. Public because every price of a gather (`GatherAction.cost`, the
-    acquisition walk's GATHER route) charges THIS figure per unit: a planner
-    gather credits one unit, and a 1-in-20 secondary drop takes 20 real gathers
-    to deliver it."""
+    surrogate. Public because the planner's price of a gather
+    (`GatherAction.cost`, via `GameData.gathers_per_unit`) charges THIS figure
+    per unit: a planner gather credits one unit, and a 1-in-20 secondary drop
+    takes 20 real gathers to deliver it. The acquisition walk's GATHER route no
+    longer reads it: it prices the LEARNED chance
+    (`acquisition_cost._units_per_attempt`, spec 2026-10-18 §2.8)."""
     avg_quantity = Fraction(min_quantity + max_quantity, 2)
     return Fraction(rate) / avg_quantity
 

@@ -36,7 +36,7 @@ from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES
-from tests.test_ai.fixtures import make_state, patched_logs
+from tests.test_ai.fixtures import make_state, patched_logs, season_8_status
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
@@ -101,8 +101,11 @@ def _patch_game_data_load():
                                   return_value=MagicMock(data=[_one_equippable_item()])))
         stack.enter_context(patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None))
         stack.enter_context(patch("artifactsmmo_cli.ai.game_data.get_account_details", return_value=None))
+        stack.enter_context(patch("artifactsmmo_cli.ai.game_data.get_server_details",
+                                  return_value=MagicMock(data=season_8_status())))
         stack.enter_context(patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache))
         yield
+
 
 
 class TestSyncBankPagination:

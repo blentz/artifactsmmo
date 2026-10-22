@@ -186,14 +186,17 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     gearcrafting's: the copper, a chicken's feather, then the
     copper_legs_armor that earns. Since spec §2.8 the piece the climb is in
     front of is the `leather_boots` (the legs add no XP): the same climb and
-    the same grind."""
+    the same grind. Since plan B Task 12a a drop farm is priced exactly
+    (rounded once a route, not once a unit), so the chicken's feathers are
+    cheaper and the cheaper gearcrafting rung is the `feather_coat`: a
+    chicken's feathers, the ash planks, then the coat."""
     report = _run(CRITERION_1_MAIN)
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "ReachSkill(gearcrafting->6)"
     assert [repr(a) for a in report.plan] == [
-        "Gather(copper_rocks×50)", "Craft(copper_bar×5)", "Fight(chicken)",
-        "Craft(copper_legs_armor×1)"]
+        "Fight(chicken)", "Gather(ash_tree×20)", "Craft(ash_plank×2)",
+        "Craft(feather_coat×1)"]
     assert report.decision.chosen_root == ReachSkillLevel(skill="gearcrafting", level=6)
     assert report.decision.blocked_target == "leather_boots"
     assert report.decision.declined == ()

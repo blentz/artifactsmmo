@@ -163,8 +163,7 @@ class RouteOption:
             craft, one purchase, one withdraw, one unit-recycle are each 1; a
             GATHER is the exact gathers one unit takes at its learned drop
             chance, a `Fraction`; a DROP is the expected wins per unit times
-            `cycles_per_kill`, rounded up to whole actions by the wrapper. A
-            fight for gold is one
+            one win's whole-loop actions, exact too. A fight for gold is one
             win's exact cost, a `Fraction` (ruling T2m M1): a gold demand takes
             many wins, and rounding each one up overpriced the gold 2-45%, so
             `_accumulate` rounds the route's applications up ONCE.

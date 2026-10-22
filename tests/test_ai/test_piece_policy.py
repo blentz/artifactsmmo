@@ -191,7 +191,9 @@ def test_a_standing_order_is_a_route_while_it_stands() -> None:
     and the step graph serves it as itself. The same character with the order
     gone reprices it through its next route, the craft behind its
     jewelrycrafting climb, and the step graph descends to the recipe: no fill is
-    planned against a vanished order."""
+    planned against a vanished order. The craft's price moved 113 -> 111 with
+    plan B Task 12a: its drop-fed materials are priced exactly, rounded once a
+    route instead of once a unit."""
     busy = shared_world(BUNDLE, with_ge_orders=True)
     quiet = shared_world(BUNDLE)
     ctx = TIMED_NO_PROFILE_CONTEXT
@@ -212,7 +214,7 @@ def test_a_standing_order_is_a_route_while_it_stands() -> None:
     assert [(r.kind, r.unlock, r.unlock_actions) for r in route_options(
         AMULET.code, climbing, quiet, ctx, store, policy=PIECE_POLICY)] == [
         ("craft", "skill:jewelrycrafting:10", 25)]
-    assert route_price(AMULET, climbing, quiet, ctx, store, policy=PIECE_POLICY) == 113
+    assert route_price(AMULET, climbing, quiet, ctx, store, policy=PIECE_POLICY) == 111
     assert actionable_step(AMULET, gone, quiet, ctx) == ObtainItem("iron_bar", 4)
 
 
@@ -238,7 +240,9 @@ def test_a_climb_is_priced_though_the_policy_admits_the_craft() -> None:
     skill costs the climb, whether or not the policy refuses it. `PIECE_POLICY`
     admits the gearcrafting and woodcutting routes as ready, and the price still
     carries both climbs: the price with both skills already at 10, plus each
-    grind, exactly as `LEGACY` (which refuses the routes) prices it."""
+    grind, exactly as `LEGACY` (which refuses the routes) prices it. The
+    ready price moved 214 -> 213 with plan B Task 12a: a drop farm is priced
+    exactly, rounded once a route instead of once a unit."""
     world = _world(CLIMB_CELL)
     ctx = TIMED_NO_PROFILE_CONTEXT
     state = replace(derived_scenario_state(SCENARIOS[CLIMB_CELL], world),
@@ -249,10 +253,10 @@ def test_a_climb_is_priced_though_the_policy_admits_the_craft() -> None:
     assert rates == {"gearcrafting": 30.0, "woodcutting": 30.0}
     climbs = sum(skill_grind_cycles(1, 0, MAX_XP, 10, 30.0) for _ in rates)
 
-    assert route_price(LEATHER, skilled, world, ctx, store, policy=PIECE_POLICY) == 214
+    assert route_price(LEATHER, skilled, world, ctx, store, policy=PIECE_POLICY) == 213
     assert climbs == 90
-    assert route_price(LEATHER, state, world, ctx, store, policy=PIECE_POLICY) == 214 + 90
-    assert route_price(LEATHER, state, world, ctx, store, policy=LEGACY) == 214 + 90
+    assert route_price(LEATHER, state, world, ctx, store, policy=PIECE_POLICY) == 213 + 90
+    assert route_price(LEATHER, state, world, ctx, store, policy=LEGACY) == 213 + 90
 
 
 def test_an_unpriceable_climb_leaves_the_piece_unpriced() -> None:

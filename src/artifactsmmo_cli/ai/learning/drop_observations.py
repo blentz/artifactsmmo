@@ -18,16 +18,24 @@ read from (the store itself, so the key cannot outlive its object) and the
 newest cycle id, and a newer id folds in only the rows past the last one read
 (the table is append-only).
 
-Inside a `LearningStore.search_cache` episode the tally is memoised through
-the store (`LearningStore.cached`): the pricing walk asks for every drop it
-prices, and each ask would otherwise read the newest cycle id again. The counts
-and `fleet_k` are read off the memoised tally (`fleet_k` reads the catalogue,
-and a memo keyed on a `GameData` belongs to `CatalogueScope` alone).
+Only the CURRENT season is evidence (ruling T12f): a cycle recorded before the
+season start the server reports (`GameData.season_start`, `GET /`) is no
+attempt. A reset changes rates and content, and last season's sources may be
+gone from this season's catalogue. Within the season, an observed source the
+catalogue lacks still raises.
+
+Inside a `LearningStore.search_cache` episode the tally and `fleet_k` are
+memoised through the store (`LearningStore.cached`): the pricing walk asks for
+every drop it prices, and each ask would otherwise read the newest cycle id
+again and refit the slope. The `fleet_k` memo holds the catalogue it was
+fitted on in its value, never an `id()` in its key, and serves only that
+catalogue.
 """
 
 import json
 import re
 from collections import Counter
+from datetime import datetime
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.drop_chance_core import fit_k
@@ -43,9 +51,9 @@ Key = tuple[str, str, int | None]
 Tally = tuple[Counter[Key], dict[Key, Counter[str]]]
 """Attempts per group, and each group's hits per item."""
 
-_COUNTS: list[tuple[LearningStore, int, Tally]] = []
-"""The last tally: its store (held, see the module doc), the newest cycle id
-folded in, and the tally."""
+_COUNTS: list[tuple[LearningStore, datetime, int, Tally]] = []
+"""The last tally: its store (held, see the module doc), the season start it
+reads from, the newest cycle id folded in, and the tally."""
 
 
 def _source(action_class: str, action_repr: str) -> str | None:
@@ -75,31 +83,34 @@ def _fold(tally: Tally, rows: list[tuple[str, str, int | None, str | None]]) -> 
         hits.setdefault(key, Counter()).update(drops.keys())
 
 
-def _tally(store: LearningStore) -> Tally:
-    """The fleet's attempts and hits through the newest cycle, read once per
-    search episode."""
-    return store.cached(("drop_tally",), lambda: _read_tally(store))
+def _tally(store: LearningStore, since: datetime) -> Tally:
+    """The fleet's attempts and hits since `since` through the newest cycle,
+    read once per search episode."""
+    return store.cached(("drop_tally", since), lambda: _read_tally(store, since))
 
 
-def _read_tally(store: LearningStore) -> Tally:
+def _read_tally(store: LearningStore, since: datetime) -> Tally:
     last = store.last_cycle_id()
     # A newest id below the one last read means the table was replaced or
-    # pruned under this store (a season reset): the tally is read afresh.
-    if _COUNTS and _COUNTS[0][0] is store and _COUNTS[0][1] <= last:
-        _, seen, tally = _COUNTS[0]
+    # pruned under this store: the tally is read afresh, as it is for a new
+    # season start.
+    if (_COUNTS and _COUNTS[0][0] is store and _COUNTS[0][1] == since
+            and _COUNTS[0][2] <= last):
+        _, _, seen, tally = _COUNTS[0]
         if seen == last:
             return tally
     else:
         seen, tally = 0, (Counter(), {})
-    _fold(tally, store.fleet_drop_rows(seen, last))
-    _COUNTS[:] = [(store, last, tally)]
+    _fold(tally, store.fleet_drop_rows(seen, last, since))
+    _COUNTS[:] = [(store, since, last, tally)]
     return tally
 
 
-def drop_counts(store: LearningStore, source: str, item: str) -> tuple[int, int]:
-    """`(attempts, hits)` of `item` at `source`, pooled over the fleet and
-    every prospecting."""
-    attempts, hits = _tally(store)
+def drop_counts(store: LearningStore, game_data: GameData, source: str,
+                item: str) -> tuple[int, int]:
+    """`(attempts, hits)` of `item` at `source` this season
+    (`game_data.season_start`), pooled over the fleet and every prospecting."""
+    attempts, hits = _tally(store, game_data.season_start)
     keys = [key for key in attempts if key[1] == source]
     return (sum(attempts[key] for key in keys),
             sum(hits[key][item] for key in keys))
@@ -127,8 +138,18 @@ def fleet_k(store: LearningStore, game_data: GameData) -> Fraction:
     A drop at API rate 1 is no sample either (ruling T11e): its chance is capped
     at 1 for every `k >= 0`, so its observed ratio is 1 whatever `k` is. It
     carries nothing about the slope, yet it would add `attempts·P²` to the
-    denominator and pull `k` toward 0 with full weight."""
-    attempts, hits = _tally(store)
+    denominator and pull `k` toward 0 with full weight.
+
+    Fitted once per search episode and catalogue: the memo's value holds the
+    catalogue it was fitted on, and another catalogue is fitted afresh."""
+    fitted_on, k = store.cached(("fleet_k",), lambda: (game_data, _fleet_k(store, game_data)))
+    if fitted_on is not game_data:
+        return _fleet_k(store, game_data)
+    return k
+
+
+def _fleet_k(store: LearningStore, game_data: GameData) -> Fraction:
+    attempts, hits = _tally(store, game_data.season_start)
     samples: list[tuple[int, int, int, int]] = []
     for key, count in attempts.items():
         action_class, source, prospecting = key

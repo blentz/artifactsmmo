@@ -12,6 +12,7 @@ import time
 from collections.abc import Callable, Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
+from datetime import datetime
 from fractions import Fraction
 from functools import cached_property
 from typing import Any, TypedDict
@@ -30,6 +31,7 @@ from artifactsmmo_api_client.api.my_account.get_account_details_my_details_get i
 from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import sync as get_bank_details
 from artifactsmmo_api_client.api.np_cs.get_all_npcs_items_npcs_items_get import sync as get_all_npc_items
 from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources
+from artifactsmmo_api_client.api.server_details.get_server_details_get import sync as get_server_details
 from artifactsmmo_api_client.api.tasks.get_all_tasks_tasks_list_get import sync as get_all_tasks
 from artifactsmmo_api_client.models.account_achievement_schema import AccountAchievementSchema
 from artifactsmmo_api_client.models.bank_schema import BankSchema
@@ -46,6 +48,7 @@ from artifactsmmo_api_client.models.map_schema import MapSchema
 from artifactsmmo_api_client.models.monster_schema import MonsterSchema
 from artifactsmmo_api_client.models.npc_item_schema import NPCItemSchema
 from artifactsmmo_api_client.models.resource_schema import ResourceSchema
+from artifactsmmo_api_client.models.status_schema import StatusSchema
 from artifactsmmo_api_client.models.task_full_schema import TaskFullSchema
 from artifactsmmo_api_client.types import Unset
 
@@ -185,6 +188,10 @@ class GameData:
     """The retained task pool. `_fetch_tasks` always paged it in full and the
     bundle always persisted it; until 2026-07-22 `_build_tasks` kept only the
     reward projections, so `type_`/`level`/`skill` were fetched and discarded."""
+    _season_start: datetime | None = None
+    """When the server's CURRENT season began (`GET /`, `season.start_date`).
+    None only for a catalogue built without the server page (a hand-built or
+    pre-v6 bundle); `season_start` raises then rather than invent a date."""
     _completed_achievements: set[str] = field(default_factory=set)
     """Achievement codes the ACCOUNT has completed (from
     /accounts/{account}/achievements). Evaluates `achievement_unlocked`
@@ -1657,6 +1664,7 @@ class GameData:
                 "effects": data._fetch_effects(client, acquire_data),
                 "bank": data._fetch_bank(client, acquire_account),
                 "achievements": data._fetch_achievements(client, acquire_account, acquire_data),
+                "server": data._fetch_server(client, acquire_data),
             }
             raw = {
                 k: (
@@ -1771,6 +1779,11 @@ class GameData:
             # through gated tiles it cannot actually enter.
             "achievements": [AccountAchievementSchema.from_dict(d)
                              for d in raw.get("achievements", [])],
+            # Absent from bundles built by hand: no server page, so no season
+            # start, and `season_start` raises when a reader needs it. Every
+            # live load fetches it (CACHE_VERSION 6).
+            "server": (StatusSchema.from_dict(raw["server"])
+                       if raw.get("server") is not None else None),
         }
 
     def _build_from_objs(self, objs: dict[str, Any],
@@ -1791,6 +1804,7 @@ class GameData:
         self._build_effects(objs["effects"])
         self._audit_effect_coverage()
         self._build_bank(objs["bank"])
+        self._build_server(objs.get("server"))
 
     def _fetch_bank(self, client: AuthenticatedClient,
                     acquire: Callable[[], None] = _no_charge) -> BankSchema | None:
@@ -1807,6 +1821,32 @@ class GameData:
             return
         self._bank_capacity = item.slots
         self._next_expansion_cost = item.next_expansion_cost
+
+    def _fetch_server(self, client: AuthenticatedClient,
+                      acquire: Callable[[], None] = _no_charge) -> StatusSchema:
+        """The server status page (`GET /`): the current season among it."""
+        acquire()
+        result = get_server_details(client=client)
+        if result is None:
+            raise ValueError("the server status page (GET /) returned nothing")
+        return result.data
+
+    def _build_server(self, status: StatusSchema | None) -> None:
+        """Keep the current season's start; a status page without one raises."""
+        if status is None:
+            return
+        if isinstance(status.season, Unset) or isinstance(status.season.start_date, Unset):
+            raise ValueError("the server status page carries no season start date")
+        self._season_start = status.season.start_date
+
+    @property
+    def season_start(self) -> datetime:
+        """When the server's current season began (`GET /`). Raises for a
+        catalogue built without the server page: there is no date to invent."""
+        if self._season_start is None:
+            raise ValueError("no season start: the catalogue was built without "
+                             "the server status page")
+        return self._season_start
 
     def _load_bank_metadata(self, client: AuthenticatedClient) -> None:
         """Fetch bank capacity and next expansion cost."""

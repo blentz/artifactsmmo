@@ -11,6 +11,7 @@ Ruling W (Task 5): the step was the player's own code, moved here whole.
 """
 
 from collections import Counter
+from contextlib import nullcontext
 from dataclasses import replace
 
 from artifactsmmo_cli.ai.combat import secure_win, unpotioned
@@ -104,9 +105,15 @@ def attach_gear_objective(state: WorldState, game_data: GameData, ctx: Selection
     context; then the grind target is `farm_target`'s, the keep follows the
     final target (`ctx.near_term_targets` are the in-flight upgrades) and
     keeps every `L*` piece (`with_objective_keep`), and the risk is judged on
-    it, bare of potions and at full hp."""
+    it, bare of potions and at full hp.
+
+    The objective is priced inside one `search_cache` episode: every drop and
+    gather route it prices reads the learned drop tally and slope
+    (`learning.drop_observations`) once, not once per route. Nothing here
+    writes the store."""
     task_monster = ctx.combat_monster
-    objective = gear_objective(state, game_data, ctx, history)
+    with history.search_cache() if history is not None else nullcontext():
+        objective = gear_objective(state, game_data, ctx, history)
     combat_monster = farm_target(task_monster, objective)
     return replace(
         ctx, gear_objective=objective, combat_monster=combat_monster,
