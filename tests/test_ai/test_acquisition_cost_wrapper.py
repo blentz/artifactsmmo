@@ -50,6 +50,7 @@ from artifactsmmo_cli.ai.obtain_sources import (
     obtain_sources,
 )
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.tiers.skill_grind_target import GRIND_PRICING
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 
 _BUNDLE = (Path(__file__).resolve().parent / "scenarios" / "fixtures"
@@ -776,6 +777,22 @@ def test_an_unmet_gate_becomes_a_PRICE_once_a_grind_rate_is_known(
         assert gated[0].unlock == "skill:weaponcrafting:10"
         assert gated[0].unlock_actions > 0
         assert gated[0].inputs == game_data.crafting_recipe("iron_sword")
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_a_policy_that_prices_no_climb_names_the_open_gate_once(
+        gated_state, game_data) -> None:
+    """A policy without `price_climbs` that opens the crafting gate (the
+    grind's `GRIND_PRICING`) prices the under-skill `iron_sword` as the ready
+    craft and adds no climb beside it, even with a grind rate to price one:
+    the gate it opens is no unlock."""
+    store = _store_with_rate("weaponcrafting", 40)
+    try:
+        routes = route_options("iron_sword", gated_state, game_data,
+                               TIMED_NO_PROFILE_CONTEXT, store, policy=GRIND_PRICING)
+        assert [(r.kind, r.unlock) for r in routes] == [("craft", "")]
     finally:
         store.end_session(exit_reason="normal")
         store.close()

@@ -3994,8 +3994,11 @@ PIECE_POLICY_OBJECTIVE_MUTATIONS = [
      "'fight_gold': False}),"),
 ]
 # ruling T2c': only a policy that sets `price_climbs` charges a climb for a
-# gate it opens; the skill grind's ranking (GRIND_PRICING) opens the gathering
-# gate on purpose. Killed by tests/test_ai/scenarios/test_fisher_cooking_rung.py.
+# gate it opens; the skill grind's ranking (GRIND_PRICING) opens both skill
+# gates on purpose. Killed by tests/test_ai/test_acquisition_cost_wrapper.py
+# (`test_a_policy_that_prices_no_climb_names_the_open_gate_once`): since
+# GRIND_PRICING derives GRIND_POLICY's open crafting gate (ruling T12k) the
+# fisher scenario no longer reaches the switch.
 PRICE_CLIMBS_SWITCH_MUTATIONS = [
     ("acquisition_cost: every policy prices a climb (price_climbs ignored)",
      "    if not policy.price_climbs:\n        return policy\n",
@@ -4252,12 +4255,18 @@ GRIND_PRICING_MUTATIONS = [
      "GRIND_PRICING = replace(GRIND_POLICY, price_climbs=False, gather_skill_gate=False)",
      "GRIND_PRICING = replace(GRIND_POLICY, price_climbs=False, gather_skill_gate=True)"),
 ]
-# Priced = served (rulings T12j, T12k). Killed by
+# Priced = served (rulings T12j, T12k). The rung's own produce limit is killed
+# by tests/test_ai/test_loss_risk.py (the rung prices are asked to produce the
+# rung): under GRIND_POLICY's switches and the probe state's removed copies
+# the only route it drops is a drop of the rung, which only an alchemy-40 rung
+# has on the bundle. The GE switch is killed by
 # tests/test_ai/scenarios/test_ge_market_triple.py.
-GRIND_SERVED_PRICE_MUTATIONS = [
+GRIND_RUNG_PRODUCE_MUTATIONS = [
     ("skill_grind_target: the grind prices a rung it would buy or withdraw",
      "            pricing_ctx, equip=False, policy=GRIND_PRICING, produce=frozenset({code}))",
      "            pricing_ctx, equip=False, policy=GRIND_PRICING, produce=frozenset())"),
+]
+GRIND_SERVED_PRICE_MUTATIONS = [
     ("skill_grind_target: the grind prices a GE fill its descent never takes",
      "GRIND_PRICING = replace(GRIND_POLICY, price_climbs=False, gather_skill_gate=False)",
      "GRIND_PRICING = replace(GRIND_POLICY, price_climbs=False, gather_skill_gate=False, "
@@ -12228,7 +12237,7 @@ def _collect_all_groups() -> None:
     run_group(FIGHT_LOOP_COST_SRC, GOLD_FUNDED_EXACT_MUTATIONS,
               "tests/test_ai/test_fight_loop_cost.py", survivors)
     run_group(ACQUISITION_COST_SRC, PRICE_CLIMBS_SWITCH_MUTATIONS,
-              "tests/test_ai/scenarios/test_fisher_cooking_rung.py", survivors)
+              "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_QUANTITY_MUTATIONS,
               "tests/test_ai/test_obtain_model.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_MINTS_MUTATIONS,
@@ -12239,6 +12248,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_obtain_model.py", survivors)
     run_group(ACQUISITION_COST_SRC, GATED_GATHER_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, GRIND_RUNG_PRODUCE_MUTATIONS,
+              "tests/test_ai/test_loss_risk.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_SERVED_PRICE_MUTATIONS,
               "tests/test_ai/scenarios/test_ge_market_triple.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_PRICING_MUTATIONS,
