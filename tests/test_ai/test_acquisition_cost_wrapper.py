@@ -43,6 +43,7 @@ from artifactsmmo_cli.ai.gear_objective import _price
 from artifactsmmo_cli.ai.learning.drop_observations import fleet_k
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
 from artifactsmmo_cli.ai.obtain_sources import (
     UNBOUNDED_CAPACITY,
     Source,
@@ -52,6 +53,7 @@ from artifactsmmo_cli.ai.obtain_sources import (
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.tiers.skill_grind_target import GRIND_PRICING
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.shared_world import shared_world
 
 _BUNDLE = (Path(__file__).resolve().parent / "scenarios" / "fixtures"
            / "gamedata_bundle.json")
@@ -1502,3 +1504,26 @@ def test_an_under_skill_gather_is_priced_by_its_grind_not_offered_as_ready(
     finally:
         store.end_session(exit_reason="normal")
         store.close()
+
+
+def test_a_produced_item_is_priced_only_by_making_it() -> None:
+    """Ruling T12j: an item in `produce` keeps only its CRAFT and GATHER
+    routes, as `ObtainModel.walk_graph` serves it, and its ingredients keep
+    every route. In the busy book, with copper banked, `copper_bar` is
+    crafted, filled or withdrawn and `copper_ore` gathered, filled or
+    withdrawn; produced, each keeps only the route that makes it."""
+    world = shared_world(_BUNDLE, with_ge_orders=True)
+    state = replace(scenario_state(SCENARIOS["l12_ge_book_grind"], world),
+                    bank_items={"copper_bar": 2, "copper_ore": 3})
+
+    def kinds(produce: frozenset[str]) -> dict[str, list[str]]:
+        options = acquisition_options("copper_bar", state, world, TIMED_NO_PROFILE_CONTEXT,
+                                      policy=LEGACY, produce=produce)
+        return {code: sorted(r.kind for r in options[code])
+                for code in ("copper_bar", "copper_ore")}
+
+    every = {"copper_bar": ["craft", "ge_fill", "withdraw"],
+             "copper_ore": ["gather", "ge_fill", "withdraw"]}
+    assert kinds(frozenset()) == every
+    assert kinds(frozenset({"copper_bar"})) == {**every, "copper_bar": ["craft"]}
+    assert kinds(frozenset({"copper_ore"})) == {**every, "copper_ore": ["gather"]}

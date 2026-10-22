@@ -1381,6 +1381,21 @@ DROP_OBSERVATIONS_MUTATIONS = [
      "            ):"),
 ]
 
+# A `produce` item is priced only by making it (ruling T12j). Killed by
+# tests/test_ai/test_acquisition_cost_wrapper.py
+# (`test_a_produced_item_is_priced_only_by_making_it`).
+PRODUCE_FILTER_MUTATIONS = [
+    ("acquisition_cost: a produced item keeps every route",
+     "        if code in produce:\n            routes = [route for route in routes if route.kind in _PRODUCING]",
+     "        if False:\n            routes = [route for route in routes if route.kind in _PRODUCING]"),
+    ("acquisition_cost: a produced item cannot be gathered",
+     "_PRODUCING = frozenset({SourceKind.CRAFT.value, SourceKind.GATHER.value})",
+     "_PRODUCING = frozenset({SourceKind.CRAFT.value})"),
+    ("acquisition_cost: a produced item cannot be crafted",
+     "_PRODUCING = frozenset({SourceKind.CRAFT.value, SourceKind.GATHER.value})",
+     "_PRODUCING = frozenset({SourceKind.GATHER.value})"),
+]
+
 # Drop and gather routes priced from the learned chance (spec 2026-10-18 §2.8,
 # plan B Task 12a). Killed by tests/test_ai/test_acquisition_cost_wrapper.py.
 DROP_PRICE_MUTATIONS = [
@@ -11802,6 +11817,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_drop_observations.py", survivors)
     run_group(LEARNING_STORE_SRC, DROP_ROWS_STORE_MUTATIONS,
               "tests/test_ai/test_drop_observations.py", survivors)
+    run_group(ACQUISITION_COST_SRC, PRODUCE_FILTER_MUTATIONS,
+              "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
     run_group(ACQUISITION_COST_SRC, DROP_PRICE_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
     run_group(GEAR_OBJECTIVE_SRC, FIGHTER_PROSPECTING_MUTATIONS,
