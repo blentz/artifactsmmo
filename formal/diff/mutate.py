@@ -1372,8 +1372,8 @@ DROP_OBSERVATIONS_MUTATIONS = [
      "    if fight.group(2) is not None:\n        return None",
      "    if False:\n        return None"),
     ("drop observations: counts ignore the source",
-     "    keys = [key for key in attempts if key[1] == source]",
-     "    keys = list(attempts)"),
+     "        source = key[1]\n        per_source[source] += count",
+     "        source = \"\"\n        per_source[source] += count"),
     ("drop observations: an unrecorded prospecting is a sample",
      "        if prospecting is None:\n            continue",
      "        if False:\n            continue"),
@@ -6941,8 +6941,8 @@ LOSS_RISK_ACQUISITION_MUTATIONS = [
      "    return per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight)\n",
      "    return per_kill\n"),
     ("loss risk: the routes drop the context's records",
-     "                                                  store, ctx.fight_records),\n",
-     "                                                  store, ()),\n"),
+     "                                                  ctx.drops(), ctx.fight_records),\n",
+     "                                                  ctx.drops(), ()),\n"),
     ("loss risk: the surcharge reads any monster's record",
      "        if monster == monster_code:\n",
      "        if True:\n"),
@@ -6960,8 +6960,8 @@ WIN_THRESHOLD_GRIND_MUTATIONS = [
      "        tuple(sorted(state.win_thresholds.items())),\n        (state.utility1_slot_quantity",
      "        (),\n        (state.utility1_slot_quantity"),
     ("worn stock: the grind memo ignores it",
-     "        (state.utility1_slot_quantity, state.utility2_slot_quantity),\n    )\n",
-     "        (0, 0),\n    )\n"),
+     "        (state.utility1_slot_quantity, state.utility2_slot_quantity),\n        learned_drops,\n    )\n",
+     "        (0, 0),\n        learned_drops,\n    )\n"),
 ]
 LOSS_RISK_COMBAT_MUTATIONS = [
     ("loss risk: a monster lost to only in another loadout keeps an empty record",
@@ -7083,17 +7083,18 @@ REGION_SPLIT_MUTATIONS = [
     ("factory: a legacy fight keeps the default region",
      "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),\n"
      "                                       travel_region=region, participants=joiners,\n"
-     "                                       party_loadout=potions))\n",
+     "                                       party_loadout=potions, learned_drops=learned_drops))\n",
      "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),\n"
      "                                       participants=joiners,\n"
-     "                                       party_loadout=potions))\n"),
+     "                                       party_loadout=potions, learned_drops=learned_drops))\n"),
     ("factory: the layered path forgets the legacy regions",
      "        for region, region_tiles in layered_extra(game_data, code, emitted.get(code, set())).items():\n",
      "        for region, region_tiles in layered_extra(game_data, code, set()).items():\n"),
     ("factory: a gather keeps the default region",
      "    actions.append(GatherAction(resource_code=resource_code, locations=frozenset(tiles),\n"
-     "                                travel_region=region))\n",
-     "    actions.append(GatherAction(resource_code=resource_code, locations=frozenset(tiles)))\n"),
+     "                                travel_region=region, learned_drops=learned_drops))\n",
+     "    actions.append(GatherAction(resource_code=resource_code, locations=frozenset(tiles),\n"
+     "                                learned_drops=learned_drops))\n"),
 ]
 # fight_tiles: the tiles a monster is fought on, shared by the factory and the
 # fight-ahead readers (fight-odds final review C1). Killed by
@@ -7451,8 +7452,10 @@ LOST_FIGHTS_PLAN_MUTATIONS = [
     ("player: the plan diagnostic never reads the record",
      "        self._refresh_party(datetime.now(tz=timezone.utc))\n"
      "        self._refresh_fight_record()\n"
+     "        self._refresh_learned_drops()\n"
      "        state = self.state\n",
      "        self._refresh_party(datetime.now(tz=timezone.utc))\n"
+     "        self._refresh_learned_drops()\n"
      "        state = self.state\n"),
 ]
 # An item-currency buy of the goal's own item is walked one bag-load at a
@@ -7493,8 +7496,8 @@ PARTY_LOADOUT_WIN_MUTATIONS = [
 ]
 PARTY_LOADOUT_FACTORY_MUTATIONS = [
     ("factory: the fight carries no party loadout",
-     "                                       party_loadout=potions))\n",
-     "                                       ))\n"),
+     "                                       party_loadout=potions, learned_drops=learned_drops))\n",
+     "                                       learned_drops=learned_drops))\n"),
 ]
 PARTY_LOADOUT_STORE_MUTATIONS = [
     ("lease store: the loadout is not written",
@@ -11675,7 +11678,7 @@ PLAN_EXISTS_BUILD_ACTIONS_MUTATIONS = [
     ("plan_exists: drop FightAction from _build_actions",
      "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),\n"
      "                                       travel_region=region, participants=joiners,\n"
-     "                                       party_loadout=potions))\n",
+     "                                       party_loadout=potions, learned_drops=learned_drops))\n",
      "            pass  # mutation: dropped FightAction append\n"),
     # Disable the items-task TaskTradeAction insertion block (BOTH the
     # quantity=k primary and the quantity=1 fallback). PURSUE_TASK then has
