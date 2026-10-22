@@ -8,6 +8,7 @@ from pathlib import Path
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.party_win import (
     party_chosen_loadout,
@@ -182,7 +183,7 @@ def test_the_factory_takes_the_party_to_the_boss() -> None:
     hero = _hero(gd)
     party = replace(hero, party=(replace(hero, character="R2D2"), replace(hero, character="Lor")))
     fights = {a.monster_code: a for a in build_actions(gd, party, None, bank_accessible=True,
-                                                         task_exchange_min_coins=0)
+                                                         task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
               if isinstance(a, FightAction)}
     assert fights["duskworm"].participants == ("R2D2", "Lor")
     assert fights["duskworm"].party_loadout == ("enhanced_health_potion",)

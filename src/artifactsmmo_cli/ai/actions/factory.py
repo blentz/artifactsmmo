@@ -35,6 +35,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.fight_tiles import by_region, layered_extra
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.party_win import party_loadout, party_participants
 from artifactsmmo_cli.ai.player_helpers import delete_cost
@@ -49,8 +50,14 @@ def build_actions(
     objective: CharacterObjective | None,
     bank_accessible: bool,
     task_exchange_min_coins: int,
+    learned_drops: LearnedDrops,
 ) -> list[Action]:
     """Build the action list. Each action handles its own movement in execute() and cost().
+
+    `learned_drops` is the cycle's learned drop model (ruling T16a), the SAME
+    value the cycle's `SelectionContext` carries: every gather and fight this
+    builds carries it, so the planner's gather price and the goal pools'
+    source picks read what the acquisition walk reads.
 
     The DESTRUCTIVE emissions (Recycle / NpcSell / Delete) are the raw MENU, not a
     decision: the keep authority licenses them per-cycle in `StrategyArbiter.select`
@@ -105,7 +112,7 @@ def build_actions(
         for region, tiles in by_region(locs, game_data).items():
             actions.append(FightAction(monster_code=monster_code, locations=frozenset(tiles),
                                        travel_region=region, participants=joiners,
-                                       party_loadout=potions))
+                                       party_loadout=potions, learned_drops=learned_drops))
             emitted.setdefault(monster_code, set()).add(region)
         actions.append(OptimizeLoadoutAction(target_monster_code=monster_code, game_data=game_data))
 
@@ -120,13 +127,14 @@ def build_actions(
         raid_tiles = game_data.raid_location_tiles(raid.code)
         if raid_tiles:
             actions.append(FightAction(monster_code=raid.monster,
-                                       locations=frozenset(raid_tiles)))
+                                       locations=frozenset(raid_tiles),
+                                       learned_drops=learned_drops))
             actions.append(OptimizeLoadoutAction(target_monster_code=raid.monster,
                                                  game_data=game_data))
 
     for resource_code, locs in game_data.all_resource_locations.items():
         for region, tiles in by_region(locs, game_data).items():
-            _gathers(actions, game_data, resource_code, tiles, region)
+            _gathers(actions, game_data, resource_code, tiles, region, learned_drops)
             emitted.setdefault(resource_code, set()).add(region)
 
     # One gather-loadout optimizer per gathering skill — lets the planner re-arm
@@ -355,11 +363,11 @@ def build_actions(
         if code in game_data.monsters.levels:
             actions.append(FightAction(
                 monster_code=code, locations=frozenset(region_tiles),
-                travel_region=region))
+                travel_region=region, learned_drops=learned_drops))
             actions.append(OptimizeLoadoutAction(
                 target_monster_code=code, game_data=game_data))
         elif game_data.resource_skill_level(code) is not None:
-            _gathers(actions, game_data, code, region_tiles, region)
+            _gathers(actions, game_data, code, region_tiles, region, learned_drops)
 
     # Phase B: bank expansion, transitions, gold management
     actions.append(BuyBankExpansionAction(bank_location=bank, accessible=bank_accessible))
@@ -394,17 +402,18 @@ def build_actions(
 
 
 def _gathers(actions: list[Action], game_data: GameData, resource_code: str,
-             tiles: list[tuple[int, int]], region: str) -> None:
+             tiles: list[tuple[int, int]], region: str, learned_drops: LearnedDrops) -> None:
     """The gathers of one resource in one region: the primary drop, then one
     targeted gather per NON-primary drop (P1: rare multi-drops — gems from
     rocks, pearls from fishing; the planner simulates the secondary yield via
     `GatherAction.drop_item_override`, so gem-ingredient chains plan)."""
     actions.append(GatherAction(resource_code=resource_code, locations=frozenset(tiles),
-                                travel_region=region))
+                                travel_region=region, learned_drops=learned_drops))
     primary = game_data.resource_drop_item(resource_code)
     seen: set[str] = set()
     for drop_item, _rate, _mn, _mx in game_data.resource_drop_table(resource_code):
         if drop_item != primary and drop_item not in seen:
             seen.add(drop_item)
             actions.append(GatherAction(resource_code=resource_code, locations=frozenset(tiles),
-                                        drop_item_override=drop_item, travel_region=region))
+                                        drop_item_override=drop_item, travel_region=region,
+                                        learned_drops=learned_drops))

@@ -16,6 +16,7 @@ import pytest
 
 from artifactsmmo_cli.ai.account_read_cache import AccountReadCache
 from artifactsmmo_cli.ai.actions.ge_cancel_order import GeCancelOrderAction
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -54,6 +55,7 @@ def make_player(tmp_path: Path) -> Iterator[Callable[[str], GamePlayer]]:
     def make(name: str) -> GamePlayer:
         player = GamePlayer(character=name)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.state = make_state(character=name)
         cache = AccountReadCache(db, name, account_interval=12.0)
         caches.append(cache)

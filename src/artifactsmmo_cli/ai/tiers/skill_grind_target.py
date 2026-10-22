@@ -40,6 +40,7 @@ from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.grind_probe_state import grind_probe_state
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
@@ -152,7 +153,7 @@ def is_obtainable(code: str, model: ObtainModel) -> bool:
 _CacheKey = tuple[str, int, tuple[tuple[str, str | None], ...],
                   tuple[tuple[str, int], ...], tuple[tuple[str, int], ...],
                   tuple[tuple[str, int], ...], tuple[tuple[str, int, int], ...],
-                  tuple[tuple[str, Fraction], ...], tuple[int, int]]
+                  tuple[tuple[str, Fraction], ...], tuple[int, int], LearnedDrops]
 
 CACHE_MAX_ENTRIES = 4096
 """Per-GameData LRU bound, mirroring `equipment/loadout_cache`: comfortably holds
@@ -165,7 +166,8 @@ bare `id()` key is unsound on its own."""
 
 
 def _cache_key(skill: str, state: WorldState,
-               fight_records: tuple[tuple[str, int, int], ...]) -> "_CacheKey":
+               fight_records: tuple[tuple[str, int, int], ...],
+               learned_drops: LearnedDrops) -> "_CacheKey":
     """The determinants of a candidate list, and nothing else.
 
     `level` and `equipment` drive `is_winnable` (hence obtainability and the DROP
@@ -195,7 +197,11 @@ def _cache_key(skill: str, state: WorldState,
 
     `win_thresholds` drive the same `is_winnable` (spec 2026-10-15
     fight-gates-odds §1), and so do the utility slot quantities: the odds
-    drink the worn restore stock (`combat.worn_restore`)."""
+    drink the worn restore stock (`combat.worn_restore`).
+
+    `learned_drops` (`ctx.drops()`, ruling T16a) prices every rung's gathered
+    and dropped materials at the learned chance, so a new observation reprices
+    them; the value itself is the key (it is hashable), never its `id()`."""
     return (
         skill,
         state.level,
@@ -206,6 +212,7 @@ def _cache_key(skill: str, state: WorldState,
         fight_records,
         tuple(sorted(state.win_thresholds.items())),
         (state.utility1_slot_quantity, state.utility2_slot_quantity),
+        learned_drops,
     )
 
 
@@ -297,7 +304,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     `recipe_closure` is built ONCE per call and shared across candidates, so the
     added cost is one closure walk per rung rather than one per material."""
     cache = _CACHES.cache_for(game_data)
-    key = _cache_key(skill, state, ctx.fight_records)
+    key = _cache_key(skill, state, ctx.fight_records, ctx.drops())
     hit = cache.get(key)
     if hit is not None:
         cache.move_to_end(key)
@@ -307,7 +314,8 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     # rungs of one skill share most of their materials.
     model = grind_model(state, game_data)
     pricing_ctx = replace(NO_PROFILE_CONTEXT, fight_records=ctx.fight_records,
-                          fight_seconds=ctx.fight_seconds, action_seconds=ctx.action_seconds)
+                          fight_seconds=ctx.fight_seconds, action_seconds=ctx.action_seconds,
+                          learned_drops=ctx.drops())
     # The SAME `current_level` `skill_grind_target` hands the selection core.
     current_level = state.skills.get(skill, 0)
     for code, stats in game_data.all_item_stats.items():

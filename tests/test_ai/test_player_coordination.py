@@ -35,6 +35,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RoleChange
 from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY, SUPPLY_DEMAND_MIN, supply_due
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.coordination_store import (
     BANK_CLAIM_TTL_SECONDS,
     GE_ORDER_CLAIM_TTL_SECONDS,
@@ -184,6 +185,7 @@ def test_producing_requirement_none_when_the_api_exposes_neither():
 def test_own_unmet_demand_empty_without_a_crafting_target():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     assert p._last_decide_crafting_target is None
     assert p._own_unmet_demand(make_state(), _make_planner_gd()) == {}
 
@@ -191,6 +193,7 @@ def test_own_unmet_demand_empty_without_a_crafting_target():
 def test_own_unmet_demand_subtracts_held_inventory():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     gd = _make_planner_gd()
     gd._crafting_recipes = {"copper_dagger": {"copper_bar": 2}}
     p._last_decide_crafting_target = "copper_dagger"
@@ -201,6 +204,7 @@ def test_own_unmet_demand_subtracts_held_inventory():
 def test_own_unmet_demand_excludes_fully_held_items():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     gd = _make_planner_gd()
     gd._crafting_recipes = {"copper_dagger": {"copper_bar": 2}}
     p._last_decide_crafting_target = "copper_dagger"
@@ -217,6 +221,7 @@ def test_own_unmet_demand_nets_the_account_wide_bank_too():
     over-production of exactly what the fleet already holds."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     gd = _make_planner_gd()
     gd._crafting_recipes = {"copper_dagger": {"copper_bar": 2}}
     p._last_decide_crafting_target = "copper_dagger"
@@ -228,6 +233,7 @@ def test_own_unmet_demand_nets_the_account_wide_bank_too():
 def test_own_unmet_demand_bank_netting_only_partially_covers():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     gd = _make_planner_gd()
     gd._crafting_recipes = {"copper_dagger": {"copper_bar": 5}}
     p._last_decide_crafting_target = "copper_dagger"
@@ -242,6 +248,7 @@ def test_own_unmet_demand_bank_netting_only_partially_covers():
 def test_pick_supply_target_none_without_a_held_role():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     assert p._role is None
     result = p._pick_supply_target({"copper_ore": 5}, {"copper_ore": "mining"},
                                    make_state(), {})
@@ -251,6 +258,7 @@ def test_pick_supply_target_none_without_a_held_role():
 def test_pick_supply_target_none_for_an_unknown_role():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._role = "not_a_real_role"
     result = p._pick_supply_target({"copper_ore": 5}, {"copper_ore": "mining"},
                                    make_state(), {})
@@ -260,6 +268,7 @@ def test_pick_supply_target_none_for_an_unknown_role():
 def test_pick_supply_target_ignores_demand_outside_the_role_skills():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._role = "miner"  # owns {mining, weaponcrafting}
     item_demand = {"ash_plank": 9}  # woodcutting/gearcrafting -> logger's territory
     skill_of_item = {"ash_plank": "woodcutting"}
@@ -277,6 +286,7 @@ def test_pick_supply_target_ignores_demand_with_no_producing_skill_at_all():
     level gate is consulted, since there is no skill to read a level in."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._role = "miner"
     assert p._pick_supply_target({"mystery": 9}, {"mystery": None},
                                  make_state(bank_items={}), {}) is None
@@ -285,6 +295,7 @@ def test_pick_supply_target_ignores_demand_with_no_producing_skill_at_all():
 def test_pick_supply_target_picks_the_highest_demand_match():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._role = "miner"
     item_demand = {"copper_ore": 4, "iron_ore": 9}
     skill_of_item = {"copper_ore": "mining", "iron_ore": "mining"}
@@ -300,6 +311,7 @@ def test_pick_supply_target_skips_an_item_this_character_cannot_produce():
     stall from role selection to supply selection."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._role = "miner"
     item_demand = {"copper_ore": 4, "iron_ore": 9}
     skill_of_item = {"copper_ore": "mining", "iron_ore": "mining"}
@@ -315,6 +327,7 @@ def test_pick_supply_target_keeps_an_item_the_character_can_produce():
     comparison, not a blanket skip of anything carrying a requirement."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._role = "miner"
     item_demand = {"copper_ore": 4, "iron_ore": 9}
     skill_of_item = {"copper_ore": "mining", "iron_ore": "mining"}
@@ -332,6 +345,7 @@ def test_pick_supply_target_none_when_the_bank_has_never_been_visited():
     contents are known, so this must return None rather than guess."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._role = "miner"
     item_demand = {"copper_ore": 3}
     skill_of_item = {"copper_ore": "mining"}
@@ -347,6 +361,7 @@ def test_pick_supply_target_treats_a_visited_empty_bank_as_zero():
     must be distinguished from."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._role = "miner"
     item_demand = {"copper_ore": 3}
     skill_of_item = {"copper_ore": "mining"}
@@ -365,6 +380,7 @@ def test_update_coordination_is_a_noop_without_a_store():
     `play <character>` and a behavior change."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     p._supply_target = ("stale", 1, 1)  # prove it gets CLEARED, not left stale
@@ -380,6 +396,7 @@ def test_update_coordination_is_a_noop_without_a_store():
 def test_set_coordination_store_attaches_it():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     assert p._coordination is None
     store = CoordinationStore(db_path=":memory:", character="hero")
     try:
@@ -392,6 +409,7 @@ def test_set_coordination_store_attaches_it():
 def test_update_coordination_claims_a_role_when_none_held(tmp_path):
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
@@ -417,6 +435,7 @@ def test_update_coordination_joins_a_role_two_siblings_already_hold(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     store = CoordinationStore(db_path=db, character="hero")
@@ -441,6 +460,7 @@ def test_update_coordination_joins_a_role_two_siblings_already_hold(tmp_path):
 def test_update_coordination_keeps_and_increments_held_cycles(tmp_path):
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
@@ -466,6 +486,7 @@ def test_update_coordination_does_not_set_role_when_the_claim_does_not_land(tmp_
     this character and a sibling joins work already being done."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
@@ -492,6 +513,7 @@ def test_update_coordination_clears_a_stale_role_when_a_reclaim_does_not_land(tm
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     store = CoordinationStore(db_path=db, character="hero")
@@ -516,6 +538,7 @@ def test_update_coordination_clears_a_stale_role_when_a_reclaim_does_not_land(tm
 def test_update_coordination_renews_the_lease_only_while_a_role_is_held(tmp_path, monkeypatch):
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
@@ -542,6 +565,7 @@ def test_update_coordination_releases_an_idle_role_after_min_hold(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(bank_items={})
     p.game_data = _two_role_demand_gd()
     store = CoordinationStore(db_path=db, character="hero")
@@ -574,6 +598,7 @@ def test_update_coordination_keeps_an_idle_role_when_nothing_else_wants_work(tmp
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(bank_items={})
     p.game_data = _two_role_demand_gd()
     store = CoordinationStore(db_path=db, character="hero")
@@ -610,6 +635,7 @@ def test_update_coordination_idle_release_does_not_immediately_reclaim(tmp_path)
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(bank_items={})
     p.game_data = _two_role_demand_gd()
     store = CoordinationStore(db_path=db, character="hero")
@@ -669,6 +695,7 @@ def test_update_coordination_records_each_quiet_cycle_in_the_window(tmp_path):
     it takes one observation per cycle — quiet cycles land as True."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _mining_demand_gd()
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
@@ -696,6 +723,7 @@ def test_a_demand_cycle_is_recorded_without_erasing_the_window(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(bank_items={})
     p.game_data = _mining_demand_gd()
     store = CoordinationStore(db_path=db, character="hero")
@@ -721,6 +749,7 @@ def test_update_coordination_clears_the_window_when_the_role_changes(tmp_path):
     not be carried into the next."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _mining_demand_gd()
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
@@ -743,6 +772,7 @@ def test_update_coordination_computes_the_supply_target_from_sibling_demand(tmp_
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(bank_items={"copper_ore": 2})
     p.game_data = gd
     store = CoordinationStore(db_path=db, character="hero")
@@ -773,6 +803,7 @@ def test_update_coordination_supply_target_none_without_a_matching_role(tmp_path
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = gd
     store = CoordinationStore(db_path=db, character="hero")
@@ -814,6 +845,7 @@ def _tried(target, plan_len: int) -> list[dict[str, object]]:
 def test_note_supply_servability_extends_the_run_when_the_goal_finds_no_plan():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._supply_target = ("copper_ore", 7, 5)
     p._note_supply_servability(_tried(p._supply_target, 0))
     p._note_supply_servability(_tried(p._supply_target, 0))
@@ -823,6 +855,7 @@ def test_note_supply_servability_extends_the_run_when_the_goal_finds_no_plan():
 def test_note_supply_servability_breaks_the_run_on_a_real_plan():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._supply_target = ("copper_ore", 7, 5)
     p._role_unservable_cycles = ROLE_UNSERVABLE_CYCLES - 1
     p._note_supply_servability(_tried(p._supply_target, 4))
@@ -837,6 +870,7 @@ def test_note_supply_servability_leaves_the_run_alone_when_the_goal_was_not_trie
     clearing the run would be honest."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._supply_target = ("copper_ore", 7, 5)
     p._role_unservable_cycles = 4
     p._note_supply_servability([])
@@ -850,6 +884,7 @@ def test_note_supply_servability_clears_the_run_without_a_supply_target():
     produces is in demand) means no run."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._role_unservable_cycles = 9
     assert p._supply_target is None
     p._note_supply_servability(_tried(("copper_ore", 7, 5), 0))
@@ -866,6 +901,7 @@ def _held_miner(tmp_path, skills=None):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(bank_items={}, **({"skills": skills} if skills else {}))
     p.game_data = _mining_demand_gd()
     store = CoordinationStore(db_path=db, character="hero")
@@ -917,6 +953,7 @@ def test_update_coordination_does_not_block_an_idle_release(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(bank_items={})
     p.game_data = _two_role_demand_gd()
     store = CoordinationStore(db_path=db, character="hero")
@@ -988,6 +1025,7 @@ def test_update_coordination_claims_the_role_its_skills_fit(tmp_path):
     everyone the first catalog entry. Proves the parameter is not inert."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.game_data = _mining_demand_gd()
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
     p.set_coordination_store(store)
@@ -1024,6 +1062,7 @@ def _decide_with_skills(tmp_path, name, skills) -> str | None:
     db = str(tmp_path / f"coord_{name}.db")
     p = GamePlayer(character=name)
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(bank_items={}, skills=skills)
     p.game_data = _iron_gated_gd()
     store = CoordinationStore(db_path=db, character=name)
@@ -1068,6 +1107,7 @@ def test_update_coordination_supply_target_respects_the_same_gate(tmp_path):
     gd._resource_skill = {**gd._resource_skill, "copper_rocks": ("mining", 1)}
     p = GamePlayer(character="Lor")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(bank_items={}, skills=dict(_LOR_SKILLS))
     p.game_data = gd
     store = CoordinationStore(db_path=db, character="Lor")
@@ -1095,6 +1135,7 @@ def test_notify_observer_populates_role_and_supply_target():
     calls: list[CycleSnapshot] = []
     player = GamePlayer(character="hero", cycle_observer=calls.append)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.state = make_state()
     player._role = "miner"
     player._supply_target = ("copper_ore", 10, 4)
@@ -1110,6 +1151,7 @@ def test_notify_observer_role_and_supply_target_none_by_default():
     calls: list[CycleSnapshot] = []
     player = GamePlayer(character="hero", cycle_observer=calls.append)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.state = make_state()
     player._notify_observer("X", "Y", "ok", goal_rank_trace=[])
     assert len(calls) == 1
@@ -1127,6 +1169,7 @@ def test_notify_observer_carries_this_cycles_role_change():
     calls: list[CycleSnapshot] = []
     player = GamePlayer(character="hero", cycle_observer=calls.append)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.state = make_state()
     player._role = "miner"
     player._role_change = RoleChange(previous=None, current="miner",
@@ -1144,6 +1187,7 @@ def test_notify_observer_carries_this_cycles_role_change():
 def test_update_coordination_records_a_claim_as_a_transition(tmp_path):
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(bank_items={})
     p.game_data = _mining_demand_gd()
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
@@ -1210,6 +1254,7 @@ def test_update_coordination_clears_the_role_change_without_a_store():
     """Every single-character run takes this path on every cycle."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _mining_demand_gd()
     p._role_change = RoleChange(previous=None, current="miner")
@@ -1236,6 +1281,7 @@ def test_a_coordinated_supply_target_reaches_a_real_supply_bank_goal(tmp_path):
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(bank_items={"copper_ore": 2})
     p.game_data = gd
     store = CoordinationStore(db_path=db, character="hero")
@@ -1291,6 +1337,7 @@ def test_a_sub_threshold_coordinated_demand_is_targeted_but_never_fires(tmp_path
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(bank_items={"copper_ore": 2})
     p.game_data = gd
     store = CoordinationStore(db_path=db, character="hero")
@@ -1352,6 +1399,7 @@ def test_update_coordination_reads_sibling_bank_claims(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(bank_items={"sap": 111})
     p.game_data = _make_planner_gd()
     store = CoordinationStore(db_path=db, character="hero")
@@ -1373,6 +1421,7 @@ def test_update_coordination_clears_sibling_bank_claims_without_a_store():
     exactly what it computed before this feature existed."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     p._sibling_bank_claims = {"sap": 90}  # prove it gets CLEARED, not left stale
@@ -1389,6 +1438,7 @@ def test_a_character_never_reads_back_its_own_bank_claim(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(bank_items={"sap": 111})
     p.game_data = _make_planner_gd()
     store = CoordinationStore(db_path=db, character="hero")
@@ -1404,12 +1454,14 @@ def test_a_character_never_reads_back_its_own_bank_claim(tmp_path):
 def test_claim_bank_stock_is_a_noop_without_a_store():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._claim_bank_stock(WithdrawItemAction(code="sap", quantity=5))  # must not raise
 
 
 def test_release_bank_stock_is_a_noop_without_a_store():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._release_bank_stock(WithdrawItemAction(code="sap", quantity=5))  # must not raise
 
 
@@ -1420,6 +1472,7 @@ def test_release_bank_stock_leaves_a_claim_alone_for_a_non_withdraw_action(tmp_p
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     store = CoordinationStore(db_path=db, character="hero")
     observer = CoordinationStore(db_path=db, character="observer")
     p.set_coordination_store(store)
@@ -1443,6 +1496,7 @@ def test_execute_publishes_the_claim_before_the_withdraw_request(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(x=4, y=0, bank_items={"sap": 111})
     p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
     observer = CoordinationStore(db_path=db, character="observer")
@@ -1482,6 +1536,7 @@ def test_execute_releases_the_claim_when_the_withdraw_is_rejected(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(x=4, y=0, bank_items={"sap": 111})
     p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
     observer = CoordinationStore(db_path=db, character="observer")
@@ -1513,6 +1568,7 @@ def test_execute_releases_the_claim_when_the_withdraw_is_rate_limited(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(x=4, y=0, bank_items={"sap": 111})
     p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
     observer = CoordinationStore(db_path=db, character="observer")
@@ -1545,6 +1601,7 @@ def test_execute_keeps_the_claim_when_the_withdraw_succeeds(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(x=4, y=0, bank_items={"sap": 111})
     p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
     observer = CoordinationStore(db_path=db, character="observer")
@@ -1574,6 +1631,7 @@ def test_execute_claims_nothing_for_a_non_withdraw_action(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(x=0, y=0)
     p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
     observer = CoordinationStore(db_path=db, character="observer")
@@ -1597,6 +1655,7 @@ def test_update_coordination_reads_sibling_order_claims(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     store = CoordinationStore(db_path=db, character="hero")
@@ -1618,6 +1677,7 @@ def test_update_coordination_clears_sibling_order_claims_without_a_store():
     it reported before this feature existed."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     p._sibling_order_claims = frozenset({"order-1"})  # prove it is CLEARED
@@ -1634,6 +1694,7 @@ def test_a_character_never_reads_back_its_own_order_claim(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     store = CoordinationStore(db_path=db, character="hero")
@@ -1649,12 +1710,14 @@ def test_a_character_never_reads_back_its_own_order_claim(tmp_path):
 def test_claim_ge_order_is_a_noop_without_a_store():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._claim_ge_order(GeCancelOrderAction(order_id="order-1", ge_location=(0, 0)))
 
 
 def test_release_ge_orders_is_a_noop_without_a_store():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._release_ge_orders(GeCancelOrderAction(order_id="order-1", ge_location=(0, 0)))
 
 
@@ -1665,6 +1728,7 @@ def test_release_ge_orders_leaves_a_claim_alone_for_a_non_cancel_action(tmp_path
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     store = CoordinationStore(db_path=db, character="hero")
     observer = CoordinationStore(db_path=db, character="observer")
     p.set_coordination_store(store)
@@ -1688,6 +1752,7 @@ def test_execute_publishes_the_order_claim_before_the_cancel_request(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(x=5, y=1)
     p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
     observer = CoordinationStore(db_path=db, character="observer")
@@ -1725,6 +1790,7 @@ def test_execute_releases_the_order_claim_when_the_cancel_is_rejected(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(x=5, y=1)
     p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
     observer = CoordinationStore(db_path=db, character="observer")
@@ -1757,6 +1823,7 @@ def test_execute_keeps_the_order_claim_when_the_cancel_succeeds(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state(x=5, y=1)
     p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
     observer = CoordinationStore(db_path=db, character="observer")
@@ -1825,6 +1892,7 @@ def _player_with_coordination(
     resolved_db = db if db is not None else str(tmp_path / "coord.db")
     p = GamePlayer(character=name)
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _self_servable_gd()
     p._role = "logger"
@@ -1957,6 +2025,7 @@ def test_no_coordination_store_leaves_the_asymmetric_set_empty():
     whether or not that reset exists."""
     player = GamePlayer(character="solo")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.state = make_state()
     player._asymmetric_demand = frozenset({"stale_code"})  # prove it gets CLEARED
     player._update_coordination(player.state, player.game_data)
@@ -2289,6 +2358,7 @@ def _coord_player(tmp_path, character: str = "C3P0"):  # type: ignore[no-untyped
     db = str(tmp_path / "coord.db")
     player = GamePlayer(character=character)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.set_coordination_store(CoordinationStore(db_path=db, character=character))
     return player, db
 
@@ -2336,6 +2406,7 @@ def test_refresh_sibling_reads_is_a_no_op_without_coordination(tmp_path) -> None
     """Every single-character run takes this path."""
     player = GamePlayer(character="solo")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
 
     player._refresh_sibling_reads(datetime.now(tz=timezone.utc))
 
@@ -2363,6 +2434,7 @@ def test_a_skill_gated_character_publishes_the_target_it_cannot_make():
     `SUPPLY_BANK`'s second arm fires on."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     gd = _make_planner_gd()
     gd._crafting_recipes = {"copper_dagger": {"copper_bar": 2}}
     p._last_decide_crafting_target = None
@@ -2383,6 +2455,7 @@ def test_both_roots_are_published_not_one_or_the_other():
     invented at the call site."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     gd = _make_planner_gd()
     gd._crafting_recipes = {"copper_dagger": {"copper_bar": 2},
                             "iron_dagger": {"iron_bar": 3}}
@@ -2403,6 +2476,7 @@ def test_update_coordination_publishes_the_need_and_reads_the_siblings(tmp_path)
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero", fleet_order=("HAL", "hero"))
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     p._consumable_need = {"small_health_potion": 40}
@@ -2426,6 +2500,7 @@ def test_update_coordination_publishes_its_share_of_the_shortfall(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     p._supply_shortfall = (("cooked_bass", 23),)
@@ -2455,6 +2530,7 @@ def test_the_read_only_refresh_reads_the_siblings_needs(tmp_path):
 def test_without_a_store_no_sibling_need_is_counted():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     p._sibling_needs = {"HAL": {"cooked_bass": 9}}
@@ -2473,6 +2549,7 @@ def test_the_shortfall_reaches_the_selection_context(monkeypatch):
     use."""
     p = GamePlayer(character="hero", fleet_order=("HAL", "hero"))
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     p._sibling_needs = {"HAL": {"cooked_bass": 4}}
@@ -2506,6 +2583,7 @@ def test_the_skill_demand_is_known_when_the_loadout_is_chosen(monkeypatch):
     be chosen against a context that already carries it."""
     p = GamePlayer(character="hero", fleet_order=("hero",))
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     seen = {}
@@ -2527,6 +2605,7 @@ def test_the_skill_demand_is_known_when_the_loadout_is_chosen(monkeypatch):
 def test_the_role_and_the_fleet_s_roles_reach_the_selection_context(monkeypatch):
     p = GamePlayer(character="hero", fleet_order=("hero",))
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     p._role = "fisher"
@@ -2549,6 +2628,7 @@ def test_a_siblings_live_lease_is_a_fleet_role(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = _make_planner_gd()
     store = CoordinationStore(db_path=db, character="hero")
@@ -2573,6 +2653,7 @@ def test_the_read_only_path_reads_the_fleet_roles(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     store = CoordinationStore(db_path=db, character="hero")
     sibling = CoordinationStore(db_path=db, character="HAL")
     p.set_coordination_store(store)
@@ -2592,6 +2673,7 @@ def test_the_diagnostic_adopts_the_lease_naming_this_character(tmp_path):
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     store = CoordinationStore(db_path=db, character="hero")
     sibling = CoordinationStore(db_path=db, character="HAL")
     p.set_coordination_store(store)
@@ -2614,6 +2696,7 @@ def test_the_diagnostic_adopts_the_lease_naming_this_character(tmp_path):
 def test_the_diagnostic_without_a_store_holds_no_role():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._adopt_lease_role(datetime.now(tz=timezone.utc))
     assert p._role is None
 
@@ -2621,6 +2704,7 @@ def test_the_diagnostic_without_a_store_holds_no_role():
 def test_a_detached_store_clears_the_fleet_roles():
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p._fleet_roles = frozenset({"fisher"})
     p._update_coordination(make_state(), _make_planner_gd())
     assert p._fleet_roles == frozenset()
@@ -2629,6 +2713,7 @@ def test_a_detached_store_clears_the_fleet_roles():
 def test_the_work_of_an_item_is_its_acquisition_walk(monkeypatch):
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.history = object()
     stores = []
     walks = {"cooked_trout": 2, "relic": UNOBTAINABLE_PER_UNIT}
@@ -2653,6 +2738,7 @@ def test_update_coordination_weighs_role_demand_by_work(tmp_path, monkeypatch):
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.state = make_state()
     p.game_data = gd
     store = CoordinationStore(db_path=db, character="hero")
@@ -2684,6 +2770,7 @@ def test_real_work_of_an_item_prices_the_craft_route(bundle_game_data):
     """No stubbing: the real walk over the bundle world (gather + craft route)."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     work = _REAL_WORK_OF_ITEM(p, {"ash_plank": 4}, make_state(), bundle_game_data)
     assert work == {"ash_plank": _EXPECTED_PLANK_WORK}
 
@@ -2693,6 +2780,7 @@ def test_work_of_an_item_ignores_what_the_character_holds_and_banks(bundle_game_
     shrink it (the fisher holds the food it is asked for)."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     empty = _REAL_WORK_OF_ITEM(p, {"ash_plank": 4}, make_state(), bundle_game_data)
     held = _REAL_WORK_OF_ITEM(
         p, {"ash_plank": 4},

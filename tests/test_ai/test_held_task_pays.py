@@ -15,6 +15,7 @@ import artifactsmmo_cli.ai.player as player_mod
 from artifactsmmo_cli.ai.best_loadout import best_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.held_task_pays import held_task_pays
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -202,6 +203,7 @@ class TestPlayerPricesThePayOncePerCycle:
     def _player(self, monkeypatch: pytest.MonkeyPatch, state, pays: list[object]):  # type: ignore[no-untyped-def]
         player = GamePlayer(character="probe", history=None)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.state = state
         player.game_data = GameData()
         monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: None)

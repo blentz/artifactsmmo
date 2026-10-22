@@ -7,6 +7,7 @@ import pytest
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -113,7 +114,7 @@ def test_gather_cost_penalizes_suboptimal_tool(gather_cost_fixture: tuple[WorldS
     """GatherAction.cost is higher when a better gather tool is owned but not equipped."""
     state, game_data = gather_cost_fixture  # owns iron_axe (woodcutting) but wears a sword
     # resource is a woodcutting tree.
-    action = GatherAction(resource_code="ash_tree", locations=frozenset({(0, 0)}))
+    action = GatherAction(resource_code="ash_tree", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     cost_suboptimal = action.cost(state, game_data)
     # with the axe already equipped the same gather has NO loadout penalty:
     state_axe = equip(state, "iron_axe", "weapon_slot")
@@ -150,7 +151,7 @@ def test_gather_cost_no_penalty_when_no_skill_requirement(gather_cost_fixture: t
     """
     state, game_data = gather_cost_fixture  # owns iron_axe but wears wooden_stick
     # "plain_rock" is absent from _resource_skill → resource_skill_level returns None
-    action = GatherAction(resource_code="plain_rock", locations=frozenset({(0, 0)}))
+    action = GatherAction(resource_code="plain_rock", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     cost_suboptimal = action.cost(state, game_data)
     # Equip the gather tool: without the None guard this path would crash or diverge
     state_axe = equip(state, "iron_axe", "weapon_slot")

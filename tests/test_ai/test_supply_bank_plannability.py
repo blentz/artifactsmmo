@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -107,7 +108,7 @@ def _state(gd: GameData, *, bank: dict[str, int] | None = None,
 def _actions(gd: GameData, state) -> list:
     objective = CharacterObjective.from_game_data(gd)
     return build_actions(gd, state, objective, bank_accessible=True,
-                         task_exchange_min_coins=0)
+                         task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
 
 
 def test_planner_produces_a_plan_for_a_realistic_demand() -> None:

@@ -28,6 +28,7 @@ from artifactsmmo_cli.ai.equipment.loadout_cache import (
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -247,7 +248,7 @@ class TestHotCallersUseCache:
         gd = _gd()
         state = _make_state(inventory={"iron_axe": 1})
         action = FightAction(monster_code="yellow_slime",
-                             locations=frozenset({(0, 0)}))
+                             locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
         first = action.cost(state, gd)
         _poison(gd)
         assert action.cost(state, gd) == first
@@ -257,7 +258,8 @@ class TestHotCallersUseCache:
         # Wrong tool equipped: pick_loadout(Gather) differs → penalty fires.
         state = _make_state(inventory={"iron_axe": 1},
                             equipment={"weapon_slot": "wooden_stick"})
-        action = GatherAction(resource_code="ash_tree", locations=frozenset({(0, 0)}))
+        action = GatherAction(resource_code="ash_tree", locations=frozenset({(0, 0)}),
+                              learned_drops=LearnedDrops.empty())
         first = action.cost(state, gd)
         _poison(gd)
         assert action.cost(state, gd) == first

@@ -6,6 +6,7 @@ The chance a drop lands, learned from observed drops (spec 2026-10-18 §2.8,
     posterior = (1 + hits) / (apiRate + attempts)
     multiplier = max(1, 1 + k·P)
     chance = min(1, posterior × multiplier)
+    units = chance × (minQ + maxQ) / 2
     k = max(0, Σ P·(hits·apiRate − attempts) / Σ attempts·P²)
 
 ## The model
@@ -29,6 +30,8 @@ attempts the fit is 0.
 * `multiplier_monotone` — the multiplier is monotone in P for k ≥ 0;
 * `multiplier_ge_one` — the multiplier never lowers a chance;
 * `chance_le_one` — the chance never exceeds 1;
+* `units_le_mean` — one attempt yields at most the drop's mean quantity
+  (`units = chance × (minQ + maxQ)/2`, `drop_chance_core.units_per_attempt`);
 * `fitK_nonneg` — the fitted k is a rational ≥ 0 (positive denominator).
 -/
 
@@ -63,6 +66,13 @@ def multiplier (k : Q) (p : Int) : Q := qmax one (k.2 + k.1 * p, k.2)
 /-- `min(1, posterior × multiplier)`. -/
 def chance (apiRate attempts hits : Nat) (k : Q) (p : Int) : Q :=
   qmin one (qmul (posterior apiRate attempts hits) (multiplier k p))
+
+/-- The expected units one attempt yields: `chance × (minQ + maxQ) / 2`
+(`drop_chance_core.units_per_attempt`, ruling T16a). The ONE drop model every
+consumer reads; its reciprocal is the expected attempts per unit the source
+selectors rank by (`Formal.GatherSelection.attemptsPerUnit`). -/
+def units (apiRate attempts hits : Nat) (k : Q) (p : Int) (minQ maxQ : Nat) : Q :=
+  qmul (chance apiRate attempts hits k p) ((minQ : Int) + maxQ, 2)
 
 /-- A fit sample: `(apiRate, prospecting, attempts, hits)`. -/
 abbrev Sample := Nat × Int × Nat × Nat
@@ -176,6 +186,22 @@ theorem fitK_nonneg (s : List Sample) : 0 ≤ (fitK s).1 ∧ 0 < (fitK s).2 := b
     · exact ⟨by omega, denSum_pos s hpos⟩
   · exact ⟨Int.le_refl 0, by decide⟩
 
+/-- One attempt never yields more than the drop's mean quantity: the chance is
+at most 1 (`chance_le_one`). -/
+theorem units_le_mean (apiRate attempts hits : Nat) (k : Q) (p : Int) (minQ maxQ : Nat) :
+    qle (units apiRate attempts hits k p minQ maxQ) ((minQ : Int) + maxQ, 2) := by
+  have h := chance_le_one apiRate attempts hits k p
+  unfold units qmul qle
+  unfold qle one at h
+  generalize chance apiRate attempts hits k p = c at h ⊢
+  have hm : (0 : Int) ≤ ((minQ : Int) + maxQ) * 2 := by omega
+  generalize (minQ : Int) + maxQ = m at hm ⊢
+  simp only [Int.mul_one, Int.one_mul] at h
+  have := Int.mul_le_mul_of_nonneg_right h hm
+  calc c.1 * m * 2 = c.1 * (m * 2) := Int.mul_assoc _ _ _
+    _ ≤ c.2 * (m * 2) := this
+    _ = m * (c.2 * 2) := by rw [Int.mul_comm c.2, Int.mul_assoc, Int.mul_comm 2 c.2]
+
 /-! ### Non-vacuity witnesses. -/
 -- `posterior_in_unit`: the prior alone (rate 300, no attempts) and the live
 -- trout_spot pearls (383 attempts, 2 hits) satisfy the hypotheses.
@@ -191,6 +217,11 @@ example : multiplier (-1, 1) 5 = one := by decide
 -- `chance_le_one`: a chance below 1 and one capped at it.
 example : chance 300 0 0 (1, 5) 10 = (15, 1500) := by decide
 example : chance 1 0 0 (1, 5) 10 = one := by decide
+-- `units` / `units_le_mean`: the prior is one pearl in 300 gathers, and the live trout_spot
+-- pearls (383 attempts, 2 hits) 3 in 683; a drop of 1 to 3 at 1 in 8 is 2/8.
+example : units 300 0 0 (0, 1) 0 1 1 = (2, 600) := by decide
+example : units 300 383 2 (0, 1) 0 1 1 = (6, 1366) := by decide
+example : units 8 0 0 (0, 1) 0 1 3 = (4, 16) := by decide
 -- `fitK_nonneg`: a positive slope (3000/30000 = 1/10), a clamped one, and none
 -- without positive prospecting.
 example : fitK [(300, 10, 100, 1), (100, 20, 50, 1)] = (3000, 30000) := by decide

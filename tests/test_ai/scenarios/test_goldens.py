@@ -24,6 +24,7 @@ from pathlib import Path
 
 import pytest
 
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -160,6 +161,7 @@ EXPECTATIONS: dict[str, Golden] = {
 def _run(name: str) -> PlanReport:
     player = GamePlayer(character=name, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     gd = shared_world(BUNDLE)
     player.seed_offline(scenario_state(SCENARIOS[name], gd), gd)
     return player.plan_from_state()

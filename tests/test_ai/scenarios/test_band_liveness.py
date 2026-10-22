@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -74,6 +75,7 @@ def _run(name: str) -> PlanReport:
     gd = shared_world(BUNDLE)
     player = GamePlayer(character=name, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(scenario_state(SCENARIOS[name], gd), gd)
     return player.plan_from_state()
 
@@ -222,7 +224,11 @@ def test_l48_band_adequate_real_band_adequate_verdict() -> None:
 
     player._offline_timing = committed_timing()
 
+    player._learned_drops = LearnedDrops.empty()
+
     player._offline_timing = committed_timing()
+
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, shared_world(BUNDLE))
     assert player._pick_winnable_monster() == "hellhound"
     assert player._tree_band_adequate() is False

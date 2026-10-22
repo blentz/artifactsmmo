@@ -7,6 +7,7 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -56,7 +57,7 @@ def _state(equipment: dict[str, str | None], inventory: dict[str, int]) -> World
 
 @pytest.fixture
 def cow_fight() -> FightAction:
-    return FightAction(monster_code="cow", locations=frozenset({(0, 0)}))
+    return FightAction(monster_code="cow", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
 
 
 def test_inapplicable_when_gathering_tool_equipped(cow_fight: FightAction) -> None:

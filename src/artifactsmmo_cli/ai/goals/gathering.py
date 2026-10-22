@@ -367,9 +367,11 @@ class GatherMaterialsGoal(Goal):
         # gather present in `result` (primary drop, or the targeted secondary
         # of a drop_item_override variant — GAP-7), keep only the source
         # minimizing expected gathers (proved in
-        # formal/Formal/GatherSelection.lean). Single-source items and
-        # non-gather actions are untouched; an unknown drop table fail-opens
-        # (no narrowing).
+        # formal/Formal/GatherSelection.lean) at the learned drop chance the
+        # gather itself carries (`GatherAction.learned_drops`, ruling T16a:
+        # the value its cost and the acquisition walk price by). Single-source
+        # items and non-gather actions are untouched; an unknown drop table
+        # fail-opens (no narrowing).
         gathers = [a for a in result if isinstance(a, GatherAction)]
         by_item: dict[str, list[GatherAction]] = {}
         for a in gathers:
@@ -394,8 +396,10 @@ class GatherMaterialsGoal(Goal):
                 else:
                     dist = 0
                 candidates.append(GatherCandidate(
-                    resource_code=a.resource_code, rate=rate, min_quantity=mn,
-                    max_quantity=mx, distance=dist))
+                    resource_code=a.resource_code,
+                    attempts=a.learned_drops.attempts_per_unit(
+                        a.resource_code, item, rate, mn, mx, state.prospecting),
+                    distance=dist))
             if not valid:
                 continue
             winner = select_gather_source(item, candidates)

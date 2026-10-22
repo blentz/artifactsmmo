@@ -3,6 +3,7 @@ import pytest
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 
 
@@ -47,7 +48,7 @@ def test_empty_plan_is_exhausted_immediately():
 
 def test_cursor_holds_until_the_batch_target_is_reached(game_data):
     gather = GatherAction(resource_code="spruce_tree", quantity=3,
-                          locations=frozenset({(0, 0)}))
+                          locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     cache = PlanCache(selected_goal=object(), plan=[gather, object()],
                       crafting_target=None, plan_level=1,
                       goal_repr="G")
@@ -62,7 +63,7 @@ def test_a_lucky_multi_unit_drop_satisfies_early(game_data):
     """The target is a state predicate, not a counter, so overshoot advances
     instead of hanging."""
     gather = GatherAction(resource_code="spruce_tree", quantity=3,
-                          locations=frozenset({(0, 0)}))
+                          locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     cache = PlanCache(selected_goal=object(), plan=[gather],
                       crafting_target=None, plan_level=1, goal_repr="G")
     drop = gather.drop_item(game_data)
@@ -85,7 +86,7 @@ def test_a_stale_target_does_not_hold_a_cursor_that_moved_off_the_gather(game_da
     gather would be pinned behind an inventory count it can never raise
     (crafting CONSUMES the drop, so the count only falls)."""
     gather = GatherAction(resource_code="spruce_tree", quantity=3,
-                          locations=frozenset({(0, 0)}))
+                          locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     craft = object()
     cache = PlanCache(selected_goal=object(), plan=[gather, craft],
                       crafting_target=None, plan_level=1, goal_repr="G")
@@ -103,7 +104,7 @@ def test_a_stale_target_does_not_hold_a_cursor_that_moved_off_the_gather(game_da
 def test_a_planned_fight_repeats_until_its_drop_is_in(game_data):
     """Phase 2d-L1c: a fight leg planned for 8 feathers holds the cursor until
     the bag holds 8 more, so the craft after it finds its inputs."""
-    fight = FightAction(monster_code="chicken", drop_target=("feather", 8))
+    fight = FightAction(monster_code="chicken", drop_target=("feather", 8), learned_drops=LearnedDrops.empty())
     cache = PlanCache(selected_goal=object(), plan=[fight, object()],
                       crafting_target=None, plan_level=1, goal_repr="G")
     cache.arm_step({"feather": 1}, game_data)
@@ -113,7 +114,7 @@ def test_a_planned_fight_repeats_until_its_drop_is_in(game_data):
 
 
 def test_a_fight_planned_for_no_drop_advances_after_one_win(game_data):
-    fight = FightAction(monster_code="chicken")
+    fight = FightAction(monster_code="chicken", learned_drops=LearnedDrops.empty())
     cache = PlanCache(selected_goal=object(), plan=[fight],
                       crafting_target=None, plan_level=1, goal_repr="G")
     cache.arm_step({}, game_data)
@@ -125,7 +126,7 @@ def test_a_single_gather_is_armed_too(game_data):
     """A secondary drop (algae from a gudgeon spot) can come up empty; the
     cursor waits for the one unit the leg was planned for."""
     gather = GatherAction(resource_code="gudgeon_spot", quantity=1, drop_item_override="algae",
-                          locations=frozenset({(0, 0)}))
+                          locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     cache = PlanCache(selected_goal=object(), plan=[gather, object()],
                       crafting_target=None, plan_level=1, goal_repr="G")
     cache.arm_step({"algae": 2}, game_data)

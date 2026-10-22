@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -38,6 +39,7 @@ class _Act:
 def _player_with_stub_plan(plan, goal):
     player = GamePlayer(character="hero", dry_run=True)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     calls = {"n": 0}
 
     def _fake_decide(state, game_data, actions):
@@ -82,6 +84,7 @@ def test_replan_persists_body_and_commitment(tmp_path):
     store.start_session()
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
 
     def _fake_decide(state, game_data, actions):
         return goal, list(plan), [{"goal": repr(goal)}]
@@ -101,6 +104,7 @@ def test_advance_with_history_persists_cursor(tmp_path):
     store.start_session()
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
 
     initial_state = make_state(hp=20, max_hp=150)
     call_count = [0]
@@ -166,7 +170,7 @@ def test_a_cached_fight_that_would_now_be_lost_is_replanned(monkeypatch):
     """Live 2026-10-08: R2D2's drop-farm leg reran Fight(rat) at 335/695 hp from
     the cache, past every guard, and lost 9 times in 70 minutes. An unready
     cached fight is a replan (where the rest-for-combat guard rests first)."""
-    fight = FightAction(monster_code="rat", locations=frozenset({(0, 0)}))
+    fight = FightAction(monster_code="rat", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     goal = _Goal()
     player, calls = _player_with_stub_plan([fight, fight], goal)
     monkeypatch.setattr(FightAction, "is_applicable", lambda self, s, g: True)
@@ -189,7 +193,7 @@ def test_a_non_fight_step_needs_no_fight_check():
 def test_a_cached_fight_the_threshold_admits_is_unready_when_resting_pays():
     """Live 2026-10-17: R2D2's cache ran Fight(king_slime) at 452/890 HP
     (P 0.633 over θ 0.552) and lost; a rest first costs less per kill."""
-    fight = FightAction(monster_code="mob", locations=frozenset({TILE}))
+    fight = FightAction(monster_code="mob", locations=frozenset({TILE}), learned_drops=LearnedDrops.empty())
     gd = _rest_gd()
     assert GamePlayer._fight_ready(fight, _rest_state(40), gd, TIMING) is False
     assert GamePlayer._fight_ready(fight, _rest_state(60), gd, TIMING) is True

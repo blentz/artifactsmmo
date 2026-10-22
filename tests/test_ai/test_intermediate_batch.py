@@ -4,6 +4,7 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.intermediate_batch import size_closure_gather, size_intermediate_craft
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from tests.test_ai.fixtures import make_state
 
@@ -176,7 +177,7 @@ def _gd_spruce() -> GameData:
 
 def test_sizes_to_the_net_closure_deficit() -> None:
     gd = _gd_spruce()
-    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     drop = a.drop_item(gd)
     state = make_state(inventory_max=100, inventory_slots_max=20)
     sized = size_closure_gather(a, {drop: 60}, state, gd)
@@ -185,7 +186,7 @@ def test_sizes_to_the_net_closure_deficit() -> None:
 
 def test_holdings_reduce_the_deficit() -> None:
     gd = _gd_spruce()
-    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     drop = a.drop_item(gd)
     state = make_state(inventory_max=100, inventory_slots_max=20)
     held = dataclasses.replace(state, inventory={drop: 10}, bank_items={drop: 15})
@@ -195,7 +196,7 @@ def test_holdings_reduce_the_deficit() -> None:
 
 def test_fully_covered_material_sizes_to_zero() -> None:
     gd = _gd_spruce()
-    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     drop = a.drop_item(gd)
     state = make_state(inventory_max=100, inventory_slots_max=20)
     held = dataclasses.replace(state, bank_items={drop: 60})
@@ -204,14 +205,15 @@ def test_fully_covered_material_sizes_to_zero() -> None:
 
 def test_material_absent_from_the_chain_sizes_to_zero() -> None:
     gd = _gd_spruce()
-    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     state = make_state(inventory_max=100, inventory_slots_max=20)
     assert size_closure_gather(a, {}, state, gd).quantity == 0
 
 
 def test_returns_the_same_instance_when_quantity_already_matches() -> None:
     gd = _gd_spruce()
-    a = GatherAction(resource_code="spruce_tree", quantity=1, locations=frozenset({(0, 0)}))
+    a = GatherAction(resource_code="spruce_tree", quantity=1, locations=frozenset({(0, 0)}),
+                     learned_drops=LearnedDrops.empty())
     drop = a.drop_item(gd)
     state = make_state(inventory_max=20, inventory_slots_max=20)
     assert size_closure_gather(a, {drop: 1}, state, gd) is a
@@ -227,7 +229,7 @@ def test_a_full_bag_floors_the_size_at_one_rather_than_zero() -> None:
     re-derives 0 from `quantity` forever after. The floor keeps the edge alive
     so `is_applicable` can gate it per node, which is where room belongs."""
     gd = _gd_spruce()
-    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     drop = a.drop_item(gd)
     # inventory_max 100, entirely consumed by an unrelated item -> zero room.
     full = make_state(inventory={"ash_wood": 100}, inventory_max=100,
@@ -241,7 +243,7 @@ def test_a_new_drop_code_with_no_free_slot_also_floors_at_one() -> None:
     when the drop needs a NEW stack and every slot is taken. That is likewise a
     property of the current state, not of the goal, so it floors too."""
     gd = _gd_spruce()
-    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     drop = a.drop_item(gd)
     # Quantity headroom to spare, but all 20 slots held by other codes.
     no_slots = make_state(inventory={f"i{n}": 1 for n in range(20)},
@@ -254,7 +256,7 @@ def test_the_floor_does_not_apply_when_there_is_no_demand() -> None:
     still size to 0 — that is the no-op edge the callers' `>= 1` guard exists
     to drop, and flooring it would put a pointless re-gather into the search."""
     gd = _gd_spruce()
-    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     drop = a.drop_item(gd)
     full = make_state(inventory={"ash_wood": 100}, inventory_max=100,
                       inventory_slots_max=20)
@@ -270,7 +272,7 @@ def test_keyed_on_the_drop_item_not_the_resource_code_for_an_override() -> None:
     # code, so demand keyed on the resource code must NOT size this gather.
     gd = _gd_spruce()
     a = GatherAction(resource_code="spruce_tree", drop_item_override="rare_gem",
-                     locations=frozenset({(0, 0)}))
+                     locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     state = make_state(inventory_max=100, inventory_slots_max=20)
     # Demand on the resource code alone must not size the gather...
     assert size_closure_gather(a, {"spruce_tree": 60}, state, gd).quantity == 0

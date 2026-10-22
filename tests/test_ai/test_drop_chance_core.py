@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.drop_chance_core import (
     fit_k,
     posterior_chance,
     prospecting_multiplier,
+    units_per_attempt,
 )
 
 
@@ -82,3 +83,17 @@ def test_no_positive_prospecting_fits_nothing() -> None:
 def test_an_impossible_sample_raises(sample: tuple[int, int, int, int]) -> None:
     with pytest.raises(ValueError, match="fit_k sample out of range"):
         fit_k([sample])
+
+
+def test_a_unit_is_the_chance_times_the_mean_quantity() -> None:
+    """Ruling T16a: an attempt yields `chance × (min + max) / 2` units. A drop
+    of 1 to 3 at 1 in 8 under the prior is `(1/8) · 2`; of 2 to 4, `(1/8) · 3`."""
+    assert units_per_attempt(8, 1, 3, 0, 0, Fraction(0), 0) == Fraction(1, 4)
+    assert units_per_attempt(8, 2, 4, 0, 0, Fraction(0), 0) == Fraction(3, 8)
+
+
+def test_a_unit_reads_the_observations_and_the_prospecting() -> None:
+    """The live pearls (383 attempts, 2 hits) make a unit 3/683; a learned
+    slope of 1/10 at prospecting 10 doubles it."""
+    assert units_per_attempt(300, 1, 1, 383, 2, Fraction(0), 0) == Fraction(3, 683)
+    assert units_per_attempt(300, 1, 1, 383, 2, Fraction(1, 10), 10) == Fraction(6, 683)

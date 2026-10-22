@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.goals.participate_raid import (
     RAID_PARTICIPATION_VALUE,
     ParticipateRaidGoal,
 )
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.source_kind import SourceKind
@@ -59,8 +60,8 @@ def test_unsatisfied_below_the_floor():
 def test_relevant_actions_keeps_only_the_boss_fight():
     """The goal narrows to its OWN boss. Without this it would admit every fight
     in the catalog and plan an unrelated grind under a raid banner."""
-    boss = FightAction(monster_code=_BOSS, locations=frozenset({(1, 0)}))
-    other = FightAction(monster_code="chicken", locations=frozenset({(2, 0)}))
+    boss = FightAction(monster_code=_BOSS, locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
+    other = FightAction(monster_code="chicken", locations=frozenset({(2, 0)}), learned_drops=LearnedDrops.empty())
     catalog = [boss, other, MoveAction(x=0, y=0), RestAction()]
     out = _goal().relevant_actions(catalog, make_state(), GameData())
     assert out == [boss]
@@ -69,7 +70,7 @@ def test_relevant_actions_keeps_only_the_boss_fight():
 def test_relevant_actions_empty_when_the_boss_fight_is_absent():
     """The factory only emits the raid fight while the window is open, so a shut
     window leaves this goal with nothing -- it must not invent an action."""
-    catalog = [FightAction(monster_code="chicken", locations=frozenset({(2, 0)}))]
+    catalog = [FightAction(monster_code="chicken", locations=frozenset({(2, 0)}), learned_drops=LearnedDrops.empty())]
     assert _goal().relevant_actions(catalog, make_state(), GameData()) == []
 
 

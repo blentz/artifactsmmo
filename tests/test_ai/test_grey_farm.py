@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.grey_farm import (
     GREY_FARM_NEXT_TIER_MARGIN,
     grey_farm_allowed,
 )
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -235,7 +236,7 @@ class TestDropFarmMechanism:
     def test_drop_farm_flag_bypasses_xp_gate(self) -> None:
         gd = _gd()
         state = make_state(level=12, skills={"alchemy": 5})  # chicken is grey at L12
-        plain = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))
+        plain = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         assert plain.is_applicable(state, gd) is False
         farm = dataclasses.replace(plain, drop_farm=True)
         assert farm.is_applicable(state, gd) is True
@@ -245,12 +246,12 @@ class TestDropFarmMechanism:
         gd = _gd()
         state = make_state(level=12, hp=1, max_hp=100, skills={"alchemy": 5})
         farm = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
-                           drop_farm=True)
+                           drop_farm=True, learned_drops=LearnedDrops.empty())
         assert farm.is_applicable(state, gd) is False
 
     def test_repr_is_unchanged_by_the_flag(self) -> None:
         """Learned-cost history keys on repr — the flag must not fork them."""
-        plain = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))
+        plain = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         farm = dataclasses.replace(plain, drop_farm=True)
         assert repr(farm) == repr(plain)
 
@@ -267,24 +268,24 @@ class TestTaskFightBypass:
 
     def test_the_task_monster_is_fightable_at_zero_xp(self) -> None:
         gd = _gd()
-        fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))
+        fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         assert fight.is_applicable(make_state(level=12, skills={"alchemy": 5}), gd) is False
         assert fight.is_applicable(self._task_state(), gd) is True
 
     def test_only_while_the_count_is_unmet(self) -> None:
         gd = _gd()
-        fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))
+        fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         assert fight.is_applicable(self._task_state(task_progress=10), gd) is False
 
     def test_only_for_the_task_monster_of_a_monsters_task(self) -> None:
         gd = _gd()
-        fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))
+        fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         assert fight.is_applicable(self._task_state(task_code="cow"), gd) is False
         assert fight.is_applicable(self._task_state(task_type="items"), gd) is False
 
     def test_the_bypass_is_only_the_xp_gate(self) -> None:
         gd = _gd()
-        fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))
+        fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         assert fight.is_applicable(self._task_state(hp=1, max_hp=100), gd) is False
 
 
@@ -300,7 +301,8 @@ class TestGatherEmitsDropFarmFights:
             make_state(level=12, skills={"alchemy": 5}, inventory={}, bank_items={}),
             inventory_max=100, inventory_slots_max=20)
         goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
-        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))]
+        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
+                               learned_drops=LearnedDrops.empty())]
         plan = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
         assert plan is not None and [repr(a) for a in plan] == ["Fight(chicken)"]
         assert plan[0].drop_target == ("feather", 2)
@@ -310,7 +312,8 @@ class TestGatherEmitsDropFarmFights:
         state = make_state(level=12, skills={"alchemy": 19},
                            inventory={}, bank_items={})
         goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
-        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))]
+        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
+                               learned_drops=LearnedDrops.empty())]
         relevant = goal.relevant_actions(actions, state, gd)
         assert not any(isinstance(a, FightAction) and a.is_applicable(state, gd)
                        for a in relevant)
@@ -333,7 +336,8 @@ class TestGatherEmitsDropFarmFights:
         state = dataclasses.replace(
             make_state(level=12, skills={"alchemy": 19}, inventory={}, bank_items={}),
             inventory_max=100, inventory_slots_max=20)
-        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))]
+        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
+                               learned_drops=LearnedDrops.empty())]
         plain = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
         assert decompose(plain, state, gd, actions, NO_PROFILE_CONTEXT) is None, \
             "vacuous: the directive does not suppress the plain gather"
@@ -359,8 +363,9 @@ class TestGatherEmitsDropFarmFights:
             make_state(level=12, skills={"alchemy": 19}, inventory={}, bank_items={}),
             inventory_max=100, inventory_slots_max=20)
         goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
-        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)})),
-                   FightAction(monster_code="hawk", locations=frozenset({(3, 0)}))]
+        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
+                               learned_drops=LearnedDrops.empty()),
+                   FightAction(monster_code="hawk", locations=frozenset({(3, 0)}), learned_drops=LearnedDrops.empty())]
         assert gd.xp_per_kill("chicken", 12) == 0 < gd.xp_per_kill("hawk", 12), \
             "vacuous: the chicken is not grey, or the hawk pays nothing"
         plan = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
@@ -382,7 +387,7 @@ class TestGatherEmitsDropFarmFights:
         state = make_state(level=3, skills={"alchemy": 5},
                            inventory={}, bank_items={})
         goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
-        fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))
+        fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         relevant = goal.relevant_actions([fight], state, gd)
         kept = [a for a in relevant if isinstance(a, FightAction)]
         assert kept and all(a.drop_farm is False for a in kept)

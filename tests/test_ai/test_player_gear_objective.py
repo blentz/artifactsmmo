@@ -20,6 +20,7 @@ from artifactsmmo_cli.ai.gear_objective import gear_objective
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective, gear_keep_for
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_owned
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -49,6 +50,7 @@ def _player(monkeypatch: pytest.MonkeyPatch, objective: GearObjective | None,
     objective was computed from, then the one the loadout was chosen against."""
     player = GamePlayer(character="probe", history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.state = make_state(task_code=None, task_total=0)
     player.game_data = GameData()
     monkeypatch.setattr(player, "_path_aligned_monster", _unasked)
@@ -177,6 +179,7 @@ def test_a_carried_piece_is_equipped_before_m_star_is_fought() -> None:
     carrying, before = _carrying_its_target("l10_bag_pursuit", gd)
     player = GamePlayer(character="l10_bag_pursuit", history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(carrying, gd)
     report = player.plan_from_state()
     assert player._last_ctx is not None and player._last_ctx.gear_objective is not None

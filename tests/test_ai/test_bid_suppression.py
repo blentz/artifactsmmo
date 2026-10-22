@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -131,8 +132,9 @@ class TestGatherSuppressedByOpenBuyOrder:
         # copper_ore is a DIFFERENT, non-bid needed item (CONTROL).
         goal = GatherMaterialsGoal("iron_ore", {"iron_ore": 5, "copper_ore": 3})
         actions = [
-            GatherAction(resource_code="iron_rocks", locations=frozenset([(0, 1)])),
-            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 2)])),
+            GatherAction(resource_code="iron_rocks", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 2)]),
+                         learned_drops=LearnedDrops.empty()),
         ]
 
         relevant = goal.relevant_actions(actions, state, gd)
@@ -156,7 +158,7 @@ class TestGatherSuppressedByOpenBuyOrder:
         state = make_state(inventory={}, open_orders=(order,))
         goal = GatherMaterialsGoal("iron_ore", {"iron_ore": 5})
         actions = [GatherAction(resource_code="iron_rocks",
-                                locations=frozenset([(0, 1)]))]
+                                locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty())]
 
         relevant = goal.relevant_actions(actions, state, gd)
 
@@ -180,7 +182,8 @@ class TestCraftSuppressedByOpenBuyOrder:
         # iron_bar is a DIFFERENT, non-bid needed item (CONTROL).
         goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 6, "iron_bar": 4})
         actions = [
-            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)])),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]),
+                         learned_drops=LearnedDrops.empty()),
             CraftAction(code="copper_bar", workshop_location=(1, 5)),
             CraftAction(code="iron_bar", workshop_location=(1, 5)),
         ]
@@ -207,7 +210,8 @@ class TestCraftSuppressedByOpenBuyOrder:
         )
         goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 6})
         actions = [
-            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)])),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]),
+                         learned_drops=LearnedDrops.empty()),
             CraftAction(code="copper_bar", workshop_location=(1, 5)),
         ]
 
@@ -313,8 +317,8 @@ class TestFightDropFarmSuppressedByOpenBuyOrder:
             inventory={}, inventory_max=50, open_orders=(order,),
         )
         actions = [
-            FightAction(monster_code="chicken", locations=frozenset({(0, 1)})),
-            FightAction(monster_code="cow", locations=frozenset({(0, 2)})),
+            FightAction(monster_code="chicken", locations=frozenset({(0, 1)}), learned_drops=LearnedDrops.empty()),
+            FightAction(monster_code="cow", locations=frozenset({(0, 2)}), learned_drops=LearnedDrops.empty()),
         ]
         # leather_coat/leather/cow is a DIFFERENT, non-bid drop chain (CONTROL).
         goal = GatherMaterialsGoal(
@@ -343,7 +347,8 @@ class TestFightDropFarmSuppressedByOpenBuyOrder:
             attack={"fire": 30}, initiative=50,
             inventory={}, inventory_max=50, open_orders=(order,),
         )
-        actions = [FightAction(monster_code="chicken", locations=frozenset({(0, 1)}))]
+        actions = [FightAction(monster_code="chicken", locations=frozenset({(0, 1)}),
+                               learned_drops=LearnedDrops.empty())]
         goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
 
         relevant = goal.relevant_actions(actions, state, gd)

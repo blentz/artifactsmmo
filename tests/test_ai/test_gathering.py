@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from tests.test_ai.fixtures import make_state
 
@@ -64,7 +65,8 @@ class TestIntermediateCraftSizedToDemand:
         )
         goal = GatherMaterialsGoal("copper_dagger", {"copper_dagger": 1})
         actions = [
-            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)])),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]),
+                         learned_drops=LearnedDrops.empty()),
             CraftAction(code="copper_bar", workshop_location=(1, 5)),
             CraftAction(code="copper_dagger", workshop_location=(3, 1)),
         ]
@@ -128,7 +130,8 @@ class TestFullBagStillPlansDepositThenGather:
 
     def _pool(self, gd):
         return [
-            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)])),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]),
+                         learned_drops=LearnedDrops.empty()),
             CraftAction(code="copper_bar", workshop_location=(1, 5)),
             DepositAllAction(bank_location=(4, 0), game_data=gd),
         ]
@@ -197,11 +200,11 @@ class TestSecondaryDropAdmission:
 
     def _actions(self):
         return [
-            GatherAction(resource_code="bass_spot", locations=frozenset([(0, 1)])),
+            GatherAction(resource_code="bass_spot", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
             GatherAction(resource_code="bass_spot", locations=frozenset([(0, 1)]),
-                         drop_item_override="small_pearls"),
+                         drop_item_override="small_pearls", learned_drops=LearnedDrops.empty()),
             GatherAction(resource_code="salmon_spot", locations=frozenset([(0, 2)]),
-                         drop_item_override="small_pearls"),
+                         drop_item_override="small_pearls", learned_drops=LearnedDrops.empty()),
         ]
 
     def test_override_gather_admitted_primary_variant_dropped(self):
@@ -339,7 +342,7 @@ class TestRecycleAsAcquisition:
                                bank_unlock_monster=None, initial_xp=0,
                                task_exchange_min_coins=1, combat_monster=None)
         raw_pool = [
-            GatherAction(resource_code="ash_tree", locations=frozenset([(0, 1)])),
+            GatherAction(resource_code="ash_tree", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
             CraftAction(code="ash_plank", workshop_location=(1, 1)),
             RecycleAction(code="fishing_net", quantity=1, workshop_location=(2, 1)),
         ]

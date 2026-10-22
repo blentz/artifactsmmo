@@ -4,6 +4,7 @@ answered the way the arbiter answers it (Phase 3-2)."""
 from unittest.mock import MagicMock, patch
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
@@ -19,6 +20,7 @@ def _decline(goal: object, decompose_result: object, reasons: list[str]) -> str 
     result stubbed, and record what reached `decompose`."""
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
 
     def fake_decompose(g, state, game_data, actions, ctx, declined):
         declined.extend(reasons)

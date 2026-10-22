@@ -20,6 +20,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.audit import craft_completeness
@@ -134,14 +135,14 @@ def test_a_grind_rung_whose_route_fights_is_priced_in_learned_seconds() -> None:
     seconds"."""
     gd = _gd()
     state = census_state("forest_bank_potion", CraftCell(18, "alchemy", 15), gd)
-    leg = GatherAction(resource_code="gudgeon_spot", locations=frozenset({(0, 0)}))
+    leg = GatherAction(resource_code="gudgeon_spot", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     assert not advances_a_closure_grind("forest_bank_potion", leg, state, gd)
 
 
 def test_no_grind_rung_means_no_grind_leg() -> None:
     gd = _gd()
     state = census_state("fried_eggs", CraftCell(1, "cooking", 1), gd)
-    leg = GatherAction(resource_code="gudgeon_spot", locations=frozenset({(0, 0)}))
+    leg = GatherAction(resource_code="gudgeon_spot", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     with patch.object(craft_completeness, "grind_rung_goal", return_value=None):
         assert not advances_a_closure_grind("fried_eggs", leg, state, gd)
 
@@ -248,7 +249,7 @@ def test_craft_cell_verdict_passes_gather_of_closure_material() -> None:
     """Gathering copper_rocks yields copper_ore (its resource_drop_item),
     a copper_bar recipe ingredient — plan[0] advances the closure."""
     gd = _gd()
-    plan = [GatherAction(resource_code="copper_rocks")]
+    plan = [GatherAction(resource_code="copper_rocks", learned_drops=LearnedDrops.empty())]
     verdict = craft_cell_verdict("copper_bar", plan, gd)
     assert verdict == CraftVerdict(True, "")
 
@@ -275,7 +276,7 @@ def test_craft_cell_verdict_passes_fight_for_a_closure_leaf_dropper() -> None:
     resource node (monster-only leaf) — recipe_closure's two-set return
     can't see it, but the recipe-ingredient union in _closure_item_set does."""
     gd = _gd()
-    plan = [FightAction(monster_code="chicken")]
+    plan = [FightAction(monster_code="chicken", learned_drops=LearnedDrops.empty())]
     verdict = craft_cell_verdict("iron_boots", plan, gd)
     assert verdict == CraftVerdict(True, "")
 
@@ -315,7 +316,7 @@ def test_craft_cell_verdict_fails_unrelated_gather() -> None:
     """ash_tree (woodcutting) neither drops an iron_boots closure material
     nor shares iron_boots' gearcrafting skill."""
     gd = _gd()
-    plan = [GatherAction(resource_code="ash_tree")]
+    plan = [GatherAction(resource_code="ash_tree", learned_drops=LearnedDrops.empty())]
     verdict = craft_cell_verdict("iron_boots", plan, gd)
     assert verdict == CraftVerdict(False, f"unrelated:{plan[0]!r}")
     assert verdict.reason == "unrelated:Gather(ash_tree×1)"
@@ -967,7 +968,8 @@ def test_the_verdict_judges_the_first_leg_that_is_not_a_crossing() -> None:
     (`craft_plan_gen._bridge_regions`); the crossing serves the leg after it."""
     from_mine = MapTransitionAction(portal_x=5, portal_y=-3, dest_x=5, dest_y=-3,
                                     dest_layer="underground")
-    gather = GatherAction(resource_code="copper_rocks", locations=frozenset({(1, 1)}))
+    gather = GatherAction(resource_code="copper_rocks", locations=frozenset({(1, 1)}),
+                          learned_drops=LearnedDrops.empty())
     assert first_work_leg([from_mine, gather]) is gather
     assert first_work_leg([from_mine]) is None
     assert first_work_leg([]) is None
@@ -1128,7 +1130,8 @@ def test_a_recycle_that_yields_a_closure_material_is_directional() -> None:
 def test_a_loadout_swap_is_not_the_work_leg() -> None:
     gd = _gd()
     swap = OptimizeLoadoutAction(target_skill="mining", game_data=gd)
-    gather = GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 0)}))
+    gather = GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 0)}),
+                          learned_drops=LearnedDrops.empty())
     assert first_work_leg([swap, gather]) is gather
     assert first_work_leg([swap]) is None
 

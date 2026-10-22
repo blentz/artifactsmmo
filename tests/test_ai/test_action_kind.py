@@ -4,6 +4,7 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 
 
 def test_move_kind_and_target():
@@ -11,11 +12,13 @@ def test_move_kind_and_target():
 
 
 def test_gather_kind_and_target():
-    assert action_kind_of(GatherAction(resource_code="copper_rocks")) == ("gather", "copper_rocks")
+    assert action_kind_of(GatherAction(resource_code="copper_rocks",
+                                       learned_drops=LearnedDrops.empty())) == ("gather", "copper_rocks")
 
 
 def test_fight_kind_and_target():
-    assert action_kind_of(FightAction(monster_code="chicken")) == ("fight", "chicken")
+    assert action_kind_of(FightAction(monster_code="chicken",
+                                      learned_drops=LearnedDrops.empty())) == ("fight", "chicken")
 
 
 def test_rest_kind_no_target():

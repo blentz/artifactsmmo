@@ -124,7 +124,9 @@ from artifactsmmo_cli.ai.intention_progress import (
     record_turn,
     turn_key,
 )
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
+from artifactsmmo_cli.ai.learning.drop_observations import learned_drops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     FleetBootstrap,
     committed_timing,
@@ -458,6 +460,11 @@ class GamePlayer:
         # `seed_offline`, which replaces the live fit entirely.
         self._bootstrap: FleetBootstrap | None = fight_bootstrap
         self._offline_timing: tuple[FightSecondsModel, Fraction] | None = None
+        # The cycle's drop evidence (ruling T16a), refreshed once per cycle by
+        # `_refresh_learned_drops` before the actions and the context are
+        # built, so both carry the SAME value. None until the first refresh:
+        # reading it then raises (`_cycle_learned_drops`), never a default.
+        self._learned_drops: LearnedDrops | None = None
         # Why the last executed action failed. `outcome` alone collapses
         # distinct dead-ends onto one label, so the message rides the trace too.
         # Cleared at the start of every `_execute`.
@@ -1029,6 +1036,7 @@ class GamePlayer:
         self._adopt_lease_role(datetime.now(tz=timezone.utc))
         self._refresh_party(datetime.now(tz=timezone.utc))
         self._refresh_fight_record()
+        self._refresh_learned_drops()
         state = self.state
         ctx = self._selection_context()
         self._last_ctx = ctx
@@ -1095,6 +1103,9 @@ class GamePlayer:
         client = client_manager.client
         self._initialize(client)
         if self.state is not None:
+            # The resumed tail is matched against a fresh action pool, which
+            # carries the cycle's drop evidence (`_build_actions`).
+            self._refresh_learned_drops()
             self._resume_plan_cache(self.state, self.game_data)
             # The intention a previous process held (Phase 4-1b): the arbiter
             # resumes it instead of choosing from scratch.
@@ -1123,6 +1134,7 @@ class GamePlayer:
                 # party wins (`party_win.party_participants`).
                 self._refresh_party(datetime.now(tz=timezone.utc))
                 self._refresh_fight_record()
+                self._refresh_learned_drops()
                 actions = self._build_actions()
 
                 assert self.state is not None
@@ -2666,6 +2678,7 @@ class GamePlayer:
             objective=self._objective,
             bank_accessible=not self._blockers.is_blocked("bank"),
             task_exchange_min_coins=self._exchange_min_coins(),
+            learned_drops=self._cycle_learned_drops(),
         )
         # Route around actions the REPEATED_ACTION_FAILURE recovery has blocked,
         # so a repeatedly-failing action (even guard-driven) is dropped from the
@@ -2898,7 +2911,8 @@ class GamePlayer:
         return self._timed(replace(NO_PROFILE_CONTEXT,
                                    bank_accessible=self._blockers.get("bank") is None,
                                    sibling_skills=self._sibling_skills,
-                                   combat_monster=monster))
+                                   combat_monster=monster,
+                                   learned_drops=self._cycle_learned_drops()))
 
     def _timed(self, ctx: SelectionContext) -> SelectionContext:
         """`ctx` carrying this cycle's learned fight and action seconds."""
@@ -3559,6 +3573,23 @@ class GamePlayer:
         thresholds = win_thresholds_from_rows(self.history.fight_cost_rows(since))
         self.state = replace(self.state, lost_fights=lost, win_thresholds=thresholds)
 
+    def _refresh_learned_drops(self) -> None:
+        """This cycle's drop evidence (ruling T16a), built ONCE where the store
+        is in hand (`drop_observations.learned_drops`, through the store's
+        per-episode memo) and handed to both the actions (`_build_actions`)
+        and the context (`_selection_context`). Without history nothing is
+        observed: `LearnedDrops.empty()`, the API prior."""
+        assert self.game_data is not None
+        self._learned_drops = (learned_drops(self.history, self.game_data)
+                               if self.history is not None else LearnedDrops.empty())
+
+    def _cycle_learned_drops(self) -> LearnedDrops:
+        """The evidence `_refresh_learned_drops` built this cycle; raises
+        before the first refresh."""
+        if self._learned_drops is None:
+            raise ValueError("no drop evidence refreshed this cycle")
+        return self._learned_drops
+
     def _release_party(self, action: Action) -> None:
         """End the lease a lost party fight was fought under."""
         assert isinstance(action, FightAction) and self._coordination is not None
@@ -4158,6 +4189,8 @@ class GamePlayer:
                            if self.history is not None else ()),
             fight_seconds=fight_seconds,
             action_seconds=action_seconds,
+            # The cycle's drop evidence: the very value the actions carry.
+            learned_drops=self._cycle_learned_drops(),
         )
         ctx = attach_gear_objective(self.state, self.game_data, ctx, self.history)
         # Skill demand first (spec 2026-10-13 §2): the loadout's make prices

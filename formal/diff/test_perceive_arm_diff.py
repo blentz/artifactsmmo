@@ -79,6 +79,7 @@ from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
@@ -200,7 +201,7 @@ def _production_arms(
         # FightAction on the target (+ recovery/equip). A non-empty Fight result
         # proves the objective step LEADS WITH a Fight on the picked monster.
         fights = goal.relevant_actions(
-            [FightAction(monster_code=combat_monster)], state, gd)
+            [FightAction(monster_code=combat_monster, learned_drops=LearnedDrops.empty())], state, gd)
         objective_step_is_fight = any(
             isinstance(a, FightAction) and a.monster_code == combat_monster
             for a in fights)
@@ -262,8 +263,8 @@ def test_faithful_arms_goal_is_real_fight_led_grind() -> None:
     assert mon == "chicken"
     goal = objective_step_goal(ReachCharLevel(LEVEL_CAP), state, gd, _make_ctx(mon))
     assert isinstance(goal, GrindCharacterXPGoal)
-    fights = goal.relevant_actions([FightAction(monster_code=mon)], state, gd)
-    assert fights == [FightAction(monster_code=mon)]
+    fights = goal.relevant_actions([FightAction(monster_code=mon, learned_drops=LearnedDrops.empty())], state, gd)
+    assert fights == [FightAction(monster_code=mon, learned_drops=LearnedDrops.empty())]
 
 
 def test_faithful_with_real_learning_store_history() -> None:

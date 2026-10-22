@@ -30,6 +30,7 @@ from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext, active_guards
@@ -112,8 +113,8 @@ def test_understocked_producible_fires_guard_maps_goal_and_plans_craft_and_equip
     # 3. The goal plans a real craft-and-equip, not a bare grind.
     catalog = [
         CraftAction(code=_POTION, quantity=1, workshop_location=(3, 0)),
-        GatherAction(resource_code=_RESOURCE, locations=frozenset({(2, 0)})),
-        FightAction(monster_code="mob", locations=frozenset({(7, 7)})),
+        GatherAction(resource_code=_RESOURCE, locations=frozenset({(2, 0)}), learned_drops=LearnedDrops.empty()),
+        FightAction(monster_code="mob", locations=frozenset({(7, 7)}), learned_drops=LearnedDrops.empty()),
         MoveAction(x=0, y=0),
     ]
     plan = decompose(goal, state, gd, catalog, TIMED_NO_PROFILE_CONTEXT) or []
@@ -232,7 +233,7 @@ def test_a_chosen_boost_is_planned_into_the_free_slot():
     ctx = _ctx(fight_monster=_MONSTER, loadout=boost_too)
     goal = map_guard(GuardKind.CRAFT_POTIONS, gd, ctx, state)
     catalog = [CraftAction(code=_BOOST, quantity=1, workshop_location=(3, 0)),
-               GatherAction(resource_code=_RESOURCE, locations=frozenset({(2, 0)})),
+               GatherAction(resource_code=_RESOURCE, locations=frozenset({(2, 0)}), learned_drops=LearnedDrops.empty()),
                MoveAction(x=0, y=0)]
     plan = decompose(goal, state, gd, catalog, TIMED_NO_PROFILE_CONTEXT) or []
     assert any(isinstance(a, CraftAction) and a.code == _BOOST for a in plan)

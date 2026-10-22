@@ -2278,11 +2278,14 @@ example : ∀ {cs : List Formal.GatherSelection.Candidate} {c : Formal.GatherSel
       Formal.GatherSelection.expectedGathers x < Formal.GatherSelection.expectedGathers c →
       c.dist < x.dist :=
   @Formal.GatherSelection.select_no_cheaper_at_le_distance
--- expected_gathers_mono_in_rate: MONOTONICITY — ↑rate (yields fixed, positive avg) ⇒ ≥ expected gathers.
-example : ∀ (a b : Formal.GatherSelection.Candidate),
-    a.minQ = b.minQ → a.maxQ = b.maxQ → 0 < a.minQ + a.maxQ → a.rate ≤ b.rate →
-    Formal.GatherSelection.expectedGathers a ≤ Formal.GatherSelection.expectedGathers b :=
-  @Formal.GatherSelection.expected_gathers_mono_in_rate
+-- attempts_antitone_in_units: MONOTONICITY — more units an attempt (a likelier drop) ⇒ ≤ expected gathers.
+example : ∀ (u₁ u₂ : Rat), 0 < u₁ → u₁ ≤ u₂ →
+    Formal.GatherSelection.attemptsPerUnit u₂ ≤ Formal.GatherSelection.attemptsPerUnit u₁ :=
+  @Formal.GatherSelection.attempts_antitone_in_units
+-- prior_attempts_is_rate_over_mean: nothing observed ⇒ the API rate over the mean yield.
+example : ∀ (rate : Nat) (mean : Rat),
+    Formal.GatherSelection.attemptsPerUnit ((1 / (rate : Rat)) * mean) = (rate : Rat) / mean :=
+  @Formal.GatherSelection.prior_attempts_is_rate_over_mean
 -- gather_selected_reaches_needed: REACHABILITY — +1 loop reaches the needed quantity.
 example : ∀ (needed owned : Nat), needed ≤ owned + (needed - owned) :=
   @Formal.GatherSelection.gather_selected_reaches_needed
@@ -2359,11 +2362,14 @@ example : ∀ {cs : List Formal.MonsterDropSelection.Candidate} {c : Formal.Mons
       Formal.MonsterDropSelection.expectedKills x < Formal.MonsterDropSelection.expectedKills c →
       c.dist < x.dist :=
   @Formal.MonsterDropSelection.select_no_fewer_kills_at_le_distance
--- expected_kills_mono_in_rate: MONOTONICITY — ↑rate (yields fixed, positive avg) ⇒ ≥ expected kills.
-example : ∀ (a b : Formal.MonsterDropSelection.Candidate),
-    a.minQ = b.minQ → a.maxQ = b.maxQ → 0 < a.minQ + a.maxQ → a.rate ≤ b.rate →
-    Formal.MonsterDropSelection.expectedKills a ≤ Formal.MonsterDropSelection.expectedKills b :=
-  @Formal.MonsterDropSelection.expected_kills_mono_in_rate
+-- attempts_antitone_in_units: MONOTONICITY — more units an attempt (a likelier drop) ⇒ ≤ expected kills.
+example : ∀ (u₁ u₂ : Rat), 0 < u₁ → u₁ ≤ u₂ →
+    Formal.MonsterDropSelection.attemptsPerUnit u₂ ≤ Formal.MonsterDropSelection.attemptsPerUnit u₁ :=
+  @Formal.MonsterDropSelection.attempts_antitone_in_units
+-- prior_attempts_is_rate_over_mean: nothing observed ⇒ the API rate over the mean yield.
+example : ∀ (rate : Nat) (mean : Rat),
+    Formal.MonsterDropSelection.attemptsPerUnit ((1 / (rate : Rat)) * mean) = (rate : Rat) / mean :=
+  @Formal.MonsterDropSelection.prior_attempts_is_rate_over_mean
 -- keyLt_total: TOTALITY of the lex key order (trichotomy).
 example : ∀ (a b : Formal.MonsterDropSelection.Candidate),
     Formal.MonsterDropSelection.keyLt a b ∨ Formal.MonsterDropSelection.keyEq a b

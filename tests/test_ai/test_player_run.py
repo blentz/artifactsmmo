@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -111,6 +112,7 @@ class TestSyncBankPagination:
     def test_paginates_when_full_page_returned(self):
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         state = make_state()
         client = MagicMock()
 
@@ -142,6 +144,7 @@ class TestPlayerRun:
         """Test run() executes the plan loop once then exits via KeyboardInterrupt."""
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         client = MagicMock()
 
         # The run loop calls: GameData.load, _fetch_world_state, then loops
@@ -171,6 +174,7 @@ class TestPlayerRun:
         on start, so a restart resumes instead of choosing from scratch."""
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         client = MagicMock()
         order: list[str] = []
 
@@ -205,6 +209,7 @@ class TestPlayerRun:
         are all inert when bank_items is None)."""
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         client = MagicMock()
 
         call_count = [0]
@@ -245,6 +250,7 @@ class TestPlayerRun:
         is baked from the same post-refresh inventory the goal/map_means sees."""
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         client = MagicMock()
         order: list[str] = []
 
@@ -273,6 +279,7 @@ class TestPlayerRun:
         (`party_win.party_participants`)."""
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         client = MagicMock()
         order: list[str] = []
 
@@ -300,6 +307,7 @@ class TestPlayerRun:
         """In dry_run mode, the player calls action.apply() instead of action.execute()."""
         player = GamePlayer(character="hero", dry_run=True)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         client = MagicMock()
 
         call_count = [0]
@@ -336,6 +344,7 @@ class TestPlayerRun:
         """
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player._arbiter.select = lambda *a, **k: (None, [], [])  # type: ignore[method-assign]
         client = MagicMock()
 
@@ -375,6 +384,7 @@ class TestPlayerRun:
         reached (Wait otherwise always plans)."""
         player = GamePlayer(character="hero", verbose=True)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player._arbiter.select = lambda *a, **k: (None, [], [])  # type: ignore[method-assign]
         client = MagicMock()
 
@@ -410,6 +420,7 @@ def test_player_builds_sell_actions_for_sellable_inventory():
     """When bank is locked and inventory has sellable items, _build_actions should include NpcSell."""
     player = GamePlayer(character="testchar", verbose=False, dry_run=True)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.game_data = GameData()
     player.game_data._npc_locations = {"cook": (2, 1)}
     player.game_data._npc_sell_prices = {"cook": {"chicken": 5}}
@@ -437,6 +448,7 @@ def test_player_builds_phase_b_actions():
     """All Phase B actions should appear in _build_actions output."""
     player = GamePlayer(character="testchar")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.game_data = GameData()
     player.game_data._bank_location = (4, 0)
     player.game_data._taskmaster_location = (1, 2)
@@ -478,6 +490,7 @@ def test_maybe_periodic_refresh_triggers_at_20_actions():
     """_maybe_periodic_refresh should call _full_refresh when counter >= 20, then reset."""
     player = GamePlayer(character="testchar")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     refresh_calls = []
 
     def fake_full_refresh(c):
@@ -503,6 +516,7 @@ def test_full_refresh_resets_counter():
     """_full_refresh itself should reset the action counter to 0."""
     player = GamePlayer(character="testchar")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.state = make_state()
     player._actions_since_full_refresh = 15
 
@@ -532,6 +546,7 @@ def test_run_calls_handle_stuck_in_no_plan_path():
     """
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     # Stub the arbiter to select nothing so the no-plan branch is reached;
     # the always-firing WaitGoal would otherwise short-circuit it.
     player._arbiter.select = lambda *a, **k: (None, [], [])  # type: ignore[method-assign]
@@ -585,6 +600,7 @@ def test_run_calls_handle_stuck_after_successful_action():
     """
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     client = MagicMock()
 
     frozen_key = (0, 0, 5, (), (), None, 0, False)
@@ -640,6 +656,7 @@ def test_run_survives_http_485_and_keeps_cycling():
     history.start_session()
     player = GamePlayer(character="hero", history=history)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     client = MagicMock()
 
     call_count = [0]
@@ -716,11 +733,13 @@ def test_run_records_gather_cycle_under_learning_key_not_repr():
     history.start_session()
     player = GamePlayer(character="hero", history=history)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     client = MagicMock()
 
     # Already standing on the resource tile -- no MoveAction, no need to also
     # mock action_move.
-    gather = GatherAction(resource_code="copper_rocks", locations=frozenset({(0, 0)}))
+    gather = GatherAction(resource_code="copper_rocks", locations=frozenset({(0, 0)}),
+                          learned_drops=LearnedDrops.empty())
     goal = WaitGoal()
     initial_state = make_state(x=0, y=0)
     gathered_char = make_char_schema(x=0, y=0)
@@ -749,8 +768,13 @@ def test_run_records_gather_cycle_under_learning_key_not_repr():
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                        # The stub catalogue has no drop table for the
+                        # gather this test records, which the season's
+                        # evidence would raise on (ruling T12f): the
+                        # evidence stays the prior seeded above.
                         with patch.object(player, "_maybe_periodic_refresh"), \
-                                patch.object(player, "_reconcile_open_orders"):
+                                patch.object(player, "_reconcile_open_orders"), \
+                                patch.object(player, "_refresh_learned_drops"):
                             with patch.object(player, "_build_actions", return_value=[gather]):
                                 with patch.object(
                                     player._arbiter, "select",
@@ -796,6 +820,8 @@ def test_run_loads_remembered_bank_blocker(capsys):
     player = GamePlayer(character="hero", history=history)
 
     player._offline_timing = committed_timing()
+
+    player._learned_drops = LearnedDrops.empty()
     client = MagicMock()
     initial_state = make_state(hp=120, max_hp=150, level=5)
 
@@ -830,6 +856,7 @@ def test_run_logs_seeded_documented_blockers(capsys):
     blockers from game data (line 264)."""
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     client = MagicMock()
     initial_state = make_state(hp=120, max_hp=150, level=5)
 
@@ -885,6 +912,8 @@ def test_run_derives_crafting_target_from_fallback_obtain_item():
     player = GamePlayer(character="hero")
 
     player._offline_timing = committed_timing()
+
+    player._learned_drops = LearnedDrops.empty()
     client = MagicMock()
     initial_state = make_state(hp=100, max_hp=150, level=5)
     captured: dict[str, object] = {}
@@ -964,6 +993,8 @@ def test_run_records_post_action_cooldown_and_handles_stuck():
     player = GamePlayer(character="hero")
 
     player._offline_timing = committed_timing()
+
+    player._learned_drops = LearnedDrops.empty()
     client = MagicMock()
 
     # Game data + initial state so the loop's asserts pass.
@@ -995,6 +1026,7 @@ def test_items_task_builds_batched_craft_and_trade():
     quantity == task_batch_size, so the planner can produce/deliver a batch."""
     player = GamePlayer(character="testchar")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.game_data = GameData()
     player.game_data._bank_location = (4, 0)
     player.game_data._taskmaster_location = (1, 2)
@@ -1051,10 +1083,11 @@ def test_run_holds_plan_cursor_through_a_batched_gather():
     """
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     client = MagicMock()
 
     gather = GatherAction(resource_code="spruce_tree", quantity=3,
-                          locations=frozenset({(0, 0)}))
+                          locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     goal = MagicMock()
     goal.is_satisfied.return_value = False
     goal.__repr__ = lambda self: "StubGoal()"  # type: ignore[assignment]
@@ -1137,10 +1170,12 @@ def test_run_records_the_fight_outcome_of_the_action_that_ran():
     every hold as a party WIN (live C3P0 2026-10-12: 134 "wins", 0 fights)."""
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     client = MagicMock()
     initial_state = make_state(hp=120, max_hp=150, level=5)
     lease = PartyLease("king_slime", "hero", ("HAL",), "overworld", 3, -1)
-    fight = FightAction(monster_code="king_slime", locations=frozenset({(3, -1)}), participants=("HAL",))
+    fight = FightAction(monster_code="king_slime", locations=frozenset({(3, -1)}), participants=("HAL",),
+                        learned_drops=LearnedDrops.empty())
     hold = HoldForPartyAction(lease=lease)
     with patch.object(ClientManager_mock := MagicMock(), "client", client):
         with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
@@ -1159,6 +1194,7 @@ def test_run_republishes_the_party_card_after_the_action():
     leader read a member cooling down from the party fight as ready)."""
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     client = MagicMock()
     initial_state = make_state(hp=120, max_hp=150, level=5)
     post = replace(initial_state, cooldown_expires=datetime.now(tz=timezone.utc) + timedelta(seconds=60))

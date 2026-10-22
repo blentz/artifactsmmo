@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
@@ -103,7 +104,7 @@ def test_equip_owned_goal_selected_over_grind():
     equip candidate, not some other config quirk, is what wins."""
     planner = GOAPPlanner()
     gd = _gd()
-    actions = [FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))]
+    actions = [FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())]
     ctx = _ctx()
 
     arbiter = StrategyArbiter(planner, history=None)

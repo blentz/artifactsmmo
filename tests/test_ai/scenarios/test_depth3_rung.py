@@ -32,6 +32,7 @@ import pytest
 
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import (
@@ -149,7 +150,11 @@ def test_owning_the_intermediate_collapses_the_depth_and_the_answer(
 
     player._offline_timing = committed_timing()
 
+    player._learned_drops = LearnedDrops.empty()
+
     player._offline_timing = committed_timing()
+
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(held, bundle_game_data)
     report = player.plan_from_state()
     assert "EquipOwnedGear" in repr(report.selected_goal)
@@ -161,6 +166,7 @@ def test_the_cell_plans_the_bottom_of_the_chain_inside_the_budget(
     three-deep closure, and the plan is the gather that starts it."""
     player = GamePlayer(character=CELL, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, bundle_game_data)
     report = player.plan_from_state()
     assert repr(report.selected_goal) == f"GatherMaterials({LEAF}, {{{LEAF}:4}})"

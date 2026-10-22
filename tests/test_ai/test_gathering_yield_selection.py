@@ -3,6 +3,7 @@ yield-optimal resource; single-source items are untouched; unknown table fail-op
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from tests.test_ai.fixtures import make_state
 
 
@@ -23,8 +24,8 @@ def test_narrows_to_yield_optimal_source():
     state = make_state(skills={"mining": 5})
     goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
     actions = [
-        GatherAction(resource_code="rich_rocks", locations=frozenset([(1, 0)])),
-        GatherAction(resource_code="poor_rocks", locations=frozenset([(1, 0)])),
+        GatherAction(resource_code="rich_rocks", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
+        GatherAction(resource_code="poor_rocks", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
     ]
     relevant = goal.relevant_actions(actions, state, gd)
     codes = {a.resource_code for a in relevant if isinstance(a, GatherAction)}
@@ -35,7 +36,8 @@ def test_single_source_untouched():
     gd = _gd_two_sources()
     state = make_state(skills={"mining": 5})
     goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
-    actions = [GatherAction(resource_code="rich_rocks", locations=frozenset([(1, 0)]))]
+    actions = [GatherAction(resource_code="rich_rocks", locations=frozenset([(1, 0)]),
+                            learned_drops=LearnedDrops.empty())]
     relevant = goal.relevant_actions(actions, state, gd)
     assert any(getattr(a, "resource_code", None) == "rich_rocks" for a in relevant)
 
@@ -48,8 +50,8 @@ def test_no_locations_uses_zero_distance():
     # rich_rocks rate=1, poor_rocks rate=3; no locations on either → distance=0
     # tie-break → code "poor_rocks" > "rich_rocks" → rich_rocks wins
     actions = [
-        GatherAction(resource_code="rich_rocks", locations=frozenset()),
-        GatherAction(resource_code="poor_rocks", locations=frozenset()),
+        GatherAction(resource_code="rich_rocks", locations=frozenset(), learned_drops=LearnedDrops.empty()),
+        GatherAction(resource_code="poor_rocks", locations=frozenset(), learned_drops=LearnedDrops.empty()),
     ]
     relevant = goal.relevant_actions(actions, state, gd)
     codes = {a.resource_code for a in relevant if isinstance(a, GatherAction)}
@@ -70,8 +72,8 @@ def test_unknown_drop_table_fail_open():
     state = make_state(skills={"mining": 5})
     goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
     actions = [
-        GatherAction(resource_code="rich_rocks", locations=frozenset([(1, 0)])),
-        GatherAction(resource_code="poor_rocks", locations=frozenset([(1, 0)])),
+        GatherAction(resource_code="rich_rocks", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
+        GatherAction(resource_code="poor_rocks", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
     ]
     relevant = goal.relevant_actions(actions, state, gd)
     codes = {a.resource_code for a in relevant if isinstance(a, GatherAction)}

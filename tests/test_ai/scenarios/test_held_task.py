@@ -61,6 +61,7 @@ from artifactsmmo_cli.ai.decisions.root import (
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.inventory_keep import keep_in_bag
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -321,6 +322,7 @@ def test_the_triple_starves_the_winnable_cascade(gd: GameData) -> None:
                    for slime in ("green_slime", "blue_slime", "red_slime", "yellow_slime"))
         player = GamePlayer(character=name, history=None)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.seed_offline(state, gd)
         player.plan_from_state()
         assert player._last_ctx is not None
@@ -468,6 +470,7 @@ def _starved_run(monster: str | None, game_data: GameData):
              else _starved_state(monster, game_data))
     player = GamePlayer(character=STARVED, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, game_data)
     report = player.plan_from_state()
     assert player._last_ctx is not None

@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
 from artifactsmmo_cli.ai.goals.post_buy_bid import POST_BUY_BID_VALUE, PostBuyBidGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import map_means
@@ -76,7 +77,7 @@ def _ctx(step_profile) -> SelectionContext:
     return SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        step_profile=step_profile)
+        step_profile=step_profile, learned_drops=LearnedDrops.empty())
 
 
 def _state(**over):

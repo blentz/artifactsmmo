@@ -20,6 +20,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.item_catalog import ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -140,7 +141,7 @@ def _state_8coins():
 def _blockers(state) -> list[str]:
     """The walk's named decline for the satchel from `state`."""
     declined: list[str] = []
-    fight_cow = FightAction(monster_code=COW, locations=frozenset([COW_LOC]))
+    fight_cow = FightAction(monster_code=COW, locations=frozenset([COW_LOC]), learned_drops=LearnedDrops.empty())
     assert decompose(GatherMaterialsGoal(SATCHEL, {SATCHEL: 1}), state,
                      _make_satchel_game_data(), [fight_cow], NO_PROFILE_CONTEXT,
                      declined) is None
@@ -166,7 +167,7 @@ def test_satchel_affordable_emits_npc_buy():
 
     # Build a minimal action list (FightAction for cow; relevant_actions
     # will EMIT the NpcBuyAction based on the recipe closure).
-    fight_cow = FightAction(monster_code=COW, locations=frozenset([COW_LOC]))
+    fight_cow = FightAction(monster_code=COW, locations=frozenset([COW_LOC]), learned_drops=LearnedDrops.empty())
     actions = [fight_cow]
 
     kept = goal.relevant_actions(actions, state, gd)

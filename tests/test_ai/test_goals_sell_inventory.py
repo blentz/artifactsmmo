@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.goals.sell_inventory import (
     MAX_SELL_DEPTH,
     SellInventoryGoal,
 )
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 
@@ -110,7 +111,7 @@ class TestSellInventoryGoal:
         state = make_state(inventory={"wooden_shield": 14, "useless": 1})
         actions = [
             RestAction(),
-            FightAction(monster_code="goblin", locations=frozenset({(1, 1)})),
+            FightAction(monster_code="goblin", locations=frozenset({(1, 1)}), learned_drops=LearnedDrops.empty()),
             NpcSellAction(npc_code="vendor", item_code="wooden_shield", quantity=1,
                           npc_location=(1, 1)),
             NpcSellAction(npc_code="vendor", item_code="not_in_inventory", quantity=1,

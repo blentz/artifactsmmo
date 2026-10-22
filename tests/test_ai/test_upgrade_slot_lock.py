@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 
@@ -52,7 +53,7 @@ def test_relevant_actions_locks_to_target_slot():
         EquipAction(code="wooden_shield", slot="shield_slot"),
         EquipAction(code="fishing_net", slot="weapon_slot"),
         OptimizeLoadoutAction(target_monster_code="goblin"),
-        GatherAction(resource_code="ash_wood", locations=frozenset({(0, 0)})),
+        GatherAction(resource_code="ash_wood", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty()),
         UnequipAction(slot="shield_slot"),
         RestAction(),  # recovery — always kept
     ]
@@ -100,7 +101,8 @@ def test_relevant_actions_unfiltered_when_no_target():
     planner gets the full action set."""
     gd = GameData()  # empty: find_upgrade_target -> None
     goal = UpgradeEquipmentGoal()  # no commitment
-    actions = [GatherAction(resource_code="ash_wood", locations=frozenset({(0, 0)}))]
+    actions = [GatherAction(resource_code="ash_wood", locations=frozenset({(0, 0)}),
+                            learned_drops=LearnedDrops.empty())]
     assert goal.relevant_actions(actions, make_state(), gd) == actions
 
 
@@ -159,7 +161,7 @@ class TestTargetDropFights:
         factory only enumerates equips for craftable/owned items)."""
         gd = _drop_gd(monster_level=1)
         state = make_state(level=12, attack={"air": 10}, dmg=10)
-        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}))
+        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         kept = _boots_goal().relevant_actions([fight], state, gd)
         fights = [a for a in kept if isinstance(a, FightAction)]
         assert [f.monster_code for f in fights] == ["spider"]
@@ -171,7 +173,7 @@ class TestTargetDropFights:
         """L2 vs L1 spider (xp-positive): the plain fight, no drop_farm."""
         gd = _drop_gd(monster_level=1)
         state = make_state(level=2, attack={"air": 10}, dmg=10)
-        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}))
+        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         kept = _boots_goal().relevant_actions([fight], state, gd)
         fights = [a for a in kept if isinstance(a, FightAction)]
         assert [f.monster_code for f in fights] == ["spider"]
@@ -183,7 +185,7 @@ class TestTargetDropFights:
         Equip either (the goal honestly stays dead)."""
         gd = _drop_gd(monster_level=1, monster_hp=100000, monster_attack=200)
         state = make_state(level=12, attack={"air": 10}, dmg=10)
-        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}))
+        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         kept = _boots_goal().relevant_actions([fight], state, gd)
         assert not any(isinstance(a, FightAction) for a in kept)
         assert not any(isinstance(a, EquipAction) for a in kept)
@@ -195,7 +197,8 @@ class TestTargetDropFights:
         for stock in ({"inventory": {"old_boots": 1}},
                       {"bank_items": {"old_boots": 1}}):
             state = make_state(level=12, attack={"air": 10}, dmg=10, **stock)
-            fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}))
+            fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}),
+                                learned_drops=LearnedDrops.empty())
             kept = _boots_goal().relevant_actions([fight], state, gd)
             assert not any(isinstance(a, FightAction) for a in kept)
 
@@ -212,7 +215,7 @@ class TestTargetDropFights:
         0 in the expected-kills metric, mirroring GatherMaterialsGoal)."""
         gd = _drop_gd(monster_level=1)
         state = make_state(level=12, attack={"air": 10}, dmg=10)
-        fight = FightAction(monster_code="spider", locations=frozenset())
+        fight = FightAction(monster_code="spider", locations=frozenset(), learned_drops=LearnedDrops.empty())
         kept = _boots_goal().relevant_actions([fight], state, gd)
         fights = [a for a in kept if isinstance(a, FightAction)]
         assert [f.monster_code for f in fights] == ["spider"]
@@ -224,7 +227,7 @@ class TestTargetDropFights:
         gd = _drop_gd(monster_level=1)
         state = make_state(level=12, attack={"air": 10}, dmg=10)
         actions = [
-            FightAction(monster_code="spider", locations=frozenset({(1, 0)})),
+            FightAction(monster_code="spider", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty()),
             EquipAction(code="old_boots", slot="boots_slot"),
         ]
         kept = _boots_goal().relevant_actions(actions, state, gd)
@@ -247,8 +250,8 @@ class TestTargetDropFights:
         gd._monster_drops["ogre"] = [("old_boots", 1, 1, 1)]
         state = make_state(level=12, attack={"air": 10}, dmg=10)
         actions = [
-            FightAction(monster_code="spider", locations=frozenset({(1, 0)})),
-            FightAction(monster_code="ogre", locations=frozenset({(2, 0)})),
+            FightAction(monster_code="spider", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty()),
+            FightAction(monster_code="ogre", locations=frozenset({(2, 0)}), learned_drops=LearnedDrops.empty()),
         ]
         kept = _boots_goal().relevant_actions(actions, state, gd)
         fights = [a for a in kept if isinstance(a, FightAction)]
@@ -306,7 +309,7 @@ class TestDropFightCompanionSwap:
         monster-drop-target emission block."""
         gd = _weapon_gd()
         state = _suboptimal_weapon_state()
-        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}))
+        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         kept = _boots_goal().relevant_actions([fight], state, gd)
         reprs = [repr(a) for a in kept]
         assert "Fight(spider)" in reprs, reprs
@@ -322,7 +325,8 @@ class TestDropFightCompanionSwap:
         this planned empty."""
         gd = _weapon_gd()
         state = _suboptimal_weapon_state()
-        actions = [FightAction(monster_code="spider", locations=frozenset({(1, 0)}))]
+        actions = [FightAction(monster_code="spider", locations=frozenset({(1, 0)}),
+                               learned_drops=LearnedDrops.empty())]
         plan = (decompose(_boots_goal(), state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
         reprs = [repr(a) for a in plan]
         assert reprs, "UpgradeEquipment(old_boots) planned empty even with the companion swap"
@@ -340,7 +344,7 @@ class TestDropFightCompanionSwap:
         gd = _weapon_gd()
         equipment = {**make_state().equipment, "weapon_slot": "iron_sword"}
         state = _suboptimal_weapon_state(equipment=equipment, inventory={})
-        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}))
+        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         swap = OptimizeLoadoutAction(target_monster_code="spider", game_data=gd)
         assert swap.is_applicable(state, gd) is False
         plan = (decompose(_boots_goal(), state, gd, list([fight]), NO_PROFILE_CONTEXT) or [])

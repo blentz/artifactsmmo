@@ -28,6 +28,7 @@ from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.task_kills import PRIORITY, TaskKillsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.plan_tree import _label
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
@@ -68,8 +69,8 @@ class TestTaskKillsGoal:
 
     def test_relevant_actions_are_the_task_fight_and_recovery(self) -> None:
         goal = TaskKillsGoal("chicken", 3)
-        chicken = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))
-        cow = FightAction(monster_code="cow", locations=frozenset({(2, 0)}))
+        chicken = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
+        cow = FightAction(monster_code="cow", locations=frozenset({(2, 0)}), learned_drops=LearnedDrops.empty())
         rest = RestAction()
         assert goal.relevant_actions([chicken, cow, rest], _held(), _gd()) == [chicken, rest]
 
@@ -77,7 +78,7 @@ class TestTaskKillsGoal:
         """The live shape: a task monster far below the character. 5-2c-iii-b
         lets the fight plan; this goal is what asks for it."""
         gd = _gd()
-        chicken = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))
+        chicken = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         plan = GOAPPlanner().plan(_held(3), TaskKillsGoal("chicken", 3), [chicken], gd)
         assert [repr(a) for a in plan] == ["Fight(chicken)"]
 
@@ -347,7 +348,8 @@ class TestBookingPools:
         return [TaskCancelAction(taskmaster_location=(4, 13)),
                 CompleteTaskAction(taskmaster_location=(4, 13)),
                 MoveAction(x=1, y=1), RestAction(),
-                GatherAction(resource_code="ash_tree", locations=frozenset({(2, 0)}))]
+                GatherAction(resource_code="ash_tree", locations=frozenset({(2, 0)}),
+                             learned_drops=LearnedDrops.empty())]
 
     def test_the_cancel_plans_over_task_and_movement_actions(self) -> None:
         pool = TaskCancelGoal().relevant_actions(self._pool(), _held(3), _gd())

@@ -8,6 +8,7 @@ server drank in cow and wolf fights Lor won anyway."""
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -19,7 +20,7 @@ def _cache(goal_repr: str, plan, cursor: int = 0) -> PlanCache:  # type: ignore[
 
 
 def _fight(monster: str) -> FightAction:
-    return FightAction(monster_code=monster, locations=frozenset({(1, 0)}))
+    return FightAction(monster_code=monster, locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
 
 
 def test_no_intention_no_fight() -> None:
@@ -29,6 +30,7 @@ def test_no_intention_no_fight() -> None:
 def test_the_first_fight_left_in_the_intentions_plan() -> None:
     player = GamePlayer(character="hero", history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._arbiter._committed_repr = "Grind"
     player._plan_cache = _cache("Grind", [_fight("cow"), RestAction(), _fight("wolf")], cursor=1)
     assert player._committed_fight_monster() == "wolf"
@@ -37,6 +39,7 @@ def test_the_first_fight_left_in_the_intentions_plan() -> None:
 def test_an_intention_that_fights_nothing_has_no_fight() -> None:
     player = GamePlayer(character="hero", history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._arbiter._committed_repr = "Climb"
     player._plan_cache = _cache("Climb", [RestAction()])
     assert player._committed_fight_monster() is None
@@ -47,6 +50,7 @@ def test_the_fight_survives_an_interrupt_that_replaces_the_cache() -> None:
     interrupts is still the one ahead, or the batch would stop half made."""
     player = GamePlayer(character="hero", history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._arbiter._committed_repr = "Grind"
     player._plan_cache = _cache("Grind", [_fight("wolf")])
     assert player._committed_fight_monster() == "wolf"
@@ -57,6 +61,7 @@ def test_the_fight_survives_an_interrupt_that_replaces_the_cache() -> None:
 def test_a_new_commitment_forgets_the_old_fight() -> None:
     player = GamePlayer(character="hero", history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._arbiter._committed_repr = "Grind"
     player._plan_cache = _cache("Grind", [_fight("wolf")])
     assert player._committed_fight_monster() == "wolf"

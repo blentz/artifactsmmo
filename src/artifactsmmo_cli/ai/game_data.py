@@ -13,7 +13,6 @@ from collections.abc import Callable, Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from datetime import datetime
-from fractions import Fraction
 from functools import cached_property
 from typing import Any, TypedDict
 
@@ -55,7 +54,6 @@ from artifactsmmo_api_client.types import Unset
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.game_data_cache import GameDataCache
 from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
-from artifactsmmo_cli.ai.gather_selection import expected_gathers
 from artifactsmmo_cli.ai.ge_order_index import index_best_ge_orders
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS, stats_is_combat_bearing
 from artifactsmmo_cli.ai.gear_taxonomy_core import (
@@ -890,13 +888,6 @@ class GameData:
         if row is None:
             return 1, 1, 1
         return row[1], row[2], row[3]
-
-    def gathers_per_unit(self, resource: str, item: str) -> Fraction:
-        """Expected gathers of `resource` to obtain ONE `item`
-        (`gather_selection.expected_gathers` over its drop row,
-        `gather_drop_row`): 1 for a primary drop, 20 for `apple` off `ash_tree`
-        (rate 20)."""
-        return expected_gathers(*self.gather_drop_row(resource, item))
 
     MAX_CHARACTER_LEVEL = 50
     """Documented character level cap.

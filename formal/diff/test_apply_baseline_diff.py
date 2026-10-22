@@ -54,6 +54,7 @@ from artifactsmmo_cli.ai.actions.use_gold_bag import UseGoldBagAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.world_state import WorldState
 
 BASELINE_FIELDS: tuple[str, ...] = (
@@ -402,7 +403,8 @@ def test_gather() -> None:
     state = _make_state(skill_xp={"mining": 5, "alchemy": 4500})
     _assert_preserved(
         state,
-        GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)])).apply(state, gd),
+        GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]),
+                     learned_drops=LearnedDrops.empty()).apply(state, gd),
     )
 
 
@@ -413,7 +415,8 @@ def test_fight() -> None:
     gd._item_stats = {"sword": ItemStats(code="sword", level=1, type_="weapon")}
     _assert_preserved(
         state,
-        FightAction(monster_code="chicken", locations=frozenset({(0, 0)})).apply(state, gd),
+        FightAction(monster_code="chicken", locations=frozenset({(0, 0)}),
+                    learned_drops=LearnedDrops.empty()).apply(state, gd),
     )
 
 
@@ -426,7 +429,8 @@ def test_fight_gold_is_its_declared_mutation() -> None:
     gd._monster_max_gold.update({"chicken": 6})
     state = _make_state(hp=100, max_hp=100, equipment={"weapon_slot": "sword"})
     gd._item_stats = {"sword": ItemStats(code="sword", level=1, type_="weapon")}
-    after = FightAction(monster_code="chicken", locations=frozenset({(0, 0)})).apply(state, gd)
+    after = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}),
+                        learned_drops=LearnedDrops.empty()).apply(state, gd)
     _assert_preserved(state, after)
     assert after.gold - state.gold == win_gold("chicken", gd) == 4
 
@@ -510,6 +514,7 @@ def test_fight_preserves_baseline_property(bkw) -> None:
                         equipment={"weapon_slot": "sword"}, **bkw)
     gd = _make_game_data_basic()
     gd._item_stats = {"sword": ItemStats(code="sword", level=1, type_="weapon")}
-    after = FightAction(monster_code="chicken", locations=frozenset({(0, 0)})).apply(state, gd)
+    after = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}),
+                        learned_drops=LearnedDrops.empty()).apply(state, gd)
     _assert_preserved(state, after)
     assert after.gold - state.gold == win_gold("chicken", gd)

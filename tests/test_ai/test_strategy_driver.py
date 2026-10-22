@@ -50,6 +50,7 @@ from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.task_kills import TaskKillsGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -1175,7 +1176,7 @@ def test_select_returns_objective_step_when_calm():
     state = make_state(level=1, hp=150, max_hp=150, xp=0, max_xp=500,
                        task_code="chicken", task_type="monsters",
                        task_progress=0, task_total=10)
-    actions = [FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))]
+    actions = [FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())]
     ctx = _ctx(combat_monster="chicken")
     arbiter = StrategyArbiter(planner, history=None)
     decision = _FakeDecision(chosen_step=ReachCharLevel(5))
@@ -1209,7 +1210,7 @@ def test_select_suppresses_step_when_no_task():
                        skills={"mining": 3})
     actions = [
         GatherAction(resource_code="copper_rocks",
-                     locations=frozenset([(1, 0)])),
+                     locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
         AcceptTaskAction(taskmaster_location=(2, 1)),
     ]
     ctx = _ctx(combat_monster="chicken")

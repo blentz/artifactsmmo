@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import httpx
 
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.raid_info import RaidInfo
@@ -37,6 +38,7 @@ def test_fetch_raids_maps_active_and_upcoming(monkeypatch):
                         lambda **kw: page if kw["page"] == 1 else MagicMock(data=[]))
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     raids = player._fetch_raids(MagicMock())
     assert [r.status for r in raids] == ["active", "upcoming"]
     active = next(r for r in raids if r.status == "active")
@@ -56,6 +58,7 @@ def _ri(status):
 def test_log_active_raids_prints_only_active(capsys):
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._log_active_raids([_ri("active"), _ri("upcoming")])
     out = capsys.readouterr().out
     assert "raid active: giant_slime 400/1000 hp" in out

@@ -10,6 +10,7 @@ import typer
 
 from artifactsmmo_cli.ai import player as player_mod
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -26,6 +27,7 @@ def test_plan_once_returns_report_without_executing():
     _execute (no server mutation)."""
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     client = MagicMock()
     state = make_state(hp=100, max_hp=150)
     with patch.object(ClientManager_mock := MagicMock(), "client", client):
@@ -59,6 +61,7 @@ def test_plan_once_seeds_committed_for_diagnostics():
     reproducing a live committed-goal hold; the injection is echoed on the report."""
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     state = make_state()
     with contextlib.ExitStack() as stack:
         for cm in _plan_once_mocks(player, state):
@@ -72,6 +75,7 @@ def test_plan_once_reports_the_cycles_gear_objective():
     the one the root walk and the arbiter read — not a second computation."""
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     state = make_state()
     objective = GearObjective(monster="chicken", loadout={}, rate=Fraction(1), missing=())
     real = player_mod.attach_gear_objective
@@ -91,6 +95,7 @@ def test_plan_once_resumes_the_persisted_intention_like_a_live_bot():
     so the diagnostic does too — before its own `--committed` override."""
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     state = make_state()
     with contextlib.ExitStack() as stack:
         for cm in _plan_once_mocks(player, state):
@@ -105,6 +110,7 @@ def test_plan_once_crafting_target_from_fallback():
     from the first ObtainItem fallback (mirrors run())."""
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     client = MagicMock()
     state = make_state()
     decision = StrategyDecision(
@@ -148,6 +154,7 @@ def test_plan_once_reports_drop_input_winnability():
     fake_strategy.decide.return_value = decision
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     with patch.object(ClientManager_mock := MagicMock(), "client", MagicMock()):
         with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
             with patch("artifactsmmo_cli.ai.player.GameData.load", return_value=gd):
@@ -387,6 +394,7 @@ def test_plan_once_reads_the_learned_record_like_a_live_bot():
     drop gate refuses the solo fights the record refuses."""
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     with contextlib.ExitStack() as stack:
         for cm in _plan_once_mocks(player, make_state(hp=100, max_hp=150)):
             stack.enter_context(cm)

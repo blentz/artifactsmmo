@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
 from artifactsmmo_cli.ai.combat_targets import combat_target_monsters
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -70,7 +71,7 @@ def _actions(gd: GameData) -> list:
                  CompleteTaskAction(taskmaster_location=(0, 0))]
     for monster in gd.monster_levels:
         out.append(FightAction(monster_code=monster,
-                               locations=frozenset(gd._monster_locations[monster])))
+                               locations=frozenset(gd._monster_locations[monster]), learned_drops=LearnedDrops.empty()))
     return out
 
 

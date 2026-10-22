@@ -28,6 +28,7 @@ memoised per item for its lifetime. Pure: no I/O.
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime
+from fractions import Fraction
 
 from artifactsmmo_cli.ai import accumulation_sell
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
@@ -213,21 +214,27 @@ class ObtainModel:
     def _ranked_gathers(self, item: str, ready: tuple[Route, ...]) -> list[Route]:
         """`ready` with its GATHER routes (contiguous in priority order) ranked
         by the proved gather-source order (`gather_selection`, expected gathers
-        per unit, then distance to the nearest tile, then code), so the walk's
-        first gather is the one `select_gather_source` picks; every other route
-        keeps its place."""
+        per unit at the context's learned drop chance, then distance to the
+        nearest tile, then code), so the walk's first gather is the one
+        `select_gather_source` picks; every other route keeps its place.
+
+        The expected gathers are the context's drop evidence
+        (`SelectionContext.drops`, ruling T16a) over the drop row
+        (`GameData.gather_drop_row`, a primary-map-only resource a sure drop),
+        at `state.prospecting`: the figure the walk prices the route at, so
+        the source the walk serves first is the one it priced cheapest."""
         gathers = [route for route in ready if route.kind is SourceKind.GATHER]
         if len(gathers) < 2:
             return list(ready)
+        evidence = self._ctx.drops()
         candidates: list[GatherCandidate] = []
         for route in gathers:
-            # A resource known only from the primary-drop map has no drop-table
-            # row; `_gather` rates it 1 (a sure drop), so the candidate does too.
-            row = next((r for r in self._gd.resource_drop_table(route.via) if r[0] == item),
-                       (item, 1, 1, 1))
+            rate, min_q, max_q = self._gd.gather_drop_row(route.via, item)
+            attempts = evidence.attempts_per_unit(route.via, item, rate, min_q, max_q,
+                                                  self._state.prospecting)
             tiles = self._gd.all_resource_locations.get(route.via) or []
             distance = min((abs(x - self._state.x) + abs(y - self._state.y) for x, y in tiles), default=0)
-            candidates.append(GatherCandidate(route.via, row[1], row[2], row[3], distance))
+            candidates.append(GatherCandidate(route.via, attempts, distance))
         by_resource = {route.via: route for route in gathers}
         ranked = iter([by_resource[code] for code in rank_gather_sources(candidates)])
         return [next(ranked) if route.kind is SourceKind.GATHER else route for route in ready]
@@ -322,17 +329,29 @@ class ObtainModel:
                       UNBOUNDED_CAPACITY, gates, inputs=dict(recipe))]
 
     def _gather(self, item: str) -> list[Route]:
-        """One route per resource that drops `item`, most frequent first. The
-        first one is the route `GameData.resource_for_drop` picks (the first
-        minimal-rate dropper in table order, falling back to the primary-drop
-        map) and is marked `primary`: the only one the legacy model offered.
-        The stable sort is what keeps that tie-break identical."""
-        droppers = [(res, rate) for res, table in self._gd.resource_drops_full.items()
-                    for code, rate, _mn, _mx in table if code == item]
+        """One route per resource that drops `item`, fewest expected gathers a
+        unit first: the context's learned drop model
+        (`SelectionContext.drops`, ruling T16a) over each drop row at
+        `state.prospecting`, the figure the walk prices the route at. The first
+        one is marked `primary`: the only one the legacy model offers, so a
+        LEGACY walk prices the source the evidence says is cheapest, not the
+        one the API rate alone names. Under the prior (`LearnedDrops.empty()`)
+        that is the minimal `rate / mean quantity` dropper; the stable sort
+        keeps table order on a tie. A resource known only from the
+        primary-drop map is a sure drop (`GameData.gather_drop_row`)."""
+        droppers = [res for res, table in self._gd.resource_drops_full.items()
+                    for code, _rate, _mn, _mx in table if code == item]
         if not droppers:
-            droppers = [(res, 1) for res, code in self._gd.resource_drops.items() if code == item]
+            droppers = [res for res, code in self._gd.resource_drops.items() if code == item]
+        evidence = self._ctx.drops()
+
+        def attempts(resource: str) -> Fraction:
+            rate, min_q, max_q = self._gd.gather_drop_row(resource, item)
+            return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,
+                                              self._state.prospecting)
+
         out: list[Route] = []
-        for rank, (resource, _rate) in enumerate(sorted(droppers, key=lambda pair: pair[1])):
+        for rank, resource in enumerate(sorted(droppers, key=attempts)):
             gates = [Gate(GateKind.SPAWN_LIVE, resource,
                           bool(self._gd.all_resource_locations.get(resource))),
                      Gate(GateKind.SPAWN_KNOWN, resource, self._gd.resource_spawn_known(resource))]

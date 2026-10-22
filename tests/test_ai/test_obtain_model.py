@@ -16,6 +16,7 @@ import pytest
 from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
 from artifactsmmo_cli.ai.decompose_core import Act
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
@@ -42,7 +43,7 @@ def census_items(gd: GameData) -> list[str]:
 def _ctx(bank_accessible: bool = True) -> SelectionContext:
     return SelectionContext(bank_accessible=bank_accessible, bank_required_level=0,
                             bank_unlock_monster=None, initial_xp=0,
-                            task_exchange_min_coins=0, combat_monster=None)
+                            task_exchange_min_coins=0, combat_monster=None, learned_drops=LearnedDrops.empty())
 
 
 @pytest.fixture(scope="module")

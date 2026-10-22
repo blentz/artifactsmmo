@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable, fightable_droppers
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
@@ -128,8 +129,8 @@ def test_grey_gate_filters_candidates_rather_than_vetoing_the_item() -> None:
                                                     allow_grey=False)]
     assert strict == ["wolf"]
     # And emission agrees with each verdict rather than refusing outright.
-    actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 1)})),
-               FightAction(monster_code="wolf", locations=frozenset({(1, 1)}))]
+    actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 1)}), learned_drops=LearnedDrops.empty()),
+               FightAction(monster_code="wolf", locations=frozenset({(1, 1)}), learned_drops=LearnedDrops.empty())]
     greedy = select_drop_fight("feather", actions, state, gd, allow_grey=True)
     assert greedy is not None and greedy.monster_code == "chicken"
     assert greedy.drop_farm is True
@@ -184,6 +185,7 @@ def dropped_items(game_data: GameData) -> list[str]:
 def _pool(scenario: str, state: WorldState, game_data: GameData) -> list:
     player = GamePlayer(character=scenario, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, game_data)
     return player._build_actions()
 

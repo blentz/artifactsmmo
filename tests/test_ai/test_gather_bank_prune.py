@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.recipe_closure import gather_serves_closure
 from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
 from tests.test_ai.fixtures import make_state
@@ -32,7 +33,7 @@ def _gd() -> GameData:
 
 def _actions() -> list:
     return [
-        GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 0)})),
+        GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 0)}), learned_drops=LearnedDrops.empty()),
         WithdrawItemAction(code="copper_ore", quantity=10),
         WithdrawItemAction(code="copper_bar", quantity=6),
     ]
@@ -142,8 +143,8 @@ def _unknown_drop_gd() -> GameData:
 
 def _unknown_drop_actions() -> list:
     return [
-        GatherAction(resource_code=_GHOST, locations=frozenset({(3, 0)})),
-        GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 0)})),
+        GatherAction(resource_code=_GHOST, locations=frozenset({(3, 0)}), learned_drops=LearnedDrops.empty()),
+        GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 0)}), learned_drops=LearnedDrops.empty()),
     ]
 
 
@@ -155,7 +156,7 @@ def test_unknown_drop_fixture_actually_exercises_the_fallback():
     """Fixture liveness. Without all three of these the equivalence test below
     passes for the wrong reason."""
     gd = _unknown_drop_gd()
-    ghost = GatherAction(resource_code=_GHOST, locations=frozenset({(3, 0)}))
+    ghost = GatherAction(resource_code=_GHOST, locations=frozenset({(3, 0)}), learned_drops=LearnedDrops.empty())
 
     # 1. The two drop-resolution rules genuinely DISAGREE for this action.
     assert ghost.drop_item(gd) == _GHOST

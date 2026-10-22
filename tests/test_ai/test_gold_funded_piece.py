@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING, FightAct
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.obtain_item_routing import _equippable_goal
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, PIECE_POLICY
@@ -81,6 +82,7 @@ def _world() -> GameData:
 def _player(world: GameData, gold: int | None = None) -> GamePlayer:
     player = GamePlayer(character=CELL, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     state = scenario_state(SCENARIOS[CELL], world)
     player.seed_offline(state if gold is None else replace(state, gold=gold), world)
     return player
@@ -180,7 +182,8 @@ def test_a_win_projects_its_mean_gold() -> None:
     low, high = world.monster_min_gold(GOLD_MONSTER), world.monster_max_gold(GOLD_MONSTER)
     assert low < high
     fight = FightAction(monster_code=GOLD_MONSTER,
-                        locations=frozenset(world.all_monster_locations[GOLD_MONSTER]))
+                        locations=frozenset(world.all_monster_locations[GOLD_MONSTER]),
+                            learned_drops=LearnedDrops.empty())
     assert fight.apply(state, world).gold == state.gold + (low + high) // 2
 
 
@@ -190,7 +193,8 @@ def test_the_gold_leg_counts_the_pocket() -> None:
     world = _world()
     state = _state(world)
     fight = FightAction(monster_code=GOLD_MONSTER, gold_target=4,
-                        locations=frozenset(world.all_monster_locations[GOLD_MONSTER]))
+                        locations=frozenset(world.all_monster_locations[GOLD_MONSTER]),
+                            learned_drops=LearnedDrops.empty())
     cache = PlanCache(selected_goal=GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}),
                       plan=[fight], crafting_target=None, plan_level=state.level,
                       goal_repr="g")
@@ -233,6 +237,7 @@ def test_a_grey_gold_monster_is_fought_as_a_drop_farm() -> None:
     assert seeded.state is not None
     player = GamePlayer(character=CELL, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(replace(seeded.state, level=39), world)
     state = player.state
     assert state is not None

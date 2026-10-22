@@ -34,6 +34,7 @@ import pytest
 
 from artifactsmmo_cli.ai.bank_room import bank_has_room
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
@@ -140,6 +141,7 @@ def test_cell8_reaches_a_relief_goal_end_to_end(
     state = _state(RELIEF_CELL, bundle_game_data)
     player = GamePlayer(character=RELIEF_CELL, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, bundle_game_data)
     report = player.plan_from_state()
     assert repr(report.selected_goal) == "CraftRelief(copper_bar)"
@@ -206,6 +208,7 @@ def test_cell9_reaches_the_discard_goal_end_to_end(
     state = _state(CRITICAL_CELL, bundle_game_data)
     player = GamePlayer(character=CRITICAL_CELL, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, bundle_game_data)
     report = player.plan_from_state()
     assert repr(report.selected_goal) == "DiscardOverstock"

@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.destructive_license import (
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_in_bag, keep_owned
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from tests.test_ai.fixtures import make_state
@@ -141,7 +142,7 @@ def test_non_destructive_actions_pass_through_untouched():
     gd = _gd()
     state = make_state(level=10, inventory={"copper_axe": 1})
     pool = [RestAction(), FightAction(monster_code="chicken",
-                                      locations=frozenset({(0, 1)}))]
+                                      locations=frozenset({(0, 1)}), learned_drops=LearnedDrops.empty())]
     assert license_destructive_actions(pool, state, gd, _ctx()) == pool
     assert destructive_demand(RestAction()) is None
 
@@ -160,7 +161,7 @@ def test_the_factory_no_longer_carries_a_code_set_protection():
         _game_data=gd, target_tools={"woodcutting": "copper_axe"})
     recycles = {a.code for a in build_actions(gd, state, objective,
                                               bank_accessible=True,
-                                              task_exchange_min_coins=0)
+                                              task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
                 if isinstance(a, RecycleAction)}
     # The axe is the objective's TOOL target — the old code-set skipped its Recycle
     # (and hoarded all 18 copies). The menu now carries it; the licence decides.

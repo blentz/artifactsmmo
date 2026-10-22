@@ -7,6 +7,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.fight_tiles import by_region, fight_tiles, layered_extra
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -93,7 +94,8 @@ def test_the_tiles_are_the_factorys_fight_tiles() -> None:
     """Parity: for every monster, the union of the factory's FightAction tiles."""
     gd = _gd()
     state = _state()
-    actions = build_actions(gd, state, None, bank_accessible=True, task_exchange_min_coins=1)
+    actions = build_actions(gd, state, None, bank_accessible=True, task_exchange_min_coins=1,
+                            learned_drops=LearnedDrops.empty())
     for monster in ("crab", "rat", "lich", "pixie", "chicken", "ghost"):
         built = {tile for a in actions if isinstance(a, FightAction) and a.monster_code == monster
                  for tile in a.locations}

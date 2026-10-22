@@ -15,6 +15,7 @@ from unittest.mock import patch
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, load_bundle_game_data, scenario_state
@@ -24,7 +25,7 @@ from artifactsmmo_cli.ai.world_state import WorldState
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 NOW = datetime(2026, 10, 18, tzinfo=UTC)
 CTX = SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
-                       initial_xp=0, task_exchange_min_coins=0, combat_monster=None)
+                       initial_xp=0, task_exchange_min_coins=0, combat_monster=None, learned_drops=LearnedDrops.empty())
 WINS = "artifactsmmo_cli.ai.obtain_model.drop_routes.drop_fight_winnable"
 """Patched to True where a test asks only about spawns, not about the fight."""
 

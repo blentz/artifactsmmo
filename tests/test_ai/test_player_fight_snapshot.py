@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.fight_record import FightRecord
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
@@ -34,6 +35,7 @@ def _notify(action) -> CycleSnapshot:
     calls: list[CycleSnapshot] = []
     player = GamePlayer(character="hero", cycle_observer=calls.append)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.state = make_state(level=17)
     player._notify_observer(
         "FarmMonster(mushmush)", repr(action), "ok", goal_rank_trace=[],
@@ -43,7 +45,7 @@ def _notify(action) -> CycleSnapshot:
 
 
 def test_fight_action_record_rides_the_snapshot():
-    action = FightAction(monster_code="mushmush")
+    action = FightAction(monster_code="mushmush", learned_drops=LearnedDrops.empty())
     action.last_fight = RECORD
 
     assert _notify(action).fight == RECORD
@@ -54,12 +56,12 @@ def test_non_fight_action_leaves_it_none():
 
 
 def test_fight_action_without_a_record_leaves_it_none():
-    assert _notify(FightAction(monster_code="mushmush")).fight is None
+    assert _notify(FightAction(monster_code="mushmush", learned_drops=LearnedDrops.empty())).fight is None
 
 
 def test_fight_survives_the_snapshot_round_trip():
     """The snapshot is serialised to traces.jsonl; the record must dump cleanly."""
-    action = FightAction(monster_code="mushmush")
+    action = FightAction(monster_code="mushmush", learned_drops=LearnedDrops.empty())
     action.last_fight = RECORD
 
     dumped = _notify(action).model_dump()
@@ -80,6 +82,7 @@ def test_fight_survives_the_snapshot_round_trip():
 def _emit(action, tracer):
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.state = make_state(level=17)
     player.tracer = tracer
     player._emit_trace(
@@ -91,7 +94,7 @@ def _emit(action, tracer):
 
 
 def test_trace_carries_the_structured_fight_fields():
-    action = FightAction(monster_code="mushmush")
+    action = FightAction(monster_code="mushmush", learned_drops=LearnedDrops.empty())
     action.last_fight = RECORD
 
     record = _emit(action, MagicMock())
@@ -106,14 +109,14 @@ def test_trace_carries_the_structured_fight_fields():
 
 def test_trace_omits_the_transcript():
     """96.8% of the record, unparseable by rule, and retrievable by started_at."""
-    action = FightAction(monster_code="mushmush")
+    action = FightAction(monster_code="mushmush", learned_drops=LearnedDrops.empty())
     action.last_fight = RECORD
 
     assert "logs" not in _emit(action, MagicMock())["fight"]
 
 
 def test_trace_record_is_json_serialisable():
-    action = FightAction(monster_code="mushmush")
+    action = FightAction(monster_code="mushmush", learned_drops=LearnedDrops.empty())
     action.last_fight = RECORD
 
     assert json.loads(json.dumps(_emit(action, MagicMock())["fight"]))["turns"] == 27
@@ -124,13 +127,13 @@ def test_non_fight_cycle_has_no_fight_key():
 
 
 def test_fight_cycle_without_a_record_has_no_fight_key():
-    assert "fight" not in _emit(FightAction(monster_code="mushmush"), MagicMock())
+    assert "fight" not in _emit(FightAction(monster_code="mushmush", learned_drops=LearnedDrops.empty()), MagicMock())
 
 
 def test_both_surfaces_share_one_gate():
     """The snapshot and the trace must never disagree about whether a cycle
     fought — they read the same `_fight_of`."""
-    action = FightAction(monster_code="mushmush")
+    action = FightAction(monster_code="mushmush", learned_drops=LearnedDrops.empty())
     action.last_fight = RECORD
 
     assert GamePlayer(character='hero')._fight_of(action) is RECORD

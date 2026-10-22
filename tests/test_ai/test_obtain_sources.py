@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_sources import (
     UNBOUNDED_CAPACITY,
     SourceKind,
@@ -146,7 +147,7 @@ def game_data_no_workshop() -> GameData:
 def ctx() -> SelectionContext:
     return SelectionContext(bank_accessible=True, bank_required_level=0,
                             bank_unlock_monster=None, initial_xp=0,
-                            task_exchange_min_coins=1, combat_monster=None)
+                            task_exchange_min_coins=1, combat_monster=None, learned_drops=LearnedDrops.empty())
 
 
 def make_state(inventory: dict[str, int] | None = None,
@@ -242,7 +243,7 @@ def test_recycle_source_capacity_is_destroyable_times_yield(game_data):
     ctx = SelectionContext(bank_accessible=True, bank_required_level=0,
                            bank_unlock_monster=None, initial_xp=0,
                            task_exchange_min_coins=1, combat_monster=None,
-                           gear_keep={"fishing_net": 0})
+                           gear_keep={"fishing_net": 0}, learned_drops=LearnedDrops.empty())
     state = make_state(inventory={"fishing_net": 2})
     rec = [s for s in obtain_sources("ash_plank", state, game_data, ctx)
            if s.kind is SourceKind.RECYCLE]
@@ -424,7 +425,7 @@ def test_bank_inaccessible_is_not_a_withdraw_source(game_data):
     gate this is a WITHDRAW source with no action in existence to serve it."""
     ctx = SelectionContext(bank_accessible=False, bank_required_level=10,
                            bank_unlock_monster=None, initial_xp=0,
-                           task_exchange_min_coins=1, combat_monster=None)
+                           task_exchange_min_coins=1, combat_monster=None, learned_drops=LearnedDrops.empty())
     state = make_state(bank_items={"ash_plank": 3})
     assert not [s for s in obtain_sources("ash_plank", state, game_data, ctx)
                 if s.kind is SourceKind.WITHDRAW]
@@ -496,7 +497,7 @@ def test_priority_order_pins_the_full_six_source_tail():
 
     ctx = SelectionContext(bank_accessible=True, bank_required_level=0,
                            bank_unlock_monster=None, initial_xp=0,
-                           task_exchange_min_coins=1, combat_monster=None)
+                           task_exchange_min_coins=1, combat_monster=None, learned_drops=LearnedDrops.empty())
     state = _fighter_state(bank_items={"hexagem": 2}, inventory={"gem_ring": 7})
     kinds = [s.kind for s in obtain_sources("hexagem", state, gd, ctx)]
     assert kinds == [

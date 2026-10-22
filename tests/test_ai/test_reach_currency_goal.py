@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal, funding_step_goal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -60,7 +61,7 @@ def test_relevant_actions_keeps_task_lifecycle_and_progress():
     acts = [
         AcceptTaskAction(taskmaster_location=(0, 0)),
         CompleteTaskAction(taskmaster_location=(0, 0)),
-        FightAction(monster_code="chicken", locations=frozenset([(1, 0)])),
+        FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
         CraftAction(code="wooden_shield", quantity=1, workshop_location=(2, 2)),
     ]
     kept = g.relevant_actions(acts, make_state(), gd)
@@ -124,7 +125,7 @@ def test_accept_apply_produces_progressable_task():
     accept = AcceptTaskAction(taskmaster_location=(1, 2))
     after_accept = accept.apply(state, gd)
     assert after_accept.task_type == "monsters"
-    fight = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+    fight = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())
     after_fight = fight.apply(after_accept, gd)
     assert after_fight.task_progress == 1
     complete = CompleteTaskAction(taskmaster_location=(1, 2))
@@ -138,7 +139,7 @@ def test_fight_does_not_progress_real_task_of_other_monster():
     import dataclasses
     tasked = dataclasses.replace(state, task_code="wolf", task_type="monsters",
                                  task_progress=0, task_total=10)
-    fight = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+    fight = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())
     assert fight.apply(tasked, gd).task_progress == 0
 
 
@@ -153,7 +154,7 @@ def test_goal_plans_one_funding_cycle_end_to_end():
     actions = [
         AcceptTaskAction(taskmaster_location=(1, 2)),
         CompleteTaskAction(taskmaster_location=(1, 2)),
-        FightAction(monster_code="chicken", locations=frozenset([(1, 0)])),
+        FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
     ]
     planner = GOAPPlanner()
     plan = planner.plan(state, goal, actions, gd, budget_seconds=10.0)
@@ -183,9 +184,9 @@ def test_relevant_actions_dedups_companion_swap_per_monster_code():
     acts = [
         AcceptTaskAction(taskmaster_location=(0, 0)),
         CompleteTaskAction(taskmaster_location=(0, 0)),
-        FightAction(monster_code="chicken", locations=frozenset([(1, 0)])),
-        FightAction(monster_code="chicken", locations=frozenset([(2, 0)])),
-        FightAction(monster_code="cow", locations=frozenset([(3, 0)])),
+        FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
+        FightAction(monster_code="chicken", locations=frozenset([(2, 0)]), learned_drops=LearnedDrops.empty()),
+        FightAction(monster_code="cow", locations=frozenset([(3, 0)]), learned_drops=LearnedDrops.empty()),
     ]
     kept = g.relevant_actions(acts, make_state(), gd)
     swaps = [a for a in kept if isinstance(a, OptimizeLoadoutAction)]
@@ -215,7 +216,7 @@ def test_plan_sequences_optimize_loadout_before_fight_when_suboptimal():
     actions = [
         AcceptTaskAction(taskmaster_location=(1, 2)),
         CompleteTaskAction(taskmaster_location=(1, 2)),
-        FightAction(monster_code="chicken", locations=frozenset([(1, 0)])),
+        FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
     ]
     planner = GOAPPlanner()
     plan = planner.plan(sub_state, goal, actions, gd, budget_seconds=10.0)
@@ -241,7 +242,7 @@ def test_no_swap_when_loadout_already_optimal():
     actions = [
         AcceptTaskAction(taskmaster_location=(1, 2)),
         CompleteTaskAction(taskmaster_location=(1, 2)),
-        FightAction(monster_code="chicken", locations=frozenset([(1, 0)])),
+        FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
     ]
     planner = GOAPPlanner()
     plan = planner.plan(opt_state, goal, actions, gd, budget_seconds=10.0)
@@ -260,7 +261,7 @@ def test_a_funding_step_rests_a_worn_character() -> None:
     state = dataclasses.replace(_census_state(gd), hp=1)
     goal = funding_step_goal(TASKS_COIN_CODE, 24, state, gd)
     actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
-                            bank_accessible=True, task_exchange_min_coins=0)
+                            bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
     plan = GOAPPlanner().plan(state, goal, goal.relevant_actions(actions, state, gd), gd,
                               budget_seconds=30)
     assert plan and "Rest" in [repr(a) for a in plan]

@@ -7,6 +7,7 @@ cost when an exchange succeeds. No hardcoded cost.
 
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
@@ -51,7 +52,7 @@ def test_success_pins_minimum_to_exact_cost_from_delta():
 
 def test_non_task_exchange_action_is_ignored():
     p = _player()
-    action = GatherAction(resource_code="ash_wood", locations=frozenset({(0, 0)}))
+    action = GatherAction(resource_code="ash_wood", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     prev = make_state(inventory={"tasks_coin": 5})
     p._learn_task_exchange_cost(action, prev, prev, "error:HTTP_478")
     assert p._task_exchange_min_coins == 1  # untouched

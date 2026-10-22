@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -116,7 +117,7 @@ class TestWithdrawIsApplicableNoBank:
 class TestGatherIsApplicableEmptyLocations:
     def test_not_applicable_when_no_locations(self):
         # GatherAction with empty locations is never applicable (no destination)
-        action = GatherAction(resource_code="copper", locations=frozenset())
+        action = GatherAction(resource_code="copper", locations=frozenset(), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0)
         gd = make_gd(resource_locs={"copper": [(3, 0)]})
         assert action.is_applicable(state, gd) is False
@@ -226,6 +227,7 @@ class TestPlayerRunVerboseAndExecute:
         """Test run() when a plan is found and executed (non-dry-run)."""
         player = GamePlayer(character="hero", verbose=True)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         char_after_rest = make_char_schema(hp=150, max_hp=150)
         client = MagicMock()
 
@@ -285,6 +287,7 @@ class TestPlayerRunVerboseAndExecute:
         """Test run() dry_run path when a plan is found."""
         player = GamePlayer(character="hero", dry_run=True)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         client = MagicMock()
 
         # Below the 25% critical-HP guard threshold so RestoreHP fires as a guard.
@@ -354,7 +357,7 @@ class TestActionCostMethods:
 
     def test_gather_action_cost_includes_distance(self):
         # At (0,0), nearest copper at (2,0): 2 tiles x 5 s, total cost=6+10=16
-        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]))
+        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0)
         gd = make_gd()
         assert action.cost(state, gd) == pytest.approx(16.0)
@@ -402,6 +405,7 @@ class TestBuildActionsWithCraftingRecipes:
         )
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.game_data = gd
         player.state = make_state()
 
@@ -429,6 +433,7 @@ class TestBuildActionsWithCraftingRecipes:
         )
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.game_data = gd
         player.state = make_state()
 

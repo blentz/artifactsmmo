@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass
 
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -36,6 +37,7 @@ def test_resume_discards_when_step_unmatchable(tmp_path):
         "GatherMaterials(...)", _GATHER_JSON, ["NoSuchAction()"], 0, None, 5)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._build_actions = lambda: []  # type: ignore[attr-defined]
     player._resume_plan_cache(make_state(), None)
     assert player._plan_cache is None
@@ -46,6 +48,7 @@ def test_resume_skips_when_goal_not_plan_bearing(tmp_path):
     store.save_plan_commitment("Deposit", "{}", ["StepA"], 0, None, 5)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._build_actions = lambda: [_Act("StepA")]  # type: ignore[attr-defined]
     player._resume_plan_cache(make_state(), None)
     assert player._plan_cache is None
@@ -57,6 +60,7 @@ def test_resume_rehydrates_when_all_steps_applicable(tmp_path):
         "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 0, "copper_ring", 5)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._build_actions = lambda: [_Act("StepA"), _Act("StepB")]  # type: ignore[attr-defined]
     game_data_stub = object()
     player._resume_plan_cache(make_state(), game_data_stub)  # type: ignore[arg-type]
@@ -71,6 +75,7 @@ def test_resume_discards_when_step_not_applicable(tmp_path):
         "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 0, "copper_ring", 5)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     # StepB is not applicable — validation must reject and leave cache None
     player._build_actions = lambda: [_Act("StepA"), _Act("StepB", applicable=False)]  # type: ignore[attr-defined]
     game_data_stub = object()
@@ -84,6 +89,7 @@ def test_resume_discards_when_no_game_data(tmp_path):
         "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 0, "copper_ring", 5)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._build_actions = lambda: [_Act("StepA"), _Act("StepB")]  # type: ignore[attr-defined]
     player._resume_plan_cache(make_state(), None)  # no game_data -> early discard
     assert player._plan_cache is None
@@ -96,6 +102,7 @@ def test_resume_discards_when_cursor_at_plan_end(tmp_path):
         "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 2, "copper_ring", 5)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._build_actions = lambda: [_Act("StepA"), _Act("StepB")]  # type: ignore[attr-defined]
     game_data_stub = object()
     player._resume_plan_cache(make_state(), game_data_stub)  # type: ignore[arg-type]
@@ -110,6 +117,7 @@ def test_resume_uses_persisted_cursor(tmp_path):
         ["StepA", "StepB", "StepC"], 1, None, 5)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._build_actions = lambda: [  # type: ignore[attr-defined]
         _Act("StepA"), _Act("StepB"), _Act("StepC")]
     game_data_stub = object()

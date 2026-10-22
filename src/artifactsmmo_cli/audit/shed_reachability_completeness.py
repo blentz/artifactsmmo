@@ -64,6 +64,7 @@ from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.disposal_route import overstock_disposal
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
@@ -353,7 +354,8 @@ def drive_selector(cell: ShedCell, state: WorldState,
     ctx = census_ctx()
     objective = CharacterObjective.from_game_data(game_data)
     actions = build_actions(game_data, state, objective,
-                            bank_accessible=True, task_exchange_min_coins=0)
+                            bank_accessible=True, task_exchange_min_coins=0,
+                            learned_drops=LearnedDrops.empty())
     arbiter = StrategyArbiter(GOAPPlanner(), None)
     step = ReachCharLevel(level=CENSUS_STEP_LEVEL)
     decision = StrategyDecision(interrupt=None, chosen_root=step,

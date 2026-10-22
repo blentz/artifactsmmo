@@ -17,6 +17,7 @@ from artifactsmmo_cli.ai.goals.reach_unlock_level import (
     PRIORITY_WHEN_BLOCKER_ACTIVE,
     ReachUnlockLevelGoal,
 )
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -104,6 +105,7 @@ class TestDropStaleBankLock:
         store.set_blocker("bank", "sea_marauder", required_level=44)
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.history = store
         player._blockers = BlockerRegistry.load(store, known_codes=["bank"])
         gd = GameData()
@@ -149,12 +151,14 @@ class TestReachUnlockLevelGoal:
         gd._monster_locations = {c: [(i, 0)] for i, c in enumerate(gd._monster_level)}
         goal = ReachUnlockLevelGoal(target_level=6)
         actions = [
-            FightAction(monster_code="chicken"),       # level 1, char L2 can beat
-            FightAction(monster_code="yellow_slime"),  # level 3, char L2 borderline (>= 2)
-            FightAction(monster_code="sea_marauder"),  # level 7, char L2 cannot beat
+            FightAction(monster_code="chicken", learned_drops=LearnedDrops.empty()),       # level 1, char L2 can beat
+            FightAction(monster_code="yellow_slime",
+                        learned_drops=LearnedDrops.empty()),  # level 3, char L2 borderline (>= 2)
+            FightAction(monster_code="sea_marauder",
+                        learned_drops=LearnedDrops.empty()),  # level 7, char L2 cannot beat
             RestAction(),
             UseConsumableAction(_item_stats={}),
-            GatherAction(resource_code="ash_tree"),    # excluded
+            GatherAction(resource_code="ash_tree", learned_drops=LearnedDrops.empty()),    # excluded
         ]
         relevant = goal.relevant_actions(actions, make_state(level=2), gd)
         codes = [a.monster_code for a in relevant if isinstance(a, FightAction)]
@@ -208,6 +212,7 @@ class TestPickWinnableMonster:
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         gd = GameData()
         gd._monster_level = monster_levels
         gd._monster_locations = {c: [(i, 0)] for i, c in enumerate(gd._monster_level)}
@@ -307,6 +312,7 @@ class TestPathAlignedMonster:
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.game_data = GameData()
         player.game_data._monster_level = {"chicken": 1, "yellow_slime": 2}
         player.game_data._monster_locations = {c: [(i, 0)] for i, c in enumerate(player.game_data._monster_level)}
@@ -359,6 +365,7 @@ class TestPathAlignedMonster:
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.game_data = GameData()
         player.game_data._monster_level = {"chicken": 1, "yellow_slime": 2}
         player.game_data._monster_locations = {c: [(i, 0)] for i, c in enumerate(player.game_data._monster_level)}
@@ -392,6 +399,7 @@ class TestPathAlignedMonster:
         forces a fall-through to the windowed picker."""
         player = GamePlayer(character="hero", history=None)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.game_data = GameData()
         player.game_data._monster_level = {"chicken": 1}
         player.game_data._monster_locations = {c: [(i, 0)] for i, c in enumerate(player.game_data._monster_level)}

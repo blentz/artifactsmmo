@@ -28,6 +28,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.sim.fake_server import FakeServer
 from formal.sim.measure import Measure, lex_lt, measure
@@ -137,7 +138,7 @@ def _pick_action(state: WorldState, gd: GameData, cycle: int):
     """Round-robin pick over the three Tier-1 actions; falls back to None when
     no action is applicable, which the test classifies as a no-op."""
     fight = FightAction(monster_code="chicken",
-                        locations=frozenset({(0, 1)}))
+                        locations=frozenset({(0, 1)}), learned_drops=LearnedDrops.empty())
     deposit = DepositAllAction(bank_location=(4, 0), accessible=True, game_data=gd)
     rest = RestAction()
     schedule = [rest, fight, deposit]

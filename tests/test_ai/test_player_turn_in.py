@@ -1,6 +1,7 @@
 """The fleet notices it is WEARING the trophy's price."""
 
 from artifactsmmo_cli.ai.item_catalog import ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -12,6 +13,7 @@ def _player_with(tmp_path, name):
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character=name)
     player = GamePlayer(character=name)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._coordination = store
     player.game_data = medal_game_data()
     return player, store
@@ -24,6 +26,7 @@ def _player_with_gd(tmp_path, name, game_data):
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character=name)
     player = GamePlayer(character=name)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._coordination = store
     player.game_data = game_data
     return player, store
@@ -220,6 +223,7 @@ def test_no_coordination_store_is_inert(tmp_path):
     crash, no turn-in, no recall."""
     player = GamePlayer(character="Robby")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     assert player._coordination is None
     gd = medal_game_data()
     state = make_state(level=27, inventory={"lich_race_medal": 20})

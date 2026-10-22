@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 
@@ -178,7 +179,7 @@ class TestRestActionExecute:
 class TestFightActionExecute:
     def test_calls_api_and_returns_new_state(self):
         # Already at monster location — no move needed
-        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=1, y=0, hp=100, max_hp=150)
         client = MagicMock()
         char = make_char_schema(hp=80, xp=15)
@@ -189,7 +190,8 @@ class TestFightActionExecute:
         assert new_state.xp == 15
 
     def test_moves_to_nearest_before_fighting(self):
-        action = FightAction(monster_code="chicken", locations=frozenset([(5, 0), (1, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(5, 0), (1, 0)]),
+                             learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, hp=100, max_hp=150)
         client = MagicMock()
         char = make_char_schema(x=1, y=0, hp=80, xp=15)
@@ -202,7 +204,7 @@ class TestFightActionExecute:
         assert new_state.xp == 15
 
     def test_raises_on_missing_response(self):
-        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=1, y=0)
         client = MagicMock()
 
@@ -211,7 +213,7 @@ class TestFightActionExecute:
                 action.execute(state, client)
 
     def test_execute_captures_the_fight_record(self):
-        action = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, hp=100, max_hp=100)
         char = make_char_schema(x=0, y=0)
 
@@ -228,7 +230,7 @@ class TestFightActionExecute:
 
     def test_execute_captures_the_record_before_raising_on_loss(self):
         """Losses are the most informative transcripts — they must survive the raise."""
-        action = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, hp=100, max_hp=100)
         char = make_char_schema(x=0, y=0)
 
@@ -242,7 +244,7 @@ class TestFightActionExecute:
         assert action.last_fight.hp_after == 0
 
     def test_execute_clears_a_stale_record_first(self):
-        action = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, hp=100, max_hp=100)
         char = make_char_schema(x=0, y=0)
 
@@ -259,8 +261,8 @@ class TestFightActionExecute:
         """compare=False keeps a fought action equal to its freshly-planned twin;
         without it the planner would see its cached plan invalidated after every
         fight and re-search. repr=False keeps the trace/snapshot action string."""
-        fought = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]))
-        fresh = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]))
+        fought = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]), learned_drops=LearnedDrops.empty())
+        fresh = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, hp=100, max_hp=100)
         char = make_char_schema(x=0, y=0)
 
@@ -277,7 +279,7 @@ class TestPartyFightExecute:
 
     def test_sends_the_participants_and_reads_its_own_character(self):
         action = FightAction(monster_code="duskworm", locations=frozenset([(0, 0)]),
-                             participants=("R2D2", "Lor"))
+                             participants=("R2D2", "Lor"), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, hp=100, max_hp=150)
         mate = make_char_schema(xp=999)
         mate.name = "Lor"
@@ -291,7 +293,7 @@ class TestPartyFightExecute:
         assert new_state.xp == 15
 
     def test_a_solo_fight_sends_no_participants(self):
-        action = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]), learned_drops=LearnedDrops.empty())
         with patch("artifactsmmo_cli.ai.actions.combat.action_fight",
                    return_value=make_fight_api_result(make_char_schema())) as fight:
             action.execute(make_state(x=0, y=0), client=MagicMock())
@@ -299,7 +301,7 @@ class TestPartyFightExecute:
 
     def test_a_response_without_this_character_raises(self):
         action = FightAction(monster_code="duskworm", locations=frozenset([(0, 0)]),
-                             participants=("Lor",))
+                             participants=("Lor",), learned_drops=LearnedDrops.empty())
         mate = make_char_schema()
         mate.name = "Lor"
         response = make_fight_api_result(make_char_schema())
@@ -309,9 +311,9 @@ class TestPartyFightExecute:
                 action.execute(make_state(x=0, y=0), client=MagicMock())
 
     def test_a_party_fight_is_its_own_action(self):
-        solo = FightAction(monster_code="duskworm", locations=frozenset([(0, 0)]))
+        solo = FightAction(monster_code="duskworm", locations=frozenset([(0, 0)]), learned_drops=LearnedDrops.empty())
         party = FightAction(monster_code="duskworm", locations=frozenset([(0, 0)]),
-                            participants=("R2D2", "Lor"))
+                            participants=("R2D2", "Lor"), learned_drops=LearnedDrops.empty())
         assert solo != party
         assert (repr(solo), repr(party)) == ("Fight(duskworm)", "Fight(duskworm+R2D2+Lor)")
 
@@ -319,7 +321,7 @@ class TestPartyFightExecute:
 class TestGatherActionExecute:
     def test_calls_api_and_returns_new_state(self):
         # Already at resource location — no move needed
-        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]))
+        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=2, y=0)
         client = MagicMock()
         char = make_char_schema()
@@ -330,7 +332,7 @@ class TestGatherActionExecute:
         assert isinstance(new_state, WorldState)
 
     def test_moves_to_nearest_before_gathering(self):
-        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]))
+        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0)
         client = MagicMock()
         char = make_char_schema()
@@ -343,7 +345,7 @@ class TestGatherActionExecute:
         assert isinstance(new_state, WorldState)
 
     def test_raises_on_missing_response(self):
-        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]))
+        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=2, y=0)
         client = MagicMock()
 

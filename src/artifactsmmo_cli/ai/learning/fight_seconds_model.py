@@ -37,6 +37,7 @@ from pathlib import Path
 from artifactsmmo_api_client.models.log_type import LogType
 
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel, fit
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.api_wrapper import APIWrapper
@@ -199,7 +200,10 @@ def committed_timing() -> tuple[FightSecondsModel, Fraction]:
 
 
 def offline_context(ctx: SelectionContext) -> SelectionContext:
-    """`ctx` carrying the committed capture's timing: the context an offline
-    world (scenario, census) prices time in."""
+    """`ctx` carrying the committed capture's timing and no observed drops: the
+    context an offline world (scenario, census) prices in. An offline world
+    has no learning store, so every drop is at its API prior
+    (`LearnedDrops.empty()`, ruling T16a)."""
     model, seconds = committed_timing()
-    return replace(ctx, fight_seconds=model, action_seconds=seconds)
+    return replace(ctx, fight_seconds=model, action_seconds=seconds,
+                   learned_drops=LearnedDrops.empty())

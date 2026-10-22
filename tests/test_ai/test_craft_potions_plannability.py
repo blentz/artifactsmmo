@@ -21,6 +21,7 @@ from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -99,7 +100,8 @@ def _state(**overrides):
 
 def _actions(gd: GameData) -> list:
     """Every action the goal's own ladder would admit, built from the catalog."""
-    out: list = [GatherAction(resource_code=_RESOURCE, locations=frozenset({(2, 0)}))]
+    out: list = [GatherAction(resource_code=_RESOURCE, locations=frozenset({(2, 0)}),
+                              learned_drops=LearnedDrops.empty())]
     for code in gd.crafting_recipes:
         out.append(CraftAction(code=code, quantity=1, workshop_location=(3, 0)))
     return out

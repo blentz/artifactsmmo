@@ -1286,20 +1286,19 @@ def runKeepOwned (args : Array Json) : Json :=
 `Formal.GatherSelection.selectGatherSource`.
 
 Variable-length candidate list, flattened the same way as `runArbiterSelect`:
-`args = [N, c0,r0,mn0,mx0,d0, c1,r1,mn1,mx1,d1, ...]` where `N` is the candidate
-count and each record is the 5 ints `[code, rate, minQ, maxQ, dist]`. Builds the
+`args = [N, c0,an0,ad0,d0, c1,an1,ad1,d1, ...]` where `N` is the candidate
+count and each record is the 4 ints `[code, attemptsNum, attemptsDen, dist]`
+(the expected attempts per unit as an exact rational). Builds the
 `List Candidate`, runs the lex-argmin selector, and emits the winning candidate's
 `code` (or `-1` when the list is empty, mirroring `Option.none`). -/
 def runGatherSelection (args : Array Json) : Json :=
   let n := (intArg args 0).toNat
   let cands : List Formal.GatherSelection.Candidate :=
     (List.range n).map (fun k =>
-      let base := 1 + 5 * k
+      let base := 1 + 4 * k
       { code := (intArg args base).toNat,
-        rate := (intArg args (base + 1)).toNat,
-        minQ := (intArg args (base + 2)).toNat,
-        maxQ := (intArg args (base + 3)).toNat,
-        dist := (intArg args (base + 4)).toNat })
+        attempts := ratArg args (base + 1),
+        dist := (intArg args (base + 3)).toNat })
   let selected : Int :=
     match Formal.GatherSelection.selectGatherSource cands with
     | some c => Int.ofNat c.code
@@ -1402,20 +1401,19 @@ def runGatherStepTarget (args : Array Json) : Json :=
 `Formal.MonsterDropSelection.selectMonsterForDrop`.
 
 Variable-length candidate list, flattened the same way as `runGatherSelection`:
-`args = [N, c0,r0,mn0,mx0,d0, c1,r1,mn1,mx1,d1, ...]` where `N` is the candidate
-count and each record is the 5 ints `[code, rate, minQ, maxQ, dist]`. Builds the
+`args = [N, c0,an0,ad0,d0, c1,an1,ad1,d1, ...]` where `N` is the candidate
+count and each record is the 4 ints `[code, attemptsNum, attemptsDen, dist]`
+(the expected attempts per unit as an exact rational). Builds the
 `List Candidate`, runs the lex-argmin selector, and emits the winning candidate's
 `code` (or `-1` when the list is empty, mirroring `Option.none`). -/
 def runMonsterDropSelection (args : Array Json) : Json :=
   let n := (intArg args 0).toNat
   let cands : List Formal.MonsterDropSelection.Candidate :=
     (List.range n).map (fun k =>
-      let base := 1 + 5 * k
+      let base := 1 + 4 * k
       { code := (intArg args base).toNat,
-        rate := (intArg args (base + 1)).toNat,
-        minQ := (intArg args (base + 2)).toNat,
-        maxQ := (intArg args (base + 3)).toNat,
-        dist := (intArg args (base + 4)).toNat })
+        attempts := ratArg args (base + 1),
+        dist := (intArg args (base + 3)).toNat })
   let selected : Int :=
     match Formal.MonsterDropSelection.selectMonsterForDrop cands with
     | some c => Int.ofNat c.code
@@ -1774,8 +1772,8 @@ def runActionCostNonneg (args : Array Json) : Json :=
 `[baseNum, baseDen, distNum, distDen, bankPenNum, bankPenDen,
   loadPenNum, loadPenDen, qty, banked, mismatch, perUnitNum, perUnitDen]`
 
-`perUnit` is the expected gathers per unit of the drop
-(`gather_selection.expected_gathers`); the base and loadout terms are charged
+`perUnit` is the expected gathers per unit of the drop at the learned chance
+(`LearnedDrops.attempts_per_unit`, ruling T16a); the base and loadout terms are charged
 on `qty * perUnit` gathers, the walk `dist` (travel seconds) once
 (`gatherCostRated`; `1` is `gatherCost` exactly).
 
@@ -1955,6 +1953,15 @@ def runDropChance (args : Array Json) : Json :=
   let p := Formal.DropChance.posterior (n 0) (n 1) (n 2)
   Json.mkObj [("num", Json.num c.1), ("den", Json.num c.2),
               ("postNum", Json.num p.1), ("postDen", Json.num p.2)]
+
+/-- The expected units of a drop one attempt yields (`Formal.DropChance.units`).
+Args: `[apiRate, attempts, hits, kNum, kDen, prospecting, minQ, maxQ]`. Emits
+`num` / `den`. -/
+def runDropUnits (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let k : Formal.DropChance.Q := (intArg args 3, intArg args 4)
+  let u := Formal.DropChance.units (n 0) (n 1) (n 2) k (intArg args 5) (n 6) (n 7)
+  Json.mkObj [("num", Json.num u.1), ("den", Json.num u.2)]
 
 /-- The fitted prospecting slope (`Formal.DropChance.fitK`). Args: `[count]`,
 then `[apiRate, prospecting, attempts, hits]` per sample. Emits `num` / `den`. -/
@@ -3200,6 +3207,8 @@ def runOne (item : Json) : Json :=
     runFightSeconds args
   else if kind == "drop_chance" then
     runDropChance args
+  else if kind == "drop_units" then
+    runDropUnits args
   else if kind == "drop_fit_k" then
     runDropFitK args
   else if kind == "loop_recovery" then

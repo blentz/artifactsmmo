@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
@@ -54,7 +55,7 @@ def _build(gd: GameData, state: WorldState) -> list:
         objective=None,
         bank_accessible=True,
         task_exchange_min_coins=6,
-    )
+     learned_drops=LearnedDrops.empty())
 
 
 def _withdraws(actions: list, code: str) -> list[WithdrawItemAction]:

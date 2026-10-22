@@ -2,12 +2,18 @@
 /-
 Formal model of the pure yield-rate gather-source selector extracted from
 `src/artifactsmmo_cli/ai/gather_selection.py`
-(`GatherCandidate`, `_expected_gathers`, `_key`, `select_gather_source`).
+(`GatherCandidate`, `_key`, `select_gather_source`).
 
 When a needed item is the PRIMARY drop of more than one resource, the bot picks
 the source minimizing the EXPECTED number of gathers to acquire one unit:
 
-    expected_gathers = rate / avg_quantity   where avg_quantity = (min_q + max_q)/2
+    expected_gathers = 1 / units_per_attempt = 1 / (chance × (min_q + max_q)/2)
+
+where `chance` is the LEARNED drop chance (`Formal.DropChance.chance`, spec
+2026-10-18 §2.8, ruling T16a): the fleet's observations update the API rate's
+prior. The candidate carries that value (`attempts`); with nothing observed it is
+the API's `rate / avg_quantity` (`prior_attempts_is_rate_over_mean`), the key
+this selector ranked by before the chance was learned.
 
 tie-broken by nearest node (`distance`), then by `resource_code` — a strict total
 order, so a unique deterministic winner. The Python core uses exact
@@ -16,18 +22,15 @@ float surrogate; we mirror it over Lean-core `Rat` (= the `ℚ` of the comments,
 mathlib — same core-only convention as `Scalarizer.lean` / `CyclesForProgress.lean`,
 which write `Rat` in code and `ℚ` in prose).
 
-The diff oracle feeds candidates as `[code, rate, minQ, maxQ, dist]` integer
+The diff oracle feeds candidates as `[code, attemptsNum, attemptsDen, dist]` integer
 tuples (the surrogate `Nat` `code` is kept 1:1 with the Python `resource_code` so
 the lex tie-break on code matches between sides), and compares the selected
 `code` against the Python `select_gather_source(...).resource_code` exactly.
 
-INPUT-DOMAIN REALITY (from `gather_selection.py` field comments + the game API):
-  * `rate` is the 1-in-N drop rate, `≥ 1`.
-  * `minQ ≥ 1`, `maxQ ≥ minQ` (a resource always drops at least 1 per success).
-  * `dist ≥ 0` (Manhattan distance to the nearest node).
-  The MODEL ranges over all `Nat`; the monotonicity theorem only needs
-  `0 < minQ + maxQ` (so the divisor is positive), which the `minQ ≥ 1` invariant
-  supplies a fortiori. The other theorems hold for ALL `Nat` candidate lists.
+INPUT-DOMAIN REALITY: `attempts > 0` (a positive chance times a mean yield of
+at least 1, inverted) and `dist ≥ 0` (Manhattan distance to the nearest node).
+The lex-argmin theorems hold for ALL candidate lists; the monotonicity theorem
+(`attempts_antitone_in_units`) needs the units an attempt yields to be positive.
 
 Lean core only — no mathlib. `Rat` order/division via the core `Rat.*` lemmas
 (`Rat.mul_le_mul_of_nonneg_right`, `Rat.inv_pos`, `Rat.not_lt`, `Rat.le_antisymm`)
@@ -41,16 +44,17 @@ namespace Formal.GatherSelection
 `resource_code` string (the diff test maps code ↔ index 1:1). -/
 structure Candidate where
   code : Nat        -- resource code (Nat surrogate; the diff test maps code<->index)
-  rate : Nat        -- 1-in-N drop rate, ≥ 1
-  minQ : Nat        -- ≥ 1
-  maxQ : Nat        -- ≥ minQ
+  attempts : Rat    -- expected gathers per unit (> 0): `1 / (chance × mean quantity)`
   dist : Nat        -- Manhattan distance to nearest node, ≥ 0
 deriving Repr, DecidableEq
 
-/-- Expected gathers to acquire one unit: `rate / avg-yield`, exact `Rat`.
-`avgYield = (minQ + maxQ) / 2`. Mirrors `_expected_gathers` over the rationals
-(Python `Fraction(rate) / Fraction(min+max, 2)`). -/
-def expectedGathers (c : Candidate) : Rat := (c.rate : Rat) / (((c.minQ + c.maxQ : Nat) : Rat) / 2)
+/-- Expected gathers to acquire one unit: the candidate's `attempts`, an exact
+`Rat` (Python `Fraction`). The caller computes it from the LEARNED drop chance
+(`LearnedDrops.attempts_per_unit`, ruling T16a) as `attemptsPerUnit` of the
+expected units one attempt yields; with nothing observed that is the API rate over
+the mean yield (`prior_attempts_is_rate_over_mean`), the key this selector ranked
+by before the chance was learned. -/
+def expectedGathers (c : Candidate) : Rat := c.attempts
 
 /-- Strict lexicographic order on the key `(expectedGathers, dist, code)` — the
 exact `_key` tuple Python `min`s over. `a` strictly precedes `b` iff it has
@@ -301,27 +305,49 @@ theorem select_no_cheaper_at_le_distance {cs : List Candidate} {c : Candidate}
   intro x hx hlt
   exact absurd (Or.inl hlt) (select_is_lex_min h x hx)
 
-/-- MONOTONICITY: with `minQ`, `maxQ` fixed and the average yield positive, raising
-the drop `rate` never decreases the expected gathers (a worse — higher-`rate` —
-source costs at least as many gathers). The `0 < minQ + maxQ` precondition is
-supplied by the `minQ ≥ 1` game invariant. -/
-theorem expected_gathers_mono_in_rate (a b : Candidate)
-    (hmin : a.minQ = b.minQ) (hmax : a.maxQ = b.maxQ)
-    (hpos : 0 < a.minQ + a.maxQ) (hrate : a.rate ≤ b.rate) :
-    expectedGathers a ≤ expectedGathers b := by
-  unfold expectedGathers
-  rw [hmin, hmax]
-  -- Divisor `den = ((b.minQ + b.maxQ : Nat) : Rat) / 2` is positive ⇒ inverse ≥ 0.
-  have hden_pos : (0 : Rat) < ((b.minQ + b.maxQ : Nat) : Rat) / 2 := by
-    have hsum_nat : 0 < b.minQ + b.maxQ := by rw [← hmin, ← hmax]; exact hpos
-    have hsum : (0 : Rat) < ((b.minQ + b.maxQ : Nat) : Rat) := by exact_mod_cast hsum_nat
-    rw [Rat.div_def]
-    exact Rat.mul_pos hsum (Rat.inv_pos.mpr (by decide))
-  have hinv : (0 : Rat) ≤ (((b.minQ + b.maxQ : Nat) : Rat) / 2)⁻¹ :=
-    Rat.le_of_lt (Rat.inv_pos.mpr hden_pos)
-  have hnum : (a.rate : Rat) ≤ (b.rate : Rat) := by exact_mod_cast hrate
-  rw [Rat.div_def, Rat.div_def]
-  exact Rat.mul_le_mul_of_nonneg_right hnum hinv
+/-- Attempts one unit takes when one attempt yields `units` units, expected:
+`1 / units`. Python `1 / LearnedDrops.units_per_attempt(...)`. -/
+def attemptsPerUnit (units : Rat) : Rat := units⁻¹
+
+/-- `a ≤ b` for positive `a` reverses under the inverse (core-only: no mathlib
+`inv_le_inv`). -/
+theorem inv_antitone {a b : Rat} (ha : 0 < a) (h : a ≤ b) : b⁻¹ ≤ a⁻¹ := by
+  have hb : 0 < b := Std.lt_of_lt_of_le ha h
+  have hai : (0 : Rat) ≤ a⁻¹ := Rat.le_of_lt (Rat.inv_pos.mpr ha)
+  have hbi : (0 : Rat) ≤ b⁻¹ := Rat.le_of_lt (Rat.inv_pos.mpr hb)
+  have hane : a ≠ 0 := fun e => by rw [e] at ha; exact Rat.lt_irrefl ha
+  have hbne : b ≠ 0 := fun e => by rw [e] at hb; exact Rat.lt_irrefl hb
+  -- b⁻¹ = b⁻¹ · (a · a⁻¹) ≤ b⁻¹ · (b · a⁻¹) = a⁻¹.
+  have step : b⁻¹ * (a * a⁻¹) ≤ b⁻¹ * (b * a⁻¹) :=
+    Rat.mul_le_mul_of_nonneg_left (Rat.mul_le_mul_of_nonneg_right h hai) hbi
+  rw [Rat.mul_inv_cancel a hane, Rat.mul_one, ← Rat.mul_assoc, Rat.inv_mul_cancel b hbne,
+    Rat.one_mul] at step
+  exact step
+
+/-- MONOTONICITY: a likelier drop is never dearer. If one attempt yields more units
+(a higher learned chance, or a larger mean quantity), the expected gathers per unit
+never rise, so the selector cannot prefer the node the evidence says drops less. -/
+theorem attempts_antitone_in_units (u₁ u₂ : Rat) (hpos : 0 < u₁) (h : u₁ ≤ u₂) :
+    attemptsPerUnit u₂ ≤ attemptsPerUnit u₁ :=
+  inv_antitone hpos h
+
+/-- The PRIOR is the API rate: with nothing observed the chance is `1 / rate`, and
+the attempts a unit takes are `rate / mean`, the key this selector ranked by
+before the chance was learned (`rate / avg_quantity`). -/
+theorem prior_attempts_is_rate_over_mean (rate : Nat) (mean : Rat) :
+    attemptsPerUnit ((1 / (rate : Rat)) * mean) = (rate : Rat) / mean := by
+  unfold attemptsPerUnit
+  rw [Rat.inv_mul_rev, Rat.div_def, Rat.one_mul, Rat.inv_inv, Rat.div_def, Rat.mul_comm]
+
+/-- Non-vacuity at the live configuration (2026-10-19): `small_pearls` off
+`trout_spot`, 1 in 300, one a drop. The prior is 300 gathers a unit; after the
+fleet's 383 attempts for 2 the posterior is 3/683, so 683/3. -/
+example : attemptsPerUnit ((1 / (300 : Rat)) * 1) = 300 := by
+  rw [show (300 : Rat) = ((300 : Nat) : Rat) from rfl, prior_attempts_is_rate_over_mean]
+  decide +kernel
+example : attemptsPerUnit (3 / 683) = 683 / 3 := by unfold attemptsPerUnit; decide +kernel
+example : attemptsPerUnit (3 / 683) ≤ attemptsPerUnit (1 / 300) :=
+  attempts_antitone_in_units (1 / 300) (3 / 683) (by decide +kernel) (by decide +kernel)
 
 /-- REACHABILITY (needed quantity): gathering `+1` repeatedly reaches the needed
 amount. Over `Nat`, `owned + (needed - owned) ≥ needed` for ALL inputs (truncated

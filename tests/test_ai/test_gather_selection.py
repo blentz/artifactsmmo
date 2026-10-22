@@ -1,9 +1,13 @@
 """select_gather_source: lex-argmin over (expected_gathers, distance, code)."""
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, select_gather_source
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 
 
 def _c(code, rate, mn, mx, dist):
-    return GatherCandidate(resource_code=code, rate=rate, min_quantity=mn, max_quantity=mx, distance=dist)
+    """A candidate at the drop row's prior: `rate / mean quantity` gathers a
+    unit (`LearnedDrops.empty()`, ruling T16a)."""
+    attempts = LearnedDrops.empty().attempts_per_unit(code, "x", rate, mn, mx, 0)
+    return GatherCandidate(resource_code=code, attempts=attempts, distance=dist)
 
 
 def test_picks_lower_expected_gathers_over_distance():

@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.goals.pursue_task import (
     PRIORITY_FLOOR,
     PursueTaskGoal,
 )
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from tests.test_ai.fixtures import make_state
@@ -103,11 +104,12 @@ class TestPursueTaskGoal:
     def test_relevant_actions_keep_produce_and_trade_drop_combat(self):
         g = PursueTaskGoal("copper_bar", 0)
         actions = [
-            GatherAction(resource_code="copper_rocks", locations=frozenset({(0, 0)})),
+            GatherAction(resource_code="copper_rocks", locations=frozenset({(0, 0)}),
+                         learned_drops=LearnedDrops.empty()),
             CraftAction(code="copper_bar", workshop_location=(0, 0)),
             TaskTradeAction(code="copper_bar", quantity=1, taskmaster_location=(1, 2)),
             RestAction(),
-            FightAction(monster_code="chicken", locations=frozenset({(0, 0)})),
+            FightAction(monster_code="chicken", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty()),
         ]
         kept = g.relevant_actions(actions, _items_task(), self._closure_gd())
         kept_types = {type(a).__name__ for a in kept}
@@ -123,8 +125,10 @@ class TestPursueTaskGoal:
         survive; unrelated gathers/crafts and a wrong-code TaskTrade are dropped."""
         g = PursueTaskGoal("copper_bar", 0)
         actions = [
-            GatherAction(resource_code="copper_rocks", locations=frozenset({(0, 0)})),  # in-closure
-            GatherAction(resource_code="iron_rocks", locations=frozenset({(0, 0)})),    # unrelated
+            GatherAction(resource_code="copper_rocks", locations=frozenset({(0, 0)}),
+                         learned_drops=LearnedDrops.empty()),  # in-closure
+            GatherAction(resource_code="iron_rocks", locations=frozenset({(0, 0)}),
+                         learned_drops=LearnedDrops.empty()),    # unrelated
             CraftAction(code="copper_bar", workshop_location=(0, 0)),                   # in-closure
             CraftAction(code="cooked_gudgeon", workshop_location=(0, 0)),               # unrelated
             TaskTradeAction(code="copper_bar", quantity=1, taskmaster_location=(1, 2)), # task item
@@ -170,7 +174,7 @@ class TestPursueTaskGoal:
         )
         g = PursueTaskGoal("ashwood_staff", 0, batch=batch)
         actions = [
-            GatherAction(resource_code="ash_tree", locations=frozenset({(0, 0)})),
+            GatherAction(resource_code="ash_tree", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty()),
             CraftAction(code="ash_plank", quantity=1, workshop_location=(0, 0)),
             CraftAction(code="ashwood_staff", quantity=batch, workshop_location=(0, 0)),
             TaskTradeAction(code="ashwood_staff", quantity=batch, taskmaster_location=(1, 2)),
@@ -237,13 +241,14 @@ class TestPursueTaskPlans:
         )
         actions = [
             # In-closure path for copper_bar:
-            GatherAction(resource_code="copper_rocks", locations=frozenset({(1, 0)})),
+            GatherAction(resource_code="copper_rocks", locations=frozenset({(1, 0)}),
+                         learned_drops=LearnedDrops.empty()),
             CraftAction(code="copper_bar", workshop_location=(2, 0)),
             TaskTradeAction(code="copper_bar", quantity=1, taskmaster_location=(3, 0)),
             # Unrelated noise the old unscoped filter would have branched across:
-            GatherAction(resource_code="iron_rocks", locations=frozenset({(5, 5)})),
-            GatherAction(resource_code="ash_tree", locations=frozenset({(6, 6)})),
-            FightAction(monster_code="chicken", locations=frozenset({(7, 7)})),
+            GatherAction(resource_code="iron_rocks", locations=frozenset({(5, 5)}), learned_drops=LearnedDrops.empty()),
+            GatherAction(resource_code="ash_tree", locations=frozenset({(6, 6)}), learned_drops=LearnedDrops.empty()),
+            FightAction(monster_code="chicken", locations=frozenset({(7, 7)}), learned_drops=LearnedDrops.empty()),
             RestAction(),
         ]
         goal = PursueTaskGoal("copper_bar", 0)
@@ -268,12 +273,13 @@ class TestPursueTaskPlans:
         )
         batch = 3
         actions = [
-            GatherAction(resource_code="copper_rocks", locations=frozenset({(1, 0)})),
+            GatherAction(resource_code="copper_rocks", locations=frozenset({(1, 0)}),
+                         learned_drops=LearnedDrops.empty()),
             CraftAction(code="copper_bar", quantity=batch, workshop_location=(2, 0)),
             TaskTradeAction(code="copper_bar", quantity=batch, taskmaster_location=(3, 0)),
             CraftAction(code="copper_bar", quantity=1, workshop_location=(2, 0)),
             TaskTradeAction(code="copper_bar", quantity=1, taskmaster_location=(3, 0)),
-            GatherAction(resource_code="iron_rocks", locations=frozenset({(9, 9)})),
+            GatherAction(resource_code="iron_rocks", locations=frozenset({(9, 9)}), learned_drops=LearnedDrops.empty()),
         ]
         goal = PursueTaskGoal("copper_bar", 0, batch=batch)
         plan = GOAPPlanner().plan(state, goal, actions, gd, None)

@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.gear_objective import gear_objective
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
@@ -76,6 +77,7 @@ def _run(sc):
     gd = _bundle()
     player = GamePlayer(character=sc.name, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(scenario_state(sc, gd), gd)
     return player.plan_from_state()
 
@@ -278,6 +280,7 @@ def _gather_materials_plan(sc, needed: dict[str, int]):
     state = scenario_state(sc, gd)
     player = GamePlayer(character=sc.name, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, gd)
     actions = list(player._build_actions())
     goal = GatherMaterialsGoal(target_item="feather", needed=needed)
@@ -306,6 +309,7 @@ class TestDropDemandCompanionSwap:
         state = scenario_state(sc, gd)
         player = GamePlayer(character=sc.name, history=None)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.seed_offline(state, gd)
         actions = list(player._build_actions())
         goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 5})

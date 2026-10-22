@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Gather
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -96,6 +97,12 @@ class GatherAction(Action):
     drop_item_override: str | None = None
     # P5b: access region of the resource tiles (see FightAction.travel_region).
     travel_region: str = "overworld"
+    # The cycle's drop evidence (ruling T16a), the value the context carries:
+    # `gathers` prices a rare drop at its learned chance, and the goal pools'
+    # source narrowing ranks gathers by it. Required, never defaulted: a world
+    # with no store passes `LearnedDrops.empty()` (the API prior). Not part of
+    # the action's identity (repr, learning key, equality).
+    learned_drops: LearnedDrops = field(kw_only=True, repr=False, compare=False)
 
     _MIN_FREE_SLOTS = 3  # gathering can produce ore + random bonus drops simultaneously
 
@@ -121,6 +128,21 @@ class GatherAction(Action):
         return (self.drop_item_override
                 or game_data.resource_drop_item(self.resource_code)
                 or self.resource_code)
+
+    def gathers(self, state: WorldState, game_data: GameData) -> Fraction:
+        """Server gathers this batch of `quantity` units takes, expected: the
+        units times the attempts one unit takes at the learned chance
+        (`LearnedDrops.attempts_per_unit` over the drop row,
+        `GameData.gather_drop_row`), at `state.prospecting`. The SAME per-unit
+        figure the acquisition walk prices a GATHER route at
+        (`acquisition_cost._gather_actions`), so the planner and the walk
+        price a rare drop alike: a pearl off `trout_spot` is 300 gathers
+        under the prior and `683/3` after the fleet's 383 gathers for 2."""
+        rate, min_q, max_q = game_data.gather_drop_row(self.resource_code,
+                                                       self.drop_item(game_data))
+        return self.quantity * self.learned_drops.attempts_per_unit(
+            self.resource_code, self.drop_item(game_data), rate, min_q, max_q,
+            state.prospecting)
 
     @staticmethod
     def inv(state: WorldState) -> GatherInv:
@@ -210,12 +232,14 @@ class GatherAction(Action):
         # SECONDS) is charged ONCE: `execute` walks to the node once and gathers
         # in place, exactly as the singleton chain only walks before its first
         # gather. Live 2026-10-05: priced at
-        # one gather per apple, the fleet spent 554 gathers on 25 apples. Exact
-        # `Fraction` arithmetic, rounded once at the end — the proved model is
+        # one gather per apple, the fleet spent 554 gathers on 25 apples. The
+        # gathers a unit takes are the learned drop model's (`gathers`, ruling
+        # T16a), the walk's own figure. Exact `Fraction` arithmetic, rounded
+        # once at the end — the proved model is
         # `Formal.GatherCost.gatherCostRated`, and a primary drop (1 per gather)
         # reduces to `gatherCost` exactly (`gather_cost_rated_one`).
         drop_item = self.drop_item(game_data)
-        gathers = self.quantity * game_data.gathers_per_unit(self.resource_code, drop_item)
+        gathers = self.gathers(state, game_data)
         static = 6 * gathers + dist
         # Penalize re-gathering a material the bank already holds, so the
         # planner withdraws banked stock before re-gathering it (see

@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.decisions.root import _orphan_skill_roots
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state, scenario_state
@@ -145,6 +146,7 @@ def test_the_alchemy_root_plans_a_grind_cycle(
     assert repr(goal) == f"ReachSkill({SKILL}->{state.skills[SKILL] + 1})"
     player = GamePlayer(character=CELL, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, bundle_game_data)
     plan = decompose(goal, state, bundle_game_data, list(player._build_actions()),
                      TIMED_NO_PROFILE_CONTEXT)

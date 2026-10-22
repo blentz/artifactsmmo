@@ -1,4 +1,5 @@
 """select_monster_for_drop: lex-argmin over (expected_kills, distance, code)."""
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.monster_drop_selection import (
     MonsterDropCandidate,
     select_monster_for_drop,
@@ -6,9 +7,10 @@ from artifactsmmo_cli.ai.monster_drop_selection import (
 
 
 def _c(code, rate, mn, mx, dist):
-    return MonsterDropCandidate(
-        monster_code=code, rate=rate, min_quantity=mn, max_quantity=mx, distance=dist
-    )
+    """A candidate at the drop row's prior: `rate / mean quantity` kills a
+    unit (`LearnedDrops.empty()`, ruling T16a)."""
+    attempts = LearnedDrops.empty().attempts_per_unit(code, "x", rate, mn, mx, 0)
+    return MonsterDropCandidate(monster_code=code, attempts=attempts, distance=dist)
 
 
 def test_picks_lower_expected_kills_over_distance():

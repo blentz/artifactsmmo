@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
@@ -25,7 +26,7 @@ def _ctx() -> SelectionContext:
     return SelectionContext(
         bank_accessible=True, bank_required_level=1, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=0, combat_monster=None,
-    )
+     learned_drops=LearnedDrops.empty())
 
 
 def _winnable_state(**overrides) -> object:
@@ -56,7 +57,7 @@ def test_crafted_item_emits_fight_for_drop_recipe_input() -> None:
     fill_monster_stat_defaults(gd)
     gd._monster_hp = {"chicken": 10}
     state = _winnable_state(inventory={}, inventory_max=50)
-    actions = [FightAction(monster_code="chicken", locations=frozenset({(0, 1)}))]
+    actions = [FightAction(monster_code="chicken", locations=frozenset({(0, 1)}), learned_drops=LearnedDrops.empty())]
     goal = GatherMaterialsGoal(target_item="feather_coat", needed={"feather_coat": 1})
     relevant = goal.relevant_actions(actions, state, gd)
     assert any(isinstance(a, FightAction) and a.monster_code == "chicken"
@@ -78,7 +79,7 @@ def test_gather_feather_plans_via_fighting_chicken() -> None:
     fill_monster_stat_defaults(gd)
     gd._monster_hp = {"chicken": 10}
     state = _winnable_state(inventory={}, inventory_max=50)
-    actions = [FightAction(monster_code="chicken", locations=frozenset({(0, 1)}))]
+    actions = [FightAction(monster_code="chicken", locations=frozenset({(0, 1)}), learned_drops=LearnedDrops.empty())]
     goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
     plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
     assert plan, "GatherMaterials(feather) must be plannable via fighting chicken"
@@ -181,8 +182,8 @@ def test_relevant_actions_emits_only_winner_fight_for_drop() -> None:
     state = _winnable_state()
     goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 3})
     actions = [
-        FightAction(monster_code="chicken", locations=frozenset([(0, 1)])),
-        FightAction(monster_code="rooster", locations=frozenset([(0, 2)])),
+        FightAction(monster_code="chicken", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
+        FightAction(monster_code="rooster", locations=frozenset([(0, 2)]), learned_drops=LearnedDrops.empty()),
     ]
     relevant = goal.relevant_actions(actions, state, gd)
     fights = [a for a in relevant if isinstance(a, FightAction)]
@@ -197,7 +198,7 @@ def test_relevant_actions_no_fight_for_unwinnable_drop() -> None:
     gd = _gd_unwinnable_dropper()
     state = make_state(level=1, x=0, y=0)
     goal = GatherMaterialsGoal(target_item="rare_hide", needed={"rare_hide": 1})
-    actions = [FightAction(monster_code="dragon", locations=frozenset([(5, 5)]))]
+    actions = [FightAction(monster_code="dragon", locations=frozenset([(5, 5)]), learned_drops=LearnedDrops.empty())]
     relevant = goal.relevant_actions(actions, state, gd)
     assert not any(isinstance(a, FightAction) for a in relevant)
 
@@ -212,7 +213,7 @@ def test_relevant_actions_single_winnable_dropper_kept() -> None:
     gd._monster_hp = {"chicken": 10}
     state = _winnable_state()
     goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 2})
-    actions = [FightAction(monster_code="chicken", locations=frozenset([(0, 1)]))]
+    actions = [FightAction(monster_code="chicken", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty())]
     relevant = goal.relevant_actions(actions, state, gd)
     fights = [a for a in relevant if isinstance(a, FightAction)]
     assert [f.monster_code for f in fights] == ["chicken"]
@@ -229,8 +230,8 @@ def test_arbiter_path_obtainitem_drop_emits_winner_fight() -> None:
     goal = objective_step_goal(step, state, gd, _ctx())
     assert isinstance(goal, GatherMaterialsGoal)
     actions = [
-        FightAction(monster_code="chicken", locations=frozenset([(0, 1)])),
-        FightAction(monster_code="rooster", locations=frozenset([(0, 2)])),
+        FightAction(monster_code="chicken", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
+        FightAction(monster_code="rooster", locations=frozenset([(0, 2)]), learned_drops=LearnedDrops.empty()),
     ]
     relevant = goal.relevant_actions(actions, state, gd)
     fights = [a for a in relevant if isinstance(a, FightAction)]
@@ -245,7 +246,7 @@ def test_relevant_actions_skips_dropper_with_no_fight_action() -> None:
     state = _winnable_state()
     goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 1})
     # Only chicken has a FightAction; rooster (also a dropper) has none.
-    actions = [FightAction(monster_code="chicken", locations=frozenset([(0, 1)]))]
+    actions = [FightAction(monster_code="chicken", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty())]
     relevant = goal.relevant_actions(actions, state, gd)
     fights = [a for a in relevant if isinstance(a, FightAction)]
     assert [f.monster_code for f in fights] == ["chicken"]
@@ -268,7 +269,8 @@ def test_relevant_actions_pursues_winnable_boss_drop() -> None:
     state = _winnable_state()
     assert _producible("goblin_crown", state, gd) is True
     goal = GatherMaterialsGoal(target_item="goblin_crown", needed={"goblin_crown": 1})
-    actions = [FightAction(monster_code="chief_goblin", locations=frozenset([(3, 3)]))]
+    actions = [FightAction(monster_code="chief_goblin", locations=frozenset([(3, 3)]),
+                           learned_drops=LearnedDrops.empty())]
     relevant = goal.relevant_actions(actions, state, gd)
     fights = [a for a in relevant if isinstance(a, FightAction)]
     assert [f.monster_code for f in fights] == ["chief_goblin"], (
@@ -293,7 +295,7 @@ def test_relevant_actions_dropper_with_no_locations_uses_zero_distance() -> None
     gd._monster_hp = {"chicken": 10}
     state = _winnable_state()
     goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 1})
-    actions = [FightAction(monster_code="chicken", locations=frozenset())]
+    actions = [FightAction(monster_code="chicken", locations=frozenset(), learned_drops=LearnedDrops.empty())]
     relevant = goal.relevant_actions(actions, state, gd)
     fights = [a for a in relevant if isinstance(a, FightAction)]
     assert [f.monster_code for f in fights] == ["chicken"]
@@ -317,7 +319,7 @@ def test_relevant_actions_rejects_dropper_with_no_known_spawn() -> None:
     assert gd.monster_spawn_known("chicken") is False
     assert _producible("raw_egg", state, gd) is False
     goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 1})
-    actions = [FightAction(monster_code="chicken", locations=frozenset())]
+    actions = [FightAction(monster_code="chicken", locations=frozenset(), learned_drops=LearnedDrops.empty())]
     relevant = goal.relevant_actions(actions, state, gd)
     assert not [a for a in relevant if isinstance(a, FightAction)]
 
@@ -339,8 +341,8 @@ def test_relevant_actions_drops_unwinnable_dropper_keeps_winnable() -> None:
     state = _winnable_state()
     goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 1})
     actions = [
-        FightAction(monster_code="chicken", locations=frozenset([(0, 1)])),
-        FightAction(monster_code="dragon", locations=frozenset([(5, 5)])),
+        FightAction(monster_code="chicken", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
+        FightAction(monster_code="dragon", locations=frozenset([(5, 5)]), learned_drops=LearnedDrops.empty()),
     ]
     relevant = goal.relevant_actions(actions, state, gd)
     fights = [a for a in relevant if isinstance(a, FightAction)]

@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.event_plan_window import (
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -59,7 +60,7 @@ def _state(seconds_left: float):
 def _fight(code):
     gd = _gd()
     return FightAction(monster_code=code,
-                       locations=frozenset(gd.monster_locations(code)))
+                       locations=frozenset(gd.monster_locations(code)), learned_drops=LearnedDrops.empty())
 
 
 def test_plan_without_event_content_always_fits():
@@ -96,7 +97,7 @@ def test_gathers_are_gated_too():
     gd.world.event_resource_locations = {"fairy_dust_node": [(3, 0)]}
     gd.world.event_code_of_content["fairy_dust_node"] = _EVENT
     plan = [GatherAction(resource_code="fairy_dust_node",
-                         locations=frozenset({(3, 0)}))] * 12
+                         locations=frozenset({(3, 0)}), learned_drops=LearnedDrops.empty())] * 12
     assert plan_fits_event_window(plan, _state(90), gd, _NOW) is False
     assert plan_fits_event_window(plan, _state(3600), gd, _NOW) is True
 
@@ -222,7 +223,7 @@ def test_classifier_ignores_plain_content():
     from artifactsmmo_cli.ai.event_plan_window import _event_only_target
     gd = _gd()
     gd._monster_locations = {"chicken": [(1, 1)], _BOTH: [(1, 0)]}
-    fight = FightAction(monster_code="chicken", locations=frozenset({(1, 1)}))
+    fight = FightAction(monster_code="chicken", locations=frozenset({(1, 1)}), learned_drops=LearnedDrops.empty())
     assert _event_only_target(fight, gd) is None
 
 
@@ -250,7 +251,7 @@ def test_classifier_ignores_plain_resources():
     gd._resource_drops = {"ash_tree": "ash_wood"}
     gd._resource_locations = {"ash_tree": [(2, 2)]}
     gather = GatherAction(resource_code="ash_tree",
-                          locations=frozenset({(2, 2)}))
+                          locations=frozenset({(2, 2)}), learned_drops=LearnedDrops.empty())
     assert _event_only_target(gather, gd) is None
 
 
@@ -260,7 +261,7 @@ def test_classifier_flags_event_only_resources():
     gd._resource_drops = {"fairy_dust_node": "fairy_dust"}
     gd.world.event_resource_locations = {"fairy_dust_node": [(3, 0)]}
     gather = GatherAction(resource_code="fairy_dust_node",
-                          locations=frozenset({(3, 0)}))
+                          locations=frozenset({(3, 0)}), learned_drops=LearnedDrops.empty())
     assert _event_only_target(gather, gd) == "fairy_dust_node"
 
 
@@ -275,6 +276,6 @@ def test_state_says_active_but_gamedata_overlay_disagrees_does_not_fit():
     makes the content read as non-event and skips the gate entirely."""
     gd = _gd()
     gd.world.active_event_codes = set()          # overlay says the event is SHUT
-    fight = FightAction(monster_code=_EVENT_ONLY, locations=frozenset({(3, 0)}))
+    fight = FightAction(monster_code=_EVENT_ONLY, locations=frozenset({(3, 0)}), learned_drops=LearnedDrops.empty())
     # ...while the STATE still carries an un-expired window for it.
     assert plan_fits_event_window([fight], _state(3600), gd, _NOW) is False

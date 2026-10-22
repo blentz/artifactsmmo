@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.shopping_list import (
     fully_covered_materials,
@@ -61,7 +62,7 @@ def _actions() -> list:
         CraftAction(code="copper_dagger", quantity=1, workshop_location=(0, 0)),
         CraftAction(code="copper_bar", quantity=1, workshop_location=(0, 0)),
         EquipAction(code="copper_dagger", slot="weapon_slot"),
-        GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 0)})),
+        GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 0)}), learned_drops=LearnedDrops.empty()),
         WithdrawItemAction(code="copper_dagger", quantity=1),
         WithdrawItemAction(code="copper_ore", quantity=10),
         WithdrawItemAction(code="copper_bar", quantity=6),

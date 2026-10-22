@@ -31,6 +31,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -85,7 +86,7 @@ def _state(gd: GameData, *, bank: dict[str, int] | None = None,
 def _drive(gd: GameData, state: WorldState) -> tuple[Goal | None, list]:
     objective = CharacterObjective.from_game_data(gd)
     actions = build_actions(gd, state, objective, bank_accessible=True,
-                            task_exchange_min_coins=0)
+                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
     arbiter = StrategyArbiter(GOAPPlanner(), None)
     step = ReachCharLevel(level=12)
     decision = StrategyDecision(interrupt=None, chosen_root=step,
@@ -198,7 +199,7 @@ def test_snapshot_makes_one_batch_a_complete_plan(gd: GameData) -> None:
                              snapshot=drain_snapshot(state, gd, _ctx()))
     objective = CharacterObjective.from_game_data(gd)
     actions = build_actions(gd, state, objective, bank_accessible=True,
-                            task_exchange_min_coins=0)
+                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
     plan = GOAPPlanner().plan(state, goal, actions, gd, budget_seconds=10.0)
     assert len(plan) == 2 and isinstance(plan[0], WithdrawItemAction)
     assert plan[1].quantity == plan[0].quantity

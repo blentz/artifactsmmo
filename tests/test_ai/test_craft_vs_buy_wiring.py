@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves, closure_gold_demand
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -151,7 +152,7 @@ def test_relevant_actions_farms_nongold_currency_for_must_buy(_=None) -> None:
     gd._monster_drops = {"sea_marauder": [("sandwhisper_coin", 50, 1, 1)]}
     gd._monster_locations = {"sea_marauder": (10, 10)}
     actions = [
-        FightAction(monster_code="sea_marauder", locations=[(10, 10)]),
+        FightAction(monster_code="sea_marauder", locations=[(10, 10)], learned_drops=LearnedDrops.empty()),
         NpcBuyAction(npc_code="sandwhisper_trader", item_code="greater_lifesteal_rune",
                      npc_location=(-2, 18), quantity=1),
     ]
@@ -182,7 +183,7 @@ def test_relevant_actions_no_farm_for_passively_earned_currency() -> None:
     gd._monster_drops = {f"m{i}": [("ticket", 50, 1, 1)] for i in range(9)}  # 9/12 passive
     gd._monster_locations = {f"m{i}": (10, 10) for i in range(9)}
     actions = [
-        FightAction(monster_code="m0", locations=[(10, 10)]),
+        FightAction(monster_code="m0", locations=[(10, 10)], learned_drops=LearnedDrops.empty()),
         NpcBuyAction(npc_code="vendor", item_code="medal",
                      npc_location=(0, 0), quantity=1),
     ]
@@ -212,7 +213,7 @@ def test_relevant_actions_no_currency_farm_when_gold_vendor_exists() -> None:
     fill_monster_stat_defaults(gd)
     gd._monster_drops = {"sea_marauder": [("sandwhisper_coin", 50, 1, 1)]}
     gd._monster_locations = {"sea_marauder": (10, 10)}
-    actions = [FightAction(monster_code="sea_marauder", locations=[(10, 10)])]
+    actions = [FightAction(monster_code="sea_marauder", locations=[(10, 10)], learned_drops=LearnedDrops.empty())]
     goal = GatherMaterialsGoal(target_item="omni_rune", needed={"omni_rune": 1})
     state = make_state(level=40, attack={"air": 50}, gold=100000, x=0, y=0)
     relevant = goal.relevant_actions(actions, state, gd)

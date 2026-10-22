@@ -25,6 +25,7 @@ import httpx
 import pytest
 
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.utils.rate_budget import WindowBudget
@@ -73,6 +74,7 @@ def _empty_page() -> MagicMock:
 def test_governors_default_to_none_so_single_character_play_is_unthrottled():
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     assert player._data_governor is None
     assert player._action_governor is None
     assert player._account_governor is None
@@ -82,6 +84,7 @@ def test_a_data_read_acquires_from_the_data_governor():
     fake = _FakeTime()
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     governor = RateGovernor(
         WindowBudget(second=1, minute=None, hour=None, day=None), sharers=1, log=_log(), bucket="data",
         clock=fake.clock, sleep=fake.sleep,
@@ -101,6 +104,7 @@ def test_wiring_governors_prices_the_planner_in_requests():
     fake = _FakeTime()
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     action_governor = RateGovernor(
         WindowBudget(second=10, minute=None, hour=300, day=None), sharers=1, log=_log(), bucket="data",
         clock=fake.clock, sleep=fake.sleep,
@@ -134,6 +138,7 @@ class TestGovernorConsultedOnRealDataReadPaths:
     def test_fetch_world_state_acquires_for_character_events_and_raids(self):
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         governor = MagicMock()
         player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
@@ -155,6 +160,7 @@ class TestGovernorConsultedOnRealDataReadPaths:
         events/raids fetch functions are not even invoked."""
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         governor = MagicMock()
         player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
@@ -174,6 +180,7 @@ class TestGovernorConsultedOnRealDataReadPaths:
     def test_fetch_active_events_acquires_once_per_page(self):
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         governor = MagicMock()
         player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
@@ -198,6 +205,7 @@ class TestGovernorConsultedOnRealDataReadPaths:
         consult the governor — acquire() is not just a once-per-page gate."""
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         governor = MagicMock()
         player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
@@ -215,6 +223,7 @@ class TestGovernorConsultedOnRealDataReadPaths:
     def test_fetch_raids_acquires_once_per_page(self):
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         governor = MagicMock()
         player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
@@ -232,6 +241,7 @@ class TestAccountScopedReadsUseTheAccountGovernor:
     def test_sync_bank_acquires_from_the_account_governor_not_data(self):
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         data_governor = MagicMock()
         account_governor = MagicMock()
         player.set_rate_governors(data=data_governor, action=MagicMock(), account=account_governor)
@@ -263,6 +273,7 @@ class TestAccountScopedReadsUseTheAccountGovernor:
     def test_fetch_open_orders_acquires_from_the_account_governor_not_data(self):
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         data_governor = MagicMock()
         account_governor = MagicMock()
         player.set_rate_governors(data=data_governor, action=MagicMock(), account=account_governor)
@@ -281,6 +292,7 @@ class TestAccountScopedReadsUseTheAccountGovernor:
         it runs immediately after `_sync_bank`."""
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         data_governor = MagicMock()
         account_governor = MagicMock()
         player.set_rate_governors(data=data_governor, action=MagicMock(), account=account_governor)
@@ -301,6 +313,7 @@ class TestAchievementLookupUsesTheDataGovernor:
     def test_resolve_bank_unlock_monster_acquires_from_the_data_governor_not_account(self):
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         data_governor = MagicMock()
         account_governor = MagicMock()
         player.set_rate_governors(data=data_governor, action=MagicMock(), account=account_governor)
@@ -315,6 +328,7 @@ class TestGovernorConsultedBeforeActionDispatch:
     def test_execute_acquires_from_the_action_governor_once_and_not_the_data_governor(self):
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.state = make_state(x=0, y=0)
         data_governor = MagicMock()
         action_governor = MagicMock()

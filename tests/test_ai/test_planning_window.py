@@ -21,6 +21,7 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -115,12 +116,14 @@ class TestPlanningDeadline:
     def test_none_when_no_cooldown_is_recorded(self):
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.state = make_state()
         assert player._planning_deadline() is None
 
     def test_none_when_the_cooldown_has_already_expired(self):
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.state = make_state(
             cooldown_expires=datetime.now(tz=timezone.utc) - timedelta(seconds=5))
         assert player._planning_deadline() is None
@@ -128,6 +131,7 @@ class TestPlanningDeadline:
     def test_tracks_the_remaining_cooldown(self):
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.state = make_state(
             cooldown_expires=datetime.now(tz=timezone.utc) + timedelta(seconds=40))
         deadline = player._planning_deadline()
@@ -141,6 +145,7 @@ class TestRunLoopOrder:
         from a constant."""
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         client = MagicMock()
         seen: list[float | None] = []
 
@@ -173,6 +178,7 @@ class TestRunLoopOrder:
         recorded ["wait", "plan", "execute"]."""
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         client = MagicMock()
         order: list[str] = []
         action = WaitAction()

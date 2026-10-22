@@ -11,7 +11,7 @@ not the solo roll and is left out. A HIT of an item is that item in the cycle's
 every character: a drop chance is a fact about the source, not the character.
 
 The cycle's `prospecting` (recorded since 2026-10-21, NULL before) groups the
-attempts for `fit_k`; `drop_counts` pools across it.
+attempts for `fit_k`; `learned_drops` pools across it.
 
 The tally is read once per recorded cycle: it is held against the store it was
 read from (the store itself, so the key cannot outlive its object) and the
@@ -40,6 +40,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.drop_chance_core import fit_k
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
 
 _GATHER = re.compile(r"Gather\(([^()]+?)(?:->[^()]+)?\)")
@@ -106,14 +107,22 @@ def _read_tally(store: LearningStore, since: datetime) -> Tally:
     return tally
 
 
-def drop_counts(store: LearningStore, game_data: GameData, source: str,
-                item: str) -> tuple[int, int]:
-    """`(attempts, hits)` of `item` at `source` this season
-    (`game_data.season_start`), pooled over the fleet and every prospecting."""
+def learned_drops(store: LearningStore, game_data: GameData) -> LearnedDrops:
+    """This cycle's drop evidence (ruling T16a): the `(attempts, hits)` of
+    every observed `(source, item)` this season (`game_data.season_start`),
+    pooled over the fleet and every prospecting, and the fleet's slope
+    (`fleet_k`). Both read through the per-episode memo; nothing here is a
+    second one."""
     attempts, hits = _tally(store, game_data.season_start)
-    keys = [key for key in attempts if key[1] == source]
-    return (sum(attempts[key] for key in keys),
-            sum(hits[key][item] for key in keys))
+    per_source: Counter[str] = Counter()
+    per_drop: Counter[tuple[str, str]] = Counter()
+    for key, count in attempts.items():
+        source = key[1]
+        per_source[source] += count
+        for item, hit in hits[key].items():
+            per_drop[source, item] += hit
+    return LearnedDrops(tuple(sorted(per_source.items())), tuple(sorted(per_drop.items())),
+                        fleet_k(store, game_data))
 
 
 def _drop_table(game_data: GameData, action_class: str,

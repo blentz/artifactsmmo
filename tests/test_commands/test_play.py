@@ -15,6 +15,7 @@ from typer.testing import CliRunner
 from artifactsmmo_cli.ai.file_tracer import FileTracer
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.intention_progress import EXIT_CYCLES
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import FleetBootstrap, committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.null_tracer import NullTracer
@@ -306,6 +307,7 @@ class TestPlayCommandWiring:
         # A real player one unproductive committed cycle short of the exit.
         real_player = GamePlayer(character="hero")
         real_player._offline_timing = committed_timing()
+        real_player._learned_drops = LearnedDrops.empty()
         grind = GrindCharacterXPGoal("chicken")
         real_player._arbiter._committed_repr = repr(grind)
         real_player._cycles_without_progress = EXIT_CYCLES - 1

@@ -30,7 +30,6 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     _kill_actions,
     _priced,
     _sale_of,
-    _units_per_attempt,
     _workshop_venue,
     acquisition_actions,
     acquisition_options,
@@ -40,7 +39,8 @@ from artifactsmmo_cli.ai.acquisition_cost import (
 )
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT, acquisition_cost
 from artifactsmmo_cli.ai.gear_objective import _price
-from artifactsmmo_cli.ai.learning.drop_observations import fleet_k
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.learning.drop_observations import fleet_k, learned_drops
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
@@ -318,6 +318,13 @@ def _fleet(path: Path, rows: list[tuple[str, str, str, int | None, int]]) -> Lea
     return store
 
 
+def _learned(game_data, store=None):  # type: ignore[no-untyped-def]
+    """The pricing context carrying `store`'s drop evidence (ruling T16a), or
+    none observed without one."""
+    evidence = learned_drops(store, game_data) if store is not None else LearnedDrops.empty()
+    return replace(TIMED_NO_PROFILE_CONTEXT, learned_drops=evidence)
+
+
 _PEARLS_383_FOR_2 = [
     ("Gather(trout_spot)", "GatherAction", '{"trout": 1}', None, 381),
     ("Gather(trout_spot->small_pearls)", "GatherAction",
@@ -336,7 +343,7 @@ _PROSPECTING_SLOPE = [
 
 def _pearl_gather(state, game_data, store=None):  # type: ignore[no-untyped-def]
     return _priced("small_pearls", Source(SourceKind.GATHER, "trout_spot", 1, UNBOUNDED_CAPACITY),
-                   state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
+                   state, game_data, _learned(game_data, store))
 
 
 def test_a_rare_drop_is_priced_by_its_chance(state, game_data) -> None:
@@ -365,14 +372,13 @@ def test_a_sure_primary_drop_still_costs_one_gather(tmp_path, state, game_data) 
     before the chance was learned."""
     store = _fleet(tmp_path / "learn.db", _PEARLS_383_FOR_2)
     trout = _priced("trout", Source(SourceKind.GATHER, "trout_spot", 1, UNBOUNDED_CAPACITY),
-                    state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
+                    state, game_data, _learned(game_data, store))
     assert trout.actions_per_application == 1
 
 
-def test_a_unit_is_the_chance_times_the_mean_quantity(state, game_data) -> None:
+def test_a_unit_is_the_chance_times_the_mean_quantity() -> None:
     """A drop of 1 to 3 units at 1 in 8 yields `(1/8) · 2` units an attempt."""
-    assert _units_per_attempt("chicken", "feather", 8, 1, 3, state, game_data,
-                              None) == Fraction(1, 4)
+    assert LearnedDrops.empty().units_per_attempt("chicken", "feather", 8, 1, 3, 0) == Fraction(1, 4)
 
 
 def test_an_observed_monster_drop_reprices_the_farm(tmp_path, state, game_data) -> None:
@@ -383,7 +389,7 @@ def test_an_observed_monster_drop_reprices_the_farm(tmp_path, state, game_data) 
                    [("Fight(chicken)", "FightAction", '{"feather": 1}', None, 50),
                     ("Fight(chicken)", "FightAction", '{"raw_chicken": 1}', None, 50)])
     learned = _priced("feather", Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
-                      state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
+                      state, game_data, _learned(game_data, store))
     win = _kill_actions("chicken", state, game_data, TIMED_NO_PROFILE_CONTEXT.timing(), ())
     assert learned.actions_per_application == Fraction(108, 51) * win
     prior = _priced("feather", Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
@@ -428,7 +434,7 @@ def test_the_second_copy_is_cheaper_than_the_first(tmp_path, state, game_data) -
     def price(st) -> int:  # type: ignore[no-untyped-def]
         buy = _priced("perfect_pearl",
                       Source(SourceKind.BUY, "archaeologist", 1, UNBOUNDED_CAPACITY),
-                      st, game_data, TIMED_NO_PROFILE_CONTEXT, store)
+                      st, game_data, _learned(game_data, store))
         assert buy.inputs == {"small_pearls": 20}
         return acquisition_cost("perfect_pearl", 1,
                                 {"perfect_pearl": [buy],
@@ -448,8 +454,8 @@ def test_a_gear_price_reads_the_fighters_prospecting(tmp_path, state, game_data)
     store = _fleet(tmp_path / "learn.db",
                    [("Fight(chicken)", "FightAction", '{"feather": 1}', 5, 4)])
     assert fleet_k(store, game_data) == Fraction(1, 5)
-    own = _price(state, game_data, TIMED_NO_PROFILE_CONTEXT, store, state, "feather")
-    lucky = _price(state, game_data, TIMED_NO_PROFILE_CONTEXT, store,
+    own = _price(state, game_data, _learned(game_data, store), store, state, "feather")
+    lucky = _price(state, game_data, _learned(game_data, store), store,
                    replace(state, prospecting=100), "feather")
     assert lucky[0] < own[0]
 
@@ -1489,16 +1495,17 @@ def test_an_under_skill_gather_is_priced_by_its_grind_not_offered_as_ready(
                    if r.kind == "gather" and r.venue == resource]
         assert gated.unlock == f"skill:{skill}:{level}" and gated.unlock_actions > 0
         assert gated.actions_per_application == 1
-        # The climb's gather is priced at the learned chance too: three
-        # recorded gathers that missed the item make it 1 in 4 (`(1 + 0) /
-        # (1 + 3)`), so a unit is 4 gathers.
+        # The climb's gather is priced at the learned chance too (the
+        # context's drop evidence, ruling T16a): three recorded gathers that
+        # missed the item make it 1 in 4 (`(1 + 0) / (1 + 3)`), so a unit is 4
+        # gathers.
         for i in range(3):
             store.record_cycle(Cycle(
                 ts=f"2026-08-09T00:00:{i:02d}+00:00", session_id="s", cycle_index=i,
                 character="grind_probe", outcome="ok", action_class="GatherAction",
                 action_repr=f"Gather({resource})", drops_json=None))
         [learned] = [r for r in route_options(item, gated_state, game_data,
-                                              TIMED_NO_PROFILE_CONTEXT, store)
+                                              _learned(game_data, store), store)
                      if r.kind == "gather" and r.venue == resource]
         assert learned.actions_per_application == 4
     finally:

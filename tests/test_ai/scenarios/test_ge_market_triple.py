@@ -39,6 +39,7 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -151,6 +152,7 @@ def _grind(name: str, game_data: GameData) -> list[str]:
     """The grind's committed plan, the arbiter's own call."""
     player = GamePlayer(character=name, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(_state(name, game_data), game_data)
     plan = decompose(ReachSkillGoal(SKILL, 10), player.state, game_data,
                      player._build_actions(), player._last_ctx)
@@ -277,6 +279,7 @@ def test_cell5_the_book_reorders_the_objective_and_the_first_action(
 def _plan(name: str, game_data: GameData):
     player = GamePlayer(character=name, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(_state(name, game_data), game_data)
     return player.plan_from_state()
 

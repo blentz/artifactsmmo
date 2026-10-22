@@ -13,8 +13,9 @@ Pure data: no behavior, so this module imports nothing else from the package —
 the exceptions are `TurnIn` below, a leaf pure-data class (`ai.currency_turnin`
 imports only stdlib), `ChosenLoadout` (`ai.chosen_loadout`, pure data over
 `thresholds`), `PartyLease` (`ai.party_lease_core`, pure data over
-`world_state`) and `GearObjective` (`ai.gear_objective_result`, pure data over
-`gear_objective_core`), none of which carries a cycle risk of its own.
+`world_state`), `GearObjective` (`ai.gear_objective_result`, pure data over
+`gear_objective_core`) and `LearnedDrops` (`ai.learned_drops`, pure data over
+`drop_chance_core`), none of which carries a cycle risk of its own.
 """
 
 from dataclasses import dataclass, field
@@ -24,6 +25,7 @@ from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
 
 
@@ -296,6 +298,22 @@ class SelectionContext:
     fight_seconds: FightSecondsModel | None = None
     action_seconds: Fraction | None = None
 
+    # The fleet's drop evidence this cycle (spec 2026-10-18 §2.8, ruling
+    # T16a): the ONE drop model the acquisition walk, the obtain model's gather
+    # order and (through the actions that carry the same value) the planner and
+    # every source picker read. Built once per cycle by the player from the
+    # learning store; `LearnedDrops.empty()` (the API prior) on an offline
+    # world (`fight_seconds_model.offline_context`) and on NO_PROFILE_CONTEXT.
+    # None on a context that never prices or ranks a drop: reading one there
+    # raises (`drops`), never a default.
+    learned_drops: LearnedDrops | None = None
+
+    def drops(self) -> LearnedDrops:
+        """This cycle's drop evidence; raises when this context has none."""
+        if self.learned_drops is None:
+            raise ValueError("this context carries no drop evidence")
+        return self.learned_drops
+
     def timing(self) -> FightSecondsModel:
         """The learned fight-seconds model; raises when this context has none."""
         if self.fight_seconds is None:
@@ -327,6 +345,11 @@ NO_PROFILE_CONTEXT = SelectionContext(
     # floor rather than a guess.
     task_exchange_min_coins=1,
     combat_monster=None,
+    # No profile, no observations: a drop at its API prior. Every site that
+    # ranks or prices through this constant is a no-store site (`tiers`
+    # feasibility walks, `potion_supply.feasible_runs`); a site that holds the
+    # cycle's evidence replaces it in.
+    learned_drops=LearnedDrops.empty(),
 )
 """The "no active goal profile" stand-in, and the ONLY default any keep/deposit
 consumer may use.

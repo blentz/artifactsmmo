@@ -20,6 +20,7 @@ from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
@@ -74,10 +75,10 @@ class TestReprMethods:
         assert repr(WithdrawItemAction(code="iron", quantity=3)) == "Withdraw(iron×3)"
 
     def test_fight_repr(self):
-        assert repr(FightAction(monster_code="wolf")) == "Fight(wolf)"
+        assert repr(FightAction(monster_code="wolf", learned_drops=LearnedDrops.empty())) == "Fight(wolf)"
 
     def test_gather_repr(self):
-        assert repr(GatherAction(resource_code="copper")) == "Gather(copper×1)"
+        assert repr(GatherAction(resource_code="copper", learned_drops=LearnedDrops.empty())) == "Gather(copper×1)"
 
     def test_rest_repr(self):
         assert repr(RestAction()) == "Rest"
@@ -305,7 +306,7 @@ class TestLearnedCostPenalty:
             idx += 1
 
     def test_gather_cost_penalised_by_low_success_rate(self, store):
-        action = GatherAction(resource_code="copper", locations=frozenset([(0, 0)]))
+        action = GatherAction(resource_code="copper", locations=frozenset([(0, 0)]), learned_drops=LearnedDrops.empty())
         gd = make_gd(resource_locs={"copper": [(0, 0)]})
         state = make_state(x=0, y=0)
         # 9 ok (cooldown=10) + 1 error => rate 0.9 (< 0.95), median learned cost 10.
@@ -320,7 +321,7 @@ class TestLearnedCostPenalty:
         assert cost == pytest.approx(10.0 / 0.9)
 
     def test_gather_cost_uses_learned_value_when_reliable(self, store):
-        action = GatherAction(resource_code="copper", locations=frozenset([(0, 0)]))
+        action = GatherAction(resource_code="copper", locations=frozenset([(0, 0)]), learned_drops=LearnedDrops.empty())
         gd = make_gd(resource_locs={"copper": [(0, 0)]})
         state = make_state(x=0, y=0)
         # All 10 ok => rate 1.0 (>= 0.95): no penalty, just the learned median.
@@ -332,7 +333,8 @@ class TestLearnedCostPenalty:
         """The learned median is the cost of ONE server gather; a batch of 3
         four tiles away is three of those plus ONE 20 s walk — the walk is not
         folded into the per-gather figure and multiplied by the batch."""
-        action = GatherAction(resource_code="copper", quantity=3, locations=frozenset([(4, 0)]))
+        action = GatherAction(resource_code="copper", quantity=3, locations=frozenset([(4, 0)]),
+                              learned_drops=LearnedDrops.empty())
         gd = make_gd(resource_locs={"copper": [(4, 0)]})
         state = make_state(x=0, y=0)
         self._record(store, action.learning_key(), ok_count=10, fail_count=0, cooldown=10.0)
@@ -343,7 +345,8 @@ class TestLearnedCostPenalty:
         median. It is the per-gather figure WITHOUT the walk, so scaling it by
         the batch and adding the walk once reproduces `static` exactly:
         6 x 3 + 4 tiles x 5 s = 38."""
-        action = GatherAction(resource_code="copper", quantity=3, locations=frozenset([(4, 0)]))
+        action = GatherAction(resource_code="copper", quantity=3, locations=frozenset([(4, 0)]),
+                              learned_drops=LearnedDrops.empty())
         gd = make_gd(resource_locs={"copper": [(4, 0)]})
         state = make_state(x=0, y=0)
         assert action.cost(state, gd, history=store) == pytest.approx(38.0)
@@ -411,7 +414,7 @@ class TestEdgeCases:
         assert action.is_applicable(state, gd) is False
 
     def test_gather_applicable_when_no_skill_required(self):
-        action = GatherAction(resource_code="copper", locations=frozenset([(3, 0)]))
+        action = GatherAction(resource_code="copper", locations=frozenset([(3, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, inventory={}, inventory_max=10)
         gd = make_gd(resource_locs={"copper": [(3, 0)]})  # no skill req
         assert action.is_applicable(state, gd) is True

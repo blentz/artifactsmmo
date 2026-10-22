@@ -60,6 +60,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -128,7 +129,7 @@ def _actions() -> list:
         CraftAction(code="enchanted_potion", quantity=1, workshop_location=(0, 0)),
         WithdrawItemAction(code="enchanted_mushroom", quantity=1),
         WithdrawItemAction(code="salmon", quantity=1),
-        FightAction(monster_code="dryad", locations=frozenset({(0, 0)})),
+        FightAction(monster_code="dryad", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty()),
     ]
 
 
@@ -184,7 +185,7 @@ def test_fight_route_would_still_lose_even_without_the_loadout_penalty() -> None
         bank_items={"enchanted_mushroom": 1, "salmon": 1},
         inventory_max=20,
     )
-    fight = FightAction(monster_code="dryad", locations=frozenset({(0, 0)}))
+    fight = FightAction(monster_code="dryad", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     assert fight.cost(state, gd) == 10.0, "fixture drifted: this test needs the zero-penalty case"
     goal = GatherMaterialsGoal(target_item="enchanted_potion", needed={"enchanted_potion": 1})
     plan = decompose(goal, state, gd, list(_actions()), NO_PROFILE_CONTEXT) or []

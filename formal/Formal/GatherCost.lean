@@ -347,9 +347,13 @@ once in `rate` gathers (`apple` off `ash_tree`: 1 in 20). Priced at one gather
 per unit, the fleet spent 554 gathers on 25 apples (live, 2026-10-05). The
 shipped `cost` therefore charges every PER-GATHER term — the base and the wrong
 tool — on `qty * perUnit` gathers, where `perUnit` is
-`gather_selection.expected_gathers` (`rate / avg_quantity`, proved ordering in
-`Formal.GatherSelection`). The bank term stays per UNIT: it penalizes the units
-this batch shares with the bank, and that is a count of units, not of gathers.
+`GatherAction.gathers` / `qty`: the LEARNED drop model's attempts per unit
+(`LearnedDrops.attempts_per_unit`, `1 / (chance × avg_quantity)`, ruling T16a;
+`Formal.DropChance.units`, ordering proved in `Formal.GatherSelection`). Under
+the API prior it is `rate / avg_quantity`; after the fleet's 383 trout_spot
+gathers for 2 pearls it is `683/3`, the walk's own figure. The bank term stays
+per UNIT: it penalizes the units this batch shares with the bank, and that is a
+count of units, not of gathers.
 The walk stays once per action: however many gathers the batch takes, `execute`
 walks to the node once.
 -/
@@ -463,6 +467,14 @@ example : 0 ≤ gatherCostRated 6 15 100 6 20 2 1 true :=
 
 example : gatherCostRated 6 15 100 6 20 3 7 true ≤ gatherCostRated 6 15 100 6 20 9 7 true :=
   gather_cost_rated_monotone 6 15 100 6 20 3 9 7 true (by omega) (by decide) (by decide)
+    (by decide) (by decide) (by decide)
+
+/-- Non-vacuity at the LEARNED pearl configuration (ruling T16a): three
+`small_pearls` off `trout_spot` at the fleet's `683/3` gathers a pearl are never
+dearer than at the API prior's 300. -/
+example : gatherCostRated 6 15 100 6 (683 / 3) 3 0 false
+    ≤ gatherCostRated 6 15 100 6 300 3 0 false :=
+  gather_cost_rated_monotone_rate 6 15 100 6 (683 / 3) 300 3 0 false (by decide +kernel)
     (by decide) (by decide) (by decide)
 
 end Formal.GatherCost

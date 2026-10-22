@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 from artifactsmmo_api_client.models.log_type import LogType
 
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     FleetBootstrap,
     committed_timing,
@@ -29,6 +30,7 @@ PAGE = FleetBootstrap(fights=((5, 0, 10.0), (10, 0, 20.0)), cooldowns=(10, 20, 3
 def test_an_offline_player_reads_the_committed_capture() -> None:
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._bootstrap = PAGE
     assert player._timing() == committed_timing()
 
@@ -64,6 +66,7 @@ def test_a_player_with_no_observation_anywhere_raises() -> None:
 def test_a_timed_context_carries_the_cycles_seconds() -> None:
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     timed = player._timed(replace(NO_PROFILE_CONTEXT, combat_monster="wolf"))
     model, seconds = committed_timing()
     assert (timed.fight_seconds, timed.action_seconds, timed.combat_monster) == (

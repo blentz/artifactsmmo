@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -37,7 +38,7 @@ def test_every_npc_has_its_tiles_region() -> None:
 def test_the_factory_builds_npc_actions_in_that_region() -> None:
     gd = _gd()
     actions = build_actions(gd, None, CharacterObjective.from_game_data(gd),
-                            bank_accessible=True, task_exchange_min_coins=0)
+                            bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
     buys = {a.travel_region for a in actions
             if isinstance(a, NpcBuyAction) and a.npc_code == "sorceress"}
     assert buys == {gd.npc_region("sorceress")}
@@ -50,7 +51,7 @@ def test_the_factory_builds_npc_actions_in_that_region() -> None:
     gd.world.npc_layers["tailor"] = "underground"
     gd.world.npc_sell_prices["tailor"] = {"cloth": 1}
     actions = build_actions(gd, None, CharacterObjective.from_game_data(gd),
-                            bank_accessible=True, task_exchange_min_coins=0)
+                            bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
     sells = {a.travel_region for a in actions
              if isinstance(a, NpcSellAction) and a.npc_code == "tailor"}
     assert sells == {gd.npc_region("sorceress")}
@@ -61,7 +62,7 @@ def test_fire_crystal_is_bought_underground() -> None:
     state = scenario_state(ScenarioCharacter(name="t", level=50, gold=1000,
                                              inventory={"fire_dust": 10}), gd)
     actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
-                            bank_accessible=True, task_exchange_min_coins=0)
+                            bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
     plan = decompose(GatherMaterialsGoal(target_item="fire_crystal", needed={"fire_crystal": 1}),
                      state, gd, actions, NO_PROFILE_CONTEXT, [])
     assert plan is not None
@@ -78,7 +79,7 @@ def test_a_goals_craft_vs_buy_offer_travels_in_the_vendors_region() -> None:
     gd.world.npc_layers["nomadic_merchant"] = "underground"
     state = scenario_state(ScenarioCharacter(name="t", level=30, gold=100000), gd)
     actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
-                            bank_accessible=True, task_exchange_min_coins=0)
+                            bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
     goal = GatherMaterialsGoal(target_item="small_antidote", needed={"small_antidote": 1})
     offers = {a.travel_region for a in goal.relevant_actions(actions, state, gd)
               if isinstance(a, NpcBuyAction) and a.item_code == "small_antidote"}

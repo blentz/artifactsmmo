@@ -12,6 +12,7 @@ attempts. Prospecting raises a drop's chance by one fleet-wide multiplier
 a prior of `k = 0`: no prospecting bonus is assumed until the data shows one.
 
     chance_at = min(1, posterior_chance × prospecting_multiplier)
+    units_per_attempt = chance_at × (min_quantity + max_quantity) / 2
 
 Proved in `Formal.DropChance` (the posterior is in (0, 1], a hit never lowers
 it, the multiplier is monotone in P for k ≥ 0, the chance never exceeds 1, the
@@ -41,6 +42,18 @@ def chance_at(api_rate: int, attempts: int, hits: int, k: Fraction,
     """The chance per attempt at `prospecting`, capped at 1."""
     return min(Fraction(1), posterior_chance(api_rate, attempts, hits)
                * prospecting_multiplier(k, prospecting))
+
+
+def units_per_attempt(api_rate: int, min_quantity: int, max_quantity: int,
+                      attempts: int, hits: int, k: Fraction, prospecting: int) -> Fraction:
+    """Units of a drop one attempt yields, expected: `chance_at` times the
+    drop's mean quantity `(min + max) / 2`. With nothing observed
+    (`attempts = hits = 0`, `k = 0`) it is the API prior alone, `1/api_rate`
+    of the mean. The ONE drop model every consumer prices and ranks a drop
+    by (ruling T16a): the planner's gather, the acquisition walk and every
+    source picker take `1 /` this as their expected attempts per unit."""
+    return (chance_at(api_rate, attempts, hits, k, prospecting)
+            * Fraction(min_quantity + max_quantity, 2))
 
 
 def fit_k(samples: Sequence[tuple[int, int, int, int]]) -> Fraction:

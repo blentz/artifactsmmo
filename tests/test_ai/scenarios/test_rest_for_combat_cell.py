@@ -33,6 +33,7 @@ import pytest
 
 from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
@@ -61,6 +62,7 @@ def _planned(state: WorldState, game_data: GameData):
     context and the assertion has to be about the same one production used."""
     player = GamePlayer(character=CELL, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, game_data)
     report = player.plan_from_state()
     return player, report
@@ -154,6 +156,7 @@ def test_no_other_scenario_reaches_this_guard() -> None:
         scenario_world = scenario_state(SCENARIOS[name], scenario_gd)
         player = GamePlayer(character=name, history=None)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.seed_offline(scenario_world, scenario_gd)
         if GuardKind.REST_FOR_COMBAT in active_guards(
                 scenario_world, scenario_gd, None, player._selection_context()):

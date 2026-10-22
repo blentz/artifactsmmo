@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
@@ -98,7 +99,7 @@ def _select(bank_item_count: int):
     planner = GOAPPlanner()
     gd = _gd()
     actions = [
-        FightAction(monster_code="chicken", locations=frozenset([(1, 0)])),
+        FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
         BuyBankExpansionAction(bank_location=(4, 0), accessible=True),
     ]
     arbiter = StrategyArbiter(planner, history=None)

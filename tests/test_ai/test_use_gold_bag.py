@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.use_gold_bag import USE_GOLD_BAG_COST, UseGoldBagAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
@@ -157,7 +158,7 @@ class TestUseGoldBagInFactory:
             objective=None,
             bank_accessible=True,
             task_exchange_min_coins=3,
-        )
+         learned_drops=LearnedDrops.empty())
         types = [type(a) for a in actions]
         assert UseGoldBagAction in types
 

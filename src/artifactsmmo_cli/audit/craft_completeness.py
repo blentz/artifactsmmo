@@ -28,6 +28,7 @@ from artifactsmmo_cli.ai.goals.reach_currency import funding_step_goal
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.planner import GOAPPlanner
@@ -162,7 +163,8 @@ def plan_craft(recipe: str, state: WorldState, game_data: GameData, grey: bool =
     objective = CharacterObjective.from_game_data(game_data)
     actions = build_actions(
         game_data, state, objective,
-        bank_accessible=True, task_exchange_min_coins=0)
+        bank_accessible=True, task_exchange_min_coins=0,
+                            learned_drops=LearnedDrops.empty())
     goal = GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}, skill_grind=grey,
                                exclude_recycle=keep)
     arbiter = StrategyArbiter(GOAPPlanner(), None)
@@ -189,7 +191,8 @@ def funding_plan(recipe: str, state: WorldState, game_data: GameData) -> list[Ac
     currency, amount = funding
     goal = funding_step_goal(currency, amount, state, game_data)
     actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
-                            bank_accessible=True, task_exchange_min_coins=0)
+                            bank_accessible=True, task_exchange_min_coins=0,
+                            learned_drops=LearnedDrops.empty())
     ctx = offline_context(SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
                            initial_xp=0, task_exchange_min_coins=0, combat_monster=None))
     return StrategyArbiter(GOAPPlanner(), None)._plans(
@@ -898,7 +901,8 @@ def _crossing_unaffordable(recipe: str, state: WorldState, game_data: GameData) 
     if not game_data.world.transition_edges:
         return False
     actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
-                            bank_accessible=True, task_exchange_min_coins=0)
+                            bank_accessible=True, task_exchange_min_coins=0,
+                            learned_drops=LearnedDrops.empty())
     ctx = offline_context(SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
                            initial_xp=0, task_exchange_min_coins=0, combat_monster=None))
     declined: list[str] = []

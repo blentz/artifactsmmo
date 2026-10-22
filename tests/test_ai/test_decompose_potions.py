@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.test_craft_potions_plannability import (
     _HEAL,
@@ -146,7 +147,8 @@ def test_a_batch_that_would_fight_is_left_to_the_search(monkeypatch):
     state = _state(inventory={})
     goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
     actions = [a for a in _actions(gd) if not isinstance(a, GatherAction)]
-    actions.append(FightAction(monster_code="biting_slime", locations=frozenset({(1, 0)})))
+    actions.append(FightAction(monster_code="biting_slime", locations=frozenset({(1, 0)}),
+                               learned_drops=LearnedDrops.empty()))
     obtain = goal.batch_obtain(state)
     assert obtain is not None
     legs = decompose(obtain, state, gd, actions, NO_PROFILE_CONTEXT)
@@ -196,7 +198,8 @@ def test_a_drop_only_ingredient_is_off_the_ladder(monkeypatch):
     state = _state(inventory={})
     goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
     actions = [a for a in _actions(gd) if not isinstance(a, GatherAction)]
-    actions.append(FightAction(monster_code="biting_slime", locations=frozenset({(1, 0)})))
+    actions.append(FightAction(monster_code="biting_slime", locations=frozenset({(1, 0)}),
+                               learned_drops=LearnedDrops.empty()))
     declined: list[str] = []
     assert decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT, declined) is None
     assert declined == [f"infeasible:{_HEAL}:no_route:{_INGREDIENT}"]

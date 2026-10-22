@@ -10,6 +10,7 @@ import artifactsmmo_cli.ai.tiers.band_target as band_mod
 from artifactsmmo_cli.ai.best_loadout import BestLoadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.fight_upkeep_core import FightUpkeep, xp_per_action
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -149,6 +150,7 @@ def test_the_player_prices_a_replacement_unit(monkeypatch) -> None:
     is a batch's price over its size, the level ramp's batch."""
     player = GamePlayer(character="hero", history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.state = make_state(level=30, inventory={POTION: 9, "sunflower": 3},
                               bank_items={POTION: 4, "apple": 1},
                               equipment={"utility1_slot": POTION, "weapon_slot": "iron_sword"})
@@ -174,6 +176,7 @@ def test_the_player_prices_a_replacement_unit(monkeypatch) -> None:
 def test_an_unvisited_bank_stays_unknown(monkeypatch) -> None:
     player = GamePlayer(character="hero", history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.state = make_state(level=30, bank_items=None)
     player.game_data = GameData()
     seen = {}

@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import _delete_cost
@@ -218,19 +219,19 @@ class TestRestAction:
 
 class TestFightAction:
     def test_applicable_with_hp_and_locations(self):
-        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, hp=100, max_hp=100, level=1)
         gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
         assert action.is_applicable(state, gd) is True
 
     def test_not_applicable_empty_locations(self):
-        action = FightAction(monster_code="chicken", locations=frozenset())
+        action = FightAction(monster_code="chicken", locations=frozenset(), learned_drops=LearnedDrops.empty())
         state = make_state(x=1, y=0, hp=100, max_hp=100, level=1)
         gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
         assert action.is_applicable(state, gd) is False
 
     def test_not_applicable_low_hp(self):
-        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, hp=20, max_hp=100, level=1)
         gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
         assert action.is_applicable(state, gd) is False
@@ -241,7 +242,7 @@ class TestFightAction:
         and deadlocked combat when nothing in-window was winnable. The
         lower gate is now `xp_per_kill > 0` — chicken grants XP at level 3,
         so the fight is applicable."""
-        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, hp=100, max_hp=100, level=3)
         gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
         assert gd.xp_per_kill("chicken", 3) > 0
@@ -256,7 +257,7 @@ class TestFightAction:
         showed 372 observed fights at diff 10 paying in full — this assertion
         was pinning the off-by-one, not the exclusion. Level 12 puts the
         fixture back inside the zero band it is here to test."""
-        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, hp=100, max_hp=100, level=12)
         gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
         assert gd.xp_per_kill("chicken", 11) > 0
@@ -264,13 +265,14 @@ class TestFightAction:
         assert action.is_applicable(state, gd) is False
 
     def test_not_applicable_monster_too_high_level(self):
-        action = FightAction(monster_code="dragon", locations=frozenset([(1, 0)]))
+        action = FightAction(monster_code="dragon", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, hp=100, max_hp=100, level=1)
         gd = make_game_data(monster_locs={"dragon": [(1, 0)]}, monster_levels={"dragon": 50})
         assert action.is_applicable(state, gd) is False
 
     def test_apply_moves_to_nearest_and_reduces_hp(self):
-        action = FightAction(monster_code="chicken", locations=frozenset([(3, 0), (1, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(3, 0), (1, 0)]),
+                             learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, hp=100, max_hp=100, xp=0, level=1)
         gd = make_game_data(monster_locs={"chicken": [(1, 0), (3, 0)]}, monster_levels={"chicken": 1})
         new_state = action.apply(state, gd)
@@ -279,7 +281,7 @@ class TestFightAction:
         assert (new_state.x, new_state.y) == (1, 0)  # nearest
 
     def test_apply_increments_task_progress_for_task_monster(self):
-        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(
             x=0, y=0, hp=100, max_hp=100, level=1,
             task_code="chicken", task_type="monsters", task_progress=2, task_total=10,
@@ -293,7 +295,7 @@ class TestFightAction:
         "fight chicken -> feather" (GatherMaterials over a monster-drop material).
         Without it, GatherMaterials(feather) explored 21868 nodes / plan_len 0 and
         the bot fell to char-grind forever (trace 2026-06-14 230824)."""
-        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, hp=100, max_hp=100, level=1,
                            inventory={}, inventory_max=20)
         gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
@@ -304,7 +306,7 @@ class TestFightAction:
 
     def test_apply_does_not_overflow_inventory_with_drops(self):
         """Drops past capacity are not minted (used never exceeds max)."""
-        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, hp=100, max_hp=100, level=1,
                            inventory={"junk": 19}, inventory_max=20)
         gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
@@ -327,7 +329,8 @@ class TestFightAction:
             make_fight_api_result,
         )
 
-        action = FightAction(monster_code="yellow_slime", locations=frozenset([(1, 0)]))
+        action = FightAction(monster_code="yellow_slime", locations=frozenset([(1, 0)]),
+                             learned_drops=LearnedDrops.empty())
         state = make_state(x=1, y=0, hp=100, max_hp=100, level=1)
 
         char = make_char_schema(x=1, y=0)
@@ -341,19 +344,19 @@ class TestFightAction:
 
 class TestGatherAction:
     def test_applicable_with_skill_and_locations(self):
-        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]))
+        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, skills={"mining": 5}, inventory={}, inventory_max=10)
         gd = make_game_data(resource_locs={"copper": [(2, 0)]}, resource_skills={"copper": ("mining", 1)})
         assert action.is_applicable(state, gd) is True
 
     def test_not_applicable_insufficient_skill(self):
-        action = GatherAction(resource_code="iron", locations=frozenset([(2, 0)]))
+        action = GatherAction(resource_code="iron", locations=frozenset([(2, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, skills={"mining": 1}, inventory={}, inventory_max=10)
         gd = make_game_data(resource_locs={"iron": [(2, 0)]}, resource_skills={"iron": ("mining", 10)})
         assert action.is_applicable(state, gd) is False
 
     def test_not_applicable_full_inventory(self):
-        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]))
+        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]), learned_drops=LearnedDrops.empty())
         inventory = {f"item_{i}": 1 for i in range(10)}
         state = make_state(x=0, y=0, skills={"mining": 5}, inventory=inventory, inventory_max=10)
         gd = make_game_data(resource_locs={"copper": [(2, 0)]}, resource_skills={"copper": ("mining", 1)})
@@ -361,20 +364,21 @@ class TestGatherAction:
 
     def test_not_applicable_near_full_inventory(self):
         # Requires at least 3 free slots to handle multi-drop scenarios
-        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]))
+        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]), learned_drops=LearnedDrops.empty())
         inventory = {f"item_{i}": 1 for i in range(8)}  # 8/10 used = 2 free slots < 3
         state = make_state(x=0, y=0, skills={"mining": 5}, inventory=inventory, inventory_max=10)
         gd = make_game_data(resource_locs={"copper": [(2, 0)]}, resource_skills={"copper": ("mining", 1)})
         assert action.is_applicable(state, gd) is False
 
     def test_not_applicable_empty_locations(self):
-        action = GatherAction(resource_code="copper", locations=frozenset())
+        action = GatherAction(resource_code="copper", locations=frozenset(), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, skills={"mining": 5}, inventory={}, inventory_max=10)
         gd = make_game_data(resource_locs={"copper": [(2, 0)]}, resource_skills={"copper": ("mining", 1)})
         assert action.is_applicable(state, gd) is False
 
     def test_apply_moves_to_nearest_and_adds_drop_item(self):
-        action = GatherAction(resource_code="copper_rocks", locations=frozenset([(5, 0), (2, 0)]))
+        action = GatherAction(resource_code="copper_rocks", locations=frozenset([(5, 0), (2, 0)]),
+                              learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, inventory={})
         gd = make_game_data(resource_locs={"copper_rocks": [(2, 0), (5, 0)]})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
@@ -385,7 +389,8 @@ class TestGatherAction:
     def test_apply_preserves_skill_xp_baseline(self):
         """GatherAction.apply must NOT mutate skill_xp — it is a server-snapshot
         baseline field (see ApplyBaseline contract / WorldState docstring)."""
-        action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]))
+        action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]),
+                              learned_drops=LearnedDrops.empty())
         gd = make_game_data(resource_skills={"copper_rocks": ("mining", 1)})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
         state = make_state(x=0, y=0, inventory={}, skill_xp={"mining": 5})
@@ -394,7 +399,8 @@ class TestGatherAction:
 
     def test_apply_preserves_other_skill_xp_entries(self):
         """GatherAction.apply must not wipe unrelated skill_xp entries."""
-        action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]))
+        action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]),
+                              learned_drops=LearnedDrops.empty())
         gd = make_game_data(resource_skills={"copper_rocks": ("mining", 1)})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
         state = make_state(x=0, y=0, inventory={}, skill_xp={"mining": 0, "alchemy": 200})
@@ -402,25 +408,27 @@ class TestGatherAction:
         assert new_state.skill_xp == state.skill_xp
 
     def test_apply_falls_back_to_resource_code_when_no_drop_mapping(self):
-        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]))
+        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, inventory={})
         gd = make_game_data(resource_locs={"copper": [(2, 0)]})
         new_state = action.apply(state, gd)
         assert new_state.inventory.get("copper", 0) == 1
 
     def test_default_quantity_is_one_and_repr_shows_it(self):
-        action = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+        action = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}),
+                              learned_drops=LearnedDrops.empty())
         assert action.quantity == 1
         assert repr(action) == "Gather(spruce_tree×1)"
 
     def test_repr_with_drop_override_shows_quantity(self):
         action = GatherAction(resource_code="copper_rocks", quantity=3,
-                              locations=frozenset({(0, 0)}), drop_item_override="emerald_stone")
+                              locations=frozenset({(0, 0)}), drop_item_override="emerald_stone",
+                                  learned_drops=LearnedDrops.empty())
         assert repr(action) == "Gather(copper_rocks->emerald_stone×3)"
 
     def test_apply_mints_the_batch(self):
         action = GatherAction(resource_code="spruce_tree", quantity=10,
-                              locations=frozenset({(0, 0)}))
+                              locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, inventory={}, inventory_max=50, inventory_slots_max=20)
         gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
         gd._resource_drops = {"spruce_tree": "spruce_wood"}
@@ -430,7 +438,7 @@ class TestGatherAction:
 
     def test_effective_quantity_clamps_to_headroom(self):
         action = GatherAction(resource_code="spruce_tree", quantity=10,
-                              locations=frozenset({(0, 0)}))
+                              locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
         gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
         gd._resource_drops = {"spruce_tree": "spruce_wood"}
         # inventory_max=20, 16 already used by "junk" -> headroom = 4 units.
@@ -442,7 +450,7 @@ class TestGatherAction:
         not vanish. Without this a near-full bag removes the only edge to a real
         deficit."""
         action = GatherAction(resource_code="spruce_tree", quantity=10,
-                              locations=frozenset({(0, 0)}))
+                              locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
         gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
         gd._resource_drops = {"spruce_tree": "spruce_wood"}
         full = make_state(x=0, y=0, inventory={"junk": 16}, inventory_max=20, inventory_slots_max=20)
@@ -455,8 +463,10 @@ class TestGatherAction:
         # function and wouldn't catch a change to that formula.
         state = make_state(x=0, y=0, inventory={}, inventory_max=50, inventory_slots_max=20)
         gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
-        one = GatherAction(resource_code="spruce_tree", quantity=1, locations=frozenset({(0, 0)}))
-        ten = GatherAction(resource_code="spruce_tree", quantity=10, locations=frozenset({(0, 0)}))
+        one = GatherAction(resource_code="spruce_tree", quantity=1, locations=frozenset({(0, 0)}),
+                           learned_drops=LearnedDrops.empty())
+        ten = GatherAction(resource_code="spruce_tree", quantity=10, locations=frozenset({(0, 0)}),
+                           learned_drops=LearnedDrops.empty())
         assert ten.cost(state, gd) == pytest.approx(10 * one.cost(state, gd))
 
     def test_banked_penalty_scales_with_covered_units_only(self):
@@ -464,7 +474,7 @@ class TestGatherAction:
         worth'; the flat +100 could not express it. 3 banked units against a batch
         of 10 penalizes 3 units, not 10 and not a flat one."""
         action = GatherAction(resource_code="spruce_tree", quantity=10,
-                              locations=frozenset({(0, 0)}))
+                              locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
         gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
         gd._resource_drops = {"spruce_tree": "spruce_wood"}
         drop = action.drop_item(gd)
@@ -477,8 +487,10 @@ class TestGatherAction:
     def test_learned_cost_key_is_quantity_free(self):
         """Learned costs must not fragment per batch size or the learning signal is
         silently destroyed — every new quantity would be a fresh, empty key."""
-        one = GatherAction(resource_code="spruce_tree", quantity=1, locations=frozenset({(0, 0)}))
-        sixty = GatherAction(resource_code="spruce_tree", quantity=60, locations=frozenset({(0, 0)}))
+        one = GatherAction(resource_code="spruce_tree", quantity=1, locations=frozenset({(0, 0)}),
+                           learned_drops=LearnedDrops.empty())
+        sixty = GatherAction(resource_code="spruce_tree", quantity=60, locations=frozenset({(0, 0)}),
+                             learned_drops=LearnedDrops.empty())
         assert one.learning_key() == sixty.learning_key()
 
     def test_learned_cost_key_separates_a_drop_override_from_the_base_drop(self):
@@ -486,9 +498,9 @@ class TestGatherAction:
         tile, and secondary drops are far rarer than the primary — so its
         measured cost per unit is a different figure. Sharing the base
         resource's key would pool the two and make both learned costs wrong."""
-        primary = GatherAction(resource_code="rocks", locations=frozenset({(0, 0)}))
+        primary = GatherAction(resource_code="rocks", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
         secondary = GatherAction(resource_code="rocks", drop_item_override="rare_gem",
-                                 locations=frozenset({(0, 0)}))
+                                 locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
         assert secondary.learning_key() == "Gather(rocks->rare_gem)"
         assert secondary.learning_key() != primary.learning_key()
 
@@ -1323,7 +1335,8 @@ class TestGatherActionTaskProgress:
     def test_gather_does_not_advance_items_task_even_when_drop_matches(self):
         gd = make_game_data(resource_locs={"copper_rocks": [(2, 0)]})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
-        action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]))
+        action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]),
+                              learned_drops=LearnedDrops.empty())
         state = make_state(task_code="copper_ore", task_type="items", task_progress=3, task_total=10)
         new_state = action.apply(state, gd)
         assert new_state.task_progress == 3                # unchanged
@@ -1332,7 +1345,8 @@ class TestGatherActionTaskProgress:
     def test_no_change_when_task_type_wrong(self):
         gd = make_game_data(resource_locs={"copper_rocks": [(2, 0)]})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
-        action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]))
+        action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]),
+                              learned_drops=LearnedDrops.empty())
         state = make_state(task_code="copper_ore", task_type="monsters", task_progress=3, task_total=10)
         new_state = action.apply(state, gd)
         assert new_state.task_progress == 3
@@ -1340,7 +1354,8 @@ class TestGatherActionTaskProgress:
     def test_no_change_when_drop_doesnt_match_task(self):
         gd = make_game_data(resource_locs={"ash_tree": [(2, 0)]})
         gd._resource_drops = {"ash_tree": "ash_wood"}
-        action = GatherAction(resource_code="ash_tree", locations=frozenset([(2, 0)]))
+        action = GatherAction(resource_code="ash_tree", locations=frozenset([(2, 0)]),
+                              learned_drops=LearnedDrops.empty())
         state = make_state(task_code="copper_ore", task_type="items", task_progress=3, task_total=10)
         new_state = action.apply(state, gd)
         assert new_state.task_progress == 3
@@ -1401,7 +1416,8 @@ def test_fight_action_cost_uses_history_when_provided():
                 session_id="x", cycle_index=i, character="x", outcome="ok",
                 action_repr="Fight(yellow_slime)", actual_cooldown_seconds=25.0,
             ))
-        action = FightAction(monster_code="yellow_slime", locations=frozenset({(1, 1)}))
+        action = FightAction(monster_code="yellow_slime", locations=frozenset({(1, 1)}),
+                             learned_drops=LearnedDrops.empty())
         state = make_state(x=1, y=1, hp=100, max_hp=100)
         gd = GameData()
         gd._monster_level = {"yellow_slime": 2}
@@ -1435,7 +1451,7 @@ def test_fight_action_cost_penalises_low_success_rate():
                 session_id="x", cycle_index=i, character="x", outcome="error:X",
                 action_repr="Fight(z)", actual_cooldown_seconds=99.0,
             ))
-        action = FightAction(monster_code="z", locations=frozenset({(1, 1)}))
+        action = FightAction(monster_code="z", locations=frozenset({(1, 1)}), learned_drops=LearnedDrops.empty())
         state = make_state(x=1, y=1, hp=100, max_hp=100)
         gd = GameData()
         gd._monster_level = {"z": 1}
@@ -1456,7 +1472,8 @@ def test_gather_action_cost_uses_history_when_provided():
     try:
         store = LearningStore(db_path=path, character="testchar")
         store.start_session()
-        action = GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 2)}))
+        action = GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 2)}),
+                              learned_drops=LearnedDrops.empty())
         # Records under EXACTLY what player.py:1190 writes
         # (`action_repr=action.learning_key()`) so this is a genuine
         # write/read round-trip, not a fixture that assumes its own
@@ -1600,7 +1617,7 @@ class TestGatherRareDropTargeting:
         gd._resource_skill = {"copper_rocks": ("mining", 1)}
         action = GatherAction(resource_code="copper_rocks",
                               locations=frozenset({(0, 0)}),
-                              drop_item_override="emerald_stone")
+                              drop_item_override="emerald_stone", learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, inventory={}, inventory_max=20)
         post = action.apply(state, gd)
         assert post.inventory.get("emerald_stone") == 1
@@ -1618,7 +1635,7 @@ class TestGatherRareDropTargeting:
         gd.world.bank_tile = (1, 1)
         gd.world.taskmaster_tile = (2, 2)
         actions = build_actions(gd, None, None, bank_accessible=False,
-                                task_exchange_min_coins=0)
+                                task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
         names = {repr(a) for a in actions}
         assert "Gather(copper_rocks×1)" in names
         assert "Gather(copper_rocks->emerald_stone×1)" in names
@@ -1641,12 +1658,12 @@ def test_factory_emits_equip_for_owned_recipeless_equippable():
     gd.world.taskmaster_tile = (2, 2)
     held = make_state(inventory={"dune_bag": 1})
     names = {repr(a) for a in build_actions(gd, held, None, bank_accessible=True,
-                                            task_exchange_min_coins=0)}
+                                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())}
     assert "Equip(dune_bag->bag_slot)" in names, sorted(
         n for n in names if "dune" in n)
     banked = make_state(bank_items={"dune_bag": 1})
     names_b = {repr(a) for a in build_actions(gd, banked, None, bank_accessible=True,
-                                              task_exchange_min_coins=0)}
+                                              task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())}
     assert "Equip(dune_bag->bag_slot)" in names_b
     assert any(n.startswith("Withdraw(dune_bag") for n in names_b), sorted(
         n for n in names_b if "dune" in n)

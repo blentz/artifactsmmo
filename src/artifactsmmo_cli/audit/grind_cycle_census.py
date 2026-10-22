@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -88,7 +89,8 @@ def run_census(game_data: GameData) -> list[GrindCycleResult]:
     for name, scenario in SCENARIOS.items():
         state = derived_scenario_state(scenario, game_data)
         actions = build_actions(game_data, state, objective, bank_accessible=True,
-                                task_exchange_min_coins=0)
+                                task_exchange_min_coins=0,
+                            learned_drops=LearnedDrops.empty())
         for skill in SKILL_NAMES:
             level = state.skills[skill]
             declined: list[str] = []

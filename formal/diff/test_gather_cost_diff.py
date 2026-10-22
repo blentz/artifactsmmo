@@ -67,6 +67,7 @@ from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Gather
 from artifactsmmo_cli.ai.item_catalog import ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
 
@@ -109,7 +110,7 @@ def _lean_gather_cost(dist: int, qty: int, banked: int, mismatch: bool,
 def _check(dist: int, qty: int, banked: int) -> float:
     action = GatherAction(resource_code=_RESOURCE, quantity=qty,
                           locations=frozenset({(dist, 0)}),
-                          drop_item_override=_DROP_ITEM)
+                          drop_item_override=_DROP_ITEM, learned_drops=LearnedDrops.empty())
     state = _state(0, 0, banked)
     py_cost = action.cost(state, GameData(), history=None)
     lean_cost = _lean_gather_cost(dist, qty, banked, mismatch=False)
@@ -138,7 +139,7 @@ def _check_mismatch(dist: int, qty: int, banked: int) -> float:
     gd = _mismatch_game_data()
     action = GatherAction(resource_code=_MISMATCH_RESOURCE, quantity=qty,
                           locations=frozenset({(dist, 0)}),
-                          drop_item_override=_DROP_ITEM)
+                          drop_item_override=_DROP_ITEM, learned_drops=LearnedDrops.empty())
     state = dataclasses.replace(_state(0, 0, banked),
                                 inventory={_BETTER_TOOL: 1},
                                 equipment={"weapon_slot": None})
@@ -358,7 +359,8 @@ def test_history_none_is_exactly_static():
     """Pins the documented boundary: `history=None` returns the bare static
     term this whole file models, with no learned-cost blending at all."""
     action = GatherAction(resource_code=_RESOURCE, quantity=7,
-                          locations=frozenset({(3, 0)}), drop_item_override=_DROP_ITEM)
+                          locations=frozenset({(3, 0)}), drop_item_override=_DROP_ITEM,
+                              learned_drops=LearnedDrops.empty())
     state = _state(0, 0, banked=2)
     static = action.cost(state, GameData(), history=None)
     assert static == 6.0 * 7 + 5 * 3 + 2 * 100.0
@@ -378,7 +380,7 @@ def test_negative_inputs_are_unreachable_by_construction(qty, banked, dist):
 # ─── Rated: a secondary drop is priced per GATHER (`gatherCostRated`) ─────────
 # Live 2026-10-05: `Gather(ash_tree->apple)` was priced at one gather per apple,
 # and the fleet spent 554 gathers on 25 apples (rate 20). The batch is `qty`
-# units but `qty * expected_gathers` server gathers.
+# units but `qty * attempts_per_unit` server gathers, at the learned chance.
 
 _RATED_RESOURCE = "rated_tree"
 
@@ -391,14 +393,24 @@ def _rated_game_data(rate: int, mn: int, mx: int) -> GameData:
     return gd
 
 
-def _check_rated(dist: int, qty: int, banked: int, rate: int, mn: int, mx: int) -> float:
+def _check_rated(dist: int, qty: int, banked: int, rate: int, mn: int, mx: int,
+                 observed: int = 0, hits: int = 0) -> float:
+    """The shipped cost against `gatherCostRated` at the per-unit gathers the
+    action itself charges: the LEARNED drop model's (`GatherAction.gathers`,
+    ruling T16a) over `observed` gathers with `hits` drops, the prior alone
+    when nothing is observed."""
     gd = _rated_game_data(rate, mn, mx)
-    per_unit = gd.gathers_per_unit(_RATED_RESOURCE, _DROP_ITEM)
-    assert per_unit == Fraction(2 * rate, mn + mx), "fixture is vacuous: the row was not read"
+    evidence = LearnedDrops(((_RATED_RESOURCE, observed),),
+                            (((_RATED_RESOURCE, _DROP_ITEM), hits),), Fraction(0))
+    per_unit = evidence.attempts_per_unit(_RATED_RESOURCE, _DROP_ITEM, rate, mn, mx, 0)
+    assert per_unit == Fraction(2 * (rate + observed), (1 + hits) * (mn + mx)), \
+        "fixture is vacuous: the row was not read"
     action = GatherAction(resource_code=_RATED_RESOURCE, quantity=qty,
                           locations=frozenset({(dist, 0)}),
-                          drop_item_override=_DROP_ITEM)
-    py_cost = action.cost(_state(0, 0, banked), gd, history=None)
+                          drop_item_override=_DROP_ITEM, learned_drops=evidence)
+    state = _state(0, 0, banked)
+    assert action.gathers(state, gd) == qty * per_unit
+    py_cost = action.cost(state, gd, history=None)
     lean_cost = _lean_gather_cost(dist, qty, banked, mismatch=False, per_unit=per_unit)
     # The shipped cost is exact `Fraction` arithmetic rounded ONCE, so it is the
     # float nearest the proved rational, bit for bit.
@@ -417,6 +429,27 @@ def _check_rated(dist: int, qty: int, banked: int, rate: int, mn: int, mx: int) 
 )
 def test_rated_gather_cost_matches_lean(dist, qty, banked, rate, mn, extra):
     _check_rated(dist, qty, banked, rate, mn, mn + extra)
+
+
+@settings(max_examples=300, deadline=None)
+@given(
+    dist=st.integers(min_value=0, max_value=200),
+    qty=st.integers(min_value=0, max_value=100),
+    rate=st.integers(min_value=1, max_value=1000),
+    observed=st.integers(min_value=0, max_value=2000),
+    data=st.data(),
+)
+def test_a_learned_gather_cost_matches_lean(dist, qty, rate, observed, data):
+    """The learned chance prices the batch: any observed gathers and hits."""
+    hits = data.draw(st.integers(min_value=0, max_value=observed))
+    _check_rated(dist, qty, 0, rate, 1, 1, observed, hits)
+
+
+def test_the_live_pearls_are_priced_at_their_learned_chance():
+    """`small_pearls` off `trout_spot` (1 in 300): 383 gathers for 2 make a
+    pearl 683/3 gathers, so 3 pearls are 683 gathers and one walk."""
+    assert _check_rated(dist=2, qty=3, banked=0, rate=300, mn=1, mx=1,
+                        observed=383, hits=2) == 6.0 * 683 + 5 * 2
 
 
 def test_apple_is_priced_at_twenty_gathers_a_unit():

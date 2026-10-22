@@ -1,8 +1,14 @@
-"""Yield-rate-optimal gather-source selection. When a needed item is the primary
-drop of more than one resource, pick the source minimizing the EXPECTED number of
-gathers to acquire one unit — `rate / avg_quantity` — tie-broken by nearest node
-then code (a total order ⇒ a unique, deterministic winner). Pure: no I/O. This is
-the differential target proved in formal/Formal/GatherSelection.lean over exact rationals (Q).
+"""Expected-attempts-optimal gather-source selection. When a needed item is a
+drop of more than one resource, pick the source minimizing the EXPECTED number
+of gathers to acquire one unit — the learned drop model's attempts per unit
+(`LearnedDrops.attempts_per_unit`: `1 / (chance × mean quantity)`, spec
+2026-10-18 §2.8, ruling T16a) — tie-broken by nearest node then code (a total
+order ⇒ a unique, deterministic winner). Pure: no I/O. This is the differential
+target proved in formal/Formal/GatherSelection.lean over exact rationals (Q).
+
+The key is the SAME figure the planner's gather charges (`GatherAction.gathers`)
+and the acquisition walk's GATHER route prices (`acquisition_cost._gather_actions`),
+so the source a picker keeps is the one both producers price.
 """
 
 from dataclasses import dataclass
@@ -12,31 +18,12 @@ from fractions import Fraction
 @dataclass(frozen=True)
 class GatherCandidate:
     resource_code: str
-    rate: int          # 1-in-N drop rate (>= 1)
-    min_quantity: int  # >= 1
-    max_quantity: int  # >= min_quantity
-    distance: int      # Manhattan distance to nearest node (>= 0)
-
-
-def expected_gathers(rate: int, min_quantity: int, max_quantity: int) -> Fraction:
-    """Expected gathers to acquire one unit of a drop row: rate / average yield.
-    Exact rational (never float) so the proof is about the real ordering, not a
-    surrogate. Public because the planner's price of a gather
-    (`GatherAction.cost`, via `GameData.gathers_per_unit`) charges THIS figure
-    per unit: a planner gather credits one unit, and a 1-in-20 secondary drop
-    takes 20 real gathers to deliver it. The acquisition walk's GATHER route no
-    longer reads it: it prices the LEARNED chance
-    (`acquisition_cost._units_per_attempt`, spec 2026-10-18 §2.8)."""
-    avg_quantity = Fraction(min_quantity + max_quantity, 2)
-    return Fraction(rate) / avg_quantity
-
-
-def _expected_gathers(c: GatherCandidate) -> Fraction:
-    return expected_gathers(c.rate, c.min_quantity, c.max_quantity)
+    attempts: Fraction  # expected gathers per unit (> 0)
+    distance: int       # Manhattan distance to nearest node (>= 0)
 
 
 def _key(c: GatherCandidate) -> tuple[Fraction, int, str]:
-    return (_expected_gathers(c), c.distance, c.resource_code)
+    return (c.attempts, c.distance, c.resource_code)
 
 
 def select_gather_source(item: str, candidates: list[GatherCandidate]) -> str | None:

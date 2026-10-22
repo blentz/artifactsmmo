@@ -170,6 +170,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -259,6 +260,7 @@ def _run(name: str) -> PlanReport:
     gd = shared_world(BUNDLE)
     player = GamePlayer(character=name, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(_state(name, gd), gd)
     return player.plan_from_state()
 
@@ -284,6 +286,7 @@ def _run_with(name: str, gd: GameData) -> PlanReport:
     """`_run`, against a caller-supplied catalog."""
     player = GamePlayer(character=name, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(_state(name, gd), gd)
     return player.plan_from_state()
 
@@ -296,6 +299,7 @@ def _plan_root(name: str, root: ObtainItem) -> tuple[str, list[str], list[str]]:
     gd = _bundle()
     player = GamePlayer(character=name, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(_state(name, gd), gd)
     assert player.state is not None and player.game_data is not None
     ctx = player._selection_context()
@@ -414,6 +418,7 @@ def test_l48_event_active_pursues_event_gear() -> None:
     gd_event = load_bundle_game_data(BUNDLE)
     overlay = GamePlayer(character="l48_event_active", history=None)
     overlay._offline_timing = committed_timing()
+    overlay._learned_drops = LearnedDrops.empty()
     overlay.seed_offline(_state("l48_event_active", gd_event), gd_event)
     assert overlay._objective is not None
     targets = overlay._objective.gear_targets_with_blockers(overlay.state, None)
@@ -979,6 +984,7 @@ def test_l35_boots_drop_farm_fights_grey_dropper() -> None:
     state = _state("l35_boots_drop_farm", gd)
     player = GamePlayer(character="l35_boots_drop_farm", history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, gd)
     actions = player._build_actions()
     goal = UpgradeEquipmentGoal(committed_target=("wooden_club", "weapon_slot"))

@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
@@ -106,7 +107,7 @@ def _chain(state: WorldState, gd: GameData, monster: str, level: int) -> bool:
     if not isinstance(goal, GrindCharacterXPGoal):
         return False
     # Step 3: G4 applicability — FightAction(monster).is_applicable.
-    fight = FightAction(monster_code=monster, locations=frozenset({(0, 0)}))
+    fight = FightAction(monster_code=monster, locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
     return fight.is_applicable(state, gd)
 
 

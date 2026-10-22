@@ -43,6 +43,7 @@ from artifactsmmo_cli.ai.constants import (
     GE_ORDER_REFRESH_INTERVAL_SECONDS,
 )
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state, patched_logs
@@ -177,6 +178,7 @@ class TestPlayerRefreshesOn404:
     def _run_fill_against_404(gd: GameData | None):
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.state = make_state(x=5, y=1)
         player.game_data = gd
         action = GeFillSellOrderAction(
@@ -255,6 +257,7 @@ class TestPeriodicReload:
         clock has never been set, i.e. the first cycle of a run)."""
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.game_data = gd
         if elapsed is not None:
             player._ge_orders_reloaded_at = 1000.0 - elapsed
@@ -392,6 +395,7 @@ def test_the_run_loop_actually_calls_the_periodic_reload():
     fire from run()'s own cycle, not merely be callable."""
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     client = MagicMock()
     seen: list[str] = []
 
@@ -436,6 +440,7 @@ class TestOfferShortRefresh:
     def _run_fill_against(code: int, message: str, gd: GameData | None):
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.state = make_state(x=5, y=1)
         player.game_data = gd
         action = GeFillSellOrderAction(

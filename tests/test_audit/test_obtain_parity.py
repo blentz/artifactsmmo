@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_sources import SourceKind
 from artifactsmmo_cli.audit import obtain_parity_completeness as opc
@@ -229,7 +230,7 @@ def test_action_source_kind_maps_every_obtain_action() -> None:
                       workshop_location=(1, 1))) is SourceKind.RECYCLE
     assert action_source_kind(CraftAction(code="copper_bar")) is SourceKind.CRAFT
     assert action_source_kind(
-        GatherAction(resource_code="copper_rocks")) is SourceKind.GATHER
+        GatherAction(resource_code="copper_rocks", learned_drops=LearnedDrops.empty())) is SourceKind.GATHER
     assert action_source_kind(
         NpcBuyAction(npc_code="tailor", item_code="cloth")) is SourceKind.BUY
     # GE_FILL: the census must SEE the Grand Exchange route. Before it did, the
@@ -240,7 +241,7 @@ def test_action_source_kind_maps_every_obtain_action() -> None:
         GeFillSellOrderAction(order_id="ord-1", item_code="cloth",
                               price=10)) is SourceKind.GE_FILL
     assert action_source_kind(
-        FightAction(monster_code="chicken")) is SourceKind.DROP
+        FightAction(monster_code="chicken", learned_drops=LearnedDrops.empty())) is SourceKind.DROP
     # A scaffolding leg obtains nothing.
     assert action_source_kind(WaitAction()) is None
 
@@ -248,7 +249,7 @@ def test_action_source_kind_maps_every_obtain_action() -> None:
 def test_action_yields_uses_the_per_kind_target_relation(
         bundle_game_data: GameData) -> None:
     gd = bundle_game_data
-    assert action_yields(GatherAction(resource_code="copper_rocks"),
+    assert action_yields(GatherAction(resource_code="copper_rocks", learned_drops=LearnedDrops.empty()),
                          "copper_ore", gd)
     assert action_yields(CraftAction(code="copper_bar"), "copper_bar", gd)
     assert action_yields(WithdrawItemAction(code="copper_ore", quantity=1),
@@ -258,14 +259,14 @@ def test_action_yields_uses_the_per_kind_target_relation(
                                        workshop_location=(1, 1)), "ash_plank", gd)
     assert action_yields(NpcBuyAction(npc_code="tailor", item_code="cloth"),
                          "cloth", gd)
-    assert action_yields(FightAction(monster_code="chicken"), "feather", gd)
+    assert action_yields(FightAction(monster_code="chicken", learned_drops=LearnedDrops.empty()), "feather", gd)
     # A GE fill yields the item the standing order is FOR.
     assert action_yields(GeFillSellOrderAction(order_id="ord-1", item_code="cloth",
                                                price=10), "cloth", gd)
     assert not action_yields(GeFillSellOrderAction(order_id="ord-1", item_code="cloth",
                                                    price=10), "copper_ore", gd)
     # Non-matches and a non-obtain action yield nothing.
-    assert not action_yields(GatherAction(resource_code="copper_rocks"),
+    assert not action_yields(GatherAction(resource_code="copper_rocks", learned_drops=LearnedDrops.empty()),
                              "iron_ore", gd)
     assert not action_yields(WaitAction(), "copper_ore", gd)
 
@@ -349,7 +350,7 @@ def test_check_goal_accepts_the_expected_step(bundle_game_data: GameData) -> Non
 # ---------------------------------------------------------------------------
 
 def test_reproduction_faithful_guard() -> None:
-    gather = GatherAction(resource_code="copper_rocks")
+    gather = GatherAction(resource_code="copper_rocks", learned_drops=LearnedDrops.empty())
     craft = CraftAction(code="copper_bar")
     # Equal plans, and an empty descent, both pass.
     _assert_reproduction_faithful("gather", [gather], [gather])
@@ -361,7 +362,7 @@ def test_reproduction_faithful_guard() -> None:
 
 
 def test_obtainable_guard() -> None:
-    gather = GatherAction(resource_code="copper_rocks")
+    gather = GatherAction(resource_code="copper_rocks", learned_drops=LearnedDrops.empty())
     # The walk serves -> ok. A timed-out empty walk -> ok (the timeout is the
     # story, classified elsewhere).
     _assert_obtainable("gather", "copper_ore", [gather], planner_failed=False)

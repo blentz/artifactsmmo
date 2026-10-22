@@ -10,7 +10,7 @@ from fractions import Fraction
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.drop_chance_core import chance_at, fit_k, posterior_chance
+from artifactsmmo_cli.ai.drop_chance_core import chance_at, fit_k, posterior_chance, units_per_attempt
 from formal.diff.oracle_client import run_oracle
 
 
@@ -59,6 +59,37 @@ def test_drop_chance_matches_lean(
     for case, row in zip(flat, rows, strict=True):
         assert chance_at(*case) == _frac(row), case
         assert posterior_chance(*case[:3]) == _frac(row, "postNum", "postDen"), case
+
+
+@settings(max_examples=300, deadline=None)
+@given(cases=st.lists(st.tuples(_chance_case, st.integers(min_value=1, max_value=10),
+                                st.integers(min_value=0, max_value=10)),
+                      min_size=1, max_size=30))
+def test_units_per_attempt_matches_lean(
+        cases: list[tuple[tuple[tuple[int, int, int], Fraction, int], int, int]]) -> None:
+    """`units_per_attempt` (ruling T16a, the one drop model) against
+    `Formal.DropChance.units`: the chance times the mean of `min..min+extra`."""
+    flat = [((*observation, k, prospecting), min_q, min_q + extra)
+            for (observation, k, prospecting), min_q, extra in cases]
+    rows = run_oracle("drop_units", [[*_chance_args(*chance), min_q, max_q]
+                                     for chance, min_q, max_q in flat])
+    for (chance, min_q, max_q), row in zip(flat, rows, strict=True):
+        api_rate, attempts, hits, k, prospecting = chance
+        assert units_per_attempt(api_rate, min_q, max_q, attempts, hits, k,
+                                 prospecting) == _frac(row), (chance, min_q, max_q)
+
+
+def test_units_edges_against_lean() -> None:
+    """The prior pearl (1/300), the live trout_spot pearls (3/683), a drop of
+    1 to 3 at 1 in 8 (1/4), and a capped chance times a mean of 2."""
+    cases = [(300, 0, 0, Fraction(0), 0, 1, 1), (300, 383, 2, Fraction(0), 0, 1, 1),
+             (8, 0, 0, Fraction(0), 0, 1, 3), (1, 0, 0, Fraction(1, 5), 10, 1, 3)]
+    rows = run_oracle("drop_units", [[*_chance_args(*case[:5]), case[5], case[6]]
+                                     for case in cases])
+    expected = [Fraction(1, 300), Fraction(3, 683), Fraction(1, 4), Fraction(2)]
+    assert [_frac(row) for row in rows] == expected
+    assert [units_per_attempt(r, mn, mx, a, h, k, p)
+            for r, a, h, k, p, mn, mx in cases] == expected
 
 
 @settings(max_examples=300, deadline=None)

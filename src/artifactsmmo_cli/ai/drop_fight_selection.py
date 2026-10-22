@@ -20,7 +20,11 @@ fightable xp-positive one.
 
 The ranking itself is the proved core (`select_monster_for_drop`,
 formal/Formal/MonsterDropSelection.lean): keep exactly ONE dropper, the
-lex-argmin of the expected-kills metric over rate/quantity/distance.
+lex-argmin of the expected kills per unit, then distance. The expected kills are
+the learned drop model's (`LearnedDrops.attempts_per_unit`, ruling T16a) at
+`state.prospecting`, read off the evidence each candidate fight carries
+(`FightAction.learned_drops`, the cycle's value): the same wins-per-unit the
+acquisition walk prices the drop at.
 
 `allow_grey` is the caller's policy, deliberately NOT decided here nor in the
 oracle — the callers disagree on it for good reasons documented at their call
@@ -71,8 +75,10 @@ def select_drop_fight(item: str, actions: list[Action], state: WorldState,
         else:
             dist = 0
         drop_candidates.append(MonsterDropCandidate(
-            monster_code=monster_code, rate=rate,
-            min_quantity=mn, max_quantity=mx, distance=dist))
+            monster_code=monster_code,
+            attempts=fight.learned_drops.attempts_per_unit(
+                monster_code, item, rate, mn, mx, state.prospecting),
+            distance=dist))
         winner_fights[monster_code] = fight
     chosen = select_monster_for_drop(item, drop_candidates)
     if chosen is None:

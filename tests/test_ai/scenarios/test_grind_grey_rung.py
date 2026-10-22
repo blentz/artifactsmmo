@@ -49,6 +49,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
@@ -77,6 +78,7 @@ def state(game_data: GameData) -> WorldState:
 def player(game_data: GameData, state: WorldState) -> GamePlayer:
     p = GamePlayer(character=SCENARIO, history=None)
     p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
     p.seed_offline(state, game_data)
     return p
 

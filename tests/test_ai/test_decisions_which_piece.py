@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.decisions.which_piece_is_next import WhichPieceIsNext
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import gear_objective
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -240,6 +241,7 @@ def test_the_held_cell_grinds_exactly_the_next_level(bundle: GameData) -> None:
     assert _resolve(state, bundle, objective, ctx=CTX).root == ReachCharLevel(level=15)
     player = GamePlayer(character="l14_wears_its_target", history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, bundle)
     report = player.plan_from_state()
     assert report.decision.chosen_root == ReachCharLevel(level=15)

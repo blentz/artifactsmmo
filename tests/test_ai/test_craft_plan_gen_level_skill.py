@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY
 from artifactsmmo_cli.ai.source_kind import SourceKind
@@ -60,7 +61,7 @@ class TestASkillGateIsASubTask:
         del gd._item_stats["trinket"]
         state = make_state(inventory={}, bank_items={}, skills={"gearcrafting": 1})
         actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
-                                bank_accessible=True, task_exchange_min_coins=0)
+                                bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
         declined: list[str] = []
 
         assert decompose(GatherMaterialsGoal("widget", {"widget": 1}), state, gd, actions,
@@ -98,7 +99,7 @@ class TestAGrindCycleEndsInItsEarningLeg:
         gd = _gd()
         state = make_state(inventory={}, bank_items={}, skills={"gearcrafting": 1})
         actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
-                                bank_accessible=True, task_exchange_min_coins=0)
+                                bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
         legs = decompose(ReachSkillGoal("gearcrafting", 2), state, gd, actions, _ctx())
         assert [repr(a) for a in legs or []] == ["Gather(gear_ore_rocks×1)", "Craft(trinket×1)"]
 

@@ -6,6 +6,7 @@ import tempfile
 
 from artifactsmmo_cli.ai.file_tracer import FileTracer
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -81,6 +82,8 @@ class TestPlayerTracer:
         player = GamePlayer(character="testchar", tracer=CapturingTracer())
 
         player._offline_timing = committed_timing()
+
+        player._learned_drops = LearnedDrops.empty()
         player.game_data = GameData()
         player.game_data._monster_level = {"chicken": 1}
         fill_monster_stat_defaults(player.game_data)
@@ -106,6 +109,7 @@ class TestPlayerTracer:
         """GamePlayer() without a tracer arg should use NullTracer (no-op)."""
         player = GamePlayer(character="testchar")
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         assert isinstance(player.tracer, NullTracer)
 
     def test_trace_state_includes_xp_skill_xp_max_xp(self):
@@ -125,6 +129,8 @@ class TestPlayerTracer:
         player = GamePlayer(character="testchar", tracer=CapturingTracer())
 
         player._offline_timing = committed_timing()
+
+        player._learned_drops = LearnedDrops.empty()
         player.game_data = GameData()
         player.game_data._monster_level = {"chicken": 1}
         fill_monster_stat_defaults(player.game_data)

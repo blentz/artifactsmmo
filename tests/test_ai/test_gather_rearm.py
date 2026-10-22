@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.craft_plan_gen import _with_rearm, decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_craft_plan_gen import _ctx
@@ -47,7 +48,7 @@ def _gd_combat() -> GameData:
 
 def _actions() -> list:
     return [
-        GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 0)})),
+        GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 0)}), learned_drops=LearnedDrops.empty()),
         CraftAction(code="copper_bar", quantity=1, workshop_location=(5, 0)),
         OptimizeLoadoutAction(target_skill="mining", game_data=None),
         OptimizeLoadoutAction(target_skill="fishing", game_data=None),
@@ -172,7 +173,7 @@ def test_with_rearm_fronts_combat_swap_for_suboptimal_fight() -> None:
     state = make_state(inventory={"copper_dagger": 1},
                        equipment={"weapon_slot": "copper_pickaxe"},
                        skills={"mining": 12})
-    fight = FightAction(monster_code="rat", locations=frozenset({(1, 1)}))
+    fight = FightAction(monster_code="rat", locations=frozenset({(1, 1)}), learned_drops=LearnedDrops.empty())
     result = _with_rearm([fight], state, gd)
     assert isinstance(result[0], OptimizeLoadoutAction), [type(a).__name__ for a in result]
     assert result[0].target_monster_code == "rat"
@@ -187,6 +188,6 @@ def test_with_rearm_leaves_optimal_fight_bare() -> None:
     gd = _gd_combat()
     state = make_state(equipment={"weapon_slot": "copper_dagger"},
                        skills={"mining": 12})
-    fight = FightAction(monster_code="rat", locations=frozenset({(1, 1)}))
+    fight = FightAction(monster_code="rat", locations=frozenset({(1, 1)}), learned_drops=LearnedDrops.empty())
     result = _with_rearm([fight], state, gd)
     assert result == [fight]

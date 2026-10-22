@@ -7,6 +7,7 @@ from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.bag_peak import plan_bag_peak
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -36,10 +37,11 @@ def test_a_fight_to_a_drop_target_holds_the_target():
     """A fight leg repeats until its drop target is held: one kill's `apply`
     adds one cowhide, the leg's end holds four."""
     state = make_state(inventory={})
-    fight = dataclasses.replace(FightAction(monster_code="cow", locations=frozenset({(1, 1)})),
+    fight = dataclasses.replace(FightAction(monster_code="cow", locations=frozenset({(1, 1)}),
+                                            learned_drops=LearnedDrops.empty()),
                                 drop_target=("cowhide", 4))
     assert plan_bag_peak([fight], state, _gd()) == (4, 1)
-    plain = FightAction(monster_code="cow", locations=frozenset({(1, 1)}))
+    plain = FightAction(monster_code="cow", locations=frozenset({(1, 1)}), learned_drops=LearnedDrops.empty())
     assert plan_bag_peak([plain], state, _gd()) == (1, 1)
 
 

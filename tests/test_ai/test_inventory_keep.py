@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.inventory_keep import (
     keep_owned,
     reason_quantity,
 )
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import Candidate, StrategyArbiter
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
@@ -33,7 +34,7 @@ def _ctx(**kw: object) -> SelectionContext:
     base = dict(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
                 initial_xp=0, task_exchange_min_coins=1, combat_monster=None)
     base.update(kw)
-    return SelectionContext(**base)
+    return SelectionContext(**base, learned_drops=LearnedDrops.empty())
 
 
 def _gd() -> GameData:

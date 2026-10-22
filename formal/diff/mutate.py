@@ -432,6 +432,8 @@ FIGHT_SECONDS_MODEL_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
 DROP_CHANCE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "drop_chance_core.py"
 DROP_OBSERVATIONS_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
                          / "drop_observations.py")
+LEARNED_DROPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learned_drops.py"
+DROP_FIGHT_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "drop_fight_selection.py"
 CONSUMABLE_PRICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price.py"
 LOOP_RATE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate_core.py"
 LOOP_RATE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate.py"
@@ -1302,6 +1304,18 @@ DROP_CHANCE_CORE_MUTATIONS = [
     ("drop chance: prospecting is ignored",
      "               * prospecting_multiplier(k, prospecting))",
      "               * 1)"),
+    ("units: a unit is the most an attempt yields",
+     "            * Fraction(min_quantity + max_quantity, 2))",
+     "            * max_quantity)"),
+    ("units: the mean quantity is the product, not the sum",
+     "            * Fraction(min_quantity + max_quantity, 2))",
+     "            * Fraction(min_quantity * max_quantity, 2))"),
+    ("units: the observations are ignored",
+     "    return (chance_at(api_rate, attempts, hits, k, prospecting)",
+     "    return (chance_at(api_rate, 0, 0, k, prospecting)"),
+    ("units: prospecting is ignored",
+     "    return (chance_at(api_rate, attempts, hits, k, prospecting)",
+     "    return (chance_at(api_rate, attempts, hits, k, 0)"),
     ("fit k: an impossible sample is accepted",
      "        if api_rate < 1 or not 0 <= hits <= attempts:\n            raise ValueError(f\"fit_k",
      "        if False:\n            raise ValueError(f\"fit_k"),
@@ -1325,6 +1339,17 @@ DROP_CHANCE_CORE_MUTATIONS = [
 # The drop observations adapter and its store reads (spec §2.8, rulings T10b,
 # T11b). Killed by tests/test_ai/test_drop_observations.py.
 DROP_OBSERVATIONS_MUTATIONS = [
+    ("learned drops: an attempt group counts once",
+     "        per_source[source] += count",
+     "        per_source[source] += 1"),
+    ("learned drops: the hits are not carried",
+     "            per_drop[source, item] += hit",
+     "            per_drop[source, item] += 0"),
+    ("learned drops: the slope is not carried",
+     "    return LearnedDrops(tuple(sorted(per_source.items())), tuple(sorted(per_drop.items())),\n"
+     "                        fleet_k(store, game_data))",
+     "    return LearnedDrops(tuple(sorted(per_source.items())), tuple(sorted(per_drop.items())),\n"
+     "                        Fraction(0))"),
     ("drop observations: the cache ignores its store",
      "    if (_COUNTS and _COUNTS[0][0] is store and _COUNTS[0][1] == since",
      "    if (_COUNTS and _COUNTS[0][1] == since"),
@@ -1399,27 +1424,101 @@ PRODUCE_FILTER_MUTATIONS = [
 # Drop and gather routes priced from the learned chance (spec 2026-10-18 §2.8,
 # plan B Task 12a). Killed by tests/test_ai/test_acquisition_cost_wrapper.py.
 DROP_PRICE_MUTATIONS = [
-    ("drop price: a storeless price ignores the API rate",
-     "        chance = posterior_chance(rate, 0, 0)",
-     "        chance = posterior_chance(1, 0, 0)"),
-    ("drop price: a store prices the prior alone",
-     "    if store is None:\n        chance = posterior_chance(rate, 0, 0)",
-     "    if True:\n        chance = posterior_chance(rate, 0, 0)"),
-    ("drop price: the observations are ignored",
-     "        chance = chance_at(rate, attempts, hits, fleet_k(",
-     "        chance = chance_at(rate, 0, 0, fleet_k("),
-    ("drop price: prospecting is ignored",
-     "fleet_k(store, game_data), state.prospecting)",
-     "fleet_k(store, game_data), 0)"),
-    ("drop price: a unit is the most an attempt yields",
-     "    return chance * Fraction(min_q + max_q, 2)",
-     "    return chance * max_q"),
+    ("drop price: a GATHER route ignores the context's evidence",
+     "                               item, source.code, state, game_data, ctx.drops()),",
+     "                               item, source.code, state, game_data, LearnedDrops.empty()),"),
+    ("drop price: a DROP route ignores the context's evidence",
+     "                                                  ctx.drops(), ctx.fight_records),",
+     "                                                  LearnedDrops.empty(), ctx.fight_records),"),
+    ("drop price: a gather ignores the worn prospecting",
+     "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q, state.prospecting)",
+     "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q, 0)"),
     ("drop price: a farm is one win a unit",
-     "    kills = 1 / _units_per_attempt(monster_code, item,",
-     "    kills = 0 * _units_per_attempt(monster_code, item,"),
+     "    kills = evidence.attempts_per_unit(monster_code, item, rate, min_q, max_q,",
+     "    kills = 0 * evidence.attempts_per_unit(monster_code, item, rate, min_q, max_q,"),
     ("gather price: a ready gather yields two a gather",
      "                           yield_per=1, capacity=source.capacity)",
      "                           yield_per=2, capacity=source.capacity)"),
+]
+
+# The cycle's drop evidence (ruling T16a, plan B Task 16): the one value every
+# drop consumer reads. Killed by tests/test_ai/test_one_drop_model.py.
+LEARNED_DROPS_MUTATIONS = [
+    ("learned drops: the observations are ignored",
+     "        return self._attempts.get(source, 0), self._hits.get((source, item), 0)",
+     "        return 0, 0"),
+    ("learned drops: the hits are ignored",
+     "        return self._attempts.get(source, 0), self._hits.get((source, item), 0)",
+     "        return self._attempts.get(source, 0), 0"),
+    ("learned drops: attempts per unit are the units",
+     "        return 1 / self.units_per_attempt(source, item, rate, min_quantity, max_quantity,",
+     "        return self.units_per_attempt(source, item, rate, min_quantity, max_quantity,"),
+]
+LEARNED_DROPS_SLOPE_MUTATIONS = [
+    ("learned drops: the slope is ignored",
+     "        return units_per_attempt(rate, min_quantity, max_quantity, attempts, hits,\n"
+     "                                 self.k, prospecting)",
+     "        return units_per_attempt(rate, min_quantity, max_quantity, attempts, hits,\n"
+     "                                 Fraction(0), prospecting)"),
+]
+# The consumers that ranked or priced a drop at the API rate read the evidence
+# (ruling T16a). Killed by tests/test_ai/test_one_drop_model.py.
+ONE_DROP_MODEL_GATHER_MUTATIONS = [
+    ("gather action: the planner prices the API prior",
+     "        return self.quantity * self.learned_drops.attempts_per_unit(",
+     "        return self.quantity * LearnedDrops.empty().attempts_per_unit("),
+]
+ONE_DROP_MODEL_OBTAIN_MUTATIONS = [
+    ("obtain model: the fast path ranks gathers by the API rate",
+     "            attempts = evidence.attempts_per_unit(route.via, item, rate, min_q, max_q,\n"
+     "                                                  self._state.prospecting)",
+     "            attempts = Fraction(rate)"),
+    ("obtain model: the primary gather is the table's first",
+     "        for rank, resource in enumerate(sorted(droppers, key=attempts)):",
+     "        for rank, resource in enumerate(droppers):"),
+    ("obtain model: the primary gather is the API-cheapest",
+     "            return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,\n"
+     "                                              self._state.prospecting)",
+     "            return Fraction(rate)"),
+]
+ONE_DROP_MODEL_NARROWING_MUTATIONS = [
+    ("gather narrowing: A* keeps the API-cheapest gather",
+     "                    attempts=a.learned_drops.attempts_per_unit(",
+     "                    attempts=rate + 0 * a.learned_drops.attempts_per_unit("),
+]
+ONE_DROP_MODEL_DROPPER_MUTATIONS = [
+    ("dropper pick: the API rate ranks the droppers",
+     "            attempts=fight.learned_drops.attempts_per_unit(",
+     "            attempts=rate + 0 * fight.learned_drops.attempts_per_unit("),
+]
+ONE_DROP_MODEL_PLAYER_MUTATIONS = [
+    ("player: the cycle's evidence ignores the store",
+     "        self._learned_drops = (learned_drops(self.history, self.game_data)\n"
+     "                               if self.history is not None else LearnedDrops.empty())",
+     "        self._learned_drops = LearnedDrops.empty()"),
+    ("player: the band context prices the prior",
+     "                                   learned_drops=self._cycle_learned_drops()))",
+     "                                   learned_drops=LearnedDrops.empty()))"),
+    ("player: the actions carry the prior",
+     "            learned_drops=self._cycle_learned_drops(),\n        )\n        # Route around",
+     "            learned_drops=LearnedDrops.empty(),\n        )\n        # Route around"),
+]
+# The grind prices its rungs at the cycle's evidence (ruling T16a). Killed by
+# tests/test_ai/test_loss_risk.py.
+ONE_DROP_MODEL_GRIND_MUTATIONS = [
+    ("grind: the memo ignores the drop evidence",
+     "        (state.utility1_slot_quantity, state.utility2_slot_quantity),\n        learned_drops,\n",
+     "        (state.utility1_slot_quantity, state.utility2_slot_quantity),\n"),
+    ("grind: the rungs price the prior",
+     "                          learned_drops=ctx.drops())",
+     "                          learned_drops=LearnedDrops.empty())"),
+]
+ONE_DROP_MODEL_FACTORY_MUTATIONS = [
+    ("factory: a targeted gather carries no evidence",
+     "                                        drop_item_override=drop_item, travel_region=region,\n"
+     "                                        learned_drops=learned_drops))",
+     "                                        drop_item_override=drop_item, travel_region=region,\n"
+     "                                        learned_drops=LearnedDrops.empty()))"),
 ]
 
 # The gear objective prices a drop at the fighter's prospecting (spec §2.8,
@@ -4250,18 +4349,19 @@ LEGACY_GATHER_SKILL_MUTATIONS = [
 # tests/test_ai/test_acquisition_cost_wrapper.py.
 GATED_GATHER_MUTATIONS = [
     ("acquisition_cost: a climb's gather ignores the observations",
-     "            actions_per_application=_gather_actions(item, route.via, state, game_data, store),",
-     "            actions_per_application=_gather_actions(item, route.via, state, game_data, None),"),
+     "            actions_per_application=_gather_actions(item, route.via, state, game_data, evidence),",
+     "            actions_per_application=_gather_actions(item, route.via, state, game_data,\n"
+     "                                                    LearnedDrops.empty()),"),
     ("acquisition_cost: no gated gather route",
      "        for kind in (SourceKind.CRAFT, SourceKind.GATHER):",
      "        for kind in (SourceKind.CRAFT,):"),
     # The apple bug (2026-10-05): a secondary drop priced at one gather a unit.
     ("acquisition_cost: a GATHER route ignores its drop rate (one gather a unit)",
-     "    return 1 / _units_per_attempt(resource, item, rate, min_q, max_q, state, game_data, store)",
+     "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q, state.prospecting)",
      "    return Fraction(1)"),
     ("acquisition_cost: a GATHER route's ratio inverted (yield per action as actions)",
-     "    return 1 / _units_per_attempt(resource, item, rate, min_q, max_q, state, game_data, store)",
-     "    return _units_per_attempt(resource, item, rate, min_q, max_q, state, game_data, store)"),
+     "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q, state.prospecting)",
+     "    return evidence.units_per_attempt(resource, item, rate, min_q, max_q, state.prospecting)"),
 ]
 # The grind ranks under its own pricing policy. Killed by
 # tests/test_ai/scenarios/test_fisher_cooking_rung.py.
@@ -5662,7 +5762,7 @@ GATHER_LOADOUT_SCALING_MUTATIONS = [
     # fleet spent 554 gathers on 25 apples. Killed by the rated pins against
     # `Formal.GatherCost.gatherCostRated`.
     ("gather cost: a secondary drop priced at one gather per unit (the apple bug)",
-     "        gathers = self.quantity * game_data.gathers_per_unit(self.resource_code, drop_item)",
+     "        gathers = self.gathers(state, game_data)",
      "        gathers = Fraction(self.quantity)"),
     # THE WALK ONCE PER ACTION (2026-10-09): `execute` walks to the node once and
     # gathers in place, so a batch of N pays one walk. Charged per gather it is
@@ -7968,6 +8068,7 @@ _ALL_SRCS = [
     FIGHT_TERMS_CORE_SRC, FIGHT_OUTCOME_CORE_SRC, FIGHT_ODDS_CORE_SRC, GROUP_FIGHT_CORE_SRC,
     CONSUMABLE_PRICE_CORE_SRC, CONSUMABLE_PRICE_SRC, LOOP_RATE_CORE_SRC, LOOP_RATE_SRC,
     FIGHT_SECONDS_CORE_SRC, FIGHT_SECONDS_MODEL_SRC, DROP_CHANCE_CORE_SRC, DROP_OBSERVATIONS_SRC,
+    LEARNED_DROPS_SRC, DROP_FIGHT_SELECTION_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
     ROOT_DECISION_SRC, GATHER_DEMAND_SRC, TUI_APP_SRC,
     OBTAIN_ITEM_ROUTING_SRC, COOLDOWN_WAIT_SRC, EQUIP_VALUE_SRC,
@@ -8491,19 +8592,6 @@ TASK_TRADE_CORE_MUTATIONS = [
 # diverges from the Lean `selectGatherSource` oracle. Killed by
 # formal/diff/test_gather_selection_diff.py.
 GATHER_SELECTION_MUTATIONS = [
-    # Drop the average-yield divisor: the metric degenerates to bare `rate`,
-    # ignoring min/max quantity. A high-yield high-rate source then loses to a
-    # low-yield low-rate one — the avg-quantity cases in the diff fire.
-    ("gather_selection: drop avg_quantity divisor (metric = rate only)",
-     "    avg_quantity = Fraction(min_quantity + max_quantity, 2)\n"
-     "    return Fraction(rate) / avg_quantity",
-     "    avg_quantity = Fraction(min_quantity + max_quantity, 2)\n"
-     "    return Fraction(rate)"),
-    # avg_quantity uses `*` instead of `+`: wrong average (min*max not min+max),
-    # so the expected-gathers ordering changes whenever min != max.
-    ("gather_selection: avg_quantity + -> * (wrong average)",
-     "    avg_quantity = Fraction(min_quantity + max_quantity, 2)",
-     "    avg_quantity = Fraction(min_quantity * max_quantity, 2)"),
     # Argmin -> argmax: pick the WORST (most expensive) source. Any list with two
     # distinct keys diverges from the Lean lex-min.
     ("gather_selection: min -> max (argmin becomes argmax)",
@@ -8513,14 +8601,14 @@ GATHER_SELECTION_MUTATIONS = [
     # metric, inverting the primary objective on any expected-gathers-vs-distance
     # tension.
     ("gather_selection: lex key swap (distance before expected_gathers)",
-     "    return (_expected_gathers(c), c.distance, c.resource_code)",
-     "    return (c.distance, _expected_gathers(c), c.resource_code)"),
+     "    return (c.attempts, c.distance, c.resource_code)",
+     "    return (c.distance, c.attempts, c.resource_code)"),
     # Drop the code tie-break (constant third field): two candidates tying on
     # (expected_gathers, distance) become order-ambiguous; Python `min` first-wins
     # by list position, diverging from the Lean code-ordered tie-break.
     ("gather_selection: drop code tie-break (third field constant)",
-     "    return (_expected_gathers(c), c.distance, c.resource_code)",
-     "    return (_expected_gathers(c), c.distance, \"\")"),
+     "    return (c.attempts, c.distance, c.resource_code)",
+     "    return (c.attempts, c.distance, \"\")"),
 ]
 
 
@@ -8624,18 +8712,6 @@ GATHER_STEP_TARGET_MUTATIONS = [
 # Killed by formal/diff/test_monster_drop_selection_diff.py. The distance
 # tie-break drop and the argmin->argmax flip are the two the task pins.
 MONSTER_DROP_SELECTION_MUTATIONS = [
-    # Drop the average-yield divisor: the metric degenerates to bare `rate`,
-    # ignoring min/max quantity; high-yield high-rate loses to low-yield low-rate.
-    ("monster_drop_selection: drop avg_quantity divisor (metric = rate only)",
-     "    avg_quantity = Fraction(c.min_quantity + c.max_quantity, 2)\n"
-     "    return Fraction(c.rate) / avg_quantity",
-     "    avg_quantity = Fraction(c.min_quantity + c.max_quantity, 2)\n"
-     "    return Fraction(c.rate)"),
-    # avg_quantity uses `*` instead of `+`: wrong average, ordering changes when
-    # min != max.
-    ("monster_drop_selection: avg_quantity + -> * (wrong average)",
-     "    avg_quantity = Fraction(c.min_quantity + c.max_quantity, 2)",
-     "    avg_quantity = Fraction(c.min_quantity * c.max_quantity, 2)"),
     # Argmin -> argmax: pick the WORST (most kills) monster. Any list with two
     # distinct keys diverges from the Lean lex-min (flips the `<` direction).
     ("monster_drop_selection: min -> max (argmin becomes argmax)",
@@ -8644,20 +8720,20 @@ MONSTER_DROP_SELECTION_MUTATIONS = [
     # Swap distance and expected_kills in the lex key: distance dominates, inverting
     # the primary objective on any kills-vs-distance tension.
     ("monster_drop_selection: lex key swap (distance before expected_kills)",
-     "    return (expected_kills(c), c.distance, c.monster_code)",
-     "    return (c.distance, expected_kills(c), c.monster_code)"),
+     "    return (c.attempts, c.distance, c.monster_code)",
+     "    return (c.distance, c.attempts, c.monster_code)"),
     # Drop the distance tie-break (constant second field): candidates tying on
     # expected_kills become distance-ambiguous; Python `min` first-wins by list
     # position, diverging from the Lean distance-ordered tie-break.
     ("monster_drop_selection: drop distance tie-break (second field constant)",
-     "    return (expected_kills(c), c.distance, c.monster_code)",
-     "    return (expected_kills(c), 0, c.monster_code)"),
+     "    return (c.attempts, c.distance, c.monster_code)",
+     "    return (c.attempts, 0, c.monster_code)"),
     # Drop the code tie-break (constant third field): candidates tying on
     # (expected_kills, distance) become order-ambiguous; Python `min` first-wins,
     # diverging from the Lean code-ordered tie-break.
     ("monster_drop_selection: drop code tie-break (third field constant)",
-     "    return (expected_kills(c), c.distance, c.monster_code)",
-     "    return (expected_kills(c), c.distance, \"\")"),
+     "    return (c.attempts, c.distance, c.monster_code)",
+     "    return (c.attempts, c.distance, \"\")"),
 ]
 
 
@@ -11821,6 +11897,24 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
     run_group(ACQUISITION_COST_SRC, DROP_PRICE_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(LEARNED_DROPS_SRC, LEARNED_DROPS_MUTATIONS,
+              "tests/test_ai/test_one_drop_model.py", survivors)
+    run_group(LEARNED_DROPS_SRC, LEARNED_DROPS_SLOPE_MUTATIONS,
+              "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(GATHERING_APPLY_SRC, ONE_DROP_MODEL_GATHER_MUTATIONS,
+              "tests/test_ai/test_one_drop_model.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, ONE_DROP_MODEL_OBTAIN_MUTATIONS,
+              "tests/test_ai/test_one_drop_model.py", survivors)
+    run_group(GATHERING_GOAL_SRC, ONE_DROP_MODEL_NARROWING_MUTATIONS,
+              "tests/test_ai/test_one_drop_model.py", survivors)
+    run_group(DROP_FIGHT_SELECTION_SRC, ONE_DROP_MODEL_DROPPER_MUTATIONS,
+              "tests/test_ai/test_one_drop_model.py", survivors)
+    run_group(FACTORY_SRC, ONE_DROP_MODEL_FACTORY_MUTATIONS,
+              "tests/test_ai/test_one_drop_model.py", survivors)
+    run_group(PLAYER_SRC, ONE_DROP_MODEL_PLAYER_MUTATIONS,
+              "tests/test_ai/test_one_drop_model.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, ONE_DROP_MODEL_GRIND_MUTATIONS,
+              "tests/test_ai/test_loss_risk.py", survivors)
     run_group(GEAR_OBJECTIVE_SRC, FIGHTER_PROSPECTING_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
     run_group(GEAR_OBJECTIVE_SRC, FIGHTER_PIECE_PRICE_MUTATIONS,

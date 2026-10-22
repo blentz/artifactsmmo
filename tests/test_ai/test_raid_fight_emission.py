@@ -14,6 +14,7 @@ FightAction, not a new action type.
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.raid_info import RaidInfo
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -52,7 +53,7 @@ def _fights_for(actions, code):
 
 def _build(state, gd):
     return build_actions(gd, state, None, bank_accessible=True,
-                         task_exchange_min_coins=1)
+                         task_exchange_min_coins=1, learned_drops=LearnedDrops.empty())
 
 
 def test_active_raid_emits_a_fight_at_the_raid_tile():

@@ -20,6 +20,7 @@ from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -144,6 +145,7 @@ def test_the_player_wires_its_planner_to_the_refusal_facts(bundle_game_data):
     """
     player = GamePlayer(character="C3P0")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.game_data = bundle_game_data
     player.state = make_state(level=20, inventory={"water_boost_potion": 3},
                               skills={"alchemy": 13})
@@ -198,6 +200,7 @@ def test_a_quantity_two_recycle_is_also_dropped_by_a_quantity_one_refusal():
     poison would silently match nothing."""
     player = GamePlayer(character="C3P0")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.state = make_state(level=20)
     player.game_data = _make_planner_gd()
 
@@ -217,6 +220,7 @@ def test_a_473_from_the_server_poisons_the_action(monkeypatch, bundle_game_data)
     """
     player = GamePlayer(character="C3P0")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.game_data = bundle_game_data
     player.state = make_state(level=20, inventory={"water_boost_potion": 3},
                               skills={"alchemy": 13})
@@ -244,6 +248,7 @@ def test_a_cooldown_does_not_poison_the_action(monkeypatch, bundle_game_data):
     must leave the action available, or the bot disables its own work."""
     player = GamePlayer(character="C3P0")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.game_data = bundle_game_data
     player.state = make_state(level=20, inventory={"water_boost_potion": 3},
                               skills={"alchemy": 13})
@@ -275,6 +280,7 @@ def test_a_485_from_the_server_poisons_the_equip(monkeypatch, bundle_game_data):
     refusal filter drops it on the NEXT cycle instead of re-deriving it."""
     player = GamePlayer(character="Lor")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.game_data = bundle_game_data
     player.state = make_state(
         level=20, inventory={"lich_race_medal": 1},
@@ -310,6 +316,7 @@ def test_a_485_poisons_the_code_in_every_slot_it_could_be_offered_for():
     next empty sibling."""
     player = GamePlayer(character="Lor")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.game_data = _make_planner_gd()
     player.state = make_state(
         level=20, inventory={"lich_race_medal": 1},
@@ -332,6 +339,7 @@ def test_the_refusal_predicate_is_safe_before_the_world_is_sensed():
     very first search."""
     player = GamePlayer(character="C3P0")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     assert player.state is None
 
     assert player._is_categorically_refused(

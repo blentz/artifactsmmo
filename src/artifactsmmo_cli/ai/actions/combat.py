@@ -21,6 +21,7 @@ from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_match import equipped_matches_loadout
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
@@ -109,6 +110,12 @@ class FightAction(Action):
     # before the fight (docs/PLAN_group_fights.md residual R2). Empty for a
     # solo fight; not in the repr (the party is).
     party_loadout: tuple[str, ...] = field(default=(), repr=False)
+    # The cycle's drop evidence (ruling T16a), the value the context carries:
+    # the dropper pick (`drop_fight_selection.select_drop_fight`) ranks this
+    # fight's drops by it. Required, never defaulted: a world with no store
+    # passes `LearnedDrops.empty()` (the API prior). Not part of the action's
+    # identity (repr, learning key, equality).
+    learned_drops: LearnedDrops = field(kw_only=True, repr=False, compare=False)
 
     _MIN_FREE_SLOTS = 1  # combat can drop loot; need at least 1 free capacity
 

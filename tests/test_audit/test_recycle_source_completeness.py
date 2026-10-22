@@ -20,6 +20,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_in_bag, keep_owned
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.audit.recycle_source_completeness import (
     RecycleSourceCell,
     RecycleSourceGapClass,
@@ -173,7 +174,7 @@ def test_partial_protection_verdict_rejects_over_destruction(
     unit = RecycleAction(code=cell.source, quantity=1, workshop_location=(1, 1))
     batch = RecycleAction(code=cell.source, quantity=2, workshop_location=(1, 1))
     gather = GatherAction(resource_code="copper_rocks",
-                          locations=frozenset({(1, 1)}))
+                          locations=frozenset({(1, 1)}), learned_drops=LearnedDrops.empty())
     assert recycle_source_cell_verdict(cell, [unit, gather], False, 1) is True
     assert recycle_source_cell_verdict(cell, [unit, unit, gather], False, 1) is False
     assert recycle_source_cell_verdict(cell, [batch, gather], False, 1) is False
@@ -463,7 +464,7 @@ def test_partial_verdict_needs_BOTH_routes(bundle_game_data: GameData) -> None:
     cell = _cells(bundle_game_data)[RecycleSourceKind.PARTIAL]
     recycle = RecycleAction(code="water_bow", quantity=1,
                             workshop_location=(1, 1))
-    gather = GatherAction(resource_code="ash_tree", locations=frozenset({(1, 1)}))
+    gather = GatherAction(resource_code="ash_tree", locations=frozenset({(1, 1)}), learned_drops=LearnedDrops.empty())
     assert recycle_source_cell_verdict(cell, [recycle, gather], False, 2) is True
     assert recycle_source_cell_verdict(cell, [recycle], False, 2) is False
     assert recycle_source_cell_verdict(cell, [gather], False, 2) is False

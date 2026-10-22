@@ -90,6 +90,7 @@ from artifactsmmo_cli.ai.inventory_keep import (
     keep_owned,
     reason_quantity,
 )
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
@@ -694,7 +695,8 @@ def plan_inventory(cell: InventoryCell, state: WorldState,
     ctx = census_ctx(cell.reason, state, game_data)
     objective = CharacterObjective.from_game_data(game_data)
     actions = build_actions(game_data, state, objective,
-                            bank_accessible=True, task_exchange_min_coins=0)
+                            bank_accessible=True, task_exchange_min_coins=0,
+                            learned_drops=LearnedDrops.empty())
     arbiter = StrategyArbiter(GOAPPlanner(), None)
     _goal, plan, tried = arbiter.select(
         census_decision(cell.reason, game_data), state, game_data, actions, ctx)

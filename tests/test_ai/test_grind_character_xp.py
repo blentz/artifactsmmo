@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.goals.grind_character_xp import (
     PRIORITY_FLOOR,
     GrindCharacterXPGoal,
 )
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -108,9 +109,9 @@ class TestRelevantActions:
         actions = [
             RestAction(),
             UseConsumableAction(_item_stats={}),
-            FightAction(monster_code="chicken"),
-            FightAction(monster_code="yellow_slime"),
-            GatherAction(resource_code="ash_tree"),
+            FightAction(monster_code="chicken", learned_drops=LearnedDrops.empty()),
+            FightAction(monster_code="yellow_slime", learned_drops=LearnedDrops.empty()),
+            GatherAction(resource_code="ash_tree", learned_drops=LearnedDrops.empty()),
         ]
         relevant = goal.relevant_actions(actions, make_state(), _gd_with_monster())
         codes = [a.monster_code for a in relevant if isinstance(a, FightAction)]
@@ -170,7 +171,7 @@ def _combat_gd() -> GameData:
 class TestFightCostPenalty:
     def test_fight_cost_penalized_when_loadout_suboptimal(self):
         gd = _combat_gd()
-        fight = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
+        fight = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
         under = make_state(level=1, equipment={"weapon_slot": "twig"}, inventory={"sword": 1}, x=0, y=0)
         optimal = make_state(level=1, equipment={"weapon_slot": "sword"}, inventory={}, x=0, y=0)
         assert fight.cost(under, gd) == fight.cost(optimal, gd) + LOADOUT_PENALTY
@@ -182,7 +183,7 @@ class TestFightCostPenalty:
         already-optimal loadout still fights directly with no swap."""
         gd = _combat_gd()
         actions = [
-            FightAction(monster_code="chicken", locations=frozenset({(0, 0)})),
+            FightAction(monster_code="chicken", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty()),
             OptimizeLoadoutAction(target_monster_code="chicken", game_data=gd),
         ]
         suboptimal = make_state(level=1, xp=0, task_code=None, hp=100, max_hp=100,

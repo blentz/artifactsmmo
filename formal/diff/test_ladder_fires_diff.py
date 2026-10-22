@@ -159,6 +159,7 @@ from artifactsmmo_cli.ai.fleet_work import SUPPLY_DEMAND_MIN
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
@@ -367,7 +368,7 @@ def _make_ctx(scn: Scenario) -> SelectionContext:
         gold_reserve=scn.gold_reserve,
         target_gear=frozenset(),
         target_tools=frozenset(),
-    )
+     learned_drops=LearnedDrops.empty())
 
 
 def _production_answers(
@@ -1139,7 +1140,7 @@ def _craft_relief_ctx() -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
-        draw_owed=True)
+        draw_owed=True, learned_drops=LearnedDrops.empty())
 
 
 def _craft_relief_world(inventory_max: int) -> WorldState:
@@ -1239,7 +1240,7 @@ def _recycle_ctx(*, protect_dagger: bool = False) -> SelectionContext:
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
         gear_keep={"dagger": 2} if protect_dagger else {},
-        draw_owed=True)
+        draw_owed=True, learned_drops=LearnedDrops.empty())
 
 
 def _recycle_world(dagger_qty: int) -> WorldState:
@@ -1325,7 +1326,7 @@ def _drain_ctx(*, protect_sap: bool = False) -> SelectionContext:
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
         gear_keep={"sap": 5} if protect_sap else {},
-        draw_owed=True)
+        draw_owed=True, learned_drops=LearnedDrops.empty())
 
 
 def _drain_world(bank_sap_qty: int) -> WorldState:
@@ -1436,7 +1437,7 @@ def _gebid_ctx(step_profile: dict[str, int]) -> SelectionContext:
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         step_profile=step_profile,
-        draw_owed=True)
+        draw_owed=True, learned_drops=LearnedDrops.empty())
 
 
 def _gebid_world(*, open_steel_order: bool = False) -> WorldState:
@@ -1623,7 +1624,7 @@ def _rest_combat_ctx() -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster="mob",
         target_gear=frozenset(), target_tools=frozenset(),
-        draw_owed=True))
+        draw_owed=True, learned_drops=LearnedDrops.empty()))
 
 
 def _rest_combat_world(hp: int, max_hp: int) -> WorldState:
@@ -1732,7 +1733,7 @@ def _plain_ctx(*, combat_monster: str | None = None,
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=combat_monster,
         target_gear=frozenset(), target_tools=frozenset(),
-        draw_owed=draw_owed)
+        draw_owed=draw_owed, learned_drops=LearnedDrops.empty())
 
 
 def _monsters_task_world(*, task_code: str, progress: int, total: int,
@@ -1880,7 +1881,7 @@ def _supply_ctx(demand: int, *, asymmetric: bool = False) -> SelectionContext:
         target_gear=frozenset(), target_tools=frozenset(),
         supply_target=("copper_ore", 999, demand),
         asymmetric_demand=frozenset({"copper_ore"}) if asymmetric else frozenset(),
-        draw_owed=False)
+        draw_owed=False, learned_drops=LearnedDrops.empty())
 
 
 def _assert_objective_step(ctx: SelectionContext, *, fires: bool) -> None:
@@ -1931,5 +1932,5 @@ def test_currency_recall_fires_objective_step() -> None:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
-        recall=("lich_race_medal", 2), draw_owed=False)
+        recall=("lich_race_medal", 2), draw_owed=False, learned_drops=LearnedDrops.empty())
     _assert_objective_step(ctx, fires=True)

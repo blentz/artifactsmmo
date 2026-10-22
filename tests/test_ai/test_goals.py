@@ -30,6 +30,7 @@ from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -78,8 +79,9 @@ class TestRestoreHPGoal:
         rest = RestAction()
         cook = CraftAction(code="cooked_chicken", quantity=1, workshop_location=(1, 1))
         move = MoveAction(x=1, y=0)
-        fight = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
-        gather = GatherAction(resource_code="ash_tree", locations=frozenset([(6, 1)]))
+        fight = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty())
+        gather = GatherAction(resource_code="ash_tree", locations=frozenset([(6, 1)]),
+                              learned_drops=LearnedDrops.empty())
         deposit = DepositAllAction()
         relevant = goal.relevant_actions(
             [rest, cook, move, fight, gather, deposit], state, gd)
@@ -119,6 +121,7 @@ class TestRestoreHPGoal:
         assert abs(1 - exit_x) + abs(1 - exit_y) == 15
         player = GamePlayer(character="l20_relief_full_bank", history=None)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.seed_offline(state, gd)
         planner = GOAPPlanner()
         plan = planner.plan(state, RestoreHPGoal(), list(player._build_actions()), gd,
@@ -1088,7 +1091,7 @@ class TestGatherMaterialsGoal:
         )
         actions = [
             RestAction(),
-            GatherAction(resource_code="ash_tree", locations=frozenset([(6, 1)])),
+            GatherAction(resource_code="ash_tree", locations=frozenset([(6, 1)]), learned_drops=LearnedDrops.empty()),
             CraftAction(code="ash_plank", quantity=1, workshop_location=(1, 1)),
             CraftAction(code="wooden_shield", quantity=1, workshop_location=(2, 2)),
             # One-craft-unit withdraw (8) + full-chain withdraw (48), as
@@ -1182,7 +1185,7 @@ class TestGatherMaterialsGoal:
         )
         actions = [
             RestAction(),
-            GatherAction(resource_code="ash_tree", locations=frozenset([(6, 1)])),
+            GatherAction(resource_code="ash_tree", locations=frozenset([(6, 1)]), learned_drops=LearnedDrops.empty()),
             CraftAction(code="ash_plank", quantity=1, workshop_location=(1, 1)),
             CraftAction(code="feather_coat", quantity=1, workshop_location=(3, 1)),
             WithdrawItemAction(code="feather", quantity=5, bank_location=bank),
@@ -1199,9 +1202,10 @@ class TestGatherMaterialsGoal:
         goal = GatherMaterialsGoal(target_item="sword", needed={"copper_ore": 6})
         state = make_state()
         actions = [
-            GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)])),
-            GatherAction(resource_code="ash_tree", locations=frozenset([(5, 0)])),
-            FightAction(monster_code="chicken", locations=frozenset([(1, 0)])),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]),
+                         learned_drops=LearnedDrops.empty()),
+            GatherAction(resource_code="ash_tree", locations=frozenset([(5, 0)]), learned_drops=LearnedDrops.empty()),
+            FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
             RestAction(),
             DepositAllAction(bank_location=(4, 0)),
         ]
@@ -1227,11 +1231,12 @@ class TestGatherMaterialsGoal:
         goal = GatherMaterialsGoal(target_item="copper_boots", needed={"copper": 4})
         state = make_state()
         actions = [
-            GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)])),
-            GatherAction(resource_code="ash_tree", locations=frozenset([(5, 0)])),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]),
+                         learned_drops=LearnedDrops.empty()),
+            GatherAction(resource_code="ash_tree", locations=frozenset([(5, 0)]), learned_drops=LearnedDrops.empty()),
             CraftAction(code="copper", quantity=1, workshop_location=(3, 0)),
             CraftAction(code="iron_bar", quantity=1, workshop_location=(3, 0)),
-            FightAction(monster_code="chicken", locations=frozenset([(1, 0)])),
+            FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
             RestAction(),
             DepositAllAction(bank_location=(4, 0)),
         ]
@@ -1265,12 +1270,12 @@ class TestGatherMaterialsGoal:
         goal = GatherMaterialsGoal(target_item="greater_staff", needed={"staff": 1})
         state = make_state()
         actions = [
-            GatherAction(resource_code="wood_grove", locations=frozenset([(1, 0)])),
-            GatherAction(resource_code="gem_mine", locations=frozenset([(2, 0)])),
+            GatherAction(resource_code="wood_grove", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
+            GatherAction(resource_code="gem_mine", locations=frozenset([(2, 0)]), learned_drops=LearnedDrops.empty()),
             CraftAction(code="plank", quantity=1, workshop_location=(3, 0)),
             CraftAction(code="staff", quantity=1, workshop_location=(4, 0)),
             CraftAction(code="iron_bar", quantity=1, workshop_location=(4, 0)),
-            FightAction(monster_code="chicken", locations=frozenset([(5, 0)])),
+            FightAction(monster_code="chicken", locations=frozenset([(5, 0)]), learned_drops=LearnedDrops.empty()),
             RestAction(),
             DepositAllAction(bank_location=(6, 0)),
         ]
@@ -1292,8 +1297,9 @@ class TestGatherMaterialsGoal:
         goal = GatherMaterialsGoal(target_item="sword", needed={"copper_ore": 6})
         state = make_state()
         actions = [
-            GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)])),
-            FightAction(monster_code="chicken", locations=frozenset([(1, 0)])),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]),
+                         learned_drops=LearnedDrops.empty()),
+            FightAction(monster_code="chicken", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
             RestAction(),
             DepositAllAction(bank_location=(4, 0)),
         ]
@@ -1475,7 +1481,7 @@ class TestTaskExchangeGoal:
                                             bank_location=(4, 0))
         deposit = DepositAllAction(bank_location=(4, 0))
         noise = [RestAction(), GatherAction(resource_code="ash_tree",
-                                            locations=frozenset({(2, 2)}))]
+                                            locations=frozenset({(2, 2)}), learned_drops=LearnedDrops.empty())]
         relevant = goal.relevant_actions(
             [*noise, exchange, coin_withdraw, other_withdraw, deposit],
             state, make_game_data())
@@ -1489,7 +1495,7 @@ class TestTaskExchangeGoal:
                            bank_items={"tasks_coin": 11})
         actions = [
             RestAction(),
-            GatherAction(resource_code="ash_tree", locations=frozenset({(2, 2)})),
+            GatherAction(resource_code="ash_tree", locations=frozenset({(2, 2)}), learned_drops=LearnedDrops.empty()),
             TaskExchangeAction(taskmaster_location=(1, 2), min_coins=1),
             WithdrawItemAction(code=TASKS_COIN_CODE, quantity=1, bank_location=(4, 0)),
             DepositAllAction(bank_location=(4, 0), game_data=make_game_data()),
@@ -1599,8 +1605,8 @@ class TestUnlockBankGoal:
         state = make_state(xp=100)
         gd = self._make_gd_with_sellables()
         actions = [
-            FightAction(monster_code="chicken"),
-            FightAction(monster_code="wolf"),
+            FightAction(monster_code="chicken", learned_drops=LearnedDrops.empty()),
+            FightAction(monster_code="wolf", learned_drops=LearnedDrops.empty()),
             RestAction(),
             DeleteItemAction(code="iron_ore"),
             UseConsumableAction(_item_stats={}),
@@ -1624,8 +1630,8 @@ class TestUnlockBankGoal:
         state = make_state(xp=100)
         gd = self._make_gd_with_sellables()
         actions = [
-            FightAction(monster_code="chicken"),
-            FightAction(monster_code="wolf"),
+            FightAction(monster_code="chicken", learned_drops=LearnedDrops.empty()),
+            FightAction(monster_code="wolf", learned_drops=LearnedDrops.empty()),
         ]
         relevant = goal.relevant_actions(actions, state, gd)
         relevant_reprs = [repr(a) for a in relevant]
@@ -1642,8 +1648,8 @@ class TestUnlockBankGoal:
         state = make_state(xp=100)
         gd = self._make_gd_with_sellables()
         actions = [
-            FightAction(monster_code="chicken"),
-            FightAction(monster_code="wolf"),
+            FightAction(monster_code="chicken", learned_drops=LearnedDrops.empty()),
+            FightAction(monster_code="wolf", learned_drops=LearnedDrops.empty()),
         ]
         relevant = goal.relevant_actions(actions, state, gd)
         relevant_reprs = [repr(a) for a in relevant]
@@ -1659,7 +1665,7 @@ class TestUnlockBankGoal:
         goal = UnlockBankGoal(bank_locked=True, initial_xp=100, target_monster="chicken")
         state = make_state(xp=100)
         gd = self._make_gd_with_sellables()
-        actions = [FightAction(monster_code="chicken")]
+        actions = [FightAction(monster_code="chicken", learned_drops=LearnedDrops.empty())]
         relevant = goal.relevant_actions(actions, state, gd)
         reprs = [repr(a) for a in relevant]
         swaps = [a for a in relevant
@@ -1673,7 +1679,7 @@ class TestUnlockBankGoal:
         goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
         state = make_state(xp=100)
         gd = self._make_gd_with_sellables()
-        actions = [FightAction(monster_code="chicken")]
+        actions = [FightAction(monster_code="chicken", learned_drops=LearnedDrops.empty())]
         relevant = goal.relevant_actions(actions, state, gd)
         assert not any(isinstance(a, OptimizeLoadoutAction) for a in relevant)
 
@@ -1683,7 +1689,7 @@ class TestUnlockBankGoal:
         goal = UnlockBankGoal(bank_locked=True, initial_xp=100, target_monster="dragon")
         state = make_state(xp=100)
         gd = self._make_gd_with_sellables()
-        actions = [FightAction(monster_code="chicken")]
+        actions = [FightAction(monster_code="chicken", learned_drops=LearnedDrops.empty())]
         relevant = goal.relevant_actions(actions, state, gd)
         assert not any(isinstance(a, OptimizeLoadoutAction) for a in relevant)
 
@@ -1709,7 +1715,8 @@ class TestUnlockBankGoal:
         state = make_state(xp=100, level=5, equipment=equipment,
                            inventory={"iron_sword": 1})
         goal = UnlockBankGoal(bank_locked=True, initial_xp=100, target_monster="chicken")
-        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))]
+        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
+                               learned_drops=LearnedDrops.empty())]
         planner = GOAPPlanner()
         plan = planner.plan(state, goal, actions, gd, budget_seconds=10.0)
         reprs = [repr(a) for a in plan]
@@ -1734,7 +1741,8 @@ class TestUnlockBankGoal:
         equipment = {**make_state().equipment, "weapon_slot": "iron_sword"}
         state = make_state(xp=100, level=5, equipment=equipment)
         goal = UnlockBankGoal(bank_locked=True, initial_xp=100, target_monster="chicken")
-        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))]
+        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
+                               learned_drops=LearnedDrops.empty())]
         planner = GOAPPlanner()
         plan = planner.plan(state, goal, actions, gd, budget_seconds=10.0)
         reprs = [repr(a) for a in plan]
@@ -1908,7 +1916,8 @@ class TestDepositInventorySelective:
         decoys = [
             MoveAction(x=2, y=0), MoveAction(x=3, y=0), MoveAction(x=5, y=0),
             RestAction(),
-            GatherAction(resource_code="copper_rocks", locations=frozenset([(1, 0)])),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(1, 0)]),
+                         learned_drops=LearnedDrops.empty()),
         ]
         state = make_state(
             x=0, y=0, inventory_max=104, bank_items={},
@@ -1942,7 +1951,8 @@ class TestAcceptTaskGoalBounded:
         accept = AcceptTaskAction(taskmaster_location=(1, 2))
         decoys = [
             MoveAction(x=2, y=0), MoveAction(x=3, y=0), RestAction(),
-            GatherAction(resource_code="copper_rocks", locations=frozenset([(1, 0)])),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(1, 0)]),
+                         learned_drops=LearnedDrops.empty()),
         ]
         state = make_state(x=0, y=0, task_code=None, task_total=0)
         assert not goal.is_satisfied(state)

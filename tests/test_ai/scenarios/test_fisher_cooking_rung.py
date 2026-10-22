@@ -44,6 +44,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -93,6 +94,7 @@ def _gather_plan(state: WorldState, game_data: GameData,
     happens to prefer for a fisher."""
     player = GamePlayer(character=CELL, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, game_data)
     actions = list(player._build_actions())
     goal = GatherMaterialsGoal(target_item=code, needed={code: quantity})
@@ -237,6 +239,7 @@ def test_the_fishers_cooking_root_plans_a_cooking_grind(
     assert repr(goal) == f"ReachSkill({SKILL}->{state.skills[SKILL] + 1})"
     player = GamePlayer(character=CELL, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, bundle_game_data)
     plan = decompose(goal, state, bundle_game_data, list(player._build_actions()),
                      TIMED_NO_PROFILE_CONTEXT)
@@ -284,6 +287,7 @@ def _wounded(game_data: GameData) -> WorldState:
 def _restore_plan(state: WorldState, game_data: GameData) -> list:
     player = GamePlayer(character=COOK_CELL, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, game_data)
     planner = GOAPPlanner()
     plan = planner.plan(state, RestoreHPGoal(), list(player._build_actions()),

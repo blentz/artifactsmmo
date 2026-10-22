@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.grind_heal_prep import (
     heal_prep_goal,
     potion_prep_goal,
 )
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
@@ -243,7 +244,7 @@ class TestHealPrepGoal:
         ]
 
 
-_FIGHT = FightAction(monster_code="wolf", locations=frozenset({(1, 1)}))
+_FIGHT = FightAction(monster_code="wolf", locations=frozenset({(1, 1)}), learned_drops=LearnedDrops.empty())
 _GRIND_GOAL = GatherMaterialsGoal(target_item="pelt", needed={"pelt": 1}, skill_grind=True)
 _CHEESE = CraftAction(code="cheese", workshop_location=(4, 4))
 
@@ -295,8 +296,9 @@ class TestGrindFightLegPreps:
             asked.append(monster)
             return ChosenLoadout(monster=monster, potions=(), food=(), made_food=())
 
-        ogre = FightAction(monster_code="ogre", locations=frozenset({(1, 2)}))
-        gather = GatherAction(resource_code="milk_rocks", locations=frozenset({(3, 3)}))
+        ogre = FightAction(monster_code="ogre", locations=frozenset({(1, 2)}), learned_drops=LearnedDrops.empty())
+        gather = GatherAction(resource_code="milk_rocks", locations=frozenset({(3, 3)}),
+                              learned_drops=LearnedDrops.empty())
         with patch.object(grind_heal_prep, "loadout_for", side_effect=eats_nothing):
             assert _grind({"milk": CARRY}, [gather, ogre, _FIGHT]) == (
                 [gather, ogre, _FIGHT], [])
@@ -335,7 +337,8 @@ class TestGrindFightLegPreps:
     def test_a_fight_after_a_gather_is_prepped_too(self):
         """The plan is committed (Phase 2d-L1c), so a fight later in it runs
         this cycle and the food's carry is made first."""
-        gather = GatherAction(resource_code="milk_rocks", locations=frozenset({(3, 3)}))
+        gather = GatherAction(resource_code="milk_rocks", locations=frozenset({(3, 3)}),
+                              learned_drops=LearnedDrops.empty())
         legs, declined = _grind({"milk": CARRY}, [gather, _FIGHT])
         assert legs is not None
         assert [type(a).__name__ for a in legs] == ["CraftAction", "GatherAction", "FightAction"]
@@ -343,7 +346,8 @@ class TestGrindFightLegPreps:
 
     def test_a_gather_leg_is_not_prepped(self):
         """Only a fight costs hp; a gather leg runs as planned."""
-        gather = GatherAction(resource_code="milk_rocks", locations=frozenset({(3, 3)}))
+        gather = GatherAction(resource_code="milk_rocks", locations=frozenset({(3, 3)}),
+                              learned_drops=LearnedDrops.empty())
         assert _grind({"milk": CARRY}, gather) == ([gather], [])
 
 

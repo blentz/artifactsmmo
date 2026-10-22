@@ -267,7 +267,8 @@ open Formal.PriorityBand
 #print axioms Formal.GatherSelection.select_mem
 #print axioms Formal.GatherSelection.select_is_lex_min
 #print axioms Formal.GatherSelection.select_no_cheaper_at_le_distance
-#print axioms Formal.GatherSelection.expected_gathers_mono_in_rate
+#print axioms Formal.GatherSelection.attempts_antitone_in_units
+#print axioms Formal.GatherSelection.prior_attempts_is_rate_over_mean
 #print axioms Formal.GatherSelection.gather_selected_reaches_needed
 #print axioms Formal.ShoppingList.credit_plus_deficit
 #print axioms Formal.ShoppingList.deficit_antitone
@@ -280,7 +281,8 @@ open Formal.PriorityBand
 #print axioms Formal.MonsterDropSelection.select_mem
 #print axioms Formal.MonsterDropSelection.select_is_lex_min
 #print axioms Formal.MonsterDropSelection.select_no_fewer_kills_at_le_distance
-#print axioms Formal.MonsterDropSelection.expected_kills_mono_in_rate
+#print axioms Formal.MonsterDropSelection.attempts_antitone_in_units
+#print axioms Formal.MonsterDropSelection.prior_attempts_is_rate_over_mean
 #print axioms Formal.MonsterDropSelection.kills_reach_needed
 #print axioms Formal.MonsterDropSelection.keyLt_total
 #print axioms Formal.CraftVsBuy.acquisition_total
@@ -1236,4 +1238,5 @@ open Formal.PriorityBand
 #print axioms Formal.DropChance.multiplier_ge_one
 #print axioms Formal.DropChance.multiplier_monotone
 #print axioms Formal.DropChance.chance_le_one
+#print axioms Formal.DropChance.units_le_mean
 #print axioms Formal.DropChance.fitK_nonneg

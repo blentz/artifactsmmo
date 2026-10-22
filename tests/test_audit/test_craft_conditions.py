@@ -11,6 +11,7 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.audit.craft_census import BARE, LOSES, PARTY, CellResult, fight_needs, run_cell
 from artifactsmmo_cli.audit.craft_completeness import (
     ARMORY_BAG,
@@ -114,7 +115,7 @@ def test_a_fight_no_loadout_wins_is_named() -> None:
     gd = _gd()
     state = census_state("cheese", CraftCell(1, "cooking", 1), gd)
     assert fight_needs([], state, gd) == ()
-    plan = [FightAction(monster_code=m, locations=frozenset({(0, 0)}))
+    plan = [FightAction(monster_code=m, locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
             for m in ("chicken", "red_dragon", "chicken")]
     assert fight_needs(plan, state, gd) == (("chicken", BARE), ("red_dragon", LOSES))
 

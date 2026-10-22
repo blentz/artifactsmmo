@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import achievable
 from artifactsmmo_cli.ai.gear_objective_core import layer_of
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -327,6 +328,7 @@ def test_a_gold_funded_piece_is_achievable_and_served() -> None:
     world = _world(RUNE_CELL)
     player = GamePlayer(character=RUNE_CELL, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(scenario_state(SCENARIOS[RUNE_CELL], world), world)
     report = player.plan_from_state()
     rune = ObtainItem("lifesteal_rune", 1, slot="rune_slot")

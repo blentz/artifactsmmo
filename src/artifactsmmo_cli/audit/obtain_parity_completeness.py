@@ -85,6 +85,7 @@ from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.obtain_sources import (
     SourceKind,
@@ -469,7 +470,8 @@ def _drive(cell: ParityCell, state: WorldState, game_data: GameData) -> _Drive:
     ctx = census_ctx()
     objective = CharacterObjective.from_game_data(game_data)
     actions = build_actions(game_data, state, objective,
-                            bank_accessible=True, task_exchange_min_coins=0)
+                            bank_accessible=True, task_exchange_min_coins=0,
+                            learned_drops=LearnedDrops.empty())
     arbiter = StrategyArbiter(GOAPPlanner(), None)
     goal, arbiter_plan, tried = arbiter.select(
         census_decision(cell), state, game_data, actions, ctx)

@@ -9,6 +9,7 @@ import pytest
 
 import artifactsmmo_cli.ai.task_worth as mod
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.task_horizon import HORIZON_GEAR, HORIZON_OUT_OF_REACH, TaskHorizon
@@ -140,6 +141,7 @@ class TestPlayerGoldShort:
     def _player(self, gold: int, bank_gold: int, root) -> GamePlayer:  # type: ignore[no-untyped-def]
         player = GamePlayer(character="hero", history=None)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.state = make_state(gold=gold, bank_gold=bank_gold)
         player.game_data = GameData()
         player._last_decision = None if root is None else type("D", (), {"chosen_root": root})()

@@ -38,6 +38,7 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.route import Route
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkGraph
@@ -59,7 +60,7 @@ def _ctx(**kw: object) -> SelectionContext:
         initial_xp=0, task_exchange_min_coins=1, combat_monster=None,
     )
     base.update(kw)
-    return SelectionContext(**base)
+    return SelectionContext(**base, learned_drops=LearnedDrops.empty())
 
 def _gd_copper_ring() -> GameData:
     """copper_ring → copper_bar (1 bar each) → copper_ore (10 ore per bar).
@@ -97,7 +98,7 @@ def _gd_copper_ring() -> GameData:
 def _copper_ring_actions() -> list:
     """Minimal action list for the copper_ring goal."""
     return [
-        GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)])),
+        GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
         CraftAction(code="copper_bar", workshop_location=(1, 5)),
         CraftAction(code="copper_ring", workshop_location=(3, 1)),
     ]
@@ -442,7 +443,8 @@ class TestMissingItemStatsOrWorkshopFallsBack:
                            skills={"mining": 5, "jewelrycrafting": 5})
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = [
-            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)])),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]),
+                         learned_drops=LearnedDrops.empty()),
             CraftAction(code="copper_ring", workshop_location=(3, 1)),
         ]
 
@@ -526,7 +528,8 @@ class TestSharedIntermediateClosure:
             {"copper_ring": 1, "copper_amulet": 1},
         )
         actions = [
-            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)])),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]),
+                         learned_drops=LearnedDrops.empty()),
             CraftAction(code="copper_bar", workshop_location=(1, 5)),
             CraftAction(code="copper_ring", workshop_location=(3, 1)),
             CraftAction(code="copper_amulet", workshop_location=(3, 1)),
@@ -567,7 +570,8 @@ class TestNoMatchingActionFallsBack:
                            skills={"mining": 5, "jewelrycrafting": 5})
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = [
-            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)])),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]),
+                         learned_drops=LearnedDrops.empty()),
             # CraftAction for copper_bar intentionally omitted.
             CraftAction(code="copper_ring", workshop_location=(3, 1)),
         ]
@@ -793,7 +797,8 @@ class TestIntermediateCraftSizedInGenerator:
         )
         goal = GatherMaterialsGoal("copper_dagger", {"copper_dagger": 1})
         actions = [
-            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)])),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]),
+                         learned_drops=LearnedDrops.empty()),
             CraftAction(code="copper_bar", workshop_location=(1, 5)),
             CraftAction(code="copper_dagger", workshop_location=(3, 1)),
         ]
@@ -903,7 +908,7 @@ def _fighter_state(**overrides):
 def _drop_leaf_actions() -> list:
     return [
         CraftAction(code="feather_coat", workshop_location=(3, 1)),
-        FightAction(monster_code="chicken", locations=frozenset([(0, 1)])),
+        FightAction(monster_code="chicken", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
     ]
 
 
@@ -955,7 +960,7 @@ class TestDropLeafFightLeg:
         state = _fighter_state(skills={"gearcrafting": 5, "woodcutting": 1})
         goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
         actions = [
-            GatherAction(resource_code="ash_tree", locations=frozenset([(0, 2)])),
+            GatherAction(resource_code="ash_tree", locations=frozenset([(0, 2)]), learned_drops=LearnedDrops.empty()),
             *_drop_leaf_actions(),
         ]
 
@@ -1154,7 +1159,7 @@ def _gd_recyclable() -> GameData:
 
 def _bar_actions(*extra) -> list:
     return [
-        GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)])),
+        GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
         CraftAction(code="copper_bar", workshop_location=(1, 5)),
         WithdrawItemAction(code="copper_bar", quantity=10, bank_location=(4, 0),
                            accessible=True),
@@ -1360,7 +1365,7 @@ class TestRecycleAsASource:
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 5})
         actions = [
             GatherAction(resource_code="copper_rocks",
-                         locations=frozenset([(0, 1)])),
+                         locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
             CraftAction(code="copper_bar", workshop_location=(1, 5)),
             CraftAction(code="copper_ring", workshop_location=(3, 1)),
             RecycleAction(code="copper_ring", quantity=1,
@@ -1443,7 +1448,7 @@ class TestRecycleAsASource:
         goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
         actions = [
             GatherAction(resource_code="copper_rocks",
-                         locations=frozenset([(0, 1)])),
+                         locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
             CraftAction(code="copper_bar", workshop_location=(1, 5)),
             RecycleAction(code="copper_dagger", quantity=1,
                           workshop_location=(2, 2)),
@@ -1467,7 +1472,7 @@ class TestRecycleAsASource:
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = [
             GatherAction(resource_code="copper_rocks",
-                         locations=frozenset([(0, 1)])),
+                         locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
             CraftAction(code="copper_bar", workshop_location=(1, 5)),
             CraftAction(code="copper_ring", workshop_location=(3, 1)),
             WithdrawItemAction(code="copper_bar", quantity=1,
@@ -1533,7 +1538,7 @@ class TestTheActivationRecycleBug:
                            skills={"weaponcrafting": 5})
         goal = GatherMaterialsGoal("fire_staff", {"fire_staff": 1})
         pool = [
-            GatherAction(resource_code="ash_tree", locations=frozenset([(0, 1)])),
+            GatherAction(resource_code="ash_tree", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
             CraftAction(code="fire_staff", workshop_location=(2, 2)),
             RecycleAction(code="fishing_net", quantity=1, workshop_location=(2, 2)),
         ]
@@ -1650,7 +1655,8 @@ class TestPhase2bDecompositionGaps:
         gd = _gd_copper_ring()
         state = make_state(inventory={}, bank_items={}, skills={"mining": 5, "jewelrycrafting": 5})
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
-        rocks = GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]))
+        rocks = GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]),
+                             learned_drops=LearnedDrops.empty())
         with patch.object(GatherMaterialsGoal, "relevant_actions",
                           lambda self, actions, state, gd: [a for a in actions if a is not rocks]):
             result = decompose(goal, state, gd, [rocks, *_copper_ring_actions()[1:]], _ctx())
@@ -1673,7 +1679,7 @@ class TestPhase2bDecompositionGaps:
                                                  crafting_skill="mining", crafting_level=10)
         state = make_state(inventory={}, bank_items={}, skills={"mining": 5, "jewelrycrafting": 5})
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
-        tin = GatherAction(resource_code="tin_rocks", locations=frozenset([(0, 2)]))
+        tin = GatherAction(resource_code="tin_rocks", locations=frozenset([(0, 2)]), learned_drops=LearnedDrops.empty())
         result = decompose(goal, state, gd, [*_copper_ring_actions(), tin], _ctx())
         assert result is not None and isinstance(result[0], GatherAction)
         assert result[0].resource_code == "tin_rocks"
@@ -1714,9 +1720,9 @@ class TestSecondaryDropGather:
         state = make_state(inventory={}, bank_items={}, skills={"fishing": 1, "jewelrycrafting": 1})
         goal = GatherMaterialsGoal("pearl_ring", {"pearl_ring": 1})
         actions = [
-            GatherAction(resource_code="bass_spot", locations=frozenset({(0, 1)})),
+            GatherAction(resource_code="bass_spot", locations=frozenset({(0, 1)}), learned_drops=LearnedDrops.empty()),
             GatherAction(resource_code="bass_spot", locations=frozenset({(0, 1)}),
-                         drop_item_override="small_pearls"),
+                         drop_item_override="small_pearls", learned_drops=LearnedDrops.empty()),
             CraftAction(code="pearl_ring", workshop_location=(3, 1)),
         ]
 
@@ -2111,15 +2117,16 @@ class TestGatherInTheCharactersRegion:
 
     def test_the_home_region_copy_wins(self) -> None:
         isle = GatherAction(resource_code="palm_tree", locations=frozenset({(-4, 18)}),
-                            drop_item_override="palm_wood", travel_region="isle")
+                            drop_item_override="palm_wood", travel_region="isle", learned_drops=LearnedDrops.empty())
         home = GatherAction(resource_code="palm_tree", locations=frozenset({(1, 0)}),
-                            drop_item_override="palm_wood", travel_region="overworld")
+                            drop_item_override="palm_wood", travel_region="overworld",
+                                learned_drops=LearnedDrops.empty())
         got = self._action([isle, home], "overworld")
         assert got.travel_region == "overworld" and got.quantity == 3
 
     def test_another_regions_copy_is_the_fallback(self) -> None:
         isle = GatherAction(resource_code="palm_tree", locations=frozenset({(-4, 18)}),
-                            drop_item_override="palm_wood", travel_region="isle")
+                            drop_item_override="palm_wood", travel_region="isle", learned_drops=LearnedDrops.empty())
         assert self._action([isle], "overworld").travel_region == "isle"
         assert self._action([], "overworld") is None
 

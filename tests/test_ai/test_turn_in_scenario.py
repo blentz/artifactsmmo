@@ -36,6 +36,7 @@ from dataclasses import replace
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.goals.currency_turnin import CurrencyTurnInGoal
 from artifactsmmo_cli.ai.goals.surrender_currency import SurrenderCurrencyGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -68,6 +69,7 @@ def _player(db: str, name: str, state: WorldState) -> GamePlayer:
     would make every character look like a non-buyer."""
     player = GamePlayer(character=name)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._coordination = CoordinationStore(db_path=db, character=name)
     player.seed_offline(replace(state, character=name), _bank_gd())
     return player

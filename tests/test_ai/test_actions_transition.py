@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.actions.transition_layer_error import TransitionLayerEr
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.region_edges import admit_region_edges
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -179,7 +180,7 @@ class TestRegionAwarePlanning:
                                 dest_layer="underground", conditions=(),
                                 travel_region="overworld"),
             FightAction(monster_code="lich", locations=frozenset({(9, 8)}),
-                        travel_region="underground"),
+                        travel_region="underground", learned_drops=LearnedDrops.empty()),
         ]
         state = make_state(x=0, y=0, xp=0, max_hp=100, hp=100,
                            attack={"fire": 30}, initiative=50)
@@ -189,7 +190,7 @@ class TestRegionAwarePlanning:
     def test_off_region_fight_not_offered_directly(self):
         gd = self._gd()
         fight = FightAction(monster_code="lich", locations=frozenset({(9, 8)}),
-                            travel_region="underground")
+                            travel_region="underground", learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0)
         # The planner's region gate (not is_applicable) rejects it; simulate:
         assert fight.travel_region != gd.state_region(state)
@@ -222,7 +223,7 @@ class TestRegionAwarePlanning:
             portal_x=2, portal_y=0, dest_x=9, dest_y=7,
             dest_layer="underground", conditions=(), travel_region="overworld")
         fight = FightAction(monster_code="lich", locations=frozenset({(9, 8)}),
-                            travel_region="underground")
+                            travel_region="underground", learned_drops=LearnedDrops.empty())
         actions = [transition, fight]
         state = make_state(x=0, y=0, xp=0, max_hp=100, hp=100,
                            attack={"fire": 30}, initiative=50)
@@ -249,7 +250,7 @@ class TestRegionAwarePlanning:
             portal_x=2, portal_y=0, dest_x=9, dest_y=7,
             dest_layer="underground", conditions=(), travel_region="overworld")
         fight = FightAction(monster_code="lich", locations=frozenset({(9, 8)}),
-                            travel_region="underground")
+                            travel_region="underground", learned_drops=LearnedDrops.empty())
         actions = [transition, fight]
         state = make_state(x=0, y=0, xp=0, max_hp=100, hp=100,
                            attack={"fire": 30}, initiative=50)
@@ -277,13 +278,13 @@ class TestRegionAwarePlanning:
             portal_x=2, portal_y=0, dest_x=9, dest_y=7,
             dest_layer="underground", conditions=(), travel_region="overworld")
         here = FightAction(monster_code="lich", locations=frozenset({(1, 1)}),
-                           travel_region="overworld")
+                           travel_region="overworld", learned_drops=LearnedDrops.empty())
         # The POOL always carries off-region work — 48 actions of it live — so
         # the gate has to ask the goal's OWN whitelist. Asking `actions` would
         # gate on nothing and re-add the edges every time.
         elsewhere = FightAction(monster_code="lich",
                                 locations=frozenset({(9, 8)}),
-                                travel_region="underground")
+                                travel_region="underground", learned_drops=LearnedDrops.empty())
         actions = [transition, here, elsewhere]
         state = make_state(x=0, y=0)
 
@@ -300,7 +301,7 @@ class TestRegionAwarePlanning:
             portal_x=2, portal_y=0, dest_x=9, dest_y=7,
             dest_layer="underground", conditions=(), travel_region="overworld")
         fight = FightAction(monster_code="lich", locations=frozenset({(9, 8)}),
-                            travel_region="underground")
+                            travel_region="underground", learned_drops=LearnedDrops.empty())
         actions = [transition, fight]
         state = make_state(x=0, y=0)
         assert admit_region_edges(list(actions), actions, state, gd) == actions

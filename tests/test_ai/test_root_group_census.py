@@ -7,6 +7,7 @@ from sqlalchemy import create_engine
 from sqlmodel import Session, select
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -65,6 +66,7 @@ def _record(store: LearningStore, decision: StrategyDecision) -> list[Cycle]:
     is what proves the write site is actually populated in production."""
     player = GamePlayer(character="hero", dry_run=False, history=store)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player._last_decision = decision
     prev = make_state(level=5)
     player._record_learning_cycle(
@@ -106,6 +108,7 @@ def _guard_world() -> GameData:
 def _player_on(store: LearningStore, state: WorldState) -> GamePlayer:
     player = GamePlayer(character="hero", dry_run=False, history=store)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     gd = _guard_world()
     player.game_data = gd
     player._blockers.clear("bank")

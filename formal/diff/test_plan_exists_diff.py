@@ -89,6 +89,7 @@ from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -187,7 +188,7 @@ def _ctx(**overrides) -> SelectionContext:
         draw_owed=True,      # ACCEPT_TASK's gate; taskless means a draw is owed
     )
     defaults.update(overrides)
-    return SelectionContext(**defaults)
+    return SelectionContext(**defaults, learned_drops=LearnedDrops.empty())
 
 
 def _build_player_with_data(
@@ -203,6 +204,8 @@ def _build_player_with_data(
     player.state = state
     player._bank_accessible = bank_accessible
     player._task_exchange_min_coins = task_exchange_min_coins
+    # An offline world: no store, every drop at its API prior (ruling T16a).
+    player._learned_drops = LearnedDrops.empty()
     return player
 
 

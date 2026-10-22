@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 
 
@@ -63,6 +64,7 @@ def test_play_marks_exit_reason_crash_when_run_raises(monkeypatch, tmp_path):
     try:
         player = GamePlayer(character="TestChar", history=store)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         try:
             player.run()
             exit_reason = "normal"

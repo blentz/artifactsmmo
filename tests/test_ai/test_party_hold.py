@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.actions.hold_for_party import HOLD_SECONDS, HoldForPart
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.join_party import JOIN_PARTY_VALUE, JoinPartyGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.party_card import card_json
@@ -108,7 +109,8 @@ def test_a_member_on_another_layer_crosses_to_the_tile() -> None:
     lease = PartyLease("king_slime", "C3P0", ("HAL",), "overworld", 3, -1)
     state = make_state(character="HAL", x=-3, y=12, layer="interior")
     goal = JoinPartyGoal(lease, gd)
-    actions = build_actions(gd, state, None, bank_accessible=True, task_exchange_min_coins=0)
+    actions = build_actions(gd, state, None, bank_accessible=True, task_exchange_min_coins=0,
+                            learned_drops=LearnedDrops.empty())
     plan = GOAPPlanner().plan(state, goal, actions, gd)
     assert [repr(a) for a in plan] == ["Transition((-3,12,interior)->(-3,12,overworld))",
                                        "HoldForParty(king_slime)"]
@@ -129,6 +131,7 @@ def _player(tmp_path: Path, name: str) -> tuple[GamePlayer, CoordinationStore]:
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character=name)
     player = GamePlayer(character=name)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.set_coordination_store(store)
     player.state = make_state(character=name, x=3, y=-1)
     player.game_data = GameData()
@@ -138,10 +141,12 @@ def _player(tmp_path: Path, name: str) -> tuple[GamePlayer, CoordinationStore]:
 def test_without_a_store_there_is_no_party(tmp_path: Path) -> None:
     player = GamePlayer(character="hero")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.state = make_state(character="hero")
     player._refresh_party(T0)
     assert player._party_hold is None and player.state.party == ()
-    fight = FightAction(monster_code="duskworm", locations=frozenset({(3, -1)}), participants=("Lor",))
+    fight = FightAction(monster_code="duskworm", locations=frozenset({(3, -1)}), participants=("Lor",),
+                        learned_drops=LearnedDrops.empty())
     assert player._lead_party(fight) is fight
 
 
@@ -170,7 +175,8 @@ def test_the_roster_is_every_sibling_no_lease_names(tmp_path: Path) -> None:
 def test_the_leader_holds_until_the_party_is_assembled(tmp_path: Path) -> None:
     hal, _ = _player(tmp_path, "HAL")
     lor_store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Lor")
-    fight = FightAction(monster_code="duskworm", locations=frozenset({(3, -1)}), participants=("Lor",))
+    fight = FightAction(monster_code="duskworm", locations=frozenset({(3, -1)}), participants=("Lor",),
+                        learned_drops=LearnedDrops.empty())
     # Lor is away: claim the lease, hold
     lor_store.publish_party_card(card_json(make_state(character="Lor", x=0, y=0)), T0)
     hal._refresh_party(T0)
@@ -184,7 +190,8 @@ def test_the_leader_holds_until_the_party_is_assembled(tmp_path: Path) -> None:
     # a boss another leader holds: hold, no fight
     r2_store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="R2D2")
     assert r2_store.claim_party("lich", (), ("overworld", 0, 0), T0)
-    lich = FightAction(monster_code="lich", locations=frozenset({(0, 0)}), participants=("Lor",))
+    lich = FightAction(monster_code="lich", locations=frozenset({(0, 0)}), participants=("Lor",),
+                       learned_drops=LearnedDrops.empty())
     assert isinstance(hal._lead_party(lich), HoldForPartyAction)
 
 
@@ -193,7 +200,8 @@ def test_a_party_fight_releases_its_lease(tmp_path: Path) -> None:
     lor_store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Lor")
     lor_store.publish_party_card(card_json(make_state(character="Lor", x=3, y=-1)), T0)
     hal._refresh_party(T0)
-    fight = FightAction(monster_code="duskworm", locations=frozenset({(3, -1)}), participants=("Lor",))
+    fight = FightAction(monster_code="duskworm", locations=frozenset({(3, -1)}), participants=("Lor",),
+                        learned_drops=LearnedDrops.empty())
     fight.execute = MagicMock(side_effect=RuntimeError("fight_lost: duskworm (turns=9)"))  # type: ignore[method-assign]
     with patch.object(hal, "_fetch_world_state", return_value=hal.state):
         hal._execute(fight, MagicMock())
@@ -207,7 +215,8 @@ def test_a_party_that_never_assembles_is_given_up(tmp_path: Path) -> None:
     lor_store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Lor")
     lor_store.publish_party_card(card_json(make_state(character="Lor", x=0, y=0)), T0)
     hal._refresh_party(T0)
-    fight = FightAction(monster_code="duskworm", locations=frozenset({(3, -1)}), participants=("Lor",))
+    fight = FightAction(monster_code="duskworm", locations=frozenset({(3, -1)}), participants=("Lor",),
+                        learned_drops=LearnedDrops.empty())
     assert isinstance(hal._lead_party(fight), HoldForPartyAction)
     assert fight.learning_key() not in hal._failure_blocks
     hal._party_since["duskworm"] = T0 - timedelta(seconds=PARTY_ASSEMBLY_SECONDS)
@@ -222,7 +231,8 @@ def _assembled_leader(tmp_path: Path) -> tuple[GamePlayer, CoordinationStore, Fi
     lor_store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Lor")
     lor_store.publish_party_card(card_json(make_state(character="Lor", x=3, y=-1)), T0)
     hal._refresh_party(T0)
-    fight = FightAction(monster_code="duskworm", locations=frozenset({(3, -1)}), participants=("Lor",))
+    fight = FightAction(monster_code="duskworm", locations=frozenset({(3, -1)}), participants=("Lor",),
+                        learned_drops=LearnedDrops.empty())
     return hal, lor_store, fight
 
 

@@ -28,6 +28,7 @@ from artifactsmmo_cli.ai.intention_progress import (
     rotate,
     turn_key,
 )
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.plan_cache import PlanCache
@@ -124,6 +125,7 @@ def test_the_budget_spend_survives_a_restart(tmp_path):
     _run(player, goal, 30)
     reborn = GamePlayer(character="hero", history=player.history)
     reborn._offline_timing = committed_timing()
+    reborn._learned_drops = LearnedDrops.empty()
     reborn._resume_turns()
     assert reborn._budget_spent == {repr(goal): 30}
     reborn._arbiter._committed_repr = repr(goal)
@@ -238,6 +240,7 @@ def test_the_turns_survive_a_restart(tmp_path):
     _run(player, goal, BUDGET_CYCLES)
     restarted = GamePlayer(character="hero", history=player.history)
     restarted._offline_timing = committed_timing()
+    restarted._learned_drops = LearnedDrops.empty()
     restarted._resume_turns()
     assert restarted._turns == {repr(goal): 1}
     assert _player()._resume_turns() is None and _player()._turns == {}

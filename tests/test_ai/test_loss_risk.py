@@ -16,6 +16,7 @@ import artifactsmmo_cli.ai.tiers.skill_grind_target as grind_mod
 from artifactsmmo_cli.ai.acquisition_cost import _loss_surcharge, _priced, route_options
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_loop_cost import loss_cost
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -74,7 +75,7 @@ class TestTheDropPrice:
         feather = Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY)
         cold = _priced("feather", feather, state, game_data, CTX).actions_per_application
         lost = _priced("feather", feather, state, game_data,
-                       replace(CTX, fight_records=(("chicken", 10, 5),)), None).actions_per_application
+                       replace(CTX, fight_records=(("chicken", 10, 5),))).actions_per_application
         assert lost > cold
 
     def test_another_monsters_record_or_no_evidence_changes_nothing(self, state, game_data) -> None:
@@ -82,8 +83,8 @@ class TestTheDropPrice:
         cold = _priced("feather", feather, state, game_data, CTX).actions_per_application
         cow = replace(CTX, fight_records=(("cow", 10, 5),))
         thin = replace(CTX, fight_records=(("chicken", MIN_WIN_SAMPLES - 1, 0),))
-        assert _priced("feather", feather, state, game_data, cow, None).actions_per_application == cold
-        assert _priced("feather", feather, state, game_data, thin, None).actions_per_application == cold
+        assert _priced("feather", feather, state, game_data, cow).actions_per_application == cold
+        assert _priced("feather", feather, state, game_data, thin).actions_per_application == cold
 
     def test_the_routes_read_the_records_off_the_context(self, state, game_data) -> None:
         def drop(ctx):  # type: ignore[no-untyped-def]
@@ -107,7 +108,8 @@ class TestTheDropPrice:
 
 class TestTheGrindRungs:
     def test_the_records_are_part_of_the_memo_key(self, state) -> None:
-        assert _cache_key("cooking", state, ()) != _cache_key("cooking", state, (("rat", 9, 4),))
+        assert _cache_key("cooking", state, (), LearnedDrops.empty()) != _cache_key(
+            "cooking", state, (("rat", 9, 4),), LearnedDrops.empty())
 
     def test_the_rung_prices_see_the_records(self, state, game_data, monkeypatch) -> None:
         seen = []
@@ -123,11 +125,36 @@ class TestTheGrindRungs:
         build_selectable_grind_candidates("weaponcrafting", state, game_data, ctx)
         assert seen and set(seen) == {records}
 
+    def test_the_drop_evidence_is_part_of_the_memo_key(self, state) -> None:
+        """Ruling T16a: a new observation reprices the rungs' drops, so the
+        memo cannot serve a list priced at another cycle's evidence."""
+        seen = LearnedDrops((("chicken", 9),), ((("chicken", "feather"), 4),), Fraction(0))
+        assert _cache_key("cooking", state, (), LearnedDrops.empty()) != _cache_key(
+            "cooking", state, (), seen)
+
+    def test_the_rung_prices_see_the_drop_evidence(self, state, game_data, monkeypatch) -> None:
+        """The rungs are priced at the cycle's evidence, and a second evidence
+        on the same state is priced afresh, not served from the memo."""
+        priced = []
+
+        def spy(code, qty, probe, gd, ctx, equip, policy, produce):  # type: ignore[no-untyped-def]
+            priced.append(ctx.learned_drops)
+            return 1
+
+        monkeypatch.setattr(grind_mod, "acquisition_actions", spy)
+        evidence = LearnedDrops((("chicken", 9),), ((("chicken", "feather"), 4),), Fraction(0))
+        for drops in (LearnedDrops.empty(), evidence):
+            build_selectable_grind_candidates(
+                "weaponcrafting", state, game_data,
+                replace(TIMED_NO_PROFILE_CONTEXT, learned_drops=drops))
+        assert priced and set(priced) == {LearnedDrops.empty(), evidence}
+
 
 class TestThePlayerContext:
     def _player(self, monkeypatch, history):  # type: ignore[no-untyped-def]
         player = GamePlayer(character="probe", history=history)
         player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
         player.state = make_state(task_code=None, task_total=0)
         player.game_data = GameData()
         monkeypatch.setattr(ctx_mod, "farm_target", lambda *_: None)

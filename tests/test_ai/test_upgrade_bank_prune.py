@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 
@@ -47,12 +48,14 @@ def _actions() -> list:
         CraftAction(code="copper_bar", quantity=1),
         CraftAction(code="cooked_beef", quantity=1),  # unrelated craft — must be pruned
         EquipAction(code="copper_dagger", slot="weapon_slot"),
-        GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 0)})),
-        GatherAction(resource_code="ash_tree", locations=frozenset({(5, 5)})),  # unrelated gather
+        GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 0)}), learned_drops=LearnedDrops.empty()),
+        GatherAction(resource_code="ash_tree", locations=frozenset({(5, 5)}),
+                     learned_drops=LearnedDrops.empty()),  # unrelated gather
         WithdrawItemAction(code="copper_ore", quantity=10),
         WithdrawItemAction(code="copper_bar", quantity=6),
         WithdrawItemAction(code="cooked_beef", quantity=1),  # unrelated withdraw — must be pruned
-        FightAction(monster_code="chicken", locations=frozenset({(1, 1)})),  # combat — pruned
+        FightAction(monster_code="chicken", locations=frozenset({(1, 1)}),
+                    learned_drops=LearnedDrops.empty()),  # combat — pruned
         RecycleAction(code="copper_dagger", quantity=1),  # recycle — pruned
     ]
 
@@ -128,7 +131,7 @@ def _shallow_actions(gd: GameData) -> list:
         CraftAction(code="tin_blade", quantity=1, workshop_location=(0, 0)),
         CraftAction(code="tin_bar", quantity=1, workshop_location=(0, 0)),
         EquipAction(code="tin_blade", slot="weapon_slot"),
-        GatherAction(resource_code="tin_rocks", locations=frozenset({(1, 0)})),
+        GatherAction(resource_code="tin_rocks", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty()),
         WithdrawItemAction(code="tin_ore", quantity=4),
         WithdrawItemAction(code="tin_bar", quantity=2),
     ]

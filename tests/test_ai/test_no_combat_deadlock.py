@@ -24,6 +24,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
@@ -74,6 +75,7 @@ def _trace_state() -> WorldState:
 def _player(gd: GameData, state: WorldState) -> GamePlayer:
     player = GamePlayer(character="Robby")
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.game_data = gd
     player.state = state
     return player
@@ -104,7 +106,7 @@ class TestNoCombatDeadlock:
         gd = _trace_game_data()
         state = _trace_state()
         fight = FightAction(monster_code="yellow_slime",
-                            locations=frozenset({(0, 2)}))
+                            locations=frozenset({(0, 2)}), learned_drops=LearnedDrops.empty())
         assert gd.xp_per_kill("yellow_slime", state.level) > 0
         assert fight.is_applicable(state, gd) is True
 
@@ -173,7 +175,7 @@ class TestNoCombatDeadlock:
         assert player._pick_winnable_monster() is None
         # Action-level: a DEFAULT fight (no drop_farm) keeps the xp gate — the
         # drop-farm bypass must never leak into plain xp-grind fights.
-        fight = FightAction(monster_code="chicken", locations=frozenset({(0, 1)}))
+        fight = FightAction(monster_code="chicken", locations=frozenset({(0, 1)}), learned_drops=LearnedDrops.empty())
         assert fight.is_applicable(state, gd) is False
 
     def test_true_deadlock_still_returns_none(self) -> None:
@@ -232,7 +234,7 @@ class TestNoCombatDeadlock:
             if target is None:
                 continue
             locations = frozenset({(0, gd._monster_level[target])})
-            fight = FightAction(monster_code=target, locations=locations)
+            fight = FightAction(monster_code=target, locations=locations, learned_drops=LearnedDrops.empty())
             checked += 1
             assert fight.is_applicable(state, gd), (
                 f"Picker-applicability divergence at char_level={char_level}: "
@@ -269,7 +271,8 @@ class TestNoCombatDeadlock:
             inventory={}, inventory_max=100,
             equipment=equipment,
         )
-        fight = FightAction(monster_code="green_slime", locations=frozenset({(0, -1)}))
+        fight = FightAction(monster_code="green_slime", locations=frozenset({(0, -1)}),
+                            learned_drops=LearnedDrops.empty())
         # Preconditions: xp gate passes, only the gear-level gate can block.
         assert gd.xp_per_kill("green_slime", state.level) > 0
         assert fight.is_applicable(state, gd) is True

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -21,6 +22,7 @@ def test_plan_from_state_runs_offline() -> None:
     gd = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
     player = GamePlayer(character="scenario", history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     state = make_state(level=1, hp=120, max_hp=120,
                        inventory={}, bank_items={}, gold=0)
     player.seed_offline(state, gd)
@@ -43,6 +45,7 @@ def test_plan_from_state_decision_is_the_tree_decision() -> None:
     sc = SCENARIOS["l10_weapon_upgrade"]
     player = GamePlayer(character=sc.name, history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     player.seed_offline(scenario_state(sc, gd), gd)
     report = player.plan_from_state()
     assert report.decision.chosen_root == ObtainItem(code="blue_slimeball", quantity=2)
@@ -75,6 +78,7 @@ def test_plan_from_state_wires_the_real_selection_context() -> None:
     gd._taskmaster_location = (0, 0)
     player = GamePlayer(character="scenario", history=None)
     player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
     state = make_state(level=5, inventory={"fishing_net": 7}, bank_items={})
     player.seed_offline(state, gd)
 

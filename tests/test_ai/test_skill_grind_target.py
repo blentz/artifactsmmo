@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
     _CACHES,
@@ -261,7 +262,8 @@ def test_the_memo_key_notices_a_changed_threshold():
     the key: the returned list is always a fresh copy, `_with_wanted`.)"""
     state = make_state(skills={"weaponcrafting": 3})
     cheap = make_state(skills={"weaponcrafting": 3}, win_thresholds={"mob": Fraction(1, 2)})
-    assert _cache_key("weaponcrafting", state, ()) != _cache_key("weaponcrafting", cheap, ())
+    assert (_cache_key("weaponcrafting", state, (), LearnedDrops.empty())
+            != _cache_key("weaponcrafting", cheap, (), LearnedDrops.empty()))
 
 
 def test_the_memo_key_notices_a_changed_worn_stock():
@@ -270,11 +272,13 @@ def test_the_memo_key_notices_a_changed_worn_stock():
     MUST change the key, in either slot."""
     state = make_state(skills={"weaponcrafting": 3}, utility1_slot_quantity=40,
                        utility2_slot_quantity=40)
-    key = _cache_key("weaponcrafting", state, ())
+    key = _cache_key("weaponcrafting", state, (), LearnedDrops.empty())
     assert key != _cache_key("weaponcrafting",
-                             dataclasses.replace(state, utility1_slot_quantity=0), ())
+                             dataclasses.replace(state, utility1_slot_quantity=0), (),
+                             LearnedDrops.empty())
     assert key != _cache_key("weaponcrafting",
-                             dataclasses.replace(state, utility2_slot_quantity=0), ())
+                             dataclasses.replace(state, utility2_slot_quantity=0), (),
+                             LearnedDrops.empty())
 
 def test_each_game_data_gets_its_own_cache():
     """Scoped per catalogue by `ai/catalogue_scope`, exactly as
