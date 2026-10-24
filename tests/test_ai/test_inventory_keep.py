@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
@@ -956,6 +958,8 @@ def test_carried_keep_is_what_a_deposit_leaves_but_food_and_potions():
     assert keep_in_bag("apple", state, gd, ctx) > 0
     assert keep_in_bag("heal_potion", state, gd, ctx) > 0
     assert carried_keep(state, gd, ctx) == 1 + 12
+    # A keep past what is held keeps only what is held: 30 of the 50 asked.
+    assert carried_keep(state, gd, replace(ctx, step_profile={"copper_ore": 50})) == 1 + 30
 
 
 def test_carried_keep_refuses_an_unknown_held_code():

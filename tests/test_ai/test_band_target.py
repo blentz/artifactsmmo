@@ -589,3 +589,10 @@ def test_a_potion_propped_fight_no_loadout_can_run_is_no_target(monkeypatch):
     assert target is not None and target.monster == "spider"
     ran = band_combat_target(make_state(level=30), gd, None, _never_priced, loops, _no_party)
     assert ran is not None and ran.monster == "ogre"
+
+
+def test_no_loop_clears_no_odds():
+    """Without a loadout whose loop runs there are no odds to clear, even a
+    threshold of 0."""
+    assert mod._odds_clear(None, Fraction(0)) is False
+    assert mod._odds_clear(make_best_loadout(xp=60, win=True, recovery=30), Fraction(1)) is True

@@ -505,6 +505,17 @@ class TestBankTrips:
             + (1 - rate.p_win) * travel_seconds((0, 0), (3, 4))
             + trip * rate.p_win * 2 / 20)
 
+    def test_a_lost_fight_drops_nothing(self) -> None:
+        """A fight won only sometimes drops its units only when won."""
+        state = _state(critical_strike=30)
+        rate = _trip_rate(state, _trip_gd())
+        assert rate is not None and 0 < rate.p_win < 1
+        trip = 2 * 50 + 2 * Fraction(DEPOSIT_SECONDS_PER_CODE)
+        assert rate.xp_per_second == rate.p_win * rate.xp_per_kill / (
+            rate.fight_seconds + rate.recovery_seconds
+            + (1 - rate.p_win) * travel_seconds((0, 0), (3, 4))
+            + trip * rate.p_win * 2 / 20)
+
     def test_a_loop_with_no_room_is_unrunnable(self) -> None:
         gd = _trip_gd()
         assert _trip_rate(_state(**_WINS), gd, carried=20) is None
