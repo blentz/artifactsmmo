@@ -8,7 +8,7 @@
 >
 > The crossing is a differential on production's own pricer — the candidate priced as it stands, then again with the walled items granted. No closure is re-derived here; obligation O6 forbids a second cost model and this census must not be one.
 
-212 candidate cells over 45 scenarios; gate opens 1 of 16 walls (store-less); obtainable 91; not_drop_walled 105; walled 16 (15 on ALTERNATIVES); closes 7; out_of_reach 9; drop_wall_unattributed 0; root_unresolved 0
+213 candidate cells over 45 scenarios; gate opens 1 of 16 walls (store-less); obtainable 92; not_drop_walled 105; walled 16 (15 on ALTERNATIVES); closes 7; out_of_reach 9; drop_wall_unattributed 0; root_unresolved 0
 
 argmax blindness: 1 of 16 walls sit on a RESOLVED root. A census that prices only the argmax sees those 1 and misses 15 — an infinite price is a veto, so a walled candidate never becomes the argmax.
 
@@ -112,12 +112,11 @@ argmax blindness: 1 of 16 walls sit on a RESOLVED root. A census that prices onl
 | l20_dual_utility_one_stocked | ReachSkillLevel(skill='weaponcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility_one_stocked | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility_one_stocked | ReachSkillLevel(skill='jewelrycrafting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l13_drop_recipe_grind | ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot') | argmax | PASS | 43 | 43 | 43 | - | - | - | - | - |
+| l13_drop_recipe_grind | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | argmax | PASS | 188 | 188 | 188 | - | - | - | - | - |
+| l13_drop_recipe_grind | ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot') | alt | PASS | 43 | 43 | 43 | - | - | - | - | - |
 | l13_drop_recipe_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 632 | 632 | 632 | - | - | - | - | - |
 | l13_drop_recipe_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot') | alt | PASS | 632 | 632 | 632 | - | - | - | - | - |
 | l13_drop_recipe_grind | ReachSkillLevel(skill='weaponcrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l13_drop_recipe_grind | ObtainItem(code='leather_armor', quantity=1, slot='body_armor_slot') | alt | PASS | 56 | 56 | 56 | - | - | - | - | - |
-| l13_drop_recipe_grind | ObtainItem(code='leather_hat', quantity=1, slot='helmet_slot') | alt | PASS | 117 | 117 | 117 | - | - | - | - | - |
 | l13_drop_recipe_grind | ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot') | alt | PASS | 43 | 43 | 43 | - | - | - | - | - |
 | l10_gearcrafting_gap | ReachSkillLevel(skill='gearcrafting', level=6) | argmax | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_gearcrafting_gap | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 1000001 | 1 | 1000001 | forest_ring | 1 | 1 | 1 | water_boost_potion, leather_hat, iron_boots |
@@ -178,6 +177,7 @@ argmax blindness: 1 of 16 walls sit on a RESOLVED root. A census that prices onl
 | l12_ge_book_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
 | l12_ge_book_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
 | l12_ge_book_grind | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
+| l12_ge_book_grind | ObtainItem(code='satchel', quantity=1, slot='bag_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
 | l12_ge_book_grind | ReachSkillLevel(skill='jewelrycrafting', level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_ge_book_grind | ReachSkillLevel(skill='gearcrafting', level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_quiet_book_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | argmax | PASS | 632 | 632 | 632 | - | - | - | - | - |
@@ -189,6 +189,7 @@ argmax blindness: 1 of 16 walls sit on a RESOLVED root. A census that prices onl
 | l12_ge_book_adequate | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
 | l12_ge_book_adequate | ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
 | l12_ge_book_adequate | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
+| l12_ge_book_adequate | ObtainItem(code='satchel', quantity=1, slot='bag_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
 | l12_ge_book_adequate | ReachSkillLevel(skill='jewelrycrafting', level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l47_depth3_amulet | ObtainItem(code='greater_dreadful_amulet', quantity=1, slot='amulet_slot') | argmax | PASS | 73 | 73 | 73 | - | - | - | - | - |
 | l47_depth3_amulet | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |

@@ -8,9 +8,9 @@
 >
 > Every field `classify_gap` reads is a column: `droppers`, `live tiles` and `winnable` are the two conjuncts `ObtainModel._drop` gates on, and `event` separates a dormant event from a permanent monster with no tile.
 
-1484 cells over 7 currencies; charged 24; FUNDED 3; walled 21; not_demanded 1460; root_unresolved 0; o7_silent_currency_stall 0; o7_multi_currency_wall 0; o7_unexplained 0; currency_catalogue_empty 0
+1491 cells over 7 currencies; charged 24; FUNDED 3; walled 21; not_demanded 1467; root_unresolved 0; o7_silent_currency_stall 0; o7_multi_currency_wall 0; o7_unexplained 0; currency_catalogue_empty 0
 
-residual scope: 24 of 1484 cells are CHARGED (2 distinct currencies) — gold 21, tasks_coin 3. An uncharged currency can only be not_demanded.
+residual scope: 24 of 1491 cells are CHARGED (2 distinct currencies) — gold 21, tasks_coin 3. An uncharged currency can only be not_demanded.
 
 | Scenario | Candidate | root? | Currency | Verdict | charged | base | granted | earnable | droppers | live tiles | winnable | event |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -700,13 +700,20 @@ residual scope: 24 of 1484 cells are CHARGED (2 distinct currencies) — gold 21
 | l20_dual_utility_one_stocked | `ReachSkillLevel(skill='jewelrycrafting', level=11)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l20_dual_utility_one_stocked | `ReachSkillLevel(skill='jewelrycrafting', level=11)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l20_dual_utility_one_stocked | `ReachSkillLevel(skill='jewelrycrafting', level=11)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
+| l13_drop_recipe_grind | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l13_drop_recipe_grind | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l13_drop_recipe_grind | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l13_drop_recipe_grind | `ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l13_drop_recipe_grind | `ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l13_drop_recipe_grind | `ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -728,20 +735,6 @@ residual scope: 24 of 1484 cells are CHARGED (2 distinct currencies) — gold 21
 | l13_drop_recipe_grind | `ReachSkillLevel(skill='weaponcrafting', level=6)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l13_drop_recipe_grind | `ReachSkillLevel(skill='weaponcrafting', level=6)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l13_drop_recipe_grind | `ReachSkillLevel(skill='weaponcrafting', level=6)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_armor', quantity=1, slot='body_armor_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_armor', quantity=1, slot='body_armor_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_armor', quantity=1, slot='body_armor_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_armor', quantity=1, slot='body_armor_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_armor', quantity=1, slot='body_armor_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_armor', quantity=1, slot='body_armor_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_armor', quantity=1, slot='body_armor_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_hat', quantity=1, slot='helmet_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_hat', quantity=1, slot='helmet_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_hat', quantity=1, slot='helmet_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_hat', quantity=1, slot='helmet_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_hat', quantity=1, slot='helmet_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_hat', quantity=1, slot='helmet_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_hat', quantity=1, slot='helmet_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -1162,6 +1155,13 @@ residual scope: 24 of 1484 cells are CHARGED (2 distinct currencies) — gold 21
 | l12_ge_book_grind | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l12_ge_book_grind | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l12_ge_book_grind | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
+| l12_ge_book_grind | `ObtainItem(code='satchel', quantity=1, slot='bag_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l12_ge_book_grind | `ObtainItem(code='satchel', quantity=1, slot='bag_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l12_ge_book_grind | `ObtainItem(code='satchel', quantity=1, slot='bag_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l12_ge_book_grind | `ObtainItem(code='satchel', quantity=1, slot='bag_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l12_ge_book_grind | `ObtainItem(code='satchel', quantity=1, slot='bag_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l12_ge_book_grind | `ObtainItem(code='satchel', quantity=1, slot='bag_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l12_ge_book_grind | `ObtainItem(code='satchel', quantity=1, slot='bag_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l12_ge_book_grind | `ReachSkillLevel(skill='jewelrycrafting', level=10)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l12_ge_book_grind | `ReachSkillLevel(skill='jewelrycrafting', level=10)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l12_ge_book_grind | `ReachSkillLevel(skill='jewelrycrafting', level=10)` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -1239,6 +1239,13 @@ residual scope: 24 of 1484 cells are CHARGED (2 distinct currencies) — gold 21
 | l12_ge_book_adequate | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l12_ge_book_adequate | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l12_ge_book_adequate | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
+| l12_ge_book_adequate | `ObtainItem(code='satchel', quantity=1, slot='bag_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l12_ge_book_adequate | `ObtainItem(code='satchel', quantity=1, slot='bag_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l12_ge_book_adequate | `ObtainItem(code='satchel', quantity=1, slot='bag_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l12_ge_book_adequate | `ObtainItem(code='satchel', quantity=1, slot='bag_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l12_ge_book_adequate | `ObtainItem(code='satchel', quantity=1, slot='bag_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l12_ge_book_adequate | `ObtainItem(code='satchel', quantity=1, slot='bag_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l12_ge_book_adequate | `ObtainItem(code='satchel', quantity=1, slot='bag_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l12_ge_book_adequate | `ReachSkillLevel(skill='jewelrycrafting', level=10)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l12_ge_book_adequate | `ReachSkillLevel(skill='jewelrycrafting', level=10)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l12_ge_book_adequate | `ReachSkillLevel(skill='jewelrycrafting', level=10)` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
