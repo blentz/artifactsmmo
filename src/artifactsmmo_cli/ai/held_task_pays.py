@@ -34,7 +34,9 @@ def held_task_pays(state: WorldState, game_data: GameData, ctx: SelectionContext
     rate = _task_rate(state.task_code, ctx.skill_demand, history)
     if rate is None:
         return True
-    grind = best_loadout(state, game_data, ctx, monster, history).rate.xp_per_second
+    best = best_loadout(state, game_data, ctx, monster, history)
+    # A grind no loadout can run (no room in the bag for its drops) earns nothing.
+    grind = Fraction(0) if best is None else best.rate.xp_per_second
     return Fraction(rate) > grind
 
 

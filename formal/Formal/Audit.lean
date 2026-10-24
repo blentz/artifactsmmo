@@ -470,6 +470,14 @@ open Formal.PriorityBand
 #print axioms Formal.LoopRate.eatCost_held_zero
 #print axioms Formal.LoopRate.potionCost_held_zero
 #print axioms Formal.LoopRate.consumed_held_free_le
+#print axioms Formal.LoopRate.tripShare_none_iff
+#print axioms Formal.LoopRate.tripShare_pos
+#print axioms Formal.LoopRate.tripShare_no_drops
+#print axioms Formal.LoopRate.share_antitone_capacity
+#print axioms Formal.LoopRate.share_mono_drops
+#print axioms Formal.LoopRate.share_mono_trip
+#print axioms Formal.LoopRate.tripSeconds_mono_walk
+#print axioms Formal.LoopRate.drops_mono_unit
 #print axioms Formal.BestLoadout.pick_optimal
 #print axioms Formal.BestLoadout.pick_mem
 #print axioms Formal.BestLoadout.pick_none_iff

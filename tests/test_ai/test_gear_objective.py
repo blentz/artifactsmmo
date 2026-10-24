@@ -7,6 +7,7 @@ worn gear; the missing pieces come in the core's order (layer, then gain per
 price).
 """
 
+import json
 from collections import Counter
 from dataclasses import replace
 from fractions import Fraction
@@ -24,11 +25,12 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import achievable, fighter_owning, gear_objective
 from artifactsmmo_cli.ai.gear_objective_core import objective_held, piece_order_key
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
+from artifactsmmo_cli.ai.inventory_keep import carried_keep
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.yield_reprs import grind_xp_repr
-from artifactsmmo_cli.ai.loop_rate import food_menu
+from artifactsmmo_cli.ai.loop_rate import LoopInputs, food_menu
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
@@ -88,6 +90,11 @@ def _novice(gd: GameData, equipment: dict[str, str] = COPPER,
     """A low-level character whose stat totals are its worn gear's."""
     return scenario_state(ScenarioCharacter(name="novice", level=level, derive_combat_stats=True,
                                             equipment=equipment, inventory=inventory or {}), gd)
+
+
+def _loop(state: WorldState, gd: GameData) -> LoopInputs:
+    """The loop inputs `gear_objective` reads for the real character `state`."""
+    return LoopInputs(CTX.timing(), CTX.drops(), carried_keep(state, gd, CTX))
 
 
 def _objective(state: WorldState, gd: GameData,
@@ -156,7 +163,7 @@ def test_a_zero_gain_piece_is_not_missing(gd: GameData, robby: GearObjective) ->
     assert loadout == robby.loadout
     emptied = _without(state, fighter, "artifact1_slot", gd)
     assert mod._rate(emptied, gd, robby.monster, food_menu(state, gd, CTX),
-                     CTX.timing()) == robby.rate
+                     _loop(state, gd)) == robby.rate
     assert all(piece.code != "perfect_pearl" for piece in robby.missing)
     assert {piece.slot for piece in robby.missing}.isdisjoint(
         {"artifact1_slot", "artifact2_slot", "artifact3_slot"})
@@ -205,8 +212,61 @@ def test_gain_is_measured_against_the_target_not_a_bare_fighter(
         assert objective.loadout[piece.slot] == piece.code
         without = _without(state, fighter, piece.slot, gd)
         assert piece.gain == objective.rate - mod._rate(without, gd, objective.monster,
-                                                        food, CTX.timing()), piece
+                                                        food, _loop(state, gd)), piece
     assert any(piece.gain > 0 for piece in objective.missing)
+
+
+def _tasks_farmer_completed() -> GameData:
+    """The committed bundle with the `tasks_farmer` achievement completed: the
+    `tasks_trader` that sells the satchel's `jasper_crystal` stands, so the
+    satchel is achievable (the sheet `test_slot_coverage` re-pinned in
+    42bd2dee)."""
+    raw = json.loads(BUNDLE.read_text())
+    for ach in raw["achievements"]:
+        if ach["code"] == "tasks_farmer":
+            ach["completed_at"] = "2026-01-01T00:00:00+00:00"
+            for objective in ach["objectives"]:
+                objective["progress"] = objective["total"]
+    return GameData.from_cache_bundle(raw)
+
+
+def test_a_bag_has_a_gain() -> None:
+    """Spec §2.10 (USER 2026-10-20, "gear score should model meta-benefits so
+    that bags receive a score"): `R` counts the bank trips the cow's drops
+    force, and the satchel's 15 units of room make them rarer. So the satchel
+    `L*` names is a missing piece with a gain above 0; it read 0 while `R`
+    left the trips out."""
+    gd = _tasks_farmer_completed()
+    state = scenario_state(SCENARIOS["l12_bag_pursuit"], gd)
+    objective = _objective(state, gd)
+    assert objective.loadout["bag_slot"] == "satchel"
+    [piece] = [piece for piece in objective.missing if piece.slot == "bag_slot"]
+    assert piece.code == "satchel" and piece.gain > 0
+    fighter, _ = mod._targets(state, gd, frozenset().union(*achievable(state, gd, CTX)))[
+        objective.monster]
+    assert fighter.inventory_max == state.inventory_max + 15
+    without = _without(state, fighter, "bag_slot", gd)
+    assert without.inventory_max == state.inventory_max
+    assert piece.gain == objective.rate - mod._rate(without, gd, objective.monster,
+                                                    food_menu(state, gd, CTX), _loop(state, gd))
+
+
+def test_the_keep_s_carry_is_room_no_drop_has(monkeypatch: pytest.MonkeyPatch,
+                                               gd: GameData) -> None:
+    """The bag's room for drops is its cap less what the keep holds in it
+    (`carried_keep`): a keep that fills any bag leaves no loop that drops
+    something running, so no monster pays and there is no objective."""
+    monkeypatch.setattr(mod, "carried_keep", lambda *_args: 10 ** 6)
+    assert gear_objective(_novice(gd), gd, CTX, None) is None
+
+
+def test_wearing_a_bag_raises_the_bag_cap(gd: GameData) -> None:
+    """The cap is a server total like the combat stats: a worn bag adds its
+    `inventory_space`, and taking it off takes it away (spec §2.10)."""
+    state = _novice(gd, inventory={"backpack": 1})
+    worn = mod._wearing(state, {"bag_slot": "backpack"}, gd)
+    assert worn.inventory_max == state.inventory_max + 35
+    assert mod._wearing(worn, {"bag_slot": None}, gd).inventory_max == state.inventory_max
 
 
 def test_a_fresh_character_wants_its_first_weapon(gd: GameData) -> None:
@@ -226,10 +286,10 @@ def test_a_fresh_character_wants_its_first_weapon(gd: GameData) -> None:
     unarmed = replace(unarmed, inventory={
         item: n for item, n in unarmed.inventory.items()
         if (stats := gd.item_stats(item)) is not None and stats.type_ != "weapon"})
-    assert mod._rate(unarmed, gd, objective.monster, food, CTX.timing()) == 0
+    assert mod._rate(unarmed, gd, objective.monster, food, _loop(state, gd)) == 0
     assert dagger[0].gain == objective.rate > 0
     carried = mod._wearing(fighter, {"weapon_slot": None}, gd)
-    assert mod._rate(carried, gd, objective.monster, food, CTX.timing()) == objective.rate
+    assert mod._rate(carried, gd, objective.monster, food, _loop(state, gd)) == objective.rate
     assert not objective.held
 
 
@@ -394,7 +454,7 @@ def test_m_star_is_the_max_rate_monster(gd: GameData, novice: GearObjective) -> 
     state = _novice(gd)
     achieved = frozenset().union(*achievable(state, gd, CTX))
     food = food_menu(state, gd, CTX)
-    rates = {code: mod._rate(fighter, gd, code, food, CTX.timing())
+    rates = {code: mod._rate(fighter, gd, code, food, _loop(state, gd))
              for code, (fighter, _) in mod._targets(state, gd, achieved).items()}
     assert len(set(rates.values())) > 1
     assert novice.rate == rates[novice.monster] == max(rates.values())
@@ -619,11 +679,13 @@ def test_wearing_an_unowned_piece_raises(gd: GameData) -> None:
         mod._wearing(_novice(gd), {"weapon_slot": "iron_sword"}, gd)
 
 
-def test_a_no_potion_loop_that_never_runs_raises(monkeypatch: pytest.MonkeyPatch,
-                                                 gd: GameData) -> None:
+def test_a_no_potion_loop_that_does_not_run_earns_nothing(monkeypatch: pytest.MonkeyPatch,
+                                                          gd: GameData) -> None:
+    """Spec §2.10: the no-potion loop does not run when the bag has no room for
+    its drops (it drinks nothing, so no potion can stop it); such a loop earns
+    nothing, `R = 0`. It raised while the no-potion loop always ran."""
     monkeypatch.setattr(mod, "loop_rate", lambda *_args: None)
-    with pytest.raises(RuntimeError, match="the no-potion loop against chicken did not run"):
-        mod._rate(_novice(gd), gd, "chicken", (), CTX.timing())
+    assert mod._rate(_novice(gd), gd, "chicken", (), _loop(_novice(gd), gd)) == 0
 
 
 def _carrying_its_target(name: str, gd: GameData) -> tuple[WorldState, GearObjective]:
@@ -667,6 +729,14 @@ def test_a_bare_element_below_zero_raises(gd: GameData) -> None:
     attack raises on `attack.fire`."""
     state = replace(_robby(), attack={**_robby().attack, "fire": 0})
     with pytest.raises(ValueError, match=r"^testchar: bare attack\.fire -37 < 0"):
+        gear_objective(state, gd, CTX, None)
+
+
+def test_a_bag_cap_below_its_worn_bag_raises(gd: GameData) -> None:
+    """The bag cap is checked too: a sheet wearing a `backpack` (35) whose cap is
+    10 did not count the bag in its total."""
+    state = replace(_robby({**ROBBY_WORN, "bag_slot": "backpack"}), inventory_max=10)
+    with pytest.raises(ValueError, match=r"^testchar: bare inventory_max -25 < 0"):
         gear_objective(state, gd, CTX, None)
 
 

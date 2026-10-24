@@ -715,8 +715,10 @@ def test_l12_bag_pursuit_satchel_chain_gated() -> None:
     assert gd.npc_location("tasks_trader") is None
 
 
-def test_l12_bag_pursuit_satchel_becomes_attainable_but_adds_no_xp() -> None:
-    """RENAMED Task 5 fix round 1 (was `..._but_is_no_longer_pursued`): with the
+def test_l12_bag_pursuit_satchel_becomes_attainable_and_has_a_gain() -> None:
+    """RENAMED spec 2026-10-18 §2.10 (was `..._but_adds_no_xp`).
+
+    RENAMED Task 5 fix round 1 (was `..._but_is_no_longer_pursued`): with the
     gear objective the satchel is an `L*` piece again, offered in the
     alternatives.
 
@@ -775,13 +777,19 @@ def test_l12_bag_pursuit_satchel_becomes_attainable_but_adds_no_xp() -> None:
     # the satchel is still `L*`'s bag, but a bag moves no fight, so its gain in
     # `R` is 0 and it is not offered. The gear objective no longer pursues a bag
     # on any sheet; the objective-level half above still bites.
+    #
+    # RE-DERIVED spec 2026-10-18 §2.10 (`R` counts the loop's bank trips): the
+    # cow's drops fill the bag and each fill is a trip to the bank, so the
+    # satchel's 15 units of room make trips rarer and its gain is above 0. It
+    # is offered again, last: its gain per second of acquisition is the least.
     assert report.decision.chosen_root == ObtainItem(
         code="iron_sword", quantity=1, slot="weapon_slot")
     assert report.decision.fallback_roots == [
         ObtainItem(code="iron_armor", quantity=1, slot="body_armor_slot"),
         ObtainItem(code="forest_ring", quantity=1, slot="ring1_slot"),
         ObtainItem(code="forest_ring", quantity=1, slot="ring2_slot"),
-        ReachSkillLevel(skill="jewelrycrafting", level=2)], report.decision.fallback_roots
+        ReachSkillLevel(skill="jewelrycrafting", level=2),
+        ObtainItem(code="satchel", quantity=1, slot="bag_slot")], report.decision.fallback_roots
     assert not any(isinstance(r, ObtainItem) and r.code == "backpack"
                    for r in report.decision.fallback_roots), \
         report.decision.fallback_roots

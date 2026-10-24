@@ -92,3 +92,14 @@ def test_dmg_crit_initiative_project():
     assert proj.dmg_elements == {"fire": 3}
     assert proj.critical_strike == 5
     assert proj.initiative == 14
+
+
+def test_a_bag_swap_moves_the_bag_cap():
+    """Spec 2026-10-18 §2.10: the server's `inventory_max_items` is a total a
+    worn bag raises, so a bag swap is its `inventory_space` delta."""
+    state = make_state(inventory_max=115, equipment={"bag_slot": "satchel"})
+    gd = _gd({"satchel": ItemStats(code="satchel", level=1, type_="bag", inventory_space=15),
+              "backpack": ItemStats(code="backpack", level=1, type_="bag", inventory_space=35)})
+    assert project_loadout_stats(state, {"bag_slot": "backpack"}, gd).inventory_max == 135
+    assert project_loadout_stats(state, {"bag_slot": None}, gd).inventory_max == 100
+    assert project_loadout_stats(state, {}, gd).inventory_max == 115

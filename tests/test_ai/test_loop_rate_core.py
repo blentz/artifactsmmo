@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.loop_rate_core import (
     _recovery_table,
     consumed_seconds,
     count_bound,
+    drops_per_fight,
     eat_cost,
     expected_xp_per_second,
     food_bound,
@@ -17,6 +18,8 @@ from artifactsmmo_cli.ai.loop_rate_core import (
     recovery_choice,
     recovery_seconds,
     rest_part,
+    trip_seconds,
+    trip_share,
     xp_per_second,
 )
 
@@ -225,3 +228,47 @@ class TestExpectedRate:
     def test_out_of_range_raises(self, args: tuple[int, Fraction, Fraction, Fraction]) -> None:
         with pytest.raises(ValueError, match=r"must be positive|out of range"):
             expected_xp_per_second(*args)
+
+
+class TestBankTrips:
+    """Spec 2026-10-18 §2.10: each fight carries `trip × drops / room` seconds of
+    bank trips (proved: `Formal.LoopRate.tripShare`)."""
+
+    def test_a_fight_drops_its_units_when_won(self) -> None:
+        assert drops_per_fight(Fraction(1, 2), [Fraction(1), Fraction(1, 3)]) == Fraction(2, 3)
+        assert drops_per_fight(Fraction(0), [Fraction(5)]) == 0
+        assert drops_per_fight(Fraction(1), []) == 0
+
+    @pytest.mark.parametrize("p_win, units", [(Fraction(-1), []), (Fraction(2), []),
+                                              (Fraction(1), [Fraction(-1)])])
+    def test_drops_out_of_range_raise(self, p_win: Fraction, units: list[Fraction]) -> None:
+        with pytest.raises(ValueError, match="out of range"):
+            drops_per_fight(p_win, units)
+
+    def test_a_trip_walks_both_ways_and_deposits_each_code(self) -> None:
+        assert trip_seconds(50, Fraction(2), 3) == 106
+        assert trip_seconds(0, Fraction(2), 0) == 0
+
+    @pytest.mark.parametrize("walk, deposit, codes", [(-1, Fraction(2), 1),
+                                                      (1, Fraction(-2), 1), (1, Fraction(2), -1)])
+    def test_a_negative_trip_term_raises(self, walk: int, deposit: Fraction, codes: int) -> None:
+        with pytest.raises(ValueError, match="must be non-negative"):
+            trip_seconds(walk, deposit, codes)
+
+    def test_the_share_is_the_trip_over_the_fights_a_bag_holds(self) -> None:
+        assert trip_share(Fraction(104), Fraction(2), 20) == Fraction(104, 10)
+        assert trip_share(Fraction(104), Fraction(2), 1) == 208
+
+    def test_no_drops_no_trips_whatever_the_room(self) -> None:
+        assert trip_share(Fraction(104), Fraction(0), 0) == 0
+        assert trip_share(Fraction(104), Fraction(0), -5) == 0
+
+    def test_drops_with_no_room_cannot_run(self) -> None:
+        assert trip_share(Fraction(104), Fraction(1, 10), 0) is None
+        assert trip_share(Fraction(104), Fraction(1, 10), -1) is None
+
+    @pytest.mark.parametrize("trip, drops", [(Fraction(-1), Fraction(1)),
+                                             (Fraction(1), Fraction(-1))])
+    def test_a_negative_share_term_raises(self, trip: Fraction, drops: Fraction) -> None:
+        with pytest.raises(ValueError, match="must be non-negative"):
+            trip_share(trip, drops, 10)

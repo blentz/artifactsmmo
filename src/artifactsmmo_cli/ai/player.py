@@ -2883,7 +2883,7 @@ class GamePlayer:
         return band_combat_target(self.state, self.game_data, self.history,
                                   self._consumable_price, self._band_loadout, self._band_party)
 
-    def _band_loadout(self, monster: str) -> BestLoadout:
+    def _band_loadout(self, monster: str) -> BestLoadout | None:
         """`best_loadout` against one band monster, for `band_combat_target`'s
         rank (USER 2026-10-10, "loadout picks the monster").
 

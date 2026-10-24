@@ -556,7 +556,13 @@ def test_the_demand_breakdown_states_the_residual_scope(
     # `l12_ge_book_adequate` from 5 to 6: a piece the book fills is offered as
     # its own `ObtainItem` (held gold free up to the pocket) rather than
     # collapsed into the crafting climb it shared. No charged cell moves.
-    assert "24 of 1484 cells are CHARGED (2 distinct currencies) — gold 21, tasks_coin 3" in line
+    # 1484 -> 1491 (spec 2026-10-18 §2.10, `R` counts the loop's bank trips):
+    # the two busy-book scenarios offer the `satchel` (+14: a bag is a gain
+    # now), and `l13_drop_recipe_grind`'s `m*` moves from `flying_snake` to
+    # `red_slime` once the trips its drops force are counted, so its walk
+    # offers `adventurer_helmet` for `leather_hat` and no `leather_armor` (-7).
+    # No charged cell moves.
+    assert "24 of 1491 cells are CHARGED (2 distinct currencies) — gold 21, tasks_coin 3" in line
     assert FUNDED_CURRENCY in line
     assert demand_breakdown([]) .endswith(
         "An uncharged currency can only be not_demanded.")

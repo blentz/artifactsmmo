@@ -121,7 +121,7 @@ class TestBest:
         assert best.loadout == ("fire_res_potion",)
         food = food_menu(state, gd, _CTX)
         expected = loop_rate(state, gd, "ogre", [("fire_res_potion", UTILITY_SLOT_MAX_STACK)],
-                             food, {"fire_res_potion": None}, _CTX.timing())
+                             food, {"fire_res_potion": None}, _CTX.timing(), _CTX.drops(), 0)
         assert best.rate == expected
         assert best.rate.win is True
         # one boost a fight, and the held apples the recovery eats
@@ -186,7 +186,7 @@ class TestBest:
         state = _state(bank_items={"fire_res_potion": 40, "water_boost": 40})
         assert list(candidate_potions(state, gd, _CTX)) == ["water_boost", "fire_res_potion"]
         pair = loop_rate(state, gd, "ogre", [("water_boost", 1), ("fire_res_potion", 1)], (),
-                         {"water_boost": None, "fire_res_potion": None}, _CTX.timing())
+                         {"water_boost": None, "fire_res_potion": None}, _CTX.timing(), _CTX.drops(), 0)
         best = best_loadout(state, gd, _CTX, "ogre")
         assert pair is not None and pair.xp_per_second == best.rate.xp_per_second > 0
         assert best.loadout == ("fire_res_potion",)
@@ -206,7 +206,7 @@ class TestBest:
         assert best.loadout == ()
         bare_units = units_used(best.bare)
         fire = loop_rate(state, _gd(), "ogre", [("fire_res_potion", UTILITY_SLOT_MAX_STACK)],
-                         food_menu(state, _gd(), _CTX), {"fire_res_potion": None}, _CTX.timing())
+                         food_menu(state, _gd(), _CTX), {"fire_res_potion": None}, _CTX.timing(), _CTX.drops(), 0)
         assert fire is not None
         assert seen == [[(best.bare.xp_per_second, bare_units), (fire.xp_per_second, 3)]]
 
@@ -326,7 +326,8 @@ def test_the_made_recovery_holds_nothing_and_drops_unpriced_food(monkeypatch: py
     seen: list[tuple[FoodOffer, ...]] = []
 
     def fake_loop_rate(state: object, gd: object, monster: object, loadout: object,
-                       food: tuple[FoodOffer, ...], prices: object, timing: object) -> LoopRate:
+                       food: tuple[FoodOffer, ...], prices: object, timing: object,
+                       drops: object, carried: object) -> LoopRate:
         seen.append(tuple(food))
         return _rate(used=(), eaten=())
 
@@ -338,3 +339,72 @@ def test_the_made_recovery_holds_nothing_and_drops_unpriced_food(monkeypatch: py
     monkeypatch.setattr(best_mod, "food_menu", lambda *a, **k: menu)
     best_loadout(_state(), GameData(), _CTX, "wolf")
     assert seen == [menu, (FoodOffer("apple", 50, Fraction(90), 0),)]
+
+
+def _scripted(monkeypatch: pytest.MonkeyPatch, codes: list[tuple[str, ...]],
+              rates: list[LoopRate | None]) -> None:
+    """`best_loadout` over `codes`, its loops answering `rates` in call order."""
+    answers = iter(rates)
+    monkeypatch.setattr(best_mod, "loop_rate", lambda *a, **k: next(answers))
+    monkeypatch.setattr(best_mod, "loadouts", lambda prices, gd: list(codes))
+    monkeypatch.setattr(best_mod, "candidate_potions", lambda *a, **k: {})
+    monkeypatch.setattr(best_mod, "food_menu", lambda *a, **k: ())
+
+
+class TestNoRoom:
+    """Spec 2026-10-18 §2.10: a loop with drops and no room in the bag for them
+    does not run, so the no-potion loop may not run either."""
+
+    def test_no_loop_that_runs_is_no_pick(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _scripted(monkeypatch, [()], [None])
+        assert best_loadout(_state(), _gd(), _CTX, "ogre") is None
+
+    def test_no_pick_is_no_fight_ahead_and_no_loadout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(best_mod, "best_loadout", lambda *a, **k: None)
+        ctx = replace(_CTX, combat_monster="ogre")
+        assert fight_ahead_loadout(_state(), _gd(), ctx, None) is None
+        assert loadout_for(_state(), _gd(), _CTX, "ogre") is None
+
+    def test_a_potion_loop_may_run_where_the_bare_one_does_not(
+            self, monkeypatch: pytest.MonkeyPatch) -> None:
+        potion = _rate(used=(("heal_potion", 1),))
+        _scripted(monkeypatch, [(), ("heal_potion",)], [None, potion, potion])
+        best = best_loadout(_state(), _gd(), _CTX, "ogre")
+        assert best is not None
+        assert (best.loadout, best.rate, best.bare, best.made) == (("heal_potion",), potion, None,
+                                                                   potion)
+
+    def test_no_room_with_every_unit_made_makes_no_food(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        held = _rate(used=(), eaten=(("apple", 2),))
+        _scripted(monkeypatch, [()], [held, None])
+        best = best_loadout(_state(), _gd(), _CTX, "ogre")
+        assert best is not None and best.made is None
+        assert chosen(best, "ogre") == ChosenLoadout("ogre", (), (("apple", 2),), ())
+
+    def test_the_loop_without_room_is_not_picked(self) -> None:
+        """A bag of 0: the fire-res loop wins and drops a bone it has no room
+        for, so it does not run; the bare loop loses, drops nothing and runs."""
+        gd = _gd()
+        gd._monster_drops = {"ogre": [("bone", 1, 1, 1)]}
+        gd._item_stats["bone"] = ItemStats(code="bone", level=1, type_="resource")
+        gd._bank_location = (5, 5)
+        state = _state(bank_items={"fire_res_potion": 40}, inventory_max=0)
+        best = best_loadout(state, gd, _CTX, "ogre")
+        assert best is not None and best.loadout == () and best.rate.p_win == 0
+        roomy = best_loadout(replace(state, inventory_max=100), gd, _CTX, "ogre")
+        assert roomy is not None and roomy.loadout == ("fire_res_potion",)
+
+    def test_what_the_keep_carries_takes_room(self) -> None:
+        """A bag of 1 holding the one bone the step needs (its goal materials,
+        `inventory_keep.carried_keep`): the fire-res loop wins a bone it has no
+        room for, so the bare loop is the pick; with the bone not needed it
+        is banked, and the fire-res loop has its room."""
+        gd = _gd()
+        gd._monster_drops = {"ogre": [("bone", 1, 1, 1)]}
+        gd._item_stats["bone"] = ItemStats(code="bone", level=1, type_="resource")
+        gd._bank_location = (5, 5)
+        state = _state(bank_items={"fire_res_potion": 40}, inventory={"bone": 1}, inventory_max=1)
+        kept = best_loadout(state, gd, replace(_CTX, step_profile={"bone": 1}), "ogre")
+        assert kept is not None and kept.loadout == ()
+        banked = best_loadout(state, gd, _CTX, "ogre")
+        assert banked is not None and banked.loadout == ("fire_res_potion",)

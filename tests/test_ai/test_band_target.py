@@ -567,3 +567,25 @@ def test_a_potion_loadout_at_a_lower_measured_threshold_is_a_candidate(monkeypat
     target = band_combat_target(state, gd, None, _never_priced,
                                 {"spider": spider, "ogre": ogre}.__getitem__, _no_party)
     assert target is not None and target.monster == "ogre"
+
+
+def test_a_loop_no_loadout_can_run_ranks_at_zero():
+    """Spec 2026-10-18 §2.10: with no room in the bag for its drops no loadout's
+    loop runs (`best_loadout` None), and an unmeasured loop that does not run
+    earns nothing."""
+    assert rank_rate(60, None, lambda: None, _never_priced) == 0
+
+
+def test_a_potion_propped_fight_no_loadout_can_run_is_no_target(monkeypatch):
+    """The ogre is won only on a potion; with no loop that runs against it, its
+    odds clear nothing, so the bare-winnable spider is the target."""
+    gd = _spider_bare_ogre_on_potions(monkeypatch)
+    loops = _loops(spider_recovery=60, ogre_win=True, ogre_consumed=0)
+
+    def no_ogre_loop(code: str):
+        return None if code == "ogre" else loops(code)
+    target = band_combat_target(make_state(level=30), gd, None, _never_priced, no_ogre_loop,
+                                _no_party)
+    assert target is not None and target.monster == "spider"
+    ran = band_combat_target(make_state(level=30), gd, None, _never_priced, loops, _no_party)
+    assert ran is not None and ran.monster == "ogre"

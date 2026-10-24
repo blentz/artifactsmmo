@@ -30,13 +30,12 @@ class ProjectedStats:
     `state.wisdom`, the server total for gear already WORN, so a candidate's own
     wisdom never reached the formula that wanted it.
 
-    `inventory_space` and `lifesteal` remain unprojected for a concrete reason:
-    `WorldState` has no field for either, so there is no BASE total to add a
-    delta to. This projection is a delta from server-authoritative totals, and a
-    fabricated base would silently mis-state every candidate — worse than the
-    absence it replaced. They stay declared in
-    `audit/stat_projection_completeness.UNPRICED`, which is the difference
-    between a known gap and a forgotten one."""
+    `lifesteal` remains unprojected for a concrete reason: `WorldState` has no
+    field for it, so there is no BASE total to add a delta to. This projection
+    is a delta from server-authoritative totals, and a fabricated base would
+    silently mis-state every candidate — worse than the absence it replaced. It
+    stays declared in `audit/stat_projection_completeness.UNPRICED`, which is
+    the difference between a known gap and a forgotten one."""
     prospecting: int = 0
     """+1% drop chance per 10 points. Pays by reducing kills-per-drop, so it
     makes every DROP-route acquisition cheaper — see
@@ -46,6 +45,12 @@ class ProjectedStats:
     """The fight-cooldown reduction a fight's seconds read
     (`fight_seconds_core`, spec 2026-10-18 §2.9). Projected since that spec
     priced a fight by its length: a haste piece shortens every fight."""
+    inventory_max: int = 0
+    """The bag's quantity cap: the server's `inventory_max_items` total, which
+    a worn bag's `inventory_space` raises. The total IS a `WorldState` field
+    (`inventory_max`), so a bag projects as a delta like every stat above.
+    Projected since spec 2026-10-18 §2.10 counted the loop's bank trips: a
+    bigger bag fills less often (`loop_rate`'s capacity)."""
 
 
 def _drop_zeros(d: dict[str, int]) -> dict[str, int]:
@@ -67,6 +72,7 @@ def project_loadout_stats(
     wisdom = state.wisdom
     prospecting = state.prospecting
     haste = state.haste
+    inventory_max = state.inventory_max
 
     for slot, new_code in loadout.items():
         old_code = state.equipment.get(slot)
@@ -95,6 +101,8 @@ def project_loadout_stats(
         prospecting += ((new_s.prospecting if new_s else 0)
                         - (old_s.prospecting if old_s else 0))
         haste += (new_s.haste if new_s else 0) - (old_s.haste if old_s else 0)
+        inventory_max += ((new_s.inventory_space if new_s else 0)
+                          - (old_s.inventory_space if old_s else 0))
 
     return ProjectedStats(
         attack=_drop_zeros(attack),
@@ -107,4 +115,5 @@ def project_loadout_stats(
         wisdom=wisdom,
         prospecting=prospecting,
         haste=haste,
+        inventory_max=inventory_max,
     )

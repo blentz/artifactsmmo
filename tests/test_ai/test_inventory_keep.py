@@ -1,3 +1,5 @@
+import pytest
+
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry, potion_carry
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -14,6 +16,7 @@ from artifactsmmo_cli.ai.inventory_keep import (
     OWNED_REASONS,
     KeepReason,
     bankable,
+    carried_keep,
     destroyable,
     keep_in_bag,
     keep_owned,
@@ -936,3 +939,26 @@ def test_slot_silence_floor_ignores_codes_the_catalog_does_not_know():
     # An unknown QUERIED code has no slots at all -> no floor.
     assert reason_quantity(KeepReason.GEAR_DEMAND, "phantom_item", state, gd, ctx) == 1
     assert reason_quantity(KeepReason.GEAR_DEMAND, "other_phantom", state, gd, ctx) == 0
+
+
+def test_carried_keep_is_what_a_deposit_leaves_but_food_and_potions():
+    """Spec 2026-10-18 §2.10: the fight loop's room for drops is the bag cap
+    less what stays in it through a deposit. Of 5 daggers one stays (the combat
+    weapon), and of 30 ore the 12 the step needs stay (its goal materials); the
+    food and the potion are the loop's own to count (`loop_rate`)."""
+    gd = _gd()
+    gd._item_stats["heal_potion"] = ItemStats(code="heal_potion", level=1, type_="utility",
+                                              hp_restore=40)
+    state = make_state(level=10, inventory={"copper_dagger": 5, "copper_ore": 30,
+                                            "apple": 20, "heal_potion": 7})
+    ctx = _ctx(loadout=ChosenLoadout("wolf", (("heal_potion", 1),), (("apple", 1),), ()),
+               step_profile={"copper_ore": 12})
+    assert keep_in_bag("apple", state, gd, ctx) > 0
+    assert keep_in_bag("heal_potion", state, gd, ctx) > 0
+    assert carried_keep(state, gd, ctx) == 1 + 12
+
+
+def test_carried_keep_refuses_an_unknown_held_code():
+    state = make_state(level=10, inventory={"mystery": 1})
+    with pytest.raises(KeyError, match="mystery is held but has no item stats"):
+        carried_keep(state, _gd(), _ctx())

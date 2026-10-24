@@ -254,6 +254,13 @@ def fight_haste(state: WorldState, game_data: GameData, monster_code: str) -> in
     return _fight_projection(state, game_data, monster_code)[1].haste
 
 
+def fight_stats(state: WorldState, game_data: GameData, monster_code: str) -> ProjectedStats:
+    """The stats a fight against `monster_code` is fought in: the projected
+    loadout's (`_fight_projection`), whose prospecting the fight's drops land at
+    and whose bag cap holds them (spec 2026-10-18 §2.10)."""
+    return _fight_projection(state, game_data, monster_code)[1]
+
+
 def endings_seconds(endings: tuple[Ending, ...], terms: FightTerms, haste: int,
                     timing: FightSecondsModel) -> Fraction:
     """The seconds of a fight with these `endings` under `terms` (who moves

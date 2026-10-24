@@ -130,6 +130,14 @@ Folding them into one name would make a future divergence silent.
 """
 
 
+DEPOSIT_SECONDS_PER_CODE = 2.0
+"""What depositing one item code is priced at, before the walk: a
+`DepositItemAction` (one code) and each held code of a `DepositAllAction`. The
+loop's bank trip charges it once per distinct drop code (spec 2026-10-18
+§2.10, `loop_rate_core.trip_seconds`), so the trip and the deposit actions the
+planner prices agree."""
+
+
 def distance_cost_pure(base: float, dist: int) -> float:
     """Cost = base + dist. Non-negative when base >= 0 and dist >= 0.
 

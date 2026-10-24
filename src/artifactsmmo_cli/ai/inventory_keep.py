@@ -62,6 +62,7 @@ from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.chosen_loadout import food_carry, potion_carry
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.heal_catalog import FOOD, POTION
 from artifactsmmo_cli.ai.inventory_caps import (
     EQUIPPABLE_KEEP,
     _is_equippable_dominated,
@@ -412,3 +413,20 @@ def destroyable(code: str, state: WorldState, game_data: GameData,
     toward satisfying it."""
     owned = state.inventory.get(code, 0) + (state.bank_items or {}).get(code, 0)
     return max(0, owned - keep_owned(code, state, game_data, ctx))
+
+
+def carried_keep(state: WorldState, game_data: GameData, ctx: SelectionContext) -> int:
+    """Units the bag still holds after a deposit, but for food and potions: each
+    held code's bag units up to `keep_in_bag` (the copies `DepositAll` leaves,
+    `bankable`). The fight loop's room for drops is the bag cap less these and
+    less its own consumables' carry, which the loop counts itself
+    (`loop_rate`, spec 2026-10-18 §2.10). A held code the catalogue does not
+    know raises: its kind decides whether the loop already counts it."""
+    total = 0
+    for code, held in state.inventory.items():
+        stats = game_data.item_stats(code)
+        if stats is None:
+            raise KeyError(f"{code} is held but has no item stats")
+        if stats.type_ not in (FOOD, POTION):
+            total += min(held, keep_in_bag(code, state, game_data, ctx))
+    return total

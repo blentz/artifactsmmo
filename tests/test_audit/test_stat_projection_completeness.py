@@ -82,19 +82,29 @@ def test_haste_graduated_with_the_learned_fight_seconds() -> None:
     assert "haste" not in UNPRICED
 
 
-def test_the_census_prices_ten_of_thirteen_worn_stats() -> None:
-    """7 -> 8 when `wisdom` graduated (increment 3), 8 -> 9 when `prospecting`
-    did (increment 4), 9 -> 10 when `haste` did (spec 2026-10-18 §2.9). Each
-    change IS the deliverable, and this assertion is what makes the graduation
-    visible rather than silent.
+def test_inventory_space_graduated_with_the_bank_trips() -> None:
+    """`inventory_space` waited on a base total to project a delta from. The
+    bag cap `WorldState.inventory_max` is that total (the server's
+    `inventory_max_items`, which a worn bag raises), and spec 2026-10-18 §2.10
+    counts the loop's bank trips, so a bag is projected as the cap it gives."""
+    assert WORN_EFFECT_TO_PROJECTED["inventory_space"] == "inventory_max"
+    assert "inventory_space" not in UNPRICED
 
-    Of the three remaining, `threat` (group fights) acts only in a party fight;
-    the other two wait on `WorldState` gaining a base total to project a delta
+
+def test_the_census_prices_eleven_of_thirteen_worn_stats() -> None:
+    """7 -> 8 when `wisdom` graduated (increment 3), 8 -> 9 when `prospecting`
+    did (increment 4), 9 -> 10 when `haste` did (spec 2026-10-18 §2.9), 10 ->
+    11 when `inventory_space` did (spec 2026-10-18 §2.10). Each change IS the
+    deliverable, and this assertion is what makes the graduation visible
+    rather than silent.
+
+    Of the two remaining, `threat` (group fights) acts only in a party fight;
+    `lifesteal` waits on `WorldState` gaining a base total to project a delta
     from."""
     census = run_census()
-    assert len(census.projected) == 10
-    assert len(census.unpriced) == 3
-    assert {"wisdom", "prospecting", "haste"} <= census.projected
+    assert len(census.projected) == 11
+    assert len(census.unpriced) == 2
+    assert {"wisdom", "prospecting", "haste", "inventory_space"} <= census.projected
     assert census.ok
 
 

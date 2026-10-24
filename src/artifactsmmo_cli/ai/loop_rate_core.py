@@ -35,7 +35,20 @@ while `used ≤ held` (`consumed_seconds` is None otherwise).
 
 XP RATE. `xp_per_second = xp_per_kill / (fight + recovery + consumed)`, all in
 seconds; it needs a positive fight duration, which keeps the denominator
-positive."""
+positive.
+
+BANK TRIPS (spec 2026-10-18 §2.10). Drops fill the bag, and a full bag stops
+the loop until the character deposits. One fight adds `drops_per_fight =
+p_win × Σ units` (each drop's expected units per attempt, a lost fight
+dropping nothing); a bag with `capacity` units of room for drops fills every
+`capacity / drops_per_fight` fights, and each fill costs one trip:
+`trip_seconds = 2 × walk + codes × deposit` (to the bank and back, and one
+deposit per distinct drop code). So each fight carries `trip_share = trip ×
+drops / capacity` seconds of trips. A loop that drops nothing never fills the
+bag and makes no trip, whatever its room; one that drops something with no
+room (`capacity ≤ 0`) cannot run (None). Proved in `Formal.LoopRate`
+(`tripShare`): no trips without drops, more room never adds trips, more drops
+or a longer trip never removes them."""
 
 from collections.abc import Callable, Sequence
 from fractions import Fraction
@@ -184,3 +197,32 @@ def expected_xp_per_second(xp_per_kill: int, p_win: Fraction, fight_seconds: Fra
     if xp_per_kill < 0 or extra_seconds < 0 or not 0 <= p_win <= 1:
         raise ValueError(f"xp {xp_per_kill}, extra {extra_seconds}, p_win {p_win} out of range")
     return p_win * xp_per_kill / (fight_seconds + extra_seconds)
+
+
+def drops_per_fight(p_win: Fraction, units: Sequence[Fraction]) -> Fraction:
+    """Item units one fight adds to the bag, expected: the win probability times
+    every drop's expected units per attempt (a loss drops nothing)."""
+    if not 0 <= p_win <= 1 or any(u < 0 for u in units):
+        raise ValueError(f"p_win {p_win} and units {list(units)} out of range")
+    return p_win * sum(units, Fraction(0))
+
+
+def trip_seconds(walk_seconds: int, deposit_seconds: Fraction, codes: int) -> Fraction:
+    """One bank trip: the walk to the bank and back, and one deposit per
+    distinct drop code."""
+    if walk_seconds < 0 or deposit_seconds < 0 or codes < 0:
+        raise ValueError(f"walk {walk_seconds}, deposit {deposit_seconds} and codes {codes} "
+                         "must be non-negative")
+    return 2 * walk_seconds + codes * deposit_seconds
+
+
+def trip_share(trip: Fraction, drops: Fraction, capacity: int) -> Fraction | None:
+    """The trip seconds one fight carries: `trip × drops / capacity`; 0 without
+    drops (the bag never fills), None with drops and no room for them."""
+    if trip < 0 or drops < 0:
+        raise ValueError(f"trip {trip} and drops {drops} must be non-negative")
+    if drops == 0:
+        return Fraction(0)
+    if capacity <= 0:
+        return None
+    return trip * drops / capacity

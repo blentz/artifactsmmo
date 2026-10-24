@@ -34,6 +34,29 @@ Python `Fraction`.
 
 The increment-3 model is the `held = 0`, always-priced case
 (`eatCost_held_zero`, `potionCost_held_zero`).
+
+## Bank trips (spec 2026-10-18 §2.10)
+
+The loop's drops fill the bag, and a full bag is a trip to the bank. A rational
+here is an unreduced `(numerator, denominator)` pair of integers (`IQ`),
+compared by cross-multiplication (`iqle`), so the model never divides (the
+`Formal.DropChance` representation):
+
+* `dropsPerFight p units = p × Σ units` — the item units one fight adds, the
+  win probability times each drop's expected units per attempt;
+* `tripSeconds walk deposit codes = 2 × walk + codes × deposit` — to the bank
+  and back, one deposit per distinct drop code;
+* `tripShare trip drops c` — the trip seconds one fight carries,
+  `trip × drops / c` for a bag with room `c > 0`; with no room, 0 when the
+  fight drops nothing (the bag never fills) and `none` (the loop cannot run)
+  when it drops something.
+
+Theorems: `tripShare_none_iff` (unrunnable exactly with drops and no room),
+`tripShare_no_drops` (no drops, no trips), `share_antitone_capacity` (more
+room never adds trips: a bag never lowers the rate), `share_mono_drops` (more
+drops never remove trips: prospecting's rate gain is at most 0),
+`share_mono_trip` and `tripSeconds_mono_walk` (a farther bank never shortens
+the trips), `drops_mono_unit` (a drop that yields more adds more units).
 -/
 
 import Formal.ConsumablePrice
@@ -474,5 +497,165 @@ theorem expectedXpRate_mono_p (p p' : Rat) (xp : Nat) (fight extra : Rat)
 
 -- 30 XP over a 30 s fight and 60 s of recovery: 1/3 XP per second.
 example : xpRate 30 1 30 60 0 = (30, 90) := by decide
+
+/-! ## Bank trips (spec 2026-10-18 §2.10) -/
+
+/-- A rational, `(numerator, denominator)`, unreduced. -/
+abbrev IQ := Int × Int
+
+/-- `a ≤ b`, cross-multiplied (sound for positive denominators). -/
+def iqle (a b : IQ) : Prop := a.1 * b.2 ≤ b.1 * a.2
+
+instance (a b : IQ) : Decidable (iqle a b) := inferInstanceAs (Decidable (_ ≤ _))
+
+def iqadd (a b : IQ) : IQ := (a.1 * b.2 + b.1 * a.2, a.2 * b.2)
+
+def iqmul (a b : IQ) : IQ := (a.1 * b.1, a.2 * b.2)
+
+def iqsum : List IQ → IQ
+  | [] => (0, 1)
+  | u :: us => iqadd u (iqsum us)
+
+/-- Item units one fight adds: the win probability `p` times every drop's
+expected units per attempt (`loop_rate_core.drops_per_fight`). -/
+def dropsPerFight (p : IQ) (units : List IQ) : IQ := iqmul p (iqsum units)
+
+/-- One bank trip: the walk both ways and one deposit per distinct drop code
+(`loop_rate_core.trip_seconds`). -/
+def tripSeconds (walk : Nat) (deposit : IQ) (codes : Nat) : IQ :=
+  (2 * (walk : Int) * deposit.2 + (codes : Int) * deposit.1, deposit.2)
+
+/-- `trip × drops / c`. -/
+def shareOf (trip drops : IQ) (c : Int) : IQ := (trip.1 * drops.1, trip.2 * drops.2 * c)
+
+/-- The trip seconds one fight carries (`loop_rate_core.trip_share`): with room
+`c > 0`, `trip × drops / c`; with none, 0 without drops and `none` with them. -/
+def tripShare (trip drops : IQ) (c : Int) : Option IQ :=
+  if c ≤ 0 then (if drops.1 = 0 then some (0, 1) else none) else some (shareOf trip drops c)
+
+/-- UNRUNNABLE EXACTLY WITH DROPS AND NO ROOM. -/
+theorem tripShare_none_iff (t d : IQ) (c : Int) :
+    tripShare t d c = none ↔ d.1 ≠ 0 ∧ c ≤ 0 := by
+  unfold tripShare
+  by_cases hc : c ≤ 0 <;> by_cases hd : d.1 = 0 <;> simp [hc, hd]
+
+/-- With room the share is the formula. -/
+theorem tripShare_pos (t d : IQ) (c : Int) (hc : 0 < c) :
+    tripShare t d c = some (shareOf t d c) := by
+  unfold tripShare
+  have : ¬ c ≤ 0 := by omega
+  simp [this]
+
+/-- NO DROPS, NO TRIPS, whatever the room. -/
+theorem tripShare_no_drops (t d : IQ) (c : Int) (hd : d.1 = 0) :
+    ∃ s, tripShare t d c = some s ∧ s.1 = 0 := by
+  unfold tripShare
+  by_cases hc : c ≤ 0
+  · exact ⟨(0, 1), by simp [hc, hd], rfl⟩
+  · exact ⟨shareOf t d c, by simp [hc], by simp [shareOf, hd]⟩
+
+/-- MORE ROOM NEVER ADDS TRIPS: a bigger bag never lowers the rate. -/
+theorem share_antitone_capacity (t d : IQ) (c c' : Int) (ht : 0 ≤ t.1) (hd : 0 ≤ d.1)
+    (ht2 : 0 < t.2) (hd2 : 0 < d.2) (hcc : c ≤ c') :
+    iqle (shareOf t d c') (shareOf t d c) := by
+  unfold iqle shareOf
+  simp only
+  have hx : 0 ≤ t.1 * d.1 := Int.mul_nonneg ht hd
+  have hy : 0 ≤ t.2 * d.2 := Int.le_of_lt (Int.mul_pos ht2 hd2)
+  have := Int.mul_le_mul_of_nonneg_left (Int.mul_le_mul_of_nonneg_left hcc hy) hx
+  simpa [Int.mul_assoc] using this
+
+/-- MORE DROPS NEVER REMOVE TRIPS: prospecting that lands more drops gains no
+rate (its benefit is on drop routes, spec §2.8). -/
+theorem share_mono_drops (t d d' : IQ) (c : Int) (ht : 0 ≤ t.1) (ht2 : 0 < t.2) (hc : 0 < c)
+    (h : iqle d d') : iqle (shareOf t d c) (shareOf t d' c) := by
+  unfold iqle shareOf at *
+  simp only at *
+  have hk : 0 ≤ t.1 * (t.2 * c) := Int.mul_nonneg ht (Int.le_of_lt (Int.mul_pos ht2 hc))
+  have := Int.mul_le_mul_of_nonneg_left h hk
+  calc t.1 * d.1 * (t.2 * d'.2 * c) = t.1 * (t.2 * c) * (d.1 * d'.2) := by
+        simp only [Int.mul_comm, Int.mul_left_comm]
+    _ ≤ t.1 * (t.2 * c) * (d'.1 * d.2) := this
+    _ = t.1 * d'.1 * (t.2 * d.2 * c) := by
+        simp only [Int.mul_comm, Int.mul_left_comm]
+
+/-- A LONGER TRIP NEVER SHORTENS THE SHARE. -/
+theorem share_mono_trip (t t' d : IQ) (c : Int) (hd : 0 ≤ d.1) (hd2 : 0 < d.2) (hc : 0 < c)
+    (h : iqle t t') : iqle (shareOf t d c) (shareOf t' d c) := by
+  unfold iqle shareOf at *
+  simp only at *
+  have hk : 0 ≤ d.1 * (d.2 * c) := Int.mul_nonneg hd (Int.le_of_lt (Int.mul_pos hd2 hc))
+  have := Int.mul_le_mul_of_nonneg_left h hk
+  calc t.1 * d.1 * (t'.2 * d.2 * c) = d.1 * (d.2 * c) * (t.1 * t'.2) := by
+        simp only [Int.mul_comm, Int.mul_left_comm]
+    _ ≤ d.1 * (d.2 * c) * (t'.1 * t.2) := this
+    _ = t'.1 * d.1 * (t.2 * d.2 * c) := by
+        simp only [Int.mul_comm, Int.mul_left_comm]
+
+/-- A FARTHER BANK IS A LONGER TRIP. -/
+theorem tripSeconds_mono_walk (w w' : Nat) (dep : IQ) (codes : Nat) (hd : 0 < dep.2)
+    (hw : w ≤ w') : iqle (tripSeconds w dep codes) (tripSeconds w' dep codes) := by
+  unfold iqle tripSeconds
+  simp only
+  have h1 : 2 * (w : Int) * dep.2 ≤ 2 * (w' : Int) * dep.2 :=
+    Int.mul_le_mul_of_nonneg_right (by omega) (Int.le_of_lt hd)
+  exact Int.mul_le_mul_of_nonneg_right (by omega) (Int.le_of_lt hd)
+
+/-- A drop that yields more makes the sum no smaller. -/
+theorem iqsum_mono_head (u u' : IQ) (us : List IQ) (hs2 : 0 < (iqsum us).2)
+    (h : iqle u u') : iqle (iqsum (u :: us)) (iqsum (u' :: us)) := by
+  unfold iqle at *
+  simp only [iqsum, iqadd]
+  generalize iqsum us = s at hs2 ⊢
+  have key := Int.mul_le_mul_of_nonneg_right h (Int.le_of_lt (Int.mul_pos hs2 hs2))
+  have e1 : (u.1 * s.2 + s.1 * u.2) * (u'.2 * s.2)
+      = u.1 * u'.2 * (s.2 * s.2) + s.1 * u.2 * u'.2 * s.2 := by
+    simp only [Int.mul_add, Int.mul_comm, Int.mul_left_comm]
+  have e2 : (u'.1 * s.2 + s.1 * u'.2) * (u.2 * s.2)
+      = u'.1 * u.2 * (s.2 * s.2) + s.1 * u.2 * u'.2 * s.2 := by
+    simp only [Int.mul_add, Int.mul_comm, Int.mul_left_comm]
+  rw [e1, e2]
+  omega
+
+/-- A DROP THAT YIELDS MORE (prospecting raising its chance, `Formal.DropChance.
+multiplier_monotone`) ADDS MORE UNITS A FIGHT, at any win probability. -/
+theorem drops_mono_unit (p u u' : IQ) (us : List IQ) (hp : 0 ≤ p.1) (hp2 : 0 < p.2)
+    (hs2 : 0 < (iqsum us).2) (h : iqle u u') :
+    iqle (dropsPerFight p (u :: us)) (dropsPerFight p (u' :: us)) := by
+  have hsum := iqsum_mono_head u u' us hs2 h
+  unfold dropsPerFight iqmul iqle at *
+  simp only at *
+  generalize iqsum (u :: us) = a at hsum ⊢
+  generalize iqsum (u' :: us) = b at hsum ⊢
+  have hk : 0 ≤ p.1 * p.2 := Int.mul_nonneg hp (Int.le_of_lt hp2)
+  have := Int.mul_le_mul_of_nonneg_left hsum hk
+  calc p.1 * a.1 * (p.2 * b.2) = p.1 * p.2 * (a.1 * b.2) := by
+        simp only [Int.mul_comm, Int.mul_left_comm]
+    _ ≤ p.1 * p.2 * (b.1 * a.2) := this
+    _ = p.1 * b.1 * (p.2 * a.2) := by
+        simp only [Int.mul_comm, Int.mul_left_comm]
+
+-- The live shapes (`tests/test_ai/test_loop_rate.py::TestBankTrips`): a 50 s
+-- walk and two codes at 2 s a deposit is a 104 s trip; two units a win into a
+-- bag of 20 carries 104 × 2 / 20 a fight; no room with drops cannot run; no
+-- room without drops makes no trip.
+example : tripSeconds 50 (2, 1) 2 = (104, 1) := by decide
+example : tripShare (104, 1) (2, 1) 20 = some (208, 20) := by decide
+example : tripShare (104, 1) (2, 1) 0 = none := by decide
+example : tripShare (104, 1) (0, 1) 0 = some (0, 1) := by decide
+-- The theorems at those shapes, their hypotheses satisfied: a satchel (20 to 35)
+-- shortens the share, a third unit lengthens it, a 200 s walk beats a 50 s one,
+-- and a hide sure at P = 100 (1 in 2 at P = 0) adds units to a won fight.
+example : iqle (shareOf (104, 1) (2, 1) 35) (shareOf (104, 1) (2, 1) 20) :=
+  share_antitone_capacity (104, 1) (2, 1) 20 35 (by decide) (by decide) (by decide) (by decide)
+    (by decide)
+example : iqle (shareOf (104, 1) (2, 1) 20) (shareOf (104, 1) (3, 1) 20) :=
+  share_mono_drops (104, 1) (2, 1) (3, 1) 20 (by decide) (by decide) (by decide) (by decide)
+example : iqle (shareOf (104, 1) (2, 1) 20) (shareOf (404, 1) (2, 1) 20) :=
+  share_mono_trip (104, 1) (404, 1) (2, 1) 20 (by decide) (by decide) (by decide) (by decide)
+example : iqle (tripSeconds 50 (2, 1) 2) (tripSeconds 200 (2, 1) 2) :=
+  tripSeconds_mono_walk 50 200 (2, 1) 2 (by decide) (by decide)
+example : iqle (dropsPerFight (1, 1) [(1, 1), (1, 1)]) (dropsPerFight (1, 1) [(2, 1), (1, 1)]) :=
+  drops_mono_unit (1, 1) (1, 1) (2, 1) [(1, 1)] (by decide) (by decide) (by decide) (by decide)
 
 end Formal.LoopRate

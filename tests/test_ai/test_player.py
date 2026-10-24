@@ -434,6 +434,9 @@ class TestArbiterSelection:
         # (recipe demand x batch buffer) exceeds the 20 held, so it is NOT
         # overstock — bag-full routes to DepositInventory, not the discard guard.
         gd._crafting_recipes = {"copper_dagger": {"copper_ore": 20}}
+        # A held code is catalogued: the fight loop reads its kind to count
+        # what the bag keeps through a deposit (spec 2026-10-18 §2.10).
+        gd._item_stats["copper_ore"] = ItemStats(code="copper_ore", level=1, type_="resource")
         gd._bank_capacity = 50  # bank has room so DEPOSIT_FULL can fire
         player = self._with_strategy(gd, level=3,
                                      inventory={"copper_ore": 20}, inventory_max=20,

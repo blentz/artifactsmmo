@@ -103,7 +103,8 @@ class BandTarget:
     solo pick."""
 
 
-def rank_rate(xp_per_kill: int, upkeep: FightUpkeep | None, best: Callable[[], BestLoadout],
+def rank_rate(xp_per_kill: int, upkeep: FightUpkeep | None,
+              best: Callable[[], BestLoadout | None],
               price_of: Callable[[str], Fraction]) -> Fraction:
     """XP per second of farming a monster: MEASURED where the store has its
     upkeep, MODELLED otherwise — one key for both.
@@ -118,15 +119,17 @@ def rank_rate(xp_per_kill: int, upkeep: FightUpkeep | None, best: Callable[[], B
       risky monster ranks below a sure one that pays better. A monster the
       record says is beaten (`is_winnable`'s monotonic-win inference) while
       the model's odds are nil ranks at the model's rate, zero: the record
-      decides the win filter, the model the rate."""
+      decides the win filter, the model the rate. A loop no loadout can run
+      (no room in the bag for its drops, spec 2026-10-18 §2.10) earns 0."""
     if upkeep is not None:
         return xp_per_action(xp_per_kill, upkeep, price_of) / FIGHT_SECONDS
-    return best().rate.xp_per_second
+    loadout = best()
+    return Fraction(0) if loadout is None else loadout.rate.xp_per_second
 
 
 def target_rate(state: WorldState, game_data: GameData, history: LearningStore | None,
                 code: str, price_of: Callable[[str], Fraction],
-                loadout: Callable[[], BestLoadout]) -> Fraction:
+                loadout: Callable[[], BestLoadout | None]) -> Fraction:
     """`rank_rate` of farming `code` at the character's level and wisdom, its
     upkeep read from the store; `loadout` is its best loadout, asked only when
     there is no measurement."""
@@ -147,10 +150,16 @@ def party_candidates(state: WorldState, game_data: GameData) -> list[str]:
             and game_data.monster_locations(code)]
 
 
+def _odds_clear(best: BestLoadout | None, threshold: Fraction) -> bool:
+    """Whether the best loadout's odds clear `threshold`; never without a
+    loadout whose loop runs."""
+    return best is not None and odds_clear(best.rate.p_win, threshold)
+
+
 def band_combat_target(state: WorldState, game_data: GameData,
                        history: LearningStore | None,
                        price_of: Callable[[str], Fraction],
-                       loadout_of: Callable[[str], BestLoadout],
+                       loadout_of: Callable[[str], BestLoadout | None],
                        party_of: Callable[[str], PartyLoop | None]) -> BandTarget | None:
     """Best winnable, FIGHTABLE normal monster in the next uncleared tier's
     band, by XP per SECOND over its best loadout (USER 2026-10-10), its measured
@@ -194,7 +203,7 @@ def band_combat_target(state: WorldState, game_data: GameData,
     for code in fightable:
         bare = is_winnable(unpotioned(rested), game_data, code, history)
         loadout = cache(partial(loadout_of, code))
-        if not bare and (not odds_clear(loadout().rate.p_win, win_threshold(rested, code)) or (
+        if not bare and (not _odds_clear(loadout(), win_threshold(rested, code)) or (
                 history is not None and loss_vetoed(rested, game_data, code, history))):
             continue
         bare_fight = bare_fight or bare

@@ -1,8 +1,10 @@
 """Differential tests for consumable utility increments 3-4: the live
 `ai/loop_rate_core.recovery_choice` / `consumed_seconds` / `xp_per_second` must
 agree with the proved `Formal.LoopRate.recovery` / `planCost` / `consumedPrice` /
-`xpRate`. The chosen count vector must COST the proved minimum (`planCost` of
-it equals `recovery`), so the counts the floor reads are an optimal plan.
+`xpRate`, and the bank trips (`drops_per_fight` / `trip_seconds` /
+`trip_share`, spec 2026-10-18 §2.10) with `dropsPerFight` / `tripSeconds` /
+`tripShare`. The chosen count vector must COST the proved minimum (`planCost`
+of it equals `recovery`), so the counts the floor reads are an optimal plan.
 
 The Lean model works on ONE common scale: every price and the eat cooldown are
 passed multiplied by the lcm of their denominators, and the Lean recovery is
@@ -19,9 +21,12 @@ from hypothesis import strategies as st
 from artifactsmmo_cli.ai.loop_rate_core import (
     Food,
     consumed_seconds,
+    drops_per_fight,
     expected_xp_per_second,
     recovery_choice,
     recovery_seconds,
+    trip_seconds,
+    trip_share,
     xp_per_second,
 )
 from formal.diff.oracle_client import run_oracle
@@ -159,3 +164,57 @@ def test_consumed_witnesses_against_lean() -> None:
                                         for c in cases])
     assert [None if r["none"] else r["cost"] for r in rows] == [14, None, 0, 0]
     assert [consumed_seconds(c) for c in cases] == [14, None, 0, 0]
+
+
+_unit = st.fractions(min_value=0, max_value=3, max_denominator=300)
+_trip_case = st.tuples(
+    _p_win, st.lists(_unit, max_size=4),
+    st.integers(min_value=0, max_value=400),                    # walk seconds
+    st.fractions(min_value=0, max_value=5, max_denominator=4),  # deposit seconds
+    st.integers(min_value=0, max_value=6),                      # codes
+    st.integers(min_value=-5, max_value=200),                   # capacity
+)
+_TripCase = tuple[Fraction, list[Fraction], int, Fraction, int, int]
+
+
+def _trip_args(case: _TripCase) -> list[int]:
+    p, units, walk, deposit, codes, capacity = case
+    args = [p.numerator, p.denominator, len(units)]
+    for unit in units:
+        args += [unit.numerator, unit.denominator]
+    return [*args, walk, deposit.numerator, deposit.denominator, codes, capacity]
+
+
+def _check_trips(cases: list[_TripCase]) -> None:
+    rows = run_oracle("loop_trips", [_trip_args(case) for case in cases])
+    for case, row in zip(cases, rows, strict=True):
+        p, units, walk, deposit, codes, capacity = case
+        drops = drops_per_fight(p, units)
+        trip = trip_seconds(walk, deposit, codes)
+        assert drops == Fraction(row["drops_num"], row["drops_den"]), case
+        assert trip == Fraction(row["trip_num"], row["trip_den"]), case
+        share = trip_share(trip, drops, capacity)
+        if row["none"]:
+            assert share is None, case
+        else:
+            assert share == Fraction(row["share_num"], row["share_den"]), case
+
+
+@settings(max_examples=300, deadline=None)
+@given(cases=st.lists(_trip_case, min_size=1, max_size=30))
+def test_trips_match_lean(cases: list[_TripCase]) -> None:
+    _check_trips(cases)
+
+
+def test_trip_witnesses_against_lean() -> None:
+    """The Lean file's witnesses: a 104 s trip, its share into a bag of 20, no
+    room with drops, no room without them, and a loss that drops nothing."""
+    _check_trips([
+        (Fraction(1), [Fraction(1), Fraction(1)], 50, Fraction(2), 2, 20),
+        (Fraction(1), [Fraction(1), Fraction(1)], 50, Fraction(2), 2, 0),
+        (Fraction(1), [], 50, Fraction(2), 2, 0),
+        (Fraction(0), [Fraction(3)], 50, Fraction(2), 1, -1),
+    ])
+    assert trip_share(trip_seconds(50, Fraction(2), 2), Fraction(2), 20) == Fraction(104, 10)
+    assert trip_share(Fraction(104), Fraction(2), 0) is None
+    assert trip_share(Fraction(104), Fraction(0), 0) == 0

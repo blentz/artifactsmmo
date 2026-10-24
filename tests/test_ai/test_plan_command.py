@@ -146,6 +146,9 @@ def test_plan_once_reports_drop_input_winnability():
     from tests.test_ai._monster_fixture import fill_monster_stat_defaults
     fill_monster_stat_defaults(gd)
     gd._monster_hp = {"chicken": 10}
+    # The chicken's feather fills the bag, so the fight loop prices its bank
+    # trips (spec 2026-10-18 §2.10): every map has a bank.
+    gd._bank_location = (4, 0)
     state = make_state(level=6, x=0, y=0, hp=200, max_hp=200, attack={"fire": 40})
     decision = StrategyDecision(
         interrupt=None, chosen_root=ObtainItem("feather_coat", 1, "body_armor_slot"),

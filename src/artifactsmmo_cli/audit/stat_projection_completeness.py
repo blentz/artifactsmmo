@@ -42,12 +42,15 @@ the whole life of the objective.
 
 See `docs/PLAN_unified_acquisition_objective.md`. `wisdom` GRADUATED in increment
 3 — the numbers above are history, not the current state. `prospecting` GRADUATED in increment 4, where
-it reduces expected kills in the DROP-route cost. `inventory_space` and `lifesteal` are expressible in
-actions but have no `WorldState` base total to project a delta from, so they wait
+it reduces expected kills in the DROP-route cost. `lifesteal` is expressible in
+actions but has no `WorldState` base total to project a delta from, so it waits
 on that. `haste` GRADUATED with spec 2026-10-18 §2.9: a fight's seconds are
 learned from its length and haste (`fight_seconds_core`), and the gear
 objective's rate is XP per SECOND, so a hasted fight is priced where it pays
-rather than smuggled into an action count.
+rather than smuggled into an action count. `inventory_space` GRADUATED with
+spec 2026-10-18 §2.10: its base total is the bag cap `WorldState.inventory_max`
+(the server's `inventory_max_items`, which a worn bag raises), and the fight
+loop's rate counts the bank trips a full bag forces (`loop_rate`).
 """
 
 from dataclasses import dataclass, fields
@@ -83,19 +86,14 @@ WORN_EFFECT_TO_PROJECTED = {
     "wisdom": "wisdom",
     "prospecting": "prospecting",
     "haste": "haste",
+    "inventory_space": "inventory_max",
 }
 """Worn-gear effects `ProjectedStats` carries, mapped to the field that carries
-them. `hp_bonus` -> `max_hp` is the one rename: the item grants a BONUS, the
-projection reports the resulting TOTAL, which is why this is a mapping rather
-than a set membership test."""
+them. `hp_bonus` -> `max_hp` and `inventory_space` -> `inventory_max` are the
+renames: the item grants a BONUS, the projection reports the resulting TOTAL,
+which is why this is a mapping rather than a set membership test."""
 
 UNPRICED: dict[str, str] = {
-    "inventory_space": (
-        "+bag slots. Pays in avoided bank round-trips, which are actions — so "
-        "this IS expressible in J's currency. Needs a model of "
-        "how often a full bag forces a deposit trip; not yet built. Scheduled: "
-        "no increment assigned."
-    ),
     "lifesteal": (
         "Heals a share of attack on a crit, so it reduces the damage taken per "
         "fight and therefore `rest_actions_per_fight` — the same channel armour "

@@ -6,13 +6,15 @@ from fractions import Fraction
 import pytest
 
 import artifactsmmo_cli.ai.loop_rate as loop_mod
-from artifactsmmo_cli.ai.actions.cost_core import travel_seconds
+from artifactsmmo_cli.ai.actions.cost_core import DEPOSIT_SECONDS_PER_CODE, travel_seconds
 from artifactsmmo_cli.ai.boost_selection import project_equip
+from artifactsmmo_cli.ai.chosen_loadout import food_carry, potion_carry
 from artifactsmmo_cli.ai.combat import combat_terms, fight_max_hp
 from artifactsmmo_cli.ai.fight_odds_core import win_probability
 from artifactsmmo_cli.ai.fight_outcome_core import fight_outcome
 from artifactsmmo_cli.ai.fight_walk import fight_walk, odds_walk, walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.loop_rate import EAT_SECONDS, FoodOffer, LoopRate, food_menu, loop_rate
 from artifactsmmo_cli.ai.loop_rate_core import consumed_seconds, recovery_choice, recovery_seconds, xp_per_second
@@ -60,7 +62,7 @@ def _rate(state: WorldState, gd: GameData, loadout: list[tuple[str, int]],
           prices: dict[str, Fraction | None] | None = None,
           food: tuple[FoodOffer, ...] = ()) -> LoopRate | None:
     return loop_rate(state, gd, "ogre", loadout, food, _FREE if prices is None else prices,
-                     _TIMING)
+                     _TIMING, LearnedDrops.empty(), 0)
 
 
 def _state(**kw: object) -> WorldState:
@@ -134,7 +136,7 @@ class TestLoop:
         gd = _gd()
         worn = _state(inventory={"fire_res_potion": 1})
         worn = project_equip(worn, "fire_res_potion", gd)
-        assert loop_mod.loop_rate(worn, gd, "ogre", [], (), {}, _TIMING).win is False  # type: ignore[union-attr]
+        assert loop_mod.loop_rate(worn, gd, "ogre", [], (), {}, _TIMING, LearnedDrops.empty(), 0).win is False  # type: ignore[union-attr]
 
     def test_a_priced_consumable_costs_its_price(self) -> None:
         rate = _rate(_state(), _gd(), [("fire_res_potion", 1)], prices={"fire_res_potion": Fraction(7)})
@@ -407,3 +409,173 @@ class TestFightSeconds:
         hasted = _rate(_state(attack={"fire": 40}, haste=20), gd, [])
         assert plain is not None and hasted is not None
         assert hasted.fight_seconds == _TIMING.seconds(Fraction(5), 20) < plain.fight_seconds
+
+
+def _trip_gd() -> GameData:
+    """`_gd`'s ogre dropping a `bone` on every win (1 in 1, one unit) and a
+    `hide` on half of them (1 in 2, one to three): two units a win at the API
+    prior, two distinct codes. Its twin `far_ogre` is the same monster spawning
+    150 tiles further from the bank at (13, 4), which is 10 tiles (50 s) from
+    the ogre's (3, 4). The `satchel` is a bag of 15."""
+    gd = _gd()
+    gd._monster_level = {"ogre": 5, "far_ogre": 5}
+    gd._monster_hp = {"ogre": 100, "far_ogre": 100}
+    gd._monster_attack = {"ogre": {"fire": 30}, "far_ogre": {"fire": 30}}
+    gd._monster_resistance = {"ogre": {}, "far_ogre": {}}
+    fill_monster_stat_defaults(gd)
+    gd._monster_locations = {"ogre": [(3, 4)], "far_ogre": [(-27, -116)]}
+    table = [("bone", 1, 1, 1), ("hide", 2, 1, 3)]
+    gd._monster_drops = {"ogre": list(table), "far_ogre": list(table)}
+    gd._bank_location = (13, 4)
+    gd._item_stats = {**gd._item_stats,
+                      "bone": ItemStats(code="bone", level=1, type_="resource"),
+                      "hide": ItemStats(code="hide", level=1, type_="resource"),
+                      "satchel": ItemStats(code="satchel", level=1, type_="bag",
+                                           inventory_space=15)}
+    return gd
+
+
+def _trip_rate(state: WorldState, gd: GameData, monster: str = "ogre",
+               loadout: list[tuple[str, int]] | None = None, food: tuple[FoodOffer, ...] = (),
+               drops: LearnedDrops | None = None, carried: int = 0) -> LoopRate | None:
+    return loop_rate(state, gd, monster, loadout or [], food, _FREE, _TIMING,
+                     LearnedDrops.empty() if drops is None else drops, carried)
+
+
+_WINS = dict(attack={"fire": 40})
+"""The ogre falls in 3 rounds to 40 fire: every fight is won (`TestFightSeconds`)."""
+
+
+class TestBankTrips:
+    """Spec 2026-10-18 §2.10: the drops fill the bag, and a full bag is a trip to
+    the bank, so each fight carries `trip × drops / room` seconds of trips."""
+
+    def test_each_fight_carries_its_share_of_the_trips(self) -> None:
+        """Two units a win into a bag of 20: a trip every 10 fights. A trip walks
+        50 s each way and deposits each of the two codes once."""
+        rate = _trip_rate(_state(**_WINS), _trip_gd())
+        assert rate is not None and rate.p_win == 1
+        trip = 2 * 50 + 2 * Fraction(DEPOSIT_SECONDS_PER_CODE)
+        assert rate.xp_per_second == rate.xp_per_kill / (
+            rate.fight_seconds + rate.recovery_seconds + trip * 2 / 20)
+
+    def test_the_bag_holds_less_what_the_keep_carries(self) -> None:
+        rate = _trip_rate(_state(**_WINS), _trip_gd(), carried=5)
+        assert rate is not None
+        trip = 2 * 50 + 2 * Fraction(DEPOSIT_SECONDS_PER_CODE)
+        assert rate.xp_per_second == rate.xp_per_kill / (
+            rate.fight_seconds + rate.recovery_seconds + trip * 2 / 15)
+
+    def test_the_food_the_recovery_eats_is_carried(self) -> None:
+        state = _state(**_WINS, inventory_max=100)
+        rate = _trip_rate(state, _trip_gd(), food=(FoodOffer("apple", 30, Fraction(0), 9),))
+        assert rate is not None
+        [(_, eaten)] = rate.eaten
+        trip = 2 * 50 + 2 * Fraction(DEPOSIT_SECONDS_PER_CODE)
+        assert rate.xp_per_second == rate.xp_per_kill / (
+            rate.fight_seconds + rate.recovery_seconds
+            + trip * 2 / (100 - food_carry(eaten)))
+
+    def test_the_potion_carry_past_the_worn_stock_is_carried(self) -> None:
+        """A heal potion worn one at a time: what the carry holds past it sits
+        in the bag."""
+        state = _state(**_WINS, inventory_max=200, critical_strike=30)
+        rate = _trip_rate(state, _trip_gd(), loadout=[("heal_potion", 1)])
+        assert rate is not None
+        [(_, used)] = rate.used
+        assert used >= 1
+        trip = 2 * 50 + 2 * Fraction(DEPOSIT_SECONDS_PER_CODE)
+        drops = rate.p_win * 2
+        assert rate.xp_per_second == rate.p_win * rate.xp_per_kill / (
+            rate.fight_seconds + rate.recovery_seconds + rate.consumed_seconds
+            + (1 - rate.p_win) * travel_seconds((0, 0), (3, 4))
+            + trip * drops / (200 - (potion_carry(used) - 1)))
+
+    def test_a_worn_stock_past_the_carry_frees_no_room(self) -> None:
+        """A full utility slot holds more than the carry: nothing of it sits in
+        the bag, and the slot frees nothing in it either."""
+        state = _state(**_WINS, inventory_max=20, critical_strike=30)
+        rate = _trip_rate(state, _trip_gd(), loadout=[("heal_potion", 100)])
+        assert rate is not None
+        [(_, used)] = rate.used
+        assert potion_carry(used) < 100
+        trip = 2 * 50 + 2 * Fraction(DEPOSIT_SECONDS_PER_CODE)
+        assert rate.xp_per_second == rate.p_win * rate.xp_per_kill / (
+            rate.fight_seconds + rate.recovery_seconds + rate.consumed_seconds
+            + (1 - rate.p_win) * travel_seconds((0, 0), (3, 4))
+            + trip * rate.p_win * 2 / 20)
+
+    def test_a_loop_with_no_room_is_unrunnable(self) -> None:
+        gd = _trip_gd()
+        assert _trip_rate(_state(**_WINS), gd, carried=20) is None
+        assert _trip_rate(_state(**_WINS), gd, carried=19) is not None
+
+    def test_a_loop_that_drops_nothing_needs_no_room_and_no_bank(self) -> None:
+        gd = _gd()
+        rate = _trip_rate(_state(**_WINS), gd, carried=20)
+        assert rate is not None
+        assert rate.xp_per_second == rate.xp_per_kill / (rate.fight_seconds
+                                                         + rate.recovery_seconds)
+
+    def test_a_bag_has_a_gain(self) -> None:
+        """A worn satchel raises the cap the loop's drops fill (35 against 20)."""
+        gd = _trip_gd()
+        bagged = _state(**_WINS, inventory_max=35,
+                        equipment={**make_state().equipment, "bag_slot": "satchel"})
+        with_bag = _trip_rate(bagged, gd)
+        without = _trip_rate(_state(**_WINS), gd)
+        assert with_bag is not None and without is not None
+        assert with_bag.xp_per_second > without.xp_per_second
+
+    def test_far_bank_values_the_bag_more(self) -> None:
+        """The same fighter and bag against two monsters with the same drops:
+        the one farther from the bank gives the bag the larger gain."""
+        gd = _trip_gd()
+        bagged = _state(**_WINS, inventory_max=35,
+                        equipment={**make_state().equipment, "bag_slot": "satchel"})
+
+        def gain(monster: str) -> Fraction:
+            with_bag = _trip_rate(bagged, gd, monster)
+            without = _trip_rate(_state(**_WINS), gd, monster)
+            assert with_bag is not None and without is not None
+            return with_bag.xp_per_second - without.xp_per_second
+
+        assert gain("far_ogre") > gain("ogre") > 0
+
+    def test_prospecting_adds_trips(self) -> None:
+        """Spec §2.10: with a learned slope `k > 0` a higher prospecting lands
+        more of the hides (1 in 2 at P = 0, sure at P = 100), so the bag fills
+        sooner and `R` is lower: prospecting's benefit is on drop routes."""
+        gd = _trip_gd()
+        learned = LearnedDrops((), (), Fraction(1, 100))
+        plain = _trip_rate(_state(**_WINS), gd, drops=learned)
+        prospecting = _trip_rate(_state(**_WINS, prospecting=100), gd, drops=learned)
+        assert plain is not None and prospecting is not None
+        trip = 2 * 50 + 2 * Fraction(DEPOSIT_SECONDS_PER_CODE)
+        assert prospecting.xp_per_second == prospecting.xp_per_kill / (
+            prospecting.fight_seconds + prospecting.recovery_seconds + trip * 3 / 20)
+        assert prospecting.xp_per_second < plain.xp_per_second
+
+    def test_the_drops_are_read_on_the_cycle_evidence(self) -> None:
+        """A hide seen on every one of 98 recorded wins: (1 + 98) / (2 + 98) a
+        win, not the prior's 1 in 2; and the bone, seen on none of them, 1 in 99
+        instead of every win."""
+        gd = _trip_gd()
+        learned = LearnedDrops((("ogre", 98),), ((("ogre", "hide"), 98),), Fraction(0))
+        rate = _trip_rate(_state(**_WINS), gd, drops=learned)
+        assert rate is not None
+        trip = 2 * 50 + 2 * Fraction(DEPOSIT_SECONDS_PER_CODE)
+        drops = Fraction(1, 99) + Fraction(99, 100) * 2
+        assert rate.xp_per_second == rate.xp_per_kill / (
+            rate.fight_seconds + rate.recovery_seconds + trip * drops / 20)
+
+    def test_the_trip_starts_from_the_spawn_tile_nearest_the_bank(self) -> None:
+        gd = _trip_gd()
+        gd._monster_locations = {"ogre": [(3, 4), (12, 4), (40, 40)]}
+        assert loop_mod.bank_walk(_state(), gd, "ogre") == travel_seconds((12, 4), (13, 4))
+
+    def test_a_bank_trip_needs_a_spawn_tile(self) -> None:
+        gd = _trip_gd()
+        gd._monster_locations = {}
+        with pytest.raises(ValueError, match="a bank trip cannot be priced"):
+            loop_mod.bank_walk(_state(), gd, "ogre")

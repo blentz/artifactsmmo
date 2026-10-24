@@ -2027,6 +2027,26 @@ def runExpectedXpRate (args : Array Json) : Json :=
     (ratArg args 3) (ratArg args 5)
   Json.mkObj [("rate_num", Json.num r.num), ("rate_den", Json.num (Int.ofNat r.den))]
 
+/-- The loop's bank trips (`Formal.LoopRate.dropsPerFight` / `tripSeconds` /
+`tripShare`, spec 2026-10-18 §2.10). Args: `[p_num, p_den, n, u_num_0, u_den_0, …,
+walk, deposit_num, deposit_den, codes, capacity]`. The share is taken over the
+model's own drops and trip. Emits `drops_*`, `trip_*`, `none` and `share_*`. -/
+def runLoopTrips (args : Array Json) : Json :=
+  let i : Nat → Int := fun k => intArg args k
+  let n := (i 2).toNat
+  let units : List Formal.LoopRate.IQ := (List.range n).map fun j => (i (3 + 2 * j), i (4 + 2 * j))
+  let base := 3 + 2 * n
+  let drops := Formal.LoopRate.dropsPerFight (i 0, i 1) units
+  let trip := Formal.LoopRate.tripSeconds (i base).toNat (i (base + 1), i (base + 2))
+    (i (base + 3)).toNat
+  let share := Formal.LoopRate.tripShare trip drops (i (base + 4))
+  let (none?, num, den) : Bool × Int × Int := match share with
+    | some q => (false, q.1, q.2)
+    | none => (true, 0, 1)
+  Json.mkObj [("drops_num", Json.num drops.1), ("drops_den", Json.num drops.2),
+              ("trip_num", Json.num trip.1), ("trip_den", Json.num trip.2),
+              ("none", Json.bool none?), ("share_num", Json.num num), ("share_den", Json.num den)]
+
 /-- The failure block table after `ticks` ticks (`Formal.FailureRecovery`).
 Args: `[premise, ticks, n, key_0, left_0, premise_0, ...]`, a premise of -1
 meaning a transport block. Emits the keys blocked under `premise`. -/
@@ -3217,6 +3237,8 @@ def runOne (item : Json) : Json :=
     runLoopXpRate args
   else if kind == "expected_xp_rate" then
     runExpectedXpRate args
+  else if kind == "loop_trips" then
+    runLoopTrips args
   else if kind == "loop_plan_cost" then
     runLoopPlanCost args
   else if kind == "loop_consumed" then

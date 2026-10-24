@@ -577,6 +577,14 @@ open Formal.PriorityBand
 #check @Formal.LoopRate.eatCost_held_zero         -- nothing held: the increment-3 eat cost
 #check @Formal.LoopRate.potionCost_held_zero      -- nothing held: every drink at its price
 #check @Formal.LoopRate.consumed_held_free_le     -- more held never raises the consumed price
+#check @Formal.LoopRate.tripShare_none_iff        -- unrunnable exactly with drops and no room (§2.10)
+#check @Formal.LoopRate.tripShare_pos             -- with room the share is trip × drops / room
+#check @Formal.LoopRate.tripShare_no_drops        -- no drops, no trips
+#check @Formal.LoopRate.share_antitone_capacity   -- more room never adds trips: a bag never costs
+#check @Formal.LoopRate.share_mono_drops          -- more drops never remove trips
+#check @Formal.LoopRate.share_mono_trip           -- a longer trip never shortens the share
+#check @Formal.LoopRate.tripSeconds_mono_walk     -- a farther bank is a longer trip
+#check @Formal.LoopRate.drops_mono_unit           -- a drop that yields more adds more units
 -- BestLoadout (consumable utility increment 4, `ai/best_loadout_core.py`):
 #check @Formal.BestLoadout.pick_optimal           -- no candidate beats the pick
 #check @Formal.BestLoadout.pick_mem               -- the pick is the candidate at its index

@@ -1815,6 +1815,24 @@ LOOP_RATE_CORE_MUTATIONS = [
     ("loop_rate: the expected rate drops the win probability",
      "    return p_win * xp_per_kill / (fight_seconds + extra_seconds)",
      "    return xp_per_kill / (fight_seconds + extra_seconds)"),
+    ("loop_rate trips: a loss drops its units",
+     "    return p_win * sum(units, Fraction(0))",
+     "    return sum(units, Fraction(0))"),
+    ("loop_rate trips: the walk is one way",
+     "    return 2 * walk_seconds + codes * deposit_seconds",
+     "    return walk_seconds + codes * deposit_seconds"),
+    ("loop_rate trips: one deposit for all codes",
+     "    return 2 * walk_seconds + codes * deposit_seconds",
+     "    return 2 * walk_seconds + deposit_seconds"),
+    ("loop_rate trips: a loop with no drops needs room",
+     "    if drops == 0:\n        return Fraction(0)\n",
+     ""),
+    ("loop_rate trips: drops with no room run",
+     "    if capacity <= 0:\n        return None\n",
+     "    if capacity < 0:\n        return None\n"),
+    ("loop_rate trips: the room is ignored",
+     "    return trip * drops / capacity",
+     "    return trip * drops"),
 ]
 
 # loop_rate_core: the recovery CHOICE's tie rules (fewest units, then the fewer
@@ -1874,8 +1892,10 @@ LOOP_RATE_READER_MUTATIONS = [
      "        extra = (1 - p_win) * travel_seconds(RESPAWN_TILE, monster_tile(state, game_data, monster))",
      "        extra = Fraction(0)"),
     ("loop_rate reader: the walk back reads the legacy spawn index",
-     "    tiles = fight_tiles(state, game_data, monster)\n    if not tiles:",
-     "    tiles = game_data.monster_locations(monster)\n    if not tiles:"),
+     "    tiles = fight_tiles(state, game_data, monster)\n    if not tiles:\n"
+     "        raise ValueError(f\"{monster} has no spawn tile: a loss's",
+     "    tiles = game_data.monster_locations(monster)\n    if not tiles:\n"
+     "        raise ValueError(f\"{monster} has no spawn tile: a loss's"),
     ("loop_rate reader: a loss recovers from its own pool",
      "        hp_end = e.hp_end // SCALE if e.win else LOSS_HP",
      "        hp_end = e.hp_end // SCALE"),
@@ -1883,11 +1903,50 @@ LOOP_RATE_READER_MUTATIONS = [
      "    used_units = tuple((code, math.ceil(used_mean[code])) for code, _ in loadout)",
      "    used_units = tuple((code, math.floor(used_mean[code])) for code, _ in loadout)"),
     ("loop_rate reader: the rate ignores the odds",
-     "    rate = expected_xp_per_second(xp, p_win, fight, extra)",
-     "    rate = expected_xp_per_second(xp, Fraction(1), fight, extra)"),
+     "    rate = expected_xp_per_second(xp, p_win, fight, extra + trips)",
+     "    rate = expected_xp_per_second(xp, Fraction(1), fight, extra + trips)"),
     ("loop_rate reader: the farthest spawn tile",
      "    return min(tiles, key=lambda tile: (travel_seconds(RESPAWN_TILE, tile), tile))",
      "    return max(tiles, key=lambda tile: (travel_seconds(RESPAWN_TILE, tile), tile))"),
+    ("loop_rate reader: the trip term is dropped",
+     "    rate = expected_xp_per_second(xp, p_win, fight, extra + trips)",
+     "    rate = expected_xp_per_second(xp, p_win, fight, extra)"),
+    ("loop_rate reader: the capacity is ignored",
+     "                       per_fight, stats.inventory_max - carry)",
+     "                       per_fight, 1)"),
+    ("loop_rate reader: nothing the bag carries takes room",
+     "                       per_fight, stats.inventory_max - carry)",
+     "                       per_fight, stats.inventory_max)"),
+    ("loop_rate reader: one deposit for all codes",
+     "    trips = trip_share(trip_seconds(walk, Fraction(DEPOSIT_SECONDS_PER_CODE), len(table)),",
+     "    trips = trip_share(trip_seconds(walk, Fraction(DEPOSIT_SECONDS_PER_CODE), 1),"),
+    ("loop_rate reader: a loop with no room runs",
+     "    if trips is None:\n        return None\n",
+     "    if trips is None:\n        trips = Fraction(0)\n"),
+    ("loop_rate reader: the keep's carry takes no room",
+     "    carry = (carried + sum(food_carry(n) for _, n in eaten)",
+     "    carry = (0 + sum(food_carry(n) for _, n in eaten)"),
+    ("loop_rate reader: the food carry takes no room",
+     "    carry = (carried + sum(food_carry(n) for _, n in eaten)",
+     "    carry = (carried + sum(0 for _, n in eaten)"),
+    ("loop_rate reader: the worn potion stock takes room",
+     "             + sum(max(0, potion_carry(n) - stock)",
+     "             + sum(potion_carry(n)"),
+    ("loop_rate reader: a worn stock past the carry frees room",
+     "             + sum(max(0, potion_carry(n) - stock)",
+     "             + sum((potion_carry(n) - stock)"),
+    ("loop_rate reader: the drops land at no prospecting",
+     "        drops.units_per_attempt(monster, item, drop_rate, low, high, stats.prospecting)",
+     "        drops.units_per_attempt(monster, item, drop_rate, low, high, 0)"),
+    ("loop_rate reader: a lost fight drops its units",
+     "    per_fight = drops_per_fight(p_win, [",
+     "    per_fight = drops_per_fight(Fraction(1), ["),
+    ("loop_rate reader: a loop with no drops walks to the bank",
+     "    walk = bank_walk(state, game_data, monster) if per_fight > 0 else 0",
+     "    walk = bank_walk(state, game_data, monster)"),
+    ("loop_rate reader: the trip starts from the farthest spawn tile",
+     "    return min(travel_seconds(tile, bank) for tile in tiles)",
+     "    return max(travel_seconds(tile, bank) for tile in tiles)"),
 ]
 
 # best_loadout_core: the pick (consumable utility increment 4). Killed by
@@ -1915,18 +1974,20 @@ BEST_LOADOUT_READER_MUTATIONS = [
      "        if held_count(code, state) > 0 or (price is not None\n",
      "        if True or (price is not None\n"),
     ("best_loadout reader: a restore is walked with one unit",
-     "                         [(code, UTILITY_SLOT_MAX_STACK) for code in codes], food, prices, timing)",
-     "                         [(code, 1) for code in codes], food, prices, timing)"),
+     "                         [(code, UTILITY_SLOT_MAX_STACK) for code in codes], food, prices, timing,\n"
+     "                         drops, carried)",
+     "                         [(code, 1) for code in codes], food, prices, timing,\n"
+     "                         drops, carried)"),
     ("best_loadout reader: the pick ignores the units",
      "    index = pick_best([(rate.xp_per_second, units_used(rate)) for _, rate in scored])",
      "    index = pick_best([(rate.xp_per_second, 0) for _, rate in scored])"),
     ("best_loadout reader: the chosen loadout drops the food its recovery eats",
      "    return ChosenLoadout(monster, tuple((code, n) for code, n in best.rate.used if n > 0),\n"
-     "                         best.rate.eaten, best.made.eaten)",
+     "                         best.rate.eaten, () if best.made is None else best.made.eaten)",
      "    return ChosenLoadout(monster, tuple((code, n) for code, n in best.rate.used if n > 0),\n"
-     "                         (), best.made.eaten)"),
+     "                         (), () if best.made is None else best.made.eaten)"),
     ("best_loadout reader: the made food is the held-free food",
-     "                         best.rate.eaten, best.made.eaten)",
+     "                         best.rate.eaten, () if best.made is None else best.made.eaten)",
      "                         best.rate.eaten, best.rate.eaten)"),
     ("best_loadout reader: the made menu keeps the held units",
      "    return tuple(replace(offer, held=0) for offer in food if offer.price is not None)\n",
@@ -1939,21 +2000,88 @@ BEST_LOADOUT_READER_MUTATIONS = [
      "for code, n in best.rate.used if n >= 0)"),
     ("best_loadout reader: the grind target outranks the fight ahead",
      "    monster = ctx.fight_monster or ctx.combat_monster\n"
-     "    if monster is None or not fight_tiles(state, game_data, monster):\n        return None\n    return chosen(",
+     "    if monster is None or not fight_tiles(state, game_data, monster):\n"
+     "        return None\n    best = best_loadout(",
      "    monster = ctx.combat_monster or ctx.fight_monster\n"
-     "    if monster is None:\n        return None\n    return chosen("),
+     "    if monster is None:\n        return None\n    best = best_loadout("),
     ("best_loadout reader: a monster that spawns nowhere is a fight ahead",
-     "    if monster is None or not fight_tiles(state, game_data, monster):\n        return None\n    return chosen(",
-     "    if monster is None:\n        return None\n    return chosen("),
+     "    if monster is None or not fight_tiles(state, game_data, monster):\n"
+     "        return None\n    best = best_loadout(",
+     "    if monster is None:\n        return None\n    best = best_loadout("),
     ("best_loadout reader: an interior-only monster is no fight ahead",
-     "    if monster is None or not fight_tiles(state, game_data, monster):\n        return None\n    return chosen(",
-     "    if monster is None or not game_data.monster_locations(monster):\n        return None\n    return chosen("),
+     "    if monster is None or not fight_tiles(state, game_data, monster):\n"
+     "        return None\n    best = best_loadout(",
+     "    if monster is None or not game_data.monster_locations(monster):\n"
+     "        return None\n    best = best_loadout("),
     ("best_loadout reader: the cycle's pick is reused for any monster",
      "    if ctx.loadout is not None and ctx.loadout.monster == monster:",
      "    if ctx.loadout is not None:"),
     ("best_loadout reader: the units count only potions",
      "    return sum(n for _, n in rate.used) + sum(n for _, n in rate.eaten)",
      "    return sum(n for _, n in rate.used)"),
+    ("best_loadout reader: no loop that runs still picks",
+     "    if index is None:\n        return None\n",
+     "    if index is None:\n        index = 0\n"),
+    ("best_loadout reader: the bare loop is any loop",
+     "            if codes == ():\n                bare = rate",
+     "            if True:\n                bare = rate"),
+    ("best_loadout reader: the keep's carry takes no room",
+     "    carried = carried_keep(state, game_data, ctx)",
+     "    carried = 0"),
+    ("best_loadout reader: no room with every unit made makes the held food",
+     "                         best.rate.eaten, () if best.made is None else best.made.eaten)",
+     "                         best.rate.eaten, best.rate.eaten if best.made is None else best.made.eaten)"),
+    ("best_loadout reader: no pick is a fight ahead",
+     "    best = best_loadout(state, game_data, ctx, monster, store)\n"
+     "    return None if best is None else chosen(best, monster)",
+     "    best = best_loadout(state, game_data, ctx, monster, store)\n"
+     "    return chosen(best, monster)  # type: ignore[arg-type]"),
+    ("best_loadout reader: no pick is a loadout for the monster",
+     "    best = best_loadout(state, game_data, ctx, monster)\n"
+     "    return None if best is None else chosen(best, monster)",
+     "    best = best_loadout(state, game_data, ctx, monster)\n"
+     "    return chosen(best, monster)  # type: ignore[arg-type]"),
+]
+
+# Spec 2026-10-18 §2.10: what stays in the bag through a deposit, but food and
+# potions (the loop counts its own). Killed by tests/test_ai/test_inventory_keep.py.
+CARRIED_KEEP_MUTATIONS = [
+    ("carried keep: food and potions count",
+     "        if stats.type_ not in (FOOD, POTION):",
+     "        if True:"),
+    ("carried keep: every held unit stays",
+     "            total += min(held, keep_in_bag(code, state, game_data, ctx))",
+     "            total += held"),
+    ("carried keep: the keep counts past what is held",
+     "            total += min(held, keep_in_bag(code, state, game_data, ctx))",
+     "            total += keep_in_bag(code, state, game_data, ctx)"),
+]
+
+# Spec 2026-10-18 §2.10: a worn bag raises the bag cap. Killed by
+# tests/test_ai/test_equipment_projection.py.
+BAG_CAP_PROJECTION_MUTATIONS = [
+    ("projection: a bag does not move the cap",
+     "        inventory_max += ((new_s.inventory_space if new_s else 0)\n"
+     "                          - (old_s.inventory_space if old_s else 0))\n",
+     ""),
+    ("projection: a removed bag keeps its room",
+     "                          - (old_s.inventory_space if old_s else 0))\n",
+     "                          - 0)\n"),
+]
+
+# Spec 2026-10-18 §2.10: a fight no loadout can run (no room for its drops).
+NO_LOOP_HELD_TASK_MUTATIONS = [
+    ("held_task_pays: a grind no loadout runs earns something",
+     "    grind = Fraction(0) if best is None else best.rate.xp_per_second",
+     "    grind = Fraction(1) if best is None else best.rate.xp_per_second"),
+]
+NO_LOOP_PREP_MUTATIONS = [
+    ("heal prep: no loop is a loadout",
+     "    if loadout is None:\n        return None\n    model = ObtainModel(",
+     "    if False:\n        return None\n    model = ObtainModel("),
+    ("potion prep: no loop is a loadout",
+     "    if loadout is None:\n        return None\n    for code, used in loadout.potions:",
+     "    if False:\n        return None\n    for code, used in loadout.potions:"),
 ]
 
 
@@ -6109,8 +6237,8 @@ GEAR_OBJECTIVE_MUTATIONS = [
      "        if at in ITEM_TYPE_TO_SLOTS.get(_stats(item, game_data).type_, []):\n",
      "        if True:\n"),
     ("gear objective: the gain vacates the placement slot, not the L* slot",
-     "                   _gain(state, target, game_data, code, food, timing, best[0], at))\n",
-     "                   _gain(state, target, game_data, code, food, timing, best[0], slot))\n"),
+     "                   _gain(state, target, game_data, code, food, loop, best[0], at))\n",
+     "                   _gain(state, target, game_data, code, food, loop, best[0], slot))\n"),
     ("gear objective: a bare total below zero is accepted",
      "        if value < 0:\n            raise ValueError(f\"{state.character}: bare {stat}",
      "        if False:\n            raise ValueError(f\"{state.character}: bare {stat}"),
@@ -6158,10 +6286,10 @@ GEAR_OBJECTIVE_MUTATIONS = [
      "        if rates and bound[code] < max(rates.values()):",
      "        if rates:"),
     ("gear objective: the worn potions rate L*",
-     "    loop = loop_rate(fighter, game_data, monster, (), food, {}, timing)",
-     "    loop = loop_rate(fighter, game_data, monster, tuple((code, n) for code, n in"
+     "    rate = loop_rate(fighter, game_data, monster, (), food, {}, loop.timing, loop.drops,",
+     "    rate = loop_rate(fighter, game_data, monster, tuple((code, n) for code, n in"
      " fighter.inventory.items() if code.endswith('_potion'))[:2], food,"
-     " dict.fromkeys(fighter.inventory, Fraction(0)), timing)"),
+     " dict.fromkeys(fighter.inventory, Fraction(0)), loop.timing, loop.drops,"),
     ("gear objective: m* only among overworld monsters",
      "            and game_data.monster_spawn_known(code)]",
      "            and game_data.monster_locations(code)]"),
@@ -6197,9 +6325,19 @@ GEAR_OBJECTIVE_MUTATIONS = [
     ("gear objective: an unowned piece is worn",
      "            if bag[code] <= 0:",
      "            if False:"),
-    ("gear objective: a no-potion loop that never ran is rated",
-     "    if loop is None:",
-     "    if False:"),
+    ("gear objective: a loop that does not run is rated",
+     "    return Fraction(0) if rate is None else rate.xp_per_second",
+     "    return rate.xp_per_second  # type: ignore[union-attr]"),
+    ("gear objective: the keep's carry leaves the bag",
+     "    loop = LoopInputs(ctx.timing(), ctx.drops(), carried_keep(state, game_data, ctx))",
+     "    loop = LoopInputs(ctx.timing(), ctx.drops(), 0)"),
+    ("gear objective: a worn bag does not raise the cap",
+     "                   prospecting=stats.prospecting, haste=stats.haste,\n"
+     "                   inventory_max=stats.inventory_max)",
+     "                   prospecting=stats.prospecting, haste=stats.haste)"),
+    ("gear objective: a bag cap below its worn bag is accepted",
+     "              (\"haste\", state.haste), (\"inventory_max\", state.inventory_max)]",
+     "              (\"haste\", state.haste)]"),
 ]
 
 # synergy_core.synergy_pure — the purity factor read by the taskmaster choice and
@@ -10472,14 +10610,17 @@ BAND_UPKEEP_MUTATIONS = [
 # tests/test_ai/test_band_target.py.
 BAND_LOADOUT_MUTATIONS = [
     ("band: a potion-propped monster is no candidate",
-     "        if not bare and (not odds_clear(loadout().rate.p_win, win_threshold(rested, code)) or (\n",
+     "        if not bare and (not _odds_clear(loadout(), win_threshold(rested, code)) or (\n",
      "        if not bare and (True or (\n"),
     ("band: the potion arm ignores the measured threshold",
-     "        if not bare and (not odds_clear(loadout().rate.p_win, win_threshold(rested, code)) or (\n",
-     "        if not bare and (not odds_clear(loadout().rate.p_win, Fraction(4, 5)) or (\n"),
+     "        if not bare and (not _odds_clear(loadout(), win_threshold(rested, code)) or (\n",
+     "        if not bare and (not _odds_clear(loadout(), Fraction(4, 5)) or (\n"),
     ("band: the potion arm reads the closed form again",
-     "        if not bare and (not odds_clear(loadout().rate.p_win, win_threshold(rested, code)) or (\n",
-     "        if not bare and (not loadout().rate.win or (\n"),
+     "    return best is not None and odds_clear(best.rate.p_win, threshold)",
+     "    return best is not None and best.rate.win"),
+    ("band: a loop no loadout can run clears the odds",
+     "    return best is not None and odds_clear(best.rate.p_win, threshold)",
+     "    return best is None or odds_clear(best.rate.p_win, threshold)"),
     ("band: the bare fight drinks the worn potions",
      "        bare = is_winnable(unpotioned(rested), game_data, code, history)\n",
      "        bare = is_winnable(rested, game_data, code, history)\n"),
@@ -10490,12 +10631,16 @@ BAND_LOADOUT_MUTATIONS = [
      "        bare_fight = bare_fight or bare\n",
      "        bare_fight = True\n"),
     ("band: the model ranks at the full kill's XP over the fight alone",
-     "    return best().rate.xp_per_second\n",
-     "    return Fraction(xp_per_kill) / best().rate.fight_seconds\n"),
+     "    return Fraction(0) if loadout is None else loadout.rate.xp_per_second\n",
+     "    return Fraction(0) if loadout is None else Fraction(xp_per_kill) / loadout.rate.fight_seconds\n"),
     ("band: the model ranks without the win odds",
-     "    return best().rate.xp_per_second\n",
-     "    return Fraction(xp_per_kill) / (best().rate.fight_seconds + best().rate.recovery_seconds\n"
-     "                                    + best().rate.consumed_seconds)\n"),
+     "    return Fraction(0) if loadout is None else loadout.rate.xp_per_second\n",
+     "    return Fraction(0) if loadout is None else Fraction(xp_per_kill) / (\n"
+     "        loadout.rate.fight_seconds + loadout.rate.recovery_seconds\n"
+     "        + loadout.rate.consumed_seconds)\n"),
+    ("band: a loop no loadout can run ranks above nothing",
+     "    return Fraction(0) if loadout is None else loadout.rate.xp_per_second\n",
+     "    return Fraction(1) if loadout is None else loadout.rate.xp_per_second\n"),
 ]
 # The grind target's risk (USER 2026-10-15). Killed by
 # tests/test_ai/test_player.py.
@@ -11967,6 +12112,14 @@ def _collect_all_groups() -> None:
               "formal/diff/test_loop_rate_diff.py", survivors)
     run_group(LOOP_RATE_SRC, LOOP_RATE_READER_MUTATIONS,
               "tests/test_ai/test_loop_rate.py", survivors)
+    run_group(INVENTORY_KEEP_SRC, CARRIED_KEEP_MUTATIONS,
+              "tests/test_ai/test_inventory_keep.py", survivors)
+    run_group(PROJECTION_SRC, BAG_CAP_PROJECTION_MUTATIONS,
+              "tests/test_ai/test_equipment_projection.py", survivors)
+    run_group(HELD_TASK_PAYS_SRC, NO_LOOP_HELD_TASK_MUTATIONS,
+              "tests/test_ai/test_held_task_pays.py", survivors)
+    run_group(GRIND_HEAL_PREP_SRC, NO_LOOP_PREP_MUTATIONS,
+              "tests/test_ai/test_grind_heal_prep.py", survivors)
     run_group(LOOP_RATE_CORE_SRC, LOOP_RATE_CHOICE_MUTATIONS,
               "tests/test_ai/test_loop_rate_core.py", survivors)
     run_group(BEST_LOADOUT_CORE_SRC, BEST_LOADOUT_CORE_MUTATIONS,

@@ -46,6 +46,13 @@ empty utility loadout), recovering over the character's own food menu, which
 is read once (gear in the bag does not change what can be eaten). It is the
 MODELLED rate: a measured upkeep belongs to the worn gear, not to a projected
 loadout.
+
+`R` COUNTS THE BANK TRIPS (§2.10). The loop's drops fill the bag the fighter's
+loadout gives (`_wearing` carries a worn bag's `inventory_space` into
+`inventory_max`), less what the real character's keep holds in it
+(`inventory_keep.carried_keep`, read once: the fighter's bag is the whole
+achievable set, which no deposit keeps). So a bigger bag is a positive gain,
+and a monster with heavy drops far from the bank values it more.
 """
 
 from collections import Counter
@@ -63,15 +70,15 @@ from artifactsmmo_cli.ai.equipment.loadout_picker import _benefit, _ordered_slot
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.equipment.realizable_loadout import ownership
 from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
-from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.fight_walk import odds_walk, walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_core import achievable_layers, layer_of, piece_order_key
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.heal_catalog import POTION
+from artifactsmmo_cli.ai.inventory_keep import carried_keep
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.loop_rate import FoodOffer, food_menu, loop_rate
+from artifactsmmo_cli.ai.loop_rate import FoodOffer, LoopInputs, food_menu, loop_rate
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.obtain_model.gate import GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
@@ -150,7 +157,8 @@ def _wearing(state: WorldState, loadout: Mapping[str, str | None],
                    dmg_elements=stats.dmg_elements, resistance=stats.resistance,
                    critical_strike=stats.critical_strike, initiative=stats.initiative,
                    max_hp=stats.max_hp, hp=stats.max_hp, wisdom=stats.wisdom,
-                   prospecting=stats.prospecting, haste=stats.haste)
+                   prospecting=stats.prospecting, haste=stats.haste,
+                   inventory_max=stats.inventory_max)
 
 
 def _potions_off(state: WorldState) -> WorldState:
@@ -192,7 +200,7 @@ def _totals(state: WorldState) -> list[tuple[str, int]]:
     totals = [("dmg", state.dmg), ("critical_strike", state.critical_strike),
               ("initiative", state.initiative), ("max_hp", state.max_hp),
               ("wisdom", state.wisdom), ("prospecting", state.prospecting),
-              ("haste", state.haste)]
+              ("haste", state.haste), ("inventory_max", state.inventory_max)]
     for name, by_element in (("attack", state.attack), ("dmg_elements", state.dmg_elements),
                              ("resistance", state.resistance)):
         totals.extend((f"{name}.{element}", value) for element, value in by_element.items())
@@ -309,19 +317,20 @@ def _combat(game_data: GameData, monster: str, state: WorldState) -> Combat:
 
 
 def _rate(fighter: WorldState, game_data: GameData, monster: str,
-          food: tuple[FoodOffer, ...], timing: FightSecondsModel) -> Fraction:
+          food: tuple[FoodOffer, ...], loop: LoopInputs) -> Fraction:
     """`R`: XP per second of farming `monster` in `fighter`'s worn gear with no
     potion, recovering over `food`, each fight lasting its learned seconds
-    (`timing`, spec §2.9; see the module doc's `R`). The no-potion loop drinks
-    nothing, so it has no potion price and always runs."""
-    loop = loop_rate(fighter, game_data, monster, (), food, {}, timing)
-    if loop is None:
-        raise RuntimeError(f"the no-potion loop against {monster} did not run")
-    return loop.xp_per_second
+    (spec §2.9) and carrying its share of the bank trips its drops force
+    (§2.10; see the module doc's `R`). The no-potion loop drinks nothing, so it
+    has no potion price; it does not run when the bag has no room for its
+    drops, and a loop that does not run earns nothing: `R = 0`."""
+    rate = loop_rate(fighter, game_data, monster, (), food, {}, loop.timing, loop.drops,
+                     loop.carried)
+    return Fraction(0) if rate is None else rate.xp_per_second
 
 
 def _rated(targets: Mapping[str, tuple[WorldState, dict[str, str]]], game_data: GameData,
-           food: tuple[FoodOffer, ...], timing: FightSecondsModel) -> list[tuple[str, Fraction]]:
+           food: tuple[FoodOffer, ...], loop: LoopInputs) -> list[tuple[str, Fraction]]:
     """`(m, R)` for every candidate that can be the argmax, in candidate order.
 
     A candidate is a fight the executor will take once `L*(m)` is worn: the
@@ -334,7 +343,8 @@ def _rated(targets: Mapping[str, tuple[WorldState, dict[str, str]]], game_data: 
 
     `R` is the no-potion loop's win odds times a kill's XP over the fight's
     seconds (`walk_seconds`, the same the loop reads) plus a non-negative
-    recovery and walk back (`loop_rate`), so it never exceeds the odds times
+    recovery, walk back and bank-trip share (`loop_rate`; 0 when the loop does
+    not run), so it never exceeds the odds times
     the XP over the fight alone. Candidates are
     rated in falling order of that bound, and the walk stops at the first whose
     bound is below the best `R` found: it and every later one can neither reach
@@ -342,7 +352,7 @@ def _rated(targets: Mapping[str, tuple[WorldState, dict[str, str]]], game_data: 
     differs (the recovery programme is most of the objective's time)."""
     bound = {code: odds_win(odds_walk(fighter, game_data, code, ())[0])
              * game_data.xp_per_kill(code, fighter.level, fighter.wisdom)
-             / walk_seconds(fighter, game_data, code, (), timing)
+             / walk_seconds(fighter, game_data, code, (), loop.timing)
              for code, (fighter, _) in targets.items()}
     rates: dict[str, Fraction] = {}
     for code in sorted(targets, key=bound.__getitem__, reverse=True):
@@ -350,7 +360,7 @@ def _rated(targets: Mapping[str, tuple[WorldState, dict[str, str]]], game_data: 
             break
         if not drop_fight_winnable(targets[code][0], game_data, code):
             continue
-        rates[code] = _rate(targets[code][0], game_data, code, food, timing)
+        rates[code] = _rate(targets[code][0], game_data, code, food, loop)
     return [(code, rates[code]) for code in targets if code in rates]
 
 
@@ -442,14 +452,15 @@ def _without(state: WorldState, target: WorldState, game_data: GameData,
 
 
 def _gain(state: WorldState, target: WorldState, game_data: GameData, monster: str,
-          food: tuple[FoodOffer, ...], timing: FightSecondsModel, rate: Fraction,
+          food: tuple[FoodOffer, ...], loop: LoopInputs, rate: Fraction,
           at: str) -> Fraction:
     """A piece's gain (§2.8): `rate`, `R(L*)` on `target` (the fighter wearing
     `L*`), less `R` of `target` with `L*`'s slot `at` holding the best item the
     character owns for it, or nothing (`_without`), each fight lasting its
-    learned seconds (`timing`, §2.9: a faster kill is a gain)."""
+    learned seconds (§2.9: a faster kill is a gain) and carrying its bank trips
+    (§2.10: a bigger bag fills less often, so a bag is a gain)."""
     return rate - _rate(_without(state, target, game_data, at), game_data, monster, food,
-                        timing)
+                        loop)
 
 
 def _price(state: WorldState, game_data: GameData, ctx: SelectionContext,
@@ -489,9 +500,9 @@ def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext
     layers = achievable(state, game_data, ctx)
     depth = layer_of(layers)
     food = food_menu(state, game_data, ctx, history)
-    timing = ctx.timing()
+    loop = LoopInputs(ctx.timing(), ctx.drops(), carried_keep(state, game_data, ctx))
     targets = _targets(state, game_data, frozenset(depth))
-    rated = _rated(targets, game_data, food, timing)
+    rated = _rated(targets, game_data, food, loop)
     if not rated or max(rate for _, rate in rated) <= 0:
         return None
     best = max((rate, game_data.monster_levels[code]) for code, rate in rated)
@@ -502,7 +513,7 @@ def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext
         target = targets[code][0]
         own = _target(state, game_data, code)[1]
         gained = [(slot, item,
-                   _gain(state, target, game_data, code, food, timing, best[0], at))
+                   _gain(state, target, game_data, code, food, loop, best[0], at))
                   for slot, item, at in _missing(game_data, code, target, loadouts[code], own)]
         pieces_of[code] = [piece for piece in gained if piece[2] > 0]
     prices = {code: [_price(state, game_data, ctx, history, targets[code][0], item)

@@ -42,25 +42,54 @@ renewal-reward: `p_win x xp / (fight + expected recovery + consumed + walk)`.
   `CONSUMABLE_COOLDOWN_SECONDS`; the units it eats are the loop's `eaten`.
 * XP — `game_data.xp_per_kill` at the character's level and wisdom on a win
   (`LoopRate.p_win` weights it); 0 on a loss. `used`/`eaten` are the expected
-  units rounded up, `hp_end` the expected end HP rounded down."""
+  units rounded up, `hp_end` the expected end HP rounded down.
+* BANK TRIPS (spec 2026-10-18 §2.10) — the drops fill the bag and a full bag
+  is a trip to the bank, so each fight carries `loop_rate_core.trip_share`
+  seconds of trips. A fight's drops are its win odds times every drop of the
+  monster at its learned units per attempt (`LearnedDrops.units_per_attempt`,
+  the one drop model) at the prospecting the fight is fought in
+  (`combat.fight_stats`). The room for them is the bag cap of that loadout
+  (a worn bag raises it) less what the bag carries through a deposit: the
+  keep's other units (`carried`, `inventory_keep.carried_keep`), the carry of
+  the food the recovery eats (`chosen_loadout.food_carry`) and the potion
+  carry the utility slots do not hold (`chosen_loadout.potion_carry` less the
+  stock worn). A trip walks from the monster's tile nearest the bank to the
+  bank (`GameData.bank_location`) and back, and pays one deposit
+  (`cost_core.DEPOSIT_SECONDS_PER_CODE`) per distinct drop code. A loop with
+  drops and no room for them is unrunnable (None); one with no drops makes
+  no trip and needs no bank."""
 
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 
-from artifactsmmo_cli.ai.actions.cost_core import CONSUMABLE_COOLDOWN_SECONDS, travel_seconds
+from artifactsmmo_cli.ai.actions.cost_core import (
+    CONSUMABLE_COOLDOWN_SECONDS,
+    DEPOSIT_SECONDS_PER_CODE,
+    travel_seconds,
+)
+from artifactsmmo_cli.ai.chosen_loadout import food_carry, potion_carry
+from artifactsmmo_cli.ai.combat import fight_stats
 from artifactsmmo_cli.ai.consumable_price import replacement_price_of
 from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.fight_terms_core import SCALE
 from artifactsmmo_cli.ai.fight_tiles import fight_tiles
-from artifactsmmo_cli.ai.fight_walk import fight_walk, odds_walk, walk_seconds
+from artifactsmmo_cli.ai.fight_walk import fight_walk, odds_walk, walk_seconds, wear
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.heal_catalog import FOOD, heal_candidates
 from artifactsmmo_cli.ai.held_stock import held_count
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.loop_rate_core import consumed_seconds, expected_xp_per_second, recovery_choice
+from artifactsmmo_cli.ai.loop_rate_core import (
+    consumed_seconds,
+    drops_per_fight,
+    expected_xp_per_second,
+    recovery_choice,
+    trip_seconds,
+    trip_share,
+)
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -113,6 +142,17 @@ class LoopRate:
     eaten: tuple[tuple[str, int], ...]
 
 
+@dataclass(frozen=True)
+class LoopInputs:
+    """What every loop of one character's cycle reads alike, whatever the
+    monster or the gear: the learned fight seconds, the cycle's drop evidence
+    and the units the keep holds in the bag (`inventory_keep.carried_keep`)."""
+
+    timing: FightSecondsModel
+    drops: LearnedDrops
+    carried: int
+
+
 def food_menu(state: WorldState, game_data: GameData, ctx: SelectionContext,
               store: LearningStore | None = None) -> tuple[FoodOffer, ...]:
     """The foods the character can eat (item level at most its level: the API
@@ -141,16 +181,32 @@ def monster_tile(state: WorldState, game_data: GameData, monster: str) -> tuple[
     return min(tiles, key=lambda tile: (travel_seconds(RESPAWN_TILE, tile), tile))
 
 
+def bank_walk(state: WorldState, game_data: GameData, monster: str) -> int:
+    """The walk from the monster's fight tile nearest the bank to the bank
+    (`GameData.bank_location`, which raises when the map has none): half a bank
+    trip. The tiles are every layer's (`fight_tiles`), priced on their (x, y)
+    alone, as the walk back from a loss is (`monster_tile`)."""
+    tiles = fight_tiles(state, game_data, monster)
+    if not tiles:
+        raise ValueError(f"{monster} has no spawn tile: a bank trip cannot be priced")
+    bank = game_data.bank_location()
+    return min(travel_seconds(tile, bank) for tile in tiles)
+
+
 def loop_rate(state: WorldState, game_data: GameData, monster: str,
               loadout: Sequence[tuple[str, int]], food: Sequence[FoodOffer],
               prices: Mapping[str, Fraction | None],
-              timing: FightSecondsModel) -> LoopRate | None:
+              timing: FightSecondsModel, drops: LearnedDrops, carried: int) -> LoopRate | None:
     """The loop's expected XP per second against `monster` wearing `loadout` and
     recovering over `food` (see the module doc): every crit ending of the fight
-    is priced (`odds_walk`), a loss walks back from `RESPAWN_TILE`, and the
-    fight lasts `walk_seconds` under `timing`. `prices` holds every loadout
-    potion's replacement price. None when a potion with no replacement is
-    expected (rounded up) to be drunk past the held units."""
+    is priced (`odds_walk`), a loss walks back from `RESPAWN_TILE`, the
+    fight lasts `walk_seconds` under `timing`, and the bank trips its drops
+    force are shared over the fights between them, the drops priced on
+    `drops` and the bag's room less `carried`, the units the keep holds in it
+    other than food and potions (`inventory_keep.carried_keep`). `prices` holds
+    every loadout potion's replacement price. None when a potion with no
+    replacement is expected (rounded up) to be drunk past the held units, or
+    when the fight drops something and the bag has no room for it."""
     outcome, max_hp, restore_code = fight_walk(state, game_data, monster, loadout)
     endings, _, _ = odds_walk(state, game_data, monster, loadout)
     p_win = odds_win(endings)
@@ -182,10 +238,23 @@ def loop_rate(state: WorldState, game_data: GameData, monster: str,
     extra += recovery_mean + consumed_mean
     xp = game_data.xp_per_kill(monster, state.level, state.wisdom)
     fight = walk_seconds(state, game_data, monster, loadout, timing)
-    rate = expected_xp_per_second(xp, p_win, fight, extra)
     used_units = tuple((code, math.ceil(used_mean[code])) for code, _ in loadout)
     if any(prices[code] is None and n > held[code] for code, n in used_units):
         return None
     eaten = tuple((f.code, math.ceil(k)) for f, k in zip(food, eaten_mean, strict=True) if k > 0)
+    stats = fight_stats(wear(state, game_data, loadout)[0], game_data, monster)
+    carry = (carried + sum(food_carry(n) for _, n in eaten)
+             + sum(max(0, potion_carry(n) - stock)
+                   for (_, stock), (_, n) in zip(loadout, used_units, strict=True)))
+    table = game_data.monster_drops(monster)
+    per_fight = drops_per_fight(p_win, [
+        drops.units_per_attempt(monster, item, drop_rate, low, high, stats.prospecting)
+        for item, drop_rate, low, high in table])
+    walk = bank_walk(state, game_data, monster) if per_fight > 0 else 0
+    trips = trip_share(trip_seconds(walk, Fraction(DEPOSIT_SECONDS_PER_CODE), len(table)),
+                       per_fight, stats.inventory_max - carry)
+    if trips is None:
+        return None
+    rate = expected_xp_per_second(xp, p_win, fight, extra + trips)
     return LoopRate(rate, xp if p_win > 0 else 0, outcome.win, p_win, fight, recovery_mean,
                     consumed_mean, max_hp, math.floor(hp_end_mean), used_units, eaten)

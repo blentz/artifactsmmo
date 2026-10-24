@@ -240,3 +240,15 @@ class TestPlayerPricesThePayOncePerCycle:
         player = self._player(monkeypatch, STATE, pays)
         assert player._selection_context().held_task_pays is False
         assert pays == []
+
+
+def test_a_grind_no_loadout_can_run_earns_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Spec 2026-10-18 §2.10: with no room in the bag for the grind's drops no
+    loadout's loop runs (`best_loadout` None): the grind pays 0, so any demanded
+    XP the task pays beats it."""
+    _worth(monkeypatch, TaskWorth(xp=True, gold=False, drops=False))
+    monkeypatch.setattr(pays_mod, "best_loadout", lambda *a, **k: None)
+    assert held_task_pays(STATE, GameData(), CTX, "imp",
+                          _store(monkeypatch, own=0.001, fleet=None)) is True
+    assert held_task_pays(STATE, GameData(), CTX, "imp",
+                          _store(monkeypatch, own=0.0, fleet=None)) is False
