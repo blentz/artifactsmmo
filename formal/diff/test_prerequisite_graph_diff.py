@@ -42,12 +42,11 @@ import random
 
 import artifactsmmo_cli.ai.tiers.prerequisite_graph as pg_mod
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import combat_capable, prerequisites
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 _EQUIPMENT_SLOTS = (
     "weapon_slot", "shield_slot", "helmet_slot", "body_armor_slot",
@@ -139,7 +138,7 @@ def _run_prereq(has_recipe, ingredients, code, ready_source=False):
         gd._resource_locations = {res: [(0, 0)]}
 
     node = ObtainItem(str(code))
-    py = _normalize_py(prerequisites(node, _unsatisfied_state(), gd, NO_PROFILE_CONTEXT))
+    py = _normalize_py(prerequisites(node, _unsatisfied_state(), gd, NO_DROPS_CONTEXT))
 
     args = _encode_prereq_args(ready_source, has_recipe, ingredients)
     lean = _normalize_lean(run_oracle("prerequisite_graph", [args])[0])
