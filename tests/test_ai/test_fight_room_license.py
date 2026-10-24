@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.inventory_keep import keep_in_bag
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
+from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
@@ -135,3 +136,29 @@ def test_a_refused_fight_is_named_in_the_log(capsys: pytest.CaptureFixture[str])
           patch.object(player, "_selection_context", return_value=ctx)):
         player._decide_band(make_state(), GameData(), [])
     assert refusal_line("ogre") in capsys.readouterr().out
+
+
+def test_the_cached_plan_replans_a_refused_fight() -> None:
+    """A cached plan whose next step fights the refused monster is not reused:
+    its step reads as not applicable, so `should_replan` re-decides."""
+    player = player_mod.GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
+    goal = MagicMock()
+    goal.is_satisfied.return_value = False
+    player._plan_cache = PlanCache(selected_goal=goal, plan=[_fight("ogre")],
+                                   crafting_target=None, plan_level=5, goal_repr="G")
+    seen: list[bool] = []
+
+    def spy(cache: object, outcome: object, level: int, satisfied: bool, applicable: bool,
+            *rest: object) -> bool:
+        seen.append(applicable)
+        return False
+    with (patch.object(player_mod, "should_replan", side_effect=spy),
+          patch.object(FightAction, "is_applicable", return_value=True),
+          patch.object(player_mod.GamePlayer, "_fight_ready", return_value=True)):
+        player._last_ctx = replace(CTX, loadout=ChosenLoadout("ogre", (), (), (), runnable=False))
+        player._plan_or_reuse(make_state(), GameData(), [])
+        player._last_ctx = replace(CTX, loadout=ChosenLoadout("ogre", (), (), ()))
+        player._plan_or_reuse(make_state(), GameData(), [])
+    assert seen == [False, True]
