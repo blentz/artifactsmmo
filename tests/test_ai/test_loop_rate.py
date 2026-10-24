@@ -517,9 +517,17 @@ class TestBankTrips:
             + trip * rate.p_win * 2 / 20)
 
     def test_a_loop_with_no_room_is_unrunnable(self) -> None:
+        """No room for the drops: the loop does not run and earns nothing, but
+        it is still the loop it would be (its fight and recovery), named by
+        `runnable`, never a bare None."""
         gd = _trip_gd()
-        assert _trip_rate(_state(**_WINS), gd, carried=20) is None
-        assert _trip_rate(_state(**_WINS), gd, carried=19) is not None
+        stuck = _trip_rate(_state(**_WINS), gd, carried=20)
+        runs = _trip_rate(_state(**_WINS), gd, carried=19)
+        assert stuck is not None and runs is not None
+        assert (stuck.runnable, stuck.xp_per_second) == (False, 0)
+        assert runs.runnable and runs.xp_per_second > 0
+        assert (stuck.fight_seconds, stuck.recovery_seconds, stuck.eaten) == (
+            runs.fight_seconds, runs.recovery_seconds, runs.eaten)
 
     def test_a_loop_that_drops_nothing_needs_no_room_and_no_bank(self) -> None:
         gd = _gd()

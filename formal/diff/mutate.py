@@ -437,6 +437,7 @@ DROP_FIGHT_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "drop_figh
 CONSUMABLE_PRICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price.py"
 LOOP_RATE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate_core.py"
 LOOP_RATE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate.py"
+FIGHT_ROOM_LICENSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_room_license.py"
 REST_FIRST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "rest_first_core.py"
 REST_FIRST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "rest_first.py"
 BEST_LOADOUT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "best_loadout_core.py"
@@ -1903,14 +1904,14 @@ LOOP_RATE_READER_MUTATIONS = [
      "    used_units = tuple((code, math.ceil(used_mean[code])) for code, _ in loadout)",
      "    used_units = tuple((code, math.floor(used_mean[code])) for code, _ in loadout)"),
     ("loop_rate reader: the rate ignores the odds",
-     "    rate = expected_xp_per_second(xp, p_win, fight, extra + trips)",
-     "    rate = expected_xp_per_second(xp, Fraction(1), fight, extra + trips)"),
+     "    rate = Fraction(0) if trips is None else expected_xp_per_second(xp, p_win, fight, extra + trips)",
+     "    rate = Fraction(0) if trips is None else expected_xp_per_second(xp, Fraction(1), fight, extra + trips)"),
     ("loop_rate reader: the farthest spawn tile",
      "    return min(tiles, key=lambda tile: (travel_seconds(RESPAWN_TILE, tile), tile))",
      "    return max(tiles, key=lambda tile: (travel_seconds(RESPAWN_TILE, tile), tile))"),
     ("loop_rate reader: the trip term is dropped",
-     "    rate = expected_xp_per_second(xp, p_win, fight, extra + trips)",
-     "    rate = expected_xp_per_second(xp, p_win, fight, extra)"),
+     "    rate = Fraction(0) if trips is None else expected_xp_per_second(xp, p_win, fight, extra + trips)",
+     "    rate = Fraction(0) if trips is None else expected_xp_per_second(xp, p_win, fight, extra)"),
     ("loop_rate reader: the capacity is ignored",
      "                       per_fight, stats.inventory_max - carry)",
      "                       per_fight, 1)"),
@@ -1921,8 +1922,11 @@ LOOP_RATE_READER_MUTATIONS = [
      "    trips = trip_share(trip_seconds(walk, Fraction(DEPOSIT_SECONDS_PER_CODE), len(table)),",
      "    trips = trip_share(trip_seconds(walk, Fraction(DEPOSIT_SECONDS_PER_CODE), 1),"),
     ("loop_rate reader: a loop with no room runs",
-     "    if trips is None:\n        return None\n",
-     "    if trips is None:\n        trips = Fraction(0)\n"),
+     "                    trips is not None)",
+     "                    True)"),
+    ("loop_rate reader: a loop with no room earns its rate without trips",
+     "    rate = Fraction(0) if trips is None else expected_xp_per_second(xp, p_win, fight, extra + trips)",
+     "    rate = expected_xp_per_second(xp, p_win, fight, extra + (trips or 0))"),
     ("loop_rate reader: the keep's carry takes no room",
      "    carry = (carried + sum(food_carry(n) for _, n in eaten)",
      "    carry = (0 + sum(food_carry(n) for _, n in eaten)"),
@@ -1979,16 +1983,22 @@ BEST_LOADOUT_READER_MUTATIONS = [
      "                         [(code, 1) for code in codes], food, prices, timing,\n"
      "                         drops, carried)"),
     ("best_loadout reader: the pick ignores the units",
-     "    index = pick_best([(rate.xp_per_second, units_used(rate)) for _, rate in scored])",
-     "    index = pick_best([(rate.xp_per_second, 0) for _, rate in scored])"),
+     "    index = pick_best([(rate.xp_per_second, units_used(rate)) for _, rate in runs])",
+     "    index = pick_best([(rate.xp_per_second, 0) for _, rate in runs])"),
+    ("best_loadout reader: a loop with no room is picked over one that runs",
+     "    runs = [entry for entry in scored if entry[1].runnable] or scored",
+     "    runs = scored"),
+    ("best_loadout reader: the pick's room verdict is dropped",
+     "                         best.rate.eaten, best.made.eaten, best.rate.runnable)",
+     "                         best.rate.eaten, best.made.eaten, True)"),
     ("best_loadout reader: the chosen loadout drops the food its recovery eats",
      "    return ChosenLoadout(monster, tuple((code, n) for code, n in best.rate.used if n > 0),\n"
-     "                         best.rate.eaten, () if best.made is None else best.made.eaten)",
+     "                         best.rate.eaten, best.made.eaten, best.rate.runnable)",
      "    return ChosenLoadout(monster, tuple((code, n) for code, n in best.rate.used if n > 0),\n"
-     "                         (), () if best.made is None else best.made.eaten)"),
+     "                         (), best.made.eaten, best.rate.runnable)"),
     ("best_loadout reader: the made food is the held-free food",
-     "                         best.rate.eaten, () if best.made is None else best.made.eaten)",
-     "                         best.rate.eaten, best.rate.eaten)"),
+     "                         best.rate.eaten, best.made.eaten, best.rate.runnable)",
+     "                         best.rate.eaten, best.rate.eaten, best.rate.runnable)"),
     ("best_loadout reader: the made menu keeps the held units",
      "    return tuple(replace(offer, held=0) for offer in food if offer.price is not None)\n",
      "    return tuple(offer for offer in food if offer.price is not None)\n"),
@@ -2001,46 +2011,27 @@ BEST_LOADOUT_READER_MUTATIONS = [
     ("best_loadout reader: the grind target outranks the fight ahead",
      "    monster = ctx.fight_monster or ctx.combat_monster\n"
      "    if monster is None or not fight_tiles(state, game_data, monster):\n"
-     "        return None\n    best = best_loadout(",
+     "        return None\n    return chosen(",
      "    monster = ctx.combat_monster or ctx.fight_monster\n"
-     "    if monster is None:\n        return None\n    best = best_loadout("),
+     "    if monster is None:\n        return None\n    return chosen("),
     ("best_loadout reader: a monster that spawns nowhere is a fight ahead",
      "    if monster is None or not fight_tiles(state, game_data, monster):\n"
-     "        return None\n    best = best_loadout(",
-     "    if monster is None:\n        return None\n    best = best_loadout("),
+     "        return None\n    return chosen(",
+     "    if monster is None:\n        return None\n    return chosen("),
     ("best_loadout reader: an interior-only monster is no fight ahead",
      "    if monster is None or not fight_tiles(state, game_data, monster):\n"
-     "        return None\n    best = best_loadout(",
+     "        return None\n    return chosen(",
      "    if monster is None or not game_data.monster_locations(monster):\n"
-     "        return None\n    best = best_loadout("),
+     "        return None\n    return chosen("),
     ("best_loadout reader: the cycle's pick is reused for any monster",
      "    if ctx.loadout is not None and ctx.loadout.monster == monster:",
      "    if ctx.loadout is not None:"),
     ("best_loadout reader: the units count only potions",
      "    return sum(n for _, n in rate.used) + sum(n for _, n in rate.eaten)",
      "    return sum(n for _, n in rate.used)"),
-    ("best_loadout reader: no loop that runs still picks",
-     "    if index is None:\n        return None\n",
-     "    if index is None:\n        index = 0\n"),
-    ("best_loadout reader: the bare loop is any loop",
-     "            if codes == ():\n                bare = rate",
-     "            if True:\n                bare = rate"),
     ("best_loadout reader: the keep's carry takes no room",
      "    carried = carried_keep(state, game_data, ctx)",
      "    carried = 0"),
-    ("best_loadout reader: no room with every unit made makes the held food",
-     "                         best.rate.eaten, () if best.made is None else best.made.eaten)",
-     "                         best.rate.eaten, best.rate.eaten if best.made is None else best.made.eaten)"),
-    ("best_loadout reader: no pick is a fight ahead",
-     "    best = best_loadout(state, game_data, ctx, monster, store)\n"
-     "    return None if best is None else chosen(best, monster)",
-     "    best = best_loadout(state, game_data, ctx, monster, store)\n"
-     "    return chosen(best, monster)  # type: ignore[arg-type]"),
-    ("best_loadout reader: no pick is a loadout for the monster",
-     "    best = best_loadout(state, game_data, ctx, monster)\n"
-     "    return None if best is None else chosen(best, monster)",
-     "    best = best_loadout(state, game_data, ctx, monster)\n"
-     "    return chosen(best, monster)  # type: ignore[arg-type]"),
 ]
 
 # Spec 2026-10-18 §2.10: what stays in the bag through a deposit, but food and
@@ -2069,19 +2060,38 @@ BAG_CAP_PROJECTION_MUTATIONS = [
      "                          - 0)\n"),
 ]
 
-# Spec 2026-10-18 §2.10: a fight no loadout can run (no room for its drops).
-NO_LOOP_HELD_TASK_MUTATIONS = [
-    ("held_task_pays: a grind no loadout runs earns something",
-     "    grind = Fraction(0) if best is None else best.rate.xp_per_second",
-     "    grind = Fraction(1) if best is None else best.rate.xp_per_second"),
+# Spec 2026-10-18 §2.10 (ruling T13c): the fight refused for want of bag room,
+# one verdict (`ChosenLoadout.runnable`) read by the arbiter's pool and the
+# cached plan. Killed by tests/test_ai/test_fight_room_license.py.
+FIGHT_ROOM_LICENSE_MUTATIONS = [
+    ("fight room: a loop with no room refuses nothing",
+     "    if loadout is None or loadout.runnable:\n        return None",
+     "    if True:\n        return None"),
+    ("fight room: a loop that runs is refused",
+     "    if loadout is None or loadout.runnable:\n        return None",
+     "    if loadout is None:\n        return None"),
+    ("fight room: every fight is refused",
+     "            if not (isinstance(action, FightAction) and action.monster_code == refused)]",
+     "            if not isinstance(action, FightAction)]"),
 ]
-NO_LOOP_PREP_MUTATIONS = [
-    ("heal prep: no loop is a loadout",
-     "    if loadout is None:\n        return None\n    model = ObtainModel(",
-     "    if False:\n        return None\n    model = ObtainModel("),
-    ("potion prep: no loop is a loadout",
-     "    if loadout is None:\n        return None\n    for code, used in loadout.potions:",
-     "    if False:\n        return None\n    for code, used in loadout.potions:"),
+FIGHT_ROOM_ARBITER_MUTATIONS = [
+    ("fight room: the arbiter plans over the refused fight",
+     "        actions = license_fights(actions, ctx)\n",
+     ""),
+    ("fight room: the trace does not name the refusal",
+     "            \"fight_no_room\": refused_fight(ctx),",
+     "            \"fight_no_room\": None,"),
+]
+FIGHT_ROOM_PLAYER_MUTATIONS = [
+    ("fight room: a cached fight the last cycle refused is reused",
+     "                           and not self._fight_refused(step))",
+     "                           and True)"),
+    ("fight room: a cached fight against any monster is refused",
+     "        return isinstance(step, FightAction) and step.monster_code == refused_fight(self._last_ctx)",
+     "        return isinstance(step, FightAction)"),
+    ("fight room: the refusal is not logged",
+     "        if refused is not None:\n            print(",
+     "        if False:\n            print("),
 ]
 
 
@@ -6325,9 +6335,9 @@ GEAR_OBJECTIVE_MUTATIONS = [
     ("gear objective: an unowned piece is worn",
      "            if bag[code] <= 0:",
      "            if False:"),
-    ("gear objective: a loop that does not run is rated",
-     "    return Fraction(0) if rate is None else rate.xp_per_second",
-     "    return rate.xp_per_second  # type: ignore[union-attr]"),
+    ("gear objective: a no-potion loop that never ran is rated",
+     "    if rate is None:\n        raise RuntimeError(",
+     "    if False:\n        raise RuntimeError("),
     ("gear objective: the keep's carry leaves the bag",
      "    loop = LoopInputs(ctx.timing(), ctx.drops(), carried_keep(state, game_data, ctx))",
      "    loop = LoopInputs(ctx.timing(), ctx.drops(), 0)"),
@@ -8120,8 +8130,8 @@ FIGHT_READY_MUTATIONS = [
      "                and True)\n"),
     ("fight ready: the cached step's readiness is not asked",
      "        step_applicable = (step is not None and step.is_applicable(state, game_data)\n"
-     "                           and self._fight_ready(step, state, game_data, self._timing()[0]))\n",
-     "        step_applicable = (step is not None and step.is_applicable(state, game_data))\n"),
+     "                           and self._fight_ready(step, state, game_data, self._timing()[0])\n",
+     "        step_applicable = (step is not None and step.is_applicable(state, game_data)\n"),
 ]
 REST_FIGHT_AHEAD_MUTATIONS = [
     ("rest guard: a fight the odds admit never rests first",
@@ -8231,6 +8241,7 @@ _ALL_SRCS = [
     TASK_CANCEL_GOAL_SRC, COMPLETE_TASK_GOAL_SRC,
     FIGHT_TERMS_CORE_SRC, FIGHT_OUTCOME_CORE_SRC, FIGHT_ODDS_CORE_SRC, GROUP_FIGHT_CORE_SRC,
     CONSUMABLE_PRICE_CORE_SRC, CONSUMABLE_PRICE_SRC, LOOP_RATE_CORE_SRC, LOOP_RATE_SRC,
+    FIGHT_ROOM_LICENSE_SRC,
     FIGHT_SECONDS_CORE_SRC, FIGHT_SECONDS_MODEL_SRC, DROP_CHANCE_CORE_SRC, DROP_OBSERVATIONS_SRC,
     LEARNED_DROPS_SRC, DROP_FIGHT_SELECTION_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
@@ -10616,11 +10627,11 @@ BAND_LOADOUT_MUTATIONS = [
      "        if not bare and (not _odds_clear(loadout(), win_threshold(rested, code)) or (\n",
      "        if not bare and (not _odds_clear(loadout(), Fraction(4, 5)) or (\n"),
     ("band: the potion arm reads the closed form again",
-     "    return best is not None and odds_clear(best.rate.p_win, threshold)",
-     "    return best is not None and best.rate.win"),
-    ("band: a loop no loadout can run clears the odds",
-     "    return best is not None and odds_clear(best.rate.p_win, threshold)",
-     "    return best is None or odds_clear(best.rate.p_win, threshold)"),
+     "    return best.rate.runnable and odds_clear(best.rate.p_win, threshold)",
+     "    return best.rate.runnable and best.rate.win"),
+    ("band: a loop with no room clears the odds",
+     "    return best.rate.runnable and odds_clear(best.rate.p_win, threshold)",
+     "    return odds_clear(best.rate.p_win, threshold)"),
     ("band: the bare fight drinks the worn potions",
      "        bare = is_winnable(unpotioned(rested), game_data, code, history)\n",
      "        bare = is_winnable(rested, game_data, code, history)\n"),
@@ -10631,16 +10642,12 @@ BAND_LOADOUT_MUTATIONS = [
      "        bare_fight = bare_fight or bare\n",
      "        bare_fight = True\n"),
     ("band: the model ranks at the full kill's XP over the fight alone",
-     "    return Fraction(0) if loadout is None else loadout.rate.xp_per_second\n",
-     "    return Fraction(0) if loadout is None else Fraction(xp_per_kill) / loadout.rate.fight_seconds\n"),
+     "    return best().rate.xp_per_second\n",
+     "    return Fraction(xp_per_kill) / best().rate.fight_seconds\n"),
     ("band: the model ranks without the win odds",
-     "    return Fraction(0) if loadout is None else loadout.rate.xp_per_second\n",
-     "    return Fraction(0) if loadout is None else Fraction(xp_per_kill) / (\n"
-     "        loadout.rate.fight_seconds + loadout.rate.recovery_seconds\n"
-     "        + loadout.rate.consumed_seconds)\n"),
-    ("band: a loop no loadout can run ranks above nothing",
-     "    return Fraction(0) if loadout is None else loadout.rate.xp_per_second\n",
-     "    return Fraction(1) if loadout is None else loadout.rate.xp_per_second\n"),
+     "    return best().rate.xp_per_second\n",
+     "    return Fraction(xp_per_kill) / (best().rate.fight_seconds + best().rate.recovery_seconds\n"
+     "                                    + best().rate.consumed_seconds)\n"),
 ]
 # The grind target's risk (USER 2026-10-15). Killed by
 # tests/test_ai/test_player.py.
@@ -12116,10 +12123,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_inventory_keep.py", survivors)
     run_group(PROJECTION_SRC, BAG_CAP_PROJECTION_MUTATIONS,
               "tests/test_ai/test_equipment_projection.py", survivors)
-    run_group(HELD_TASK_PAYS_SRC, NO_LOOP_HELD_TASK_MUTATIONS,
-              "tests/test_ai/test_held_task_pays.py", survivors)
-    run_group(GRIND_HEAL_PREP_SRC, NO_LOOP_PREP_MUTATIONS,
-              "tests/test_ai/test_grind_heal_prep.py", survivors)
+    run_group(FIGHT_ROOM_LICENSE_SRC, FIGHT_ROOM_LICENSE_MUTATIONS,
+              "tests/test_ai/test_fight_room_license.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, FIGHT_ROOM_ARBITER_MUTATIONS,
+              "tests/test_ai/test_fight_room_license.py", survivors)
+    run_group(PLAYER_SRC, FIGHT_ROOM_PLAYER_MUTATIONS,
+              "tests/test_ai/test_fight_room_license.py", survivors)
     run_group(LOOP_RATE_CORE_SRC, LOOP_RATE_CHOICE_MUTATIONS,
               "tests/test_ai/test_loop_rate_core.py", survivors)
     run_group(BEST_LOADOUT_CORE_SRC, BEST_LOADOUT_CORE_MUTATIONS,

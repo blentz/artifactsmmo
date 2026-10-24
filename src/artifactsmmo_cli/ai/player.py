@@ -100,6 +100,7 @@ from artifactsmmo_cli.ai.failure_recovery_core import (
     tick,
 )
 from artifactsmmo_cli.ai.fight_record import FightRecord
+from artifactsmmo_cli.ai.fight_room_license import refusal_line, refused_fight
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import (
@@ -725,6 +726,9 @@ class GamePlayer:
         ctx = self._selection_context()
         self._last_ctx = ctx
         print(f"[{self._now()}] {gear_objective_line(ctx.gear_objective)}")
+        refused = refused_fight(ctx)
+        if refused is not None:
+            print(f"[{self._now()}] {refusal_line(refused)}")
         step_decline = self._step_decline(state, game_data, ctx, actions)
         self._notify_planning(True)
         # The search cache spans the WHOLE decision, not just the planner search
@@ -793,7 +797,8 @@ class GamePlayer:
         step = cache.current() if cache is not None else None
         goal_satisfied = cache is not None and cache.selected_goal.is_satisfied(state)
         step_applicable = (step is not None and step.is_applicable(state, game_data)
-                           and self._fight_ready(step, state, game_data, self._timing()[0]))
+                           and self._fight_ready(step, state, game_data, self._timing()[0])
+                           and not self._fight_refused(step))
         # A party lease calling this member preempts a cached plan that is not
         # its hold (should_replan trigger 7).
         party_called = (self._party_hold is not None and (
@@ -840,6 +845,13 @@ class GamePlayer:
         self.state = replace(state, crafting_target=cache.crafting_target)
         self._notify_planning(False)
         return cache.selected_goal, cache.plan[cache.cursor:], [], False
+
+    def _fight_refused(self, step: Action) -> bool:
+        """A cached Fight step against the monster the last decision refused for
+        want of bag room (`fight_room_license.refused_fight`, spec 2026-10-18
+        §2.10): a replan, where the arbiter's pool no longer holds it. The
+        verdict is the one the last cycle's context carried, never recomputed."""
+        return isinstance(step, FightAction) and step.monster_code == refused_fight(self._last_ctx)
 
     @staticmethod
     def _fight_ready(step: Action, state: WorldState, game_data: GameData,
@@ -2883,7 +2895,7 @@ class GamePlayer:
         return band_combat_target(self.state, self.game_data, self.history,
                                   self._consumable_price, self._band_loadout, self._band_party)
 
-    def _band_loadout(self, monster: str) -> BestLoadout | None:
+    def _band_loadout(self, monster: str) -> BestLoadout:
         """`best_loadout` against one band monster, for `band_combat_target`'s
         rank (USER 2026-10-10, "loadout picks the monster").
 

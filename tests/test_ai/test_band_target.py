@@ -569,30 +569,38 @@ def test_a_potion_loadout_at_a_lower_measured_threshold_is_a_candidate(monkeypat
     assert target is not None and target.monster == "ogre"
 
 
-def test_a_loop_no_loadout_can_run_ranks_at_zero():
-    """Spec 2026-10-18 §2.10: with no room in the bag for its drops no loadout's
-    loop runs (`best_loadout` None), and an unmeasured loop that does not run
-    earns nothing."""
-    assert rank_rate(60, None, lambda: None, _never_priced) == 0
+def _no_room(best):
+    """`best` with its loop out of room for its drops (spec 2026-10-18 §2.10):
+    it does not run and earns nothing."""
+    stuck = dataclasses.replace(best.rate, runnable=False, xp_per_second=Fraction(0))
+    return dataclasses.replace(best, rate=stuck, made=stuck)
 
 
-def test_a_potion_propped_fight_no_loadout_can_run_is_no_target(monkeypatch):
-    """The ogre is won only on a potion; with no loop that runs against it, its
-    odds clear nothing, so the bare-winnable spider is the target."""
+def test_a_loop_with_no_room_ranks_at_zero():
+    """Spec 2026-10-18 §2.10: a loop with no room in the bag for its drops does
+    not run, and an unmeasured loop that does not run earns nothing."""
+    stuck = _no_room(make_best_loadout(xp=60, win=True, recovery=30))
+    assert rank_rate(60, None, lambda: stuck, _never_priced) == 0
+
+
+def test_a_potion_propped_fight_with_no_room_is_no_target(monkeypatch):
+    """The ogre is won only on a potion; with no room for its drops its loop
+    does not run, so its odds clear nothing and the bare-winnable spider is
+    the target."""
     gd = _spider_bare_ogre_on_potions(monkeypatch)
     loops = _loops(spider_recovery=60, ogre_win=True, ogre_consumed=0)
 
-    def no_ogre_loop(code: str):
-        return None if code == "ogre" else loops(code)
-    target = band_combat_target(make_state(level=30), gd, None, _never_priced, no_ogre_loop,
+    def no_ogre_room(code: str):
+        return _no_room(loops(code)) if code == "ogre" else loops(code)
+    target = band_combat_target(make_state(level=30), gd, None, _never_priced, no_ogre_room,
                                 _no_party)
     assert target is not None and target.monster == "spider"
     ran = band_combat_target(make_state(level=30), gd, None, _never_priced, loops, _no_party)
     assert ran is not None and ran.monster == "ogre"
 
 
-def test_no_loop_clears_no_odds():
-    """Without a loadout whose loop runs there are no odds to clear, even a
-    threshold of 0."""
-    assert mod._odds_clear(None, Fraction(0)) is False
-    assert mod._odds_clear(make_best_loadout(xp=60, win=True, recovery=30), Fraction(1)) is True
+def test_a_loop_with_no_room_clears_no_odds():
+    """Odds that clear any threshold do not, for a loop that does not run."""
+    sure = make_best_loadout(xp=60, win=True, recovery=30)
+    assert mod._odds_clear(sure, Fraction(1)) is True
+    assert mod._odds_clear(_no_room(sure), Fraction(0)) is False

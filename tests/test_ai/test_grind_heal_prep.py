@@ -381,20 +381,3 @@ class TestPotionPrep:
         self._patch(monkeypatch, ladder=False, feasible=False)
         assert potion_prep_goal(_state(gd, {}), gd, EATS_CHEESE, "wolf") is None
 
-
-class TestNoLoop:
-    """Spec 2026-10-18 §2.10: no loadout's loop runs against a monster whose
-    drops find no room in the bag (`best_loadout.loadout_for` is None), so there
-    is no food or potion to carry into it."""
-
-    def test_no_loop_is_no_heal_prep(self, monkeypatch) -> None:
-        monkeypatch.setattr(grind_heal_prep, "loadout_for", lambda *a: None)
-        gd = _gd()
-        assert heal_prep_goal(_state(gd, {"milk": CARRY}), gd, EATS_CHEESE, "ogre") is None
-
-    def test_no_loop_is_no_potion_prep(self, monkeypatch) -> None:
-        monkeypatch.setattr(grind_heal_prep, "loadout_for", lambda *a: None)
-        monkeypatch.setattr(grind_heal_prep, "ladder_supplies", lambda *a: False)
-        monkeypatch.setattr(grind_heal_prep, "prep_supplies", lambda *a: True)
-        gd = _gd()
-        assert potion_prep_goal(_state(gd, {}), gd, EATS_CHEESE, "ogre") is None

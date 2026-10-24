@@ -49,6 +49,12 @@ class ChosenLoadout:
     potions: tuple[tuple[str, int], ...]
     food: tuple[tuple[str, int], ...]
     made_food: tuple[tuple[str, int], ...]
+    runnable: bool = True
+    """Whether the bag has room for the fight's drops (spec 2026-10-18 §2.10,
+    `LoopRate.runnable`). A pick that is not runnable is still the fight's
+    loadout: the keep and the preps keep serving it, and the fight against
+    `monster` is refused on this flag (`fight_room_license`). A party's pick
+    counts no trips and always runs."""
 
     def potion_codes(self) -> frozenset[str]:
         """The utility potions the loadout wears."""

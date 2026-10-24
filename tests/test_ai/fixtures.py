@@ -197,14 +197,14 @@ def make_loop(*, xp: int = 0, win: bool = False, recovery: int = 0, consumed: in
     return LoopRate(xp_per_second=odds * xp / seconds,
                     xp_per_kill=xp, win=win, p_win=odds, fight_seconds=fight,
                     recovery_seconds=Fraction(recovery), consumed_seconds=Fraction(consumed),
-                    max_hp=100, hp_end=50, used=used, eaten=())
+                    max_hp=100, hp_end=50, used=used, eaten=(), runnable=True)
 
 
 def make_best_loadout(loadout: tuple[str, ...] = (), **loop: object) -> BestLoadout:
     """A `best_loadout.BestLoadout` whose pick is `make_loop(**loop)` wearing
-    `loadout`; its bare loop loses."""
+    `loadout`."""
     loop_rate = make_loop(**loop)  # type: ignore[arg-type]
-    return BestLoadout(loadout, loop_rate, make_loop(), loop_rate)
+    return BestLoadout(loadout, loop_rate, loop_rate)
 
 
 def season_8_status() -> StatusSchema:

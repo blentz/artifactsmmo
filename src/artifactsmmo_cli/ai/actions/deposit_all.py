@@ -192,8 +192,12 @@ class DepositAllAction(Action):
         last_state = state
         deposits = self._deposits(state)
         # ONE REQUEST PER BATCH, NOT PER CODE. The endpoint takes a list body,
-        # and every accepted deposit — whatever its width — starts exactly one
-        # server cooldown. Sending each code on its own put the second call
+        # and every accepted deposit starts exactly one server cooldown, whose
+        # length scales with the codes in it (learning.db 2026-10-24: DepositAll
+        # cooldowns cluster at about 3 s a code, up to the 20-code batch; one
+        # code, about 2.4 s). Batching saves REQUESTS, not seconds: the width
+        # is paid in the cooldown (`cost` charges per held code). Sending each
+        # code on its own put the second call
         # inside the first call's cooldown: live Robby 2026-09-13, a 2.07%
         # `error:cooldown` rate over 1404 executions (18x FightAction's), every
         # failure a PARTIAL deposit with the items already gone from the bag and

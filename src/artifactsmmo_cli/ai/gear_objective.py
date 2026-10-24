@@ -322,11 +322,13 @@ def _rate(fighter: WorldState, game_data: GameData, monster: str,
     potion, recovering over `food`, each fight lasting its learned seconds
     (spec §2.9) and carrying its share of the bank trips its drops force
     (§2.10; see the module doc's `R`). The no-potion loop drinks nothing, so it
-    has no potion price; it does not run when the bag has no room for its
-    drops, and a loop that does not run earns nothing: `R = 0`."""
+    has no potion price and always has a rate; with no room in the bag for its
+    drops it does not run and earns nothing (`LoopRate.runnable`, `R = 0`)."""
     rate = loop_rate(fighter, game_data, monster, (), food, {}, loop.timing, loop.drops,
                      loop.carried)
-    return Fraction(0) if rate is None else rate.xp_per_second
+    if rate is None:
+        raise RuntimeError(f"the no-potion loop against {monster} did not run")
+    return rate.xp_per_second
 
 
 def _rated(targets: Mapping[str, tuple[WorldState, dict[str, str]]], game_data: GameData,

@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.equipment.bank_tool_fills import bank_tool_fills
 from artifactsmmo_cli.ai.equipment.empty_slot_fills import empty_slot_rank_fills
 from artifactsmmo_cli.ai.event_plan_window import plan_fits_event_window
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.fight_room_license import license_fights, refused_fight
 from artifactsmmo_cli.ai.fight_tiles import fight_tiles
 from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY, supply_due, turn_in_due
 from artifactsmmo_cli.ai.game_data import GameData
@@ -1005,6 +1006,10 @@ class StrategyArbiter:
         # PREFERRED victim. Licence the pool HERE, at the one point where the ctx is
         # fully bound, so no goal can bypass the authority.
         actions = license_destructive_actions(actions, state, game_data, ctx)
+        # Spec 2026-10-18 §2.10 (ruling T13c): a fight whose drops find no room
+        # in the bag is refused on the cycle loadout's own verdict, here where
+        # the ctx is bound, and named in the trace (`fight_no_room`).
+        actions = license_fights(actions, ctx)
         # Phase B3: snapshot the fired kinds for the trace (selection-time
         # truth; recomputing at emit time would drift on ctx-dependent flags).
         self.last_fires = {
@@ -1012,6 +1017,7 @@ class StrategyArbiter:
             "collect": [k.value for k in collect_kinds],
             "discretionary": [k.value for k in discretionary_kinds],
             "step_present": step_goal is not None,
+            "fight_no_room": refused_fight(ctx),
         }
 
         # Trace 2026-05-19 (cycles 318-342): with task_code=None, the bot

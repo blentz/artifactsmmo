@@ -679,13 +679,14 @@ def test_wearing_an_unowned_piece_raises(gd: GameData) -> None:
         mod._wearing(_novice(gd), {"weapon_slot": "iron_sword"}, gd)
 
 
-def test_a_no_potion_loop_that_does_not_run_earns_nothing(monkeypatch: pytest.MonkeyPatch,
-                                                          gd: GameData) -> None:
-    """Spec §2.10: the no-potion loop does not run when the bag has no room for
-    its drops (it drinks nothing, so no potion can stop it); such a loop earns
-    nothing, `R = 0`. It raised while the no-potion loop always ran."""
+def test_a_no_potion_loop_that_never_runs_raises(monkeypatch: pytest.MonkeyPatch,
+                                                 gd: GameData) -> None:
+    """The no-potion loop drinks nothing, so it always has a rate (one with no
+    room for its drops earns 0, `test_the_keep_s_carry_is_room_no_drop_has`):
+    a None from it is a broken invariant, never a rate."""
     monkeypatch.setattr(mod, "loop_rate", lambda *_args: None)
-    assert mod._rate(_novice(gd), gd, "chicken", (), _loop(_novice(gd), gd)) == 0
+    with pytest.raises(RuntimeError, match="the no-potion loop against chicken did not run"):
+        mod._rate(_novice(gd), gd, "chicken", (), _loop(_novice(gd), gd))
 
 
 def _carrying_its_target(name: str, gd: GameData) -> tuple[WorldState, GearObjective]:

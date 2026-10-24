@@ -25,8 +25,14 @@ the decisions as a `chosen_loadout.ChosenLoadout` (increment 5).
   Every loadout's loop counts the bank trips its drops force, in the bag the
   keep leaves (`inventory_keep.carried_keep`) and over the cycle's drop
   evidence (`ctx.drops()`, spec 2026-10-18 §2.10). A loop with no room for its
-  drops does not run, so no pick is guaranteed: with no runnable loadout there
-  is none (None), and the fight is no loop this character can grind.
+  drops does not run (`LoopRate.runnable` False): the pick is among the
+  loadouts whose loop runs, and when none does it is the one using the fewest
+  units (every rate is 0), so the bag the character makes room in carries the
+  least. The pick is still the fight's loadout, flagged not runnable
+  (`ChosenLoadout.runnable`): the keep and the preps keep serving it, and the
+  fight itself is refused on that flag (`fight_room_license`).
+  The no-potion loadout consumes nothing, so it is always payable and there is
+  always a pick.
 
 The player reads the pick once per cycle against the fight ahead
 (`fight_ahead_loadout`) and threads it on the selection context; every
@@ -56,16 +62,13 @@ from artifactsmmo_cli.ai.world_state import WorldState
 @dataclass(frozen=True)
 class BestLoadout:
     """The chosen utility potions, their loop (`rate.used`: the potions one
-    fight drinks; `rate.eaten`: the foods its recovery eats), the no-potion
-    loop, and `made`: the chosen potions' loop over the food menu with nothing
-    held (spec 2026-10-13 section 1). `bare` and `made` are None when that loop
-    has no room for its drops (spec 2026-10-18 §2.10): the bag is full of what
-    it carries before a fight drops anything."""
+    fight drinks; `rate.eaten`: the foods its recovery eats; `rate.runnable`:
+    whether the bag has room for its drops), and `made`: the chosen potions'
+    loop over the food menu with nothing held (spec 2026-10-13 section 1)."""
 
     loadout: tuple[str, ...]
     rate: LoopRate
-    bare: LoopRate | None
-    made: LoopRate | None
+    made: LoopRate
 
 
 def unheld(food: Sequence[FoodOffer]) -> tuple[FoodOffer, ...]:
@@ -92,32 +95,34 @@ def candidate_potions(state: WorldState, game_data: GameData, ctx: SelectionCont
 
 
 def best_loadout(state: WorldState, game_data: GameData, ctx: SelectionContext, monster: str,
-                 store: LearningStore | None = None) -> BestLoadout | None:
+                 store: LearningStore | None = None) -> BestLoadout:
     """The loadout with the most XP per second against `monster` (see the module
-    doc), or None when no loadout's loop runs."""
+    doc)."""
     prices = candidate_potions(state, game_data, ctx, store)
     food = food_menu(state, game_data, ctx, store)
     timing = ctx.timing()
     drops = ctx.drops()
     carried = carried_keep(state, game_data, ctx)
     scored: list[tuple[tuple[str, ...], LoopRate]] = []
-    bare: LoopRate | None = None
     for codes in loadouts(list(prices), game_data):
         rate = loop_rate(state, game_data, monster,
                          [(code, UTILITY_SLOT_MAX_STACK) for code in codes], food, prices, timing,
                          drops, carried)
         if rate is not None:
             scored.append((codes, rate))
-            if codes == ():
-                bare = rate
-    index = pick_best([(rate.xp_per_second, units_used(rate)) for _, rate in scored])
-    if index is None:
-        return None
-    codes, rate = scored[index]
+    # The no-potion loadout is first and consumes nothing: always payable.
+    assert scored and scored[0][0] == ()
+    runs = [entry for entry in scored if entry[1].runnable] or scored
+    index = pick_best([(rate.xp_per_second, units_used(rate)) for _, rate in runs])
+    assert index is not None
+    codes, rate = runs[index]
     made = loop_rate(state, game_data, monster,
                      [(code, UTILITY_SLOT_MAX_STACK) for code in codes], unheld(food), prices,
                      timing, drops, carried)
-    return BestLoadout(codes, rate, bare, made)
+    # The chosen potions were payable over the real menu, and food never
+    # changes what a fight drinks: the same potions are payable here.
+    assert made is not None
+    return BestLoadout(codes, rate, made)
 
 
 def units_used(rate: LoopRate) -> int:
@@ -126,11 +131,10 @@ def units_used(rate: LoopRate) -> int:
 
 
 def chosen(best: BestLoadout, monster: str) -> ChosenLoadout:
-    """The pick as plain data: the potions one fight drinks and the food its
-    recovery eats. With every unit made the loop has no room for its drops
-    (`made` None), so no food is worth making for it."""
+    """The pick as plain data: the potions one fight drinks, the food its
+    recovery eats, and whether its loop runs (spec 2026-10-18 §2.10)."""
     return ChosenLoadout(monster, tuple((code, n) for code, n in best.rate.used if n > 0),
-                         best.rate.eaten, () if best.made is None else best.made.eaten)
+                         best.rate.eaten, best.made.eaten, best.rate.runnable)
 
 
 def fight_ahead_loadout(state: WorldState, game_data: GameData, ctx: SelectionContext,
@@ -139,21 +143,21 @@ def fight_ahead_loadout(state: WorldState, game_data: GameData, ctx: SelectionCo
     (`ctx.fight_monster`), else the grind target (`ctx.combat_monster`) — or
     None with neither, or when the monster is fought on no tile now, on any
     layer (`fight_tiles`: a committed fight whose event despawned: there is
-    no fight to price), or when no loadout's loop runs against it."""
+    no fight to price). A fight ahead whose loop has no room for its drops is
+    still a pick, flagged not runnable (`ChosenLoadout.runnable`): a named
+    verdict, never "no fight ahead"."""
     monster = ctx.fight_monster or ctx.combat_monster
     if monster is None or not fight_tiles(state, game_data, monster):
         return None
-    best = best_loadout(state, game_data, ctx, monster, store)
-    return None if best is None else chosen(best, monster)
+    return chosen(best_loadout(state, game_data, ctx, monster, store), monster)
 
 
 def loadout_for(state: WorldState, game_data: GameData, ctx: SelectionContext,
-                monster: str) -> ChosenLoadout | None:
+                monster: str) -> ChosenLoadout:
     """The pick against `monster`: the cycle's own (`ctx.loadout`) when it was
-    chosen against that monster, else chosen now; None when no loadout's loop
-    runs against it. A fight other than the one ahead (a grind's drop fight)
-    is priced without the learning store, which the context does not carry."""
+    chosen against that monster, else chosen now. A fight other than the one
+    ahead (a grind's drop fight) is priced without the learning store, which
+    the context does not carry."""
     if ctx.loadout is not None and ctx.loadout.monster == monster:
         return ctx.loadout
-    best = best_loadout(state, game_data, ctx, monster)
-    return None if best is None else chosen(best, monster)
+    return chosen(best_loadout(state, game_data, ctx, monster), monster)

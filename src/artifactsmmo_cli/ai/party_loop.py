@@ -81,8 +81,10 @@ has no replacement."""
                                        [(f.restore, f.price, f.held) for f in food], EAT_SECONDS)
     eaten = tuple((f.code, k) for f, k in zip(food, counts, strict=True) if k > 0)
     fight = Fraction(SECONDS_PER_TURN * outcome.turns * (len(levels) + 1))
+    # A party loop counts no bank trips (spec 2026-10-18 §2.10 covers the solo
+    # loop): it always runs.
     return LoopRate(xp_per_second(xp, fight, recovery, consumed), xp, True, Fraction(1), fight, recovery,
-                    consumed, me.max_hp, hp_end, used, eaten)
+                    consumed, me.max_hp, hp_end, used, eaten, True)
 
 
 def best_party_loop(state: WorldState, game_data: GameData, monster: str,

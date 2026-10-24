@@ -597,9 +597,9 @@ theorem tripSeconds_mono_walk (w w' : Nat) (dep : IQ) (codes : Nat) (hd : 0 < de
     (hw : w ≤ w') : iqle (tripSeconds w dep codes) (tripSeconds w' dep codes) := by
   unfold iqle tripSeconds
   simp only
-  have h1 : 2 * (w : Int) * dep.2 ≤ 2 * (w' : Int) * dep.2 :=
+  have walk : 2 * (w : Int) * dep.2 ≤ 2 * (w' : Int) * dep.2 :=
     Int.mul_le_mul_of_nonneg_right (by omega) (Int.le_of_lt hd)
-  exact Int.mul_le_mul_of_nonneg_right (by omega) (Int.le_of_lt hd)
+  exact Int.mul_le_mul_of_nonneg_right (Int.add_le_add_right walk _) (Int.le_of_lt hd)
 
 /-- A drop that yields more makes the sum no smaller. -/
 theorem iqsum_mono_head (u u' : IQ) (us : List IQ) (hs2 : 0 < (iqsum us).2)

@@ -54,8 +54,7 @@ def heal_prep_goal(state: WorldState, game_data: GameData, ctx: SelectionContext
                    monster: str) -> GatherMaterialsGoal | None:
     """The goal that carries the chosen loadout's food into fights against
     `monster`, or None when its recovery eats nothing or every food it eats is
-    carried (or cannot be supplied), or when no loadout's loop runs against it
-    (`best_loadout.loadout_for`: no room in the bag for the drops).
+    carried (or cannot be supplied).
 
     The foods are taken in the loadout's order; the first one short of its
     carry in the bag is the goal. Its target is the full carry only when the
@@ -65,10 +64,8 @@ def heal_prep_goal(state: WorldState, game_data: GameData, ctx: SelectionContext
     held (bag and bank: held stock is free, USER 2026-10-09 "free until used
     up") — a banked unit is withdrawn by the walk like any banked copy of its
     target (Phase 2c-2b). A food with neither is skipped for the next one."""
-    loadout = loadout_for(state, game_data, ctx, monster)
-    if loadout is None:
-        return None
     model = ObtainModel(state, game_data, ctx, datetime.now(UTC))
+    loadout = loadout_for(state, game_data, ctx, monster)
     made = dict(loadout.made_food)
     for code, eaten in loadout.food:
         carry = food_carry(eaten)
@@ -101,11 +98,8 @@ def potion_prep_goal(state: WorldState, game_data: GameData, ctx: SelectionConte
     included — unlike food, the potion decides the fight, and the pick priced
     its drops' fights, USER 2026-10-09). None when every potion is on hand (the
     guard equips it from the bag), the guard's to stock, or cannot be
-    supplied, or when no loadout's loop runs against `monster`."""
-    loadout = loadout_for(state, game_data, ctx, monster)
-    if loadout is None:
-        return None
-    for code, used in loadout.potions:
+    supplied."""
+    for code, used in loadout_for(state, game_data, ctx, monster).potions:
         needed = potion_carry(used) - equipped_potion_qty(state, code)
         if (needed > state.inventory.get(code, 0)
                 and not ladder_supplies(code, needed, state, game_data)

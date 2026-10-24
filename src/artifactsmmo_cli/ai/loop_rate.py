@@ -56,8 +56,8 @@ renewal-reward: `p_win x xp / (fight + expected recovery + consumed + walk)`.
   stock worn). A trip walks from the monster's tile nearest the bank to the
   bank (`GameData.bank_location`) and back, and pays one deposit
   (`cost_core.DEPOSIT_SECONDS_PER_CODE`) per distinct drop code. A loop with
-  drops and no room for them is unrunnable (None); one with no drops makes
-  no trip and needs no bank."""
+  drops and no room for them does not run (`LoopRate.runnable` False, no XP a
+  second); one with no drops makes no trip and needs no bank."""
 
 import math
 from collections.abc import Mapping, Sequence
@@ -127,7 +127,12 @@ class LoopRate:
     (only the foods it eats), both the expectation rounded UP; `hp_end` is the
     expected end HP rounded down. `xp_per_kill` is the kill's XP when the
     fight can be won (`p_win > 0`) and 0 when it cannot: the XP a win pays,
-    not an expectation (`xp_per_second` carries the `p_win` weight)."""
+    not an expectation (`xp_per_second` carries the `p_win` weight).
+    `runnable` is False when the fight drops something and the bag has no room
+    for it (spec 2026-10-18 §2.10): the loop cannot run, so it earns nothing
+    (`xp_per_second` 0) while its fight, recovery and consumables are still
+    the ones it would take. The ONE verdict a fight against that monster is
+    refused on (`fight_room_license`)."""
 
     xp_per_second: Fraction
     xp_per_kill: int
@@ -140,6 +145,7 @@ class LoopRate:
     hp_end: int
     used: tuple[tuple[str, int], ...]
     eaten: tuple[tuple[str, int], ...]
+    runnable: bool
 
 
 @dataclass(frozen=True)
@@ -205,8 +211,9 @@ def loop_rate(state: WorldState, game_data: GameData, monster: str,
     `drops` and the bag's room less `carried`, the units the keep holds in it
     other than food and potions (`inventory_keep.carried_keep`). `prices` holds
     every loadout potion's replacement price. None when a potion with no
-    replacement is expected (rounded up) to be drunk past the held units, or
-    when the fight drops something and the bag has no room for it."""
+    replacement is expected (rounded up) to be drunk past the held units. A
+    fight that drops something into a bag with no room for it is a loop that
+    does not run: `runnable` False and no XP a second."""
     outcome, max_hp, restore_code = fight_walk(state, game_data, monster, loadout)
     endings, _, _ = odds_walk(state, game_data, monster, loadout)
     p_win = odds_win(endings)
@@ -253,8 +260,7 @@ def loop_rate(state: WorldState, game_data: GameData, monster: str,
     walk = bank_walk(state, game_data, monster) if per_fight > 0 else 0
     trips = trip_share(trip_seconds(walk, Fraction(DEPOSIT_SECONDS_PER_CODE), len(table)),
                        per_fight, stats.inventory_max - carry)
-    if trips is None:
-        return None
-    rate = expected_xp_per_second(xp, p_win, fight, extra + trips)
+    rate = Fraction(0) if trips is None else expected_xp_per_second(xp, p_win, fight, extra + trips)
     return LoopRate(rate, xp if p_win > 0 else 0, outcome.win, p_win, fight, recovery_mean,
-                    consumed_mean, max_hp, math.floor(hp_end_mean), used_units, eaten)
+                    consumed_mean, max_hp, math.floor(hp_end_mean), used_units, eaten,
+                    trips is not None)
