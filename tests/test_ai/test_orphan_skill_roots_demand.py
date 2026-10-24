@@ -9,21 +9,20 @@ cycles each for 0 character XP while neither needed a fish. Since 2026-10-08
 from artifactsmmo_cli.ai.decisions.root import _orphan_skill_roots
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.gather_demand import gather_demand
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 from tests.test_ai.test_gather_demand import _gd
 
 _BOOTS = ObtainItem(code="iron_boots", quantity=1)
 
 
 def _skills(state, gd, offered):
-    return [g.skill for g in _orphan_skill_roots(state, gd, offered, NO_PROFILE_CONTEXT)]
+    return [g.skill for g in _orphan_skill_roots(state, gd, offered, NO_DROPS_CONTEXT)]
 
 
 def _orphan_demand(state, gd, offered):
-    return gather_demand(offered, state, gd, NO_PROFILE_CONTEXT)
+    return gather_demand(offered, state, gd, NO_DROPS_CONTEXT)
 
 
 class TestGatheringSkillNeedsDemand:
@@ -73,7 +72,7 @@ class TestGatheringSkillNeedsDemand:
         """Not C+1. `mining->2` completes and re-emits; `mining->10` is the ask."""
         gd = self._gd_with_open_mining_floor()
         state = make_state(level=20, skills={"mining": 1, "cooking": 1})
-        roots = _orphan_skill_roots(state, gd, [_BOOTS], NO_PROFILE_CONTEXT)
+        roots = _orphan_skill_roots(state, gd, [_BOOTS], NO_DROPS_CONTEXT)
         mining = next(g for g in roots if g.skill == "mining")
         assert mining.level == 10
 

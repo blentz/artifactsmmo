@@ -303,9 +303,10 @@ class SelectionContext:
     # order and (through the actions that carry the same value) the planner and
     # every source picker read. Built once per cycle by the player from the
     # learning store; `LearnedDrops.empty()` (the API prior) on an offline
-    # world (`fight_seconds_model.offline_context`) and on NO_PROFILE_CONTEXT.
-    # None on a context that never prices or ranks a drop: reading one there
-    # raises (`drops`), never a default.
+    # world (`fight_seconds_model.offline_context`) and on each store-less
+    # site, passed explicitly. None here and on NO_PROFILE_CONTEXT (ruling
+    # T16b): reading it then raises (`drops`), so no live path can price the
+    # prior by inheriting a default.
     learned_drops: LearnedDrops | None = None
 
     def drops(self) -> LearnedDrops:
@@ -345,11 +346,6 @@ NO_PROFILE_CONTEXT = SelectionContext(
     # floor rather than a guess.
     task_exchange_min_coins=1,
     combat_monster=None,
-    # No profile, no observations: a drop at its API prior. Every site that
-    # ranks or prices through this constant is a no-store site (`tiers`
-    # feasibility walks, `potion_supply.feasible_runs`); a site that holds the
-    # cycle's evidence replaces it in.
-    learned_drops=LearnedDrops.empty(),
 )
 """The "no active goal profile" stand-in, and the ONLY default any keep/deposit
 consumer may use.

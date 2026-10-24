@@ -38,12 +38,11 @@ from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.task_coins import tasks_coin_total
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 
 def make_game_data(item_stats=None) -> GameData:
@@ -1099,7 +1098,7 @@ class TestGatherMaterialsGoal:
             WithdrawItemAction(code="ash_wood", quantity=8, bank_location=bank),
             WithdrawItemAction(code="ash_wood", quantity=48, bank_location=bank),
         ]
-        plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
+        plan = (decompose(goal, state, gd, list(actions), NO_DROPS_CONTEXT) or [])
         assert plan, "planner found no plan"
         # The FIRST acquisition action must withdraw banked ash_wood, not gather.
         first_acq = next(
@@ -1190,7 +1189,7 @@ class TestGatherMaterialsGoal:
             CraftAction(code="feather_coat", quantity=1, workshop_location=(3, 1)),
             WithdrawItemAction(code="feather", quantity=5, bank_location=bank),
         ]
-        plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
+        plan = (decompose(goal, state, gd, list(actions), NO_DROPS_CONTEXT) or [])
         assert plan, "planner found no plan for bank-stocked feather_coat"
         reprs = [repr(a) for a in plan]
         assert any("Withdraw" in r and "feather" in r for r in reprs), reprs
@@ -1882,7 +1881,7 @@ class TestDepositInventorySelective:
             "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon", attack={"fire": 12}),
         })
         # The heal is protected as the food the chosen loadout eats (its carry).
-        ctx = dataclasses.replace(NO_PROFILE_CONTEXT, loadout=ChosenLoadout(
+        ctx = dataclasses.replace(NO_DROPS_CONTEXT, loadout=ChosenLoadout(
             monster="chicken", potions=(), food=(("cooked_chicken", 1),),
             made_food=(("cooked_chicken", 1),)))
         goal = DepositInventoryGoal(bank_accessible=True, game_data=gd, ctx=ctx)

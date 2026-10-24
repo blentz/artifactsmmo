@@ -16,11 +16,10 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.planner import PlanStats
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 
 def _gd() -> GameData:
@@ -286,5 +285,5 @@ def test_a_fallback_step_that_eats_the_task_pool_is_not_a_candidate():
     candidates = _arbiter()._build_candidates(
         guard_kinds=[], collect_kinds=[], discretionary_kinds=[], step_goal=None,
         fallback_steps=[helmet], fallback_roots=[helmet], state=state, game_data=_gd(),
-        ctx=NO_PROFILE_CONTEXT)
+        ctx=NO_DROPS_CONTEXT)
     assert not any("copper_helmet" in c.repr_ for c in candidates), [c.repr_ for c in candidates]

@@ -39,11 +39,11 @@ from artifactsmmo_cli.ai.scenario import (
     load_bundle_game_data,
     scenario_state,
 )
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -129,7 +129,7 @@ def test_the_step_is_the_currency_leaf_itself(unlocked: GameData) -> None:
     mapper the currency item directly" shape that stalled the satchel live on
     2026-07-06."""
     state = _state(unlocked)
-    step = actionable_step(_root(), state, unlocked, NO_PROFILE_CONTEXT)
+    step = actionable_step(_root(), state, unlocked, NO_DROPS_CONTEXT)
     assert step == ObtainItem(code=LEAF, quantity=1)
 
 
@@ -145,7 +145,7 @@ def test_the_step_graph_routes_to_funding_not_to_gathering(
     analysis = analyze_currency_leaves({LEAF: 1}, state, unlocked)
     assert analysis.funding_target == (TASKS_COIN_CODE, LEAF_PRICE)
     goal = objective_step_goal(ObtainItem(code=LEAF, quantity=1), state,
-                               unlocked, NO_PROFILE_CONTEXT, root=_root(),
+                               unlocked, NO_DROPS_CONTEXT, root=_root(),
                                history=None)
     # one task loop's coins at a time (`funding_step_goal`), toward the price
     step = min(LEAF_PRICE, unlocked.min_task_coin_reward())
@@ -163,7 +163,7 @@ def test_holding_the_coins_flips_the_arm_and_the_goal(
     analysis = analyze_currency_leaves({LEAF: 1}, funded, unlocked)
     assert analysis.funding_target is None
     goal = objective_step_goal(ObtainItem(code=LEAF, quantity=1), funded,
-                               unlocked, NO_PROFILE_CONTEXT, root=_root(),
+                               unlocked, NO_DROPS_CONTEXT, root=_root(),
                                history=None)
     assert "ReachCurrency" not in repr(goal)
 
@@ -181,7 +181,7 @@ def test_the_locked_world_cannot_reach_the_arm_at_all(
     analysis = analyze_currency_leaves({LEAF: 1}, state, locked)
     assert analysis.funding_target is None
     goal = objective_step_goal(ObtainItem(code=LEAF, quantity=1), state,
-                               locked, NO_PROFILE_CONTEXT, root=_root(),
+                               locked, NO_DROPS_CONTEXT, root=_root(),
                                history=None)
     assert "ReachCurrency" not in repr(goal)
 

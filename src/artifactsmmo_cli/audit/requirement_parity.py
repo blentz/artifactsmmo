@@ -46,9 +46,10 @@ Four are DRIFT, and the census pins them so the fix is visible when it lands:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
@@ -97,6 +98,11 @@ class WalkRow:
     source_kinds: tuple[str, ...]
 
 
+_NO_DROPS = replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty())
+"""The census is store-less: every drop at its API prior, passed explicitly
+(ruling T16b)."""
+
+
 def census_state(game_data: GameData, skill_level: int) -> WorldState:
     """Offline state for the walks that take one.
 
@@ -138,7 +144,7 @@ def run_target(code: str, game_data: GameData, state: WorldState,
     }
     drop_blind = tuple(sorted(i for i in demand if i not in representable and i != code))
 
-    prereqs = prerequisites(ObtainItem(code=code, quantity=1), state, game_data)
+    prereqs = prerequisites(ObtainItem(code=code, quantity=1), state, game_data, _NO_DROPS)
     recipe = game_data.crafting_recipe(code)
     # Axis 2: a craftable that returns NO prereqs was truncated at a ready
     # non-craft source rather than descended.
@@ -146,7 +152,7 @@ def run_target(code: str, game_data: GameData, state: WorldState,
 
     needs = objective_needs(ObtainItem(code=code, quantity=1), state, game_data)
     gap = _item_skill_gap(code, probe_state, game_data, set())
-    sources = obtain_sources(code, state, game_data, NO_PROFILE_CONTEXT)
+    sources = obtain_sources(code, state, game_data, _NO_DROPS)
 
     return WalkRow(
         code=code,

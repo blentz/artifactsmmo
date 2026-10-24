@@ -1496,12 +1496,35 @@ ONE_DROP_MODEL_PLAYER_MUTATIONS = [
      "        self._learned_drops = (learned_drops(self.history, self.game_data)\n"
      "                               if self.history is not None else LearnedDrops.empty())",
      "        self._learned_drops = LearnedDrops.empty()"),
+    ("player: the trace's context keeps no evidence",
+     "        self._last_ctx = replace(self._last_ctx, learned_drops=self._learned_drops)\n",
+     ""),
     ("player: the band context prices the prior",
      "                                   learned_drops=self._cycle_learned_drops()))",
      "                                   learned_drops=LearnedDrops.empty()))"),
+    ("player: the consumable price prices the prior",
+     "                                  learned_drops=self._cycle_learned_drops()))\n        batch",
+     "                                  learned_drops=LearnedDrops.empty()))\n        batch"),
+    ("player: the role board's work prices the prior",
+     "        ctx = self._timed(replace(NO_PROFILE_CONTEXT,\n"
+     "                                  learned_drops=self._cycle_learned_drops()))\n        work",
+     "        ctx = self._timed(replace(NO_PROFILE_CONTEXT,\n"
+     "                                  learned_drops=LearnedDrops.empty()))\n        work"),
     ("player: the actions carry the prior",
      "            learned_drops=self._cycle_learned_drops(),\n        )\n        # Route around",
      "            learned_drops=LearnedDrops.empty(),\n        )\n        # Route around"),
+]
+# The cycle's selection context carries the cycle's evidence (ruling T16b, I2).
+# Killed by tests/test_ai/test_player_gear_objective.py.
+ONE_DROP_MODEL_OFFLINE_MUTATIONS = [
+    ("player: an offline world's trace context keeps no evidence",
+     "        # one), on `_last_ctx` too (ruling T16b).\n        self._refresh_learned_drops()\n",
+     "        # one), on `_last_ctx` too (ruling T16b).\n"),
+]
+ONE_DROP_MODEL_CONTEXT_MUTATIONS = [
+    ("player: the selection context prices the prior",
+     "            learned_drops=self._cycle_learned_drops(),\n        )\n        ctx = attach_gear_objective(",
+     "            learned_drops=LearnedDrops.empty(),\n        )\n        ctx = attach_gear_objective("),
 ]
 # The grind prices its rungs at the cycle's evidence (ruling T16a). Killed by
 # tests/test_ai/test_loss_risk.py.
@@ -11916,6 +11939,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_one_drop_model.py", survivors)
     run_group(PLAYER_SRC, ONE_DROP_MODEL_PLAYER_MUTATIONS,
               "tests/test_ai/test_one_drop_model.py", survivors)
+    run_group(PLAYER_SRC, ONE_DROP_MODEL_CONTEXT_MUTATIONS,
+              "tests/test_ai/test_player_gear_objective.py", survivors)
+    run_group(PLAYER_SRC, ONE_DROP_MODEL_OFFLINE_MUTATIONS,
+              "tests/test_ai/scenarios/test_plan_from_state.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, ONE_DROP_MODEL_GRIND_MUTATIONS,
               "tests/test_ai/test_loss_risk.py", survivors)
     run_group(GEAR_OBJECTIVE_SRC, FIGHTER_PROSPECTING_MUTATIONS,

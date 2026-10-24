@@ -14,8 +14,8 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
 
@@ -64,7 +64,7 @@ def test_fire_crystal_is_bought_underground() -> None:
     actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
                             bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
     plan = decompose(GatherMaterialsGoal(target_item="fire_crystal", needed={"fire_crystal": 1}),
-                     state, gd, actions, NO_PROFILE_CONTEXT, [])
+                     state, gd, actions, NO_DROPS_CONTEXT, [])
     assert plan is not None
     assert repr(plan[-1]) .startswith("NpcBuy(fire_crystal")
     assert any("underground" in repr(a) for a in plan[:-1])

@@ -37,10 +37,10 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
 from artifactsmmo_cli.ai.requirement_projections import requirement_closure
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 from artifactsmmo_cli.audit.craft_census import craftable_recipes
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT
 
 #: The kinds with a state-free capability counterpart in `leaves`. WITHDRAW and
 #: RECYCLE are state-only (see module docstring).
@@ -111,7 +111,7 @@ def test_obtain_sources_state_free_kinds_are_a_subset_of_graph_leaves(
     violations: list[tuple[str, list[str]]] = []
     for item in closure_items:
         walk_kinds = {s.kind for s in obtain_sources(
-            item, state, bundle_game_data, NO_PROFILE_CONTEXT)} & _STATE_FREE
+            item, state, bundle_game_data, NO_DROPS_CONTEXT)} & _STATE_FREE
         graph_kinds = graph.leaves.get(item, frozenset())
         extra = walk_kinds - graph_kinds
         if extra:
@@ -158,7 +158,7 @@ def test_the_invariant_can_fail(bundle_game_data: GameData) -> None:
     assert currency_buys, "no currency-only buy in the bundle — witness is vacuous"
     item = currency_buys[0]
     walk_kinds = {s.kind for s in obtain_sources(
-        item, state, bundle_game_data, NO_PROFILE_CONTEXT)} & _STATE_FREE
+        item, state, bundle_game_data, NO_DROPS_CONTEXT)} & _STATE_FREE
     # obtain_sources names BUY for this currency-only item...
     assert SourceKind.BUY in walk_kinds
     # ...and a graph whose BUY leaf reverted to the gold-only view would NOT

@@ -29,12 +29,11 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.audit.root_sibling_census import BlockedTargetVerdict, RootSiblingVerdict
 from artifactsmmo_cli.audit.sibling_route_census import SiblingVerdict
 from artifactsmmo_cli.commands import sibling_route_report as cmd
-from tests.test_ai.fixtures import coordination_now, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, coordination_now, make_state
 
 _ALL_SKILLS = {"mining": 3, "woodcutting": 2, "fishing": 1, "weaponcrafting": 1,
                "gearcrafting": 1, "jewelrycrafting": 1, "cooking": 1, "alchemy": 1}
@@ -94,7 +93,7 @@ def canned_sense(audit_world: tuple[object, object],
                  monkeypatch: pytest.MonkeyPatch) -> None:
     """`_sense` now returns a THIRD and FOURTH element, the player's
     `_last_ctx` (I2) and `_objective` (T2.1) — every test that only cares
-    about the world's state/game_data passes `NO_PROFILE_CONTEXT` and this
+    about the world's state/game_data passes `NO_DROPS_CONTEXT` and this
     world's own `CharacterObjective` here unchanged; the tests that pin I2
     itself build their own marker context instead of going through this
     fixture.
@@ -111,7 +110,7 @@ def canned_sense(audit_world: tuple[object, object],
     objective = CharacterObjective.from_game_data(game_data)
     monkeypatch.setattr(
         cmd, "_sense",
-        lambda character: (state, game_data, NO_PROFILE_CONTEXT, objective))
+        lambda character: (state, game_data, NO_DROPS_CONTEXT, objective))
     monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: ([], None))
 
 
@@ -178,7 +177,7 @@ def test_a_crafting_skill_with_no_recipe_is_excluded_from_eligible(
     objective = CharacterObjective.from_game_data(game_data)
     monkeypatch.setattr(
         cmd, "_sense",
-        lambda character: (state, game_data, NO_PROFILE_CONTEXT, objective))
+        lambda character: (state, game_data, NO_DROPS_CONTEXT, objective))
     monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: ([], None))
     _publish_sibling_levels(db_path, "R2D2", {"jewelrycrafting": 10})
 
@@ -289,7 +288,7 @@ def test_command_prices_with_the_players_real_context_not_no_profile(
     db_path: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     """I2: the command must price every route with `player._last_ctx`
-    (overriding only `sibling_skills`), not `NO_PROFILE_CONTEXT` -- the
+    (overriding only `sibling_skills`), not `NO_DROPS_CONTEXT` -- the
     stand-in's own docstring says it "is NOT a substitute for the player's
     real context". Pinned by giving `_sense` a marker context that diverges
     from `NO_PROFILE_CONTEXT` in a field the stand-in hard-codes
@@ -298,7 +297,7 @@ def test_command_prices_with_the_players_real_context_not_no_profile(
     overridden on top."""
     state = make_state(skills=_ALL_SKILLS)
     game_data = GameData()
-    marker_ctx = replace(NO_PROFILE_CONTEXT, bank_accessible=False)
+    marker_ctx = replace(NO_DROPS_CONTEXT, bank_accessible=False)
     objective = CharacterObjective.from_game_data(game_data)
     monkeypatch.setattr(
         cmd, "_sense", lambda character: (state, game_data, marker_ctx, objective))
@@ -319,7 +318,7 @@ def test_command_prices_with_the_players_real_context_not_no_profile(
     ctx = captured["ctx"]
     assert ctx.bank_accessible is False, (
         "the command must price with the player's real _last_ctx, not "
-        "NO_PROFILE_CONTEXT, which hard-codes bank_accessible=True"
+        "NO_DROPS_CONTEXT, which hard-codes bank_accessible=True"
     )
     assert ctx.sibling_skills == {"weaponcrafting": 10}, (
         "sibling_skills must still be overridden with the coordination "
@@ -350,7 +349,7 @@ def test_root_section_is_driven_with_the_sensed_objective_and_the_augmented_ctx(
     ctx.sibling_skills that only the coordination-store read produces)."""
     state = make_state(skills=_ALL_SKILLS)
     game_data = GameData()
-    marker_ctx = replace(NO_PROFILE_CONTEXT, bank_accessible=False)
+    marker_ctx = replace(NO_DROPS_CONTEXT, bank_accessible=False)
     sensed_objective = CharacterObjective.from_game_data(game_data)
     monkeypatch.setattr(
         cmd, "_sense",
@@ -485,7 +484,7 @@ def test_two_items_behind_the_same_gate_produce_one_gate_line_end_to_end(
     objective = CharacterObjective.from_game_data(game_data)
     monkeypatch.setattr(
         cmd, "_sense",
-        lambda character: (state, game_data, NO_PROFILE_CONTEXT, objective))
+        lambda character: (state, game_data, NO_DROPS_CONTEXT, objective))
     monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: ([], None))
     _publish_sibling_levels(db_path, "R2D2", {"jewelrycrafting": 15})
     _seed_supply_request(db_path, "R2D2")
@@ -523,7 +522,7 @@ def test_outpriced_rows_print_in_their_own_section(
     objective = CharacterObjective.from_game_data(game_data)
     monkeypatch.setattr(
         cmd, "_sense",
-        lambda character: (state, game_data, NO_PROFILE_CONTEXT, objective))
+        lambda character: (state, game_data, NO_DROPS_CONTEXT, objective))
     monkeypatch.setattr(cmd, "_eligible_candidates", lambda *a, **k: ["outpriced_ring"])
     outpriced_verdict = SiblingVerdict(
         item="outpriced_ring", skill="jewelrycrafting", required_level=15,
@@ -875,7 +874,7 @@ def _sensing_player(state: object, game_data: object, ctx: object = None,
     # `plan_once()` -> `plan_from_state()` sets `self._last_ctx` as a side
     # effect (`player.py:1087`); this mock stands in for that assignment
     # having already happened by the time `_sense` reads it.
-    player._last_ctx = ctx if ctx is not None else NO_PROFILE_CONTEXT
+    player._last_ctx = ctx if ctx is not None else NO_DROPS_CONTEXT
     # `_initialize()` (called by `plan_once()`, BEFORE `plan_from_state()`)
     # sets `self._objective` unconditionally (`player.py:970`) -- this mock
     # stands in for that assignment too. `_UNSET` (not `None`) is the
@@ -897,8 +896,8 @@ def test_sense_returns_the_players_state_game_data_last_ctx_and_objective() -> N
 
     I2: `_sense` must also return `player._last_ctx` — the context
     `plan_from_state` actually built for this cycle — not the
-    `NO_PROFILE_CONTEXT` stand-in the command used to price against. The
-    marker context here differs from `NO_PROFILE_CONTEXT` in a field the
+    `NO_DROPS_CONTEXT` stand-in the command used to price against. The
+    marker context here differs from `NO_DROPS_CONTEXT` in a field the
     stand-in hard-codes (`bank_accessible`), so returning the wrong object
     would be visible by identity AND by value.
 
@@ -909,7 +908,7 @@ def test_sense_returns_the_players_state_game_data_last_ctx_and_objective() -> N
     marker object this test controls."""
     state = make_state(level=5)
     game_data = GameData()
-    marker_ctx = replace(NO_PROFILE_CONTEXT, bank_accessible=False)
+    marker_ctx = replace(NO_DROPS_CONTEXT, bank_accessible=False)
     marker_objective = CharacterObjective.from_game_data(game_data)
     player = _sensing_player(state, game_data, marker_ctx, marker_objective)
     with (

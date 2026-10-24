@@ -19,8 +19,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 
 def _gd() -> GameData:
@@ -327,7 +326,7 @@ class TestDropFightCompanionSwap:
         state = _suboptimal_weapon_state()
         actions = [FightAction(monster_code="spider", locations=frozenset({(1, 0)}),
                                learned_drops=LearnedDrops.empty())]
-        plan = (decompose(_boots_goal(), state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
+        plan = (decompose(_boots_goal(), state, gd, list(actions), NO_DROPS_CONTEXT) or [])
         reprs = [repr(a) for a in plan]
         assert reprs, "UpgradeEquipment(old_boots) planned empty even with the companion swap"
         assert "OptimizeLoadout(spider)" in reprs, reprs
@@ -347,7 +346,7 @@ class TestDropFightCompanionSwap:
         fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         swap = OptimizeLoadoutAction(target_monster_code="spider", game_data=gd)
         assert swap.is_applicable(state, gd) is False
-        plan = (decompose(_boots_goal(), state, gd, list([fight]), NO_PROFILE_CONTEXT) or [])
+        plan = (decompose(_boots_goal(), state, gd, list([fight]), NO_DROPS_CONTEXT) or [])
         plan_reprs = [repr(a) for a in plan]
         assert plan_reprs, "UpgradeEquipment(old_boots) planned empty from the optimal-loadout baseline"
         assert "Fight(spider)" in plan_reprs, plan_reprs

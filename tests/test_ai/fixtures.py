@@ -1,6 +1,7 @@
 """Shared test fixtures for AI module tests."""
 
 import json
+from dataclasses import replace
 from datetime import datetime, timezone
 from fractions import Fraction
 from typing import Any
@@ -14,6 +15,7 @@ from artifactsmmo_api_client.models.status_schema import StatusSchema
 
 from artifactsmmo_cli.ai.best_loadout import BestLoadout
 from artifactsmmo_cli.ai.item_catalog import ItemStats
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     FIGHT_LOGS,
     FleetBootstrap,
@@ -40,6 +42,11 @@ def patched_logs() -> Any:
     return patch("artifactsmmo_cli.ai.player.GamePlayer._fetch_bootstrap",
                  return_value=BOOTSTRAP)
 
+
+NO_DROPS_CONTEXT = replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty())
+"""`NO_PROFILE_CONTEXT` with nothing observed passed explicitly: every drop at
+its API prior (ruling T16b). `NO_PROFILE_CONTEXT` itself carries no evidence
+and refuses to price a drop."""
 
 TIMED_NO_PROFILE_CONTEXT = offline_context(NO_PROFILE_CONTEXT)
 """`NO_PROFILE_CONTEXT` carrying the committed live capture's fight and action

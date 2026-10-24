@@ -6,6 +6,7 @@ consumable loadout only (docs/PLAN_consumable_utility.md increment 5).
 potions by effect for the utility-slot designation
 (`CharacterObjective.utility_potion_targets`); the guard does not read them."""
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, potion_carry
@@ -14,6 +15,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
 from artifactsmmo_cli.ai.held_for_crafting import held_for_crafting
 from artifactsmmo_cli.ai.held_stock import held_count
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.max_batch_from_held import max_batch_from_held_pure
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, Policy
@@ -140,7 +142,11 @@ def feasible_runs(code: str, runs: int, state: WorldState, game_data: GameData) 
     none (`produce` alone would admit its gather)."""
     if not game_data.crafting_recipes.get(code):
         return 0
-    model = ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
+    # A store-less feasibility walk: every drop at its API prior, passed
+    # explicitly (ruling T16b).
+    model = ObtainModel(state, game_data,
+                       replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty()),
+                       datetime.now(UTC))
     potion = frozenset({code})
     held = model.in_bag(code)
     craft_yield = game_data.craft_yield(code)

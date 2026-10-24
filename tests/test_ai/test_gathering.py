@@ -16,8 +16,8 @@ from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
-from tests.test_ai.fixtures import make_state
+from artifactsmmo_cli.ai.selection_context import SelectionContext
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 
 def _gd_copper_dagger() -> GameData:
@@ -351,7 +351,7 @@ class TestRecycleAsAcquisition:
         # surviving RecycleAction.
         pool = license_destructive_actions(raw_pool, state, gd, ctx)
         goal = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5})
-        plan = (decompose(goal, state, gd, list(goal.relevant_actions(pool, state, gd)), NO_PROFILE_CONTEXT) or [])
+        plan = (decompose(goal, state, gd, list(goal.relevant_actions(pool, state, gd)), NO_DROPS_CONTEXT) or [])
         assert plan, "planner found no plan"
         assert any(isinstance(a, RecycleAction) for a in plan)
         assert sum(isinstance(a, GatherAction) for a in plan) < 10

@@ -20,9 +20,8 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 
 def _copper_chain_gd() -> GameData:
@@ -90,7 +89,7 @@ class TestTraceRegression:
         # The prune precondition really holds: net 0 ⇒ the gather is dropped.
         relevant = goal.relevant_actions(actions, state, gd)
         assert not any(isinstance(a, GatherAction) for a in relevant)
-        plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
+        plan = (decompose(goal, state, gd, list(actions), NO_DROPS_CONTEXT) or [])
         assert plan, "net-0 bank coverage must yield a withdraw/craft plan, not no_plan"
 
     def test_upgrade_equipment_prune_covered_by_same_fix(self):
@@ -113,7 +112,7 @@ class TestTraceRegression:
         # The residual withdraws survive the closure-locked prune.
         assert any(a.quantity == 1 for a in _withdraws(relevant, "copper_ore"))
         assert any(a.quantity == 1 for a in _withdraws(relevant, "copper_bar"))
-        plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
+        plan = (decompose(goal, state, gd, list(actions), NO_DROPS_CONTEXT) or [])
         assert plan, "net-0 bank coverage must yield a withdraw/craft/equip plan"
 
 

@@ -23,8 +23,8 @@ import pytest
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.source_kind import SourceKind
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -144,7 +144,7 @@ def test_hydrated_book_puts_a_ge_fill_route_on_the_rung() -> None:
                 if busy.crafting_recipe(code))
 
     def kinds(gd: GameData) -> set[SourceKind]:
-        return {s.kind for s in obtain_sources(rung, state, gd, NO_PROFILE_CONTEXT)}
+        return {s.kind for s in obtain_sources(rung, state, gd, NO_DROPS_CONTEXT)}
 
     assert SourceKind.GE_FILL not in kinds(quiet)
     assert SourceKind.GE_FILL in kinds(busy)

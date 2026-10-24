@@ -999,6 +999,9 @@ class GamePlayer:
         self._actions_since_full_refresh = BANK_REFRESH_FORCE_SENTINEL
         self._offline_timing = committed_timing()
         self._last_ctx = self._timed(self._last_ctx)
+        # The offline world's drop evidence (the store's, or the prior without
+        # one), on `_last_ctx` too (ruling T16b).
+        self._refresh_learned_drops()
 
     def plan_once(self, committed: str | None = None) -> PlanReport:
         """Sense the world via the API, then compute one planning cycle —
@@ -2946,7 +2949,8 @@ class GamePlayer:
                        for slot, worn in state.equipment.items()})
         ctx = self._timed(replace(NO_PROFILE_CONTEXT,
                                   bank_accessible=self._blockers.get("bank") is None,
-                                  sibling_skills=self._sibling_skills))
+                                  sibling_skills=self._sibling_skills,
+                                  learned_drops=self._cycle_learned_drops()))
         batch = potion_level_ramp(state.level)
         actions = acquisition_actions(code, batch, stripped, self.game_data, ctx, equip=False,
                                       store=self.history, gated_drop=False,
@@ -3473,8 +3477,11 @@ class GamePlayer:
         against the profile-free context: a board weight, not a plan. A code with
         no route at all is left out and so recruits no one."""
         bare = replace(state, inventory={}, bank_items={})
-        work = {code: acquisition_actions(code, 1, bare, game_data,
-                                          self._timed(NO_PROFILE_CONTEXT),
+        # The cycle's drop evidence (ruling T16b): a gathered or dropped
+        # material is priced at its learned chance, as every other price is.
+        ctx = self._timed(replace(NO_PROFILE_CONTEXT,
+                                  learned_drops=self._cycle_learned_drops()))
+        work = {code: acquisition_actions(code, 1, bare, game_data, ctx,
                                           equip=False, store=self.history)
                 for code in item_demand}
         return {code: actions for code, actions in work.items()
@@ -3582,6 +3589,10 @@ class GamePlayer:
         assert self.game_data is not None
         self._learned_drops = (learned_drops(self.history, self.game_data)
                                if self.history is not None else LearnedDrops.empty())
+        # The trace's plan tree prices through `_last_ctx` (`build_plan_tree`),
+        # which before this process's first decision is NO_PROFILE_CONTEXT and
+        # carries no evidence (ruling T16b): it reads this cycle's too.
+        self._last_ctx = replace(self._last_ctx, learned_drops=self._learned_drops)
 
     def _cycle_learned_drops(self) -> LearnedDrops:
         """The evidence `_refresh_learned_drops` built this cycle; raises

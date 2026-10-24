@@ -20,9 +20,9 @@ from artifactsmmo_cli.ai.grey_farm import (
     grey_farm_allowed,
 )
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT
 
 _ALL_SLOTS: dict[str, str | None] = {
     "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
@@ -303,7 +303,7 @@ class TestGatherEmitsDropFarmFights:
         goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
         actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
                                learned_drops=LearnedDrops.empty())]
-        plan = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
+        plan = decompose(goal, state, gd, actions, NO_DROPS_CONTEXT)
         assert plan is not None and [repr(a) for a in plan] == ["Fight(chicken)"]
         assert plan[0].drop_target == ("feather", 2)
 
@@ -339,11 +339,11 @@ class TestGatherEmitsDropFarmFights:
         actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
                                learned_drops=LearnedDrops.empty())]
         plain = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
-        assert decompose(plain, state, gd, actions, NO_PROFILE_CONTEXT) is None, \
+        assert decompose(plain, state, gd, actions, NO_DROPS_CONTEXT) is None, \
             "vacuous: the directive does not suppress the plain gather"
         goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2},
                                    skill_grind=True)
-        plan = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
+        plan = decompose(goal, state, gd, actions, NO_DROPS_CONTEXT)
         assert plan is not None and [repr(a) for a in plan] == ["Fight(chicken)"]
         assert plan[0].drop_target == ("feather", 2)
 
@@ -368,7 +368,7 @@ class TestGatherEmitsDropFarmFights:
                    FightAction(monster_code="hawk", locations=frozenset({(3, 0)}), learned_drops=LearnedDrops.empty())]
         assert gd.xp_per_kill("chicken", 12) == 0 < gd.xp_per_kill("hawk", 12), \
             "vacuous: the chicken is not grey, or the hawk pays nothing"
-        plan = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
+        plan = decompose(goal, state, gd, actions, NO_DROPS_CONTEXT)
         assert plan is not None and [repr(a) for a in plan] == ["Fight(hawk)"]
 
     def test_skill_grind_exemption_does_not_change_the_policy(self) -> None:

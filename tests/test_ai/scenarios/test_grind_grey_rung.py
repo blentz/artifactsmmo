@@ -56,7 +56,7 @@ from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scena
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -122,7 +122,7 @@ def test_grind_does_not_eat_the_objective_materials(game_data: GameData,
     chosen rung's recipe must not consume it — otherwise the grind and the
     objective fight over the same pile forever."""
     reserved = frozenset({"ash_wood", "birch_wood"})
-    rung = skill_grind_target(SKILL, state, game_data, reserved)
+    rung = skill_grind_target(SKILL, state, game_data, reserved, ctx=NO_DROPS_CONTEXT)
     assert rung is not None, "reservation must not empty the candidate set here"
     assert "ash_wood" not in game_data.crafting_recipe(rung)
 
@@ -164,7 +164,7 @@ def test_reservation_reaches_the_grind_through_the_context(
     assert repr(reserved) != repr(plain), (
         "the grind ignored ctx.step_profile — the reserved guard is dead again")
     # ...and what it moved to must genuinely avoid the reserved materials.
-    alt = skill_grind_target(_RESERVE_SKILL, state, game_data, frozenset(mats))
+    alt = skill_grind_target(_RESERVE_SKILL, state, game_data, frozenset(mats), ctx=NO_DROPS_CONTEXT)
     assert alt is not None and not (set(game_data.crafting_recipe(alt)) & set(mats))
 
 

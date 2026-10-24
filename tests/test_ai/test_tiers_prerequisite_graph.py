@@ -11,7 +11,7 @@ from artifactsmmo_cli.ai.tiers.prerequisite_graph import (
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 
 @dataclass(frozen=True)
@@ -50,14 +50,14 @@ def test_obtain_craftable_yields_only_materials():
     # (under-skill gear grinds via UpgradeEquipmentGoal + the LevelSkill action).
     # An ObtainItem's prereqs are just its material ObtainItems.
     gd = _gd()
-    prereqs = prerequisites(ObtainItem("copper_dagger"), make_state(), gd)
+    prereqs = prerequisites(ObtainItem("copper_dagger"), make_state(), gd, ctx=NO_DROPS_CONTEXT)
     assert prereqs == [ObtainItem("copper_bar", 6)]
 
 
 def test_obtain_already_owned_has_no_prereqs():
     gd = _gd()
     s = make_state(inventory={"copper_dagger": 1})
-    assert prerequisites(ObtainItem("copper_dagger"), s, gd) == []
+    assert prerequisites(ObtainItem("copper_dagger"), s, gd, ctx=NO_DROPS_CONTEXT) == []
 
 
 def test_obtain_already_equipped_is_satisfied_leaf():
@@ -65,25 +65,25 @@ def test_obtain_already_equipped_is_satisfied_leaf():
     prereq descent short-circuits to an empty list (line 45-46)."""
     gd = _gd()
     s = make_state(equipment={"weapon_slot": "copper_dagger"})
-    assert prerequisites(ObtainItem("copper_dagger"), s, gd) == []
+    assert prerequisites(ObtainItem("copper_dagger"), s, gd, ctx=NO_DROPS_CONTEXT) == []
 
 
 def test_obtain_gatherable_is_leaf():
     # P3b: a gatherable (recipe-less) item is a leaf — no skill-gate prereq is
     # emitted; the material enters via the ObtainItem chain of its consumer.
     gd = _gd()
-    assert prerequisites(ObtainItem("copper_ore"), make_state(), gd) == []
+    assert prerequisites(ObtainItem("copper_ore"), make_state(), gd, ctx=NO_DROPS_CONTEXT) == []
 
 
 def test_obtain_unknown_source_is_leaf():
     gd = _gd()
-    assert prerequisites(ObtainItem("mystery"), make_state(), gd) == []
+    assert prerequisites(ObtainItem("mystery"), make_state(), gd, ctx=NO_DROPS_CONTEXT) == []
 
 
 def test_reach_char_level_leaf_when_combat_capable():
     gd = _gd()  # chicken (0 hp/atk stub) is stat-beatable once the player can hit
     state = make_state(level=1, attack={"fire": 10})
-    assert prerequisites(ReachCharLevel(50), state, gd) == []
+    assert prerequisites(ReachCharLevel(50), state, gd, ctx=NO_DROPS_CONTEXT) == []
 
 
 def test_reach_char_level_needs_weapon_when_underequipped():
@@ -91,7 +91,7 @@ def test_reach_char_level_needs_weapon_when_underequipped():
     gd._monster_level = {"dragon": 40}  # nothing beatable at level 1
     fill_monster_stat_defaults(gd)
     gd._item_stats = {"iron_sword": ItemStats(code="iron_sword", level=10, type_="weapon", attack={"fire": 30})}
-    prereqs = prerequisites(ReachCharLevel(50), make_state(level=1), gd)
+    prereqs = prerequisites(ReachCharLevel(50), make_state(level=1), gd, ctx=NO_DROPS_CONTEXT)
     assert prereqs == [ObtainItem("iron_sword")]
 
 
@@ -99,7 +99,7 @@ def test_reach_char_level_leaf_when_no_weapon_exists():
     gd = GameData()
     gd._monster_level = {"dragon": 40}
     fill_monster_stat_defaults(gd)
-    assert prerequisites(ReachCharLevel(50), make_state(level=1), gd) == []
+    assert prerequisites(ReachCharLevel(50), make_state(level=1), gd, ctx=NO_DROPS_CONTEXT) == []
 
 
 def test_combat_capable_uses_stat_prediction_not_level_margin():
@@ -132,9 +132,9 @@ def test_a_material_with_a_ready_source_is_a_leaf():
     ready `ai/obtain_sources` route already covers."""
     gd = _gd()
     node = ObtainItem("copper_bar", 6)
-    assert prerequisites(node, make_state(), gd) == [ObtainItem("copper_ore", 10)]
+    assert prerequisites(node, make_state(), gd, ctx=NO_DROPS_CONTEXT) == [ObtainItem("copper_ore", 10)]
     state = make_state(inventory={"copper_dagger": 2})
-    assert prerequisites(node, state, gd) == []
+    assert prerequisites(node, state, gd, ctx=NO_DROPS_CONTEXT) == []
 
 
 def test_leaf_rule_is_any_ready_source_not_fully_covering_the_need():
@@ -144,7 +144,7 @@ def test_leaf_rule_is_any_ready_source_not_fully_covering_the_need():
     decision)."""
     gd = _gd()
     state = make_state(inventory={"copper_dagger": 2})
-    assert prerequisites(ObtainItem("copper_bar", 6), state, gd) == []
+    assert prerequisites(ObtainItem("copper_bar", 6), state, gd, ctx=NO_DROPS_CONTEXT) == []
 
 
 def test_no_destroyable_copies_still_descends():
@@ -153,7 +153,7 @@ def test_no_destroyable_copies_still_descends():
     still falls into copper_bar's own recipe."""
     gd = _gd()
     state = make_state(inventory={"copper_dagger": 1})
-    assert prerequisites(ObtainItem("copper_bar", 6), state, gd) \
+    assert prerequisites(ObtainItem("copper_bar", 6), state, gd, ctx=NO_DROPS_CONTEXT) \
         == [ObtainItem("copper_ore", 10)]
 
 
@@ -171,7 +171,7 @@ def test_gatherable_craftable_is_a_leaf_via_gather_source():
     gd._resource_drops = {"iron_bar_vein": "iron_bar", "iron_rocks": "iron_ore"}
     gd._resource_skill = {"iron_bar_vein": ("mining", 1), "iron_rocks": ("mining", 1)}
     gd._resource_locations = {"iron_bar_vein": [(2, 2)], "iron_rocks": [(1, 1)]}
-    assert prerequisites(ObtainItem("iron_bar"), make_state(), gd) == []
+    assert prerequisites(ObtainItem("iron_bar"), make_state(), gd, ctx=NO_DROPS_CONTEXT) == []
 
 
 def test_cyclic_recipe_traversal_terminates():
@@ -190,7 +190,7 @@ def test_cyclic_recipe_traversal_terminates():
         if node in seen:
             continue
         seen.add(node)
-        frontier.extend(prerequisites(node, make_state(), gd))
+        frontier.extend(prerequisites(node, make_state(), gd, ctx=NO_DROPS_CONTEXT))
     assert ObtainItem("a", 1) in seen and ObtainItem("b", 1) in seen
 
 
@@ -198,7 +198,7 @@ def test_reach_skill_level_has_no_prerequisites():
     # §5.1: a skill climb has no MetaGoal prerequisites — LevelSkill /
     # ReachSkillGoal owns the sub-plan, not the prerequisite graph.
     gd = _gd()
-    assert prerequisites(ReachSkillLevel("weaponcrafting", 11), make_state(), gd) == []
+    assert prerequisites(ReachSkillLevel("weaponcrafting", 11), make_state(), gd, ctx=NO_DROPS_CONTEXT) == []
 
 
 def test_prerequisites_raises_on_unhandled_metagoal_kind():
@@ -209,4 +209,4 @@ def test_prerequisites_raises_on_unhandled_metagoal_kind():
     # strategy.py:_prereq_order's `assert isinstance(...)` convention.
     gd = _gd()
     with pytest.raises(AssertionError, match="unhandled MetaGoal kind"):
-        prerequisites(_UnknownMetaGoal(), make_state(), gd)
+        prerequisites(_UnknownMetaGoal(), make_state(), gd, ctx=NO_DROPS_CONTEXT)

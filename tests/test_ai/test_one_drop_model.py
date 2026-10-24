@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+import artifactsmmo_cli.ai.player as player_mod
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_options
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
@@ -202,6 +203,8 @@ def test_the_player_hands_one_evidence_to_the_actions_and_the_context(
                if isinstance(a, GatherAction | FightAction)]
     assert carried and all(drops is evidence for drops in carried)
     assert player._band_context("chicken").learned_drops is evidence
+    # The trace's plan tree prices through `_last_ctx`, before any decision.
+    assert player._last_ctx.learned_drops is evidence
 
 
 def test_a_player_without_history_prices_the_prior(state, game_data) -> None:
@@ -215,3 +218,24 @@ def test_a_context_without_evidence_refuses_to_price_a_drop() -> None:
     raises when a consumer reads it; the prior is passed explicitly."""
     with pytest.raises(ValueError, match="no drop evidence"):
         replace(TIMED_NO_PROFILE_CONTEXT, learned_drops=None).drops()
+
+
+def test_the_players_other_prices_read_the_cycles_evidence(
+        tmp_path, state, game_data, monkeypatch) -> None:
+    """Ruling T16b: the consumable upkeep price (`_consumable_price`) and the
+    role board's work (`_work_of_item`) walk the acquisition routes too, so
+    they price at the cycle's evidence, never an inherited prior."""
+    store = _store(tmp_path / "learn.db", _PEARLS_383_FOR_2)
+    player = _player(state, game_data, store)
+    player._refresh_learned_drops()
+    evidence = player._cycle_learned_drops()
+    seen = []
+
+    def spy(code, qty, probe, gd, ctx, **_):  # type: ignore[no-untyped-def]
+        seen.append(ctx.learned_drops)
+        return 1
+
+    monkeypatch.setattr(player_mod, "acquisition_actions", spy)
+    player._consumable_price("small_health_potion")
+    player._work_of_item({"small_pearls": 1}, state, game_data)
+    assert len(seen) == 2 and all(drops is evidence for drops in seen)

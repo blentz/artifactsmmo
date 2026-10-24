@@ -22,9 +22,8 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 _HEAL = "small_health_potion"
 _BOOST = "fire_boost_potion"
@@ -115,7 +114,7 @@ def test_goal_is_plannable_without_a_craftable_boost():
     goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
-    plan = (decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or [])
+    plan = (decompose(goal, state, gd, list(_actions(gd)), NO_DROPS_CONTEXT) or [])
 
     assert plan, "control: the heal-only goal must be plannable"
 
@@ -131,7 +130,7 @@ def test_goal_stays_plannable_with_a_second_chosen_potion():
     goal = CraftPotionsGoal(loadout=BOTH_LOADOUT, game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
-    plan = decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or []
+    plan = decompose(goal, state, gd, list(_actions(gd)), NO_DROPS_CONTEXT) or []
 
     assert plan, (
         "goal must stay plannable when a boost is craftable; the frozen "
@@ -151,7 +150,7 @@ def test_goal_is_plannable_when_the_deficit_exceeds_one_gather_batch():
     goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
-    plan = decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or []
+    plan = decompose(goal, state, gd, list(_actions(gd)), NO_DROPS_CONTEXT) or []
 
     assert plan, "a deficit larger than one gather batch must still yield a batch plan"
 
@@ -176,6 +175,6 @@ def test_goal_provisions_depth_for_the_batch_its_own_ladder_sized():
     goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
-    plan = decompose(goal, state, gd, list(_actions(gd)), NO_PROFILE_CONTEXT) or []
+    plan = decompose(goal, state, gd, list(_actions(gd)), NO_DROPS_CONTEXT) or []
 
     assert len(plan) >= 2, "the sized batch must be planned whole"

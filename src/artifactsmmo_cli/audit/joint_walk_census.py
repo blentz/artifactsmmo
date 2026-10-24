@@ -39,6 +39,7 @@ from enum import Enum
 
 from artifactsmmo_cli.ai.decompose_core import Route, can_obtain, runs
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY
 from artifactsmmo_cli.ai.recipe_closure import recipe_closure
@@ -190,7 +191,11 @@ def run_cell(recipe: str, holding: str, game_data: GameData) -> JointCell:
     state = census_state(recipe, cell, game_data)
     if holding == "one_run_each":
         state = replace(state, inventory=_one_run_each(recipe, game_data))
-    model = ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
+    # A store-less feasibility walk: every drop at its API prior, passed
+    # explicitly (ruling T16b).
+    model = ObtainModel(state, game_data,
+                       replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty()),
+                       datetime.now(UTC))
     graph = model.walk_graph(recipe, DECOMPOSE_POLICY, keep=frozenset({recipe}))
     independent = independent_can(recipe, 1, graph.on_hand, graph.routes)
     greedy = can_obtain(recipe, 1, graph.on_hand, graph.routes)

@@ -7,7 +7,6 @@ import artifactsmmo_cli.ai.decisions.root as _root_mod
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -29,7 +28,7 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     unmet_closure_size,
 )
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 
 def _missing(slot: str, code: str):  # type: ignore[no-untyped-def]
@@ -38,7 +37,7 @@ def _missing(slot: str, code: str):  # type: ignore[no-untyped-def]
     too small for `gear_objective` to find a paying monster, so the objective
     is built explicitly (ruling W)."""
     piece = GearPiece(slot, code, 0, Fraction(1), Fraction(1), SourceKind.CRAFT)
-    return replace(NO_PROFILE_CONTEXT,
+    return replace(NO_DROPS_CONTEXT,
                    gear_objective=GearObjective("chicken", {slot: code}, Fraction(1), (piece,)))
 
 
@@ -71,7 +70,7 @@ def _gd() -> GameData:
 
 def test_actionable_step_descends_to_ready_node():
     gd = _gd()
-    step = actionable_step(ObtainItem("copper_dagger"), make_state(), gd)
+    step = actionable_step(ObtainItem("copper_dagger"), make_state(), gd, ctx=NO_DROPS_CONTEXT)
     assert step == ObtainItem("copper_ore", 10)
 
 
@@ -79,7 +78,7 @@ def test_actionable_step_blocked_returns_none():
     gd = GameData()
     gd._crafting_recipes = {"a": {"a": 1}}  # self-referential, no gather/leaf path
     gd._item_stats = {"a": ItemStats(code="a", level=1, type_="resource")}
-    assert actionable_step(ObtainItem("a"), make_state(), gd) is None
+    assert actionable_step(ObtainItem("a"), make_state(), gd, ctx=NO_DROPS_CONTEXT) is None
 
 
 def test_actionable_step_stops_at_the_ready_source_material():
@@ -89,10 +88,10 @@ def test_actionable_step_stops_at_the_ready_source_material():
     recycling 2 held copper_ring (destroyable 1, capacity 1), it returns
     copper_bar itself."""
     gd = _gd()
-    assert actionable_step(ObtainItem("copper_dagger"), make_state(), gd) \
+    assert actionable_step(ObtainItem("copper_dagger"), make_state(), gd, ctx=NO_DROPS_CONTEXT) \
         == ObtainItem("copper_ore", 10)
     state = make_state(inventory={"copper_ring": 2})
-    assert actionable_step(ObtainItem("copper_dagger"), state, gd, NO_PROFILE_CONTEXT) \
+    assert actionable_step(ObtainItem("copper_dagger"), state, gd, NO_DROPS_CONTEXT) \
         == ObtainItem("copper_bar", 6)
 
 
@@ -116,16 +115,16 @@ def test_is_reachable_agrees_with_the_descent_ready_source():
     gd._workshop_locations = {"jewelrycrafting": (1, 1)}
     gd.recycle_totals = {"part_source": 2}
     state = make_state()
-    assert is_reachable(ObtainItem("trinket"), state, gd) is False
+    assert is_reachable(ObtainItem("trinket"), state, gd, ctx=NO_DROPS_CONTEXT) is False
     state2 = make_state(inventory={"part_source": 2})
     assert is_reachable(ObtainItem("trinket"), state2, gd, frozenset(),
-                        NO_PROFILE_CONTEXT) is True
+                        NO_DROPS_CONTEXT) is True
 
 
 def test_unmet_closure_size_counts_unmet_nodes():
     gd = _gd()
-    assert unmet_closure_size(ObtainItem("copper_dagger"), make_state(), gd) == 3
-    assert unmet_closure_size(ObtainItem("copper_ore"), make_state(), gd) == 1
+    assert unmet_closure_size(ObtainItem("copper_dagger"), make_state(), gd, ctx=NO_DROPS_CONTEXT) == 3
+    assert unmet_closure_size(ObtainItem("copper_ore"), make_state(), gd, ctx=NO_DROPS_CONTEXT) == 1
 
 
 def test_unmet_closure_size_shrinks_with_a_ready_source():
@@ -137,10 +136,10 @@ def test_unmet_closure_size_shrinks_with_a_ready_source():
     game_data)` losing the trailing arg) would pass every OTHER test today but
     leave this one at 3."""
     gd = _gd()
-    assert unmet_closure_size(ObtainItem("copper_dagger"), make_state(), gd) == 3
+    assert unmet_closure_size(ObtainItem("copper_dagger"), make_state(), gd, ctx=NO_DROPS_CONTEXT) == 3
     state = make_state(inventory={"copper_ring": 2})
     assert unmet_closure_size(ObtainItem("copper_dagger"), state, gd,
-                              NO_PROFILE_CONTEXT) == 2
+                              NO_DROPS_CONTEXT) == 2
 
 
 def test_root_category():
@@ -225,7 +224,7 @@ def test_unmet_closure_size_dedups_shared_prereq():
     gd = GameData()
     gd._crafting_recipes = {"X": {"A": 1, "B": 1}, "A": {"C": 1}, "B": {"C": 1}}
     gd._item_stats = {c: ItemStats(code=c, level=1, type_="resource") for c in "XABC"}
-    assert unmet_closure_size(ObtainItem("X"), make_state(), gd) == 4  # X,A,B,C once each
+    assert unmet_closure_size(ObtainItem("X"), make_state(), gd, ctx=NO_DROPS_CONTEXT) == 4  # X,A,B,C once each
 
 
 def test_a_self_blocked_root_is_reported_then_passed_over_when_declined():
@@ -270,13 +269,13 @@ def test_a_self_blocked_root_is_reported_then_passed_over_when_declined():
 
 def test_root_cost_is_levels_remaining_for_char_level():
     gd = _gd()
-    assert root_cost(ReachCharLevel(50), make_state(level=3), gd) == 47
-    assert root_cost(ReachCharLevel(4), make_state(level=4), gd) == 1  # floor
+    assert root_cost(ReachCharLevel(50), make_state(level=3), gd, ctx=NO_DROPS_CONTEXT) == 47
+    assert root_cost(ReachCharLevel(4), make_state(level=4), gd, ctx=NO_DROPS_CONTEXT) == 1  # floor
 
 
 def test_root_cost_for_gear_uses_closure_size():
     gd = _gd()
-    assert root_cost(ObtainItem("copper_dagger"), make_state(), gd) == 3
+    assert root_cost(ObtainItem("copper_dagger"), make_state(), gd, ctx=NO_DROPS_CONTEXT) == 3
 
 
 def test_root_cost_shrinks_with_a_ready_source():
@@ -286,9 +285,9 @@ def test_root_cost_shrinks_with_a_ready_source():
     `unmet_closure_size(root, state, game_data, ctx)` inside root_cost would
     leave the default-ctx tests green but this one stuck at 3."""
     gd = _gd()
-    assert root_cost(ObtainItem("copper_dagger"), make_state(), gd) == 3
+    assert root_cost(ObtainItem("copper_dagger"), make_state(), gd, ctx=NO_DROPS_CONTEXT) == 3
     state = make_state(inventory={"copper_ring": 2})
-    assert root_cost(ObtainItem("copper_dagger"), state, gd, NO_PROFILE_CONTEXT) == 2
+    assert root_cost(ObtainItem("copper_dagger"), state, gd, NO_DROPS_CONTEXT) == 2
 
 
 def _reach_gd():
@@ -323,24 +322,24 @@ def test_producible():
 def test_is_reachable_gatherable_and_craftable_chain():
     gd = _reach_gd()
     s = make_state(level=1)
-    assert is_reachable(ObtainItem("iron_ore"), s, gd) is True
-    assert is_reachable(ObtainItem("iron_helm"), s, gd) is True
+    assert is_reachable(ObtainItem("iron_ore"), s, gd, ctx=NO_DROPS_CONTEXT) is True
+    assert is_reachable(ObtainItem("iron_helm"), s, gd, ctx=NO_DROPS_CONTEXT) is True
 
 
 def test_is_reachable_false_for_unproducible_and_blocked_material():
     gd = _reach_gd()
     s = make_state(level=1)
-    assert is_reachable(ObtainItem("drop_blade"), s, gd) is False
+    assert is_reachable(ObtainItem("drop_blade"), s, gd, ctx=NO_DROPS_CONTEXT) is False
     gd._crafting_recipes["cursed_helm"] = {"drop_blade": 1}
     gd._item_stats["cursed_helm"] = ItemStats(code="cursed_helm", level=1, type_="helmet")
-    assert is_reachable(ObtainItem("cursed_helm"), s, gd) is False
+    assert is_reachable(ObtainItem("cursed_helm"), s, gd, ctx=NO_DROPS_CONTEXT) is False
 
 
 def test_is_reachable_char_level():
     gd = _reach_gd()
     # ReachCharLevel reachable because the player can beat a monster once it can
     # deal damage (combat_capable now uses predict_win, not a level margin).
-    assert is_reachable(ReachCharLevel(50), make_state(level=1, attack={"fire": 10}), gd) is True
+    assert is_reachable(ReachCharLevel(50), make_state(level=1, attack={"fire": 10}), gd, ctx=NO_DROPS_CONTEXT) is True
 
 
 def test_is_reachable_char_level_false_when_underequipped_and_no_makeable_weapon():
@@ -348,21 +347,21 @@ def test_is_reachable_char_level_false_when_underequipped_and_no_makeable_weapon
     gd._monster_level = {"dragon": 40}
     fill_monster_stat_defaults(gd)
     gd._item_stats = {"drop_blade": ItemStats(code="drop_blade", level=1, type_="weapon", attack={"f": 9})}
-    assert is_reachable(ReachCharLevel(50), make_state(level=1), gd) is False
+    assert is_reachable(ReachCharLevel(50), make_state(level=1), gd, ctx=NO_DROPS_CONTEXT) is False
 
 
 def test_is_reachable_satisfied_and_cycle():
     gd = _reach_gd()
-    assert is_reachable(ReachCharLevel(1), make_state(level=5), gd) is True
+    assert is_reachable(ReachCharLevel(1), make_state(level=5), gd, ctx=NO_DROPS_CONTEXT) is True
     cyc = GameData()
     cyc._crafting_recipes = {"a": {"a": 1}}
     cyc._item_stats = {"a": ItemStats(code="a", level=1, type_="resource")}
-    assert is_reachable(ObtainItem("a"), make_state(), cyc) is False
+    assert is_reachable(ObtainItem("a"), make_state(), cyc, ctx=NO_DROPS_CONTEXT) is False
 
 
 def test_actionable_step_none_for_unproducible_leaf():
     gd = _reach_gd()
-    assert actionable_step(ObtainItem("drop_blade"), make_state(), gd) is None
+    assert actionable_step(ObtainItem("drop_blade"), make_state(), gd, ctx=NO_DROPS_CONTEXT) is None
 
 
 # --- Task 2: semantic (not repr) prerequisite order ---
@@ -409,7 +408,7 @@ def test_actionable_step_descends_to_material_for_underskill_craftable() -> None
     gd._monster_level = {"chicken": 1}
     fill_monster_stat_defaults(gd)
     state = make_state(level=5, skills={"weaving": 1})
-    step = actionable_step(ObtainItem("widget"), state, gd)
+    step = actionable_step(ObtainItem("widget"), state, gd, ctx=NO_DROPS_CONTEXT)
     assert step == ObtainItem("thread", 3)
 
 

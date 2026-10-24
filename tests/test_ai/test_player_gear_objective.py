@@ -302,3 +302,15 @@ def test_the_objective_is_priced_inside_one_search_episode(
     attach_gear_objective(make_state(), GameData(), CTX, store)
     assert seen == [True]
     assert store._search_cache is None
+
+
+def test_the_cycle_context_carries_the_cycles_drop_evidence(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling T16a/T16b: the selection context carries the very evidence the
+    cycle's actions do (`_refresh_learned_drops`), so the walk and the planner
+    read one drop model."""
+    player = _player(monkeypatch, MISSING, [])
+    evidence = LearnedDrops((("trout_spot", 383),), ((("trout_spot", "small_pearls"), 2),),
+                            Fraction(0))
+    player._learned_drops = evidence
+    assert player._selection_context().learned_drops is evidence

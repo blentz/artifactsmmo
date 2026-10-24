@@ -8,13 +8,12 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemCatalog, ItemStats
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.sibling_route_census import (
     SiblingVerdict,
     sibling_route_verdicts,
 )
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 
 def test_saving_is_the_action_difference() -> None:
@@ -156,7 +155,7 @@ def test_the_eligible_gated_item_is_priced_and_load_bearing(
     must be silently absent from the result rather than producing a hollow
     verdict."""
     state, game_data = census_world
-    ctx = replace(NO_PROFILE_CONTEXT, sibling_skills={"weaponcrafting": 10})
+    ctx = replace(NO_DROPS_CONTEXT, sibling_skills={"weaponcrafting": 10})
     store = _FleetStore()
 
     verdicts = sibling_route_verdicts(
@@ -195,7 +194,7 @@ def test_an_outpriced_sibling_route_is_priced_but_not_load_bearing(
     reading "0 load-bearing" would know whether the fleet has no sibling
     capacity or has capacity nothing ever needs."""
     state, game_data = census_world
-    ctx = replace(NO_PROFILE_CONTEXT,
+    ctx = replace(NO_DROPS_CONTEXT,
                   sibling_skills={"weaponcrafting": 10, "gearcrafting": 8})
     store = _FleetStore(grind_rates={"gearcrafting": 100.0})
 
@@ -231,7 +230,7 @@ def test_load_bearing_is_provable_by_emptying_sibling_skills(
     say `priced=True`, which `hexstaff` alone (no `kind=CRAFT` route survives
     it at all) could never catch."""
     state, game_data = census_world
-    ctx = replace(NO_PROFILE_CONTEXT, sibling_skills={})
+    ctx = replace(NO_DROPS_CONTEXT, sibling_skills={})
     store = _FleetStore(grind_rates={"gearcrafting": 100.0})
 
     verdicts = sibling_route_verdicts(

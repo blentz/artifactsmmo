@@ -32,13 +32,12 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemCatalog, ItemStats
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.root_sibling_census import root_sibling_verdicts
 from artifactsmmo_cli.audit.sibling_route_census import sibling_route_verdicts
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 
 class _Store:
@@ -119,7 +118,7 @@ def test_candidate_order_is_preserved_and_exactly_one_root_is_chosen(monkeypatch
 
     rows, blocked = root_sibling_verdicts(
         state, game_data, CharacterObjective.from_game_data(game_data),
-        NO_PROFILE_CONTEXT, _Store())
+        NO_DROPS_CONTEXT, _Store())
 
     assert [r.root_repr for r in rows] == [repr(root), repr(alt_a), repr(alt_b)], \
         "candidate order must match [root, *alternatives] exactly"
@@ -160,7 +159,7 @@ def test_a_wall_resolution_filters_the_none_root_and_chooses_nothing(monkeypatch
 
     rows, blocked = root_sibling_verdicts(
         state, game_data, CharacterObjective.from_game_data(game_data),
-        NO_PROFILE_CONTEXT, _Store())
+        NO_DROPS_CONTEXT, _Store())
 
     assert [r.root_repr for r in rows] == [repr(alt_a), repr(alt_b)], \
         "the None root must be filtered, not stand in as a row of its own"
@@ -182,7 +181,7 @@ def test_a_root_naming_no_item_is_reported_with_none_item_and_none_verdict(monke
 
     rows, blocked = root_sibling_verdicts(
         state, game_data, CharacterObjective.from_game_data(game_data),
-        NO_PROFILE_CONTEXT, _Store())
+        NO_DROPS_CONTEXT, _Store())
 
     assert len(rows) == 1
     row = rows[0]
@@ -202,7 +201,7 @@ def test_a_root_naming_an_item_is_priced_by_the_existing_sibling_census(
     of delegating would be caught even if the reimplementation happened to
     agree on this one fixture's booleans."""
     state, game_data = root_census_world
-    ctx = replace(NO_PROFILE_CONTEXT, sibling_skills={"weaponcrafting": 10})
+    ctx = replace(NO_DROPS_CONTEXT, sibling_skills={"weaponcrafting": 10})
     store = _Store()
     root = ObtainItem(code="sibling_gear")
     monkeypatch.setattr(root_sibling_census, "resolve_root",
@@ -243,7 +242,7 @@ def test_blocked_target_is_priced_through_the_existing_census_and_returned_separ
     census, exactly as rule 3 proves the candidate-row path does not
     re-derive ELIGIBLE/PRICED/LOAD-BEARING."""
     state, game_data = root_census_world
-    ctx = replace(NO_PROFILE_CONTEXT, sibling_skills={"weaponcrafting": 10})
+    ctx = replace(NO_DROPS_CONTEXT, sibling_skills={"weaponcrafting": 10})
     store = _Store()
     root = ReachSkillLevel(skill="weaponcrafting", level=10)
     monkeypatch.setattr(
@@ -279,6 +278,6 @@ def test_blocked_target_unset_reports_none_not_a_fabricated_row(monkeypatch) -> 
 
     _rows, blocked = root_sibling_verdicts(
         state, game_data, CharacterObjective.from_game_data(game_data),
-        NO_PROFILE_CONTEXT, _Store())
+        NO_DROPS_CONTEXT, _Store())
 
     assert blocked is None

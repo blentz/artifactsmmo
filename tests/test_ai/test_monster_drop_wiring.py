@@ -13,13 +13,12 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.strategy import _producible
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 
 def _ctx() -> SelectionContext:
@@ -81,7 +80,7 @@ def test_gather_feather_plans_via_fighting_chicken() -> None:
     state = _winnable_state(inventory={}, inventory_max=50)
     actions = [FightAction(monster_code="chicken", locations=frozenset({(0, 1)}), learned_drops=LearnedDrops.empty())]
     goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
-    plan = (decompose(goal, state, gd, list(actions), NO_PROFILE_CONTEXT) or [])
+    plan = (decompose(goal, state, gd, list(actions), NO_DROPS_CONTEXT) or [])
     assert plan, "GatherMaterials(feather) must be plannable via fighting chicken"
     assert any(isinstance(a, FightAction) for a in plan)
 

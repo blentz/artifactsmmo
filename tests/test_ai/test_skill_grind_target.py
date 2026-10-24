@@ -23,7 +23,7 @@ from artifactsmmo_cli.ai.tiers.skill_grind_target import (
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT, make_state
 
 
 def _gd() -> GameData:
@@ -85,7 +85,7 @@ def test_the_BAG_is_free_but_the_BANK_is_a_priced_withdraw():
     gd = _gd()
     def steps(state):
         return next(c.acquire_steps
-                    for c in build_selectable_grind_candidates("weaponcrafting", state, gd)
+                    for c in build_selectable_grind_candidates("weaponcrafting", state, gd, ctx=NO_DROPS_CONTEXT)
                     if c.code == "copper_dagger")
     empty = steps(make_state(skills={"weaponcrafting": 3}))
     banked = steps(make_state(skills={"weaponcrafting": 3},
@@ -133,7 +133,7 @@ def test_reserved_materials_exclude_recipe():
     assert skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) == "copper_dagger"
     assert skill_grind_target(
         "weaponcrafting", state, gd, reserved=frozenset({"copper_bar"}),
-    ) == "wooden_staff"
+     ctx=NO_DROPS_CONTEXT) == "wooden_staff"
 
 
 def test_reserved_can_exhaust_all_recipes():
@@ -142,7 +142,7 @@ def test_reserved_can_exhaust_all_recipes():
     assert skill_grind_target(
         "weaponcrafting", state, gd,
         reserved=frozenset({"copper_bar", "iron_bar", "ash_plank"}),
-    ) is None
+     ctx=NO_DROPS_CONTEXT) is None
 
 
 def _gd_obtainability() -> GameData:
@@ -223,12 +223,12 @@ def test_the_memo_returns_a_hit_for_an_identical_state():
     and reused; that is the identity this now pins."""
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    build_selectable_grind_candidates("weaponcrafting", state, gd)
+    build_selectable_grind_candidates("weaponcrafting", state, gd, ctx=NO_DROPS_CONTEXT)
     cache = _CACHES.cache_for(gd)
     assert len(cache) == 1
     key = next(iter(cache))
     first_entry = cache[key]
-    build_selectable_grind_candidates("weaponcrafting", state, gd)
+    build_selectable_grind_candidates("weaponcrafting", state, gd, ctx=NO_DROPS_CONTEXT)
     assert cache[key] is first_entry, "a cache hit must not rebuild the entry"
 
 
@@ -238,9 +238,9 @@ def test_the_memo_key_notices_a_changed_inventory():
     `acquire_steps`, so a changed inventory MUST miss."""
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    build_selectable_grind_candidates("weaponcrafting", state, gd)
+    build_selectable_grind_candidates("weaponcrafting", state, gd, ctx=NO_DROPS_CONTEXT)
     changed = make_state(skills={"weaponcrafting": 3}, inventory={"copper_bar": 6})
-    build_selectable_grind_candidates("weaponcrafting", changed, gd)
+    build_selectable_grind_candidates("weaponcrafting", changed, gd, ctx=NO_DROPS_CONTEXT)
     assert len(_CACHES.cache_for(gd)) == 2
 
 
@@ -249,9 +249,9 @@ def test_the_memo_key_notices_a_changed_skill_level():
     list here would grind a rung that pays nothing."""
     gd = _gd()
     build_selectable_grind_candidates(
-        "weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd)
+        "weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd, ctx=NO_DROPS_CONTEXT)
     build_selectable_grind_candidates(
-        "weaponcrafting", make_state(skills={"weaponcrafting": 9}), gd)
+        "weaponcrafting", make_state(skills={"weaponcrafting": 9}), gd, ctx=NO_DROPS_CONTEXT)
     assert len(_CACHES.cache_for(gd)) == 2
 
 
@@ -285,8 +285,8 @@ def test_each_game_data_gets_its_own_cache():
     `equipment/loadout_cache` is, so two fixtures never serve each other's
     answers."""
     state = make_state(skills={"weaponcrafting": 3})
-    assert (build_selectable_grind_candidates("weaponcrafting", state, _gd())
-            is not build_selectable_grind_candidates("weaponcrafting", state, _gd()))
+    assert (build_selectable_grind_candidates("weaponcrafting", state, _gd(), ctx=NO_DROPS_CONTEXT)
+            is not build_selectable_grind_candidates("weaponcrafting", state, _gd(), ctx=NO_DROPS_CONTEXT))
 
 
 def test_a_recycled_address_never_serves_the_previous_catalogues_candidates():
@@ -300,12 +300,12 @@ def test_a_recycled_address_never_serves_the_previous_catalogues_candidates():
     state = make_state(skills={"weaponcrafting": 3})
     for round_ in range(200):
         full = _gd()
-        assert build_selectable_grind_candidates("weaponcrafting", state, full), (
+        assert build_selectable_grind_candidates("weaponcrafting", state, full, ctx=NO_DROPS_CONTEXT), (
             f"round {round_}: served a freed catalogue's empty list")
         del full
 
         bare = GameData()
-        assert build_selectable_grind_candidates("weaponcrafting", state, bare) == [], (
+        assert build_selectable_grind_candidates("weaponcrafting", state, bare, ctx=NO_DROPS_CONTEXT) == [], (
             f"round {round_}: an empty catalogue was served the full "
             f"catalogue's candidates from a recycled address")
         del bare
@@ -318,7 +318,8 @@ def test_the_cache_is_bounded():
     cache = _CACHES.cache_for(gd)
     for i in range(CACHE_MAX_ENTRIES):
         cache[("filler", i, (), (), (), ())] = []
-    build_selectable_grind_candidates("weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd)
+    build_selectable_grind_candidates("weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd,
+                                      ctx=NO_DROPS_CONTEXT)
     assert len(cache) <= CACHE_MAX_ENTRIES
 
 
@@ -339,12 +340,12 @@ def test_out_of_level_rungs_are_never_priced():
     """
     gd = _gd()
     at_three = {c.code for c in build_selectable_grind_candidates(
-        "weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd)}
+        "weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd, ctx=NO_DROPS_CONTEXT)}
     assert at_three == {"copper_dagger", "wooden_staff"}, at_three
     # Reaching the gate brings the rung back: this is a level test, not a
     # permanent exclusion.
     at_ten = {c.code for c in build_selectable_grind_candidates(
-        "weaponcrafting", make_state(skills={"weaponcrafting": 10}), gd)}
+        "weaponcrafting", make_state(skills={"weaponcrafting": 10}), gd, ctx=NO_DROPS_CONTEXT)}
     assert at_ten == {"copper_dagger", "wooden_staff", "iron_dagger"}, at_ten
 
 
@@ -381,9 +382,9 @@ def test_a_HELD_rung_is_not_free_because_the_grind_must_CRAFT_another():
                       inventory={"copper_dagger": 3})
     none_held = make_state(skills={"weaponcrafting": 3})
     cands = {c.code: c for c in
-             build_selectable_grind_candidates("weaponcrafting", held, gd)}
+             build_selectable_grind_candidates("weaponcrafting", held, gd, ctx=NO_DROPS_CONTEXT)}
     baseline = {c.code: c for c in
-                build_selectable_grind_candidates("weaponcrafting", none_held, gd)}
+                build_selectable_grind_candidates("weaponcrafting", none_held, gd, ctx=NO_DROPS_CONTEXT)}
     assert cands["copper_dagger"].acquire_steps > 0, (
         "a held rung priced at 0 — the grind must CRAFT another, not own one")
     assert cands["copper_dagger"].acquire_steps == baseline["copper_dagger"].acquire_steps, (

@@ -9,13 +9,14 @@ its kernel proofs therefore guarded dead code. Gear priority is decided by the
 progression tree's `gain` on the `pursuit_value` ruler, not by a gap scalar."""
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.equipment.slot_occupancy import defers_to_picker
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
@@ -259,7 +260,11 @@ def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool
 
     A craftable item is no longer asked only through its recipe: a permanent
     vendor for it counts too."""
-    model = ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
+    # A store-less feasibility walk: every drop at its API prior, passed
+    # explicitly (ruling T16b).
+    model = ObtainModel(state, game_data,
+                       replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty()),
+                       datetime.now(UTC))
     return model.feasible(code, 1, NEAR_TERM_POLICY)
 
 
@@ -312,7 +317,11 @@ def is_suppliable(code: str, state: WorldState, game_data: GameData) -> bool:
     supply and its funding loop would be declared dead. (This arm asked the
     state-free `RequirementGraph` plus `is_task_earnable` until step 4 of
     docs/PLAN_decision_architecture_redesign.md.)"""
-    model = ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
+    # A store-less feasibility walk: every drop at its API prior, passed
+    # explicitly (ruling T16b).
+    model = ObtainModel(state, game_data,
+                       replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty()),
+                       datetime.now(UTC))
     if model.mints(code):
         return True
     bank = state.bank_items or {}

@@ -21,10 +21,9 @@ from artifactsmmo_cli.ai.potion_supply import (
     prep_supplies,
     target_potion_pure,
 )
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.thresholds import POTION_GATHER_BATCH, UTILITY_SLOT_MAX_STACK
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 
 def _gd() -> GameData:
@@ -363,22 +362,22 @@ def test_ladder_supplies_is_the_batch_sizing() -> None:
 
 def test_the_prep_supplies_what_the_decomposition_walks() -> None:
     state = make_state(level=10)
-    assert prep_supplies("brew", 3, state, _gd_batch(), NO_PROFILE_CONTEXT)
-    assert not prep_supplies("walled", 1, state, _gd_batch(), NO_PROFILE_CONTEXT)
+    assert prep_supplies("brew", 3, state, _gd_batch(), NO_DROPS_CONTEXT)
+    assert not prep_supplies("walled", 1, state, _gd_batch(), NO_DROPS_CONTEXT)
 
 
 def test_a_potion_is_stockable_held_brewed_or_prepped(monkeypatch) -> None:
     gd = _gd_batch()
-    assert not potion_stockable("walled", make_state(level=10), gd, NO_PROFILE_CONTEXT)
+    assert not potion_stockable("walled", make_state(level=10), gd, NO_DROPS_CONTEXT)
     assert potion_stockable("walled", make_state(level=10, bank_items={"walled": 1}), gd,
-                            NO_PROFILE_CONTEXT)
+                            NO_DROPS_CONTEXT)
     # worn only: the ladder counts bag and bank, the held count the slots too
-    assert potion_stockable("walled", _worn("walled", 3), gd, NO_PROFILE_CONTEXT)
+    assert potion_stockable("walled", _worn("walled", 3), gd, NO_DROPS_CONTEXT)
     assert potion_stockable("brew", make_state(level=10, inventory={"sunflower": 50}), gd,
-                            NO_PROFILE_CONTEXT)
+                            NO_DROPS_CONTEXT)
     monkeypatch.setattr(potion_supply, "ladder_supplies", lambda *a: False)
     monkeypatch.setattr(potion_supply, "prep_supplies", lambda *a: True)
-    assert potion_stockable("walled", make_state(level=10), gd, NO_PROFILE_CONTEXT)
+    assert potion_stockable("walled", make_state(level=10), gd, NO_DROPS_CONTEXT)
 
 
 def test_the_prep_walk_admits_a_grey_the_directive_allows(monkeypatch) -> None:
@@ -401,7 +400,7 @@ def test_the_prep_walk_admits_a_grey_the_directive_allows(monkeypatch) -> None:
     gd._monster_critical_strike.setdefault("slime", 0)
     gd._monster_initiative.setdefault("slime", 0)
     state = make_state(level=30, attack={"fire": 50})
-    assert prep_supplies("slime_brew", 1, state, gd, NO_PROFILE_CONTEXT)
+    assert prep_supplies("slime_brew", 1, state, gd, NO_DROPS_CONTEXT)
     assert "slimeball" in seen
     monkeypatch.setattr(potion_supply, "grey_farm_allowed", lambda *_: False)
-    assert not prep_supplies("slime_brew", 1, state, gd, NO_PROFILE_CONTEXT)
+    assert not prep_supplies("slime_brew", 1, state, gd, NO_DROPS_CONTEXT)

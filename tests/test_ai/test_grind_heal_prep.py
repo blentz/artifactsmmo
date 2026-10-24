@@ -30,9 +30,10 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT
 
 CARRY = food_carry(1)
 """The carry of a food the loadout eats one unit of per fight."""
@@ -72,7 +73,7 @@ def _state(gd: GameData, inventory: dict[str, int],
 def _eats(*food: tuple[str, int], monster: str = "wolf",
           combat_monster: str | None = "wolf") -> SelectionContext:
     """A cycle whose loadout, chosen against `monster`, eats `food` in order."""
-    return replace(NO_PROFILE_CONTEXT, combat_monster=combat_monster,
+    return replace(NO_DROPS_CONTEXT, combat_monster=combat_monster,
                    loadout=ChosenLoadout(monster=monster, potions=(), food=food, made_food=food))
 
 
@@ -117,7 +118,7 @@ class TestHealPrepGoal:
         """Spec §1: Rest beats the food at replacement price (`made_food`
         empty): the banked units are fetched, nothing is cooked."""
         gd = _gd()
-        ctx = replace(NO_PROFILE_CONTEXT, combat_monster="wolf",
+        ctx = replace(NO_DROPS_CONTEXT, combat_monster="wolf",
                       loadout=ChosenLoadout("wolf", (), (("cheese", 1),), ()))
         state = _state(gd, {"milk": CARRY}, bank={"cheese": 5})
         assert _needed(heal_prep_goal(state, gd, ctx, "wolf")) == {"cheese": 5}

@@ -122,7 +122,11 @@ def grind_model(state: WorldState, game_data: GameData) -> ObtainModel:
 
     Context-free on purpose: the candidate list is memoised without a
     `SelectionContext` (see `_cache_key`), so its verdicts must not read one."""
-    return ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
+    # A store-less feasibility walk: every drop at its API prior, passed
+    # explicitly (ruling T16b).
+    return ObtainModel(state, game_data,
+                       replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty()),
+                       datetime.now(UTC))
 
 
 def is_obtainable(code: str, model: ObtainModel) -> bool:

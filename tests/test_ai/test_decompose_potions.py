@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT
 from tests.test_ai.test_craft_potions_plannability import (
     _HEAL,
     _INGREDIENT,
@@ -43,7 +43,7 @@ def _drive(goal, state, gd, actions, cycles: int = 20):
     for _ in range(cycles):
         if goal.is_satisfied(state):
             return state, ran
-        plan = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
+        plan = decompose(goal, state, gd, actions, NO_DROPS_CONTEXT)
         assert plan is not None, f"decomposition declined at {state.inventory}"
         state = _apply_all(plan, state, gd)
         ran.extend(plan)
@@ -70,7 +70,7 @@ def test_held_ingredients_craft_the_whole_batch_in_one_action():
     goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
     equip = goal.batch_equip(state)
     assert equip is not None
-    plan = decompose(goal, state, gd, _actions(gd), NO_PROFILE_CONTEXT)
+    plan = decompose(goal, state, gd, _actions(gd), NO_DROPS_CONTEXT)
     assert plan is not None
     assert [type(a).__name__ for a in plan] == ["CraftAction", "EquipAction"]
     assert plan[-1] == equip
@@ -84,7 +84,7 @@ def test_a_prefix_plan_ends_before_the_equip():
     state = _state(inventory={})
     goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
     actions = [a for a in _actions(gd) if not isinstance(a, CraftAction)]
-    plan = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
+    plan = decompose(goal, state, gd, actions, NO_DROPS_CONTEXT)
     assert plan is not None
     assert [type(a).__name__ for a in plan] == ["GatherAction"]
 
@@ -97,7 +97,7 @@ def test_potions_already_in_the_bag_are_just_equipped():
     assert equip is not None
     stocked = replace(state, inventory={**state.inventory, _HEAL: equip.quantity})
 
-    plan = decompose(goal, stocked, gd, _actions(gd), NO_PROFILE_CONTEXT)
+    plan = decompose(goal, stocked, gd, _actions(gd), NO_DROPS_CONTEXT)
 
     assert plan == [equip]
     assert goal.is_satisfied(_apply_all(plan, stocked, gd))
@@ -108,7 +108,7 @@ def test_missing_ingredients_are_gathered_first():
     state = _state(inventory={})
     goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
 
-    plan = decompose(goal, state, gd, _actions(gd), NO_PROFILE_CONTEXT)
+    plan = decompose(goal, state, gd, _actions(gd), NO_DROPS_CONTEXT)
 
     assert plan is not None
     assert isinstance(plan[0], GatherAction)
@@ -124,13 +124,13 @@ def test_a_landed_batch_is_not_decomposed():
 
     assert goal.batch_equip(done) is None
     assert goal.batch_obtain(done) is None
-    assert decompose(goal, done, gd, _actions(gd), NO_PROFILE_CONTEXT) is None
+    assert decompose(goal, done, gd, _actions(gd), NO_DROPS_CONTEXT) is None
 
 
 def test_an_unseeded_goal_is_left_to_the_search():
     gd = _gd(with_boost=False, monster_level=18)
     assert decompose(CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd), _state(), gd, _actions(gd),
-                     NO_PROFILE_CONTEXT) is None
+                     NO_DROPS_CONTEXT) is None
 
 
 def test_a_batch_that_would_fight_is_left_to_the_search(monkeypatch):
@@ -151,17 +151,17 @@ def test_a_batch_that_would_fight_is_left_to_the_search(monkeypatch):
                                learned_drops=LearnedDrops.empty()))
     obtain = goal.batch_obtain(state)
     assert obtain is not None
-    legs = decompose(obtain, state, gd, actions, NO_PROFILE_CONTEXT)
+    legs = decompose(obtain, state, gd, actions, NO_DROPS_CONTEXT)
     assert legs is not None and isinstance(legs[0], FightAction), "fixture: the batch really opens with a fight"
 
-    assert decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT) is None
+    assert decompose(goal, state, gd, actions, NO_DROPS_CONTEXT) is None
 
 
 def test_the_gather_the_plan_opens_with_is_the_ingredients():
     gd = _gd(with_boost=False, monster_level=18)
     state = _state(inventory={})
     goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
-    plan = decompose(goal, state, gd, _actions(gd), NO_PROFILE_CONTEXT)
+    plan = decompose(goal, state, gd, _actions(gd), NO_DROPS_CONTEXT)
     assert plan is not None
     assert plan[0].resource_code == _RESOURCE
 
@@ -174,7 +174,7 @@ def test_decline_reasons_are_named(monkeypatch):
 
     done, _ran = _drive(goal, state, gd, _actions(gd))
     declined: list[str] = []
-    assert decompose(goal, done, gd, _actions(gd), NO_PROFILE_CONTEXT, declined) is None
+    assert decompose(goal, done, gd, _actions(gd), NO_DROPS_CONTEXT, declined) is None
     assert declined == ["potion:no_batch"]
 
     equip = goal.batch_equip(state)
@@ -182,7 +182,7 @@ def test_decline_reasons_are_named(monkeypatch):
     stocked = replace(state, inventory={**state.inventory, _HEAL: equip.quantity})
     declined = []
     monkeypatch.setattr(EquipAction, "is_applicable", lambda *_a: False)
-    assert decompose(goal, stocked, gd, _actions(gd), NO_PROFILE_CONTEXT, declined) is None
+    assert decompose(goal, stocked, gd, _actions(gd), NO_DROPS_CONTEXT, declined) is None
     assert declined == [f"potion:equip_inapplicable:{equip!r}"]
 
 
@@ -201,7 +201,7 @@ def test_a_drop_only_ingredient_is_off_the_ladder(monkeypatch):
     actions.append(FightAction(monster_code="biting_slime", locations=frozenset({(1, 0)}),
                                learned_drops=LearnedDrops.empty()))
     declined: list[str] = []
-    assert decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT, declined) is None
+    assert decompose(goal, state, gd, actions, NO_DROPS_CONTEXT, declined) is None
     assert declined == [f"infeasible:{_HEAL}:no_route:{_INGREDIENT}"]
 
 
@@ -215,5 +215,5 @@ def test_an_undecomposable_batch_reports_the_inner_reason(monkeypatch):
     state = _state(inventory={})
     goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
     declined: list[str] = []
-    assert decompose(goal, state, gd, _actions(gd), NO_PROFILE_CONTEXT, declined) is None
+    assert decompose(goal, state, gd, _actions(gd), NO_DROPS_CONTEXT, declined) is None
     assert declined == [f"infeasible:{_HEAL}:no_route:{_INGREDIENT}"]

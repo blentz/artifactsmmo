@@ -6,7 +6,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.plan_tree import build_plan_tree, root_detail
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 
 def _gd() -> GameData:
@@ -44,7 +44,7 @@ def test_chosen_expands_materials():
     state = make_state(skills={"jewelrycrafting": 1}, equipment={"amulet_slot": None})
     chosen = ObtainItem("life_amulet")
     step = ObtainItem("golden_ring", 1)
-    tree = build_plan_tree(_decision(chosen, step, [_rs(chosen, 2)]), state, gd, None)
+    tree = build_plan_tree(_decision(chosen, step, [_rs(chosen, 2)]), state, gd, None, ctx=NO_DROPS_CONTEXT)
 
     assert len(tree) == 1                      # only the chosen root (no other ranked roots)
     root = tree[0]
@@ -61,7 +61,7 @@ def test_chosen_node_shows_its_resolution_reason():
     gd = _gd()
     state = make_state(skills={"jewelrycrafting": 1}, equipment={"amulet_slot": None})
     chosen = ObtainItem("life_amulet")
-    tree = build_plan_tree(_decision(chosen, chosen, [_rs(chosen, 2)]), state, gd, None)
+    tree = build_plan_tree(_decision(chosen, chosen, [_rs(chosen, 2)]), state, gd, None, ctx=NO_DROPS_CONTEXT)
     assert tree[0].detail == "gear"
 
 
@@ -72,7 +72,7 @@ def test_chosen_node_no_detail_when_absent_from_ranking():
     state = make_state(skills={"jewelrycrafting": 1}, equipment={"amulet_slot": None})
     chosen = ObtainItem("life_amulet")
     other = ObtainItem("copper_boots")
-    tree = build_plan_tree(_decision(chosen, chosen, [_rs(other, 2)]), state, gd, None)
+    tree = build_plan_tree(_decision(chosen, chosen, [_rs(other, 2)]), state, gd, None, ctx=NO_DROPS_CONTEXT)
     assert tree[0].detail == ""
 
 
@@ -82,7 +82,7 @@ def test_current_step_gets_synthetic_serve_child():
     chosen = ObtainItem("life_amulet")
     step = ObtainItem("golden_ring", 1)
     tree = build_plan_tree(_decision(chosen, step, [_rs(chosen, 2)]), state, gd,
-                           "LevelSkill: craft copper_ring")
+                           "LevelSkill: craft copper_ring", ctx=NO_DROPS_CONTEXT)
     ring = next(c for c in tree[0].children if c.label == "golden_ring")
     steps = [c for c in ring.children if c.kind == "step"]
     assert len(steps) == 1
@@ -96,7 +96,7 @@ def test_serve_child_is_a_leaf():
     chosen = ObtainItem("life_amulet")
     step = ObtainItem("golden_ring", 1)
     tree = build_plan_tree(_decision(chosen, step, [_rs(chosen, 2)]), state, gd,
-                           "UpgradeEquipment: LevelSkill(woodcutting)")
+                           "UpgradeEquipment: LevelSkill(woodcutting)", ctx=NO_DROPS_CONTEXT)
     ring = next(c for c in tree[0].children if c.label == "golden_ring")
     serve = next(c for c in ring.children if c.kind == "step")
     assert serve.children == ()
@@ -107,7 +107,7 @@ def test_no_serve_child_when_serve_step_none():
     state = make_state(skills={"jewelrycrafting": 1})
     chosen = ObtainItem("life_amulet")
     step = ObtainItem("golden_ring", 1)
-    tree = build_plan_tree(_decision(chosen, step, [_rs(chosen, 2)]), state, gd, None)
+    tree = build_plan_tree(_decision(chosen, step, [_rs(chosen, 2)]), state, gd, None, ctx=NO_DROPS_CONTEXT)
     ring = next(c for c in tree[0].children if c.label == "golden_ring")
     assert [c for c in ring.children if c.kind == "step"] == []
 
@@ -116,7 +116,7 @@ def test_recurses_material_subtree_to_raw_leaf():
     gd = _gd()
     state = make_state(skills={"jewelrycrafting": 1})
     chosen = ObtainItem("life_amulet")
-    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 2)]), state, gd, None)
+    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 2)]), state, gd, None, ctx=NO_DROPS_CONTEXT)
     ring = next(c for c in tree[0].children if c.label == "golden_ring")
     topaz = next(c for c in ring.children if c.label == "topaz ×4")
     assert topaz.children == ()                                           # raw resource → leaf
@@ -127,7 +127,7 @@ def test_met_material_marked_met():
     # topaz owned enough at the amulet level: 2 needed, hold 2 -> met leaf
     state = make_state(skills={"jewelrycrafting": 1}, inventory={"topaz": 2})
     chosen = ObtainItem("life_amulet")
-    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 2)]), state, gd, None)
+    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 2)]), state, gd, None, ctx=NO_DROPS_CONTEXT)
     topaz = next(c for c in tree[0].children if c.label == "topaz ×2")
     assert topaz.status == "met"
 
@@ -138,7 +138,7 @@ def test_non_chosen_roots_are_leaf_stubs():
     chosen = ObtainItem("life_amulet")
     other = ObtainItem("golden_ring")
     ranking = [_rs(chosen, 2, "gear"), _rs(other, 1, "gear")]
-    tree = build_plan_tree(_decision(chosen, None, ranking), state, gd, None)
+    tree = build_plan_tree(_decision(chosen, None, ranking), state, gd, None, ctx=NO_DROPS_CONTEXT)
     assert len(tree) == 2
     stub = tree[1]
     assert stub.kind == "root_stub" and stub.children == ()
@@ -147,7 +147,7 @@ def test_non_chosen_roots_are_leaf_stubs():
 
 def test_chosen_root_none_returns_empty():
     gd = _gd()
-    tree = build_plan_tree(_decision(None, None, []), make_state(), gd, None)
+    tree = build_plan_tree(_decision(None, None, []), make_state(), gd, None, ctx=NO_DROPS_CONTEXT)
     assert tree == ()
 
 
@@ -158,7 +158,7 @@ def test_cycle_and_depth_bounded():
     gd._item_stats = {"loop_item": ItemStats(code="loop_item", level=1, type_="resource")}
     state = make_state()
     chosen = ObtainItem("loop_item")
-    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 1)]), state, gd, None)
+    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 1)]), state, gd, None, ctx=NO_DROPS_CONTEXT)
     # terminates; the repeated node becomes a leaf via the visited-set
     assert tree[0].label == "loop_item"
 
@@ -173,7 +173,7 @@ def test_reach_char_level_root_labelled_and_leaf():
     gd._resource_drops = {}
     gd._resource_skill = {}
     chosen = ReachCharLevel(5)
-    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 1)]), make_state(), gd, None)
+    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 1)]), make_state(), gd, None, ctx=NO_DROPS_CONTEXT)
     assert tree[0].label == "character → 5" and tree[0].kind == "charlevel"
     assert tree[0].children == ()
 
@@ -187,7 +187,7 @@ def test_reach_skill_level_root_labelled_and_leaf():
     # the node is a leaf.
     gd = _gd()
     chosen = ReachSkillLevel("weaponcrafting", 11)
-    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 1)]), make_state(), gd, None)
+    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 1)]), make_state(), gd, None, ctx=NO_DROPS_CONTEXT)
     assert tree[0].label == "weaponcrafting → 11" and tree[0].kind == "skill"
     assert tree[0].children == ()
 
@@ -201,7 +201,7 @@ class _UnknownGoal:
 def test_unknown_metagoal_falls_back_to_short_root_label():
     gd = _gd()
     dummy = _UnknownGoal()
-    tree = build_plan_tree(_decision(dummy, None, [_rs(dummy, 1)]), make_state(), gd, None)
+    tree = build_plan_tree(_decision(dummy, None, [_rs(dummy, 1)]), make_state(), gd, None, ctx=NO_DROPS_CONTEXT)
     assert tree[0].kind == "obtain"        # fallback branch
     assert tree[0].children == ()          # prerequisites(unknown) -> []
 
@@ -215,7 +215,7 @@ def _supplying_tree(**kwargs):
     state = make_state(skills={"jewelrycrafting": 1}, equipment={"amulet_slot": None})
     chosen = ObtainItem("life_amulet")
     return build_plan_tree(_decision(chosen, chosen, [_rs(chosen, 2)]), state, gd, None,
-                           **kwargs)
+                           **kwargs, ctx=NO_DROPS_CONTEXT)
 
 
 def test_chosen_root_is_annotated_with_the_held_role():
@@ -244,7 +244,7 @@ def test_the_role_annotates_a_root_that_is_absent_from_the_ranking():
     chosen = ObtainItem("life_amulet")
     other = ObtainItem("copper_boots")
     tree = build_plan_tree(_decision(chosen, chosen, [_rs(other, 2)]), state, gd, None,
-                           role="logger")
+                           role="logger", ctx=NO_DROPS_CONTEXT)
     assert tree[0].detail == "[logger]"
 
 

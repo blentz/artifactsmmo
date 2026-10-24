@@ -60,7 +60,6 @@ from artifactsmmo_cli.ai.obtain_item_routing import (
     _recipe_has_combat_drop_input,
 )
 from artifactsmmo_cli.ai.planner import GOAPPlanner, PlanStats
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import (
     LEVEL_LOOKAHEAD,
     StrategyArbiter,
@@ -84,7 +83,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 
 def _gd():
@@ -359,7 +358,7 @@ def test_equippable_goal_deep_chain_routes_to_flat_leaf_again():
     gd = _deep_chain_gd()
     gd._workshop_locations = {"gearcrafting": (0, 0)}
     state = make_state(level=2, inventory={}, bank_items={})
-    goal = _equippable_goal("steel_boots", "boots_slot", state, gd)
+    goal = _equippable_goal("steel_boots", "boots_slot", state, gd, ctx=NO_DROPS_CONTEXT)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal._target_item == "iron_ore"
     assert goal._needed == {"iron_ore": 10}
@@ -383,7 +382,7 @@ def test_equippable_goal_deep_chain_partial_credit_routes_to_the_next_leaf():
     gd = _deep_chain_gd()
     gd._workshop_locations = {"gearcrafting": (0, 0)}
     state = make_state(level=2, inventory={}, bank_items={"iron_ore": 10})
-    goal = _equippable_goal("steel_boots", "boots_slot", state, gd)
+    goal = _equippable_goal("steel_boots", "boots_slot", state, gd, ctx=NO_DROPS_CONTEXT)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal._target_item == "iron_bar"
     assert goal._needed == {"iron_bar": 8}
@@ -453,7 +452,7 @@ def test_equippable_goal_root_by_name_falls_through_to_upgrade():
     own reachable-root goal on that signal."""
     gd = _wooden_staff_gd()
     state = make_state(level=1, inventory={}, bank_items={})
-    goal = _equippable_goal("wooden_staff", "weapon_slot", state, gd)
+    goal = _equippable_goal("wooden_staff", "weapon_slot", state, gd, ctx=NO_DROPS_CONTEXT)
     assert isinstance(goal, UpgradeEquipmentGoal)
     assert repr(goal) == "UpgradeEquipment(wooden_staff->weapon_slot)"
 
@@ -508,7 +507,7 @@ def test_gather_helper_falls_back_to_direct_recipe_without_deeper_step():
     gd._resource_drops = {"tree": "plank"}
     gd._resource_locations = {"tree": [(1, 0)]}
     state = make_state(inventory={}, bank_items={})
-    goal = _gather_goal_for_unreachable_equippable("plank", state, gd, 15)
+    goal = _gather_goal_for_unreachable_equippable("plank", state, gd, 15, ctx=NO_DROPS_CONTEXT)
     assert isinstance(goal, GatherMaterialsGoal)
     # Empty recipe -> needed is the (empty) direct recipe fallback.
     assert goal._target_item == "plank"
@@ -547,7 +546,7 @@ def test_bank_stock_is_credited_before_the_depth_budget_is_judged():
     empty_bank = make_state(inventory={}, bank_items={})
     # 48 raw ore > the 15 budget: the root IS depth-unreachable, so the helper
     # routes to the deepest actionable step (the raw leaf).
-    unbanked = _gather_goal_for_unreachable_equippable("boots", empty_bank, gd, 15)
+    unbanked = _gather_goal_for_unreachable_equippable("boots", empty_bank, gd, 15, ctx=NO_DROPS_CONTEXT)
     assert unbanked is not None
     assert unbanked._target_item == "ore"
     # 40 of those 48 already banked leaves 8 to gather, inside the budget, so the
@@ -555,7 +554,7 @@ def test_bank_stock_is_credited_before_the_depth_budget_is_judged():
     # than wrapping the root in GatherMaterials. This differs from the line
     # above ONLY by the bank merge.
     banked = dataclasses.replace(empty_bank, bank_items={"ore": 40})
-    routed = _gather_goal_for_unreachable_equippable("boots", banked, gd, 15)
+    routed = _gather_goal_for_unreachable_equippable("boots", banked, gd, 15, ctx=NO_DROPS_CONTEXT)
     assert routed is None
 
 
@@ -628,9 +627,9 @@ def test_equippable_passive_currency_skips_dedicated_grind():
     drop (live 2026-10-13). This is the live event_ticket / lich_race_medal fix."""
     gd = _passive_currency_gd()
     state = make_state(inventory={"ticket": 7}, bank_items={})
-    assert _equippable_goal("medal", "artifact1_slot", state, gd) is None
+    assert _equippable_goal("medal", "artifact1_slot", state, gd, ctx=NO_DROPS_CONTEXT) is None
     paid = make_state(inventory={"ticket": 7}, bank_items={"ticket": 93})
-    goal = _equippable_goal("medal", "artifact1_slot", paid, gd)
+    goal = _equippable_goal("medal", "artifact1_slot", paid, gd, ctx=NO_DROPS_CONTEXT)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal._target_item == "medal"      # the buy, NOT a "ticket" grind
 
@@ -641,7 +640,7 @@ def test_equippable_non_passive_currency_still_grinds():
     gd = _passive_currency_gd()
     gd._monster_drops = {"m0": [("ticket", 50, 1, 1)]}   # 1/12 < half -> not passive
     state = make_state(inventory={"ticket": 7}, bank_items={})
-    goal = _equippable_goal("medal", "artifact1_slot", state, gd)
+    goal = _equippable_goal("medal", "artifact1_slot", state, gd, ctx=NO_DROPS_CONTEXT)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal._target_item == "ticket"     # currency grind fires
 
@@ -1733,7 +1732,7 @@ def test_objective_step_equippable_dead_ends_admit_the_root_cheaply():
     # Since Phase 2e a committed upgrade is the walk's; with no action to map
     # its legs onto it declines at once, a named answer rather than a search.
     declined: list[str] = []
-    assert sd.decompose(goal, state, gd, [], NO_PROFILE_CONTEXT, declined) is None
+    assert sd.decompose(goal, state, gd, [], NO_DROPS_CONTEXT, declined) is None
     assert declined and not sd.hands_off_to_search(declined), declined
 
 

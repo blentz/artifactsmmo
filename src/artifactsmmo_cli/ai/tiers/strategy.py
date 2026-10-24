@@ -2,11 +2,12 @@
 actionable subgoal. `decide` delegates to `progression_tree.decide_tree`
 (Phase 4b THE FLIP); the flat scalar ranking pipeline is deleted."""
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
@@ -152,7 +153,11 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
     cycles; 2026-07-06), and gold is earned by any winnable fight that pays it."""
     if game_data.crafting_recipe(code) is not None:
         return True
-    model = ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
+    # A store-less feasibility walk: every drop at its API prior, passed
+    # explicitly (ruling T16b).
+    model = ObtainModel(state, game_data,
+                       replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty()),
+                       datetime.now(UTC))
     return model.feasible(code, 1, PIECE_POLICY)
 
 

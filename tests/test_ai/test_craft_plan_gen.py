@@ -43,11 +43,10 @@ from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.route import Route
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkGraph
 from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
 
 # ---------------------------------------------------------------------------
@@ -1726,7 +1725,7 @@ class TestSecondaryDropGather:
             CraftAction(code="pearl_ring", workshop_location=(3, 1)),
         ]
 
-        result = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
+        result = decompose(goal, state, gd, actions, NO_DROPS_CONTEXT)
 
         assert result is not None
         first = result[0]
@@ -1922,7 +1921,7 @@ class TestDecomposeSupply:
         monkeypatch.setattr(cpg, "_walk_plan", walk)
         goal = SupplyBankGoal("cooked_rat_meat", 10, 20)
         state = make_state(bank_items={"cooked_rat_meat": 6, "raw_rat_meat": 2})
-        plan = cpg.decompose(goal, state, self._gd(), [], NO_PROFILE_CONTEXT, [])
+        plan = cpg.decompose(goal, state, self._gd(), [], NO_DROPS_CONTEXT, [])
         assert plan is not None and [type(a).__name__ for a in plan] == ["_Lands", "DepositItemAction"]
         assert (plan[1].code, plan[1].quantity) == ("cooked_rat_meat", 4)
         # asked against the bank minus the target's own copies, no sub-grinds
@@ -1932,7 +1931,7 @@ class TestDecomposeSupply:
     def test_no_deposit_into_an_inaccessible_bank(self, monkeypatch) -> None:
         monkeypatch.setattr(cpg, "_walk_plan", lambda *a: [_Lands("cooked_rat_meat", 4)])
         goal = SupplyBankGoal("cooked_rat_meat", 10, 20)
-        gated = dataclasses.replace(NO_PROFILE_CONTEXT, bank_accessible=False)
+        gated = dataclasses.replace(NO_DROPS_CONTEXT, bank_accessible=False)
         plan = cpg.decompose(goal, make_state(bank_items={"cooked_rat_meat": 6}), self._gd(), [],
                              gated, [])
         assert plan is not None and [type(a).__name__ for a in plan] == ["_Lands"]
@@ -1940,22 +1939,22 @@ class TestDecomposeSupply:
     def test_legs_alone_while_they_have_not_landed_the_batch(self, monkeypatch) -> None:
         monkeypatch.setattr(cpg, "_walk_plan", lambda *a: [_Lands("cooked_rat_meat", 1)])
         goal = SupplyBankGoal("cooked_rat_meat", 10, 20)
-        plan = cpg.decompose(goal, make_state(bank_items={}), self._gd(), [], NO_PROFILE_CONTEXT, [])
+        plan = cpg.decompose(goal, make_state(bank_items={}), self._gd(), [], NO_DROPS_CONTEXT, [])
         assert plan is not None and [type(a).__name__ for a in plan] == ["_Lands"]
 
     def test_declines(self, monkeypatch) -> None:
         goal = SupplyBankGoal("cooked_rat_meat", 10, 20)
         declined: list[str] = []
         assert cpg.decompose(goal, make_state(bank_items={"cooked_rat_meat": 10}), self._gd(),
-                             [], NO_PROFILE_CONTEXT, declined) is None
+                             [], NO_DROPS_CONTEXT, declined) is None
         assert declined == ["satisfied"]
         declined = []
         assert cpg.decompose(goal, make_state(bank_items={}), GameData(), [],
-                             NO_PROFILE_CONTEXT, declined) is None
+                             NO_DROPS_CONTEXT, declined) is None
         assert declined == ["supply:no_bank"]
         monkeypatch.setattr(cpg, "_walk_plan", lambda *a: None)
         assert cpg.decompose(goal, make_state(bank_items={}), self._gd(), [],
-                             NO_PROFILE_CONTEXT, []) is None
+                             NO_DROPS_CONTEXT, []) is None
 
 
 class _Lands(Action):
@@ -2063,7 +2062,7 @@ class TestBridgeRegions:
         gd._bank_capacity = 100
         plan = cpg.decompose(SupplyBankGoal("cooked_rat_meat", 10, 20),
                              make_state(layer="overworld", bank_items={}), gd,
-                             [_Edge("overworld", "interior")], NO_PROFILE_CONTEXT, [])
+                             [_Edge("overworld", "interior")], NO_DROPS_CONTEXT, [])
         assert plan is not None and [repr(a) for a in plan] == ["Edge(overworld->interior)",
                                                                  "Fight(rat)"]
 
@@ -2096,7 +2095,7 @@ class TestBridgeRegions:
         declined: list[str] = []
         assert cpg.decompose(SupplyBankGoal("cooked_rat_meat", 10, 20),
                              make_state(layer="overworld", bank_items={}), gd, [],
-                             NO_PROFILE_CONTEXT, declined) is None
+                             NO_DROPS_CONTEXT, declined) is None
         assert declined == ["region:overworld->interior:Fight(rat)"]
 
 

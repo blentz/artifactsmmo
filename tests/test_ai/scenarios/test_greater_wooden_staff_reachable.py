@@ -58,7 +58,7 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT, make_state
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 """The REAL 321-recipe catalog, same loader every other scenario uses. A
@@ -182,7 +182,7 @@ def test_from_scratch_routes_to_the_achievable_step_not_the_equippable():
     the real planner over the real 321-recipe action pool."""
     gd, state = _game_data(), _state_without_banked_planks()
     goal = obtain_item_routing._equippable_goal(
-        "greater_wooden_staff", "weapon_slot", state, gd)
+        "greater_wooden_staff", "weapon_slot", state, gd, ctx=NO_DROPS_CONTEXT)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal._target_item == "spruce_wood"
     assert goal.needed == {"spruce_wood": 10}
@@ -202,7 +202,7 @@ def test_banked_materials_still_route_to_the_craft():
     the file already has it under that name."""
     gd, state = _game_data(), _bank_covered_state()
     goal = obtain_item_routing._equippable_goal(
-        "greater_wooden_staff", "weapon_slot", state, gd)
+        "greater_wooden_staff", "weapon_slot", state, gd, ctx=NO_DROPS_CONTEXT)
     assert isinstance(goal, UpgradeEquipmentGoal)
 
 
@@ -219,5 +219,5 @@ def test_the_traversal_runs_once_per_decision(monkeypatch):
     monkeypatch.setattr(obtain_item_routing, "actionable_step", counting)
     gd, state = _game_data(), _state_without_banked_planks()
     obtain_item_routing._equippable_goal(
-        "greater_wooden_staff", "weapon_slot", state, gd)
+        "greater_wooden_staff", "weapon_slot", state, gd, ctx=NO_DROPS_CONTEXT)
     assert len(calls) == 1, f"actionable_step ran {len(calls)} times"
