@@ -38,6 +38,7 @@ from artifactsmmo_cli.ai.fight_room_license import license_fights, refused_fight
 from artifactsmmo_cli.ai.fight_tiles import fight_tiles
 from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY, supply_due, turn_in_due
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_demand import gathering_skills, root_seed
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -116,7 +117,6 @@ from artifactsmmo_cli.ai.tiers.objective_needs import (
     link_demand,
     objective_needs,
 )
-from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.taskmaster_choice import choose_taskmaster
 from artifactsmmo_cli.ai.utility_slot import already_provisioned
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -688,17 +688,15 @@ def _turn_in_goal(state: WorldState, ctx: SelectionContext) -> Goal | None:
 
 def chosen_root_closure(chosen_root: MetaGoal | None, state: WorldState,
                         game_data: GameData, ctx: SelectionContext) -> frozenset[str]:
-    """Every item the chosen root's walk needs. An `ObtainItem` names its own
-    item; a `ReachSkillLevel` names none, so it is seeded with the item the
-    character would craft for that rung (`skill_grind_target`). A root with
-    neither has no item, and its closure is empty."""
-    seed: str | None
-    if isinstance(chosen_root, ObtainItem):
-        seed = chosen_root.code
-    elif isinstance(chosen_root, ReachSkillLevel):
-        seed = skill_grind_target(chosen_root.skill, state, game_data, ctx=ctx)
-    else:
-        seed = None
+    """Every item the chosen root's walk needs, from the SAME seed
+    `gather_demand` uses (`root_seed`): an `ObtainItem` names its own item, a
+    gear-skill `ReachSkillLevel` the item the character would craft for that
+    rung. A root with no seed (none chosen, a gathering-skill climb whose XP
+    comes from gathering, a level or task root) needs no item, so its closure
+    is empty."""
+    if chosen_root is None:
+        return frozenset()
+    seed = root_seed(chosen_root, state, game_data, ctx, gathering_skills(game_data))
     if seed is None:
         return frozenset()
     return requirement_closure(game_data.requirement_graph.graph(), [seed])

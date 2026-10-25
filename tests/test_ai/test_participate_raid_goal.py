@@ -32,7 +32,7 @@ from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter, chosen_root_closure, raid_may_fight
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachSkillLevel
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 
 _RAID = "enchanted_fairy"
 _BOSS = "pixie"
@@ -265,23 +265,63 @@ def test_a_root_with_no_item_has_an_empty_closure():
     assert chosen_root_closure(None, _survivable_state(), gd, NO_PROFILE_CONTEXT) == frozenset()
 
 
-def test_a_skill_root_is_seeded_with_its_grind_target(monkeypatch):
+def _grind_gd() -> GameData:
+    """The `test_gather_demand._gd` shape: `iron_gloves` is a level-1
+    gearcrafting recipe over iron_bar -> iron_ore, so a gearcrafting@1
+    character's grind target is `iron_gloves`; `iron_nails` is the in-level
+    mining recipe a mining climb would seed with, were it not a gathering skill."""
+    gd = _raid_gd(tiles=True, hurts=False)
+    gd._item_stats.update({
+        "iron_gloves": ItemStats(code="iron_gloves", level=1, type_="gloves",
+                                 crafting_skill="gearcrafting", crafting_level=1),
+        "iron_bar": ItemStats(code="iron_bar", level=10, type_="resource",
+                              crafting_skill="mining", crafting_level=10),
+        "iron_ore": ItemStats(code="iron_ore", level=10, type_="resource"),
+        "iron_nails": ItemStats(code="iron_nails", level=1, type_="resource",
+                                crafting_skill="mining", crafting_level=1),
+    })
+    gd._crafting_recipes = {"iron_gloves": {"iron_bar": 1}, "iron_bar": {"iron_ore": 10},
+                            "iron_nails": {"iron_ore": 1}}
+    gd._resource_drops_full = {"iron_rocks": [("iron_ore", 100, 1, 1)]}
+    gd._resource_skill = {"iron_rocks": ("mining", 10)}
+    gd.world.workshop_locations = {"mining": (0, 0), "gearcrafting": (0, 1)}
+    gd.recipes_catalog.locations = {"iron_rocks": [(1, 0)]}
+    return gd
+
+
+def test_a_skill_root_is_seeded_with_its_grind_target():
     """A `ReachSkillLevel` names no item; its closure is that of the item the
-    character would craft for the rung, and a skill with no target has none."""
-    gd = _piece_gd({"boss_blade_shard": 2})
-    state = _survivable_state()
-    root = ReachSkillLevel("gearcrafting", 5)
-    seen = []
+    character would craft for the rung, and a boss dropping a material of it
+    is the route."""
+    gd = _grind_gd()
+    gd._monster_drops = {_BOSS: [("iron_ore", 10, 1, 1)]}
+    state = make_state(level=48, hp=1000, max_hp=1000, attack={"air": 50},
+                       skills={"mining": 1, "gearcrafting": 1}, raids=[_raid_info()])
+    root = ReachSkillLevel("gearcrafting", 10)
+    ctx = replace(TIMED_NO_PROFILE_CONTEXT, gear_objective=_MISSING)
+    assert chosen_root_closure(root, state, gd, ctx) == {
+        "iron_gloves", "iron_bar", "iron_ore"}
+    out = StrategyArbiter._raid_candidates(
+        StrategyArbiter.__new__(StrategyArbiter), state, gd, ctx, root)
+    assert [repr(g) for g in out] == [f"ParticipateRaid({_RAID})"]
 
-    def target(skill, st, data, ctx):
-        seen.append((skill, st, data, ctx))
-        return "boss_shield"
 
-    monkeypatch.setattr("artifactsmmo_cli.ai.strategy_driver.skill_grind_target",
-                        lambda skill, st, data, ctx: target(skill, st, data, ctx))
-    ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_MISSING)
-    assert chosen_root_closure(root, state, gd, ctx) == {"boss_shield", "boss_blade_shard"}
-    assert seen == [("gearcrafting", state, gd, ctx)]
-    monkeypatch.setattr("artifactsmmo_cli.ai.strategy_driver.skill_grind_target",
-                        lambda skill, st, data, ctx: None)
+def test_a_gathering_skill_root_has_an_empty_closure():
+    """A mining climb's XP comes from gathering, so no craft feeds it and a
+    boss dropping the mining grind target's materials is no route."""
+    gd = _grind_gd()
+    gd._monster_drops = {_BOSS: [("iron_ore", 10, 1, 1)]}
+    state = make_state(level=48, hp=1000, max_hp=1000, attack={"air": 50},
+                       skills={"mining": 1, "gearcrafting": 1}, raids=[_raid_info()])
+    root = ReachSkillLevel("mining", 2)
+    ctx = replace(TIMED_NO_PROFILE_CONTEXT, gear_objective=_MISSING)
     assert chosen_root_closure(root, state, gd, ctx) == frozenset()
+    assert StrategyArbiter._raid_candidates(
+        StrategyArbiter.__new__(StrategyArbiter), state, gd, ctx, root) == []
+
+
+def test_a_skill_root_with_no_grind_target_has_an_empty_closure():
+    gd = _raid_gd(tiles=True, hurts=False)
+    state = make_state(level=48, skills={"gearcrafting": 1})
+    ctx = replace(TIMED_NO_PROFILE_CONTEXT, gear_objective=_MISSING)
+    assert chosen_root_closure(ReachSkillLevel("gearcrafting", 5), state, gd, ctx) == frozenset()

@@ -14,7 +14,7 @@ def _gd() -> GameData:
 
     `iron_nails` is a SECOND mining craft, in-level at mining@1 (unlike
     `iron_bar`, which is craft_level=10 and so out of level for a mining@1
-    character). Its purpose is entirely for `_seed`'s recursion guard: without
+    character). Its purpose is entirely for `root_seed`'s recursion guard: without
     it, `skill_grind_target("mining", state{mining: 1}, gd, ctx=TIMED_NO_PROFILE_CONTEXT)` has no in-level
     mining recipe to select at all and returns `None` regardless of whether the
     guard runs, which is exactly what let the guard's own test pass with the

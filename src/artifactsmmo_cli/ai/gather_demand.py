@@ -32,7 +32,7 @@ def gathering_skills(game_data: GameData) -> frozenset[str]:
     return frozenset(skill for skill, _level in graph.gather_skill.values())
 
 
-def _seed(root: MetaGoal, state: WorldState, game_data: GameData,
+def root_seed(root: MetaGoal, state: WorldState, game_data: GameData,
           ctx: SelectionContext, gathering: frozenset[str]) -> str | None:
     """The item code whose requirements stand in for `root`.
 
@@ -41,6 +41,10 @@ def _seed(root: MetaGoal, state: WorldState, game_data: GameData,
     supply link — and is seeded with the item the character would craft for that
     rung. A root for a GATHERING skill is not seeded: letting it name its own
     grind target would let the root manufacture the demand that admits it.
+
+    Public because the raid gate (`strategy_driver.chosen_root_closure`) asks
+    the same question — which item stands in for this root — and a second
+    copy would drift from this one.
     """
     if isinstance(root, ObtainItem):
         return root.code
@@ -60,7 +64,7 @@ def gather_demand(roots: Sequence[MetaGoal], state: WorldState,
     gathering = gathering_skills(game_data)
     demand: dict[str, int] = {}
     for root in roots:
-        seed = _seed(root, state, game_data, ctx, gathering)
+        seed = root_seed(root, state, game_data, ctx, gathering)
         if seed is None:
             continue
         for item in requirement_closure(graph, [seed]):
