@@ -1598,3 +1598,10 @@ open Formal.PriorityBand
 #check @Formal.DropChance.chance_le_one                -- the chance never exceeds 1
 #check @Formal.DropChance.units_le_mean                -- an attempt yields at most the mean quantity
 #check @Formal.DropChance.fitK_nonneg                  -- the fitted k is never negative
+-- FleetClimb (spec 2026-10-18 §2.5 — the fleet's shared skill climb,
+-- `ai/fleet_climb_core.py`):
+#check @Formal.FleetClimb.amortized_le_remaining       -- a unit's share never exceeds the whole climb
+#check @Formal.FleetClimb.amortized_antitone_in_units  -- more units never raise a unit's share
+#check @Formal.FleetClimb.climber_minimal              -- no candidate has a strictly smaller (remaining, committed)
+#check @Formal.FleetClimb.pick_mem                     -- the climber is a candidate
+#check @Formal.FleetClimb.pick_first                   -- every candidate ahead of the climber has a larger key

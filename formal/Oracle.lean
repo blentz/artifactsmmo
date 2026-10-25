@@ -8,6 +8,7 @@ import Formal.PotionBaseline
 import Formal.MaxBatchFromHeld
 import Formal.OptimalBuyMix
 import Formal.GearObjective
+import Formal.FleetClimb
 import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
@@ -3046,6 +3047,28 @@ def runGearObjectiveOrder (args : Array Json) : Json :=
   let order := Formal.GearObjective.pieceOrder ((List.range m).map piece)
   Json.mkObj [("order", Json.arr (order.map (fun i => Json.num (Int.ofNat i))).toArray)]
 
+/-- `fleet_climb_amortized` — the proved `Formal.FleetClimb.amortized`.
+args: `[remainingNum, remainingDen, units]`. Emits `{"num": n, "den": d}`. -/
+def runFleetClimbAmortized (args : Array Json) : Json :=
+  let q := Formal.FleetClimb.amortized (ratArg args 0) (intArg args 2).toNat
+  Json.mkObj [("num", Json.num q.num), ("den", Json.num (Int.ofNat q.den))]
+
+/-- `fleet_climb_pick` — the proved `Formal.FleetClimb.pick`.
+args: `[m, then per candidate in fleet order: id, remainingNum, remainingDen,
+committed]`. Emits `{"pick": id}`, or `{"pick": -1}` for no candidate. -/
+def runFleetClimbPick (args : Array Json) : Json :=
+  let m := (intArg args 0).toNat
+  let cand := fun (i : Nat) =>
+    let o := 1 + 4 * i
+    ((intArg args o).toNat, ratArg args (o + 1), (intArg args (o + 3)).toNat)
+  let picked := match Formal.FleetClimb.pick ((List.range m).map cand) with
+    | none => (-1 : Int)
+    | some c => Int.ofNat c.1
+  Json.mkObj [("pick", Json.num picked)]
+
+-- The dispatch is one `if`/`else if` chain over every kind; at this length its
+-- elaboration exceeds the default recursion depth (512).
+set_option maxRecDepth 2048 in
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
   let args := ((item.getObjValD "args" |>.getArr?).toOption.getD #[])
@@ -3309,6 +3332,10 @@ def runOne (item : Json) : Json :=
     runGearObjectiveLayers args
   else if kind == "gear_objective_order" then
     runGearObjectiveOrder args
+  else if kind == "fleet_climb_amortized" then
+    runFleetClimbAmortized args
+  else if kind == "fleet_climb_pick" then
+    runFleetClimbPick args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

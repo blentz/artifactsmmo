@@ -1248,3 +1248,8 @@ open Formal.PriorityBand
 #print axioms Formal.DropChance.chance_le_one
 #print axioms Formal.DropChance.units_le_mean
 #print axioms Formal.DropChance.fitK_nonneg
+#print axioms Formal.FleetClimb.amortized_le_remaining
+#print axioms Formal.FleetClimb.amortized_antitone_in_units
+#print axioms Formal.FleetClimb.climber_minimal
+#print axioms Formal.FleetClimb.pick_mem
+#print axioms Formal.FleetClimb.pick_first

@@ -175,6 +175,7 @@ GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxono
 POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
 PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
 GEAR_OBJECTIVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective_core.py"
+FLEET_CLIMB_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_climb_core.py"
 GEAR_OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective.py"
 GEAR_OBJECTIVE_CONTEXT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective_context.py"
 PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
@@ -6350,6 +6351,33 @@ GEAR_OBJECTIVE_MUTATIONS = [
      "              (\"haste\", state.haste)]"),
 ]
 
+# Fleet climb core (spec 2026-10-18 §2.5): unit-killed group bound to
+# tests/test_ai/test_fleet_climb_core.py; the same semantics are proven in
+# Formal/FleetClimb.lean and diffed by formal/diff/test_fleet_climb_diff.py.
+FLEET_CLIMB_CORE_MUTATIONS = [
+    ("fleet climb: a climb shared by no unit admitted",
+     "    if units < 1:",
+     "    if units < 0:"),
+    ("fleet climb: the whole climb charged to every unit",
+     "    return remaining / units",
+     "    return remaining"),
+    ("fleet climb: committed work no longer breaks a remaining tie",
+     "               key=lambda name: (remaining_by_character[name], committed_by_character[name]))",
+     "               key=lambda name: (remaining_by_character[name], 0))"),
+    ("fleet climb: committed work ranked before the remaining climb",
+     "               key=lambda name: (remaining_by_character[name], committed_by_character[name]))",
+     "               key=lambda name: (committed_by_character[name], remaining_by_character[name]))"),
+    ("fleet climb: a full tie goes to the name, not the fleet order",
+     "    candidates = [name for name in order if name in remaining_by_character]",
+     "    candidates = sorted(remaining_by_character)"),
+    ("fleet climb: a character outside the fleet order accepted",
+     "    if outside:",
+     "    if False:"),
+    ("fleet climb: an empty fleet not named",
+     "    if not candidates:",
+     "    if False:"),
+]
+
 # synergy_core.synergy_pure — the purity factor read by the taskmaster choice and
 # the means-worth gate (spec 2026-07-19 §3, Phase 2). Unit-killed by tests/test_ai/test_synergy_core.py;
 # the same core is proven in Formal/Synergy.lean (synergy_le_one/ge_floor/floor_pos/
@@ -8332,6 +8360,8 @@ _ALL_SRCS = [
     PROGRESSION_TREE_SRC,
     # Gear objective core (spec 2026-10-18 §2.3/§2.4): unit-killed group.
     GEAR_OBJECTIVE_CORE_SRC,
+    # Fleet climb core (spec 2026-10-18 §2.5): unit-killed group.
+    FLEET_CLIMB_CORE_SRC,
     # Gear objective adapter (spec 2026-10-18 §2.1-§2.4): unit-killed group.
     GEAR_OBJECTIVE_SRC,
     # Equipment-profile selector (2026-07-08): differential-killed group.
@@ -12913,6 +12943,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_progression_tree_core.py", survivors)
     run_group(GEAR_OBJECTIVE_CORE_SRC, GEAR_OBJECTIVE_CORE_MUTATIONS,
               "tests/test_ai/test_gear_objective_core.py", survivors)
+    run_group(FLEET_CLIMB_CORE_SRC, FLEET_CLIMB_CORE_MUTATIONS,
+              "tests/test_ai/test_fleet_climb_core.py", survivors)
     run_group(GEAR_OBJECTIVE_SRC, GEAR_OBJECTIVE_MUTATIONS,
               "tests/test_ai/test_gear_objective.py", survivors)
     run_group(SYNERGY_CORE_SRC, SYNERGY_CORE_MUTATIONS,
