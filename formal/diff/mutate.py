@@ -10270,13 +10270,16 @@ FLEET_ROUTE_MUTATIONS = [
 #     whose objective names three pieces with no crafting target;
 #   * netting removed -- killed by test_a_missing_piece_already_banked_is_not_published
 #     and the `_own_unmet_demand` netting tests;
-#   * a later duplicate piece overwriting the first -- killed by
-#     test_two_slots_missing_one_code_publish_the_first_pieces_value.
+#   * pieces folded by max instead of summed (ruling T6a) -- killed by
+#     test_every_missing_piece_is_published (copper_bar 5, not 3);
+#   * the slot count ignored (one unit per code) -- killed by
+#     test_two_slots_missing_one_code_ask_for_two_and_sum_their_gain;
+#   * gain not summed over a code's slots -- killed by the same test.
 FLEET_BOARD_PIECES_MUTATIONS = [
     (
         "player._own_unmet_demand: chosen-root-only restored (missing pieces dropped)",
-        "        roots = [piece.code for piece in self._missing_pieces()]",
-        "        roots: list[str] = []",
+        "            slots[piece.code] = slots.get(piece.code, 0) + 1",
+        "            pass",
     ),
     (
         "player._own_unmet_demand: bag and bank netting removed",
@@ -10286,9 +10289,22 @@ FLEET_BOARD_PIECES_MUTATIONS = [
         "        return dict(demand)",
     ),
     (
-        "player._own_piece_value: a later duplicate piece overwrites the first",
-        "            value.setdefault(piece.code, (piece.gain, piece.price))",
-        "            value[piece.code] = (piece.gain, piece.price)",
+        "player._own_unmet_demand: pieces folded by max instead of summed",
+        "            piece_demand: dict[str, int] = {}\n"
+        "            closure_demand(code, count, game_data, piece_demand, frozenset())\n"
+        "            for item, qty in piece_demand.items():\n"
+        "                demand[item] = demand.get(item, 0) + qty",
+        "            closure_demand(code, count, game_data, demand, frozenset())",
+    ),
+    (
+        "player._own_unmet_demand: slot count ignored (one unit per code)",
+        "            closure_demand(code, count, game_data, piece_demand, frozenset())",
+        "            closure_demand(code, 1, game_data, piece_demand, frozenset())",
+    ),
+    (
+        "player._own_piece_value: gain not summed over a code's slots",
+        "            value[piece.code] = (gain + piece.gain, price)",
+        "            value[piece.code] = (piece.gain, price)",
     ),
 ]
 

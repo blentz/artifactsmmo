@@ -119,9 +119,12 @@ def test_the_blocked_ask_reaches_a_sibling_who_can_serve_it(tmp_path) -> None:
     # LINK 1 — the ask exists at all. This is the assertion the live fleet fails:
     # a blocked character published `{}` and the board stayed empty.
     assert asker._last_ctx.gear_objective is not None
-    assert ASKED in {piece.code for piece in asker._last_ctx.gear_objective.missing}
+    # The whole objective, in pursuit order: the gated sword is one piece of it.
+    assert tuple(piece.code for piece in asker._last_ctx.gear_objective.missing) == (
+        ASKED, "fire_and_earth_amulet", "iron_boots", "iron_shield", "iron_legs_armor",
+        "iron_armor", "adventurer_helmet", "forest_ring", "forest_ring")
     published = asker._own_unmet_demand(asker.state, gd)
-    assert ASKED in published
+    assert published[ASKED] == 1
 
     # LINK 2 — and it is published as ASYMMETRIC. `serves_item` fails on the
     # asker's own gate, so the code is absent from `self_servable`, which is the

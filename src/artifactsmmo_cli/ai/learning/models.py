@@ -342,7 +342,14 @@ class MaterialDemand(SQLModel, table=True):
     it owns) and `GearPiece.price` (`route_price`), each an exact `Fraction`
     stored as its `str` (`"3/7"`) and read back with `Fraction(text)`, so the
     board carries the value losslessly. None on every row that is not a piece:
-    a recipe material, the crafting target, a consumable-floor share."""
+    a recipe material, the crafting target, a consumable-floor share.
+
+    `gain` is summed over the requester's slots missing the code; `price` is
+    per unit. A piece with no route this cycle stays on the board (§2.5: the
+    request is for the item, and a sibling may have the route the requester
+    lacks), so `price` can be the no-route sentinel: `route_price` caps at
+    `acquisition_cost_core.UNOBTAINABLE_PER_UNIT` per unit, and a reader tests
+    `Fraction(price) >= UNOBTAINABLE_PER_UNIT` before any arithmetic on it."""
 
     __tablename__ = "material_demand"
 

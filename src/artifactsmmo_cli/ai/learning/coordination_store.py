@@ -588,6 +588,8 @@ class CoordinationStore:
             return {}
         totals: dict[str, Fraction] = {}
         for row in rows:
+            # The query's own `gain IS NOT NULL` filter guarantees this: an
+            # invariant of this method, not a check on outside data.
             assert row.gain is not None
             totals[row.item_code] = totals.get(row.item_code, Fraction(0)) + Fraction(row.gain)
         return totals

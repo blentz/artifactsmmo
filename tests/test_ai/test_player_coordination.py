@@ -2467,7 +2467,8 @@ def _board(store: CoordinationStore) -> dict[str, tuple[int, bool, str | None, s
 
 def test_every_missing_piece_is_published(tmp_path):
     """Three missing pieces, one behind this character's weaponcrafting gate:
-    all three closures reach the board, each piece row carries its gain and
+    all three closures reach the board, SUMMED (the helmet's 3 copper_bar and
+    the ring's 2 are both needed: 5), each piece row carries its gain and
     price, and the gated sword alone is NOT self-servable, so a sibling holding
     weaponcrafting reads it as asymmetric. The chosen root is a climb (no
     crafting target), which is exactly the cycle the board used to be silent
@@ -2482,7 +2483,7 @@ def test_every_missing_piece_is_published(tmp_path):
         assert _board(store) == {
             "copper_helmet": (1, True, "1/2", "30"),
             "copper_ring": (1, True, "1/3", "20"),
-            "copper_bar": (3, True, None, None),
+            "copper_bar": (5, True, None, None),
             "iron_sword": (1, False, "2/7", "90"),
             "iron_bar": (4, True, None, None),
         }
@@ -2531,15 +2532,30 @@ def test_no_objective_publishes_only_the_crafting_target():
     assert p._own_piece_value() == {}
 
 
-def test_a_missing_piece_already_banked_is_not_published():
-    """Each piece is netted against bag AND bank, as every root was: a banked
-    helmet is a withdraw away, and its closure is satisfied with it."""
+def test_the_summed_closure_is_netted_against_bag_and_bank():
+    """The summed need is netted against bag AND bank, as every root was: the
+    helmet and ring need 5 copper_bar together, 1 is carried and 2 are banked,
+    so 2 are asked for. A banked piece nets out its own row."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
     p._learned_drops = LearnedDrops.empty()
     p._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective(_HELMET, _RING))
-    state = make_state(inventory={"copper_bar": 1}, bank_items={"copper_helmet": 1})
-    assert p._own_unmet_demand(state, _gear_gd()) == {"copper_ring": 1, "copper_bar": 2}
+    state = make_state(inventory={"copper_bar": 1},
+                       bank_items={"copper_bar": 2, "copper_ring": 1})
+    assert p._own_unmet_demand(state, _gear_gd()) == {"copper_helmet": 1, "copper_bar": 2}
+
+
+def test_a_crafting_target_inside_a_pieces_closure_is_not_asked_twice():
+    """The crafting target is normally a step of one piece (a bar of the
+    helmet) and is already counted in its closure: it merges by max, so the
+    5 copper_bar the pieces need stay 5 rather than 6."""
+    p = GamePlayer(character="hero")
+    p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
+    p._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective(_HELMET, _RING))
+    p._last_decide_crafting_target = "copper_bar"
+    assert p._own_unmet_demand(make_state(), _gear_gd()) == {
+        "copper_helmet": 1, "copper_ring": 1, "copper_bar": 5}
 
 
 def test_a_piece_and_the_crafting_target_are_both_published():
@@ -2555,13 +2571,22 @@ def test_a_piece_and_the_crafting_target_are_both_published():
         "iron_sword": 1, "iron_bar": 4, "copper_helmet": 1, "copper_bar": 3}
 
 
-def test_two_slots_missing_one_code_publish_the_first_pieces_value():
-    """`missing` is in pursuit order; one board row per code carries the
-    value of the piece pursued first."""
-    p = GamePlayer(character="hero")
+def test_two_slots_missing_one_code_ask_for_two_and_sum_their_gain(tmp_path):
+    """R2D2's live shape: one ring code missing in ring1 AND ring2. `L*` needs
+    two rings, so the board asks for 2 (and 4 copper_bar), and the row's gain
+    is both slots' gains: ring2's is not dropped. The price is per unit, the
+    first-pursued piece's."""
+    player, store = _player_with_coordination(tmp_path, "Lor")
+    player.game_data = _gear_gd()
+    player.state = make_state(skills=_GEAR_SKILLS)
     ring2 = _piece("ring2", "copper_ring", Fraction(1, 9), Fraction(25))
-    p._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective(_RING, ring2))
-    assert p._own_piece_value() == {"copper_ring": (Fraction(1, 3), Fraction(20))}
+    player._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective(_RING, ring2))
+    try:
+        player._update_coordination(player.state, player.game_data)
+        assert _board(store) == {"copper_ring": (2, True, "4/9", "20"),
+                                 "copper_bar": (4, True, None, None)}
+    finally:
+        store.close()
 
 
 def test_published_values_sum_over_siblings(tmp_path):

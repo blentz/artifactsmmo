@@ -3133,13 +3133,16 @@ class GamePlayer:
         return () if objective is None else objective.missing
 
     def _own_piece_value(self) -> dict[str, tuple[Fraction, Fraction]]:
-        """Each missing `L*` piece's `(gain, price)`, the value the fleet board
+        """Each missing `L*` code's `(gain, price)`, the value the fleet board
         carries beside its demand row (spec 2026-10-18 §2.5). Two slots may
-        miss the same code; the board row is one per code, so it carries the
-        piece pursued first (`missing` is in pursuit order)."""
+        miss the same code (ring1 and ring2); the board row is one per code
+        and asks for both units, so its gain is the SUM over those slots (the
+        objective gains from each) and its price stays the per-unit price of
+        the piece pursued first (`missing` is in pursuit order)."""
         value: dict[str, tuple[Fraction, Fraction]] = {}
         for piece in self._missing_pieces():
-            value.setdefault(piece.code, (piece.gain, piece.price))
+            gain, price = value.get(piece.code, (Fraction(0), piece.price))
+            value[piece.code] = (gain + piece.gain, price)
         return value
 
     def _own_unmet_demand(self, state: "WorldState", game_data: GameData) -> dict[str, int]:
@@ -3175,19 +3178,27 @@ class GamePlayer:
         # arm fires on. Its MATERIALS come along through the closure and stay
         # self-servable, which is also right: those the asker can gather.
         #
-        # The crafting target rides beside the pieces: "what I am working
-        # toward" can be a recipe material or a task item that is no `L*`
-        # piece. `closure_demand` accumulates the max across roots into one
-        # dict — its documented usage — so one call per root is the supported
-        # shape, not a merge invented here.
-        roots = [piece.code for piece in self._missing_pieces()]
-        if self._last_decide_crafting_target is not None:
-            roots.append(self._last_decide_crafting_target)
-        if not roots:
-            return {}
+        # THE PIECES ARE A CONJUNCTION (ruling T6a): `L*` needs every one, so
+        # their closures SUM. A code missing in k slots (ruby_ring in ring1
+        # and ring2) is k units, and two pieces sharing a material need both
+        # shares of it. `closure_demand`'s own max-across-roots fold is for
+        # ALTERNATIVE roots; here each code's closure goes into its own dict
+        # at multiplier k and the dicts are added.
+        slots: dict[str, int] = {}
+        for piece in self._missing_pieces():
+            slots[piece.code] = slots.get(piece.code, 0) + 1
         demand: dict[str, int] = {}
-        for root in roots:
-            closure_demand(root, 1, game_data, demand, frozenset())
+        for code, count in slots.items():
+            piece_demand: dict[str, int] = {}
+            closure_demand(code, count, game_data, piece_demand, frozenset())
+            for item, qty in piece_demand.items():
+                demand[item] = demand.get(item, 0) + qty
+        # The crafting target rides beside the pieces: "what I am working
+        # toward" is normally a step inside one piece's closure (a bar of the
+        # helmet), already counted there, so it merges by MAX — the fold
+        # `closure_demand` documents — never by sum, which would ask twice.
+        if self._last_decide_crafting_target is not None:
+            closure_demand(self._last_decide_crafting_target, 1, game_data, demand, frozenset())
         bank = state.bank_items or {}
         return {code: qty - state.inventory.get(code, 0) - bank.get(code, 0)
                 for code, qty in demand.items()
