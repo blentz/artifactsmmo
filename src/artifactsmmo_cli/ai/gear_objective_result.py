@@ -38,6 +38,17 @@ class GearPiece:
         (`audit/one_cost_model` O8)."""
         return self.route is SourceKind.CRAFT
 
+    def awaits_delivery(self, state: WorldState) -> bool:
+        """The route that priced the piece is a bank WITHDRAW and the bank
+        holds no copy yet. That is the sibling route (spec 2026-10-18 §2.5,
+        "Delivery"): the fleet's crafter makes the piece and banks it, and this
+        character's own step is the withdraw, so until a copy is banked the
+        piece has no step of its own — least of all the crafting climb the
+        sibling route exists to spare it. Read here beside `crafted`, for the
+        same reason (O8). A bank never visited (`bank_items is None`) holds no
+        copy the character knows of."""
+        return self.route is SourceKind.WITHDRAW and (state.bank_items or {}).get(self.code, 0) <= 0
+
 
 @dataclass(frozen=True)
 class GearObjective:

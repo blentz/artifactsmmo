@@ -25,18 +25,23 @@ from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_ta
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
-def farm_target(task_monster: str | None, objective: GearObjective | None) -> str | None:
+def farm_target(task_monster: str | None, objective: GearObjective | None,
+                fleet_waiting: bool) -> str | None:
     """The cycle's grind target (spec 2026-10-18 §2.4, §6.2): the held
     monsters task's monster first, as always; otherwise `m*` of the cycle's
     gear objective while `L*` is held, and None while a piece of it is
     missing, so no fight is chosen for XP then (acquisition fights still pay
     theirs). The proved cascade (`winnable_farm_target_pure`) keeps the
     precedence: `m*` is its path tier, winnable exactly when held, and nothing
-    is picked below it."""
+    is picked below it.
+
+    `fleet_waiting`: the crafter's role serves fleet pieces (§2.5,
+    `ctx.fleet_pieces`), which count as missing pieces of its joint objective, so
+    `L*` is not held for the grind while one waits."""
     return winnable_farm_target_pure(CascadeInputs(
         task_monster=task_monster,
         path_monster=objective.monster if objective is not None else None,
-        path_winnable=objective is not None and objective.held,
+        path_winnable=objective is not None and objective.held and not fleet_waiting,
         pick_winnable=None,
     ))
 
@@ -114,7 +119,7 @@ def attach_gear_objective(state: WorldState, game_data: GameData, ctx: Selection
     task_monster = ctx.combat_monster
     with history.search_cache() if history is not None else nullcontext():
         objective = gear_objective(state, game_data, ctx, history)
-    combat_monster = farm_target(task_monster, objective)
+    combat_monster = farm_target(task_monster, objective, bool(ctx.fleet_pieces))
     return replace(
         ctx, gear_objective=objective, combat_monster=combat_monster,
         gear_keep=with_objective_keep(

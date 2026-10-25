@@ -857,6 +857,14 @@ class LearningStore:
         """
         return self._grind_rate(skill, window, character=None)
 
+    def character_skill_grind_rate(self, character: str, skill: str,
+                                   window: int = WINDOW_RECENT) -> float | None:
+        """`skill_grind_rate` of ANOTHER character in the store: the rate of
+        the fleet's climber (spec 2026-10-18 §2.5), whose remaining climb a
+        sibling's route is priced with. Same query, same None-vs-0.0 meaning,
+        so a caller falls back to `fleet_skill_grind_rate` on None alone."""
+        return self._grind_rate(skill, window, character=character)
+
     def task_work_xp_per_second(self, task_code: str, skills: frozenset[str],
                                 window: int = WINDOW_RECENT) -> float | None:
         """XP of `skills` per second of THIS character's work on task

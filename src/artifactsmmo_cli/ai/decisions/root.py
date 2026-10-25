@@ -936,8 +936,10 @@ def resolve_root(state: WorldState, game_data: GameData,
     `RootResolution.declined`.
 
     The alternatives, in a fixed order and never ranked against each other:
-    every missing piece in `missing`'s own order, the trunk ONLY when `L*` is
-    held (no fight is chosen for XP while a piece is missing, §6.2), then the
+    every missing piece in `missing`'s own order, then a crafter's fleet
+    pieces' steps (§2.5, `ctx.fleet_pieces`), the trunk ONLY when `L*` is held and
+    no fleet piece waits (no fight is chosen for XP while a piece is missing,
+    §6.2, nor while fleet demand the crafter's role serves exists), then the
     task, fleet and orphan-skill roots."""
     walk = RootWalk(step_decline=step_decline)
     # Locally annotated, not inlined into the call: mypy 1.18.1 infers
@@ -954,9 +956,17 @@ def resolve_root(state: WorldState, game_data: GameData,
         IsThisTargetBlocked(piece.slot, _which_piece.piece_target(piece, objective, state),
                             RootWalk()).resolve(state, game_data, ctx, history)
         for piece in (target.missing if target is not None else ())
+        # A piece a sibling crafts for this character has no step until it is
+        # banked (§2.5, `GearPiece.awaits_delivery`): offering its `ObtainItem`
+        # would hand the rotation the very climb the sibling route spares.
+        if not piece.awaits_delivery(state)
     ]
+    fleet = ctx.fleet_pieces if target is not None else ()
+    ordered.extend(step for step in (_which_piece.fleet_piece_root(piece, state, ctx)
+                                     for piece in fleet)
+                   if step is not None)
     trunk = _which_piece.next_level(state, game_data)
-    if target is not None and target.held and trunk is not None:
+    if target is not None and target.held and not fleet and trunk is not None:
         ordered.append(trunk)
     # THE RESTORED SEAM: the orphan skill roots, after the gear siblings and
     # after the trunk. Produced here, beside the trunk, and for the same reason

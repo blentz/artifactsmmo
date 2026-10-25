@@ -19,6 +19,7 @@ from contextlib import redirect_stdout
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from fractions import Fraction
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -63,6 +64,7 @@ from artifactsmmo_cli.ai.thresholds import SUPPLY_BATCH
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachFleetOutcome
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
 from tests.test_ai.fixtures import coordination_now, make_state
+from tests.test_ai.shared_world import shared_world
 from tests.test_ai.test_actions_execute import (
     make_api_result,
     make_char_schema,
@@ -2360,10 +2362,15 @@ def test_a_lost_supply_claim_falls_through_to_the_next_candidate(tmp_path, monke
 
 
 def _coord_player(tmp_path, character: str = "C3P0"):  # type: ignore[no-untyped-def]
+    """A coordinated player with a state and game data, as every production
+    caller of `_refresh_sibling_reads` has: the fleet's climbers are read off
+    this character's own skills (spec 2026-10-18 §2.5)."""
     db = str(tmp_path / "coord.db")
     player = GamePlayer(character=character)
     player._offline_timing = committed_timing()
     player._learned_drops = LearnedDrops.empty()
+    player.state = make_state(character=character)
+    player.game_data = GameData()
     player.set_coordination_store(CoordinationStore(db_path=db, character=character))
     return player, db
 
@@ -2804,6 +2811,8 @@ def test_the_read_only_path_reads_the_fleet_roles(tmp_path):
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
     p._learned_drops = LearnedDrops.empty()
+    p.state = make_state(character="hero")
+    p.game_data = GameData()
     store = CoordinationStore(db_path=db, character="hero")
     sibling = CoordinationStore(db_path=db, character="HAL")
     p.set_coordination_store(store)
@@ -2937,3 +2946,43 @@ def test_work_of_an_item_ignores_what_the_character_holds_and_banks(bundle_game_
         make_state(inventory={"ash_plank": 9}, bank_items={"ash_plank": 9}), bundle_game_data)
     assert held == empty
     assert empty["ash_plank"] > 0
+
+
+_FLEET_BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
+
+
+def test_the_refresh_reads_the_fleet_climb(tmp_path) -> None:
+    """Spec 2026-10-18 §2.5: the read-only refresh reads each sibling's levels,
+    the siblings' `L*` pieces with the units they ask (a material row is no
+    piece), and names one climber per demanded skill — here Robby, the higher
+    gearcrafter, for the shield both characters' objectives need."""
+    now = datetime.now(tz=timezone.utc)
+    robby = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Robby")
+    try:
+        robby.publish_skills({"gearcrafting": 8}, now)
+        robby.publish_demand({"iron_shield": 2, "iron_bar": 12}, frozenset(), now,
+                             {"iron_shield": (Fraction(3), Fraction(40))})
+        player, _ = _coord_player(tmp_path)
+        player._fleet_order = ("C3P0", "Robby")
+        player.game_data = shared_world(_FLEET_BUNDLE)
+        player._refresh_sibling_reads(now)
+        assert player._sibling_ledger == {"Robby": {"gearcrafting": 8}}
+        assert player._fleet_board == {"iron_shield": (2, Fraction(3))}
+        assert player._fleet_climbers == {"gearcrafting": "Robby"}
+    finally:
+        robby.close()
+
+
+def test_the_demanded_levels_span_the_board_and_the_own_pieces(tmp_path) -> None:
+    """The level each producing skill must reach: the board's shield
+    (gearcrafting 10), this character's own sword (weaponcrafting 10), the
+    higher of two levels on one skill, and nothing for a piece no skill
+    produces."""
+    player, _ = _coord_player(tmp_path)
+    gd = shared_world(_FLEET_BUNDLE)
+    player._fleet_board = {"iron_shield": (1, Fraction(1)), "copper_helmet": (1, Fraction(1)),
+                           "feather": (1, Fraction(1))}
+    sword = GearPiece("weapon_slot", "iron_sword", 0, Fraction(1), Fraction(5), SourceKind.CRAFT)
+    player._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+        "wolf", {"weapon_slot": "iron_sword"}, Fraction(1), (sword,)))
+    assert player._demanded_levels(gd) == {"gearcrafting": 10, "weaponcrafting": 10}

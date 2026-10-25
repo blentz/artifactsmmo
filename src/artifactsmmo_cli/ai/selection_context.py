@@ -24,6 +24,7 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
+from artifactsmmo_cli.ai.fleet_piece import FleetPiece
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
@@ -226,6 +227,31 @@ class SelectionContext:
     # emptied the bank of event_ticket between them, then gathered tickets
     # while the fleet already held the 10 medals. Empty without a store.
     sibling_holdings: dict[str, int] = field(default_factory=dict)
+    # The fleet's shared skill climb (spec 2026-10-18 §2.5), read once per
+    # cycle by the player's coordination block and threaded here as DATA, the
+    # same seam as `sibling_skills`. All empty on a single-character run and
+    # on every caller with no coordination store, which leaves the amortized
+    # sibling climb (`acquisition_cost._sibling_craft_option`) and the
+    # crafter's fleet pieces (`fleet_pieces`) absent rather than wrong.
+    #
+    # `sibling_skill_ledger`: each live sibling's published skill levels
+    # (`CoordinationStore.sibling_skill_ledger`), per character — the climber
+    # is chosen per character, which `sibling_skills`' fleet max cannot do.
+    sibling_skill_ledger: dict[str, dict[str, int]] = field(default_factory=dict)
+    # skill -> the ONE character that climbs it for the fleet's `L*` pieces
+    # (`fleet_climber.fleet_climber`, computed once per cycle by the player
+    # over every skill a fleet piece demands): the climber the role claim
+    # admits and whose remaining climb a sibling route is priced with.
+    fleet_climbers: dict[str, str] = field(default_factory=dict)
+    # Every `L*` piece a sibling publishes: code -> (units asked, gain summed
+    # over the publishers) (`CoordinationStore.sibling_demand` and
+    # `sibling_demand_values`). The units a sibling climb is shared across, and
+    # the pieces a crafter's role serves.
+    fleet_board: dict[str, tuple[int, Fraction]] = field(default_factory=dict)
+    # The board pieces this character's craft role serves (`fleet_pieces`,
+    # computed once per cycle by the player from `role` and `fleet_board`):
+    # the crafter's joint objective beside its own `L*` pieces.
+    fleet_pieces: tuple[FleetPiece, ...] = ()
 
     # The live party lease naming this character as a MEMBER
     # (`CoordinationStore.party_lease_for`, read once per cycle by the player

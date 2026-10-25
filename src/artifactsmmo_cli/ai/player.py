@@ -102,6 +102,8 @@ from artifactsmmo_cli.ai.failure_recovery_core import (
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.fight_room_license import refusal_line, refused_fight
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
+from artifactsmmo_cli.ai.fleet_climber import fleet_climber
+from artifactsmmo_cli.ai.fleet_pieces import fleet_pieces
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import (
     attach_gear_objective,
@@ -183,6 +185,7 @@ from artifactsmmo_cli.ai.role_catalog import (
     ROLES_BY_NAME,
     role_skill_level,
     role_skills,
+    skill_owner,
 )
 from artifactsmmo_cli.ai.role_selection import (
     ROLE_IDLE_WINDOW,
@@ -575,6 +578,13 @@ class GamePlayer:
         # stays inert there, exactly like every other coordination field.
         self._asymmetric_demand: frozenset[str] = frozenset()
         self._sibling_skills: dict[str, int] = {}
+        # The fleet's shared skill climb (spec 2026-10-18 §2.5): each live
+        # sibling's skill levels, every live role's holders, and every `L*`
+        # piece a sibling publishes as (units, summed gain). Read in
+        # `_refresh_sibling_reads`; empty without a coordination store.
+        self._sibling_ledger: dict[str, dict[str, int]] = {}
+        self._fleet_board: dict[str, tuple[int, Fraction]] = {}
+        self._fleet_climbers: dict[str, str] = {}
         # The siblings' dual-role units (`SelectionContext.sibling_holdings`).
         self._sibling_holdings: dict[str, int] = {}
         # The live party lease naming this character as a member, and the
@@ -3145,6 +3155,32 @@ class GamePlayer:
             value[piece.code] = (gain + piece.gain, price)
         return value
 
+    def _climbers(self, leases: Mapping[str, frozenset[str]]) -> dict[str, str]:
+        """skill -> the ONE character that climbs it for the fleet (spec
+        2026-10-18 §2.5, `fleet_climber`), over every skill a fleet `L*` piece
+        demands (`_demanded_levels`), from this cycle's ledger and `leases`.
+        The same function, on the same inputs, `decide_role`'s claim gate
+        reads, so the role and the sibling route's price name one climber."""
+        assert self.state is not None and self.game_data is not None
+        return {skill: fleet_climber(skill, level, self.character, self.state.skills,
+                                     self._sibling_ledger, leases,
+                                     skill_owner(skill, ROLE_CATALOG), self._fleet_order)
+                for skill, level in self._demanded_levels(self.game_data).items()}
+
+    def _demanded_levels(self, game_data: GameData) -> dict[str, int]:
+        """The level each producing skill must reach for the fleet's `L*`
+        pieces (spec 2026-10-18 §2.5): over every piece a sibling publishes
+        (`_fleet_board`) and this character's own missing pieces, the highest
+        level `GameData.producing_requirement` gates one at, per skill. A piece
+        with no producing skill demands none."""
+        demanded: dict[str, int] = {}
+        for code in (*self._fleet_board, *self._own_piece_value()):
+            requirement = game_data.producing_requirement(code)
+            if requirement is not None:
+                skill, level = requirement
+                demanded[skill] = max(demanded.get(skill, 0), level)
+        return demanded
+
     def _own_unmet_demand(self, state: "WorldState", game_data: GameData) -> dict[str, int]:
         """This character's unmet closure demand for every missing piece of its
         gear objective `L*` and its chosen crafting target, minus what it
@@ -3556,6 +3592,13 @@ class GamePlayer:
         self._sibling_order_claims = self._coordination.sibling_order_claims(now)
         self._asymmetric_demand = self._coordination.sibling_demand_asymmetric(now)
         self._sibling_skills = self._coordination.sibling_skill_levels(now)
+        self._sibling_ledger = self._coordination.sibling_skill_ledger(now)
+        # Every `L*` piece a sibling publishes, with the units it asks: the
+        # units a sibling climb is shared across, and the pieces a crafter's
+        # role serves (spec 2026-10-18 §2.5).
+        board_units = self._coordination.sibling_demand(now)
+        self._fleet_board = {code: (board_units[code], gain)
+                             for code, gain in self._coordination.sibling_demand_values(now).items()}
         self._sibling_holdings = self._coordination.sibling_holdings(now)
         # The siblings' consumable needs, for this character's floor share
         # (USER 2026-10-09, "Need ledger + API order").
@@ -3563,7 +3606,9 @@ class GamePlayer:
         # Every role a live character holds, for the food producer rule
         # (`food_producer.may_make_food`, spec 2026-10-13 §4). Read here, not
         # in `_update_coordination`, so the diagnostics see the fleet's roles.
-        self._fleet_roles = frozenset(self._coordination.live_leases(now))
+        leases = self._coordination.live_leases(now)
+        self._fleet_roles = frozenset(leases)
+        self._fleet_climbers = self._climbers(leases)
 
     def _adopt_lease_role(self, now: datetime) -> None:
         """The diagnostics' role: the live lease naming this character, when
@@ -3731,6 +3776,9 @@ class GamePlayer:
             self._recall = None
             self._asymmetric_demand = frozenset()
             self._sibling_skills = {}
+            self._sibling_ledger = {}
+            self._fleet_board = {}
+            self._fleet_climbers = {}
             self._sibling_holdings = {}
             self._sibling_needs = {}
             self._fleet_roles = frozenset()
@@ -3807,12 +3855,20 @@ class GamePlayer:
         item_demand = self._coordination.sibling_demand(now)
         skill_of_item, level_of_item = self._producing_split(item_demand, game_data)
         work_of_item = self._work_of_item(item_demand, state, game_data)
+        # The fleet's shared climb (spec 2026-10-18 §2.5): the level each
+        # skill must reach for the fleet's `L*` pieces, and the skills this
+        # character is the fleet's one climber for (`fleet_climber`).
+        demanded = self._demanded_levels(game_data)
+        leases = self._coordination.live_leases(now)
+        climbing = frozenset(skill for skill, who in self._fleet_climbers.items()
+                             if who == self.character)
         # PER-CHARACTER demand: `state.skills` gates out every item this
         # character's levels cannot produce, so it is never recruited to a role
         # by demand it provably cannot serve (live 2026-08-03: `Lor` at mining 8
-        # held `miner` against iron demand that gates at mining 10).
+        # held `miner` against iron demand that gates at mining 10) — unless it
+        # is the fleet's climber for the producing skill: the climb IS the work.
         by_role = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG,
-                                 level_of_item, state.skills, work_of_item)
+                                 level_of_item, state.skills, work_of_item, climbing)
         # The roles through which this character could serve an ASYMMETRIC ask:
         # the same aggregate over those requests alone. They win the claim, as
         # `_pick_supply_target` ranks those requests first (`decide_role`).
@@ -3821,7 +3877,7 @@ class GamePlayer:
                 {code: qty for code, qty in item_demand.items()
                  if code in self._asymmetric_demand},
                 skill_of_item, ROLE_CATALOG, level_of_item, state.skills,
-                work_of_item).items()
+                work_of_item, climbing).items()
             if qty > 0)
         # Extend or break the zero-demand RUN before deciding, so the count
         # passed in includes this cycle's observation. `decide_role` releases on
@@ -3840,7 +3896,7 @@ class GamePlayer:
             if role_skill_level(ROLES_BY_NAME[name], state.skills) <= level
         }
         decision = decide_role(current=self._role, held_cycles=self._role_held_cycles,
-                               live_leases=self._coordination.live_leases(now),
+                               live_leases=leases,
                                demand_by_role=by_role,
                                character=self._coordination.character,
                                catalog=ROLE_CATALOG,
@@ -3850,7 +3906,10 @@ class GamePlayer:
                                unservable_released=frozenset(self._role_unservable_released),
                                unservable_cycles=self._role_unservable_cycles,
                                skill_levels=state.skills,
-                               asymmetric_roles=asymmetric_roles)
+                               asymmetric_roles=asymmetric_roles,
+                               sibling_skill_levels=self._sibling_ledger,
+                               demanded_level=demanded,
+                               fleet_order=self._fleet_order)
         if decision.release is not None:
             self._coordination.release(decision.release)
             # `decide_role`'s docstring: the caller adds a role on EVERY
@@ -4221,6 +4280,13 @@ class GamePlayer:
             # on every single-character run. Feeds
             # `acquisition_cost._sibling_craft_option`.
             sibling_skills=self._sibling_skills,
+            # The fleet's shared skill climb (spec 2026-10-18 §2.5), same
+            # source and lifecycle as `sibling_skills`.
+            sibling_skill_ledger=self._sibling_ledger,
+            fleet_climbers=self._fleet_climbers,
+            fleet_board=self._fleet_board,
+            fleet_pieces=fleet_pieces(self.state, self.game_data, self._role,
+                                      self._fleet_board),
             role=self._role,
             fleet_roles=self._fleet_roles,
             # The siblings' dual-role units, same source and lifecycle as

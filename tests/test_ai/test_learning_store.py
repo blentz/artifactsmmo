@@ -1431,6 +1431,29 @@ class TestSkillGrindRate:
             action_repr="Fight(pig)", delta_skill_xp_json=json.dumps({}),
         )
 
+    def test_another_characters_rate_is_its_own(self, tmp_db_path):
+        """The fleet climber's rate (spec 2026-10-18 §2.5): the store answers
+        for a named sibling exactly as `skill_grind_rate` answers for itself,
+        and a character that never ground the skill is ignorance (None)."""
+        veteran = LearningStore(db_path=tmp_db_path, character="vet")
+        veteran.start_session()
+        store = LearningStore(db_path=tmp_db_path, character="me")
+        store.start_session()
+        try:
+            for i in range(4):
+                veteran.record_cycle(self._grind_cycle(i, "vet", "gearcrafting", 6))
+            for i in range(4, 8):
+                store.record_cycle(self._grind_cycle(i, "me", "gearcrafting", 2))
+            assert store.character_skill_grind_rate("vet", "gearcrafting") == 6.0
+            assert store.character_skill_grind_rate("me", "gearcrafting") == \
+                store.skill_grind_rate("gearcrafting") == 2.0
+            assert store.character_skill_grind_rate("new", "gearcrafting") is None
+        finally:
+            veteran.end_session(exit_reason="normal")
+            veteran.close()
+            store.end_session(exit_reason="normal")
+            store.close()
+
     def test_an_empty_store_has_no_rate_under_either_estimator(self, tmp_db_path):
         """No cycles at all is IGNORANCE, not a rate of zero — under both the
         retired estimator and its replacement. `_gated_skill_option` reads the

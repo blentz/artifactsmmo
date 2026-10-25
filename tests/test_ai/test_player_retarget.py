@@ -27,7 +27,7 @@ def _player(tmp_path):
 
 
 def _target(p: GamePlayer) -> str | None:
-    return farm_target(p._task_aligned_monster(), HELD)
+    return farm_target(p._task_aligned_monster(), HELD, False)
 
 
 def test_pursue_monster_task_retargets_grind(tmp_path):

@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     acquisition_actions,
     acquisition_options,
     bundle_acquisition_actions,
+    cheapest_route,
     npc_price_of,
     route_options,
 )
@@ -240,6 +241,104 @@ def test_sibling_unlock_is_keyed_ON_THE_ITEM_so_a_batch_pays_once(
 
     keys = [r.unlock for r in routes if r.unlock.startswith("sibling:")]
     assert keys == ["sibling:iron_sword"], "keyed on the item, not the skill"
+
+
+class _ClimbStore(_SupplyStore):
+    """A store that has seen fleet supply requests and the fleet climber's own
+    grind (`character_skill_grind_rate`), with an optional fleet rate."""
+
+    def __init__(self, rates, fleet=None, request_cycles=15.0):  # type: ignore[no-untyped-def]
+        super().__init__(request_cycles)
+        self._rates = rates
+        self._fleet = fleet
+
+    def character_skill_grind_rate(self, character, skill):  # type: ignore[no-untyped-def]
+        return self._rates.get(character)
+
+    def fleet_skill_grind_rate(self, skill):  # type: ignore[no-untyped-def]
+        return self._fleet
+
+
+_CLIMB_BOARD = {
+    "iron_dagger": (2, Fraction(1)),       # weaponcrafting 10: the climb to 10 opens it
+    "fire_staff": (1, Fraction(1)),        # weaponcrafting 5: the climber already makes it
+    "king_slime_sword": (1, Fraction(1)),  # weaponcrafting 15: past this climb
+    "copper_helmet": (3, Fraction(1)),     # another skill's piece
+    "feather": (4, Fraction(1)),           # no producing skill at all
+}
+
+
+def _climb_ctx(climber="Sib", board=None):  # type: ignore[no-untyped-def]
+    """No sibling meets `iron_sword`'s weaponcrafting 10; `Sib`, at 6, is the
+    fleet's climber for it."""
+    return replace(TIMED_NO_PROFILE_CONTEXT, sibling_skills={"weaponcrafting": 6},
+                   sibling_skill_ledger={"Sib": {"weaponcrafting": 6}},
+                   fleet_climbers={"weaponcrafting": climber},
+                   fleet_board=_CLIMB_BOARD if board is None else board)
+
+
+def _sibling_routes(st, game_data, ctx, store):  # type: ignore[no-untyped-def]
+    return [r for r in route_options("iron_sword", st, game_data, ctx, store)
+            if r.unlock == "sibling:iron_sword"]
+
+
+def test_the_fleet_climber_shares_its_climb_across_the_units_it_opens(
+        gated_state, game_data) -> None:
+    """Spec 2026-10-18 §2.5: no sibling meets the gate yet, so the route is the
+    climber's remaining climb (6 -> 10 at 500 xp a level and 10 xp a cycle:
+    2000 / 10 = 200 cycles) shared by the units the climb opens — this one and
+    the sibling's two `iron_dagger`s (3), rounded up to 67 — plus the request
+    cost. A piece the climber already makes, one past the climb, another
+    skill's and a drop share none of it."""
+    st = replace(gated_state, skills={**gated_state.skills, "weaponcrafting": 1})
+    [route] = _sibling_routes(st, game_data, _climb_ctx(), _ClimbStore({"Sib": 10.0}))
+    assert route.unlock_actions == 67 + 15
+    assert route.venue == BANK_VENUE
+    assert route.inputs == game_data.crafting_recipe("iron_sword")
+
+
+def test_the_climbers_own_rate_comes_before_the_fleets(gated_state, game_data) -> None:
+    """The fleet rate prices the climb only in the climber's ABSENCE: 20 xp a
+    cycle is 100 cycles, 34 a unit."""
+    st = replace(gated_state, skills={**gated_state.skills, "weaponcrafting": 1})
+    [own] = _sibling_routes(st, game_data, _climb_ctx(), _ClimbStore({"Sib": 20.0}, fleet=5.0))
+    [fleet] = _sibling_routes(st, game_data, _climb_ctx(), _ClimbStore({}, fleet=20.0))
+    assert own.unlock_actions == fleet.unlock_actions == 34 + 15
+
+
+@pytest.mark.parametrize(("rates", "fleet"), [({}, None), ({"Sib": 0.0}, 9.0)])
+def test_an_unpriceable_climb_is_no_route(gated_state, game_data, rates, fleet) -> None:
+    """No rate anywhere, or the climber's own zero (evidence, not ignorance):
+    a climb priced at nothing would be the free-looking grind."""
+    st = replace(gated_state, skills={**gated_state.skills, "weaponcrafting": 1})
+    assert not _sibling_routes(st, game_data, _climb_ctx(), _ClimbStore(rates, fleet=fleet))
+
+
+def test_no_skill_requirement_reading_is_no_climb(state, game_data) -> None:
+    """`skill_max_xp` empty: the climb has no size, so it is not priced."""
+    st = replace(state, skills={**state.skills, "weaponcrafting": 1})
+    assert not _sibling_routes(st, game_data, _climb_ctx(), _ClimbStore({"Sib": 10.0}))
+
+
+def test_the_climber_itself_has_no_sibling_route(gated_state, game_data) -> None:
+    """Its own climb is `_gated_skill_option`; a second route would price it twice."""
+    st = replace(gated_state, character="Me", skills={**gated_state.skills, "weaponcrafting": 1})
+    assert not _sibling_routes(st, game_data, _climb_ctx(climber="Me"), _ClimbStore({"Me": 10.0}))
+
+
+def test_a_fleet_naming_no_climber_has_no_sibling_route(gated_state, game_data) -> None:
+    st = replace(gated_state, skills={**gated_state.skills, "weaponcrafting": 1})
+    ctx = replace(_climb_ctx(), fleet_climbers={})
+    assert not _sibling_routes(st, game_data, ctx, _ClimbStore({"Sib": 10.0}))
+
+
+def test_a_sibling_priced_piece_is_served_by_a_withdraw(gated_state, game_data) -> None:
+    """The sibling crafts and banks it; this character's own step is the
+    withdraw (§2.5 "Delivery"), never its own craft behind the gate."""
+    st = replace(gated_state, skills={**gated_state.skills, "weaponcrafting": 1})
+    _price, kind = cheapest_route("iron_sword", 1, st, game_data, _climb_ctx(),
+                                  _ClimbStore({"Sib": 10.0}), policy=LEGACY, pocket=0)
+    assert kind is SourceKind.WITHDRAW
 
 
 def test_ge_fill_is_priced_in_gold_at_the_standing_order(state, game_data) -> None:

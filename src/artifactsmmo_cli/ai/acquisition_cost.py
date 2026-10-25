@@ -26,6 +26,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timezone
 from fractions import Fraction
+from math import ceil
 
 from artifactsmmo_cli.ai.acquisition_cost_core import (
     BANK_VENUE,
@@ -40,6 +41,7 @@ from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.fight_walk import walk_seconds
+from artifactsmmo_cli.ai.fleet_climb_core import amortized_climb_seconds
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill, loss_cost
@@ -498,23 +500,80 @@ def _sibling_craft_option(item: str, state: WorldState, game_data: GameData,
     two units of one item are one. `unlock_actions` is paid once across every
     route sharing the key, which is precisely the batching `SupplyClaim` elects a
     single producer to perform.
+
+    NO SIBLING MEETS THE GATE YET (spec 2026-10-18 §2.5): the fleet's ONE
+    climber for the skill (`role_selection.fleet_climber`) pays the climb once
+    for every fleet unit it unlocks, so the route still exists, with the
+    climber's remaining climb divided across those units
+    (`_amortized_fleet_climb`) added to the request cost. "Speculation" above
+    meant a climb nobody committed to; the climber is committed by
+    construction — it alone may hold the skill's role, and its own objective
+    serves every fleet piece the climb unlocks (`fleet_pieces`). When this
+    character IS the climber there is no sibling route: its own climb is
+    `_gated_skill_option`.
     """
     gated = _skill_gated(item, model, SourceKind.CRAFT, policy)
     if gated is None:
         return None  # no craft, or our own CRAFT route already covers it
     route, skill, level = gated
-    if ctx.sibling_skills.get(skill, 0) < level:
-        return None  # nobody is one craft away
     cost = store.fleet_supply_request_cycles()
     if cost is None or cost <= 0:
         return None  # the fleet has never served a request; nothing to price it with
+    climb = 0
+    if ctx.sibling_skills.get(skill, 0) < level:
+        # Nobody is one craft away: the fleet's climber climbs for us.
+        amortized = _amortized_fleet_climb(skill, level, state, game_data, ctx, store)
+        if amortized is None:
+            return None
+        climb = amortized
     return RouteOption(
         kind=SourceKind.CRAFT.value, venue=BANK_VENUE,
         actions_per_application=1, yield_per=route.yield_per,
         capacity=UNBOUNDED_CAPACITY, inputs=dict(route.inputs),
         unlock=f"sibling:{item}",
-        unlock_actions=int(cost),
+        unlock_actions=climb + int(cost),
     )
+
+
+def _amortized_fleet_climb(skill: str, level: int, state: WorldState, game_data: GameData,
+                           ctx: SelectionContext, store: LearningStore) -> int | None:
+    """This character's share, in actions, of the fleet climber's remaining
+    climb of `skill` to `level` (spec 2026-10-18 §2.5), or None when there is
+    no sibling climb to share: the fleet names no climber for the skill
+    (`ctx.fleet_climbers`, empty without a fleet), this character is the
+    climber itself, or the climb cannot be priced. The climber is the one
+    `role_selection.decide_role` lets claim the skill's role.
+
+    The remaining climb is priced as `decisions/route.route_price` prices a
+    `ReachSkillLevel`: `skill_grind_cycles` at the climber's grind rate
+    (`character_skill_grind_rate`), the fleet's only in its ABSENCE (the same
+    load-bearing `is None` test), and a non-positive rate or xp requirement
+    declines. Cycles ARE actions, so no conversion follows. The ledger
+    publishes levels, not xp, so the climber climbs from the start of its
+    level, and this character's own `skill_max_xp` stands for every level —
+    `skill_grind_cost_core`'s own assumption, a lower bound on a rising curve.
+
+    Shared across the units it unlocks (`amortized_climb_seconds`, rounded up
+    to whole actions): the one being priced, plus every unit of a sibling's
+    `L*` piece on the board that `skill` gates above the climber's level and
+    at or below `level` — the climb to `level` opens exactly those."""
+    who = ctx.fleet_climbers.get(skill)
+    if who is None or who == state.character:
+        return None
+    rate = store.character_skill_grind_rate(who, skill)
+    if rate is None:
+        rate = store.fleet_skill_grind_rate(skill)
+    max_xp = state.skill_max_xp.get(skill, 0)
+    if not rate or rate <= 0 or max_xp <= 0:
+        return None
+    start = ctx.sibling_skill_ledger[who].get(skill, 0)
+    remaining = skill_grind_cycles(start, 0, max_xp, level, rate)
+    units = 1
+    for code, (asked, _gain) in ctx.fleet_board.items():
+        requirement = game_data.producing_requirement(code)
+        if requirement is not None and requirement[0] == skill and start < requirement[1] <= level:
+            units += asked
+    return ceil(amortized_climb_seconds(Fraction(remaining), units))
 
 
 def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
@@ -780,12 +839,25 @@ def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
         credit_skills, game_data)
     price, route = priced_route(item, qty, options, owned, frozenset({GOLD_CODE}))
     if route is not None:
-        return price, SourceKind(route.kind)
+        return price, _served_by(route)
     model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc))
     for kind in _SKILL_GATE:
         if _skill_gated(item, model, kind, policy) is not None:
             return price, kind
     return price, None
+
+
+def _served_by(route: RouteOption) -> SourceKind:
+    """The route kind that SERVES `route` on this character's side. A
+    sibling's craft (`_sibling_craft_option`: CRAFT at `BANK_VENUE`) reaches
+    this character as a bank WITHDRAW — the sibling crafts and banks it, and
+    this character's own step is the withdraw (spec 2026-10-18 §2.5,
+    "Delivery") — so a piece it priced is never served by this character's own
+    craft, whose crafting gate would turn it into the very climb the sibling
+    route exists to spare. Every other route serves as its own kind."""
+    if route.kind == SourceKind.CRAFT.value and route.venue == BANK_VENUE:
+        return SourceKind.WITHDRAW
+    return SourceKind(route.kind)
 
 
 def fight_gold_monster(state: WorldState, game_data: GameData, ctx: SelectionContext,

@@ -22,8 +22,11 @@ from artifactsmmo_cli.ai.decisions.root import (
     resolve_root,
 )
 from artifactsmmo_cli.ai.decisions.which_piece_is_next import WhichPieceIsNext
+from artifactsmmo_cli.ai.fleet_piece import FleetPiece
+from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import gear_objective
+from artifactsmmo_cli.ai.gear_objective_context import farm_target
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
@@ -38,6 +41,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
+    ReachFleetOutcome,
     ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -319,3 +323,118 @@ def test_cheapest_route_matches_the_price(bundle: GameData) -> None:
             piece.code, 1, state, bundle, CTX, None, policy=PIECE_POLICY,
             pocket=spendable_pocket(state, bundle, frozenset({piece.code})))
         assert (Fraction(price + EQUIP_ACTIONS), route) == (piece.price, piece.route), piece
+
+
+
+# ---------------------------------------------------------------------------
+# A crafter's fleet pieces join its own (spec 2026-10-18 §2.5)
+# ---------------------------------------------------------------------------
+
+FLEET_SHIELD = FleetPiece("iron_shield", "gearcrafting", 10, Fraction(3))
+"""A sibling's gearcrafting-10 piece on the board, for a gearcrafting-1 crafter."""
+
+
+def _crafting(fleet: tuple[FleetPiece, ...] = (FLEET_SHIELD,), **kw) -> SelectionContext:
+    return replace(_ctx(role="logger", **kw), fleet_pieces=fleet)
+
+
+def test_a_crafter_holding_its_own_l_star_climbs_for_the_fleet() -> None:
+    """Its own `L*` is held, but a sibling's piece its role skill makes is on
+    the board: the root is that piece's climb, never one more character level,
+    and the trunk is not even an alternative."""
+    gd = _gd()
+    resolution = _resolve(make_state(level=15), gd, _missing(), ctx=_crafting())
+    assert resolution.root == ReachSkillLevel(skill="gearcrafting", level=2)
+    assert not any(isinstance(alt, ReachCharLevel) for alt in resolution.alternatives)
+
+
+def test_a_met_gate_serves_the_fleet_piece_by_the_supply_run() -> None:
+    """At gearcrafting 10 the shield is one craft away, and it is the role's
+    due supply target: the step banks it for the receivers."""
+    gd = _gd()
+    state = make_state(level=15, skills={**make_state().skills, "gearcrafting": 10})
+    ctx = _crafting(supply_target=("iron_shield", 1, 1),
+                    asymmetric_demand=frozenset({"iron_shield"}))
+    resolution = _resolve(state, gd, _missing(), ctx=ctx)
+    assert resolution.root == ReachFleetOutcome(FLEET_SUPPLY, "iron_shield")
+
+
+def test_a_fleet_piece_with_no_step_this_cycle_still_withholds_the_trunk() -> None:
+    """The gate is met but the role's supply run is for another item: the
+    piece has no step now and is named in `declined`, and a crafter whose
+    fleet demand waits grinds no XP — no root at all."""
+    gd = _gd()
+    state = make_state(level=15, skills={**make_state().skills, "gearcrafting": 10})
+    resolution = _resolve(state, gd, _missing(),
+                          ctx=_crafting(supply_target=("ash_club", 1, 1),
+                                        asymmetric_demand=frozenset({"ash_club"})))
+    assert resolution.root is None
+    assert dict(resolution.declined) == {"FleetPiece(iron_shield)": "not the supply target"}
+    assert not any(isinstance(alt, ReachCharLevel) for alt in resolution.alternatives)
+
+
+def test_a_declined_fleet_step_yields_and_withholds_the_trunk() -> None:
+    """The climb's step is declined: recorded by name, and no XP fight follows
+    even though every own piece is held."""
+    gd = _gd()
+    climb = ReachSkillLevel(skill="gearcrafting", level=2)
+    resolution = _resolve(make_state(level=15), gd, _missing(), {climb: "no_plan"},
+                          ctx=_crafting())
+    assert resolution.root is None
+    assert dict(resolution.declined) == {repr(climb): "no_plan"}
+
+
+def test_fleet_and_own_pieces_share_one_order() -> None:
+    """One `piece_order_key` over both: a fleet piece whose summed gain per
+    price beats the crafter's own piece goes first, and a zero-gain fleet piece
+    goes after it."""
+    gd = _gd()
+    rich = FleetPiece("iron_shield", "gearcrafting", 10, Fraction(10**9))
+    poor = FleetPiece("iron_shield", "gearcrafting", 10, Fraction(0))
+    club = _missing(CLUB)
+    assert _resolve(make_state(level=15), gd, club, ctx=_crafting((rich,))).root == \
+        ReachSkillLevel(skill="gearcrafting", level=2)
+    first = _resolve(make_state(level=15), gd, club, ctx=_crafting((poor,)))
+    assert first.root == ObtainItem("ash_club", 1, slot="weapon_slot")
+    assert ReachSkillLevel(skill="gearcrafting", level=2) in first.alternatives
+
+
+def test_no_fleet_piece_keeps_the_held_trunk() -> None:
+    """A crafter whose role serves nothing on the board grinds as before."""
+    gd = _gd()
+    resolution = _resolve(make_state(level=15), gd, _missing(), ctx=_crafting(()))
+    assert resolution.root == ReachCharLevel(level=16)
+
+
+def test_waiting_fleet_demand_names_no_grind_target() -> None:
+    """`L*` held, but fleet pieces wait: no monster is the grind target."""
+    held = _missing()
+    assert farm_target(None, held, False) == "wolf"
+    assert farm_target(None, held, True) is None
+
+
+AWAITED = replace(SHIELD, route=SourceKind.WITHDRAW)
+"""The shield priced by the sibling route: a fleet crafter makes and banks it."""
+
+
+def test_a_piece_a_sibling_crafts_waits_for_the_bank() -> None:
+    """§2.5 "Delivery": the shield is served by a withdraw and the bank holds
+    none yet, so it has no step — never this character's own gearcrafting
+    climb — and the next piece heads the walk; nor is it offered as an
+    alternative."""
+    gd = _gd()
+    shield = ObtainItem("iron_shield", 1, slot="shield_slot")
+    resolution = _resolve(make_state(level=15, bank_items={}), gd, _missing(AWAITED, CLUB))
+    assert resolution.root == ObtainItem("ash_club", 1, slot="weapon_slot")
+    assert dict(resolution.declined) == {repr(shield): "awaits the fleet crafter"}
+    assert shield not in resolution.alternatives
+    assert ReachSkillLevel(skill="gearcrafting", level=2) not in resolution.alternatives
+
+
+def test_a_banked_piece_from_a_sibling_is_withdrawn() -> None:
+    """Once the crafter banks it, the shield is its own root: the step
+    withdraws and equips it."""
+    gd = _gd()
+    state = make_state(level=15, bank_items={"iron_shield": 1})
+    resolution = _resolve(state, gd, _missing(AWAITED, CLUB))
+    assert resolution.root == ObtainItem("iron_shield", 1, slot="shield_slot")

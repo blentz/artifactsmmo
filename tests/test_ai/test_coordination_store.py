@@ -2624,3 +2624,49 @@ def test_create_all_adds_the_supply_claims_table_to_a_pre_existing_database(
         assert store.claim_supply("spruce_wood", _T0) is True
     finally:
         store.close()
+
+
+def test_sibling_skill_ledger_reads_each_sibling_apart(tmp_path: Path) -> None:
+    """The fleet's climber is chosen per character (spec 2026-10-18 §2.5), so
+    the ledger keeps each sibling's levels apart where `sibling_skill_levels`
+    folds them to the best; this character's own row and an expired row are
+    not read."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    ana = CoordinationStore(db_path=db, character="Ana")
+    bea = CoordinationStore(db_path=db, character="Bea")
+    old = CoordinationStore(db_path=db, character="Old")
+    try:
+        hal.publish_skills({"gearcrafting": 30}, _T0)
+        ana.publish_skills({"gearcrafting": 23, "jewelrycrafting": 22}, _T0)
+        bea.publish_skills({"gearcrafting": 20}, _T0)
+        old.publish_skills({"gearcrafting": 40},
+                           _T0 - timedelta(seconds=DEMAND_TTL_SECONDS + 1))
+        assert hal.sibling_skill_ledger(_T0) == {
+            "Ana": {"gearcrafting": 23, "jewelrycrafting": 22}, "Bea": {"gearcrafting": 20}}
+        assert hal.sibling_skill_levels(_T0) == {"gearcrafting": 23, "jewelrycrafting": 22}
+    finally:
+        for store in (hal, ana, bea, old):
+            store.close()
+
+
+def test_sibling_skill_ledger_swallows_error_and_returns_empty(
+    tmp_path: Path, capsys
+) -> None:
+    """Degrades to "no sibling ledger", which leaves the fleet climb absent —
+    the same safe direction as `sibling_skill_levels`."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    _break_engine(hal)
+    assert hal.sibling_skill_ledger(_T0) == {}
+    assert "[coordination] sibling_skill_ledger failed" in capsys.readouterr().out
+
+
+def test_sibling_skill_ledger_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.sibling_skill_ledger(_NAIVE_NOW)
+    finally:
+        hal.close()

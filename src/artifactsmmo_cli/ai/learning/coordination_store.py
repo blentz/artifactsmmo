@@ -817,6 +817,32 @@ class CoordinationStore:
                 best[row.skill] = row.level
         return best
 
+    def sibling_skill_ledger(self, now: datetime) -> dict[str, dict[str, int]]:
+        """Every OTHER character's unexpired skill levels, per character.
+
+        `sibling_skill_levels` folds the ledger to the fleet's best level per
+        skill, which answers "can ANY sibling make this"; choosing the ONE
+        character that climbs a skill for the fleet (spec 2026-10-18 §2.5,
+        `fleet_climb_core.climber`) needs each sibling's own level. Same rows,
+        same liveness and own-character filter."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        ledger: dict[str, dict[str, int]] = {}
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(
+                    select(SkillLedger).where(
+                        SkillLedger.expires_at > stamp,
+                        SkillLedger.character != self._character,
+                    )
+                ).all()
+        except SQLAlchemyError as e:
+            print(f"[coordination] sibling_skill_ledger failed: {e}")
+            return {}
+        for row in rows:
+            ledger.setdefault(row.character, {})[row.skill] = row.level
+        return ledger
+
     def _bank_claim_expiry(self, now: datetime) -> str:
         return (now + timedelta(seconds=BANK_CLAIM_TTL_SECONDS)).isoformat()
 

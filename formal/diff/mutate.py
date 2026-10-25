@@ -176,6 +176,8 @@ POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py
 PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
 GEAR_OBJECTIVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective_core.py"
 FLEET_CLIMB_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_climb_core.py"
+FLEET_CLIMBER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_climber.py"
+FLEET_PIECES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_pieces.py"
 GEAR_OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective.py"
 GEAR_OBJECTIVE_CONTEXT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective_context.py"
 PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
@@ -4840,7 +4842,7 @@ FLEET_ROLES_PLAYER_MUTATIONS = [
      "        if self._coordination is None or self._role is not None:\n",
      "        if self._coordination is None:\n"),
     ("fleet roles: never read",
-     "        self._fleet_roles = frozenset(self._coordination.live_leases(now))\n",
+     "        self._fleet_roles = frozenset(leases)\n",
      ""),
     ("fleet roles: the context never carries the role",
      "            role=self._role,\n            fleet_roles=self._fleet_roles,\n",
@@ -6376,6 +6378,172 @@ FLEET_CLIMB_CORE_MUTATIONS = [
     ("fleet climb: an empty fleet not named",
      "    if not candidates:",
      "    if False:"),
+]
+
+# One crafter climbs for the fleet (spec 2026-10-18 §2.5, plan B Task 7): the
+# role claim admits only the fleet's climber, the climber is read off live
+# coordination data, the sibling route shares the climber's climb, the crafter's
+# fleet pieces join its objective, and a sibling-served piece waits on the bank.
+FLEET_CLIMB_ROLE_MUTATIONS = [
+    ("fleet climb: a second character claims the climbed skill's role",
+     "    if role_name in unservable_released or role_name in climbed_elsewhere:",
+     "    if role_name in unservable_released:"),
+    ("fleet climb: the climber itself is refused its role",
+     "                          fleet_order) != character)",
+     "                          fleet_order) == character)"),
+    ("fleet climb: the rival scan ignores who climbs",
+     "        if not _claimable(role.name, demand_by_role, idle_released, unservable_released,\n"
+     "                          climbed_elsewhere):\n"
+     "            continue\n"
+     "        rival_best",
+     "        if not _claimable(role.name, demand_by_role, idle_released, unservable_released,\n"
+     "                          frozenset()):\n"
+     "            continue\n"
+     "        rival_best"),
+    ("fleet climb: the climber's demand above its level is dropped",
+     "        if skill not in climbing and not serves_item(item_code, skill, level_of_item,",
+     "        if not serves_item(item_code, skill, level_of_item,"),
+]
+FLEET_CLIMBER_MUTATIONS = [
+    ("fleet climber: a ledger row outside the fleet competes",
+     "        name: sibling for name, sibling in sibling_skill_levels.items() if name in fleet_order}",
+     "        name: sibling for name, sibling in sibling_skill_levels.items()}"),
+    ("fleet climber: this character's stale ledger row beats its live levels",
+     "    levels[character] = skill_levels",
+     "    levels.setdefault(character, skill_levels)"),
+    ("fleet climber: levels past the demand count as less to climb",
+     "    remaining = {name: Fraction(max(0, demanded - held.get(skill, 0)))",
+     "    remaining = {name: Fraction(demanded - held.get(skill, 0))"),
+    ("fleet climber: holding the skill's own role counts as other work",
+     "                           if name in holders and role != owner)",
+     "                           if name in holders)"),
+]
+FLEET_CLIMB_ROUTE_MUTATIONS = [
+    ("fleet climb route: a sibling below the gate is one craft away",
+     "    if ctx.sibling_skills.get(skill, 0) < level:",
+     "    if False:"),
+    ("fleet climb route: the climb is not charged",
+     "        unlock_actions=climb + int(cost),",
+     "        unlock_actions=int(cost),"),
+    ("fleet climb route: the climber's own climb priced as a sibling's",
+     "    if who is None or who == state.character:",
+     "    if who is None:"),
+    ("fleet climb route: the fleet rate before the climber's own",
+     "    rate = store.character_skill_grind_rate(who, skill)",
+     "    rate = store.fleet_skill_grind_rate(skill)"),
+    ("fleet climb route: the climb is not shared",
+     "    return ceil(amortized_climb_seconds(Fraction(remaining), units))",
+     "    return remaining"),
+    ("fleet climb route: a unit the climber already makes shares the climb",
+     "        if requirement is not None and requirement[0] == skill and start < requirement[1] <= level:",
+     "        if requirement is not None and requirement[0] == skill and requirement[1] <= level:"),
+    ("fleet climb route: a unit past the climb shares it",
+     "        if requirement is not None and requirement[0] == skill and start < requirement[1] <= level:",
+     "        if requirement is not None and requirement[0] == skill and start < requirement[1]:"),
+    ("fleet climb route: another skill's unit shares the climb",
+     "        if requirement is not None and requirement[0] == skill and start < requirement[1] <= level:",
+     "        if requirement is not None and start < requirement[1] <= level:"),
+    ("fleet climb route: a sibling-crafted piece is served by its own craft",
+     "    if route.kind == SourceKind.CRAFT.value and route.venue == BANK_VENUE:",
+     "    if False:"),
+]
+FLEET_PIECE_WALK_MUTATIONS = [
+    ("fleet pieces: a held crafter grinds whatever the fleet waits on",
+     "        if target.held and not fleet:\n",
+     "        if target.held:\n"),
+    ("fleet pieces: every fleet step declined offers the trunk",
+     "        if fleet:\n"
+     "            # Fleet demand this role serves is waiting",
+     "        if False:\n"
+     "            # Fleet demand this role serves is waiting"),
+    ("fleet pieces: a fleet piece always orders first",
+     "        keyed.append((piece_order_key(0, piece.gain, price, len(rank)), piece))",
+     "        keyed.insert(0, (piece_order_key(0, piece.gain, price, len(rank)), piece))"),
+    ("fleet pieces: a met gate still climbs",
+     "    if current < piece.level:",
+     "    if current <= piece.level:"),
+    ("fleet pieces: any supply run serves every fleet piece",
+     "    if target is not None and target[0] == piece.code and supply_due(ctx):",
+     "    if target is not None and supply_due(ctx):"),
+    ("fleet pieces: a declined fleet step is served anyway",
+     "                reason = self.walk.step_decline(root)\n"
+     "                if reason is None:",
+     "                reason = self.walk.step_decline(root)\n"
+     "                if True:"),
+    ("fleet pieces: a sibling-crafted piece climbs before it is banked",
+     "            if piece.awaits_delivery(state):",
+     "            if False:"),
+]
+FLEET_PIECE_ROOT_MUTATIONS = [
+    ("fleet pieces: the trunk is offered while fleet demand waits",
+     "    if target is not None and target.held and not fleet and trunk is not None:\n",
+     "    if target is not None and target.held and trunk is not None:\n"),
+    ("fleet pieces: a sibling-crafted piece is offered before it is banked",
+     "        if not piece.awaits_delivery(state)\n",
+     "        if True\n"),
+]
+FLEET_PIECE_RESULT_MUTATIONS = [
+    ("fleet pieces: a banked copy still awaits delivery",
+     "        return self.route is SourceKind.WITHDRAW and (state.bank_items or {}).get(self.code, 0) <= 0",
+     "        return self.route is SourceKind.WITHDRAW"),
+]
+FLEET_PIECE_TARGET_MUTATIONS = [
+    ("fleet pieces: m* is the grind target while fleet demand waits",
+     "        path_winnable=objective is not None and objective.held and not fleet_waiting,\n",
+     "        path_winnable=objective is not None and objective.held,\n"),
+]
+FLEET_PIECES_MUTATIONS = [
+    ("fleet pieces: another skill's piece is served",
+     "        if requirement is None or requirement[0] != skill:",
+     "        if requirement is None:"),
+    ("fleet pieces: a banked copy is climbed for",
+     "        if state.inventory.get(code, 0) > 0 or banked.get(code, 0) > 0:",
+     "        if state.inventory.get(code, 0) > 0:"),
+]
+FLEET_CLIMB_PLAYER_SCENARIO_MUTATIONS = [
+    ("fleet climb player: the climber's demand above its level is dropped",
+     "                                 level_of_item, state.skills, work_of_item, climbing)",
+     "                                 level_of_item, state.skills, work_of_item)"),
+    ("fleet climb player: the role claim ignores who climbs",
+     "                               demanded_level=demanded,",
+     "                               demanded_level={},"),
+    ("fleet climb player: the crafter's fleet pieces never reach the walk",
+     "            fleet_pieces=fleet_pieces(self.state, self.game_data, self._role,",
+     "            fleet_pieces=fleet_pieces(self.state, self.game_data, None,"),
+]
+FLEET_CLIMB_PLAYER_MUTATIONS = [
+    ("fleet climb player: no climber named",
+     "        self._fleet_climbers = self._climbers(leases)",
+     "        self._fleet_climbers = {}"),
+    ("fleet climb player: a piece's asked units are lost",
+     "        self._fleet_board = {code: (board_units[code], gain)",
+     "        self._fleet_board = {code: (1, gain)"),
+    ("fleet climb player: the board's pieces demand no level",
+     "        for code in (*self._fleet_board, *self._own_piece_value()):",
+     "        for code in self._own_piece_value():"),
+    ("fleet climb player: two pieces on one skill demand the lower level",
+     "                demanded[skill] = max(demanded.get(skill, 0), level)",
+     "                demanded[skill] = min(demanded.get(skill, level), level)"),
+    ("fleet climb player: the sibling ledger is never read",
+     "        self._sibling_ledger = self._coordination.sibling_skill_ledger(now)",
+     "        self._sibling_ledger = {}"),
+]
+FLEET_CLIMB_STORE_MUTATIONS = [
+    ("fleet climb store: another character's rate is this one's",
+     "        return self._grind_rate(skill, window, character=character)",
+     "        return self._grind_rate(skill, window, character=self._character)"),
+]
+FLEET_CLIMB_LEDGER_MUTATIONS = [
+    ("fleet climb ledger: this character's own row is read",
+     "                        SkillLedger.character != self._character,\n"
+     "                    )\n"
+     "                ).all()\n"
+     "        except SQLAlchemyError as e:\n"
+     "            print(f\"[coordination] sibling_skill_ledger failed: {e}\")",
+     "                    )\n"
+     "                ).all()\n"
+     "        except SQLAlchemyError as e:\n"
+     "            print(f\"[coordination] sibling_skill_ledger failed: {e}\")"),
 ]
 
 # synergy_core.synergy_pure — the purity factor read by the taskmaster choice and
@@ -8362,6 +8530,9 @@ _ALL_SRCS = [
     GEAR_OBJECTIVE_CORE_SRC,
     # Fleet climb core (spec 2026-10-18 §2.5): unit-killed group.
     FLEET_CLIMB_CORE_SRC,
+    # Fleet climber and fleet pieces (plan B Task 7): unit-killed groups.
+    FLEET_CLIMBER_SRC,
+    FLEET_PIECES_SRC,
     # Gear objective adapter (spec 2026-10-18 §2.1-§2.4): unit-killed group.
     GEAR_OBJECTIVE_SRC,
     # Equipment-profile selector (2026-07-08): differential-killed group.
@@ -10079,9 +10250,9 @@ WHICH_PIECE_MUTATIONS = [
     # so skipping the held branch reached the all-declined trunk, the same
     # `next_level`. The held branch must still answer the trunk, not nothing.
     ("which-piece: a held objective answers no root",
-     "        if target.held:\n"
+     "        if target.held and not fleet:\n"
      "            return next_level(state, game_data)\n",
-     "        if target.held:\n"
+     "        if target.held and not fleet:\n"
      "            return None\n"),
     ("which-piece: a held objective grinds to the current level",
      "    return ReachCharLevel(level=state.level + 1)\n",
@@ -10096,8 +10267,8 @@ WHICH_PIECE_MUTATIONS = [
      "            if self.walk.serves(piece.slot, gear, state, game_data, ctx, history):\n",
      "            if self.walk.serves(piece.slot, gear, state, game_data, ctx, history) or True:\n"),
     ("which-piece: the LAST served piece heads the walk",
-     "        for piece in target.missing:\n",
-     "        for piece in reversed(target.missing):\n"),
+     "        return list(target.missing)\n",
+     "        return list(reversed(target.missing))\n"),
     ("which-piece: a piece the catalogue does not know is classified, not refused",
      "        if unknown:\n",
      "        if False:\n"),
@@ -10114,12 +10285,12 @@ WHICH_PIECE_MUTATIONS = [
 ]
 WHICH_PIECE_ROOT_MUTATIONS = [
     ("root/resolve_root: the trunk is offered while a piece is missing",
-     "    if target is not None and target.held and trunk is not None:\n",
-     "    if target is not None and trunk is not None:\n"),
+     "    if target is not None and target.held and not fleet and trunk is not None:\n",
+     "    if target is not None and not fleet and trunk is not None:\n"),
     ("root/resolve_root: the trunk is offered at the level cap (F12)",
-     "    if target is not None and target.held and trunk is not None:\n"
+     "    if target is not None and target.held and not fleet and trunk is not None:\n"
      "        ordered.append(trunk)\n",
-     "    if target is not None and target.held:\n"
+     "    if target is not None and target.held and not fleet:\n"
      "        ordered.append(trunk or ReachCharLevel(level=state.level + 1))\n"),
     ("root/resolve_root: the missing pieces are not offered as alternatives",
      "        for piece in (target.missing if target is not None else ())\n",
@@ -10798,8 +10969,8 @@ GEAR_OBJECTIVE_CTX_MUTATIONS = [
      "    with history.search_cache() if history is not None else nullcontext():",
      "    with nullcontext():"),
     ("target: m* is fought while a piece of L* is missing",
-     "        path_winnable=objective is not None and objective.held,\n",
-     "        path_winnable=objective is not None,\n"),
+     "        path_winnable=objective is not None and objective.held and not fleet_waiting,\n",
+     "        path_winnable=objective is not None and not fleet_waiting,\n"),
     ("target: a held monsters task loses its precedence",
      "        task_monster=task_monster,\n",
      "        task_monster=None,\n"),
@@ -12945,6 +13116,30 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_gear_objective_core.py", survivors)
     run_group(FLEET_CLIMB_CORE_SRC, FLEET_CLIMB_CORE_MUTATIONS,
               "tests/test_ai/test_fleet_climb_core.py", survivors)
+    run_group(ROLE_SELECTION_SRC, FLEET_CLIMB_ROLE_MUTATIONS,
+              "tests/test_ai/test_role_selection.py", survivors)
+    run_group(FLEET_CLIMBER_SRC, FLEET_CLIMBER_MUTATIONS,
+              "tests/test_ai/test_fleet_climber.py", survivors)
+    run_group(ACQUISITION_COST_SRC, FLEET_CLIMB_ROUTE_MUTATIONS,
+              "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(WHICH_PIECE_SRC, FLEET_PIECE_WALK_MUTATIONS,
+              "tests/test_ai/test_decisions_which_piece.py", survivors)
+    run_group(ROOT_DECISION_SRC, FLEET_PIECE_ROOT_MUTATIONS,
+              "tests/test_ai/test_decisions_which_piece.py", survivors)
+    run_group(GEAR_OBJECTIVE_RESULT_SRC, FLEET_PIECE_RESULT_MUTATIONS,
+              "tests/test_ai/test_decisions_which_piece.py", survivors)
+    run_group(GEAR_OBJECTIVE_CONTEXT_SRC, FLEET_PIECE_TARGET_MUTATIONS,
+              "tests/test_ai/test_decisions_which_piece.py", survivors)
+    run_group(FLEET_PIECES_SRC, FLEET_PIECES_MUTATIONS,
+              "tests/test_ai/test_fleet_pieces.py", survivors)
+    run_group(PLAYER_SRC, FLEET_CLIMB_PLAYER_SCENARIO_MUTATIONS,
+              "tests/test_ai/scenarios/test_fleet_amortized_climb.py", survivors)
+    run_group(PLAYER_SRC, FLEET_CLIMB_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
+    run_group(LEARNING_STORE_SRC, FLEET_CLIMB_STORE_MUTATIONS,
+              "tests/test_ai/test_learning_store.py", survivors)
+    run_group(COORDINATION_STORE_SRC, FLEET_CLIMB_LEDGER_MUTATIONS,
+              "tests/test_ai/test_coordination_store.py", survivors)
     run_group(GEAR_OBJECTIVE_SRC, GEAR_OBJECTIVE_MUTATIONS,
               "tests/test_ai/test_gear_objective.py", survivors)
     run_group(SYNERGY_CORE_SRC, SYNERGY_CORE_MUTATIONS,

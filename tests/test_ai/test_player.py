@@ -410,19 +410,19 @@ class TestArbiterSelection:
                 return verdict
             return _fake
 
-        monkeypatch.setattr(ctx_mod, "farm_target", lambda task, objective: "chicken")
+        monkeypatch.setattr(ctx_mod, "farm_target", lambda task, objective, fleet_waiting: "chicken")
         with patch("artifactsmmo_cli.ai.gear_objective_context.secure_win", _secure(False)):
             assert player._selection_context().combat_risky is True
         with patch("artifactsmmo_cli.ai.gear_objective_context.secure_win", _secure(True)):
             assert player._selection_context().combat_risky is False
         assert asked == [(player.state.max_hp, 0), (player.state.max_hp, 0)]
-        monkeypatch.setattr(ctx_mod, "farm_target", lambda task, objective: None)
+        monkeypatch.setattr(ctx_mod, "farm_target", lambda task, objective, fleet_waiting: None)
         with patch("artifactsmmo_cli.ai.gear_objective_context.secure_win", _secure(False)):
             assert player._selection_context().combat_risky is False
 
     def test_selection_context_carries_combat_monster(self, monkeypatch):
         player = self._with_strategy(make_game_data_mock(), level=3)
-        monkeypatch.setattr(ctx_mod, "farm_target", lambda task, objective: "chicken")
+        monkeypatch.setattr(ctx_mod, "farm_target", lambda task, objective, fleet_waiting: "chicken")
         ctx = player._selection_context()
         assert ctx.combat_monster == "chicken"
         assert ctx.task_exchange_min_coins == player._exchange_min_coins()
