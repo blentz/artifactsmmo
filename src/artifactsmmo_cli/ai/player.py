@@ -108,6 +108,7 @@ from artifactsmmo_cli.ai.gear_objective_context import (
     gear_keep_for,
     gear_objective_line,
 )
+from artifactsmmo_cli.ai.gear_objective_result import GearPiece
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
 from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
@@ -441,11 +442,6 @@ class GamePlayer:
         self._last_outcome: str | None = None
         self._plan_cache: PlanCache | None = None
         self._last_decide_crafting_target: str | None = None
-        # The gear a crafting-skill gate blocked this character out of, from
-        # `StrategyDecision.blocked_target`. Published as demand when the
-        # chosen root is a skill climb and therefore names no item — see
-        # `_own_unmet_demand`.
-        self._last_blocked_target: str | None = None
         # Per-cycle SelectionContext, computed ONCE per cycle at the
         # `_selection_context` seam and threaded into `decide`/`decompose`/
         # `build_plan_tree` so the tier descent stops at a node with any ready
@@ -688,9 +684,9 @@ class GamePlayer:
             self._planning_observer(active)
 
     def _record_decision_targets(self, decision: "StrategyDecision") -> str | None:
-        """The chosen step's item code, and the blocked target beside it.
+        """The chosen step's item code.
 
-        ONE PRODUCER for both. `_decide_band` and `plan_from_state` each carried
+        ONE PRODUCER. `_decide_band` and `plan_from_state` each carried
         their own copy of this derivation — `plan_from_state`'s docstring says it
         "mirrors run()'s per-cycle decide+select", and a mirror is what it was:
         the copies drifted the moment `blocked_target` was added to one of them,
@@ -699,7 +695,7 @@ class GamePlayer:
         here by a probe that read the wrong path.
 
         Returns the crafting target (the caller stamps it onto `state`) and
-        records both fields for the coordination publisher.
+        records it for the coordination publisher.
         """
         step = decision.chosen_step
         crafting_target = step.code if isinstance(step, ObtainItem) else None
@@ -709,7 +705,6 @@ class GamePlayer:
                     crafting_target = alt.code
                     break
         self._last_decide_crafting_target = crafting_target
-        self._last_blocked_target = decision.blocked_target
         return crafting_target
 
     def _decide_band(
@@ -3129,9 +3124,28 @@ class GamePlayer:
                 and self.state.level > bank_blocker.blocked_at_char_level):
             self._blockers.clear("bank")
 
+    def _missing_pieces(self) -> tuple[GearPiece, ...]:
+        """The missing pieces of this character's gear objective `L*`, read off
+        the cycle's own `SelectionContext` (`_last_ctx`, set where the cycle
+        decides). Empty when the objective is held, and when no objective was
+        computed (no monster pays, or no decision has run yet)."""
+        objective = self._last_ctx.gear_objective
+        return () if objective is None else objective.missing
+
+    def _own_piece_value(self) -> dict[str, tuple[Fraction, Fraction]]:
+        """Each missing `L*` piece's `(gain, price)`, the value the fleet board
+        carries beside its demand row (spec 2026-10-18 §2.5). Two slots may
+        miss the same code; the board row is one per code, so it carries the
+        piece pursued first (`missing` is in pursuit order)."""
+        value: dict[str, tuple[Fraction, Fraction]] = {}
+        for piece in self._missing_pieces():
+            value.setdefault(piece.code, (piece.gain, piece.price))
+        return value
+
     def _own_unmet_demand(self, state: "WorldState", game_data: GameData) -> dict[str, int]:
-        """This character's unmet closure demand for its chosen root, minus
-        what it already holds in inventory AND the account-wide bank.
+        """This character's unmet closure demand for every missing piece of its
+        gear objective `L*` and its chosen crafting target, minus what it
+        already holds in inventory AND the account-wide bank.
 
         The ArtifactsMMO bank is shared by every character on the account —
         `ai/obtain_sources` already prefers a bank withdraw over producing —
@@ -3146,28 +3160,29 @@ class GamePlayer:
         `task_reserved_demand` calls for the task-material reservation
         closure — rather than computing demand a second way (one-obtain-model
         discipline)."""
-        # THE BLOCKED TARGET IS THE FALLBACK, and it is the whole point of
-        # publishing at all. A character whose gear target is skill-gated
-        # resolves to `ReachSkillLevel`, which names no item, so `root` is None
-        # and this returned `{}` — silence, on exactly the cycles where a
-        # sibling holding that skill could have made the thing. Measured on the
-        # live fleet before this: `SupplyBank` executed 0 times in 105,159
-        # cycles and `supply_claims` was empty, while every row the board ever
-        # carried was a quantity-1 vendor good every asker could serve itself.
+        # EVERY MISSING PIECE, not the chosen root (spec 2026-10-18 §2.5): the
+        # fleet amortizes a skill climb over every piece that climb unlocks,
+        # so it has to see all of them, and the request is for the item, not
+        # for a skill. A piece behind this character's own crafting gate is
+        # exactly the one a sibling holding that skill can make: the chosen
+        # root there is a `ReachSkillLevel`, which names no item, and
+        # publishing from it alone left the board silent on the only asks a
+        # sibling could act on (`SupplyBank` executed 0 times in 105,159
+        # cycles before the gate's target was published at all).
         #
-        # `serves_item` then marks the blocked code NOT self-servable (its skill
-        # gate is what blocked it), which is what makes the request ASYMMETRIC
-        # and what `SUPPLY_BANK`'s second arm fires on. Its MATERIALS come along
-        # through the closure and stay self-servable, which is also right: those
-        # the asker can gather.
-        # BOTH ROOTS, not one or the other: "what I am working toward" and
-        # "what I am blocked out of" are different facts and the fleet needs
-        # both. `closure_demand` accumulates the max across roots into one dict
-        # — its documented usage — so two calls is the supported shape, not a
-        # merge invented here.
-        roots = [code for code in (self._last_decide_crafting_target,
-                                   self._last_blocked_target)
-                 if code is not None]
+        # `serves_item` then marks a gated piece NOT self-servable, which is
+        # what makes the request ASYMMETRIC and what `SUPPLY_BANK`'s second
+        # arm fires on. Its MATERIALS come along through the closure and stay
+        # self-servable, which is also right: those the asker can gather.
+        #
+        # The crafting target rides beside the pieces: "what I am working
+        # toward" can be a recipe material or a task item that is no `L*`
+        # piece. `closure_demand` accumulates the max across roots into one
+        # dict — its documented usage — so one call per root is the supported
+        # shape, not a merge invented here.
+        roots = [piece.code for piece in self._missing_pieces()]
+        if self._last_decide_crafting_target is not None:
+            roots.append(self._last_decide_crafting_target)
         if not roots:
             return {}
         demand: dict[str, int] = {}
@@ -3770,7 +3785,8 @@ class GamePlayer:
         self_servable = frozenset(
             code for code, skill in own_skill_of_item.items()
             if skill is None or serves_item(code, skill, own_level_of_item, state.skills))
-        self._coordination.publish_demand(own_demand, self_servable, now)
+        self._coordination.publish_demand(own_demand, self_servable, now,
+                                          self._own_piece_value())
         # This character's read of the shared board's asymmetric demand: codes
         # SOME sibling wants but marked NOT self-servable for itself — the
         # signal the supply rung (Task 4) gates on. Same per-cycle lifecycle

@@ -19,8 +19,8 @@ character blocked by a crafting-skill gate resolves to `ReachSkillLevel` (which
 names no item), so it published nothing at all. The one item a sibling could have
 made was the one item never asked for.
 
-So the walk now records the target its skill gate rejected
-(`RootWalk.blocked_target`) and the player publishes it. `serves_item` marks it
+So the player now publishes every missing piece of its gear objective `L*`,
+the gated one included (spec 2026-10-18 §2.5). `serves_item` marks it
 NOT self-servable — the asker's own gate is what blocked it — which is exactly
 what makes the request ASYMMETRIC, and `fleet_work.supply_due`'s second arm is due on any
 size of asymmetric demand.
@@ -69,10 +69,10 @@ def _game_data():
 def _asker(db: str, gd) -> GamePlayer:
     """The blocked character, driven through the REAL walk.
 
-    `plan_from_state` is what sets `_last_blocked_target` (via
-    `_record_decision_targets`, the one producer both it and `_decide_band`
-    share), so the ask is derived here rather than hand-set — a hand-set field
-    would pass this test against a walk that had stopped recording anything."""
+    `plan_from_state` is what sets `_last_ctx` (the cycle's gear objective,
+    whose missing pieces are published), so the ask is derived here rather
+    than hand-set — a hand-set objective would pass this test against a walk
+    that had stopped computing anything."""
     state = replace(scenario_state(SCENARIOS["l12_deep_chain_grind"], gd),
                     character="Ask")
     player = GamePlayer(character="Ask")
@@ -118,7 +118,8 @@ def test_the_blocked_ask_reaches_a_sibling_who_can_serve_it(tmp_path) -> None:
     asker = _asker(db, gd)
     # LINK 1 — the ask exists at all. This is the assertion the live fleet fails:
     # a blocked character published `{}` and the board stayed empty.
-    assert asker._last_blocked_target == ASKED
+    assert asker._last_ctx.gear_objective is not None
+    assert ASKED in {piece.code for piece in asker._last_ctx.gear_objective.missing}
     published = asker._own_unmet_demand(asker.state, gd)
     assert ASKED in published
 

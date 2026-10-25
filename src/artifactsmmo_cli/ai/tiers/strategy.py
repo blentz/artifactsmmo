@@ -242,10 +242,10 @@ class StrategyDecision:
     # GatherMaterials(copper_bar) which only crafts bars and stops.
     fallback_roots: list[MetaGoal] = field(default_factory=list)
     # The gear code whose CRAFTING-SKILL GATE produced a `ReachSkillLevel` root
-    # (`decisions/root.RootWalk.blocked_target`). Carried so the player can
-    # PUBLISH it as fleet demand: a blocked character's root is a skill climb,
-    # not an `ObtainItem`, so without this it publishes nothing at all and the
-    # one item a sibling could make for it is the one never asked for.
+    # (`decisions/root.RootWalk.blocked_target`). Carried for the trace's
+    # `root_group` (`tiers/root_group.root_group_of`), which tells a skill gate
+    # from an orphan climb by it. Fleet demand no longer reads it: the player
+    # publishes every missing piece of the gear objective `L*` instead.
     blocked_target: str | None = None
     # `(root repr, reason)` for each gear target the walk passed over because
     # its step cannot be served this cycle (`RootResolution.declined`). The

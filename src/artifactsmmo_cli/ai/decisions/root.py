@@ -160,8 +160,8 @@ class RootResolution:
     blocked_target: str | None = None
     """The gear code a crafting-skill gate turned into this walk's
     `ReachSkillLevel` — see `RootWalk.blocked_target`. `decide_tree` copies it
-    onto `StrategyDecision.blocked_target`, and the player publishes it as
-    demand so a sibling holding the skill can make it."""
+    onto `StrategyDecision.blocked_target`, which the trace's `root_group`
+    reads to tell a skill gate from an orphan climb."""
 
     declined: tuple[tuple[str, str], ...] = ()
     """`(root repr, reason)` for every gear target the walk passed over because

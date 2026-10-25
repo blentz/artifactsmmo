@@ -16,7 +16,9 @@ one execution reaching the line. See the paired tests below (`..._none`/
 
 import io
 from contextlib import redirect_stdout
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from fractions import Fraction
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -34,6 +36,7 @@ from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RoleChange
 from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY, SUPPLY_DEMAND_MIN, supply_due
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.coordination_store import (
@@ -52,6 +55,8 @@ from artifactsmmo_cli.ai.role_selection import (
     decide_role,
     demand_by_role,
 )
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.supply_batch_target import supply_batch_target_pure
 from artifactsmmo_cli.ai.thresholds import SUPPLY_BATCH
@@ -100,8 +105,8 @@ def test_two_stores_converge_on_distinct_roles(tmp_path) -> None:
     hal = CoordinationStore(db_path=db, character="HAL")
     c3po = CoordinationStore(db_path=db, character="C3P0")
     try:
-        hal.publish_demand({"copper_bar": 10}, frozenset(), _T0)
-        c3po.publish_demand({"ash_plank": 4}, frozenset(), _T0)
+        hal.publish_demand({"copper_bar": 10}, frozenset(), _T0, piece_value={})
+        c3po.publish_demand({"ash_plank": 4}, frozenset(), _T0, piece_value={})
         skills = {"copper_bar": "mining", "ash_plank": "woodcutting"}
 
         held: dict[str, str] = {}
@@ -574,7 +579,7 @@ def test_update_coordination_releases_an_idle_role_after_min_hold(tmp_path):
     now = datetime.now(tz=timezone.utc)
     try:
         # Somewhere to go: `logger` wants work, `miner` (hero's role) does not.
-        sibling.publish_demand({"ash_wood": 5}, frozenset(), now)
+        sibling.publish_demand({"ash_wood": 5}, frozenset(), now, piece_value={})
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES  # eligible; own demand is 0
@@ -644,7 +649,7 @@ def test_update_coordination_idle_release_does_not_immediately_reclaim(tmp_path)
     now = datetime.now(tz=timezone.utc)
     try:
         # `logger` wants work, which is what makes the idle release fire at all.
-        sibling.publish_demand({"ash_wood": 5}, frozenset(), now)
+        sibling.publish_demand({"ash_wood": 5}, frozenset(), now, piece_value={})
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
@@ -734,7 +739,7 @@ def test_a_demand_cycle_is_recorded_without_erasing_the_window(tmp_path):
         store.claim("miner", now)
         p._role = "miner"
         p._role_idle_window.extend([True] * (ROLE_IDLE_WINDOW - 2))
-        sibling.publish_demand({"copper_ore": 5}, frozenset(), now)
+        sibling.publish_demand({"copper_ore": 5}, frozenset(), now, piece_value={})
         p._update_coordination(p.state, p.game_data)
         assert p._role_idle_window[-1] is False, "the demand cycle is recorded"
         assert sum(p._role_idle_window) == ROLE_IDLE_WINDOW - 2, (
@@ -780,7 +785,7 @@ def test_update_coordination_computes_the_supply_target_from_sibling_demand(tmp_
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
-        sibling.publish_demand({"copper_ore": 5}, frozenset(), now)
+        sibling.publish_demand({"copper_ore": 5}, frozenset(), now, piece_value={})
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = 3  # below ROLE_MIN_HOLD_CYCLES: stays "miner" (keep)
@@ -811,7 +816,7 @@ def test_update_coordination_supply_target_none_without_a_matching_role(tmp_path
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
-        sibling.publish_demand({"copper_ore": 5}, frozenset(), now)
+        sibling.publish_demand({"copper_ore": 5}, frozenset(), now, piece_value={})
         # hero holds "jeweler" (jewelrycrafting only) — cannot serve mining
         # demand, so no supply target even though sibling demand exists.
         store.claim("jeweler", now)
@@ -908,7 +913,7 @@ def _held_miner(tmp_path, skills=None):
     sibling = CoordinationStore(db_path=db, character="rival")
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
-    sibling.publish_demand({"copper_ore": 5}, frozenset(), now)
+    sibling.publish_demand({"copper_ore": 5}, frozenset(), now, piece_value={})
     store.claim("miner", now)
     p._role = "miner"
     p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
@@ -961,7 +966,7 @@ def test_update_coordination_does_not_block_an_idle_release(tmp_path):
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
-        sibling.publish_demand({"ash_wood": 5}, frozenset(), now)
+        sibling.publish_demand({"ash_wood": 5}, frozenset(), now, piece_value={})
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
@@ -1070,7 +1075,7 @@ def _decide_with_skills(tmp_path, name, skills) -> str | None:
     p.set_coordination_store(store)
     try:
         sibling.publish_demand({"iron_ore": 30, "ash_wood": 6}, frozenset(),
-                               datetime.now(tz=timezone.utc))
+                               datetime.now(tz=timezone.utc), piece_value={})
         p._update_coordination(p.state, p.game_data)
         return p._role
     finally:
@@ -1115,7 +1120,7 @@ def test_update_coordination_supply_target_respects_the_same_gate(tmp_path):
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
-        sibling.publish_demand({"iron_ore": 30, "copper_ore": 4}, frozenset(), now)
+        sibling.publish_demand({"iron_ore": 30, "copper_ore": 4}, frozenset(), now, piece_value={})
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = 3  # below ROLE_MIN_HOLD_CYCLES: stays "miner"
@@ -1289,7 +1294,7 @@ def test_a_coordinated_supply_target_reaches_a_real_supply_bank_goal(tmp_path):
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
-        sibling.publish_demand({"copper_ore": SUPPLY_DEMAND_MIN + 2}, frozenset(), now)
+        sibling.publish_demand({"copper_ore": SUPPLY_DEMAND_MIN + 2}, frozenset(), now, piece_value={})
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = 3  # below ROLE_MIN_HOLD_CYCLES: stays "miner"
@@ -1346,7 +1351,7 @@ def test_a_sub_threshold_coordinated_demand_is_targeted_but_never_fires(tmp_path
     now = datetime.now(tz=timezone.utc)
     try:
         sibling.publish_demand({"copper_ore": SUPPLY_DEMAND_MIN - 1},
-                               frozenset({"copper_ore"}), now)
+                               frozenset({"copper_ore"}), now, piece_value={})
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = 3
@@ -1908,7 +1913,7 @@ def _publish_sibling_request(tmp_path, name: str, demand: dict[str, int],
     db = str(tmp_path / "coord.db")
     sibling = CoordinationStore(db_path=db, character=name)
     try:
-        sibling.publish_demand(demand, self_servable, datetime.now(tz=timezone.utc))
+        sibling.publish_demand(demand, self_servable, datetime.now(tz=timezone.utc), piece_value={})
     finally:
         sibling.close()
 
@@ -2414,55 +2419,175 @@ def test_refresh_sibling_reads_is_a_no_op_without_coordination(tmp_path) -> None
 
 
 # ---------------------------------------------------------------------------
-# The BLOCKED target: what a skill-gated character asks the fleet for
+# Every missing `L*` piece goes on the fleet board (spec 2026-10-18 §2.5)
 # ---------------------------------------------------------------------------
 
-def test_a_skill_gated_character_publishes_the_target_it_cannot_make():
-    """THE ASK THAT WAS NEVER MADE.
+def _piece(slot: str, code: str, gain: Fraction, price: Fraction) -> GearPiece:
+    return GearPiece(slot=slot, code=code, layer=0, gain=gain, price=price,
+                     route=SourceKind.CRAFT)
 
-    Demand is published from the chosen root, and a character blocked by a
-    crafting-skill gate resolves to `ReachSkillLevel` — not an `ObtainItem` — so
-    `_last_decide_crafting_target` is None and the whole board stays silent.
-    Measured on the live fleet: `SupplyBank` has executed **0 times in 105,159
-    cycles**, `supply_claims` is empty, and the only rows the board has ever
-    carried are quantity-1 vendor goods every asker can serve itself.
 
-    The item a sibling could actually help with — the one behind a skill gate —
-    is precisely the one never asked for. So the blocked target is published
-    too, from the walk that classified it, and `serves_item` then marks it NOT
-    self-servable, which is what makes it ASYMMETRIC and what
-    `SUPPLY_BANK`'s second arm fires on."""
+def _objective(*missing: GearPiece) -> GearObjective:
+    return GearObjective(monster="chicken", loadout={p.slot: p.code for p in missing},
+                         rate=Fraction(1), missing=missing)
+
+
+def _gear_gd() -> GameData:
+    """Three gear pieces over `_self_servable_gd`: a helmet (gearcrafting 1)
+    and a ring (jewelrycrafting 1) this character can make, and a sword
+    (weaponcrafting 10) behind its gate. Their bars have no producing skill
+    here, so they are self-servable."""
+    gd = _self_servable_gd()
+    gd._item_stats = {
+        **gd._item_stats,
+        "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
+                                   crafting_skill="gearcrafting", crafting_level=1),
+        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                 crafting_skill="jewelrycrafting", crafting_level=1),
+        "iron_sword": ItemStats(code="iron_sword", level=10, type_="weapon",
+                                crafting_skill="weaponcrafting", crafting_level=10),
+    }
+    gd._crafting_recipes = {"copper_helmet": {"copper_bar": 3},
+                            "copper_ring": {"copper_bar": 2},
+                            "iron_sword": {"iron_bar": 4}}
+    return gd
+
+
+_HELMET = _piece("helmet", "copper_helmet", Fraction(1, 2), Fraction(30))
+_RING = _piece("ring1", "copper_ring", Fraction(1, 3), Fraction(20))
+_SWORD = _piece("weapon", "iron_sword", Fraction(2, 7), Fraction(90))
+_GEAR_SKILLS = {"gearcrafting": 5, "jewelrycrafting": 5, "weaponcrafting": 1}
+
+
+def _board(store: CoordinationStore) -> dict[str, tuple[int, bool, str | None, str | None]]:
+    with SqlSession(store._engine) as s:
+        return {r.item_code: (r.quantity, r.self_servable, r.gain, r.price)
+                for r in s.exec(select(MaterialDemand)).all()}
+
+
+def test_every_missing_piece_is_published(tmp_path):
+    """Three missing pieces, one behind this character's weaponcrafting gate:
+    all three closures reach the board, each piece row carries its gain and
+    price, and the gated sword alone is NOT self-servable, so a sibling holding
+    weaponcrafting reads it as asymmetric. The chosen root is a climb (no
+    crafting target), which is exactly the cycle the board used to be silent
+    on for every piece but the one the walk named."""
+    player, store = _player_with_coordination(tmp_path, "Lor")
+    player.game_data = _gear_gd()
+    player.state = make_state(skills=_GEAR_SKILLS)
+    player._last_ctx = replace(NO_PROFILE_CONTEXT,
+                               gear_objective=_objective(_HELMET, _RING, _SWORD))
+    try:
+        player._update_coordination(player.state, player.game_data)
+        assert _board(store) == {
+            "copper_helmet": (1, True, "1/2", "30"),
+            "copper_ring": (1, True, "1/3", "20"),
+            "copper_bar": (3, True, None, None),
+            "iron_sword": (1, False, "2/7", "90"),
+            "iron_bar": (4, True, None, None),
+        }
+    finally:
+        store.close()
+
+
+def test_a_held_objective_publishes_no_gear_demand(tmp_path):
+    """`L*` held: no piece is missing, so nothing goes on the board for gear."""
+    player, store = _player_with_coordination(tmp_path, "Lor")
+    player.game_data = _gear_gd()
+    player.state = make_state(skills=_GEAR_SKILLS)
+    player._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective())
+    try:
+        player._update_coordination(player.state, player.game_data)
+        assert _board(store) == {}
+    finally:
+        store.close()
+
+
+def test_a_held_objective_still_publishes_the_crafting_target(tmp_path):
+    """The crafting target is a root beside the pieces, not one of them: with
+    `L*` held it is still published, and carries no piece value."""
+    player, store = _player_with_coordination(tmp_path, "Lor")
+    player.game_data = _gear_gd()
+    player.state = make_state(skills=_GEAR_SKILLS)
+    player._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective())
+    player._last_decide_crafting_target = "copper_ring"
+    try:
+        player._update_coordination(player.state, player.game_data)
+        assert _board(store) == {"copper_ring": (1, True, None, None),
+                                 "copper_bar": (2, True, None, None)}
+    finally:
+        store.close()
+
+
+def test_no_objective_publishes_only_the_crafting_target():
+    """No objective computed (no monster pays, or no decision yet): the
+    crafting target alone is the root."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
     p._learned_drops = LearnedDrops.empty()
-    gd = _make_planner_gd()
-    gd._crafting_recipes = {"copper_dagger": {"copper_bar": 2}}
-    p._last_decide_crafting_target = None
-    p._last_blocked_target = "copper_dagger"
-    state = make_state(inventory={"copper_bar": 1})
-    assert p._own_unmet_demand(state, gd) == {"copper_dagger": 1, "copper_bar": 1}
+    assert p._last_ctx.gear_objective is None
+    p._last_decide_crafting_target = "copper_ring"
+    assert p._own_unmet_demand(make_state(), _gear_gd()) == {"copper_ring": 1, "copper_bar": 2}
+    assert p._own_piece_value() == {}
 
 
-def test_both_roots_are_published_not_one_or_the_other():
-    """"What I am working toward" and "what I am blocked out of" are DIFFERENT
-    facts, and the fleet needs both.
-
-    Publishing only the chosen root keeps the board silent about the skill gate
-    — the asymmetric half, and the only half a sibling can act on. Publishing
-    only the blocked target would drop the materials the character is actually
-    collecting. `closure_demand` accumulates the max across roots into one dict,
-    which is its documented usage, so this is two calls rather than a merge
-    invented at the call site."""
+def test_a_missing_piece_already_banked_is_not_published():
+    """Each piece is netted against bag AND bank, as every root was: a banked
+    helmet is a withdraw away, and its closure is satisfied with it."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
     p._learned_drops = LearnedDrops.empty()
-    gd = _make_planner_gd()
-    gd._crafting_recipes = {"copper_dagger": {"copper_bar": 2},
-                            "iron_dagger": {"iron_bar": 3}}
-    p._last_decide_crafting_target = "iron_dagger"
-    p._last_blocked_target = "copper_dagger"
-    assert p._own_unmet_demand(make_state(), gd) == {
-        "iron_dagger": 1, "iron_bar": 3, "copper_dagger": 1, "copper_bar": 2}
+    p._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective(_HELMET, _RING))
+    state = make_state(inventory={"copper_bar": 1}, bank_items={"copper_helmet": 1})
+    assert p._own_unmet_demand(state, _gear_gd()) == {"copper_ring": 1, "copper_bar": 2}
+
+
+def test_a_piece_and_the_crafting_target_are_both_published():
+    """"What I am working toward" and "what my objective is missing" are
+    different facts, and the fleet needs both. `closure_demand` accumulates
+    the max across roots into one dict, its documented usage."""
+    p = GamePlayer(character="hero")
+    p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
+    p._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective(_SWORD))
+    p._last_decide_crafting_target = "copper_helmet"
+    assert p._own_unmet_demand(make_state(), _gear_gd()) == {
+        "iron_sword": 1, "iron_bar": 4, "copper_helmet": 1, "copper_bar": 3}
+
+
+def test_two_slots_missing_one_code_publish_the_first_pieces_value():
+    """`missing` is in pursuit order; one board row per code carries the
+    value of the piece pursued first."""
+    p = GamePlayer(character="hero")
+    ring2 = _piece("ring2", "copper_ring", Fraction(1, 9), Fraction(25))
+    p._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective(_RING, ring2))
+    assert p._own_piece_value() == {"copper_ring": (Fraction(1, 3), Fraction(20))}
+
+
+def test_published_values_sum_over_siblings(tmp_path):
+    """Two siblings miss the same sword; a third reads its value as the sum of
+    their gains (spec §2.5: a fleet piece is ordered by gain summed over the
+    receiving characters). The reader's own missing sword is not counted."""
+    db = str(tmp_path / "coord.db")
+    hal, hal_store = _player_with_coordination(tmp_path, "HAL", db)
+    lor, lor_store = _player_with_coordination(tmp_path, "Lor", db)
+    me, my_store = _player_with_coordination(tmp_path, "R2D2", db)
+    hal._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective(_SWORD))
+    lor._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective(
+        _piece("weapon", "iron_sword", Fraction(1, 7), Fraction(90)), _HELMET))
+    me._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective(
+        _piece("weapon", "iron_sword", Fraction(5), Fraction(90))))
+    try:
+        for player in (hal, lor, me):
+            player.game_data = _gear_gd()
+            player.state = make_state(skills=_GEAR_SKILLS)
+            player._update_coordination(player.state, player.game_data)
+        assert my_store.sibling_demand_values(datetime.now(tz=timezone.utc)) == {
+            "iron_sword": Fraction(3, 7), "copper_helmet": Fraction(1, 2)}
+    finally:
+        hal_store.close()
+        lor_store.close()
+        my_store.close()
 
 
 # ---------------------------------------------------------------------------
@@ -2755,7 +2880,7 @@ def test_update_coordination_weighs_role_demand_by_work(tmp_path, monkeypatch):
 
     monkeypatch.setattr("artifactsmmo_cli.ai.player.decide_role", spy)
     try:
-        sibling.publish_demand({"copper_ore": 5}, frozenset(), datetime.now(tz=timezone.utc))
+        sibling.publish_demand({"copper_ore": 5}, frozenset(), datetime.now(tz=timezone.utc), piece_value={})
         p._update_coordination(p.state, p.game_data)
         assert seen["miner"] == 35
     finally:

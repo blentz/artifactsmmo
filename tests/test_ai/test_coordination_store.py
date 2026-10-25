@@ -11,6 +11,7 @@ import multiprocessing
 import sqlite3
 import tempfile
 from datetime import datetime, timedelta, timezone
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -683,7 +684,7 @@ class TestDegradationOnDbError:
         db = str(tmp_path / "coord.db")
         hal = CoordinationStore(db_path=db, character="HAL")
         _break_engine(hal)
-        hal.publish_demand({"copper_bar": 6}, frozenset(), _T0)
+        hal.publish_demand({"copper_bar": 6}, frozenset(), _T0, piece_value={})
         assert "[coordination] publish_demand failed" in capsys.readouterr().out
 
     def test_sibling_demand_swallows_error_and_returns_empty(self, tmp_path: Path, capsys) -> None:
@@ -692,6 +693,15 @@ class TestDegradationOnDbError:
         _break_engine(hal)
         assert hal.sibling_demand(_T0) == {}
         assert "[coordination] sibling_demand failed" in capsys.readouterr().out
+
+    def test_sibling_demand_values_swallows_error_and_returns_empty(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        _break_engine(hal)
+        assert hal.sibling_demand_values(_T0) == {}
+        assert "[coordination] sibling_demand_values failed" in capsys.readouterr().out
 
     def test_sibling_demand_asymmetric_swallows_error_and_returns_empty(
         self, tmp_path: Path, capsys
@@ -1071,8 +1081,8 @@ def test_sibling_demand_sums_across_characters_and_excludes_self(tmp_path: Path)
     hal = CoordinationStore(db_path=db, character="HAL")
     c3po = CoordinationStore(db_path=db, character="C3P0")
     try:
-        hal.publish_demand({"copper_bar": 6, "ash_plank": 2}, frozenset(), _T0)
-        c3po.publish_demand({"copper_bar": 4}, frozenset(), _T0)
+        hal.publish_demand({"copper_bar": 6, "ash_plank": 2}, frozenset(), _T0, piece_value={})
+        c3po.publish_demand({"copper_bar": 4}, frozenset(), _T0, piece_value={})
         assert hal.sibling_demand(_T0) == {"copper_bar": 4}
         assert c3po.sibling_demand(_T0) == {"copper_bar": 6, "ash_plank": 2}
     finally:
@@ -1085,8 +1095,8 @@ def test_publish_demand_replaces_prior_rows(tmp_path: Path) -> None:
     hal = CoordinationStore(db_path=db, character="HAL")
     obs = CoordinationStore(db_path=db, character="observer")
     try:
-        hal.publish_demand({"copper_bar": 6, "ash_plank": 2}, frozenset(), _T0)
-        hal.publish_demand({"copper_bar": 1}, frozenset(), _T0)
+        hal.publish_demand({"copper_bar": 6, "ash_plank": 2}, frozenset(), _T0, piece_value={})
+        hal.publish_demand({"copper_bar": 1}, frozenset(), _T0, piece_value={})
         assert obs.sibling_demand(_T0) == {"copper_bar": 1}
     finally:
         hal.close()
@@ -1099,7 +1109,7 @@ def test_expired_demand_is_not_served(tmp_path: Path) -> None:
     obs = CoordinationStore(db_path=db, character="observer")
     later = _T0 + timedelta(seconds=DEMAND_TTL_SECONDS + 1)
     try:
-        hal.publish_demand({"copper_bar": 6}, frozenset(), _T0)
+        hal.publish_demand({"copper_bar": 6}, frozenset(), _T0, piece_value={})
         assert obs.sibling_demand(later) == {}
     finally:
         hal.close()
@@ -1111,8 +1121,8 @@ def test_empty_demand_clears_the_board(tmp_path: Path) -> None:
     hal = CoordinationStore(db_path=db, character="HAL")
     obs = CoordinationStore(db_path=db, character="observer")
     try:
-        hal.publish_demand({"copper_bar": 6}, frozenset(), _T0)
-        hal.publish_demand({}, frozenset(), _T0)
+        hal.publish_demand({"copper_bar": 6}, frozenset(), _T0, piece_value={})
+        hal.publish_demand({}, frozenset(), _T0, piece_value={})
         assert obs.sibling_demand(_T0) == {}
     finally:
         hal.close()
@@ -1127,7 +1137,7 @@ def test_publish_demand_skips_zero_quantity(tmp_path: Path) -> None:
     hal = CoordinationStore(db_path=db, character="HAL")
     obs = CoordinationStore(db_path=db, character="observer")
     try:
-        hal.publish_demand({"copper_bar": 0}, frozenset(), _T0)
+        hal.publish_demand({"copper_bar": 0}, frozenset(), _T0, piece_value={})
         assert obs.sibling_demand(_T0) == {}
     finally:
         hal.close()
@@ -1139,7 +1149,7 @@ def test_publish_demand_skips_negative_quantity(tmp_path: Path) -> None:
     hal = CoordinationStore(db_path=db, character="HAL")
     obs = CoordinationStore(db_path=db, character="observer")
     try:
-        hal.publish_demand({"copper_bar": -3}, frozenset(), _T0)
+        hal.publish_demand({"copper_bar": -3}, frozenset(), _T0, piece_value={})
         assert obs.sibling_demand(_T0) == {}
     finally:
         hal.close()
@@ -1151,7 +1161,7 @@ def test_publish_demand_mixed_mapping_publishes_only_positive_entries(tmp_path: 
     hal = CoordinationStore(db_path=db, character="HAL")
     obs = CoordinationStore(db_path=db, character="observer")
     try:
-        hal.publish_demand({"copper_bar": 6, "ash_plank": 0}, frozenset(), _T0)
+        hal.publish_demand({"copper_bar": 6, "ash_plank": 0}, frozenset(), _T0, piece_value={})
         assert obs.sibling_demand(_T0) == {"copper_bar": 6}
     finally:
         hal.close()
@@ -1163,7 +1173,7 @@ def test_publish_demand_rejects_naive_now(tmp_path: Path) -> None:
     hal = CoordinationStore(db_path=db, character="HAL")
     try:
         with pytest.raises(ValueError, match="naive"):
-            hal.publish_demand({"copper_bar": 6}, frozenset(), _NAIVE_NOW)
+            hal.publish_demand({"copper_bar": 6}, frozenset(), _NAIVE_NOW, piece_value={})
     finally:
         hal.close()
 
@@ -1173,7 +1183,7 @@ def test_publish_demand_rejects_non_utc_offset_now(tmp_path: Path) -> None:
     hal = CoordinationStore(db_path=db, character="HAL")
     try:
         with pytest.raises(ValueError, match="offset"):
-            hal.publish_demand({"copper_bar": 6}, frozenset(), _NON_UTC_NOW)
+            hal.publish_demand({"copper_bar": 6}, frozenset(), _NON_UTC_NOW, piece_value={})
     finally:
         hal.close()
 
@@ -1181,7 +1191,7 @@ def test_publish_demand_rejects_non_utc_offset_now(tmp_path: Path) -> None:
 def test_self_servable_defaults_true_so_legacy_rows_keep_todays_behaviour(tmp_path):
     now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="HAL")
-    store.publish_demand({"copper_ore": 12}, frozenset({"copper_ore"}), now)
+    store.publish_demand({"copper_ore": 12}, frozenset({"copper_ore"}), now, piece_value={})
     with SqlSession(store._engine) as s:
         row = s.exec(select(MaterialDemand)).one()
     assert row.self_servable is True
@@ -1190,7 +1200,7 @@ def test_self_servable_defaults_true_so_legacy_rows_keep_todays_behaviour(tmp_pa
 def test_a_request_the_requester_cannot_make_is_stored_as_not_self_servable(tmp_path):
     now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Lor")
-    store.publish_demand({"greater_wooden_staff": 1}, frozenset(), now)
+    store.publish_demand({"greater_wooden_staff": 1}, frozenset(), now, piece_value={})
     with SqlSession(store._engine) as s:
         row = s.exec(select(MaterialDemand)).one()
     assert row.self_servable is False
@@ -1212,12 +1222,93 @@ def test_a_pre_existing_database_without_the_column_is_migrated_in_place(tmp_pat
 
     now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
     store = CoordinationStore(db_path=db, character="HAL")
-    store.publish_demand({"iron_ore": 4}, frozenset({"iron_ore"}), now)
+    store.publish_demand({"iron_ore": 4}, frozenset({"iron_ore"}), now, piece_value={})
 
     with SqlSession(store._engine) as s:
         rows = {r.item_code: r for r in s.exec(select(MaterialDemand)).all()}
     assert set(rows) == {"copper_ore", "iron_ore"}      # the legacy row survived
     assert rows["copper_ore"].self_servable is True     # back-filled with the safe default
+    assert rows["copper_ore"].gain is None              # a legacy row carries no piece value
+    assert rows["copper_ore"].price is None
+
+
+def test_a_database_with_self_servable_but_no_piece_value_is_migrated_in_place(tmp_path):
+    """The board as it stood before the piece value: `self_servable` already
+    there, `gain`/`price` absent. Opening it adds both, keeps the row, and a
+    piece-valued publish lands."""
+    db = str(tmp_path / "legacy.db")
+    raw = sqlite3.connect(db)
+    raw.execute(
+        "CREATE TABLE material_demand (id INTEGER PRIMARY KEY, character TEXT, "
+        "item_code TEXT, quantity INTEGER, expires_at TEXT, "
+        "self_servable BOOLEAN NOT NULL DEFAULT 1)")
+    raw.execute("INSERT INTO material_demand (character, item_code, quantity, expires_at) "
+                "VALUES ('Robby', 'copper_ore', 5, '2099-01-01T00:00:00+00:00')")
+    raw.commit()
+    raw.close()
+
+    now = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
+    store = CoordinationStore(db_path=db, character="HAL")
+    store.publish_demand({"iron_helm": 1}, frozenset(), now,
+                         piece_value={"iron_helm": (Fraction(3, 7), Fraction(250))})
+
+    with SqlSession(store._engine) as s:
+        rows = {r.item_code: r for r in s.exec(select(MaterialDemand)).all()}
+    assert set(rows) == {"copper_ore", "iron_helm"}
+    assert (rows["copper_ore"].gain, rows["copper_ore"].price) == (None, None)
+    assert (rows["iron_helm"].gain, rows["iron_helm"].price) == ("3/7", "250")
+    store.close()
+
+
+def test_a_piece_row_carries_its_gain_and_price_losslessly(tmp_path):
+    """A `Fraction` that no float holds exactly survives the board: stored as
+    its `str`, read back equal. A material row in the same publish carries no
+    value at all."""
+    now = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
+    store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="HAL")
+    gain, price = Fraction(1, 3), Fraction(10**20 + 1, 7)
+    store.publish_demand({"iron_helm": 1, "iron_bar": 6}, frozenset(), now,
+                         piece_value={"iron_helm": (gain, price)})
+    with SqlSession(store._engine) as s:
+        rows = {r.item_code: r for r in s.exec(select(MaterialDemand)).all()}
+    assert rows["iron_helm"].gain is not None and rows["iron_helm"].price is not None
+    assert (Fraction(rows["iron_helm"].gain), Fraction(rows["iron_helm"].price)) == (gain, price)
+    assert (rows["iron_bar"].gain, rows["iron_bar"].price) == (None, None)
+    store.close()
+
+
+def test_a_piece_value_for_a_code_not_demanded_writes_no_row(tmp_path):
+    """The value rides on a demand row; it never makes one. A piece the
+    character already holds nets out of `demand`, so its value has nowhere
+    to go and the board stays empty."""
+    now = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
+    store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="HAL")
+    store.publish_demand({}, frozenset(), now,
+                         piece_value={"iron_helm": (Fraction(1), Fraction(1))})
+    with SqlSession(store._engine) as s:
+        assert s.exec(select(MaterialDemand)).all() == []
+    store.close()
+
+
+def test_sibling_demand_values_skips_own_expired_and_material_rows(tmp_path):
+    """Only a LIVE SIBLING's PIECE counts: this character's own row, an expired
+    sibling row, and a sibling's material row (no gain) are all left out."""
+    now = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    lor = CoordinationStore(db_path=db, character="Lor")
+    old = CoordinationStore(db_path=db, character="Robby")
+    hal.publish_demand({"iron_helm": 1}, frozenset(), now,
+                       piece_value={"iron_helm": (Fraction(5), Fraction(1))})
+    lor.publish_demand({"iron_helm": 1, "iron_bar": 6}, frozenset(), now,
+                       piece_value={"iron_helm": (Fraction(2, 3), Fraction(1))})
+    old.publish_demand({"iron_helm": 1}, frozenset(),
+                       now - timedelta(seconds=DEMAND_TTL_SECONDS + 1),
+                       piece_value={"iron_helm": (Fraction(7), Fraction(1))})
+    assert hal.sibling_demand_values(now) == {"iron_helm": Fraction(2, 3)}
+    hal.close()
+    lor.close()
+    old.close()
 
 
 def test_sibling_demand_rejects_naive_now(tmp_path: Path) -> None:
@@ -1244,9 +1335,9 @@ def test_a_code_is_asymmetric_when_any_asker_cannot_make_it(tmp_path):
     now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
     db = str(tmp_path / "coord.db")
     CoordinationStore(db_path=db, character="Lor").publish_demand(
-        {"greater_wooden_staff": 1}, frozenset(), now)             # cannot make it
+        {"greater_wooden_staff": 1}, frozenset(), now, piece_value={})  # cannot make it
     CoordinationStore(db_path=db, character="C3P0").publish_demand(
-        {"greater_wooden_staff": 1}, frozenset({"greater_wooden_staff"}), now)  # can
+        {"greater_wooden_staff": 1}, frozenset({"greater_wooden_staff"}), now, piece_value={})  # can
 
     assert CoordinationStore(db_path=db, character="R2D2").sibling_demand_asymmetric(now) == \
         frozenset({"greater_wooden_staff"})
@@ -1256,7 +1347,7 @@ def test_a_code_every_asker_can_make_is_not_asymmetric(tmp_path):
     now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
     db = str(tmp_path / "coord.db")
     CoordinationStore(db_path=db, character="Lor").publish_demand(
-        {"copper_ore": 30}, frozenset({"copper_ore"}), now)
+        {"copper_ore": 30}, frozenset({"copper_ore"}), now, piece_value={})
 
     assert CoordinationStore(db_path=db, character="R2D2").sibling_demand_asymmetric(now) == frozenset()
 
@@ -1266,7 +1357,7 @@ def test_my_own_row_never_makes_a_code_asymmetric_for_me(tmp_path):
     now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
     db = str(tmp_path / "coord.db")
     lor = CoordinationStore(db_path=db, character="Lor")
-    lor.publish_demand({"greater_wooden_staff": 1}, frozenset(), now)
+    lor.publish_demand({"greater_wooden_staff": 1}, frozenset(), now, piece_value={})
 
     assert lor.sibling_demand_asymmetric(now) == frozenset()
 
@@ -1275,7 +1366,7 @@ def test_an_expired_row_stops_making_a_code_asymmetric(tmp_path):
     now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
     db = str(tmp_path / "coord.db")
     CoordinationStore(db_path=db, character="Lor").publish_demand(
-        {"greater_wooden_staff": 1}, frozenset(), now)
+        {"greater_wooden_staff": 1}, frozenset(), now, piece_value={})
     later = now + timedelta(seconds=DEMAND_TTL_SECONDS + 1)
 
     assert CoordinationStore(db_path=db, character="R2D2").sibling_demand_asymmetric(later) == frozenset()

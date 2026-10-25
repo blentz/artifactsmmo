@@ -10263,6 +10263,68 @@ FLEET_ROUTE_MUTATIONS = [
 ]
 
 
+# Global gear objective Plan B Task 6: every missing `L*` piece goes on the
+# fleet board (spec 2026-10-18 §2.5). OWN run_groups, unit-killed:
+#   * chosen-root-only restored (no piece roots) -- killed by
+#     test_every_missing_piece_is_published (tests/test_ai/test_player_coordination.py),
+#     whose objective names three pieces with no crafting target;
+#   * netting removed -- killed by test_a_missing_piece_already_banked_is_not_published
+#     and the `_own_unmet_demand` netting tests;
+#   * a later duplicate piece overwriting the first -- killed by
+#     test_two_slots_missing_one_code_publish_the_first_pieces_value.
+FLEET_BOARD_PIECES_MUTATIONS = [
+    (
+        "player._own_unmet_demand: chosen-root-only restored (missing pieces dropped)",
+        "        roots = [piece.code for piece in self._missing_pieces()]",
+        "        roots: list[str] = []",
+    ),
+    (
+        "player._own_unmet_demand: bag and bank netting removed",
+        "        return {code: qty - state.inventory.get(code, 0) - bank.get(code, 0)\n"
+        "                for code, qty in demand.items()\n"
+        "                if qty - state.inventory.get(code, 0) - bank.get(code, 0) > 0}",
+        "        return dict(demand)",
+    ),
+    (
+        "player._own_piece_value: a later duplicate piece overwrites the first",
+        "            value.setdefault(piece.code, (piece.gain, piece.price))",
+        "            value[piece.code] = (piece.gain, piece.price)",
+    ),
+]
+
+# Same task, the board half: the stored value and the summed sibling read.
+# OWN run_group, unit-killed in tests/test_ai/test_coordination_store.py:
+#   * gain/price never stored -- test_a_piece_row_carries_its_gain_and_price_losslessly;
+#   * own row summed in -- test_sibling_demand_values_skips_own_expired_and_material_rows;
+#   * expiry ignored -- the same test (an expired sibling row is published).
+FLEET_BOARD_VALUE_MUTATIONS = [
+    (
+        "coordination_store.publish_demand: piece gain never stored",
+        "                                             gain=None if value is None else str(value[0]),",
+        "                                             gain=None,",
+    ),
+    (
+        "coordination_store.publish_demand: piece price never stored",
+        "                                             price=None if value is None else str(value[1])))",
+        "                                             price=None))",
+    ),
+    (
+        "coordination_store.sibling_demand_values: own-character filter dropped",
+        "                        MaterialDemand.character != self._character,\n"
+        "                        col(MaterialDemand.gain).is_not(None),",
+        "                        col(MaterialDemand.gain).is_not(None),",
+    ),
+    (
+        "coordination_store.sibling_demand_values: expiry ignored",
+        "                        MaterialDemand.expires_at > stamp,\n"
+        "                        MaterialDemand.character != self._character,\n"
+        "                        col(MaterialDemand.gain).is_not(None),",
+        "                        MaterialDemand.character != self._character,\n"
+        "                        col(MaterialDemand.gain).is_not(None),",
+    ),
+]
+
+
 # Task 7 (role-driven supply, mutation coverage): `sibling_demand_asymmetric`'s
 # own-character filter. Without `MaterialDemand.character != self._character`
 # a character's OWN unservable request would make its own code "asymmetric"
@@ -12375,6 +12437,10 @@ def _collect_all_groups() -> None:
     run_group(ROUTE_SRC, FLEET_ROUTE_MUTATIONS,
               "tests/test_ai/test_fleet_objective.py", survivors)
     run_group(COORDINATION_STORE_SRC, SIBLING_DEMAND_ASYMMETRIC_OWN_FILTER_MUTATIONS,
+              "tests/test_ai/test_coordination_store.py", survivors)
+    run_group(PLAYER_SRC, FLEET_BOARD_PIECES_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
+    run_group(COORDINATION_STORE_SRC, FLEET_BOARD_VALUE_MUTATIONS,
               "tests/test_ai/test_coordination_store.py", survivors)
     run_group(PLAYER_SRC, PICK_SUPPLY_TARGET_ASYMMETRIC_ORDER_MUTATIONS,
               "tests/test_ai/test_player_coordination.py", survivors)

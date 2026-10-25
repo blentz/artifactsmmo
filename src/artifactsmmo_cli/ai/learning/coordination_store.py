@@ -21,6 +21,7 @@ behaviour. Handled here and NOT re-handled upstream.
 import weakref
 from collections.abc import Mapping
 from datetime import datetime, timedelta
+from fractions import Fraction
 from pathlib import Path
 
 from sqlalchemy import Connection
@@ -200,6 +201,18 @@ def _migrate_material_demand_self_servable(conn: Connection) -> None:
     )
 
 
+def _migrate_material_demand_piece_value(conn: Connection) -> None:
+    """`material_demand` grew nullable `gain` and `price` columns (2026-10-25,
+    global gear objective §2.5): the value of a missing gear piece. Same shape
+    as `_migrate_material_demand_self_servable`: detect with `PRAGMA`, add in
+    place, no-op on a fresh DB. A legacy row reads as no piece value (NULL),
+    which is what a material row publishes too."""
+    columns = [row[1] for row in conn.exec_driver_sql("PRAGMA table_info(material_demand)")]
+    for column in ("gain", "price"):
+        if column not in columns:
+            conn.exec_driver_sql(f"ALTER TABLE material_demand ADD COLUMN {column} VARCHAR")
+
+
 def _migrate_party_lease_loadout(conn: Connection) -> None:
     """`party_leases` grew a `loadout` column (2026-10-13, docs/PLAN_group_fights.md
     residual R2): the potions the party wins in, comma-joined. Same shape as
@@ -284,6 +297,7 @@ class CoordinationStore:
             SQLModel.metadata.create_all(conn)
             _migrate_role_lease_unique_index(conn)
             _migrate_material_demand_self_servable(conn)
+            _migrate_material_demand_piece_value(conn)
             _migrate_party_lease_loadout(conn)
         # Same exposure as `LearningStore`, on the same file: the journal-mode
         # change cannot go inside the lock above, so it races every sibling that
@@ -479,7 +493,8 @@ class CoordinationStore:
         return (now + timedelta(seconds=DEMAND_TTL_SECONDS)).isoformat()
 
     def publish_demand(self, demand: Mapping[str, int], self_servable: frozenset[str],
-                       now: datetime) -> None:
+                       now: datetime,
+                       piece_value: Mapping[str, tuple[Fraction, Fraction]]) -> None:
         """Replace this character's demand rows wholesale.
 
         Replace rather than merge: demand is a snapshot of what is unmet RIGHT
@@ -498,7 +513,13 @@ class CoordinationStore:
         making it, which is the case the "serve a sibling's request" rung
         needs to finally distinguish from "could make it but asked anyway"
         (see `MaterialDemand.self_servable` for why a vendor-only code with
-        no producing skill belongs on the servable side, not this one)."""
+        no producing skill belongs on the servable side, not this one).
+
+        `piece_value` maps each missing gear-objective piece's code to its
+        `(gain, price)`; a row whose code is in it carries both, every other
+        row (a recipe material, the crafting target) carries None. Keyed by
+        code like `demand` for the same reason `self_servable` is: a value is
+        written only onto a row `demand` itself names."""
         _require_utc(now)
         expiry = self._demand_expiry(now)
         try:
@@ -512,11 +533,14 @@ class CoordinationStore:
                     s.delete(row)
                 for item_code, quantity in demand.items():
                     if quantity > 0:
+                        value = piece_value.get(item_code)
                         s.add(MaterialDemand(character=self._character,
                                              item_code=item_code,
                                              quantity=quantity,
                                              expires_at=expiry,
-                                             self_servable=item_code in self_servable))
+                                             self_servable=item_code in self_servable,
+                                             gain=None if value is None else str(value[0]),
+                                             price=None if value is None else str(value[1])))
                 s.commit()
         except SQLAlchemyError as e:
             print(f"[coordination] publish_demand failed: {e}")
@@ -540,6 +564,32 @@ class CoordinationStore:
             return {}
         for row in rows:
             totals[row.item_code] = totals.get(row.item_code, 0) + row.quantity
+        return totals
+
+    def sibling_demand_values(self, now: datetime) -> dict[str, Fraction]:
+        """Each gear piece some OTHER character is missing, mapped to its gain
+        summed over every sibling that publishes it (spec 2026-10-18 §2.5: a
+        fleet piece is ordered by gain summed over the receiving characters).
+        Same liveness and own-character filter as `sibling_demand`; a row with
+        no `gain` is not a piece and is not read."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(
+                    select(MaterialDemand).where(
+                        MaterialDemand.expires_at > stamp,
+                        MaterialDemand.character != self._character,
+                        col(MaterialDemand.gain).is_not(None),
+                    )
+                ).all()
+        except SQLAlchemyError as e:
+            print(f"[coordination] sibling_demand_values failed: {e}")
+            return {}
+        totals: dict[str, Fraction] = {}
+        for row in rows:
+            assert row.gain is not None
+            totals[row.item_code] = totals.get(row.item_code, Fraction(0)) + Fraction(row.gain)
         return totals
 
     def sibling_demand_asymmetric(self, now: datetime) -> frozenset[str]:

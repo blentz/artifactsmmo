@@ -335,7 +335,14 @@ class MaterialDemand(SQLModel, table=True):
     Defaults `True` so a row written by an un-migrated column, or read
     before this code shipped, reads as "the requester can handle this
     itself" — today's behaviour — rather than suddenly flooding the fleet
-    with requests nobody asked for."""
+    with requests nobody asked for.
+
+    `gain` and `price` are the requester's value of a missing gear-objective
+    piece (spec 2026-10-18 §2.5): `GearPiece.gain` (advancement rate over what
+    it owns) and `GearPiece.price` (`route_price`), each an exact `Fraction`
+    stored as its `str` (`"3/7"`) and read back with `Fraction(text)`, so the
+    board carries the value losslessly. None on every row that is not a piece:
+    a recipe material, the crafting target, a consumable-floor share."""
 
     __tablename__ = "material_demand"
 
@@ -345,6 +352,8 @@ class MaterialDemand(SQLModel, table=True):
     quantity: int
     expires_at: str
     self_servable: bool = Field(default=True)
+    gain: str | None = Field(default=None)
+    price: str | None = Field(default=None)
 
 
 class HoldingLedger(SQLModel, table=True):
