@@ -15,6 +15,7 @@ one execution reaching the line. See the paired tests below (`..._none`/
 """
 
 import io
+import json
 from contextlib import redirect_stdout
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -46,7 +47,8 @@ from artifactsmmo_cli.ai.learning.coordination_store import (
     CoordinationStore,
 )
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
-from artifactsmmo_cli.ai.learning.models import MaterialDemand
+from artifactsmmo_cli.ai.learning.models import Cycle, MaterialDemand
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG
 from artifactsmmo_cli.ai.role_selection import (
@@ -2986,3 +2988,43 @@ def test_the_demanded_levels_span_the_board_and_the_own_pieces(tmp_path) -> None
     player._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
         "wolf", {"weapon_slot": "iron_sword"}, Fraction(1), (sword,)))
     assert player._demanded_levels(gd) == {"gearcrafting": 10, "weaponcrafting": 10}
+
+
+def test_the_fleet_climber_is_recruited_by_demand_above_its_level(tmp_path) -> None:
+    """Spec 2026-10-18 §2.5: Robby (gearcrafting 5) asks for an iron shield
+    (gearcrafting 10) that neither character can craft yet. This character,
+    at 8, is the fleet's climber, so the shield's demand counts toward its
+    `logger` role — the climb is the role's work — and it claims `logger`
+    over the mining its own skills lean to."""
+    now = datetime.now(tz=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    history = LearningStore(db_path=db, character="C3P0")
+    history.start_session()
+    for i in range(5):
+        history.record_cycle(Cycle(
+            ts=f"2026-10-20T00:00:{i:02d}+00:00", session_id="s", cycle_index=i,
+            character="C3P0", outcome="ok", selected_goal="ReachSkill(gearcrafting->9)",
+            delta_skill_xp_json=json.dumps({"gearcrafting": 50})))
+    robby = CoordinationStore(db_path=db, character="Robby")
+    try:
+        robby.publish_skills({"gearcrafting": 5}, now)
+        # Marked self-servable, so no asymmetry recruits the role: the
+        # demand alone must.
+        robby.publish_demand({"iron_shield": 1}, frozenset({"iron_shield"}), now,
+                             {"iron_shield": (Fraction(3), Fraction(40))})
+        player = GamePlayer(character="C3P0", fleet_order=("C3P0", "Robby"), history=history)
+        player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
+        skills = {**make_state().skills, "mining": 20, "gearcrafting": 8}
+        player.state = make_state(character="C3P0", skills=skills,
+                                  skill_xp={skill: 0 for skill in skills},
+                                  skill_max_xp={skill: 100 for skill in skills})
+        player.game_data = shared_world(_FLEET_BUNDLE)
+        player.set_coordination_store(CoordinationStore(db_path=db, character="C3P0"))
+        player._update_coordination(player.state, player.game_data)
+        assert player._fleet_climbers == {"gearcrafting": "C3P0"}
+        assert player._role == "logger"
+    finally:
+        robby.close()
+        history.end_session(exit_reason="normal")
+        history.close()

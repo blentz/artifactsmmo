@@ -6456,9 +6456,9 @@ FLEET_PIECE_WALK_MUTATIONS = [
      "            # Fleet demand this role serves is waiting",
      "        if False:\n"
      "            # Fleet demand this role serves is waiting"),
-    ("fleet pieces: a fleet piece always orders first",
+    ("fleet pieces: a fleet piece's summed gain is not its order",
      "        keyed.append((piece_order_key(0, piece.gain, price, len(rank)), piece))",
-     "        keyed.insert(0, (piece_order_key(0, piece.gain, price, len(rank)), piece))"),
+     "        keyed.append((piece_order_key(0, Fraction(0), price, len(rank)), piece))"),
     ("fleet pieces: a met gate still climbs",
      "    if current < piece.level:",
      "    if current <= piece.level:"),
@@ -6501,9 +6501,6 @@ FLEET_PIECES_MUTATIONS = [
      "        if state.inventory.get(code, 0) > 0:"),
 ]
 FLEET_CLIMB_PLAYER_SCENARIO_MUTATIONS = [
-    ("fleet climb player: the climber's demand above its level is dropped",
-     "                                 level_of_item, state.skills, work_of_item, climbing)",
-     "                                 level_of_item, state.skills, work_of_item)"),
     ("fleet climb player: the role claim ignores who climbs",
      "                               demanded_level=demanded,",
      "                               demanded_level={},"),
@@ -6512,6 +6509,9 @@ FLEET_CLIMB_PLAYER_SCENARIO_MUTATIONS = [
      "            fleet_pieces=fleet_pieces(self.state, self.game_data, None,"),
 ]
 FLEET_CLIMB_PLAYER_MUTATIONS = [
+    ("fleet climb player: the climber's demand above its level is dropped",
+     "                                 level_of_item, state.skills, work_of_item, climbing)",
+     "                                 level_of_item, state.skills, work_of_item)"),
     ("fleet climb player: no climber named",
      "        self._fleet_climbers = self._climbers(leases)",
      "        self._fleet_climbers = {}"),

@@ -263,7 +263,7 @@ _CLIMB_BOARD = {
     "iron_dagger": (2, Fraction(1)),       # weaponcrafting 10: the climb to 10 opens it
     "fire_staff": (1, Fraction(1)),        # weaponcrafting 5: the climber already makes it
     "king_slime_sword": (1, Fraction(1)),  # weaponcrafting 15: past this climb
-    "copper_helmet": (3, Fraction(1)),     # another skill's piece
+    "iron_shield": (3, Fraction(1)),       # another skill's piece, in the climb's range
     "feather": (4, Fraction(1)),           # no producing skill at all
 }
 
