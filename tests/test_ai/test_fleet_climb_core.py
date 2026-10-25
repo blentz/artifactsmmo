@@ -4,7 +4,7 @@ from fractions import Fraction
 
 import pytest
 
-from artifactsmmo_cli.ai.fleet_climb_core import amortized_climb_seconds, climber
+from artifactsmmo_cli.ai.fleet_climb_core import amortized_climb_seconds, assign_climbers, climber
 
 
 def test_a_climb_is_divided_across_the_units_it_unlocks() -> None:
@@ -49,3 +49,22 @@ def test_an_empty_fleet_has_no_climber() -> None:
 def test_a_candidate_without_a_committed_count_is_refused() -> None:
     with pytest.raises(KeyError):
         climber({"a": Fraction(1), "b": Fraction(2)}, {"b": 0}, ("a", "b"))
+
+
+def test_each_skill_takes_its_climber_from_the_characters_still_free() -> None:
+    """Ruling T7a: Ana is least behind in both skills; gearcrafting comes
+    first and takes her, so jewelrycrafting goes to Bea."""
+    skills = [("gearcrafting", {"Ana": Fraction(7), "Bea": Fraction(10)}, {"Ana": 0, "Bea": 0}),
+              ("jewelrycrafting", {"Ana": Fraction(5), "Bea": Fraction(8)}, {"Ana": 0, "Bea": 0})]
+    assert assign_climbers(skills, ("Ana", "Bea")) == {"gearcrafting": "Ana",
+                                                       "jewelrycrafting": "Bea"}
+
+
+def test_a_skill_with_every_character_taken_has_no_climber() -> None:
+    skills = [("gearcrafting", {"Ana": Fraction(7)}, {"Ana": 0}),
+              ("jewelrycrafting", {"Ana": Fraction(5)}, {"Ana": 0})]
+    assert assign_climbers(skills, ("Ana",)) == {"gearcrafting": "Ana"}
+
+
+def test_no_skill_assigns_no_climber() -> None:
+    assert assign_climbers([], ("Ana",)) == {}

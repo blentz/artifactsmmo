@@ -359,17 +359,16 @@ def test_a_met_gate_serves_the_fleet_piece_by_the_supply_run() -> None:
     assert resolution.root == ReachFleetOutcome(FLEET_SUPPLY, "iron_shield")
 
 
-def test_a_fleet_piece_with_no_step_this_cycle_still_withholds_the_trunk() -> None:
-    """The gate is met but the role's supply run is for another item: the
-    piece has no step now and is named in `declined`, and a crafter whose
-    fleet demand waits grinds no XP — no root at all."""
+def test_a_met_gate_not_yet_the_supply_target_is_crafted() -> None:
+    """Ruling T7d M3: the gate is met but the role's supply run is for another
+    item. The piece is still a step — its craft, one unit, which the supply
+    run then banks — never no root, and no XP fight either."""
     gd = _gd()
     state = make_state(level=15, skills={**make_state().skills, "gearcrafting": 10})
     resolution = _resolve(state, gd, _missing(),
                           ctx=_crafting(supply_target=("ash_club", 1, 1),
                                         asymmetric_demand=frozenset({"ash_club"})))
-    assert resolution.root is None
-    assert dict(resolution.declined) == {"FleetPiece(iron_shield)": "not the supply target"}
+    assert resolution.root == ObtainItem("iron_shield", 1)
     assert not any(isinstance(alt, ReachCharLevel) for alt in resolution.alternatives)
 
 

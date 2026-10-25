@@ -238,14 +238,15 @@ class SelectionContext:
     # (`CoordinationStore.sibling_skill_ledger`), per character — the climber
     # is chosen per character, which `sibling_skills`' fleet max cannot do.
     sibling_skill_ledger: dict[str, dict[str, int]] = field(default_factory=dict)
-    # skill -> the ONE character that climbs it for the fleet's `L*` pieces
-    # (`fleet_climber.fleet_climber`, computed once per cycle by the player
-    # over every skill a fleet piece demands): the climber the role claim
-    # admits and whose remaining climb a sibling route is priced with.
+    # craft skill -> its assigned climber (`fleet_climber.fleet_climbers`,
+    # ruling T7a), kept only where that climber can serve the skill: it holds,
+    # or is free to claim, the skill's role (`serving_climbers`). Computed once
+    # per cycle by the player; the climber whose remaining climb a sibling
+    # route is priced with. Empty on a failed ledger read (ruling T7b).
     fleet_climbers: dict[str, str] = field(default_factory=dict)
     # Every `L*` piece a sibling publishes: code -> (units asked, gain summed
-    # over the publishers) (`CoordinationStore.sibling_demand` and
-    # `sibling_demand_values`). The units a sibling climb is shared across, and
+    # over the publishers) (`CoordinationStore.sibling_demand_values`, one
+    # read). The units a sibling climb is shared across, and
     # the pieces a crafter's role serves.
     fleet_board: dict[str, tuple[int, Fraction]] = field(default_factory=dict)
     # The board pieces this character's craft role serves (`fleet_pieces`,

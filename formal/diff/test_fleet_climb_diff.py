@@ -5,6 +5,9 @@ Two surfaces:
 
   * `amortized_climb_seconds` vs `amortized`: random non-negative rational
     climbs over 1..12 units, compared as exact fractions.
+  * `assign_climbers` vs `assign` (ruling T7a): up to 4 skills in priority
+    order over one fleet, each skill with its own remaining and committed
+    per character; compared as the climber per skill (-1 for none).
   * `climber` vs `pick`: up to 6 candidates in a random fleet order, each with
     a small rational remaining climb and a committed count (small ranges, so
     remaining ties, committed ties and full ties are all common). Python names
@@ -17,7 +20,7 @@ from fractions import Fraction
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.fleet_climb_core import amortized_climb_seconds, climber
+from artifactsmmo_cli.ai.fleet_climb_core import amortized_climb_seconds, assign_climbers, climber
 from formal.diff.oracle_client import run_oracle
 
 _rat = st.tuples(st.integers(min_value=0, max_value=40), st.integers(min_value=1, max_value=6))
@@ -66,3 +69,34 @@ def test_spec_tie_goes_to_fewer_committed_then_fleet_order() -> None:
                    {"0": 0, "1": 2, "2": 0}, ("0", "1", "2")) == "2"
     assert run_oracle("fleet_climb_pick", [[2, 5, 7, 1, 0, 3, 7, 1, 0]])[0] == {"pick": 5}
     assert climber({"5": Fraction(7), "3": Fraction(7)}, {"5": 0, "3": 0}, ("5", "3")) == "5"
+
+
+@st.composite
+def _skills(draw) -> tuple[list[int], list[list[tuple[int, tuple[int, int], int]]]]:
+    n = draw(st.integers(min_value=1, max_value=4))
+    ids = draw(st.permutations(list(range(n))))
+    k = draw(st.integers(min_value=0, max_value=4))
+    skills = [[(ident,
+                (draw(st.integers(min_value=0, max_value=3)), draw(st.integers(min_value=1, max_value=2))),
+                draw(st.integers(min_value=0, max_value=2)))
+               for ident in ids if draw(st.booleans())]
+              for _ in range(k)]
+    return list(ids), skills
+
+
+@settings(max_examples=400, deadline=None)
+@given(fleet=_skills())
+def test_assign_matches_lean(fleet) -> None:
+    ids, skills = fleet
+    order = tuple(str(ident) for ident in ids)
+    spec = [(str(i), {str(c): Fraction(*rem) for c, rem, _ in cands},
+             {str(c): com for c, _, com in cands}) for i, cands in enumerate(skills)]
+    assigned = assign_climbers(spec, order)
+    python = [int(assigned[str(i)]) if str(i) in assigned else -1 for i in range(len(skills))]
+    args = [len(skills)]
+    for cands in skills:
+        args.append(len(cands))
+        for ident, (num, den), com in cands:
+            args.extend([ident, num, den, com])
+    lean = run_oracle("fleet_climb_assign", [args])[0]["assign"]
+    assert lean == python, f"divergence: lean={lean} python={python} skills={skills}"

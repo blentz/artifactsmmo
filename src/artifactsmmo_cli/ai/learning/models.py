@@ -456,6 +456,20 @@ class SkillLedger(SQLModel, table=True):
     expires_at: str
 
 
+class FleetRoster(SQLModel, table=True):
+    """One character's place in the fleet's order: the account's
+    `GET /my/characters` order, published by every `play --all` child
+    (`CoordinationStore.publish_fleet_order`) so a character started alone
+    breaks a climb tie (spec 2026-10-18 §2.5) as the fleet does. Replaced
+    wholesale; the same `expires_at` liveness rule as every coordination row."""
+
+    __tablename__ = "fleet_roster"
+
+    character: str = Field(primary_key=True)
+    position: int
+    expires_at: str
+
+
 class BankStockClaim(SQLModel, table=True):
     """One character's claim on BANK stock it is withdrawing. Upsert key is
     (character, item_code), the same shape as `MaterialDemand`.

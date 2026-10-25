@@ -67,20 +67,21 @@ def piece_target(piece: GearPiece, objective: CharacterObjective, state: WorldSt
 
 
 def fleet_piece_root(piece: FleetPiece, state: WorldState,
-                     ctx: SelectionContext) -> MetaGoal | None:
+                     ctx: SelectionContext) -> MetaGoal:
     """The step a fleet piece (§2.5) asks of the crafter now: the next level of
     its craft skill while the gate is unmet (+1, as `IsThisTargetBlocked`
     climbs: the walk re-derives every cycle); once met, the supply run that
-    banks it for the receivers, when it is this cycle's due supply target
-    (`fleet_work.supply_due`); else None — the gate is met and the item is not
-    the role's current request, so there is no step for it this cycle."""
+    banks it for the receivers when it is this cycle's due supply target
+    (`fleet_work.supply_due`), else its craft — one unit made, which the
+    supply run then banks (ruling T7d M3: a met gate is a craft, never no
+    step, so a crafter whose only work is the fleet's never idles on it)."""
     current = state.skills[piece.skill]
     if current < piece.level:
         return ReachSkillLevel(skill=piece.skill, level=current + 1)
     target = ctx.supply_target
     if target is not None and target[0] == piece.code and supply_due(ctx):
         return ReachFleetOutcome(FLEET_SUPPLY, piece.code)
-    return None
+    return ObtainItem(piece.code, 1)
 
 
 def pursuit_order(target: GearObjective, fleet: tuple[FleetPiece, ...], state: WorldState,
@@ -134,8 +135,8 @@ class WhichPieceIsNext(Decision[MetaGoal]):
     * no objective: the wall, `None` — no achievable loadout pays XP on any
       monster, so there is neither a piece to build nor a fight to grind.
     * a crafter's fleet pieces (§2.5, `ctx.fleet_pieces`) are pursued beside its
-      own, in `pursuit_order`: a piece's step is its climb, or the supply run
-      once the gate is met (`fleet_piece_root`). While one waits the trunk is
+      own, in `pursuit_order`: a piece's step is its climb, then its supply
+      run or its craft once the gate is met (`fleet_piece_root`). While one waits the trunk is
       withheld, `L*` held or every piece declined: a crafter is never pulled
       off its role to grind XP while the fleet has demand it serves.
 
@@ -169,9 +170,6 @@ class WhichPieceIsNext(Decision[MetaGoal]):
         for piece in pursuit_order(target, fleet, state, game_data, ctx, history):
             if isinstance(piece, FleetPiece):
                 root = fleet_piece_root(piece, state, ctx)
-                if root is None:
-                    self.walk.declined[f"FleetPiece({piece.code})"] = "not the supply target"
-                    continue
                 reason = self.walk.step_decline(root)
                 if reason is None:
                     return root

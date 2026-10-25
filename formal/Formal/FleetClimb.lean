@@ -22,6 +22,12 @@ Two pieces:
     (`pick_mem`); and a candidate strictly before the pick in fleet order has a
     strictly larger key (`pick_first`), so a full tie goes to the fleet order.
 
+  * `assign` — the climbers as an ASSIGNMENT (ruling T7a,
+    `assign_climbers`): skills in priority order each `pick` over the
+    candidates no earlier skill took. Proven: the climber is minimal over the
+    eligible set and is itself free (`climber_minimal_eligible`), and no
+    character is assigned twice (`assign_nodup`, via `assign_fresh`).
+
 Non-vacuity: `amortized_le_remaining` and `amortized_antitone_in_units` are
 instantiated by concrete `example`s below (a 100-cycle climb over 4 units
 pays no more than the climb, and no more than over 2); `climber_minimal` and `pick_first` by a three-character
@@ -251,5 +257,90 @@ theorem pick_first : ∀ {cs : List Cand} {d : Cand}, pick cs = some d →
 example : pick [(0, 7, 2), (1, 7, 0), (2, 9, 0)] = some (1, 7, 0) := by decide
 -- A full tie goes to the first in fleet order.
 example : pick [(5, 7, 0), (3, 7, 0)] = some (5, 7, 0) := by decide
+
+/-! ### The assignment (ruling T7a) -/
+
+/-- The candidates no earlier skill took. -/
+def eligible (taken : List Nat) (cs : List Cand) : List Cand :=
+  cs.filter (fun c => !decide (c.1 ∈ taken))
+
+/-- MINIMAL OVER THE ELIGIBLE SET: the climber a skill picks from the
+characters still free is free itself, and no free candidate has a strictly
+smaller `(remaining, committed)`. -/
+theorem climber_minimal_eligible {taken : List Nat} {cs : List Cand} {d : Cand}
+    (h : pick (eligible taken cs) = some d) :
+    d.1 ∉ taken ∧ ∀ x ∈ cs, x.1 ∉ taken → ¬ keyLt (key x) (key d) := by
+  refine ⟨?_, ?_⟩
+  · have hm := pick_mem h
+    simp only [eligible, List.mem_filter, Bool.not_eq_true', decide_eq_false_iff_not] at hm
+    exact hm.2
+  · intro x hx hfree
+    apply climber_minimal h x
+    simp only [eligible, List.mem_filter, Bool.not_eq_true', decide_eq_false_iff_not]
+    exact ⟨hx, hfree⟩
+
+/-- Each skill, in priority order, picks its climber from the characters no
+earlier skill took (`fleet_climb_core.assign_climbers`): `some id`, or `none`
+when every candidate is taken. -/
+def assign : List (List Cand) → List Nat → List (Option Nat)
+  | [], _ => []
+  | cs :: rest, taken =>
+    match pick (eligible taken cs) with
+    | none => none :: assign rest taken
+    | some d => some d.1 :: assign rest (d.1 :: taken)
+
+theorem assign_cons_none {cs : List Cand} {rest : List (List Cand)} {taken : List Nat}
+    (hp : pick (eligible taken cs) = none) :
+    assign (cs :: rest) taken = none :: assign rest taken := by
+  simp only [assign, hp]
+
+theorem assign_cons_some {cs : List Cand} {rest : List (List Cand)} {taken : List Nat}
+    {d : Cand} (hp : pick (eligible taken cs) = some d) :
+    assign (cs :: rest) taken = some d.1 :: assign rest (d.1 :: taken) := by
+  simp only [assign, hp]
+
+/-- No climber assigned is one already taken. -/
+theorem assign_fresh : ∀ (skills : List (List Cand)) (taken : List Nat) (x : Nat),
+    x ∈ (assign skills taken).filterMap id → x ∉ taken
+  | [], _, x => by simp [assign]
+  | cs :: rest, taken, x => by
+    intro hx
+    cases hp : pick (eligible taken cs) with
+    | none =>
+      rw [assign_cons_none hp] at hx
+      simp only [List.filterMap_cons, id] at hx
+      exact assign_fresh rest taken x hx
+    | some d =>
+      rw [assign_cons_some hp] at hx
+      simp only [List.filterMap_cons, id, List.mem_cons] at hx
+      rcases hx with hx | hx
+      · subst hx; exact (climber_minimal_eligible hp).1
+      · have := assign_fresh rest (d.1 :: taken) x hx
+        exact fun h => this (List.mem_cons_of_mem _ h)
+
+/-- ONE CLIMB PER CHARACTER: no character is assigned two skills. -/
+theorem assign_nodup : ∀ (skills : List (List Cand)) (taken : List Nat),
+    ((assign skills taken).filterMap id).Nodup
+  | [], _ => by simp [assign]
+  | cs :: rest, taken => by
+    cases hp : pick (eligible taken cs) with
+    | none =>
+      rw [assign_cons_none hp]
+      simp only [List.filterMap_cons, id]
+      exact assign_nodup rest taken
+    | some d =>
+      rw [assign_cons_some hp]
+      simp only [List.filterMap_cons, id]
+      rw [List.nodup_cons]
+      refine ⟨?_, assign_nodup rest (d.1 :: taken)⟩
+      intro hmem
+      exact assign_fresh rest (d.1 :: taken) d.1 hmem (List.mem_cons_self)
+
+-- Non-vacuity: character 0 is least behind in both skills; the first skill
+-- takes it, so the second goes to 1 (`climber_minimal_eligible`'s hypothesis
+-- holds with 0 taken).
+example : assign [[(0, 7, 0), (1, 10, 0)], [(0, 5, 0), (1, 8, 0)]] [] = [some 0, some 1] := by
+  decide
+example : pick (eligible [0] [(0, 5, 0), (1, 8, 0)]) = some (1, 8, 0) := by decide
 
 end Formal.FleetClimb

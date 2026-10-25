@@ -1605,3 +1605,6 @@ open Formal.PriorityBand
 #check @Formal.FleetClimb.climber_minimal              -- no candidate has a strictly smaller (remaining, committed)
 #check @Formal.FleetClimb.pick_mem                     -- the climber is a candidate
 #check @Formal.FleetClimb.pick_first                   -- every candidate ahead of the climber has a larger key
+#check @Formal.FleetClimb.climber_minimal_eligible     -- a skill's climber is free and minimal over the free candidates
+#check @Formal.FleetClimb.assign_fresh                 -- no assigned climber was already taken
+#check @Formal.FleetClimb.assign_nodup                 -- no character is assigned two skills

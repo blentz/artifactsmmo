@@ -502,13 +502,15 @@ def _sibling_craft_option(item: str, state: WorldState, game_data: GameData,
     single producer to perform.
 
     NO SIBLING MEETS THE GATE YET (spec 2026-10-18 §2.5): the fleet's ONE
-    climber for the skill (`role_selection.fleet_climber`) pays the climb once
+    climber for the skill (`fleet_climber.fleet_climbers`) pays the climb once
     for every fleet unit it unlocks, so the route still exists, with the
     climber's remaining climb divided across those units
     (`_amortized_fleet_climb`) added to the request cost. "Speculation" above
-    meant a climb nobody committed to; the climber is committed by
-    construction — it alone may hold the skill's role, and its own objective
-    serves every fleet piece the climb unlocks (`fleet_pieces`). When this
+    meant a climb nobody committed to; this climber is committed — the fleet
+    assigned it the skill (ruling T7a), it holds or is free to claim the
+    skill's role, and the role's objective serves every fleet piece the climb
+    unlocks (`fleet_pieces`). A climber holding another role serves none, so
+    it is not on `ctx.fleet_climbers` and the route does not exist. When this
     character IS the climber there is no sibling route: its own climb is
     `_gated_skill_option`.
     """
@@ -539,10 +541,10 @@ def _amortized_fleet_climb(skill: str, level: int, state: WorldState, game_data:
                            ctx: SelectionContext, store: LearningStore) -> int | None:
     """This character's share, in actions, of the fleet climber's remaining
     climb of `skill` to `level` (spec 2026-10-18 §2.5), or None when there is
-    no sibling climb to share: the fleet names no climber for the skill
-    (`ctx.fleet_climbers`, empty without a fleet), this character is the
-    climber itself, or the climb cannot be priced. The climber is the one
-    `role_selection.decide_role` lets claim the skill's role.
+    no sibling climb to share: the fleet names no SERVING climber for the skill
+    (`ctx.fleet_climbers`: the assigned climbers that hold or are free to
+    claim the skill's role; empty without a fleet or on a failed ledger read),
+    this character is the climber itself, or the climb cannot be priced.
 
     The remaining climb is priced as `decisions/route.route_price` prices a
     `ReachSkillLevel`: `skill_grind_cycles` at the climber's grind rate

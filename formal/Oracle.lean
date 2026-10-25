@@ -3066,6 +3066,26 @@ def runFleetClimbPick (args : Array Json) : Json :=
     | some c => Int.ofNat c.1
   Json.mkObj [("pick", Json.num picked)]
 
+/-- `fleet_climb_assign` — the proved `Formal.FleetClimb.assign`.
+args: `[k, then per skill in priority order: m, then per candidate: id,
+remainingNum, remainingDen, committed]`. Emits `{"assign": [id or -1, ..]}`. -/
+partial def readSkills (args : Array Json) (left : Nat) (o : Nat)
+    (acc : List (List Formal.FleetClimb.Cand)) : List (List Formal.FleetClimb.Cand) :=
+  if left = 0 then acc.reverse
+  else
+    let m := (intArg args o).toNat
+    let cand := fun (i : Nat) =>
+      let p := o + 1 + 4 * i
+      ((intArg args p).toNat, ratArg args (p + 1), (intArg args (p + 3)).toNat)
+    readSkills args (left - 1) (o + 1 + 4 * m) ((List.range m).map cand :: acc)
+
+def runFleetClimbAssign (args : Array Json) : Json :=
+  let skills := readSkills args (intArg args 0).toNat 1 []
+  let out := (Formal.FleetClimb.assign skills []).map (fun r => match r with
+    | none => Json.num (-1 : Int)
+    | some i => Json.num (Int.ofNat i))
+  Json.mkObj [("assign", Json.arr out.toArray)]
+
 -- The dispatch is one `if`/`else if` chain over every kind; at this length its
 -- elaboration exceeds the default recursion depth (512).
 set_option maxRecDepth 2048 in
@@ -3336,6 +3356,8 @@ def runOne (item : Json) : Json :=
     runFleetClimbAmortized args
   else if kind == "fleet_climb_pick" then
     runFleetClimbPick args
+  else if kind == "fleet_climb_assign" then
+    runFleetClimbAssign args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

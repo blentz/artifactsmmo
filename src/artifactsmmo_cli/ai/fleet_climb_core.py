@@ -11,6 +11,10 @@ piece gated by that skill. Two pieces of that live here:
   * `climber`: who climbs. The character with the least remaining climb, ties
     by the least other committed work, then the fleet's own order (the
     account's `GET /my/characters` order). Never a name or `repr` order.
+  * `assign_climbers`: who climbs WHAT (ruling T7a). The demanded skills, in
+    the caller's order, each take `climber` over the characters no earlier
+    skill was assigned, so a character climbs one craft skill at most: a
+    character holds one role, and only a role-holder supplies.
 """
 
 from collections.abc import Mapping, Sequence
@@ -45,3 +49,23 @@ def climber(remaining_by_character: Mapping[str, Fraction],
     # `min` keeps the first of equal keys, and `candidates` is in fleet order.
     return min(candidates,
                key=lambda name: (remaining_by_character[name], committed_by_character[name]))
+
+
+def assign_climbers(skills: Sequence[tuple[str, Mapping[str, Fraction], Mapping[str, int]]],
+                    order: Sequence[str]) -> dict[str, str]:
+    """skill -> its climber, for `skills` given in priority order as
+    `(skill, remaining_by_character, committed_by_character)`.
+
+    Each skill's climber is `climber` over the candidates no earlier skill
+    took; a skill whose candidates are all taken has no climber and is absent
+    from the answer. So no character is assigned two skills."""
+    assigned: dict[str, str] = {}
+    taken: set[str] = set()
+    for skill, remaining, committed in skills:
+        eligible = {name: left for name, left in remaining.items() if name not in taken}
+        if not eligible:
+            continue
+        who = climber(eligible, committed, order)
+        assigned[skill] = who
+        taken.add(who)
+    return assigned

@@ -2617,7 +2617,7 @@ def test_published_values_sum_over_siblings(tmp_path):
             player.state = make_state(skills=_GEAR_SKILLS)
             player._update_coordination(player.state, player.game_data)
         assert my_store.sibling_demand_values(datetime.now(tz=timezone.utc)) == {
-            "iron_sword": Fraction(3, 7), "copper_helmet": Fraction(1, 2)}
+            "iron_sword": (2, Fraction(3, 7)), "copper_helmet": (1, Fraction(1, 2))}
     finally:
         hal_store.close()
         lor_store.close()
@@ -2964,10 +2964,13 @@ def test_the_refresh_reads_the_fleet_climb(tmp_path) -> None:
         robby.publish_skills({"gearcrafting": 8}, now)
         robby.publish_demand({"iron_shield": 2, "iron_bar": 12}, frozenset(), now,
                              {"iron_shield": (Fraction(3), Fraction(40))})
+        # Robby's `play --all` child published the fleet; this character was
+        # started alone and reads its order from there (ruling T7d M1).
+        robby.publish_fleet_order(("C3P0", "Robby"), now)
         player, _ = _coord_player(tmp_path)
-        player._fleet_order = ("C3P0", "Robby")
         player.game_data = shared_world(_FLEET_BUNDLE)
         player._refresh_sibling_reads(now)
+        assert player._fleet_order == ("C3P0", "Robby")
         assert player._sibling_ledger == {"Robby": {"gearcrafting": 8}}
         assert player._fleet_board == {"iron_shield": (2, Fraction(3))}
         assert player._fleet_climbers == {"gearcrafting": "Robby"}
@@ -3028,3 +3031,70 @@ def test_the_fleet_climber_is_recruited_by_demand_above_its_level(tmp_path) -> N
         robby.close()
         history.end_session(exit_reason="normal")
         history.close()
+
+
+def test_a_roster_without_this_character_is_not_its_fleet(tmp_path) -> None:
+    """A live roster that does not name this character leaves it its own
+    fleet: its siblings do not compete for its climbs."""
+    now = datetime.now(tz=timezone.utc)
+    robby = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Robby")
+    try:
+        robby.publish_fleet_order(("Robby", "Lor"), now)
+        player, _ = _coord_player(tmp_path)
+        player._refresh_sibling_reads(now)
+        assert player._fleet_order == ("C3P0",)
+    finally:
+        robby.close()
+
+
+def test_a_child_publishes_the_fleet_order_it_was_given(tmp_path) -> None:
+    """`play --all` hands each child the fleet order; the child puts it on the
+    board for a sibling started alone. A lone character publishes none."""
+    db = str(tmp_path / "coord.db")
+    reader = CoordinationStore(db_path=db, character="reader")
+    try:
+        lone, _ = _coord_player(tmp_path, "Lone")
+        lone._update_coordination(lone.state, lone.game_data)
+        assert reader.fleet_order(coordination_now()) is None
+        child = GamePlayer(character="C3P0", fleet_order=("Robby", "C3P0"))
+        child._offline_timing = committed_timing()
+        child._learned_drops = LearnedDrops.empty()
+        child.state = make_state(character="C3P0")
+        child.game_data = GameData()
+        child.set_coordination_store(CoordinationStore(db_path=db, character="C3P0"))
+        child._update_coordination(child.state, child.game_data)
+        assert reader.fleet_order(coordination_now()) == ("Robby", "C3P0")
+        assert child._fleet_order == ("Robby", "C3P0")
+    finally:
+        reader.close()
+
+
+def test_a_failed_ledger_read_assigns_no_climber(tmp_path) -> None:
+    """Ruling T7b: the ledger read failing is not "no sibling" — this
+    character is not named every skill's climber; nothing is assigned, so no
+    sibling route is priced and no role demand is gated this cycle."""
+    now = datetime.now(tz=timezone.utc)
+    robby = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Robby")
+    try:
+        robby.publish_demand({"iron_shield": 1}, frozenset(), now,
+                             {"iron_shield": (Fraction(3), Fraction(40))})
+        player, _ = _coord_player(tmp_path)
+        player.game_data = shared_world(_FLEET_BUNDLE)
+        assert player._coordination is not None
+        # Only the ledger read fails: the board still names the shield, so a
+        # failure read as `{}` would make this character its climber.
+        player._coordination.sibling_skill_ledger = lambda _now: None  # type: ignore[method-assign]
+        player._refresh_sibling_reads(now)
+        assert player._fleet_board == {"iron_shield": (1, Fraction(3))}
+        assert player._sibling_ledger is None
+        assert player._fleet_climbers == {} and player._serving_climbers == {}
+        assert player._selection_context().sibling_skill_ledger == {}
+    finally:
+        robby.close()
+
+
+def test_the_climbers_need_a_state(tmp_path) -> None:
+    player, _ = _coord_player(tmp_path)
+    player.state = None
+    with pytest.raises(ValueError, match="neither yet"):
+        player._climbers({})

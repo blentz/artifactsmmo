@@ -19,7 +19,7 @@ behaviour. Handled here and NOT re-handled upstream.
 """
 
 import weakref
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from fractions import Fraction
 from pathlib import Path
@@ -32,6 +32,7 @@ from sqlmodel import SQLModel, col, create_engine, select
 from artifactsmmo_cli.ai.learning.models import (
     BankStockClaim,
     ConsumableNeed,
+    FleetRoster,
     GeOrderClaim,
     HoldingLedger,
     MaterialDemand,
@@ -566,12 +567,15 @@ class CoordinationStore:
             totals[row.item_code] = totals.get(row.item_code, 0) + row.quantity
         return totals
 
-    def sibling_demand_values(self, now: datetime) -> dict[str, Fraction]:
-        """Each gear piece some OTHER character is missing, mapped to its gain
-        summed over every sibling that publishes it (spec 2026-10-18 §2.5: a
-        fleet piece is ordered by gain summed over the receiving characters).
+    def sibling_demand_values(self, now: datetime) -> dict[str, tuple[int, Fraction]]:
+        """Each gear piece some OTHER character is missing, mapped to the units
+        asked and the gain, each summed over every sibling that publishes it
+        (spec 2026-10-18 §2.5: a fleet piece is ordered by gain summed over the
+        receiving characters, and a sibling climb is shared across its units).
         Same liveness and own-character filter as `sibling_demand`; a row with
-        no `gain` is not a piece and is not read."""
+        no `gain` is not a piece and is not read. Units and gain come off the
+        SAME rows in one read, so they cannot disagree about which pieces are
+        on the board."""
         _require_utc(now)
         stamp = now.isoformat()
         try:
@@ -586,12 +590,13 @@ class CoordinationStore:
         except SQLAlchemyError as e:
             print(f"[coordination] sibling_demand_values failed: {e}")
             return {}
-        totals: dict[str, Fraction] = {}
+        totals: dict[str, tuple[int, Fraction]] = {}
         for row in rows:
             # The query's own `gain IS NOT NULL` filter guarantees this: an
             # invariant of this method, not a check on outside data.
             assert row.gain is not None
-            totals[row.item_code] = totals.get(row.item_code, Fraction(0)) + Fraction(row.gain)
+            units, gain = totals.get(row.item_code, (0, Fraction(0)))
+            totals[row.item_code] = (units + row.quantity, gain + Fraction(row.gain))
         return totals
 
     def sibling_demand_asymmetric(self, now: datetime) -> frozenset[str]:
@@ -817,14 +822,19 @@ class CoordinationStore:
                 best[row.skill] = row.level
         return best
 
-    def sibling_skill_ledger(self, now: datetime) -> dict[str, dict[str, int]]:
-        """Every OTHER character's unexpired skill levels, per character.
+    def sibling_skill_ledger(self, now: datetime) -> dict[str, dict[str, int]] | None:
+        """Every OTHER character's unexpired skill levels, per character, or
+        None when the read FAILED.
 
         `sibling_skill_levels` folds the ledger to the fleet's best level per
         skill, which answers "can ANY sibling make this"; choosing the ONE
         character that climbs a skill for the fleet (spec 2026-10-18 §2.5,
-        `fleet_climb_core.climber`) needs each sibling's own level. Same rows,
-        same liveness and own-character filter."""
+        `fleet_climber.fleet_climbers`) needs each sibling's own level. Same rows, same
+        liveness and own-character filter.
+
+        A failure is None, never `{}` (ruling T7b): an empty ledger means "no
+        sibling", which makes this character every skill's climber; a failed
+        read means nothing is known, and the caller assigns no climber."""
         _require_utc(now)
         stamp = now.isoformat()
         ledger: dict[str, dict[str, int]] = {}
@@ -838,10 +848,46 @@ class CoordinationStore:
                 ).all()
         except SQLAlchemyError as e:
             print(f"[coordination] sibling_skill_ledger failed: {e}")
-            return {}
+            return None
         for row in rows:
             ledger.setdefault(row.character, {})[row.skill] = row.level
         return ledger
+
+    def publish_fleet_order(self, order: Sequence[str], now: datetime) -> None:
+        """Replace the fleet's roster with `order`, the account's characters in
+        `GET /my/characters` order (`play --all` passes it to every child).
+
+        Account-wide, not per character: every child writes the same order, so
+        the roster is replaced wholesale. It is what a character started ALONE
+        (no `--fleet-order`) reads its fleet order from (ruling T7d M1), so a
+        lone `play <char>` beside a live fleet breaks a climb tie as the fleet
+        does. Same TTL as every coordination row."""
+        _require_utc(now)
+        expiry = self._demand_expiry(now)
+        try:
+            with SqlSession(self._engine) as s:
+                for row in s.exec(select(FleetRoster)).all():
+                    s.delete(row)
+                s.flush()
+                for position, name in enumerate(order):
+                    s.add(FleetRoster(character=name, position=position, expires_at=expiry))
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[coordination] publish_fleet_order failed: {e}")
+
+    def fleet_order(self, now: datetime) -> tuple[str, ...] | None:
+        """The live fleet roster in its published order, or None when none is
+        live (or the read failed): nothing is known of the fleet's order."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(select(FleetRoster).where(FleetRoster.expires_at > stamp)
+                              .order_by(col(FleetRoster.position))).all()
+        except SQLAlchemyError as e:
+            print(f"[coordination] fleet_order failed: {e}")
+            return None
+        return tuple(row.character for row in rows) or None
 
     def _bank_claim_expiry(self, now: datetime) -> str:
         return (now + timedelta(seconds=BANK_CLAIM_TTL_SECONDS)).isoformat()

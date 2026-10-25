@@ -1253,3 +1253,6 @@ open Formal.PriorityBand
 #print axioms Formal.FleetClimb.climber_minimal
 #print axioms Formal.FleetClimb.pick_mem
 #print axioms Formal.FleetClimb.pick_first
+#print axioms Formal.FleetClimb.climber_minimal_eligible
+#print axioms Formal.FleetClimb.assign_fresh
+#print axioms Formal.FleetClimb.assign_nodup

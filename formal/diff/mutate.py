@@ -6385,21 +6385,12 @@ FLEET_CLIMB_CORE_MUTATIONS = [
 # coordination data, the sibling route shares the climber's climb, the crafter's
 # fleet pieces join its objective, and a sibling-served piece waits on the bank.
 FLEET_CLIMB_ROLE_MUTATIONS = [
-    ("fleet climb: a second character claims the climbed skill's role",
-     "    if role_name in unservable_released or role_name in climbed_elsewhere:",
-     "    if role_name in unservable_released:"),
-    ("fleet climb: the climber itself is refused its role",
-     "                          fleet_order) != character)",
-     "                          fleet_order) == character)"),
-    ("fleet climb: the rival scan ignores who climbs",
-     "        if not _claimable(role.name, demand_by_role, idle_released, unservable_released,\n"
-     "                          climbed_elsewhere):\n"
-     "            continue\n"
-     "        rival_best",
-     "        if not _claimable(role.name, demand_by_role, idle_released, unservable_released,\n"
-     "                          frozenset()):\n"
-     "            continue\n"
-     "        rival_best"),
+    ("fleet climb: a piece another character climbs recruits this one",
+     "        if item_code in pieces and skill in climbed_elsewhere:",
+     "        if False:"),
+    ("fleet climb: every product of a climbed skill is gated, not only its pieces",
+     "        if item_code in pieces and skill in climbed_elsewhere:",
+     "        if skill in climbed_elsewhere:"),
     ("fleet climb: the climber's demand above its level is dropped",
      "        if skill not in climbing and not serves_item(item_code, skill, level_of_item,",
      "        if not serves_item(item_code, skill, level_of_item,"),
@@ -6412,11 +6403,31 @@ FLEET_CLIMBER_MUTATIONS = [
      "    levels[character] = skill_levels",
      "    levels.setdefault(character, skill_levels)"),
     ("fleet climber: levels past the demand count as less to climb",
-     "    remaining = {name: Fraction(max(0, demanded - held.get(skill, 0)))",
-     "    remaining = {name: Fraction(demanded - held.get(skill, 0))"),
+     "          {name: Fraction(max(0, demanded[skill] - held.get(skill, 0)))",
+     "          {name: Fraction(demanded[skill] - held.get(skill, 0))"),
     ("fleet climber: holding the skill's own role counts as other work",
-     "                           if name in holders and role != owner)",
-     "                           if name in holders)"),
+     "                     if name in holders and role != owners[skill])",
+     "                     if name in holders)"),
+    ("fleet climber: a gathering skill is climbed for the fleet",
+     "    skills = sorted((skill for skill in demanded if skill in owners),",
+     "    skills = sorted((skill for skill in demanded if skill in owners or True),"),
+    ("fleet climber: the lower-gain skill takes its climber first",
+     "                    key=lambda skill: (-gain.get(skill, Fraction(0)), skill_rank.index(skill)))",
+     "                    key=lambda skill: (gain.get(skill, Fraction(0)), skill_rank.index(skill)))"),
+    ("fleet climber: equal gain ignores the catalogue order",
+     "                    key=lambda skill: (-gain.get(skill, Fraction(0)), skill_rank.index(skill)))",
+     "                    key=lambda skill: (-gain.get(skill, Fraction(0)), -skill_rank.index(skill)))"),
+    ("fleet climber: a climber holding another role still serves",
+     "            if all(role == owners[skill]",
+     "            if all(True"),
+]
+FLEET_CLIMB_CORE_ASSIGN_MUTATIONS = [
+    ("fleet climb: a character is assigned two skills",
+     "        eligible = {name: left for name, left in remaining.items() if name not in taken}",
+     "        eligible = dict(remaining)"),
+    ("fleet climb: a skill with every character taken is assigned anyway",
+     "        if not eligible:\n            continue",
+     "        if not eligible:\n            eligible = dict(remaining)"),
 ]
 FLEET_CLIMB_ROUTE_MUTATIONS = [
     ("fleet climb route: a sibling below the gate is one craft away",
@@ -6470,6 +6481,9 @@ FLEET_PIECE_WALK_MUTATIONS = [
      "                if reason is None:",
      "                reason = self.walk.step_decline(root)\n"
      "                if True:"),
+    ("fleet pieces: a met gate not yet the supply target climbs on",
+     "    return ObtainItem(piece.code, 1)",
+     "    return ReachSkillLevel(skill=piece.skill, level=current + 1)"),
     ("fleet pieces: a sibling-crafted piece climbs before it is banked",
      "            if piece.awaits_delivery(state):",
      "            if False:"),
@@ -6499,25 +6513,37 @@ FLEET_PIECES_MUTATIONS = [
     ("fleet pieces: a banked copy is climbed for",
      "        if state.inventory.get(code, 0) > 0 or banked.get(code, 0) > 0:",
      "        if state.inventory.get(code, 0) > 0:"),
+    ("fleet pieces: a skill another character climbs makes fleet pieces",
+     "    if climbers.get(skill, state.character) != state.character:",
+     "    if False:"),
 ]
 FLEET_CLIMB_PLAYER_SCENARIO_MUTATIONS = [
-    ("fleet climb player: the role claim ignores who climbs",
-     "                               demanded_level=demanded,",
-     "                               demanded_level={},"),
     ("fleet climb player: the crafter's fleet pieces never reach the walk",
      "            fleet_pieces=fleet_pieces(self.state, self.game_data, self._role,",
      "            fleet_pieces=fleet_pieces(self.state, self.game_data, None,"),
+    ("fleet climb player: a climber holding another role is priced as serving",
+     "            fleet_climbers=self._serving_climbers,",
+     "            fleet_climbers=self._fleet_climbers,"),
+    ("fleet climb player: another character's climb recruits this one",
+     "                                 level_of_item, state.skills, work_of_item, climbing,\n"
+     "                                 elsewhere, pieces)",
+     "                                 level_of_item, state.skills, work_of_item, climbing)"),
+    ("fleet climb player: a fleet piece another character climbs is climbed",
+     "                                      self._fleet_board, self._fleet_climbers),",
+     "                                      self._fleet_board, {}),"),
+    ("fleet climb player: the skills are taken in no gain order",
+     "                              self._demanded_gain(self.game_data), owners,",
+     "                              {}, owners,"),
 ]
 FLEET_CLIMB_PLAYER_MUTATIONS = [
     ("fleet climb player: the climber's demand above its level is dropped",
-     "                                 level_of_item, state.skills, work_of_item, climbing)",
-     "                                 level_of_item, state.skills, work_of_item)"),
+     "                                 level_of_item, state.skills, work_of_item, climbing,\n"
+     "                                 elsewhere, pieces)",
+     "                                 level_of_item, state.skills, work_of_item, frozenset(),\n"
+     "                                 elsewhere, pieces)"),
     ("fleet climb player: no climber named",
      "        self._fleet_climbers = self._climbers(leases)",
      "        self._fleet_climbers = {}"),
-    ("fleet climb player: a piece's asked units are lost",
-     "        self._fleet_board = {code: (board_units[code], gain)",
-     "        self._fleet_board = {code: (1, gain)"),
     ("fleet climb player: the board's pieces demand no level",
      "        for code in (*self._fleet_board, *self._own_piece_value()):",
      "        for code in self._own_piece_value():"),
@@ -6527,11 +6553,40 @@ FLEET_CLIMB_PLAYER_MUTATIONS = [
     ("fleet climb player: the sibling ledger is never read",
      "        self._sibling_ledger = self._coordination.sibling_skill_ledger(now)",
      "        self._sibling_ledger = {}"),
+    ("fleet climb player: a failed ledger read names this character every climber",
+     "        if self._sibling_ledger is None:\n            return {}",
+     "        if self._sibling_ledger is None:\n            self._sibling_ledger = {}"),
+    ("fleet climb player: a lone character ignores the live fleet's order",
+     "        if not self._fleet_order_given:\n            roster",
+     "        if False:\n            roster"),
+    ("fleet climb player: a roster without this character is taken anyway",
+     "            self._fleet_order = (roster if roster is not None and self.character in roster",
+     "            self._fleet_order = (roster if roster is not None"),
+    ("fleet climb player: the given fleet order is never published",
+     "        if self._fleet_order_given:\n            self._coordination.publish_fleet_order",
+     "        if False:\n            self._coordination.publish_fleet_order"),
 ]
 FLEET_CLIMB_STORE_MUTATIONS = [
     ("fleet climb store: another character's rate is this one's",
      "        return self._grind_rate(skill, window, character=character)",
      "        return self._grind_rate(skill, window, character=self._character)"),
+]
+FLEET_CLIMB_ROSTER_MUTATIONS = [
+    ("fleet roster: read in no order",
+     "                              .order_by(col(FleetRoster.position))).all()",
+     "                              ).all()"),
+    ("fleet roster: an expired roster is live",
+     "                rows = s.exec(select(FleetRoster).where(FleetRoster.expires_at > stamp)",
+     "                rows = s.exec(select(FleetRoster)"),
+    ("fleet roster: a republish keeps the old rows",
+     "                for row in s.exec(select(FleetRoster)).all():\n                    s.delete(row)",
+     "                for row in s.exec(select(FleetRoster)).all():\n                    pass"),
+    ("fleet ledger: a failed read is an empty ledger",
+     "            print(f\"[coordination] sibling_skill_ledger failed: {e}\")\n            return None",
+     "            print(f\"[coordination] sibling_skill_ledger failed: {e}\")\n            return {}"),
+    ("fleet board: units dropped from the one read",
+     "            totals[row.item_code] = (units + row.quantity, gain + Fraction(row.gain))",
+     "            totals[row.item_code] = (units + 1, gain + Fraction(row.gain))"),
 ]
 FLEET_CLIMB_LEDGER_MUTATIONS = [
     ("fleet climb ledger: this character's own row is read",
@@ -13120,6 +13175,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_role_selection.py", survivors)
     run_group(FLEET_CLIMBER_SRC, FLEET_CLIMBER_MUTATIONS,
               "tests/test_ai/test_fleet_climber.py", survivors)
+    run_group(FLEET_CLIMB_CORE_SRC, FLEET_CLIMB_CORE_ASSIGN_MUTATIONS,
+              "tests/test_ai/test_fleet_climb_core.py", survivors)
+    run_group(COORDINATION_STORE_SRC, FLEET_CLIMB_ROSTER_MUTATIONS,
+              "tests/test_ai/test_coordination_store.py", survivors)
     run_group(ACQUISITION_COST_SRC, FLEET_CLIMB_ROUTE_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
     run_group(WHICH_PIECE_SRC, FLEET_PIECE_WALK_MUTATIONS,

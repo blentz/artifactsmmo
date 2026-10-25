@@ -22,6 +22,7 @@ import pytest
 
 from artifactsmmo_cli.ai.acquisition_cost import route_options
 from artifactsmmo_cli.ai.decisions.root import resolve_root
+from artifactsmmo_cli.ai.decisions.which_piece_is_next import fleet_piece_root
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import farm_target
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -32,6 +33,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.yield_reprs import grind_xp_repr
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.role_selection import ROLE_IDLE_WINDOW, ROLE_MIN_HOLD_CYCLES
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -135,15 +137,18 @@ def test_both_characters_miss_the_gearcrafting_pieces(fleet) -> None:  # type: i
 
 
 def test_only_the_least_remaining_climber_takes_the_role(fleet) -> None:  # type: ignore[no-untyped-def]
-    """Gearcrafting 23 against 20, demanded 30: the 23 claims `logger` (the
-    role owning gearcrafting) and the 20 does not, though the board's
-    gearcrafting demand is what weighs most on it too. Bea is the higher
-    jewelrycrafter, so she is the fleet's jewelrycrafting climber."""
-    ana, bea, _gd = fleet
+    """Gearcrafting 23 against 20, demanded 30: the 23 is assigned the
+    gearcrafting climb and claims `logger` (the role owning gearcrafting) for
+    it; Bea, the higher jewelrycrafter, is assigned jewelrycrafting. Roles stay
+    non-exclusive (ruling T7c), but whatever role Bea holds, none of the
+    board's gearcrafting pieces is hers to climb for."""
+    ana, bea, gd = fleet
     assert ana._role == "logger"
-    assert bea._role is not None and bea._role != "logger"
     assert ana._fleet_climbers == bea._fleet_climbers == {
         "gearcrafting": "Ana", "jewelrycrafting": "Bea"}
+    bea.plan_from_state()
+    assert not [piece for piece in bea._last_ctx.fleet_pieces
+                if gd.producing_requirement(piece.code)[0] == "gearcrafting"]
 
 
 def test_the_other_prices_the_gearcrafting_piece_by_the_sibling_climb(fleet) -> None:  # type: ignore[no-untyped-def]
@@ -212,3 +217,67 @@ def test_a_crafter_with_own_l_star_held_still_serves_the_fleet(fleet) -> None:  
     assert resolution.root == ReachSkillLevel("gearcrafting", 24)
     assert not any(isinstance(alt, ReachCharLevel) for alt in resolution.alternatives)
     assert farm_target(None, held, bool(ctx.fleet_pieces)) is None
+
+
+def test_a_climber_holding_another_role_is_not_waited_on(fleet) -> None:  # type: ignore[no-untyped-def]
+    """Ruling T7a, the review's C1: Bea is the fleet's jewelrycrafting climber
+    but holds `miner`, so she makes no jewelry for the fleet. Ana must not
+    wait on her: Ana's jewelrycrafting pieces price Ana's own climb (a craft,
+    never a withdraw), and none is declined as awaiting the fleet crafter."""
+    ana, bea, gd = fleet
+    assert bea._coordination is not None and ana.state is not None
+    if bea._role is not None:
+        bea._coordination.release(bea._role)
+    assert bea._coordination.claim("miner", datetime.now(UTC))
+    report = ana.plan_from_state()
+    assert ana._fleet_climbers["jewelrycrafting"] == "Bea"
+    assert "jewelrycrafting" not in ana._serving_climbers
+    jewelry = [piece for piece in report.gear_objective.missing
+               if gd.producing_requirement(piece.code)[0] == "jewelrycrafting"]
+    assert jewelry and all(piece.route is SourceKind.CRAFT for piece in jewelry)
+    assert "awaits the fleet crafter" not in dict(report.decision.declined).values()
+
+
+def test_one_character_highest_in_both_skills_climbs_one(tmp_path: Path) -> None:
+    """Ana leads both climbed skills (gearcrafting 23 vs 20, jewelrycrafting
+    25 vs 22). She is assigned one, and the other goes to Bea, so each skill
+    has its own climber and Ana is not named for both."""
+    gd = shared_world(BUNDLE)
+    db = str(tmp_path / "fleet.db")
+    _seed_history(db)
+    ana = _player("Ana", _state("Ana", 23, 25), db, gd)
+    bea = _player("Bea", _state("Bea", 20, 22), db, gd)
+    for player in (ana, bea):
+        player.plan_from_state()
+    for player in (ana, bea):
+        _publish(player, gd)
+    ana.plan_from_state()
+    assert sorted(ana._fleet_climbers) == ["gearcrafting", "jewelrycrafting"]
+    assert sorted(ana._fleet_climbers.values()) == ["Ana", "Bea"]
+
+
+def test_the_role_releases_at_the_demanded_level(fleet) -> None:  # type: ignore[no-untyped-def]
+    """Review Focus 4 / ruling T7d M7. Ana reaches the demanded gearcrafting
+    30 while Bea's pieces are still on the board: she keeps `logger`, and her
+    fleet step is now the craft, not a climb. Once Bea's pieces leave the
+    board (delivered), the role reads idle for a full window while mining is
+    still wanted, and release-on-idle frees it: no one climbs a skill nobody
+    needs."""
+    ana, bea, gd = fleet
+    assert ana.state is not None and bea._coordination is not None
+    skills = {**ana.state.skills, "gearcrafting": 30}
+    ana.seed_offline(replace(ana.state, skills=skills), gd)
+    assert ana.state is not None
+    ana._update_coordination(ana.state, gd)
+    assert ana._role == "logger"
+    ana.plan_from_state()
+    roots = {fleet_piece_root(piece, ana.state, ana._last_ctx)
+             for piece in ana._last_ctx.fleet_pieces}
+    assert roots and not any(isinstance(root, ReachSkillLevel) for root in roots)
+
+    bea._coordination.publish_demand({"iron_ore": 20}, frozenset(), datetime.now(UTC), {})
+    ana._role_held_cycles = ROLE_MIN_HOLD_CYCLES
+    ana._role_idle_window.extend([True] * ROLE_IDLE_WINDOW)
+    ana._update_coordination(ana.state, gd)
+    assert ana._role is None
+    assert "logger" in ana._role_idle_released

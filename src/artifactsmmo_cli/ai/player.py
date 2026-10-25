@@ -102,7 +102,7 @@ from artifactsmmo_cli.ai.failure_recovery_core import (
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.fight_room_license import refusal_line, refused_fight
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
-from artifactsmmo_cli.ai.fleet_climber import fleet_climber
+from artifactsmmo_cli.ai.fleet_climber import fleet_climbers, serving_climbers
 from artifactsmmo_cli.ai.fleet_pieces import fleet_pieces
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import (
@@ -185,7 +185,6 @@ from artifactsmmo_cli.ai.role_catalog import (
     ROLES_BY_NAME,
     role_skill_level,
     role_skills,
-    skill_owner,
 )
 from artifactsmmo_cli.ai.role_selection import (
     ROLE_IDLE_WINDOW,
@@ -299,7 +298,10 @@ class GamePlayer:
         # The characters sharing the account's bank in the account's
         # `GET /my/characters` order (`play --all` passes it), in which the
         # fleet consumable floor assigns the banked stock (USER 2026-10-09,
-        # "Need ledger + API order"). A lone character is its own fleet.
+        # "Need ledger + API order"). A character started alone reads the live
+        # fleet's order off the coordination store instead (ruling T7d M1,
+        # `_refresh_sibling_reads`), and is its own fleet only while none is live.
+        self._fleet_order_given = fleet_order is not None
         self._fleet_order = (character,) if fleet_order is None else fleet_order
         # This character's consumable need (`consumable_floor.consumable_need`)
         # and its siblings' published needs, read with the coordination block,
@@ -582,9 +584,15 @@ class GamePlayer:
         # sibling's skill levels, every live role's holders, and every `L*`
         # piece a sibling publishes as (units, summed gain). Read in
         # `_refresh_sibling_reads`; empty without a coordination store.
-        self._sibling_ledger: dict[str, dict[str, int]] = {}
+        # `_sibling_ledger` is None when the ledger read failed (ruling T7b):
+        # nothing is known of the siblings, so no climber is assigned.
+        # `_fleet_climbers` is the assignment (`fleet_climber.fleet_climbers`),
+        # `_serving_climbers` the part of it that can serve (holds or is free
+        # to claim the skill's role), the only climbers a sibling route prices.
+        self._sibling_ledger: dict[str, dict[str, int]] | None = {}
         self._fleet_board: dict[str, tuple[int, Fraction]] = {}
         self._fleet_climbers: dict[str, str] = {}
+        self._serving_climbers: dict[str, str] = {}
         # The siblings' dual-role units (`SelectionContext.sibling_holdings`).
         self._sibling_holdings: dict[str, int] = {}
         # The live party lease naming this character as a member, and the
@@ -3156,16 +3164,40 @@ class GamePlayer:
         return value
 
     def _climbers(self, leases: Mapping[str, frozenset[str]]) -> dict[str, str]:
-        """skill -> the ONE character that climbs it for the fleet (spec
-        2026-10-18 §2.5, `fleet_climber`), over every skill a fleet `L*` piece
-        demands (`_demanded_levels`), from this cycle's ledger and `leases`.
-        The same function, on the same inputs, `decide_role`'s claim gate
-        reads, so the role and the sibling route's price name one climber."""
-        assert self.state is not None and self.game_data is not None
-        return {skill: fleet_climber(skill, level, self.character, self.state.skills,
-                                     self._sibling_ledger, leases,
-                                     skill_owner(skill, ROLE_CATALOG), self._fleet_order)
-                for skill, level in self._demanded_levels(self.game_data).items()}
+        """craft skill -> the ONE character that climbs it for the fleet (spec
+        2026-10-18 §2.5, ruling T7a, `fleet_climber.fleet_climbers`): the
+        assignment over every craft skill a fleet `L*` piece demands
+        (`_demanded_levels`), taken in descending fleet gain (`_demanded_gain`,
+        ties in `ROLE_CATALOG` order), from this cycle's ledger and `leases`.
+
+        Empty when the ledger read failed (ruling T7b): with nothing known of
+        the siblings this cycle prices no sibling route and gates no role
+        demand, rather than reading the failure as "no sibling" and naming
+        this character every skill's climber."""
+        if self.state is None or self.game_data is None:
+            raise ValueError(f"{self.character}: the fleet's climbers are read off this "
+                             "character's state and game data, and it has neither yet")
+        if self._sibling_ledger is None:
+            return {}
+        owners = {role.craft: role.name for role in ROLE_CATALOG}
+        return fleet_climbers(self._demanded_levels(self.game_data),
+                              self._demanded_gain(self.game_data), owners,
+                              [role.craft for role in ROLE_CATALOG], self.character,
+                              self.state.skills, self._sibling_ledger, leases, self._fleet_order)
+
+    def _demanded_gain(self, game_data: GameData) -> dict[str, Fraction]:
+        """The fleet's gain summed, per producing skill, over every `L*` piece
+        it gates: the board's (summed over its publishers) and this
+        character's own. Every character sums the same pieces, so every
+        character orders the skills alike (ruling T7a)."""
+        gain: dict[str, Fraction] = {}
+        pieces = [(code, piece_gain) for code, (_units, piece_gain) in self._fleet_board.items()]
+        pieces += [(code, value[0]) for code, value in self._own_piece_value().items()]
+        for code, piece_gain in pieces:
+            requirement = game_data.producing_requirement(code)
+            if requirement is not None:
+                gain[requirement[0]] = gain.get(requirement[0], Fraction(0)) + piece_gain
+        return gain
 
     def _demanded_levels(self, game_data: GameData) -> dict[str, int]:
         """The level each producing skill must reach for the fleet's `L*`
@@ -3593,12 +3625,16 @@ class GamePlayer:
         self._asymmetric_demand = self._coordination.sibling_demand_asymmetric(now)
         self._sibling_skills = self._coordination.sibling_skill_levels(now)
         self._sibling_ledger = self._coordination.sibling_skill_ledger(now)
-        # Every `L*` piece a sibling publishes, with the units it asks: the
-        # units a sibling climb is shared across, and the pieces a crafter's
-        # role serves (spec 2026-10-18 §2.5).
-        board_units = self._coordination.sibling_demand(now)
-        self._fleet_board = {code: (board_units[code], gain)
-                             for code, gain in self._coordination.sibling_demand_values(now).items()}
+        # The live fleet's order for a character started alone (ruling T7d
+        # M1); a roster that does not name this character is not its fleet.
+        if not self._fleet_order_given:
+            roster = self._coordination.fleet_order(now)
+            self._fleet_order = (roster if roster is not None and self.character in roster
+                                 else (self.character,))
+        # Every `L*` piece a sibling publishes, with the units it asks (one
+        # read): the units a sibling climb is shared across, and the pieces a
+        # crafter's role serves (spec 2026-10-18 §2.5).
+        self._fleet_board = self._coordination.sibling_demand_values(now)
         self._sibling_holdings = self._coordination.sibling_holdings(now)
         # The siblings' consumable needs, for this character's floor share
         # (USER 2026-10-09, "Need ledger + API order").
@@ -3609,6 +3645,8 @@ class GamePlayer:
         leases = self._coordination.live_leases(now)
         self._fleet_roles = frozenset(leases)
         self._fleet_climbers = self._climbers(leases)
+        self._serving_climbers = serving_climbers(
+            self._fleet_climbers, {role.craft: role.name for role in ROLE_CATALOG}, leases)
 
     def _adopt_lease_role(self, now: datetime) -> None:
         """The diagnostics' role: the live lease naming this character, when
@@ -3779,6 +3817,7 @@ class GamePlayer:
             self._sibling_ledger = {}
             self._fleet_board = {}
             self._fleet_climbers = {}
+            self._serving_climbers = {}
             self._sibling_holdings = {}
             self._sibling_needs = {}
             self._fleet_roles = frozenset()
@@ -3799,6 +3838,10 @@ class GamePlayer:
         # that we can and price asking as a route rather than as unobtainable.
         # Same write path and same TTL as the holdings publish directly above.
         self._coordination.publish_skills(state.skills, now)
+        # The fleet order `play --all` handed this child, for a sibling
+        # started alone to break a climb tie by (ruling T7d M1).
+        if self._fleet_order_given:
+            self._coordination.publish_fleet_order(self._fleet_order, now)
         # Our party card: what a sibling leader judges a party fight with, and
         # whether we stand on its tile out of cooldown (increment 4).
         self._publish_party_card(state)
@@ -3855,20 +3898,23 @@ class GamePlayer:
         item_demand = self._coordination.sibling_demand(now)
         skill_of_item, level_of_item = self._producing_split(item_demand, game_data)
         work_of_item = self._work_of_item(item_demand, state, game_data)
-        # The fleet's shared climb (spec 2026-10-18 §2.5): the level each
-        # skill must reach for the fleet's `L*` pieces, and the skills this
-        # character is the fleet's one climber for (`fleet_climber`).
-        demanded = self._demanded_levels(game_data)
+        # The fleet's shared climb (spec 2026-10-18 §2.5, rulings T7a/T7c):
+        # the skills this character is assigned to climb, and those another
+        # character climbs, whose `L*` pieces recruit nobody else.
         leases = self._coordination.live_leases(now)
         climbing = frozenset(skill for skill, who in self._fleet_climbers.items()
                              if who == self.character)
+        elsewhere = frozenset(skill for skill, who in self._fleet_climbers.items()
+                              if who != self.character)
+        pieces = frozenset(self._fleet_board)
         # PER-CHARACTER demand: `state.skills` gates out every item this
         # character's levels cannot produce, so it is never recruited to a role
         # by demand it provably cannot serve (live 2026-08-03: `Lor` at mining 8
         # held `miner` against iron demand that gates at mining 10) — unless it
         # is the fleet's climber for the producing skill: the climb IS the work.
         by_role = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG,
-                                 level_of_item, state.skills, work_of_item, climbing)
+                                 level_of_item, state.skills, work_of_item, climbing,
+                                 elsewhere, pieces)
         # The roles through which this character could serve an ASYMMETRIC ask:
         # the same aggregate over those requests alone. They win the claim, as
         # `_pick_supply_target` ranks those requests first (`decide_role`).
@@ -3877,7 +3923,7 @@ class GamePlayer:
                 {code: qty for code, qty in item_demand.items()
                  if code in self._asymmetric_demand},
                 skill_of_item, ROLE_CATALOG, level_of_item, state.skills,
-                work_of_item, climbing).items()
+                work_of_item, climbing, elsewhere, pieces).items()
             if qty > 0)
         # Extend or break the zero-demand RUN before deciding, so the count
         # passed in includes this cycle's observation. `decide_role` releases on
@@ -3906,10 +3952,7 @@ class GamePlayer:
                                unservable_released=frozenset(self._role_unservable_released),
                                unservable_cycles=self._role_unservable_cycles,
                                skill_levels=state.skills,
-                               asymmetric_roles=asymmetric_roles,
-                               sibling_skill_levels=self._sibling_ledger,
-                               demanded_level=demanded,
-                               fleet_order=self._fleet_order)
+                               asymmetric_roles=asymmetric_roles)
         if decision.release is not None:
             self._coordination.release(decision.release)
             # `decide_role`'s docstring: the caller adds a role on EVERY
@@ -4282,11 +4325,11 @@ class GamePlayer:
             sibling_skills=self._sibling_skills,
             # The fleet's shared skill climb (spec 2026-10-18 §2.5), same
             # source and lifecycle as `sibling_skills`.
-            sibling_skill_ledger=self._sibling_ledger,
-            fleet_climbers=self._fleet_climbers,
+            sibling_skill_ledger=self._sibling_ledger or {},
+            fleet_climbers=self._serving_climbers,
             fleet_board=self._fleet_board,
             fleet_pieces=fleet_pieces(self.state, self.game_data, self._role,
-                                      self._fleet_board),
+                                      self._fleet_board, self._fleet_climbers),
             role=self._role,
             fleet_roles=self._fleet_roles,
             # The siblings' dual-role units, same source and lifecycle as

@@ -1305,7 +1305,7 @@ def test_sibling_demand_values_skips_own_expired_and_material_rows(tmp_path):
     old.publish_demand({"iron_helm": 1}, frozenset(),
                        now - timedelta(seconds=DEMAND_TTL_SECONDS + 1),
                        piece_value={"iron_helm": (Fraction(7), Fraction(1))})
-    assert hal.sibling_demand_values(now) == {"iron_helm": Fraction(2, 3)}
+    assert hal.sibling_demand_values(now) == {"iron_helm": (1, Fraction(2, 3))}
     hal.close()
     lor.close()
     old.close()
@@ -2650,15 +2650,15 @@ def test_sibling_skill_ledger_reads_each_sibling_apart(tmp_path: Path) -> None:
             store.close()
 
 
-def test_sibling_skill_ledger_swallows_error_and_returns_empty(
+def test_a_failed_skill_ledger_read_is_not_an_empty_ledger(
     tmp_path: Path, capsys
 ) -> None:
-    """Degrades to "no sibling ledger", which leaves the fleet climb absent —
-    the same safe direction as `sibling_skill_levels`."""
+    """Ruling T7b: an empty ledger means "no sibling", which would make this
+    character every skill's climber; a failed read is None, nothing known."""
     db = str(tmp_path / "coord.db")
     hal = CoordinationStore(db_path=db, character="HAL")
     _break_engine(hal)
-    assert hal.sibling_skill_ledger(_T0) == {}
+    assert hal.sibling_skill_ledger(_T0) is None
     assert "[coordination] sibling_skill_ledger failed" in capsys.readouterr().out
 
 
@@ -2668,5 +2668,61 @@ def test_sibling_skill_ledger_rejects_naive_now(tmp_path: Path) -> None:
     try:
         with pytest.raises(ValueError, match="naive"):
             hal.sibling_skill_ledger(_NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_sibling_demand_values_sum_units_and_gain_over_siblings(tmp_path: Path) -> None:
+    """Two siblings ask for one helmet each: two units, their gains summed."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    lor = CoordinationStore(db_path=db, character="Lor")
+    bea = CoordinationStore(db_path=db, character="Bea")
+    try:
+        lor.publish_demand({"iron_helm": 1}, frozenset(), _T0,
+                           piece_value={"iron_helm": (Fraction(2, 3), Fraction(1))})
+        bea.publish_demand({"iron_helm": 2}, frozenset(), _T0,
+                           piece_value={"iron_helm": (Fraction(1, 3), Fraction(1))})
+        assert hal.sibling_demand_values(_T0) == {"iron_helm": (3, Fraction(1))}
+    finally:
+        for store in (hal, lor, bea):
+            store.close()
+
+
+def test_the_fleet_order_is_read_back_in_its_published_order(tmp_path: Path) -> None:
+    """The account's order, not a name order, replaced wholesale on each
+    publish, and gone once it expires (ruling T7d M1)."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        assert hal.fleet_order(_T0) is None
+        hal.publish_fleet_order(("Robby", "HAL", "Ana"), _T0)
+        assert hal.fleet_order(_T0) == ("Robby", "HAL", "Ana")
+        hal.publish_fleet_order(("HAL", "Robby"), _T0)
+        assert hal.fleet_order(_T0) == ("HAL", "Robby")
+        assert hal.fleet_order(_T0 + timedelta(seconds=DEMAND_TTL_SECONDS + 1)) is None
+    finally:
+        hal.close()
+
+
+def test_the_fleet_order_swallows_errors(tmp_path: Path, capsys) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    _break_engine(hal)
+    hal.publish_fleet_order(("HAL",), _T0)
+    assert hal.fleet_order(_T0) is None
+    out = capsys.readouterr().out
+    assert "[coordination] publish_fleet_order failed" in out
+    assert "[coordination] fleet_order failed" in out
+
+
+def test_the_fleet_order_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.publish_fleet_order(("HAL",), _NAIVE_NOW)
+        with pytest.raises(ValueError, match="naive"):
+            hal.fleet_order(_NAIVE_NOW)
     finally:
         hal.close()

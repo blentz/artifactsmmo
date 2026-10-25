@@ -25,18 +25,25 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 
 def fleet_pieces(state: WorldState, game_data: GameData, role: str | None,
-                 board: Mapping[str, tuple[int, Fraction]]) -> tuple[FleetPiece, ...]:
+                 board: Mapping[str, tuple[int, Fraction]],
+                 climbers: Mapping[str, str]) -> tuple[FleetPiece, ...]:
     """The pieces on `board` (code -> (units, summed gain), the siblings' `L*`
     pieces) that the craft skill of `role` makes, in board order.
 
     None without a role: a character holds no fleet objective until it holds
-    the role (`role_selection.decide_role` gives a craft role only to the
-    fleet's climber for that skill). A code this character holds in its bag or
-    bank is not one: a held copy is supplied by a deposit (the supply run,
-    `ReachFleetOutcome`), not by a climb or a craft."""
+    the role. None either when the fleet assigned the role's craft skill to
+    ANOTHER character (`climbers`, skill -> climber, ruling T7a): roles stay
+    non-exclusive (ruling T7c), so a second holder may serve the role's gather
+    demand, but one crafter climbs the skill and makes the fleet's pieces. A
+    skill with no assigned climber (a failed ledger read, ruling T7b) gates
+    nothing. A code this character holds in its bag or bank is not one: a held
+    copy is supplied by a deposit (the supply run, `ReachFleetOutcome`), not by
+    a climb or a craft."""
     if role is None:
         return ()
     skill = ROLES_BY_NAME[role].craft
+    if climbers.get(skill, state.character) != state.character:
+        return ()
     banked = state.bank_items or {}
     pieces: list[FleetPiece] = []
     for code, (_units, gain) in board.items():

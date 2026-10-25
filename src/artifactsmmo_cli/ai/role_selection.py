@@ -95,12 +95,11 @@ parameter, not module state.
 Pure: no I/O, no clock, no classes beyond the frozen result record.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from fractions import Fraction
 from types import MappingProxyType
 
-from artifactsmmo_cli.ai.fleet_climber import fleet_climber
 from artifactsmmo_cli.ai.role_catalog import Role, role_skill_level, role_skills
 
 NO_SKILL_LEVELS: Mapping[str, int] = MappingProxyType({})
@@ -118,15 +117,6 @@ read by `serves_item` as two INDEPENDENT unknowns (what the item demands, what
 the character has), and either one being absent is enough to leave the demand
 ungated. Collapsing them into one name would tie two defaults that must be
 allowed to move apart."""
-
-NO_SIBLING_LEVELS: Mapping[str, Mapping[str, int]] = MappingProxyType({})
-"""The "caller supplied no sibling skill ledger" default for `decide_role`'s
-`sibling_skill_levels`. Read-only, like `NO_SKILL_LEVELS`."""
-
-NO_DEMANDED_LEVELS: Mapping[str, int] = MappingProxyType({})
-"""The "no fleet piece demands a craft skill" default for `decide_role`'s
-`demanded_level`: no role is gated on a climb, the pre-fleet-climb claim.
-Separate from `NO_ITEM_LEVELS`: one is keyed by SKILL, the other by ITEM."""
 
 ROLE_MIN_HOLD_CYCLES = 100
 """Cycles a role must be held before it may be voluntarily released."""
@@ -325,8 +315,7 @@ def _effective_demand(demand_by_role: Mapping[str, int], role_name: str,
 
 def _claimable(role_name: str, demand_by_role: Mapping[str, int],
                idle_released: frozenset[str],
-               unservable_released: frozenset[str],
-               climbed_elsewhere: frozenset[str]) -> bool:
+               unservable_released: frozenset[str]) -> bool:
     """Whether this character may take `role_name` at all this cycle.
 
     THE eligibility rule, and deliberately the ONLY one: every part of the
@@ -356,13 +345,8 @@ def _claimable(role_name: str, demand_by_role: Mapping[str, int],
     one comparison over five roles and removes the drift, whereas a rival scan
     that filtered on `unservable_released` alone would be a second, subtly
     different copy of the rule — the exact defect this function exists to
-    close.
-
-    `climbed_elsewhere` (spec 2026-10-18 §2.5): roles whose craft skill the
-    fleet demands and whose climber (`fleet_climber`) is ANOTHER character.
-    Unconditional, like `unservable_released`: one crafter per skill climbs
-    for the whole fleet, so a second character never claims the role."""
-    if role_name in unservable_released or role_name in climbed_elsewhere:
+    close."""
+    if role_name in unservable_released:
         return False
     return role_name not in idle_released or demand_by_role.get(role_name, 0) > 0
 
@@ -373,8 +357,7 @@ def _best_role(live_leases: Mapping[str, frozenset[str]],
                idle_released: frozenset[str],
                unservable_released: frozenset[str],
                skill_levels: Mapping[str, int],
-               asymmetric_roles: frozenset[str],
-               climbed_elsewhere: frozenset[str]) -> str | None:
+               asymmetric_roles: frozenset[str] = frozenset()) -> str | None:
     """The best role for this character to serve, or None if it may serve none.
 
     A role in `asymmetric_roles` (it can serve an ask no sibling of a different
@@ -426,8 +409,7 @@ def _best_role(live_leases: Mapping[str, frozenset[str]],
     # condition.
     best_key = (False, Fraction(-1))
     for role in catalog:
-        if not _claimable(role.name, demand_by_role, idle_released, unservable_released,
-                          climbed_elsewhere):
+        if not _claimable(role.name, demand_by_role, idle_released, unservable_released):
             continue
         share = _effective_demand(demand_by_role, role.name, live_leases, character)
         key = (role.name in asymmetric_roles, (share + 1) * (1 + affinity[role.name]))
@@ -446,10 +428,7 @@ def decide_role(current: str | None, held_cycles: int,
                 unservable_released: frozenset[str] = frozenset(),
                 unservable_cycles: int = 0,
                 skill_levels: Mapping[str, int] = NO_SKILL_LEVELS,
-                asymmetric_roles: frozenset[str] = frozenset(),
-                sibling_skill_levels: Mapping[str, Mapping[str, int]] = NO_SIBLING_LEVELS,
-                demanded_level: Mapping[str, int] = NO_DEMANDED_LEVELS,
-                fleet_order: Sequence[str] = ()) -> RoleDecision:
+                asymmetric_roles: frozenset[str] = frozenset()) -> RoleDecision:
     """Decide whether to keep, claim, or release a role this cycle.
 
     `idle_zeros` / `idle_samples`: of the last `ROLE_IDLE_WINDOW` observations
@@ -526,28 +505,11 @@ def decide_role(current: str | None, held_cycles: int,
     asymmetric ask (one no sibling of a different role could fill; the caller
     derives it with `demand_by_role` over the asymmetric requests alone). Such
     a role wins the claim outright (`_best_role`), and past the minimum hold a
-    held role outside the set is released for a claimable rival inside it.
-
-    `sibling_skill_levels` / `demanded_level` / `fleet_order` (spec
-    2026-10-18 §2.5): each live sibling's skill levels, the level the fleet's
-    `L*` pieces demand of each craft skill, and the fleet order. A character
-    claims a craft role whose skill is demanded only when `fleet_climber`
-    names it (each catalogue role owns its own craft skill), so one crafter
-    per skill climbs for the fleet
-    (`_claimable`'s `climbed_elsewhere`). Release-on-idle and
-    release-on-unservable are unchanged: the gate decides a CLAIM, never a
-    release, so a holder whose sibling out-levels it keeps serving until one
-    of those rules fires."""
-    climbed_elsewhere = frozenset(
-        role.name for role in catalog
-        if role.craft in demanded_level
-        and fleet_climber(role.craft, demanded_level[role.craft], character, skill_levels,
-                          sibling_skill_levels, live_leases, role.name,
-                          fleet_order) != character)
+    held role outside the set is released for a claimable rival inside it."""
     if current is None:
         best = _best_role(live_leases, demand_by_role, character, catalog,
                           idle_released, unservable_released, skill_levels,
-                          asymmetric_roles, climbed_elsewhere)
+                          asymmetric_roles)
         if best is None:
             return RoleDecision(reason="no claimable role")
         return RoleDecision(claim=best,
@@ -580,8 +542,7 @@ def decide_role(current: str | None, held_cycles: int,
     for role in catalog:
         if role.name == current:
             continue
-        if not _claimable(role.name, demand_by_role, idle_released, unservable_released,
-                          climbed_elsewhere):
+        if not _claimable(role.name, demand_by_role, idle_released, unservable_released):
             continue
         rival_best = max(
             rival_best,
@@ -702,7 +663,9 @@ def demand_by_role(item_demand: Mapping[str, int],
                    level_of_item: Mapping[str, int] = NO_ITEM_LEVELS,
                    skill_levels: Mapping[str, int] = NO_SKILL_LEVELS,
                    work_of_item: Mapping[str, int] | None = None,
-                   climbing: frozenset[str] = frozenset()) -> dict[str, int]:
+                   climbing: frozenset[str] = frozenset(),
+                   climbed_elsewhere: frozenset[str] = frozenset(),
+                   pieces: frozenset[str] = frozenset()) -> dict[str, int]:
     """Aggregate item-keyed demand into role-keyed demand, AS ONE CHARACTER
     SHOULD READ IT.
 
@@ -738,9 +701,16 @@ def demand_by_role(item_demand: Mapping[str, int],
     and recruits no one. None counts units (the pure unit tests' shape; the
     player always passes the map).
 
-    `climbing` (spec 2026-10-18 §2.5): the skills THIS character climbs for
-    the fleet (`fleet_climber`). Demand produced by one of them counts above
-    this character's level: the climb is the work the role does for it.
+    The fleet's shared climb (spec 2026-10-18 §2.5, `fleet_climber.fleet_climbers`):
+      * `climbing` — the skills THIS character climbs for the fleet. Demand
+        produced by one of them counts above this character's level: the climb
+        is the work the role does for it.
+      * `climbed_elsewhere` / `pieces` — the skills ANOTHER character climbs,
+        and the codes that are the fleet's `L*` pieces. A piece produced by such
+        a skill recruits nobody else (ruling T7c): one crafter per skill makes
+        the fleet's pieces. Only that CRAFT term is gated; the role's gather
+        demand, and every material, still recruits it, so roles stay
+        non-exclusive.
 
     All four maps are passed in rather than derived from GameData so this
     module stays pure and testable without a game-data fixture."""
@@ -755,6 +725,8 @@ def demand_by_role(item_demand: Mapping[str, int],
             continue
         role_name = owner.get(skill)
         if role_name is None:
+            continue
+        if item_code in pieces and skill in climbed_elsewhere:
             continue
         if skill not in climbing and not serves_item(item_code, skill, level_of_item,
                                                      skill_levels):

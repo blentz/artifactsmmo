@@ -73,16 +73,6 @@ def role_skills(role: Role) -> frozenset[str]:
     return frozenset({role.gather, role.craft})
 
 
-def skill_owner(skill: str, catalog: tuple[Role, ...]) -> str:
-    """The name of the role in `catalog` that owns `skill`. Each API skill is
-    owned exactly once (`ROLE_CATALOG`); a skill no role owns names no
-    crafter, and is refused (`ValueError`)."""
-    for role in catalog:
-        if skill in role_skills(role):
-            return role.name
-    raise ValueError(f"no role owns {skill!r}")
-
-
 def role_skill_level(role: Role, skill_levels: Mapping[str, int]) -> int:
     """The character's BEST level among the skills this role owns.
 

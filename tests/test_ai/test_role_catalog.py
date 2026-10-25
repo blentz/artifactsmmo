@@ -6,7 +6,6 @@ from artifactsmmo_cli.ai.role_catalog import (
     Role,
     role_skill_level,
     role_skills,
-    skill_owner,
     validate_catalog,
 )
 from artifactsmmo_cli.ai.tiers.skill_classes import (
@@ -140,16 +139,3 @@ def test_role_skill_level_handles_the_collapsed_alchemist_role() -> None:
     # be well-formed over a single-element set.
     role = Role(name="alchemist", gather="alchemy", craft="alchemy")
     assert role_skill_level(role, {"alchemy": 7}) == 7
-
-
-def test_each_skill_names_the_one_role_that_owns_it() -> None:
-    """The role a fleet climb's committed work is counted against (spec
-    2026-10-18 §2.5): gearcrafting is the logger's, mining the miner's."""
-    assert skill_owner("gearcrafting", ROLE_CATALOG) == "logger"
-    assert skill_owner("mining", ROLE_CATALOG) == "miner"
-    assert skill_owner("jewelrycrafting", ROLE_CATALOG) == "jeweler"
-
-
-def test_a_skill_no_role_owns_is_refused() -> None:
-    with pytest.raises(ValueError, match="no role owns"):
-        skill_owner("gearcrafting", (Role(name="miner", gather="mining", craft="weaponcrafting"),))

@@ -1207,84 +1207,44 @@ def test_an_item_with_no_priced_work_does_not_recruit():
 
 
 # ---------------------------------------------------------------------------
-# One crafter climbs each skill for the fleet (spec 2026-10-18 §2.5)
+# One crafter climbs each skill for the fleet (spec 2026-10-18 §2.5,
+# rulings T7a/T7c): the gate is on the role's CRAFT demand, not on the role.
 # ---------------------------------------------------------------------------
 
-_FLEET = ("Sib", _ME)
-"""The fleet order: the sibling first, so a full tie goes to it."""
-_GEAR_DEMAND = {"logger": 40, "miner": 5}
-"""The fleet's gearcrafting pieces weigh on `logger`; a little mining elsewhere."""
-
-
-def _fleet_decide(me: int, sibling: int, current=None, held_cycles=0, leases=None,
-                  demand=None, **kwargs):  # type: ignore[no-untyped-def]
-    """This character at gearcrafting `me`, one live sibling at `sibling`, the
-    fleet's pieces demanding gearcrafting 30."""
-    return _decide(current, held_cycles, leases or {}, demand or _GEAR_DEMAND,
-                   skill_levels={"gearcrafting": me},
-                   sibling_skill_levels={"Sib": {"gearcrafting": sibling}},
-                   demanded_level={"gearcrafting": 30}, fleet_order=_FLEET, **kwargs)
-
-
-def test_the_least_remaining_climber_claims_the_craft_role() -> None:
-    """23 against a sibling's 20, demanded 30: this character climbs."""
-    assert _fleet_decide(me=23, sibling=20).claim == "logger"
-
-
-def test_a_character_with_more_climb_left_does_not_claim_it() -> None:
-    """20 against a sibling's 23: the sibling climbs, so the role is not this
-    character's whatever its demand, and it claims the next role instead."""
-    assert _fleet_decide(me=20, sibling=23).claim == "miner"
-
-
-def test_a_remaining_tie_goes_to_the_climber_with_less_other_work() -> None:
-    """Both at 23; the sibling, first in the fleet order, holds `miner`: other
-    committed work, so this character climbs."""
-    leases = _held(miner=("Sib",))
-    assert _fleet_decide(me=23, sibling=23, leases=leases).claim == "logger"
-
-
-def test_a_full_tie_goes_to_the_fleet_order() -> None:
-    """Both at 23, neither holding a role: the sibling is first in the fleet."""
-    assert _fleet_decide(me=23, sibling=23).claim == "miner"
-
-
-def test_a_rival_role_another_character_climbs_cannot_pull_this_one_off() -> None:
-    """Past the minimum hold on `miner`, the logger's 40 would outrank miner's
-    5 — but the sibling climbs gearcrafting, so `logger` is no rival."""
-    decision = _fleet_decide(me=20, sibling=23, current="miner",
-                             held_cycles=ROLE_MIN_HOLD_CYCLES,
-                             leases=_held(miner=(_ME,)), idle_zeros=0)
-    assert decision.keep == "miner"
-
-
-def test_a_skill_no_fleet_piece_demands_gates_nothing() -> None:
-    """No demanded gearcrafting level: the claim is the pre-climb claim."""
-    decision = _decide(None, 0, {}, _GEAR_DEMAND, skill_levels={"gearcrafting": 20},
-                       sibling_skill_levels={"Sib": {"gearcrafting": 23}},
-                       fleet_order=_FLEET)
-    assert decision.claim == "logger"
-
-
-def test_the_role_releases_at_the_demanded_level() -> None:
-    """Review Focus 4: the crafter reached gearcrafting 30, the pieces it
-    served are made and the board no longer demands the skill (no demanded
-    level), so its role reads idle for a full window while mining is wanted:
-    release-on-idle frees it rather than climbing a skill nobody needs."""
-    decision = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)),
-                       {"logger": 0, "miner": 5}, skill_levels={"gearcrafting": 30},
-                       sibling_skill_levels={"Sib": {"gearcrafting": 20}},
-                       fleet_order=_FLEET)
-    assert decision.release == "logger"
+_BOARD = {"steel_helmet": 2, "spruce_wood": 30}
+"""A gearcrafting-30 `L*` piece and the woodcutting it needs."""
+_SKILL = {"steel_helmet": "gearcrafting", "spruce_wood": "woodcutting"}
+_LEVEL = {"steel_helmet": 30, "spruce_wood": 20}
+_PIECES = frozenset({"steel_helmet"})
 
 
 def test_a_climber_counts_the_demand_above_its_level() -> None:
-    """The climb IS the logger's work: a gearcrafting 30 piece counts toward
-    the role of the character that climbs to it, and is dropped for one that
-    does not."""
+    """The climb IS the logger's work: a gearcrafting-30 piece counts toward
+    the role of the character climbing to it, and is dropped for one at 23
+    that does not climb it."""
+    skills = {"gearcrafting": 23, "woodcutting": 25}
+    climbing = demand_by_role(_BOARD, _SKILL, ROLE_CATALOG, _LEVEL, skills,
+                              climbing=frozenset({"gearcrafting"}), pieces=_PIECES)
+    assert climbing["logger"] == 2 + 30
+    assert demand_by_role(_BOARD, _SKILL, ROLE_CATALOG, _LEVEL, skills,
+                          pieces=_PIECES)["logger"] == 30
+
+
+def test_a_piece_another_character_climbs_recruits_nobody_else() -> None:
+    """Ruling T7c: at gearcrafting 30 this character could make the helmet,
+    but the fleet assigned the skill's climb to a sibling, so the piece does
+    not recruit it; the woodcutting still does — the role stays open to it."""
+    skills = {"gearcrafting": 30, "woodcutting": 25}
+    gated = demand_by_role(_BOARD, _SKILL, ROLE_CATALOG, _LEVEL, skills,
+                           climbed_elsewhere=frozenset({"gearcrafting"}), pieces=_PIECES)
+    assert gated["logger"] == 30
+    assert demand_by_role(_BOARD, _SKILL, ROLE_CATALOG, _LEVEL, skills,
+                          pieces=_PIECES)["logger"] == 32
+
+
+def test_a_material_of_a_climbed_skill_still_recruits() -> None:
+    """Only the fleet's `L*` pieces are gated: a gearcrafted material is not
+    one, and it still counts for whoever can make it."""
     demand = {"steel_helmet": 2}
-    skill = {"steel_helmet": "gearcrafting"}
-    level = {"steel_helmet": 30}
-    assert demand_by_role(demand, skill, ROLE_CATALOG, level, {"gearcrafting": 23},
-                          climbing=frozenset({"gearcrafting"}))["logger"] == 2
-    assert demand_by_role(demand, skill, ROLE_CATALOG, level, {"gearcrafting": 23})["logger"] == 0
+    assert demand_by_role(demand, _SKILL, ROLE_CATALOG, _LEVEL, {"gearcrafting": 30},
+                          climbed_elsewhere=frozenset({"gearcrafting"}))["logger"] == 2
