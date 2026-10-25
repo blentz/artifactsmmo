@@ -3105,6 +3105,8 @@ def test_a_failed_ledger_read_assigns_no_climber(tmp_path) -> None:
     try:
         robby.publish_demand({"iron_shield": 1}, frozenset(), now,
                              {"iron_shield": (Fraction(3), Fraction(40))})
+        # The fleet's order is known, so only the ledger can withhold a climber.
+        robby.publish_fleet_order(("C3P0", "Robby"), now)
         player, _ = _coord_player(tmp_path)
         player.game_data = shared_world(_FLEET_BUNDLE)
         assert player._coordination is not None
