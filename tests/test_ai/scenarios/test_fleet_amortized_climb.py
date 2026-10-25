@@ -281,3 +281,25 @@ def test_the_role_releases_at_the_demanded_level(fleet) -> None:  # type: ignore
     ana._update_coordination(ana.state, gd)
     assert ana._role is None
     assert "logger" in ana._role_idle_released
+
+
+def test_a_roleless_climber_is_not_waited_on_until_it_claims(fleet) -> None:  # type: ignore[no-untyped-def]
+    """Ruling T7f: Ana keeps the gearcrafting assignment but drops `logger`.
+    While she holds no role, Bea prices her own gearcrafting climb (a craft)
+    and declines nothing as awaiting the fleet crafter; the cycle after Ana
+    claims `logger` again, Bea routes the pieces through Ana (a withdraw)."""
+    ana, bea, _gd = fleet
+    assert ana._coordination is not None and ana._role == "logger"
+    ana._coordination.release("logger")
+    report = bea.plan_from_state()
+    assert bea._fleet_climbers["gearcrafting"] == "Ana"
+    assert "gearcrafting" not in bea._serving_climbers
+    gear = {piece.code: piece for piece in report.gear_objective.missing}
+    assert all(gear[code].route is SourceKind.CRAFT for code in GEAR_PIECES)
+    assert "awaits the fleet crafter" not in dict(report.decision.declined).values()
+
+    assert ana._coordination.claim("logger", datetime.now(UTC))
+    report = bea.plan_from_state()
+    assert bea._serving_climbers["gearcrafting"] == "Ana"
+    gear = {piece.code: piece for piece in report.gear_objective.missing}
+    assert all(gear[code].route is SourceKind.WITHDRAW for code in GEAR_PIECES)

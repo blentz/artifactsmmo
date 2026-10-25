@@ -303,6 +303,12 @@ class GamePlayer:
         # `_refresh_sibling_reads`), and is its own fleet only while none is live.
         self._fleet_order_given = fleet_order is not None
         self._fleet_order = (character,) if fleet_order is None else fleet_order
+        # The order the fleet's climbs are assigned over (ruling T7g): the
+        # given fleet order, or the live roster naming this character; None
+        # when neither is known — a failed or absent roster read — and then no
+        # climber is assigned, rather than this character being its own whole
+        # fleet and every skill's climber.
+        self._climb_order: tuple[str, ...] | None = fleet_order
         # This character's consumable need (`consumable_floor.consumable_need`)
         # and its siblings' published needs, read with the coordination block,
         # and this cycle's consumable shortfall share (`consumable_floor`),
@@ -3170,20 +3176,22 @@ class GamePlayer:
         (`_demanded_levels`), taken in descending fleet gain (`_demanded_gain`,
         ties in `ROLE_CATALOG` order), from this cycle's ledger and `leases`.
 
-        Empty when the ledger read failed (ruling T7b): with nothing known of
-        the siblings this cycle prices no sibling route and gates no role
+        Empty when the ledger read failed (ruling T7b) or the fleet's order is
+        unknown (ruling T7g: no fleet order given and no live roster naming
+        this character): with nothing known of the siblings, or no order to
+        assign over, this cycle prices no sibling route and gates no role
         demand, rather than reading the failure as "no sibling" and naming
         this character every skill's climber."""
         if self.state is None or self.game_data is None:
             raise ValueError(f"{self.character}: the fleet's climbers are read off this "
                              "character's state and game data, and it has neither yet")
-        if self._sibling_ledger is None:
+        if self._sibling_ledger is None or self._climb_order is None:
             return {}
         owners = {role.craft: role.name for role in ROLE_CATALOG}
         return fleet_climbers(self._demanded_levels(self.game_data),
                               self._demanded_gain(self.game_data), owners,
                               [role.craft for role in ROLE_CATALOG], self.character,
-                              self.state.skills, self._sibling_ledger, leases, self._fleet_order)
+                              self.state.skills, self._sibling_ledger, leases, self._climb_order)
 
     def _demanded_gain(self, game_data: GameData) -> dict[str, Fraction]:
         """The fleet's gain summed, per producing skill, over every `L*` piece
@@ -3629,8 +3637,9 @@ class GamePlayer:
         # M1); a roster that does not name this character is not its fleet.
         if not self._fleet_order_given:
             roster = self._coordination.fleet_order(now)
-            self._fleet_order = (roster if roster is not None and self.character in roster
-                                 else (self.character,))
+            self._climb_order = (roster if roster is not None and self.character in roster
+                                 else None)
+            self._fleet_order = (self.character,) if self._climb_order is None else self._climb_order
         # Every `L*` piece a sibling publishes, with the units it asks (one
         # read): the units a sibling climb is shared across, and the pieces a
         # crafter's role serves (spec 2026-10-18 §2.5).

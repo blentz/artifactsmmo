@@ -3039,10 +3039,37 @@ def test_a_roster_without_this_character_is_not_its_fleet(tmp_path) -> None:
     now = datetime.now(tz=timezone.utc)
     robby = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Robby")
     try:
+        robby.publish_skills({"gearcrafting": 8}, now)
+        robby.publish_demand({"iron_shield": 1}, frozenset(), now,
+                             {"iron_shield": (Fraction(3), Fraction(40))})
         robby.publish_fleet_order(("Robby", "Lor"), now)
         player, _ = _coord_player(tmp_path)
+        player.game_data = shared_world(_FLEET_BUNDLE)
         player._refresh_sibling_reads(now)
         assert player._fleet_order == ("C3P0",)
+        # Ruling T7g: no known order to assign over, so no climber — never
+        # this character as its own whole fleet and the shield's climber.
+        assert player._climb_order is None
+        assert player._fleet_climbers == {}
+    finally:
+        robby.close()
+
+
+def test_a_failed_roster_read_assigns_no_climber(tmp_path) -> None:
+    """Ruling T7g: the roster read failing is not "a fleet of one"."""
+    now = datetime.now(tz=timezone.utc)
+    robby = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Robby")
+    try:
+        robby.publish_skills({"gearcrafting": 8}, now)
+        robby.publish_demand({"iron_shield": 1}, frozenset(), now,
+                             {"iron_shield": (Fraction(3), Fraction(40))})
+        player, _ = _coord_player(tmp_path)
+        player.game_data = shared_world(_FLEET_BUNDLE)
+        assert player._coordination is not None
+        player._coordination.fleet_order = lambda _now: None  # type: ignore[method-assign]
+        player._refresh_sibling_reads(now)
+        assert player._fleet_board == {"iron_shield": (1, Fraction(3))}
+        assert player._climb_order is None and player._fleet_climbers == {}
     finally:
         robby.close()
 
@@ -3110,7 +3137,7 @@ def test_the_skill_carrying_more_fleet_gain_takes_its_climber_first(tmp_path) ->
     player.game_data = shared_world(_FLEET_BUNDLE)
     skills = {**make_state().skills, "gearcrafting": 8, "jewelrycrafting": 8}
     player.state = make_state(character="C3P0", skills=skills)
-    player._fleet_order = ("C3P0", "Robby")
+    player._climb_order = ("C3P0", "Robby")
     player._sibling_ledger = {"Robby": {"gearcrafting": 5, "jewelrycrafting": 5}}
     player._fleet_board = {"iron_shield": (1, Fraction(1)), "iron_ring": (1, Fraction(2))}
     ring = GearPiece("ring1_slot", "iron_ring", 0, Fraction(3), Fraction(5), SourceKind.CRAFT)

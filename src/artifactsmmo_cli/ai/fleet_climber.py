@@ -68,10 +68,12 @@ def fleet_climbers(demanded: Mapping[str, int], gain: Mapping[str, Fraction],
 
 def serving_climbers(climbers: Mapping[str, str], owners: Mapping[str, str],
                      live_leases: Mapping[str, frozenset[str]]) -> dict[str, str]:
-    """The climbers that can serve their skill (ruling T7a): each holds that
-    skill's owning role, or no role at all and so is free to claim it. A
-    climber holding another role supplies nothing for this skill, so its
-    receivers price their own climb instead of waiting on it."""
+    """The climbers that serve their skill (rulings T7a, T7f): each HOLDS that
+    skill's owning role, the only role whose supply run banks the fleet's
+    pieces. A climber holding another role, or none yet, supplies nothing for
+    the skill this cycle, so its receivers price their own climb instead of
+    waiting on it. A roleless climber keeps its assignment: its `climbing`
+    demand recruits it to the role, and the cycle after it claims, receivers
+    switch to the sibling route."""
     return {skill: who for skill, who in climbers.items()
-            if all(role == owners[skill]
-                   for role, holders in live_leases.items() if who in holders)}
+            if who in live_leases.get(owners[skill], frozenset())}

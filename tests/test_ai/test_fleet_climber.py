@@ -96,10 +96,9 @@ def test_this_character_must_be_in_the_fleet() -> None:
         _assign("Zed", {"gearcrafting": 20}, {}, order=("Ana",))
 
 
-def test_a_climber_serves_with_its_skills_role_or_none() -> None:
-    """Holding the skill's own role, or no role, it serves; holding another
-    role it serves nothing for this skill (ruling T7a)."""
+def test_only_a_holder_of_the_skills_role_serves() -> None:
+    """Ruling T7f: holding the skill's own role it serves; holding another
+    role, or none yet, it serves nothing for this skill this cycle."""
     climbers = {"gearcrafting": "Ana", "jewelrycrafting": "Bea", "weaponcrafting": "Cid"}
     leases = {"logger": frozenset({"Ana"}), "miner": frozenset({"Bea"})}
-    assert serving_climbers(climbers, OWNERS, leases) == {"gearcrafting": "Ana",
-                                                          "weaponcrafting": "Cid"}
+    assert serving_climbers(climbers, OWNERS, leases) == {"gearcrafting": "Ana"}
