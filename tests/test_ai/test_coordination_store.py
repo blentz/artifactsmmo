@@ -30,6 +30,7 @@ from artifactsmmo_cli.ai.learning.coordination_store import (
 )
 from artifactsmmo_cli.ai.learning.models import (
     BankStockClaim,
+    FleetRoster,
     GeOrderClaim,
     HoldingLedger,
     MaterialDemand,
@@ -2724,5 +2725,22 @@ def test_the_fleet_order_rejects_naive_now(tmp_path: Path) -> None:
             hal.publish_fleet_order(("HAL",), _NAIVE_NOW)
         with pytest.raises(ValueError, match="naive"):
             hal.fleet_order(_NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_the_fleet_order_reads_by_position_not_by_insertion(tmp_path: Path) -> None:
+    """The roster's order is its `position` column, whatever order the rows
+    were written in."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        expiry = (_T0 + timedelta(seconds=DEMAND_TTL_SECONDS)).isoformat()
+        with SqlSession(hal._engine) as s:
+            s.add(FleetRoster(character="HAL", position=2, expires_at=expiry))
+            s.add(FleetRoster(character="Robby", position=0, expires_at=expiry))
+            s.add(FleetRoster(character="Ana", position=1, expires_at=expiry))
+            s.commit()
+        assert hal.fleet_order(_T0) == ("Robby", "Ana", "HAL")
     finally:
         hal.close()

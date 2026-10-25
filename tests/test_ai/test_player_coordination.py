@@ -3098,3 +3098,57 @@ def test_the_climbers_need_a_state(tmp_path) -> None:
     player.state = None
     with pytest.raises(ValueError, match="neither yet"):
         player._climbers({})
+
+
+def test_the_skill_carrying_more_fleet_gain_takes_its_climber_first(tmp_path) -> None:
+    """Ruling T7a: this character leads both skills, so whichever skill is
+    taken first takes it. The fleet's jewelrycrafting pieces carry more gain
+    (an iron ring at 5 against an iron shield at 1, summed over the board and
+    this character's own pieces), so jewelrycrafting takes it and
+    gearcrafting goes to Robby — not the catalogue's gearcrafting-first."""
+    player, _ = _coord_player(tmp_path)
+    player.game_data = shared_world(_FLEET_BUNDLE)
+    skills = {**make_state().skills, "gearcrafting": 8, "jewelrycrafting": 8}
+    player.state = make_state(character="C3P0", skills=skills)
+    player._fleet_order = ("C3P0", "Robby")
+    player._sibling_ledger = {"Robby": {"gearcrafting": 5, "jewelrycrafting": 5}}
+    player._fleet_board = {"iron_shield": (1, Fraction(1)), "iron_ring": (1, Fraction(2))}
+    ring = GearPiece("ring1_slot", "iron_ring", 0, Fraction(3), Fraction(5), SourceKind.CRAFT)
+    player._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+        "wolf", {"ring1_slot": "iron_ring"}, Fraction(1), (ring,)))
+    assert player._demanded_gain(player.game_data) == {
+        "gearcrafting": Fraction(1), "jewelrycrafting": Fraction(5)}
+    assert player._climbers({}) == {"jewelrycrafting": "C3P0", "gearcrafting": "Robby"}
+
+
+def test_a_piece_the_fleet_climber_makes_recruits_no_second_crafter(tmp_path) -> None:
+    """Ruling T7c: at gearcrafting 12 this character could make the iron
+    shield Robby asks for, but the fleet assigned gearcrafting to Robby (both
+    past the shield's 10; Robby first in the fleet order). The shield
+    recruits nobody else, so this character, leaning to mining, claims
+    `miner` and not `logger`."""
+    now = datetime.now(tz=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    history = LearningStore(db_path=db, character="C3P0")
+    history.start_session()
+    robby = CoordinationStore(db_path=db, character="Robby")
+    try:
+        robby.publish_skills({"gearcrafting": 12}, now)
+        robby.publish_demand({"iron_shield": 1}, frozenset({"iron_shield"}), now,
+                             {"iron_shield": (Fraction(3), Fraction(40))})
+        player = GamePlayer(character="C3P0", fleet_order=("Robby", "C3P0"), history=history)
+        player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
+        skills = {**make_state().skills, "mining": 20, "gearcrafting": 12}
+        player.state = make_state(character="C3P0", skills=skills,
+                                  skill_xp={skill: 0 for skill in skills},
+                                  skill_max_xp={skill: 100 for skill in skills})
+        player.game_data = shared_world(_FLEET_BUNDLE)
+        player.set_coordination_store(CoordinationStore(db_path=db, character="C3P0"))
+        player._update_coordination(player.state, player.game_data)
+        assert player._fleet_climbers == {"gearcrafting": "Robby"}
+        assert player._role == "miner"
+    finally:
+        robby.close()
+        history.end_session(exit_reason="normal")
+        history.close()

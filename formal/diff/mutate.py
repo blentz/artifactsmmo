@@ -6524,18 +6524,21 @@ FLEET_CLIMB_PLAYER_SCENARIO_MUTATIONS = [
     ("fleet climb player: a climber holding another role is priced as serving",
      "            fleet_climbers=self._serving_climbers,",
      "            fleet_climbers=self._fleet_climbers,"),
+    ("fleet climb player: a fleet piece another character climbs is climbed",
+     "                                      self._fleet_board, self._fleet_climbers),",
+     "                                      self._fleet_board, {}),"),
+]
+FLEET_CLIMB_PLAYER_MUTATIONS = [
     ("fleet climb player: another character's climb recruits this one",
      "                                 level_of_item, state.skills, work_of_item, climbing,\n"
      "                                 elsewhere, pieces)",
      "                                 level_of_item, state.skills, work_of_item, climbing)"),
-    ("fleet climb player: a fleet piece another character climbs is climbed",
-     "                                      self._fleet_board, self._fleet_climbers),",
-     "                                      self._fleet_board, {}),"),
     ("fleet climb player: the skills are taken in no gain order",
      "                              self._demanded_gain(self.game_data), owners,",
      "                              {}, owners,"),
-]
-FLEET_CLIMB_PLAYER_MUTATIONS = [
+    ("fleet climb player: a skill's fleet gain is its last piece's",
+     "                gain[requirement[0]] = gain.get(requirement[0], Fraction(0)) + piece_gain",
+     "                gain[requirement[0]] = piece_gain"),
     ("fleet climb player: the climber's demand above its level is dropped",
      "                                 level_of_item, state.skills, work_of_item, climbing,\n"
      "                                 elsewhere, pieces)",
