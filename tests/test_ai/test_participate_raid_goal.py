@@ -29,7 +29,7 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter, raid_may_fight
+from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter, chosen_root_closure, raid_may_fight
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachSkillLevel
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -222,10 +222,66 @@ def test_the_raid_is_offered_when_its_boss_drops_the_chosen_piece():
 def test_raid_may_fight_reads_the_objective_and_the_route():
     drops = [("boss_shield", 10, 1, 1)]
     shield = ObtainItem("boss_shield", 1, slot="shield_slot")
-    assert raid_may_fight(None, None, [])
-    assert raid_may_fight(_HELD, None, [])
-    assert not raid_may_fight(_MISSING, None, drops)
-    assert not raid_may_fight(_MISSING, shield, [])
-    assert not raid_may_fight(_MISSING, ObtainItem("other", 1), drops)
-    assert not raid_may_fight(_MISSING, ReachSkillLevel("gearcrafting", 5), drops)
-    assert raid_may_fight(_MISSING, shield, drops)
+    closure = frozenset({"boss_shield"})
+    assert raid_may_fight(None, None, [], frozenset())
+    assert raid_may_fight(_HELD, None, [], frozenset())
+    assert not raid_may_fight(_MISSING, None, drops, frozenset())
+    assert not raid_may_fight(_MISSING, shield, [], closure)
+    assert not raid_may_fight(_MISSING, ObtainItem("other", 1), drops, frozenset({"other"}))
+    assert raid_may_fight(_MISSING, shield, drops, closure)
+
+
+def _piece_gd(recipe: dict[str, int]):
+    """The raid world plus a craftable `boss_shield` whose recipe is `recipe`."""
+    gd = _raid_gd(tiles=True, hurts=False)
+    gd._monster_drops = {_BOSS: [("boss_blade_shard", 10, 1, 1)]}
+    gd._item_stats["boss_shield"] = ItemStats(code="boss_shield", level=5, type_="shield")
+    gd._item_stats["boss_blade_shard"] = ItemStats(code="boss_blade_shard", level=1,
+                                                   type_="resource")
+    gd._crafting_recipes = {"boss_shield": dict(recipe)}
+    gd._crafting_skill = {"boss_shield": "gearcrafting"}
+    gd._crafting_level = {"boss_shield": 5}
+    return gd
+
+
+def test_a_raid_dropping_a_material_of_the_piece_may_fight():
+    """The boss drops a recipe INPUT of the chosen piece, not the piece."""
+    gd = _piece_gd({"boss_blade_shard": 2})
+    root = ObtainItem("boss_shield", 1, slot="shield_slot")
+    assert chosen_root_closure(root, _survivable_state(), gd, NO_PROFILE_CONTEXT) == {
+        "boss_shield", "boss_blade_shard"}
+    out = _candidates(gd, _survivable_state(), _MISSING, root)
+    assert [repr(g) for g in out] == [f"ParticipateRaid({_RAID})"]
+
+
+def test_an_unrelated_raid_still_waits():
+    gd = _piece_gd({"x": 2})
+    root = ObtainItem("boss_shield", 1, slot="shield_slot")
+    assert _candidates(gd, _survivable_state(), _MISSING, root) == []
+
+
+def test_a_root_with_no_item_has_an_empty_closure():
+    gd = _piece_gd({"x": 2})
+    assert chosen_root_closure(None, _survivable_state(), gd, NO_PROFILE_CONTEXT) == frozenset()
+
+
+def test_a_skill_root_is_seeded_with_its_grind_target(monkeypatch):
+    """A `ReachSkillLevel` names no item; its closure is that of the item the
+    character would craft for the rung, and a skill with no target has none."""
+    gd = _piece_gd({"boss_blade_shard": 2})
+    state = _survivable_state()
+    root = ReachSkillLevel("gearcrafting", 5)
+    seen = []
+
+    def target(skill, st, data, ctx):
+        seen.append((skill, st, data, ctx))
+        return "boss_shield"
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.strategy_driver.skill_grind_target",
+                        lambda skill, st, data, ctx: target(skill, st, data, ctx))
+    ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_MISSING)
+    assert chosen_root_closure(root, state, gd, ctx) == {"boss_shield", "boss_blade_shard"}
+    assert seen == [("gearcrafting", state, gd, ctx)]
+    monkeypatch.setattr("artifactsmmo_cli.ai.strategy_driver.skill_grind_target",
+                        lambda skill, st, data, ctx: None)
+    assert chosen_root_closure(root, state, gd, ctx) == frozenset()

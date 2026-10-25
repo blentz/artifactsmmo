@@ -82,7 +82,7 @@ from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.potion_supply import guard_loadout
 from artifactsmmo_cli.ai.raid_participation import raid_survivable_pure
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
-from artifactsmmo_cli.ai.requirement_projections import demand_set
+from artifactsmmo_cli.ai.requirement_projections import demand_set, requirement_closure
 from artifactsmmo_cli.ai.shed_urgency import bank_shed_hoist, shed_urgency
 from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_batch import task_batch_size
@@ -116,6 +116,7 @@ from artifactsmmo_cli.ai.tiers.objective_needs import (
     link_demand,
     objective_needs,
 )
+from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.taskmaster_choice import choose_taskmaster
 from artifactsmmo_cli.ai.utility_slot import already_provisioned
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -685,12 +686,33 @@ def _turn_in_goal(state: WorldState, ctx: SelectionContext) -> Goal | None:
     return None
 
 
+def chosen_root_closure(chosen_root: MetaGoal | None, state: WorldState,
+                        game_data: GameData, ctx: SelectionContext) -> frozenset[str]:
+    """Every item the chosen root's walk needs. An `ObtainItem` names its own
+    item; a `ReachSkillLevel` names none, so it is seeded with the item the
+    character would craft for that rung (`skill_grind_target`). A root with
+    neither has no item, and its closure is empty."""
+    seed: str | None
+    if isinstance(chosen_root, ObtainItem):
+        seed = chosen_root.code
+    elif isinstance(chosen_root, ReachSkillLevel):
+        seed = skill_grind_target(chosen_root.skill, state, game_data, ctx=ctx)
+    else:
+        seed = None
+    if seed is None:
+        return frozenset()
+    return requirement_closure(game_data.requirement_graph.graph(), [seed])
+
+
 def raid_may_fight(objective: GearObjective | None, chosen_root: MetaGoal | None,
-                   boss_drops: list[tuple[str, int, int, int]]) -> bool:
+                   boss_drops: list[tuple[str, int, int, int]],
+                   closure: frozenset[str]) -> bool:
     """Whether an open raid may be fought this cycle (ruling Z, AJ; spec
     2026-10-18 §2.4, §6.2): a raid is an XP fight, so while a piece of `L*` is
-    missing it is offered only as the chosen piece's ROUTE — its boss drops the
-    walk's root item. Once `L*` is held it is offered as before.
+    missing it is offered only as the chosen piece's ROUTE — its boss drops an
+    item in `closure`, the requirement closure of the chosen root's item (the
+    root itself or any material of its recipe). Once `L*` is held it is
+    offered as before.
 
     WHY HERE AND NOT BY POSITION. Filing the raid behind the objective step
     only ordered it: when the piece's step failed to plan, or `rotate` demoted
@@ -702,8 +724,7 @@ def raid_may_fight(objective: GearObjective | None, chosen_root: MetaGoal | None
     missing from, so nothing outranks the raid and it stays on offer."""
     if objective is None or objective.held:
         return True
-    return (isinstance(chosen_root, ObtainItem)
-            and any(item == chosen_root.code for item, *_ in boss_drops))
+    return any(item in closure for item, *_ in boss_drops)
 
 
 def _pursue_goal(state: WorldState, game_data: GameData) -> Goal:
@@ -1461,6 +1482,7 @@ class StrategyArbiter:
         still applies, and a raid the bot cannot survive is never offered.
         """
         out: list[ParticipateRaidGoal] = []
+        closure = chosen_root_closure(chosen_root, state, game_data, ctx)
         for raid in state.active_raids:
             if not game_data.raid_location_tiles(raid.code):
                 continue
@@ -1468,7 +1490,7 @@ class StrategyArbiter:
             if not raid_survivable_pure(state.hp, state.max_hp, damage):
                 continue
             if not raid_may_fight(ctx.gear_objective, chosen_root,
-                                  game_data.monster_drops(raid.monster)):
+                                  game_data.monster_drops(raid.monster), closure):
                 continue
             out.append(ParticipateRaidGoal(raid_code=raid.code,
                                            monster_code=raid.monster,
