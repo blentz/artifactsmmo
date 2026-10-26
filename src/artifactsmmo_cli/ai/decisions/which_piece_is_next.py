@@ -68,7 +68,7 @@ def piece_target(piece: GearPiece, objective: CharacterObjective, state: WorldSt
 
 
 def fleet_piece_root(piece: FleetPiece, state: WorldState, game_data: GameData,
-                     ctx: SelectionContext) -> MetaGoal:
+                     ctx: SelectionContext, walk: "_root.RootWalk") -> MetaGoal:
     """The step a fleet piece (§2.5) asks of the crafter now: the next level of
     its craft skill while the gate is unmet (+1, as `IsThisTargetBlocked`
     climbs: the walk re-derives every cycle); once met, the supply run that
@@ -79,7 +79,7 @@ def fleet_piece_root(piece: FleetPiece, state: WorldState, game_data: GameData,
     current = state.skills[piece.skill]
     if current < piece.level:
         return tool_first(ReachSkillLevel(skill=piece.skill, level=current + 1),
-                          state, game_data, ctx)
+                          state, game_data, ctx, walk.now, walk.step_decline)
     target = ctx.supply_target
     if target is not None and target[0] == piece.code and supply_due(ctx):
         return ReachFleetOutcome(FLEET_SUPPLY, piece.code)
@@ -171,7 +171,7 @@ class WhichPieceIsNext(Decision[MetaGoal]):
             raise ValueError(f"gear objective names {unknown!r}, absent from game data")
         for piece in pursuit_order(target, fleet, state, game_data, ctx, history):
             if isinstance(piece, FleetPiece):
-                root = fleet_piece_root(piece, state, game_data, ctx)
+                root = fleet_piece_root(piece, state, game_data, ctx, self.walk)
                 reason = self.walk.step_decline(root)
                 if reason is None:
                     return root

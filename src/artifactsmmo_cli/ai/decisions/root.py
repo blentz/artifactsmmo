@@ -58,6 +58,7 @@ and no longer disagrees with this module):
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 
 # MODULE import, same idiom as `_skill_grindable` and `_route` below, and for the
 # same reason but the OTHER direction: `gather_demand` imports
@@ -213,6 +214,9 @@ class RootWalk:
     step_decline: StepDecline = no_decline
     declined: dict[str, str] = field(default_factory=dict)
     declined_targets: list[tuple[str, GearTarget]] = field(default_factory=list)
+    # The walk's one clock (the obtain model's event gates read it): the
+    # caller's, else read once when the walk is made.
+    now: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def serves(self, slot: str, target: GearTarget, state: WorldState,
                game_data: GameData, ctx: SelectionContext,
@@ -220,7 +224,8 @@ class RootWalk:
         """Can this target's step be served this cycle? Records the reason when
         it cannot. The root is converted on a throwaway walk, as everywhere a
         target is converted outside the main visit."""
-        root = IsThisTargetBlocked(slot, target, RootWalk()).resolve(
+        root = IsThisTargetBlocked(
+            slot, target, RootWalk(step_decline=self.step_decline, now=self.now)).resolve(
             state, game_data, ctx, history)
         reason = self.step_decline(root)
         if reason is None:
@@ -761,7 +766,7 @@ class IsThisTargetBlocked(Decision[MetaGoal]):
             current = state.skills.get(self.target.blocking_skill, 1)
             return tool_first(
                 ReachSkillLevel(skill=self.target.blocking_skill, level=current + 1),
-                state, game_data, ctx)
+                state, game_data, ctx, self.walk.now, self.walk.step_decline)
         if self.target.blocker is None:
             return ObtainItem(code=self.target.code, quantity=1, slot=self.slot)
         if self.target.blocker == self.target.code:
@@ -928,7 +933,8 @@ def _fleet_roots(ctx: SelectionContext) -> list[ReachFleetOutcome]:
 def resolve_root(state: WorldState, game_data: GameData,
                  objective: CharacterObjective, ctx: SelectionContext,
                  history: LearningStore | None,
-                 step_decline: StepDecline = no_decline) -> RootResolution:
+                 step_decline: StepDecline = no_decline,
+                 now: datetime | None = None) -> RootResolution:
     """Walk the root graph from `WhichPieceIsNext` to a root MetaGoal (spec
     2026-10-18 §2.4): the next missing `L*` piece, or one more character level
     once `L*` is held, or None when the cycle has no gear objective (the wall).
@@ -943,7 +949,8 @@ def resolve_root(state: WorldState, game_data: GameData,
     no fleet piece waits (no fight is chosen for XP while a piece is missing,
     §6.2, nor while fleet demand the crafter's role serves exists), then the
     task, fleet and orphan-skill roots."""
-    walk = RootWalk(step_decline=step_decline)
+    walk = RootWalk(step_decline=step_decline) if now is None else RootWalk(
+        step_decline=step_decline, now=now)
     # Locally annotated, not inlined into the call: mypy 1.18.1 infers
     # `Leaf = Never` for a bare `Decision[X]` argument to `resolve_node` and
     # reports arg-type. Same fix as the `strategy_driver.py` call site.
@@ -956,7 +963,8 @@ def resolve_root(state: WorldState, game_data: GameData,
         # A throwaway RootWalk: this is a conversion, not a visit, so it must
         # not append to the trail.
         IsThisTargetBlocked(piece.slot, _which_piece.piece_target(piece, objective, state),
-                            RootWalk()).resolve(state, game_data, ctx, history)
+                            RootWalk(step_decline=step_decline, now=walk.now)
+                            ).resolve(state, game_data, ctx, history)
         for piece in (target.missing if target is not None else ())
         # A piece a sibling crafts for this character has no step until it is
         # banked (§2.5, `GearPiece.awaits_delivery`): offering its `ObtainItem`
@@ -964,7 +972,7 @@ def resolve_root(state: WorldState, game_data: GameData,
         if not piece.awaits_delivery(state)
     ]
     fleet = ctx.fleet_pieces if target is not None else ()
-    ordered.extend(_which_piece.fleet_piece_root(piece, state, game_data, ctx) for piece in fleet)
+    ordered.extend(_which_piece.fleet_piece_root(piece, state, game_data, ctx, walk) for piece in fleet)
     trunk = _which_piece.next_level(state, game_data)
     if target is not None and target.held and not fleet and trunk is not None:
         ordered.append(trunk)

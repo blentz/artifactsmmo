@@ -5317,8 +5317,8 @@ ROOT_DECISION_MUTATIONS = [
     # `test_the_orphan_roots_sit_behind_the_trunk` still witnesses the order.
     ("root: the sibling conversion reuses the real walk, so converting an"
      " alternative pollutes the trail",
-     "                            RootWalk()).resolve(state, game_data, ctx, history)\n",
-     "                            walk).resolve(state, game_data, ctx, history)\n"),
+     "                            RootWalk(step_decline=step_decline, now=walk.now)\n",
+     "                            walk\n"),
     # THE FLIP (task 6). Spec 5.3 named `tier_of_level`, the highest rung AT OR
     # BELOW the level -- a root the character has already satisfied, which
     # empties `objective_needs` and switches the arbiter's PURSUE_TASK worth
@@ -6469,7 +6469,7 @@ TOOL_OBJECTIVE_MUTATIONS = [
      "        if held:\n            return None\n",
      "        if held and False:\n            return None\n"),
     ("tool_objective: the tool step is skipped (the climb is never preceded)",
-     "    tool = tool_target(climb.skill, state, game_data, ctx)\n",
+     "    tool = tool_target(climb.skill, state, game_data, ctx, now)\n",
      "    tool = None\n"),
     ("tool_objective: an unachievable tool is targeted",
      "        if model.feasible(code, 1, PIECE_POLICY):\n",
@@ -6481,6 +6481,9 @@ TOOL_OBJECTIVE_MUTATIONS = [
      "candidates.sort(key=lambda row: row[:3])"),
     ("tool_objective: a tool with no effect on the skill qualifies",
      "tool_value(stats, skill) > 0]", "tool_value(stats, skill) >= 0]"),
+    ("tool_objective: a declined tool step declines the climb instead of falling back",
+     "    if step_decline(root) is not None:\n        return climb\n",
+     "    if step_decline(root) is not None and False:\n        return climb\n"),
     ("tool_objective: a banked tool is not owned",
      "                     | {code for code, n in bank.items() if n > 0})\n\n\ndef tool_target",
      "                     )\n\n\ndef tool_target"),
@@ -6489,14 +6492,14 @@ TOOL_OBJECTIVE_ROOT_MUTATIONS = [
     ("root: a gear target's skill climb ignores the tool",
      "            return tool_first(\n"
      "                ReachSkillLevel(skill=self.target.blocking_skill, level=current + 1),\n"
-     "                state, game_data, ctx)\n",
+     "                state, game_data, ctx, self.walk.now, self.walk.step_decline)\n",
      "            return ReachSkillLevel(skill=self.target.blocking_skill,\n"
      "                                   level=current + 1)\n"),
 ]
 TOOL_OBJECTIVE_FLEET_MUTATIONS = [
     ("which_piece_is_next: a fleet piece's climb ignores the tool",
      "        return tool_first(ReachSkillLevel(skill=piece.skill, level=current + 1),\n"
-     "                          state, game_data, ctx)\n",
+     "                          state, game_data, ctx, walk.now, walk.step_decline)\n",
      "        return ReachSkillLevel(skill=piece.skill, level=current + 1)\n"),
 ]
 FLEET_PIECE_WALK_MUTATIONS = [

@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.acquisition_cost import route_options
-from artifactsmmo_cli.ai.decisions.root import resolve_root
+from artifactsmmo_cli.ai.decisions.root import RootWalk, resolve_root
 from artifactsmmo_cli.ai.decisions.which_piece_is_next import fleet_piece_root
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import farm_target
@@ -271,7 +271,7 @@ def test_the_role_releases_at_the_demanded_level(fleet) -> None:  # type: ignore
     ana._update_coordination(ana.state, gd)
     assert ana._role == "logger"
     ana.plan_from_state()
-    roots = {fleet_piece_root(piece, ana.state, gd, ana._last_ctx)
+    roots = {fleet_piece_root(piece, ana.state, gd, ana._last_ctx, RootWalk())
              for piece in ana._last_ctx.fleet_pieces}
     assert roots and not any(isinstance(root, ReachSkillLevel) for root in roots)
 
