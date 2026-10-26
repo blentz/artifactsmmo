@@ -24,6 +24,7 @@ from artifactsmmo_cli.ai.bag_clear import (
     SLOT_DECLINES,
     clear_actions,
     cleared_state,
+    frees_first,
     needs_slot,
     related_codes,
     roomy,
@@ -1594,7 +1595,8 @@ class StrategyArbiter:
         Three triggers, all after the goal's own attempt:
           * the plan needs a slot the bag does not have (`needs_slot`);
           * the last action drew HTTP 497 (`ctx.bag_refused`): the server's word
-            overrides the model;
+            overrides the model — unless the plan's own walk frees a slot before
+            it needs one (`frees_first`): that plan is the relief, emitted as is;
           * the goal has NO plan because of a slot block (ruling T13e-a): the
             fast path declined `first_leg_inapplicable` / `bag_overflow`, or A*
             found nothing on a bag with no free slot, AND the plan the goal takes
@@ -1610,7 +1612,10 @@ class StrategyArbiter:
         `last_bag_verdict`, the player's log) and the plan is DROPPED, so the
         walk moves on instead of retrying a refused action (ruling T13e-c)."""
         if plan:
-            if not (needs_slot(plan, state, game_data) or ctx.bag_refused):
+            # Fits, or — after a 497 — frees a slot itself before it needs one:
+            # the plan IS the relief (re-review I2), never a verdict.
+            refused = ctx.bag_refused and not frees_first(plan, state, game_data)
+            if not (needs_slot(plan, state, game_data) or refused):
                 return plan
             intended = plan
         else:
@@ -1656,11 +1661,17 @@ class StrategyArbiter:
         slot_decline = any(reason.startswith(SLOT_DECLINES) for reason in self._attempt_declined)
         if not (slot_decline or (self._attempt_searched and state.inventory_slots_free == 0)):
             return None
-        tried, events = self.goals_tried, self.events
+        # The cycle's planner telemetry (`last_stats`, read by the player for
+        # the cycle's nodes/depth/timeout) is the goal's own attempt's, not this
+        # hypothetical search's (re-review m1).
+        tried, events, stats = self.goals_tried, self.events, self._planner.last_stats
         self.goals_tried, self.events = [], DecisionEventLog()
-        intended = self._plans(goal, roomy(state), game_data, actions, ctx,
-                               self._remaining_budget_seconds())
-        self.goals_tried, self.events = tried, events
+        try:
+            intended = self._plans(goal, roomy(state), game_data, actions, ctx,
+                                   self._remaining_budget_seconds())
+        finally:
+            self.goals_tried, self.events = tried, events
+            self._planner.last_stats = stats
         if intended and needs_slot(intended, state, game_data):
             return intended
         return None

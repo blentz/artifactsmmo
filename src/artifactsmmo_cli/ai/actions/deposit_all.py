@@ -59,9 +59,14 @@ class DepositAllAction(Action):
     ctx: SelectionContext = field(default=NO_PROFILE_CONTEXT, repr=False)
     #: One-entry `(state, deposits)` memo for `_deposits`; see there. Excluded
     #: from `repr`/`eq` so an action carrying a warm memo still compares equal to
-    #: a cold one — the planner dedups actions by value.
+    #: a cold one — the planner dedups actions by value. Excluded from `init`
+    #: too, so `dataclasses.replace(deposit, ctx=...)` starts COLD: the memo is
+    #: keyed on the state alone, and a copy re-parameterised with a wider keep
+    #: context (the full-bag clear, `DepositInventoryGoal`) would otherwise
+    #: answer with the original context's deposits for the same state object
+    #: (Task 13e re-review I1: R2D2's related raw_porkchop modelled as banked).
     _last_deposits: "tuple[WorldState, list[tuple[str, int]]] | None" = field(
-        default=None, repr=False, compare=False)
+        default=None, init=False, repr=False, compare=False)
 
     def _deposits(self, state: WorldState) -> list[tuple[str, int]]:
         """Surplus copies to bank this trip (per-code quantity, sell-value

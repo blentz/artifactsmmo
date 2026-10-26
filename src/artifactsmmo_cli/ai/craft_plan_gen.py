@@ -102,7 +102,8 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
               actions: list[Action], ctx: SelectionContext,
               declined: list[str] | None = None, *,
               subtasks: bool = True,
-              policy: Policy = DECOMPOSE_POLICY) -> list[Action] | None:
+              policy: Policy = DECOMPOSE_POLICY,
+              outermost: bool = True) -> list[Action] | None:
     """The route-driven next-action producer: a plan for `goal` built by
     decomposing its recipe closure over the obtain model's routes, or None when
     decomposition cannot serve it (the caller may then search).
@@ -138,6 +139,14 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     `bag_overflow:...`: the walk counts quantities, not the bag, and the plan is
     committed, so a leg that cannot fit would stall it mid-cycle.
 
+    The clear runs only at the OUTERMOST call (`outermost`). A nested decompose
+    (a grind's heal prep, a potion batch's obtain) that overflows declines
+    instead: its plan is a prefix of the outer one, and cleared against its own
+    legs alone it would bank or junk a stack the outer plan consumes (Task 13e
+    re-review m2; USER: never shed a related item). The outer call judges and
+    clears the WHOLE plan, so the related set holds every leg; a prep that
+    cannot fit on its own is skipped, as before, and never blocks the grind.
+
     The deposit is the plan's, not the deposit guard's: that guard fires on
     pressure (`DEPOSIT_FULL_FRACTION`), and a bag far below it can still be too
     full for the plan ahead. Live HAL 2026-10-11 21:35Z: 61/164 items in 17/20
@@ -151,7 +160,8 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
         return None
     peak_qty, peak_slots = plan_bag_peak(plan, state, game_data)
     if peak_qty > state.inventory_max or peak_slots > state.inventory_slots_max:
-        cleared = _clear_first(walked, state, game_data, actions, ctx)
+        cleared = (_clear_first(walked, state, game_data, actions, ctx)
+                   if outermost else None)
         if cleared is not None:
             return cleared
         return _decline(declined, f"bag_overflow:qty={peak_qty}/{state.inventory_max}"
@@ -368,7 +378,7 @@ def _decompose_grind(skill: str, target_level: int, state: WorldState, game_data
         if prep is not None:
             prep_declined: list[str] = []
             prep_legs = decompose(prep, state, game_data, actions, ctx, prep_declined,
-                                  subtasks=False, policy=HEAL_PREP_POLICY)
+                                  subtasks=False, policy=HEAL_PREP_POLICY, outermost=False)
             if declined is not None:
                 declined.extend(f"heal_prep:{reason}" for reason in prep_declined)
             if prep_legs:
@@ -636,7 +646,7 @@ def _decompose_potions(goal: CraftPotionsGoal, state: WorldState, game_data: Gam
             return [equip]
         return _decline(declined, f"potion:equip_inapplicable:{equip!r}")
     legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False,
-                     policy=POTION_POLICY)
+                     policy=POTION_POLICY, outermost=False)
     if legs is None:
         return None
     # The legs can be a PREFIX of the batch (a later leg with no action): the

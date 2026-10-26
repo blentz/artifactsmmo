@@ -310,7 +310,10 @@ class TestGrindFightLegPreps:
         assert _grind({"milk": CARRY}, _FIGHT, ctx=_eats()) == ([_FIGHT], [])
 
     def test_a_prep_decline_is_noted_and_the_fight_goes_ahead(self):
-        def declines(_goal, _state, _gd, _actions, _ctx, declined, subtasks, policy):
+        def declines(_goal, _state, _gd, _actions, _ctx, declined, subtasks, policy, outermost):
+            # The prep is a NESTED decompose: it never clears for itself
+            # (Task 13e re-review m2).
+            assert outermost is False
             declined.append("unmapped_step:milk")
             return None
 

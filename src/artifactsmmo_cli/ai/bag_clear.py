@@ -32,7 +32,7 @@ Every authority here is an existing one:
 """
 
 import dataclasses
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -78,11 +78,17 @@ def roomy(state: WorldState) -> WorldState:
         inventory_slots_max=state.inventory_slots_max + state.inventory_slots_used)
 
 
-def needs_slot(plan: Sequence[Action], state: WorldState, game_data: GameData) -> bool:
-    """Whether a step of `plan` needs room the bag does not have, walked over
-    the plan's own modelled states.
+NEEDS = "needs"
+FREES = "frees"
 
-    Two shapes, one room authority (`inventory_room.has_room`):
+
+def _room_events(plan: Sequence[Action], state: WorldState,
+                 game_data: GameData) -> Iterator[str]:
+    """The plan's slot events, step by step over its own modelled states:
+    `NEEDS` where a step needs room the bag does not have, `FREES` where a
+    step leaves the bag on fewer slots than it STARTED on (a craft whose
+    output is eaten later frees nothing: it only returns the slot it took). One room authority
+    (`inventory_room.has_room`) for both shapes of need:
       * a step that is not slot-gated (a craft) whose modelled result does not
         fit, net of what the step frees;
       * a slot-gated step (withdraw, equip, gather of a new code) that its own
@@ -90,20 +96,37 @@ def needs_slot(plan: Sequence[Action], state: WorldState, game_data: GameData) -
 
     The walk stops at the first fight: a fight's modelled loot is one of every
     drop (optimistic, `FightAction.apply`), so the states past it are not a slot
-    fact, and the fight's own room is `fight_room_license.refused_fight`'s."""
+    fact, and the fight's own room is `fight_room_license.refused_fight`'s. It
+    stops at a step refused for any other reason, too: the plan is not this
+    bag's to judge past it."""
     current = state
     for action in plan:
         if isinstance(action, FightAction):
-            return False
+            return
         if not action.is_applicable(current, game_data):
-            return action.is_applicable(roomy(current), game_data)
+            if action.is_applicable(roomy(current), game_data):
+                yield NEEDS
+            return
         nxt = action.apply(current, game_data)
         if not has_room(nxt.inventory_slots_used - current.inventory_slots_used,
                         nxt.inventory_used - current.inventory_used,
                         current.inventory_slots_free, current.inventory_free):
-            return True
+            yield NEEDS  # every reader stops at the first NEEDS
+        elif nxt.inventory_slots_used < state.inventory_slots_used:
+            yield FREES
         current = nxt
-    return False
+
+
+def needs_slot(plan: Sequence[Action], state: WorldState, game_data: GameData) -> bool:
+    """Whether a step of `plan` needs room the bag does not have (`_room_events`)."""
+    return NEEDS in _room_events(plan, state, game_data)
+
+
+def frees_first(plan: Sequence[Action], state: WorldState, game_data: GameData) -> bool:
+    """Whether `plan`'s own walk frees a slot before any step needs one: the
+    plan IS the relief (a deposit, a shed, a recycle), so a server 497 calls
+    for it, not for a clear in front of it (Task 13e re-review I2)."""
+    return next(iter(_room_events(plan, state, game_data)), None) == FREES
 
 
 def plan_codes(plan: Sequence[Action], state: WorldState, game_data: GameData) -> frozenset[str]:

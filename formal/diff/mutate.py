@@ -2108,11 +2108,11 @@ BAG_CLEAR_CORE_MUTATIONS = [
 ]
 BAG_CLEAR_MUTATIONS = [
     ("bag clear: the slot walk judges past a fight",
-     "        if isinstance(action, FightAction):\n            return False\n",
-     "        if False:\n            return False\n"),
+     "        if isinstance(action, FightAction):\n            return\n",
+     "        if False:\n            return\n"),
     ("bag clear: a slot-gated step refused by its room check is no slot need",
-     "            return action.is_applicable(roomy(current), game_data)",
-     "            return False"),
+     "            if action.is_applicable(roomy(current), game_data):\n                yield NEEDS",
+     "            if False:\n                yield NEEDS"),
     ("bag clear: the emptied bag gets no extra slots",
      "        inventory_slots_max=state.inventory_slots_max + state.inventory_slots_used)",
      "        inventory_slots_max=state.inventory_slots_max)"),
@@ -2122,6 +2122,12 @@ BAG_CLEAR_MUTATIONS = [
     ("bag clear: the deposit counts one slot whatever it banks",
      "    return ClearPlan(actions=(*head, *disposals), freed=slots_freed(routes))",
      "    return ClearPlan(actions=(*head, *disposals), freed=len(head) + len(disposals))"),
+    ("bag clear: a plan frees a slot by returning the one it took",
+     "        elif nxt.inventory_slots_used < state.inventory_slots_used:",
+     "        elif nxt.inventory_slots_used < current.inventory_slots_used:"),
+    ("bag clear: a relief plan's freed slot is never seen",
+     "            yield FREES\n",
+     "            pass\n"),
     ("bag clear: the slot walk is slot-blind",
      "        if not has_room(nxt.inventory_slots_used - current.inventory_slots_used,",
      "        if not has_room(0,"),
@@ -2146,11 +2152,11 @@ BAG_CLEAR_MUTATIONS = [
 ]
 BAG_CLEAR_ARBITER_MUTATIONS = [
     ("bag clear: the server's 497 is ignored",
-     "            if not (needs_slot(plan, state, game_data) or ctx.bag_refused):",
+     "            if not (needs_slot(plan, state, game_data) or refused):",
      "            if not needs_slot(plan, state, game_data):"),
     ("bag clear: the predicted slot need is ignored",
-     "            if not (needs_slot(plan, state, game_data) or ctx.bag_refused):",
-     "            if not ctx.bag_refused:"),
+     "            if not (needs_slot(plan, state, game_data) or refused):",
+     "            if not refused:"),
     ("bag clear: a plan with nothing freeable keeps its turn",
      "            return []\n        cleared = cleared_state(",
      "            return plan\n        cleared = cleared_state("),
@@ -2192,9 +2198,35 @@ BAG_CLEAR_ARBITER_MUTATIONS = [
     ("bag clear: the attempt's declines are not kept",
      "        self._attempt_declined = list(declined)\n",
      ""),
+    ("bag clear: after a 497 the relief plan itself is cleared for",
+     "            refused = ctx.bag_refused and not frees_first(plan, state, game_data)",
+     "            refused = ctx.bag_refused"),
+    ("bag clear: the quiet ask leaves its planner stats as the cycle's",
+     "            self._planner.last_stats = stats\n",
+     ""),
+    ("bag clear: the quiet ask's swap is not restored on a raise",
+     "        finally:\n            self.goals_tried, self.events = tried, events\n"
+     "            self._planner.last_stats = stats\n",
+     "        finally:\n            pass\n        self.goals_tried, self.events = tried, events\n"
+     "        self._planner.last_stats = stats\n"),
     ("bag clear: the root closure is not bound onto the ctx",
      "                      root_closure=chosen_root_closure(chosen_root, state, game_data, ctx))",
      "                      root_closure=frozenset())"),
+]
+# Fix round 2 (re-review task-13e-rereview-1.md, rulings T13e-d..g). Killed by
+# tests/test_ai/test_bag_clear.py.
+BAG_CLEAR_MEMO_MUTATIONS = [
+    ("bag clear: a re-parameterised deposit inherits the warm memo",
+     "        default=None, init=False, repr=False, compare=False)",
+     "        default=None, repr=False, compare=False)"),
+]
+BAG_CLEAR_NESTED_MUTATIONS = [
+    ("bag clear: a nested decompose clears against its own legs",
+     "                   if outermost else None)",
+     "                   if True else None)"),
+    ("bag clear: the heal prep is decomposed as the outermost call",
+     "                                  subtasks=False, policy=HEAL_PREP_POLICY, outermost=False)",
+     "                                  subtasks=False, policy=HEAL_PREP_POLICY, outermost=True)"),
 ]
 BAG_CLEAR_PLAYER_MUTATIONS = [
     ("bag clear: the player never reads the 497",
@@ -4699,8 +4731,8 @@ GRIND_PREP_MUTATIONS = [
      "    fight = next((a for a in legs if isinstance(a, FightAction)), None)",
      "    fight = legs[0] if isinstance(legs[0], FightAction) else None"),
     ("craft_plan_gen: the heal prep is walked under its selection policy",
-     "                                  subtasks=False, policy=HEAL_PREP_POLICY)",
-     "                                  subtasks=False)"),
+     "                                  subtasks=False, policy=HEAL_PREP_POLICY, outermost=False)",
+     "                                  subtasks=False, outermost=False)"),
     ("craft_plan_gen: a prep decline is not noted",
      "                declined.extend(f\"heal_prep:{reason}\" for reason in prep_declined)",
      "                pass"),
@@ -4879,9 +4911,9 @@ BAG_PEAK_MUTATIONS = [
 BAG_OVERFLOW_DECLINE_MUTATIONS = [
     ("craft_plan_gen: a plan may overflow the bag",
      "    if peak_qty > state.inventory_max or peak_slots > state.inventory_slots_max:\n"
-     "        cleared = _clear_first(",
+     "        cleared = (_clear_first(",
      "    if False:\n"
-     "        cleared = _clear_first("),
+     "        cleared = (_clear_first("),
 ]
 # Phase 2e: a decline of a served goal is final. Killed by
 # tests/test_ai/test_decision_events.py.
@@ -4932,8 +4964,9 @@ WALK_GRAPH_GREY_MUTATIONS = [
 POTION_DECOMPOSE_POLICY_MUTATIONS = [
     ("craft_plan_gen: the potion batch is walked under its selection policy",
      "    legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False,\n"
-     "                     policy=POTION_POLICY)",
-     "    legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False)"),
+     "                     policy=POTION_POLICY, outermost=False)",
+     "    legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False,\n"
+     "                     outermost=False)"),
 ]
 FOOD_PRODUCER_MUTATIONS = [
     ("food producer: no food has an owner",
@@ -7958,7 +7991,8 @@ INTENTION_BUDGET_PER_GOAL_MUTATIONS = [
 # OWN run_group: unit-killed by tests/test_ai/test_craft_plan_gen.py.
 BANK_FIRST_MUTATIONS = [
     ("decompose: an overflowing plan never clears first",
-     "        cleared = _clear_first(walked, state, game_data, actions, ctx)\n",
+     "        cleared = (_clear_first(walked, state, game_data, actions, ctx)\n"
+     "                   if outermost else None)\n",
      "        cleared = None\n"),
     ("decompose: the cleared plan is not re-checked against the bag",
      "    if peak_qty > state.inventory_max or peak_slots > state.inventory_slots_max:\n"
@@ -12646,6 +12680,10 @@ def _collect_all_groups() -> None:
     run_group(BAG_CLEAR_SRC, BAG_CLEAR_MUTATIONS,
               "tests/test_ai/test_bag_clear.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, BAG_CLEAR_ARBITER_MUTATIONS,
+              "tests/test_ai/test_bag_clear.py", survivors)
+    run_group(DEPOSIT_ALL_SRC, BAG_CLEAR_MEMO_MUTATIONS,
+              "tests/test_ai/test_bag_clear.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, BAG_CLEAR_NESTED_MUTATIONS,
               "tests/test_ai/test_bag_clear.py", survivors)
     run_group(PLAYER_SRC, BAG_CLEAR_PLAYER_MUTATIONS,
               "tests/test_ai/test_bag_clear.py", survivors)

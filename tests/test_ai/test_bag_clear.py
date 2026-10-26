@@ -14,6 +14,7 @@ from dataclasses import replace
 import pytest
 
 import artifactsmmo_cli.ai.bag_clear as bag_clear_mod
+import artifactsmmo_cli.ai.craft_plan_gen as craft_plan_gen_mod
 import artifactsmmo_cli.ai.strategy_driver as strategy_driver_mod
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
@@ -29,6 +30,7 @@ from artifactsmmo_cli.ai.bag_clear import (
     ClearPlan,
     clear_actions,
     cleared_state,
+    frees_first,
     needs_slot,
     plan_codes,
     related_codes,
@@ -38,14 +40,16 @@ from artifactsmmo_cli.ai.bag_clear_core import (
     ClearRoute,
     clear_route,
 )
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
-from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.planner import GOAPPlanner, PlanStats
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -538,3 +542,116 @@ def test_two_cycles_clear_then_the_original_goal(
     assert second.plan and not isinstance(second.plan[0], DepositAllAction), second.plan
     assert not needs_slot(second.plan, executed, gd)
     assert any(isinstance(a, CraftAction) and a.code == "cooked_porkchop" for a in second.plan)
+
+
+# --------------------------------------------------------------------------
+# Fix round 2 (re-review task-13e-rereview-1.md; rulings T13e-d..g)
+# --------------------------------------------------------------------------
+
+def test_a_warm_pool_memo_never_answers_for_the_widened_clear(gd: GameData) -> None:
+    """T13e-d: the pool's DepositAll memoises its deposits on the state object.
+    The clear re-parameterises a copy with a wider keep; the copy must start
+    cold, or it answers with the pool's deposits and models the related
+    porkchop inputs as banked."""
+    state = scenario_state(_r2d2(), gd)
+    pool = _deposit(gd)
+    assert pool.is_applicable(state, gd)  # warms the memo on THIS state object
+    assert "raw_porkchop" not in pool.apply(state, gd).inventory  # the pool banks it
+    related = related_codes([_craft(gd)], state, gd, _ctx())
+    clear = clear_actions(state, gd, [pool], _ctx(), related)
+    assert cleared_state(clear.actions, state, gd).inventory == {"raw_porkchop": 19}
+    # The same rule covers DepositInventoryGoal's re-parameterised copy.
+    assert replace(pool, ctx=_ctx())._last_deposits is None
+
+
+def test_a_497_relief_plan_is_emitted_not_named(gd: GameData) -> None:
+    """T13e-e: after a 497, a plan that frees a slot itself before it needs
+    one IS the relief (the DEPOSIT_FULL guard's [DepositAll]): emitted as is,
+    no clear, no `bag_full_all_related` verdict."""
+    state = scenario_state(_r2d2(), gd)
+    arbiter = StrategyArbiter(GOAPPlanner(), None)
+    relief = [_deposit(gd)]
+    assert frees_first(relief, state, gd)
+    refused = replace(_ctx(), bag_refused=True)
+    assert arbiter._clear_bag(RestoreHPGoal(), relief, state, gd, [_deposit(gd)], refused) == relief
+    assert arbiter.last_bag_verdict is None
+    assert arbiter.events.drain() == []
+
+
+def test_frees_first_reads_the_first_slot_event(gd: GameData) -> None:
+    """A plan that needs a slot before it frees one is not the relief."""
+    state = scenario_state(_r2d2(), gd)
+    assert not frees_first([_craft(gd), _deposit(gd)], state, gd)
+    assert not frees_first([], state, gd)
+    # A craft whose output is eaten returns only the slot it took.
+    roomier = scenario_state(_r2d2(slots_max=30), gd)
+    eat = UseConsumableAction(_item_stats=gd.all_item_stats)
+    assert not frees_first([_craft(gd), eat], roomier, gd)
+
+
+def test_the_quiet_ask_keeps_the_cycles_planner_stats(gd: GameData,
+                                                      monkeypatch: pytest.MonkeyPatch) -> None:
+    """T13e-f: the emptied-bag ask may run A*; the cycle's planner telemetry
+    stays the goal's own attempt's, and the swap is restored even when the ask
+    raises."""
+    player, goal = _climb(gd)
+    assert player.state is not None
+    arbiter = player._arbiter
+    before = PlanStats(nodes_explored=7)
+    arbiter._planner.last_stats = before
+
+    def search(*args: object, **kwargs: object) -> list[object]:
+        arbiter._planner.last_stats = PlanStats(nodes_explored=99_999)
+        arbiter.goals_tried.append({"goal": "hypothetical"})
+        return []
+
+    monkeypatch.setattr(arbiter, "_plans", search)
+    arbiter._attempt_declined, arbiter._attempt_searched = [], True
+    tried = arbiter.goals_tried
+    assert arbiter._slot_blocked_plan(goal, player.state, gd, [], player._selection_context()) is None
+    assert arbiter._planner.last_stats is before
+    assert arbiter.goals_tried is tried and tried == []
+
+    def boom(*args: object, **kwargs: object) -> list[object]:
+        arbiter.goals_tried.append({"goal": "hypothetical"})
+        raise RuntimeError("search failed")
+
+    monkeypatch.setattr(arbiter, "_plans", boom)
+    with pytest.raises(RuntimeError):
+        arbiter._slot_blocked_plan(goal, player.state, gd, [], player._selection_context())
+    assert arbiter.goals_tried is tried and tried == []
+    assert arbiter._planner.last_stats is before
+
+
+def test_a_heal_prep_never_clears_the_grinds_own_stack(gd: GameData,
+                                                       monkeypatch: pytest.MonkeyPatch) -> None:
+    """T13e-g: a grind whose legs smelt the held iron_ore and fight, fronted by
+    a heal prep that cooks the held raw_porkchop, on R2D2's full bag. The prep
+    alone overflows; clearing against ITS legs would bank the ore the grind
+    smelts. The clear runs once, at the outermost decompose, over the plan it
+    judges: the nested prep declines (and is skipped, as a prep that cannot be
+    served always was), and the grind's own ore stays."""
+    state = scenario_state(replace(_r2d2(), skills={"cooking": 30, "mining": 30}), gd)
+    smelt = CraftAction(code="iron_bar", quantity=1, workshop_location=gd.workshop_location("mining"))
+    fight = FightAction(monster_code="chicken", locations=frozenset({(0, 1)}),
+                        learned_drops=LearnedDrops.empty())
+    rung = GatherMaterialsGoal("iron_bar", {"iron_bar": 1})
+    prep = GatherMaterialsGoal("cooked_porkchop", {"cooked_porkchop": 1})
+    walk = craft_plan_gen_mod._walk_plan
+
+    def walk_plan(goal: GatherMaterialsGoal, *args: object, **kwargs: object) -> object:
+        return [smelt, fight] if goal is rung else walk(goal, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(craft_plan_gen_mod, "grind_rung_goal", lambda *a, **k: rung)
+    monkeypatch.setattr(craft_plan_gen_mod, "_walk_plan", walk_plan)
+    monkeypatch.setattr(craft_plan_gen_mod, "heal_prep_goal", lambda *a, **k: prep)
+    pool = [_deposit(gd), _craft(gd), smelt, fight]
+    plan = decompose(ReachSkillGoal(skill_name="mining", target_level=31), state, gd, pool, _ctx())
+    assert plan is not None and isinstance(plan[0], DepositAllAction), plan
+    assert plan[1:] == [smelt, fight], plan
+    after = cleared_state(plan[:1], state, gd)
+    assert after.inventory == {"iron_ore": 12}
+    # Nested, the prep alone declines rather than clearing for itself.
+    declined: list[str] = []
+    assert decompose(prep, state, gd, pool, _ctx(), declined, outermost=False) is None
+    assert declined and declined[0].startswith("bag_overflow:")
