@@ -342,6 +342,12 @@ class SelectionContext:
     # player from its last outcome; False on every offline and first cycle.
     bag_refused: bool = False
 
+    # The chosen root's requirement closure (`strategy_driver.chosen_root_closure`),
+    # bound by `StrategyArbiter.select` with `step_profile`: the full-bag clear
+    # keeps these stacks whole (`bag_clear.related_codes`). Empty on every ctx
+    # built before the arbiter binds it (the root walk's own step checks).
+    root_closure: frozenset[str] = frozenset()
+
     def drops(self) -> LearnedDrops:
         """This cycle's drop evidence; raises when this context has none."""
         if self.learned_drops is None:

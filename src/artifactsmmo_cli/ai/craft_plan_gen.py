@@ -38,7 +38,6 @@ from artifactsmmo_cli.ai.acquisition_cost import fight_gold_monster
 from artifactsmmo_cli.ai.actions.base import Action, serves_region
 from artifactsmmo_cli.ai.actions.combat import FightAction, win_gold
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
-from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -46,6 +45,7 @@ from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.bag_clear import clear_actions, related_codes
 from artifactsmmo_cli.ai.bag_peak import plan_bag_peak
 from artifactsmmo_cli.ai.currency_buy_batch import currency_buy_batch_pure
 from artifactsmmo_cli.ai.decompose_core import Act, OpenGate, Step
@@ -130,9 +130,11 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     (Phase 2d-F).
 
     A plan whose bag would overflow at some leg (`bag_peak.plan_bag_peak`,
-    total quantity or occupied slots) first tries banking the bag's surplus
-    ahead of it (the pool's `DepositAllAction`): the plan is kept with the
-    deposit in front when that makes it fit. Otherwise it declines as
+    total quantity or occupied slots) first tries the ONE make-room mechanism,
+    the full-bag clear (`bag_clear.clear_actions`, Task 13e ruling T13e-b): every
+    stack the plan does not use leaves (banked, or the junk policy for a stack
+    the bank refuses), and the plan is kept with the clear in front when that
+    makes it fit. Otherwise it declines as
     `bag_overflow:...`: the walk counts quantities, not the bag, and the plan is
     committed, so a leg that cannot fit would stall it mid-cycle.
 
@@ -149,22 +151,24 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
         return None
     peak_qty, peak_slots = plan_bag_peak(plan, state, game_data)
     if peak_qty > state.inventory_max or peak_slots > state.inventory_slots_max:
-        banked = _bank_first(walked, state, game_data, actions)
-        if banked is not None:
-            return banked
+        cleared = _clear_first(walked, state, game_data, actions, ctx)
+        if cleared is not None:
+            return cleared
         return _decline(declined, f"bag_overflow:qty={peak_qty}/{state.inventory_max}"
                                   f":slots={peak_slots}/{state.inventory_slots_max}")
     return plan
 
 
-def _bank_first(walked: list[Action], state: WorldState, game_data: GameData,
-                actions: list[Action]) -> list[Action] | None:
-    """`walked` with the pool's bank deposit in front, region-bridged, when the
-    deposit applies now and the plan then fits the bag; None otherwise."""
-    deposit = next((a for a in actions if isinstance(a, DepositAllAction)), None)
-    if deposit is None or not deposit.is_applicable(state, game_data):
+def _clear_first(walked: list[Action], state: WorldState, game_data: GameData,
+                 actions: list[Action], ctx: SelectionContext) -> list[Action] | None:
+    """`walked` with the full-bag clear in front (`bag_clear.clear_actions`:
+    every stack the walk does not use leaves), region-bridged, when the clear
+    frees something and the plan then fits the bag; None otherwise."""
+    clear = clear_actions(state, game_data, actions, ctx,
+                          related_codes(walked, state, game_data, ctx))
+    if not clear.actions:
         return None
-    plan = _bridge_regions([deposit, *walked], state, game_data, actions, None)
+    plan = _bridge_regions([*clear.actions, *walked], state, game_data, actions, None)
     if plan is None:
         return None
     peak_qty, peak_slots = plan_bag_peak(plan, state, game_data)

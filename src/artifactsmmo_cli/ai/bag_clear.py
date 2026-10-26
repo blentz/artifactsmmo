@@ -33,11 +33,12 @@ Every authority here is an existing one:
 
 import dataclasses
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-from artifactsmmo_cli.ai.bag_clear_core import ClearRoute, clear_route
+from artifactsmmo_cli.ai.bag_clear_core import ClearRoute, clear_route, slots_freed
 from artifactsmmo_cli.ai.disposal_route import overstock_disposal
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_in_bag
@@ -50,10 +51,42 @@ BAG_FULL_OUTCOME = "error:HTTP_497"
 character's inventory is full"). The server's word overrides the model."""
 
 
+SLOT_DECLINES = ("first_leg_inapplicable:", "bag_overflow:")
+"""The fast path's declines a full bag can cause (`craft_plan_gen._finish`,
+`craft_plan_gen.decompose`): a goal answered by one of them may be a goal the
+clear unblocks (`StrategyArbiter._slot_blocked_plan` asks)."""
+
+
+@dataclass(frozen=True)
+class ClearPlan:
+    """The clear: the actions that move the unrelated stacks out (one
+    DepositAll, then one junk-policy action per bank-refused stack), and the
+    slots they free (`slots_freed` over every held stack's route). Empty
+    actions and `freed == 0` are the same fact: `bag_full_all_related`."""
+
+    actions: tuple[Action, ...]
+    freed: int
+
+
+def roomy(state: WorldState) -> WorldState:
+    """`state` with the room of an emptied bag: the quantity and slot caps
+    raised by what the bag holds. The plan a goal takes here is the plan it
+    would take once its bag were cleared, so its legs name what the goal uses
+    (a goal the full bag stops from planning at all)."""
+    return dataclasses.replace(
+        state, inventory_max=state.inventory_max + state.inventory_used,
+        inventory_slots_max=state.inventory_slots_max + state.inventory_slots_used)
+
+
 def needs_slot(plan: Sequence[Action], state: WorldState, game_data: GameData) -> bool:
-    """Whether a step of `plan` adds stacks or units the bag has no room for,
-    walked over the plan's own modelled states (`has_room`, net of what the
-    step frees).
+    """Whether a step of `plan` needs room the bag does not have, walked over
+    the plan's own modelled states.
+
+    Two shapes, one room authority (`inventory_room.has_room`):
+      * a step that is not slot-gated (a craft) whose modelled result does not
+        fit, net of what the step frees;
+      * a slot-gated step (withdraw, equip, gather of a new code) that its own
+        room check refuses here but admits with an emptied bag (`roomy`).
 
     The walk stops at the first fight: a fight's modelled loot is one of every
     drop (optimistic, `FightAction.apply`), so the states past it are not a slot
@@ -62,6 +95,8 @@ def needs_slot(plan: Sequence[Action], state: WorldState, game_data: GameData) -
     for action in plan:
         if isinstance(action, FightAction):
             return False
+        if not action.is_applicable(current, game_data):
+            return action.is_applicable(roomy(current), game_data)
         nxt = action.apply(current, game_data)
         if not has_room(nxt.inventory_slots_used - current.inventory_slots_used,
                         nxt.inventory_used - current.inventory_used,
@@ -73,9 +108,10 @@ def needs_slot(plan: Sequence[Action], state: WorldState, game_data: GameData) -
 
 def plan_codes(plan: Sequence[Action], state: WorldState, game_data: GameData) -> frozenset[str]:
     """Every code a step of `plan` consumes or produces: the codes whose held
-    quantity a modelled step changes."""
+    quantity a modelled step changes. Walked with an emptied bag's room
+    (`roomy`), where every step of a plan the bag blocks still applies."""
     codes: set[str] = set()
-    current = state
+    current = roomy(state)
     for action in plan:
         nxt = action.apply(current, game_data)
         codes |= {code for code in current.inventory.keys() | nxt.inventory.keys()
@@ -85,13 +121,14 @@ def plan_codes(plan: Sequence[Action], state: WorldState, game_data: GameData) -
 
 
 def related_codes(plan: Sequence[Action], state: WorldState, game_data: GameData,
-                  ctx: SelectionContext, closure: frozenset[str]) -> frozenset[str]:
+                  ctx: SelectionContext) -> frozenset[str]:
     """The codes the clear must not touch: the plan's inputs and outputs, the
-    chosen root's requirement closure, every held code the keep authority keeps
-    a copy of in the bag, and the equipped codes."""
+    chosen root's requirement closure (`ctx.root_closure`, bound by the
+    arbiter), every held code the keep authority keeps a copy of in the bag,
+    and the equipped codes."""
     kept = {code for code, qty in state.inventory.items()
             if qty > 0 and keep_in_bag(code, state, game_data, ctx) > 0}
-    return (plan_codes(plan, state, game_data) | closure | frozenset(kept)
+    return (plan_codes(plan, state, game_data) | ctx.root_closure | frozenset(kept)
             | frozenset(code for code in state.equipment.values() if code is not None))
 
 
@@ -127,10 +164,11 @@ def _whole_disposal(code: str, state: WorldState, game_data: GameData,
 
 
 def clear_actions(state: WorldState, game_data: GameData, actions: Sequence[Action],
-                  ctx: SelectionContext, related: frozenset[str]) -> list[Action]:
-    """The actions that move every unrelated stack out of the bag at once: one
+                  ctx: SelectionContext, related: frozenset[str]) -> ClearPlan:
+    """The clear that moves every unrelated stack out of the bag at once: one
     DepositAll for the stacks the bank takes, then the junk policy for each
-    stack it refuses. [] when no stack can leave (`bag_full_all_related`)."""
+    stack it refuses. No actions and `freed == 0` when no stack can leave
+    (`bag_full_all_related`)."""
     deposit = _clear_deposit(state, actions, ctx, related)
     banked = state
     if deposit is not None and deposit.is_applicable(state, game_data):
@@ -141,22 +179,22 @@ def clear_actions(state: WorldState, game_data: GameData, actions: Sequence[Acti
     # bankable — this clear then has nothing to bank, and the deposit is dropped.)
     taken = {code for code in held if code not in related and code not in banked.inventory}
     current = banked if taken else state
+    routes: list[ClearRoute] = []
     disposals: list[Action] = []
     for code in held:
         disposal = (None if code in related or code in taken
                     else _whole_disposal(code, current, game_data, ctx))
         route = clear_route(code in related, code in taken, disposal is not None)
+        routes.append(route)
         if route is ClearRoute.DISPOSE:
             assert disposal is not None  # clear_route: DISPOSE => disposable
             disposals.append(disposal)
             current = disposal.apply(current, game_data)
-    # One slot frees per stack whose route is not KEEP (`Formal.BagClear.freed`):
-    # the taken stacks ride the deposit, the disposed ones their own actions, so
-    # a clear that frees nothing is the empty list.
-    if not taken:
-        return disposals
-    assert deposit is not None  # `taken` is read off the deposit's own state
-    return [deposit, *disposals]
+    head: list[Action] = []
+    if taken:
+        assert deposit is not None  # `taken` is read off the deposit's own state
+        head = [deposit]
+    return ClearPlan(actions=(*head, *disposals), freed=slots_freed(routes))
 
 
 def cleared_state(clear: Sequence[Action], state: WorldState, game_data: GameData) -> WorldState:

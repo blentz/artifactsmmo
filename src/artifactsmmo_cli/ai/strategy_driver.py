@@ -20,7 +20,14 @@ from artifactsmmo_cli.ai.arbiter_select import (
     Candidate,
     arbitrate,
 )
-from artifactsmmo_cli.ai.bag_clear import clear_actions, cleared_state, needs_slot, related_codes
+from artifactsmmo_cli.ai.bag_clear import (
+    SLOT_DECLINES,
+    clear_actions,
+    cleared_state,
+    needs_slot,
+    related_codes,
+    roomy,
+)
 from artifactsmmo_cli.ai.bag_clear_core import BAG_FULL_ALL_RELATED
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess, drain_snapshot
 from artifactsmmo_cli.ai.chosen_loadout import potion_carry
@@ -798,6 +805,10 @@ class StrategyArbiter:
         # `bag_full_all_related` when the most recent `select()` met a full bag
         # its clear could free no slot of (Task 13e, `_clear_bag`); else None.
         self.last_bag_verdict: str | None = None
+        # The most recent `_plans` attempt's fast-path declines and whether it
+        # reached A* (`_clear_bag`'s no-plan arm reads them).
+        self._attempt_declined: list[str] = []
+        self._attempt_searched = False
         # Monotonic instant this cycle's cooldown expires — the window the whole
         # walk may search inside, set by the player once per cycle. None on any
         # cycle with no cooldown to spend (first cycle, an error cycle), which
@@ -853,6 +864,15 @@ class StrategyArbiter:
             return None
         return max(_SEARCH_BUDGET_SECONDS, self._planning_deadline - time.monotonic())
 
+    def _remaining_budget_seconds(self) -> float | None:
+        """What is LEFT of this cycle's cooldown window, unfloored: the budget
+        of the full-bag clear's extra searches (`_clear_bag`), which come after
+        the goal's own attempt has had its floored budget. None (no deadline)
+        leaves `planner.plan` on its own default."""
+        if self._planning_deadline is None:
+            return None
+        return max(0.0, self._planning_deadline - time.monotonic())
+
     def _plans(
         self,
         goal: Goal,
@@ -883,6 +903,10 @@ class StrategyArbiter:
         # map, not just around `planner.plan`, because the budget the arbiter
         # hands out covers the whole attempt.
         started = time.monotonic()
+        # What THIS attempt's producers said, for the full-bag clear's no-plan
+        # arm (`_clear_bag`): the fast path's declines, and whether A* ran.
+        self._attempt_declined = []
+        self._attempt_searched = False
 
         def _elapsed_ms() -> float:
             return round((time.monotonic() - started) * 1000, 1)
@@ -912,6 +936,7 @@ class StrategyArbiter:
         # names why instead of reading as a bare `plan_len=0`.
         declined: list[str] = []
         gen = decompose(goal, state, game_data, actions, ctx, declined)
+        self._attempt_declined = list(declined)
         for reason in declined:
             self.events.note(Mechanism.DECOMPOSE_DECLINE, repr(goal), reason)
         if gen is not None:
@@ -939,6 +964,7 @@ class StrategyArbiter:
                 "declined": declined[0] if declined else None,
             })
             return []
+        self._attempt_searched = True
         plan = self._planner.plan(state, goal, actions, game_data, self._history,
                                   budget_seconds=budget_seconds)
         stats = self._planner.last_stats
@@ -1015,7 +1041,8 @@ class StrategyArbiter:
         # in when it builds the ctx — it would have to re-resolve the step goal
         # WITHOUT the fallback walk and task suppression above, and the two
         # derivations would drift. Re-binding the frozen ctx here keeps one source.
-        ctx = replace(ctx, step_profile=dict(step_profile or {}))
+        ctx = replace(ctx, step_profile=dict(step_profile or {}),
+                      root_closure=chosen_root_closure(chosen_root, state, game_data, ctx))
         # EVERY consumer of the ctx below sees the bound profile: the means/guard
         # predicates, the goals they map to, and the destructive-action licence.
         collect_kinds, discretionary_kinds = active_means(state, game_data, self._history, ctx)
@@ -1083,7 +1110,7 @@ class StrategyArbiter:
         prev_committed = self._committed_repr
         self.last_bag_verdict = None
         chosen, plan, new_committed = self._arbitrate(
-            candidates, state, game_data, actions, ctx, chosen_root)
+            candidates, state, game_data, actions, ctx)
 
         self._committed_repr = new_committed
         if new_committed != prev_committed:
@@ -1508,7 +1535,6 @@ class StrategyArbiter:
         game_data: GameData,
         actions: list[Action],
         ctx: SelectionContext,
-        chosen_root: MetaGoal | None,
     ) -> tuple[Goal | None, list[Action], str | None]:
         """Ordered walk → Wait fallback.
 
@@ -1533,7 +1559,7 @@ class StrategyArbiter:
             return self._clear_bag(
                 goal, self._plans(goal, state, game_data, actions, ctx,
                                   self._cycle_budget_seconds()),
-                state, game_data, actions, ctx, chosen_root)
+                state, game_data, actions, ctx)
 
         def satisfied(goal: Goal) -> bool:
             return goal.is_satisfied(state)
@@ -1561,39 +1587,83 @@ class StrategyArbiter:
         game_data: GameData,
         actions: list[Action],
         ctx: SelectionContext,
-        chosen_root: MetaGoal | None,
     ) -> list[Action]:
-        """`plan`, or — when it needs a slot the bag does not have, or the last
-        action drew HTTP 497 — a clear of every stack the plan does not use
-        followed by `goal` re-planned on the cleared bag (Task 13e, USER
-        2026-10-25; see `ai/bag_clear`). Here, after either producer has
-        answered, so the fast path and A* are both covered.
+        """`plan`, or the full-bag clear followed by `goal` re-planned on the
+        cleared bag (Task 13e, USER 2026-10-25; see `ai/bag_clear`).
+
+        Three triggers, all after the goal's own attempt:
+          * the plan needs a slot the bag does not have (`needs_slot`);
+          * the last action drew HTTP 497 (`ctx.bag_refused`): the server's word
+            overrides the model;
+          * the goal has NO plan because of a slot block (ruling T13e-a): the
+            fast path declined `first_leg_inapplicable` / `bag_overflow`, or A*
+            found nothing on a bag with no free slot, AND the plan the goal takes
+            with an emptied bag (`bag_clear.roomy`) needs a slot here.
+        The related set is read off that plan (the real one, or the roomy one).
+
+        The retry is re-planned on the cleared state within what is LEFT of the
+        cycle's window, re-checked with `needs_slot`, and dropped when it is
+        empty or still doomed (the clear alone then runs; the next cycle
+        re-plans on the cleared bag). `goals_tried` records the EMITTED plan.
 
         A clear that can free no slot is named `bag_full_all_related` (event,
-        `last_bag_verdict`, and the player's log): a plan the model knows needs
-        the slot is dropped, so the walk moves on instead of retrying a doomed
-        action; a plan the model believes fits keeps its turn (only the
-        server's 497 said otherwise, and the refresh that follows corrects the
-        model)."""
-        if not plan:
-            return plan
-        doomed = needs_slot(plan, state, game_data)
-        if not (doomed or ctx.bag_refused):
-            return plan
-        related = related_codes(plan, state, game_data, ctx,
-                                chosen_root_closure(chosen_root, state, game_data, ctx))
+        `last_bag_verdict`, the player's log) and the plan is DROPPED, so the
+        walk moves on instead of retrying a refused action (ruling T13e-c)."""
+        if plan:
+            if not (needs_slot(plan, state, game_data) or ctx.bag_refused):
+                return plan
+            intended = plan
+        else:
+            blocked = self._slot_blocked_plan(goal, state, game_data, actions, ctx)
+            if blocked is None:
+                return plan
+            intended = blocked
+        related = related_codes(intended, state, game_data, ctx)
         clear = clear_actions(state, game_data, actions, ctx, related)
-        if not clear:
+        if not clear.freed:
             held = [code for code, qty in state.inventory.items() if qty > 0]
             self.events.note(Mechanism.BAG_FULL_ALL_RELATED, repr(goal),
                              f"held={len(held)} related={sum(1 for c in held if c in related)}")
             self.last_bag_verdict = BAG_FULL_ALL_RELATED
-            return [] if doomed else plan
-        cleared = cleared_state(clear, state, game_data)
-        self.events.note(Mechanism.BAG_CLEAR, repr(goal), ",".join(
+            return []
+        cleared = cleared_state(clear.actions, state, game_data)
+        self.events.note(Mechanism.BAG_CLEAR, repr(goal), f"freed={clear.freed}:" + ",".join(
             code for code in state.inventory if code not in cleared.inventory))
-        retry = self._plans(goal, cleared, game_data, actions, ctx, self._cycle_budget_seconds())
-        return [*clear, *retry]
+        retry = self._plans(goal, cleared, game_data, actions, ctx,
+                            self._remaining_budget_seconds())
+        emitted = [*clear.actions]
+        if retry and not needs_slot(retry, cleared, game_data):
+            emitted += retry
+        self.goals_tried[-1]["plan_len"] = len(emitted)
+        return emitted
+
+    def _slot_blocked_plan(
+        self,
+        goal: Goal,
+        state: WorldState,
+        game_data: GameData,
+        actions: list[Action],
+        ctx: SelectionContext,
+    ) -> list[Action] | None:
+        """The plan `goal` would take once its bag were emptied, when the
+        attempt that just came back empty was stopped by the bag: a fast-path
+        decline of a slot-needing first leg or an overflow, or A* finding
+        nothing on a bag with no free slot — and that plan needs a slot the
+        real bag lacks. None otherwise (the empty plan is the goal's answer).
+
+        Asked quietly (no attempt record, no events): it is a question about
+        the goal's legs, not an attempt the cycle made."""
+        slot_decline = any(reason.startswith(SLOT_DECLINES) for reason in self._attempt_declined)
+        if not (slot_decline or (self._attempt_searched and state.inventory_slots_free == 0)):
+            return None
+        tried, events = self.goals_tried, self.events
+        self.goals_tried, self.events = [], DecisionEventLog()
+        intended = self._plans(goal, roomy(state), game_data, actions, ctx,
+                               self._remaining_budget_seconds())
+        self.goals_tried, self.events = tried, events
+        if intended and needs_slot(intended, state, game_data):
+            return intended
+        return None
 
     def _dedupe_goals_tried(self) -> list[dict[str, object]]:
         """Telemetry: one record per goal (the LAST attempt wins, first-seen order kept)."""

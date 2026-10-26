@@ -11,10 +11,11 @@ Each held stack is routed on three executability-now facts the adapter
                   remove the whole stack (`disposal_route`, bounded by `destroyable`)
     KEEP     otherwise                          (nothing can move it this cycle)
 
-The clear frees one slot per stack whose route is not KEEP (`freed` in the
-proof); a clear that frees none is the named verdict `BAG_FULL_ALL_RELATED`.
-Mirrored in formal/Formal/BagClear.lean (`clearRoute`)."""
+The clear frees one slot per stack that leaves (`slots_freed`); a clear that
+frees none is the named verdict `BAG_FULL_ALL_RELATED`. Mirrored in
+formal/Formal/BagClear.lean (`clearRoute`, `freed`)."""
 
+from collections.abc import Iterable
 from enum import Enum
 
 BAG_FULL_ALL_RELATED = "bag_full_all_related"
@@ -38,3 +39,9 @@ def clear_route(related: bool, bank_takes: bool, disposable: bool) -> ClearRoute
         return ClearRoute.DISPOSE
     return ClearRoute.KEEP
 
+
+def slots_freed(routes: Iterable[ClearRoute]) -> int:
+    """Slots the clear frees: one per stack whose route is not KEEP (the
+    deposit banks every DEPOSIT stack whole; each DISPOSE stack gets its own
+    action that empties it). Mirrors `Formal.BagClear.freed`."""
+    return sum(1 for route in routes if route is not ClearRoute.KEEP)
