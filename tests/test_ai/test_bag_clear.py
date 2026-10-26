@@ -146,12 +146,15 @@ def test_a_new_stack_with_a_free_slot_fits(gd: GameData) -> None:
     assert not needs_slot([_craft(gd)], state, gd)
 
 
-def test_the_walk_stops_at_a_fight(gd: GameData) -> None:
-    """Past a fight the modelled loot is optimistic, so a craft behind it is
-    not judged; the fight's own room is `refused_fight`'s."""
-    state = scenario_state(_r2d2(), gd)
+def test_the_walk_stops_at_a_fight(gd: GameData, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fight's modelled loot (one of every drop: four new stacks for a
+    chicken) is optimistic, so the walk stops there instead of judging it, or
+    the craft behind it; the fight's own room is `refused_fight`'s."""
+    state = scenario_state(_r2d2(slots_max=21), gd)
+    monkeypatch.setattr(FightAction, "is_applicable", lambda self, s, g: True)
     fight = FightAction(monster_code="chicken", locations=frozenset({(0, 1)}),
                         learned_drops=LearnedDrops.empty())
+    assert len(fight.apply(state, gd).inventory) > state.inventory_slots_max  # the optimism
     assert not needs_slot([fight, _craft(gd)], state, gd)
 
 
@@ -393,7 +396,8 @@ def test_a_slot_decline_the_emptied_bag_cannot_serve_is_not_cleared(gd: GameData
                                       player._selection_context()) is None
 
 
-def test_a_search_on_a_full_bag_is_asked_with_room(gd: GameData) -> None:
+def test_a_search_on_a_full_bag_is_asked_with_room(gd: GameData,
+                                                  monkeypatch: pytest.MonkeyPatch) -> None:
     """A* found nothing on a bag with no free slot: the roomy plan is asked."""
     player, goal = _climb(gd)
     assert player.state is not None
@@ -409,6 +413,17 @@ def test_a_search_on_a_full_bag_is_asked_with_room(gd: GameData) -> None:
     roomier = replace(player.state, inventory_slots_max=21)
     assert arbiter._slot_blocked_plan(goal, roomier, gd, player._build_actions(),
                                       player._selection_context()) is None
+    # ...even when the emptied-bag plan would need more slots than the one
+    # free: an empty search re-asks only a bag with NO free slot (the extra
+    # search is bounded to the bag the clear exists for).
+    two = [WithdrawItemAction(code="steel_bar", quantity=1, bank_location=gd.bank_location()),
+           WithdrawItemAction(code="iron_bar", quantity=1, bank_location=gd.bank_location())]
+    stocked = replace(roomier, bank_items={"steel_bar": 1, "iron_bar": 1})
+    assert needs_slot(two, stocked, gd)
+    monkeypatch.setattr(arbiter, "_plans", lambda *a, **k: two)
+    assert arbiter._slot_blocked_plan(goal, stocked, gd, player._build_actions(),
+                                      player._selection_context()) is None
+    monkeypatch.undo()
     # A slot decline whose emptied-bag plan fits the real bag is no slot block.
     arbiter._attempt_searched = False
     arbiter._attempt_declined = ["bag_overflow:qty=1/1:slots=1/1"]
