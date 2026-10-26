@@ -1,5 +1,5 @@
 """Differential test: the real Python pure core
-`artifactsmmo_cli.ai.bag_clear_core` (`clear_route`, `slots_freed`) must agree
+`artifactsmmo_cli.ai.bag_clear_core` (`clear_route`, and the count of stacks that leave) must agree
 with the proved Lean core `Formal.BagClear` (`clearRoute`, `freed`) on EVERY
 row (Task 13e: a full bag frees every slot the plan does not use).
 
@@ -11,7 +11,7 @@ from itertools import product
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.bag_clear_core import ClearRoute, clear_route, slots_freed
+from artifactsmmo_cli.ai.bag_clear_core import ClearRoute, clear_route
 from formal.diff.oracle_client import run_oracle
 
 _CODE = {ClearRoute.KEEP: 0, ClearRoute.DEPOSIT: 1, ClearRoute.DISPOSE: 2}
@@ -29,7 +29,9 @@ def _lean(bag: list[Row]) -> tuple[list[int], int]:
 
 def _python(bag: list[Row]) -> tuple[list[int], int]:
     routes = [clear_route(*row) for row in bag]
-    return [_CODE[r] for r in routes], slots_freed(routes)
+    # A slot frees per stack that leaves: the adapter's construction (one
+    # deposit for the DEPOSIT stacks, one action per DISPOSE stack).
+    return [_CODE[r] for r in routes], sum(1 for r in routes if r is not ClearRoute.KEEP)
 
 
 def test_every_single_stack_input_matches_lean() -> None:

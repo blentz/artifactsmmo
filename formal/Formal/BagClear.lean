@@ -1,8 +1,9 @@
 -- @concept: inventory, slot-room @property: safety, dominance, liveness
 /-
 Formal model of the full-bag clear's per-stack route, extracted from
-`src/artifactsmmo_cli/ai/bag_clear_core.py` (`ClearRoute`, `clear_route`,
-`slots_freed`) — Task 13e of the global gear objective, plan B (USER
+`src/artifactsmmo_cli/ai/bag_clear_core.py` (`ClearRoute`, `clear_route`),
+and of the slots the adapter (`ai/bag_clear.clear_actions`) frees — Task 13e
+of the global gear objective, plan B (USER
 2026-10-25: "free up all in-use inventory slots that aren't related to the
 current plan, then retry the plan once the full inventory state is cleared").
 
@@ -45,7 +46,9 @@ abbrev Row := Bool × Bool × Bool
 /-- Whether the stack leaves the bag (its route is not KEEP). -/
 def leaves (r : Row) : Bool := clearRoute r.1 r.2.1 r.2.2 != Route.keep
 
-/-- Slots the clear frees: one per stack that leaves. Mirrors `slots_freed`. -/
+/-- Slots the clear frees: one per stack that leaves. The adapter banks the
+    DEPOSIT stacks in one DepositAll and gives each DISPOSE stack its own
+    action, so it frees exactly this many. -/
 def freed : List Row → Nat
   | [] => 0
   | r :: rs => (if leaves r then 1 else 0) + freed rs

@@ -2102,9 +2102,6 @@ BAG_CLEAR_CORE_MUTATIONS = [
     ("bag clear: an unlicensed stack is disposed of",
      "        return ClearRoute.DISPOSE\n    return ClearRoute.KEEP\n",
      "        return ClearRoute.DISPOSE\n    return ClearRoute.DISPOSE\n"),
-    ("bag clear: only deposits count as freed",
-     "    return sum(1 for route in routes if route is not ClearRoute.KEEP)",
-     "    return sum(1 for route in routes if route is ClearRoute.DEPOSIT)"),
 ]
 BAG_CLEAR_MUTATIONS = [
     ("bag clear: the slot walk judges past a fight",
@@ -2131,9 +2128,6 @@ BAG_CLEAR_MUTATIONS = [
     ("bag clear: a partial disposal counts as a cleared slot",
      "    if code in action.apply(state, game_data).inventory:",
      "    if False:"),
-    ("bag clear: a clear that frees nothing is still returned",
-     "    if not slots_freed(routes):\n        return []\n",
-     ""),
 ]
 BAG_CLEAR_ARBITER_MUTATIONS = [
     ("bag clear: the server's 497 is ignored",

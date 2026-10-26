@@ -37,7 +37,7 @@ from collections.abc import Sequence
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-from artifactsmmo_cli.ai.bag_clear_core import ClearRoute, clear_route, slots_freed
+from artifactsmmo_cli.ai.bag_clear_core import ClearRoute, clear_route
 from artifactsmmo_cli.ai.disposal_route import overstock_disposal
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_in_bag
@@ -141,17 +141,18 @@ def clear_actions(state: WorldState, game_data: GameData, actions: Sequence[Acti
     # bankable — this clear then has nothing to bank, and the deposit is dropped.)
     taken = {code for code in held if code not in related and code not in banked.inventory}
     current = banked if taken else state
-    routes: list[ClearRoute] = []
     disposals: list[Action] = []
     for code in held:
         disposal = (None if code in related or code in taken
                     else _whole_disposal(code, current, game_data, ctx))
-        routes.append(clear_route(code in related, code in taken, disposal is not None))
-        if disposal is not None:
+        route = clear_route(code in related, code in taken, disposal is not None)
+        if route is ClearRoute.DISPOSE:
+            assert disposal is not None  # clear_route: DISPOSE => disposable
             disposals.append(disposal)
             current = disposal.apply(current, game_data)
-    if not slots_freed(routes):
-        return []
+    # One slot frees per stack whose route is not KEEP (`Formal.BagClear.freed`):
+    # the taken stacks ride the deposit, the disposed ones their own actions, so
+    # a clear that frees nothing is the empty list.
     if not taken:
         return disposals
     assert deposit is not None  # `taken` is read off the deposit's own state

@@ -33,7 +33,6 @@ from artifactsmmo_cli.ai.bag_clear_core import (
     BAG_FULL_ALL_RELATED,
     ClearRoute,
     clear_route,
-    slots_freed,
 )
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.game_data import GameData
@@ -118,12 +117,6 @@ def test_a_bank_refusal_disposes_of_a_licensed_stack() -> None:
 
 def test_an_unmovable_unrelated_stack_stays() -> None:
     assert clear_route(False, False, False) is ClearRoute.KEEP
-
-
-def test_slots_freed_counts_the_stacks_that_leave() -> None:
-    routes = [ClearRoute.KEEP, ClearRoute.DEPOSIT, ClearRoute.DISPOSE, ClearRoute.KEEP]
-    assert slots_freed(routes) == 2
-    assert slots_freed([ClearRoute.KEEP]) == 0
 
 
 # --------------------------------------------------------------------------
