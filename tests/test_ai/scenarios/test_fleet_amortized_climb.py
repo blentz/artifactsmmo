@@ -271,7 +271,7 @@ def test_the_role_releases_at_the_demanded_level(fleet) -> None:  # type: ignore
     ana._update_coordination(ana.state, gd)
     assert ana._role == "logger"
     ana.plan_from_state()
-    roots = {fleet_piece_root(piece, ana.state, ana._last_ctx)
+    roots = {fleet_piece_root(piece, ana.state, gd, ana._last_ctx)
              for piece in ana._last_ctx.fleet_pieces}
     assert roots and not any(isinstance(root, ReachSkillLevel) for root in roots)
 

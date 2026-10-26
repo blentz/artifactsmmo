@@ -39,6 +39,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
+from artifactsmmo_cli.ai.tool_objective import tool_first
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -66,7 +67,7 @@ def piece_target(piece: GearPiece, objective: CharacterObjective, state: WorldSt
     return GearTarget(code=piece.code, attainable=False, blocker=piece.code)
 
 
-def fleet_piece_root(piece: FleetPiece, state: WorldState,
+def fleet_piece_root(piece: FleetPiece, state: WorldState, game_data: GameData,
                      ctx: SelectionContext) -> MetaGoal:
     """The step a fleet piece (§2.5) asks of the crafter now: the next level of
     its craft skill while the gate is unmet (+1, as `IsThisTargetBlocked`
@@ -77,7 +78,8 @@ def fleet_piece_root(piece: FleetPiece, state: WorldState,
     step, so a crafter whose only work is the fleet's never idles on it)."""
     current = state.skills[piece.skill]
     if current < piece.level:
-        return ReachSkillLevel(skill=piece.skill, level=current + 1)
+        return tool_first(ReachSkillLevel(skill=piece.skill, level=current + 1),
+                          state, game_data, ctx)
     target = ctx.supply_target
     if target is not None and target[0] == piece.code and supply_due(ctx):
         return ReachFleetOutcome(FLEET_SUPPLY, piece.code)
@@ -169,7 +171,7 @@ class WhichPieceIsNext(Decision[MetaGoal]):
             raise ValueError(f"gear objective names {unknown!r}, absent from game data")
         for piece in pursuit_order(target, fleet, state, game_data, ctx, history):
             if isinstance(piece, FleetPiece):
-                root = fleet_piece_root(piece, state, ctx)
+                root = fleet_piece_root(piece, state, game_data, ctx)
                 reason = self.walk.step_decline(root)
                 if reason is None:
                     return root

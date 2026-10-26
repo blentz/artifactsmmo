@@ -130,6 +130,7 @@ from artifactsmmo_cli.ai.tiers.objective import (
 from artifactsmmo_cli.ai.tiers.progression_tree_core import milestone_pure
 from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, tier_of_level
 from artifactsmmo_cli.ai.tiers.tier_progress import next_uncleared_tier
+from artifactsmmo_cli.ai.tool_objective import tool_first
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
 
@@ -758,8 +759,9 @@ class IsThisTargetBlocked(Decision[MetaGoal]):
             # `decisions/obtain_item.CanICraftCurrentTier`, and it reads the
             # character's skills the same way that site does.
             current = state.skills.get(self.target.blocking_skill, 1)
-            return ReachSkillLevel(skill=self.target.blocking_skill,
-                                   level=current + 1)
+            return tool_first(
+                ReachSkillLevel(skill=self.target.blocking_skill, level=current + 1),
+                state, game_data, ctx)
         if self.target.blocker is None:
             return ObtainItem(code=self.target.code, quantity=1, slot=self.slot)
         if self.target.blocker == self.target.code:
@@ -962,7 +964,7 @@ def resolve_root(state: WorldState, game_data: GameData,
         if not piece.awaits_delivery(state)
     ]
     fleet = ctx.fleet_pieces if target is not None else ()
-    ordered.extend(_which_piece.fleet_piece_root(piece, state, ctx) for piece in fleet)
+    ordered.extend(_which_piece.fleet_piece_root(piece, state, game_data, ctx) for piece in fleet)
     trunk = _which_piece.next_level(state, game_data)
     if target is not None and target.held and not fleet and trunk is not None:
         ordered.append(trunk)

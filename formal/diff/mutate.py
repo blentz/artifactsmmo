@@ -478,6 +478,7 @@ DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decision.py"
 OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "obtain_item.py"
 ROOT_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "root.py"
 CURRENCY_WALL_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "currency_wall_census.py"
+TOOL_OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tool_objective.py"
 WHICH_PIECE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "which_piece_is_next.py"
 GEAR_OBJECTIVE_RESULT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective_result.py"
 TUI_APP_SRC = ROOT / "src" / "artifactsmmo_cli" / "tui" / "app.py"
@@ -5234,10 +5235,9 @@ ROOT_DECISION_MUTATIONS = [
      "            return ObtainItem(code=self.target.code, quantity=1, slot=self.slot)\n"
      "        if self.target.blocking_skill is not None:\n"),
     ("root: the skill-gated arm demands the whole climb instead of +1",
-     "            return ReachSkillLevel(skill=self.target.blocking_skill,\n"
-     "                                   level=current + 1)\n",
-     "            return ReachSkillLevel(skill=self.target.blocking_skill,\n"
-     "                                   level=self.target.blocking_skill_level)\n"),
+     "                ReachSkillLevel(skill=self.target.blocking_skill, level=current + 1),\n",
+     "                ReachSkillLevel(skill=self.target.blocking_skill,\n"
+     "                                level=self.target.blocking_skill_level),\n"),
     ("root: the material-gated arm asks for ONE unit instead of the recipe's"
      " quantity",
      "        return ObtainItem(code=self.target.blocker,\n"
@@ -6461,6 +6461,39 @@ FLEET_CLIMB_ROUTE_MUTATIONS = [
     ("fleet climb route: a sibling-crafted piece is served by its own craft",
      "    if route.kind == SourceKind.CRAFT.value and route.venue == BANK_VENUE:",
      "    if False:"),
+]
+# Plan B Task 8: a skill climb first fetches its best tool.
+# Killed by tests/test_ai/test_tool_objective.py.
+TOOL_OBJECTIVE_MUTATIONS = [
+    ("tool_objective: the owned check is removed (an owned best tool is fetched again)",
+     "        if held:\n            return None\n",
+     "        if held and False:\n            return None\n"),
+    ("tool_objective: the tool step is skipped (the climb is never preceded)",
+     "    tool = tool_target(climb.skill, state, game_data, ctx)\n",
+     "    tool = None\n"),
+    ("tool_objective: an unachievable tool is targeted",
+     "        if model.feasible(code, 1, PIECE_POLICY):\n",
+     "        if True:\n"),
+    ("tool_objective: a tool above the character's level qualifies",
+     "if stats.level <= state.level and", "if stats.level <= state.level + 5 and"),
+    ("tool_objective: the smallest effect wins",
+     "candidates.sort(key=lambda row: row[:3], reverse=True)",
+     "candidates.sort(key=lambda row: row[:3])"),
+    ("tool_objective: a tool with no effect on the skill qualifies",
+     "tool_value(stats, skill) > 0]", "tool_value(stats, skill) >= 0]"),
+    ("tool_objective: a banked tool is not owned",
+     "                     | {code for code, n in bank.items() if n > 0})\n\n\ndef tool_target",
+     "                     )\n\n\ndef tool_target"),
+]
+TOOL_OBJECTIVE_ROOT_MUTATIONS = [
+    ("root: a gear target's skill climb ignores the tool",
+     "            return tool_first(\n                ReachSkillLevel(skill=self.target.blocking_skill, level=current + 1),\n                state, game_data, ctx)\n",
+     "            return ReachSkillLevel(skill=self.target.blocking_skill, level=current + 1)\n"),
+]
+TOOL_OBJECTIVE_FLEET_MUTATIONS = [
+    ("which_piece_is_next: a fleet piece's climb ignores the tool",
+     "        return tool_first(ReachSkillLevel(skill=piece.skill, level=current + 1),\n                          state, game_data, ctx)\n",
+     "        return ReachSkillLevel(skill=piece.skill, level=current + 1)\n"),
 ]
 FLEET_PIECE_WALK_MUTATIONS = [
     ("fleet pieces: a held crafter grinds whatever the fleet waits on",
@@ -13191,6 +13224,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_coordination_store.py", survivors)
     run_group(ACQUISITION_COST_SRC, FLEET_CLIMB_ROUTE_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(TOOL_OBJECTIVE_SRC, TOOL_OBJECTIVE_MUTATIONS,
+              "tests/test_ai/test_tool_objective.py", survivors)
+    run_group(ROOT_DECISION_SRC, TOOL_OBJECTIVE_ROOT_MUTATIONS,
+              "tests/test_ai/test_tool_objective.py", survivors)
+    run_group(WHICH_PIECE_SRC, TOOL_OBJECTIVE_FLEET_MUTATIONS,
+              "tests/test_ai/test_tool_objective.py", survivors)
     run_group(WHICH_PIECE_SRC, FLEET_PIECE_WALK_MUTATIONS,
               "tests/test_ai/test_decisions_which_piece.py", survivors)
     run_group(ROOT_DECISION_SRC, FLEET_PIECE_ROOT_MUTATIONS,
