@@ -409,8 +409,10 @@ def test_a_search_on_a_full_bag_is_asked_with_room(gd: GameData,
     assert intended is not None and isinstance(intended[0], WithdrawItemAction)
     # ...and asked quietly: no attempt record, no event.
     assert arbiter.goals_tried == [] and arbiter.events.drain() == []
-    # A search on a bag WITH a free slot is not a slot block.
+    # A search on a bag WITH a free slot is not a slot block. (Each ask re-arms
+    # the attempt's facts: the quiet roomy ask is itself an attempt of `_plans`.)
     roomier = replace(player.state, inventory_slots_max=21)
+    arbiter._attempt_declined, arbiter._attempt_searched = [], True
     assert arbiter._slot_blocked_plan(goal, roomier, gd, player._build_actions(),
                                       player._selection_context()) is None
     # ...even when the emptied-bag plan would need more slots than the one
@@ -421,6 +423,7 @@ def test_a_search_on_a_full_bag_is_asked_with_room(gd: GameData,
     stocked = replace(roomier, bank_items={"steel_bar": 1, "iron_bar": 1})
     assert needs_slot(two, stocked, gd)
     monkeypatch.setattr(arbiter, "_plans", lambda *a, **k: two)
+    arbiter._attempt_declined, arbiter._attempt_searched = [], True
     assert arbiter._slot_blocked_plan(goal, stocked, gd, player._build_actions(),
                                       player._selection_context()) is None
     monkeypatch.undo()
