@@ -273,9 +273,14 @@ def _cheapest_route(item: str, options: Mapping[str, list[RouteOption]],
 def _accumulate(item: str, qty: int, options: Mapping[str, list[RouteOption]],
                 memo: dict[str, tuple[int | Fraction, RouteOption | None]],
                 owned: dict[str, int], paid: dict[str, int],
-                actions: list[int], fuel: int, free: Mapping[str, int]) -> None:
+                actions: list[int], fuel: int, free: Mapping[str, int],
+                legs: list[tuple[str, RouteOption, int]] | None = None) -> None:
     """Walk the demand closure once, crediting holdings and collecting the
     PAY-ONCE keys the plan touches.
+
+    `legs`, when given, collects each route the walk takes as `(item, route,
+    units)`: the units of `item` that route must still deliver once holdings
+    are credited (`route_legs`). It changes no price.
 
     Holdings are consumed as they are credited, so a unit spent under one parent
     is not available to a sibling — the invariant that keeps this a bound on one
@@ -310,13 +315,15 @@ def _accumulate(item: str, qty: int, options: Mapping[str, list[RouteOption]],
     # Rounded up ONCE for the route's applications: an exact `Fraction` cost
     # (a fight for gold) pays its fraction of an action once, not per win.
     actions[0] += ceil(applications * route.actions_per_application)
+    if legs is not None:
+        legs.append((item, route, remaining))
     if route.venue:
         paid.setdefault(route.venue, 1)
     if route.unlock:
         paid.setdefault(route.unlock, route.unlock_actions)
     for material, per_application in sorted(route.inputs.items()):
         _accumulate(material, per_application * applications, options, memo,
-                    owned, paid, actions, fuel - 1, free)
+                    owned, paid, actions, fuel - 1, free, legs)
 
 
 def acquisition_cost(
@@ -375,6 +382,26 @@ def priced_route(
     # and a negative ceiling would turn that 0 into a negative price.
     return (_capped(actions[0] + sum(paid.values()), max(0, qty)),
             _cheapest_route(item, options, memo, frozenset(), free)[1])
+
+
+def route_legs(
+    item: str,
+    qty: int,
+    options: Mapping[str, list[RouteOption]],
+    owned: Mapping[str, int],
+    free_codes: frozenset[str] = frozenset(),
+) -> tuple[tuple[str, RouteOption, int], ...]:
+    """The routes `priced_route`'s walk takes to obtain `qty` of `item`, as
+    `(code, route, units)` in walk order: each code the plan must still
+    obtain once holdings are credited, the route it takes, and the units that
+    route delivers. The same walk, the same memo shape and the same holdings
+    rule as the price, so the legs are the price's own plan (spec 2026-10-18
+    §2.8: the drop work a prospecting tool is weighed against)."""
+    legs: list[tuple[str, RouteOption, int]] = []
+    memo: dict[str, tuple[int | Fraction, RouteOption | None]] = {}
+    free = {code: owned.get(code, 0) for code in free_codes}
+    _accumulate(item, qty, options, memo, dict(owned), {}, [0], len(options) + 1, free, legs)
+    return tuple(legs)
 
 
 def bundle_acquisition_cost(

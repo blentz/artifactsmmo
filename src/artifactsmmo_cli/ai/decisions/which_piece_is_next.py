@@ -39,7 +39,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
-from artifactsmmo_cli.ai.tool_objective import tool_first
+from artifactsmmo_cli.ai.tool_objective import drop_tool_first, tool_first
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -68,14 +68,20 @@ def piece_target(piece: GearPiece, objective: CharacterObjective, state: WorldSt
 
 
 def fleet_piece_root(piece: FleetPiece, state: WorldState, game_data: GameData,
-                     ctx: SelectionContext, walk: "_root.RootWalk") -> MetaGoal:
+                     ctx: SelectionContext, walk: "_root.RootWalk",
+                     history: LearningStore | None) -> MetaGoal:
     """The step a fleet piece (§2.5) asks of the crafter now: the next level of
     its craft skill while the gate is unmet (+1, as `IsThisTargetBlocked`
     climbs: the walk re-derives every cycle); once met, the supply run that
     banks it for the receivers when it is this cycle's due supply target
     (`fleet_work.supply_due`), else its craft — one unit made, which the
     supply run then banks (ruling T7d M3: a met gate is a craft, never no
-    step, so a crafter whose only work is the fleet's never idles on it)."""
+    step, so a crafter whose only work is the fleet's never idles on it).
+
+    The craft is the one arm that reaches drop work (its materials' gathers
+    and farms): the prospecting item that pays for itself on that work comes
+    first (`drop_tool_first`, §2.8), priced as the piece is (`PIECE_POLICY`).
+    A climb is skill XP and a supply run banks a made unit, so neither does."""
     current = state.skills[piece.skill]
     if current < piece.level:
         return tool_first(ReachSkillLevel(skill=piece.skill, level=current + 1),
@@ -83,7 +89,9 @@ def fleet_piece_root(piece: FleetPiece, state: WorldState, game_data: GameData,
     target = ctx.supply_target
     if target is not None and target[0] == piece.code and supply_due(ctx):
         return ReachFleetOutcome(FLEET_SUPPLY, piece.code)
-    return ObtainItem(piece.code, 1)
+    craft = ObtainItem(piece.code, 1)
+    work = _route.route_drop_work(craft, state, game_data, ctx, history, PIECE_POLICY)
+    return drop_tool_first(craft, work, state, game_data, ctx, walk.step_decline)
 
 
 def pursuit_order(target: GearObjective, fleet: tuple[FleetPiece, ...], state: WorldState,
@@ -128,8 +136,10 @@ class WhichPieceIsNext(Decision[MetaGoal]):
       served by the route that priced it (`piece_target`): a crafted piece's
       crafting-skill gate becomes the next skill level, a missing material its
       `ObtainItem`; a piece priced by any other route is its own
-      `ObtainItem`. A piece whose step is declined is recorded with its reason
-      and the next piece is asked, and so is a piece a sibling crafts for this
+      `ObtainItem`. Before it, the prospecting item that pays for itself on the
+      drop work the piece's route still holds (`drop_tool_first`, §2.8), unless
+      that item's step is declined. A piece whose step is declined is
+      recorded with its reason and the next piece is asked, and so is a piece a sibling crafts for this
       character (`GearPiece.awaits_delivery`, §2.5) until its copy is banked.
     * every piece declined (INTERIM, ruling AI): no gear action is available
       this cycle, so XP is the next action that best advances the character
@@ -171,7 +181,7 @@ class WhichPieceIsNext(Decision[MetaGoal]):
             raise ValueError(f"gear objective names {unknown!r}, absent from game data")
         for piece in pursuit_order(target, fleet, state, game_data, ctx, history):
             if isinstance(piece, FleetPiece):
-                root = fleet_piece_root(piece, state, game_data, ctx, self.walk)
+                root = fleet_piece_root(piece, state, game_data, ctx, self.walk, history)
                 reason = self.walk.step_decline(root)
                 if reason is None:
                     return root
@@ -185,7 +195,14 @@ class WhichPieceIsNext(Decision[MetaGoal]):
                 continue
             gear = piece_target(piece, self.objective, state)
             if self.walk.serves(piece.slot, gear, state, game_data, ctx, history):
-                return _root.IsThisTargetBlocked(piece.slot, gear, self.walk)
+                # Resolved here, not handed on, so the piece's step can yield to
+                # the prospecting item its route's drop work pays for (§2.8).
+                step = _root.IsThisTargetBlocked(piece.slot, gear, self.walk).resolve(
+                    state, game_data, ctx, history)
+                work = _route.route_drop_work(ObtainItem(piece.code, 1), state, game_data,
+                                              ctx, history, PIECE_POLICY)
+                return drop_tool_first(step, work, state, game_data, ctx,
+                                       self.walk.step_decline)
         if fleet:
             # Fleet demand this role serves is waiting, and none of its steps
             # can be served this cycle: no XP fight, so no root.

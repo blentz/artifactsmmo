@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.acquisition_cost_core import (
     RouteOption,
     bundle_acquisition_cost,
     priced_route,
+    route_legs,
 )
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
 from artifactsmmo_cli.ai.combat_deficit import combat_deficit
@@ -847,6 +848,48 @@ def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
         if _skill_gated(item, model, kind, policy) is not None:
             return price, kind
     return price, None
+
+
+_DROP_WORK = frozenset({SourceKind.GATHER.value, SourceKind.DROP.value})
+"""The route kinds whose work is attempts at a drop chance: a gather and a
+fight for an item drop. Prospecting raises that chance (spec 2026-10-18 §2.8);
+a fight for gold pays its range, not a chance, so it is no drop work."""
+
+
+def drop_work(item: str, qty: int, state: WorldState, game_data: GameData,
+              ctx: SelectionContext, store: LearningStore | None, *,
+              policy: Policy) -> tuple[tuple[str, str, int], ...]:
+    """The remaining drop work of the route that prices `qty` of `item`:
+    `(source, drop, units)` for every gather and drop-farm leg the walk takes
+    (`acquisition_cost_core.route_legs`), the source being the resource or the
+    monster attempted. The walk is `cheapest_route`'s own, over the same
+    options and holdings (the bag, plus the pocket's gold), so the work is the
+    work the price is made of."""
+    options = acquisition_options(item, state, game_data, ctx, store, policy=policy)
+    legs = route_legs(item, qty, options, _owned_with_gold(state, state.gold),
+                      frozenset({GOLD_CODE}))
+    return tuple((route.venue, code, units) for code, route, units in legs
+                 if route.kind in _DROP_WORK)
+
+
+def drop_work_actions(work: Sequence[tuple[str, str, int]], state: WorldState,
+                      game_data: GameData, ctx: SelectionContext) -> Fraction:
+    """Actions `work` (`drop_work`'s legs) takes at `state.prospecting`,
+    exact: each leg's units times the per-unit price its route has in the walk,
+    a farm's (`_drop_actions`) when a monster at the source drops the item,
+    else a gather's (`_gather_actions`). Both read the ONE drop model
+    (`ctx.drops()`), so a leg is priced as the walk prices a ready route of
+    its kind (a farm behind gear it lacks carries no loss surcharge there)."""
+    total = Fraction(0)
+    for source, item, units in work:
+        if any(code == source for code, *_row in game_data.monsters_dropping(item)):
+            rate, min_q, max_q = _drop_table(item, source, game_data)
+            per_unit = _drop_actions(item, source, rate, min_q, max_q, state, game_data,
+                                     ctx.timing(), ctx.drops(), ctx.fight_records)
+        else:
+            per_unit = _gather_actions(item, source, state, game_data, ctx.drops())
+        total += units * per_unit
+    return total
 
 
 def _served_by(route: RouteOption) -> SourceKind:

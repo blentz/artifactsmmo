@@ -38,7 +38,7 @@ never appear inside a `sorted(...)` key over an unbounded list.
 
 from math import ceil
 
-from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
+from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, drop_work
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.fight_walk import walk_seconds
@@ -102,6 +102,17 @@ def route_is_acquirable(goal: MetaGoal, state: WorldState, game_data: GameData,
     `ai/decisions/` rather than a second import of the cost model.
     """
     return route_price(goal, state, game_data, ctx, history) < UNOBTAINABLE_PER_UNIT
+
+
+def route_drop_work(goal: ObtainItem, state: WorldState, game_data: GameData,
+                    ctx: SelectionContext, history: LearningStore | None,
+                    policy: Policy) -> tuple[tuple[str, str, int], ...]:
+    """The remaining drop work `(source, item, units)` of the route
+    `route_price` prices `goal` by under `policy` (`acquisition_cost.drop_work`,
+    spec 2026-10-18 §2.8): what a prospecting tool is weighed against. A
+    FORWARDER through this funnel, as `route_price` is, so a `Decision` reads
+    the price's own legs and never imports the cost model (O6)."""
+    return drop_work(goal.code, goal.quantity, state, game_data, ctx, history, policy=policy)
 
 
 def route_price(goal: MetaGoal, state: WorldState, game_data: GameData,

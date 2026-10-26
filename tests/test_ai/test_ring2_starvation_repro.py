@@ -26,13 +26,13 @@ from artifactsmmo_cli.ai.scenario import (
     ScenarioCharacter,
     scenario_state,
 )
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
@@ -126,7 +126,9 @@ def test_without_a_yield_the_stuck_drop_root_heads_every_cycle() -> None:
     state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
     pieces = (GearPiece("helmet_slot", "wolf_ears", 0, Fraction(1), Fraction(1), SourceKind.DROP),
               GearPiece("ring2_slot", "iron_ring", 0, Fraction(1), Fraction(1), SourceKind.CRAFT))
-    ctx = replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+    # Timed and with the drop prior (`offline_context`): the walk prices the
+    # chosen piece's drop work against a prospecting tool (plan B Task 12b).
+    ctx = replace(TIMED_NO_PROFILE_CONTEXT, gear_objective=GearObjective(
         "chicken", {p.slot: p.code for p in pieces}, Fraction(1), pieces))
     engine = StrategyEngine(objective)
     picks = {engine.decide(state, gd, ctx=ctx).chosen_root for _ in range(30)}

@@ -972,7 +972,8 @@ def resolve_root(state: WorldState, game_data: GameData,
         if not piece.awaits_delivery(state)
     ]
     fleet = ctx.fleet_pieces if target is not None else ()
-    ordered.extend(_which_piece.fleet_piece_root(piece, state, game_data, ctx, walk) for piece in fleet)
+    ordered.extend(_which_piece.fleet_piece_root(piece, state, game_data, ctx, walk, history)
+                   for piece in fleet)
     trunk = _which_piece.next_level(state, game_data)
     if target is not None and target.held and not fleet and trunk is not None:
         ordered.append(trunk)

@@ -35,6 +35,8 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     acquisition_options,
     bundle_acquisition_actions,
     cheapest_route,
+    drop_work,
+    drop_work_actions,
     npc_price_of,
     route_options,
 )
@@ -1633,3 +1635,20 @@ def test_a_produced_item_is_priced_only_by_making_it() -> None:
     assert kinds(frozenset()) == every
     assert kinds(frozenset({"copper_bar"})) == {**every, "copper_bar": ["craft"]}
     assert kinds(frozenset({"copper_ore"})) == {**every, "copper_ore": ["gather"]}
+
+
+def test_drop_work_is_the_walks_gathers_and_farms_priced_by_their_route(
+        state, game_data) -> None:
+    """`drop_work` lists the gather and drop-farm legs the price walks, after
+    holdings; `drop_work_actions` prices a farm leg as the walk's DROP route
+    (wins at the learned chance times one win's actions) and a gather leg as
+    its GATHER route. A route with no drop work lists none."""
+    assert drop_work("feather", 2, state, game_data, TIMED_NO_PROFILE_CONTEXT, None,
+                     policy=LEGACY) == (("chicken", "feather", 2),)
+    assert drop_work("copper_helmet", 2, state, game_data, TIMED_NO_PROFILE_CONTEXT, None,
+                     policy=LEGACY) == (("copper_rocks", "copper_ore", 119),)
+    win = _kill_actions("chicken", state, game_data, TIMED_NO_PROFILE_CONTEXT.timing(), ())
+    assert drop_work_actions((("chicken", "feather", 3),), state, game_data,
+                             TIMED_NO_PROFILE_CONTEXT) == 3 * 8 * win
+    assert drop_work_actions((("copper_rocks", "copper_ore", 119),), state, game_data,
+                             TIMED_NO_PROFILE_CONTEXT) == 119

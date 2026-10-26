@@ -158,16 +158,18 @@ def test_no_objective_is_the_wall() -> None:
 
 
 def test_the_node_reads_only_the_context_objective() -> None:
-    """The node itself: a missing piece resolves to `IsThisTargetBlocked` on
-    the same walk, held to the next level, none to None."""
+    """The node itself: a missing piece resolves through `IsThisTargetBlocked`
+    on the same walk to the piece's step (resolved in the node, so a
+    prospecting item can precede its drop work: plan B Task 12b), held to the
+    next level, none to None."""
     gd = _gd()
     objective = CharacterObjective.from_game_data(gd)
     state = make_state(level=15)
     walk = RootWalk()
     child = WhichPieceIsNext(objective, walk).resolve(
         state, gd, replace(_ctx(), gear_objective=_missing(CLUB)), None)
-    assert isinstance(child, IsThisTargetBlocked) and child.walk is walk
-    assert (child.slot, child.target.code) == ("weapon_slot", "ash_club")
+    assert child == ObtainItem("ash_club", 1, slot="weapon_slot")
+    assert walk.trail == ["WhichPieceIsNext", "IsThisTargetBlocked"]
     assert WhichPieceIsNext(objective, RootWalk()).resolve(
         state, gd, replace(_ctx(), gear_objective=_missing()), None) == ReachCharLevel(16)
     assert WhichPieceIsNext(objective, RootWalk()).resolve(
