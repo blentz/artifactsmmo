@@ -64,3 +64,10 @@ class Mechanism(StrEnum):
     # per-process re-probe memo it replaced) is retired; its value stays in
     # `decision_events` history and must not be reused.
     REFUSAL_FACT = "refusal_fact"
+    # The full-bag clear (Task 13e; subject: the goal repr). BAG_CLEAR: the
+    # goal's plan needed a slot it did not have (or the last action drew HTTP
+    # 497), so every unrelated stack leaves first and the goal is re-planned;
+    # detail: the cleared codes. BAG_FULL_ALL_RELATED: the clear can free no
+    # slot; detail: the held and related stack counts.
+    BAG_CLEAR = "bag_clear"
+    BAG_FULL_ALL_RELATED = "bag_full_all_related"

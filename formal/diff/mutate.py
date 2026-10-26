@@ -441,6 +441,9 @@ CONSUMABLE_PRICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_pr
 LOOP_RATE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate_core.py"
 LOOP_RATE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate.py"
 FIGHT_ROOM_LICENSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_room_license.py"
+# Task 13e: the full-bag clear (pure core + adapter).
+BAG_CLEAR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bag_clear_core.py"
+BAG_CLEAR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bag_clear.py"
 REST_FIRST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "rest_first_core.py"
 REST_FIRST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "rest_first.py"
 BEST_LOADOUT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "best_loadout_core.py"
@@ -2085,6 +2088,77 @@ FIGHT_ROOM_ARBITER_MUTATIONS = [
     ("fight room: the trace does not name the refusal",
      "            \"fight_no_room\": refused_fight(ctx),",
      "            \"fight_no_room\": None,"),
+]
+# Task 13e (USER 2026-10-25): a full bag frees every slot the plan does not
+# use, then retries. The core is killed by its Lean differential; the adapter,
+# the arbiter seam and the player wiring by tests/test_ai/test_bag_clear.py.
+BAG_CLEAR_CORE_MUTATIONS = [
+    ("bag clear: a related stack may be shed",
+     "    if related:\n        return ClearRoute.KEEP\n",
+     "    if False:\n        return ClearRoute.KEEP\n"),
+    ("bag clear: disposal before the bank",
+     "    if bank_takes:\n        return ClearRoute.DEPOSIT\n",
+     "    if bank_takes and not disposable:\n        return ClearRoute.DEPOSIT\n"),
+    ("bag clear: an unlicensed stack is disposed of",
+     "        return ClearRoute.DISPOSE\n    return ClearRoute.KEEP\n",
+     "        return ClearRoute.DISPOSE\n    return ClearRoute.DISPOSE\n"),
+    ("bag clear: only deposits count as freed",
+     "    return sum(1 for route in routes if route is not ClearRoute.KEEP)",
+     "    return sum(1 for route in routes if route is ClearRoute.DEPOSIT)"),
+]
+BAG_CLEAR_MUTATIONS = [
+    ("bag clear: the slot walk judges past a fight",
+     "        if isinstance(action, FightAction):\n            return False\n",
+     "        if False:\n            return False\n"),
+    ("bag clear: the slot walk is slot-blind",
+     "        if not has_room(nxt.inventory_slots_used - current.inventory_slots_used,",
+     "        if not has_room(0,"),
+    ("bag clear: the keep authority is not related",
+     "            if qty > 0 and keep_in_bag(code, state, game_data, ctx) > 0}",
+     "            if qty > 0 and False}"),
+    ("bag clear: the root closure is not related",
+     "    return (plan_codes(plan, state, game_data) | closure | frozenset(kept)",
+     "    return (plan_codes(plan, state, game_data) | frozenset(kept)"),
+    ("bag clear: the plan's own codes are not related",
+     "    return (plan_codes(plan, state, game_data) | closure | frozenset(kept)",
+     "    return (closure | frozenset(kept)"),
+    ("bag clear: the deposit banks the related stacks too",
+     "            profile[code] = max(profile.get(code, 0), qty)",
+     "            pass"),
+    ("bag clear: disposal ignores the ownership keep",
+     "    if destroyable(code, state, game_data, ctx) < held:",
+     "    if False:"),
+    ("bag clear: a partial disposal counts as a cleared slot",
+     "    if code in action.apply(state, game_data).inventory:",
+     "    if False:"),
+    ("bag clear: a clear that frees nothing is still returned",
+     "    if not slots_freed(routes):\n        return []\n",
+     ""),
+]
+BAG_CLEAR_ARBITER_MUTATIONS = [
+    ("bag clear: the server's 497 is ignored",
+     "        if not (doomed or ctx.bag_refused):",
+     "        if not doomed:"),
+    ("bag clear: the predicted slot need is ignored",
+     "        if not (doomed or ctx.bag_refused):",
+     "        if not ctx.bag_refused:"),
+    ("bag clear: a doomed plan is retried after the verdict",
+     "            return [] if doomed else plan",
+     "            return plan"),
+    ("bag clear: the verdict is not named on the arbiter",
+     "            self.last_bag_verdict = BAG_FULL_ALL_RELATED\n",
+     ""),
+    ("bag clear: the original goal is not retried after the clear",
+     "        return [*clear, *retry]",
+     "        return clear"),
+]
+BAG_CLEAR_PLAYER_MUTATIONS = [
+    ("bag clear: the player never reads the 497",
+     "            bag_refused=self._last_outcome == BAG_FULL_OUTCOME,",
+     "            bag_refused=False,"),
+    ("bag clear: the verdict is not logged",
+     "        if self._arbiter.last_bag_verdict is not None:\n            print(",
+     "        if False:\n            print("),
 ]
 FIGHT_ROOM_PLAYER_MUTATIONS = [
     ("fight room: a cached fight the last cycle refused is reused",
@@ -8543,6 +8617,7 @@ _ALL_SRCS = [
     FIGHT_TERMS_CORE_SRC, FIGHT_OUTCOME_CORE_SRC, FIGHT_ODDS_CORE_SRC, GROUP_FIGHT_CORE_SRC,
     CONSUMABLE_PRICE_CORE_SRC, CONSUMABLE_PRICE_SRC, LOOP_RATE_CORE_SRC, LOOP_RATE_SRC,
     FIGHT_ROOM_LICENSE_SRC,
+    BAG_CLEAR_CORE_SRC, BAG_CLEAR_SRC,
     FIGHT_SECONDS_CORE_SRC, FIGHT_SECONDS_MODEL_SRC, DROP_CHANCE_CORE_SRC, DROP_OBSERVATIONS_SRC,
     LEARNED_DROPS_SRC, DROP_FIGHT_SELECTION_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
@@ -12522,6 +12597,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_inventory_keep.py", survivors)
     run_group(PROJECTION_SRC, BAG_CAP_PROJECTION_MUTATIONS,
               "tests/test_ai/test_equipment_projection.py", survivors)
+    run_group(BAG_CLEAR_CORE_SRC, BAG_CLEAR_CORE_MUTATIONS,
+              "formal/diff/test_bag_clear_diff.py", survivors)
+    run_group(BAG_CLEAR_SRC, BAG_CLEAR_MUTATIONS,
+              "tests/test_ai/test_bag_clear.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, BAG_CLEAR_ARBITER_MUTATIONS,
+              "tests/test_ai/test_bag_clear.py", survivors)
+    run_group(PLAYER_SRC, BAG_CLEAR_PLAYER_MUTATIONS,
+              "tests/test_ai/test_bag_clear.py", survivors)
     run_group(FIGHT_ROOM_LICENSE_SRC, FIGHT_ROOM_LICENSE_MUTATIONS,
               "tests/test_ai/test_fight_room_license.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, FIGHT_ROOM_ARBITER_MUTATIONS,

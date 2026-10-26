@@ -1250,6 +1250,24 @@ def runInventoryRoom (args : Array Json) : Json :=
   Json.mkObj [("has_room",
     Json.bool (InventoryRoom.hasRoom newStacks addedQty slotsFree qtyFree))]
 
+/-- Compute one bag_clear result using the SAME proved
+`Formal.BagClear.clearRoute` / `freed`. args: `[n, r0, b0, d0, ...]`, each fact
+0/1 (`related`, `bankTakes`, `disposable` per held stack). Emits the per-stack
+route (`0` = KEEP, `1` = DEPOSIT, `2` = DISPOSE, the Python `ClearRoute`
+encoding in the differential) and the slots freed. -/
+def runBagClear (args : Array Json) : Json :=
+  let n := (intArg args 0).toNat
+  let rows : List Formal.BagClear.Row := (List.range n).map (fun k =>
+    let base := 1 + 3 * k
+    (intArg args base != 0, intArg args (base + 1) != 0, intArg args (base + 2) != 0))
+  let code (r : Formal.BagClear.Row) : Int :=
+    match Formal.BagClear.clearRoute r.1 r.2.1 r.2.2 with
+    | Formal.BagClear.Route.keep => 0
+    | Formal.BagClear.Route.deposit => 1
+    | Formal.BagClear.Route.dispose => 2
+  Json.mkObj [("routes", Json.arr ((rows.map (fun r => Json.num (code r))).toArray)),
+              ("freed", Json.num (Int.ofNat (Formal.BagClear.freed rows)))]
+
 /-- The keep-reason contribution vector, flattened the same way as the other
 variable-length keys: `args = [bag, bank, N, q0, q1, ..., q(N-1)]` where each
 `qi` is ONE registry reason's quantity, computed by the REAL Python
@@ -3196,6 +3214,8 @@ def runOne (item : Json) : Json :=
     runGatherApply args
   else if kind == "inventory_room" then
     runInventoryRoom args
+  else if kind == "bag_clear" then
+    runBagClear args
   else if kind == "keep_in_bag" then
     runKeepInBag args
   else if kind == "keep_owned" then

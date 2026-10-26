@@ -1086,6 +1086,17 @@ open Formal.PriorityBand
 #print axioms InventoryRoom.hasRoom_no_slot_witness
 #print axioms InventoryRoom.hasRoom_no_qty_witness
 #print axioms InventoryRoom.hasRoom_grow_full_slots_witness
+#print axioms Formal.BagClear.related_never_shed
+#print axioms Formal.BagClear.dispose_only_when_bank_refuses
+#print axioms Formal.BagClear.deposit_before_dispose
+#print axioms Formal.BagClear.all_related_frees_none
+#print axioms Formal.BagClear.unrelated_bankable_frees
+#print axioms Formal.BagClear.route_keep_witness
+#print axioms Formal.BagClear.route_deposit_witness
+#print axioms Formal.BagClear.route_dispose_witness
+#print axioms Formal.BagClear.route_stuck_witness
+#print axioms Formal.BagClear.all_related_witness
+#print axioms Formal.BagClear.frees_witness
 #print axioms Formal.OptimalBuyMix.cost_zero
 #print axioms Formal.OptimalBuyMix.cost_mono
 #print axioms Formal.OptimalBuyMix.result_feasible

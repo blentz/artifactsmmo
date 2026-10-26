@@ -51,6 +51,7 @@ from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
 from artifactsmmo_cli.ai.actions.hold_for_party import HoldForPartyAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.bag_clear import BAG_FULL_OUTCOME
 from artifactsmmo_cli.ai.best_loadout import BestLoadout, best_loadout, candidate_potions, fight_ahead_loadout
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
@@ -779,6 +780,9 @@ class GamePlayer:
             objective=self._objective,
             turns=self._turns,
         )
+        if self._arbiter.last_bag_verdict is not None:
+            print(f"[{self._now()}] [bag] {self._arbiter.last_bag_verdict}: the bag is full "
+                  "and every stack is related to the plan or cannot move")
         return selected_goal, plan, goals_tried
 
     def _tree_band_adequate(self) -> bool:
@@ -4357,6 +4361,9 @@ class GamePlayer:
                            if self.history is not None else ()),
             fight_seconds=fight_seconds,
             action_seconds=action_seconds,
+            # The server refused the last action for want of bag room: the
+            # arbiter clears the bag before the next plan (Task 13e).
+            bag_refused=self._last_outcome == BAG_FULL_OUTCOME,
             # The cycle's drop evidence: the very value the actions carry.
             learned_drops=self._cycle_learned_drops(),
         )

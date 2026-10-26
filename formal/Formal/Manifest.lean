@@ -1405,6 +1405,18 @@ open Formal.PriorityBand
 #check @InventoryRoom.hasRoom_no_slot_witness         -- non-vacuity: blocked purely by the slot cap
 #check @InventoryRoom.hasRoom_no_qty_witness          -- non-vacuity: blocked purely by the quantity cap
 #check @InventoryRoom.hasRoom_grow_full_slots_witness -- non-vacuity: grow past a full slot budget still fits
+-- BagClear (Task 13e: a full bag frees every slot the plan does not use):
+#check @Formal.BagClear.related_never_shed             -- safety: a related stack is never shed
+#check @Formal.BagClear.dispose_only_when_bank_refuses -- safety: dispose ⇒ unrelated ∧ bank refused ∧ disposable
+#check @Formal.BagClear.deposit_before_dispose         -- dominance: the bank before any disposal
+#check @Formal.BagClear.all_related_frees_none         -- liveness: all-related ⇒ frees nothing (the named verdict)
+#check @Formal.BagClear.unrelated_bankable_frees       -- liveness: one bankable unrelated stack frees a slot
+#check @Formal.BagClear.route_keep_witness             -- non-vacuity: KEEP reachable
+#check @Formal.BagClear.route_deposit_witness          -- non-vacuity: DEPOSIT reachable
+#check @Formal.BagClear.route_dispose_witness          -- non-vacuity: DISPOSE reachable
+#check @Formal.BagClear.route_stuck_witness            -- non-vacuity: an unmovable unrelated stack stays
+#check @Formal.BagClear.all_related_witness            -- non-vacuity: all-related on a non-empty bag
+#check @Formal.BagClear.frees_witness                  -- non-vacuity: a clear that frees two slots
 -- OptimalBuyMix (the affordable-batch search behind the Python `break`):
 #check @Formal.OptimalBuyMix.cost_zero                       -- zero runs cost zero
 #check @Formal.OptimalBuyMix.cost_mono                       -- cost is monotone in batch (affordable batches are down-closed)

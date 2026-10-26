@@ -336,6 +336,12 @@ class SelectionContext:
     # prior by inheriting a default.
     learned_drops: LearnedDrops | None = None
 
+    # The previous executed action came back HTTP 497, the server's "inventory
+    # is full" (Task 13e): the server's word overrides the slot model, so the
+    # arbiter clears the bag before the next plan (`ai/bag_clear`). Set by the
+    # player from its last outcome; False on every offline and first cycle.
+    bag_refused: bool = False
+
     def drops(self) -> LearnedDrops:
         """This cycle's drop evidence; raises when this context has none."""
         if self.learned_drops is None:
