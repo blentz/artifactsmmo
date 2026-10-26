@@ -37,10 +37,17 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     cheapest_route,
     drop_work,
     drop_work_actions,
+    leg_prospecting,
     npc_price_of,
     route_options,
 )
-from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT, acquisition_cost
+from artifactsmmo_cli.ai.acquisition_cost_core import (
+    UNOBTAINABLE_PER_UNIT,
+    RouteOption,
+    acquisition_cost,
+)
+from artifactsmmo_cli.ai.drop_leg import DropLeg
+from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.gear_objective import _price
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.drop_observations import fleet_k, learned_drops
@@ -1640,15 +1647,65 @@ def test_a_produced_item_is_priced_only_by_making_it() -> None:
 def test_drop_work_is_the_walks_gathers_and_farms_priced_by_their_route(
         state, game_data) -> None:
     """`drop_work` lists the gather and drop-farm legs the price walks, after
-    holdings; `drop_work_actions` prices a farm leg as the walk's DROP route
-    (wins at the learned chance times one win's actions) and a gather leg as
-    its GATHER route. A route with no drop work lists none."""
+    holdings, each carrying its route's kind; `drop_work_actions` prices a farm
+    leg as the walk's DROP route (wins at the learned chance times one win's
+    actions) and a gather leg as its GATHER route. A route with no drop work
+    lists none."""
     assert drop_work("feather", 2, state, game_data, TIMED_NO_PROFILE_CONTEXT, None,
-                     policy=LEGACY) == (("chicken", "feather", 2),)
+                     policy=LEGACY) == (DropLeg(SourceKind.DROP, "chicken", "feather", 2, True),)
     assert drop_work("copper_helmet", 2, state, game_data, TIMED_NO_PROFILE_CONTEXT, None,
-                     policy=LEGACY) == (("copper_rocks", "copper_ore", 119),)
+                     policy=LEGACY) == (
+        DropLeg(SourceKind.GATHER, "copper_rocks", "copper_ore", 119, True),)
     win = _kill_actions("chicken", state, game_data, TIMED_NO_PROFILE_CONTEXT.timing(), ())
-    assert drop_work_actions((("chicken", "feather", 3),), state, game_data,
-                             TIMED_NO_PROFILE_CONTEXT) == 3 * 8 * win
-    assert drop_work_actions((("copper_rocks", "copper_ore", 119),), state, game_data,
-                             TIMED_NO_PROFILE_CONTEXT) == 119
+    assert drop_work_actions((DropLeg(SourceKind.DROP, "chicken", "feather", 3, True),), state,
+                             game_data, TIMED_NO_PROFILE_CONTEXT) == 3 * 8 * win
+    assert drop_work_actions((DropLeg(SourceKind.GATHER, "copper_rocks", "copper_ore", 119, True),),
+                             state, game_data, TIMED_NO_PROFILE_CONTEXT) == 119
+
+
+def test_a_farm_behind_gear_is_drop_work_without_the_loss_surcharge(
+        state, game_data, monkeypatch) -> None:
+    """The walk prices a farm behind gear the character lacks
+    (`_gated_drop_option`, its unlock keyed `gear:<monster>`) with no loss
+    surcharge, so its leg says so and is priced the same way; a ready farm's
+    leg carries the learned losses."""
+    gated = RouteOption(kind=SourceKind.DROP.value, venue="chicken", actions_per_application=1,
+                        yield_per=1, capacity=UNBOUNDED_CAPACITY, unlock="gear:chicken",
+                        unlock_actions=5)
+    monkeypatch.setattr("artifactsmmo_cli.ai.acquisition_cost.acquisition_options",
+                        lambda *_args, **_kwargs: {"feather": [gated]})
+    assert drop_work("feather", 2, state, game_data, TIMED_NO_PROFILE_CONTEXT, None,
+                     policy=LEGACY) == (DropLeg(SourceKind.DROP, "chicken", "feather", 2, False),)
+    records = (("chicken", 20, 10),)
+    ctx = replace(TIMED_NO_PROFILE_CONTEXT, fight_records=records)
+    timing = ctx.timing()
+    lossy = _kill_actions("chicken", state, game_data, timing, records)
+    clean = _kill_actions("chicken", state, game_data, timing, ())
+    assert lossy > clean
+    assert drop_work_actions((DropLeg(SourceKind.DROP, "chicken", "feather", 3, True),), state,
+                             game_data, ctx) == 3 * 8 * lossy
+    assert drop_work_actions((DropLeg(SourceKind.DROP, "chicken", "feather", 3, False),), state,
+                             game_data, ctx) == 3 * 8 * clean
+
+
+def test_a_legs_prospecting_is_its_loadouts_swap(state, game_data, monkeypatch) -> None:
+    """`leg_prospecting` is the prospecting of the loadout the leg is attempted
+    in: a fight wears a +200 vest, displacing a +150 one for a net +50; a gather
+    keeps its armour, so the vest moves nothing there. A resource without a
+    gathering skill is a data fault."""
+    monkeypatch.setattr(game_data, "_item_stats", {
+        **game_data._item_stats,
+        "old_vest": ItemStats(code="old_vest", level=1, type_="body_armor", prospecting=150),
+        "vest": ItemStats(code="vest", level=1, type_="body_armor", prospecting=200)})
+    worn = replace(state, equipment={**state.equipment, "body_armor_slot": "old_vest"},
+                   prospecting=150)
+    owning = replace(worn, inventory={**worn.inventory, "vest": 1})
+    fight = DropLeg(SourceKind.DROP, "chicken", "feather", 1, True)
+    gather = DropLeg(SourceKind.GATHER, "copper_rocks", "copper_ore", 1, True)
+    assert (leg_prospecting(fight, worn, game_data), leg_prospecting(fight, owning, game_data)) == (
+        150, 200)
+    assert (leg_prospecting(gather, worn, game_data),
+            leg_prospecting(gather, owning, game_data)) == (150, 150)
+    with pytest.raises(ValueError, match="no gathering skill"):
+        leg_prospecting(DropLeg(SourceKind.GATHER, "nowhere", "copper_ore", 1, True), worn,
+                        game_data)

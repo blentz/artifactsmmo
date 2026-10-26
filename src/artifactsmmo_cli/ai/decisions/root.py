@@ -962,9 +962,9 @@ def resolve_root(state: WorldState, game_data: GameData,
     ordered: list[MetaGoal] = [
         # A throwaway RootWalk: this is a conversion, not a visit, so it must
         # not append to the trail.
-        IsThisTargetBlocked(piece.slot, _which_piece.piece_target(piece, objective, state),
-                            RootWalk(step_decline=step_decline, now=walk.now)
-                            ).resolve(state, game_data, ctx, history)
+        _which_piece.piece_step(piece.slot, _which_piece.piece_target(piece, objective, state),
+                                RootWalk(step_decline=step_decline, now=walk.now),
+                                state, game_data, ctx, history)
         for piece in (target.missing if target is not None else ())
         # A piece a sibling crafts for this character has no step until it is
         # banked (§2.5, `GearPiece.awaits_delivery`): offering its `ObtainItem`

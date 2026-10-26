@@ -37,9 +37,10 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachCharLevel,
     ReachFleetOutcome,
     ReachSkillLevel,
+    StepDecline,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
-from artifactsmmo_cli.ai.tool_objective import drop_tool_first, tool_first
+from artifactsmmo_cli.ai.tool_objective import drop_tool_target, tool_first
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -67,6 +68,65 @@ def piece_target(piece: GearPiece, objective: CharacterObjective, state: WorldSt
     return GearTarget(code=piece.code, attainable=False, blocker=piece.code)
 
 
+def _scan_key(step: ObtainItem, state: WorldState) -> tuple[object, ...]:
+    """The search-cache key of one drop-tool scan: the step's obtain and the
+    state the scan reads (the holdings its loadouts are picked from, the level
+    its candidates are legal at), so a scan is reused within a decision only
+    for the very state it answered."""
+    return ("drop_tool", step.code, step.quantity, state.character, state.level,
+            tuple(sorted(state.inventory.items())), tuple(sorted(state.equipment.items())),
+            tuple(sorted((state.bank_items or {}).items())))
+
+
+def with_drop_tool(step: ObtainItem, state: WorldState, game_data: GameData,
+                   ctx: SelectionContext, history: LearningStore | None,
+                   step_decline: StepDecline) -> ObtainItem:
+    """`ObtainItem(t)` for the prospecting item that pays for itself on the
+    drop work `step` itself serves (`drop_tool_target` over
+    `route.route_drop_work(step)`, spec 2026-10-18 §2.8), else `step`. The one
+    wrapper every obtain step goes through: a piece's, a fleet piece's craft,
+    and the alternatives `resolve_root` offers (rulings T12k, T12m). A climb is
+    never wrapped (it is skill XP, not drop work): callers hand this only an
+    obtain.
+
+    Like a skill tool (`tool_first`, ruling T8a) the item is an accelerator,
+    not a gate: one whose step `step_decline` refuses this cycle leaves `step`.
+    With no prospecting slope learned (`k = 0`) the chance multiplier is 1
+    (`Formal.DropChance`), so nothing can save anything and no walk is made.
+    Inside a `search_cache` episode the scan is made once per step and state
+    (ruling T12l): the walk's entry and its alternatives share it."""
+    if ctx.drops().k == 0:
+        return step
+
+    def scan() -> str | None:
+        work = _route.route_drop_work(step, state, game_data, ctx, history, PIECE_POLICY)
+        return drop_tool_target(work, state, game_data, ctx)
+
+    tool = scan() if history is None else history.cached(_scan_key(step, state), scan)
+    if tool is None:
+        return step
+    root = ObtainItem(tool, 1)
+    if step_decline(root) is not None:
+        return step
+    return root
+
+
+def piece_step(slot: str, target: GearTarget, walk: "_root.RootWalk", state: WorldState,
+               game_data: GameData, ctx: SelectionContext,
+               history: LearningStore | None) -> ObtainItem | ReachSkillLevel:
+    """A missing piece's step: `IsThisTargetBlocked`'s answer for its target,
+    preceded by the prospecting item its obtain's drop work pays for
+    (`with_drop_tool`). A skill-gated target's step is its climb (or the climb's
+    skill tool, `tool_first`) and is never wrapped (ruling T12k); every other
+    arm is an obtain."""
+    step = _root.IsThisTargetBlocked(slot, target, walk).resolve(state, game_data, ctx, history)
+    if target.blocking_skill is not None:
+        return step
+    # Every arm of `IsThisTargetBlocked` past its skill gate is an obtain.
+    assert isinstance(step, ObtainItem)
+    return with_drop_tool(step, state, game_data, ctx, history, walk.step_decline)
+
+
 def fleet_piece_root(piece: FleetPiece, state: WorldState, game_data: GameData,
                      ctx: SelectionContext, walk: "_root.RootWalk",
                      history: LearningStore | None) -> MetaGoal:
@@ -80,8 +140,8 @@ def fleet_piece_root(piece: FleetPiece, state: WorldState, game_data: GameData,
 
     The craft is the one arm that reaches drop work (its materials' gathers
     and farms): the prospecting item that pays for itself on that work comes
-    first (`drop_tool_first`, §2.8), priced as the piece is (`PIECE_POLICY`).
-    A climb is skill XP and a supply run banks a made unit, so neither does."""
+    first (`with_drop_tool`, §2.8). A climb is skill XP and a supply run banks
+    a made unit, so neither is wrapped (ruling T12k)."""
     current = state.skills[piece.skill]
     if current < piece.level:
         return tool_first(ReachSkillLevel(skill=piece.skill, level=current + 1),
@@ -89,9 +149,8 @@ def fleet_piece_root(piece: FleetPiece, state: WorldState, game_data: GameData,
     target = ctx.supply_target
     if target is not None and target[0] == piece.code and supply_due(ctx):
         return ReachFleetOutcome(FLEET_SUPPLY, piece.code)
-    craft = ObtainItem(piece.code, 1)
-    work = _route.route_drop_work(craft, state, game_data, ctx, history, PIECE_POLICY)
-    return drop_tool_first(craft, work, state, game_data, ctx, walk.step_decline)
+    return with_drop_tool(ObtainItem(piece.code, 1), state, game_data, ctx, history,
+                          walk.step_decline)
 
 
 def pursuit_order(target: GearObjective, fleet: tuple[FleetPiece, ...], state: WorldState,
@@ -136,11 +195,11 @@ class WhichPieceIsNext(Decision[MetaGoal]):
       served by the route that priced it (`piece_target`): a crafted piece's
       crafting-skill gate becomes the next skill level, a missing material its
       `ObtainItem`; a piece priced by any other route is its own
-      `ObtainItem`. Before it, the prospecting item that pays for itself on the
-      drop work the piece's route still holds (`drop_tool_first`, §2.8), unless
-      that item's step is declined. A piece whose step is declined is
-      recorded with its reason and the next piece is asked, and so is a piece a sibling crafts for this
-      character (`GearPiece.awaits_delivery`, §2.5) until its copy is banked.
+      `ObtainItem`. An obtain step is preceded by the prospecting item that
+      pays for itself on its drop work (`piece_step`, §2.8), unless that
+      item's step is declined; a climb never is. A piece whose step is
+      declined is recorded with its reason and the next piece is asked, and so
+      is a piece a sibling crafts for this character (`GearPiece.awaits_delivery`, §2.5) until its copy is banked.
     * every piece declined (INTERIM, ruling AI): no gear action is available
       this cycle, so XP is the next action that best advances the character
       (§2.4), and the root is `ReachCharLevel(state.level + 1)` on `m*`.
@@ -195,14 +254,9 @@ class WhichPieceIsNext(Decision[MetaGoal]):
                 continue
             gear = piece_target(piece, self.objective, state)
             if self.walk.serves(piece.slot, gear, state, game_data, ctx, history):
-                # Resolved here, not handed on, so the piece's step can yield to
-                # the prospecting item its route's drop work pays for (§2.8).
-                step = _root.IsThisTargetBlocked(piece.slot, gear, self.walk).resolve(
-                    state, game_data, ctx, history)
-                work = _route.route_drop_work(ObtainItem(piece.code, 1), state, game_data,
-                                              ctx, history, PIECE_POLICY)
-                return drop_tool_first(step, work, state, game_data, ctx,
-                                       self.walk.step_decline)
+                # Resolved here, not handed on, so an obtain step can yield to
+                # the prospecting item its drop work pays for (§2.8).
+                return piece_step(piece.slot, gear, self.walk, state, game_data, ctx, history)
         if fleet:
             # Fleet demand this role serves is waiting, and none of its steps
             # can be served this cycle: no XP fight, so no root.

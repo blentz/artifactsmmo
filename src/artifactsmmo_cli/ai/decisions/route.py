@@ -40,6 +40,7 @@ from math import ceil
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, drop_work
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
+from artifactsmmo_cli.ai.drop_leg import DropLeg
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY
@@ -106,8 +107,8 @@ def route_is_acquirable(goal: MetaGoal, state: WorldState, game_data: GameData,
 
 def route_drop_work(goal: ObtainItem, state: WorldState, game_data: GameData,
                     ctx: SelectionContext, history: LearningStore | None,
-                    policy: Policy) -> tuple[tuple[str, str, int], ...]:
-    """The remaining drop work `(source, item, units)` of the route
+                    policy: Policy) -> tuple[DropLeg, ...]:
+    """The remaining drop work (`DropLeg`s) of the route
     `route_price` prices `goal` by under `policy` (`acquisition_cost.drop_work`,
     spec 2026-10-18 §2.8): what a prospecting tool is weighed against. A
     FORWARDER through this funnel, as `route_price` is, so a `Decision` reads

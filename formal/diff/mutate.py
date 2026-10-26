@@ -4472,8 +4472,8 @@ SERVED_BY_ITS_ROUTE_RESULT_MUTATIONS = [
 ]
 SERVED_BY_ITS_ROUTE_ROOT_MUTATIONS = [
     ("root: the alternatives classify every piece behind its crafting gate",
-     "        IsThisTargetBlocked(piece.slot, _which_piece.piece_target(piece, objective, state),",
-     "        IsThisTargetBlocked(piece.slot, objective.classify_target(piece.code, state),"),
+     "        _which_piece.piece_step(piece.slot, _which_piece.piece_target(piece, objective, state),",
+     "        _which_piece.piece_step(piece.slot, objective.classify_target(piece.code, state),"),
 ]
 SERVED_BY_ITS_ROUTE_PRICE_MUTATIONS = [
     ("gear_objective: the piece forgets the route that priced it",
@@ -5468,8 +5468,8 @@ ROOT_DECISION_MUTATIONS = [
     # `test_the_orphan_roots_sit_behind_the_trunk` still witnesses the order.
     ("root: the sibling conversion reuses the real walk, so converting an"
      " alternative pollutes the trail",
-     "                            RootWalk(step_decline=step_decline, now=walk.now)\n",
-     "                            walk\n"),
+     "                                RootWalk(step_decline=step_decline, now=walk.now),\n",
+     "                                walk,\n"),
     # THE FLIP (task 6). Spec 5.3 named `tier_of_level`, the highest rung AT OR
     # BELOW the level -- a root the character has already satisfied, which
     # empties `objective_needs` and switches the arbiter's PURSUE_TASK worth
@@ -6643,50 +6643,83 @@ TOOL_OBJECTIVE_MUTATIONS = [
 # Plan B Task 12b: prospecting is a drop tool (spec 2026-10-18 §2.8).
 # Killed by tests/test_ai/test_tool_objective.py.
 DROP_TOOL_MUTATIONS = [
-    ("drop tool: an owned prospecting item is fetched again",
-     "        if held:\n            return None\n        relieved",
-     "        if held and False:\n            return None\n        relieved"),
     ("drop tool: a prospecting item above the character's level qualifies",
      "if stats.level <= state.level and stats.prospecting > 0]",
      "if stats.level <= state.level + 5 and stats.prospecting > 0]"),
-    ("drop tool: an item that saves nothing is still priced",
-     "        if relieved >= base:\n            return None\n",
-     "        if False:\n            return None\n"),
+    ("drop tool: an item that saves nothing is still price-walked",
+     "        if saving <= 0:\n            continue\n",
+     "        if False:\n            continue\n"),
     ("drop tool: the item's own price is not charged against the saving",
-     "price + relieved < base", "relieved < base"),
+     "price < UNOBTAINABLE_PER_UNIT and price < saving",
+     "price < UNOBTAINABLE_PER_UNIT and 0 < saving"),
     ("drop tool: an unobtainable item counts as priced",
-     "if price < UNOBTAINABLE_PER_UNIT and price + relieved", "if price + relieved"),
+     "if price < UNOBTAINABLE_PER_UNIT and price < saving", "if price < saving"),
     ("drop tool: the weakest prospecting item is asked first",
-     "candidates.sort(key=lambda row: row[:3], reverse=True)\n    for prospecting,",
-     "candidates.sort(key=lambda row: row[:3])\n    for prospecting,"),
-    ("drop tool: the item's prospecting is never added",
-     "prospecting=state.prospecting + prospecting)", "prospecting=state.prospecting)"),
-    ("drop tool: the worn prospecting is dropped from P",
-     "prospecting=state.prospecting + prospecting)", "prospecting=prospecting)"),
-    ("drop tool: the drop work is never preceded",
-     "    tool = drop_tool_target(work, state, game_data, ctx)\n", "    tool = None\n"),
-    ("drop tool: a declined item's step declines the piece's step instead of falling back",
-     "    if step_decline(root) is not None:\n        return step\n",
-     "    if step_decline(root) is not None and False:\n        return step\n"),
+     "candidates.sort(key=lambda row: row[:2], reverse=True)",
+     "candidates.sort(key=lambda row: row[:2])"),
+    ("drop tool: a banked item is not owned",
+     "        bag[code] = bag.get(code, 0) + n\n", "        pass\n"),
+    ("drop tool: the item is never added to the holdings",
+     "code: owned.inventory.get(code, 0) + 1})", "code: owned.inventory.get(code, 0)})"),
+    ("drop tool: the base work ignores the bank",
+     "    base = drop_work_actions(work, owned, game_data, ctx)",
+     "    base = drop_work_actions(work, state, game_data, ctx)"),
 ]
 DROP_TOOL_WALK_MUTATIONS = [
-    ("which_piece_is_next: a piece's drop work ignores the prospecting item",
-     "                return drop_tool_first(step, work, state, game_data, ctx,\n"
-     "                                       self.walk.step_decline)\n",
-     "                return step\n"),
+    ("which_piece_is_next: no learned slope still walks the drop work",
+     "    if ctx.drops().k == 0:\n        return step\n",
+     "    if False:\n        return step\n"),
+    ("which_piece_is_next: the drop-tool scan bypasses the search cache",
+     "    tool = scan() if history is None else history.cached(_scan_key(step, state), scan)",
+     "    tool = scan()"),
+    ("which_piece_is_next: a declined prospecting item declines the obtain instead",
+     "    if step_decline(root) is not None:\n        return step\n",
+     "    if step_decline(root) is not None and False:\n        return step\n"),
+    ("which_piece_is_next: a skill climb is preceded by the prospecting item",
+     "    if target.blocking_skill is not None:\n        return step\n",
+     "    if False:\n        return step\n"),
+    ("which_piece_is_next: a piece's obtain ignores the prospecting item",
+     "    return with_drop_tool(step, state, game_data, ctx, history, walk.step_decline)",
+     "    return step"),
     ("which_piece_is_next: a fleet piece's craft ignores the prospecting item",
-     "    return drop_tool_first(craft, work, state, game_data, ctx, walk.step_decline)\n",
-     "    return craft\n"),
+     "    return with_drop_tool(ObtainItem(piece.code, 1), state, game_data, ctx, history,\n"
+     "                          walk.step_decline)",
+     "    return ObtainItem(piece.code, 1)"),
+]
+DROP_TOOL_ALTERNATIVES_MUTATIONS = [
+    ("root: a missing piece's alternative ignores the prospecting item",
+     "        _which_piece.piece_step(piece.slot, _which_piece.piece_target(piece, objective, state),\n"
+     "                                RootWalk(step_decline=step_decline, now=walk.now),\n"
+     "                                state, game_data, ctx, history)\n",
+     "        IsThisTargetBlocked(piece.slot, _which_piece.piece_target(piece, objective, state),\n"
+     "                            RootWalk(step_decline=step_decline, now=walk.now)\n"
+     "                            ).resolve(state, game_data, ctx, history)\n"),
 ]
 DROP_TOOL_WORK_MUTATIONS = [
     ("drop work: every leg of the route is drop work",
-     "                 if route.kind in _DROP_WORK)", "                 if True)"),
+     "                 for code, route, units in legs if route.kind in _DROP_WORK)",
+     "                 for code, route, units in legs)"),
     ("drop work: the bag is not credited",
      "    legs = route_legs(item, qty, options, _owned_with_gold(state, state.gold),",
      "    legs = route_legs(item, qty, options, {},"),
     ("drop work: a farm leg is priced as a gather",
-     "        if any(code == source for code, *_row in game_data.monsters_dropping(item)):",
-     "        if False:"),
+     "        if leg.kind is SourceKind.DROP:\n            rate, min_q",
+     "        if False:\n            rate, min_q"),
+    ("drop work: a farm behind gear is charged the loss surcharge",
+     "ctx.fight_records if leg.surcharged else ()", "ctx.fight_records"),
+    ("drop work: every farm leg is marked surcharged",
+     "surcharged=not route.unlock)", "surcharged=True)"),
+    ("drop work: a fight leg is given a gather's loadout",
+     "    if leg.kind is SourceKind.DROP:\n        purpose = Combat(",
+     "    if False:\n        purpose = Combat("),
+    ("drop work: a resource with no skill is not raised",
+     "            raise ValueError(f\"resource {leg.source!r} has no gathering skill in game data\")\n",
+     "            return 0\n"),
+]
+DROP_TOOL_LEG_P_MUTATIONS = [
+    ("drop work: a leg is priced at the worn total, not its loadout's",
+     "        attempt = replace(state, prospecting=leg_prospecting(leg, state, game_data))",
+     "        attempt = state"),
 ]
 DROP_TOOL_CORE_MUTATIONS = [
     ("route legs: a leg records the demand, not what holdings leave",
@@ -6733,8 +6766,9 @@ FLEET_PIECE_WALK_MUTATIONS = [
      "                reason = self.walk.step_decline(root)\n"
      "                if True:"),
     ("fleet pieces: a met gate not yet the supply target climbs on",
-     "    craft = ObtainItem(piece.code, 1)",
-     "    craft = ReachSkillLevel(skill=piece.skill, level=current + 1)"),
+     "    return with_drop_tool(ObtainItem(piece.code, 1), state, game_data, ctx, history,\n"
+     "                          walk.step_decline)",
+     "    return ReachSkillLevel(skill=piece.skill, level=current + 1)"),
     ("fleet pieces: a sibling-crafted piece climbs before it is banked",
      "            if piece.awaits_delivery(state):",
      "            if False:"),
@@ -13464,6 +13498,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_tool_objective.py", survivors)
     run_group(ACQUISITION_COST_SRC, DROP_TOOL_WORK_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(ROOT_DECISION_SRC, DROP_TOOL_ALTERNATIVES_MUTATIONS,
+              "tests/test_ai/test_tool_objective.py", survivors)
+    run_group(ACQUISITION_COST_SRC, DROP_TOOL_LEG_P_MUTATIONS,
+              "tests/test_ai/test_tool_objective.py", survivors)
     run_group(ACQUISITION_COST_CORE_SRC, DROP_TOOL_CORE_MUTATIONS,
               "tests/test_ai/test_tool_objective.py", survivors)
     run_group(WHICH_PIECE_SRC, FLEET_PIECE_WALK_MUTATIONS,
