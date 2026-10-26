@@ -6643,9 +6643,6 @@ TOOL_OBJECTIVE_MUTATIONS = [
 # Plan B Task 12b: prospecting is a drop tool (spec 2026-10-18 §2.8).
 # Killed by tests/test_ai/test_tool_objective.py.
 DROP_TOOL_MUTATIONS = [
-    ("drop tool: a prospecting item above the character's level qualifies",
-     "if stats.level <= state.level and stats.prospecting > 0]",
-     "if stats.level <= state.level + 5 and stats.prospecting > 0]"),
     ("drop tool: an item that saves nothing is still price-walked",
      "        if saving <= 0:\n            continue\n",
      "        if False:\n            continue\n"),

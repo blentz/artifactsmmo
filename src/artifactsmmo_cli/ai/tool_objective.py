@@ -87,8 +87,8 @@ def _owned_view(state: WorldState) -> WorldState:
 
 def drop_tool_target(work: Sequence[DropLeg], state: WorldState,
                      game_data: GameData, ctx: SelectionContext) -> str | None:
-    """The level-legal prospecting item `t` with the highest prospecting that
-    pays for itself on `work`, the remaining drop work of the step it would
+    """The prospecting item `t` with the highest prospecting that pays for
+    itself on `work`, the remaining drop work of the step it would
     precede (spec 2026-10-18 §2.8: a tool is worth its saving, ruling T12j):
 
         price(t) < W(owned) - W(owned + t)
@@ -98,9 +98,10 @@ def drop_tool_target(work: Sequence[DropLeg], state: WorldState,
     the character owns (bag, bank and worn: `_owned_view`). So `t`'s gain is
     what that loadout gains by owning it — its prospecting less what it
     displaces, and nothing at all for an item the leg's loadout would not wear
-    (a gather never wears body armour) or a copy already held. `price(t)` is
-    the acquisition walk's price for one `t` under `PIECE_POLICY`; at
-    `UNOBTAINABLE_PER_UNIT` or more it is out of reach.
+    (a gather never wears body armour), a copy already held, or an item above
+    the character's level (the picker's own level gate: one gate, not two).
+    `price(t)` is the acquisition walk's price for one `t` under
+    `PIECE_POLICY`; at `UNOBTAINABLE_PER_UNIT` or more it is out of reach.
 
     Candidates go by prospecting descending, then the lower level, then the
     catalogue's own order; the first that pays is the answer. One that saves
@@ -109,8 +110,7 @@ def drop_tool_target(work: Sequence[DropLeg], state: WorldState,
     owned = _owned_view(state)
     base = drop_work_actions(work, owned, game_data, ctx)
     candidates = [(stats.prospecting, -stats.level, code)
-                  for code, stats in game_data.items.stats.items()
-                  if stats.level <= state.level and stats.prospecting > 0]
+                  for code, stats in game_data.items.stats.items() if stats.prospecting > 0]
     # Stable sort, descending on the semantic key only.
     candidates.sort(key=lambda row: row[:2], reverse=True)
     for _prospecting, _level, code in candidates:
