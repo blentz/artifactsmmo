@@ -6487,12 +6487,16 @@ TOOL_OBJECTIVE_MUTATIONS = [
 ]
 TOOL_OBJECTIVE_ROOT_MUTATIONS = [
     ("root: a gear target's skill climb ignores the tool",
-     "            return tool_first(\n                ReachSkillLevel(skill=self.target.blocking_skill, level=current + 1),\n                state, game_data, ctx)\n",
-     "            return ReachSkillLevel(skill=self.target.blocking_skill, level=current + 1)\n"),
+     "            return tool_first(\n"
+     "                ReachSkillLevel(skill=self.target.blocking_skill, level=current + 1),\n"
+     "                state, game_data, ctx)\n",
+     "            return ReachSkillLevel(skill=self.target.blocking_skill,\n"
+     "                                   level=current + 1)\n"),
 ]
 TOOL_OBJECTIVE_FLEET_MUTATIONS = [
     ("which_piece_is_next: a fleet piece's climb ignores the tool",
-     "        return tool_first(ReachSkillLevel(skill=piece.skill, level=current + 1),\n                          state, game_data, ctx)\n",
+     "        return tool_first(ReachSkillLevel(skill=piece.skill, level=current + 1),\n"
+     "                          state, game_data, ctx)\n",
      "        return ReachSkillLevel(skill=piece.skill, level=current + 1)\n"),
 ]
 FLEET_PIECE_WALK_MUTATIONS = [
