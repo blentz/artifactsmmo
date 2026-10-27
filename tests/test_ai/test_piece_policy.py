@@ -30,7 +30,9 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     route_options,
 )
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
+from artifactsmmo_cli.ai.decisions.root import IsThisTargetBlocked, RootWalk
 from artifactsmmo_cli.ai.decisions.route import route_price
+from artifactsmmo_cli.ai.decisions.which_piece_is_next import piece_target
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import achievable
 from artifactsmmo_cli.ai.gear_objective_core import layer_of
@@ -159,6 +161,66 @@ def test_a_layer_zero_piece_is_served_or_climbs() -> None:
             assert step is not None or gated, (name, piece)
             served += 1
     assert served > 100, served
+
+
+UNSERVED = ("no_step_goal", "infeasible:", "unmapped_step:", "region:")
+"""The walk's answers for a step the obtain model calls feasible that no goal
+or action serves: the disagreement plan B Task 14a's INTERIM trunk stood in
+for. A transient decline (a full bag, low hp) is not one."""
+
+
+def test_every_layer_zero_piece_the_model_calls_achievable_the_walk_serves() -> None:
+    """Plan B Task 14a (ruling T6c): `L*` never names a piece the walk cannot
+    serve. The live census of 2026-10-27 found two such classes, both fixed
+    rather than filtered out of `L*`: a passive-currency piece mapped to no
+    goal (`lich_race_trophy`, ruling T14a-B) and a GE-filled material with no
+    walk route (`malefic_crystal`, ruling T14a-C). After them no live piece
+    of the five characters is unserved, so this pins the agreement: on every
+    catalogued scenario, the walk's own question (`GamePlayer._step_decline`)
+    answers a first-layer piece's step as unserved only in the named residual.
+
+    THE RESIDUAL, awaiting rulings (task-14a report, fix round 1), exactly:
+      * `slime_shield` at L30/L40: its `wool` drops only from `sheep`, grey
+        there. `PIECE_POLICY` admits a grey dropper, and the walk's grey-farm
+        directive (2026-07-06) refuses it.
+      * `lifesteal_rune` at L48: its fight-gold monster (`fight_gold_monster`
+        under `PIECE_POLICY`) is `dryad`, in a region no single crossing
+        reaches (`region:overworld->restricted:...`)."""
+    unserved: list[tuple[str, str, str]] = []
+    asked = 0
+    for name, sc in SCENARIOS.items():
+        world = _world(name)
+        player = GamePlayer(character=sc.name, history=None)
+        player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
+        player.seed_offline(derived_scenario_state(sc, world), world)
+        state = player.state
+        assert state is not None
+        ctx = player._selection_context()
+        if ctx.gear_objective is None:
+            continue
+        decline = player._step_decline(state, world, ctx, player._build_actions())
+        objective = CharacterObjective.from_game_data(world)
+        for piece in ctx.gear_objective.missing:
+            if piece.layer != 0 or piece.awaits_delivery(state):
+                continue
+            target = piece_target(piece, objective, state)
+            root = IsThisTargetBlocked(piece.slot, target, RootWalk(step_decline=decline)).resolve(
+                state, world, ctx, None)
+            reason = decline(root)
+            if reason is not None and reason.startswith(UNSERVED):
+                unserved.append((name, piece.code, reason))
+            asked += 1
+    assert asked > 100, asked
+    beyond = "region:overworld->restricted:overworld:-5,8:Fight(dryad)"
+    assert sorted(unserved) == [
+        ("l30_rune_fill", "slime_shield", "infeasible:cloth:no_route:wool"),
+        ("l40_band_entry", "slime_shield", "infeasible:cloth:no_route:wool"),
+        ("l48_band_adequate", "lifesteal_rune", beyond),
+        ("l48_capstone_approach", "lifesteal_rune", beyond),
+        ("l48_event_active", "lifesteal_rune", beyond),
+        ("l48_raid_active", "lifesteal_rune", beyond),
+    ]
 
 
 def test_an_event_vendor_counts_only_while_live() -> None:
