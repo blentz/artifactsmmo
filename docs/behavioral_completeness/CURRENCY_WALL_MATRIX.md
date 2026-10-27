@@ -8,9 +8,9 @@
 >
 > Every field `classify_gap` reads is a column: `droppers`, `live tiles` and `winnable` are the two conjuncts `ObtainModel._drop` gates on, and `event` separates a dormant event from a permanent monster with no tile.
 
-1491 cells over 7 currencies; charged 24; FUNDED 3; walled 21; not_demanded 1467; root_unresolved 0; o7_silent_currency_stall 0; o7_multi_currency_wall 0; o7_unexplained 0; currency_catalogue_empty 0
+1491 cells over 7 currencies; charged 25; FUNDED 3; walled 22; not_demanded 1466; root_unresolved 0; o7_silent_currency_stall 0; o7_multi_currency_wall 0; o7_unexplained 0; currency_catalogue_empty 0
 
-residual scope: 24 of 1491 cells are CHARGED (2 distinct currencies) — gold 21, tasks_coin 3. An uncharged currency can only be not_demanded.
+residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22, tasks_coin 3. An uncharged currency can only be not_demanded.
 
 | Scenario | Candidate | root? | Currency | Verdict | charged | base | granted | earnable | droppers | live tiles | winnable | event |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -1287,7 +1287,7 @@ residual scope: 24 of 1491 cells are CHARGED (2 distinct currencies) — gold 21
 | l20_relief_full_bank | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
 | l20_relief_full_bank | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l20_relief_full_bank | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l20_relief_full_bank | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
+| l20_relief_full_bank | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | gold | **wall_gold** | - | - | - | - | - | - | - | - |
 | l20_relief_full_bank | `ReachSkillLevel(skill='weaponcrafting', level=16)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l20_relief_full_bank | `ReachSkillLevel(skill='weaponcrafting', level=16)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l20_relief_full_bank | `ReachSkillLevel(skill='weaponcrafting', level=16)` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |

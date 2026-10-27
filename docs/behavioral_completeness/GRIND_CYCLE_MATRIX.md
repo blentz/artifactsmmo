@@ -33,7 +33,7 @@
 | l10_weapon_upgrade | alchemy | 1 | earns | Gather(sunflower_field×1) |
 | l10_weapon_upgrade | cooking | 1 | earns | Gather(gudgeon_spot×1) → Craft(cooked_gudgeon×1) |
 | l10_weapon_upgrade | fishing | 1 | earns | Gather(gudgeon_spot×1) |
-| l10_weapon_upgrade | gearcrafting | 1 | earns | Withdraw(copper_ore×20) → Gather(copper_rocks×40) → Craft(copper_bar×6) → Craft(copper_helmet×1) |
+| l10_weapon_upgrade | gearcrafting | 1 | earns | Gather(ash_tree×60) → Craft(ash_plank×6) → Craft(wooden_shield×1) |
 | l10_weapon_upgrade | jewelrycrafting | 1 | earns | Withdraw(copper_ore×20) → Gather(copper_rocks×40) → Craft(copper_bar×6) → Craft(copper_ring×1) |
 | l10_weapon_upgrade | mining | 10 | earns | Withdraw(iron_ore×10) → Craft(iron_bar×1) |
 | l10_weapon_upgrade | weaponcrafting | 10 | earns | Withdraw(iron_ore×60) → Craft(iron_bar×6) → Fight(chicken) → Craft(iron_sword×1) |
@@ -175,7 +175,7 @@
 | l20_dual_utility_one_stocked | weaponcrafting | 15 | earns | Gather(iron_rocks×60) → Craft(iron_bar×6) → Fight(chicken) → Craft(iron_sword×1) |
 | l20_dual_utility_one_stocked | woodcutting | 18 | earns | Gather(spruce_tree×10) → Craft(spruce_plank×1) |
 | l13_drop_recipe_grind | alchemy | 16 | earns | Gather(sunflower_field×1) → Craft(water_boost_potion×1) |
-| l13_drop_recipe_grind | cooking | 5 | earns | Withdraw(apple×13) → Withdraw(egg×1) → OptimizeLoadout(chicken) → Fight(chicken) → Craft(fried_eggs×1) |
+| l13_drop_recipe_grind | cooking | 5 | earns | Withdraw(apple×13) → OptimizeLoadout(cow) → Fight(cow) → Craft(cooked_beef×1) |
 | l13_drop_recipe_grind | fishing | 3 | earns | OptimizeLoadout(gather:fishing) → Gather(gudgeon_spot×1) |
 | l13_drop_recipe_grind | gearcrafting | 10 | earns | Withdraw(apple×13) → OptimizeLoadout(cow) → Fight(cow) → Craft(leather_legs_armor×1) |
 | l13_drop_recipe_grind | jewelrycrafting | 5 | earns | Withdraw(apple×13) → OptimizeLoadout(chicken) → Fight(chicken) → Craft(life_amulet×1) |
@@ -316,7 +316,7 @@
 | l20_relief_full_bank | gearcrafting | 15 | earns | Craft(leather_hat×1) |
 | l20_relief_full_bank | jewelrycrafting | 15 | earns | Withdraw(apple×1) → Withdraw(iron_bar×1) → Withdraw(iron_ore×1) → Gather(iron_rocks×17) → Craft(iron_bar×3) → Withdraw(red_slimeball×1) → Fight(red_slime) → Craft(fire_and_earth_amulet×1) |
 | l20_relief_full_bank | mining | 20 | earns | Craft(iron_bar×1) |
-| l20_relief_full_bank | weaponcrafting | 15 | earns | Withdraw(iron_bar×1) → Withdraw(iron_ore×1) → Gather(iron_rocks×37) → Craft(iron_bar×5) → Craft(iron_sword×1) |
+| l20_relief_full_bank | weaponcrafting | 15 | earns | Withdraw(copper_bar×1) → Craft(copper_bar×1) → Craft(sticky_sword×1) |
 | l20_relief_full_bank | woodcutting | 20 | earns | Craft(hardwood_plank×1) |
 | l20_bag_critical_empty_bank | alchemy | 10 | earns | Gather(sunflower_field×3) → Craft(small_health_potion×1) |
 | l20_bag_critical_empty_bank | cooking | 10 | earns | Gather(shrimp_spot×1) → Craft(cooked_shrimp×1) |

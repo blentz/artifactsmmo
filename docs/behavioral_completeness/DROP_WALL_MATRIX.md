@@ -8,9 +8,9 @@
 >
 > The crossing is a differential on production's own pricer — the candidate priced as it stands, then again with the walled items granted. No closure is re-derived here; obligation O6 forbids a second cost model and this census must not be one.
 
-213 candidate cells over 45 scenarios; gate opens 1 of 16 walls (store-less); obtainable 92; not_drop_walled 105; walled 16 (15 on ALTERNATIVES); closes 7; out_of_reach 9; drop_wall_unattributed 0; root_unresolved 0
+213 candidate cells over 45 scenarios; gate opens 1 of 17 walls (store-less); obtainable 91; not_drop_walled 105; walled 17 (16 on ALTERNATIVES); closes 7; out_of_reach 10; drop_wall_unattributed 0; root_unresolved 0
 
-argmax blindness: 1 of 16 walls sit on a RESOLVED root. A census that prices only the argmax sees those 1 and misses 15 — an infinite price is a veto, so a walled candidate never becomes the argmax.
+argmax blindness: 1 of 17 walls sit on a RESOLVED root. A census that prices only the argmax sees those 1 and misses 16 — an infinite price is a veto, so a walled candidate never becomes the argmax.
 
 | Scenario | Candidate | Root? | Verdict | base | granted | gated | item | droppers | live tiles | closes | chain |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -193,9 +193,9 @@ argmax blindness: 1 of 16 walls sit on a RESOLVED root. A census that prices onl
 | l12_ge_book_adequate | ReachSkillLevel(skill='jewelrycrafting', level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l47_depth3_amulet | ObtainItem(code='greater_dreadful_amulet', quantity=1, slot='amulet_slot') | argmax | PASS | 73 | 73 | 73 | - | - | - | - | - |
 | l47_depth3_amulet | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l20_relief_full_bank | ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot') | argmax | PASS | 10 | 10 | 10 | - | - | - | - | - |
-| l20_relief_full_bank | ObtainItem(code='mushmush_jacket', quantity=1, slot='body_armor_slot') | alt | PASS | 154 | 154 | 154 | - | - | - | - | - |
-| l20_relief_full_bank | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 2464 | 2464 | 2464 | - | - | - | - | - |
+| l20_relief_full_bank | ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot') | argmax | PASS | 51 | 51 | 51 | - | - | - | - | - |
+| l20_relief_full_bank | ObtainItem(code='mushmush_jacket', quantity=1, slot='body_armor_slot') | alt | PASS | 199 | 199 | 199 | - | - | - | - | - |
+| l20_relief_full_bank | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1238 | 1000001 | cursed_wood | 1 | 1 | 0 | - |
 | l20_relief_full_bank | ReachSkillLevel(skill='weaponcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_relief_full_bank | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_bag_critical_empty_bank | ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot') | argmax | PASS | 91 | 91 | 91 | - | - | - | - | - |
@@ -204,8 +204,8 @@ argmax blindness: 1 of 16 walls sit on a RESOLVED root. A census that prices onl
 | l20_bag_critical_empty_bank | ReachSkillLevel(skill='weaponcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_bag_critical_empty_bank | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l22_rest_for_combat | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | argmax | PASS | 80 | 80 | 80 | - | - | - | - | - |
-| l22_rest_for_combat | ObtainItem(code='water_ring', quantity=1, slot='ring1_slot') | alt | PASS | 153 | 153 | 153 | - | - | - | - | - |
-| l22_rest_for_combat | ObtainItem(code='water_ring', quantity=1, slot='ring2_slot') | alt | PASS | 153 | 153 | 153 | - | - | - | - | - |
+| l22_rest_for_combat | ObtainItem(code='water_ring', quantity=1, slot='ring1_slot') | alt | PASS | 165 | 165 | 165 | - | - | - | - | - |
+| l22_rest_for_combat | ObtainItem(code='water_ring', quantity=1, slot='ring2_slot') | alt | PASS | 165 | 165 | 165 | - | - | - | - | - |
 | l22_rest_for_combat | ObtainItem(code='adventurer_pants', quantity=1, slot='leg_armor_slot') | alt | PASS | 345 | 345 | 345 | - | - | - | - | - |
 | l22_rest_for_combat | ReachSkillLevel(skill='weaponcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l22_rest_for_combat | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
