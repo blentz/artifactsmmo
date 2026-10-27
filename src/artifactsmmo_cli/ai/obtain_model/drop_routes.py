@@ -76,7 +76,7 @@ def drop_fight_winnable(rested: WorldState, game_data: GameData, monster: str) -
             or wins_as_a_party(rested, game_data, monster))
 
 
-def _reached(monster: str, game_data: GameData, reach: frozenset[str]) -> bool:
+def monster_reached(monster: str, game_data: GameData, reach: frozenset[str]) -> bool:
     """Some tile of `monster`, live or on any layer, lies in a region of
     `reach`."""
     tiles = [(x, y, "overworld") for x, y in game_data.all_monster_locations.get(monster, [])]
@@ -87,7 +87,7 @@ def _reached(monster: str, game_data: GameData, reach: frozenset[str]) -> bool:
 def _fight_gates(monster: str, state: WorldState, game_data: GameData,
                  rested: _Rested, reach: frozenset[str]) -> tuple[Gate, ...]:
     live = bool(game_data.all_monster_locations.get(monster))
-    known = game_data.monster_spawn_known(monster) and _reached(monster, game_data, reach)
+    known = game_data.monster_spawn_known(monster) and monster_reached(monster, game_data, reach)
     winnable = (live or known) and drop_fight_winnable(rested.get(), game_data, monster)
     return (
         Gate(GateKind.SPAWN_LIVE, monster, live),

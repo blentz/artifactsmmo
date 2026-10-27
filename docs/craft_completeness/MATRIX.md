@@ -5,7 +5,7 @@
 > Census drives the REAL planner over the committed bundle. Cells whose plan hits the 10 s wall-clock budget (~16% of cells) can vary between regens; treat their verdict as approximate.
 
 
-321 recipes, 2418 cells; PASS 634 (26%); recipes PASS 133/321; nominal-at-skill PASS 120/321; gaps: event_gated 660, combat_blocked 912, material_unreachable 177, skill_unreachable 0, grey_farm_suppressed 1, purchase_recursion 0, crossing_unaffordable 34, planner_bug 0
+321 recipes, 2418 cells; PASS 637 (26%); recipes PASS 134/321; nominal-at-skill PASS 120/321; gaps: event_gated 660, combat_blocked 912, material_unreachable 177, skill_unreachable 0, grey_farm_suppressed 1, purchase_recursion 0, crossing_unaffordable 31, planner_bug 0
 
 Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unreachable, GF=grey_farm_suppressed, PR=purchase_recursion, XU=crossing_unaffordable, PB=planner_bug; +ev = the cell with the recipe's sourcing events active.
 
@@ -42,7 +42,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 |---|---|---|
 | air_res_potion | 40 | 38/35 PASS · 38/40 PASS · 40/35 PASS · 40/40 PASS · 42/35 PASS · 42/40 PASS |
 | earth_res_potion | 40 | 38/35 PASS · 38/40 PASS · 40/35 PASS · 40/40 PASS · 42/35 PASS · 42/40 PASS |
-| enchanted_potion | 40 | 38/35 XU · 38/40 XU · 40/35 XU · 40/40 XU · 42/35 XU · 42/40 XU |
+| enchanted_potion | 40 | 38/35 PASS · 38/40 XU · 40/35 PASS · 40/40 XU · 42/35 PASS · 42/40 XU |
 | enhanced_boost_potion | 40 | 38/35 EG · 38/40 EG · 40/35 EG · 40/40 EG · 42/35 EG · 42/40 EG · 38/35+ev CB · 38/40+ev CB · 40/35+ev CB · 40/40+ev XU · 42/35+ev CB · 42/40+ev XU |
 | fire_res_potion | 40 | 38/35 PASS · 38/40 PASS · 40/35 PASS · 40/40 PASS · 42/35 PASS · 42/40 PASS |
 | greater_health_potion | 40 | 38/35 PASS · 38/40 PASS · 40/35 PASS · 40/40 PASS · 42/35 PASS · 42/40 PASS |

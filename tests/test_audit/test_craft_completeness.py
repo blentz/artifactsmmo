@@ -984,7 +984,7 @@ def test_a_crossing_the_census_character_cannot_pay_is_its_own_gap(monkeypatch) 
                                               crafting_skill="woodcutting", crafting_level=1)}
     cell = CraftCell(char_level=48, skill_name="woodcutting", skill_level=50)
     monkeypatch.setattr(craft_completeness, "census_state", lambda r, c, g: object())
-    assert craft_completeness._crossing_unaffordable("palm_plank", object(), gd) is False
+    assert craft_completeness._census_declines("palm_plank", object(), gd) == []
     gd.world.transition_edges = {(2, 16, "overworld"): (-2, 21, "overworld", (("gold", "cost", 1000),))}
     monkeypatch.setattr(craft_completeness, "build_actions", lambda *a, **k: [])
 
@@ -1000,7 +1000,53 @@ def test_a_crossing_the_census_character_cannot_pay_is_its_own_gap(monkeypatch) 
         return None
 
     monkeypatch.setattr(craft_completeness, "decompose", declined_otherwise)
-    assert craft_completeness._crossing_unaffordable("palm_plank", object(), gd) is False
+    assert craft_completeness._crossing_unaffordable(
+        craft_completeness._census_declines("palm_plank", object(), gd)) is False
+
+
+def test_a_drop_behind_an_unpayable_crossing_is_the_crossing_gap(monkeypatch) -> None:
+    """Ruling T14a-E: a monster behind a crossing the census character cannot
+    pay for is no route at all (`drop_routes.monster_reached`), so the
+    decomposition declines the leaf `infeasible:...:no_route:<leaf>` rather
+    than `region:...`. A dead leaf whose present, beatable dropper spawns where
+    the walk cannot reach now is the crossing gap (live census:
+    `enhanced_antidote`'s `sand_snake_poison` with its events live); one whose
+    dropper is reached, unbeatable or absent is not."""
+    gd = GameData()
+    dead = ["infeasible:antidote:no_route:gold,venom"]
+    monkeypatch.setattr(craft_completeness, "reachable_regions_now", lambda s, g: frozenset())
+    monkeypatch.setattr(craft_completeness, "_present_droppers",
+                        lambda leaf, g: ["sand_snake"] if leaf == "venom" else [])
+    monkeypatch.setattr(craft_completeness, "_drop_winnable", lambda s, g, m: True)
+    monkeypatch.setattr(craft_completeness, "monster_reached", lambda m, g, r: False)
+    assert craft_completeness._dead_leaf_behind_crossing(dead, object(), gd) is True
+    assert craft_completeness._dead_leaf_behind_crossing([], object(), gd) is False
+    monkeypatch.setattr(craft_completeness, "monster_reached", lambda m, g, r: True)
+    assert craft_completeness._dead_leaf_behind_crossing(dead, object(), gd) is False
+    monkeypatch.setattr(craft_completeness, "monster_reached", lambda m, g, r: False)
+    monkeypatch.setattr(craft_completeness, "_drop_winnable", lambda s, g, m: False)
+    assert craft_completeness._dead_leaf_behind_crossing(dead, object(), gd) is False
+    monkeypatch.setattr(craft_completeness, "_drop_winnable", lambda s, g, m: True)
+    monkeypatch.setattr(craft_completeness, "_present_droppers", lambda leaf, g: [])
+    assert craft_completeness._dead_leaf_behind_crossing(dead, object(), gd) is False
+
+
+def test_an_event_gated_leaf_outranks_a_dead_leaf_behind_a_crossing(monkeypatch) -> None:
+    """The dead-leaf crossing reading runs after the EVENT_GATED one, so an
+    event-free cell keeps its EVENT_GATED class (the event-free
+    `enhanced_antidote` 48/45 and 50/45 stay EG), and it outranks every other
+    leaf reading (COMBAT_BLOCKED here), as the crossing decline did."""
+    gd = GameData()
+    cell = CraftCell(char_level=48, skill_name="alchemy", skill_level=45)
+    monkeypatch.setattr(craft_completeness, "census_state", lambda r, c, g: object())
+    monkeypatch.setattr(craft_completeness, "_census_declines", lambda r, s, g: ["infeasible:x:no_route:y"])
+    monkeypatch.setattr(craft_completeness, "_closure_leaves", lambda r, g: frozenset({"y", "z"}))
+    monkeypatch.setattr(craft_completeness, "_dead_leaf_behind_crossing", lambda d, s, g: True)
+    statuses = {"y": GapClass.EVENT_GATED, "z": GapClass.COMBAT_BLOCKED}
+    monkeypatch.setattr(craft_completeness, "_leaf_status", lambda leaf, s, g: statuses[leaf])
+    assert classify_gap("x", cell, gd) is GapClass.EVENT_GATED
+    statuses["y"] = GapClass.COMBAT_BLOCKED
+    assert classify_gap("x", cell, gd) is GapClass.CROSSING_UNAFFORDABLE
 
 
 # --- Census fidelity (USER 2026-10-10: "fix both faults", "add event-active

@@ -7955,8 +7955,27 @@ CENSUS_CROSSING_MUTATIONS = [
     ("census: an unaffordable crossing is a planner bug",
      "    return any(reason.startswith(\"region:\") for reason in declined)\n",
      "    return False\n"),
+    ("census: an event-gated leaf loses to a dead leaf behind a crossing",
+     "    if GapClass.EVENT_GATED in statuses:\n        return GapClass.EVENT_GATED\n",
+     ""),
+    ("census: a dead leaf behind a crossing is never the crossing gap",
+     "    if _dead_leaf_behind_crossing(declined, state, game_data):\n",
+     "    if False:\n"),
+    # Ruling T14a-E: a dead leaf behind an unpayable crossing.
+    ("census: a dead leaf behind an unpayable crossing is a planner bug",
+     "    return any(not monster_reached(monster, game_data, reach)\n",
+     "    return False and any(not monster_reached(monster, game_data, reach)\n"),
+    ("census: a reached dropper of a dead leaf is the crossing gap",
+     "    return any(not monster_reached(monster, game_data, reach)\n",
+     "    return any(True\n"),
+    ("census: an unbeatable dropper behind a crossing is the crossing gap",
+     "               and _drop_winnable(state, game_data, monster) for monster in present)\n",
+     "               for monster in present)\n"),
+    ("census: an absent dropper is the crossing gap",
+     "    present = [monster for leaf in dead for monster in _present_droppers(leaf, game_data)]\n",
+     "    present = [monster for leaf in dead for monster, *_ in game_data.monsters_dropping(leaf)]\n"),
     ("census: a world without transitions is still asked",
-     "    if not game_data.world.transition_edges:\n        return False\n",
+     "    if not game_data.world.transition_edges:\n        return []\n",
      ""),
 ]
 # Census fidelity (USER 2026-10-10: "fix both faults", "add event-active cells").
@@ -8392,7 +8411,7 @@ REGION_CROSSING_MUTATIONS = [
 # Killed by tests/test_ai/test_piece_policy.py.
 REACH_GATE_MUTATIONS = [
     ("reach: a known spawn behind an unpayable crossing is a route",
-     "    known = game_data.monster_spawn_known(monster) and _reached(monster, game_data, reach)\n",
+     "    known = game_data.monster_spawn_known(monster) and monster_reached(monster, game_data, reach)\n",
      "    known = game_data.monster_spawn_known(monster)\n"),
     ("reach: a monster's layered tiles are not read",
      "    tiles += game_data.layered_locations(monster)\n",

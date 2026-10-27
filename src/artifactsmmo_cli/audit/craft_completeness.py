@@ -30,10 +30,10 @@ from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
-from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable, monster_reached
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
-from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG
+from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG, reachable_regions_now
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
@@ -894,12 +894,12 @@ def census_gear(char_level: int, events: frozenset[str],
     return dict(memo[key])
 
 
-def _crossing_unaffordable(recipe: str, state: WorldState, game_data: GameData) -> bool:
-    """The production decomposition declines `recipe` for a region crossing it
-    cannot make from `state` (`craft_plan_gen._bridge_regions`). A world with
-    no transitions has no crossing to fail."""
+def _census_declines(recipe: str, state: WorldState, game_data: GameData) -> list[str]:
+    """The production decomposition's named declines for `recipe` from
+    `state`, asked once per classified cell. A world with no transitions has
+    no crossing to fail, so it is not asked (none)."""
     if not game_data.world.transition_edges:
-        return False
+        return []
     actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
                             bank_accessible=True, task_exchange_min_coins=0,
                             learned_drops=LearnedDrops.empty())
@@ -908,7 +908,33 @@ def _crossing_unaffordable(recipe: str, state: WorldState, game_data: GameData) 
     declined: list[str] = []
     decompose(GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}), state, game_data,
               actions, ctx, declined)
+    return declined
+
+
+def _crossing_unaffordable(declined: list[str]) -> bool:
+    """The decomposition declined for a region crossing it cannot make
+    (`craft_plan_gen._bridge_regions`, `region:...`)."""
     return any(reason.startswith("region:") for reason in declined)
+
+
+def _dead_leaf_behind_crossing(declined: list[str], state: WorldState,
+                               game_data: GameData) -> bool:
+    """The decomposition declined a dead leaf (`infeasible:<item>:no_route:
+    <leaves>`) whose dropper the cell would otherwise serve it from — present in
+    this cell's world (`_present_droppers`) and beatable here
+    (`_drop_winnable`) — but which stands where no crossing applicable from
+    `state` reaches. Ruling T14a-E made such a monster no route at all, so the
+    decline names the leaf rather than the crossing; the reach is the one
+    authority (`drop_routes.monster_reached` over
+    `region_edges.reachable_regions_now`)."""
+    dead = {leaf for reason in declined if reason.startswith("infeasible:")
+            for leaf in reason.rsplit(":", 1)[1].split(",")}
+    present = [monster for leaf in dead for monster in _present_droppers(leaf, game_data)]
+    if not present:
+        return False
+    reach = reachable_regions_now(state, game_data)
+    return any(not monster_reached(monster, game_data, reach)
+               and _drop_winnable(state, game_data, monster) for monster in present)
 
 
 def classify_gap(recipe: str, cell: CraftCell,
@@ -949,7 +975,8 @@ def classify_gap(recipe: str, cell: CraftCell,
     A leaf's own status is decided by `_leaf_status`; the cascade then ranks
     the leaf statuses by the precedence above."""
     state = census_state(recipe, cell, game_data)
-    if _crossing_unaffordable(recipe, state, game_data):
+    declined = _census_declines(recipe, state, game_data)
+    if _crossing_unaffordable(declined):
         # FIRST, because it is direct evidence: the production decomposition
         # found every source and declined only for a crossing fee (the island
         # boat, the Enchanted Forest's 5000-gold exit). A leaf-level reading of
@@ -957,9 +984,17 @@ def classify_gap(recipe: str, cell: CraftCell,
         return GapClass.CROSSING_UNAFFORDABLE
     statuses = {_leaf_status(leaf, state, game_data)
                 for leaf in _closure_leaves(recipe, game_data)}
-    for gap in (GapClass.EVENT_GATED, GapClass.COMBAT_BLOCKED,
-                GapClass.MATERIAL_UNREACHABLE, GapClass.GREY_FARM_SUPPRESSED,
-                GapClass.PURCHASE_RECURSION):
+    if GapClass.EVENT_GATED in statuses:
+        return GapClass.EVENT_GATED
+    if _dead_leaf_behind_crossing(declined, state, game_data):
+        # A dead leaf behind a crossing the character cannot pay (ruling
+        # T14a-E): the decline names the leaf, not the crossing, so it cannot
+        # be told apart from an event-gated cell's dead leaf until the event
+        # reading has run; it ranks where the crossing decline it replaced did
+        # for an event-free leaf set, ahead of every other leaf reading.
+        return GapClass.CROSSING_UNAFFORDABLE
+    for gap in (GapClass.COMBAT_BLOCKED, GapClass.MATERIAL_UNREACHABLE,
+                GapClass.GREY_FARM_SUPPRESSED, GapClass.PURCHASE_RECURSION):
         if gap in statuses:
             return gap
     stats = game_data.item_stats(recipe)
