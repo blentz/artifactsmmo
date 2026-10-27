@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.acquisition_cost_core import (
     acquisition_cost,
     bundle_acquisition_cost,
     priced_route,
+    route_legs,
 )
 
 UNBOUNDED = 10**9
@@ -154,30 +155,71 @@ def test_the_walk_picks_the_cheapest_route() -> None:
     assert acquisition_cost("bar", 1, options, {}) == 2   # hop + withdraw
 
 
-def test_capacity_is_IGNORED_because_it_can_only_raise_the_cost() -> None:
-    """A DELIBERATE LOOSENING, and the price of making the walk terminate.
-
-    The first version modelled capacity exactly: withdraw the two bars the bank
-    holds, craft the other two. That is a tighter bound — and it required
-    re-entering the node with the exhausted route removed from a REBUILT options
-    mapping, which made the walk exponential in recipe fan-out. Measured:
-    `adventurer_vest` (four inputs, 82 routes in closure) ran **10.1 million**
-    recursive calls in 20 seconds without finishing, 2.09M of them shortfall
-    rebuilds, and four of five live characters ran ~2x slower per cycle.
-
-    A capacity limit can only ever make acquisition MORE expensive — you exhaust
-    the cheap route and fall back to a dearer one — so ignoring it keeps this a
-    sound LOWER bound, which is the direction the contract requires because every
-    consumer PRUNES with it. All four bars are now priced as withdraws.
-
-    A bound that does not return is worth nothing, however tight it would have
-    been."""
+def test_a_capped_route_prices_only_its_capacity() -> None:
+    """Ruling T14a-B' (was `test_capacity_is_IGNORED...`, which priced all four
+    bars as withdraws from a bank holding two): a capped route delivers only
+    its capacity and the remainder takes the next-cheapest route. The old
+    loosening priced HAL's `lich_race_trophy` (10 medals, 1 banked) at 13, the
+    head of its `L*` order. The fill is per node over the memoised unit costs,
+    so the walk stays linear: no node is re-entered with a rebuilt mapping."""
     options = {
         "bar": [withdraw(stock=2), craft("smithy", {"ore": 3})],
         "ore": [gather("pit")],
     }
-    # bank hop + 4 withdraws. The craft leg is never entered.
-    assert acquisition_cost("bar", 4, options, {}) == 1 + 4
+    # bank hop + 2 withdraws, smithy hop + 2 crafts, pit hop + 6 gathers.
+    assert acquisition_cost("bar", 4, options, {}) == (1 + 2) + (1 + 2) + (1 + 6)
+
+
+def _medal_options(tickets_banked: int) -> dict[str, list[RouteOption]]:
+    """HAL 2026-10-27: the trophy for 10 medals, a medal withdrawn (1 banked)
+    or bought for 100 event_tickets, a ticket withdrawn or gathered at about
+    160 actions a ticket."""
+    return {
+        "trophy": [buy("archaeologist", "medal", 10)],
+        "medal": [withdraw(stock=1), buy("archaeologist", "ticket", 100)],
+        "ticket": [withdraw(stock=tickets_banked),
+                   RouteOption(kind="gather", venue="spot", actions_per_application=160,
+                               yield_per=1, capacity=UNBOUNDED)],
+    }
+
+
+def test_the_trophy_pays_for_the_medals_the_bank_lacks() -> None:
+    """1 + 9 x the ticket-buy route: one medal withdrawn, nine bought, their
+    900 tickets 65 withdrawn and 835 gathered. Hops: archaeologist, bank,
+    spot."""
+    price = acquisition_cost("trophy", 1, _medal_options(65), {})
+    assert price == 1 + (1 + 9) + (65 + 835 * 160) + 3
+
+
+def test_a_capped_stock_is_drawn_once_across_parents() -> None:
+    """Two crafts each need the one banked bar: the bank serves the first,
+    the second bar is crafted. Capacity is consumed like holdings are."""
+    options = {
+        "kit": [craft("bench", {"left": 1, "right": 1})],
+        "left": [craft("bench", {"bar": 1})],
+        "right": [craft("bench", {"bar": 1})],
+        "bar": [withdraw(stock=1), craft("smithy", {"ore": 1})],
+        "ore": [gather("pit")],
+    }
+    # 3 bench crafts, 1 withdraw, 1 smelt, 1 gather; hops bench, bank, smithy, pit.
+    assert acquisition_cost("kit", 1, options, {}) == 3 + 1 + 1 + 1 + 4
+    # The spent stock is no leg of the second parent.
+    bars = [(route.kind, units) for code, route, units in route_legs("kit", 1, options, {})
+            if code == "bar"]
+    assert bars == [("withdraw", 1), ("craft", 1)]
+
+
+def test_a_remainder_no_route_serves_is_unobtainable() -> None:
+    """Past the only route's capacity there is no route: the two units the
+    bank holds cost their withdraws and hop, the other two the sentinel each."""
+    options = {"bar": [withdraw(stock=2)]}
+    assert acquisition_cost("bar", 4, options, {}) == 1 + 2 + 2 * UNOBTAINABLE_PER_UNIT
+
+
+def test_the_legs_split_at_the_capacity() -> None:
+    legs = route_legs("bar", 4, {"bar": [withdraw(stock=1), gather("pit")]}, {})
+    assert [(code, route.kind, units) for code, route, units in legs] == [
+        ("bar", "withdraw", 1), ("bar", "gather", 3)]
 
 
 def test_the_cheapest_route_still_decides_when_capacity_is_irrelevant() -> None:

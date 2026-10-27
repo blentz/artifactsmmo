@@ -1266,28 +1266,38 @@ def test_a_shared_skill_unlock_is_what_makes_the_iron_set_affordable(
     charged once — the amortisation option C claims and option B cannot express.
 
     Measured here rather than asserted at a magnitude: the numbers move with the
-    fixture, the ORDER does not."""
+    fixture, the ORDER does not.
+
+    The four-extra-unlocks bound is measured with the bank emptied (ruling
+    T14a-B'): the bank's 6 iron_bar now serve the bundle ONCE, as one plan
+    draws them, while each piece priced apart draws all six, so banked stock
+    is a second cross-root term pulling the other way (2736 - 918 = 1818 <
+    4 x 500 with it). With the stock the bundle is still the cheaper plan."""
     store = _store_with_rate("gearcrafting", 5, cycles=5)
     try:
-        singly = {c: acquisition_actions(c, 1, unlock_state, game_data,
-                                         TIMED_NO_PROFILE_CONTEXT, equip=True, store=store)
-                  for c in _IRON_SET}
-        together, paid = bundle_acquisition_actions(
-            [(c, 1) for c in _IRON_SET], unlock_state, game_data,
-            TIMED_NO_PROFILE_CONTEXT, equip=True, store=store)
+        measured = []
+        for state in (replace(unlock_state, bank_items={}), unlock_state):
+            singly = {c: acquisition_actions(c, 1, state, game_data,
+                                             TIMED_NO_PROFILE_CONTEXT, equip=True, store=store)
+                      for c in _IRON_SET}
+            together, paid = bundle_acquisition_actions(
+                [(c, 1) for c in _IRON_SET], state, game_data,
+                TIMED_NO_PROFILE_CONTEXT, equip=True, store=store)
+            measured.append((sum(singly.values()), together, paid))
     finally:
         store.end_session(exit_reason="normal")
         store.close()
-    apart = sum(singly.values())
     unlock = "skill:gearcrafting:10"
+    (apart, together, paid), (stocked_apart, stocked_together, _paid) = measured
     assert unlock in paid, "the gated craft did not fire — this measures nothing"
     assert paid[unlock] > 0
     # The unlock alone is charged four extra times when the five are priced apart.
     assert apart - together >= paid[unlock] * 4
     # And it dominates: nothing here is walled, so the whole set as one plan
-    # costs a small fraction of the five priced apart.
+    # costs a small fraction of the five priced apart; with the stock, less.
     assert apart < UNOBTAINABLE_PER_UNIT, "a walled input would swamp the term under test"
     assert together < apart // 3
+    assert stocked_together < stocked_apart
 
 
 def test_bundling_saves_nothing_when_there_is_nothing_to_share(

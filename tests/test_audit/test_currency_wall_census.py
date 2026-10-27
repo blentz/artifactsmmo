@@ -210,17 +210,21 @@ def test_only_the_gold_wall_is_exercised_and_the_matrix_says_so(
     `l24_fisher_cooking_rung` too. It is achievable, the arbiter declines it
     (`infeasible:lifesteal_rune:no_route`: the executor buys from the pocket)
     and the walk falls through to the next piece. Serving it (fight for the
-    gold, then buy) is Task 3's."""
+    gold, then buy) is Task 3's.
+
+    21 -> 22 (ruling T14a-B', capacity is priced): on `l20_relief_full_bank`
+    the census's LEGACY rune price sold the one banked sap for 18,500 gold;
+    the sell route delivers 135, so the rune is honestly gold-walled there."""
     walls = [r for r in results if r.gap.startswith("wall_")]
     assert {r.gap for r in walls} == {CurrencyGap.WALL_GOLD.value}
     assert {r.currency for r in walls} == {GOLD_ROW}
-    assert len(walls) == 21
+    assert len(walls) == 22
     assert {r.candidate for r in walls} == {repr(GOLD_CANDIDATE)}
     assert {r.scenario for r in walls if r.is_resolved_root} == {
         "l32_items_task", "l32_held_task_workable", "l32_held_task_closable",
         "l32_held_task_open", "l20_dual_utility", "l20_dual_utility_one_stocked",
         "l24_fisher_cooking_rung"}
-    assert "walled 21" in summary_line(results)
+    assert "walled 22" in summary_line(results)
 
 
 # --- the detector is production's own answer --------------------------------
@@ -562,7 +566,9 @@ def test_the_demand_breakdown_states_the_residual_scope(
     # `red_slime` once the trips its drops force are counted, so its walk
     # offers `adventurer_helmet` for `leather_hat` and no `leather_armor` (-7).
     # No charged cell moves.
-    assert "24 of 1491 cells are CHARGED (2 distinct currencies) — gold 21, tasks_coin 3" in line
+    # 24 -> 25, gold 21 -> 22 (ruling T14a-B'): `l20_relief_full_bank`'s rune,
+    # once priced by selling one banked sap for 18,500 gold, is gold-walled.
+    assert "25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22, tasks_coin 3" in line
     assert FUNDED_CURRENCY in line
     assert demand_breakdown([]) .endswith(
         "An uncharged currency can only be not_demanded.")
@@ -624,7 +630,8 @@ def test_the_gold_wall_names_what_no_other_row_can_see(
     gold = [r for r in results if r.currency == GOLD_ROW and r.charged]
     # 6 -> 22 (ruling AB): the alternatives are priced; see the wall count.
     # 22 -> 21 (spec §2.8): `l22_rest_for_combat`'s rune adds no XP.
-    assert len(gold) == 21
+    # 21 -> 22 (ruling T14a-B'): one banked sap no longer sells for 18,500 gold.
+    assert len(gold) == 22
     assert {r.gap for r in gold} == {CurrencyGap.WALL_GOLD.value}
     assert GOLD_WALLED_CELL in {r.scenario for r in gold}
     for row in gold:

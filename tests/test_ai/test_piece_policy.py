@@ -194,7 +194,9 @@ def test_a_standing_order_is_a_route_while_it_stands() -> None:
     jewelrycrafting climb, and the step graph descends to the recipe: no fill is
     planned against a vanished order. The craft's price moved 113 -> 111 with
     plan B Task 12a: its drop-fed materials are priced exactly, rounded once a
-    route instead of once a unit."""
+    route instead of once a unit. It moved 111 -> 115 with ruling T14a-B': the
+    bank holds 3 of the 4 iron_bar, so the 4th is smelted (the smelt and the
+    mining hop) from 2 more gathered ore (the gathers and the rocks hop)."""
     busy = shared_world(BUNDLE, with_ge_orders=True)
     quiet = shared_world(BUNDLE)
     ctx = TIMED_NO_PROFILE_CONTEXT
@@ -215,7 +217,7 @@ def test_a_standing_order_is_a_route_while_it_stands() -> None:
     assert [(r.kind, r.unlock, r.unlock_actions) for r in route_options(
         AMULET.code, climbing, quiet, ctx, store, policy=PIECE_POLICY)] == [
         ("craft", "skill:jewelrycrafting:10", 25)]
-    assert route_price(AMULET, climbing, quiet, ctx, store, policy=PIECE_POLICY) == 111
+    assert route_price(AMULET, climbing, quiet, ctx, store, policy=PIECE_POLICY) == 115
     assert actionable_step(AMULET, gone, quiet, ctx) == ObtainItem("iron_bar", 4)
 
 
@@ -374,7 +376,9 @@ def test_held_gold_is_free_up_to_the_pocket() -> None:
     The 13 are 7 yellow_slime wins (11 actions, rounded once): ruling T15a
     takes the level-15 highwayman, whose gold per action was the cheapest, out
     of a level-12 character's gold routes (above its fight ceiling), and its
-    4 wins cost 12."""
+    4 wins cost 12. The LEGACY craft moved 38 -> 42 with ruling T14a-B': the
+    bank holds 3 of its 4 iron_bar, and the 4th is smelted from gathered ore
+    (smelt, gathers, two hops)."""
     busy = shared_world(BUNDLE, with_ge_orders=True)
     ctx = TIMED_NO_PROFILE_CONTEXT
     climbing = replace(scenario_state(SCENARIOS[GE_CELL], busy),
@@ -391,7 +395,7 @@ def test_held_gold_is_free_up_to_the_pocket() -> None:
     assert route_price(AMULET, short, busy, ctx, store, policy=PIECE_POLICY) == 15
     assert cheapest_route(AMULET.code, 1, short, busy, ctx, store, policy=LEGACY,
                           pocket=short.gold) == (
-        38, SourceKind.CRAFT)
+        42, SourceKind.CRAFT)
 
 
 def test_an_unpriced_climb_is_served_as_its_craft() -> None:

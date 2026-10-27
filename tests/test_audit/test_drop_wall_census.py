@@ -165,9 +165,14 @@ def test_only_the_closes_arm_is_exercised_and_the_matrix_says_so(
     length): `l10_weapon_upgrade`'s `L*` weapon is the `greater_wooden_staff`
     now, and its `blue_slimeball` (dropped by `blue_slime`, which the worn
     copper loses to and the banked iron sword beats) is the walk's RESOLVED
-    root — the one wall on a chosen root, and a CLOSES row."""
+    root — the one wall on a chosen root, and a CLOSES row.
+
+    9 -> 10 OUT_OF_REACH (ruling T14a-B', capacity is priced):
+    `l20_relief_full_bank`'s `lifesteal_rune` was priced by selling one banked
+    sap for its 18,500 gold; the sell route delivers 135, so its gold is
+    honestly a drop (gold) the worn gear cannot farm."""
     assert sum(1 for r in results if r.gap == CLOSES) == 7
-    assert sum(1 for r in results if r.gap == OUT_OF_REACH) == 9
+    assert sum(1 for r in results if r.gap == OUT_OF_REACH) == 10
     assert [(r.scenario, r.candidate) for r in _walls(results) if r.is_resolved_root] == [
         ("l10_weapon_upgrade", "ObtainItem(code='blue_slimeball', quantity=2)")]
 
@@ -356,9 +361,9 @@ def test_a_root_the_walk_cannot_resolve_is_a_visible_row(
 def test_the_summary_reports_the_arm_counts(results: list[DropResult]) -> None:
     line = summary_line(results)
     assert "candidate cells" in line
-    assert "gate opens 1 of 16 walls (store-less)" in line
+    assert "gate opens 1 of 17 walls (store-less)" in line
     assert "closes 7" in line
-    assert "out_of_reach 9" in line
+    assert "out_of_reach 10" in line
     assert "on ALTERNATIVES" in line
 
 
@@ -424,9 +429,13 @@ def test_the_census_keeps_counting_a_wall_the_gate_now_prices(
 
     16 walls, 1 opened, since spec 2026-10-18 §2.9: `l10_weapon_upgrade`'s
     `blue_slimeball` is a wall the gate opens (the banked iron sword beats
-    its dropper), so that half has its witness again."""
+    its dropper), so that half has its witness again.
+
+    17 walls, 1 opened, since ruling T14a-B': `l20_relief_full_bank`'s
+    `lifesteal_rune`, no longer priced by selling one banked sap for 18,500
+    gold, is a wall the gate does not open."""
     walls = _walls(results)
-    assert len(walls) == 16
+    assert len(walls) == 17
     opened = [w for w in walls if w.gate_price < UNOBTAINABLE_PER_UNIT]
     assert [(w.scenario, w.candidate) for w in opened] == [
         ("l10_weapon_upgrade", "ObtainItem(code='blue_slimeball', quantity=2)")]

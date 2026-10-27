@@ -4518,17 +4518,39 @@ SERVED_BY_ITS_ROUTE_REACH_MUTATIONS = [
 ]
 SERVED_BY_ITS_ROUTE_CORE_MUTATIONS = [
     ("acquisition_cost_core: held gold is not free to the choice",
-     "            short = max(0, per_application - free.get(material, 0))\n",
-     "            short = per_application\n"),
+     "        short = max(0, per_application - free.get(material, 0))\n",
+     "        short = per_application\n"),
     ("acquisition_cost_core: an exact fight cost is rounded up per unit in the choice",
-     "        per_unit = (cost / max(1, route.yield_per) if isinstance(cost, Fraction)\n",
-     "        per_unit = (-(-cost // max(1, route.yield_per)) if isinstance(cost, Fraction)\n"),
+     "    per_unit = (cost / max(1, route.yield_per) if isinstance(cost, Fraction)\n",
+     "    per_unit = (-(-cost // max(1, route.yield_per)) if isinstance(cost, Fraction)\n"),
     ("acquisition_cost_core: each application rounded up on its own",
-     "    actions[0] += ceil(applications * route.actions_per_application)\n",
-     "    actions[0] += applications * ceil(route.actions_per_application)\n"),
+     "        actions[0] += ceil(applications * route.actions_per_application)\n",
+     "        actions[0] += applications * ceil(route.actions_per_application)\n"),
     ("acquisition_cost_core: the priced route is not the walk's argmin",
      "            _cheapest_route(item, options, memo, frozenset(), free)[1])\n",
      "            next(iter(options.get(item, [])), None))\n"),
+]
+# Ruling T14a-B': a capped route prices only its capacity, the remainder the
+# next-cheapest route. Killed by tests/test_ai/test_acquisition_cost_core.py.
+CAPACITY_FILL_MUTATIONS = [
+    ("capacity fill: a capped route serves the whole demand",
+     "        take = min(remaining, route.capacity - drawn.get((item, index), 0))\n",
+     "        take = remaining\n"),
+    ("capacity fill: a stock drawn under one parent is drawn again",
+     "        drawn[(item, index)] = drawn.get((item, index), 0) + take\n",
+     "        drawn[(item, index)] = drawn.get((item, index), 0)\n"),
+    ("capacity fill: an exhausted route is charged again",
+     "        if take <= 0:\n            continue\n",
+     "        if take < 0:\n            continue\n"),
+    ("capacity fill: the routes fill in catalogue order, not unit cost",
+     "                   key=lambda index: (_route_unit(routes[index], options, memo, inner, free),\n",
+     "                   key=lambda index: (0,\n"),
+    ("capacity fill: a remainder no route serves is free",
+     "            return\n    actions[0] += UNOBTAINABLE_PER_UNIT * remaining\n",
+     "            return\n    actions[0] += 0 * remaining\n"),
+    ("capacity fill: the fill stops after the first route",
+     "        if remaining <= 0:\n            return\n    actions[0] += UNOBTAINABLE",
+     "        return\n    actions[0] += UNOBTAINABLE"),
 ]
 SERVED_BY_ITS_ROUTE_PRICER_MUTATIONS = [
     ("acquisition_cost: the pocket's gold is not free to the choice (T2k)",
@@ -6768,10 +6790,10 @@ DROP_TOOL_LEG_P_MUTATIONS = [
 ]
 DROP_TOOL_CORE_MUTATIONS = [
     ("route legs: a leg records the demand, not what holdings leave",
-     "        legs.append((item, route, remaining))", "        legs.append((item, route, qty))"),
+     "            legs.append((item, route, take))", "            legs.append((item, route, qty))"),
     ("route legs: the inputs' legs are not collected",
-     "                    owned, paid, actions, fuel - 1, free, legs)",
-     "                    owned, paid, actions, fuel - 1, free)"),
+     "                        owned, paid, actions, fuel - 1, free, drawn, legs)",
+     "                        owned, paid, actions, fuel - 1, free, drawn)"),
 ]
 TOOL_OBJECTIVE_ROOT_MUTATIONS = [
     ("root: a gear target's skill climb ignores the tool",
@@ -12946,6 +12968,8 @@ def _collect_all_groups() -> None:
     run_group(CRAFT_VS_BUY_SRC, CRAFT_VS_BUY_MUTATIONS,
               "formal/diff/test_craft_vs_buy_diff.py", survivors)
     run_group(ACQUISITION_COST_CORE_SRC, ACQUISITION_CEILING_MUTATIONS,
+              "tests/test_ai/test_acquisition_cost_core.py", survivors)
+    run_group(ACQUISITION_COST_CORE_SRC, CAPACITY_FILL_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_core.py", survivors)
     run_group(LIQUIDATION_VENUE_SRC, LIQUIDATION_VENUE_MUTATIONS,
               "formal/diff/test_liquidation_venue_diff.py", survivors)
