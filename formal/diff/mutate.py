@@ -2237,6 +2237,36 @@ BAG_CLEAR_PLAYER_MUTATIONS = [
      "        if self._arbiter.last_bag_verdict is not None:\n            print(",
      "        if False:\n            print("),
 ]
+# Plan B Task 14a: the walk asks the bag the arbiter's clear leaves. Killed by
+# tests/test_ai/test_player_step_decline.py.
+WALK_SLOT_DECLINE_MUTATIONS = [
+    ("walk slot decline: a full bag is never asked the cleared bag",
+     "            if reason is None or not any(r.startswith(SLOT_DECLINES) for r in declined):",
+     "            if True:"),
+    ("walk slot decline: only the first decline is read for a slot shape",
+     "            if reason is None or not any(r.startswith(SLOT_DECLINES) for r in declined):",
+     "            if reason is None or not declined[0].startswith(SLOT_DECLINES):"),
+    ("walk slot decline: a cleared-bag decline is served",
+     "            if cleared is None:\n                return reason_of(cleared, cleared_declined)",
+     "            if cleared is None:\n                return None"),
+    ("walk slot decline: a cleared-bag decline keeps the full bag's reason",
+     "            if cleared is None:\n                return reason_of(cleared, cleared_declined)",
+     "            if cleared is None:\n                return reason"),
+    ("walk slot decline: a cleared plan needing no slot here is served",
+     "            if (needs_slot(cleared, state, game_data)\n"
+     "                    and clear_actions(",
+     "            if (True\n"
+     "                    and clear_actions("),
+    ("walk slot decline: a clear that frees nothing serves the step",
+     "                    and clear_actions(state, game_data, actions, ctx, related).freed > 0):",
+     "                    and clear_actions(state, game_data, actions, ctx, related).freed >= 0):"),
+]
+# Killed by tests/test_ai/test_bag_clear.py (the live R2D2 equip shape).
+WALK_SLOT_DECLINE_SHAPE_MUTATIONS = [
+    ("walk slot decline: a full-bag equip decline is no slot decline",
+     'SLOT_DECLINES = ("first_leg_inapplicable:", "bag_overflow:", "upgrade:equip_inapplicable:")',
+     'SLOT_DECLINES = ("first_leg_inapplicable:", "bag_overflow:")'),
+]
 FIGHT_ROOM_PLAYER_MUTATIONS = [
     ("fight room: a cached fight the last cycle refused is reused",
      "                           and not self._fight_refused(step))",
@@ -12791,6 +12821,10 @@ def _collect_all_groups() -> None:
     run_group(CRAFT_PLAN_GEN_SRC, BAG_CLEAR_NESTED_MUTATIONS,
               "tests/test_ai/test_bag_clear.py", survivors)
     run_group(PLAYER_SRC, BAG_CLEAR_PLAYER_MUTATIONS,
+              "tests/test_ai/test_bag_clear.py", survivors)
+    run_group(PLAYER_SRC, WALK_SLOT_DECLINE_MUTATIONS,
+              "tests/test_ai/test_player_step_decline.py", survivors)
+    run_group(BAG_CLEAR_SRC, WALK_SLOT_DECLINE_SHAPE_MUTATIONS,
               "tests/test_ai/test_bag_clear.py", survivors)
     run_group(FIGHT_ROOM_LICENSE_SRC, FIGHT_ROOM_LICENSE_MUTATIONS,
               "tests/test_ai/test_fight_room_license.py", survivors)

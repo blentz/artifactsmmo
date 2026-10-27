@@ -51,7 +51,14 @@ from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
 from artifactsmmo_cli.ai.actions.hold_for_party import HoldForPartyAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-from artifactsmmo_cli.ai.bag_clear import BAG_FULL_OUTCOME
+from artifactsmmo_cli.ai.bag_clear import (
+    BAG_FULL_OUTCOME,
+    SLOT_DECLINES,
+    clear_actions,
+    needs_slot,
+    related_codes,
+    roomy,
+)
 from artifactsmmo_cli.ai.best_loadout import BestLoadout, best_loadout, candidate_potions, fight_ahead_loadout
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
@@ -3123,19 +3130,46 @@ class GamePlayer:
         arbiter will ask it. This replaced `_step_servable`'s `is_plannable`,
         a second model that refused goals the walk serves (live 2026-10-03:
         HAL's `GatherMaterials(hard_leather x5)`, which the walk plans as
-        withdraw, fight cow, buy)."""
+        withdraw, fight cow, buy).
+
+        A FULL BAG IS ASKED AS THE ARBITER ASKS IT (Task 13e, plan B Task 14a).
+        A decline a full bag can cause (`bag_clear.SLOT_DECLINES`) is answered
+        by the arbiter's clear: it re-plans the goal on the bag the clear
+        leaves (`StrategyArbiter._slot_blocked_plan`). So the walk asks the
+        same bag (`bag_clear.roomy`): the step is served when the emptied bag
+        plans it, the plan needs a slot here, and the clear frees one; a
+        decline the emptied bag still gives is its reason, and one it hands
+        to the search is the search's. Live R2D2 2026-10-25..27: 20 of 20
+        slots, every `L*` piece declined `upgrade:equip_inapplicable` or
+        `first_leg_inapplicable:Withdraw(...)`, so no piece headed the walk
+        and the clear that serves them was never asked."""
+        def answer(goal: Goal, at: WorldState) -> tuple[list[Action] | None, list[str]]:
+            declined: list[str] = []
+            return decompose(goal, at, game_data, actions, ctx, declined), declined
+
+        def reason_of(plan: list[Action] | None, declined: list[str]) -> str | None:
+            if plan is not None or not declined or hands_off_to_search(declined):
+                return None
+            return declined[0]
+
         def decline(root: MetaGoal) -> str | None:
             step = actionable_step(root, state, game_data, ctx) or root
             goal = objective_step_goal(step, state, game_data, ctx,
                                        root=root, history=self.history)
             if goal is None:
                 return "no_step_goal"
-            declined: list[str] = []
-            if decompose(goal, state, game_data, actions, ctx, declined) is not None:
+            plan, declined = answer(goal, state)
+            reason = reason_of(plan, declined)
+            if reason is None or not any(r.startswith(SLOT_DECLINES) for r in declined):
+                return reason
+            cleared, cleared_declined = answer(goal, roomy(state))
+            if cleared is None:
+                return reason_of(cleared, cleared_declined)
+            related = related_codes(cleared, state, game_data, ctx)
+            if (needs_slot(cleared, state, game_data)
+                    and clear_actions(state, game_data, actions, ctx, related).freed > 0):
                 return None
-            if not declined or hands_off_to_search(declined):
-                return None
-            return declined[0]
+            return reason
         return decline
 
     def _maybe_retry_bank(self) -> None:

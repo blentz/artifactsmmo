@@ -44,6 +44,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -54,7 +55,7 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
@@ -655,3 +656,66 @@ def test_a_heal_prep_never_clears_the_grinds_own_stack(gd: GameData,
     declined: list[str] = []
     assert decompose(prep, state, gd, pool, _ctx(), declined, outermost=False) is None
     assert declined and declined[0].startswith("bag_overflow:")
+
+
+# --------------------------------------------------------------------------
+# Task 14a: the walk asks the bag the arbiter clears
+# --------------------------------------------------------------------------
+
+def test_the_walk_serves_a_climb_the_clear_unblocks(gd: GameData) -> None:
+    """Live R2D2 2026-10-25 (777 cycles): the gearcrafting climb was declined
+    by the WALK as `first_leg_inapplicable:Withdraw(steel_bar×4)` on 20 of 20
+    slots, so it never headed the resolution and the arbiter's clear, which
+    serves it (`test_a_withdraw_the_full_bag_refuses_is_cleared_then_runs`),
+    was never asked. The walk now asks the bag the clear leaves."""
+    player, _goal = _climb(gd)
+    assert player.state is not None
+    decline = player._step_decline(player.state, gd, player._selection_context(),
+                                   player._build_actions())
+    assert decline(ReachSkillLevel(skill="gearcrafting", level=24)) is None
+
+
+def _helmet(gd: GameData) -> tuple[GamePlayer, ObtainItem]:
+    """R2D2's full bag, a worn helmet, and the better one banked: the equip
+    displaces the worn helmet into a bag with no slot for it."""
+    sc = replace(_r2d2(bank={"steel_helm": 1}), hp=900,
+                 equipment={"helmet_slot": "copper_helmet"})
+    return _player(gd, sc), ObtainItem(code="steel_helm", quantity=1, slot="helmet_slot")
+
+
+def test_the_walk_serves_an_equip_the_full_bag_refuses(gd: GameData) -> None:
+    """Live R2D2 2026-10-27: 8 of 11 `L*` pieces declined
+    `upgrade:equip_inapplicable` on 20 of 20 slots — the displaced piece has
+    no slot to land in. A full bag is a slot decline the clear answers."""
+    player, root = _helmet(gd)
+    assert player.state is not None
+    ctx = player._selection_context()
+    actions = player._build_actions()
+    assert player._step_decline(player.state, gd, ctx, actions)(root) is None
+    goal = UpgradeEquipmentGoal(initial_equipment=player.state.equipment,
+                                committed_target=("steel_helm", "helmet_slot"))
+    declined: list[str] = []
+    assert decompose(goal, player.state, gd, actions, ctx, declined) is None
+    assert declined == ["upgrade:equip_inapplicable:Equip(steel_helm->helmet_slot)"]
+    # ...and the arbiter serves it: the clear, then the withdraw and the equip.
+    chosen, plan, _ = player._arbiter._arbitrate(
+        [Candidate(goal=goal, repr_=repr(goal), band=BAND_STEP)], player.state, gd,
+        actions, ctx)
+    assert chosen is goal
+    assert isinstance(plan[0], DepositAllAction), plan
+    assert plan[-1] == EquipAction(code="steel_helm", slot="helmet_slot"), plan
+
+
+def test_a_slot_decline_with_nothing_to_clear_stays_declined(gd: GameData) -> None:
+    """Every stack is related (the climb's own materials), so the clear frees
+    no slot: the arbiter would drop the plan (`bag_full_all_related`), and the
+    walk keeps the decline."""
+    sc = replace(_r2d2(inventory={"wolf_bone": 3, "skeleton_bone": 11, "pig_skin": 3},
+                       slots_max=3, bank={"steel_bar": 40}),
+                 hp=900, skills={"cooking": 30, "gearcrafting": 20, "mining": 30})
+    player = _player(gd, sc)
+    assert player.state is not None
+    decline = player._step_decline(player.state, gd, player._selection_context(),
+                                   player._build_actions())
+    assert decline(ReachSkillLevel(skill="gearcrafting", level=24)) == (
+        "first_leg_inapplicable:Withdraw(steel_bar×4)")

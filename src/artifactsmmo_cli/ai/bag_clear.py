@@ -51,10 +51,13 @@ BAG_FULL_OUTCOME = "error:HTTP_497"
 character's inventory is full"). The server's word overrides the model."""
 
 
-SLOT_DECLINES = ("first_leg_inapplicable:", "bag_overflow:")
+SLOT_DECLINES = ("first_leg_inapplicable:", "bag_overflow:", "upgrade:equip_inapplicable:")
 """The fast path's declines a full bag can cause (`craft_plan_gen._finish`,
-`craft_plan_gen.decompose`): a goal answered by one of them may be a goal the
-clear unblocks (`StrategyArbiter._slot_blocked_plan` asks)."""
+`craft_plan_gen.decompose`, and `craft_plan_gen._decompose_upgrade`'s equip,
+whose displaced piece needs a slot: live R2D2 2026-10-27, 8 of 11 `L*` pieces):
+a goal answered by one of them may be a goal the clear unblocks
+(`StrategyArbiter._slot_blocked_plan` and the walk's `GamePlayer._step_decline`
+ask)."""
 
 
 @dataclass(frozen=True)
