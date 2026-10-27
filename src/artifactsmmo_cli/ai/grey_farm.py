@@ -25,7 +25,15 @@ Policy (user directive 2026-07-06): grey farming is allowed IFF
      too does not consult the next-tier suppression below, because that
      suppression's whole preference — "grind the skill instead" — is
      exactly what this goal is doing. Rationale and the livelock it fixes
-     are on the call site in `ai/goals/gathering.py`. AND
+     are on the call site in `ai/goals/gathering.py`. An `L*` PIECE'S
+     MATERIAL WALK is the fourth (ruling T14a-D, 2026-10-27): a
+     GatherMaterialsGoal marked `piece_material` serves a material of a
+     missing piece of the global gear objective. It holds the demand gate
+     (`serves_a_demand`, condition 1 below, still asked) and does not
+     consult the next-tier suppression, for GAP-6's reason: `L*`'s argmax
+     (spec 2026-10-18 §2.2) already arbitrated the piece against every
+     same-family alternative. Live shape: `slime_shield`'s cloth is bought
+     for `wool`, which only the L5 `sheep` drops, grey from L16. AND
   2. the NEXT-TIER recipe of that recipe's family is too far a skill-grind
      away (or absent). When a same-family recipe just a few levels up exists
      (health_potion at alchemy 18 vs large_health_potion at 20), grinding the
@@ -64,6 +72,34 @@ def _next_tier_level(recipe_item: ItemStats, game_data: GameData) -> int | None:
     return min(levels) if levels else None
 
 
+def _demand(item_code: str, game_data: GameData) -> tuple[list[ItemStats], set[str]]:
+    """The recipes `item_code` serves and the purchases it pays for:
+    `(consumers, bought)`, condition 1's two halves.
+
+    A drop that is the CURRENCY of an NPC purchase serves the recipes that
+    consume what it buys (Fight×N → NpcBuy → craft): wool buys the tailor's
+    cloth, and cloth feeds slime_shield. Before 2026-10-10 the currency
+    demand counted only when NO recipe consumed the drop itself, so wool's
+    own obsolete consumers (copper_armor, iron_helm, ...) suppressed the
+    farm and steel_armor / slime_shield planned at no character level."""
+    bought = {code for per_item in game_data.world.npc_buy_currency.values()
+              for code, currency in per_item.items() if currency == item_code}
+    consumers = [
+        stats
+        for stats in game_data.all_item_stats.values()
+        if item_code in (recipe := game_data.crafting_recipe(stats.code) or {})
+        or not bought.isdisjoint(recipe)
+    ]
+    return consumers, bought
+
+
+def serves_a_demand(item_code: str, game_data: GameData) -> bool:
+    """Condition 1 alone: some recipe consumes the drop, or what it buys, or
+    it is a purchase currency. The gate an exempt walk still asks."""
+    consumers, bought = _demand(item_code, game_data)
+    return bool(consumers) or bool(bought)
+
+
 def grey_farm_allowed(item_code: str, state: WorldState,
                       game_data: GameData) -> bool:
     """True when fighting a zero-xp dropper of `item_code` is worth it.
@@ -85,20 +121,7 @@ def grey_farm_allowed(item_code: str, state: WorldState,
     upstream) — so instead of guessing one reference, we allow when ANY
     consumer is non-obsolete. This is the honest reading of the directive
     across every recipe the drop serves."""
-    # A drop that is the CURRENCY of an NPC purchase serves the recipes that
-    # consume what it buys (Fight×N → NpcBuy → craft): wool buys the tailor's
-    # cloth, and cloth feeds slime_shield. Before 2026-10-10 the currency
-    # demand counted only when NO recipe consumed the drop itself, so wool's
-    # own obsolete consumers (copper_armor, iron_helm, ...) suppressed the
-    # farm and steel_armor / slime_shield planned at no character level.
-    bought = {code for per_item in game_data.world.npc_buy_currency.values()
-              for code, currency in per_item.items() if currency == item_code}
-    consumers = [
-        stats
-        for stats in game_data.all_item_stats.values()
-        if item_code in (recipe := game_data.crafting_recipe(stats.code) or {})
-        or not bought.isdisjoint(recipe)
-    ]
+    consumers, bought = _demand(item_code, game_data)
     if not consumers:
         # Nothing it makes or buys is a recipe input — but a purchase
         # currency still serves the purchase (a rune bought with a coin):

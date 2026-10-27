@@ -30,12 +30,16 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     route_options,
 )
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
+from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.decisions.root import IsThisTargetBlocked, RootWalk
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.decisions.which_piece_is_next import piece_target
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import achievable
 from artifactsmmo_cli.ai.gear_objective_core import layer_of
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.grey_farm import serves_a_demand
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -51,6 +55,7 @@ from artifactsmmo_cli.ai.scenario import (
 )
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
 from artifactsmmo_cli.ai.source_kind import SourceKind
+from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
@@ -180,9 +185,8 @@ def test_every_layer_zero_piece_the_model_calls_achievable_the_walk_serves() -> 
     answers a first-layer piece's step as unserved only in the named residual.
 
     THE RESIDUAL, awaiting rulings (task-14a report, fix round 1), exactly:
-      * `slime_shield` at L30/L40: its `wool` drops only from `sheep`, grey
-        there. `PIECE_POLICY` admits a grey dropper, and the walk's grey-farm
-        directive (2026-07-06) refuses it.
+      * (ruled and fixed, T14a-D: `slime_shield` at L30/L40, whose grey
+        `wool` a piece's material walk now farms.)
       * `lifesteal_rune` at L48: its fight-gold monster (`fight_gold_monster`
         under `PIECE_POLICY`) is `dryad`, in a region no single crossing
         reaches (`region:overworld->restricted:...`)."""
@@ -214,8 +218,6 @@ def test_every_layer_zero_piece_the_model_calls_achievable_the_walk_serves() -> 
     assert asked > 100, asked
     beyond = "region:overworld->restricted:overworld:-5,8:Fight(dryad)"
     assert sorted(unserved) == [
-        ("l30_rune_fill", "slime_shield", "infeasible:cloth:no_route:wool"),
-        ("l40_band_entry", "slime_shield", "infeasible:cloth:no_route:wool"),
         ("l48_band_adequate", "lifesteal_rune", beyond),
         ("l48_capstone_approach", "lifesteal_rune", beyond),
         ("l48_event_active", "lifesteal_rune", beyond),
@@ -494,3 +496,90 @@ def test_every_policy_states_price_climbs() -> None:
               if name != "price_climbs"}
     with pytest.raises(TypeError, match="price_climbs"):
         Policy(**fields)
+
+
+# --- ruling T14a-D: an `L*` piece's material walk may farm a grey dropper ----
+
+SHIELD_CELL = "l30_rune_fill"
+"""A level-30 sheet whose `L*` holds `slime_shield`: its cloth is bought for
+`wool`, which only `sheep` (level 5, grey at 30) drops."""
+
+
+def _shield_step(name: str) -> tuple[GamePlayer, GatherMaterialsGoal]:
+    sc = SCENARIOS[name]
+    world = _world(name)
+    player = GamePlayer(character=sc.name, history=None)
+    player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
+    player.seed_offline(derived_scenario_state(sc, world), world)
+    state = player.state
+    assert state is not None
+    ctx = player._selection_context()
+    assert ctx.gear_objective is not None
+    piece = next(p for p in ctx.gear_objective.missing if p.code == "slime_shield")
+    root = ObtainItem(piece.code, 1, slot=piece.slot)
+    step = actionable_step(root, state, world, ctx)
+    assert step == ObtainItem("cloth", 3)
+    goal = objective_step_goal(step, state, world, ctx, root=root)
+    assert isinstance(goal, GatherMaterialsGoal)
+    return player, goal
+
+
+@pytest.mark.parametrize("name", [SHIELD_CELL, "l40_band_entry"])
+def test_a_piece_s_grey_material_is_farmed(name: str) -> None:
+    """Ruling T14a-D: `L*`'s argmax (§2.2) already arbitrated `slime_shield`
+    against every same-family alternative, as the tree's argmax did for an
+    upgrade's own target (GAP-6), so the grey-farm directive's next-tier
+    suppression is not consulted for its material walk; its demand gate
+    (the wool buys the cloth the shield's recipe consumes) still holds. The
+    walk farms the grey sheep instead of declining
+    `infeasible:cloth:no_route:wool`."""
+    player, goal = _shield_step(name)
+    assert goal.piece_material is True
+    state, world = player.state, player.game_data
+    assert state is not None and world is not None
+    ctx = player._selection_context()
+    actions = player._build_actions()
+    declined: list[str] = []
+    plan = decompose(goal, state, world, actions, ctx, declined)
+    assert plan is not None, declined
+    # Not a piece's material: the directive stands, as before.
+    plain = GatherMaterialsGoal(goal.target_item, goal.needed)
+    refused: list[str] = []
+    assert decompose(plain, state, world, actions, ctx, refused) is None
+    assert refused == ["infeasible:cloth:no_route:wool"]
+    # The search's edges agree: only the piece's goal admits the sheep fight.
+
+    def sheep(g: GatherMaterialsGoal) -> list[object]:
+        return [a for a in g.relevant_actions(actions, state, world)
+                if isinstance(a, FightAction) and a.monster_code == "sheep"]
+
+    assert sheep(goal) and not sheep(plain)
+
+
+def test_the_piece_exemption_keeps_the_demand_gate() -> None:
+    """Condition 1 holds for a piece's walk: a drop that serves no recipe and
+    buys nothing (`golden_egg`, only from the grey `chicken` at 30) is never
+    grey-farmed, piece or not."""
+    world = _world(SHIELD_CELL)
+    assert serves_a_demand("wool", world)
+    assert not serves_a_demand("slime_shield", world)
+    player, _goal = _shield_step(SHIELD_CELL)
+    state = player.state
+    assert state is not None
+    egg = GatherMaterialsGoal("golden_egg", {"golden_egg": 1}, piece_material=True)
+    declined: list[str] = []
+    assert decompose(egg, state, world, player._build_actions(),
+                     player._selection_context(), declined) is None
+    assert declined == ["infeasible:golden_egg:no_route:golden_egg"]
+
+
+def test_only_a_piece_s_gather_is_marked() -> None:
+    """The seam marks the gather only when its root is a missing `L*` piece:
+    the same cloth step asked for itself is an ordinary gather."""
+    player, _goal = _shield_step(SHIELD_CELL)
+    state, world = player.state, player.game_data
+    assert state is not None and world is not None
+    goal = objective_step_goal(ObtainItem("cloth", 3), state, world, player._selection_context())
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.piece_material is False

@@ -21,7 +21,7 @@ from artifactsmmo_cli.ai.gather_selection import GatherCandidate, select_gather_
 from artifactsmmo_cli.ai.gather_skill_gate import skill_open
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
-from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
+from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed, serves_a_demand
 from artifactsmmo_cli.ai.intermediate_batch import size_closure_gather, size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
@@ -69,8 +69,15 @@ class GatherMaterialsGoal(Goal):
     def __init__(self, target_item: str, needed: dict[str, int],
                  skill_grind: bool = False,
                  exclude_recycle: frozenset[str] = frozenset(),
-                 carry: bool = False, fight_gold: bool = False) -> None:
+                 carry: bool = False, fight_gold: bool = False,
+                 piece_material: bool = False) -> None:
         self._target_item = target_item
+        # piece_material: the goal walks a material of a missing `L*` piece
+        # (ruling T14a-D; `for_piece`), so a grey dropper of a material that
+        # serves a demand may be farmed: the grey-farm directive's next-tier
+        # suppression is not consulted (`ai/grey_farm.py`). Not part of goal
+        # identity, like `skill_grind`.
+        self.piece_material = piece_material
         # fight_gold: the goal serves an `L*` piece priced through gold earned
         # by fighting (plan B Task 15, ruling T3a), so its walk may fight for
         # the gold the pocket lacks (`craft_plan_gen._dispatch`). Only that
@@ -101,6 +108,13 @@ class GatherMaterialsGoal(Goal):
         # `strategy_driver._step_protection_profile`. Not part of goal identity
         # (repr/serialize) — the `needed` map already distinguishes instances.
         self.skill_grind = skill_grind
+
+    def for_piece(self) -> "GatherMaterialsGoal":
+        """This goal as an `L*` piece's material walk (`piece_material`)."""
+        return GatherMaterialsGoal(self._target_item, dict(self._needed),
+                                   skill_grind=self.skill_grind,
+                                   exclude_recycle=self._exclude_recycle, carry=self.carry,
+                                   fight_gold=self.fight_gold, piece_material=True)
 
     @property
     def needed(self) -> dict[str, int]:
@@ -470,6 +484,7 @@ class GatherMaterialsGoal(Goal):
             fight = select_drop_fight(
                 item, actions, state, game_data,
                 allow_grey=(self.skill_grind
+                            or (self.piece_material and serves_a_demand(item, game_data))
                             or grey_farm_allowed(item, state, game_data)))
             if fight is not None:
                 result.append(fight)

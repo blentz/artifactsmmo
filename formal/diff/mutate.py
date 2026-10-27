@@ -8344,6 +8344,37 @@ PIECE_PASSIVE_CURRENCY_MUTATIONS = [
      "        piece = _is_bought_piece(code, ctx)\n",
      "        piece = True\n"),
 ]
+# Ruling T14a-D: an `L*` piece's material walk keeps the demand gate and skips
+# the next-tier suppression. Killed by tests/test_ai/test_piece_policy.py.
+PIECE_GREY_WALK_MUTATIONS = [
+    ("piece grey: the walk never exempts a piece's material",
+     "        if goal.piece_material and serves_a_demand(item, game_data):\n",
+     "        if False:\n"),
+    ("piece grey: the walk exempts a piece's material without the demand gate",
+     "        if goal.piece_material and serves_a_demand(item, game_data):\n",
+     "        if goal.piece_material:\n"),
+]
+PIECE_GREY_GOAL_MUTATIONS = [
+    ("piece grey: the search never exempts a piece's material",
+     "                            or (self.piece_material and serves_a_demand(item, game_data))\n",
+     "                            or False\n"),
+    ("piece grey: for_piece leaves the goal unmarked",
+     "                                   fight_gold=self.fight_gold, piece_material=True)",
+     "                                   fight_gold=self.fight_gold, piece_material=False)"),
+]
+PIECE_GREY_SEAM_MUTATIONS = [
+    ("piece grey: a piece's gather is never marked",
+     "        if isinstance(resolved, GatherMaterialsGoal) and _is_bought_piece(piece.code, ctx):\n",
+     "        if False:\n"),
+    ("piece grey: every gather is marked a piece's",
+     "        if isinstance(resolved, GatherMaterialsGoal) and _is_bought_piece(piece.code, ctx):\n",
+     "        if isinstance(resolved, GatherMaterialsGoal):\n"),
+]
+PIECE_GREY_DEMAND_MUTATIONS = [
+    ("piece grey: the demand gate admits any drop",
+     "    return bool(consumers) or bool(bought)\n",
+     "    return True\n"),
+]
 FLEET_CURRENCY_STEP_MUTATIONS = [
     ("fleet step: the fleet's holding never leaves it to the turn-in",
      "            if held < price <= held + pooled:\n",
@@ -13272,6 +13303,14 @@ def _collect_all_groups() -> None:
     run_group(ROUTE_SRC, PIECE_POLICY_ROUTE_PRICE_MUTATIONS,
               "tests/test_ai/test_piece_policy.py", survivors)
     run_group(ACQUISITION_COST_SRC, PIECE_POLICY_PRICER_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, PIECE_GREY_WALK_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(GATHERING_GOAL_SRC, PIECE_GREY_GOAL_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, PIECE_GREY_SEAM_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(GREY_FARM_SRC_CUR, PIECE_GREY_DEMAND_MUTATIONS,
               "tests/test_ai/test_piece_policy.py", survivors)
     run_group(WHICH_PIECE_SRC, SERVED_BY_ITS_ROUTE_WHICH_PIECE_MUTATIONS,
               "tests/test_ai/test_decisions_which_piece.py", survivors)

@@ -58,7 +58,7 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
-from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
+from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed, serves_a_demand
 from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY, heal_prep_goal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
@@ -444,6 +444,10 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
         own consumer (`grey_exempt`), and anything else only when the
         directive licenses the drop (`grey_farm_allowed`)."""
         if goal.skill_grind or item in grey_exempt:
+            return True
+        if goal.piece_material and serves_a_demand(item, game_data):
+            # An `L*` piece's material walk (ruling T14a-D): the demand gate
+            # alone, as `ai/grey_farm.py` states.
             return True
         if item not in grey_verdicts:
             grey_verdicts[item] = grey_farm_allowed(item, state, game_data)
