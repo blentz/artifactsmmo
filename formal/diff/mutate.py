@@ -8308,6 +8308,19 @@ PARTY_LOADOUT_PLAYER_MUTATIONS = [
 # A pooled (dual-role) currency is short only by what the WHOLE fleet lacks
 # (live 2026-10-13: four characters bought and gathered toward their own medal
 # shortfall). OWN run_groups, one per killing test module.
+# Ruling T14a-B: an `L*` piece's passive currency is farmed, never left to
+# levelling. Killed by tests/test_ai/test_dual_role_currency.py.
+PIECE_PASSIVE_CURRENCY_MUTATIONS = [
+    ("passive currency: an L* piece's medals are capped by the tickets held",
+     "                if funded is not None and not piece:\n",
+     "                if funded is not None:\n"),
+    ("passive currency: an L* medal worn for itself waits on the tickets held",
+     "        if _passively_funded(code, state, game_data) == 0 and not piece:\n",
+     "        if _passively_funded(code, state, game_data) == 0:\n"),
+    ("passive currency: every equippable is an L* piece",
+     "        piece = _is_bought_piece(code, ctx)\n",
+     "        piece = True\n"),
+]
 FLEET_CURRENCY_STEP_MUTATIONS = [
     ("fleet step: the fleet's holding never leaves it to the turn-in",
      "            if held < price <= held + pooled:\n",
@@ -8339,7 +8352,7 @@ FLEET_CURRENCY_STEP_MUTATIONS += [
      "    held = state.inventory.get(pay, 0) + (state.bank_items or {}).get(pay, 0)\n    return held // price\n",
      "    held = state.inventory.get(pay, 0)\n    return held // price\n"),
     ("passive: an item bought with tickets farms them",
-     "        if _passively_funded(code, state, game_data) == 0:\n",
+     "        if _passively_funded(code, state, game_data) == 0 and not piece:\n",
      "        if False:\n"),
 ]
 SERVER_LAG_MUTATIONS = [
@@ -13806,6 +13819,8 @@ def _collect_all_groups() -> None:
     run_group(PLAYER_SRC, PARTY_RECORD_MUTATIONS,
               "tests/test_ai/test_player_learning.py", survivors)
     run_group(OBTAIN_ITEM_ROUTING_SRC, FLEET_CURRENCY_STEP_MUTATIONS,
+              "tests/test_ai/test_dual_role_currency.py", survivors)
+    run_group(OBTAIN_ITEM_ROUTING_SRC, PIECE_PASSIVE_CURRENCY_MUTATIONS,
               "tests/test_ai/test_dual_role_currency.py", survivors)
     run_group(DUAL_ROLE_CURRENCY_SRC, FLEET_POOLED_MUTATIONS,
               "tests/test_ai/test_dual_role_currency.py", survivors)

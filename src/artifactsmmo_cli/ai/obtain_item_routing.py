@@ -228,6 +228,15 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
         # so the arbiter falls back to levelling (which accrues the currency). The
         # item is then bought once ordinary play has paid for it. (§synergy live
         # diagnosis 2026-07-23: over-boosted event_ticket grind out-ranked xp.)
+        #
+        # AN `L*` PIECE IS THE EXCEPTION (ruling T14a-B; spec 2026-10-18 §2.1:
+        # an achievable currency counts, §6.1: a long route is pursued, §6.2:
+        # no fight is chosen for XP while a piece is missing). "Until then,
+        # level" is an XP fight standing in for an acquisition step, so a
+        # missing piece's passive currency is farmed as one. Its cost orders
+        # the piece (the capacity-honest price, ruling T14a-B'); it is not a
+        # refusal. Every other equippable keeps the rule.
+        piece = _is_bought_piece(code, ctx)
         purchases = [(price, currency)
                      for price, currency in _permanent_vendor_purchases(code, game_data)
                      if currency != "gold"
@@ -246,28 +255,30 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
                 fleet = held + pooled
                 want = currency_grind_target_pure(fleet, price) - fleet
                 funded = _passively_funded(currency, state, game_data)
-                if funded is not None:
+                if funded is not None and not piece:
                     # The currency is BOUGHT with a passive one (a medal for 100
                     # event_ticket): the same rule one level down — buy what
                     # the tickets already held pay for, never farm the tickets
                     # (live 2026-10-13: 472 gathers for 4 tickets, 1 in 200).
+                    # Not for an `L*` piece (see `piece` above).
                     want = min(want, funded)
                     if want == 0:
                         return None
                 return GatherMaterialsGoal(target_item=currency,
                                            needed={currency: held + want})
-        if _passively_funded(code, state, game_data) == 0:
+        if _passively_funded(code, state, game_data) == 0 and not piece:
             # The ITEM itself is bought with a passive currency (a medal worn
             # as an artifact): the "plain buy attempt" above is not
             # unplannable, GatherMaterials' currency injection farms the
             # tickets as a drop (live 2026-10-13: HAL and Lor, 163 gathers).
-            # Buy once held tickets pay for it; until then, level.
+            # Buy once held tickets pay for it; until then, level — except an
+            # `L*` piece, whose tickets are farmed (see `piece` above).
             return None
         # An `L*` piece the objective prices through fight gold is served by
         # that fight (plan B Task 15): its walk may earn the gold the pocket
         # lacks. Any other gold-priced buy still waits for the pocket.
         return GatherMaterialsGoal(target_item=code, needed={code: 1},
-                                   fight_gold=_is_bought_piece(code, ctx))
+                                   fight_gold=piece)
     # Route on the STEP, not on a depth-bound proxy for it (see the docstring:
     # the deleted `is_plannable` depth gate never rejected on real data).
     #

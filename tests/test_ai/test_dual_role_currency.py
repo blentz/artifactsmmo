@@ -1,12 +1,15 @@
 """A dual-role item is one the character can WEAR and also SPEND."""
 from dataclasses import replace
+from fractions import Fraction
 
 from artifactsmmo_cli.ai.currency_grind_target import currency_grind_target_pure
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
 from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings, fleet_pooled, is_dual_role
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.obtain_item_routing import _equippable_goal, _passively_funded
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
 
@@ -138,3 +141,39 @@ def test_a_medal_worn_for_itself_is_bought_only_with_tickets_held(monkeypatch):
     goal = _equippable_goal("lich_race_medal", "artifact2_slot", paid, gd, NO_PROFILE_CONTEXT)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal.needed == {"lich_race_medal": 1}
+
+
+def _piece_ctx(code: str, slot: str):  # type: ignore[no-untyped-def]
+    """A context whose gear objective names `code` as a missing `L*` piece."""
+    piece = GearPiece(slot, code, 0, Fraction(1), Fraction(10), SourceKind.BUY)
+    return replace(NO_PROFILE_CONTEXT,
+                   gear_objective=GearObjective("wolf", {slot: code}, Fraction(1), (piece,)))
+
+
+def test_an_l_star_trophy_farms_the_tickets_its_medals_cost(monkeypatch):
+    """Ruling T14a-B (spec 2026-10-18 §2.1, §6.1, §6.2): an `L*` piece paid
+    for in a currency bought with a passive one is pursued by farming that
+    currency, never left to levelling. Live HAL/C3P0/Robby 2026-10-25:
+    `lich_race_trophy` declined `no_step_goal` 100-200 cycles a day each. The
+    cost is answered by its price ordering it (ruling T14a-B'), not refused."""
+    gd = _passive_tickets(_trophy_world(), monkeypatch)
+    poor = make_state(level=30, bank_items={"lich_race_medal": 3, "event_ticket": 99})
+    ctx = _piece_ctx("lich_race_trophy", "artifact1_slot")
+    goal = _equippable_goal("lich_race_trophy", "artifact1_slot", poor, gd, ctx)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.needed == {"lich_race_medal": currency_grind_target_pure(3, 10)}
+    # Not an `L*` piece: the passive rule stands (a medal step's tickets held).
+    assert _equippable_goal("lich_race_trophy", "artifact1_slot", poor, gd,
+                            NO_PROFILE_CONTEXT) is None
+
+
+def test_an_l_star_medal_worn_for_itself_farms_its_tickets(monkeypatch):
+    gd = _passive_tickets(_trophy_world(), monkeypatch)
+    poor = make_state(level=30, inventory={"event_ticket": 20}, bank_items={"event_ticket": 79})
+    ctx = _piece_ctx("lich_race_medal", "artifact2_slot")
+    goal = _equippable_goal("lich_race_medal", "artifact2_slot", poor, gd, ctx)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.needed == {"lich_race_medal": 1}
+    assert goal.fight_gold is True
+    assert _equippable_goal("lich_race_medal", "artifact2_slot", poor, gd,
+                            NO_PROFILE_CONTEXT) is None
