@@ -69,11 +69,14 @@ def piece_target(piece: GearPiece, objective: CharacterObjective, state: WorldSt
 
 
 def _scan_key(step: ObtainItem, state: WorldState) -> tuple[object, ...]:
-    """The search-cache key of one drop-tool scan: the step's obtain and the
-    state the scan reads (the holdings its loadouts are picked from, the level
-    its candidates are legal at), so a scan is reused within a decision only
-    for the very state it answered."""
+    """The search-cache key of one drop-tool scan: the step's obtain and what
+    the scan reads off the state — the holdings its loadouts are picked from
+    (bag, worn, bank), the gold its routes are paid with, the skills that gate
+    them and the level its loadouts are legal at. The state and the context
+    themselves cannot be hashed, so `with_drop_tool` pins both by reference
+    on the entry (memory: a cache key must pin its object)."""
     return ("drop_tool", step.code, step.quantity, state.character, state.level,
+            state.gold, tuple(sorted(state.skills.items())),
             tuple(sorted(state.inventory.items())), tuple(sorted(state.equipment.items())),
             tuple(sorted((state.bank_items or {}).items())))
 
@@ -93,8 +96,10 @@ def with_drop_tool(step: ObtainItem, state: WorldState, game_data: GameData,
     not a gate: one whose step `step_decline` refuses this cycle leaves `step`.
     With no prospecting slope learned (`k = 0`) the chance multiplier is 1
     (`Formal.DropChance`), so nothing can save anything and no walk is made.
-    Inside a `search_cache` episode the scan is made once per step and state
-    (ruling T12l): the walk's entry and its alternatives share it."""
+    Inside a `search_cache` episode the scan is made once per step, state and
+    context (rulings T12l, T12p): the walk's entry and its alternatives share
+    it. The entry holds the state and the context it answered, so it is
+    served only to those very objects; any other asker scans afresh."""
     if ctx.drops().k == 0:
         return step
 
@@ -102,7 +107,15 @@ def with_drop_tool(step: ObtainItem, state: WorldState, game_data: GameData,
         work = _route.route_drop_work(step, state, game_data, ctx, history, PIECE_POLICY)
         return drop_tool_target(work, state, game_data, ctx)
 
-    tool = scan() if history is None else history.cached(_scan_key(step, state), scan)
+    def pinned() -> tuple[WorldState, SelectionContext, str | None]:
+        return state, ctx, scan()
+
+    if history is None:
+        tool = scan()
+    else:
+        held_state, held_ctx, tool = history.cached(_scan_key(step, state), pinned)
+        if held_state is not state or held_ctx is not ctx:
+            tool = scan()
     if tool is None:
         return step
     root = ObtainItem(tool, 1)
@@ -199,7 +212,8 @@ class WhichPieceIsNext(Decision[MetaGoal]):
       pays for itself on its drop work (`piece_step`, §2.8), unless that
       item's step is declined; a climb never is. A piece whose step is
       declined is recorded with its reason and the next piece is asked, and so
-      is a piece a sibling crafts for this character (`GearPiece.awaits_delivery`, §2.5) until its copy is banked.
+      is a piece a sibling crafts for this character
+      (`GearPiece.awaits_delivery`, §2.5) until its copy is banked.
     * every piece declined (INTERIM, ruling AI): no gear action is available
       this cycle, so XP is the next action that best advances the character
       (§2.4), and the root is `ReachCharLevel(state.level + 1)` on `m*`.

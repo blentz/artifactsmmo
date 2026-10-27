@@ -45,6 +45,10 @@ def _gd() -> GameData:
     # obtainable (the obtainability filter only excludes un-gettable chains).
     gd._resource_drops = {"copper_rocks": "copper_bar", "iron_rocks": "iron_bar",
                           "ash_tree": "ash_plank"}
+    # Every API resource names its gathering skill; the drop price reads the
+    # gather's loadout by it (ruling T12n), so a resource without one raises.
+    gd._resource_skill = {"copper_rocks": ("mining", 1), "iron_rocks": ("mining", 1),
+                          "ash_tree": ("woodcutting", 1)}
     # `acquire_steps` is now route-aware (`acquisition_cost.acquisition_actions`),
     # and a route is only servable where the executor could actually go: a CRAFT
     # needs a known workshop, a GATHER needs a live tile. Without these the stub
@@ -165,6 +169,9 @@ def _gd_obtainability() -> GameData:
     }
     # copper_ore + ash_wood are gatherable resource drops; wooden_stick is NOT.
     gd._resource_drops = {"copper_rocks": "copper_ore", "ash_tree": "ash_wood"}
+    # Every API resource names its gathering skill; the drop price reads the
+    # gather's loadout by it (ruling T12n), so a resource without one raises.
+    gd._resource_skill = {"copper_rocks": ("mining", 1), "ash_tree": ("woodcutting", 1)}
     # Somewhere to craft and to gather, as in `_gd`: obtainability is the obtain
     # model's feasibility, which counts only routes the executor can serve.
     gd.world.workshop_locations = {"weaponcrafting": (0, 0), "mining": (0, 1)}

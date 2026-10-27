@@ -102,6 +102,46 @@ def _loss_surcharge(monster_code: str, max_hp: int,
     return Fraction(0)
 
 
+def _loadout_prospecting(purpose: Combat | Gather, state: WorldState,
+                         game_data: GameData) -> int:
+    """The prospecting the loadout `pick_loadout` picks for `purpose` from
+    what `state` owns carries, projected as a swap (`project_loadout_stats`:
+    an item's prospecting in, the one it displaces out). The executor wears
+    that loadout for the attempt — a fight is gated on it
+    (`FightAction.is_applicable`), a gather re-arms into it
+    (`GatherAction.cost`) — so it is the `P` a drop's chance is read at (spec
+    2026-10-18 §2.8: "the prospecting of the loadout used for that gather or
+    fight"), and the ONE basis every drop price uses (ruling T12n)."""
+    loadout = pick_loadout_cached(purpose, state, game_data)
+    return project_loadout_stats(state, loadout, game_data).prospecting
+
+
+def _fight_prospecting(monster_code: str, state: WorldState, game_data: GameData) -> int:
+    """`_loadout_prospecting` for a fight against `monster_code`: the
+    `Combat` purpose the fight's loadout gate reads."""
+    return _loadout_prospecting(Combat(game_data.monster_attack(monster_code),
+                                       game_data.monster_resistance(monster_code),
+                                       dict(state.attack)), state, game_data)
+
+
+def _gather_prospecting(resource: str, state: WorldState, game_data: GameData) -> int:
+    """`_loadout_prospecting` for a gather at `resource`: the `Gather` purpose
+    of its skill. A resource with no skill in the catalogue RAISES: API data or
+    fail."""
+    requirement = game_data.resource_skill_level(resource)
+    if requirement is None:
+        raise ValueError(f"resource {resource!r} has no gathering skill in game data")
+    return _loadout_prospecting(Gather(requirement[0]), state, game_data)
+
+
+def leg_prospecting(leg: DropLeg, state: WorldState, game_data: GameData) -> int:
+    """The prospecting the loadout `leg` is attempted in carries: the fight's
+    for a farm leg, the gather's for a gather leg (`_loadout_prospecting`)."""
+    if leg.kind is SourceKind.DROP:
+        return _fight_prospecting(leg.source, state, game_data)
+    return _gather_prospecting(leg.source, state, game_data)
+
+
 def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: int,
                   state: WorldState, game_data: GameData, timing: FightSecondsModel,
                   evidence: LearnedDrops,
@@ -110,7 +150,8 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
 
     Two pieces, multiplied, and neither is restated here: the wins one unit
     takes (`LearnedDrops.attempts_per_unit`, the learned chance proved in
-    `Formal.DropChance`, at `state.prospecting`) times `cycles_per_kill` — the SAME
+    `Formal.DropChance`, at the fight loadout's prospecting,
+    `_fight_prospecting`) times `cycles_per_kill` — the SAME
     fight-plus-forced-rest figure `cheapest_path_to_level` spends, so a drop farm
     and a level grind are quoted in identical units. Using a bare kill count here
     would price the farm at roughly half its real cost, which is the defect
@@ -124,7 +165,7 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
     rounds the route's applications up ONCE; rounding each unit up overpriced a
     farm whose win yields more than a unit's worth of its cost."""
     kills = evidence.attempts_per_unit(monster_code, item, rate, min_q, max_q,
-                                       state.prospecting)
+                                       _fight_prospecting(monster_code, state, game_data))
     return kills * _kill_actions(monster_code, state, game_data, timing, records)
 
 
@@ -146,10 +187,10 @@ def _gather_actions(item: str, resource: str, state: WorldState, game_data: Game
                     evidence: LearnedDrops) -> Fraction:
     """Gathers of `resource` to obtain ONE `item`, exact: the attempts a unit
     takes (`LearnedDrops.attempts_per_unit`, spec 2026-10-18 §2.8) over the
-    item's drop row (`GameData.gather_drop_row`), at `state.prospecting`, the
-    worn total of the loadout the gather is made in: the character's own for
-    an executor price, the fighter's for a gear-objective price
-    (`gear_objective._price`). The SAME figure the planner's gather charges
+    item's drop row (`GameData.gather_drop_row`), at the prospecting of the
+    loadout the gather is made in (`_gather_prospecting`): picked from the
+    character's own holdings for an executor price, from the `L*` fighter's
+    worn gear for a gear-objective price (`gear_objective._price`). The SAME figure the planner's gather charges
     (`GatherAction.gathers`) and every gather source picker ranks by (ruling
     T16a), so the walk and the planner cannot disagree on a rare drop: 20
     `small_pearls` (1 in 300) off `trout_spot` are about 6,000 gathers under
@@ -164,7 +205,8 @@ def _gather_actions(item: str, resource: str, state: WorldState, game_data: Game
     Exact, as a fight for gold is (ruling T2m M1): a learned chance is no whole
     number of gathers, and the walk rounds the route's applications up once."""
     rate, min_q, max_q = game_data.gather_drop_row(resource, item)
-    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q, state.prospecting)
+    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,
+                                      _gather_prospecting(resource, state, game_data))
 
 
 def _priced(item: str, source: Source, state: WorldState,
@@ -878,45 +920,24 @@ def drop_work(item: str, qty: int, state: WorldState, game_data: GameData,
                  for code, route, units in legs if route.kind in _DROP_WORK)
 
 
-def leg_prospecting(leg: DropLeg, state: WorldState, game_data: GameData) -> int:
-    """The prospecting the loadout `leg` is attempted in carries (spec
-    2026-10-18 §2.8: "the prospecting of the loadout used for that gather or
-    fight"): the loadout `pick_loadout` picks from what `state` owns for the
-    leg's activity — `Gather(skill)` at a resource, `Combat` against the
-    monster — projected as a swap (`project_loadout_stats`: an item's
-    prospecting in, the one it displaces out). A resource with no skill in the
-    catalogue RAISES: API data or fail."""
-    purpose: Combat | Gather
-    if leg.kind is SourceKind.DROP:
-        purpose = Combat(game_data.monster_attack(leg.source),
-                         game_data.monster_resistance(leg.source), dict(state.attack))
-    else:
-        requirement = game_data.resource_skill_level(leg.source)
-        if requirement is None:
-            raise ValueError(f"resource {leg.source!r} has no gathering skill in game data")
-        purpose = Gather(requirement[0])
-    loadout = pick_loadout_cached(purpose, state, game_data)
-    return project_loadout_stats(state, loadout, game_data).prospecting
-
-
 def drop_work_actions(work: Sequence[DropLeg], state: WorldState,
                       game_data: GameData, ctx: SelectionContext) -> Fraction:
     """Actions `work` (`drop_work`'s legs) takes, exact: each leg's units
     times the per-unit price its route has in the walk — a farm's
     (`_drop_actions`, with the loss surcharge only where the walk charges it)
-    or a gather's (`_gather_actions`) — at the prospecting of the loadout the
-    leg is attempted in (`leg_prospecting`), so an item that loadout would not
-    wear moves no price. Both read the ONE drop model (`ctx.drops()`)."""
+    or a gather's (`_gather_actions`) — so at the prospecting of the loadout
+    the leg is attempted in, exactly as the walk prices it: an item that
+    loadout would not wear moves no price. Both read the ONE drop model
+    (`ctx.drops()`)."""
     total = Fraction(0)
     for leg in work:
-        attempt = replace(state, prospecting=leg_prospecting(leg, state, game_data))
         if leg.kind is SourceKind.DROP:
             rate, min_q, max_q = _drop_table(leg.item, leg.source, game_data)
-            per_unit = _drop_actions(leg.item, leg.source, rate, min_q, max_q, attempt,
+            per_unit = _drop_actions(leg.item, leg.source, rate, min_q, max_q, state,
                                      game_data, ctx.timing(), ctx.drops(),
                                      ctx.fight_records if leg.surcharged else ())
         else:
-            per_unit = _gather_actions(leg.item, leg.source, attempt, game_data, ctx.drops())
+            per_unit = _gather_actions(leg.item, leg.source, state, game_data, ctx.drops())
         total += leg.units * per_unit
     return total
 

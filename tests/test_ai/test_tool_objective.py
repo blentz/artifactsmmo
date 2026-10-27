@@ -12,7 +12,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from fractions import Fraction
 
-from artifactsmmo_cli.ai.acquisition_cost import drop_work, drop_work_actions
+from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, drop_work, drop_work_actions
 from artifactsmmo_cli.ai.decisions.root import RootWalk, resolve_root
 from artifactsmmo_cli.ai.decisions.which_piece_is_next import fleet_piece_root, with_drop_tool
 from artifactsmmo_cli.ai.drop_leg import DropLeg
@@ -414,3 +414,37 @@ def test_a_fleet_pieces_craft_fetches_the_prospecting_item_first() -> None:
         ObtainItem(CHARM, 1)
     walk = RootWalk(step_decline={ObtainItem(CHARM, 1): "no plan"}.get, now=NOW)
     assert fleet_piece_root(piece, state, gd, _learned(), walk, None) == ObtainItem("pearl_ring", 1)
+
+
+def test_the_walk_prices_a_gather_at_the_loadout_it_is_made_in() -> None:
+    """One basis (ruling T12n): the acquisition walk prices the pearls at the
+    prospecting of the loadout the gather is made in, so a charm in the bag,
+    which that loadout wears, cheapens the ring's own price exactly as it
+    cheapens its drop work: 6,000 gathers become 4,000."""
+    gd = _pearl_world()
+    bare = make_state(level=15)
+    held = make_state(level=15, inventory={CHARM: 1})
+    plain = acquisition_actions("pearl_ring", 1, bare, gd, _learned(), equip=False)
+    charmed = acquisition_actions("pearl_ring", 1, held, gd, _learned(), equip=False)
+    assert plain - charmed == 2000
+    assert drop_work_actions(PEARLS, held, gd, _learned()) == 4000
+
+
+def test_a_scan_is_reused_only_for_the_very_inputs_it_read(tmp_path, monkeypatch) -> None:
+    """The search-cache entry answers one step, state and context (ruling
+    T12p): the same three hit it; a state with other gold misses on the key,
+    and another context object, or another state object with the same fields,
+    misses on the pinned references."""
+    gd = _pearl_world()
+    store = LearningStore(db_path=str(tmp_path / "learn.db"), character="scan_probe")
+    calls = _counting(monkeypatch,
+                      "artifactsmmo_cli.ai.decisions.which_piece_is_next.drop_tool_target")
+    step = ObtainItem("pearl_ring", 1, slot="ring1_slot")
+    state, ctx = make_state(level=15), _learned()
+    with store.search_cache():
+        for asker, context, scans in ((state, ctx, 1), (state, ctx, 1),
+                                      (replace(state, gold=51), ctx, 2),
+                                      (state, replace(ctx), 3), (replace(state), ctx, 4)):
+            assert with_drop_tool(step, asker, gd, context, store, no_decline) == \
+                ObtainItem(CHARM, 1)
+            assert len(calls) == scans

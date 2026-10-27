@@ -30,6 +30,9 @@ def _progression_gd() -> GameData:
     # known -> every wc_t* is obtainable (the grind-target obtainability filter
     # only excludes chains the executor cannot serve).
     gd._resource_drops = {"bar_rocks": "bar"}
+    # Every API resource names its gathering skill; the drop price reads the
+    # gather's loadout by it (ruling T12n), so a resource without one raises.
+    gd._resource_skill = {"bar_rocks": ("mining", 1)}
     gd._resource_locations = {"bar_rocks": [(1, 0)]}
     gd._workshop_locations = {"weaponcrafting": (0, 0)}
     return gd

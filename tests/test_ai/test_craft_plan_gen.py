@@ -85,6 +85,9 @@ def _gd_copper_ring() -> GameData:
         "copper_ring": {"copper_bar": 1},
     }
     gd._resource_drops = {"copper_rocks": "copper_ore"}
+    # Every API resource names its gathering skill; the drop price reads the
+    # gather's loadout by it (ruling T12n), so a resource without one raises.
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
     # The tile the pool's gather stands on: a gather with no known tile is no
     # ready route for the one walk (the old descent never asked).
     gd._resource_locations = {"copper_rocks": [(0, 1)]}

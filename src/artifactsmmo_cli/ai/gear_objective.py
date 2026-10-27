@@ -474,10 +474,12 @@ def _price(state: WorldState, game_data: GameData, ctx: SelectionContext,
     and the route that price takes, the one the piece is served by (plan B
     Task 3).
 
-    A drop route's chance is read at `fighter`'s prospecting (spec 2026-10-18
-    §2.8: the prospecting of the loadout the attempt is made in), the fighter
-    wearing `L*` that the objective's rate is read on. Only the prospecting is
-    the fighter's: the holdings priced are the character's own.
+    A drop route's chance is read at the prospecting of the loadout the
+    attempt is made in (spec 2026-10-18 §2.8, `acquisition_cost`'s one basis,
+    ruling T12n), on top of `fighter`'s prospecting total, the fighter wearing
+    `L*` that the objective's rate is read on. Only that total is the
+    fighter's: the holdings priced, and the worn gear the loadout swaps from,
+    are the character's own.
 
     Held gold is credited only above the reserve the piece's buy must keep
     (`spendable_pocket`, ruling T3e m3): the gold the executor's buy refuses

@@ -1438,8 +1438,9 @@ DROP_PRICE_MUTATIONS = [
     ("drop price: a DROP route ignores the context's evidence",
      "                                                  ctx.drops(), ctx.fight_records),",
      "                                                  LearnedDrops.empty(), ctx.fight_records),"),
-    ("drop price: a gather ignores the worn prospecting",
-     "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q, state.prospecting)",
+    ("drop price: a gather ignores its loadout's prospecting",
+     "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,\n"
+     "                                      _gather_prospecting(resource, state, game_data))",
      "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q, 0)"),
     ("drop price: a farm is one win a unit",
      "    kills = evidence.attempts_per_unit(monster_code, item, rate, min_q, max_q,",
@@ -4672,11 +4673,14 @@ GATED_GATHER_MUTATIONS = [
      "        for kind in (SourceKind.CRAFT,):"),
     # The apple bug (2026-10-05): a secondary drop priced at one gather a unit.
     ("acquisition_cost: a GATHER route ignores its drop rate (one gather a unit)",
-     "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q, state.prospecting)",
+     "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,\n"
+     "                                      _gather_prospecting(resource, state, game_data))",
      "    return Fraction(1)"),
     ("acquisition_cost: a GATHER route's ratio inverted (yield per action as actions)",
-     "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q, state.prospecting)",
-     "    return evidence.units_per_attempt(resource, item, rate, min_q, max_q, state.prospecting)"),
+     "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,\n"
+     "                                      _gather_prospecting(resource, state, game_data))",
+     "    return evidence.units_per_attempt(resource, item, rate, min_q, max_q,\n"
+     "                                      _gather_prospecting(resource, state, game_data))"),
 ]
 # The grind ranks under its own pricing policy. Killed by
 # tests/test_ai/scenarios/test_fisher_cooking_rung.py.
@@ -6667,8 +6671,19 @@ DROP_TOOL_WALK_MUTATIONS = [
      "    if ctx.drops().k == 0:\n        return step\n",
      "    if False:\n        return step\n"),
     ("which_piece_is_next: the drop-tool scan bypasses the search cache",
-     "    tool = scan() if history is None else history.cached(_scan_key(step, state), scan)",
-     "    tool = scan()"),
+     "        held_state, held_ctx, tool = history.cached(_scan_key(step, state), pinned)\n"
+     "        if held_state is not state or held_ctx is not ctx:\n"
+     "            tool = scan()\n",
+     "        tool = scan()\n"),
+    ("which_piece_is_next: a cached scan is served to another state or context",
+     "        if held_state is not state or held_ctx is not ctx:\n",
+     "        if False:\n"),
+    ("which_piece_is_next: a cached scan is served to another context",
+     "        if held_state is not state or held_ctx is not ctx:\n",
+     "        if held_state is not state:\n"),
+    ("which_piece_is_next: a cached scan is served to another state object",
+     "        if held_state is not state or held_ctx is not ctx:\n",
+     "        if held_ctx is not ctx:\n"),
     ("which_piece_is_next: a declined prospecting item declines the obtain instead",
      "    if step_decline(root) is not None:\n        return step\n",
      "    if step_decline(root) is not None and False:\n        return step\n"),
@@ -6707,16 +6722,19 @@ DROP_TOOL_WORK_MUTATIONS = [
     ("drop work: every farm leg is marked surcharged",
      "surcharged=not route.unlock)", "surcharged=True)"),
     ("drop work: a fight leg is given a gather's loadout",
-     "    if leg.kind is SourceKind.DROP:\n        purpose = Combat(",
-     "    if False:\n        purpose = Combat("),
+     "    if leg.kind is SourceKind.DROP:\n        return _fight_prospecting",
+     "    if False:\n        return _fight_prospecting"),
     ("drop work: a resource with no skill is not raised",
-     "            raise ValueError(f\"resource {leg.source!r} has no gathering skill in game data\")\n",
-     "            return 0\n"),
+     "        raise ValueError(f\"resource {resource!r} has no gathering skill in game data\")\n",
+     "        return 0\n"),
+    ("drop price: a farm reads the worn total, not its fight loadout's",
+     "                                       _fight_prospecting(monster_code, state, game_data))",
+     "                                       state.prospecting)"),
 ]
 DROP_TOOL_LEG_P_MUTATIONS = [
-    ("drop work: a leg is priced at the worn total, not its loadout's",
-     "        attempt = replace(state, prospecting=leg_prospecting(leg, state, game_data))",
-     "        attempt = state"),
+    ("drop price: a gather reads the worn total, not its gather loadout's",
+     "                                      _gather_prospecting(resource, state, game_data))",
+     "                                      state.prospecting)"),
 ]
 DROP_TOOL_CORE_MUTATIONS = [
     ("route legs: a leg records the demand, not what holdings leave",

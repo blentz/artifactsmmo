@@ -26,6 +26,7 @@ import pytest
 
 from artifactsmmo_cli.ai.acquisition_cost import (
     BANK_VENUE,
+    _drop_actions,
     _drop_table,
     _kill_actions,
     _priced,
@@ -1709,3 +1710,21 @@ def test_a_legs_prospecting_is_its_loadouts_swap(state, game_data, monkeypatch) 
     with pytest.raises(ValueError, match="no gathering skill"):
         leg_prospecting(DropLeg(SourceKind.GATHER, "nowhere", "copper_ore", 1, True), worn,
                         game_data)
+
+
+def test_a_farm_is_priced_at_the_prospecting_its_fight_loadout_wears(
+        state, game_data, monkeypatch) -> None:
+    """One basis (ruling T12n): a +200 vest in the bag is what the chicken
+    fight's loadout wears, so with `k = 1/100` a feather is 8/3 wins, not 8,
+    in the walk's own farm price as in the drop work."""
+    monkeypatch.setattr(game_data, "_item_stats", {
+        **game_data._item_stats,
+        "vest": ItemStats(code="vest", level=1, type_="body_armor", prospecting=200)})
+    ctx = replace(TIMED_NO_PROFILE_CONTEXT, learned_drops=LearnedDrops((), (), Fraction(1, 100)))
+    owning = replace(state, inventory={**state.inventory, "vest": 1})
+    win = _kill_actions("chicken", owning, game_data, ctx.timing(), ())
+    rate, low, high = _drop_table("feather", "chicken", game_data)
+    assert _drop_actions("feather", "chicken", rate, low, high, owning, game_data,
+                         ctx.timing(), ctx.drops()) == Fraction(8, 3) * win
+    assert _drop_actions("feather", "chicken", rate, low, high, state, game_data,
+                         ctx.timing(), ctx.drops()) == 8 * win
