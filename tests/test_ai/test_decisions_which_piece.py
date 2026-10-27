@@ -109,31 +109,48 @@ def test_a_declined_piece_yields_to_the_next() -> None:
     assert resolution.alternatives[:2] == (shield_step, ObtainItem("leather", 2))
 
 
-def test_every_piece_declined_offers_the_trunk() -> None:
-    """Ruling AI (final review F1), INTERIM until Plan B makes the obtain model
-    and the walk agree: with no servable gear step, the next action that best
-    advances the character is XP, so the root is one more character level.
-    Every piece stays on offer behind its named reason, ahead of the trunk's
-    alternatives — the trunk is the root, never repeated as an alternative."""
+def test_every_piece_declined_is_no_root() -> None:
+    """Ruling T6c (plan B Task 14a; was ruling AI's INTERIM trunk, which made
+    this root `ReachCharLevel(16)`): a level-up is not an acquisition step, so
+    with no servable gear step the walk has NO root (§6.2). Every piece stays
+    on offer behind its named reason, and no trunk is offered at all."""
     gd = _gd()
     shield_step = ReachSkillLevel(skill="gearcrafting", level=2)
     club_step = ObtainItem("ash_club", 1, slot="weapon_slot")
     resolution = _resolve(make_state(level=15), gd, _missing(SHIELD, CLUB),
                           {shield_step: "a", club_step: "b"})
-    assert resolution.root == ReachCharLevel(level=16)
+    assert resolution.root is None
     assert resolution.declined == ((repr(shield_step), "a"), (repr(club_step), "b"))
     assert resolution.alternatives[:2] == (shield_step, club_step)
     assert not any(isinstance(alt, ReachCharLevel) for alt in resolution.alternatives)
 
 
-def test_a_declined_objective_grinds_its_monster() -> None:
-    """Ruling AI: the trunk offered behind every declined piece fights `m*`.
-    `farm_target` names no grind target while a piece is missing, so the
-    trunk's step reads the objective's monster instead of returning None."""
+def test_a_transient_decline_gives_the_gear_step_back() -> None:
+    """Liveness (plan B Task 14a): every piece declined for a transient
+    reason (a full bag, low hp) is no root THIS cycle, never a permanent
+    shut-off: the walk re-asks every cycle, so the cycle the reason clears the
+    first piece heads it again."""
+    gd = _gd()
+    state = make_state(level=15)
+    shield_step = ReachSkillLevel(skill="gearcrafting", level=2)
+    club_step = ObtainItem("ash_club", 1, slot="weapon_slot")
+    objective = _missing(SHIELD, CLUB)
+    full_bag = {shield_step: "first_leg_inapplicable:Withdraw(x)",
+                club_step: "upgrade:equip_inapplicable:Equip(ash_club->weapon_slot)"}
+    assert _resolve(state, gd, objective, full_bag).root is None
+    cleared = _resolve(state, gd, objective)
+    assert cleared.root == shield_step
+    assert cleared.declined == ()
+
+
+def test_a_trunk_with_no_grind_target_is_no_fight() -> None:
+    """Ruling T6c (was ruling AI: the trunk behind declined pieces fought
+    `m*`): `farm_target` names no grind target while a piece is missing, and
+    the trunk's step no longer reads the objective's monster instead, so no
+    fight is chosen for XP (§6.2)."""
     gd = _gd()
     ctx = replace(_ctx(combat_monster=None), gear_objective=_missing(SHIELD))
-    goal = objective_step_goal(ReachCharLevel(level=16), make_state(level=15), gd, ctx)
-    assert repr(goal) == "GrindCharacterXP(wolf)"
+    assert objective_step_goal(ReachCharLevel(level=16), make_state(level=15), gd, ctx) is None
     assert objective_step_goal(ReachCharLevel(level=16), make_state(level=15), gd,
                                replace(ctx, gear_objective=None)) is None
 

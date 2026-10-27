@@ -4,8 +4,9 @@
 While a piece of `L*` is missing the root is the next step on its acquisition
 plan; only once `L*` is held does the character grind character XP, on `m*`.
 A level-up is not an acquisition step (§6.2), so no `ReachCharLevel` heads the
-walk while a piece is missing — except, INTERIM (ruling AI), when every missing
-piece's step is declined and no gear action is available at all.
+walk while a piece is missing, not even when every missing piece's step is
+declined this cycle: the walk then has no root, and the declined pieces stay
+named in `declined` and on offer, re-asked every cycle (plan B Task 14a).
 
 A crafter's fleet pieces (§2.5, `fleet_pieces`) join its own missing pieces: the
 objective is held only when both are served, so the trunk is never offered
@@ -214,16 +215,18 @@ class WhichPieceIsNext(Decision[MetaGoal]):
       declined is recorded with its reason and the next piece is asked, and so
       is a piece a sibling crafts for this character
       (`GearPiece.awaits_delivery`, §2.5) until its copy is banked.
-    * every piece declined (INTERIM, ruling AI): no gear action is available
-      this cycle, so XP is the next action that best advances the character
-      (§2.4), and the root is `ReachCharLevel(state.level + 1)` on `m*`.
+    * every piece declined (plan B Task 14a, ruling T6c): no root. No fight
+      is chosen for XP while `L*` is missing (§2.4.3, §6.2), so nothing
+      replaces the declined pieces; each stays in `declined` by name and is
+      asked again next cycle, so a piece declined for a transient reason (a
+      full bag, low hp) heads the walk the cycle it clears.
     * no objective: the wall, `None` — no achievable loadout pays XP on any
       monster, so there is neither a piece to build nor a fight to grind.
     * a crafter's fleet pieces (§2.5, `ctx.fleet_pieces`) are pursued beside its
       own, in `pursuit_order`: a piece's step is its climb, then its supply
       run or its craft once the gate is met (`fleet_piece_root`). While one waits the trunk is
-      withheld, `L*` held or every piece declined: a crafter is never pulled
-      off its role to grind XP while the fleet has demand it serves.
+      withheld, even with `L*` held: a crafter is never pulled off its role
+      to grind XP while the fleet has demand it serves.
 
     A missing piece the decision's game data does not know RAISES: the
     objective and the catalogue disagree, which is a data fault, and a root
@@ -271,15 +274,7 @@ class WhichPieceIsNext(Decision[MetaGoal]):
                 # Resolved here, not handed on, so an obtain step can yield to
                 # the prospecting item its drop work pays for (§2.8).
                 return piece_step(piece.slot, gear, self.walk, state, game_data, ctx, history)
-        if fleet:
-            # Fleet demand this role serves is waiting, and none of its steps
-            # can be served this cycle: no XP fight, so no root.
-            return None
-        # INTERIM (ruling AI, final review F1): every missing piece is declined,
-        # so no gear step can be served. Returning None here shut the XP trunk
-        # off for good whenever a piece the obtain model calls feasible maps to
-        # no goal the walk can serve (live: `lich_race_trophy`, `no_step_goal`,
-        # heads 3 of 5 objectives). Plan B must make the obtain model and the
-        # walk agree, so `L*` never names such a piece; until then the trunk is
-        # offered behind the declined pieces, which stay in `declined` by name.
-        return next_level(state, game_data)
+        # Every missing piece (and fleet piece) is declined this cycle: no
+        # root. A level-up is not an acquisition step (§6.2, ruling T6c), so
+        # no XP trunk stands in for the pieces; they stay in `declined` by name.
+        return None

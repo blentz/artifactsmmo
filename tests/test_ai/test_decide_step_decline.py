@@ -14,7 +14,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel, no_decline
+from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, no_decline
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -84,16 +84,16 @@ class TestDecideStepDecline:
         assert filtered.declined == ((repr(top), "no_route"),)
         assert top in filtered.fallback_roots
 
-    def test_every_target_declined_offers_the_trunk(self):
-        """No piece can be served: the root is one more character level
-        (ruling AI, INTERIM until Plan B), and every piece is named."""
+    def test_every_target_declined_is_no_root(self):
+        """No piece can be served: there is no root (ruling T6c; was ruling
+        AI's INTERIM `ReachCharLevel(6)`), and every piece is named."""
         gd = _two_root_gd()
         eng = _eng(gd)
         state = make_state(level=5)
         filtered = eng.decide(
             state, gd, ctx=_two_pieces(),
             step_decline=lambda root: "no_route" if isinstance(root, ObtainItem) else None)
-        assert filtered.chosen_root == ReachCharLevel(level=6)
+        assert filtered.chosen_root is None
         assert len(filtered.declined) == 2
         assert {reason for _root, reason in filtered.declined} == {"no_route"}
 

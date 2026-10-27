@@ -6792,10 +6792,10 @@ FLEET_PIECE_WALK_MUTATIONS = [
      "        if target.held and not fleet:\n",
      "        if target.held:\n"),
     ("fleet pieces: every fleet step declined offers the trunk",
-     "        if fleet:\n"
-     "            # Fleet demand this role serves is waiting",
-     "        if False:\n"
-     "            # Fleet demand this role serves is waiting"),
+     "        # no XP trunk stands in for the pieces; they stay in `declined` by name.\n"
+     "        return None\n",
+     "        # no XP trunk stands in for the pieces; they stay in `declined` by name.\n"
+     "        return next_level(state, game_data) if fleet else None\n"),
     ("fleet pieces: a fleet piece's summed gain is not its order",
      "        keyed.append((piece_order_key(0, piece.gain, price, len(rank)), piece))",
      "        keyed.append((piece_order_key(0, Fraction(0), price, len(rank)), piece))"),
@@ -10665,11 +10665,11 @@ WHICH_PIECE_MUTATIONS = [
     ("which-piece: a piece the catalogue does not know is classified, not refused",
      "        if unknown:\n",
      "        if False:\n"),
-    ("which-piece: every piece declined is no root (ruling AI)",
-     "        # offered behind the declined pieces, which stay in `declined` by name.\n"
-     "        return next_level(state, game_data)\n",
-     "        # offered behind the declined pieces, which stay in `declined` by name.\n"
-     "        return None\n"),
+    ("which-piece: every piece declined offers the trunk (ruling T6c)",
+     "        # no XP trunk stands in for the pieces; they stay in `declined` by name.\n"
+     "        return None\n",
+     "        # no XP trunk stands in for the pieces; they stay in `declined` by name.\n"
+     "        return next_level(state, game_data)\n"),
     ("which-piece: no objective grinds a level instead of the wall",
      "        if target is None:\n"
      "            return None\n",
@@ -10730,12 +10730,15 @@ RAID_MAY_FIGHT_MUTATIONS = [
 ]
 
 
-# Ruling AI (final review F1, INTERIM): the trunk offered behind every declined
-# `L*` piece fights `m*`. Killed by tests/test_ai/test_decisions_which_piece.py.
+# Ruling T6c (plan B Task 14a; replaced ruling AI's INTERIM trunk, which fought
+# `m*` behind every declined piece): a trunk with no grind target is no fight.
+# Killed by tests/test_ai/test_decisions_which_piece.py.
 TRUNK_DECLINED_STEP_MUTATIONS = [
-    ("objective_step_goal: the trunk behind declined pieces never fights m*",
-     "            monster = ctx.gear_objective.monster\n",
-     "            return None\n"),
+    ("objective_step_goal: a trunk with no grind target fights m*",
+     "        if monster is None:\n"
+     "            # `farm_target` names `m*`",
+     "        if monster is None and ctx.gear_objective is None:\n"
+     "            # `farm_target` names `m*`"),
 ]
 
 

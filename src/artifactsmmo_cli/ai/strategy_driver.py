@@ -521,14 +521,11 @@ def objective_step_goal(
     if isinstance(step, ReachCharLevel):
         monster = ctx.combat_monster
         if monster is None:
-            # The trunk offered behind every declined `L*` piece (ruling AI,
-            # INTERIM): `farm_target` names no grind target while a piece is
-            # missing, and the walk alone knows every piece was declined, so the
-            # step fights the objective's `m*`. No objective, no fight.
-            if ctx.gear_objective is None:
-                return None
-            monster = ctx.gear_objective.monster
-            ctx = replace(ctx, combat_monster=monster)
+            # `farm_target` names `m*` as the grind target only while `L*` is
+            # held, the only time the walk offers the trunk (§2.4.1); with no
+            # target (and no held task monster) there is no fight: none is
+            # chosen for XP while a piece is missing (§6.2, ruling T6c).
+            return None
         # A HELD ITEMS TASK DEFERS THE GRIND ONLY WHILE IT PAYS (spec
         # 2026-10-14 items-task-pays, USER "Price it by useful XP"): a gold or
         # drop verdict, or skill XP the DAG demands at a better rate than the

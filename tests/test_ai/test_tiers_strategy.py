@@ -184,9 +184,9 @@ def test_decide_forwards_step_decline_and_it_changes_the_answer():
         == decide_tree(state, gd, obj, step_decline=decline, ctx=ctx)
     # The dagger is material-gated on its recipe's copper bars.
     assert eng.decide(state, gd, ctx=ctx).chosen_root == ObtainItem("copper_bar", 6)
-    # Every piece declined: the interim trunk (ruling AI), one more level.
-    assert eng.decide(state, gd, ctx=ctx, step_decline=decline).chosen_root \
-        == ReachCharLevel(level=6)
+    # Every piece declined: no root, never a level grind (ruling T6c; was the
+    # INTERIM trunk `ReachCharLevel(6)`).
+    assert eng.decide(state, gd, ctx=ctx, step_decline=decline).chosen_root is None
 
 
 def test_decide_forwards_history_into_the_root_walk(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -258,11 +258,10 @@ def test_a_self_blocked_root_is_reported_then_passed_over_when_declined():
     served = eng.decide(
         make_state(level=5), gd, ctx=ctx,
         step_decline=lambda root: "no_route" if root == blocked else None)
-    # No served piece: the walk does not commit to the blocked root; it
-    # offers the interim trunk (ruling AI, until Plan B makes the obtain model
-    # and the walk agree), and the piece stays on offer behind its named
-    # decline.
-    assert served.chosen_root == ReachCharLevel(level=6)
+    # No served piece: the walk does not commit to the blocked root and has
+    # no root (ruling T6c; was the INTERIM trunk `ReachCharLevel(6)`); the
+    # piece stays on offer behind its named decline.
+    assert served.chosen_root is None
     assert served.fallback_roots == [blocked]
     assert served.declined == ((repr(blocked), "no_route"),)
 
