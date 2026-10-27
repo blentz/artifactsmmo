@@ -108,6 +108,7 @@ from dataclasses import replace
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
+from artifactsmmo_cli.ai.region_edges import reachable_regions_now
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -157,7 +158,9 @@ def fightable_droppers(item: str, state: WorldState, game_data: GameData,
     # all 44 scenario worlds, both grey settings, before the switch (46,024
     # comparisons, 0 differences).
     policy = replace(LEGACY, allow_grey=allow_grey)
-    ready = {route.via for route in drop_routes(item, state, game_data) if policy.ready(route)}
+    ready = {route.via for route in drop_routes(item, state, game_data,
+                                                reachable_regions_now(state, game_data))
+             if policy.ready(route)}
     return [row for row in game_data.monsters_dropping(item) if row[0] in ready]
 
 

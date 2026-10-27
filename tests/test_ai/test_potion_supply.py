@@ -391,7 +391,7 @@ def test_the_prep_walk_admits_a_grey_the_directive_allows(monkeypatch) -> None:
     gd._item_stats["slime_brew"] = ItemStats(code="slime_brew", level=1, type_="utility",
                                              crafting_skill="alchemy", crafting_level=1)
     gd._crafting_recipes["slime_brew"] = {"slimeball": 1}
-    gd._monster_locations = {"slime": (1, 1)}
+    gd._monster_locations = {"slime": [(1, 1)]}
     gd._monster_level = {"slime": 1}
     gd._monster_hp = {"slime": 1}
     gd._monster_drops = {"slime": [("slimeball", 1, 1, 1)]}

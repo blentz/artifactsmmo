@@ -137,7 +137,7 @@ def _drop_gd(monster_level: int = 1, monster_hp: int = 60,
         "old_boots": ItemStats(code="old_boots", level=20, type_="boots"),
     }
     gd._crafting_recipes = {}
-    gd._monster_locations = {"spider": (1, 0)}
+    gd._monster_locations = {"spider": [(1, 0)]}
     gd._monster_level = {"spider": monster_level}
     gd._monster_hp = {"spider": monster_hp}
     gd._monster_attack = {"spider": {"air": monster_attack}}
@@ -237,7 +237,7 @@ class TestTargetDropFights:
         """Two droppers, the expected-kills-better one unwinnable: the
         winnable one is chosen (is_winnable gates BEFORE the argmin)."""
         gd = _drop_gd(monster_level=1)
-        gd._monster_locations["ogre"] = (2, 0)
+        gd._monster_locations["ogre"] = [(2, 0)]
         gd._monster_level["ogre"] = 1
         gd._monster_hp["ogre"] = 100000
         gd._monster_attack["ogre"] = {"air": 200}

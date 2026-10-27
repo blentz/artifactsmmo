@@ -65,7 +65,7 @@ def _gd(alchemy_next_tier_level: int | None = 20) -> GameData:
     """chicken (L1) drops feather; health_potion (alchemy 5) consumes feather;
     optionally a same-family next-tier recipe at `alchemy_next_tier_level`."""
     gd = GameData()
-    gd._monster_locations = {"chicken": (1, 0)}
+    gd._monster_locations = {"chicken": [(1, 0)]}
     gd._monster_level = {"chicken": 1}
     gd._monster_hp = {"chicken": 60}
     gd._monster_attack = {"chicken": {"air": 4}}
@@ -184,7 +184,7 @@ def _gd_gap9() -> GameData:
     low_glove (close -> suppress); the ANY-consumer policy allows because
     iron_boots is non-obsolete."""
     gd = GameData()
-    gd._monster_locations = {"chicken": (1, 0)}
+    gd._monster_locations = {"chicken": [(1, 0)]}
     gd._monster_level = {"chicken": 1}
     gd._monster_hp = {"chicken": 60}
     gd._monster_attack = {"chicken": {"air": 4}}
@@ -353,7 +353,7 @@ class TestGatherEmitsDropFarmFights:
         walk's drop leg fights the hawk: the fight selection obeys the same
         per-item verdict the walk's routes do."""
         gd = _gd(alchemy_next_tier_level=20)
-        gd._monster_locations["hawk"] = (3, 0)
+        gd._monster_locations["hawk"] = [(3, 0)]
         gd._monster_level["hawk"] = 12
         gd._monster_hp["hawk"] = 60
         gd._monster_attack["hawk"] = {"air": 4}

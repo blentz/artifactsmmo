@@ -38,7 +38,7 @@ def _vendor_only_gd() -> GameData:
     gd._monster_hp = {"titan": 99999}
     gd._monster_attack = {"titan": {"fire": 9999}}
     gd._monster_resistance = {"titan": {}}
-    gd._monster_locations = {"titan": (9, 9)}
+    gd._monster_locations = {"titan": [(9, 9)]}
     gd._monster_critical_strike = {"titan": 0}
     gd._monster_initiative = {"titan": 0}
     gd._monster_drops = {"titan": [("dune_coin", 50, 1, 1)]}

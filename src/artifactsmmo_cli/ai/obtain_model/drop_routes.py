@@ -12,7 +12,12 @@ The gates on a fight, whatever it pays:
 - `SPAWN_LIVE`: a tile in `all_monster_locations`, which `factory.py` builds
   FightActions from (an event monster's tiles only while its event is live).
 - `SPAWN_KNOWN`: `monster_spawn_known`, which also admits layered tiles in a
-  reachable region.
+  reachable region, AND a tile of the monster in a region the walk reaches
+  from here now (`region_edges.reachable_regions_now`, ruling T14a-E: the one
+  reachability authority, the crossings the walk's bridge can apply). A
+  monster behind a crossing the character cannot pay for is no route: the
+  pricer chose `dryad` behind a 5000-gold fee for the L48 rune's gold, and
+  the walk declined `region:overworld->restricted:...` every cycle.
 - `WINNABLE`: asked at RESTORABLE hp (route existence is not an hp question;
   resting is an action the planner has), cold (no LearningStore: the record's
   refusals arrive as `WorldState.lost_fights`, which voids both solo arms), and only for
@@ -71,10 +76,18 @@ def drop_fight_winnable(rested: WorldState, game_data: GameData, monster: str) -
             or wins_as_a_party(rested, game_data, monster))
 
 
+def _reached(monster: str, game_data: GameData, reach: frozenset[str]) -> bool:
+    """Some tile of `monster`, live or on any layer, lies in a region of
+    `reach`."""
+    tiles = [(x, y, "overworld") for x, y in game_data.all_monster_locations.get(monster, [])]
+    tiles += game_data.layered_locations(monster)
+    return any(game_data.region_of(x, y, layer) in reach for x, y, layer in tiles)
+
+
 def _fight_gates(monster: str, state: WorldState, game_data: GameData,
-                 rested: _Rested) -> tuple[Gate, ...]:
+                 rested: _Rested, reach: frozenset[str]) -> tuple[Gate, ...]:
     live = bool(game_data.all_monster_locations.get(monster))
-    known = game_data.monster_spawn_known(monster)
+    known = game_data.monster_spawn_known(monster) and _reached(monster, game_data, reach)
     winnable = (live or known) and drop_fight_winnable(rested.get(), game_data, monster)
     return (
         Gate(GateKind.SPAWN_LIVE, monster, live),
@@ -84,7 +97,7 @@ def _fight_gates(monster: str, state: WorldState, game_data: GameData,
     )
 
 
-def drop_routes(item: str, state: WorldState, game_data: GameData,
+def drop_routes(item: str, state: WorldState, game_data: GameData, reach: frozenset[str],
                 fighter: Fighter | None = None) -> list[Route]:
     """One DROP route per monster that drops `item`, in drop-table order.
 
@@ -100,11 +113,12 @@ def drop_routes(item: str, state: WorldState, game_data: GameData,
         return _Rested(fighter(monster)) if callable(fighter) else shared
 
     return [Route(item, SourceKind.DROP, monster, 1, UNBOUNDED_CAPACITY,
-                  _fight_gates(monster, state, game_data, rested(monster)))
+                  _fight_gates(monster, state, game_data, rested(monster), reach))
             for monster, _rate, _mn, _mx in game_data.monsters_dropping(item)]
 
 
-def gold_drop_routes(state: WorldState, game_data: GameData) -> list[Route]:
+def gold_drop_routes(state: WorldState, game_data: GameData,
+                     reach: frozenset[str]) -> list[Route]:
     """One GOLD_DROP route per monster whose win pays gold, in catalogue order.
 
     Gold is minted by fighting: every win pays between the monster's
@@ -127,5 +141,5 @@ def gold_drop_routes(state: WorldState, game_data: GameData) -> list[Route]:
             continue
         paid = max(1, win_gold(monster, game_data))
         out.append(Route(GOLD_CODE, SourceKind.GOLD_DROP, monster, paid, UNBOUNDED_CAPACITY,
-                         _fight_gates(monster, state, game_data, rested)))
+                         _fight_gates(monster, state, game_data, rested, reach)))
     return out

@@ -2120,7 +2120,7 @@ def _vendor_bag_gd() -> GameData:
     gd._npc_locations = {"dune_trader": (4, 1)}
     gd._monster_level = {"dune_rat": 1}
     gd._monster_hp = {"dune_rat": 10}
-    gd._monster_locations = {"dune_rat": (2, 2)}
+    gd._monster_locations = {"dune_rat": [(2, 2)]}
     fill_monster_stat_defaults(gd)
     gd._monster_drops = {"dune_rat": [("dune_coin", 50, 1, 1)]}
     return gd

@@ -150,7 +150,7 @@ def test_relevant_actions_farms_nongold_currency_for_must_buy(_=None) -> None:
     gd._monster_hp = {"sea_marauder": 20}
     fill_monster_stat_defaults(gd)
     gd._monster_drops = {"sea_marauder": [("sandwhisper_coin", 50, 1, 1)]}
-    gd._monster_locations = {"sea_marauder": (10, 10)}
+    gd._monster_locations = {"sea_marauder": [(10, 10)]}
     actions = [
         FightAction(monster_code="sea_marauder", locations=[(10, 10)], learned_drops=LearnedDrops.empty()),
         NpcBuyAction(npc_code="sandwhisper_trader", item_code="greater_lifesteal_rune",
@@ -212,7 +212,7 @@ def test_relevant_actions_no_currency_farm_when_gold_vendor_exists() -> None:
     gd._monster_hp = {"sea_marauder": 20}
     fill_monster_stat_defaults(gd)
     gd._monster_drops = {"sea_marauder": [("sandwhisper_coin", 50, 1, 1)]}
-    gd._monster_locations = {"sea_marauder": (10, 10)}
+    gd._monster_locations = {"sea_marauder": [(10, 10)]}
     actions = [FightAction(monster_code="sea_marauder", locations=[(10, 10)], learned_drops=LearnedDrops.empty())]
     goal = GatherMaterialsGoal(target_item="omni_rune", needed={"omni_rune": 1})
     state = make_state(level=40, attack={"air": 50}, gold=100000, x=0, y=0)

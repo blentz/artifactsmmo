@@ -103,7 +103,7 @@ def _funding_fixture() -> tuple[GameData, object]:
     beatable monster, and a known coin reward."""
     gd = GameData()
     gd._taskmaster_location = (1, 2)
-    gd._monster_locations = {"chicken": (1, 0)}
+    gd._monster_locations = {"chicken": [(1, 0)]}
     gd._monster_level = {"chicken": 1}
     gd._monster_drops = {"chicken": []}
     gd._task_coin_rewards = {"chickens": 2}

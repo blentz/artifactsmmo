@@ -22,11 +22,13 @@ from pathlib import Path
 
 import pytest
 
+from artifactsmmo_cli.ai import region_edges
 from artifactsmmo_cli.ai.acquisition_cost import (
     _climbs,
     _kill_actions,
     acquisition_options,
     cheapest_route,
+    fight_gold_monster,
     route_options,
 )
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
@@ -47,6 +49,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, PIECE_POLICY, Policy
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.region_edges import reachable_regions_now
 from artifactsmmo_cli.ai.scenario import (
     FAR_FUTURE,
     SCENARIOS,
@@ -182,14 +185,12 @@ def test_every_layer_zero_piece_the_model_calls_achievable_the_walk_serves() -> 
     walk route (`malefic_crystal`, ruling T14a-C). After them no live piece
     of the five characters is unserved, so this pins the agreement: on every
     catalogued scenario, the walk's own question (`GamePlayer._step_decline`)
-    answers a first-layer piece's step as unserved only in the named residual.
+    never answers a first-layer piece's step as unserved.
 
-    THE RESIDUAL, awaiting rulings (task-14a report, fix round 1), exactly:
-      * (ruled and fixed, T14a-D: `slime_shield` at L30/L40, whose grey
-        `wool` a piece's material walk now farms.)
-      * `lifesteal_rune` at L48: its fight-gold monster (`fight_gold_monster`
-        under `PIECE_POLICY`) is `dryad`, in a region no single crossing
-        reaches (`region:overworld->restricted:...`)."""
+    Two more classes this pin found on the fixtures were ruled and fixed
+    (fix round 2): a piece's grey material (`slime_shield`'s wool at L30/L40,
+    ruling T14a-D) and a fight-gold monster behind a crossing the character
+    cannot pay for (`lifesteal_rune`'s dryad at L48, ruling T14a-E)."""
     unserved: list[tuple[str, str, str]] = []
     asked = 0
     for name, sc in SCENARIOS.items():
@@ -216,13 +217,7 @@ def test_every_layer_zero_piece_the_model_calls_achievable_the_walk_serves() -> 
                 unserved.append((name, piece.code, reason))
             asked += 1
     assert asked > 100, asked
-    beyond = "region:overworld->restricted:overworld:-5,8:Fight(dryad)"
-    assert sorted(unserved) == [
-        ("l48_band_adequate", "lifesteal_rune", beyond),
-        ("l48_capstone_approach", "lifesteal_rune", beyond),
-        ("l48_event_active", "lifesteal_rune", beyond),
-        ("l48_raid_active", "lifesteal_rune", beyond),
-    ]
+    assert unserved == []
 
 
 def test_an_event_vendor_counts_only_while_live() -> None:
@@ -583,3 +578,70 @@ def test_only_a_piece_s_gather_is_marked() -> None:
     goal = objective_step_goal(ObtainItem("cloth", 3), state, world, player._selection_context())
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal.piece_material is False
+
+
+# --- ruling T14a-E: one reachability authority for a fight's monster ----------
+
+RUNE_CELLS = ["l48_band_adequate", "l48_capstone_approach", "l48_event_active",
+              "l48_raid_active"]
+"""Level-48 sheets whose `L*` holds `lifesteal_rune`, bought for gold. The
+pricer's cheapest gold fight was `dryad`, behind the 5000-gold crossing into
+`restricted:overworld:-5,8`, which the walk cannot pay for from here."""
+
+
+def _seeded(name: str) -> GamePlayer:
+    sc = SCENARIOS[name]
+    world = _world(name)
+    player = GamePlayer(character=sc.name, history=None)
+    player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
+    player.seed_offline(derived_scenario_state(sc, world), world)
+    return player
+
+
+@pytest.mark.parametrize("name", RUNE_CELLS)
+def test_a_gold_fight_is_one_the_walk_can_reach(name: str) -> None:
+    """Ruling T14a-E: the pricer's fight-gold monster is chosen from monsters
+    the walk reaches (`region_edges.reachable_regions_now`), so the rune's
+    step is served, not declined `region:overworld->restricted:...`."""
+    player = _seeded(name)
+    state, world = player.state, player.game_data
+    assert state is not None and world is not None
+    ctx = player._selection_context()
+    assert state.gold < 5000
+    assert fight_gold_monster(state, world, ctx, policy=PIECE_POLICY) != "dryad"
+    decline = player._step_decline(state, world, ctx, player._build_actions())
+    assert decline(ObtainItem("lifesteal_rune", 1, slot="rune_slot")) is None
+
+
+def test_a_monster_behind_a_crossing_the_character_can_pay_is_reachable() -> None:
+    """The gate reads the crossing as the walk does: with the 5000-gold fee in
+    the pocket, `dryad` is reachable again."""
+    player = _seeded(RUNE_CELLS[0])
+    state, world = player.state, player.game_data
+    assert state is not None and world is not None
+    poor = reachable_regions_now(state, world)
+    rich = reachable_regions_now(replace(state, gold=6000), world)
+    assert "restricted:overworld:-5,8" not in poor
+    assert "restricted:overworld:-5,8" in rich
+    assert world.state_region(state) in poor
+
+
+def test_the_reach_memo_is_scoped_per_catalogue_and_bounded() -> None:
+    """A walk is remembered per catalogue (`CatalogueScope`) and per what a
+    crossing reads, at most `REACH_MEMO_SIZE` of them, the least recently
+    used evicted first."""
+    player = _seeded(RUNE_CELLS[0])
+    state, world = player.state, player.game_data
+    assert state is not None and world is not None
+    region_edges._REACH.clear()
+    reachable_regions_now(state, world)
+    reachable_regions_now(state, world)
+    memo = region_edges._REACH.cache_for(world)
+    assert list(memo) == [region_edges._reach_key(state, world)]
+    region_edges._REACH.max_entries = 1
+    try:
+        reachable_regions_now(replace(state, gold=6000), world)
+        assert list(memo) == [region_edges._reach_key(replace(state, gold=6000), world)]
+    finally:
+        region_edges._REACH.max_entries = region_edges.REACH_MEMO_SIZE

@@ -103,7 +103,7 @@ def _gd() -> GameData:
     gd._monster_hp = {"dryad": 1}  # harmless: one hit kills it
     fill_monster_stat_defaults(gd)  # 0 attack -> the player can never lose
     gd._monster_drops = {"dryad": [("enchanted_potion", 100, 1, 1)]}
-    gd._monster_locations = {"dryad": (0, 0)}
+    gd._monster_locations = {"dryad": [(0, 0)]}
     return gd
 
 

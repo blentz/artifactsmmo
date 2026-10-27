@@ -27,7 +27,6 @@ from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.teleport import TeleportAction
-from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.use_gold_bag import UseGoldBagAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
@@ -39,6 +38,7 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.party_win import party_loadout, party_participants
 from artifactsmmo_cli.ai.player_helpers import delete_cost
+from artifactsmmo_cli.ai.region_edges import region_edge_actions
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -348,13 +348,7 @@ def build_actions(
     # the planner chains Transition edges to reach them (movement folds only
     # within a region). Monster/resource codes already indexed by the legacy
     # (overworld) maps are NOT re-emitted for their overworld tiles.
-    for (px, py, playr), (dx, dy, dlayer, conds) in sorted(
-            game_data.world.transition_edges.items()):
-        actions.append(MapTransitionAction(
-            portal_x=px, portal_y=py, portal_layer=playr,
-            dest_x=dx, dest_y=dy, dest_layer=dlayer,
-            conditions=conds,
-            travel_region=game_data.region_of(px, py, playr)))
+    actions.extend(region_edge_actions(game_data))
     extra_tiles: dict[tuple[str, str], list[tuple[int, int]]] = {}
     for code in game_data.world.layered_content:
         for region, region_tiles in layered_extra(game_data, code, emitted.get(code, set())).items():

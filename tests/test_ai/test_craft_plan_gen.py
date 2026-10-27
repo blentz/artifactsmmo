@@ -44,6 +44,7 @@ from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.route import Route
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkGraph
 from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
+from artifactsmmo_cli.ai.region_edges import crossings
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -2102,14 +2103,14 @@ class TestBridgeRegions:
         """The island to the sonnengott cavern is 5 crossings; a cap of 4
         declined it (2026-10-10). The search ends on exhausted regions."""
         chain = [_Edge(f"r{i}", f"r{i + 1}") for i in range(6)]
-        route = cpg._crossings(make_state(layer="r0"), "r6", chain, GameData())
+        route = crossings(make_state(layer="r0"), "r6", chain, GameData())
         assert route is not None and len(route) == 6
-        assert cpg._crossings(make_state(layer="r0"), "nowhere", chain, GameData()) is None
+        assert crossings(make_state(layer="r0"), "nowhere", chain, GameData()) is None
 
     def test_a_region_reached_twice_is_expanded_once(self) -> None:
         """Two edges into `mine`: the second is not a new frontier entry."""
         edges = [_Edge("overworld", "mine"), _Edge("overworld", "mine"), _Edge("mine", "tomb")]
-        route = cpg._crossings(make_state(layer="overworld"), "tomb", edges, GameData())
+        route = crossings(make_state(layer="overworld"), "tomb", edges, GameData())
         assert [repr(a) for a in route] == ["Edge(overworld->mine)", "Edge(mine->tomb)"]
 
     def test_decompose_declines_a_plan_it_cannot_bridge(self, monkeypatch) -> None:

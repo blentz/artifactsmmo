@@ -456,7 +456,7 @@ def test_classify_gap_grey_farm_suppressed_when_only_dropper_is_grey_and_obsolet
                             "mid_food": {"other_mat": 1}}
     gd._resource_drops = {"blade_vein": "iron_blade"}
     gd._resource_locations = {"blade_vein": [(2, 2)]}  # a gatherable weapon spawns
-    gd._monster_locations = {"hen": (0, 1)}
+    gd._monster_locations = {"hen": [(0, 1)]}
     gd._monster_level = {"hen": 1}
     gd._monster_hp = {"hen": 10}
     gd._monster_drops = {"hen": [("raw_meat", 50, 1, 1)]}
@@ -507,7 +507,7 @@ def test_classify_gap_combat_blocked_unwinnable_dropper() -> None:
         "beast_hide": _mat("beast_hide"),
     }
     gd._crafting_recipes = {"beast_armor": {"beast_hide": 2}}
-    gd._monster_locations = {"cow": (1, 0)}
+    gd._monster_locations = {"cow": [(1, 0)]}
     gd._monster_level = {"cow": 30}
     gd._monster_hp = {"cow": 2000}
     gd._monster_attack = {"cow": {"earth": 200}}
@@ -562,7 +562,7 @@ def test_classify_gap_event_gated_outranks_combat_blocked() -> None:
         "beast_hide": _mat("beast_hide"),
     }
     gd._crafting_recipes = {"dual": {"event_gem": 1, "beast_hide": 1}}
-    gd._monster_locations = {"cow": (1, 0)}
+    gd._monster_locations = {"cow": [(1, 0)]}
     gd._monster_level = {"cow": 30, "event_ogre": 20}
     gd._monster_hp = {"cow": 2000}
     gd._monster_attack = {"cow": {"earth": 200}}
@@ -586,7 +586,7 @@ def test_classify_gap_combat_blocked_outranks_material_unreachable() -> None:
         "phantom_mat": _mat("phantom_mat"),
     }
     gd._crafting_recipes = {"mix": {"beast_hide": 1, "phantom_mat": 1}}
-    gd._monster_locations = {"cow": (1, 0)}
+    gd._monster_locations = {"cow": [(1, 0)]}
     gd._monster_level = {"cow": 30}
     gd._monster_hp = {"cow": 2000}
     gd._monster_attack = {"cow": {"earth": 200}}
@@ -786,7 +786,7 @@ def test_leaf_status_reachable_via_winnable_permanent_dropper() -> None:
         "blade": ItemStats(code="blade", level=1, type_="weapon", subtype="",
                            attack={"fire": 100}),
     }
-    gd._monster_locations = {"rat": (1, 0)}
+    gd._monster_locations = {"rat": [(1, 0)]}
     gd._monster_level = {"rat": 1}
     gd._monster_hp = {"rat": 10}
     gd._monster_drops = {"rat": [("meat", 10, 1, 1)]}
@@ -862,7 +862,7 @@ def test_census_state_gears_the_cell_and_flips_combat_blocked_to_reachable() -> 
     }
     gd._resource_drops = {"blade_vein": "iron_blade"}
     gd._resource_locations = {"blade_vein": [(2, 2)]}  # a gatherable weapon spawns
-    gd._monster_locations = {"critter": (1, 0)}
+    gd._monster_locations = {"critter": [(1, 0)]}
     gd._monster_level = {"critter": 1}
     gd._monster_hp = {"critter": 5}
     gd._monster_drops = {"critter": [("critter_meat", 10, 1, 1)]}
@@ -900,7 +900,7 @@ def test_classify_gap_combat_blocked_survives_geared_loadout_against_overleveled
     gd._crafting_recipes = {"beast_armor": {"beast_hide": 2}}
     gd._resource_drops = {"blade_vein": "iron_blade"}
     gd._resource_locations = {"blade_vein": [(2, 2)]}  # a gatherable weapon spawns
-    gd._monster_locations = {"cow": (1, 0)}
+    gd._monster_locations = {"cow": [(1, 0)]}
     gd._monster_level = {"cow": 30}
     gd._monster_hp = {"cow": 2000}
     gd._monster_attack = {"cow": {"earth": 200}}
@@ -1110,7 +1110,7 @@ def test_a_purchase_currency_the_grey_policy_refuses_is_not_attainable() -> None
     gd.world.npc_stock = {"tailor": {"cloth": 3}}
     gd.world.npc_tiles = {"tailor": (4, 4)}
     gd.world.npc_buy_currency = {"tailor": {"cloth": "wool"}}
-    gd._monster_locations = {"sheep": (1, 0)}
+    gd._monster_locations = {"sheep": [(1, 0)]}
     gd._monster_level = {"sheep": 1}
     gd._monster_hp = {"sheep": 5}
     gd._monster_drops = {"sheep": [("wool", 1, 1, 1)]}

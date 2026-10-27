@@ -183,6 +183,8 @@ GEAR_OBJECTIVE_CONTEXT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_ob
 PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
 SLOT_OCCUPANCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "slot_occupancy.py"
 REGION_EDGES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "region_edges.py"
+DROP_ROUTES_SRC_T14A = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model"
+                        / "drop_routes.py")
 CURRENCY_BUY_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_buy_batch.py"
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
@@ -4403,8 +4405,8 @@ OBTAIN_MODEL_FIGHTER_DROP_MUTATIONS = [
 ]
 OBTAIN_MODEL_FIGHTER_MUTATIONS = [
     ("obtain_model: the fighter never reaches the drop gates",
-     "        return drop_routes(item, self._state, self._gd, self._fighter)",
-     "        return drop_routes(item, self._state, self._gd)"),
+     "        return drop_routes(item, self._state, self._gd, self._reach(), self._fighter)",
+     "        return drop_routes(item, self._state, self._gd, self._reach())"),
     ("obtain_model: the fighter's inventory is stock",
      "        bag: dict[str, int] = dict(self._state.inventory)",
      "        bag: dict[str, int] = dict(self._state.inventory) | "
@@ -7942,9 +7944,6 @@ GATHER_REGION_MUTATIONS = [
      "        gather = next(iter(gathers), None)\n"),
 ]
 CROSSINGS_MUTATIONS = [
-    ("crossings: one hop only",
-     "                if region not in seen:\n                    seen.add(region)\n                    nxt.append(",
-     "                if False:\n                    seen.add(region)\n                    nxt.append("),
     # No "a region reached twice is expanded twice" mutant: `seen` only bounds
     # the work — breadth-first, the first route to the target is the same with
     # or without it, so no output can tell them apart.
@@ -8375,6 +8374,49 @@ PIECE_GREY_DEMAND_MUTATIONS = [
      "    return bool(consumers) or bool(bought)\n",
      "    return True\n"),
 ]
+# The walk's crossing search, moved to `region_edges` (ruling T14a-E: one
+# reachability authority for the walk's bridge and a fight's monster). Killed
+# by tests/test_ai/test_craft_plan_gen.py.
+REGION_CROSSING_MUTATIONS = [
+    ("crossings: one hop only",
+     "                if region not in seen:\n                    seen.add(region)\n                    nxt.append(",
+     "                if False:\n                    seen.add(region)\n                    nxt.append("),
+    ("region bridge: the crossing search is capped at 4",
+     "    while frontier:\n",
+     "    for _ in range(4):\n"),
+    ("region bridge: a crossing need not land in the leg's region",
+     "                 if region == target), None)",
+     "                 if True), None)"),
+]
+# Ruling T14a-E: a fight's monster is a route only where the walk reaches.
+# Killed by tests/test_ai/test_piece_policy.py.
+REACH_GATE_MUTATIONS = [
+    ("reach: a known spawn behind an unpayable crossing is a route",
+     "    known = game_data.monster_spawn_known(monster) and _reached(monster, game_data, reach)\n",
+     "    known = game_data.monster_spawn_known(monster)\n"),
+    ("reach: a monster's layered tiles are not read",
+     "    tiles += game_data.layered_locations(monster)\n",
+     "    tiles += []\n"),
+    ("reach: any tile region is reached",
+     "    return any(game_data.region_of(x, y, layer) in reach for x, y, layer in tiles)\n",
+     "    return bool(tiles)\n"),
+]
+REACH_REGIONS_MUTATIONS = [
+    ("reach: the walk's start region is not reachable",
+     "            {game_data.state_region(state)}\n            | {region",
+     "            set()\n            | {region"),
+    ("reach: a crossing's regions are not counted",
+     "            | {region for region, _route in _crossing_walk(\n"
+     "                state, region_edge_actions(game_data), game_data)}))\n",
+     "            | {region for region, _route in _crossing_walk(\n"
+     "                state, [], game_data)}))\n"),
+    ("reach: the memo ignores the gold a crossing is paid with",
+     "    return (game_data.state_region(state), state.layer, state.gold,\n",
+     "    return (game_data.state_region(state), state.layer, 0,\n"),
+    ("reach: the memo is shared by every catalogue",
+     "    memo = _REACH.cache_for(game_data)\n",
+     "    memo = _REACH.cache_for(None)  # type: ignore[arg-type]\n"),
+]
 FLEET_CURRENCY_STEP_MUTATIONS = [
     ("fleet step: the fleet's holding never leaves it to the turn-in",
      "            if held < price <= held + pooled:\n",
@@ -8673,9 +8715,6 @@ CONDITIONS_HELD_MUTATIONS = [
      "    rungs.append((\"achievements\", cell, False))\n"),
 ]
 CROSSING_CAP_MUTATIONS = [
-    ("region bridge: the crossing search is capped at 4",
-     "    while frontier:\n",
-     "    for _ in range(4):\n"),
 ]
 FUNDING_STEP_MUTATIONS = [
     ("funding: the whole target as one goal",
@@ -8700,9 +8739,6 @@ REGION_BRIDGE_MUTATIONS = [
     ("region bridge: decompose emits legs in another region unbridged",
      "    plan = _bridge_regions(walked, state, game_data, actions, declined)\n",
      "    plan = walked\n"),
-    ("region bridge: a crossing need not land in the leg's region",
-     "                if region == target:\n",
-     "                if True:\n"),
     ("region bridge: an unreachable leg is emitted anyway",
      "            if route is None:\n                return _decline(",
      "            if False:\n                return _decline("),
@@ -13698,6 +13734,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(OBJECTIVE_SRC, OBJECTIVE_OCCUPANCY_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)
+    run_group(REGION_EDGES_SRC, REGION_CROSSING_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(DROP_ROUTES_SRC_T14A, REACH_GATE_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(REGION_EDGES_SRC, REACH_REGIONS_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
     run_group(REGION_EDGES_SRC, REGION_EDGE_MUTATIONS,
               "tests/test_ai/test_actions_transition.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, GE_ORDER_STALENESS_MUTATIONS,

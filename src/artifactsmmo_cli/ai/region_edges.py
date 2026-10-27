@@ -45,7 +45,11 @@ than of the full pool (the pool always carries all 48 off-region actions, so
 asking it would gate on nothing).
 """
 
+from collections.abc import Iterator, Sequence
+
 from artifactsmmo_cli.ai.actions.base import Action, serves_region
+from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
+from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -81,3 +85,91 @@ def admit_region_edges(relevant: list[Action], actions: list[Action],
     seen = {id(a) for a in relevant}
     return relevant + [a for a in actions
                        if REGION_EDGE_TAG in a.tags and id(a) not in seen]
+
+
+def region_edge_actions(game_data: GameData) -> list[Action]:
+    """One `MapTransitionAction` per transition edge in the catalogue, in tile
+    order: the edges the action factory puts in every pool (`build_actions`),
+    built here once so the pool and `reachable_regions_now` cross the same
+    edges."""
+    return [MapTransitionAction(
+        portal_x=px, portal_y=py, portal_layer=playr,
+        dest_x=dx, dest_y=dy, dest_layer=dlayer,
+        conditions=conds,
+        travel_region=game_data.region_of(px, py, playr))
+        for (px, py, playr), (dx, dy, dlayer, conds) in sorted(
+            game_data.world.transition_edges.items())]
+
+
+def _crossing_walk(state: WorldState, edges: Sequence[Action],
+                   game_data: GameData) -> Iterator[tuple[str, list[Action]]]:
+    """Every region a chain of applicable crossings from `state` lands in, with
+    the fewest crossings that land there first: breadth-first over the region
+    edges. Each crossing is applied, so a key or fee the first one spends is
+    not available to the second. Each region is entered once (`seen`), so the
+    walk ends when the reachable regions are exhausted."""
+    frontier: list[tuple[WorldState, list[Action]]] = [(state, [])]
+    seen = {game_data.state_region(state)}
+    while frontier:
+        nxt: list[tuple[WorldState, list[Action]]] = []
+        for at, route in frontier:
+            here = game_data.state_region(at)
+            for edge in edges:
+                if edge.travel_region != here or not edge.is_applicable(at, game_data):
+                    continue
+                landed = edge.apply(at, game_data)
+                region = game_data.state_region(landed)
+                yield region, [*route, edge]
+                if region not in seen:
+                    seen.add(region)
+                    nxt.append((landed, [*route, edge]))
+        frontier = nxt
+
+
+def crossings(state: WorldState, target: str, edges: Sequence[Action],
+              game_data: GameData) -> list[Action] | None:
+    """The fewest applicable crossings from `state`'s region into `target`, or
+    None: the walk's bridge (`craft_plan_gen._bridge_regions`). It was capped
+    at 4 crossings: the island to the sonnengott cavern, and that cavern to
+    the raid area, are 5 (the conditions census, 2026-10-10: red_dragon_boots,
+    medic_armor declined)."""
+    return next((route for region, route in _crossing_walk(state, edges, game_data)
+                 if region == target), None)
+
+
+REACH_MEMO_SIZE = 256
+"""Walks `reachable_regions_now` keeps per catalogue: one per distinct
+(region, gold, holdings) the cycle asks about. The obtain model asks once per
+model, and a cycle builds thousands of models over a handful of states."""
+
+_REACH: "CatalogueScope[tuple[object, ...], frozenset[str]]" = CatalogueScope(REACH_MEMO_SIZE)
+"""The walks, scoped per catalogue (`CatalogueScope`: a catalogue's entries
+die with it, so no address is ever reused for another's answer)."""
+
+
+def _reach_key(state: WorldState, game_data: GameData) -> tuple[object, ...]:
+    """Everything a crossing's applicability reads (`MapTransitionAction.
+    is_applicable`): the region and layer the walk starts from, the gold and
+    items it pays with, the items it holds or wears."""
+    return (game_data.state_region(state), state.layer, state.gold,
+            tuple(sorted(state.inventory.items())),
+            tuple(sorted(code for code in state.equipment.values() if code)))
+
+
+def reachable_regions_now(state: WorldState, game_data: GameData) -> frozenset[str]:
+    """The regions the walk can reach from `state` now: its own, and every
+    region a chain of crossings applicable from it lands in (`crossings`'s
+    walk over the catalogue's edges). The ONE reachability authority for a
+    fight's monster (ruling T14a-E): a route whose monster stands in no such
+    region is not a route, since the walk could not serve it. Unlike
+    `GameData.reachable_regions` (a fee the character could earn counts), a
+    crossing is reachable only when it is applicable here: the gold or key
+    in hand. Memoised per catalogue (`_REACH`, keyed by `_reach_key`)."""
+    memo = _REACH.cache_for(game_data)
+    key = _reach_key(state, game_data)
+    if key not in memo:
+        _REACH.remember(memo, key, frozenset(
+            {game_data.state_region(state)}
+            | {region for region, _route in _crossing_walk(
+                state, region_edge_actions(game_data), game_data)}))
+    return memo[key]

@@ -68,7 +68,7 @@ from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
 from artifactsmmo_cli.ai.obtain_sources import SourceKind
 from artifactsmmo_cli.ai.potion_supply import POTION_POLICY
 from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
-from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG, admit_region_edges
+from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG, admit_region_edges, crossings
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
@@ -210,7 +210,7 @@ def _bridge_regions(plan: list[Action], state: WorldState, game_data: GameData,
     for leg in plan:
         here = game_data.state_region(at)
         if not serves_region(leg, here):
-            route = _crossings(at, leg.travel_region, edges, game_data)
+            route = crossings(at, leg.travel_region, edges, game_data)
             if route is None:
                 return _decline(declined, f"region:{here}->{leg.travel_region}:{leg!r}")
             for crossing in route:
@@ -220,35 +220,6 @@ def _bridge_regions(plan: list[Action], state: WorldState, game_data: GameData,
         if leg.is_applicable(at, game_data):
             at = leg.apply(at, game_data)
     return bridged
-
-
-def _crossings(state: WorldState, target: str, edges: list[Action],
-               game_data: GameData) -> list[Action] | None:
-    """The fewest applicable crossings from `state`'s region into `target`,
-    breadth-first over the region edges, or None. Each crossing is applied, so
-    a key or fee the first one spends is not available to the second. Each
-    region is entered once (`seen`), so the search ends when the reachable
-    regions are exhausted. It was capped at 4 crossings: the island to the
-    sonnengott cavern, and that cavern to the raid area, are 5 (the conditions
-    census, 2026-10-10: red_dragon_boots, medic_armor declined)."""
-    frontier: list[tuple[WorldState, list[Action]]] = [(state, [])]
-    seen = {game_data.state_region(state)}
-    while frontier:
-        nxt: list[tuple[WorldState, list[Action]]] = []
-        for at, route in frontier:
-            here = game_data.state_region(at)
-            for edge in edges:
-                if edge.travel_region != here or not edge.is_applicable(at, game_data):
-                    continue
-                landed = edge.apply(at, game_data)
-                region = game_data.state_region(landed)
-                if region == target:
-                    return [*route, edge]
-                if region not in seen:
-                    seen.add(region)
-                    nxt.append((landed, [*route, edge]))
-        frontier = nxt
-    return None
 
 
 def _dispatch(goal: Goal, state: WorldState, game_data: GameData, actions: list[Action],

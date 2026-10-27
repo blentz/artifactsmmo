@@ -44,6 +44,7 @@ from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
+from artifactsmmo_cli.ai.region_edges import reachable_regions_now
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
@@ -75,6 +76,14 @@ class ObtainModel:
         self._ctx = ctx
         self._now = now
         self._routes: dict[str, tuple[Route, ...]] = {}
+        self._regions: frozenset[str] | None = None
+
+    def _reach(self) -> frozenset[str]:
+        """The regions the walk reaches from this state now
+        (`region_edges.reachable_regions_now`), walked once per model."""
+        if self._regions is None:
+            self._regions = reachable_regions_now(self._state, self._gd)
+        return self._regions
 
     def routes(self, item: str) -> tuple[Route, ...]:
         """Every route to `item` in priority order, usable or not."""
@@ -399,7 +408,7 @@ class ObtainModel:
         """Monsters that drop `item`: see `drop_routes`, the one place drop gates
         are evaluated (shared with `drop_obtainability`), judged against the
         projected `fighter` when one is given."""
-        return drop_routes(item, self._state, self._gd, self._fighter)
+        return drop_routes(item, self._state, self._gd, self._reach(), self._fighter)
 
     def _task_reward(self, item: str) -> list[Route]:
         """The task board pays `item`: one application is a whole task loop
@@ -418,7 +427,7 @@ class ObtainModel:
         (see `drop_routes.gold_drop_routes`, which shares the fight gates)."""
         if item != GOLD_CODE:
             return []
-        return gold_drop_routes(self._state, self._gd)
+        return gold_drop_routes(self._state, self._gd, self._reach())
 
     def _sell(self, item: str) -> list[Route]:
         """GOLD only: selling what the keep authority licenses, one route per

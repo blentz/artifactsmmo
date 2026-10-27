@@ -47,8 +47,12 @@ _MIN_PAIRS = 60
 _MIN_ROUTED = 10
 _MIN_WALLED = 1
 
-WALLS = 9
-"""Today's closed cells (all `wall_unobtainable`)."""
+WALLS = 10
+"""Today's closed cells (all `wall_unobtainable`). 9 -> 10 with ruling T14a-E
+(a fight's monster is a route only where the walk reaches): `l47_depth3_amulet`'s
+weaponcrafting 40 rungs (the mithril tools and gloves) all need
+`cultist_alchemist`'s drops from `interior:-1,13`, whose door asks a held
+`cultist_cloak` the sheet does not have."""
 GEAR_WALLS = 4
 """Of those, gearcrafting 42 in the four l48 scenarios."""
 ROUTED_SKILLS = frozenset({"gearcrafting", "jewelrycrafting", "weaponcrafting", "mining"})
@@ -208,8 +212,10 @@ def test_weaponcrafting_ten_has_an_open_climb(results: list[scc.ClimbResult]) ->
 def test_the_walls_today_are_high_weapon_and_gearcrafting(
         results: list[scc.ClimbResult]) -> None:
     """Today's whole wall set, pinned as a FINDING: `weaponcrafting` at 35 or
-    42 and `gearcrafting` at 42 (weaponcrafting 40 opened 2026-10-10, when the
-    drop gate began wearing a potion loadout) (the l48 scenarios, whose one recipe needs a
+    40 or 42 and `gearcrafting` at 42 (weaponcrafting 40 opened 2026-10-10, when
+    the drop gate began wearing a potion loadout, and closed again on
+    `l47_depth3_amulet` with ruling T14a-E: its drops lie behind a door the
+    sheet holds no key for; see `WALLS`) (the l48 scenarios, whose one recipe needs a
     `diamond_stone` from the tile-less `strange_rocks`), each with XP-positive
     recipes in reach and NOT ONE with a reachable material set, and none
     routed. A change that opens one is a fix and updates this test."""
@@ -217,8 +223,8 @@ def test_the_walls_today_are_high_weapon_and_gearcrafting(
     assert len(walls) == WALLS
     assert sum(wall.skill == "gearcrafting" for wall in walls) == GEAR_WALLS
     for wall in walls:
-        assert (wall.skill, wall.level) in {("weaponcrafting", 35), ("weaponcrafting", 42),
-                                            ("gearcrafting", 42)}
+        assert (wall.skill, wall.level) in {("weaponcrafting", 35), ("weaponcrafting", 40),
+                                            ("weaponcrafting", 42), ("gearcrafting", 42)}
         assert wall.gap == ClimbGap.WALL_UNOBTAINABLE.value
         assert wall.inventory.xp_positive > 0
         assert wall.inventory.obtainable == 0

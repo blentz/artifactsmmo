@@ -8,7 +8,7 @@
 >
 > `g-in`/`g-above` are the in-range and above-range resource counts and `g-xp+` is whether the HIGHEST in-range resource still pays XP.
 
-360 cells over 92 distinct (skill, level) pairs; PASS 351; routed 71; walled 9; silent_stall 0; unexplained 0; skill_catalogue_empty 0
+360 cells over 92 distinct (skill, level) pairs; PASS 350; routed 71; walled 10; silent_stall 0; unexplained 0; skill_catalogue_empty 0
 
 residual scope: 71 of 360 cells are ROUTED (4 of 8 skills) — jewelrycrafting 30, gearcrafting 24, weaponcrafting 16, mining 1. A closure in an unrouted skill can only be an explained wall.
 
@@ -316,7 +316,7 @@ residual scope: 71 of 360 cells are ROUTED (4 of 8 skills) — jewelrycrafting 3
 | l47_depth3_amulet | gearcrafting | 40 | 41 | PASS | - | 98 | 51 | 2 | 34 | 0 | 0 | - | `None` |
 | l47_depth3_amulet | jewelrycrafting | 40 | 41 | PASS | - | 44 | 23 | 4 | 6 | 0 | 0 | - | `None` |
 | l47_depth3_amulet | mining | 40 | 41 | PASS | - | 12 | 5 | 3 | 2 | 6 | 1 | yes | `mithril_ore` |
-| l47_depth3_amulet | weaponcrafting | 40 | 41 | PASS | - | 56 | 22 | 4 | 13 | 0 | 0 | - | `None` |
+| l47_depth3_amulet | weaponcrafting | 40 | 41 | **wall_unobtainable** | - | 56 | 22 | 0 | 13 | 0 | 0 | - | `None` |
 | l47_depth3_amulet | woodcutting | 40 | 41 | PASS | - | 10 | 7 | 5 | 1 | 6 | 1 | yes | `maple_wood` |
 | l20_relief_full_bank | alchemy | 10 | 11 | PASS | - | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
 | l20_relief_full_bank | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
