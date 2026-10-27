@@ -46,6 +46,8 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
+from artifactsmmo_cli.ai.obtain_model.gate import GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, PIECE_POLICY, Policy
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -63,7 +65,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
@@ -645,3 +647,24 @@ def test_the_reach_memo_is_scoped_per_catalogue_and_bounded() -> None:
         assert list(memo) == [region_edges._reach_key(replace(state, gold=6000), world)]
     finally:
         region_edges._REACH.max_entries = region_edges.REACH_MEMO_SIZE
+
+
+def test_a_drop_behind_a_crossing_is_a_route_once_the_fee_is_held() -> None:
+    """`dryad_hair` drops only from `dryad`, whose tiles are all on the
+    restricted layer past the 5000-gold door: its route's SPAWN_KNOWN gate is
+    shut while the pocket cannot pay, and open once it can."""
+    player = _seeded(RUNE_CELLS[0])
+    state, world = player.state, player.game_data
+    assert state is not None and world is not None
+
+    def known(at: WorldState) -> bool:
+        (route,) = drop_routes("dryad_hair", at, world, reachable_regions_now(at, world))
+        return next(g.satisfied for g in route.gates if g.kind is GateKind.SPAWN_KNOWN)
+
+    assert not known(state)
+    assert known(replace(state, gold=6000))
+
+
+def test_the_region_the_character_stands_in_is_reachable() -> None:
+    """With no crossing at all, the walk still reaches where it stands."""
+    assert reachable_regions_now(make_state(), GameData()) == frozenset({"overworld"})
