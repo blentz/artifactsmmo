@@ -4608,6 +4608,29 @@ GOLD_FUNDED_DECOMPOSE_MUTATIONS = [
      "                                   gold_target=win_gold(fight.monster_code, game_data))\n",
      "                                   gold_target=None)\n"),
 ]
+# Ruling T14a-C: an `L*` piece's GE-filled material is served by the route that
+# priced it. Killed by tests/test_ai/test_gold_funded_piece.py.
+PIECE_GE_ROUTING_MUTATIONS = [
+    ("piece GE: a piece's currency step is walked without the piece's routes",
+     "                                           needed={currency: held + want},\n"
+     "                                           fight_gold=piece)",
+     "                                           needed={currency: held + want},\n"
+     "                                           fight_gold=False)"),
+]
+PIECE_GE_DECOMPOSE_MUTATIONS = [
+    ("piece GE: a piece's walk has no GE fill (D-E kept)",
+     "                          replace(policy, fight_gold=True, ge_routes=True), frozenset({GOLD_CODE}))",
+     "                          replace(policy, fight_gold=True), frozenset({GOLD_CODE}))"),
+    ("piece GE: a GE leg maps to no action",
+     "    if route.kind is SourceKind.GE_FILL:\n",
+     "    if False:\n"),
+    ("piece GE: a vanished order is still filled",
+     "        if order is None or order[0] != route.via or location is None:\n",
+     "        if order is None or location is None:\n"),
+    ("piece GE: a map without the exchange still fills",
+     "        if order is None or order[0] != route.via or location is None:\n",
+     "        if order is None or order[0] != route.via:\n"),
+]
 GOLD_FUNDED_ROUTING_MUTATIONS = [
     ("obtain_item_routing: no L* piece fights for its gold",
      "    return objective is not None and any(piece.code == code for piece in objective.missing)\n",
@@ -13273,6 +13296,10 @@ def _collect_all_groups() -> None:
     run_group(CRAFT_PLAN_GEN_SRC, GOLD_FUNDED_DECOMPOSE_MUTATIONS,
               "tests/test_ai/test_gold_funded_piece.py", survivors)
     run_group(OBTAIN_ITEM_ROUTING_SRC, GOLD_FUNDED_ROUTING_MUTATIONS,
+              "tests/test_ai/test_gold_funded_piece.py", survivors)
+    run_group(OBTAIN_ITEM_ROUTING_SRC, PIECE_GE_ROUTING_MUTATIONS,
+              "tests/test_ai/test_gold_funded_piece.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, PIECE_GE_DECOMPOSE_MUTATIONS,
               "tests/test_ai/test_gold_funded_piece.py", survivors)
     run_group(OBTAIN_MODEL_DROP_SRC, GOLD_FUNDED_DROP_ROUTES_MUTATIONS,
               "tests/test_ai/test_gold_funded_piece.py", survivors)

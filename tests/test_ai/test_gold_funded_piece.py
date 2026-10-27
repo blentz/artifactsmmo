@@ -13,15 +13,19 @@ take, at most `FIGHT_LEVEL_GAP_CEILING` levels above the character.
 from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from artifactsmmo_cli.ai import accumulation_sell
+from artifactsmmo_cli.ai import accumulation_sell, craft_plan_gen
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_options, fight_gold_monster
 from artifactsmmo_cli.ai.acquisition_cost_core import priced_route
 from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING, FightAction, win_gold
+from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
+from artifactsmmo_cli.ai.decompose_core import Act
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
@@ -36,6 +40,7 @@ from artifactsmmo_cli.ai.scenario import (
     load_bundle_game_data,
     scenario_state,
 )
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
@@ -307,3 +312,88 @@ def test_only_the_piece_is_flagged() -> None:
     other = _equippable_goal(OTHER_RUNE, "rune_slot", state, world, ctx)
     assert isinstance(piece, GatherMaterialsGoal) and piece.fight_gold is True
     assert isinstance(other, GatherMaterialsGoal) and other.fight_gold is False
+
+
+# --------------------------------------------------------------------------
+# Ruling T14a-C: the walk serves an `L*` piece's GE-filled material.
+# --------------------------------------------------------------------------
+
+SHARD = "malefic_shard"
+"""`malefic_crystal`'s price at the archaeologist (24): on the busy book a
+standing sell order (3 at 800 gold) is its only route the character has."""
+
+
+def _busy() -> tuple[GameData, WorldState, list[object]]:
+    world = shared_world(BUNDLE, with_ge_orders=True)
+    state = scenario_state(SCENARIOS[CELL], world)
+    player = GamePlayer(character=state.character, history=None)
+    player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
+    player.seed_offline(state, world)
+    return world, state, player._build_actions()
+
+
+def _crystal_ctx():  # type: ignore[no-untyped-def]
+    piece = GearPiece("artifact3_slot", "malefic_crystal", 0, Fraction(1), Fraction(10),
+                      SourceKind.BUY)
+    return replace(TIMED_NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+        "wolf", {"artifact3_slot": "malefic_crystal"}, Fraction(1), (piece,)))
+
+
+def test_an_l_star_piece_s_currency_step_is_served_by_its_priced_route() -> None:
+    """Live R2D2 2026-10-27: `malefic_crystal` priced through 24 GE-filled
+    `malefic_shard` and declined `infeasible:malefic_shard:no_route` — the
+    walk had no GE fill (D-E). The piece's currency step is served under the
+    piece's own routes (fight gold and GE fills, as `PIECE_POLICY` priced it)."""
+    world, state, _actions = _busy()
+    goal = _equippable_goal("malefic_crystal", "artifact3_slot", state, world, _crystal_ctx())
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.fight_gold is True
+    assert set(goal.needed) == {SHARD}
+
+
+def test_a_piece_s_ge_material_is_filled_with_the_pocket_s_gold() -> None:
+    world, state, actions = _busy()
+    order = world.ge_best_sell_order(SHARD)
+    assert order is not None
+    goal = GatherMaterialsGoal(SHARD, {SHARD: 3}, fight_gold=True)
+    rich = replace(state, gold=order[1] * 3 + 1000)
+    plan = decompose(goal, rich, world, actions, _crystal_ctx())
+    assert plan is not None
+    fills = [a for a in plan if isinstance(a, GeFillSellOrderAction)]
+    assert fills == [GeFillSellOrderAction(order_id=order[0], item_code=SHARD, price=order[1],
+                                           quantity=3,
+                                           ge_location=world.grand_exchange_location())]
+    # Short of the gold: the fight that earns it comes first.
+    poor = replace(state, gold=100)
+    first = decompose(goal, poor, world, actions, _crystal_ctx())
+    assert first is not None
+    assert isinstance(first[0], FightAction) and first[0].gold_target is not None
+    # Not a piece's step: D-E stands, the walk has no GE fill.
+    declined: list[str] = []
+    assert decompose(GatherMaterialsGoal(SHARD, {SHARD: 3}), rich, world, actions,
+                     TIMED_NO_PROFILE_CONTEXT, declined) is None
+    assert declined == [f"infeasible:{SHARD}:no_route:{SHARD}"]
+
+
+def test_a_fill_is_built_only_for_the_order_that_still_stands(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """The GE leg names its order: an order the book no longer holds as its
+    best, or a map without the exchange, builds no fill (the next cycle
+    re-walks the book it has)."""
+    world, state, _actions = _busy()
+    order = world.ge_best_sell_order(SHARD)
+    assert order is not None
+
+    def leg(via: str, gd: GameData) -> object:
+        graph = SimpleNamespace(sources={SHARD: [SimpleNamespace(kind=SourceKind.GE_FILL, via=via)]})
+        return craft_plan_gen._action_for(Act(SHARD, 0, 2, 2), graph, [], [], state, gd, True,
+                                          lambda _item: False)
+
+    assert leg(order[0], world) == GeFillSellOrderAction(
+        order_id=order[0], item_code=SHARD, price=order[1], quantity=2,
+        ge_location=world.grand_exchange_location())
+    assert leg("a-vanished-order", world) is None
+    # The order stands, the map has no exchange tile.
+    monkeypatch.setattr(world, "grand_exchange_location", lambda: None)
+    assert leg(order[0], world) is None

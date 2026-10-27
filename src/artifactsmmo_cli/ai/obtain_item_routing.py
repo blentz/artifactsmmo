@@ -264,8 +264,12 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
                     want = min(want, funded)
                     if want == 0:
                         return None
+                # An `L*` piece's currency is served under the piece's own
+                # routes (ruling T14a-C): the walk may fill a standing GE order
+                # and fight for its gold, as `PIECE_POLICY` priced it.
                 return GatherMaterialsGoal(target_item=currency,
-                                           needed={currency: held + want})
+                                           needed={currency: held + want},
+                                           fight_gold=piece)
         if _passively_funded(code, state, game_data) == 0 and not piece:
             # The ITEM itself is bought with a passive currency (a medal worn
             # as an artifact): the "plain buy attempt" above is not

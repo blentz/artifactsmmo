@@ -41,6 +41,7 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
@@ -268,9 +269,12 @@ def _dispatch(goal: Goal, state: WorldState, game_data: GameData, actions: list[
     if goal.fight_gold:
         # An `L*` piece priced through fight gold (plan B Task 15, ruling
         # T3a): only its goal's walk may fight for gold, and a grey monster
-        # may pay it, as `PIECE_POLICY` priced it.
+        # may pay it, as `PIECE_POLICY` priced it. It also fills a standing GE
+        # sell order (ruling T14a-C: the piece is served by the route that
+        # priced it, and `PIECE_POLICY` prices GE fills), so D-E is lifted for
+        # a piece's goal only: the price, not the walk, weighed the fill.
         return _walk_plan(goal, state, game_data, actions, ctx, declined, subtasks, frozenset(),
-                          replace(policy, fight_gold=True), frozenset({GOLD_CODE}))
+                          replace(policy, fight_gold=True, ge_routes=True), frozenset({GOLD_CODE}))
     return _walk_plan(goal, state, game_data, actions, ctx, declined, subtasks, frozenset(), policy)
 
 
@@ -592,6 +596,16 @@ def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool:
         buy = next((a for a in candidates if isinstance(a, NpcBuyAction)
                     and a.npc_code == route.via and a.item_code == step.item), None)
         return None if buy is None else dataclasses.replace(buy, quantity=step.amount)
+    if route.kind is SourceKind.GE_FILL:
+        # A standing sell order filled (ruling T14a-C, only under a piece's
+        # policy): the order the route names, at its own price, while it still
+        # stands as the book's best.
+        order = game_data.ge_best_sell_order(step.item)
+        location = game_data.grand_exchange_location()
+        if order is None or order[0] != route.via or location is None:
+            return None
+        return GeFillSellOrderAction(order_id=route.via, item_code=step.item, price=order[1],
+                                     quantity=step.amount, ge_location=location)
     if route.kind is SourceKind.GOLD_DROP:
         # The goal's own actions come last so their fight wins for the monster,
         # as in the DROP arm below.
