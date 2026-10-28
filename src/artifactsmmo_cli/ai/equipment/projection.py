@@ -1,8 +1,8 @@
 """Project a hypothetical loadout's combat stats as a delta from current totals.
 
-The server reports only total stats (base + equipped gear), never base, so a
-loadout's projected stats are computed as: current totals + Σ_slot (picked item
-contribution − currently-equipped item contribution). Pure; used by predict_win
+The server reports only total stats (base + equipped gear), never base, so for
+gear slots a loadout's projected stats are computed as: current totals + Σ_slot
+(picked item contribution − currently-equipped item contribution). Pure; used by predict_win
 to judge winnability with the best-attainable loadout before equipping it.
 
 THE UTILITY SLOTS are not in the totals. A utility potion's boost is a

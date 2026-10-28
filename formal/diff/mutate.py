@@ -2128,8 +2128,11 @@ BOOST_SELECTION_MUTATIONS = [
      "    units = stock if code else 0\n",
      "    units = stock\n"),
     ("project_equip: utility2_slot's stock lands in utility1_slot",
-     "                               utility2_slot_quantity=units)\n",
-     "                               utility1_slot_quantity=units)\n"),
+     "                                   utility2_slot_quantity=units)\n",
+     "                                   utility1_slot_quantity=units)\n"),
+    ("project_equip: a slot that is no utility slot projects as utility2_slot",
+     '    if slot == "utility2_slot":\n',
+     "    if True:\n"),
 ]
 
 # Spec 2026-10-18 §2.10 (ruling T13c): the fight refused for want of bag room,

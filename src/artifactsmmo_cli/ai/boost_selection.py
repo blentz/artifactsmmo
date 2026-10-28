@@ -43,5 +43,7 @@ def project_equip(state: WorldState, code: str | None, game_data: GameData,
     if slot == "utility1_slot":
         return dataclasses.replace(state, equipment=equipment, inventory=inventory,
                                    utility1_slot_quantity=units)
-    return dataclasses.replace(state, equipment=equipment, inventory=inventory,
-                               utility2_slot_quantity=units)
+    if slot == "utility2_slot":
+        return dataclasses.replace(state, equipment=equipment, inventory=inventory,
+                                   utility2_slot_quantity=units)
+    raise ValueError(f"project_equip: {slot} is not a utility slot")

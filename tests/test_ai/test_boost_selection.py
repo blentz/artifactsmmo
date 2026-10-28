@@ -22,6 +22,8 @@ Math spot-check (fire_mob scenario):
     player has no earth attack -> margin unchanged = 9 (gain 0)
 """
 
+import pytest
+
 from artifactsmmo_cli.ai.boost_selection import project_equip
 from artifactsmmo_cli.ai.combat import combat_margin, fight_stats
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -131,6 +133,13 @@ def test_the_named_slot_is_the_one_projected():
     assert projected.equipment["utility2_slot"] == _RES_FIRE
     assert projected.equipment["utility1_slot"] is None
     assert (projected.utility1_slot_quantity, projected.utility2_slot_quantity) == (0, 4)
+
+
+def test_a_slot_that_is_no_utility_slot_raises():
+    """Only the two utility slots hold a potion: a gear slot named here is a
+    caller's bug, not utility2_slot."""
+    with pytest.raises(ValueError, match="weapon_slot"):
+        project_equip(_state(), _RES_FIRE, _gd_fire_mob(), slot="weapon_slot", stock=1)
 
 
 def test_competing_utility_items_leave_the_bag_and_the_rest_stays():
