@@ -15,7 +15,7 @@ Proved in `Formal.FightSeconds` (monotone in turns, antitone in haste for
 `formal/diff/test_fight_seconds_diff.py`.
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 
@@ -69,11 +69,54 @@ class FightSecondsModel:
         return fight_seconds(turns, self.s_turn, self.h, haste, self.floor)
 
 
-def fit(samples: Sequence[tuple[int, int, float]]) -> tuple[Fraction, Fraction, Fraction]:
-    """`(s_turn, h, floor)` fitted to observed `(turns, haste, cooldown)` fights.
+@dataclass(frozen=True)
+class FitSums:
+    """The sufficient statistics of `fit` over the fights folded in so far:
+    the least-squares sums, the least cooldown, the hastes seen and the count
+    of fights kept (a positive cooldown). Exact (`Fraction`) and independent of
+    the order fights are folded in, so a fold of new fights into old sums is
+    the sums of all of them: an incremental fit equals a cold one."""
 
-    A cooldown of 0 or less is no observation of a fight's length (a refused or
-    simulated action) and is dropped from the fit and the floor alike.
+    kept: int
+    s11: Fraction
+    s12: Fraction
+    s22: Fraction
+    y1: Fraction
+    y2: Fraction
+    floor: Fraction | None
+    hastes: frozenset[int]
+
+
+NO_FIGHTS = FitSums(0, Fraction(0), Fraction(0), Fraction(0), Fraction(0), Fraction(0), None,
+                    frozenset())
+"""The sums of no fight."""
+
+
+def fit_sums(samples: Iterable[tuple[int, int, float]], sums: FitSums = NO_FIGHTS) -> FitSums:
+    """`sums` with the `(turns, haste, cooldown)` fights of `samples` folded
+    in. A cooldown of 0 or less is no observation of a fight's length (a
+    refused or simulated action) and is dropped; a kept fight with negative
+    turns or haste raises."""
+    kept = [(turns, haste, Fraction(cooldown)) for turns, haste, cooldown in samples
+            if cooldown > 0]
+    if any(turns < 0 or haste < 0 for turns, haste, _ in kept):
+        raise ValueError("a fight with negative turns or haste")
+    if not kept:
+        return sums
+    least = min(c for _, _, c in kept)
+    return FitSums(
+        sums.kept + len(kept),
+        sums.s11 + sum((Fraction(t * t) for t, _, _ in kept), Fraction(0)),
+        sums.s12 + sum((Fraction(t * t * a) for t, a, _ in kept), Fraction(0)),
+        sums.s22 + sum((Fraction(t * t * a * a) for t, a, _ in kept), Fraction(0)),
+        sums.y1 + sum((t * c for t, _, c in kept), Fraction(0)),
+        sums.y2 + sum((t * a * c for t, a, c in kept), Fraction(0)),
+        least if sums.floor is None else min(sums.floor, least),
+        sums.hastes | {a for _, a, _ in kept})
+
+
+def solve(sums: FitSums) -> tuple[Fraction, Fraction, Fraction]:
+    """`(s_turn, h, floor)` from the sums of the observed fights.
 
     Least squares on `cooldown ≈ a·turns + b·(turns·haste)`, through the origin,
     gives `s_turn = a` and `h = −b / a`. When the haste never varies the two
@@ -83,20 +126,11 @@ def fit(samples: Sequence[tuple[int, int, float]]) -> tuple[Fraction, Fraction, 
     give an `h` of 1 or more (the fit would predict a fight of no seconds at
     one point of haste); `fight_seconds` refuses one at use. No observations at
     all raise. `floor` is the least observed cooldown."""
-    kept = [(turns, haste, Fraction(cooldown)) for turns, haste, cooldown in samples
-            if cooldown > 0]
-    if not kept:
+    if sums.floor is None:
         raise ValueError("no fight with a positive cooldown to fit fight seconds on")
-    if any(turns < 0 or haste < 0 for turns, haste, _ in kept):
-        raise ValueError("a fight with negative turns or haste")
-    s11 = sum((Fraction(t * t) for t, _, _ in kept), Fraction(0))
+    s11, s12, s22, y1, y2, floor = sums.s11, sums.s12, sums.s22, sums.y1, sums.y2, sums.floor
     if s11 == 0:
         raise ValueError("every observed fight has 0 turns")
-    s12 = sum((Fraction(t * t * a) for t, a, _ in kept), Fraction(0))
-    s22 = sum((Fraction(t * t * a * a) for t, a, _ in kept), Fraction(0))
-    y1 = sum((t * c for t, _, c in kept), Fraction(0))
-    y2 = sum((t * a * c for t, a, c in kept), Fraction(0))
-    floor = min(c for _, _, c in kept)
     det = s11 * s22 - s12 * s12
     if det == 0:
         return y1 / s11, Fraction(0), floor
@@ -108,3 +142,9 @@ def fit(samples: Sequence[tuple[int, int, float]]) -> tuple[Fraction, Fraction, 
     if h < 0:
         return y1 / s11, Fraction(0), floor
     return a, h, floor
+
+
+def fit(samples: Sequence[tuple[int, int, float]]) -> tuple[Fraction, Fraction, Fraction]:
+    """`(s_turn, h, floor)` fitted to observed `(turns, haste, cooldown)`
+    fights: `solve` of their `fit_sums`."""
+    return solve(fit_sums(samples))

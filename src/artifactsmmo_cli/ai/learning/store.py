@@ -920,15 +920,18 @@ class LearningStore:
                 seen.setdefault(code, Counter())[produced // runs] += 1
         return {code: yields.most_common(1)[0][0] for code, yields in seen.items()}
 
-    def fleet_fight_samples(self) -> list[tuple[int, int, float]]:
+    def fleet_fight_samples(self, after_id: int,
+                            through_id: int) -> list[tuple[int, int, float]]:
         """`(turns, haste, cooldown)` of every fight any character recorded
-        with its length (`Cycle.fight_turns`) and a positive cooldown: the
-        fight-seconds observations (spec 2026-10-18 §2.9), in id order. Rows
-        written before the length was recorded have none and are not read."""
+        with its length (`Cycle.fight_turns`) and a positive cooldown, with
+        `after_id < id <= through_id`: the fight-seconds observations (spec
+        2026-10-18 §2.9), in id order. Rows written before the length was
+        recorded have none and are not read."""
         with SqlSession(self._engine) as s:
             rows = s.exec(
                 select(Cycle.fight_turns, Cycle.fight_haste, Cycle.actual_cooldown_seconds)
                 .where(col(Cycle.fight_turns).is_not(None))
+                .where(col(Cycle.id) > after_id, col(Cycle.id) <= through_id)
                 .order_by(col(Cycle.id)))
             return [(turns, haste, seconds) for turns, haste, seconds in rows
                     if turns is not None and haste is not None

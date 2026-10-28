@@ -36,7 +36,13 @@ from pathlib import Path
 
 from artifactsmmo_api_client.models.log_type import LogType
 
-from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel, fit
+from artifactsmmo_cli.ai.fight_seconds_core import (
+    NO_FIGHTS,
+    FightSecondsModel,
+    FitSums,
+    fit_sums,
+    solve,
+)
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -54,11 +60,15 @@ Sample = tuple[int, int, float]
 """`(turns, haste, cooldown)` of one observed fight."""
 
 
+def model_of(sums: FitSums) -> FightSecondsModel:
+    """The model `solve`d from `sums`; raises with no positive cooldown."""
+    s_turn, h, floor = solve(sums)
+    return FightSecondsModel(s_turn, h, floor, len(sums.hastes) > 1, sums.kept)
+
+
 def fit_model(samples: Sequence[Sample]) -> FightSecondsModel:
     """The model fitted to `samples`; raises with no positive cooldown."""
-    s_turn, h, floor = fit(samples)
-    kept = [haste for _, haste, cooldown in samples if cooldown > 0]
-    return FightSecondsModel(s_turn, h, floor, len(set(kept)) > 1, len(kept))
+    return model_of(fit_sums(samples))
 
 
 def log_fights(haste: int, entries: Iterable[LogEntry]) -> list[Sample]:
@@ -134,21 +144,46 @@ def fetch_fleet_bootstrap(api: APIWrapper, hastes: Mapping[str, int],
         page += 1
 
 
-_LEARNED: list[tuple[LearningStore, int, tuple[Sample, ...], FightSecondsModel]] = []
+_LEARNED: list[tuple[LearningStore, int, FitSums, tuple[Sample, ...], FightSecondsModel]] = []
 """The last fit: its store (held, so the key cannot outlive its object), the
-store's fight count, the bootstrap, and the model."""
+newest cycle id folded in, the sums of the store's recorded fights through it,
+the bootstrap, and the model."""
 
 
 def learned_model(store: LearningStore, bootstrap: Sequence[Sample]) -> FightSecondsModel:
-    """The model fitted to the fleet's recorded fights and `bootstrap`, refitted
-    only when either changed."""
-    recorded = store.fleet_fight_samples()
+    """The model fitted to the fleet's recorded fights and `bootstrap`.
+
+    Read once per recorded cycle: the fit is held against its store and the
+    newest cycle id, and a newer id folds in only the fights recorded past the
+    last one read (the table is append-only) into the held sums
+    (`fit_sums`), so the model equals a cold fit of every recorded fight and
+    the bootstrap, without re-reading or re-summing them."""
+    last = store.last_cycle_id()
     key = tuple(bootstrap)
-    if _LEARNED and _LEARNED[0][0] is store and _LEARNED[0][1:3] == (len(recorded), key):
-        return _LEARNED[0][3]
-    model = fit_model([*recorded, *bootstrap])
-    _LEARNED[:] = [(store, len(recorded), key, model)]
+    # A newest id below the one last read means the table was replaced or
+    # pruned under this store: the fights are read afresh.
+    held = _LEARNED[0] if _LEARNED and _LEARNED[0][0] is store and _LEARNED[0][1] <= last else None
+    if held is not None and held[1] == last and held[3] == key:
+        return held[4]
+    seen, recorded = (held[1], held[2]) if held is not None else (0, NO_FIGHTS)
+    recorded = fit_sums(store.fleet_fight_samples(seen, last), recorded)
+    model = model_of(fit_sums(key, recorded))
+    _LEARNED[:] = [(store, last, recorded, key, model)]
     return model
+
+
+_MEAN: list[tuple[LearningStore, int, float | None]] = []
+"""The last mean action seconds read: its store (held), the newest cycle id it
+was read at, and the mean."""
+
+
+def _fleet_mean(store: LearningStore) -> float | None:
+    """`store.fleet_mean_action_seconds()`, read once per recorded cycle (the
+    table is append-only, so an unchanged newest id is an unchanged mean)."""
+    last = store.last_cycle_id()
+    if not (_MEAN and _MEAN[0][0] is store and _MEAN[0][1] == last):
+        _MEAN[:] = [(store, last, store.fleet_mean_action_seconds())]
+    return _MEAN[0][2]
 
 
 def _mean_cooldown(cooldowns: Iterable[int], source: str) -> Fraction:
@@ -161,7 +196,7 @@ def _mean_cooldown(cooldowns: Iterable[int], source: str) -> Fraction:
 def learned_action_seconds(store: LearningStore, bootstrap: Iterable[int]) -> Fraction:
     """The fleet's mean seconds per executed action, or the `bootstrap`
     cooldowns' while the store has recorded none; raises with neither."""
-    mean = store.fleet_mean_action_seconds()
+    mean = _fleet_mean(store)
     if mean is not None:
         return Fraction(mean)
     return _mean_cooldown(bootstrap, "no executed action is recorded and the bootstrap has")

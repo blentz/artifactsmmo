@@ -1189,8 +1189,21 @@ FIGHT_SECONDS_CORE_MUTATIONS = [
      "            if cooldown > 0]",
      "            if cooldown >= 0]"),
     ("fight seconds fit: the floor is the longest fight",
-     "    floor = min(c for _, _, c in kept)",
-     "    floor = max(c for _, _, c in kept)"),
+     "    least = min(c for _, _, c in kept)",
+     "    least = max(c for _, _, c in kept)"),
+    # Plan B Task 14c: the fit folds sums, so a held fit takes new fights.
+    ("fight seconds fit: a fold forgets the floor held so far",
+     "        least if sums.floor is None else min(sums.floor, least),",
+     "        least,"),
+    ("fight seconds fit: a fold of no kept fight drops the sums held so far",
+     "    if not kept:\n        return sums\n",
+     "    if not kept:\n        return NO_FIGHTS\n"),
+    ("fight seconds fit: a fold forgets the fights held so far",
+     "        sums.kept + len(kept),\n        sums.s11 + sum(",
+     "        sums.kept + len(kept),\n        0 + sum("),
+    ("fight seconds fit: no fight is solved",
+     "    if sums.floor is None:\n        raise ValueError(\"no fight with a positive cooldown",
+     "    if False:\n        raise ValueError(\"no fight with a positive cooldown"),
     ("fight seconds fit: a haste that slows is kept",
      "    if h < 0:\n        return y1 / s11, Fraction(0), floor",
      "    if False:\n        return y1 / s11, Fraction(0), floor"),
@@ -1253,17 +1266,40 @@ PLAYER_TIMING_MUTATIONS = [
 # tests/test_ai/test_fight_seconds_model.py.
 FIGHT_SECONDS_MODEL_MUTATIONS = [
     ("fight seconds model: the cache ignores its store",
-     "    if _LEARNED and _LEARNED[0][0] is store and _LEARNED[0][1:3] == (len(recorded), key):",
-     "    if _LEARNED and _LEARNED[0][1:3] == (len(recorded), key):"),
+     "    held = _LEARNED[0] if _LEARNED and _LEARNED[0][0] is store and _LEARNED[0][1] <= last else None",
+     "    held = _LEARNED[0] if _LEARNED and _LEARNED[0][1] <= last else None"),
+    # Plan B Task 14c (M-5): the fit is held per newest cycle id and folds in
+    # only the fights recorded since.
     ("fight seconds model: the cache ignores new fights",
-     "    if _LEARNED and _LEARNED[0][0] is store and _LEARNED[0][1:3] == (len(recorded), key):",
-     "    if _LEARNED and _LEARNED[0][0] is store and _LEARNED[0][2] == key:"),
+     "    if held is not None and held[1] == last and held[3] == key:",
+     "    if held is not None and held[3] == key:"),
+    ("fight seconds model: the cache ignores a new bootstrap",
+     "    if held is not None and held[1] == last and held[3] == key:",
+     "    if held is not None and held[1] == last:"),
+    ("fight seconds model: a replaced table is folded into the held sums",
+     "    held = _LEARNED[0] if _LEARNED and _LEARNED[0][0] is store and _LEARNED[0][1] <= last else None",
+     "    held = _LEARNED[0] if _LEARNED and _LEARNED[0][0] is store else None"),
+    ("fight seconds model: every recorded fight is folded in again",
+     "    recorded = fit_sums(store.fleet_fight_samples(seen, last), recorded)",
+     "    recorded = fit_sums(store.fleet_fight_samples(0, last), recorded)"),
+    ("fight seconds model: the held fights are read afresh each time",
+     "    seen, recorded = (held[1], held[2]) if held is not None else (0, NO_FIGHTS)",
+     "    seen, recorded = (0, NO_FIGHTS)"),
+    ("fight seconds model: the action mean ignores its store",
+     "    if not (_MEAN and _MEAN[0][0] is store and _MEAN[0][1] == last):",
+     "    if not (_MEAN and _MEAN[0][1] == last):"),
+    ("fight seconds model: the action mean ignores new cycles",
+     "    if not (_MEAN and _MEAN[0][0] is store and _MEAN[0][1] == last):",
+     "    if not (_MEAN and _MEAN[0][0] is store):"),
+    ("fight seconds model: the action mean is read every time",
+     "    if not (_MEAN and _MEAN[0][0] is store and _MEAN[0][1] == last):",
+     "    if True:"),
     ("fight seconds model: one haste identifies its effect",
-     "    return FightSecondsModel(s_turn, h, floor, len(set(kept)) > 1, len(kept))",
-     "    return FightSecondsModel(s_turn, h, floor, len(set(kept)) >= 1, len(kept))"),
+     "    return FightSecondsModel(s_turn, h, floor, len(sums.hastes) > 1, sums.kept)",
+     "    return FightSecondsModel(s_turn, h, floor, len(sums.hastes) >= 1, sums.kept)"),
     ("fight seconds model: the bootstrap is ignored",
-     "    model = fit_model([*recorded, *bootstrap])",
-     "    model = fit_model(recorded)"),
+     "    model = model_of(fit_sums(key, recorded))",
+     "    model = model_of(recorded)"),
     ("fight seconds model: a learned action mean is ignored",
      "    if mean is not None:\n        return Fraction(mean)",
      "    if False:\n        return Fraction(mean)"),
@@ -4896,6 +4932,17 @@ GAME_DATA_LEARNED_CRAFT_YIELD_MUTATIONS = [
      "        if self._requirement_graph_memo is not None:\n"
      "            self._requirement_graph_memo.clear()\n",
      "        self.recipes_catalog.learned_craft_yields = learned\n"),
+]
+# Plan B Task 14c (M-5): the fight read is bounded by cycle id, so the held fit
+# folds in only the fights recorded since. Killed by
+# tests/test_ai/test_learning_store.py (TestFightSecondsObservations).
+FLEET_FIGHT_SAMPLES_MUTATIONS = [
+    ("store: the fight read starts at the first cycle",
+     "                .where(col(Cycle.id) > after_id, col(Cycle.id) <= through_id)",
+     "                .where(col(Cycle.id) <= through_id)"),
+    ("store: the fight read runs past the newest id read",
+     "                .where(col(Cycle.id) > after_id, col(Cycle.id) <= through_id)",
+     "                .where(col(Cycle.id) > after_id)"),
 ]
 # Killed by tests/test_ai/test_learning_store.py (TestFleetCraftYields).
 FLEET_CRAFT_YIELDS_MUTATIONS = [
@@ -13543,6 +13590,8 @@ def _collect_all_groups() -> None:
     run_group(GAME_DATA_PARSE_SRC, GAME_DATA_LEARNED_CRAFT_YIELD_MUTATIONS,
               "tests/test_ai/test_recycle_yield.py", survivors)
     run_group(LEARNING_STORE_SRC, FLEET_CRAFT_YIELDS_MUTATIONS,
+              "tests/test_ai/test_learning_store.py", survivors)
+    run_group(LEARNING_STORE_SRC, FLEET_FIGHT_SAMPLES_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)
     run_group(LEARNING_STORE_SRC, TASK_WORK_RATE_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)

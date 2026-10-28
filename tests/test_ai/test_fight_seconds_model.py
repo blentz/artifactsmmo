@@ -211,3 +211,91 @@ def test_timing_with_a_store_pools_the_fleet_and_the_bootstrap(tmp_path: Path) -
         assert (model.s_turn, model.samples, seconds) == (Fraction(5, 2), 2, Fraction(15))
     finally:
         store.close()
+
+
+def _cold(store: LearningStore, bootstrap: list[tuple[int, int, float]]) -> FightSecondsModel:
+    """The fit read and summed afresh from every recorded fight."""
+    return fit_model([*store.fleet_fight_samples(0, store.last_cycle_id()), *bootstrap])
+
+
+def test_the_held_fit_equals_a_cold_refit_after_every_recorded_fight(tmp_path: Path) -> None:
+    """Plan B Task 14c (M-5): fights recorded one at a time, among cycles that
+    are no fight and a fight of no cooldown, at three hastes; after each the
+    held model equals a cold fit of the same history, and the read covers only
+    the cycles recorded since the last one."""
+    store = _store(tmp_path)
+    reads: list[tuple[int, int]] = []
+    read = store.fleet_fight_samples
+
+    def spy(after_id: int, through_id: int) -> list[tuple[int, int, float]]:
+        reads.append((after_id, through_id))
+        return read(after_id, through_id)
+
+    bootstrap = [(10, 0, 20.0), (8, 4, 15.0)]
+    rows = [(5, 0, 10.0), None, (7, 4, 13.0), (6, 4, 0.0), (9, 12, 14.0), None, (3, 8, 5.5)]
+    try:
+        store.fleet_fight_samples = spy  # type: ignore[method-assign]
+        for index, row in enumerate(rows):
+            if row is None:
+                store.record_cycle(Cycle(ts=f"2026-10-19T00:01:{index:02d}+00:00",
+                                         cycle_index=index, outcome="ok",
+                                         actual_cooldown_seconds=25.0))
+            else:
+                _fight(store, index, *row)
+            before = len(reads)
+            held = learned_model(store, bootstrap)
+            assert reads[before:] == [(index, index + 1)]
+            assert held == fit_model([*read(0, store.last_cycle_id()), *bootstrap])
+            assert learned_model(store, bootstrap) is held
+            assert len(reads) == before + 1
+        assert held.samples == 4 + len(bootstrap)  # the 0 s fight is no observation
+    finally:
+        store.close()
+
+
+def test_a_replaced_table_is_read_afresh(tmp_path: Path) -> None:
+    """A newest id below the one last read is a table pruned under the store:
+    the held sums are dropped, never folded into."""
+    store = _store(tmp_path)
+    try:
+        _fight(store, 0, 5, 0, 10.0)
+        _fight(store, 1, 5, 0, 20.0)
+        assert learned_model(store, []).s_turn == 3
+        with store._engine.begin() as conn:
+            conn.exec_driver_sql("DELETE FROM cycles")
+        _fight(store, 2, 5, 0, 25.0)
+        assert store.last_cycle_id() == 1
+        assert learned_model(store, []) == _cold(store, [])
+        assert learned_model(store, []).s_turn == 5
+    finally:
+        store.close()
+
+
+def test_the_action_mean_is_read_once_per_recorded_cycle(tmp_path: Path) -> None:
+    """Plan B Task 14c (M-5): the fleet's mean action seconds are read again
+    only when a cycle has been recorded since, and held against their store."""
+    store, other = _store(tmp_path / "a"), _store(tmp_path / "b")
+    reads: list[int] = []
+    read = store.fleet_mean_action_seconds
+
+    def spy() -> float | None:
+        reads.append(1)
+        return read()
+
+    try:
+        store.fleet_mean_action_seconds = spy  # type: ignore[method-assign]
+        _fight(store, 0, 5, 0, 10.0)
+        other.record_cycle(Cycle(ts="2026-10-19T00:00:00+00:00", cycle_index=0, outcome="ok",
+                                 actual_cooldown_seconds=40.0))
+        assert learned_action_seconds(store, ()) == 10
+        assert learned_action_seconds(store, ()) == 10
+        assert len(reads) == 1
+        assert learned_action_seconds(other, ()) == 40
+        assert mod._MEAN[0][0] is other
+        store.record_cycle(Cycle(ts="2026-10-19T00:01:00+00:00", cycle_index=1, outcome="ok",
+                                 actual_cooldown_seconds=30.0))
+        assert learned_action_seconds(store, ()) == 20
+        assert len(reads) == 2
+    finally:
+        store.close()
+        other.close()

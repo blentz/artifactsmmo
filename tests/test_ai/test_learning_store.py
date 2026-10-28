@@ -2033,7 +2033,11 @@ class TestFightSecondsObservations:
         hero.record_cycle(Cycle(ts="2026-10-19T00:00:03+00:00", cycle_index=2, outcome="ok",
                                 actual_cooldown_seconds=30.0))
         try:
-            assert hero.fleet_fight_samples() == [(5, 8, 9.0), (9, 12, 16.0)]
+            assert hero.fleet_fight_samples(0, hero.last_cycle_id()) == [(5, 8, 9.0),
+                                                                       (9, 12, 16.0)]
+            # The bounds: past `after_id`, through `through_id`.
+            assert hero.fleet_fight_samples(0, 1) == [(5, 8, 9.0)]
+            assert hero.fleet_fight_samples(1, hero.last_cycle_id()) == [(9, 12, 16.0)]
         finally:
             hero.close()
             sidekick.close()
