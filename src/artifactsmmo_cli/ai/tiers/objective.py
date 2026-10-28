@@ -536,11 +536,14 @@ class CharacterObjective:
                 code=code, attainable=False, blocker=None,
                 blocking_skill=stats.crafting_skill,
                 blocking_skill_level=stats.crafting_level)
-        if is_attainable_now(code, state, self._game_data):
+        # The target and each of its materials are asked of one state: one
+        # model (`is_attainable_now`'s) answers them all.
+        model = near_term_model(state, self._game_data)
+        if model.feasible(code, 1, NEAR_TERM_POLICY):
             return GearTarget(code=code, attainable=True, blocker=None)
         recipe = self._game_data.crafting_recipe(code) or {}
         for material in sorted(recipe):
-            if not is_attainable_now(material, state, self._game_data):
+            if not model.feasible(material, 1, NEAR_TERM_POLICY):
                 return GearTarget(code=code, attainable=False, blocker=material)
         return GearTarget(code=code, attainable=False, blocker=code)
 

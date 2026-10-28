@@ -5374,6 +5374,15 @@ GRIND_OBTAINABLE_MUTATIONS = [
 # objective.NEAR_TERM_POLICY, killed by tests/test_ai/test_tiers_objective.py.
 NEAR_TERM_POLICY_MUTATIONS = [
     # Plan B Task 14c: one obtain model answers every candidate of one state.
+    # Fix round 1: classify_target asks its target and materials of one model.
+    ("objective: classify_target builds a model for the target",
+     "        if model.feasible(code, 1, NEAR_TERM_POLICY):\n"
+     "            return GearTarget(code=code, attainable=True, blocker=None)",
+     "        if is_attainable_now(code, state, self._game_data):\n"
+     "            return GearTarget(code=code, attainable=True, blocker=None)"),
+    ("objective: classify_target builds a model per material",
+     "            if not model.feasible(material, 1, NEAR_TERM_POLICY):",
+     "            if not is_attainable_now(material, state, self._game_data):"),
     ("objective: near-term gear builds an obtain model per candidate",
      "                          if model.feasible(code, 1, NEAR_TERM_POLICY)]",
      "                          if is_attainable_now(code, state, self._game_data)]"),

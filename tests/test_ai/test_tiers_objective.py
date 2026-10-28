@@ -449,6 +449,31 @@ def test_classify_target_still_reports_a_sourceless_code_as_its_own_blocker():
     assert target.blocker == "relic"
 
 
+def test_classify_target_asks_one_obtain_model_per_call() -> None:
+    """Plan B Task 14c fix round 1: the target and each of its recipe's
+    materials are asked of one state, so one obtain model answers them all;
+    the classification is the one `is_attainable_now` gives each alone."""
+    gd = _gd_drop_recipes()
+    state = make_state(level=5, attack={"air": 5})
+    obj = CharacterObjective.from_game_data(gd)
+    built: list[ObtainModel] = []
+    real = objective_mod.ObtainModel
+
+    def counting(*args: object) -> ObtainModel:
+        model = real(*args)  # type: ignore[arg-type]
+        built.append(model)
+        return model
+
+    with patch.object(objective_mod, "ObtainModel", counting):
+        helm = obj.classify_target("dragon_helm", state)
+        coat = obj.classify_target("feather_coat", state)
+    assert len(built) == 2
+    assert (helm.attainable, helm.blocker) == (False, "dragon_scale")
+    assert not is_attainable_now("dragon_helm", state, gd)
+    assert not is_attainable_now("dragon_scale", state, gd)
+    assert (coat.attainable, coat.blocker) == (True, None)
+
+
 def test_gear_targets_keep_an_unattainable_but_producible_candidate():
     """The other half of the contract: `gear_targets_with_blockers`
     DELIBERATELY keeps unattainable targets so `IsThisTargetBlocked` can route
