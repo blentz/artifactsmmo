@@ -1503,6 +1503,22 @@ LEARNED_DROPS_MUTATIONS = [
      "        return 1 / self.units_per_attempt(source, item, rate, min_quantity, max_quantity,",
      "        return self.units_per_attempt(source, item, rate, min_quantity, max_quantity,"),
 ]
+# Plan B Task 14d (parked T16c M3): the drop-chance harness asks the production
+# `LearnedDrops.attempts_per_unit` against `Formal.DropChance.attemptsOf`, the one
+# Lean definition both selectors read. Killed by formal/diff/test_drop_chance_diff.py.
+DROP_ATTEMPTS_HARNESS_MUTATIONS = [
+    ("drop attempts harness: a unit takes twice the attempts",
+     "        return 1 / self.units_per_attempt(source, item, rate, min_quantity, max_quantity,",
+     "        return 2 / self.units_per_attempt(source, item, rate, min_quantity, max_quantity,"),
+    ("drop attempts harness: a hit is counted twice",
+     "        return self._attempts.get(source, 0), self._hits.get((source, item), 0)",
+     "        return self._attempts.get(source, 0), 2 * self._hits.get((source, item), 0)"),
+    ("drop attempts harness: the slope is doubled",
+     "        return units_per_attempt(rate, min_quantity, max_quantity, attempts, hits,\n"
+     "                                 self.k, prospecting)",
+     "        return units_per_attempt(rate, min_quantity, max_quantity, attempts, hits,\n"
+     "                                 2 * self.k, prospecting)"),
+]
 LEARNED_DROPS_SLOPE_MUTATIONS = [
     ("learned drops: the slope is ignored",
      "        return units_per_attempt(rate, min_quantity, max_quantity, attempts, hits,\n"
@@ -13154,6 +13170,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_one_drop_model.py", survivors)
     run_group(LEARNED_DROPS_SRC, LEARNED_DROPS_SLOPE_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(LEARNED_DROPS_SRC, DROP_ATTEMPTS_HARNESS_MUTATIONS,
+              "formal/diff/test_drop_chance_diff.py", survivors)
     run_group(GATHERING_APPLY_SRC, ONE_DROP_MODEL_GATHER_MUTATIONS,
               "tests/test_ai/test_one_drop_model.py", survivors)
     run_group(OBTAIN_MODEL_SRC, ONE_DROP_MODEL_OBTAIN_MUTATIONS,

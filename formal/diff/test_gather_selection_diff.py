@@ -3,7 +3,7 @@ Formal.GatherSelection.selectGatherSource (Lean) over hundreds of random
 candidate lists.
 
 Each candidate's key is the LEARNED expected gathers per unit (ruling T16a):
-`1 / drop_chance_core.units_per_attempt(...)` over a random API rate, quantity
+`LearnedDrops.attempts_per_unit(...)` (the production function) over a random API rate, quantity
 range, observed attempts and hits, prospecting slope and prospecting — the very
 function every production picker ranks by — so the oracle is asked about the
 rationals production computes, not hand-picked ones.
@@ -29,14 +29,22 @@ from fractions import Fraction
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.drop_chance_core import units_per_attempt
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, select_gather_source
 from formal.diff.oracle_client import run_oracle
 
 
+def _attempts_per_unit(rate: int, min_q: int, max_q: int, observed: int, hits: int,
+                       k: Fraction, prospecting: int) -> Fraction:
+    """The production figure (`LearnedDrops.attempts_per_unit`) over evidence
+    holding exactly `(observed, hits)` for one (source, item)."""
+    evidence = LearnedDrops((("src", observed),), ((("src", "item"), hits),), k)
+    return evidence.attempts_per_unit("src", "item", rate, min_q, max_q, prospecting)
+
+
 @st.composite
 def _attempts(draw: st.DrawFn) -> Fraction:
-    """A learned expected-gathers per unit: the reciprocal of `units_per_attempt`
+    """A learned expected-gathers per unit: the production `LearnedDrops.attempts_per_unit`
     over a random drop row and random evidence."""
     rate = draw(st.integers(min_value=1, max_value=500))
     min_q = draw(st.integers(min_value=1, max_value=10))
@@ -45,7 +53,7 @@ def _attempts(draw: st.DrawFn) -> Fraction:
     hits = draw(st.integers(min_value=0, max_value=observed))
     k = draw(st.fractions(min_value=0, max_value=1, max_denominator=20))
     prospecting = draw(st.integers(min_value=0, max_value=200))
-    return 1 / units_per_attempt(rate, min_q, max_q, observed, hits, k, prospecting)
+    return _attempts_per_unit(rate, min_q, max_q, observed, hits, k, prospecting)
 
 
 _cand = st.tuples(
@@ -103,9 +111,9 @@ def test_observations_flip_the_pick():
     """The live pearl sources: `salmon_spot` (1 in 100) beats `trout_spot`
     (1 in 300) under the prior, and 1,000 salmon gathers without a pearl make it
     the dearer one (1100 vs 300 gathers a pearl). Both models flip together."""
-    salmon_prior = 1 / units_per_attempt(100, 1, 1, 0, 0, Fraction(0), 0)
-    salmon_seen = 1 / units_per_attempt(100, 1, 1, 1000, 0, Fraction(0), 0)
-    trout = 1 / units_per_attempt(300, 1, 1, 0, 0, Fraction(0), 0)
+    salmon_prior = _attempts_per_unit(100, 1, 1, 0, 0, Fraction(0), 0)
+    salmon_seen = _attempts_per_unit(100, 1, 1, 1000, 0, Fraction(0), 0)
+    trout = _attempts_per_unit(300, 1, 1, 0, 0, Fraction(0), 0)
     assert (salmon_prior, salmon_seen, trout) == (100, 1100, 300)
     assert _select([(1, salmon_prior, 5), (2, trout, 5)]) == ("01", 1)
     assert _select([(1, salmon_seen, 5), (2, trout, 5)]) == ("02", 2)

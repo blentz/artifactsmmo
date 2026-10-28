@@ -333,8 +333,8 @@ open Formal.PriorityBand
 #check @Formal.GatherSelection.select_mem                        -- winner is a real candidate
 #check @Formal.GatherSelection.select_is_lex_min                 -- dominance: nothing strictly beats the winner
 #check @Formal.GatherSelection.select_no_cheaper_at_le_distance  -- corollary: strictly-cheaper ⇒ strictly-farther
-#check @Formal.GatherSelection.attempts_antitone_in_units       -- monotonicity: likelier drop ⇒ ≤ expected gathers
-#check @Formal.GatherSelection.prior_attempts_is_rate_over_mean -- the prior is the API rate over the mean
+#check @Formal.DropChance.attempts_antitone_in_units       -- monotonicity: likelier drop ⇒ ≤ expected gathers
+#check @Formal.DropChance.prior_attempts_is_rate_over_mean -- the prior is the API rate over the mean
 #check @Formal.GatherSelection.gather_selected_reaches_needed    -- reachability: +1 loop reaches needed qty
 -- ShoppingList required roles (bank-aware recipe net for planner gather-pruning):
 #check @Formal.ShoppingList.credit_plus_deficit         -- reconstruction: credit + deficit = requirement
@@ -349,8 +349,8 @@ open Formal.PriorityBand
 #check @Formal.MonsterDropSelection.select_mem                        -- winner is a real candidate
 #check @Formal.MonsterDropSelection.select_is_lex_min                 -- dominance: nothing strictly beats the winner
 #check @Formal.MonsterDropSelection.select_no_fewer_kills_at_le_distance -- corollary: fewer-kills ⇒ strictly-farther
-#check @Formal.MonsterDropSelection.attempts_antitone_in_units       -- monotonicity: likelier drop ⇒ ≤ expected kills
-#check @Formal.MonsterDropSelection.prior_attempts_is_rate_over_mean -- the prior is the API rate over the mean
+#check @Formal.DropChance.attempts_antitone_in_units       -- monotonicity: likelier drop ⇒ ≤ expected kills
+#check @Formal.DropChance.prior_attempts_is_rate_over_mean -- the prior is the API rate over the mean
 #check @Formal.MonsterDropSelection.kills_reach_needed                -- reachability: +1 kill loop reaches needed qty
 #check @Formal.MonsterDropSelection.keyLt_total                       -- totality of the lex key order
 -- CraftVsBuy required roles (craft-vs-buy acquisition decision over Int):

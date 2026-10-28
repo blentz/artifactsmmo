@@ -1982,6 +1982,15 @@ def runDropUnits (args : Array Json) : Json :=
   let u := Formal.DropChance.units (n 0) (n 1) (n 2) k (intArg args 5) (n 6) (n 7)
   Json.mkObj [("num", Json.num u.1), ("den", Json.num u.2)]
 
+/-- The expected attempts one unit takes (`Formal.DropChance.attemptsOf`, the
+reciprocal the source selectors rank by). Args as `runDropUnits`. Emits the
+reduced `num` / `den`. -/
+def runDropAttempts (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let k : Formal.DropChance.Q := (intArg args 3, intArg args 4)
+  let a := Formal.DropChance.attemptsOf (n 0) (n 1) (n 2) k (intArg args 5) (n 6) (n 7)
+  Json.mkObj [("num", Json.num a.num), ("den", Json.num (a.den : Int))]
+
 /-- The fitted prospecting slope (`Formal.DropChance.fitK`). Args: `[count]`,
 then `[apiRate, prospecting, attempts, hits]` per sample. Emits `num` / `den`. -/
 def runDropFitK (args : Array Json) : Json :=
@@ -3292,6 +3301,8 @@ def runOne (item : Json) : Json :=
     runDropChance args
   else if kind == "drop_units" then
     runDropUnits args
+  else if kind == "drop_attempts" then
+    runDropAttempts args
   else if kind == "drop_fit_k" then
     runDropFitK args
   else if kind == "loop_recovery" then

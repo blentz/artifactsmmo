@@ -11,6 +11,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.drop_chance_core import chance_at, fit_k, posterior_chance, units_per_attempt
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from formal.diff.oracle_client import run_oracle
 
 
@@ -77,6 +78,44 @@ def test_units_per_attempt_matches_lean(
         api_rate, attempts, hits, k, prospecting = chance
         assert units_per_attempt(api_rate, min_q, max_q, attempts, hits, k,
                                  prospecting) == _frac(row), (chance, min_q, max_q)
+
+
+def _production_attempts(api_rate: int, attempts: int, hits: int, k: Fraction,
+                         prospecting: int, min_q: int, max_q: int) -> Fraction:
+    """The production figure every source picker ranks by:
+    `LearnedDrops.attempts_per_unit` over evidence holding exactly
+    `(attempts, hits)` for one (source, item)."""
+    evidence = LearnedDrops((("src", attempts),), ((("src", "item"), hits),), k)
+    return evidence.attempts_per_unit("src", "item", api_rate, min_q, max_q, prospecting)
+
+
+@settings(max_examples=300, deadline=None)
+@given(cases=st.lists(st.tuples(_chance_case, st.integers(min_value=1, max_value=10),
+                                st.integers(min_value=0, max_value=10)),
+                      min_size=1, max_size=30))
+def test_attempts_per_unit_matches_lean(
+        cases: list[tuple[tuple[tuple[int, int, int], Fraction, int], int, int]]) -> None:
+    """`LearnedDrops.attempts_per_unit`, the production function, against
+    `Formal.DropChance.attemptsOf`, the one Lean definition both selectors read
+    (`attemptsPerUnit` of `units`; Task 14d, parked T16c M3)."""
+    flat = [((*observation, k, prospecting), min_q, min_q + extra)
+            for (observation, k, prospecting), min_q, extra in cases]
+    rows = run_oracle("drop_attempts", [[*_chance_args(*chance), min_q, max_q]
+                                        for chance, min_q, max_q in flat])
+    for (chance, min_q, max_q), row in zip(flat, rows, strict=True):
+        assert _production_attempts(*chance, min_q, max_q) == _frac(row), (chance, min_q, max_q)
+
+
+def test_attempts_edges_against_lean() -> None:
+    """The prior pearl (300), the live trout_spot pearls (683/3) and a drop of
+    1 to 3 at 1 in 8 (4), the `attemptsOf` witnesses."""
+    cases = [(300, 0, 0, Fraction(0), 0, 1, 1), (300, 383, 2, Fraction(0), 0, 1, 1),
+             (8, 0, 0, Fraction(0), 0, 1, 3)]
+    rows = run_oracle("drop_attempts", [[*_chance_args(*case[:5]), case[5], case[6]]
+                                        for case in cases])
+    expected = [Fraction(300), Fraction(683, 3), Fraction(4)]
+    assert [_frac(row) for row in rows] == expected
+    assert [_production_attempts(*case) for case in cases] == expected
 
 
 def test_units_edges_against_lean() -> None:

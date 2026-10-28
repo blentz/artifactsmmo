@@ -1,4 +1,5 @@
 -- @concept: resources @property: dominance, monotonicity, totality, reachability
+import Formal.DropChance
 /-
 Formal model of the pure yield-rate gather-source selector extracted from
 `src/artifactsmmo_cli/ai/gather_selection.py`
@@ -50,7 +51,7 @@ deriving Repr, DecidableEq
 
 /-- Expected gathers to acquire one unit: the candidate's `attempts`, an exact
 `Rat` (Python `Fraction`). The caller computes it from the LEARNED drop chance
-(`LearnedDrops.attempts_per_unit`, ruling T16a) as `attemptsPerUnit` of the
+(`LearnedDrops.attempts_per_unit`, ruling T16a) as `Formal.DropChance.attemptsPerUnit` of the
 expected units one attempt yields; with nothing observed that is the API rate over
 the mean yield (`prior_attempts_is_rate_over_mean`), the key this selector ranked
 by before the chance was learned. -/
@@ -305,50 +306,9 @@ theorem select_no_cheaper_at_le_distance {cs : List Candidate} {c : Candidate}
   intro x hx hlt
   exact absurd (Or.inl hlt) (select_is_lex_min h x hx)
 
-/-- Attempts one unit takes when one attempt yields `units` units, expected:
-`1 / units`. Python `1 / LearnedDrops.units_per_attempt(...)`. -/
-def attemptsPerUnit (units : Rat) : Rat := units⁻¹
-
-/-- `a ≤ b` for positive `a` reverses under the inverse (core-only: no mathlib
-`inv_le_inv`). -/
-theorem inv_antitone {a b : Rat} (ha : 0 < a) (h : a ≤ b) : b⁻¹ ≤ a⁻¹ := by
-  have hb : 0 < b := Std.lt_of_lt_of_le ha h
-  have hai : (0 : Rat) ≤ a⁻¹ := Rat.le_of_lt (Rat.inv_pos.mpr ha)
-  have hbi : (0 : Rat) ≤ b⁻¹ := Rat.le_of_lt (Rat.inv_pos.mpr hb)
-  have hane : a ≠ 0 := fun e => by rw [e] at ha; exact Rat.lt_irrefl ha
-  have hbne : b ≠ 0 := fun e => by rw [e] at hb; exact Rat.lt_irrefl hb
-  -- b⁻¹ = b⁻¹ · (a · a⁻¹) ≤ b⁻¹ · (b · a⁻¹) = a⁻¹.
-  have step : b⁻¹ * (a * a⁻¹) ≤ b⁻¹ * (b * a⁻¹) :=
-    Rat.mul_le_mul_of_nonneg_left (Rat.mul_le_mul_of_nonneg_right h hai) hbi
-  rw [Rat.mul_inv_cancel a hane, Rat.mul_one, ← Rat.mul_assoc, Rat.inv_mul_cancel b hbne,
-    Rat.one_mul] at step
-  exact step
-
-/-- MONOTONICITY: a likelier drop is never dearer. If one attempt yields more units
-(a higher learned chance, or a larger mean quantity), the expected gathers per unit
-never rise, so the selector cannot prefer the node the evidence says drops less. -/
-theorem attempts_antitone_in_units (u₁ u₂ : Rat) (hpos : 0 < u₁) (h : u₁ ≤ u₂) :
-    attemptsPerUnit u₂ ≤ attemptsPerUnit u₁ :=
-  inv_antitone hpos h
-
-/-- The PRIOR is the API rate: with nothing observed the chance is `1 / rate`, and
-the attempts a unit takes are `rate / mean`, the key this selector ranked by
-before the chance was learned (`rate / avg_quantity`). -/
-theorem prior_attempts_is_rate_over_mean (rate : Nat) (mean : Rat) :
-    attemptsPerUnit ((1 / (rate : Rat)) * mean) = (rate : Rat) / mean := by
-  unfold attemptsPerUnit
-  rw [Rat.inv_mul_rev, Rat.div_def, Rat.one_mul, Rat.inv_inv, Rat.div_def, Rat.mul_comm]
-
-/-- Non-vacuity at the live configuration (2026-10-19): `small_pearls` off
-`trout_spot`, 1 in 300, one a drop. The prior is 300 gathers a unit; after the
-fleet's 383 attempts for 2 the posterior is 3/683, so 683/3. -/
-example : attemptsPerUnit ((1 / (300 : Rat)) * 1) = 300 := by
-  rw [show (300 : Rat) = ((300 : Nat) : Rat) from rfl, prior_attempts_is_rate_over_mean]
-  decide +kernel
-example : attemptsPerUnit (3 / 683) = 683 / 3 := by unfold attemptsPerUnit; decide +kernel
-example : attemptsPerUnit (3 / 683) ≤ attemptsPerUnit (1 / 300) :=
-  attempts_antitone_in_units (1 / 300) (3 / 683) (by decide +kernel) (by decide +kernel)
-
+/- The attempts a unit takes are `Formal.DropChance.attemptsPerUnit`, the one
+definition both selectors read (its monotonicity, `attempts_antitone_in_units`,
+and prior, `prior_attempts_is_rate_over_mean`, are proved there). -/
 /-- REACHABILITY (needed quantity): gathering `+1` repeatedly reaches the needed
 amount. Over `Nat`, `owned + (needed - owned) ≥ needed` for ALL inputs (truncated
 subtraction makes this hold both when already-owned ≥ needed and when short) — the
