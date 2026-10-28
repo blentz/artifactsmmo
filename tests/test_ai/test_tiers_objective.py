@@ -6,6 +6,7 @@ from unittest.mock import patch
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
+from artifactsmmo_cli.ai.tiers import objective as objective_mod
 from artifactsmmo_cli.ai.tiers.objective import (
     CharacterObjective,
     is_attainable,
@@ -248,6 +249,30 @@ def test_near_term_gear_fills_paired_ring_slots():
     targets = obj.near_term_gear(make_state(level=5))
     assert targets["ring1_slot"] == "silver_ring"
     assert targets["ring2_slot"] == "silver_ring"
+
+
+def test_near_term_gear_asks_one_obtain_model_per_state() -> None:
+    """Plan B Task 14c: every candidate of one `near_term_gear` call is asked
+    of one state, so one obtain model (which memoises each item's routes)
+    answers them all, and its picks are the ones `is_attainable_now` gives
+    each candidate alone."""
+    gd = _gd_near_term()
+    obj = CharacterObjective.from_game_data(gd)
+    state = make_state(level=5)
+    built: list[ObtainModel] = []
+    real = objective_mod.ObtainModel
+
+    def counting(*args: object) -> ObtainModel:
+        model = real(*args)  # type: ignore[arg-type]
+        built.append(model)
+        return model
+
+    with patch.object(objective_mod, "ObtainModel", counting):
+        targets = obj.near_term_gear(state)
+    assert len(built) == 1
+    assert targets == {"body_armor_slot": "copper_armor", "helmet_slot": "copper_helmet",
+                       "ring1_slot": "silver_ring", "ring2_slot": "silver_ring"}
+    assert all(is_attainable_now(code, state, gd) for code in targets.values())
 
 
 def _gd_drop_recipes() -> GameData:

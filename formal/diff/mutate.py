@@ -5338,6 +5338,10 @@ GRIND_OBTAINABLE_MUTATIONS = [
 ]
 # objective.NEAR_TERM_POLICY, killed by tests/test_ai/test_tiers_objective.py.
 NEAR_TERM_POLICY_MUTATIONS = [
+    # Plan B Task 14c: one obtain model answers every candidate of one state.
+    ("objective: near-term gear builds an obtain model per candidate",
+     "                          if model.feasible(code, 1, NEAR_TERM_POLICY)]",
+     "                          if is_attainable_now(code, state, self._game_data)]"),
     ("objective: near-term attainability counts GE fills",
      "                          ge_routes=False, task_rewards=True, fight_gold=False, drop_routes=True)",
      "                          ge_routes=True, task_rewards=True, fight_gold=False, drop_routes=True)"),

@@ -260,12 +260,18 @@ def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool
 
     A craftable item is no longer asked only through its recipe: a permanent
     vendor for it counts too."""
-    # A store-less feasibility walk: every drop at its API prior, passed
-    # explicitly (ruling T16b).
-    model = ObtainModel(state, game_data,
+    return near_term_model(state, game_data).feasible(code, 1, NEAR_TERM_POLICY)
+
+
+def near_term_model(state: WorldState, game_data: GameData) -> ObtainModel:
+    """The obtain model `is_attainable_now` asks: a store-less feasibility
+    walk, every drop at its API prior, passed explicitly (ruling T16b). One
+    model answers every item asked of the same state: it memoises each item's
+    routes for its lifetime, so a caller asking many items of one state
+    (`near_term_gear`'s candidates) builds it once."""
+    return ObtainModel(state, game_data,
                        replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty()),
                        datetime.now(UTC))
-    return model.feasible(code, 1, NEAR_TERM_POLICY)
 
 
 def is_suppliable(code: str, state: WorldState, game_data: GameData) -> bool:
@@ -465,11 +471,12 @@ class CharacterObjective:
         consecutive fights at -72.8 HP each. These near-term targets are the
         live roots that premise needs."""
         targets: dict[str, str] = {}
+        model = near_term_model(state, self._game_data)
         for type_, ranked in _gear_candidates_by_type(
                 self._game_data, state.level).items():
             slots = [s for s in ITEM_TYPE_TO_SLOTS[type_] if s in EQUIPMENT_SLOTS]
             attainable = [(value, code) for (value, code) in ranked
-                          if is_attainable_now(code, state, self._game_data)]
+                          if model.feasible(code, 1, NEAR_TERM_POLICY)]
             for slot, value, code in _slot_assignments(type_, slots, attainable):
                 if value > self._item_value(state.equipment.get(slot)):
                     targets[slot] = code
