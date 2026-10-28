@@ -3,12 +3,21 @@
 The server reports only total stats (base + equipped gear), never base, so a
 loadout's projected stats are computed as: current totals + Σ_slot (picked item
 contribution − currently-equipped item contribution). Pure; used by predict_win
-to judge winnability with the best-attainable loadout before equipping it."""
+to judge winnability with the best-attainable loadout before equipping it.
+
+THE UTILITY SLOTS are not in the totals. A utility potion's boost is a
+combat-time effect the sheet leaves out: live 2026-10-28, three public sheets
+wearing `earth_boost_potion` (+12% earth damage), `air_boost_potion` and
+`health_boost_potion` (+250 HP) each read exactly base + the gear's stats.
+So a worn potion is never subtracted, and the one a utility slot fights with
+is added: the picked one, or the worn one kept while its slot holds a unit (a
+slot with no stock is no potion, `combat.unpotioned`)."""
 
 from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.utility_slot import UTILITY_SLOTS, utility_slot_quantity
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -76,6 +85,11 @@ def project_loadout_stats(
 
     for slot, new_code in loadout.items():
         old_code = state.equipment.get(slot)
+        if slot in UTILITY_SLOTS:
+            # The sheet never holds a worn potion (module doc): nothing to take off.
+            if new_code == old_code and utility_slot_quantity(state, slot) == 0:
+                new_code = None
+            old_code = None
         if new_code == old_code:
             continue
         new_s: ItemStats | None = game_data.item_stats(new_code) if new_code else None

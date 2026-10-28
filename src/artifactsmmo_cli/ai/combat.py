@@ -514,9 +514,10 @@ def worn_restore(state: WorldState, game_data: GameData) -> tuple[int, int]:
 
 
 def unpotioned(state: WorldState) -> WorldState:
-    """`state` fighting on BARE gear: the worn restore potions stay worn but
-    none is drunk (`worn_restore` reads stock 0; it is the only fight reader of
-    a utility slot's quantity). Every GEAR question asks it — a rung cleared
+    """`state` fighting on BARE gear: the worn potions stay worn but none is
+    drunk (`worn_restore` reads stock 0, and a worn boost with no stock is no
+    boost, `equipment.projection`; they are the fight's readers of a utility
+    slot's quantity). Every GEAR question asks it — a rung cleared
     (`tier_progress.tier_cleared`), the band's bare fight
     (`band_target.BandTarget.bare_fight`), a fight secure enough to need no
     gear (`SelectionContext.combat_risky`, `combat_deficit`'s routing walk) —

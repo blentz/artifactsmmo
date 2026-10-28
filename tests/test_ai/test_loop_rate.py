@@ -135,7 +135,7 @@ class TestLoop:
     def test_a_worn_boost_left_out_of_the_loadout_is_taken_off(self) -> None:
         gd = _gd()
         worn = _state(inventory={"fire_res_potion": 1})
-        worn = project_equip(worn, "fire_res_potion", gd)
+        worn = project_equip(worn, "fire_res_potion", gd, stock=1)
         assert loop_mod.loop_rate(worn, gd, "ogre", [], (), {}, _TIMING, LearnedDrops.empty(), 0).win is False  # type: ignore[union-attr]
 
     def test_a_priced_consumable_costs_its_price(self) -> None:
@@ -362,17 +362,17 @@ class TestProjection:
         gd = _gd()
         assert fight_max_hp(_state(), gd, "ogre") == 100
         boosted = project_equip(_state(inventory={"hp_potion": 1}), "hp_potion", gd,
-                                slot="utility2_slot")
+                                slot="utility2_slot", stock=1)
         assert boosted.equipment["utility2_slot"] == "hp_potion"
         assert fight_max_hp(boosted, gd, "ogre") == 160
 
     def test_project_equip_none_empties_the_slot(self) -> None:
         gd = _gd()
-        worn = project_equip(_state(inventory={"hp_potion": 1}), "hp_potion", gd)
-        assert worn.max_hp == 160
-        emptied = project_equip(worn, None, gd)
+        worn = project_equip(_state(inventory={"hp_potion": 1}), "hp_potion", gd, stock=1)
+        assert (worn.max_hp, fight_max_hp(worn, gd, "ogre")) == (100, 160)
+        emptied = project_equip(worn, None, gd, stock=0)
         assert emptied.equipment["utility1_slot"] is None
-        assert emptied.max_hp == 100
+        assert (emptied.max_hp, fight_max_hp(emptied, gd, "ogre")) == (100, 100)
         assert "hp_potion" not in emptied.inventory
 
 

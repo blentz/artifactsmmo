@@ -462,6 +462,7 @@ CRAFT_COMPLETENESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_co
 CRAFT_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_census.py"
 HELD_STOCK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "held_stock.py"
 FIGHT_WALK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_walk.py"
+BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selection.py"
 LOCATION_CATALOG_SRC_NPC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 GREY_FARM_SRC_CUR = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grey_farm.py"
 CRAFT_CONDITIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_conditions.py"
@@ -2068,6 +2069,31 @@ BAG_CAP_PROJECTION_MUTATIONS = [
     ("projection: a removed bag keeps its room",
      "                          - (old_s.inventory_space if old_s else 0))\n",
      "                          - 0)\n"),
+]
+
+# Plan B Task 14b: the sheet leaves a worn utility potion out of its totals
+# (live 2026-10-28), so a utility slot's worn potion is never subtracted and is
+# added while stocked; `project_equip` wears a potion as the slot and its stock,
+# never as a stat delta. Killed by tests/test_ai/test_equipment_projection.py
+# and tests/test_ai/test_boost_selection.py.
+UTILITY_PROJECTION_MUTATIONS = [
+    ("projection: a worn utility potion is subtracted from the totals",
+     "                new_code = None\n            old_code = None\n",
+     "                new_code = None\n"),
+    ("projection: a worn utility potion with no stock still fights",
+     "            if new_code == old_code and utility_slot_quantity(state, slot) == 0:\n",
+     "            if False:\n"),
+]
+BOOST_SELECTION_MUTATIONS = [
+    ("project_equip: a worn potion holds no stock",
+     "    units = stock if code else 0\n",
+     "    units = 0\n"),
+    ("project_equip: an emptied slot keeps its stock",
+     "    units = stock if code else 0\n",
+     "    units = stock\n"),
+    ("project_equip: utility2_slot's stock lands in utility1_slot",
+     "                               utility2_slot_quantity=units)\n",
+     "                               utility1_slot_quantity=units)\n"),
 ]
 
 # Spec 2026-10-18 §2.10 (ruling T13c): the fight refused for want of bag room,
@@ -13008,6 +13034,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_inventory_keep.py", survivors)
     run_group(PROJECTION_SRC, BAG_CAP_PROJECTION_MUTATIONS,
               "tests/test_ai/test_equipment_projection.py", survivors)
+    run_group(PROJECTION_SRC, UTILITY_PROJECTION_MUTATIONS,
+              "tests/test_ai/test_equipment_projection.py", survivors)
+    run_group(BOOST_SELECTION_SRC, BOOST_SELECTION_MUTATIONS,
+              "tests/test_ai/test_boost_selection.py", survivors)
     run_group(BAG_CLEAR_CORE_SRC, BAG_CLEAR_CORE_MUTATIONS,
               "formal/diff/test_bag_clear_diff.py", survivors)
     run_group(BAG_CLEAR_SRC, BAG_CLEAR_MUTATIONS,

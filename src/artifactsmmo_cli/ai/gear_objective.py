@@ -164,9 +164,8 @@ def _wearing(state: WorldState, loadout: Mapping[str, str | None],
 def _potions_off(state: WorldState) -> WorldState:
     """`state` with its utility slots emptied into the bag, every unit of their
     stacks with them. The totals do not move: the sheet leaves a worn potion's
-    boost out of them (a combat-time effect, `scenario._derived_combat_totals`),
-    so taking one off strips nothing. Left on, the no-potion fight takes it off
-    by `project_equip`, which subtracts a boost the totals never held."""
+    boost out of them (a combat-time effect, `equipment.projection`'s module
+    doc), so taking one off strips nothing."""
     bag = Counter(state.inventory)
     for slot in UTILITY_SLOTS:
         code = state.equipment[slot]

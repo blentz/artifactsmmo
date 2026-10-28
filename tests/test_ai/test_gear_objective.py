@@ -18,9 +18,10 @@ import pytest
 import artifactsmmo_cli.ai.gear_objective as mod
 from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.combat import fight_loadout, win_probability
+from artifactsmmo_cli.ai.combat import fight_loadout, fight_stats, win_probability
 from artifactsmmo_cli.ai.equipment.loadout_picker import _ordered_slots
 from artifactsmmo_cli.ai.equipment.realizable_loadout import ownership
+from artifactsmmo_cli.ai.fight_walk import wear
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import achievable, fighter_owning, gear_objective
 from artifactsmmo_cli.ai.gear_objective_core import objective_held, piece_order_key
@@ -30,7 +31,7 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.yield_reprs import grind_xp_repr
-from artifactsmmo_cli.ai.loop_rate import LoopInputs, food_menu
+from artifactsmmo_cli.ai.loop_rate import LoopInputs, food_menu, loop_rate
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
@@ -823,3 +824,57 @@ def test_a_piece_is_priced_at_the_fighters_prospecting(monkeypatch: pytest.Monke
     assert objective.fighter is not None
     assert objective.fighter.prospecting != state.prospecting
     assert asked and set(asked) == {objective.fighter.prospecting}
+
+
+def _wearing_boost(fighter: WorldState, boost: str) -> WorldState:
+    """`fighter` with `boost` worn in utility1_slot, 30 units, and its totals
+    untouched: the live sheet leaves a worn boost out of them (2026-10-28, a
+    public sheet wearing `earth_boost_potion` reads `dmg_earth` 0 with no earth
+    gear), which is how `scenario_state` builds them too."""
+    return replace(fighter, equipment={**fighter.equipment, "utility1_slot": boost},
+                   utility1_slot_quantity=30)
+
+
+def _boost_rate(fighter: WorldState, gd: GameData, monster: str, boost: str) -> Fraction:
+    """`R` of farming `monster` in `fighter` wearing 30 `boost`, the potion free."""
+    rate = loop_rate(fighter, gd, monster, [(boost, 30)], food_menu(fighter, gd, CTX),
+                     {boost: None}, CTX.timing(), CTX.drops(), carried_keep(fighter, gd, CTX))
+    assert rate is not None
+    return rate.xp_per_second
+
+
+def test_a_worn_boost_projects_to_the_sheet_totals(gd: GameData, novice: GearObjective) -> None:
+    """A worn boost was taken off the totals by the no-potion fight and never
+    added back by the boosted one, because `project_equip` subtracted what the
+    sheet never held: the novice's `R` against `cow` fell 11.5% (0.4330 to
+    0.3834) and wearing the boost it already wore read the unboosted 0.4330,
+    below the 0.4484 of the same boost drawn from the bag."""
+    fighter = novice.fighter
+    worn = _wearing_boost(fighter, "earth_boost_potion")
+    assert fight_stats(wear(worn, gd, ())[0], gd, novice.monster) == fight_stats(
+        fighter, gd, novice.monster)
+    loop = _loop(fighter, gd)
+    food = food_menu(fighter, gd, CTX)
+    bare = mod._rate(fighter, gd, novice.monster, food, loop)
+    assert mod._rate(worn, gd, novice.monster, food, loop) == bare
+    carried = replace(fighter, inventory={**fighter.inventory, "earth_boost_potion": 30})
+    assert _boost_rate(worn, gd, novice.monster, "earth_boost_potion") == _boost_rate(
+        carried, gd, novice.monster, "earth_boost_potion") > bare
+
+
+def test_swapping_a_worn_boost_moves_only_its_delta(gd: GameData, novice: GearObjective) -> None:
+    """Over a worn `earth_boost_potion`, wearing `fire_boost_potion` instead
+    moves the fight's totals by exactly fire's stats less earth's."""
+    worn = _wearing_boost(novice.fighter, "earth_boost_potion")
+    worn = replace(worn, inventory={**worn.inventory, "fire_boost_potion": 30})
+    earth = fight_stats(wear(worn, gd, [("earth_boost_potion", 30)])[0], gd, novice.monster)
+    fire = fight_stats(wear(worn, gd, [("fire_boost_potion", 30)])[0], gd, novice.monster)
+    a = gd.item_stats("earth_boost_potion")
+    b = gd.item_stats("fire_boost_potion")
+    assert a is not None and b is not None
+    for element in ("fire", "earth", "water", "air"):
+        assert (fire.dmg_elements.get(element, 0) - earth.dmg_elements.get(element, 0)
+                == b.dmg_elements.get(element, 0) - a.dmg_elements.get(element, 0))
+        assert fire.resistance == earth.resistance and fire.attack == earth.attack
+    assert (fire.dmg, fire.critical_strike, fire.initiative, fire.max_hp) == (
+        earth.dmg, earth.critical_strike, earth.initiative, earth.max_hp)

@@ -83,11 +83,11 @@ def wear(state: WorldState, game_data: GameData,
     LOADOUT): the projected state and the loadout's restore potion, its HP and
     its stock (`(None, 0, 0)` without one)."""
     restore_code, restore_hp, restore_stock = _restore_of(loadout, game_data)
-    codes: list[str | None] = [code for code, _ in loadout]
-    codes += [None] * (len(UTILITY_SLOTS) - len(codes))
+    worn: list[tuple[str | None, int]] = list(loadout)
+    worn += [(None, 0)] * (len(UTILITY_SLOTS) - len(worn))
     projected = state
-    for slot, code in zip(UTILITY_SLOTS, codes, strict=True):
-        projected = project_equip(projected, code, game_data, slot=slot)
+    for slot, (code, stock) in zip(UTILITY_SLOTS, worn, strict=True):
+        projected = project_equip(projected, code, game_data, slot=slot, stock=stock)
     return projected, restore_code, restore_hp, restore_stock
 
 

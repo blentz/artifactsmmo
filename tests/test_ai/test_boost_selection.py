@@ -1,8 +1,9 @@
 """Tests for `boost_selection.project_equip`: a state with one utility potion
 force-equipped, so `combat_margin` reads the boosted stats through its one
-arithmetic path. (`best_boost_potion`, the boost picker, was deleted with the
-CRAFT_POTIONS boost arm: docs/PLAN_consumable_utility.md increment 5 stocks
-only the chosen loadout's potions.)
+arithmetic path (`project_loadout_stats`; the totals stay the sheet's).
+(`best_boost_potion`, the boost picker, was deleted with the CRAFT_POTIONS
+boost arm: docs/PLAN_consumable_utility.md increment 5 stocks only the chosen
+loadout's potions.)
 
 Monster fixtures use fill_monster_stat_defaults to satisfy the KeyError-on-unknown
 invariant of the production monster catalog.
@@ -22,7 +23,7 @@ Math spot-check (fire_mob scenario):
 """
 
 from artifactsmmo_cli.ai.boost_selection import project_equip
-from artifactsmmo_cli.ai.combat import combat_margin
+from artifactsmmo_cli.ai.combat import combat_margin, fight_stats
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -60,13 +61,21 @@ def _state(**overrides):
     return make_state(**base)
 
 
+def _fight(state, gd):
+    """The stats the fight against `fire_mob` is fought in."""
+    return fight_stats(state, gd, "fire_mob")
+
+
 def test_projected_resistance_boost_raises_the_margin_by_its_rounds():
-    """The worked example: +20% fire resistance turns margin 9 into 12."""
+    """The worked example: +20% fire resistance turns margin 9 into 12. The
+    totals stay the sheet's; the fight adds the worn potion."""
     gd = _gd_fire_mob()
     state = _state()
-    projected = project_equip(state, _RES_FIRE, gd)
+    projected = project_equip(state, _RES_FIRE, gd, stock=2)
     assert projected.equipment["utility1_slot"] == _RES_FIRE
-    assert projected.resistance["fire"] == 20
+    assert projected.utility1_slot_quantity == 2
+    assert projected.resistance == state.resistance
+    assert _fight(projected, gd).resistance["fire"] == 20
     assert combat_margin(state, gd, "fire_mob") == 9
     assert combat_margin(projected, gd, "fire_mob") == 12
 
@@ -74,46 +83,54 @@ def test_projected_resistance_boost_raises_the_margin_by_its_rounds():
 def test_a_boost_for_an_element_the_player_lacks_changes_nothing():
     gd = _gd_fire_mob()
     state = _state()
-    projected = project_equip(state, _DMG_EARTH, gd)
-    assert projected.dmg_elements["earth"] == 30
+    projected = project_equip(state, _DMG_EARTH, gd, stock=1)
+    assert _fight(projected, gd).dmg_elements["earth"] == 30
     assert combat_margin(projected, gd, "fire_mob") == combat_margin(state, gd, "fire_mob")
 
 
+def _wearing_res_fire():
+    """A sheet wearing `res_fire_potion`: the server leaves a worn potion out
+    of its totals (`equipment.projection`'s module doc)."""
+    return _state(equipment={**make_state().equipment, "utility1_slot": _RES_FIRE},
+                  utility1_slot_quantity=3)
+
+
 def test_the_swapped_out_code_loses_its_stats():
-    """Projecting over an equipped potion subtracts the old one's stats: the
-    old resistance is gone, the new damage bonus is in."""
+    """Projecting over an equipped potion fights without the old one: the old
+    resistance is gone, the new damage bonus is in, and nothing was taken off
+    totals that never held the old one."""
     gd = _gd_fire_mob()
-    worn = _state(equipment={**make_state().equipment, "utility1_slot": _RES_FIRE},
-                  resistance={"fire": 20})
-    projected = project_equip(worn, _DMG_EARTH, gd)
+    worn = _wearing_res_fire()
+    assert _fight(worn, gd).resistance["fire"] == 20
+    projected = project_equip(worn, _DMG_EARTH, gd, stock=1)
     assert projected.equipment["utility1_slot"] == _DMG_EARTH
-    assert projected.resistance["fire"] == 0
-    assert projected.dmg_elements["earth"] == 30
+    assert _fight(projected, gd).resistance.get("fire", 0) == 0
+    assert _fight(projected, gd).dmg_elements["earth"] == 30
 
 
 def test_none_empties_the_slot_and_removes_its_stats():
     gd = _gd_fire_mob()
-    worn = _state(equipment={**make_state().equipment, "utility1_slot": _RES_FIRE},
-                  resistance={"fire": 20})
-    projected = project_equip(worn, None, gd)
+    worn = _wearing_res_fire()
+    projected = project_equip(worn, None, gd, stock=3)
     assert projected.equipment["utility1_slot"] is None
-    assert projected.resistance["fire"] == 0
+    assert projected.utility1_slot_quantity == 0
+    assert _fight(projected, gd) == _fight(_state(), gd)
 
 
 def test_every_scalar_stat_moves_with_the_projection():
     gd = _gd_fire_mob()
     state = _state(dmg=1, critical_strike=2, initiative=3, max_hp=100)
-    projected = project_equip(state, _ALLROUND, gd)
-    assert projected.attack["water"] == 4
-    assert (projected.dmg, projected.critical_strike, projected.initiative,
-            projected.max_hp) == (8, 5, 14, 125)
+    fight = _fight(project_equip(state, _ALLROUND, gd, stock=1), gd)
+    assert fight.attack["water"] == 4
+    assert (fight.dmg, fight.critical_strike, fight.initiative, fight.max_hp) == (8, 5, 14, 125)
 
 
 def test_the_named_slot_is_the_one_projected():
     gd = _gd_fire_mob()
-    projected = project_equip(_state(), _RES_FIRE, gd, slot="utility2_slot")
+    projected = project_equip(_state(), _RES_FIRE, gd, slot="utility2_slot", stock=4)
     assert projected.equipment["utility2_slot"] == _RES_FIRE
     assert projected.equipment["utility1_slot"] is None
+    assert (projected.utility1_slot_quantity, projected.utility2_slot_quantity) == (0, 4)
 
 
 def test_competing_utility_items_leave_the_bag_and_the_rest_stays():
@@ -122,5 +139,5 @@ def test_competing_utility_items_leave_the_bag_and_the_rest_stays():
     code itself, non-utility items and unknown codes stay."""
     gd = _gd_fire_mob()
     state = _state(inventory={_RES_FIRE: 2, _DMG_EARTH: 3, "copper_ore": 4, "mystery": 1})
-    projected = project_equip(state, _RES_FIRE, gd)
+    projected = project_equip(state, _RES_FIRE, gd, stock=1)
     assert projected.inventory == {_RES_FIRE: 2, "copper_ore": 4, "mystery": 1}

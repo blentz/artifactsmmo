@@ -198,8 +198,9 @@ def _derived_combat_totals(
     Utility slots are SKIPPED: boost-family potions fold boost_dmg_*/boost_
     res_*/boost_hp into dmg_elements/resistance/hp_bonus at catalog-build
     time (game_data.py fill), which are combat-time effects the live sheet
-    does NOT report as permanent totals — summing them here would repeat the
-    zero-stats/hp contamination a third time."""
+    does NOT report as totals (measured 2026-10-28 on public sheets wearing
+    earth, air and health boosts; `equipment.projection` adds a worn one to
+    the fight)."""
     attack: dict[str, int] = {}
     dmg = 0
     dmg_elements: dict[str, int] = {}

@@ -103,3 +103,43 @@ def test_a_bag_swap_moves_the_bag_cap():
     assert project_loadout_stats(state, {"bag_slot": "backpack"}, gd).inventory_max == 135
     assert project_loadout_stats(state, {"bag_slot": None}, gd).inventory_max == 100
     assert project_loadout_stats(state, {}, gd).inventory_max == 115
+
+
+_EARTH = ItemStats(code="earth_boost_potion", level=1, type_="utility", dmg_elements={"earth": 12})
+_FIRE = ItemStats(code="fire_boost_potion", level=1, type_="utility", dmg_elements={"fire": 12})
+
+
+def _worn_boost(quantity: int):
+    """A sheet wearing `earth_boost_potion`: the server's totals leave the worn
+    boost out (live 2026-10-28, a public sheet wearing one reads `dmg_earth` 0
+    with no earth gear), so the totals are the gear's alone."""
+    return make_state(dmg_elements={"fire": 5},
+                      equipment={"utility1_slot": "earth_boost_potion", "utility2_slot": None},
+                      utility1_slot_quantity=quantity)
+
+
+def test_a_worn_stocked_boost_fights_without_being_in_the_totals():
+    """Kept on, the worn boost is in the fight: the sheet never held it."""
+    proj = project_loadout_stats(_worn_boost(3), dict(_worn_boost(3).equipment),
+                                 _gd({"earth_boost_potion": _EARTH}))
+    assert proj.dmg_elements == {"fire": 5, "earth": 12}
+
+
+def test_a_worn_boost_with_no_stock_is_no_boost():
+    """A slot drunk dry fights with nothing (`combat.unpotioned`)."""
+    proj = project_loadout_stats(_worn_boost(0), dict(_worn_boost(0).equipment),
+                                 _gd({"earth_boost_potion": _EARTH}))
+    assert proj.dmg_elements == {"fire": 5}
+
+
+def test_taking_a_worn_boost_off_leaves_the_sheet():
+    """Nothing is subtracted: the totals never held the boost."""
+    proj = project_loadout_stats(_worn_boost(3), {"utility1_slot": None},
+                                 _gd({"earth_boost_potion": _EARTH}))
+    assert proj.dmg_elements == {"fire": 5}
+
+
+def test_a_boost_swapped_in_over_a_worn_one_adds_only_itself():
+    proj = project_loadout_stats(_worn_boost(3), {"utility1_slot": "fire_boost_potion"},
+                                 _gd({"earth_boost_potion": _EARTH, "fire_boost_potion": _FIRE}))
+    assert proj.dmg_elements == {"fire": 5 + 12}
