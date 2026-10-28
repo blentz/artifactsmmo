@@ -22,6 +22,15 @@ from math import ceil
 from pathlib import Path
 
 import pytest
+from artifactsmmo_api_client.models.access_schema import AccessSchema
+from artifactsmmo_api_client.models.condition_schema import ConditionSchema
+from artifactsmmo_api_client.models.interaction_schema import InteractionSchema
+from artifactsmmo_api_client.models.map_access_type import MapAccessType
+from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
+from artifactsmmo_api_client.models.map_content_type import MapContentType
+from artifactsmmo_api_client.models.map_layer import MapLayer
+from artifactsmmo_api_client.models.map_schema import MapSchema
+from artifactsmmo_api_client.models.transition_schema import TransitionSchema
 
 from artifactsmmo_cli.ai import region_edges
 from artifactsmmo_cli.ai.acquisition_cost import (
@@ -47,6 +56,7 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model import drop_routes as drop_routes_module
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
 from artifactsmmo_cli.ai.obtain_model.gate import GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
@@ -689,6 +699,49 @@ def test_a_gather_behind_a_crossing_is_a_route_once_the_fee_is_held() -> None:
     assert state.gold < 5000
     assert not known(state)
     assert known(replace(state, gold=6000))
+
+
+def _tile(map_id: int, x: int, y: int, layer: str, content: MapContentSchema | None = None,
+          transition: TransitionSchema | None = None) -> MapSchema:
+    return MapSchema(map_id=map_id, name="t", skin="s", x=x, y=y, layer=MapLayer(layer),
+                     access=AccessSchema(type_=MapAccessType.STANDARD),
+                     interactions=InteractionSchema(content=content, transition=transition))
+
+
+def test_fight_and_gather_gates_ask_one_reach_where_the_catalogue_does_not(monkeypatch) -> None:
+    """Ruling R3-M1: the fight gate and the gather gate ask the walk's reach
+    alone, with the same guards. A character standing in a pocket entered
+    through an `achievement_unlocked` edge (which the catalogue's fixed point
+    skips, so `monster_spawn_known` and `resource_spawn_known` are False there)
+    can fight the pocket's goblin and gather its mithril where it stands. From
+    the overworld the pocket is past the unmodeled edge: no route either way."""
+    world = GameData()
+    world._build_maps([
+        _tile(1, 0, 0, "overworld"),
+        _tile(2, 2, 0, "overworld", transition=TransitionSchema(
+            map_id=3, x=3, y=0, layer="underground",
+            conditions=[ConditionSchema(code="deep_delver", operator="achievement_unlocked", value=1)])),
+        _tile(3, 3, 0, "underground",
+              content=MapContentSchema(type_=MapContentType.MONSTER, code="goblin_priestess")),
+        _tile(4, 3, 1, "underground",
+              content=MapContentSchema(type_=MapContentType.RESOURCE, code="mithril_rocks")),
+    ])
+    world._resource_drops = {"mithril_rocks": "mithril_ore"}
+    monkeypatch.setattr(world, "monsters_dropping",
+                        lambda item: [("goblin_priestess", 1, 1, 1)] if item == "goblin_cloth" else [])
+    monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
+    assert world.monster_spawn_known("goblin_priestess") is False
+    assert world.resource_spawn_known("mithril_rocks") is False
+
+    def known(at: WorldState) -> tuple[bool, bool]:
+        (fight,) = drop_routes("goblin_cloth", at, world, reachable_regions_now(at, world))
+        (gather,) = [r for r in ObtainModel(at, world, TIMED_NO_PROFILE_CONTEXT, datetime.now(UTC))
+                     .routes("mithril_ore") if r.kind is SourceKind.GATHER]
+        return tuple(next(g.satisfied for g in route.gates if g.kind is GateKind.SPAWN_KNOWN)
+                     for route in (fight, gather))  # type: ignore[return-value]
+
+    assert known(make_state(x=3, y=0, layer="underground")) == (True, True)
+    assert known(make_state(x=0, y=0)) == (False, False)
 
 
 def test_a_piece_s_search_keeps_the_demand_gate() -> None:

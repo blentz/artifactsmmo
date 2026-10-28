@@ -11,13 +11,18 @@ The gates on a fight, whatever it pays:
 
 - `SPAWN_LIVE`: a tile in `all_monster_locations`, which `factory.py` builds
   FightActions from (an event monster's tiles only while its event is live).
-- `SPAWN_KNOWN`: `monster_spawn_known`, which also admits layered tiles in a
-  reachable region, AND a tile of the monster in a region the walk reaches
-  from here now (`region_edges.reachable_regions_now`, ruling T14a-E: the one
-  reachability authority, the crossings the walk's bridge can apply). A
-  monster behind a crossing the character cannot pay for is no route: the
-  pricer chose `dryad` behind a 5000-gold fee for the L48 rune's gold, and
-  the walk declined `region:overworld->restricted:...` every cycle.
+- `SPAWN_KNOWN`: a tile of the monster, live or on any layer, in a region the
+  walk reaches from here now (`monster_reached` over
+  `region_edges.reachable_regions_now`, ruling T14a-E: the one reachability
+  authority, the crossings the walk's bridge can apply). A monster behind a
+  crossing the character cannot pay for is no route: the pricer chose `dryad`
+  behind a 5000-gold fee for the L48 rune's gold, and the walk declined
+  `region:overworld->restricted:...` every cycle. The catalogue's own
+  fixed point (`monster_spawn_known`) is not asked as well: a gather's
+  SPAWN_KNOWN asks the same reach alone (ruling R3-M1), and the fixed point
+  starts from the overworld, so it would refuse a monster in a pocket the
+  character already stands in (one entered through an edge the catalogue
+  does not model, such as `achievement_unlocked`).
 - `WINNABLE`: asked at RESTORABLE hp (route existence is not an hp question;
   resting is an action the planner has), cold (no LearningStore: the record's
   refusals arrive as `WorldState.lost_fights`, which voids both solo arms), and only for
@@ -87,7 +92,7 @@ def monster_reached(monster: str, game_data: GameData, reach: frozenset[str]) ->
 def _fight_gates(monster: str, state: WorldState, game_data: GameData,
                  rested: _Rested, reach: frozenset[str]) -> tuple[Gate, ...]:
     live = bool(game_data.all_monster_locations.get(monster))
-    known = game_data.monster_spawn_known(monster) and monster_reached(monster, game_data, reach)
+    known = monster_reached(monster, game_data, reach)
     winnable = (live or known) and drop_fight_winnable(rested.get(), game_data, monster)
     return (
         Gate(GateKind.SPAWN_LIVE, monster, live),

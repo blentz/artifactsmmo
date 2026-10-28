@@ -336,6 +336,12 @@ def test_a_SECONDARY_drop_is_recognised_as_gatherable(game_data: GameData,
                       for res, table in game_data.resource_drops_full.items()
                       if any(item == code for item, *_ in table))]
     assert spawned, "fixture drift: no secondary drop off a resource that spawns"
+    # Ruling R3-M3, two facts not computed by the predicate under test: a gem
+    # off the overworld's copper_rocks is a gather, and alexandrite_stone (off
+    # adamantite_rocks, past the crossing) is not.
+    assert "topaz_stone" in hidden and model.feasible("topaz_stone", 1, GRIND_POLICY)
+    assert "alexandrite_stone" in hidden
+    assert not model.feasible("alexandrite_stone", 1, GRIND_POLICY)
     for code in hidden:
         # A resource with no tile on any layer (e.g. `diamond_rocks` here) has
         # no GatherAction to serve it, so its drops are rightly not obtainable.

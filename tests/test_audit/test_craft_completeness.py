@@ -1033,27 +1033,106 @@ def test_each_leaf_is_behind_a_crossing_only_when_no_source_is_reached(monkeypat
     monkeypatch.setattr(craft_completeness, "_drop_winnable", lambda s, g, m: m == "flameche")
     assert behind("sonnengott_key", state, gd, reach) is True
     monkeypatch.setattr(craft_completeness, "_drop_winnable", lambda s, g, m: True)
+    # Ruling R3-M2: every source kind counts. A vendor selling the leaf for
+    # gold where the walk reaches (the overworld tailor) is a reached source;
+    # one past the island crossing (sandwhisper_trader) is not.
+    assert gd.npc_region("tailor") in reach
+    assert gd.npc_region("sandwhisper_trader") not in reach
+    sold = {"tailor": [("tailor", 10, "gold")],
+            "sandwhisper_trader": [("sandwhisper_trader", 10, "gold")]}
+    for npc, verdict in (("tailor", False), ("sandwhisper_trader", True)):
+        monkeypatch.setattr(GameData, "npc_purchases",
+                            lambda self, item, npc=npc: sold[npc] if item == "dryad_hair" else [])
+        assert behind("dryad_hair", state, gd, reach) is verdict
+    # A vendor with no tile (and no live event) is no source at all.
+    monkeypatch.setattr(GameData, "npc_purchases",
+                        lambda self, item: [("no_such_npc", 10, "gold")] if item == "dryad_hair" else [])
+    assert gd.npc_region("no_such_npc") in reach
+    assert behind("dryad_hair", state, gd, reach) is True
+    # A vendor whose currency the planner cannot acquire is no source at all.
+    monkeypatch.setattr(GameData, "npc_purchases",
+                        lambda self, item: [("tailor", 10, "no_such_coin")] if item == "dryad_hair" else [])
+    assert behind("dryad_hair", state, gd, reach) is True
+    monkeypatch.undo()
+    monkeypatch.setattr(craft_completeness, "_drop_winnable", lambda s, g, m: True)
+    # A task reward is the always-available task loop: a reached source.
+    assert gd.is_task_earnable("dryad_hair") is False
+    monkeypatch.setattr(GameData, "is_task_earnable", lambda self, code: code == "dryad_hair")
+    assert behind("dryad_hair", state, gd, reach) is False
+    monkeypatch.setattr(GameData, "is_task_earnable", lambda self, code: False)
     # A leaf with no source at all is not explained by a crossing.
     monkeypatch.setattr(craft_completeness, "_present_droppers", lambda leaf, g: [])
     assert behind("dryad_hair", state, gd, reach) is False
 
 
-def test_a_crossing_explains_a_cell_only_when_every_dead_leaf_is_explained(monkeypatch) -> None:
-    """Ruling I-2: one dead leaf behind a crossing does not explain a second
-    dead leaf that has no reading of its own (a walk defect: PLANNER_BUG). A
-    dead code outside the closure (`gold`) is not a leaf."""
+def test_a_crossing_explains_a_cell_only_when_every_dead_name_is_behind_one(monkeypatch) -> None:
+    """Rulings R3-I1 and R3-I2: the dead-name crossing reading holds only when
+    EVERY name the decomposition declined dead is behind a crossing. A second
+    dead leaf with its own reading (`hide`, an unbeatable dropper) or with none
+    (`ore`, a walk defect) is a second cause, and so is a dead purchase
+    currency outside the closure (`fire_dust`). `gold` is the one exception:
+    the census character's empty pocket explains it."""
     gd = GameData()
     monkeypatch.setattr(craft_completeness, "reachable_regions_now", lambda s, g: frozenset())
     monkeypatch.setattr(craft_completeness, "_leaf_behind_crossing",
-                        lambda leaf, s, g, r: leaf == "venom")
-    statuses = {"venom": None, "hide": GapClass.COMBAT_BLOCKED, "ore": None}
+                        lambda leaf, s, g, r: leaf in {"venom", "palm_wood"})
     explained = craft_completeness._dead_leaves_behind_crossing
-    assert explained(["infeasible:x:no_route:gold,venom"], object(), gd, statuses) is True
-    assert explained(["infeasible:x:no_route:venom,hide"], object(), gd, statuses) is True
-    assert explained(["infeasible:x:no_route:venom,ore"], object(), gd, statuses) is False
-    assert explained(["infeasible:x:no_route:hide"], object(), gd, statuses) is False
-    assert explained(["infeasible:x:no_route:gold"], object(), gd, statuses) is False
-    assert explained([], object(), gd, statuses) is False
+    assert explained(["infeasible:x:no_route:gold,venom"], object(), gd) is True
+    assert explained(["infeasible:x:no_route:venom,palm_wood"], object(), gd) is True
+    assert explained(["infeasible:x:no_route:venom", "infeasible:y:no_route:palm_wood"],
+                     object(), gd) is True
+    assert explained(["infeasible:x:no_route:venom,hide"], object(), gd) is False
+    assert explained(["infeasible:x:no_route:venom,ore"], object(), gd) is False
+    assert explained(["infeasible:x:no_route:palm_wood,fire_dust"], object(), gd) is False
+    assert explained(["infeasible:x:no_route:venom", "infeasible:y:no_route:hide"],
+                     object(), gd) is False
+    assert explained(["infeasible:x:no_route:hide"], object(), gd) is False
+    assert explained(["infeasible:x:no_route:gold"], object(), gd) is False
+    assert explained(["region:overworld->overworld:-4,17:Gather(palm_tree x10)"], object(), gd) is False
+    assert explained([], object(), gd) is False
+
+
+def _mixed_cell(monkeypatch, declined: str, statuses: dict[str, GapClass | None],
+                behind: frozenset[str]) -> GapClass:
+    """`classify_gap` on a synthetic cell: the decomposition declines
+    `declined`, the closure leaves read `statuses`, and the leaves in `behind`
+    stand behind a crossing. No constant is patched."""
+    gd = GameData()
+    cell = CraftCell(char_level=48, skill_name="gearcrafting", skill_level=50)
+    monkeypatch.setattr(craft_completeness, "census_state", lambda r, c, g: object())
+    monkeypatch.setattr(craft_completeness, "_census_declines", lambda r, s, g: [declined])
+    monkeypatch.setattr(craft_completeness, "_closure_leaves", lambda r, g: frozenset(statuses))
+    monkeypatch.setattr(craft_completeness, "_leaf_status", lambda leaf, s, g: statuses[leaf])
+    monkeypatch.setattr(craft_completeness, "reachable_regions_now", lambda s, g: frozenset())
+    monkeypatch.setattr(craft_completeness, "_leaf_behind_crossing",
+                        lambda leaf, s, g, r: leaf in behind)
+    return classify_gap("x", cell, gd)
+
+
+def test_a_cell_still_unwinnable_past_the_crossing_is_not_a_crossing_gap(monkeypatch) -> None:
+    """Ruling R3-I1, `adamantite_mask 48/50+ev`'s shape: adamantite_ore stands
+    behind a crossing, duskworm_skin drops only from an unbeatable monster.
+    Paying the fee leaves the mask unwinnable, so the cell is COMBAT_BLOCKED.
+    With every dead leaf behind a crossing it is the crossing gap."""
+    statuses = {"adamantite_ore": None, "duskworm_skin": GapClass.COMBAT_BLOCKED}
+    mixed = "infeasible:adamantite_mask:no_route:adamantite_ore,duskworm_skin"
+    assert _mixed_cell(monkeypatch, mixed, statuses,
+                       frozenset({"adamantite_ore"})) is GapClass.COMBAT_BLOCKED
+    assert _mixed_cell(monkeypatch, mixed, statuses,
+                       frozenset({"adamantite_ore", "duskworm_skin"})) is GapClass.CROSSING_UNAFFORDABLE
+
+
+def test_a_dead_currency_with_no_crossing_in_front_is_a_planner_bug(monkeypatch) -> None:
+    """Ruling R3-I2, `medic_armor 48/50+ev`'s shape: palm_wood stands behind
+    the island crossing, and the purchase currency fire_dust (no closure leaf)
+    is declined dead too. With fire_dust reachable and no reading anywhere the
+    walk failed it: PLANNER_BUG, not the crossing gap."""
+    statuses = {"palm_wood": None}
+    declined = "infeasible:medic_armor:no_route:fire_dust,palm_wood"
+    assert _mixed_cell(monkeypatch, declined, statuses,
+                       frozenset({"palm_wood"})) is GapClass.PLANNER_BUG
+    assert _mixed_cell(monkeypatch, declined, statuses,
+                       frozenset({"palm_wood", "fire_dust"})) is GapClass.CROSSING_UNAFFORDABLE
 
 
 def test_an_event_gated_leaf_outranks_a_dead_leaf_behind_a_crossing(monkeypatch) -> None:
@@ -1066,7 +1145,7 @@ def test_an_event_gated_leaf_outranks_a_dead_leaf_behind_a_crossing(monkeypatch)
     monkeypatch.setattr(craft_completeness, "census_state", lambda r, c, g: object())
     monkeypatch.setattr(craft_completeness, "_census_declines", lambda r, s, g: ["infeasible:x:no_route:y"])
     monkeypatch.setattr(craft_completeness, "_closure_leaves", lambda r, g: frozenset({"y", "z"}))
-    monkeypatch.setattr(craft_completeness, "_dead_leaves_behind_crossing", lambda d, s, g, st: True)
+    monkeypatch.setattr(craft_completeness, "_dead_leaves_behind_crossing", lambda d, s, g: True)
     statuses = {"y": GapClass.EVENT_GATED, "z": GapClass.COMBAT_BLOCKED}
     monkeypatch.setattr(craft_completeness, "_leaf_status", lambda leaf, s, g: statuses[leaf])
     assert classify_gap("x", cell, gd) is GapClass.EVENT_GATED

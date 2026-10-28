@@ -184,11 +184,12 @@ because the step graph refused every event NPC.
   while the book holds an open sell order (`ObtainModel._ge_fill` reads
   `ge_best_sell_order`, None when the order is gone), as an event vendor's
   route is ready only while `VENDOR_TRADEABLE` holds.
-- A routable spawn (`spawn_known`): a tile on any layer in a reachable region.
-  It admits a static underground or interior monster, which the overworld-only
-  live index cannot see, and it does NOT admit an event monster whose event is
-  not live: `monster_spawn_known` reads the event tiles only while the event is
-  live, and an event's candidate maps carry no static content in the map data.
+- A routable spawn (`spawn_known`): a tile on any layer in a region the walk
+  reaches now (`region_edges.content_reached`). It admits a static underground
+  or interior monster, which the overworld-only live index cannot see, and it
+  does NOT admit an event monster whose event is not live: the live index
+  holds the event tiles only while the event is live, and an event's
+  candidate maps carry no static content in the map data.
 - Grey droppers count: the objective asks what can be had, not what pays XP.
 - Gold is earned by fighting (`fight_gold`), and task-earned currency counts:
   a vendor leaf is a step the character can work toward however far the

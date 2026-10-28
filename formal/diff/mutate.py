@@ -7960,7 +7960,7 @@ CENSUS_CROSSING_MUTATIONS = [
      "    if GapClass.EVENT_GATED in statuses.values():\n        return GapClass.EVENT_GATED\n",
      ""),
     ("census: a dead leaf behind a crossing is never the crossing gap",
-     "    if _dead_leaves_behind_crossing(declined, state, game_data, statuses):\n",
+     "    if _dead_leaves_behind_crossing(declined, state, game_data):\n",
      "    if False:\n"),
     # Rulings T14a-E, I-2, I-3: each leaf on its own, every dead leaf explained.
     ("census: one unreached source puts a leaf behind a crossing",
@@ -7973,17 +7973,37 @@ CENSUS_CROSSING_MUTATIONS = [
      "              if _drop_winnable(state, game_data, monster)]\n",
      "              ]\n"),
     ("census: a leaf's gather sources are not asked",
-     "    sources = fights + gathers\n",
-     "    sources = fights\n"),
+     "    sources = fights + gathers + _vendor_sources(leaf, state, game_data, reach) + tasks\n",
+     "    sources = fights + _vendor_sources(leaf, state, game_data, reach) + tasks\n"),
     ("census: a resource that spawns nowhere is a gather source",
      "    return sorted(res for res in tables if game_data.resource_spawn_known(res))\n",
      "    return sorted(tables)\n"),
-    ("census: one leaf behind a crossing explains an unexplained one",
-     "    return bool(behind) and all(leaf in behind or statuses[leaf] is not None for leaf in dead)\n",
-     "    return bool(behind)\n"),
-    ("census: an explained cell needs no leaf behind a crossing",
-     "    return bool(behind) and all(leaf in behind or statuses[leaf] is not None for leaf in dead)\n",
-     "    return all(leaf in behind or statuses[leaf] is not None for leaf in dead)\n"),
+    # Rulings R3-I1, R3-I2: every dead name, currencies too, behind a crossing.
+    ("census: one dead name behind a crossing explains the cell",
+     "    return all(_leaf_behind_crossing(name, state, game_data, reach) for name in dead)\n",
+     "    return any(_leaf_behind_crossing(name, state, game_data, reach) for name in dead)\n"),
+    ("census: a cell with no dead name is the crossing gap",
+     "    dead = _dead_names(declined)\n    if not dead:\n        return False\n",
+     "    dead = _dead_names(declined)\n"),
+    ("census: a dead gold leaf needs a crossing",
+     "                     for name in reason.rsplit(\":\", 1)[1].split(\",\") if name != GOLD)\n",
+     "                     for name in reason.rsplit(\":\", 1)[1].split(\",\"))\n"),
+    # Ruling R3-M2: every source kind of a leaf counts.
+    ("census: a leaf's vendors are not asked",
+     "    sources = fights + gathers + _vendor_sources(leaf, state, game_data, reach) + tasks\n",
+     "    sources = fights + gathers + tasks\n"),
+    ("census: a leaf's task reward is not a source",
+     "    sources = fights + gathers + _vendor_sources(leaf, state, game_data, reach) + tasks\n",
+     "    sources = fights + gathers + _vendor_sources(leaf, state, game_data, reach)\n"),
+    ("census: a vendor past a crossing is reached",
+     "    return [game_data.npc_region(npc) in reach\n",
+     "    return [True\n"),
+    ("census: an absent vendor is a source",
+     "            if _present_vendor(npc, game_data)\n            and _currency_directly_attainable(",
+     "            if _currency_directly_attainable("),
+    ("census: a vendor's currency is not asked",
+     "            and _currency_directly_attainable(currency, state, game_data)]\n",
+     "            ]\n"),
     ("census: a world without transitions is still asked",
      "    if not game_data.world.transition_edges:\n        return []\n",
      ""),
@@ -8425,8 +8445,12 @@ REGION_CROSSING_MUTATIONS = [
 # Killed by tests/test_ai/test_piece_policy.py.
 REACH_GATE_MUTATIONS = [
     ("reach: a known spawn behind an unpayable crossing is a route",
-     "    known = game_data.monster_spawn_known(monster) and monster_reached(monster, game_data, reach)\n",
+     "    known = monster_reached(monster, game_data, reach)\n",
      "    known = game_data.monster_spawn_known(monster)\n"),
+    # Ruling R3-M1: the fight gate asks the walk's reach alone, as the gather gate.
+    ("reach: the fight gate also asks the catalogue's fixed point",
+     "    known = monster_reached(monster, game_data, reach)\n",
+     "    known = game_data.monster_spawn_known(monster) and monster_reached(monster, game_data, reach)\n"),
 ]
 # Ruling I-3: a gather's SPAWN_KNOWN asks the walk's reach, as a fight's.
 # Killed by tests/test_ai/test_piece_policy.py.
@@ -8435,6 +8459,11 @@ GATHER_REACH_MUTATIONS = [
      "            known = content_reached(resource, self._gd.all_resource_locations.get(resource, []),\n"
      "                                    self._gd, self._reach())\n",
      "            known = self._gd.resource_spawn_known(resource)\n"),
+    # Ruling R3-M1: the gather gate asks the walk's reach alone, as the fight gate.
+    ("obtain_model: the gather gate also asks the catalogue's fixed point",
+     "            known = content_reached(resource, self._gd.all_resource_locations.get(resource, []),\n",
+     "            known = self._gd.resource_spawn_known(resource) and content_reached(\n"
+     "                resource, self._gd.all_resource_locations.get(resource, []),\n"),
 ]
 REACH_REGIONS_MUTATIONS = [
     ("reach: a content's layered tiles are not read",

@@ -928,40 +928,70 @@ def _gather_resources(leaf: str, game_data: GameData) -> list[str]:
     return sorted(res for res in tables if game_data.resource_spawn_known(res))
 
 
+def _vendor_sources(leaf: str, state: WorldState, game_data: GameData,
+                    reach: frozenset[str]) -> list[bool]:
+    """One verdict per vendor the cell would buy `leaf` from — present here
+    (`_present_vendor`) and selling for a currency the planner directly
+    acquires (`_currency_directly_attainable`), the vendors `_permanently_buyable`
+    counts — each True when the vendor's region (`GameData.npc_region`) is in
+    `reach`."""
+    return [game_data.npc_region(npc) in reach
+            for npc, _price, currency in game_data.npc_purchases(leaf)
+            if _present_vendor(npc, game_data)
+            and _currency_directly_attainable(currency, state, game_data)]
+
+
 def _leaf_behind_crossing(leaf: str, state: WorldState, game_data: GameData,
                           reach: frozenset[str]) -> bool:
     """`leaf` on its own (ruling I-2): it has a source the cell would serve it
-    from — a dropper present in this cell's world (`_present_droppers`) and
-    beatable here (`_drop_winnable`), or a resource that spawns
-    (`_gather_resources`) — and NOT ONE of those sources stands where the walk
-    reaches from `state` now (`region_edges.content_reached` over `reach`, the
-    one authority of rulings T14a-E and I-3). One reached source means the
-    crossing does not explain the leaf."""
+    from, and NOT ONE of those sources stands where the walk reaches from
+    `state` now (`reach`, the one authority of rulings T14a-E and I-3). Every
+    source kind counts (ruling R3-M2):
+
+    - a dropper present in this cell's world (`_present_droppers`) and beatable
+      here (`_drop_winnable`), reached by `monster_reached`;
+    - a resource that spawns (`_gather_resources`), reached by
+      `region_edges.content_reached`;
+    - a vendor `_vendor_sources` counts, reached by its region;
+    - a task reward (`GameData.is_task_earnable`), the always-available task
+      loop `_leaf_status` reads it as, so always reached.
+
+    One reached source means the crossing does not explain the leaf."""
     fights = [monster_reached(monster, game_data, reach)
               for monster in _present_droppers(leaf, game_data)
               if _drop_winnable(state, game_data, monster)]
     gathers = [content_reached(res, game_data.all_resource_locations.get(res, []), game_data, reach)
                for res in _gather_resources(leaf, game_data)]
-    sources = fights + gathers
+    tasks = [True] if game_data.is_task_earnable(leaf) else []
+    sources = fights + gathers + _vendor_sources(leaf, state, game_data, reach) + tasks
     return bool(sources) and not any(sources)
 
 
-def _dead_leaves_behind_crossing(declined: list[str], state: WorldState, game_data: GameData,
-                                 statuses: Mapping[str, GapClass | None]) -> bool:
-    """The decomposition declined dead leaves (`infeasible:<item>:no_route:
-    <leaves>`), at least one of them behind a crossing (`_leaf_behind_crossing`),
-    and EVERY dead closure leaf is explained: behind a crossing, or carrying a
-    leaf reading of its own (`statuses`). A dead leaf with neither is a walk
-    defect, so the cell stays a PLANNER_BUG. Rulings T14a-E and I-3 made a
-    source behind a crossing the character cannot pay for no route at all, so
-    the decline names the leaf rather than the crossing (`region:...`)."""
-    dead = {leaf for reason in declined if reason.startswith("infeasible:")
-            for leaf in reason.rsplit(":", 1)[1].split(",") if leaf in statuses}
+def _dead_names(declined: list[str]) -> frozenset[str]:
+    """Every name the decomposition declined as dead (`infeasible:<item>:
+    no_route:<names>`): closure leaves, purchase currencies and any other code
+    it lists alike (ruling R3-I2). `gold` is the one named exception: the
+    census character holds none, which explains a dead gold leaf by itself."""
+    return frozenset(name for reason in declined if reason.startswith("infeasible:")
+                     for name in reason.rsplit(":", 1)[1].split(",") if name != GOLD)
+
+
+def _dead_leaves_behind_crossing(declined: list[str], state: WorldState,
+                                 game_data: GameData) -> bool:
+    """The decomposition declined dead names (`_dead_names`), and EVERY one of
+    them is behind a crossing (`_leaf_behind_crossing`, ruling R3-I1): paying
+    the crossing is then all the cell lacks. A dead name with no crossing in
+    front of it — a leaf with its own reading (an unbeatable dropper, a
+    catalogue dead end), or one with none (a walk defect) — leaves the cell to
+    the leaf readings below, so COMBAT_BLOCKED, MATERIAL_UNREACHABLE or the
+    PLANNER_BUG residual still names it. Rulings T14a-E and I-3 made a source
+    behind a crossing the character cannot pay for no route at all, so the
+    decline names the leaf rather than the crossing (`region:...`)."""
+    dead = _dead_names(declined)
     if not dead:
         return False
     reach = reachable_regions_now(state, game_data)
-    behind = {leaf for leaf in dead if _leaf_behind_crossing(leaf, state, game_data, reach)}
-    return bool(behind) and all(leaf in behind or statuses[leaf] is not None for leaf in dead)
+    return all(_leaf_behind_crossing(name, state, game_data, reach) for name in dead)
 
 
 def classify_gap(recipe: str, cell: CraftCell,
@@ -973,13 +1003,18 @@ def classify_gap(recipe: str, cell: CraftCell,
     (`recipe`, `cell`, `game_data`).
 
     Precedence — CROSSING_UNAFFORDABLE (a `region:` decline) → EVENT_GATED →
-    CROSSING_UNAFFORDABLE (every dead leaf explained, at least one behind a
-    crossing: `_dead_leaves_behind_crossing`) → COMBAT_BLOCKED →
+    CROSSING_UNAFFORDABLE (every dead name behind a crossing:
+    `_dead_leaves_behind_crossing`) → COMBAT_BLOCKED →
     MATERIAL_UNREACHABLE → GREY_FARM_SUPPRESSED → PURCHASE_RECURSION →
     SKILL_UNREACHABLE → PLANNER_BUG — runs most-specific-first. The two
     crossing arms are one cause named two ways (the decomposition names the
     crossing when it reaches it, the leaf when the reach gate leaves the source
-    no route); the second ranks after EVENT_GATED because ranking it with the
+    no route). Each fires only when the crossing is the cell's ONLY blocker:
+    the `region:` decline comes after every leaf was routed, and the dead-name
+    arm asks that every dead name be behind a crossing (ruling R3-I1). A cell
+    with a second cause — a dead leaf that stays unbeatable or unsourced once
+    the crossing is paid — is not a crossing gap: it falls to that leaf's
+    reading. The second arm ranks after EVENT_GATED because ranking it with the
     first re-classed event-gated cells (ruling M-4). The first five are leaf-level (a
     specific closure leaf blocks); SKILL_UNREACHABLE is recipe-level (the
     crafting skill is below level AND cannot be bootstrapped from here);
@@ -1019,7 +1054,7 @@ def classify_gap(recipe: str, cell: CraftCell,
                 for leaf in _closure_leaves(recipe, game_data)}
     if GapClass.EVENT_GATED in statuses.values():
         return GapClass.EVENT_GATED
-    if _dead_leaves_behind_crossing(declined, state, game_data, statuses):
+    if _dead_leaves_behind_crossing(declined, state, game_data):
         # The same cause as the `region:` decline above, named by the leaf
         # (rulings T14a-E, I-3). Ranked after EVENT_GATED, not with it: ranked
         # first, it re-classed the event-free enhanced_antidote 48/45 and 50/45

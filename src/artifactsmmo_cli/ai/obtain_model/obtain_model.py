@@ -361,12 +361,14 @@ class ObtainModel:
 
         out: list[Route] = []
         for rank, resource in enumerate(sorted(droppers, key=attempts)):
-            # SPAWN_KNOWN is the walk's reach (ruling I-3, as T14a-E for a
-            # fight): a resource whose every tile stands past a crossing the
-            # character cannot pay for now is no route. It implies
-            # `resource_spawn_known` (a live tile, or a layered one in a region
-            # the walk reaches, which the catalogue's fixed point counts too),
-            # so that test is not asked again.
+            # SPAWN_KNOWN is the walk's reach alone (ruling I-3, as T14a-E for
+            # a fight, with the same guard: ruling R3-M1): a resource whose
+            # every tile stands past a crossing the character cannot pay for
+            # now is no route. `resource_spawn_known` is not asked as well. The
+            # two agree whenever the state's region is one the catalogue's
+            # fixed point reaches; the fixed point starts from the overworld,
+            # so in a pocket entered through an edge it does not model it
+            # would refuse a gather the character can make where it stands.
             known = content_reached(resource, self._gd.all_resource_locations.get(resource, []),
                                     self._gd, self._reach())
             gates = [Gate(GateKind.SPAWN_LIVE, resource,

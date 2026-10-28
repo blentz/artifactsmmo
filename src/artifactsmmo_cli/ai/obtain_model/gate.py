@@ -26,9 +26,9 @@ class GateKind(Enum):
     SPAWN_LIVE = "spawn_live"
     """Resource or monster `subject` has a currently-live tile."""
     SPAWN_KNOWN = "spawn_known"
-    """Monster `subject` spawns somewhere the movement model can route to
-    (`GameData.monster_spawn_known`: a live tile, or a layered tile in a
-    reachable region)."""
+    """Monster or resource `subject` has a tile, live or on any layer, in a
+    region the walk reaches from here now (`region_edges.content_reached` over
+    `reachable_regions_now`: rulings T14a-E, I-3, R3-M1)."""
     XP_POSITIVE = "xp_positive"
     """Monster `subject` pays experience at the character's level (not grey)."""
     WINNABLE = "winnable"
