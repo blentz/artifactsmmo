@@ -6,7 +6,6 @@ level/skill grid and classifies whether it can produce a directional plan.
 Pure cores (grid/verdict/classifier) + a thin planner harness (`plan_craft`);
 the generator/docs live in scripts/gen_craft_completeness.py."""
 
-from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import Enum
 
