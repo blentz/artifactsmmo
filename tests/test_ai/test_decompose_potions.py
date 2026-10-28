@@ -9,11 +9,11 @@ grind."""
 
 from dataclasses import replace
 
+import artifactsmmo_cli.ai.craft_plan_gen as craft_plan_gen_mod
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
-import artifactsmmo_cli.ai.craft_plan_gen as craft_plan_gen_mod
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops

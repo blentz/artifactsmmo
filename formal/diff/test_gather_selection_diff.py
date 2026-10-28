@@ -29,8 +29,8 @@ from fractions import Fraction
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, select_gather_source
+from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from formal.diff.oracle_client import run_oracle
 
 
