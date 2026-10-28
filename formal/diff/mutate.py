@@ -4933,6 +4933,24 @@ GAME_DATA_LEARNED_CRAFT_YIELD_MUTATIONS = [
      "            self._requirement_graph_memo.clear()\n",
      "        self.recipes_catalog.learned_craft_yields = learned\n"),
 ]
+# Plan B Task 14c fix round 1: the grind rate is one answer per search episode
+# per `(skill, window, character)`. Killed by tests/test_ai/test_learning_store.py
+# (TestSkillGrindRate::test_one_read_per_search_episode_per_key).
+GRIND_RATE_EPISODE_MUTATIONS = [
+    ("store: the grind rate is read on every ask",
+     '        return self.cached(("grind_rate", skill, window, character),\n'
+     "                           lambda: self._read_grind_rate(skill, window, character))",
+     "        return self._read_grind_rate(skill, window, character)"),
+    ("store: the grind rate memo ignores the skill",
+     '        return self.cached(("grind_rate", skill, window, character),\n',
+     '        return self.cached(("grind_rate", window, character),\n'),
+    ("store: the grind rate memo ignores the window",
+     '        return self.cached(("grind_rate", skill, window, character),\n',
+     '        return self.cached(("grind_rate", skill, character),\n'),
+    ("store: the grind rate memo ignores the character",
+     '        return self.cached(("grind_rate", skill, window, character),\n',
+     '        return self.cached(("grind_rate", skill, window),\n'),
+]
 # Plan B Task 14c (M-5): the fight read is bounded by cycle id, so the held fit
 # folds in only the fights recorded since; item 3: the supply-request cycles
 # are memoised per search episode. Killed by
@@ -13602,6 +13620,8 @@ def _collect_all_groups() -> None:
     run_group(LEARNING_STORE_SRC, FLEET_CRAFT_YIELDS_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)
     run_group(LEARNING_STORE_SRC, FLEET_FIGHT_SAMPLES_MUTATIONS,
+              "tests/test_ai/test_learning_store.py", survivors)
+    run_group(LEARNING_STORE_SRC, GRIND_RATE_EPISODE_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)
     run_group(LEARNING_STORE_SRC, TASK_WORK_RATE_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)

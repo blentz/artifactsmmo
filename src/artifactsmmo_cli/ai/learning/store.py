@@ -1067,7 +1067,19 @@ class LearningStore:
                     character: str | None) -> float | None:
         """Shared body of the two grind-rate estimators — ONE query, so the
         per-character and fleet answers cannot drift into disagreeing about what a
-        grind cycle is."""
+        grind cycle is.
+
+        One answer per `search_cache` episode (`cached`): the pricing walk asks
+        it once per skill-gated option it prices, 19 to 80 times a live cycle
+        for a few skills (plan B Task 14c). The key is every input of the read:
+        the query is a function of `(skill, window, character)` and the
+        `cycles` rows alone, and an episode is read-only, so no row changes
+        under it."""
+        return self.cached(("grind_rate", skill, window, character),
+                           lambda: self._read_grind_rate(skill, window, character))
+
+    def _read_grind_rate(self, skill: str, window: int,
+                         character: str | None) -> float | None:
         # A grind cycle is one whose GOAL is a ReachSkill for the skill (2d-a
         # onward) or, in the history before it, whose ACTION was the LevelSkill
         # macro: both read, so the evidence carries over the change.

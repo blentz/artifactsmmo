@@ -1454,6 +1454,50 @@ class TestSkillGrindRate:
             store.end_session(exit_reason="normal")
             store.close()
 
+    def test_one_read_per_search_episode_per_key(self, tmp_db_path):
+        """Plan B Task 14c fix round 1: the pricing walk asks the grind rate
+        19 to 80 times a live cycle for a few skills; inside one `search_cache`
+        episode each `(skill, window, character)` is read once, every part of
+        the key keeps its own answer, and outside an episode it is read afresh."""
+        veteran = LearningStore(db_path=tmp_db_path, character="vet")
+        veteran.start_session()
+        store = LearningStore(db_path=tmp_db_path, character="me")
+        store.start_session()
+        reads: list[tuple[str, int, str | None]] = []
+        read = store._read_grind_rate
+
+        def spy(skill: str, window: int, character: str | None) -> float | None:
+            reads.append((skill, window, character))
+            return read(skill, window, character)
+
+        try:
+            for i in range(4):
+                veteran.record_cycle(self._grind_cycle(i, "vet", "gearcrafting", 6))
+            store.record_cycle(self._grind_cycle(4, "me", "gearcrafting", 2))
+            store.record_cycle(self._grind_cycle(5, "me", "gearcrafting", 4))
+            store.record_cycle(self._grind_cycle(6, "me", "alchemy", 9))
+            store._read_grind_rate = spy  # type: ignore[method-assign]
+            with store.search_cache():
+                for _ in range(3):
+                    assert store.skill_grind_rate("gearcrafting") == 3.0
+                    assert store.skill_grind_rate("gearcrafting", window=1) == 4.0
+                    assert store.skill_grind_rate("alchemy") == 9.0
+                    assert store.fleet_skill_grind_rate("gearcrafting") == 5.0
+                    assert store.character_skill_grind_rate("vet", "gearcrafting") == 6.0
+            assert sorted(reads, key=repr) == sorted([
+                ("gearcrafting", LearningStore.WINDOW_RECENT, "me"), ("gearcrafting", 1, "me"),
+                ("alchemy", LearningStore.WINDOW_RECENT, "me"),
+                ("gearcrafting", LearningStore.WINDOW_RECENT, None),
+                ("gearcrafting", LearningStore.WINDOW_RECENT, "vet")], key=repr)
+            assert store.skill_grind_rate("gearcrafting") == 3.0
+            assert store.skill_grind_rate("gearcrafting") == 3.0
+            assert len(reads) == 7
+        finally:
+            veteran.end_session(exit_reason="normal")
+            veteran.close()
+            store.end_session(exit_reason="normal")
+            store.close()
+
     def test_an_empty_store_has_no_rate_under_either_estimator(self, tmp_db_path):
         """No cycles at all is IGNORANCE, not a rate of zero — under both the
         retired estimator and its replacement. `_gated_skill_option` reads the
