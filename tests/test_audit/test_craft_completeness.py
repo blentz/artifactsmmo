@@ -1028,6 +1028,11 @@ def test_each_leaf_is_behind_a_crossing_only_when_no_source_is_reached(monkeypat
     # A resource that spawns nowhere is no gather source.
     monkeypatch.setattr(GameData, "resource_spawn_known", lambda self, code: False)
     assert behind("enchanted_mushroom", state, gd, reach) is False
+    # Only a beatable dropper is a source: with the reached dragon unbeatable,
+    # the unreached flameche alone stands, and the key is behind the crossing.
+    monkeypatch.setattr(craft_completeness, "_drop_winnable", lambda s, g, m: m == "flameche")
+    assert behind("sonnengott_key", state, gd, reach) is True
+    monkeypatch.setattr(craft_completeness, "_drop_winnable", lambda s, g, m: True)
     # A leaf with no source at all is not explained by a crossing.
     monkeypatch.setattr(craft_completeness, "_present_droppers", lambda leaf, g: [])
     assert behind("dryad_hair", state, gd, reach) is False

@@ -4689,8 +4689,9 @@ SERVED_BY_ITS_ROUTE_POLICY_MUTATIONS = [
 # killed by tests/test_ai/test_obtain_model.py and test_game_data.py.
 OBTAIN_MODEL_GATHER_SPAWN_MUTATIONS = [
     ("obtain_model: every resource has a routable spawn",
-     "            known = self._gd.resource_spawn_known(resource) and content_reached(\n",
-     "            known = True and content_reached(\n"),
+     "            known = content_reached(resource, self._gd.all_resource_locations.get(resource, []),\n"
+     "                                    self._gd, self._reach())\n",
+     "            known = True\n"),
 ]
 # ObtainModel.renewable / on_hand, killed by tests/test_ai/test_obtain_model.py
 # (TestQuantity).
@@ -8431,8 +8432,9 @@ REACH_GATE_MUTATIONS = [
 # Killed by tests/test_ai/test_piece_policy.py.
 GATHER_REACH_MUTATIONS = [
     ("obtain_model: a resource behind an unpayable crossing is a route",
-     "            known = self._gd.resource_spawn_known(resource) and content_reached(\n",
-     "            known = self._gd.resource_spawn_known(resource) or content_reached(\n"),
+     "            known = content_reached(resource, self._gd.all_resource_locations.get(resource, []),\n"
+     "                                    self._gd, self._reach())\n",
+     "            known = self._gd.resource_spawn_known(resource)\n"),
 ]
 REACH_REGIONS_MUTATIONS = [
     ("reach: a content's layered tiles are not read",
