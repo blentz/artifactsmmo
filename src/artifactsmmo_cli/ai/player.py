@@ -3298,25 +3298,40 @@ class GamePlayer:
         # shares of it. `closure_demand`'s own max-across-roots fold is for
         # ALTERNATIVE roots; here each code's closure goes into its own dict
         # at multiplier k and the dicts are added.
+        #
+        # HELD STOCK NETS A ROOT BEFORE ITS RECIPE EXPANDS (ruling T6d). A
+        # piece held in the bag or bank IS the piece (EquipOwned wears it), so
+        # its materials are not needed: each held unit is taken once from one
+        # pool of bag + bank, and only the units still missing expand. What the
+        # pool keeps after that nets every row once below; a unit already
+        # taken for a piece is gone from it, so nothing is netted twice.
+        pool = dict(state.bank_items or {})
+        for code, qty in state.inventory.items():
+            pool[code] = pool.get(code, 0) + qty
         slots: dict[str, int] = {}
         for piece in self._missing_pieces():
             slots[piece.code] = slots.get(piece.code, 0) + 1
         demand: dict[str, int] = {}
         for code, count in slots.items():
+            held = min(count, pool.get(code, 0))
+            pool[code] = pool.get(code, 0) - held
+            # A fully held code expands at 0, which records nothing.
             piece_demand: dict[str, int] = {}
-            closure_demand(code, count, game_data, piece_demand, frozenset())
+            closure_demand(code, count - held, game_data, piece_demand, frozenset())
             for item, qty in piece_demand.items():
                 demand[item] = demand.get(item, 0) + qty
         # The crafting target rides beside the pieces: "what I am working
         # toward" is normally a step inside one piece's closure (a bar of the
         # helmet), already counted there, so it merges by MAX — the fold
         # `closure_demand` documents — never by sum, which would ask twice.
-        if self._last_decide_crafting_target is not None:
-            closure_demand(self._last_decide_crafting_target, 1, game_data, demand, frozenset())
-        bank = state.bank_items or {}
-        return {code: qty - state.inventory.get(code, 0) - bank.get(code, 0)
+        # Held, it expands nothing; it takes no unit from the pool, since a
+        # target inside a piece's closure is one of that closure's own units.
+        target = self._last_decide_crafting_target
+        if target is not None and pool.get(target, 0) == 0:
+            closure_demand(target, 1, game_data, demand, frozenset())
+        return {code: qty - pool.get(code, 0)
                 for code, qty in demand.items()
-                if qty - state.inventory.get(code, 0) - bank.get(code, 0) > 0}
+                if qty - pool.get(code, 0) > 0}
 
     def _pick_supply_target(
         self, item_demand: dict[str, int], skill_of_item: dict[str, str | None],

@@ -2542,16 +2542,50 @@ def test_no_objective_publishes_only_the_crafting_target():
 
 
 def test_the_summed_closure_is_netted_against_bag_and_bank():
-    """The summed need is netted against bag AND bank, as every root was: the
-    helmet and ring need 5 copper_bar together, 1 is carried and 2 are banked,
-    so 2 are asked for. A banked piece nets out its own row."""
+    """The summed need is netted against bag AND bank. The banked ring nets
+    out its own row and, held before its recipe expands (ruling T6d), its 2
+    copper_bar too; the helmet's 3 are covered by the 1 carried and 2 banked."""
     p = GamePlayer(character="hero")
     p._offline_timing = committed_timing()
     p._learned_drops = LearnedDrops.empty()
     p._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective(_HELMET, _RING))
     state = make_state(inventory={"copper_bar": 1},
                        bank_items={"copper_bar": 2, "copper_ring": 1})
-    assert p._own_unmet_demand(state, _gear_gd()) == {"copper_helmet": 1, "copper_bar": 2}
+    assert p._own_unmet_demand(state, _gear_gd()) == {"copper_helmet": 1}
+
+
+def test_a_banked_piece_asks_for_none_of_its_materials():
+    """Ruling T6d: held stock satisfies a piece BEFORE its recipe expands. The
+    banked ring is the ring, so neither the ring nor its 2 copper_bar are
+    asked for; the helmet still asks for its own 3."""
+    p = GamePlayer(character="hero")
+    p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
+    p._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective(_HELMET, _RING))
+    state = make_state(bank_items={"copper_ring": 1})
+    assert p._own_unmet_demand(state, _gear_gd()) == {"copper_helmet": 1, "copper_bar": 3}
+
+
+def test_two_needed_one_held_asks_for_the_materials_of_exactly_one():
+    """One ring code missing in ring1 and ring2, one ring in the bag: the held
+    unit is consumed once, so one ring and its 2 copper_bar are asked for."""
+    p = GamePlayer(character="hero")
+    p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
+    ring2 = _piece("ring2", "copper_ring", Fraction(1, 9), Fraction(25))
+    p._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective(_RING, ring2))
+    state = make_state(inventory={"copper_ring": 1})
+    assert p._own_unmet_demand(state, _gear_gd()) == {"copper_ring": 1, "copper_bar": 2}
+
+
+def test_a_held_crafting_target_asks_for_none_of_its_materials():
+    """The crafting target is a root too: a held one expands no recipe."""
+    p = GamePlayer(character="hero")
+    p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
+    p._last_decide_crafting_target = "copper_ring"
+    state = make_state(bank_items={"copper_ring": 1})
+    assert p._own_unmet_demand(state, _gear_gd()) == {}
 
 
 def test_a_crafting_target_inside_a_pieces_closure_is_not_asked_twice():

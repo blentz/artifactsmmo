@@ -11193,6 +11193,10 @@ FLEET_ROUTE_MUTATIONS = [
 #     whose objective names three pieces with no crafting target;
 #   * netting removed -- killed by test_a_missing_piece_already_banked_is_not_published
 #     and the `_own_unmet_demand` netting tests;
+#   * Task 14d (ruling T6d) held stock nets a root before its recipe expands:
+#     a held piece still expanding -- test_a_banked_piece_asks_for_none_of_its_materials;
+#     a held unit not consumed -- test_two_needed_one_held_asks_for_the_materials_of_exactly_one;
+#     a held crafting target expanding -- test_a_held_crafting_target_asks_for_none_of_its_materials;
 #   * pieces folded by max instead of summed (ruling T6a) -- killed by
 #     test_every_missing_piece_is_published (copper_bar 5, not 3);
 #   * the slot count ignored (one unit per code) -- killed by
@@ -11206,23 +11210,38 @@ FLEET_BOARD_PIECES_MUTATIONS = [
     ),
     (
         "player._own_unmet_demand: bag and bank netting removed",
-        "        return {code: qty - state.inventory.get(code, 0) - bank.get(code, 0)\n"
+        "        return {code: qty - pool.get(code, 0)\n"
         "                for code, qty in demand.items()\n"
-        "                if qty - state.inventory.get(code, 0) - bank.get(code, 0) > 0}",
+        "                if qty - pool.get(code, 0) > 0}",
         "        return dict(demand)",
+    ),
+    (
+        "player._own_unmet_demand: a held piece still expands its recipe",
+        "            held = min(count, pool.get(code, 0))",
+        "            held = 0",
+    ),
+    (
+        "player._own_unmet_demand: a held unit nets a piece and its row again",
+        "            pool[code] = pool.get(code, 0) - held",
+        "            pool[code] = pool.get(code, 0)",
+    ),
+    (
+        "player._own_unmet_demand: a held crafting target still expands its recipe",
+        "        if target is not None and pool.get(target, 0) == 0:",
+        "        if target is not None:",
     ),
     (
         "player._own_unmet_demand: pieces folded by max instead of summed",
         "            piece_demand: dict[str, int] = {}\n"
-        "            closure_demand(code, count, game_data, piece_demand, frozenset())\n"
+        "            closure_demand(code, count - held, game_data, piece_demand, frozenset())\n"
         "            for item, qty in piece_demand.items():\n"
         "                demand[item] = demand.get(item, 0) + qty",
-        "            closure_demand(code, count, game_data, demand, frozenset())",
+        "            closure_demand(code, count - held, game_data, demand, frozenset())",
     ),
     (
         "player._own_unmet_demand: slot count ignored (one unit per code)",
-        "            closure_demand(code, count, game_data, piece_demand, frozenset())",
-        "            closure_demand(code, 1, game_data, piece_demand, frozenset())",
+        "            slots[piece.code] = slots.get(piece.code, 0) + 1",
+        "            slots[piece.code] = 1",
     ),
     (
         "player._own_piece_value: gain not summed over a code's slots",
