@@ -4933,6 +4933,23 @@ GAME_DATA_LEARNED_CRAFT_YIELD_MUTATIONS = [
      "            self._requirement_graph_memo.clear()\n",
      "        self.recipes_catalog.learned_craft_yields = learned\n"),
 ]
+# Plan B Task 14c fix round 1: the fleet's recycle totals and craft yields are
+# read once per recorded cycle. Killed by tests/test_ai/test_learning_store.py
+# (TestPerRecordedCycle).
+PER_RECORDED_CYCLE_MUTATIONS = [
+    ("store: a per-cycle read is read on every ask",
+     "        if held is None or held[0] != last:\n            held = (last, compute())",
+     "        if True:\n            held = (last, compute())"),
+    ("store: a per-cycle read ignores a newly recorded cycle",
+     "        if held is None or held[0] != last:\n            held = (last, compute())",
+     "        if held is None:\n            held = (last, compute())"),
+    ("store: the craft yields are read on every fetch",
+     '        return self.per_recorded_cycle("fleet_craft_yields", self._fleet_craft_yields)',
+     "        return self._fleet_craft_yields()"),
+    ("store: the recycle totals are read on every fetch",
+     '        return self.per_recorded_cycle("fleet_recycle_totals", self._fleet_recycle_totals)',
+     "        return self._fleet_recycle_totals()"),
+]
 # Plan B Task 14c fix round 1: the grind rate is one answer per search episode
 # per `(skill, window, character)`. Killed by tests/test_ai/test_learning_store.py
 # (TestSkillGrindRate::test_one_read_per_search_episode_per_key).
@@ -13622,6 +13639,8 @@ def _collect_all_groups() -> None:
     run_group(LEARNING_STORE_SRC, FLEET_FIGHT_SAMPLES_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)
     run_group(LEARNING_STORE_SRC, GRIND_RATE_EPISODE_MUTATIONS,
+              "tests/test_ai/test_learning_store.py", survivors)
+    run_group(LEARNING_STORE_SRC, PER_RECORDED_CYCLE_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)
     run_group(LEARNING_STORE_SRC, TASK_WORK_RATE_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)

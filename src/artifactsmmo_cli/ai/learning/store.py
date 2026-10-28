@@ -319,6 +319,8 @@ class LearningStore:
         self._session_id: str | None = None
         self._session_row_written: bool = False
         self._search_cache: dict[tuple[object, ...], object] | None = None
+        # `per_recorded_cycle`'s answers: name -> (newest cycle id, value).
+        self._per_cycle: dict[str, tuple[int, object]] = {}
 
     def start_session(self) -> str:
         """Allocate session_id. Actual Session row written lazily on first record_cycle."""
@@ -408,6 +410,19 @@ class LearningStore:
         if key not in self._search_cache:
             self._search_cache[key] = compute()
         return self._search_cache[key]  # type: ignore[return-value]
+
+    def per_recorded_cycle(self, name: str, compute: Callable[[], _T]) -> _T:
+        """`compute()`, a read of the append-only `cycles` table alone, read
+        again only when a cycle has been recorded since (the newest cycle id
+        moved): rows are only ever appended, so an unchanged newest id is an
+        unchanged answer. `name` names the read; held on this store. A newest
+        id that dropped (the table replaced) reads afresh too."""
+        last = self.last_cycle_id()
+        held = self._per_cycle.get(name)
+        if held is None or held[0] != last:
+            held = (last, compute())
+            self._per_cycle[name] = held
+        return held[1]  # type: ignore[return-value]
 
     def action_cost(self, action_repr: str, default: float, window: int = WINDOW_ACTION) -> float:
         """Median actual_cooldown_seconds over last `window` ok cycles, or default if < 5 samples."""
@@ -903,7 +918,13 @@ class LearningStore:
         Most common per-run value per item: the yield is a fact about the item,
         and the ratio is skewed only by crafts the old executor re-batched
         (measured 2026-10-01: the mode equals the API's CraftSchema.quantity on
-        all 63 items crafted). An item never crafted has no entry."""
+        all 63 items crafted). An item never crafted has no entry.
+
+        Read once per recorded cycle (`per_recorded_cycle`): every world-state
+        fetch attaches it, and a cycle can fetch twice (plan B Task 14c)."""
+        return self.per_recorded_cycle("fleet_craft_yields", self._fleet_craft_yields)
+
+    def _fleet_craft_yields(self) -> dict[str, int]:
         with SqlSession(self._engine) as s:
             rows = list(s.exec(
                 select(Cycle.action_repr, Cycle.drops_json)
@@ -993,7 +1014,13 @@ class LearningStore:
         The server returns a fixed total per unit, split at random across the
         recipe's materials (`ai/recycle_yield`), so the total is a fact about
         the item, not the character, and one recycle observes it. The most
-        common per-unit total wins; an item never recycled has no entry."""
+        common per-unit total wins; an item never recycled has no entry.
+
+        Read once per recorded cycle (`per_recorded_cycle`), as
+        `fleet_craft_yields` is."""
+        return self.per_recorded_cycle("fleet_recycle_totals", self._fleet_recycle_totals)
+
+    def _fleet_recycle_totals(self) -> dict[str, int]:
         with SqlSession(self._engine) as s:
             rows = list(s.exec(
                 select(Cycle.action_repr, Cycle.drops_json)

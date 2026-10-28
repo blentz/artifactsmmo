@@ -1924,6 +1924,61 @@ class TestTheHottestReadIsIndexed:
         other.close()
 
 
+class TestPerRecordedCycle:
+    """Plan B Task 14c fix round 1: every world-state fetch attaches the
+    fleet's recycle totals and craft yields, and `plan` fetches twice; each is
+    read once per recorded cycle."""
+
+    @staticmethod
+    def _row(store: LearningStore, index: int) -> None:
+        store.record_cycle(Cycle(
+            ts=f"2026-10-01T00:00:{index:02d}+00:00", session_id="x", cycle_index=index,
+            character="testchar", outcome="ok", action_class="RecycleAction",
+            action_repr="Recycle(iron_dagger×1)", drops_json=json.dumps({"iron_bar": index})))
+
+    @pytest.mark.parametrize("name", ["fleet_recycle_totals", "fleet_craft_yields"])
+    def test_read_again_only_after_a_cycle_is_recorded(self, tmp_db_path, name):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        reads: list[int] = []
+        read = getattr(store, f"_{name}")
+
+        def spy() -> dict[str, int]:
+            reads.append(1)
+            return read()
+
+        setattr(store, f"_{name}", spy)
+        try:
+            self._row(store, 1)
+            first = getattr(store, name)()
+            assert getattr(store, name)() is first
+            assert len(reads) == 1
+            self._row(store, 2)
+            getattr(store, name)()
+            assert len(reads) == 2
+        finally:
+            store.close()
+
+    def test_the_answer_follows_the_newest_id(self, tmp_db_path):
+        """A new cycle is a new answer; a newest id that dropped (the table
+        replaced) is read afresh, never served from the held one."""
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        try:
+            self._row(store, 2)
+            assert store.fleet_recycle_totals() == {"iron_dagger": 2}
+            self._row(store, 3)
+            self._row(store, 3)
+            assert store.fleet_recycle_totals() == {"iron_dagger": 3}
+            with store._engine.begin() as conn:
+                conn.exec_driver_sql("DELETE FROM cycles")
+            self._row(store, 5)
+            assert store.last_cycle_id() == 1
+            assert store.fleet_recycle_totals() == {"iron_dagger": 5}
+        finally:
+            store.close()
+
+
 class TestFleetRecycleTotals:
     """`fleet_recycle_totals`: units one recycled copy returns, per item,
     measured over every character's successful recycles."""
