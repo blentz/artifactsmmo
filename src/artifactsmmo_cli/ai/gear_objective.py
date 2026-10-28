@@ -372,7 +372,10 @@ def _candidates(state: WorldState, game_data: GameData) -> list[str]:
     and with a tile the fight pool reaches on any layer (`monster_spawn_known`:
     a static tile in a reachable region, interiors and the underground
     included, for which the action factory builds a `FightAction`, or a live
-    event tile), the same predicate `PIECE_POLICY`'s drops ask."""
+    event tile). A drop route asks that predicate AND the walk's reach from
+    here now (`drop_routes.monster_reached`, ruling T14a-E); a candidate here
+    does not, so a monster behind a crossing the character cannot pay for yet
+    may still be `m*`."""
     ceiling = state.level + FIGHT_LEVEL_GAP_CEILING
     return [code for code, kind in game_data.monsters.types.items()
             if kind not in PARTY_ONLY_TYPES and game_data.monster_levels[code] <= ceiling

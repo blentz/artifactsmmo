@@ -44,6 +44,7 @@ from artifactsmmo_cli.ai.loadout_win import wins_with_a_loadout
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.party_win import wins_as_a_party
+from artifactsmmo_cli.ai.region_edges import content_reached
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
@@ -78,10 +79,9 @@ def drop_fight_winnable(rested: WorldState, game_data: GameData, monster: str) -
 
 def monster_reached(monster: str, game_data: GameData, reach: frozenset[str]) -> bool:
     """Some tile of `monster`, live or on any layer, lies in a region of
-    `reach`."""
-    tiles = [(x, y, "overworld") for x, y in game_data.all_monster_locations.get(monster, [])]
-    tiles += game_data.layered_locations(monster)
-    return any(game_data.region_of(x, y, layer) in reach for x, y, layer in tiles)
+    `reach` (`region_edges.content_reached`)."""
+    return content_reached(monster, game_data.all_monster_locations.get(monster, []),
+                           game_data, reach)
 
 
 def _fight_gates(monster: str, state: WorldState, game_data: GameData,

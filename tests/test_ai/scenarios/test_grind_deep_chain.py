@@ -66,6 +66,7 @@ from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.min_crafts import min_crafts
 from artifactsmmo_cli.ai.min_gathers import min_gathers
+from artifactsmmo_cli.ai.region_edges import content_reached, reachable_regions_now
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
@@ -324,8 +325,14 @@ def test_a_SECONDARY_drop_is_recognised_as_gatherable(game_data: GameData,
     hidden = sorted(full - primary)
     assert hidden, "fixture drift: no secondary-drop item to test with"
     model = grind_model(state, game_data)
+    # Ruling I-3: a resource counts where the walk reaches from here now, as a
+    # fight's monster does (`alexandrite_stone`'s `adamantite_rocks` stand past
+    # a crossing this character cannot make).
+    reach = reachable_regions_now(state, game_data)
     spawned = [code for code in hidden
                if any(game_data.resource_spawn_known(res)
+                      and content_reached(res, game_data.all_resource_locations.get(res, []),
+                                          game_data, reach)
                       for res, table in game_data.resource_drops_full.items()
                       if any(item == code for item, *_ in table))]
     assert spawned, "fixture drift: no secondary drop off a resource that spawns"
@@ -335,7 +342,8 @@ def test_a_SECONDARY_drop_is_recognised_as_gatherable(game_data: GameData,
         # A rung's inputs are asked through `feasible` (a craftable one such as
         # `maple_sap` counts through its gather even below its craft level).
         assert model.feasible(code, 1, GRIND_POLICY) == (code in spawned), (
-            f"{code}: obtainable must be exactly 'a resource that drops it spawns' "
+            f"{code}: obtainable must be exactly 'a resource that drops it spawns where "
+            "the walk reaches' "
             "— a False for a spawned one means the primary-only map is back")
 
 

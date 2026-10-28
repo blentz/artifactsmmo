@@ -88,7 +88,7 @@ from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal, potion_prep_goal
 from artifactsmmo_cli.ai.intention_progress import rotate, turn_key
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
-from artifactsmmo_cli.ai.obtain_item_routing import _is_bought_piece
+from artifactsmmo_cli.ai.obtain_item_routing import is_missing_piece
 from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.potion_supply import guard_loadout
@@ -522,7 +522,7 @@ def objective_step_goal(
         # chose for a missing piece of the gear objective is marked once, here,
         # whichever node built it, so its grey material may be farmed.
         piece = root if isinstance(root, ObtainItem) else step
-        if isinstance(resolved, GatherMaterialsGoal) and _is_bought_piece(piece.code, ctx):
+        if isinstance(resolved, GatherMaterialsGoal) and is_missing_piece(piece.code, ctx):
             return resolved.for_piece()
         return resolved
     if isinstance(step, ReachCharLevel):

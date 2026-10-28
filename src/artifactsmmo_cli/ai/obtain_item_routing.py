@@ -130,14 +130,15 @@ def _gather_goal_for_unreachable_equippable(
     return GatherMaterialsGoal(target_item=code, needed=dict(recipe))
 
 
-def _is_bought_piece(code: str, ctx: SelectionContext) -> bool:
+def is_missing_piece(code: str, ctx: SelectionContext) -> bool:
     """`code` is a missing piece of the cycle's `L*`: the piece is served by the
     route that priced it, and a fight for gold is one (plan B Task 15).
 
-    Asked only on the recipe-less vendor arm of `_equippable_goal`, so the
-    piece is never CRAFT-routed there: every CRAFT route, the climbed and the
-    sibling one included, comes from `ObtainModel._craft`, which has none for
-    an item without a recipe."""
+    Asked on the recipe-less vendor arm of `_equippable_goal` (where the piece
+    is never CRAFT-routed: every CRAFT route, the climbed and the sibling one
+    included, comes from `ObtainModel._craft`, which has none for an item
+    without a recipe), and by `strategy_driver.objective_step_goal` to mark a
+    piece's material walk (`GatherMaterialsGoal.for_piece`, ruling T14a-D)."""
     objective = ctx.gear_objective
     return objective is not None and any(piece.code == code for piece in objective.missing)
 
@@ -236,7 +237,7 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
         # missing piece's passive currency is farmed as one. Its cost orders
         # the piece (the capacity-honest price, ruling T14a-B'); it is not a
         # refusal. Every other equippable keeps the rule.
-        piece = _is_bought_piece(code, ctx)
+        piece = is_missing_piece(code, ctx)
         purchases = [(price, currency)
                      for price, currency in _permanent_vendor_purchases(code, game_data)
                      if currency != "gold"

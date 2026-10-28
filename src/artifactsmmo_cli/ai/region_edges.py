@@ -45,7 +45,7 @@ than of the full pool (the pool always carries all 48 off-region actions, so
 asking it would gate on nothing).
 """
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 
 from artifactsmmo_cli.ai.actions.base import Action, serves_region
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
@@ -173,3 +173,14 @@ def reachable_regions_now(state: WorldState, game_data: GameData) -> frozenset[s
             | {region for region, _route in _crossing_walk(
                 state, region_edge_actions(game_data), game_data)}))
     return memo[key]
+
+
+def content_reached(code: str, live: Iterable[tuple[int, int]], game_data: GameData,
+                    reach: frozenset[str]) -> bool:
+    """Some tile of the content `code` (a monster or a resource) — its `live`
+    overworld tiles, or any of its tiles on any layer — lies in a region of
+    `reach` (`reachable_regions_now`). The one tile test a fight's and a
+    gather's SPAWN_KNOWN gate read (rulings T14a-E, I-3)."""
+    tiles = [(x, y, "overworld") for x, y in live]
+    tiles += game_data.layered_locations(code)
+    return any(game_data.region_of(x, y, layer) in reach for x, y, layer in tiles)

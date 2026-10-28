@@ -4689,8 +4689,8 @@ SERVED_BY_ITS_ROUTE_POLICY_MUTATIONS = [
 # killed by tests/test_ai/test_obtain_model.py and test_game_data.py.
 OBTAIN_MODEL_GATHER_SPAWN_MUTATIONS = [
     ("obtain_model: every resource has a routable spawn",
-     "Gate(GateKind.SPAWN_KNOWN, resource, self._gd.resource_spawn_known(resource))",
-     "Gate(GateKind.SPAWN_KNOWN, resource, True)"),
+     "            known = self._gd.resource_spawn_known(resource) and content_reached(\n",
+     "            known = True and content_reached(\n"),
 ]
 # ObtainModel.renewable / on_hand, killed by tests/test_ai/test_obtain_model.py
 # (TestQuantity).
@@ -7956,24 +7956,33 @@ CENSUS_CROSSING_MUTATIONS = [
      "    return any(reason.startswith(\"region:\") for reason in declined)\n",
      "    return False\n"),
     ("census: an event-gated leaf loses to a dead leaf behind a crossing",
-     "    if GapClass.EVENT_GATED in statuses:\n        return GapClass.EVENT_GATED\n",
+     "    if GapClass.EVENT_GATED in statuses.values():\n        return GapClass.EVENT_GATED\n",
      ""),
     ("census: a dead leaf behind a crossing is never the crossing gap",
-     "    if _dead_leaf_behind_crossing(declined, state, game_data):\n",
+     "    if _dead_leaves_behind_crossing(declined, state, game_data, statuses):\n",
      "    if False:\n"),
-    # Ruling T14a-E: a dead leaf behind an unpayable crossing.
-    ("census: a dead leaf behind an unpayable crossing is a planner bug",
-     "    return any(not monster_reached(monster, game_data, reach)\n",
-     "    return False and any(not monster_reached(monster, game_data, reach)\n"),
-    ("census: a reached dropper of a dead leaf is the crossing gap",
-     "    return any(not monster_reached(monster, game_data, reach)\n",
-     "    return any(True\n"),
-    ("census: an unbeatable dropper behind a crossing is the crossing gap",
-     "               and _drop_winnable(state, game_data, monster) for monster in present)\n",
-     "               for monster in present)\n"),
-    ("census: an absent dropper is the crossing gap",
-     "    present = [monster for leaf in dead for monster in _present_droppers(leaf, game_data)]\n",
-     "    present = [monster for leaf in dead for monster, *_ in game_data.monsters_dropping(leaf)]\n"),
+    # Rulings T14a-E, I-2, I-3: each leaf on its own, every dead leaf explained.
+    ("census: one unreached source puts a leaf behind a crossing",
+     "    return bool(sources) and not any(sources)\n",
+     "    return bool(sources) and not all(sources)\n"),
+    ("census: a leaf with no source is behind a crossing",
+     "    return bool(sources) and not any(sources)\n",
+     "    return not any(sources)\n"),
+    ("census: an unbeatable dropper is a leaf's source",
+     "              if _drop_winnable(state, game_data, monster)]\n",
+     "              ]\n"),
+    ("census: a leaf's gather sources are not asked",
+     "    sources = fights + gathers\n",
+     "    sources = fights\n"),
+    ("census: a resource that spawns nowhere is a gather source",
+     "    return sorted(res for res in tables if game_data.resource_spawn_known(res))\n",
+     "    return sorted(tables)\n"),
+    ("census: one leaf behind a crossing explains an unexplained one",
+     "    return bool(behind) and all(leaf in behind or statuses[leaf] is not None for leaf in dead)\n",
+     "    return bool(behind)\n"),
+    ("census: an explained cell needs no leaf behind a crossing",
+     "    return bool(behind) and all(leaf in behind or statuses[leaf] is not None for leaf in dead)\n",
+     "    return all(leaf in behind or statuses[leaf] is not None for leaf in dead)\n"),
     ("census: a world without transitions is still asked",
      "    if not game_data.world.transition_edges:\n        return []\n",
      ""),
@@ -8359,7 +8368,7 @@ PIECE_PASSIVE_CURRENCY_MUTATIONS = [
      "        if _passively_funded(code, state, game_data) == 0 and not piece:\n",
      "        if _passively_funded(code, state, game_data) == 0:\n"),
     ("passive currency: every equippable is an L* piece",
-     "        piece = _is_bought_piece(code, ctx)\n",
+     "        piece = is_missing_piece(code, ctx)\n",
      "        piece = True\n"),
 ]
 # Ruling T14a-D: an `L*` piece's material walk keeps the demand gate and skips
@@ -8376,16 +8385,20 @@ PIECE_GREY_GOAL_MUTATIONS = [
     ("piece grey: the search never exempts a piece's material",
      "                            or (self.piece_material and serves_a_demand(item, game_data))\n",
      "                            or False\n"),
+    # Ruling I-1: the search side keeps the demand gate too.
+    ("piece grey: the search exempts a piece's material without the demand gate",
+     "                            or (self.piece_material and serves_a_demand(item, game_data))\n",
+     "                            or self.piece_material\n"),
     ("piece grey: for_piece leaves the goal unmarked",
      "                                   fight_gold=self.fight_gold, piece_material=True)",
      "                                   fight_gold=self.fight_gold, piece_material=False)"),
 ]
 PIECE_GREY_SEAM_MUTATIONS = [
     ("piece grey: a piece's gather is never marked",
-     "        if isinstance(resolved, GatherMaterialsGoal) and _is_bought_piece(piece.code, ctx):\n",
+     "        if isinstance(resolved, GatherMaterialsGoal) and is_missing_piece(piece.code, ctx):\n",
      "        if False:\n"),
     ("piece grey: every gather is marked a piece's",
-     "        if isinstance(resolved, GatherMaterialsGoal) and _is_bought_piece(piece.code, ctx):\n",
+     "        if isinstance(resolved, GatherMaterialsGoal) and is_missing_piece(piece.code, ctx):\n",
      "        if isinstance(resolved, GatherMaterialsGoal):\n"),
 ]
 PIECE_GREY_DEMAND_MUTATIONS = [
@@ -8413,14 +8426,21 @@ REACH_GATE_MUTATIONS = [
     ("reach: a known spawn behind an unpayable crossing is a route",
      "    known = game_data.monster_spawn_known(monster) and monster_reached(monster, game_data, reach)\n",
      "    known = game_data.monster_spawn_known(monster)\n"),
-    ("reach: a monster's layered tiles are not read",
-     "    tiles += game_data.layered_locations(monster)\n",
+]
+# Ruling I-3: a gather's SPAWN_KNOWN asks the walk's reach, as a fight's.
+# Killed by tests/test_ai/test_piece_policy.py.
+GATHER_REACH_MUTATIONS = [
+    ("obtain_model: a resource behind an unpayable crossing is a route",
+     "            known = self._gd.resource_spawn_known(resource) and content_reached(\n",
+     "            known = self._gd.resource_spawn_known(resource) or content_reached(\n"),
+]
+REACH_REGIONS_MUTATIONS = [
+    ("reach: a content's layered tiles are not read",
+     "    tiles += game_data.layered_locations(code)\n",
      "    tiles += []\n"),
     ("reach: any tile region is reached",
      "    return any(game_data.region_of(x, y, layer) in reach for x, y, layer in tiles)\n",
      "    return bool(tiles)\n"),
-]
-REACH_REGIONS_MUTATIONS = [
     ("reach: the walk's start region is not reachable",
      "            {game_data.state_region(state)}\n            | {region",
      "            set()\n            | {region"),
@@ -13758,6 +13778,8 @@ def _collect_all_groups() -> None:
     run_group(DROP_ROUTES_SRC_T14A, REACH_GATE_MUTATIONS,
               "tests/test_ai/test_piece_policy.py", survivors)
     run_group(REGION_EDGES_SRC, REACH_REGIONS_MUTATIONS,
+              "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, GATHER_REACH_MUTATIONS,
               "tests/test_ai/test_piece_policy.py", survivors)
     run_group(REGION_EDGES_SRC, REGION_EDGE_MUTATIONS,
               "tests/test_ai/test_actions_transition.py", survivors)

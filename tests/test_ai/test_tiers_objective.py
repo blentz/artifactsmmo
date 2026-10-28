@@ -925,7 +925,11 @@ def test_is_attainable_now_counts_a_reachable_underground_resource():
     gd._resource_locations = {}
     state = make_state(level=5)
     assert is_attainable_now("copper_armor", state, gd) is False
-    with patch.object(GameData, "resource_spawn_known", return_value=True):
+    # Its layered tile lies in the character's own region (ruling I-3: a
+    # gather counts where the walk reaches).
+    with (patch.object(GameData, "resource_spawn_known", return_value=True),
+          patch.object(GameData, "layered_locations",
+                       return_value=[(state.x, state.y, state.layer)])):
         assert is_attainable_now("copper_armor", state, gd) is True
 
 

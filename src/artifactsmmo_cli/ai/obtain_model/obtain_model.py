@@ -44,7 +44,7 @@ from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
-from artifactsmmo_cli.ai.region_edges import reachable_regions_now
+from artifactsmmo_cli.ai.region_edges import content_reached, reachable_regions_now
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
@@ -361,9 +361,15 @@ class ObtainModel:
 
         out: list[Route] = []
         for rank, resource in enumerate(sorted(droppers, key=attempts)):
+            # SPAWN_KNOWN also asks the walk's reach (ruling I-3, as T14a-E for a
+            # fight): a resource whose every tile stands past a crossing the
+            # character cannot pay for now is no route.
+            known = self._gd.resource_spawn_known(resource) and content_reached(
+                resource, self._gd.all_resource_locations.get(resource, []), self._gd,
+                self._reach())
             gates = [Gate(GateKind.SPAWN_LIVE, resource,
                           bool(self._gd.all_resource_locations.get(resource))),
-                     Gate(GateKind.SPAWN_KNOWN, resource, self._gd.resource_spawn_known(resource))]
+                     Gate(GateKind.SPAWN_KNOWN, resource, known)]
             requirement = self._gd.resource_skill_level(resource)
             if requirement is not None:
                 skill, level = requirement

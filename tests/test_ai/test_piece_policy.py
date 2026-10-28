@@ -16,6 +16,7 @@ permanent NPC there). The bundle's own event-gated vendor item stands in for it:
 
 import json
 from dataclasses import replace
+from datetime import UTC, datetime
 from fractions import Fraction
 from math import ceil
 from pathlib import Path
@@ -668,3 +669,35 @@ def test_a_drop_behind_a_crossing_is_a_route_once_the_fee_is_held() -> None:
 def test_the_region_the_character_stands_in_is_reachable() -> None:
     """With no crossing at all, the walk still reaches where it stands."""
     assert reachable_regions_now(make_state(), GameData()) == frozenset({"overworld"})
+
+
+def test_a_gather_behind_a_crossing_is_a_route_once_the_fee_is_held() -> None:
+    """Ruling I-3 (one reachability authority, gathers as fights): the only
+    `enchanted_mushroom` spot stands past the 5000-gold door into
+    `restricted:overworld:-5,8`. Its gather route's SPAWN_KNOWN gate is shut
+    while the pocket cannot pay, and open once it can."""
+    player = _seeded(RUNE_CELLS[0])
+    state, world = player.state, player.game_data
+    assert state is not None and world is not None
+    ctx = player._selection_context()
+
+    def known(at: WorldState) -> bool:
+        model = ObtainModel(at, world, ctx, datetime.now(UTC))
+        (route,) = [r for r in model.routes("enchanted_mushroom") if r.kind is SourceKind.GATHER]
+        return next(g.satisfied for g in route.gates if g.kind is GateKind.SPAWN_KNOWN)
+
+    assert state.gold < 5000
+    assert not known(state)
+    assert known(replace(state, gold=6000))
+
+
+def test_a_piece_s_search_keeps_the_demand_gate() -> None:
+    """Ruling I-1: the search side of T14a-D keeps condition 1 too: a piece
+    goal's edges hold no fight for `golden_egg`, whose grey chicken drop
+    serves no demand."""
+    player, _goal = _shield_step(SHIELD_CELL)
+    state, world = player.state, player.game_data
+    assert state is not None and world is not None
+    egg = GatherMaterialsGoal("golden_egg", {"golden_egg": 1}, piece_material=True)
+    assert not [a for a in egg.relevant_actions(player._build_actions(), state, world)
+                if isinstance(a, FightAction) and a.monster_code == "chicken"]

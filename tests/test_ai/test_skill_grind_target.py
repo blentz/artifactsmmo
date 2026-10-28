@@ -621,8 +621,13 @@ def test_a_material_from_a_reachable_underground_resource_counts():
     gathered by the action pool, so the grind counts it."""
     gd = _policy_world()
     gd._resource_drops = {"deep_vein": "gem"}
-    with patch.object(GameData, "resource_spawn_known", return_value=True):
-        model = grind_model(_jeweller(), gd)
+    jeweller = _jeweller()
+    # Its tile lies in the character's own region (ruling I-3: a gather counts
+    # where the walk reaches).
+    with (patch.object(GameData, "resource_spawn_known", return_value=True),
+          patch.object(GameData, "layered_locations",
+                       return_value=[(jeweller.x, jeweller.y, jeweller.layer)])):
+        model = grind_model(jeweller, gd)
         assert not model.feasible("gem", 1, replace(LEGACY, spawn_known=False)), \
             "vacuous: the vein has a live tile"
         assert is_obtainable("ring", model)

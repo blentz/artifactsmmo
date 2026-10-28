@@ -21,7 +21,8 @@ from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
+from artifactsmmo_cli.ai.region_edges import reachable_regions_now
+from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.audit import craft_completeness
 from artifactsmmo_cli.audit.craft_census import run_cell
@@ -1004,31 +1005,50 @@ def test_a_crossing_the_census_character_cannot_pay_is_its_own_gap(monkeypatch) 
         craft_completeness._census_declines("palm_plank", object(), gd)) is False
 
 
-def test_a_drop_behind_an_unpayable_crossing_is_the_crossing_gap(monkeypatch) -> None:
-    """Ruling T14a-E: a monster behind a crossing the census character cannot
-    pay for is no route at all (`drop_routes.monster_reached`), so the
-    decomposition declines the leaf `infeasible:...:no_route:<leaf>` rather
-    than `region:...`. A dead leaf whose present, beatable dropper spawns where
-    the walk cannot reach now is the crossing gap (live census:
-    `enhanced_antidote`'s `sand_snake_poison` with its events live); one whose
-    dropper is reached, unbeatable or absent is not."""
-    gd = GameData()
-    dead = ["infeasible:antidote:no_route:gold,venom"]
-    monkeypatch.setattr(craft_completeness, "reachable_regions_now", lambda s, g: frozenset())
-    monkeypatch.setattr(craft_completeness, "_present_droppers",
-                        lambda leaf, g: ["sand_snake"] if leaf == "venom" else [])
+def test_each_leaf_is_behind_a_crossing_only_when_no_source_is_reached(monkeypatch) -> None:
+    """Ruling I-2, on the bundle's own reach (no reach patched): a leaf counts
+    as behind a crossing only when NONE of its present, winnable sources is
+    reached from here. `sonnengott_key` drops from `baby_red_dragon` (reached)
+    and `flameche` (past a crossing): one reached dropper, so not behind.
+    `dryad_hair` drops only from `dryad`, past the 5000-gold door: behind,
+    until the fee is held. `enchanted_mushroom` is gathered only past that
+    same door (ruling I-3). Winnability is pinned (the sheet beats neither
+    dragon), the reach is the real walk's."""
+    gd = load_bundle_game_data(BUNDLE)
+    state = scenario_state(SCENARIOS["l48_band_adequate"], gd)
+    assert state.gold < 5000
     monkeypatch.setattr(craft_completeness, "_drop_winnable", lambda s, g, m: True)
-    monkeypatch.setattr(craft_completeness, "monster_reached", lambda m, g, r: False)
-    assert craft_completeness._dead_leaf_behind_crossing(dead, object(), gd) is True
-    assert craft_completeness._dead_leaf_behind_crossing([], object(), gd) is False
-    monkeypatch.setattr(craft_completeness, "monster_reached", lambda m, g, r: True)
-    assert craft_completeness._dead_leaf_behind_crossing(dead, object(), gd) is False
-    monkeypatch.setattr(craft_completeness, "monster_reached", lambda m, g, r: False)
-    monkeypatch.setattr(craft_completeness, "_drop_winnable", lambda s, g, m: False)
-    assert craft_completeness._dead_leaf_behind_crossing(dead, object(), gd) is False
-    monkeypatch.setattr(craft_completeness, "_drop_winnable", lambda s, g, m: True)
+    reach = reachable_regions_now(state, gd)
+    behind = craft_completeness._leaf_behind_crossing
+    assert behind("sonnengott_key", state, gd, reach) is False
+    assert behind("dryad_hair", state, gd, reach) is True
+    assert behind("enchanted_mushroom", state, gd, reach) is True
+    rich = replace(state, gold=6000)
+    assert behind("dryad_hair", rich, gd, reachable_regions_now(rich, gd)) is False
+    # A resource that spawns nowhere is no gather source.
+    monkeypatch.setattr(GameData, "resource_spawn_known", lambda self, code: False)
+    assert behind("enchanted_mushroom", state, gd, reach) is False
+    # A leaf with no source at all is not explained by a crossing.
     monkeypatch.setattr(craft_completeness, "_present_droppers", lambda leaf, g: [])
-    assert craft_completeness._dead_leaf_behind_crossing(dead, object(), gd) is False
+    assert behind("dryad_hair", state, gd, reach) is False
+
+
+def test_a_crossing_explains_a_cell_only_when_every_dead_leaf_is_explained(monkeypatch) -> None:
+    """Ruling I-2: one dead leaf behind a crossing does not explain a second
+    dead leaf that has no reading of its own (a walk defect: PLANNER_BUG). A
+    dead code outside the closure (`gold`) is not a leaf."""
+    gd = GameData()
+    monkeypatch.setattr(craft_completeness, "reachable_regions_now", lambda s, g: frozenset())
+    monkeypatch.setattr(craft_completeness, "_leaf_behind_crossing",
+                        lambda leaf, s, g, r: leaf == "venom")
+    statuses = {"venom": None, "hide": GapClass.COMBAT_BLOCKED, "ore": None}
+    explained = craft_completeness._dead_leaves_behind_crossing
+    assert explained(["infeasible:x:no_route:gold,venom"], object(), gd, statuses) is True
+    assert explained(["infeasible:x:no_route:venom,hide"], object(), gd, statuses) is True
+    assert explained(["infeasible:x:no_route:venom,ore"], object(), gd, statuses) is False
+    assert explained(["infeasible:x:no_route:hide"], object(), gd, statuses) is False
+    assert explained(["infeasible:x:no_route:gold"], object(), gd, statuses) is False
+    assert explained([], object(), gd, statuses) is False
 
 
 def test_an_event_gated_leaf_outranks_a_dead_leaf_behind_a_crossing(monkeypatch) -> None:
@@ -1041,7 +1061,7 @@ def test_an_event_gated_leaf_outranks_a_dead_leaf_behind_a_crossing(monkeypatch)
     monkeypatch.setattr(craft_completeness, "census_state", lambda r, c, g: object())
     monkeypatch.setattr(craft_completeness, "_census_declines", lambda r, s, g: ["infeasible:x:no_route:y"])
     monkeypatch.setattr(craft_completeness, "_closure_leaves", lambda r, g: frozenset({"y", "z"}))
-    monkeypatch.setattr(craft_completeness, "_dead_leaf_behind_crossing", lambda d, s, g: True)
+    monkeypatch.setattr(craft_completeness, "_dead_leaves_behind_crossing", lambda d, s, g, st: True)
     statuses = {"y": GapClass.EVENT_GATED, "z": GapClass.COMBAT_BLOCKED}
     monkeypatch.setattr(craft_completeness, "_leaf_status", lambda leaf, s, g: statuses[leaf])
     assert classify_gap("x", cell, gd) is GapClass.EVENT_GATED

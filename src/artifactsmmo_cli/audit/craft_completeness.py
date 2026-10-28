@@ -6,6 +6,7 @@ level/skill grid and classifies whether it can produce a directional plan.
 Pure cores (grid/verdict/classifier) + a thin planner harness (`plan_craft`);
 the generator/docs live in scripts/gen_craft_completeness.py."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import Enum
 
@@ -33,7 +34,7 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable, monster_reached
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
-from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG, reachable_regions_now
+from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG, content_reached, reachable_regions_now
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
@@ -917,24 +918,50 @@ def _crossing_unaffordable(declined: list[str]) -> bool:
     return any(reason.startswith("region:") for reason in declined)
 
 
-def _dead_leaf_behind_crossing(declined: list[str], state: WorldState,
-                               game_data: GameData) -> bool:
-    """The decomposition declined a dead leaf (`infeasible:<item>:no_route:
-    <leaves>`) whose dropper the cell would otherwise serve it from — present in
-    this cell's world (`_present_droppers`) and beatable here
-    (`_drop_winnable`) — but which stands where no crossing applicable from
-    `state` reaches. Ruling T14a-E made such a monster no route at all, so the
-    decline names the leaf rather than the crossing; the reach is the one
-    authority (`drop_routes.monster_reached` over
-    `region_edges.reachable_regions_now`)."""
+def _gather_resources(leaf: str, game_data: GameData) -> list[str]:
+    """The resources whose gather drops `leaf` and that spawn somewhere
+    (`resource_spawn_known`), from the full drop tables and the primary-drop
+    map alike."""
+    tables = {res for res, table in game_data.resource_drops_full.items()
+              for code, *_ in table if code == leaf}
+    tables |= {res for res, code in game_data.resource_drops.items() if code == leaf}
+    return sorted(res for res in tables if game_data.resource_spawn_known(res))
+
+
+def _leaf_behind_crossing(leaf: str, state: WorldState, game_data: GameData,
+                          reach: frozenset[str]) -> bool:
+    """`leaf` on its own (ruling I-2): it has a source the cell would serve it
+    from — a dropper present in this cell's world (`_present_droppers`) and
+    beatable here (`_drop_winnable`), or a resource that spawns
+    (`_gather_resources`) — and NOT ONE of those sources stands where the walk
+    reaches from `state` now (`region_edges.content_reached` over `reach`, the
+    one authority of rulings T14a-E and I-3). One reached source means the
+    crossing does not explain the leaf."""
+    fights = [monster_reached(monster, game_data, reach)
+              for monster in _present_droppers(leaf, game_data)
+              if _drop_winnable(state, game_data, monster)]
+    gathers = [content_reached(res, game_data.all_resource_locations.get(res, []), game_data, reach)
+               for res in _gather_resources(leaf, game_data)]
+    sources = fights + gathers
+    return bool(sources) and not any(sources)
+
+
+def _dead_leaves_behind_crossing(declined: list[str], state: WorldState, game_data: GameData,
+                                 statuses: Mapping[str, GapClass | None]) -> bool:
+    """The decomposition declined dead leaves (`infeasible:<item>:no_route:
+    <leaves>`), at least one of them behind a crossing (`_leaf_behind_crossing`),
+    and EVERY dead closure leaf is explained: behind a crossing, or carrying a
+    leaf reading of its own (`statuses`). A dead leaf with neither is a walk
+    defect, so the cell stays a PLANNER_BUG. Rulings T14a-E and I-3 made a
+    source behind a crossing the character cannot pay for no route at all, so
+    the decline names the leaf rather than the crossing (`region:...`)."""
     dead = {leaf for reason in declined if reason.startswith("infeasible:")
-            for leaf in reason.rsplit(":", 1)[1].split(",")}
-    present = [monster for leaf in dead for monster in _present_droppers(leaf, game_data)]
-    if not present:
+            for leaf in reason.rsplit(":", 1)[1].split(",") if leaf in statuses}
+    if not dead:
         return False
     reach = reachable_regions_now(state, game_data)
-    return any(not monster_reached(monster, game_data, reach)
-               and _drop_winnable(state, game_data, monster) for monster in present)
+    behind = {leaf for leaf in dead if _leaf_behind_crossing(leaf, state, game_data, reach)}
+    return bool(behind) and all(leaf in behind or statuses[leaf] is not None for leaf in dead)
 
 
 def classify_gap(recipe: str, cell: CraftCell,
@@ -945,9 +972,15 @@ def classify_gap(recipe: str, cell: CraftCell,
     equipped with a plausible near-term loadout). Pure over
     (`recipe`, `cell`, `game_data`).
 
-    Precedence — CROSSING_UNAFFORDABLE → EVENT_GATED → COMBAT_BLOCKED → MATERIAL_UNREACHABLE →
-    GREY_FARM_SUPPRESSED → PURCHASE_RECURSION → SKILL_UNREACHABLE →
-    PLANNER_BUG — runs most-specific-first. The first five are leaf-level (a
+    Precedence — CROSSING_UNAFFORDABLE (a `region:` decline) → EVENT_GATED →
+    CROSSING_UNAFFORDABLE (every dead leaf explained, at least one behind a
+    crossing: `_dead_leaves_behind_crossing`) → COMBAT_BLOCKED →
+    MATERIAL_UNREACHABLE → GREY_FARM_SUPPRESSED → PURCHASE_RECURSION →
+    SKILL_UNREACHABLE → PLANNER_BUG — runs most-specific-first. The two
+    crossing arms are one cause named two ways (the decomposition names the
+    crossing when it reaches it, the leaf when the reach gate leaves the source
+    no route); the second ranks after EVENT_GATED because ranking it with the
+    first re-classed event-gated cells (ruling M-4). The first five are leaf-level (a
     specific closure leaf blocks); SKILL_UNREACHABLE is recipe-level (the
     crafting skill is below level AND cannot be bootstrapped from here);
     PLANNER_BUG is the residual. A GRINDABLE under-skill cell is NOT a gap class:
@@ -982,20 +1015,19 @@ def classify_gap(recipe: str, cell: CraftCell,
         # boat, the Enchanted Forest's 5000-gold exit). A leaf-level reading of
         # the same cell calls those sources event-gated or unreachable.
         return GapClass.CROSSING_UNAFFORDABLE
-    statuses = {_leaf_status(leaf, state, game_data)
+    statuses = {leaf: _leaf_status(leaf, state, game_data)
                 for leaf in _closure_leaves(recipe, game_data)}
-    if GapClass.EVENT_GATED in statuses:
+    if GapClass.EVENT_GATED in statuses.values():
         return GapClass.EVENT_GATED
-    if _dead_leaf_behind_crossing(declined, state, game_data):
-        # A dead leaf behind a crossing the character cannot pay (ruling
-        # T14a-E): the decline names the leaf, not the crossing, so it cannot
-        # be told apart from an event-gated cell's dead leaf until the event
-        # reading has run; it ranks where the crossing decline it replaced did
-        # for an event-free leaf set, ahead of every other leaf reading.
+    if _dead_leaves_behind_crossing(declined, state, game_data, statuses):
+        # The same cause as the `region:` decline above, named by the leaf
+        # (rulings T14a-E, I-3). Ranked after EVENT_GATED, not with it: ranked
+        # first, it re-classed the event-free enhanced_antidote 48/45 and 50/45
+        # from EVENT_GATED (ruling M-4: keep the current order and report it).
         return GapClass.CROSSING_UNAFFORDABLE
     for gap in (GapClass.COMBAT_BLOCKED, GapClass.MATERIAL_UNREACHABLE,
                 GapClass.GREY_FARM_SUPPRESSED, GapClass.PURCHASE_RECURSION):
-        if gap in statuses:
+        if gap in statuses.values():
             return gap
     stats = game_data.item_stats(recipe)
     skill = (stats.crafting_skill or "") if stats is not None else ""
