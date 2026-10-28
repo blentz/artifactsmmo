@@ -24,6 +24,7 @@ from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.cost_core import (
     CONSUMABLE_COOLDOWN_SECONDS,
+    DEPOSIT_SECONDS_PER_CODE,
     REST_COST_MAX,
     distance_cost_pure,
     learned_cost_pure,
@@ -295,7 +296,7 @@ def test_deposit_all_nonneg(invsize, sx, sy, dx, dy):
     s = _state(x=sx, y=sy, inv=inv)
     dist = 5 * (abs(dx - sx) + abs(dy - sy))  # travel seconds, 5 s a tile
     out = DepositAllAction(bank_location=(dx, dy)).cost(s, None, None)
-    assert out == len(inv) * 2.0 + dist
+    assert out == len(inv) * DEPOSIT_SECONDS_PER_CODE + dist
     assert out >= 0.0
 
 
