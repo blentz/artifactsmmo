@@ -23,6 +23,7 @@ from unittest.mock import MagicMock, patch
 
 from artifactsmmo_api_client.types import UNSET
 
+from artifactsmmo_cli.ai.actions.cost_core import DEPOSIT_SECONDS_PER_CODE
 from artifactsmmo_cli.ai.actions.deposit_all import DEPOSIT_BATCH_MAX, DepositAllAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai.fixtures import make_state
@@ -145,3 +146,15 @@ def test_the_batch_cap_matches_the_published_server_limit():
     body = (spec["paths"]["/my/{name}/action/bank/deposit/item"]["post"]
             ["requestBody"]["content"]["application/json"]["schema"])
     assert body["max_items"] == DEPOSIT_BATCH_MAX
+
+
+def test_a_code_is_priced_at_the_published_deposit_cooldown():
+    """`openapi.json`: "The cooldown will be 3 seconds multiplied by the number
+    of different items deposited." The per-code price is that figure (Task 14d:
+    it was 2.0, a third under; learning.db's DepositAll cooldowns run about
+    2.95 s a code, the server's 3 less the response latency)."""
+    with open("openapi.json", encoding="utf-8") as fp:
+        spec = json.load(fp)
+    doc = spec["paths"]["/my/{name}/action/bank/deposit/item"]["post"]["description"]
+    assert f"cooldown will be {DEPOSIT_SECONDS_PER_CODE:g} seconds multiplied by the number" \
+        " of different items deposited" in doc

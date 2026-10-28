@@ -101,8 +101,8 @@ class TestExecute:
         action = DepositItemAction(code="emerald_stone", quantity=16, bank_location=BANK_LOC)
         at_bank = make_state(x=BANK_LOC[0], y=BANK_LOC[1])
         far = make_state(x=0, y=0)
-        assert action.cost(at_bank, _gd()) == 2.0
-        assert action.cost(far, _gd()) == 2.0 + 5 * 5  # 5 tiles x 5 s
+        assert action.cost(at_bank, _gd()) == 3.0
+        assert action.cost(far, _gd()) == 3.0 + 5 * 5  # 5 tiles x 5 s
 
     def test_repr(self):
         action = DepositItemAction(code="emerald_stone", quantity=16, bank_location=BANK_LOC)

@@ -10318,6 +10318,13 @@ CYCLE_ERROR_TEXT_MUTATIONS = [
      "            error_text=None,"),
 ]
 
+# Plan B Task 14d (parked T13d): a deposited code is priced at the published
+# deposit cooldown, 3 s a code. Killed by tests/test_ai/test_deposit_all_batching.py.
+DEPOSIT_SECONDS_MUTATIONS = [
+    ("cost_core: a deposited code is priced under the published cooldown",
+     "DEPOSIT_SECONDS_PER_CODE = 3.0\n",
+     "DEPOSIT_SECONDS_PER_CODE = 2.0\n"),
+]
 DEPOSIT_ALL_BATCH_SRC = DEPOSIT_ALL_SRC
 DEPOSIT_ALL_BATCH_MUTATIONS = [
     # Its own group again: the batching invariants are owned by the batching
@@ -13333,6 +13340,8 @@ def _collect_all_groups() -> None:
     run_group(DEPOSIT_ALL_SRC, DEPOSIT_ALL_ERROR_MUTATIONS,
               "tests/test_ai/test_actions_execute.py", survivors)
     run_group(DEPOSIT_ALL_BATCH_SRC, DEPOSIT_ALL_BATCH_MUTATIONS,
+              "tests/test_ai/test_deposit_all_batching.py", survivors)
+    run_group(COST_CORE_SRC, DEPOSIT_SECONDS_MUTATIONS,
               "tests/test_ai/test_deposit_all_batching.py", survivors)
     run_group(GOLD_SURPLUS_SRC, GOLD_SURPLUS_MUTATIONS,
               "tests/test_ai/test_gold_surplus_core.py", survivors)

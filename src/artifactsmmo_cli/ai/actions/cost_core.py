@@ -130,12 +130,21 @@ Folding them into one name would make a future divergence silent.
 """
 
 
-DEPOSIT_SECONDS_PER_CODE = 2.0
+DEPOSIT_SECONDS_PER_CODE = 3.0
 """What depositing one item code is priced at, before the walk: a
 `DepositItemAction` (one code) and each held code of a `DepositAllAction`. The
 loop's bank trip charges it once per distinct drop code (spec 2026-10-18
 §2.10, `loop_rate_core.trip_seconds`), so the trip and the deposit actions the
-planner prices agree."""
+planner prices agree.
+
+The published cooldown (`openapi.json`, `/my/{name}/action/bank/deposit/item`:
+"3 seconds multiplied by the number of different items deposited"), the same
+kind of published server rule as `CONSUMABLE_COOLDOWN_SECONDS`. learning.db
+agrees (read-only copy, 2026-10-28): 2,137 ok `DepositAllAction` cycles cluster
+at whole multiples of about 2.95 s a code from 5 codes up, and 1,065
+`DepositItemAction` cycles (one code) average 2.41 s, the server's 3 less the
+response latency the recorded remaining cooldown loses. It was 2.0, a third
+under the server."""
 
 
 def distance_cost_pure(base: float, dist: int) -> float:

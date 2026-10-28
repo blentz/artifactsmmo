@@ -95,7 +95,7 @@ class TestCostMethods:
         action = DepositAllAction()
         state = make_state(inventory={"a": 1, "b": 2, "c": 3})
         gd = make_gd()
-        assert action.cost(state, gd) == pytest.approx(6.0)
+        assert action.cost(state, gd) == pytest.approx(9.0)
 
     def test_withdraw_cost(self):
         action = WithdrawItemAction(code="copper", quantity=5)
