@@ -39,15 +39,13 @@ from artifactsmmo_cli.ai.acquisition_cost_core import (
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
 from artifactsmmo_cli.ai.combat_deficit import combat_deficit
 from artifactsmmo_cli.ai.drop_leg import DropLeg
-from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
-from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
+from artifactsmmo_cli.ai.attempt_prospecting import fight_prospecting, gather_prospecting
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.fleet_climb_core import amortized_climb_seconds
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill, loss_cost
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -102,44 +100,12 @@ def _loss_surcharge(monster_code: str, max_hp: int,
     return Fraction(0)
 
 
-def _loadout_prospecting(purpose: Combat | Gather, state: WorldState,
-                         game_data: GameData) -> int:
-    """The prospecting the loadout `pick_loadout` picks for `purpose` from
-    what `state` owns carries, projected as a swap (`project_loadout_stats`:
-    an item's prospecting in, the one it displaces out). The executor wears
-    that loadout for the attempt — a fight is gated on it
-    (`FightAction.is_applicable`), a gather re-arms into it
-    (`GatherAction.cost`) — so it is the `P` a drop's chance is read at (spec
-    2026-10-18 §2.8: "the prospecting of the loadout used for that gather or
-    fight"), and the ONE basis every drop price uses (ruling T12n)."""
-    loadout = pick_loadout_cached(purpose, state, game_data)
-    return project_loadout_stats(state, loadout, game_data).prospecting
-
-
-def _fight_prospecting(monster_code: str, state: WorldState, game_data: GameData) -> int:
-    """`_loadout_prospecting` for a fight against `monster_code`: the
-    `Combat` purpose the fight's loadout gate reads."""
-    return _loadout_prospecting(Combat(game_data.monster_attack(monster_code),
-                                       game_data.monster_resistance(monster_code),
-                                       dict(state.attack)), state, game_data)
-
-
-def _gather_prospecting(resource: str, state: WorldState, game_data: GameData) -> int:
-    """`_loadout_prospecting` for a gather at `resource`: the `Gather` purpose
-    of its skill. A resource with no skill in the catalogue RAISES: API data or
-    fail."""
-    requirement = game_data.resource_skill_level(resource)
-    if requirement is None:
-        raise ValueError(f"resource {resource!r} has no gathering skill in game data")
-    return _loadout_prospecting(Gather(requirement[0]), state, game_data)
-
-
 def leg_prospecting(leg: DropLeg, state: WorldState, game_data: GameData) -> int:
     """The prospecting the loadout `leg` is attempted in carries: the fight's
-    for a farm leg, the gather's for a gather leg (`_loadout_prospecting`)."""
+    for a farm leg, the gather's for a gather leg (`attempt_prospecting`)."""
     if leg.kind is SourceKind.DROP:
-        return _fight_prospecting(leg.source, state, game_data)
-    return _gather_prospecting(leg.source, state, game_data)
+        return fight_prospecting(leg.source, state, game_data)
+    return gather_prospecting(leg.source, state, game_data)
 
 
 def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: int,
@@ -151,7 +117,7 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
     Two pieces, multiplied, and neither is restated here: the wins one unit
     takes (`LearnedDrops.attempts_per_unit`, the learned chance proved in
     `Formal.DropChance`, at the fight loadout's prospecting,
-    `_fight_prospecting`) times `cycles_per_kill` — the SAME
+    `fight_prospecting`) times `cycles_per_kill` — the SAME
     fight-plus-forced-rest figure `cheapest_path_to_level` spends, so a drop farm
     and a level grind are quoted in identical units. Using a bare kill count here
     would price the farm at roughly half its real cost, which is the defect
@@ -165,7 +131,7 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
     rounds the route's applications up ONCE; rounding each unit up overpriced a
     farm whose win yields more than a unit's worth of its cost."""
     kills = evidence.attempts_per_unit(monster_code, item, rate, min_q, max_q,
-                                       _fight_prospecting(monster_code, state, game_data))
+                                       fight_prospecting(monster_code, state, game_data))
     return kills * _kill_actions(monster_code, state, game_data, timing, records)
 
 
@@ -188,7 +154,7 @@ def _gather_actions(item: str, resource: str, state: WorldState, game_data: Game
     """Gathers of `resource` to obtain ONE `item`, exact: the attempts a unit
     takes (`LearnedDrops.attempts_per_unit`, spec 2026-10-18 §2.8) over the
     item's drop row (`GameData.gather_drop_row`), at the prospecting of the
-    loadout the gather is made in (`_gather_prospecting`): picked from the
+    loadout the gather is made in (`gather_prospecting`): picked from the
     character's own holdings for an executor price, from the `L*` fighter's
     worn gear for a gear-objective price (`gear_objective._price`). The SAME figure the planner's gather charges
     (`GatherAction.gathers`) and every gather source picker ranks by (ruling
@@ -206,7 +172,7 @@ def _gather_actions(item: str, resource: str, state: WorldState, game_data: Game
     number of gathers, and the walk rounds the route's applications up once."""
     rate, min_q, max_q = game_data.gather_drop_row(resource, item)
     return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,
-                                      _gather_prospecting(resource, state, game_data))
+                                      gather_prospecting(resource, state, game_data))
 
 
 def _priced(item: str, source: Source, state: WorldState,

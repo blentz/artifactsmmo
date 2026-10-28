@@ -22,7 +22,8 @@ The ranking itself is the proved core (`select_monster_for_drop`,
 formal/Formal/MonsterDropSelection.lean): keep exactly ONE dropper, the
 lex-argmin of the expected kills per unit, then distance. The expected kills are
 the learned drop model's (`LearnedDrops.attempts_per_unit`, ruling T16a) at
-`state.prospecting`, read off the evidence each candidate fight carries
+the prospecting of the fight's loadout (`attempt_prospecting.fight_prospecting`,
+not the worn total), read off the evidence each candidate fight carries
 (`FightAction.learned_drops`, the cycle's value): the same wins-per-unit the
 acquisition walk prices the drop at.
 
@@ -39,6 +40,7 @@ import dataclasses
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.attempt_prospecting import fight_prospecting
 from artifactsmmo_cli.ai.drop_obtainability import fightable_droppers
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.monster_drop_selection import (
@@ -77,7 +79,8 @@ def select_drop_fight(item: str, actions: list[Action], state: WorldState,
         drop_candidates.append(MonsterDropCandidate(
             monster_code=monster_code,
             attempts=fight.learned_drops.attempts_per_unit(
-                monster_code, item, rate, mn, mx, state.prospecting),
+                monster_code, item, rate, mn, mx,
+                fight_prospecting(monster_code, state, game_data)),
             distance=dist))
         winner_fights[monster_code] = fight
     chosen = select_monster_for_drop(item, drop_candidates)

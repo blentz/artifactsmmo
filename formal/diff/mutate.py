@@ -463,6 +463,7 @@ CRAFT_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_census.p
 HELD_STOCK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "held_stock.py"
 FIGHT_WALK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_walk.py"
 BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selection.py"
+ATTEMPT_PROSPECTING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "attempt_prospecting.py"
 LOCATION_CATALOG_SRC_NPC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 GREY_FARM_SRC_CUR = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grey_farm.py"
 CRAFT_CONDITIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_conditions.py"
@@ -1479,7 +1480,7 @@ DROP_PRICE_MUTATIONS = [
      "                                                  LearnedDrops.empty(), ctx.fight_records),"),
     ("drop price: a gather ignores its loadout's prospecting",
      "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,\n"
-     "                                      _gather_prospecting(resource, state, game_data))",
+     "                                      gather_prospecting(resource, state, game_data))",
      "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q, 0)"),
     ("drop price: a farm is one win a unit",
      "    kills = evidence.attempts_per_unit(monster_code, item, rate, min_q, max_q,",
@@ -4828,13 +4829,13 @@ GATED_GATHER_MUTATIONS = [
     # The apple bug (2026-10-05): a secondary drop priced at one gather a unit.
     ("acquisition_cost: a GATHER route ignores its drop rate (one gather a unit)",
      "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,\n"
-     "                                      _gather_prospecting(resource, state, game_data))",
+     "                                      gather_prospecting(resource, state, game_data))",
      "    return Fraction(1)"),
     ("acquisition_cost: a GATHER route's ratio inverted (yield per action as actions)",
      "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,\n"
-     "                                      _gather_prospecting(resource, state, game_data))",
+     "                                      gather_prospecting(resource, state, game_data))",
      "    return evidence.units_per_attempt(resource, item, rate, min_q, max_q,\n"
-     "                                      _gather_prospecting(resource, state, game_data))"),
+     "                                      gather_prospecting(resource, state, game_data))"),
 ]
 # The grind ranks under its own pricing policy. Killed by
 # tests/test_ai/scenarios/test_fisher_cooking_rung.py.
@@ -6950,18 +6951,31 @@ DROP_TOOL_WORK_MUTATIONS = [
     ("drop work: every farm leg is marked surcharged",
      "surcharged=not route.unlock)", "surcharged=True)"),
     ("drop work: a fight leg is given a gather's loadout",
-     "    if leg.kind is SourceKind.DROP:\n        return _fight_prospecting",
-     "    if False:\n        return _fight_prospecting"),
+     "    if leg.kind is SourceKind.DROP:\n        return fight_prospecting",
+     "    if False:\n        return fight_prospecting"),
+    ("drop price: a farm reads the worn total, not its fight loadout's",
+     "                                       fight_prospecting(monster_code, state, game_data))",
+     "                                       state.prospecting)"),
+]
+# Task 14d (census of ledger 253 (b)): the drop-fight picker reads the fight
+# loadout's prospecting, not the worn total. Killed by
+# tests/test_ai/test_attempt_prospecting.py.
+PROSPECTING_DROP_FIGHT_MUTATIONS = [
+    ("prospecting: the drop-fight picker reads the worn total",
+     "                fight_prospecting(monster_code, state, game_data)),",
+     "                state.prospecting),"),
+]
+# The loadout prospecting moved to its own module (Task 14d, ledger 253 (b)):
+# the drop-fight picker reads it too. Killed by
+# tests/test_ai/test_acquisition_cost_wrapper.py.
+ATTEMPT_PROSPECTING_RAISE_MUTATIONS = [
     ("drop work: a resource with no skill is not raised",
      "        raise ValueError(f\"resource {resource!r} has no gathering skill in game data\")\n",
      "        return 0\n"),
-    ("drop price: a farm reads the worn total, not its fight loadout's",
-     "                                       _fight_prospecting(monster_code, state, game_data))",
-     "                                       state.prospecting)"),
 ]
 DROP_TOOL_LEG_P_MUTATIONS = [
     ("drop price: a gather reads the worn total, not its gather loadout's",
-     "                                      _gather_prospecting(resource, state, game_data))",
+     "                                      gather_prospecting(resource, state, game_data))",
      "                                      state.prospecting)"),
 ]
 DROP_TOOL_CORE_MUTATIONS = [
@@ -9164,7 +9178,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
-    LIVENESS_CENSUS_SRC,
+    LIVENESS_CENSUS_SRC, ATTEMPT_PROSPECTING_SRC,
     LOADOUT_CALIBRATION_SRC,
     TIER_PROGRESS_SRC, COMBAT_TARGETS_SRC, WIN_THRESHOLD_CORE_SRC,
     ROLE_SELECTION_SRC,
@@ -13949,6 +13963,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_tool_objective.py", survivors)
     run_group(ACQUISITION_COST_SRC, DROP_TOOL_WORK_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(ATTEMPT_PROSPECTING_SRC, ATTEMPT_PROSPECTING_RAISE_MUTATIONS,
+              "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(DROP_FIGHT_SELECTION_SRC, PROSPECTING_DROP_FIGHT_MUTATIONS,
+              "tests/test_ai/test_attempt_prospecting.py", survivors)
     run_group(ROOT_DECISION_SRC, DROP_TOOL_ALTERNATIVES_MUTATIONS,
               "tests/test_ai/test_tool_objective.py", survivors)
     run_group(ACQUISITION_COST_SRC, DROP_TOOL_LEG_P_MUTATIONS,
