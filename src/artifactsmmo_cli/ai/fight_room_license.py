@@ -33,11 +33,20 @@ def refused_fight(ctx: SelectionContext) -> str | None:
     return loadout.monster
 
 
+def is_refused(action: Action, refused: str | None) -> bool:
+    """`action` is a solo fight against the `refused` monster. The verdict is
+    the solo loop's (its bag has no room for the drops); a party fight's loop
+    counts no trips and always runs (`party_loop`), so it is never refused on
+    it (T13e re-review minor 3)."""
+    return (isinstance(action, FightAction) and not action.participants
+            and action.monster_code == refused)
+
+
 def license_fights(actions: Sequence[Action], ctx: SelectionContext) -> list[Action]:
-    """`actions` less every fight against the refused monster (`refused_fight`)."""
+    """`actions` less every solo fight against the refused monster
+    (`refused_fight`, `is_refused`)."""
     refused = refused_fight(ctx)
-    return [action for action in actions
-            if not (isinstance(action, FightAction) and action.monster_code == refused)]
+    return [action for action in actions if not is_refused(action, refused)]
 
 
 def refusal_line(monster: str) -> str:

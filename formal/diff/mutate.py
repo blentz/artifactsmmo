@@ -2146,8 +2146,14 @@ FIGHT_ROOM_LICENSE_MUTATIONS = [
      "    if loadout is None or loadout.runnable:\n        return None",
      "    if loadout is None:\n        return None"),
     ("fight room: every fight is refused",
-     "            if not (isinstance(action, FightAction) and action.monster_code == refused)]",
-     "            if not isinstance(action, FightAction)]"),
+     "    return (isinstance(action, FightAction) and not action.participants\n"
+     "            and action.monster_code == refused)",
+     "    return (isinstance(action, FightAction) and not action.participants)"),
+    # Task 14d (T13e re-review minor 3): a party fight is never refused on the
+    # solo verdict.
+    ("fight room: a party fight is refused on the solo verdict",
+     "    return (isinstance(action, FightAction) and not action.participants\n",
+     "    return (isinstance(action, FightAction)\n"),
 ]
 FIGHT_ROOM_ARBITER_MUTATIONS = [
     ("fight room: the arbiter plans over the refused fight",
@@ -2339,8 +2345,13 @@ FIGHT_ROOM_PLAYER_MUTATIONS = [
      "                           and not self._fight_refused(step))",
      "                           and True)"),
     ("fight room: a cached fight against any monster is refused",
-     "        return isinstance(step, FightAction) and step.monster_code == refused_fight(self._last_ctx)",
+     "        return is_refused(step, refused_fight(self._last_ctx))",
      "        return isinstance(step, FightAction)"),
+    # Task 14d (T13e re-review minor 2): before the first decision there is no
+    # verdict, so a cached fight is a replan.
+    ("fight room: a cached fight runs before the first decision binds a context",
+     "        if self._last_ctx is NO_PROFILE_CONTEXT:\n            return isinstance(step, FightAction)",
+     "        if False:\n            return isinstance(step, FightAction)"),
     ("fight room: the refusal is not logged",
      "        if refused is not None:\n            print(",
      "        if False:\n            print("),

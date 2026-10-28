@@ -8,7 +8,13 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
-from tests.test_ai.fixtures import make_state, one_equippable_item_page, patched_logs, season_8_status
+from tests.test_ai.fixtures import (
+    TIMED_NO_PROFILE_CONTEXT,
+    make_state,
+    one_equippable_item_page,
+    patched_logs,
+    season_8_status,
+)
 from tests.test_ai.test_rest_first import TILE, TIMING
 from tests.test_ai.test_rest_first import _gd as _rest_gd
 from tests.test_ai.test_rest_first import _state as _rest_state
@@ -44,6 +50,9 @@ def _player_with_stub_plan(plan, goal):
 
     def _fake_decide(state, game_data, actions):
         calls["n"] += 1
+        # The real band binds the cycle's context (`_last_ctx = ctx`); a cached
+        # fight before any bound context is a replan (`_fight_refused`).
+        player._last_ctx = TIMED_NO_PROFILE_CONTEXT
         return goal, list(plan), [{"goal": repr(goal)}]
 
     # Replace only the expensive band, the collaborator — not the unit under test.

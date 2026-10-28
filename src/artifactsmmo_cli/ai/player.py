@@ -108,7 +108,7 @@ from artifactsmmo_cli.ai.failure_recovery_core import (
     tick,
 )
 from artifactsmmo_cli.ai.fight_record import FightRecord
-from artifactsmmo_cli.ai.fight_room_license import refusal_line, refused_fight
+from artifactsmmo_cli.ai.fight_room_license import is_refused, refusal_line, refused_fight
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.fleet_climber import fleet_climbers, serving_climbers
 from artifactsmmo_cli.ai.fleet_pieces import fleet_pieces
@@ -880,8 +880,16 @@ class GamePlayer:
         """A cached Fight step against the monster the last decision refused for
         want of bag room (`fight_room_license.refused_fight`, spec 2026-10-18
         §2.10): a replan, where the arbiter's pool no longer holds it. The
-        verdict is the one the last cycle's context carried, never recomputed."""
-        return isinstance(step, FightAction) and step.monster_code == refused_fight(self._last_ctx)
+        verdict is the one the last cycle's context carried, never recomputed.
+
+        Before the first decision (a plan cache restored from the store after
+        a restart) there is no context, so no verdict: a cached fight is a
+        replan then too, and runs only on the context its decision binds
+        (T13e re-review minor 2). A party fight is never refused on the solo
+        verdict (`is_refused`)."""
+        if self._last_ctx is NO_PROFILE_CONTEXT:
+            return isinstance(step, FightAction)
+        return is_refused(step, refused_fight(self._last_ctx))
 
     @staticmethod
     def _fight_ready(step: Action, state: WorldState, game_data: GameData,

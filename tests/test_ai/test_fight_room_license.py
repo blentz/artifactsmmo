@@ -122,6 +122,35 @@ def test_a_cached_fight_the_last_cycle_refused_is_a_replan() -> None:
     assert player._fight_refused(_fight("ogre")) is False
 
 
+def test_a_party_fight_is_not_refused_on_the_solo_verdict() -> None:
+    """T13e re-review minor (3): the refusal is the SOLO loop's (its bag has
+    no room for the drops); a party fight's loop counts no trips and always
+    runs (`party_loop`), so a party fight against the same monster stays in
+    the pool and a cached one is not a replan."""
+    party = FightAction(monster_code="ogre", locations=frozenset({(3, 4)}),
+                        learned_drops=LearnedDrops.empty(), participants=("Lor",))
+    ctx = replace(CTX, loadout=ChosenLoadout("ogre", (), (), (), runnable=False))
+    pool: list[Action] = [_fight("ogre"), party, _fight("wolf")]
+    assert license_fights(pool, ctx) == [party, _fight("wolf")]
+    player = player_mod.GamePlayer(character="hero")
+    player._last_ctx = ctx
+    assert player._fight_refused(party) is False
+    assert player._fight_refused(_fight("ogre")) is True
+
+
+def test_a_cached_fight_before_the_first_decision_is_a_replan() -> None:
+    """T13e re-review minor (2): a plan cache restored from the store after a
+    restart holds no decision's context yet (`NO_PROFILE_CONTEXT`), so no
+    refusal verdict. Its fight step does not run on that context: it is a
+    replan, whose decision binds the real one."""
+    player = player_mod.GamePlayer(character="hero")
+    assert player._last_ctx is player_mod.NO_PROFILE_CONTEXT
+    assert player._fight_refused(_fight("ogre")) is True
+    assert player._fight_refused(RestAction()) is False
+    player._last_ctx = CTX
+    assert player._fight_refused(_fight("ogre")) is False
+
+
 def test_a_refused_fight_is_named_in_the_log(capsys: pytest.CaptureFixture[str]) -> None:
     """The decision band prints the refusal beside the gear objective line."""
     player = player_mod.GamePlayer(character="hero")
