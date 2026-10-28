@@ -5168,6 +5168,14 @@ POTION_DECOMPOSE_POLICY_MUTATIONS = [
      "    legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False,\n"
      "                     outermost=False)"),
 ]
+# Plan B Task 14d (ledger 234): the potion batch's obtain is a nested decompose,
+# so an overflowing batch declines rather than clearing against its own legs.
+# Killed by tests/test_ai/test_decompose_potions.py.
+POTION_NESTED_MUTATIONS = [
+    ("craft_plan_gen: the potion batch's obtain is decomposed as the outermost call",
+     "                     policy=POTION_POLICY, outermost=False)",
+     "                     policy=POTION_POLICY, outermost=True)"),
+]
 FOOD_PRODUCER_MUTATIONS = [
     ("food producer: no food has an owner",
      "    return next((role.name for role in _role_catalog.ROLE_CATALOG\n"
@@ -13664,6 +13672,8 @@ def _collect_all_groups() -> None:
     run_group(CRAFT_PLAN_GEN_SRC, SEARCH_HANDOFF_MUTATIONS,
               "tests/test_ai/test_decision_events.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, POTION_DECOMPOSE_POLICY_MUTATIONS,
+              "tests/test_ai/test_decompose_potions.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, POTION_NESTED_MUTATIONS,
               "tests/test_ai/test_decompose_potions.py", survivors)
     run_group(RECYCLE_YIELD_SRC, RECYCLE_YIELD_MUTATIONS,
               "tests/test_ai/test_recycle_yield.py", survivors)

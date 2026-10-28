@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+import artifactsmmo_cli.ai.craft_plan_gen as craft_plan_gen_mod
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -217,3 +218,24 @@ def test_an_undecomposable_batch_reports_the_inner_reason(monkeypatch):
     declined: list[str] = []
     assert decompose(goal, state, gd, _actions(gd), NO_DROPS_CONTEXT, declined) is None
     assert declined == [f"infeasible:{_HEAL}:no_route:{_INGREDIENT}"]
+
+
+def test_a_potion_batch_that_overflows_the_bag_never_clears_for_itself(monkeypatch):
+    """Task 13e re-review m2 for the potion arm (Task 14d, ledger 234): the
+    batch's obtain is a NESTED decompose (`outermost=False`), so a batch that
+    overflows the bag declines `bag_overflow` instead of clearing against its
+    own legs; the clear runs only at an outermost call. Every slot is full (the
+    ingredient and a junk stack), so the crafted heal has nowhere to land."""
+    gd = _gd(with_boost=False, monster_level=18)
+    state = _state(inventory={_INGREDIENT: 300, "junk": 1}, inventory_slots_max=2)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    cleared: list[object] = []
+
+    def clear_first(walked, *_a):
+        cleared.append(walked)
+        return list(walked)
+    monkeypatch.setattr(craft_plan_gen_mod, "_clear_first", clear_first)
+    declined: list[str] = []
+    assert decompose(goal, state, gd, _actions(gd), NO_DROPS_CONTEXT, declined) is None
+    assert cleared == []
+    assert declined and declined[0].startswith("bag_overflow:"), declined
