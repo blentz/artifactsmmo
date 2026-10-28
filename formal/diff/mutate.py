@@ -4969,9 +4969,10 @@ GRIND_RATE_EPISODE_MUTATIONS = [
      '        return self.cached(("grind_rate", skill, window),\n'),
 ]
 # Plan B Task 14c (M-5): the fight read is bounded by cycle id, so the held fit
-# folds in only the fights recorded since; item 3: the supply-request cycles
-# are memoised per search episode. Killed by
-# tests/test_ai/test_learning_store.py (TestFightSecondsObservations).
+# folds in only the fights recorded since; killed by
+# tests/test_ai/test_learning_store.py (TestFightSecondsObservations). Item 3:
+# the supply-request cycles are memoised per search episode; killed by
+# TestFleetSupplyRequestCycles::test_one_read_per_search_episode.
 FLEET_FIGHT_SAMPLES_MUTATIONS = [
     # The supply-request cycles are one answer per search episode.
     ("store: the supply-request cycles are read on every ask",

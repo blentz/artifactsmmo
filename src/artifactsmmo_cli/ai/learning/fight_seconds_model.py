@@ -160,8 +160,9 @@ def learned_model(store: LearningStore, bootstrap: Sequence[Sample]) -> FightSec
     the bootstrap, without re-reading or re-summing them."""
     last = store.last_cycle_id()
     key = tuple(bootstrap)
-    # A newest id below the one last read means the table was replaced or
-    # pruned under this store: the fights are read afresh.
+    # Only a newest id that dropped below the one last read is detected: the
+    # table was replaced under this store (newest id dropped), and the fights
+    # are read afresh. Rows removed below the newest id are not detected.
     held = _LEARNED[0] if _LEARNED and _LEARNED[0][0] is store and _LEARNED[0][1] <= last else None
     if held is not None and held[1] == last and held[3] == key:
         return held[4]
