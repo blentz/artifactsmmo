@@ -6,7 +6,15 @@ from fractions import Fraction
 
 import pytest
 
-from artifactsmmo_cli.ai.fight_seconds_core import expected_turns, fight_seconds, fit, server_turns
+from artifactsmmo_cli.ai.fight_seconds_core import (
+    NO_FIGHTS,
+    expected_turns,
+    fight_seconds,
+    fit,
+    fit_sums,
+    server_turns,
+    solve,
+)
 from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS
 
 
@@ -65,6 +73,23 @@ def test_a_non_positive_cooldown_is_no_observation() -> None:
     """A 0 s row is dropped from the floor and the fit: the floor is the least
     positive cooldown."""
     assert fit([(5, 0, 10.0), (3, 0, 0.0), (4, 0, -1.0)]) == (Fraction(2), Fraction(0), Fraction(10))
+
+
+def test_a_fold_of_new_fights_into_held_sums_is_the_sums_of_all() -> None:
+    """Plan B Task 14c (M-5): the sums are folded batch by batch as fights are
+    recorded; every split of the same fights gives the cold sums, including a
+    batch that holds no kept fight and a batch whose least cooldown is above
+    the floor held so far."""
+    fights = [(5, 0, 10.0), (7, 4, 13.0), (6, 4, 0.0), (9, 12, 14.0), (3, 8, 5.5),
+              (4, 0, 9.0)]
+    cold = fit_sums(fights)
+    for split in ([1, 2, 3, 4, 5], [3], [2, 3], [4]):
+        sums = NO_FIGHTS
+        for start, end in zip([0, *split], [*split, len(fights)], strict=True):
+            sums = fit_sums(fights[start:end], sums)
+        assert sums == cold, split
+    assert solve(cold) == fit(fights)
+    assert (cold.kept, cold.floor, cold.hastes) == (5, Fraction(11, 2), frozenset({0, 4, 8, 12}))
 
 
 @pytest.mark.parametrize("samples", [[], [(5, 0, 0.0)]])
