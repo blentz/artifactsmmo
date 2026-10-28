@@ -1036,7 +1036,15 @@ class LearningStore:
         cannot be recovered from the store and is NOT included here. That is a
         declared gap, not a forgotten one: this number is the fleet's PRODUCTION
         cost, and it understates the requester's wall-clock latency.
+
+        It takes no argument, so it is one answer per `search_cache` episode
+        (`cached`): the pricing walk asks it once per sibling-craft option it
+        prices, 13 to 51 times a live cycle (plan B Task 14c, ~0.2 s each).
         """
+        return self.cached(("fleet_supply_request_cycles",),
+                           self._fleet_supply_request_cycles)
+
+    def _fleet_supply_request_cycles(self) -> float | None:
         try:
             with SqlSession(self._engine) as s:
                 rows = list(s.exec(

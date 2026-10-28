@@ -1752,6 +1752,28 @@ class TestFleetSupplyRequestCycles:
         assert store.fleet_supply_request_cycles() is None
         store.close()
 
+    def test_one_read_per_search_episode(self, tmp_db_path):
+        """Plan B Task 14c: the pricing walk asks it once per sibling-craft
+        option, 13 to 51 times a live cycle; inside one `search_cache` episode
+        it is read once, and outside one afresh each time."""
+        self._supply_cycles(tmp_db_path, "SupplyBank(ax1)", "HAL", 5)
+        store = LearningStore(db_path=tmp_db_path, character="Robby")
+        reads: list[int] = []
+        read = store._fleet_supply_request_cycles
+
+        def spy() -> float | None:
+            reads.append(1)
+            return read()
+
+        store._fleet_supply_request_cycles = spy  # type: ignore[method-assign]
+        with store.search_cache():
+            assert [store.fleet_supply_request_cycles() for _ in range(3)] == [5.0] * 3
+        assert len(reads) == 1
+        assert store.fleet_supply_request_cycles() == 5.0
+        assert store.fleet_supply_request_cycles() == 5.0
+        assert len(reads) == 3
+        store.close()
+
 
 class TestTheHottestReadIsIndexed:
     """`win_count` / `sample_count` are the hottest reads in the codebase, and
