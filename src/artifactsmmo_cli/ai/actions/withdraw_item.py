@@ -11,7 +11,11 @@ from artifactsmmo_api_client.api.my_characters.action_withdraw_bank_item_my_name
 from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure, travel_seconds
+from artifactsmmo_cli.ai.actions.cost_core import (
+    WITHDRAW_SECONDS_PER_CODE,
+    distance_cost_pure,
+    travel_seconds,
+)
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_room import has_room
@@ -92,7 +96,7 @@ class WithdrawItemAction(Action):
              history: LearningStore | None = None) -> float:
         dest = self.bank_location
         dist = travel_seconds((state.x, state.y), dest)
-        return distance_cost_pure(2.0, dist)
+        return distance_cost_pure(WITHDRAW_SECONDS_PER_CODE, dist)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         if (state.x, state.y) != self.bank_location:

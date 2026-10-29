@@ -10437,6 +10437,10 @@ DEPOSIT_SECONDS_MUTATIONS = [
     ("cost_core: a deposited code is priced under the published cooldown",
      "DEPOSIT_SECONDS_PER_CODE = 3.0\n",
      "DEPOSIT_SECONDS_PER_CODE = 2.0\n"),
+    # Ruling T14d-W: the withdraw's published 3 s a code.
+    ("cost_core: a withdrawn code is priced under the published cooldown",
+     "WITHDRAW_SECONDS_PER_CODE = 3.0\n",
+     "WITHDRAW_SECONDS_PER_CODE = 2.0\n"),
 ]
 DEPOSIT_ALL_BATCH_SRC = DEPOSIT_ALL_SRC
 DEPOSIT_ALL_BATCH_MUTATIONS = [

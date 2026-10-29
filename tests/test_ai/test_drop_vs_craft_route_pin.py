@@ -36,8 +36,9 @@ THE COST-MODEL DERIVATION (verdict, not judgment):
 
   Craft route: Withdraw(enchanted_mushroom x1) + Withdraw(salmon x1) +
   Craft(enchanted_potion x1). Action.cost formulas (all `dist=0` in this
-  fixture): WithdrawItemAction = 2.0 + dist = 2.0 each; CraftAction =
-  5.0*quantity + dist = 5.0. Total = 2.0 + 2.0 + 5.0 = 9.0.
+  fixture): WithdrawItemAction = 3.0 + dist = 3.0 each (the published
+  withdraw cooldown, ruling T14d-W; it was 2.0); CraftAction =
+  5.0*quantity + dist = 5.0. Total = 3.0 + 3.0 + 5.0 = 11.0.
 
   Fight route: Fight(dryad) alone (100% drop rate, min=max=1 -> one kill
   guarantees the unit). FightAction.cost = 10.0 + dist (+`LOADOUT_PENALTY`
@@ -46,9 +47,12 @@ THE COST-MODEL DERIVATION (verdict, not judgment):
   = 10.0; realistic case (weapon owned but not pre-equipped, so the planner's
   loadout pick differs from the current equipment) = 15.0.
 
-  9.0 < 10.0 in BOTH cases (even the Fight route's best case), so the
-  least-cost planner picks CRAFT regardless of the loadout-penalty edge —
-  the 3-Withdraw/Craft chain is strictly cheaper than any single Fight.
+  With Withdraw at 3.0 (ruling T14d-W) the craft route is 11.0: below the
+  Fight route's realistic 15.0 but ABOVE its best case 10.0. Both pins still
+  hold, so the cost comparison is not what picks the craft route here: the
+  decomposition's walk serves the banked inputs first (held stock is free),
+  and `test_fight_route_would_still_lose_even_without_the_loadout_penalty`
+  shows it on the case where the costs favour the Fight.
 """
 
 import json
@@ -150,10 +154,8 @@ def test_both_routes_are_admitted_into_relevant_actions() -> None:
 
 def test_planner_picks_the_cheaper_craft_route_over_the_winnable_drop() -> None:
     """THE PIN: with both routes admitted and the dropper genuinely winnable,
-    the least-cost GOAP search picks CRAFT (cost 9.0: 2.0 Withdraw + 2.0
-    Withdraw + 5.0 Craft) over FIGHT (cost 15.0: 10.0 base + 5.0
-    LOADOUT_PENALTY) — the cost-model verdict derived in the module
-    docstring, not an asserted preference."""
+    the decomposition picks CRAFT (cost 11.0: 3.0 Withdraw + 3.0 Withdraw +
+    5.0 Craft) over FIGHT (cost 15.0: 10.0 base + 5.0 LOADOUT_PENALTY)."""
     gd = _gd()
     state = _state()
     goal = GatherMaterialsGoal(target_item="enchanted_potion", needed={"enchanted_potion": 1})
@@ -167,11 +169,11 @@ def test_planner_picks_the_cheaper_craft_route_over_the_winnable_drop() -> None:
 
 
 def test_fight_route_would_still_lose_even_without_the_loadout_penalty() -> None:
-    """Strengthens the pin: even in Fight's BEST case (10.0, no loadout
-    penalty — the character already optimally geared), Craft's 9.0 still
-    wins. The preference is not an artifact of the penalty; it holds on the
-    base action-count/cooldown-shape difference alone (2 withdraws + 1 craft
-    vs 1 fight, 9 < 10)."""
+    """Even in Fight's BEST case (10.0, no loadout penalty — the character
+    already optimally geared) the craft route is planned. Since Withdraw is
+    3.0 (ruling T14d-W) the craft chain costs 11.0, more than this Fight: the
+    walk serves the banked inputs first, whatever the two costs (it was 9.0
+    < 10.0 at a 2.0 Withdraw)."""
     gd = _gd()
     # Pre-equip the sword so the planner's picked loadout matches current
     # equipment exactly -> FightAction.cost's `optimal != current` check

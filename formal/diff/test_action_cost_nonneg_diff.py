@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.actions.cost_core import (
     CONSUMABLE_COOLDOWN_SECONDS,
     DEPOSIT_SECONDS_PER_CODE,
     REST_COST_MAX,
+    WITHDRAW_SECONDS_PER_CODE,
     distance_cost_pure,
     learned_cost_pure,
     qty_cost_pure,
@@ -254,9 +255,9 @@ def test_distance_actions_nonneg(sx, sy, dx, dy):
     ).cost(s, None, None) == 2.0 + dist
     assert WithdrawItemAction(
         code="c", quantity=1, bank_location=(dx, dy)
-    ).cost(s, None, None) == 2.0 + dist
+    ).cost(s, None, None) == WITHDRAW_SECONDS_PER_CODE + dist
     # All ≥ 0 (dist ≥ 0 always).
-    for action_cost in (1.0 + dist, 2.0 + dist):
+    for action_cost in (1.0 + dist, 2.0 + dist, WITHDRAW_SECONDS_PER_CODE + dist):
         assert action_cost >= 0.0
 
 

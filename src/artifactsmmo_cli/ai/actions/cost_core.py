@@ -147,6 +147,14 @@ response latency the recorded remaining cooldown loses. It was 2.0, a third
 under the server."""
 
 
+WITHDRAW_SECONDS_PER_CODE = 3.0
+"""What withdrawing one item code is priced at, before the walk: a
+`WithdrawItemAction` (one code). The published cooldown (`openapi.json`,
+`/my/{name}/action/bank/withdraw/item`: "3 seconds multiplied by the number of
+different items withdrawn"), the deposit's rule (`DEPOSIT_SECONDS_PER_CODE`)
+on the other direction. It was 2.0 (ruling T14d-W)."""
+
+
 def distance_cost_pure(base: float, dist: int) -> float:
     """Cost = base + dist. Non-negative when base >= 0 and dist >= 0.
 

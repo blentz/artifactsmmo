@@ -101,7 +101,7 @@ class TestCostMethods:
         action = WithdrawItemAction(code="copper", quantity=5)
         state = make_state()
         gd = make_gd()
-        assert action.cost(state, gd) == pytest.approx(2.0)
+        assert action.cost(state, gd) == pytest.approx(3.0)
 
 
 class TestDesiredStateMethods:

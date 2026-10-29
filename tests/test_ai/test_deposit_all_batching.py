@@ -23,7 +23,7 @@ from unittest.mock import MagicMock, patch
 
 from artifactsmmo_api_client.types import UNSET
 
-from artifactsmmo_cli.ai.actions.cost_core import DEPOSIT_SECONDS_PER_CODE
+from artifactsmmo_cli.ai.actions.cost_core import DEPOSIT_SECONDS_PER_CODE, WITHDRAW_SECONDS_PER_CODE
 from artifactsmmo_cli.ai.actions.deposit_all import DEPOSIT_BATCH_MAX, DepositAllAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai.fixtures import make_state
@@ -158,3 +158,14 @@ def test_a_code_is_priced_at_the_published_deposit_cooldown():
     doc = spec["paths"]["/my/{name}/action/bank/deposit/item"]["post"]["description"]
     assert f"cooldown will be {DEPOSIT_SECONDS_PER_CODE:g} seconds multiplied by the number" \
         " of different items deposited" in doc
+
+
+def test_a_withdrawn_code_is_priced_at_the_published_withdraw_cooldown():
+    """`openapi.json`: "The cooldown will be 3 seconds multiplied by the number
+    of different items withdrawn." A `WithdrawItemAction` is one code, priced at
+    that figure (ruling T14d-W: it was 2.0)."""
+    with open("openapi.json", encoding="utf-8") as fp:
+        spec = json.load(fp)
+    doc = spec["paths"]["/my/{name}/action/bank/withdraw/item"]["post"]["description"]
+    assert f"cooldown will be {WITHDRAW_SECONDS_PER_CODE:g} seconds multiplied by the number" \
+        " of different items withdrawn" in doc
