@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import artifactsmmo_cli.ai.craft_plan_gen as craft_plan_gen_mod
 import artifactsmmo_cli.ai.player as player_mod
 import artifactsmmo_cli.ai.strategy_driver as driver_mod
 from artifactsmmo_cli.ai.actions.base import Action
@@ -13,15 +14,20 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.best_loadout import fight_ahead_loadout
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.fight_room_license import license_fights, refusal_line, refused_fight
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
+from artifactsmmo_cli.ai.goals.task_kills import TaskKillsGoal
 from artifactsmmo_cli.ai.inventory_keep import keep_in_bag
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
+from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter, objective_step_goal
+from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -191,3 +197,46 @@ def test_the_cached_plan_replans_a_refused_fight() -> None:
         player._last_ctx = replace(CTX, loadout=ChosenLoadout("ogre", (), (), ()))
         player._plan_or_reuse(make_state(), GameData(), [])
     assert seen == [False, True]
+
+
+_WOLF_AHEAD = ChosenLoadout("wolf", (), (), ())
+"""The cycle's loadout is chosen against another monster, so the ogre's fight
+is priced by `loadout_for` alone (ruling T14d-2)."""
+
+
+def _grind_fighting_ogre(monkeypatch: pytest.MonkeyPatch, inventory_max: int) -> tuple[object, list[str]]:
+    rung = GatherMaterialsGoal("bone", {"bone": 1})
+    monkeypatch.setattr(craft_plan_gen_mod, "grind_rung_goal", lambda *a, **k: rung)
+    monkeypatch.setattr(craft_plan_gen_mod, "_walk_plan", lambda *a, **k: [_fight("ogre")])
+    monkeypatch.setattr(craft_plan_gen_mod, "heal_prep_goal", lambda *a, **k: None)
+    declined: list[str] = []
+    plan = decompose(ReachSkillGoal(skill_name="mining", target_level=5),
+                     _state(inventory_max=inventory_max), _gd(), [_fight("ogre")],
+                     replace(CTX, loadout=_WOLF_AHEAD), declined)
+    return plan, declined
+
+
+def test_a_grinds_fight_with_no_room_for_its_drops_is_refused_at_the_grind(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """T13e re-review minor (1): the grind's fight against the ogre is priced
+    by `loadout_for` (the cycle's loadout is the wolf's). Its loop has no room
+    for the drops in a bag of 30, so the grind declines it by name; in a bag of
+    200 the grind's legs stand."""
+    plan, declined = _grind_fighting_ogre(monkeypatch, 30)
+    assert plan is None and declined == ["fight_no_room:ogre"]
+    plan, declined = _grind_fighting_ogre(monkeypatch, 200)
+    assert plan == [_fight("ogre")] and declined == []
+
+
+def test_a_task_fight_with_no_room_for_its_drops_is_refused_at_its_step() -> None:
+    """T13e re-review minor (1): the held task's fight against the ogre is
+    priced by `loadout_for`, as its prep is. With no room for the drops the
+    task step maps to no goal; with room it is one more kill."""
+    gd = _gd()
+    ctx = replace(CTX, loadout=_WOLF_AHEAD)
+    held = {"task_code": "ogre", "task_type": "monsters", "task_total": 5, "task_progress": 0}
+    full = replace(_state(inventory_max=30), **held)
+    roomy = replace(_state(inventory_max=200), **held)
+    assert objective_step_goal(ReachTaskOutcome("ogre"), full, gd, ctx) is None
+    goal = objective_step_goal(ReachTaskOutcome("ogre"), roomy, gd, ctx)
+    assert isinstance(goal, TaskKillsGoal) and repr(goal) == "TaskKills(ogre)"

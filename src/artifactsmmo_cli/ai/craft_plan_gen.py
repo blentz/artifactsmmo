@@ -51,6 +51,7 @@ from artifactsmmo_cli.ai.bag_peak import plan_bag_peak
 from artifactsmmo_cli.ai.currency_buy_batch import currency_buy_batch_pure
 from artifactsmmo_cli.ai.decompose_core import Act, OpenGate, Step
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
+from artifactsmmo_cli.ai.fight_room_license import refuses_fight_against
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
@@ -353,6 +354,11 @@ def _decompose_grind(skill: str, target_level: int, state: WorldState, game_data
         return None
     fight = next((a for a in legs if isinstance(a, FightAction)), None)
     if fight is not None:
+        # The fight is priced at `loadout_for`'s pick (its heal prep reads it):
+        # a pick whose loop has no room for the drops refuses the fight here,
+        # as the cycle's own refuses it in the pool (ruling T14d-2).
+        if refuses_fight_against(state, game_data, ctx, fight.monster_code):
+            return _decline(declined, f"fight_no_room:{fight.monster_code}")
         prep = heal_prep_goal(state, game_data, ctx, fight.monster_code)
         if prep is not None:
             prep_declined: list[str] = []

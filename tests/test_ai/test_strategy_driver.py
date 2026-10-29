@@ -2370,6 +2370,9 @@ class TestFightStepsCarryTheirLoadout:
         factory fights on. The legacy index alone left a rat task unprepped."""
         monkeypatch.setattr(sd, "potion_prep_goal", lambda *a: None)
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
+        # The task fight's room verdict reads `loadout_for` against the
+        # chicken, as the preps stubbed above do (ruling T14d-2): a loop that runs.
+        monkeypatch.setattr(sd, "refuses_fight_against", lambda *a: False)
         gd = _spawning_gd()
         gd._monster_locations = {}
         gd.world.layered_content = {"chicken": [(-3, 12, "interior")]}

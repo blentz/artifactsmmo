@@ -20,17 +20,37 @@ from collections.abc import Sequence
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.best_loadout import loadout_for
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
+from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.world_state import WorldState
 
 
-def refused_fight(ctx: SelectionContext) -> str | None:
-    """The monster whose fight this cycle refuses: the cycle's loadout's, when
-    its loop has no room for the drops; None otherwise (no fight ahead, or a
-    loop that runs)."""
-    loadout = ctx.loadout
+def refused_monster(loadout: ChosenLoadout | None) -> str | None:
+    """The monster `loadout`'s fight is refused against: its own, when its
+    loop has no room for the drops; None otherwise (no pick, or a loop that
+    runs). The ONE refusal verdict: the cycle's loadout (`refused_fight`) and
+    a fight priced by `loadout_for` (`refuses_fight_against`) both read it."""
     if loadout is None or loadout.runnable:
         return None
     return loadout.monster
+
+
+def refused_fight(ctx: SelectionContext) -> str | None:
+    """The monster whose fight this cycle refuses: the cycle's loadout's
+    (`refused_monster`)."""
+    return refused_monster(ctx.loadout)
+
+
+def refuses_fight_against(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                          monster: str) -> bool:
+    """The fight against `monster` is refused, on the pick `loadout_for`
+    prices it at (ruling T14d-2): the cycle's own when it was chosen against
+    `monster`, else chosen now. The grind's fight (its heal prep's loadout) and
+    a task step's fight read it at their step, so a fight the bag has no room
+    for is refused there as the cycle's own is refused in the pool."""
+    return refused_monster(loadout_for(state, game_data, ctx, monster)) == monster
 
 
 def is_refused(action: Action, refused: str | None) -> bool:

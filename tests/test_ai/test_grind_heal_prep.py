@@ -12,7 +12,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from unittest.mock import patch
 
-from artifactsmmo_cli.ai import craft_plan_gen, grind_heal_prep
+from artifactsmmo_cli.ai import craft_plan_gen, fight_room_license, grind_heal_prep
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -300,7 +300,11 @@ class TestGrindFightLegPreps:
         ogre = FightAction(monster_code="ogre", locations=frozenset({(1, 2)}), learned_drops=LearnedDrops.empty())
         gather = GatherAction(resource_code="milk_rocks", locations=frozenset({(3, 3)}),
                               learned_drops=LearnedDrops.empty())
-        with patch.object(grind_heal_prep, "loadout_for", side_effect=eats_nothing):
+        # The grind's refusal reads `loadout_for` too (ruling T14d-2): the
+        # same runnable pick, not recorded here.
+        runs = ChosenLoadout(monster="ogre", potions=(), food=(), made_food=())
+        with patch.object(grind_heal_prep, "loadout_for", side_effect=eats_nothing), \
+                patch.object(fight_room_license, "loadout_for", return_value=runs):
             assert _grind({"milk": CARRY}, [gather, ogre, _FIGHT]) == (
                 [gather, ogre, _FIGHT], [])
         assert asked == ["ogre"]

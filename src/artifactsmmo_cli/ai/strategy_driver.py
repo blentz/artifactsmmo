@@ -44,7 +44,7 @@ from artifactsmmo_cli.ai.equipment.bank_tool_fills import bank_tool_fills
 from artifactsmmo_cli.ai.equipment.empty_slot_fills import empty_slot_rank_fills
 from artifactsmmo_cli.ai.event_plan_window import plan_fits_event_window
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
-from artifactsmmo_cli.ai.fight_room_license import license_fights, refused_fight
+from artifactsmmo_cli.ai.fight_room_license import license_fights, refused_fight, refuses_fight_against
 from artifactsmmo_cli.ai.fight_tiles import fight_tiles
 from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY, supply_due, turn_in_due
 from artifactsmmo_cli.ai.game_data import GameData
@@ -620,6 +620,13 @@ def objective_step_goal(
         if state.task_type == "items":
             # c-2 #4/#5: a held items task not cancelled for its worth is worked.
             return _pursue_goal(state, game_data)
+        if (ctx.loadout is not None and fight_tiles(state, game_data, step.task_code)
+                and refuses_fight_against(state, game_data, ctx, step.task_code)):
+            # Its fight is priced at `loadout_for`'s pick, as its prep is
+            # (`_fight_step_prep`: no loadout this cycle, or no tile, prices
+            # neither): a pick whose loop has no room for the drops refuses the
+            # fight at this step (ruling T14d-2).
+            return None
         prep = _fight_step_prep(state, game_data, ctx, step.task_code)
         if prep is not None:
             return prep  # the task fight carries its loadout too (see the trunk arm)

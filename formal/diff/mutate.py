@@ -2172,6 +2172,25 @@ FIGHT_ROOM_LICENSE_MUTATIONS = [
      "    return (isinstance(action, FightAction) and not action.participants\n",
      "    return (isinstance(action, FightAction)\n"),
 ]
+# Ruling T14d-2: a fight priced by `loadout_for` is refused at its step, on the
+# one verdict (`refused_monster`). Killed by tests/test_ai/test_fight_room_license.py.
+FIGHT_ROOM_STEP_VERDICT_MUTATIONS = [
+    ("fight room: a fight priced by loadout_for is never refused",
+     "    return refused_monster(loadout_for(state, game_data, ctx, monster)) == monster",
+     "    return False"),
+]
+FIGHT_ROOM_GRIND_MUTATIONS = [
+    ("fight room: a grind's refused fight is planned",
+     "        if refuses_fight_against(state, game_data, ctx, fight.monster_code):\n"
+     "            return _decline(",
+     "        if False:\n"
+     "            return _decline("),
+]
+FIGHT_ROOM_TASK_STEP_MUTATIONS = [
+    ("fight room: a task step's refused fight is one more kill",
+     "        if (ctx.loadout is not None and fight_tiles(state, game_data, step.task_code)",
+     "        if (False and fight_tiles(state, game_data, step.task_code)"),
+]
 FIGHT_ROOM_ARBITER_MUTATIONS = [
     ("fight room: the arbiter plans over the refused fight",
      "        actions = license_fights(actions, ctx)\n",
@@ -13259,6 +13278,12 @@ def _collect_all_groups() -> None:
     run_group(STRATEGY_DRIVER_SRC, FIGHT_ROOM_ARBITER_MUTATIONS,
               "tests/test_ai/test_fight_room_license.py", survivors)
     run_group(PLAYER_SRC, FIGHT_ROOM_PLAYER_MUTATIONS,
+              "tests/test_ai/test_fight_room_license.py", survivors)
+    run_group(FIGHT_ROOM_LICENSE_SRC, FIGHT_ROOM_STEP_VERDICT_MUTATIONS,
+              "tests/test_ai/test_fight_room_license.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, FIGHT_ROOM_GRIND_MUTATIONS,
+              "tests/test_ai/test_fight_room_license.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, FIGHT_ROOM_TASK_STEP_MUTATIONS,
               "tests/test_ai/test_fight_room_license.py", survivors)
     run_group(LOOP_RATE_CORE_SRC, LOOP_RATE_CHOICE_MUTATIONS,
               "tests/test_ai/test_loop_rate_core.py", survivors)
