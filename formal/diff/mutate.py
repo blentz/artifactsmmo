@@ -8772,8 +8772,8 @@ KEY_DOOR_TOLL_TRANSITION_MUTATIONS = [
 ]
 KEY_DOOR_TOLL_REACH_MUTATIONS = [
     ("toll: a door carries no toll",
-     "                out[door] = (tuple(sorted(edge.toll().items())), beyond)\n",
-     "                out[door] = ((), beyond)\n"),
+     "                toll: Door = tuple(sorted(edge.toll().items()))\n",
+     "                toll: Door = ()\n"),
 ]
 KEY_DOOR_TOLL_PRICE_MUTATIONS = [
     ("toll: re-entry is never charged",
@@ -8803,13 +8803,41 @@ KEY_DOOR_RANK_PLAN_MUTATIONS = [
      "        answer = model.walk(item, qty, policy, goal.exclude_recycle, openable,\n"
      "                            frozenset(goal.needed), grey_ok, prefer)\n"),
 ]
+# Ruling T14e-m6: doors at any depth. Killed by
+# tests/test_ai/test_key_door_route.py.
+KEY_DOOR_CHAIN_REACH_MUTATIONS = [
+    ("chain: no door is grown past the first",
+     "        covered |= found\n        frontier = grown\n",
+     "        covered |= found\n        frontier = []\n"),
+    ("chain: a chain's regions include a shorter door's",
+     "                beyond = reachable_regions_now(holding, game_data) - covered\n",
+     "                beyond = reachable_regions_now(holding, game_data) - now\n"),
+    ("chain: a chain's legs are the merged door",
+     "    return _DOORS.cache_for(game_data)[_reach_key(state, game_data)][1].get(door, (door,))\n",
+     "    return (door,)\n"),
+]
+KEY_DOOR_CHAIN_PRICE_MUTATIONS = [
+    ("chain: every leg is priced at the origin",
+     "        for leg, at in zip(legs, leg_states(state, legs), strict=True))\n",
+     "        for leg, at in zip(legs, [state] * len(legs), strict=True))\n"),
+]
+KEY_DOOR_CHAIN_WALK_MUTATIONS = [
+    ("chain: every leg is walked by the origin's model",
+     "                for leg, model in zip(legs, self._leg_models(legs), strict=True)\n",
+     "                for leg, model in zip(legs, [self] * len(legs), strict=True)\n"),
+]
+KEY_DOOR_CHAIN_EXECUTOR_MUTATIONS = [
+    ("chain: the executor opens the merged door's first code",
+     "    code, units = door_legs(door, state, game_data)[0][0]\n",
+     "    code, units = door[0]\n"),
+]
 KEY_DOOR_REACH_MUTATIONS = [
     ("door: the hypothetical holds nothing",
-     "    beyond = reachable_regions_now(_holding(state, door), game_data) - now\n",
-     "    beyond = reachable_regions_now(state, game_data) - now\n"),
+     "                holding = _holding(held, leg)\n",
+     "                holding = held\n"),
     ("door: a door that reaches nothing new is a door",
-     "            if beyond:\n                out[door] = (tuple(sorted(edge.toll().items())), beyond)\n",
-     "            if True:\n                out[door] = (tuple(sorted(edge.toll().items())), beyond)\n"),
+     "                if not beyond:\n                    continue\n",
+     "                if False:\n                    continue\n"),
     ("door: every door leads to the content",
      "                 if content_reached(code, tiles, game_data, beyond))\n",
      "                 if True)\n"),
@@ -8836,7 +8864,7 @@ KEY_DOOR_WALK_MUTATIONS = [
      "        return None if door is None else replace(gate, doors=(door,))\n",
      "        return None if door is None else gate\n"),
     ("door: every door opens",
-     "                can_obtain(code, self.in_bag(code) + units, graph.on_hand, graph.routes)\n",
+     "                can_obtain(code, model.in_bag(code) + units, graph.on_hand, graph.routes)\n",
      "                True\n"),
 ]
 KEY_DOOR_PRICE_MUTATIONS = [
@@ -8845,8 +8873,8 @@ KEY_DOOR_PRICE_MUTATIONS = [
      "                                gated_drop, opening, list(routes)))\n",
      "    routes.extend([])\n"),
     ("door price: the crossing is free",
-     "    return CROSSING_ACTIONS + sum(\n",
-     "    return sum(\n"),
+     "        CROSSING_ACTIONS + sum(\n            acquisition_actions(code, (at.gold",
+     "        0 + sum(\n            acquisition_actions(code, (at.gold"),
     ("door price: a door being priced is priced again",
      "                  for door in gate.doors if door not in opening]\n",
      "                  for door in gate.doors]\n"),
@@ -14348,6 +14376,14 @@ def _collect_all_groups() -> None:
     run_group(OBTAIN_MODEL_SRC, KEY_DOOR_RANK_WALK_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, KEY_DOOR_RANK_PLAN_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(REGION_EDGES_SRC, KEY_DOOR_CHAIN_REACH_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(ACQUISITION_COST_SRC, KEY_DOOR_CHAIN_PRICE_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, KEY_DOOR_CHAIN_WALK_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, KEY_DOOR_CHAIN_EXECUTOR_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(PROGRESSION_RESERVE_SRC, FEE_SHORTFALL_MUTATIONS,
               "tests/test_ai/test_progression_reserve.py", survivors)

@@ -70,7 +70,7 @@ from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
 from artifactsmmo_cli.ai.obtain_sources import SourceKind
 from artifactsmmo_cli.ai.potion_supply import POTION_POLICY
 from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
-from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG, admit_region_edges, crossings
+from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG, admit_region_edges, crossings, door_legs
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
@@ -551,8 +551,11 @@ def _open_door(door: Door, state: WorldState, game_data: GameData, actions: list
     A fee's gold is held on top of the pocket the inner walk itself counts
     (`_walk_pocket`, ruling T14e-2): the shortfall is gold to EARN, and a walk
     that counts only its spendable pocket must earn it on top of that pocket,
-    not on top of the real one, or the reserve would be fought past twice."""
-    code, units = door[0]
+    not on top of the real one, or the reserve would be fought past twice.
+
+    A door chain (ruling T14e-m6) opens its first leg first: the next cycle,
+    past it, finds the rest a shorter chain."""
+    code, units = door_legs(door, state, game_data)[0][0]
     bag = (_walk_pocket(state, game_data, frozenset({code}), policy) if code == GOLD_CODE
            else state.inventory.get(code, 0))
     return _walk_plan(GatherMaterialsGoal(code, {code: bag + units}, fight_gold=policy.fight_gold),

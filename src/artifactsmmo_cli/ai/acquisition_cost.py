@@ -62,7 +62,7 @@ from artifactsmmo_cli.ai.obtain_sources import (
     SourceKind,
     obtain_sources,
 )
-from artifactsmmo_cli.ai.region_edges import door_toll
+from artifactsmmo_cli.ai.region_edges import door_legs, door_toll, leg_states
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_credit import credit_demanded_skills
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
@@ -784,12 +784,20 @@ def price_key(state: WorldState) -> tuple[object, ...]:
 def _door_price(door: Door, state: WorldState, game_data: GameData, ctx: SelectionContext,
                 store: LearningStore | None, policy: Policy, gated_drop: bool,
                 opening: frozenset[Door]) -> int:
-    """`door_price`'s computation."""
-    return CROSSING_ACTIONS + sum(
-        acquisition_actions(code, (state.gold if code == GOLD_CODE else state.inventory.get(code, 0))
-                            + units, state, game_data, ctx, equip=False, store=store,
-                            gated_drop=gated_drop, policy=policy, opening=opening | {door})
-        for code, units in door)
+    """`door_price`'s computation: the sum of its legs (ruling T14e-m6), each
+    a crossing and its shortfall's own price asked of the state holding the
+    legs before it (`region_edges.leg_states`), where the crossings before it
+    are applicable. Every leg, and the door, is closed to its own price
+    (`opening`): a key behind its own chain is a wall."""
+    legs = door_legs(door, state, game_data)
+    closed = opening | {door, *legs}
+    return sum(
+        CROSSING_ACTIONS + sum(
+            acquisition_actions(code, (at.gold if code == GOLD_CODE else at.inventory.get(code, 0))
+                                + units, at, game_data, ctx, equip=False, store=store,
+                                gated_drop=gated_drop, policy=policy, opening=closed)
+            for code, units in leg)
+        for leg, at in zip(legs, leg_states(state, legs), strict=True))
 
 
 def _companion_unlock(route: Route, gate: Gate, state: WorldState, game_data: GameData,

@@ -741,3 +741,132 @@ def test_the_census_reach_is_walked_once_per_reach_and_door_walk_key(
     skilled = replace(state, skills={**state.skills, "mining": state.skills["mining"] + 1})
     craft_completeness._census_reach(skilled, world)
     assert len(walks) == 2
+
+
+# --- ruling T14e-m6: doors at any depth ---------------------------------------
+
+KEY_A, KEY_B = (("key_a", 1),), (("key_b", 1),)
+CHAIN = (("key_a", 1), ("key_b", 1))
+
+
+def _chain_world(monkeypatch: pytest.MonkeyPatch, guard_drops_key_b: bool = True) -> GameData:
+    """The overworld, a hall past a door asking a held `key_a` (the overworld
+    `smith` drops it), and a vault past a door in the hall asking a held
+    `key_b`. The hall's `guard` drops `key_b` (or, without
+    `guard_drops_key_b`, only the vault's `warden` does); the warden drops
+    `loot`. Every fight is winnable."""
+    world = GameData()
+    world._build_maps([
+        _tile(1, 0, 0, "overworld"),
+        _tile(2, 1, 0, "overworld", transition=TransitionSchema(
+            map_id=3, x=3, y=0, layer="interior",
+            conditions=[ConditionSchema(code="key_a", operator="has_item", value=1)])),
+        _tile(3, 3, 0, "interior",
+              content=MapContentSchema(type_=MapContentType.MONSTER, code="guard")),
+        _tile(4, 4, 0, "interior", transition=TransitionSchema(
+            map_id=5, x=5, y=0, layer="underground",
+            conditions=[ConditionSchema(code="key_b", operator="has_item", value=1)])),
+        _tile(5, 5, 0, "underground",
+              content=MapContentSchema(type_=MapContentType.MONSTER, code="warden")),
+        _tile(6, 0, 1, "overworld",
+              content=MapContentSchema(type_=MapContentType.MONSTER, code="smith")),
+    ])
+    droppers = {"loot": [("warden", 1, 1, 1)], "key_a": [("smith", 1, 1, 1)],
+                "key_b": [("guard" if guard_drops_key_b else "warden", 1, 1, 1)]}
+    monkeypatch.setattr(world, "monsters_dropping", lambda item: droppers.get(item, []))
+    monkeypatch.setattr(world, "xp_per_kill", lambda monster, level, wisdom=0: 1)
+    monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
+    return world
+
+
+def test_a_door_behind_a_door_is_one_chain_of_its_legs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The vault stands past two unpaid doors: one chain door, its legs in
+    crossing order, reaching only the vault. Past the first door, the second
+    is a single door."""
+    world = _chain_world(monkeypatch)
+    state = make_state(x=0, y=0)
+    listed = {door: beyond for door, _toll, beyond in door_reaches(state, world)}
+    assert listed[KEY_A] == frozenset({"interior:3,0"})
+    (vault,) = listed[CHAIN]
+    assert vault not in reachable_regions_now(state, world) and vault != "interior:3,0"
+    assert region_edges.door_legs(CHAIN, state, world) == (KEY_A, KEY_B)
+    assert region_edges.door_legs(KEY_A, state, world) == (KEY_A,)
+    holding = replace(state, inventory={"key_a": 1})
+    assert [door for door, _t, _b in door_reaches(holding, world)] == [KEY_B]
+
+
+def test_a_chain_is_priced_as_the_sum_of_its_legs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Key A's price, key B's asked of the state holding key A (where the hall
+    is reached), and both crossings."""
+    world = _chain_world(monkeypatch)
+    state = make_state(x=0, y=0)
+    asked: list[tuple[str, int, dict[str, int]]] = []
+
+    def priced(code: str, qty: int, at: WorldState, *a: object, **kw: object) -> int:
+        asked.append((code, qty, dict(at.inventory)))
+        return {"key_a": 5, "key_b": 7}[code]
+
+    monkeypatch.setattr(acquisition_cost, "acquisition_actions", priced)
+    price = acquisition_cost.door_price(CHAIN, state, world, TIMED_NO_PROFILE_CONTEXT, None,
+                                        DECOMPOSE_POLICY, True, frozenset())
+    assert price == 5 + 7 + 2 * CROSSING_ACTIONS
+    assert asked == [("key_a", 1, {}), ("key_b", 1, {"key_a": 1})]
+
+
+def test_the_walk_opens_a_chain_leg_by_leg(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`loot` is feasible through the chain: the walk's gate is the chain
+    door, the executor's first leg is key A, and holding key A the walk's
+    door is key B's alone."""
+    world = _chain_world(monkeypatch)
+    state = make_state(x=0, y=0)
+    model = _model(state, world)
+    assert model.feasible("loot", 1, DECOMPOSE_POLICY)
+    step = model.walk("loot", 1, DECOMPOSE_POLICY).plan[0]
+    assert isinstance(step, OpenGate) and isinstance(step.gate, Gate)
+    assert step.gate.doors == (CHAIN,)
+    assert region_edges.door_legs(CHAIN, state, world)[0][0] == ("key_a", 1)
+    holding = replace(state, inventory={"key_a": 1})
+    step = _model(holding, world).walk("loot", 1, DECOMPOSE_POLICY).plan[0]
+    assert isinstance(step, OpenGate) and isinstance(step.gate, Gate)
+    assert step.gate.doors == (KEY_B,)
+
+
+def test_a_key_behind_its_own_chain_is_a_wall(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only the vault's warden drops key B: the chain cannot open, and `loot`
+    is a wall, its door still named."""
+    world = _chain_world(monkeypatch, guard_drops_key_b=False)
+    model = _model(make_state(x=0, y=0), world)
+    assert not model.door_open(CHAIN, DECOMPOSE_POLICY)
+    assert not model.feasible("loot", 1, DECOMPOSE_POLICY)
+    (route,) = model.routes("loot")
+    assert next(g.doors for g in route.gates if g.kind is GateKind.SPAWN_KNOWN) == (CHAIN,)
+
+
+@pytest.mark.parametrize("name", ["l30_band_entry", "l48_band_adequate"])
+def test_the_sandwhisper_vault_past_the_boat_is_reached_through_a_chain(name: str) -> None:
+    """The `sandwhisper_key` edge stands on the island past the 1000-gold
+    boat: its region is no single door's, and a chain (the boat's gold, then
+    the key) reaches it."""
+    state, world, _player = _seeded(name)
+    vault = "interior:-4,19"
+    assert vault not in reachable_regions_now(state, world)
+    chains = [(door, beyond) for door, _toll, beyond in door_reaches(state, world)
+              if vault in beyond]
+    assert chains
+    for door, _beyond in chains:
+        legs = region_edges.door_legs(door, state, world)
+        assert len(legs) == 2 and legs[1] == (("sandwhisper_key", 1),)
+
+
+def test_the_executor_opens_a_chain_s_first_leg_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`_open_door` walks the first leg's shortfall, in crossing order, not
+    the merged door's first code."""
+    door = (("aa_key", 1), ("zz_key", 1))
+    monkeypatch.setattr(craft_plan_gen, "door_legs",
+                        lambda d, s, g: ((("zz_key", 1),), (("aa_key", 1),)))
+    walked: list[dict[str, int]] = []
+    monkeypatch.setattr(craft_plan_gen, "_walk_plan",
+                        lambda goal, *a: walked.append(goal.needed))
+    craft_plan_gen._open_door(door, make_state(), GameData(), [], TIMED_NO_PROFILE_CONTEXT,
+                              None, False, frozenset(), DECOMPOSE_POLICY)
+    assert walked == [{"zz_key": 1}]

@@ -44,7 +44,13 @@ from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
-from artifactsmmo_cli.ai.region_edges import content_reached, doors_to, reachable_regions_now
+from artifactsmmo_cli.ai.region_edges import (
+    content_reached,
+    door_legs,
+    doors_to,
+    leg_states,
+    reachable_regions_now,
+)
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
@@ -312,12 +318,25 @@ class ObtainModel:
         with and no other callable can share its answer."""
         key = (door, policy, keep, opening, openable, grey_ok, rank)
         if key not in self._doors:
+            legs = door_legs(door, self._crossing, self._gd)
+            closed = opening | set(legs)
             self._doors[key] = all(
-                can_obtain(code, self.in_bag(code) + units, graph.on_hand, graph.routes)
-                for code, units in door
-                for graph in (self.walk_graph(code, policy, keep=keep, openable=openable,
-                                              grey_ok=grey_ok, opening=opening, rank=rank),))
+                can_obtain(code, model.in_bag(code) + units, graph.on_hand, graph.routes)
+                for leg, model in zip(legs, self._leg_models(legs), strict=True)
+                for code, units in leg
+                for graph in (model.walk_graph(code, policy, keep=keep, openable=openable,
+                                               grey_ok=grey_ok, opening=closed, rank=rank),))
         return self._doors[key]
+
+    def _leg_models(self, legs: tuple[Door, ...]) -> list["ObtainModel"]:
+        """One model per leg of a door chain (ruling T14e-m6): this one for
+        the first leg, then one over the state holding the legs before it
+        (`region_edges.leg_states`, the pocket and the crossing state alike),
+        where the crossings before it are applicable."""
+        return [self, *(ObtainModel(at, self._gd, self._ctx, self._now, self._fighter,
+                                    crossing=cross)
+                        for at, cross in zip(leg_states(self._state, legs)[1:],
+                                             leg_states(self._crossing, legs)[1:], strict=True))]
 
     def _ranked_gathers(self, item: str, ready: tuple[Route, ...]) -> list[Route]:
         """`ready` with its GATHER routes (contiguous in priority order) ranked

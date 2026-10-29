@@ -192,8 +192,10 @@ def content_reached(code: str, live: Iterable[tuple[int, int]], game_data: GameD
     return any(game_data.region_of(x, y, layer) in reach for x, y, layer in tiles)
 
 
-_DOORS: "CatalogueScope[tuple[object, ...], tuple[tuple[Door, Door, frozenset[str]], ...]]" = (
-    CatalogueScope(REACH_MEMO_SIZE))
+type _DoorAnswer = tuple[tuple[tuple[Door, Door, frozenset[str]], ...], dict[Door, tuple[Door, ...]]]
+"""`door_reaches`' answer and each door's legs (`door_legs`)."""
+
+_DOORS: "CatalogueScope[tuple[object, ...], _DoorAnswer]" = CatalogueScope(REACH_MEMO_SIZE)
 """`door_reaches`' answers, scoped and keyed as `_REACH` is."""
 
 
@@ -213,9 +215,9 @@ def _holding(state: WorldState, door: Door) -> WorldState:
 def door_reaches(state: WorldState,
                  game_data: GameData) -> tuple[tuple[Door, Door, frozenset[str]], ...]:
     """Every door the walk could cross holding its shortfall (Task 14e, M-3),
-    with what one crossing of it consumes (its toll, `MapTransitionAction.
-    toll`, sorted as a door is: ruling T14e-m2) and the regions that shortfall
-    adds to `reachable_regions_now`.
+    with what crossing it consumes (its toll, `MapTransitionAction.toll`,
+    sorted as a door is: ruling T14e-m2) and the regions that shortfall adds
+    to `reachable_regions_now`.
 
     A door is a modeled edge (`MapTransitionAction.shortfall` is not None)
     that `state` cannot cross: a key it lacks (`has_item` or a consumed
@@ -223,30 +225,111 @@ def door_reaches(state: WorldState,
     answer asked of `state` holding the shortfall (`_holding`), so a key that
     opens a second door, or a crossing the key's door leads to, is counted as
     the walk would cross them, and a door whose portal the walk cannot reach
-    reaches nothing new: it is no door. One door at a time: content past two
-    unpaid doors with different keys stays unreached. Edges in tile
-    order (`region_edge_actions`); a shortfall two edges share is listed
-    once, with the first edge's toll. Memoised as `reachable_regions_now` is
-    (`_DOORS`)."""
+    reaches nothing new: it is no door.
+
+    ANY DEPTH (ruling T14e-m6). A door whose portal stands past another unpaid
+    door is a CHAIN: its legs are the doors in crossing order, each leg the
+    shortfall of an edge asked of the state past the legs before it (holding
+    their shortfalls, their tolls paid: `_past`). The chain is listed as ONE
+    door, its legs' shortfalls summed by code, its toll every leg's toll, and
+    its legs read by `door_legs`, its regions only those no shorter door
+    reaches (content a shorter door reaches is past that door). The search is
+    breadth first, a chain grown only while it reaches such a region, so it
+    ends at a fixed point within the edge count; content still unreached then
+    spawns nowhere reachable. Single doors first, in tile order (`region_edge_actions`); a
+    shortfall two edges (or chains) share is listed once, the first's.
+    Memoised as `reachable_regions_now` is (`_DOORS`)."""
     memo = _DOORS.cache_for(game_data)
     key = _reach_key(state, game_data)
     if key not in memo:
-        now = reachable_regions_now(state, game_data)
-        out: dict[Door, tuple[Door, frozenset[str]]] = {}
-        for edge in region_edge_actions(game_data):
-            assert isinstance(edge, MapTransitionAction)
-            lack = edge.shortfall(state, game_data)
-            if not lack:
-                continue
-            door: Door = tuple(sorted(lack.items()))
-            if door in out:
-                continue
-            beyond = reachable_regions_now(_holding(state, door), game_data) - now
-            if beyond:
-                out[door] = (tuple(sorted(edge.toll().items())), beyond)
-        _DOORS.remember(memo, key, tuple((door, toll, beyond)
-                                         for door, (toll, beyond) in out.items()))
-    return memo[key]
+        chains = _door_chains(state, game_data)
+        _DOORS.remember(memo, key, (
+            tuple((door, toll, beyond) for door, _legs, toll, beyond in chains),
+            {door: legs for door, legs, _toll, _beyond in chains}))
+    return memo[key][0]
+
+
+def door_legs(door: Door, state: WorldState, game_data: GameData) -> tuple[Door, ...]:
+    """The legs of `door` (one of `door_reaches`'), in crossing order: the
+    door itself when it is a single edge's, the chain's doors when its portal
+    stands past other unpaid doors (ruling T14e-m6). A shortfall no door
+    lists (a toll, priced for a re-entry) is one leg: itself."""
+    door_reaches(state, game_data)
+    return _DOORS.cache_for(game_data)[_reach_key(state, game_data)][1].get(door, (door,))
+
+
+def leg_states(state: WorldState, legs: tuple[Door, ...]) -> list[WorldState]:
+    """`state` holding each prefix of `legs` (`_holding`): the state the
+    walk and the pricer ask a leg's shortfall of, the legs before it in hand,
+    so the crossings before it are applicable (ruling T14e-m6). Entry `i` is
+    the state for leg `i`; entry 0 is `state` itself."""
+    out = [state]
+    for leg in legs[:-1]:
+        out.append(_holding(out[-1], leg))
+    return out
+
+
+def _past(state: WorldState, leg: Door, toll: Door) -> WorldState:
+    """`state` holding `leg` with its `toll` paid: the pocket and the bag a
+    crossing of it leaves, which the next leg's shortfall is asked of."""
+    held = _holding(state, leg)
+    inventory = dict(held.inventory)
+    gold = held.gold
+    for code, units in toll:
+        if code == GOLD_CODE:
+            gold -= units
+        else:
+            inventory[code] = inventory[code] - units
+    return dataclasses.replace(held, gold=gold,
+                               inventory={c: n for c, n in inventory.items() if n})
+
+
+def _merged(doors: Iterable[Door]) -> Door:
+    """`doors`' shortfalls (or tolls) summed by code, sorted as a door is."""
+    total: dict[str, int] = {}
+    for door in doors:
+        for code, units in door:
+            total[code] = total.get(code, 0) + units
+    return tuple(sorted(total.items()))
+
+
+def _door_chains(state: WorldState, game_data: GameData
+                 ) -> tuple[tuple[Door, tuple[Door, ...], Door, frozenset[str]], ...]:
+    """`door_reaches`' computation: `(door, legs, toll, beyond)` per door,
+    breadth first over chains (ruling T14e-m6)."""
+    now = reachable_regions_now(state, game_data)
+    edges = region_edge_actions(game_data)
+    covered = set(now)
+    out: dict[Door, tuple[tuple[Door, ...], Door, frozenset[str]]] = {}
+    # (legs, their tolls, the state holding them, the state past them)
+    frontier: list[tuple[tuple[Door, ...], tuple[Door, ...], WorldState, WorldState]] = [
+        ((), (), state, state)]
+    for _depth in range(len(edges)):
+        grown: list[tuple[tuple[Door, ...], tuple[Door, ...], WorldState, WorldState]] = []
+        found: set[str] = set()
+        for legs, tolls, held, past in frontier:
+            for edge in edges:
+                assert isinstance(edge, MapTransitionAction)
+                lack = edge.shortfall(past, game_data)
+                if not lack:
+                    continue
+                leg: Door = tuple(sorted(lack.items()))
+                toll: Door = tuple(sorted(edge.toll().items()))
+                holding = _holding(held, leg)
+                beyond = reachable_regions_now(holding, game_data) - covered
+                if not beyond:
+                    continue
+                door = _merged((*legs, leg))
+                if door in out:
+                    continue
+                out[door] = ((*legs, leg), _merged((*tolls, toll)), beyond)
+                found |= beyond
+                grown.append(((*legs, leg), (*tolls, toll), holding, _past(past, leg, toll)))
+        if not grown:
+            break
+        covered |= found
+        frontier = grown
+    return tuple((door, legs, toll, beyond) for door, (legs, toll, beyond) in out.items())
 
 
 def doors_to(code: str, live: Iterable[tuple[int, int]], state: WorldState,
