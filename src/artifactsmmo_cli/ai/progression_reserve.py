@@ -217,13 +217,19 @@ def _binding(floor: int, state: WorldState) -> int:
     return _MIN_SAFETY_FLOOR if floor >= account_gold(state) else floor
 
 
+def target_floor(state: WorldState, game_data: GameData, buying: str | None) -> int:
+    """The deduction-aware reserve floor for buying `buying`, floored at
+    `_MIN_SAFETY_FLOOR`, before `_binding` asks whether the account funds it:
+    what `reserve_floor` binds and what `fee_shortfall` reads (a fee's
+    shortfall is the gold that would make it fund)."""
+    return max(_MIN_SAFETY_FLOOR, effective_floor(reserved_targets(state, game_data), buying))
+
+
 def reserve_floor(state: WorldState, game_data: GameData,
                   buying: str | None) -> int:
-    """The deduction-aware reserve floor that applies while buying `buying`,
-    floored at `_MIN_SAFETY_FLOOR` and not binding above what the account holds
-    (`_binding`)."""
-    reserved = reserved_targets(state, game_data)
-    return _binding(max(_MIN_SAFETY_FLOOR, effective_floor(reserved, buying)), state)
+    """The deduction-aware reserve floor that applies while buying `buying`
+    (`target_floor`), not binding above what the account holds (`_binding`)."""
+    return _binding(target_floor(state, game_data, buying), state)
 
 
 def reserve_floor_multi(state: WorldState, game_data: GameData,
@@ -309,7 +315,7 @@ def fee_shortfall(state: WorldState, game_data: GameData, fee: int) -> int:
     own lack is that lack or one of those starts, and the reserve's always
     passes (it funds the floor, so the floor binds and is met)."""
     pocket_lack = max(0, fee - state.gold)
-    floor = max(_MIN_SAFETY_FLOOR, effective_floor(reserved_targets(state, game_data), None))
+    floor = target_floor(state, game_data, None)
     account = account_gold(state)
     starts = sorted({pocket_lack, max(pocket_lack, fee + _MIN_SAFETY_FLOOR - account),
                      max(pocket_lack, fee + floor - account)})

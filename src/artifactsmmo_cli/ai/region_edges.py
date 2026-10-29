@@ -53,7 +53,7 @@ from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.gate import Door
-from artifactsmmo_cli.ai.progression_reserve import reserve_floor
+from artifactsmmo_cli.ai.progression_reserve import target_floor
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 REGION_EDGE_TAG = "movement"
@@ -155,9 +155,12 @@ def _reach_key(state: WorldState, game_data: GameData) -> tuple[object, ...]:
     is_applicable`): the region and layer the walk starts from, the gold and
     items it pays with, the items it holds or wears, and what a fee's reserve
     reads (ruling T14e-2): the banked gold the account counts and the floor
-    the reserve keeps."""
+    the reserve keeps. The floor is keyed BEFORE `_binding` collapses an
+    unfunded one to the safety floor (`target_floor`): `door_reaches`'
+    shortfalls (`fee_shortfall`) read it raw, so two unfunded states with
+    different floors lack different gold."""
     return (game_data.state_region(state), state.layer, state.gold, state.bank_gold,
-            reserve_floor(state, game_data, None),
+            target_floor(state, game_data, None),
             tuple(sorted(state.inventory.items())),
             tuple(sorted(code for code in state.equipment.values() if code)))
 

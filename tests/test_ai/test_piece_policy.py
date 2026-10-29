@@ -681,6 +681,32 @@ def test_the_reach_memo_keys_what_a_fee_s_reserve_reads(monkeypatch: pytest.Monk
     assert region not in reachable_regions_now(replace(banked, level=1), world)
 
 
+def test_the_door_memo_keys_the_floor_a_fee_s_shortfall_reads(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Round-4 Important #1: an account with no gold funds no floor, so the
+    reserve binds only the safety floor (`_binding`), but a fee's shortfall
+    is the gold that WOULD fund it (`fee_shortfall` reads the floor raw). At
+    a 3000 floor the 5000 door lacks 8000, not the 5100 the safety floor
+    gives, so the door memo (`door_reaches`, and `door_legs` / `door_toll`
+    that read it) must not hand the floorless state's answer to it."""
+    player = _seeded(RUNE_CELLS[0])
+    state, world = player.state, player.game_data
+    assert state is not None and world is not None
+    broke = replace(state, gold=0, bank_gold=0)
+    monkeypatch.setattr(progression_reserve, "reserved_targets",
+                        lambda at, gd: {"x": 3000} if at.level == 1 else {})
+    low = replace(broke, level=1)
+    region_edges._DOORS.clear()
+    region_edges._REACH.clear()
+    assert (("gold", 5100),) in [d for d, _t, _b in region_edges.door_reaches(broke, world)]
+    doors = [d for d, _t, _b in region_edges.door_reaches(low, world)]
+    assert (("gold", 8000),) in doors
+    assert (("gold", 5100),) not in doors
+    assert region_edges.door_legs((("gold", 8000), ("sandwhisper_key", 1)), low, world) == (
+        (("gold", 8000),), (("sandwhisper_key", 1),))
+    assert region_edges.door_toll((("gold", 8000),), low, world) == (("gold", 5000),)
+
+
 def test_a_drop_behind_a_crossing_is_a_route_once_the_fee_is_held() -> None:
     """`dryad_hair` drops only from `dryad`, whose tiles are all on the
     restricted layer past the 5000-gold door: its route's SPAWN_KNOWN gate is
