@@ -459,13 +459,11 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
 
     relevant = admit_region_edges(goal.relevant_actions(actions, state, game_data),
                                   actions, state, game_data)
-    # A walk that may fight for gold counts only the pocket its buy may spend
-    # (`spendable_pocket`, the reserve `NpcBuy` keeps through `can_spend`), so
-    # the buy is planned only once it will pass, and the gold the reserve
-    # keeps is fought for. Its gold leg fights the monster the piece's price
-    # fought (`fight_gold_monster` under `PIECE_POLICY`).
-    walked = (replace(state, gold=spendable_pocket(state, game_data, frozenset(goal.needed)))
-              if policy.fight_gold else state)
+    # The walk's pocket (`_walk_pocket`); its crossings are asked of the real
+    # state (ruling T14e-2), which keeps the reserve at the fee itself. Its gold
+    # leg fights the monster the piece's price fought (`fight_gold_monster`
+    # under `PIECE_POLICY`).
+    walked = replace(state, gold=_walk_pocket(state, game_data, frozenset(goal.needed), policy))
     gold_monster = (fight_gold_monster(state, game_data, ctx, policy=PIECE_POLICY)
                     if policy.fight_gold else None)
     preferred: dict[str, tuple[SourceKind, str] | None] = {}
@@ -475,13 +473,13 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
         item the walk can reach past a door (ruling T14e-1): the walk serves
         the route the price took."""
         if code not in preferred:
-            preferred[code] = door_route(code, walked, game_data, ctx, policy=policy,
+            preferred[code] = door_route(code, state, game_data, ctx, policy=policy,
                                          pocket=walked.gold)
         return preferred[code]
 
     for item, needed in goal.needed.items():
         qty = _bag_target(item, needed, goal.exclude_recycle, state)
-        model = ObtainModel(walked, game_data, ctx, datetime.now(UTC))
+        model = ObtainModel(walked, game_data, ctx, datetime.now(UTC), crossing=state)
         answer = model.walk(item, qty, policy, goal.exclude_recycle, openable,
                             frozenset(goal.needed), grey_ok, prefer)
         trip = _one_trip(item, qty, answer, state, game_data)
@@ -539,11 +537,28 @@ def _open_door(door: Door, state: WorldState, game_data: GameData, actions: list
     shortfall (a key, or the fee's gold), held on top of the bag.
     The plan stops there, as at a skill gate: the next cycle walks again from
     the bag it left, and once the shortfall is held the content is reached
-    and the region bridge crosses the door (`_bridge_regions`)."""
+    and the region bridge crosses the door (`_bridge_regions`).
+
+    A fee's gold is held on top of the pocket the inner walk itself counts
+    (`_walk_pocket`, ruling T14e-2): the shortfall is gold to EARN, and a walk
+    that counts only its spendable pocket must earn it on top of that pocket,
+    not on top of the real one, or the reserve would be fought past twice."""
     code, units = door[0]
-    bag = state.gold if code == GOLD_CODE else state.inventory.get(code, 0)
+    bag = (_walk_pocket(state, game_data, frozenset({code}), policy) if code == GOLD_CODE
+           else state.inventory.get(code, 0))
     return _walk_plan(GatherMaterialsGoal(code, {code: bag + units}, fight_gold=policy.fight_gold),
                       state, game_data, actions, ctx, declined, subtasks, grinding, policy)
+
+
+def _walk_pocket(state: WorldState, game_data: GameData, needed: frozenset[str],
+                 policy: Policy) -> int:
+    """The pocket a walk for the items `needed` counts as its bag's gold. A walk that may
+    fight for gold counts only the pocket its buy may spend
+    (`spendable_pocket`, the reserve `NpcBuy` keeps through `can_spend`), so
+    the buy is planned only once it will pass, and the gold the reserve keeps
+    is fought for; any other walk, the whole pocket."""
+    return (spendable_pocket(state, game_data, needed) if policy.fight_gold
+            else state.gold)
 
 
 def _one_trip(item: str, qty: int, answer: WalkAnswer, state: WorldState,

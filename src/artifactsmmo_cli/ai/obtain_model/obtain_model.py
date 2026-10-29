@@ -65,12 +65,21 @@ class ObtainModel:
     gear objective's fixed point, spec 2026-10-18 §2.3), or a function giving
     that character per dropping monster (each monster judged on its own target
     loadout). It is never stock: the bag, bank and pocket are always
-    `state`'s."""
+    `state`'s.
+
+    `crossing`, when given, is the state the crossings are asked of (every
+    SPAWN_KNOWN gate's reach and doors): the real state of a walk whose
+    `state` pocket is only the gold its buys may spend
+    (`progression_reserve.spendable_pocket`). A fee is reserve-guarded at the
+    crossing itself (ruling T14e-2), so asking it of the spendable pocket would
+    keep the reserve twice. A door's shortfall is gold to EARN, the same on
+    either pocket."""
 
     def __init__(self, state: WorldState, game_data: GameData,
                  ctx: SelectionContext, now: datetime,
-                 fighter: Fighter | None = None) -> None:
+                 fighter: Fighter | None = None, crossing: WorldState | None = None) -> None:
         self._state = state
+        self._crossing = state if crossing is None else crossing
         self._fighter = fighter
         self._gd = game_data
         self._ctx = ctx
@@ -83,7 +92,7 @@ class ObtainModel:
         """The regions the walk reaches from this state now
         (`region_edges.reachable_regions_now`), walked once per model."""
         if self._regions is None:
-            self._regions = reachable_regions_now(self._state, self._gd)
+            self._regions = reachable_regions_now(self._crossing, self._gd)
         return self._regions
 
     def routes(self, item: str) -> tuple[Route, ...]:
@@ -456,7 +465,7 @@ class ObtainModel:
             # would refuse a gather the character can make where it stands.
             tiles = self._gd.all_resource_locations.get(resource, [])
             known = content_reached(resource, tiles, self._gd, self._reach())
-            doors = () if known else doors_to(resource, tiles, self._state, self._gd)
+            doors = () if known else doors_to(resource, tiles, self._crossing, self._gd)
             gates = [Gate(GateKind.SPAWN_LIVE, resource, bool(tiles)),
                      Gate(GateKind.SPAWN_KNOWN, resource, known, doors=doors)]
             requirement = self._gd.resource_skill_level(resource)
@@ -503,7 +512,7 @@ class ObtainModel:
         """Monsters that drop `item`: see `drop_routes`, the one place drop gates
         are evaluated (shared with `drop_obtainability`), judged against the
         projected `fighter` when one is given."""
-        return drop_routes(item, self._state, self._gd, self._reach(), self._fighter)
+        return drop_routes(item, self._state, self._gd, self._crossing, self._fighter)
 
     def _task_reward(self, item: str) -> list[Route]:
         """The task board pays `item`: one application is a whole task loop
@@ -522,7 +531,7 @@ class ObtainModel:
         (see `drop_routes.gold_drop_routes`, which shares the fight gates)."""
         if item != GOLD_CODE:
             return []
-        return gold_drop_routes(self._state, self._gd, self._reach())
+        return gold_drop_routes(self._state, self._gd, self._crossing)
 
     def _sell(self, item: str) -> list[Route]:
         """GOLD only: selling what the keep authority licenses, one route per

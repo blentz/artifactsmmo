@@ -22,7 +22,6 @@ from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, LEGACY, Policy
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
-from artifactsmmo_cli.ai.region_edges import reachable_regions_now
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
@@ -400,7 +399,7 @@ def test_drop_routes_evaluate_winnability_only_for_a_monster_that_spawns(
                        side_effect=lambda code: [(state.x, state.y, state.layer)]
                        if code == monster else []),
           patch("artifactsmmo_cli.ai.obtain_model.drop_routes.is_winnable", return_value=True) as winnable):
-        routes = drop_routes(item, state, gd, reachable_regions_now(state, gd))
+        routes = drop_routes(item, state, gd, state)
     assert [call.args[2] for call in winnable.call_args_list] == [monster]
     gates = {g.kind: g.satisfied for g in routes[0].gates}
     assert gates[GateKind.SPAWN_KNOWN] and gates[GateKind.WINNABLE] and not gates[GateKind.SPAWN_LIVE]

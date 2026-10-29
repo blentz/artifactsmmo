@@ -12,7 +12,6 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.loadout_win import stockable_potions, winning_loadout, wins_with_a_loadout
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
 from artifactsmmo_cli.ai.obtain_model.gate import GateKind
-from artifactsmmo_cli.ai.region_edges import reachable_regions_now
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -99,7 +98,7 @@ def test_the_drop_route_is_winnable_with_a_loadout() -> None:
     gd._npc_stock = {}
 
     def winnable(state: WorldState) -> bool:
-        (route,) = drop_routes("ogre_eye", state, gd, reachable_regions_now(state, gd))
+        (route,) = drop_routes("ogre_eye", state, gd, state)
         return next(g.satisfied for g in route.gates if g.kind is GateKind.WINNABLE)
 
     assert not winnable(_state())

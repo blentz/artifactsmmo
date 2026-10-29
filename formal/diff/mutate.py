@@ -4543,8 +4543,8 @@ OBTAIN_MODEL_FIGHTER_DROP_MUTATIONS = [
 ]
 OBTAIN_MODEL_FIGHTER_MUTATIONS = [
     ("obtain_model: the fighter never reaches the drop gates",
-     "        return drop_routes(item, self._state, self._gd, self._reach(), self._fighter)",
-     "        return drop_routes(item, self._state, self._gd, self._reach())"),
+     "        return drop_routes(item, self._state, self._gd, self._crossing, self._fighter)",
+     "        return drop_routes(item, self._state, self._gd, self._crossing)"),
     ("obtain_model: the fighter's inventory is stock",
      "        bag: dict[str, int] = dict(self._state.inventory)",
      "        bag: dict[str, int] = dict(self._state.inventory) | "
@@ -4731,9 +4731,9 @@ GOLD_FUNDED_DECOMPOSE_MUTATIONS = [
      "    if goal.fight_gold:\n",
      "    if True:\n"),
     ("craft_plan_gen: the walk counts the pocket the reserve keeps (reserve ignored)",
-     "    walked = (replace(state, gold=spendable_pocket(state, game_data, frozenset(goal.needed)))\n"
-     "              if policy.fight_gold else state)\n",
-     "    walked = state\n"),
+     "    return (spendable_pocket(state, game_data, needed) if policy.fight_gold\n"
+     "            else state.gold)\n",
+     "    return state.gold\n"),
     ("craft_plan_gen: the gold fight is the walk's monster, not the price's",
      "        fight = fights.get(gold_monster) if gold_monster is not None else None\n",
      "        fight = fights.get(route.via)\n"),
@@ -8723,12 +8723,45 @@ GATHER_REACH_MUTATIONS = [
 # Task 14e (M-3): a key door is a route through its key. Killed by
 # tests/test_ai/test_key_door_route.py.
 KEY_DOOR_SHORTFALL_MUTATIONS = [
-    ("door: a fee's shortfall is the whole fee",
-     "            lack[GOLD_CODE] = self._gold_cost() - state.gold\n",
-     "            lack[GOLD_CODE] = self._gold_cost()\n"),
+    ("door: a fee's shortfall is the pocket's lack alone (reserve ignored)",
+     "        gold = fee_shortfall(state, game_data, self._gold_cost()) if self._gold_cost() else 0\n",
+     "        gold = max(0, self._gold_cost() - state.gold)\n"),
     ("door: a worn has_item key is not held",
      "            if self._possessed(state, code) < qty:\n",
      "            if state.inventory.get(code, 0) < qty:\n"),
+]
+# Ruling T14e-2: a crossing fee is a reserve-guarded sink. Killed by
+# tests/test_ai/test_progression_reserve.py (fee_shortfall) and
+# tests/test_ai/test_key_door_route.py (the walk's crossing state).
+FEE_SHORTFALL_MUTATIONS = [
+    ("fee shortfall: the pocket's lack alone",
+     "    return next(g for g in starts\n",
+     "    return next(g for g in [pocket_lack]\n"),
+    ("fee shortfall: the floor the account cannot fund is never tried",
+     "    starts = sorted({pocket_lack, max(pocket_lack, fee + _MIN_SAFETY_FLOOR - account),\n",
+     "    starts = sorted({pocket_lack,\n"),
+    ("fee shortfall: the bank does not fund the reserve",
+     "    account = account_gold(state)\n    starts",
+     "    account = state.gold\n    starts"),
+]
+KEY_DOOR_CROSSING_MUTATIONS = [
+    ("door: the walk's crossings are asked of its spendable pocket",
+     "        model = ObtainModel(walked, game_data, ctx, datetime.now(UTC), crossing=state)\n",
+     "        model = ObtainModel(walked, game_data, ctx, datetime.now(UTC))\n"),
+    ("door: the model's reach is its pocket's",
+     "        self._crossing = state if crossing is None else crossing\n",
+     "        self._crossing = state\n"),
+    ("door: a fee's gold is earned on top of the real pocket",
+     "    bag = (_walk_pocket(state, game_data, frozenset({code}), policy) if code == GOLD_CODE\n",
+     "    bag = (state.gold if code == GOLD_CODE\n"),
+]
+KEY_DOOR_FEE_GUARD_MUTATIONS = [
+    ("door: a fee is paid past the reserve",
+     "        if fee and (state.gold < fee or not can_spend(state, game_data, None, fee)):\n",
+     "        if fee and state.gold < fee:\n"),
+    ("door: a fee is paid from the bank",
+     "        if fee and (state.gold < fee or not can_spend(state, game_data, None, fee)):\n",
+     "        if fee and not can_spend(state, game_data, None, fee):\n"),
 ]
 KEY_DOOR_REACH_MUTATIONS = [
     ("door: the hypothetical holds nothing",
@@ -8743,7 +8776,7 @@ KEY_DOOR_REACH_MUTATIONS = [
 ]
 KEY_DOOR_GATE_MUTATIONS = [
     ("door: a fight past a door names no door",
-     "    doors = () if known else monster_doors(monster, state, game_data)\n",
+     "    doors = () if known else monster_doors(monster, crossing, game_data)\n",
      "    doors = ()\n"),
     ("door: winnability is not asked past a door",
      "    winnable = (live or known or bool(doors)) and drop_fight_winnable(",
@@ -8751,7 +8784,7 @@ KEY_DOOR_GATE_MUTATIONS = [
 ]
 KEY_DOOR_WALK_MUTATIONS = [
     ("door: a gather past a door names no door",
-     "            doors = () if known else doors_to(resource, tiles, self._state, self._gd)\n",
+     "            doors = () if known else doors_to(resource, tiles, self._crossing, self._gd)\n",
      "            doors = ()\n"),
     ("door: a door gate never joins the walk",
      "                if not unmet or not all(openable(gate) or gate.doors for gate in unmet):\n",
@@ -8847,8 +8880,14 @@ REACH_REGIONS_MUTATIONS = [
      "            | {region for region, _route in _crossing_walk(\n"
      "                state, [], game_data)}))\n"),
     ("reach: the memo ignores the gold a crossing is paid with",
-     "    return (game_data.state_region(state), state.layer, state.gold,\n",
-     "    return (game_data.state_region(state), state.layer, 0,\n"),
+     "    return (game_data.state_region(state), state.layer, state.gold, state.bank_gold,\n",
+     "    return (game_data.state_region(state), state.layer, 0, state.bank_gold,\n"),
+    ("reach: the memo ignores the bank a fee's reserve counts",
+     "    return (game_data.state_region(state), state.layer, state.gold, state.bank_gold,\n",
+     "    return (game_data.state_region(state), state.layer, state.gold, 0,\n"),
+    ("reach: the memo ignores the reserve's floor",
+     "            reserve_floor(state, game_data, None),\n",
+     "            0,\n"),
     ("reach: the memo is shared by every catalogue",
      "    memo = _REACH.cache_for(game_data)\n",
      "    memo = _REACH.cache_for(None)  # type: ignore[arg-type]\n"),
@@ -14251,6 +14290,16 @@ def _collect_all_groups() -> None:
     run_group(TRANSITION_SRC, KEY_DOOR_SHORTFALL_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(REGION_EDGES_SRC, KEY_DOOR_REACH_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(TRANSITION_SRC, KEY_DOOR_FEE_GUARD_MUTATIONS,
+              "tests/test_ai/test_actions_transition.py", survivors)
+    run_group(PROGRESSION_RESERVE_SRC, FEE_SHORTFALL_MUTATIONS,
+              "tests/test_ai/test_progression_reserve.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, KEY_DOOR_CROSSING_MUTATIONS[:1],
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, KEY_DOOR_CROSSING_MUTATIONS[1:2],
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, KEY_DOOR_CROSSING_MUTATIONS[2:],
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(DROP_ROUTES_SRC_T14A, KEY_DOOR_GATE_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)

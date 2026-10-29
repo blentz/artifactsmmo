@@ -52,7 +52,7 @@ from artifactsmmo_cli.ai.loadout_win import wins_with_a_loadout
 from artifactsmmo_cli.ai.obtain_model.gate import Door, Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.party_win import wins_as_a_party
-from artifactsmmo_cli.ai.region_edges import content_reached, doors_to
+from artifactsmmo_cli.ai.region_edges import content_reached, doors_to, reachable_regions_now
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
@@ -98,10 +98,10 @@ def monster_doors(monster: str, state: WorldState, game_data: GameData) -> tuple
 
 
 def _fight_gates(monster: str, state: WorldState, game_data: GameData,
-                 rested: _Rested, reach: frozenset[str]) -> tuple[Gate, ...]:
+                 rested: _Rested, reach: frozenset[str], crossing: WorldState) -> tuple[Gate, ...]:
     live = bool(game_data.all_monster_locations.get(monster))
     known = monster_reached(monster, game_data, reach)
-    doors = () if known else monster_doors(monster, state, game_data)
+    doors = () if known else monster_doors(monster, crossing, game_data)
     winnable = (live or known or bool(doors)) and drop_fight_winnable(rested.get(), game_data, monster)
     return (
         Gate(GateKind.SPAWN_LIVE, monster, live),
@@ -111,7 +111,7 @@ def _fight_gates(monster: str, state: WorldState, game_data: GameData,
     )
 
 
-def drop_routes(item: str, state: WorldState, game_data: GameData, reach: frozenset[str],
+def drop_routes(item: str, state: WorldState, game_data: GameData, crossing: WorldState,
                 fighter: Fighter | None = None) -> list[Route]:
     """One DROP route per monster that drops `item`, in drop-table order.
 
@@ -120,19 +120,25 @@ def drop_routes(item: str, state: WorldState, game_data: GameData, reach: frozen
     fixed point, spec 2026-10-18 §2.3). A callable is asked once per dropping
     monster for the fighter that monster is judged against (its own target
     loadout: "beatable by SOME achievable loadout"). XP_POSITIVE still reads
-    `state`'s level."""
+    `state`'s level.
+
+    `crossing` is the state the crossings are asked of (SPAWN_KNOWN's reach,
+    `region_edges.reachable_regions_now`, and its doors): `state` itself, or
+    the real state when `state`'s pocket is only the gold a buy may spend
+    (ruling T14e-2: the reserve a fee keeps is applied by the crossing, once)."""
     shared = _Rested(state if fighter is None or callable(fighter) else fighter)
+    reach = reachable_regions_now(crossing, game_data)
 
     def rested(monster: str) -> _Rested:
         return _Rested(fighter(monster)) if callable(fighter) else shared
 
     return [Route(item, SourceKind.DROP, monster, 1, UNBOUNDED_CAPACITY,
-                  _fight_gates(monster, state, game_data, rested(monster), reach))
+                  _fight_gates(monster, state, game_data, rested(monster), reach, crossing))
             for monster, _rate, _mn, _mx in game_data.monsters_dropping(item)]
 
 
 def gold_drop_routes(state: WorldState, game_data: GameData,
-                     reach: frozenset[str]) -> list[Route]:
+                     crossing: WorldState) -> list[Route]:
     """One GOLD_DROP route per monster whose win pays gold, in catalogue order.
 
     Gold is minted by fighting: every win pays between the monster's
@@ -145,8 +151,11 @@ def gold_drop_routes(state: WorldState, game_data: GameData,
     suicide guard, the same ceiling `gear_objective._candidates` puts on `m*`.
     The gold a piece is priced by is the gold the fight that serves it earns:
     in `l20_dual_utility` the level-28 imp paid gold cheapest, and the level-20
-    character could never fight it."""
+    character could never fight it.
+
+    `crossing` is the state the crossings are asked of, as `drop_routes`'."""
     rested = _Rested(state)
+    reach = reachable_regions_now(crossing, game_data)
     ceiling = state.level + FIGHT_LEVEL_GAP_CEILING
     out: list[Route] = []
     for monster in game_data.monsters.levels:
@@ -155,5 +164,5 @@ def gold_drop_routes(state: WorldState, game_data: GameData,
             continue
         paid = max(1, win_gold(monster, game_data))
         out.append(Route(GOLD_CODE, SourceKind.GOLD_DROP, monster, paid, UNBOUNDED_CAPACITY,
-                         _fight_gates(monster, state, game_data, rested, reach)))
+                         _fight_gates(monster, state, game_data, rested, reach, crossing)))
     return out

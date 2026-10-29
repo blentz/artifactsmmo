@@ -53,6 +53,7 @@ from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.gate import Door
+from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 REGION_EDGE_TAG = "movement"
@@ -152,8 +153,11 @@ die with it, so no address is ever reused for another's answer)."""
 def _reach_key(state: WorldState, game_data: GameData) -> tuple[object, ...]:
     """Everything a crossing's applicability reads (`MapTransitionAction.
     is_applicable`): the region and layer the walk starts from, the gold and
-    items it pays with, the items it holds or wears."""
-    return (game_data.state_region(state), state.layer, state.gold,
+    items it pays with, the items it holds or wears, and what a fee's reserve
+    reads (ruling T14e-2): the banked gold the account counts and the floor
+    the reserve keeps."""
+    return (game_data.state_region(state), state.layer, state.gold, state.bank_gold,
+            reserve_floor(state, game_data, None),
             tuple(sorted(state.inventory.items())),
             tuple(sorted(code for code in state.equipment.values() if code)))
 
@@ -227,7 +231,7 @@ def door_reaches(state: WorldState, game_data: GameData) -> tuple[tuple[Door, fr
         out: dict[Door, frozenset[str]] = {}
         for edge in region_edge_actions(game_data):
             assert isinstance(edge, MapTransitionAction)
-            lack = edge.shortfall(state)
+            lack = edge.shortfall(state, game_data)
             if not lack:
                 continue
             door: Door = tuple(sorted(lack.items()))

@@ -32,7 +32,7 @@ from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.models.map_schema import MapSchema
 from artifactsmmo_api_client.models.transition_schema import TransitionSchema
 
-from artifactsmmo_cli.ai import region_edges
+from artifactsmmo_cli.ai import progression_reserve, region_edges
 from artifactsmmo_cli.ai.acquisition_cost import (
     _climbs,
     _kill_actions,
@@ -660,6 +660,27 @@ def test_the_reach_memo_is_scoped_per_catalogue_and_bounded() -> None:
         region_edges._REACH.max_entries = region_edges.REACH_MEMO_SIZE
 
 
+def test_the_reach_memo_keys_what_a_fee_s_reserve_reads(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling T14e-2: the 5000-gold crossing asks the reserve (`can_spend`),
+    which reads the bank the account counts and the floor the next target
+    sets. Two states that differ only there walk apart, so the memo keys
+    both (`_reach_key`)."""
+    player = _seeded(RUNE_CELLS[0])
+    state, world = player.state, player.game_data
+    assert state is not None and world is not None
+    region = "restricted:overworld:-5,8"
+    region_edges._REACH.clear()
+    pocket = replace(state, gold=5050, bank_gold=0)
+    assert region not in reachable_regions_now(pocket, world)
+    assert region in reachable_regions_now(replace(pocket, bank_gold=10_000), world)
+    monkeypatch.setattr(progression_reserve, "reserved_targets",
+                        lambda at, gd: {"x": 12_000} if at.level == 1 else {})
+    region_edges._REACH.clear()
+    banked = replace(pocket, bank_gold=10_000)
+    assert region in reachable_regions_now(banked, world)
+    assert region not in reachable_regions_now(replace(banked, level=1), world)
+
+
 def test_a_drop_behind_a_crossing_is_a_route_once_the_fee_is_held() -> None:
     """`dryad_hair` drops only from `dryad`, whose tiles are all on the
     restricted layer past the 5000-gold door: its route's SPAWN_KNOWN gate is
@@ -669,7 +690,7 @@ def test_a_drop_behind_a_crossing_is_a_route_once_the_fee_is_held() -> None:
     assert state is not None and world is not None
 
     def known(at: WorldState) -> bool:
-        (route,) = drop_routes("dryad_hair", at, world, reachable_regions_now(at, world))
+        (route,) = drop_routes("dryad_hair", at, world, at)
         return next(g.satisfied for g in route.gates if g.kind is GateKind.SPAWN_KNOWN)
 
     assert not known(state)
@@ -734,7 +755,7 @@ def test_fight_and_gather_gates_ask_one_reach_where_the_catalogue_does_not(monke
     assert world.resource_spawn_known("mithril_rocks") is False
 
     def known(at: WorldState) -> tuple[bool, bool]:
-        (fight,) = drop_routes("goblin_cloth", at, world, reachable_regions_now(at, world))
+        (fight,) = drop_routes("goblin_cloth", at, world, at)
         (gather,) = [r for r in ObtainModel(at, world, TIMED_NO_PROFILE_CONTEXT, datetime.now(UTC))
                      .routes("mithril_ore") if r.kind is SourceKind.GATHER]
         return tuple(next(g.satisfied for g in route.gates if g.kind is GateKind.SPAWN_KNOWN)

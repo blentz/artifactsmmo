@@ -33,10 +33,14 @@ class TestMapTransitionAction:
         assert repr(_edge()) == "Transition((-4,9,overworld)->(-4,8,overworld), 5000g)"
         assert repr(_edge(conditions=())) == "Transition((-4,9,overworld)->(-4,8,overworld))"
 
-    def test_applicable_iff_gold_covers_the_fee(self):
+    def test_applicable_iff_gold_covers_the_fee_above_the_reserve(self):
+        """Ruling T14e-2: a fee is a reserve-guarded sink. The pocket pays
+        it, and the account (pocket and bank) keeps the safety floor after."""
         gd = GameData()
-        assert _edge().is_applicable(make_state(gold=5000), gd) is True
-        assert _edge().is_applicable(make_state(gold=4999), gd) is False
+        assert _edge().is_applicable(make_state(gold=5100), gd) is True
+        assert _edge().is_applicable(make_state(gold=5099), gd) is False
+        assert _edge().is_applicable(make_state(gold=5000, bank_gold=100), gd) is True
+        assert _edge().is_applicable(make_state(gold=4999, bank_gold=10**6), gd) is False
         assert _edge(conditions=()).is_applicable(make_state(gold=0), gd) is True
 
     def test_unmodeled_condition_operators_never_pass(self):
@@ -130,13 +134,13 @@ class TestKeyedTransitions:
         gd = GameData()
         edge = _edge(conditions=(("gold", "cost", 100),
                                  ("lich_tomb_key", "cost", 1)))
-        funded = make_state(gold=100, inventory={"lich_tomb_key": 1})
+        funded = make_state(gold=200, inventory={"lich_tomb_key": 1})
         assert edge.is_applicable(funded, gd) is True
         assert edge.is_applicable(
-            make_state(gold=99, inventory={"lich_tomb_key": 1}), gd) is False
-        assert edge.is_applicable(make_state(gold=100, inventory={}), gd) is False
+            make_state(gold=199, inventory={"lich_tomb_key": 1}), gd) is False
+        assert edge.is_applicable(make_state(gold=200, inventory={}), gd) is False
         post = edge.apply(funded, gd)
-        assert post.gold == 0 and post.inventory == {}
+        assert post.gold == 100 and post.inventory == {}
 
     def test_repr_shows_key_conditions(self):
         assert repr(_edge(conditions=(("lich_tomb_key", "cost", 1),))) == \

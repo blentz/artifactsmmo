@@ -1,11 +1,15 @@
 # tests/test_ai/test_progression_reserve.py
+from dataclasses import replace
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.progression_reserve import (
     _MIN_SAFETY_FLOOR,
     account_gold,
     boss_targets,
     buy_price,
+    can_spend,
     crafting_unlock_targets,
+    fee_shortfall,
     gear_targets,
     progression_reserve,
     reserve_floor,
@@ -365,3 +369,33 @@ def test_the_binding_test_is_against_ACCOUNT_gold_not_the_pocket():
     assert reserve_floor(pocket_only, gd, None) == _MIN_SAFETY_FLOOR
     assert account_gold(with_bank) > total
     assert reserve_floor(with_bank, gd, None) == total
+
+
+def test_a_fee_shortfall_is_the_least_gold_the_reserve_lets_pay_the_fee():
+    """Ruling T14e-2: a crossing fee is a discretionary sink (`can_spend`,
+    `buying=None`). Its shortfall is the least gold to earn (into the pocket)
+    before the pocket covers the fee and the account keeps its floor after.
+    Here the floor is the 120-gold armor reservation."""
+    gd = _gd_buyable_armor()
+    equip = {"body_armor_slot": "rags"}
+    held = make_state(gold=1000, bank_gold=0, equipment=equip)
+    assert reserve_floor(held, gd, None) == 120
+    assert fee_shortfall(held, gd, 50) == 0
+    # the pocket's own lack, when the bank already funds the floor
+    banked = make_state(gold=0, bank_gold=1000, equipment=equip)
+    assert fee_shortfall(banked, gd, 50) == 50
+    # broke: the fee and the funded floor above it
+    broke = make_state(gold=0, bank_gold=0, equipment=equip)
+    assert fee_shortfall(broke, gd, 50) == 170
+    assert not can_spend(replace(broke, gold=169), gd, None, 50)
+
+
+def test_a_fee_shortfall_passes_against_a_floor_the_account_cannot_fund():
+    """The reserve is not monotone in the balance: a floor the account cannot
+    fund does not bind (`_binding`), so 110 gold pays a 10-gold fee against
+    the safety floor, while 125 (which funds the 120 floor) does not."""
+    gd = _gd_buyable_armor()
+    broke = make_state(gold=0, bank_gold=0, equipment={"body_armor_slot": "rags"})
+    assert fee_shortfall(broke, gd, 10) == 110
+    assert can_spend(replace(broke, gold=110), gd, None, 10)
+    assert not can_spend(replace(broke, gold=125), gd, None, 10)

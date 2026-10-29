@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.transition_layer_error import TransitionLayerError
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.progression_reserve import can_spend, fee_shortfall
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 
@@ -28,7 +29,9 @@ class MapTransitionAction(Action):
     Modeled condition operators (docs concepts/maps_and_movement):
     - `cost`: pay gold or a key item, CONSUMED on use (`lich_tomb_key`,
       `sonnengott_key`, the Enchanted Forest's 5000 gold fee). Item costs
-      are paid from the inventory.
+      are paid from the inventory. A gold fee is a discretionary sink the
+      gold reserve guards (ruling T14e-2, one reserve governs): it is paid
+      only when `can_spend` passes it, as every other gold sink is.
     - `has_item`: possess the item in inventory OR equipped, NOT consumed
       (`cultist_cloak`).
     Any other operator (achievement_unlocked, stat comparisons) makes the
@@ -80,9 +83,10 @@ class MapTransitionAction(Action):
         return state.inventory.get(code, 0) + sum(
             1 for equipped in state.equipment.values() if equipped == code)
 
-    def shortfall(self, state: WorldState) -> dict[str, int] | None:
+    def shortfall(self, state: WorldState, game_data: GameData) -> dict[str, int] | None:
         """What `state` lacks to pay this edge's conditions, `{code: units}`
-        with gold under `GOLD_CODE`: the gold fee past the pocket, each
+        with gold under `GOLD_CODE`: the gold to earn before the fee passes
+        the pocket and the reserve (`progression_reserve.fee_shortfall`), each
         consumed key past the bag, each `has_item` key past the bag and the
         worn slots. Empty when the conditions are met; None when an operator
         is not modeled (`is_applicable` refuses it whatever is held). The
@@ -90,8 +94,9 @@ class MapTransitionAction(Action):
         if not self._conditions_modeled():
             return None
         lack: dict[str, int] = {}
-        if self._gold_cost() > state.gold:
-            lack[GOLD_CODE] = self._gold_cost() - state.gold
+        gold = fee_shortfall(state, game_data, self._gold_cost()) if self._gold_cost() else 0
+        if gold:
+            lack[GOLD_CODE] = gold
         for code, qty in self._item_costs().items():
             if state.inventory.get(code, 0) < qty:
                 lack[code] = qty - state.inventory.get(code, 0)
@@ -105,7 +110,8 @@ class MapTransitionAction(Action):
             return False
         if not self._conditions_modeled():
             return False
-        if state.gold < self._gold_cost():
+        fee = self._gold_cost()
+        if fee and (state.gold < fee or not can_spend(state, game_data, None, fee)):
             return False
         if any(state.inventory.get(code, 0) < qty
                for code, qty in self._item_costs().items()):

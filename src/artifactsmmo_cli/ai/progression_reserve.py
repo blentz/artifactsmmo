@@ -5,18 +5,29 @@ items the bot would BUY, mapped to their cheapest gold buy price. The pure
 `progression_reserve_core` then sums them and applies the deduction-aware floor.
 Craftable-now / unsellable items contribute nothing (no gold needed).
 """
+import dataclasses
+
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_value import gear_value
+from artifactsmmo_cli.ai.gear_value_core import Rank
 from artifactsmmo_cli.ai.progression_reserve_core import (
     effective_floor,
     effective_floor_multi,
     reserve_total,
 )
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _HORIZON = 2  # reserve for upgrades usable within the next 2 character levels
 _MIN_SAFETY_FLOOR = 100  # never spend to zero even when nothing is reserved
+
+
+def _rank(stats: ItemStats) -> int:
+    """`tiers.equip_value.equip_value`, which is `gear_value(stats, Rank)`,
+    read at its definition: this module is imported by the crossing
+    (`MapTransitionAction`, ruling T14e-2), and the `tiers` package imports
+    the obtain model that imports the crossing."""
+    return gear_value(stats, Rank)
 
 
 def buy_price(code: str, game_data: GameData) -> int | None:
@@ -60,13 +71,13 @@ def _best_per_slot(state: WorldState, game_data: GameData,
         for slot in slots:
             equipped = state.equipment.get(slot)
             cur = game_data.item_stats(equipped) if equipped else None
-            cur_val = equip_value(cur) if cur is not None else 0
-            if equip_value(stats) <= cur_val:
+            cur_val = _rank(cur) if cur is not None else 0
+            if _rank(stats) <= cur_val:
                 continue
             incumbent = best.get(slot)
             inc_stats = game_data.item_stats(incumbent) if incumbent else None
-            inc_val = equip_value(inc_stats) if inc_stats is not None else cur_val
-            if equip_value(stats) > inc_val:
+            inc_val = _rank(inc_stats) if inc_stats is not None else cur_val
+            if _rank(stats) > inc_val:
                 best[slot] = code
     return best
 
@@ -279,3 +290,28 @@ def spendable_pocket(state: WorldState, game_data: GameData,
     floor = reserve_floor_multi(state, game_data, buying)
     return max(0, min(state.gold, account_gold(state) - floor))
 
+
+
+def fee_shortfall(state: WorldState, game_data: GameData, fee: int) -> int:
+    """The least gold `state` must earn before it may pay a `fee` (a crossing's
+    gold `cost`, Task 14e ruling T14e-2): the smallest `g >= 0` such that the
+    pocket plus `g` covers the fee and `can_spend` passes it, a discretionary
+    sink (`buying=None`), on the account plus `g`. Earned gold lands in the
+    pocket, so both grow by `g`.
+
+    ONE RESERVE GOVERNS, ASKED OF `can_spend` ITSELF. The answer is not monotone
+    in `g`: a floor the account cannot fund does not bind (`_binding`), so a
+    small balance passes against the safety floor, a larger one that funds the
+    floor fails until it also covers the fee above it. The passing `g` form at
+    most two intervals, starting at the safety floor's bound
+    (`fee + _MIN_SAFETY_FLOOR - account`) and at the reserve's
+    (`fee + floor - account`); the least passing `g` at or past the pocket's
+    own lack is that lack or one of those starts, and the reserve's always
+    passes (it funds the floor, so the floor binds and is met)."""
+    pocket_lack = max(0, fee - state.gold)
+    floor = max(_MIN_SAFETY_FLOOR, effective_floor(reserved_targets(state, game_data), None))
+    account = account_gold(state)
+    starts = sorted({pocket_lack, max(pocket_lack, fee + _MIN_SAFETY_FLOOR - account),
+                     max(pocket_lack, fee + floor - account)})
+    return next(g for g in starts
+                if can_spend(dataclasses.replace(state, gold=state.gold + g), game_data, None, fee))

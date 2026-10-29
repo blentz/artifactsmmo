@@ -24,7 +24,7 @@ from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.models.map_schema import MapSchema
 from artifactsmmo_api_client.models.transition_schema import TransitionSchema
 
-from artifactsmmo_cli.ai import acquisition_cost, region_edges
+from artifactsmmo_cli.ai import acquisition_cost, craft_plan_gen, region_edges
 from artifactsmmo_cli.ai.acquisition_cost import (
     CROSSING_ACTIONS,
     acquisition_actions,
@@ -43,7 +43,9 @@ from artifactsmmo_cli.ai.obtain_model import drop_routes as drop_routes_module
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, PIECE_POLICY
+from artifactsmmo_cli.ai.obtain_sources import UNBOUNDED_CAPACITY, Source
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression_reserve import fee_shortfall, spendable_pocket
 from artifactsmmo_cli.ai.region_edges import door_reaches, doors_to, reachable_regions_now
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.source_kind import SourceKind
@@ -137,17 +139,21 @@ def _seeded(name: str) -> tuple[WorldState, GameData, GamePlayer]:
 # --- the authority names the door -------------------------------------------
 
 def test_a_door_s_shortfall_is_what_the_state_lacks() -> None:
-    """`MapTransitionAction.shortfall`: the fee past the pocket, a consumed key
-    past the bag, a `has_item` key past the bag and the worn slots; None for an
-    operator the model refuses."""
+    """`MapTransitionAction.shortfall`: the gold to earn before the fee
+    passes the pocket and the reserve (the 100-gold safety floor here), a
+    consumed key past the bag, a `has_item` key past the bag and the worn
+    slots; None for an operator the model refuses."""
+    world = GameData()
     edge = MapTransitionAction(conditions=(("gold", "cost", 100), ("tomb_key", "cost", 2),
                                            ("cloak", "has_item", 1)))
-    assert edge.shortfall(make_state(gold=30)) == {GOLD_CODE: 70, "tomb_key": 2, "cloak": 1}
-    held = make_state(gold=100, inventory={"tomb_key": 1}, equipment={"body_armor_slot": "cloak"})
-    assert edge.shortfall(held) == {"tomb_key": 1}
-    assert edge.shortfall(make_state(gold=200, inventory={"tomb_key": 2, "cloak": 1})) == {}
+    assert edge.shortfall(make_state(gold=30), world) == {GOLD_CODE: 170, "tomb_key": 2,
+                                                          "cloak": 1}
+    held = make_state(gold=200, inventory={"tomb_key": 1}, equipment={"body_armor_slot": "cloak"})
+    assert edge.shortfall(held, world) == {"tomb_key": 1}
+    assert edge.shortfall(make_state(gold=200, inventory={"tomb_key": 2, "cloak": 1}),
+                          world) == {}
     unmodeled = MapTransitionAction(conditions=(("deep_delver", "achievement_unlocked", 1),))
-    assert unmodeled.shortfall(make_state()) is None
+    assert unmodeled.shortfall(make_state(), world) is None
 
 
 def test_a_door_past_the_reach_names_its_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -244,12 +250,15 @@ def test_a_key_past_another_door_is_walked_through_that_door(
 
 def test_a_gather_past_a_door_names_the_door() -> None:
     """`enchanted_mushroom` grows only past the 5000-gold door: its gather's
-    SPAWN_KNOWN gate names the fee the pocket lacks."""
+    SPAWN_KNOWN gate names the gold to earn before the fee passes the pocket
+    and the reserve (`fee_shortfall`), more than the pocket alone lacks."""
     state, world, player = _seeded("l48_band_adequate")
     model = ObtainModel(state, world, player._selection_context(), datetime.now(UTC))
     (route,) = [r for r in model.routes("enchanted_mushroom") if r.kind is SourceKind.GATHER]
     gate = next(g for g in route.gates if g.kind is GateKind.SPAWN_KNOWN)
-    assert (gate.satisfied, gate.doors) == (False, (((GOLD_CODE, 5000 - state.gold),),))
+    short = fee_shortfall(state, world, 5000)
+    assert short > 5000 - state.gold
+    assert (gate.satisfied, gate.doors) == (False, (((GOLD_CODE, short),),))
 
 
 def test_a_key_behind_its_own_door_is_a_wall(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -422,6 +431,26 @@ def test_a_ready_route_the_door_cannot_beat_is_the_one_served(
                       pocket=state.gold) is None
 
 
+def test_a_door_route_a_ready_one_dominates_is_not_priced(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """The cyclops drops `life_crystal_shard` every win: a ready route with no
+    inputs, no unlock and unbounded capacity that costs no more per unit than
+    the lich's own fight. The route past the lich door could never be the
+    price, so it is not priced at all."""
+    state, world, player = _seeded("l30_band_entry")
+    real = GameData.monsters_dropping
+    monkeypatch.setattr(GameData, "monsters_dropping", lambda self, item: real(self, item) + (
+        [("cyclops", 1, 1, 1)] if item == "life_crystal_shard" else []))
+    monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
+    ctx = player._selection_context()
+    options = route_options("life_crystal_shard", state, world, ctx, policy=DECOMPOSE_POLICY)
+    assert [(o.venue, o.unlock) for o in options] == [("cyclops", "")]
+    lich = acquisition_cost._priced("life_crystal_shard",
+                                    Source(SourceKind.DROP, "lich", 1, UNBOUNDED_CAPACITY),
+                                    state, world, ctx)
+    assert acquisition_cost._per_unit(options[0]) <= acquisition_cost._per_unit(lich)
+
+
 def test_a_door_route_never_suppresses_the_gear_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     """The gear gate asks whether anything served the item before a door was
     priced: an item a door route serves still gets its gear-gated drop."""
@@ -496,6 +525,23 @@ def test_a_gather_past_a_door_pays_its_climb_as_the_skill_gate_does() -> None:
                   frozenset()) is None
 
 
+def test_the_gear_chain_under_a_door_is_priced_with_that_door_shut(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling T14e-m5, at `_gear_unlock` itself: a gear chain whose step drops
+    only past the lich door (every fight winnable) prices through that door,
+    unless the door is the one being opened (`opening`), where it has no
+    route and the gear does not close."""
+    state, world, _player = _seeded("l30_band_entry")
+    monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
+    step = DeficitStep("life_crystal_shard", "ring", 30, None, 0, 1)
+    monkeypatch.setattr(acquisition_cost, "combat_deficit",
+                        lambda s, g, monster: CombatDeficit(monster, -1, (step,), True))
+    gear = acquisition_cost._gear_unlock
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    assert gear("x", state, world, ctx, None, DECOMPOSE_POLICY, frozenset()) is not None
+    assert gear("x", state, world, ctx, None, DECOMPOSE_POLICY, frozenset({LICH_DOOR})) is None
+
+
 def test_the_gear_past_a_door_never_reprices_that_door(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ruling T14e-m5: the gear chain that opens a fight past a door is priced
     with the door closed to it (`opening`). A chain that needs the very item
@@ -508,3 +554,46 @@ def test_the_gear_past_a_door_never_reprices_that_door(monkeypatch: pytest.Monke
     assert not [o for o in route_options("life_crystal_shard", state, world,
                                          TIMED_NO_PROFILE_CONTEXT, policy=DECOMPOSE_POLICY)
                 if o.venue == "lich"]
+
+
+# --- ruling T14e-2: a crossing fee is a reserve-guarded sink ------------------
+
+def test_a_fee_the_reserve_keeps_is_priced_and_fought_for_alike(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """The level-48 sheet holding the 5000-gold fee, but not the fee and the
+    reserve's floor above it: the crossing refuses it (`can_spend`), so the
+    dryad stands past the door. The pricer charges the gold the reserve
+    keeps as the route's door, the walk opens that same door with a gold
+    fight, and both read one shortfall (`fee_shortfall`)."""
+    state, world, player = _seeded("l48_band_adequate")
+    rich = replace(state, gold=5050, bank_gold=0)
+    assert spendable_pocket(rich, world, frozenset({"dryad_hair"})) < 5000 <= rich.gold
+    short = fee_shortfall(rich, world, 5000)
+    assert short > 0
+    assert "restricted:overworld:-5,8" not in reachable_regions_now(rich, world)
+    door = ((GOLD_CODE, short),)
+    ctx = player._selection_context()
+    (option,) = [o for o in route_options("dryad_hair", rich, world, ctx, policy=PIECE_POLICY)
+                 if o.venue == "dryad"]
+    assert option.unlock == acquisition_cost._door_unlock(door)
+    model = ObtainModel(rich, world, ctx, datetime.now(UTC))
+    assert model.door_open(door, PIECE_POLICY)
+    opened: list[object] = []
+    walked: list[dict[str, int]] = []
+    open_door, walk_plan = craft_plan_gen._open_door, craft_plan_gen._walk_plan
+    monkeypatch.setattr(craft_plan_gen, "_open_door",
+                        lambda door, *a: opened.append(door) or open_door(door, *a))
+    monkeypatch.setattr(craft_plan_gen, "_walk_plan",
+                        lambda goal, *a: walked.append(goal.needed) or walk_plan(goal, *a))
+    piece = GatherMaterialsGoal("dryad_hair", {"dryad_hair": 1}, piece_material=True,
+                                fight_gold=True)
+    plan = decompose(piece, rich, world, player._build_actions(), ctx)
+    assert plan is not None
+    (fight,) = plan
+    assert isinstance(fight, FightAction) and fight.gold_target is not None
+    assert opened == [door]
+    # the fee's gold is earned on top of the pocket the inner walk counts
+    pocket = spendable_pocket(rich, world, frozenset({GOLD_CODE}))
+    assert walked[-1] == {GOLD_CODE: pocket + short}
+    paid = replace(rich, gold=rich.gold + short)
+    assert "restricted:overworld:-5,8" in reachable_regions_now(paid, world)
