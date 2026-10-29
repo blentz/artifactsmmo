@@ -31,7 +31,8 @@ from artifactsmmo_cli.ai.bag_clear import (
 )
 from artifactsmmo_cli.ai.bag_clear_core import BAG_FULL_ALL_RELATED
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess, drain_snapshot
-from artifactsmmo_cli.ai.chosen_loadout import potion_carry
+from artifactsmmo_cli.ai.best_loadout import loadout_for
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, potion_carry
 from artifactsmmo_cli.ai.craft_plan_gen import decompose, hands_off_to_search
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
@@ -44,7 +45,7 @@ from artifactsmmo_cli.ai.equipment.bank_tool_fills import bank_tool_fills
 from artifactsmmo_cli.ai.equipment.empty_slot_fills import empty_slot_rank_fills
 from artifactsmmo_cli.ai.event_plan_window import plan_fits_event_window
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
-from artifactsmmo_cli.ai.fight_room_license import license_fights, refused_fight, refuses_fight_against
+from artifactsmmo_cli.ai.fight_room_license import license_fights, refused_fight, refused_monster
 from artifactsmmo_cli.ai.fight_tiles import fight_tiles
 from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY, supply_due, turn_in_due
 from artifactsmmo_cli.ai.game_data import GameData
@@ -560,7 +561,8 @@ def objective_step_goal(
         provision = _marginal_provision_goal(ctx, state, game_data)
         if provision is not None:
             return provision
-        prep = _fight_step_prep(state, game_data, ctx, monster)
+        loadout = _fight_step_loadout(state, game_data, ctx, monster)
+        prep = None if loadout is None else _fight_step_prep(state, game_data, ctx, loadout)
         if prep is not None:
             # THE FIGHT STEP CARRIES ITS LOADOUT (USER 2026-10-10, "Fight steps
             # prep it"; §3: the leaf builds what it needs). Live 05:16-14:40Z
@@ -620,15 +622,16 @@ def objective_step_goal(
         if state.task_type == "items":
             # c-2 #4/#5: a held items task not cancelled for its worth is worked.
             return _pursue_goal(state, game_data)
-        if (_prices_step_fight(state, game_data, ctx, step.task_code)
-                and refuses_fight_against(state, game_data, ctx, step.task_code)):
-            # Its fight is priced at `loadout_for`'s pick, as its prep is: a
-            # pick whose loop has no room for the drops refuses the fight at
-            # this step (ruling T14d-2).
-            return None
-        prep = _fight_step_prep(state, game_data, ctx, step.task_code)
-        if prep is not None:
-            return prep  # the task fight carries its loadout too (see the trunk arm)
+        loadout = _fight_step_loadout(state, game_data, ctx, step.task_code)
+        if loadout is not None:
+            if refused_monster(loadout) is not None:
+                # The pick its prep reads, read once (ruling T14d-R m4): one
+                # whose loop has no room for the drops refuses the fight at
+                # this step (ruling T14d-2).
+                return None
+            prep = _fight_step_prep(state, game_data, ctx, loadout)
+            if prep is not None:
+                return prep  # the task fight carries its loadout too (see the trunk arm)
         return TaskKillsGoal(step.task_code, state.task_progress)
     if isinstance(step, ReachFleetOutcome):
         return _fleet_step_goal(step, state, ctx)
@@ -644,21 +647,30 @@ def _prices_step_fight(state: WorldState, game_data: GameData, ctx: SelectionCon
     return ctx.loadout is not None and bool(fight_tiles(state, game_data, monster))
 
 
-def _fight_step_prep(state: WorldState, game_data: GameData, ctx: SelectionContext,
-                     monster: str) -> Goal | None:
-    """The fight step's prep (USER 2026-10-10, "Fight steps prep it"): the
-    loadout's potions, then its food, from the loadout against this step's
-    monster (`best_loadout.loadout_for`: the cycle's own when it was chosen
-    against it). Not only when the cycle's loadout matches: while a potion
-    carry is committed, the fight ahead is the carry's own (its ingredient's
-    dropper), and a prep that switched off then would hand the commitment back
-    to the bare fight. No loadout this cycle (no fight ahead) is no prep, and a
-    monster fought on no tile now, on any layer (`fight_tiles`), has no fight
-    to prep (`_prices_step_fight`)."""
+def _fight_step_loadout(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                        monster: str) -> ChosenLoadout | None:
+    """The pick a fight step against `monster` is priced at
+    (`best_loadout.loadout_for`: the cycle's own when it was chosen against
+    it), or None when the step prices no fight (`_prices_step_fight`). Read
+    ONCE per step (ruling T14d-R m4): its prep and its bag-room verdict both
+    take it."""
     if not _prices_step_fight(state, game_data, ctx, monster):
         return None
-    return (potion_prep_goal(state, game_data, ctx, monster)
-            or heal_prep_goal(state, game_data, ctx, monster))
+    return loadout_for(state, game_data, ctx, monster)
+
+
+def _fight_step_prep(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                     loadout: ChosenLoadout) -> Goal | None:
+    """The fight step's prep (USER 2026-10-10, "Fight steps prep it"): the
+    loadout's potions, then its food, from the pick against this step's
+    monster (`_fight_step_loadout`). Not only when the cycle's loadout
+    matches: while a potion carry is committed, the fight ahead is the
+    carry's own (its ingredient's dropper), and a prep that switched off then
+    would hand the commitment back to the bare fight. No loadout this cycle
+    (no fight ahead) is no prep, and a monster fought on no tile now, on any
+    layer (`fight_tiles`), has no fight to prep: there is no pick to hand in."""
+    return (potion_prep_goal(state, game_data, ctx, loadout)
+            or heal_prep_goal(state, game_data, ctx, loadout))
 
 
 def _fleet_step_goal(step: ReachFleetOutcome, state: WorldState,

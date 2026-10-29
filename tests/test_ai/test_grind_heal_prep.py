@@ -12,10 +12,11 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from unittest.mock import patch
 
-from artifactsmmo_cli.ai import craft_plan_gen, fight_room_license, grind_heal_prep
+from artifactsmmo_cli.ai import craft_plan_gen, grind_heal_prep
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.best_loadout import loadout_for
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry, potion_carry
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -37,6 +38,13 @@ from tests.test_ai.fixtures import NO_DROPS_CONTEXT
 
 CARRY = food_carry(1)
 """The carry of a food the loadout eats one unit of per fight."""
+
+
+def _heal(state: WorldState, gd: GameData, ctx: SelectionContext,
+          monster: str) -> GatherMaterialsGoal | None:
+    """`heal_prep_goal` on the pick its callers hand it: `loadout_for`'s
+    against `monster` (ruling T14d-R m4)."""
+    return heal_prep_goal(state, gd, ctx, loadout_for(state, gd, ctx, monster))
 
 
 def _gd() -> GameData:
@@ -89,30 +97,30 @@ def _needed(goal: GatherMaterialsGoal | None) -> dict[str, int] | None:
 class TestHealPrepGoal:
     def test_the_chosen_food_is_stocked_to_its_carry(self):
         gd = _gd()
-        goal = heal_prep_goal(_state(gd, {"milk": CARRY}), gd, EATS_CHEESE, "wolf")
+        goal = _heal(_state(gd, {"milk": CARRY}), gd, EATS_CHEESE, "wolf")
         assert _needed(goal) == {"cheese": CARRY}
         assert goal is not None and goal.carry  # satisfied by the BAG only (live 2026-10-10)
 
     def test_the_carry_scales_with_the_units_eaten_per_fight(self):
         gd = _gd()
-        goal = heal_prep_goal(_state(gd, {"milk": 3 * CARRY}), gd, _eats(("cheese", 3)), "wolf")
+        goal = _heal(_state(gd, {"milk": 3 * CARRY}), gd, _eats(("cheese", 3)), "wolf")
         assert _needed(goal) == {"cheese": food_carry(3)}
 
     def test_the_bag_counts_toward_the_carry(self):
         """Five in the bag: the goal still names the full carry (the bag's five
         plus the rest); a full carry in the bag is no goal at all."""
         gd = _gd()
-        goal = heal_prep_goal(_state(gd, {"cheese": 5, "milk": CARRY - 5}), gd,
+        goal = _heal(_state(gd, {"cheese": 5, "milk": CARRY - 5}), gd,
                               EATS_CHEESE, "wolf")
         assert _needed(goal) == {"cheese": CARRY}
-        assert heal_prep_goal(_state(gd, {"cheese": CARRY, "milk": CARRY}), gd,
+        assert _heal(_state(gd, {"cheese": CARRY, "milk": CARRY}), gd,
                               EATS_CHEESE, "wolf") is None
 
     def test_rest_wins_when_the_loadout_eats_nothing(self):
         """The chosen recovery is Rest (the loadout eats no food): nothing is
         stocked, even with every ingredient on hand."""
         gd = _gd()
-        assert heal_prep_goal(_state(gd, {"milk": CARRY}), gd, _eats(), "wolf") is None
+        assert _heal(_state(gd, {"milk": CARRY}), gd, _eats(), "wolf") is None
 
     def test_food_not_worth_making_is_only_withdrawn(self):
         """Spec §1: Rest beats the food at replacement price (`made_food`
@@ -121,17 +129,17 @@ class TestHealPrepGoal:
         ctx = replace(NO_DROPS_CONTEXT, combat_monster="wolf",
                       loadout=ChosenLoadout("wolf", (), (("cheese", 1),), ()))
         state = _state(gd, {"milk": CARRY}, bank={"cheese": 5})
-        assert _needed(heal_prep_goal(state, gd, ctx, "wolf")) == {"cheese": 5}
-        assert heal_prep_goal(_state(gd, {"milk": CARRY}), gd, ctx, "wolf") is None
+        assert _needed(_heal(state, gd, ctx, "wolf")) == {"cheese": 5}
+        assert _heal(_state(gd, {"milk": CARRY}), gd, ctx, "wolf") is None
 
     def test_a_non_fisher_only_withdraws_while_a_fisher_is_held(self):
         """Spec §4: the fisher makes the fleet's food; a sibling fetches it."""
         gd = _gd()
         ctx = replace(EATS_CHEESE, role="miner", fleet_roles=frozenset({"fisher", "miner"}))
         state = _state(gd, {"milk": CARRY}, bank={"cheese": 5})
-        assert _needed(heal_prep_goal(state, gd, ctx, "wolf")) == {"cheese": 5}
+        assert _needed(_heal(state, gd, ctx, "wolf")) == {"cheese": 5}
         fisher = replace(ctx, role="fisher")
-        assert _needed(heal_prep_goal(state, gd, fisher, "wolf")) == {"cheese": CARRY}
+        assert _needed(_heal(state, gd, fisher, "wolf")) == {"cheese": CARRY}
 
     def test_an_unsuppliable_carry_stocks_the_units_held_in_the_bank(self):
         """No milk, so the carry cannot be crafted; the five banked cheese are
@@ -139,9 +147,9 @@ class TestHealPrepGoal:
         withdraws them."""
         gd = _gd()
         state = _state(gd, {}, bank={"cheese": 5})
-        assert _needed(heal_prep_goal(state, gd, EATS_CHEESE, "wolf")) == {"cheese": 5}
+        assert _needed(_heal(state, gd, EATS_CHEESE, "wolf")) == {"cheese": 5}
         state = _state(gd, {"cheese": 2}, bank={"cheese": 3})
-        assert _needed(heal_prep_goal(state, gd, EATS_CHEESE, "wolf")) == {"cheese": 5}
+        assert _needed(_heal(state, gd, EATS_CHEESE, "wolf")) == {"cheese": 5}
 
     def test_the_carry_is_capped_at_the_bags_room(self):
         """The bag takes only what it has room for: a carry past it plans a
@@ -150,67 +158,63 @@ class TestHealPrepGoal:
         gd = _gd()
         state = replace(_state(gd, {"cheese": 2}, bank={"cheese": 100}),
                         inventory_max=CARRY - 5)  # room: 2 held + 13 free
-        assert _needed(heal_prep_goal(state, gd, EATS_CHEESE, "wolf")) == {"cheese": CARRY - 5}
+        assert _needed(_heal(state, gd, EATS_CHEESE, "wolf")) == {"cheese": CARRY - 5}
         made = _state(gd, {"cheese": 2, "milk": CARRY})
         made = replace(made, inventory_max=made.inventory_used + 3)
-        assert _needed(heal_prep_goal(made, gd, EATS_CHEESE, "wolf")) == {"cheese": 5}
+        assert _needed(_heal(made, gd, EATS_CHEESE, "wolf")) == {"cheese": 5}
 
     def test_a_new_stack_needs_a_free_slot(self):
         """No cheese in the bag and no free slot: nothing fits, no goal."""
         gd = _gd()
         state = _state(gd, {}, bank={"cheese": 5})
         state = replace(state, inventory={"rock": 1}, inventory_slots_max=1)
-        assert heal_prep_goal(state, gd, EATS_CHEESE, "wolf") is None
+        assert _heal(state, gd, EATS_CHEESE, "wolf") is None
 
     def test_held_units_already_in_the_bag_are_no_goal(self):
         """The carry cannot be supplied and everything held is already in the
         bag: nothing to fetch."""
         gd = _gd()
-        assert heal_prep_goal(_state(gd, {"cheese": 5}), gd, EATS_CHEESE, "wolf") is None
+        assert _heal(_state(gd, {"cheese": 5}), gd, EATS_CHEESE, "wolf") is None
 
     def test_a_food_neither_suppliable_nor_held_is_skipped(self):
         """Cheese has no milk and none held: alone it is no goal, and with bread
         next in the loadout the bread is stocked."""
         gd = _gd()
         state = _state(gd, {"wheat": CARRY})
-        assert heal_prep_goal(state, gd, EATS_CHEESE, "wolf") is None
-        assert _needed(heal_prep_goal(state, gd, EATS_CHEESE_THEN_BREAD, "wolf")) == {
+        assert _heal(state, gd, EATS_CHEESE, "wolf") is None
+        assert _needed(_heal(state, gd, EATS_CHEESE_THEN_BREAD, "wolf")) == {
             "bread": CARRY}
 
     def test_a_food_the_character_cannot_craft_is_skipped(self):
         """Milk on hand but no cooking skill: the cheese cannot be supplied."""
         gd = _gd()
         state = replace(_state(gd, {"milk": CARRY}), skills={"gearcrafting": 1, "cooking": 0})
-        assert heal_prep_goal(state, gd, EATS_CHEESE, "wolf") is None
+        assert _heal(state, gd, EATS_CHEESE, "wolf") is None
 
     def test_the_second_food_is_stocked_once_the_first_is_carried(self):
         gd = _gd()
         state = _state(gd, {"cheese": CARRY, "milk": CARRY, "wheat": CARRY})
-        assert _needed(heal_prep_goal(state, gd, EATS_CHEESE_THEN_BREAD, "wolf")) == {
+        assert _needed(_heal(state, gd, EATS_CHEESE_THEN_BREAD, "wolf")) == {
             "bread": CARRY}
-        assert heal_prep_goal(_state(gd, {"cheese": CARRY, "bread": CARRY}), gd,
+        assert _heal(_state(gd, {"cheese": CARRY, "bread": CARRY}), gd,
                               EATS_CHEESE_THEN_BREAD, "wolf") is None
 
     def test_the_first_short_food_wins(self):
         gd = _gd()
         state = _state(gd, {"milk": CARRY, "wheat": CARRY})
-        assert _needed(heal_prep_goal(state, gd, EATS_CHEESE_THEN_BREAD, "wolf")) == {
+        assert _needed(_heal(state, gd, EATS_CHEESE_THEN_BREAD, "wolf")) == {
             "cheese": CARRY}
 
-    def test_the_loadout_is_the_one_chosen_against_the_named_monster(self):
-        """`loadout_for` is asked about the fight's monster; the cycle's own
-        loadout (chosen against another monster) is not read directly."""
+    def test_the_prep_reads_the_pick_it_is_handed(self):
+        """The prep stocks the food of the pick its caller hands it (the
+        `loadout_for` pick against the fight's monster, read once by the
+        caller, ruling T14d-R m4), not the cycle's own loadout (cheese, chosen
+        against another monster)."""
         gd = _gd()
-        asked: list[str] = []
-
-        def eats_bread(_state, _gd, _ctx, monster: str) -> ChosenLoadout:
-            asked.append(monster)
-            return ChosenLoadout(monster=monster, potions=(), food=(("bread", 1),), made_food=(("bread", 1),))
-
+        bread = ChosenLoadout(monster="ogre", potions=(), food=(("bread", 1),),
+                              made_food=(("bread", 1),))
         state = _state(gd, {"milk": CARRY, "wheat": CARRY})
-        with patch.object(grind_heal_prep, "loadout_for", side_effect=eats_bread):
-            goal = heal_prep_goal(state, gd, EATS_CHEESE, "ogre")
-        assert asked == ["ogre"]
+        goal = heal_prep_goal(state, gd, EATS_CHEESE, bread)
         assert _needed(goal) == {"bread": CARRY}
 
     def test_no_goal_when_the_food_needs_a_fight(self):
@@ -226,7 +230,7 @@ class TestHealPrepGoal:
         state = replace(_state(gd, {}), hp=165, max_hp=165, attack={"air": 5}, dmg=18)
         assert ObtainModel(state, gd, EATS_CHEESE, datetime.now(UTC)).feasible(
             "cheese", CARRY, LEGACY), "fixture is vacuous: cheese must be feasible by fighting"
-        assert heal_prep_goal(state, gd, EATS_CHEESE, "wolf") is None
+        assert _heal(state, gd, EATS_CHEESE, "wolf") is None
 
     def test_a_banked_food_is_withdrawn_before_crafting(self):
         """Real decomposition (the one walk): the banked cheese is withdrawn into
@@ -234,7 +238,7 @@ class TestHealPrepGoal:
         exactly."""
         gd = _gd()
         state = _state(gd, {"cheese": 2, "milk": CARRY}, bank={"cheese": 1})
-        goal = heal_prep_goal(state, gd, EATS_CHEESE, "wolf")
+        goal = _heal(state, gd, EATS_CHEESE, "wolf")
         assert goal is not None
         actions = [CraftAction(code="cheese", workshop_location=(4, 4))]
         plan = decompose(goal, state, gd, actions, EATS_CHEESE)
@@ -300,11 +304,9 @@ class TestGrindFightLegPreps:
         ogre = FightAction(monster_code="ogre", locations=frozenset({(1, 2)}), learned_drops=LearnedDrops.empty())
         gather = GatherAction(resource_code="milk_rocks", locations=frozenset({(3, 3)}),
                               learned_drops=LearnedDrops.empty())
-        # The grind's refusal reads `loadout_for` too (ruling T14d-2): the
-        # same runnable pick, not recorded here.
-        runs = ChosenLoadout(monster="ogre", potions=(), food=(), made_food=())
-        with patch.object(grind_heal_prep, "loadout_for", side_effect=eats_nothing), \
-                patch.object(fight_room_license, "loadout_for", return_value=runs):
+        # ONE read (ruling T14d-R m4): the grind's bag-room verdict and its
+        # heal prep take the same pick.
+        with patch.object(craft_plan_gen, "loadout_for", side_effect=eats_nothing):
             assert _grind({"milk": CARRY}, [gather, ogre, _FIGHT]) == (
                 [gather, ogre, _FIGHT], [])
         assert asked == ["ogre"]
@@ -367,7 +369,6 @@ class TestPotionPrep:
     LOADOUT = ChosenLoadout(monster="wolf", potions=(("boost", 1),), food=(), made_food=())
 
     def _patch(self, monkeypatch, *, ladder: bool, feasible: bool) -> None:
-        monkeypatch.setattr(grind_heal_prep, "loadout_for", lambda *a: self.LOADOUT)
         monkeypatch.setattr(grind_heal_prep, "ladder_supplies", lambda *a: ladder)
         monkeypatch.setattr(grind_heal_prep, "prep_supplies", lambda *a: feasible)
 
@@ -376,15 +377,15 @@ class TestPotionPrep:
         gd = _gd()
         state = replace(_state(gd, {}), equipment={**_state(gd, {}).equipment, "utility1_slot": "boost"},
                         utility1_slot_quantity=5)
-        goal = potion_prep_goal(state, gd, EATS_CHEESE, "wolf")
+        goal = potion_prep_goal(state, gd, EATS_CHEESE, self.LOADOUT)
         assert goal is not None and goal.carry and goal.needed == {"boost": potion_carry(1) - 5}
 
     def test_on_hand_brewable_or_unsuppliable_is_no_prep(self, monkeypatch) -> None:
         gd = _gd()
         self._patch(monkeypatch, ladder=False, feasible=True)
-        assert potion_prep_goal(_state(gd, {"boost": potion_carry(1)}), gd, EATS_CHEESE, "wolf") is None
+        assert potion_prep_goal(_state(gd, {"boost": potion_carry(1)}), gd, EATS_CHEESE, self.LOADOUT) is None
         self._patch(monkeypatch, ladder=True, feasible=True)
-        assert potion_prep_goal(_state(gd, {}), gd, EATS_CHEESE, "wolf") is None
+        assert potion_prep_goal(_state(gd, {}), gd, EATS_CHEESE, self.LOADOUT) is None
         self._patch(monkeypatch, ladder=False, feasible=False)
-        assert potion_prep_goal(_state(gd, {}), gd, EATS_CHEESE, "wolf") is None
+        assert potion_prep_goal(_state(gd, {}), gd, EATS_CHEESE, self.LOADOUT) is None
 

@@ -245,14 +245,33 @@ def test_a_task_fight_with_no_room_for_its_drops_is_refused_at_its_step() -> Non
 def test_the_task_steps_prep_and_refusal_share_one_guard(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ruling T14d-R m5: the task step's bag-room refusal and its prep are
     guarded by one predicate (`_prices_step_fight`). Where it says the step
-    prices no fight, neither is asked: the refusing pick is never read and the
-    step is one more kill."""
+    prices no fight, neither is asked: the pick they share is never read and
+    the step is one more kill."""
     asked: list[str] = []
     monkeypatch.setattr(driver_mod, "_prices_step_fight",
                         lambda *a: asked.append(a[3]) or False)
-    monkeypatch.setattr(driver_mod, "refuses_fight_against",
-                        lambda *a: pytest.fail("the refusal was asked"))
+    monkeypatch.setattr(driver_mod, "loadout_for",
+                        lambda *a: pytest.fail("the step's pick was read"))
     held = {"task_code": "ogre", "task_type": "monsters", "task_total": 5, "task_progress": 0}
     full = replace(_state(inventory_max=30), **held)
     goal = objective_step_goal(ReachTaskOutcome("ogre"), full, _gd(), replace(CTX, loadout=_WOLF_AHEAD))
-    assert isinstance(goal, TaskKillsGoal) and asked == ["ogre", "ogre"]
+    assert isinstance(goal, TaskKillsGoal) and asked == ["ogre"]
+
+
+def test_a_task_step_reads_its_fights_pick_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling T14d-R m4: the task step's bag-room verdict and its prep take
+    one pick: `loadout_for` is called once per step, refused or not."""
+    real = driver_mod.loadout_for
+    calls: list[str] = []
+
+    def counting(state: WorldState, gd: GameData, ctx: SelectionContext, monster: str) -> ChosenLoadout:
+        calls.append(monster)
+        return real(state, gd, ctx, monster)
+    monkeypatch.setattr(driver_mod, "loadout_for", counting)
+    held = {"task_code": "ogre", "task_type": "monsters", "task_total": 5, "task_progress": 0}
+    ctx = replace(CTX, loadout=_WOLF_AHEAD)
+    for bag, refused in ((30, True), (200, False)):
+        calls.clear()
+        goal = objective_step_goal(ReachTaskOutcome("ogre"), replace(_state(inventory_max=bag), **held),
+                                   _gd(), ctx)
+        assert (goal is None) is refused and calls == ["ogre"]

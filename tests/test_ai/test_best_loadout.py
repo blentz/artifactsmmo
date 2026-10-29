@@ -268,10 +268,10 @@ class TestChosen:
         assert got is not None and got == chosen(best_loadout(state, gd, _CTX, "ogre"), "ogre")
         assert 0 < best_loadout(state, gd, _CTX, "ogre").rate.p_win < 1
         assert loadout_for(state, gd, _CTX, "ogre") == got
-        prep = heal_prep_goal(state, gd, replace(ctx, loadout=got), "ogre")
+        prep = heal_prep_goal(state, gd, replace(ctx, loadout=got), got)
         assert repr(prep) == repr(GatherMaterialsGoal(target_item="apple", needed={"apple": 3},
                                                       carry=True))
-        step = _fight_step_prep(state, gd, replace(ctx, loadout=got), "ogre")
+        step = _fight_step_prep(state, gd, replace(ctx, loadout=got), got)
         assert repr(step) == repr(prep)
 
     def test_no_fight_ahead_chooses_nothing(self) -> None:

@@ -20,6 +20,7 @@ from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.best_loadout import loadout_for
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
@@ -435,7 +436,8 @@ def advances_a_heal_prep(first: Action, plan: list[Action], state: WorldState,
     fight = next((a for a in plan if isinstance(a, FightAction)), None)
     if fight is None:
         return False
-    prep = heal_prep_goal(state, game_data, _OFFLINE_CONTEXT, fight.monster_code)
+    prep = heal_prep_goal(state, game_data, _OFFLINE_CONTEXT,
+                          loadout_for(state, game_data, _OFFLINE_CONTEXT, fight.monster_code))
     if prep is None:
         return False
     for item in prep.needed:

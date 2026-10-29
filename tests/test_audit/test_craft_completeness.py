@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
-from artifactsmmo_cli.ai import grind_heal_prep
+from artifactsmmo_cli.ai import craft_plan_gen
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -949,7 +949,10 @@ def test_a_heal_prep_leg_before_a_grind_fight_is_directional() -> None:
         return ChosenLoadout(monster=monster, potions=(), food=(("cooked_gudgeon", 1),),
                              made_food=(("cooked_gudgeon", 1),))
 
-    with patch.object(grind_heal_prep, "loadout_for", side_effect=eats_gudgeon):
+    # The grind (`craft_plan_gen`) and the census verdict (`craft_completeness`)
+    # each read the pick once and hand it to the prep (ruling T14d-R m4).
+    with patch.object(craft_plan_gen, "loadout_for", side_effect=eats_gudgeon), \
+            patch.object(craft_completeness, "loadout_for", side_effect=eats_gudgeon):
         state = census_state("iron_boots", CraftCell(8, "gearcrafting", 5), gd)
         plan = plan_craft("iron_boots", state, gd)
         assert repr(plan[0]) == f"Gather(gudgeon_spot×{food_carry(1)})"

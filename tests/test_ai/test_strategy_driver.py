@@ -2341,11 +2341,15 @@ class TestFightStepsCarryTheirLoadout:
         against that carry's dropper; the grind still preps for ITS monster
         (`loadout_for`), or the prep would hand the commitment back."""
         asked: list[str] = []
+        handed: list[str] = []
+        monkeypatch.setattr(sd, "loadout_for",
+                            lambda _s, _g, _c, monster: asked.append(monster) or self._loadout(monster))
         monkeypatch.setattr(sd, "potion_prep_goal", lambda *a: None)
-        monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: asked.append(a[3]) or self.PREP)
+        monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: handed.append(a[3].monster) or self.PREP)
         ctx = _ctx(combat_monster="chicken", loadout=self._loadout("cow"))
         assert objective_step_goal(ReachCharLevel(10), make_state(), _spawning_gd(), ctx) is self.PREP
-        assert asked == ["chicken"]
+        # One pick, against the step's own monster, handed to the prep.
+        assert asked == ["chicken"] and handed == ["chicken"]
 
     def test_no_loadout_no_prep(self, monkeypatch):
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
@@ -2370,9 +2374,9 @@ class TestFightStepsCarryTheirLoadout:
         factory fights on. The legacy index alone left a rat task unprepped."""
         monkeypatch.setattr(sd, "potion_prep_goal", lambda *a: None)
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
-        # The task fight's room verdict reads `loadout_for` against the
-        # chicken, as the preps stubbed above do (ruling T14d-2): a loop that runs.
-        monkeypatch.setattr(sd, "refuses_fight_against", lambda *a: False)
+        # The step's one pick against the chicken (ruling T14d-R m4), which
+        # the stubbed preps and the room verdict take: a loop that runs.
+        monkeypatch.setattr(sd, "loadout_for", lambda *a: self._loadout("chicken"))
         gd = _spawning_gd()
         gd._monster_locations = {}
         gd.world.layered_content = {"chicken": [(-3, 12, "interior")]}

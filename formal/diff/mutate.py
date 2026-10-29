@@ -2178,21 +2178,23 @@ FIGHT_ROOM_LICENSE_MUTATIONS = [
 # Ruling T14d-2: a fight priced by `loadout_for` is refused at its step, on the
 # one verdict (`refused_monster`). Killed by tests/test_ai/test_fight_room_license.py.
 FIGHT_ROOM_STEP_VERDICT_MUTATIONS = [
-    ("fight room: a fight priced by loadout_for is never refused",
-     "    return refused_monster(loadout_for(state, game_data, ctx, monster)) == monster",
-     "    return False"),
+    ("fight room: a refusing pick is read as running",
+     "    if loadout is None or loadout.runnable:\n        return None\n    return loadout.monster",
+     "    if loadout is None:\n        return None\n    return None"),
 ]
 FIGHT_ROOM_GRIND_MUTATIONS = [
     ("fight room: a grind's refused fight is planned",
-     "        if refuses_fight_against(state, game_data, ctx, fight.monster_code):\n"
+     "        if refused_monster(loadout) is not None:\n"
      "            return _decline(",
      "        if False:\n"
      "            return _decline("),
 ]
 FIGHT_ROOM_TASK_STEP_MUTATIONS = [
     ("fight room: a task step's refused fight is one more kill",
-     "        if (_prices_step_fight(state, game_data, ctx, step.task_code)",
-     "        if (False"),
+     "            if refused_monster(loadout) is not None:\n"
+     "                # The pick its prep reads",
+     "            if False:\n"
+     "                # The pick its prep reads"),
     # Ruling T14d-R m5: one guard for the step's prep and its refusal.
     ("fight step: the prep ignores the shared guard",
      "    if not _prices_step_fight(state, game_data, ctx, monster):\n        return None",
@@ -7879,11 +7881,11 @@ CARRY_PREP_MUTATIONS = [
 ]
 FIGHT_STEP_PREP_MUTATIONS = [
     ("fight steps: the grind never preps",
-     "        prep = _fight_step_prep(state, game_data, ctx, monster)\n",
+     "        prep = None if loadout is None else _fight_step_prep(state, game_data, ctx, loadout)\n",
      "        prep = None\n"),
     ("fight steps: the task kill never preps",
-     "        prep = _fight_step_prep(state, game_data, ctx, step.task_code)\n",
-     "        prep = None\n"),
+     "            prep = _fight_step_prep(state, game_data, ctx, loadout)\n",
+     "            prep = None\n"),
 ]
 # The items task's own step (GatherMaterials of the task item) is never deferred
 # by the task reservation (36ca9aa2, C3P0 2026-10-10 spruce_plank stall). Killed
@@ -8959,10 +8961,10 @@ POTION_PREP_MUTATIONS = [
 ]
 FIGHT_STEP_POTION_MUTATIONS = [
     ("fight step: food before the potions",
-     "    return (potion_prep_goal(state, game_data, ctx, monster)\n"
-     "            or heal_prep_goal(state, game_data, ctx, monster))\n",
-     "    return (heal_prep_goal(state, game_data, ctx, monster)\n"
-     "            or potion_prep_goal(state, game_data, ctx, monster))\n"),
+     "    return (potion_prep_goal(state, game_data, ctx, loadout)\n"
+     "            or heal_prep_goal(state, game_data, ctx, loadout))\n",
+     "    return (heal_prep_goal(state, game_data, ctx, loadout)\n"
+     "            or potion_prep_goal(state, game_data, ctx, loadout))\n"),
     # The guard is one predicate since ruling T14d-R m5 (`_prices_step_fight`).
     ("fight step: no loadout still preps",
      "    return ctx.loadout is not None and bool(fight_tiles(state, game_data, monster))\n",
