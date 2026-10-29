@@ -805,25 +805,25 @@ def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str
     assert objective.held is (not missing)
 
 
-def test_a_piece_is_priced_at_the_fighters_prospecting(monkeypatch: pytest.MonkeyPatch,
-                                                       gd: GameData) -> None:
-    """Spec §2.8: a drop's chance is read at the prospecting of the loadout the
-    attempt is made in, and for the objective that is the fighter wearing
-    `L*`, not the character's worn total. Every piece's price is asked at
-    the fighter's."""
+def test_a_piece_is_priced_from_the_characters_own_state(monkeypatch: pytest.MonkeyPatch,
+                                                         gd: GameData) -> None:
+    """Ruling T14d-3: one basis. A piece's price is paid from now, with the
+    gear the character holds, so every piece is priced on the character's own
+    state (its drops at the loadout that state picks, `attempt_prospecting`),
+    not on the `L*` fighter's prospecting total over the character's gear."""
     state = scenario_state(SCENARIOS["l40_band_entry"], gd)
-    asked: list[int] = []
+    asked: list[WorldState] = []
     real = mod.cheapest_route
 
     def recording(code, qty, priced, *args, **kwargs):  # type: ignore[no-untyped-def]
-        asked.append(priced.prospecting)
+        asked.append(priced)
         return real(code, qty, priced, *args, **kwargs)
 
     monkeypatch.setattr(mod, "cheapest_route", recording)
     objective = _objective(state, gd)
     assert objective.fighter is not None
     assert objective.fighter.prospecting != state.prospecting
-    assert asked and set(asked) == {objective.fighter.prospecting}
+    assert asked and all(priced is state for priced in asked)
 
 
 def _wearing_boost(fighter: WorldState, boost: str) -> WorldState:

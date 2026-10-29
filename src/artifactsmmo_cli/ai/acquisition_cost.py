@@ -154,9 +154,9 @@ def _gather_actions(item: str, resource: str, state: WorldState, game_data: Game
     """Gathers of `resource` to obtain ONE `item`, exact: the attempts a unit
     takes (`LearnedDrops.attempts_per_unit`, spec 2026-10-18 §2.8) over the
     item's drop row (`GameData.gather_drop_row`), at the prospecting of the
-    loadout the gather is made in (`gather_prospecting`): picked from the
-    character's own holdings for an executor price, from the `L*` fighter's
-    worn gear for a gear-objective price (`gear_objective._price`). The SAME figure the planner's gather charges
+    loadout the gather is made in (`gather_prospecting`), picked from the
+    character's own holdings, a gear-objective price (`gear_objective._price`,
+    ruling T14d-3) as much as an executor's. The SAME figure the planner's gather charges
     (`GatherAction.gathers`) and every gather source picker ranks by (ruling
     T16a), so the walk and the planner cannot disagree on a rare drop: 20
     `small_pearls` (1 in 300) off `trout_spot` are about 6,000 gathers under

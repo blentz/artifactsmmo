@@ -556,16 +556,17 @@ def test_the_second_copy_is_cheaper_than_the_first(tmp_path, state, game_data) -
     assert second < first
 
 
-def test_a_gear_price_reads_the_fighters_prospecting(tmp_path, state, game_data) -> None:
-    """A gear-objective price prices a drop at the prospecting of the fighter
-    wearing `L*` (§2.8), not the character's own: with `k` learned on chicken
-    kills, a fighter at prospecting 100 farms feathers cheaper than one at 0."""
+def test_a_gear_price_reads_the_characters_own_prospecting(tmp_path, state, game_data) -> None:
+    """Ruling T14d-3: a gear-objective price is read on the character's own
+    state, so its own prospecting moves the drop price: with `k` learned on
+    chicken kills, a character at prospecting 100 farms feathers cheaper than
+    one at 0."""
     store = _fleet(tmp_path / "learn.db",
                    [("Fight(chicken)", "FightAction", '{"feather": 1}', 5, 4)])
     assert fleet_k(store, game_data) == Fraction(1, 5)
-    own = _price(state, game_data, _learned(game_data, store), store, state, "feather")
-    lucky = _price(state, game_data, _learned(game_data, store), store,
-                   replace(state, prospecting=100), "feather")
+    own = _price(state, game_data, _learned(game_data, store), store, "feather")
+    lucky = _price(replace(state, prospecting=100), game_data, _learned(game_data, store),
+                   store, "feather")
     assert lucky[0] < own[0]
 
 

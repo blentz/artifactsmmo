@@ -1609,20 +1609,23 @@ ONE_DROP_MODEL_FACTORY_MUTATIONS = [
      "                                        learned_drops=LearnedDrops.empty()))"),
 ]
 
-# The gear objective prices a drop at the fighter's prospecting (spec §2.8,
-# plan B Task 12a). Killed by tests/test_ai/test_acquisition_cost_wrapper.py.
+# The gear objective prices a drop at the character's own prospecting (ruling
+# T14d-3; was the fighter's, plan B Task 12a). Killed by
+# tests/test_ai/test_acquisition_cost_wrapper.py.
 FIGHTER_PROSPECTING_MUTATIONS = [
-    ("gear price: a drop reads the character's prospecting",
-     "replace(state, prospecting=fighter.prospecting)",
-     "replace(state, prospecting=state.prospecting)"),
+    ("gear price: a drop ignores the character's own prospecting",
+     "    price, route = cheapest_route(code, 1, state, game_data, ctx, history, policy=PIECE_POLICY,",
+     "    price, route = cheapest_route(code, 1, replace(state, prospecting=0), game_data, ctx,\n"
+     "                                  history, policy=PIECE_POLICY,"),
 ]
 
-# The objective asks each piece's price at its L* fighter (spec §2.8, ruling
-# T12g m3). Killed by tests/test_ai/test_gear_objective.py.
+# The objective asks each piece's price on the character's own state (ruling
+# T14d-3; was the L* fighter's prospecting, T12g m3). Killed by
+# tests/test_ai/test_gear_objective.py.
 FIGHTER_PIECE_PRICE_MUTATIONS = [
-    ("gear objective: a piece is priced at the character's worn prospecting",
-     "_price(state, game_data, ctx, history, targets[code][0], item)",
-     "_price(state, game_data, ctx, history, state, item)"),
+    ("gear objective: a piece is priced on the L* fighter, not the character (T14d-3)",
+     "_price(state, game_data, ctx, history, item)",
+     "_price(targets[code][0], game_data, ctx, history, item)"),
 ]
 
 DROP_ROWS_STORE_MUTATIONS = [
@@ -4578,8 +4581,8 @@ PIECE_POLICY_OBJECTIVE_MUTATIONS = [
      "            if model.feasible(code, 1, type(PIECE_POLICY)(**{**vars(PIECE_POLICY), "
      "'ge_routes': False})):"),
     ("gear_objective: the price back on LEGACY's switches (no event vendor, no fight gold)",
-     "                                  game_data, ctx, history, policy=PIECE_POLICY,",
-     "                                  game_data, ctx, history, "
+     "    price, route = cheapest_route(code, 1, state, game_data, ctx, history, policy=PIECE_POLICY,",
+     "    price, route = cheapest_route(code, 1, state, game_data, ctx, history, "
      "policy=type(PIECE_POLICY)(**{**vars(PIECE_POLICY), 'event_vendors': False, "
      "'fight_gold': False}),"),
 ]

@@ -468,27 +468,25 @@ def _gain(state: WorldState, target: WorldState, game_data: GameData, monster: s
 
 
 def _price(state: WorldState, game_data: GameData, ctx: SelectionContext,
-           history: LearningStore | None, fighter: WorldState,
-           code: str) -> tuple[Fraction, SourceKind | None]:
+           history: LearningStore | None, code: str) -> tuple[Fraction, SourceKind | None]:
     """`(price, route)` of wearing `code`: its `cheapest_route` under
     `PIECE_POLICY`, the policy the piece was judged achievable by and is served
     by, plus the equip (the price `route_price` gives the slotted `ObtainItem`),
     and the route that price takes, the one the piece is served by (plan B
     Task 3).
 
-    A drop route's chance is read at the prospecting of the loadout the
-    attempt is made in (spec 2026-10-18 §2.8, `acquisition_cost`'s one basis,
-    ruling T12n), on top of `fighter`'s prospecting total, the fighter wearing
-    `L*` that the objective's rate is read on. Only that total is the
-    fighter's: the holdings priced, and the worn gear the loadout swaps from,
-    are the character's own.
+    Priced from the character's OWN state (ruling T14d-3): the price is paid
+    from now, with the gear the character holds, so a drop route's chance is
+    read at the prospecting of the loadout the attempt is made in from that
+    gear (spec 2026-10-18 §2.8, `attempt_prospecting`, ruling T12n). It used to
+    swap the character's own gear on top of the `L*` fighter's prospecting
+    total, a mixed basis.
 
     Held gold is credited only above the reserve the piece's buy must keep
     (`spendable_pocket`, ruling T3e m3): the gold the executor's buy refuses
     to spend (`can_spend`) is priced as gold to fight for, the same pocket the
     served fight counts toward (`gold_funded_buy`)."""
-    price, route = cheapest_route(code, 1, replace(state, prospecting=fighter.prospecting),
-                                  game_data, ctx, history, policy=PIECE_POLICY,
+    price, route = cheapest_route(code, 1, state, game_data, ctx, history, policy=PIECE_POLICY,
                                   pocket=spendable_pocket(state, game_data, frozenset({code})))
     return Fraction(price + EQUIP_ACTIONS), route
 
@@ -522,7 +520,7 @@ def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext
                    _gain(state, target, game_data, code, food, loop, best[0], at))
                   for slot, item, at in _missing(game_data, code, target, loadouts[code], own)]
         pieces_of[code] = [piece for piece in gained if piece[2] > 0]
-    prices = {code: [_price(state, game_data, ctx, history, targets[code][0], item)
+    prices = {code: [_price(state, game_data, ctx, history, item)
                      for _, item, _ in pieces_of[code]] for code in tied}
     # `min` keeps the first of equal totals: catalogue order, as `_candidates` lists.
     monster = min(tied, key=lambda code: sum((price for price, _ in prices[code]),
