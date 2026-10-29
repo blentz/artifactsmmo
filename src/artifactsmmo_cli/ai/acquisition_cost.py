@@ -782,13 +782,19 @@ def door_price(door: Door, state: WorldState, game_data: GameData, ctx: Selectio
 
 def price_key(state: WorldState) -> tuple[object, ...]:
     """Everything of `state` a price reads: where it stands, its level, xp,
-    hp, gold (pocket and bank), its bag, gear, bank and skills, and the
-    fights it has lost."""
+    hp, gold (pocket and bank), its bag and the bag's cap (`_reentry_actions`'
+    room), gear, bank, skills, skill xp and each skill's level span
+    (`_climb_actions`), the events live on it (an event's content and
+    vendors), and the fights it has lost. The census memo
+    (`craft_completeness._census_reach`) keys on it across cells, so a cell
+    that differs only there has its own answer."""
     return (state.character, state.x, state.y, state.layer, state.level, state.xp, state.hp,
             state.max_hp, state.gold, state.bank_gold,
-            tuple(sorted(state.inventory.items())), tuple(sorted(state.equipment.items())),
+            tuple(sorted(state.inventory.items())), state.inventory_max,
+            tuple(sorted(state.equipment.items())),
             tuple(sorted((state.bank_items or {}).items())), tuple(sorted(state.skills.items())),
-            tuple(sorted(state.skill_xp.items())), state.lost_fights)
+            tuple(sorted(state.skill_xp.items())), tuple(sorted(state.skill_max_xp.items())),
+            tuple(sorted(state.active_events.items())), state.lost_fights)
 
 
 def _door_price(door: Door, state: WorldState, game_data: GameData, ctx: SelectionContext,

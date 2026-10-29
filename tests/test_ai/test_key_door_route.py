@@ -745,6 +745,30 @@ def test_the_census_reach_is_walked_once_per_reach_and_door_walk_key(
     assert len(walks) == 2
 
 
+
+@pytest.mark.parametrize("field", ["inventory_max", "skill_max_xp", "active_events"])
+def test_a_census_cell_that_differs_only_in_a_priced_input_has_its_own_answer(
+        monkeypatch: pytest.MonkeyPatch, field: str) -> None:
+    """Round 4 minor 2: the census memo spans cells, and a price reads the
+    bag's cap (`_reentry_actions`' room), each skill's level span
+    (`_climb_actions`) and the live events; a cell that differs only there is
+    walked afresh (`acquisition_cost.price_key`)."""
+    state, world, _player = _seeded("l30_band_entry")
+    craft_completeness._CENSUS_REACH.clear()
+    walks: list[WorldState] = []
+    walk = craft_completeness._census_reach_walk
+    monkeypatch.setattr(craft_completeness, "_census_reach_walk",
+                        lambda at, gd: walks.append(at) or walk(at, gd))
+    other = {"inventory_max": state.inventory_max + 1,
+             "skill_max_xp": {**state.skill_max_xp, "mining": state.skill_max_xp.get(
+                 "mining", 0) + 1},
+             "active_events": {**state.active_events, "probe_event": datetime(2026, 1, 1,
+                                                                             tzinfo=UTC)}}
+    craft_completeness._census_reach(state, world)
+    craft_completeness._census_reach(replace(state, **{field: other[field]}), world)
+    assert len(walks) == 2
+
+
 # --- ruling T14e-m6: doors at any depth ---------------------------------------
 
 KEY_A, KEY_B = (("key_a", 1),), (("key_b", 1),)
@@ -924,10 +948,11 @@ def test_a_consumed_key_chain_prices_and_walks_its_second_leg_past_the_toll(
     assert legs[0] is model
     assert legs[1]._state.inventory == {} and legs[1]._crossing.inventory == {"key_a": 1}
     ctx = TIMED_NO_PROFILE_CONTEXT
-    # Priced in that split, key B's guard is a ready route and no door's.
+    # Priced in that split, key B's guard is a ready route and no door's (a
+    # bounded stub, so no dominance prune hides a door route).
     monkeypatch.setattr(acquisition_cost, "_priced", lambda item, source, *a: RouteOption(
         kind=source.kind.value, venue=source.code, actions_per_application=Fraction(1),
-        yield_per=1, capacity=UNBOUNDED_CAPACITY))
+        yield_per=1, capacity=5))
     monkeypatch.setattr(acquisition_cost, "door_price", lambda door, *a: 1)
     options = route_options("key_b", pocket1, world, ctx, policy=DECOMPOSE_POLICY,
                             crossing=cross1)

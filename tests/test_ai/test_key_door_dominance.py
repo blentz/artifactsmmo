@@ -3,6 +3,7 @@ in isolation, so the mutant that removes it dies in seconds (the scenario
 tests in `test_key_door_route.py` price every door route without it, which
 takes minutes)."""
 
+from dataclasses import replace
 from fractions import Fraction
 
 import pytest
@@ -30,9 +31,10 @@ class _PastADoor:
                  (gate,)),)
 
 
-def _option(per_unit: int) -> RouteOption:
-    return RouteOption(kind=SourceKind.DROP.value, venue="m", actions_per_application=Fraction(
+def _option(per_unit: int, **fields: object) -> RouteOption:
+    option = RouteOption(kind=SourceKind.DROP.value, venue="m", actions_per_application=Fraction(
         per_unit), yield_per=1, capacity=UNBOUNDED_CAPACITY)
+    return replace(option, **fields)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(("ready", "door_route", "priced"), [(1, 2, False), (2, 2, False),
@@ -52,3 +54,24 @@ def test_a_door_route_a_ready_route_dominates_is_never_priced(
         _PastADoor(), DECOMPOSE_POLICY, True, frozenset(), [_option(ready)],  # type: ignore[arg-type]
         make_state())
     assert (calls == [DOOR], len(out) == 1) == (priced, priced)
+
+
+@pytest.mark.parametrize("fields", [{"unlock": "skill:mining:5", "unlock_actions": 9},
+                                    {"inputs": {"ore": 1}},
+                                    {"capacity": 3}],
+                         ids=["unlock", "inputs", "bounded"])
+def test_a_served_route_that_is_not_plain_is_no_dominance_floor(
+        monkeypatch: pytest.MonkeyPatch, fields: dict[str, object]) -> None:
+    """Round 4 minor 3: a served route that pays an unlock, needs inputs or
+    has bounded capacity can be dearer than the door route for some
+    quantity, however cheap per unit: it is no floor, and the door is
+    priced."""
+    monkeypatch.setattr(acquisition_cost, "_priced", lambda *a: _option(2))
+    calls: list[object] = []
+    monkeypatch.setattr(acquisition_cost, "door_price", lambda door, *a: calls.append(door) or 1)
+    monkeypatch.setattr(acquisition_cost, "door_toll", lambda door, s, g: ())
+    out = acquisition_cost._door_options(
+        "loot", make_state(), GameData(), TIMED_NO_PROFILE_CONTEXT, None,
+        _PastADoor(), DECOMPOSE_POLICY, True, frozenset(),  # type: ignore[arg-type]
+        [_option(1, **fields)], make_state())
+    assert calls == [DOOR] and len(out) == 1

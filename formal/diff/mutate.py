@@ -8864,6 +8864,16 @@ KEY_DOOR_CHAIN_EXECUTOR_MUTATIONS = [
 # The dominance prune, killed in seconds by its focused test (ruling
 # T14e-perf): without the prune the scenario file prices every door route.
 KEY_DOOR_DOMINANCE_MUTATIONS = [
+    # Round 4 minor 3: only a plain served route is the floor.
+    ("door price: a served route with inputs is the dominance floor",
+     "                 if not r.inputs and not r.unlock and r.capacity >= UNBOUNDED_CAPACITY),\n",
+     "                 if not r.unlock and r.capacity >= UNBOUNDED_CAPACITY),\n"),
+    ("door price: a served route with an unlock is the dominance floor",
+     "                 if not r.inputs and not r.unlock and r.capacity >= UNBOUNDED_CAPACITY),\n",
+     "                 if not r.inputs and r.capacity >= UNBOUNDED_CAPACITY),\n"),
+    ("door price: a bounded served route is the dominance floor",
+     "                 if not r.inputs and not r.unlock and r.capacity >= UNBOUNDED_CAPACITY),\n",
+     "                 if not r.inputs and not r.unlock),\n"),
     ("door price: a dominated door route is priced",
      "        if option is not None and floor is not None and floor <= _per_unit(option):\n"
      "            continue\n",
@@ -8957,6 +8967,19 @@ KEY_DOOR_EXECUTOR_MUTATIONS = [
     ("door executor: a door gate is ground as a skill gate",
      "                if gate.kind is GateKind.SPAWN_KNOWN:\n                    sub = _open_door(",
      "                if False:\n                    sub = _open_door("),
+]
+# Round 4 minor 2: the census memo spans cells, so price_key holds every
+# state input a price reads. Killed by tests/test_ai/test_key_door_route.py.
+KEY_DOOR_PRICE_KEY_MUTATIONS = [
+    ("price key: the bag's cap is not keyed",
+     "            tuple(sorted(state.inventory.items())), state.inventory_max,\n",
+     "            tuple(sorted(state.inventory.items())),\n"),
+    ("price key: the skills' level spans are not keyed",
+     "            tuple(sorted(state.skill_xp.items())), tuple(sorted(state.skill_max_xp.items())),\n",
+     "            tuple(sorted(state.skill_xp.items())),\n"),
+    ("price key: the live events are not keyed",
+     "            tuple(sorted(state.active_events.items())), state.lost_fights)\n",
+     "            state.lost_fights)\n"),
 ]
 KEY_DOOR_CENSUS_MUTATIONS = [
     ("door census: the memo keys only the reach (ruling T14e-m4)",
@@ -14443,6 +14466,8 @@ def _collect_all_groups() -> None:
     run_group(CRAFT_PLAN_GEN_SRC, KEY_DOOR_EXECUTOR_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(CRAFT_COMPLETENESS_SRC, KEY_DOOR_CENSUS_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(ACQUISITION_COST_SRC, KEY_DOOR_PRICE_KEY_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(REGION_EDGES_SRC, REGION_EDGE_MUTATIONS,
               "tests/test_ai/test_actions_transition.py", survivors)
