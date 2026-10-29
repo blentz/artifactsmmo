@@ -8831,6 +8831,15 @@ KEY_DOOR_CHAIN_EXECUTOR_MUTATIONS = [
      "    code, units = door_legs(door, state, game_data)[0][0]\n",
      "    code, units = door[0]\n"),
 ]
+# The dominance prune, killed in seconds by its focused test (ruling
+# T14e-perf): without the prune the scenario file prices every door route.
+KEY_DOOR_DOMINANCE_MUTATIONS = [
+    ("door price: a dominated door route is priced",
+     "        if option is not None and floor is not None and floor <= _per_unit(option):\n"
+     "            continue\n",
+     "        if False:\n"
+     "            continue\n"),
+]
 KEY_DOOR_REACH_MUTATIONS = [
     ("door: the hypothetical holds nothing",
      "                holding = _holding(held, leg)\n",
@@ -8891,11 +8900,6 @@ KEY_DOOR_PRICE_MUTATIONS = [
     ("door price: a companion that cannot be paid is skipped",
      "        if any(c is None for c in companions):\n            continue\n",
      "        if False:\n            continue\n"),
-    ("door price: a dominated door route is priced",
-     "        if option is not None and floor is not None and floor <= _per_unit(option):\n"
-     "            continue\n",
-     "        if False:\n"
-     "            continue\n"),
     ("door price: the gear past a door is priced without the gear gate",
      "                if gated_drop else None)\n",
      "                if True else None)\n"),
@@ -14385,6 +14389,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, KEY_DOOR_CHAIN_EXECUTOR_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(ACQUISITION_COST_SRC, KEY_DOOR_DOMINANCE_MUTATIONS,
+              "tests/test_ai/test_key_door_dominance.py", survivors)
     run_group(PROGRESSION_RESERVE_SRC, FEE_SHORTFALL_MUTATIONS,
               "tests/test_ai/test_progression_reserve.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, KEY_DOOR_CROSSING_MUTATIONS[:1],
