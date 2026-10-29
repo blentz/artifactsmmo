@@ -21,28 +21,32 @@ from collections.abc import Mapping, Sequence
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.fleet_climb_core import assign_climbers
-from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
+from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_xp
 
 
 def climb_ranks(skill: str, demanded: int, levels: Mapping[str, Mapping[str, int]],
                 rates: Mapping[str, Mapping[str, float]], max_xp: int) -> dict[str, Fraction]:
     """Each candidate's rank for climbing `skill` to `demanded`, in CYCLES
-    (ruling T14d-6): `skill_grind_cycles` from its level at its rate (`rates`:
-    its own, else the fleet's, positive only; `acquisition_cost.climber_rate`),
-    the measure the sibling route's price uses. A candidate already at the
+    (ruling T14d-6): the xp still to earn from its level (`skill_grind_xp`)
+    over its rate (`rates`: its own, else the fleet's, positive only;
+    `acquisition_cost.climber_rate`), the measure the sibling route's price
+    uses. UNROUNDED (ruling T14d-R m6): the price rounds its cycles up once,
+    but a rank on the rounded figure would let a ceiling tie, broken by fleet
+    order, pick a slower climber. A candidate already at the
     level is 0 cycles. One with no positive rate (or no known `max_xp`) has no
     price, and ranks after every priced candidate, ordered among themselves by
     the levels still to climb: `1 + the largest priced cycles + levels`."""
     left = {name: max(0, demanded - held.get(skill, 0)) for name, held in levels.items()}
-    priced: dict[str, int] = {}
+    priced: dict[str, Fraction] = {}
     for name, held in levels.items():
         rate = rates.get(name, {}).get(skill)
         if left[name] == 0:
-            priced[name] = 0
+            priced[name] = Fraction(0)
         elif rate is not None and max_xp > 0:
-            priced[name] = skill_grind_cycles(held.get(skill, 0), 0, max_xp, demanded, rate)
-    ceiling = 1 + max(priced.values(), default=0)
-    return {name: Fraction(priced[name] if name in priced else ceiling + left[name])
+            priced[name] = (Fraction(skill_grind_xp(held.get(skill, 0), 0, max_xp, demanded))
+                            / Fraction(rate))
+    ceiling = 1 + max(priced.values(), default=Fraction(0))
+    return {name: priced[name] if name in priced else ceiling + left[name]
             for name in levels}
 
 

@@ -62,10 +62,21 @@ def skill_grind_cycles(current_level: int, current_xp: int, max_xp: int,
 
     Rounded UP — a fractional cycle is still an action the character spends, and
     the objective is exact integers (S-013)."""
-    if current_level >= target_level:
-        return 0
-    levels_after_this_one = target_level - current_level - 1
-    remaining_xp = max(0, max_xp - current_xp) + max_xp * levels_after_this_one
+    remaining_xp = skill_grind_xp(current_level, current_xp, max_xp, target_level)
     if remaining_xp <= 0:
         return 0
     return ceil(remaining_xp / xp_per_cycle)
+
+
+def skill_grind_xp(current_level: int, current_xp: int, max_xp: int, target_level: int) -> int:
+    """The xp still to earn to raise a skill from `current_level` (with
+    `current_xp` into it) to `target_level`: what `skill_grind_cycles`
+    divides by the rate. 0 when the gate is already met. `max_xp`, the
+    current level's requirement, stands for every level in between (the API
+    exposes no curve). Read unrounded by the fleet's climber rank
+    (`fleet_climber.climb_ranks`, ruling T14d-R m6), so a ceiling tie never
+    decides who climbs."""
+    if current_level >= target_level:
+        return 0
+    levels_after_this_one = target_level - current_level - 1
+    return max(0, max_xp - current_xp) + max_xp * levels_after_this_one

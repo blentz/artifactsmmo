@@ -34,7 +34,7 @@ def test_the_climber_is_ranked_in_cycles_not_levels() -> None:
     (100 cycles): Bea climbs, though Ana is the higher in the skill."""
     rates = {"Ana": {"gearcrafting": 10.0}, "Bea": {"gearcrafting": 100.0}}
     assert climb_ranks("gearcrafting", 30, {"Ana": {"gearcrafting": 23}, "Bea": {"gearcrafting": 20}},
-                       rates, 1000) == {"Ana": Fraction(700), "Bea": Fraction(100)}
+                       rates, 1000) == {"Ana": Fraction(700), "Bea": Fraction(100)}  # exact: no rounding
     assert _assign("Ana", {"gearcrafting": 23}, {"Bea": {"gearcrafting": 20}}, rates=rates) == {
         "gearcrafting": "Bea"}
 
@@ -147,3 +147,18 @@ def test_only_a_holder_of_the_skills_role_serves() -> None:
     climbers = {"gearcrafting": "Ana", "jewelrycrafting": "Bea", "weaponcrafting": "Cid"}
     leases = {"logger": frozenset({"Ana"}), "miner": frozenset({"Bea"})}
     assert serving_climbers(climbers, OWNERS, leases) == {"gearcrafting": "Ana"}
+
+
+def test_the_rank_is_unrounded_so_a_ceiling_tie_picks_the_faster_climber() -> None:
+    """Ruling T14d-R m6: one level of 1000 xp is 1000/501 cycles for Ana and
+    1000/600 for Bea. Rounded up both are 2, a tie the fleet order breaks for
+    Ana; unrounded, Bea is faster and climbs. Every character ranks the same
+    exact Fractions, so every character names Bea."""
+    levels = {"Ana": {"gearcrafting": 29}, "Bea": {"gearcrafting": 29}}
+    rates = {"Ana": {"gearcrafting": 501.0}, "Bea": {"gearcrafting": 600.0}}
+    assert climb_ranks("gearcrafting", 30, levels, rates, 1000) == {
+        "Ana": Fraction(1000) / Fraction(501.0), "Bea": Fraction(1000) / Fraction(600.0)}
+    for me in ("Ana", "Bea"):
+        other = "Bea" if me == "Ana" else "Ana"
+        assert _assign(me, levels[me], {other: levels[other]}, rates=rates) == {
+            "gearcrafting": "Bea"}

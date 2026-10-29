@@ -6852,8 +6852,13 @@ FLEET_CLIMBER_MUTATIONS = [
     # Ruling T14d-6: the rank is in cycles, an unpriced candidate after every
     # priced one by levels.
     ("fleet climber: a candidate at the level needs a rate",
-     "        if left[name] == 0:\n            priced[name] = 0",
-     "        if False:\n            priced[name] = 0"),
+     "        if left[name] == 0:\n            priced[name] = Fraction(0)",
+     "        if False:\n            priced[name] = Fraction(0)"),
+    ("fleet climber: the rank rounds its cycles up (T14d-R m6)",
+     "            priced[name] = (Fraction(skill_grind_xp(held.get(skill, 0), 0, max_xp, demanded))\n"
+     "                            / Fraction(rate))",
+     "            priced[name] = Fraction(-(-skill_grind_xp(held.get(skill, 0), 0, max_xp, demanded)\n"
+     "                                      // Fraction(rate)))"),
     ("fleet climber: the rank stays in levels",
      "        elif rate is not None and max_xp > 0:",
      "        elif False:"),
@@ -6861,7 +6866,7 @@ FLEET_CLIMBER_MUTATIONS = [
      "        elif rate is not None and max_xp > 0:",
      "        elif rate is not None:"),
     ("fleet climber: an unpriced candidate ranks among the priced",
-     "    ceiling = 1 + max(priced.values(), default=0)",
+     "    ceiling = 1 + max(priced.values(), default=Fraction(0))",
      "    ceiling = 0"),
     ("fleet climber: holding the skill's own role counts as other work",
      "                     if name in holders and role != owners[skill])",
