@@ -11,9 +11,17 @@ is itself craftable). Neither admission checks the OTHER route at all — so an
 item that is BOTH craftable (with its materials already banked) AND dropped
 by a winnable monster gets BOTH routes admitted into `relevant_actions`'
 output simultaneously. GAP-6's review asked for a test pinning WHICH route
-the least-cost GOAP planner (`planner.py`, Dijkstra with h=0 — proven optimal,
-`formal/Formal/PlannerAdmissibility.lean`) actually picks in that case,
-derived from the cost model rather than asserted by fiat.
+is planned in that case.
+
+WHAT IS PINNED (ruling T14d-R m3). Two producers plan this goal, and they
+answer differently:
+
+* the decomposition's walk (`craft_plan_gen.decompose`, the fast path every
+  arbiter candidate asks first) serves the BANKED inputs first (held stock is
+  free): it plans Withdraw, Withdraw, Craft whatever the two routes cost;
+* A* (`planner.py`, Dijkstra with h=0, proven optimal,
+  `formal/Formal/PlannerAdmissibility.lean`) picks the cheaper route by the
+  cost model, derived in the A* pin from each action's `cost`.
 
 THE CATALOG CASE: a one-time scan of the live scenario bundle
 (`tests/test_ai/scenarios/fixtures/gamedata_bundle.json`, verified in
@@ -32,39 +40,37 @@ dropper, guaranteed win) — isolating the cost-model comparison from combat
 and travel noise, the same synthetic-fixture pattern already used throughout
 this file's sibling `test_craft_vs_buy_wiring.py` (`_gold_vendor_gd()` etc.).
 
-THE COST-MODEL DERIVATION (verdict, not judgment):
+THE COST MODEL (every distance 0):
 
   Craft route: Withdraw(enchanted_mushroom x1) + Withdraw(salmon x1) +
-  Craft(enchanted_potion x1). Action.cost formulas (all `dist=0` in this
-  fixture): WithdrawItemAction = 3.0 + dist = 3.0 each (the published
-  withdraw cooldown, ruling T14d-W; it was 2.0); CraftAction =
-  5.0*quantity + dist = 5.0. Total = 3.0 + 3.0 + 5.0 = 11.0.
+  Craft(enchanted_potion x1) = 3.0 + 3.0 + 5.0 = 11.0 (Withdraw is the
+  published 3 s a code, ruling T14d-W; Craft is 5.0 a unit).
 
-  Fight route: Fight(dryad) alone (100% drop rate, min=max=1 -> one kill
-  guarantees the unit). FightAction.cost = 10.0 + dist (+`LOADOUT_PENALTY`
-  5.0 if the character is not already wielding its best owned loadout for
-  the fight — `actions/combat.py:31`). Best case (already optimally geared)
-  = 10.0; realistic case (weapon owned but not pre-equipped, so the planner's
-  loadout pick differs from the current equipment) = 15.0.
+  Fight route: Fight(dryad) alone (min=max=1, one kill yields the unit) is
+  10.0 when the sword is worn. Not worn, the fight is inapplicable (the
+  optimal-loadout gate) and the route is OptimizeLoadout(dryad) + Fight =
+  10.0 + 10.0 = 20.0.
 
-  With Withdraw at 3.0 (ruling T14d-W) the craft route is 11.0: below the
-  Fight route's realistic 15.0 but ABOVE its best case 10.0. Both pins still
-  hold, so the cost comparison is not what picks the craft route here: the
-  decomposition's walk serves the banked inputs first (held stock is free),
-  and `test_fight_route_would_still_lose_even_without_the_loadout_penalty`
-  shows it on the case where the costs favour the Fight.
+  So A* plans the Fight with the sword worn (10.0 < 11.0) and the craft route
+  without it (11.0 < 20.0); the walk plans the craft route in both.
 """
 
 import json
 from pathlib import Path
 
+import pytest
+
+from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
@@ -111,14 +117,13 @@ def _gd() -> GameData:
     return gd
 
 
-def _state() -> object:
+def _state() -> WorldState:
     # basic_sword OWNED (in inventory) but NOT pre-equipped: `pick_loadout`
     # must pick it for the fight, and the delta from "not currently equipped"
     # is what makes raw_player > 0 (predict_win: an unarmed 0-attack loadout
     # never wins — `combat.py:project_loadout_stats` deltas off `state.attack`,
-    # which is 0 with nothing equipped). This also means the Fight route pays
-    # the realistic LOADOUT_PENALTY (character isn't already optimally
-    # geared), the WORSE case for Fight in the derivation above.
+    # which is 0 with nothing equipped). The fight is then inapplicable until
+    # the re-arm (the optimal-loadout gate), the 20.0 Fight route above.
     return make_state(
         level=5, x=0, y=0, skills={"alchemy": 1},
         inventory={"basic_sword": 1},
@@ -136,15 +141,31 @@ def _actions() -> list:
     ]
 
 
-def test_both_routes_are_admitted_into_relevant_actions() -> None:
-    """Precondition for the pin to mean anything: BOTH the Craft route's
-    actions AND the Fight route are actually offered to the planner
-    simultaneously — proving this is a genuine least-cost CHOICE, not a
-    narrowing that already excluded one side."""
+def _armed_state() -> WorldState:
+    """`_state` with the sword WORN, its stats in the totals (the sheet's
+    totals are base + worn gear), so the fight is ready with no re-arm."""
+    equipment = dict(make_state().equipment)
+    equipment["weapon_slot"] = "basic_sword"
+    return make_state(
+        level=5, x=0, y=0, skills={"alchemy": 1}, attack={"fire": 50},
+        inventory={"basic_sword": 1}, equipment=equipment,
+        bank_items={"enchanted_mushroom": 1, "salmon": 1},
+        inventory_max=20,
+    )
+
+
+_GOAL = GatherMaterialsGoal(target_item="enchanted_potion", needed={"enchanted_potion": 1})
+_CRAFT_ROUTE = ["Withdraw(enchanted_mushroom×1)", "Withdraw(salmon×1)", "Craft(enchanted_potion×1)"]
+
+
+@pytest.mark.parametrize("make", [_state, _armed_state], ids=["sword_in_bag", "sword_worn"])
+def test_both_routes_are_admitted_into_relevant_actions(make) -> None:  # type: ignore[no-untyped-def]
+    """Precondition for the pins to mean anything: BOTH the Craft route's
+    actions AND the Fight route are offered to the planner simultaneously,
+    so each pin is a genuine CHOICE, not a narrowing that already excluded
+    one side."""
     gd = _gd()
-    state = _state()
-    goal = GatherMaterialsGoal(target_item="enchanted_potion", needed={"enchanted_potion": 1})
-    relevant = goal.relevant_actions(_actions(), state, gd)
+    relevant = _GOAL.relevant_actions(_actions(), make(), gd)
     assert any(isinstance(a, CraftAction) and a.code == "enchanted_potion" for a in relevant)
     assert any(isinstance(a, WithdrawItemAction) and a.code == "enchanted_mushroom"
                for a in relevant)
@@ -152,44 +173,43 @@ def test_both_routes_are_admitted_into_relevant_actions() -> None:
     assert any(isinstance(a, FightAction) and a.monster_code == "dryad" for a in relevant)
 
 
-def test_planner_picks_the_cheaper_craft_route_over_the_winnable_drop() -> None:
-    """THE PIN: with both routes admitted and the dropper genuinely winnable,
-    the decomposition picks CRAFT (cost 11.0: 3.0 Withdraw + 3.0 Withdraw +
-    5.0 Craft) over FIGHT (cost 15.0: 10.0 base + 5.0 LOADOUT_PENALTY)."""
-    gd = _gd()
-    state = _state()
-    goal = GatherMaterialsGoal(target_item="enchanted_potion", needed={"enchanted_potion": 1})
-    actions = _actions()
-    plan = (decompose(goal, state, gd, list(actions), NO_DROPS_CONTEXT) or [])
-    reprs = [repr(a) for a in plan]
-    assert reprs == [
-        "Withdraw(enchanted_mushroom×1)", "Withdraw(salmon×1)", "Craft(enchanted_potion×1)",
-    ], reprs
-    assert not any(isinstance(a, FightAction) for a in plan), reprs
+@pytest.mark.parametrize("make", [_state, _armed_state], ids=["sword_in_bag", "sword_worn"])
+def test_the_walk_serves_the_banked_inputs_over_the_winnable_drop(make) -> None:  # type: ignore[no-untyped-def]
+    """THE WALK PIN: the decomposition plans Withdraw, Withdraw, Craft with
+    the sword in the bag (craft 11.0 against a 20.0 Fight route) AND with it
+    worn (craft 11.0 against a 10.0 Fight): it serves the banked inputs first,
+    whatever the two routes cost."""
+    plan = decompose(_GOAL, make(), _gd(), list(_actions()), NO_DROPS_CONTEXT) or []
+    assert [repr(a) for a in plan] == _CRAFT_ROUTE
+    assert not any(isinstance(a, FightAction) for a in plan)
 
 
-def test_fight_route_would_still_lose_even_without_the_loadout_penalty() -> None:
-    """Even in Fight's BEST case (10.0, no loadout penalty — the character
-    already optimally geared) the craft route is planned. Since Withdraw is
-    3.0 (ruling T14d-W) the craft chain costs 11.0, more than this Fight: the
-    walk serves the banked inputs first, whatever the two costs (it was 9.0
-    < 10.0 at a 2.0 Withdraw)."""
+def _route_cost(route: list[Action], state: WorldState, gd: GameData) -> float:
+    """The cost model's price of `route` from `state`: each action's `cost`
+    in the state the previous one leaves."""
+    total = 0.0
+    for action in route:
+        assert action.is_applicable(state, gd), action
+        total += action.cost(state, gd)
+        state = action.apply(state, gd)
+    return total
+
+
+@pytest.mark.parametrize("make", [_state, _armed_state], ids=["sword_in_bag", "sword_worn"])
+def test_astar_plans_the_route_the_cost_model_prices_cheaper(make) -> None:  # type: ignore[no-untyped-def]
+    """THE A* PIN (ruling T14d-R m3): A* plans the cheaper route, the one the
+    cost model prices lower, derived here from each action's `cost`: craft
+    11.0; the Fight 10.0 with the sword worn, or OptimizeLoadout + Fight 20.0
+    with it in the bag."""
     gd = _gd()
-    # Pre-equip the sword so the planner's picked loadout matches current
-    # equipment exactly -> FightAction.cost's `optimal != current` check
-    # never fires -> no LOADOUT_PENALTY.
-    equipment = dict(make_state().equipment)
-    equipment["weapon_slot"] = "basic_sword"
-    state = make_state(
-        level=5, x=0, y=0, skills={"alchemy": 1},
-        inventory={"basic_sword": 1}, equipment=equipment,
-        bank_items={"enchanted_mushroom": 1, "salmon": 1},
-        inventory_max=20,
-    )
-    fight = FightAction(monster_code="dryad", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
-    assert fight.cost(state, gd) == 10.0, "fixture drifted: this test needs the zero-penalty case"
-    goal = GatherMaterialsGoal(target_item="enchanted_potion", needed={"enchanted_potion": 1})
-    plan = decompose(goal, state, gd, list(_actions()), NO_DROPS_CONTEXT) or []
-    assert [repr(a) for a in plan] == [
-        "Withdraw(enchanted_mushroom×1)", "Withdraw(salmon×1)", "Craft(enchanted_potion×1)",
-    ], (plan, goal)
+    state = make()
+    craft, withdraw_mushroom, withdraw_salmon, fight = _actions()
+    craft_route: list[Action] = [withdraw_mushroom, withdraw_salmon, craft]
+    rearm = OptimizeLoadoutAction(target_monster_code="dryad", game_data=gd)
+    fight_route: list[Action] = ([fight] if fight.is_applicable(state, gd) else [rearm, fight])
+    priced = {tuple(map(repr, craft_route)): _route_cost(craft_route, state, gd),
+              tuple(map(repr, fight_route)): _route_cost(fight_route, state, gd)}
+    assert sorted(priced.values()) == ([10.0, 11.0] if make is _armed_state else [11.0, 20.0])
+    expected = min(priced, key=lambda route: priced[route])
+    plan = GOAPPlanner().plan(state, _GOAL, _actions(), gd)
+    assert tuple(repr(a) for a in plan) == expected
