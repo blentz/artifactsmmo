@@ -192,7 +192,7 @@ def content_reached(code: str, live: Iterable[tuple[int, int]], game_data: GameD
     return any(game_data.region_of(x, y, layer) in reach for x, y, layer in tiles)
 
 
-_DOORS: "CatalogueScope[tuple[object, ...], tuple[tuple[Door, frozenset[str]], ...]]" = (
+_DOORS: "CatalogueScope[tuple[object, ...], tuple[tuple[Door, Door, frozenset[str]], ...]]" = (
     CatalogueScope(REACH_MEMO_SIZE))
 """`door_reaches`' answers, scoped and keyed as `_REACH` is."""
 
@@ -210,9 +210,12 @@ def _holding(state: WorldState, door: Door) -> WorldState:
     return dataclasses.replace(state, gold=gold, inventory=inventory)
 
 
-def door_reaches(state: WorldState, game_data: GameData) -> tuple[tuple[Door, frozenset[str]], ...]:
+def door_reaches(state: WorldState,
+                 game_data: GameData) -> tuple[tuple[Door, Door, frozenset[str]], ...]:
     """Every door the walk could cross holding its shortfall (Task 14e, M-3),
-    with the regions that shortfall adds to `reachable_regions_now`.
+    with what one crossing of it consumes (its toll, `MapTransitionAction.
+    toll`, sorted as a door is: ruling T14e-m2) and the regions that shortfall
+    adds to `reachable_regions_now`.
 
     A door is a modeled edge (`MapTransitionAction.shortfall` is not None)
     that `state` cannot cross: a key it lacks (`has_item` or a consumed
@@ -223,12 +226,13 @@ def door_reaches(state: WorldState, game_data: GameData) -> tuple[tuple[Door, fr
     reaches nothing new: it is no door. One door at a time: content past two
     unpaid doors with different keys stays unreached. Edges in tile
     order (`region_edge_actions`); a shortfall two edges share is listed
-    once. Memoised as `reachable_regions_now` is (`_DOORS`)."""
+    once, with the first edge's toll. Memoised as `reachable_regions_now` is
+    (`_DOORS`)."""
     memo = _DOORS.cache_for(game_data)
     key = _reach_key(state, game_data)
     if key not in memo:
         now = reachable_regions_now(state, game_data)
-        out: dict[Door, frozenset[str]] = {}
+        out: dict[Door, tuple[Door, frozenset[str]]] = {}
         for edge in region_edge_actions(game_data):
             assert isinstance(edge, MapTransitionAction)
             lack = edge.shortfall(state, game_data)
@@ -239,8 +243,9 @@ def door_reaches(state: WorldState, game_data: GameData) -> tuple[tuple[Door, fr
                 continue
             beyond = reachable_regions_now(_holding(state, door), game_data) - now
             if beyond:
-                out[door] = beyond
-        _DOORS.remember(memo, key, tuple(out.items()))
+                out[door] = (tuple(sorted(edge.toll().items())), beyond)
+        _DOORS.remember(memo, key, tuple((door, toll, beyond)
+                                         for door, (toll, beyond) in out.items()))
     return memo[key]
 
 
@@ -250,5 +255,12 @@ def doors_to(code: str, live: Iterable[tuple[int, int]], state: WorldState,
     lies (`content_reached`), in `door_reaches`' order: the shortfalls that
     would make it reached. Asked of content the walk does not reach now."""
     tiles = list(live)
-    return tuple(door for door, beyond in door_reaches(state, game_data)
+    return tuple(door for door, _toll, beyond in door_reaches(state, game_data)
                  if content_reached(code, tiles, game_data, beyond))
+
+
+def door_toll(door: Door, state: WorldState, game_data: GameData) -> Door:
+    """What one crossing of `door` (one of `door_reaches`') consumes: its
+    toll, empty for a door whose keys are kept (ruling T14e-m2)."""
+    return next(toll for listed, toll, _beyond in door_reaches(state, game_data)
+                if listed == door)

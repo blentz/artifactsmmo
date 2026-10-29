@@ -46,9 +46,11 @@ from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.fleet_climb_core import amortized_climb_seconds
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.inventory_keep import carried_keep
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill, loss_cost
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.loop_rate_core import drops_per_fight, trip_share
 from artifactsmmo_cli.ai.loss_risk_core import loss_surcharge
 from artifactsmmo_cli.ai.obtain_model.gate import Door, Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
@@ -60,6 +62,7 @@ from artifactsmmo_cli.ai.obtain_sources import (
     SourceKind,
     obtain_sources,
 )
+from artifactsmmo_cli.ai.region_edges import door_toll
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_credit import credit_demanded_skills
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
@@ -875,8 +878,62 @@ def _door_options(item: str, state: WorldState, game_data: GameData,
             actions += extra
         if option is None:
             option = _priced(item, source, state, game_data, ctx)
+        toll = door_toll(door, state, game_data)
+        if toll:
+            reentry = _reentry_actions(item, route, toll, state, game_data, ctx, store, policy,
+                                       gated_drop, opening)
+            if reentry is None:
+                continue
+            option = replace(option, actions_per_application=(
+                option.actions_per_application + reentry))
         out.append(replace(option, unlock="+".join(keys), unlock_actions=actions))
     return out
+
+
+def _reentry_actions(item: str, route: Route, toll: Door, state: WorldState,
+                     game_data: GameData, ctx: SelectionContext, store: LearningStore | None,
+                     policy: Policy, gated_drop: bool,
+                     opening: frozenset[Door]) -> Fraction | None:
+    """Actions one application of `route` (past a door whose crossing consumes
+    `toll`) adds for the re-entries its bank trips cost (ruling T14e-m2): a
+    farm that fills the bag leaves to deposit and pays the toll to come back.
+
+    THE ONE TRIP MODEL (`loop_rate`, spec §2.10): one attempt carries
+    `trip_share(re-entry, drops, room)` of a trip, where the re-entry is the
+    toll's own price and a crossing (`door_price` of the toll), the drops are
+    the units one attempt adds to the bag (`drops_per_fight` at a won fight
+    or a gather: every row of the source's table, the item's own at its
+    learned chance), and the room is the bag cap less the units the keep holds
+    in it (`inventory_keep.carried_keep`). Per farm that is the toll times the
+    expected trips, on top of the first entry the door's unlock pays: price =
+    toll × (1 + trips). None when the toll cannot be had or the bag has no
+    room for the drops, and when the toll is itself being priced further up
+    (`opening`: the fee's gold past its own door is no route, as a key past
+    its own door is not)."""
+    if toll in opening:
+        return None
+    reentry = door_price(toll, state, game_data, ctx, store, policy, gated_drop, opening)
+    if reentry >= UNOBTAINABLE_PER_UNIT:
+        return None
+    evidence = ctx.drops()
+    if route.kind is SourceKind.GATHER:
+        prospecting = gather_prospecting(route.via, state, game_data)
+        table = game_data.resource_drop_table(route.via)
+        attempts = _gather_actions(item, route.via, state, game_data, evidence)
+    else:
+        prospecting = fight_prospecting(route.via, state, game_data)
+        table = game_data.monster_drops(route.via)
+        attempts = (Fraction(1) if route.kind is SourceKind.GOLD_DROP else
+                    evidence.attempts_per_unit(route.via, item, *_drop_table(item, route.via,
+                                                                             game_data),
+                                               prospecting))
+    own = Fraction(0) if route.kind is SourceKind.GOLD_DROP else 1 / attempts
+    drops = drops_per_fight(Fraction(1), [own, *(
+        evidence.units_per_attempt(route.via, code, rate, low, high, prospecting)
+        for code, rate, low, high in table if code != item)])
+    share = trip_share(Fraction(reentry), drops,
+                       state.inventory_max - carried_keep(state, game_data, ctx))
+    return None if share is None else attempts * share
 
 
 def _per_unit(option: RouteOption) -> Fraction:

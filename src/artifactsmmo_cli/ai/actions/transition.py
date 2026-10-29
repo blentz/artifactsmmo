@@ -72,6 +72,16 @@ class MapTransitionAction(Action):
                 out[code] = max(out.get(code, 0), v)
         return out
 
+    def toll(self) -> dict[str, int]:
+        """What ONE crossing consumes, `{code: units}` with gold under
+        `GOLD_CODE`: the gold fee and every consumed (`cost`) key. A `has_item`
+        key is kept, so it is no toll: re-entering after a bank trip pays the
+        toll again, and only the toll (ruling T14e-m2)."""
+        out = self._item_costs()
+        if self._gold_cost():
+            out[GOLD_CODE] = self._gold_cost()
+        return out
+
     def _conditions_modeled(self) -> bool:
         return all(op in ("cost", "has_item")
                    for _code, op, _v in self.conditions)

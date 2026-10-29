@@ -11,6 +11,7 @@ price plus the crossing as the route's unlock (`acquisition_cost._door_options`)
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from math import ceil
 from pathlib import Path
 
 import pytest
@@ -46,7 +47,7 @@ from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, PIECE_POLI
 from artifactsmmo_cli.ai.obtain_sources import UNBOUNDED_CAPACITY, Source
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.progression_reserve import fee_shortfall, spendable_pocket
-from artifactsmmo_cli.ai.region_edges import door_reaches, doors_to, reachable_regions_now
+from artifactsmmo_cli.ai.region_edges import door_reaches, door_toll, doors_to, reachable_regions_now
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
@@ -163,7 +164,7 @@ def test_a_door_past_the_reach_names_its_key(monkeypatch: pytest.MonkeyPatch) ->
     world = _door_world(monkeypatch, key_outside=True)
     poor = make_state(x=0, y=0)
     assert "interior:3,0" not in reachable_regions_now(poor, world)
-    assert door_reaches(poor, world) == (((("vault_key", 1),), frozenset({"interior:3,0"})),)
+    assert door_reaches(poor, world) == (((("vault_key", 1),), (), frozenset({"interior:3,0"})),)
     assert doors_to("warden", [], poor, world) == ((("vault_key", 1),),)
     assert doors_to("smith", [(0, 1)], poor, world) == ()
     holding = replace(poor, inventory={"vault_key": 1})
@@ -293,13 +294,14 @@ def test_a_monster_behind_a_key_door_is_priced_through_the_key(
         monkeypatch: pytest.MonkeyPatch) -> None:
     """`life_crystal_shard` drops only from the lich, past the lich tomb's
     door. With the key in the bag the farm is a ready route; without it, the
-    price is that farm's plus the key's own price plus the crossing, paid once
-    (the route's unlock)."""
+    price is the key's own price plus the crossing, paid once (the route's
+    unlock), plus the farm, whose every win also carries its share of the
+    re-entries a bank trip costs (ruling T14e-m2: the key is consumed)."""
     state, world, _player = _seeded("l48_band_adequate")
     monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
     ctx = TIMED_NO_PROFILE_CONTEXT
     assert state.inventory.get("lich_tomb_key", 0) == 0
-    assert LICH_DOOR in [door for door, _beyond in door_reaches(state, world)]
+    assert LICH_DOOR in [door for door, _toll, _beyond in door_reaches(state, world)]
     holding = replace(state, inventory={**state.inventory, "lich_tomb_key": 1})
 
     def price(at: WorldState, item: str, qty: int, **kw: object) -> int:
@@ -309,8 +311,14 @@ def test_a_monster_behind_a_key_door_is_priced_through_the_key(
     rest = price(holding, "life_crystal_shard", 1)
     key = price(state, "lich_tomb_key", 1, opening=frozenset({LICH_DOOR}))
     assert rest < UNOBTAINABLE_PER_UNIT and key < UNOBTAINABLE_PER_UNIT
-    assert price(state, "life_crystal_shard", 1) == rest + key + CROSSING_ACTIONS
     (option,) = route_options("life_crystal_shard", state, world, ctx, policy=PIECE_POLICY)
+    ready = acquisition_cost._priced("life_crystal_shard",
+                                     Source(SourceKind.DROP, "lich", 1, UNBOUNDED_CAPACITY),
+                                     state, world, ctx)
+    assert option.actions_per_application > ready.actions_per_application
+    assert price(state, "life_crystal_shard", 1) == (
+        rest + key + CROSSING_ACTIONS
+        + ceil(option.actions_per_application) - ceil(ready.actions_per_application))
     assert (option.kind, option.venue) == (SourceKind.DROP.value, "lich")
     assert (option.unlock, option.unlock_actions) == ("door:lich_tomb_keyx1", key + CROSSING_ACTIONS)
 
@@ -597,3 +605,85 @@ def test_a_fee_the_reserve_keeps_is_priced_and_fought_for_alike(
     assert walked[-1] == {GOLD_CODE: pocket + short}
     paid = replace(rich, gold=rich.gold + short)
     assert "restricted:overworld:-5,8" in reachable_regions_now(paid, world)
+
+
+# --- ruling T14e-m2: a consumed key is paid per entry ------------------------
+
+def _lich_farm(monkeypatch: pytest.MonkeyPatch) -> tuple[WorldState, GameData, object, object]:
+    """The level-30 sheet, every fight winnable: the lich's farm past its door
+    priced (`route_options`) and as its ready route (`_priced`)."""
+    state, world, _player = _seeded("l30_band_entry")
+    monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    (option,) = [o for o in route_options("life_crystal_shard", state, world, ctx,
+                                          policy=DECOMPOSE_POLICY) if o.venue == "lich"]
+    ready = acquisition_cost._priced("life_crystal_shard",
+                                     Source(SourceKind.DROP, "lich", 1, UNBOUNDED_CAPACITY),
+                                     state, world, ctx)
+    return state, world, option, ready
+
+
+def test_a_consumed_key_is_paid_again_for_every_bank_trip(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """The lich tomb's key is consumed by each crossing: a farm whose drops
+    fill the bag leaves to deposit and pays another key to come back. Each win
+    carries the re-entry's share of a trip (`trip_share`): the toll's price
+    and a crossing, times the units a win drops, over the bag's room. Twice
+    the room, half the share; no room, no route."""
+    state, world, option, ready = _lich_farm(monkeypatch)
+    assert door_toll(LICH_DOOR, state, world) == LICH_DOOR
+    extra = option.actions_per_application - ready.actions_per_application
+    assert extra > 0
+    assert option.unlock == "door:lich_tomb_keyx1"
+    roomy = replace(state, inventory_max=2 * state.inventory_max)
+    reentry = acquisition_cost._reentry_actions
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    (route,) = [r for r in ObtainModel(state, world, ctx, datetime.now(UTC)).routes(
+        "life_crystal_shard") if r.via == "lich"]
+    here = reentry("life_crystal_shard", route, LICH_DOOR, state, world, ctx, None,
+                   DECOMPOSE_POLICY, True, frozenset())
+    assert here == extra
+    wide = reentry("life_crystal_shard", route, LICH_DOOR, roomy, world, ctx, None,
+                   DECOMPOSE_POLICY, True, frozenset())
+    assert here is not None and wide is not None
+    assert 2 * wide <= here  # the room past the keep's carry at least doubles
+    full = replace(state, inventory_max=0)
+    assert reentry("life_crystal_shard", route, LICH_DOOR, full, world, ctx, None,
+                   DECOMPOSE_POLICY, True, frozenset()) is None
+    # a toll priced further up, and a toll nothing yields, are no route
+    assert reentry("life_crystal_shard", route, LICH_DOOR, state, world, ctx, None,
+                   DECOMPOSE_POLICY, True, frozenset({LICH_DOOR})) is None
+    cloak = (("cultist_cloak", 1),)
+    assert reentry("life_crystal_shard", route, cloak, state, world, ctx, None,
+                   DECOMPOSE_POLICY, True, frozenset()) is None
+
+
+def test_a_gather_and_a_gold_fight_past_a_fee_pay_its_toll_per_entry() -> None:
+    """The 5000-gold door's fee is a toll too: a gather past it carries the
+    fee's re-entry share per gather, a gold fight per win."""
+    state, world, player = _seeded("l48_band_adequate")
+    ctx = player._selection_context()
+    model = ObtainModel(state, world, ctx, datetime.now(UTC))
+    fee = ((GOLD_CODE, 5000),)
+    door = next(door for door, _toll, _beyond in door_reaches(state, world)
+                if door[0][0] == GOLD_CODE and door[0][1] > 4000)
+    assert door_toll(door, state, world) == fee
+    (gather,) = [r for r in model.routes("enchanted_mushroom") if r.kind is SourceKind.GATHER]
+    (fight,) = [r for r in model.routes(GOLD_CODE) if r.via == "dryad"]
+    reentry = acquisition_cost._reentry_actions
+    for item, route in (("enchanted_mushroom", gather), (GOLD_CODE, fight)):
+        share = reentry(item, route, fee, state, world, ctx, None, PIECE_POLICY, True,
+                        frozenset())
+        assert share is not None and share > 0
+
+
+def test_a_kept_key_is_paid_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A held key (`has_item`, the vault door) is not consumed: no toll. A
+    door without a toll prices its farm as the ready route, the key paid once
+    (the lich's farm with its door read as a kept key's)."""
+    world = _door_world(monkeypatch, key_outside=True)
+    assert door_toll((("vault_key", 1),), make_state(x=0, y=0), world) == ()
+    monkeypatch.setattr(acquisition_cost, "door_toll", lambda door, state, gd: ())
+    _state, _world, option, ready = _lich_farm(monkeypatch)
+    assert option.unlock == "door:lich_tomb_keyx1"
+    assert option.actions_per_application == ready.actions_per_application

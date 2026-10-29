@@ -384,6 +384,9 @@ def test_a_fee_shortfall_is_the_least_gold_the_reserve_lets_pay_the_fee():
     # the pocket's own lack, when the bank already funds the floor
     banked = make_state(gold=0, bank_gold=1000, equipment=equip)
     assert fee_shortfall(banked, gd, 50) == 50
+    # the bank funds the floor once 70 more is earned: 100 + 70 - 50 = 120
+    part = make_state(gold=0, bank_gold=100, equipment=equip)
+    assert fee_shortfall(part, gd, 50) == 70
     # broke: the fee and the funded floor above it
     broke = make_state(gold=0, bank_gold=0, equipment=equip)
     assert fee_shortfall(broke, gd, 50) == 170

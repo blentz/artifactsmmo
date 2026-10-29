@@ -936,7 +936,7 @@ def _census_reach(state: WorldState, game_data: GameData) -> frozenset[str]:
     behind a crossing: the walk routes through the key."""
     model = ObtainModel(state, game_data, _census_context(), datetime.now(UTC))
     reach = set(reachable_regions_now(state, game_data))
-    for door, beyond in door_reaches(state, game_data):
+    for door, _toll, beyond in door_reaches(state, game_data):
         if model.door_open(door, DECOMPOSE_POLICY):
             reach |= beyond
     return frozenset(reach)

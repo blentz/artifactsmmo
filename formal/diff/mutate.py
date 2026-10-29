@@ -8763,13 +8763,39 @@ KEY_DOOR_FEE_GUARD_MUTATIONS = [
      "        if fee and (state.gold < fee or not can_spend(state, game_data, None, fee)):\n",
      "        if fee and not can_spend(state, game_data, None, fee):\n"),
 ]
+# Ruling T14e-m2: a consumed key is charged per entry. Killed by
+# tests/test_ai/test_key_door_route.py.
+KEY_DOOR_TOLL_TRANSITION_MUTATIONS = [
+    ("toll: a gold fee is no toll",
+     "        if self._gold_cost():\n            out[GOLD_CODE] = self._gold_cost()\n",
+     "        if False:\n            out[GOLD_CODE] = self._gold_cost()\n"),
+]
+KEY_DOOR_TOLL_REACH_MUTATIONS = [
+    ("toll: a door carries no toll",
+     "                out[door] = (tuple(sorted(edge.toll().items())), beyond)\n",
+     "                out[door] = ((), beyond)\n"),
+]
+KEY_DOOR_TOLL_PRICE_MUTATIONS = [
+    ("toll: re-entry is never charged",
+     "        if toll:\n            reentry = _reentry_actions(",
+     "        if False:\n            reentry = _reentry_actions("),
+    ("toll: a toll priced further up is priced again",
+     "    if toll in opening:\n        return None\n",
+     "    if False:\n        return None\n"),
+    ("toll: an unobtainable toll is charged",
+     "    if reentry >= UNOBTAINABLE_PER_UNIT:\n        return None\n",
+     "    if False:\n        return None\n"),
+    ("toll: a full bag still re-enters",
+     "    return None if share is None else attempts * share\n",
+     "    return Fraction(0) if share is None else attempts * share\n"),
+]
 KEY_DOOR_REACH_MUTATIONS = [
     ("door: the hypothetical holds nothing",
      "    beyond = reachable_regions_now(_holding(state, door), game_data) - now\n",
      "    beyond = reachable_regions_now(state, game_data) - now\n"),
     ("door: a door that reaches nothing new is a door",
-     "            if beyond:\n                out[door] = beyond\n",
-     "            if True:\n                out[door] = beyond\n"),
+     "            if beyond:\n                out[door] = (tuple(sorted(edge.toll().items())), beyond)\n",
+     "            if True:\n                out[door] = (tuple(sorted(edge.toll().items())), beyond)\n"),
     ("door: every door leads to the content",
      "                 if content_reached(code, tiles, game_data, beyond))\n",
      "                 if True)\n"),
@@ -14293,6 +14319,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(TRANSITION_SRC, KEY_DOOR_FEE_GUARD_MUTATIONS,
               "tests/test_ai/test_actions_transition.py", survivors)
+    run_group(TRANSITION_SRC, KEY_DOOR_TOLL_TRANSITION_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(REGION_EDGES_SRC, KEY_DOOR_TOLL_REACH_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(ACQUISITION_COST_SRC, KEY_DOOR_TOLL_PRICE_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
     run_group(PROGRESSION_RESERVE_SRC, FEE_SHORTFALL_MUTATIONS,
               "tests/test_ai/test_progression_reserve.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, KEY_DOOR_CROSSING_MUTATIONS[:1],
