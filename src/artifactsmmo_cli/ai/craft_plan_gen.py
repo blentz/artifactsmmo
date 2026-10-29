@@ -381,11 +381,13 @@ def _prep_after_clear(prep: GatherMaterialsGoal, legs: list[Action], state: Worl
     """The prep and the grind's legs behind the full-bag clear, when the clear
     makes the WHOLE plan fit (ruling T14d-1): the prep's own walk (unjudged,
     under `HEAL_PREP_POLICY`) then `legs`, cleared against both, so no stack
-    either uses leaves (T13e-g). None when the prep cannot be walked again or
-    the clear does not make it fit; the grind then runs without the prep."""
+    either uses leaves (T13e-g). None when the clear does not make it fit; the
+    grind then runs without the prep.
+
+    The prep's walk cannot fail here: `bag_overflow` is declined only after
+    the same walk, over the same inputs, returned its legs."""
     walked = _dispatch(prep, state, game_data, actions, ctx, None, False, HEAL_PREP_POLICY, False)
-    if walked is None:
-        return None
+    assert walked is not None, f"the prep {prep!r} walked once and not again"
     return _clear_first([*walked, *legs], state, game_data, actions, ctx)
 
 
