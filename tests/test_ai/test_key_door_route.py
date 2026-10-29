@@ -11,6 +11,7 @@ price plus the crossing as the route's unlock (`acquisition_cost._door_options`)
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from fractions import Fraction
 from math import ceil
 from pathlib import Path
 
@@ -32,7 +33,7 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     door_route,
     route_options,
 )
-from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
+from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT, RouteOption
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.combat_deficit import CombatDeficit, DeficitStep
@@ -524,13 +525,13 @@ def test_a_gather_past_a_door_pays_its_climb_as_the_skill_gate_does() -> None:
     unlock = acquisition_cost._companion_unlock
     store = _RatedStore(None, 10.0)
     paid = unlock(route, gate, state, world, TIMED_NO_PROFILE_CONTEXT, store,  # type: ignore[arg-type]
-                  DECOMPOSE_POLICY, True, frozenset())
+                  DECOMPOSE_POLICY, True, frozenset(), state)
     assert paid is not None and paid[0] == "skill:mining:5" and paid[1] > 0
     assert unlock(route, gate, state, world, TIMED_NO_PROFILE_CONTEXT, None, DECOMPOSE_POLICY,
-                  True, frozenset()) is None
+                  True, frozenset(), state) is None
     assert unlock(route, gate, state, world, TIMED_NO_PROFILE_CONTEXT,
                   _RatedStore(None, None), DECOMPOSE_POLICY, True,  # type: ignore[arg-type]
-                  frozenset()) is None
+                  frozenset(), state) is None
 
 
 def test_the_gear_chain_under_a_door_is_priced_with_that_door_shut(
@@ -546,8 +547,9 @@ def test_the_gear_chain_under_a_door_is_priced_with_that_door_shut(
                         lambda s, g, monster: CombatDeficit(monster, -1, (step,), True))
     gear = acquisition_cost._gear_unlock
     ctx = TIMED_NO_PROFILE_CONTEXT
-    assert gear("x", state, world, ctx, None, DECOMPOSE_POLICY, frozenset()) is not None
-    assert gear("x", state, world, ctx, None, DECOMPOSE_POLICY, frozenset({LICH_DOOR})) is None
+    assert gear("x", state, world, ctx, None, DECOMPOSE_POLICY, frozenset(), state) is not None
+    assert gear("x", state, world, ctx, None, DECOMPOSE_POLICY, frozenset({LICH_DOOR}),
+                state) is None
 
 
 def test_the_gear_past_a_door_never_reprices_that_door(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -641,21 +643,21 @@ def test_a_consumed_key_is_paid_again_for_every_bank_trip(
     (route,) = [r for r in ObtainModel(state, world, ctx, datetime.now(UTC)).routes(
         "life_crystal_shard") if r.via == "lich"]
     here = reentry("life_crystal_shard", route, LICH_DOOR, state, world, ctx, None,
-                   DECOMPOSE_POLICY, True, frozenset())
+                   DECOMPOSE_POLICY, True, frozenset(), state)
     assert here == extra
     wide = reentry("life_crystal_shard", route, LICH_DOOR, roomy, world, ctx, None,
-                   DECOMPOSE_POLICY, True, frozenset())
+                   DECOMPOSE_POLICY, True, frozenset(), roomy)
     assert here is not None and wide is not None
     assert 2 * wide <= here  # the room past the keep's carry at least doubles
     full = replace(state, inventory_max=0)
     assert reentry("life_crystal_shard", route, LICH_DOOR, full, world, ctx, None,
-                   DECOMPOSE_POLICY, True, frozenset()) is None
+                   DECOMPOSE_POLICY, True, frozenset(), full) is None
     # a toll priced further up, and a toll nothing yields, are no route
     assert reentry("life_crystal_shard", route, LICH_DOOR, state, world, ctx, None,
-                   DECOMPOSE_POLICY, True, frozenset({LICH_DOOR})) is None
-    cloak = (("cultist_cloak", 1),)
-    assert reentry("life_crystal_shard", route, cloak, state, world, ctx, None,
-                   DECOMPOSE_POLICY, True, frozenset()) is None
+                   DECOMPOSE_POLICY, True, frozenset({LICH_DOOR}), state) is None
+    monkeypatch.setattr(acquisition_cost, "door_price", lambda *a: UNOBTAINABLE_PER_UNIT)
+    assert reentry("life_crystal_shard", route, LICH_DOOR, state, world, ctx, None,
+                   DECOMPOSE_POLICY, True, frozenset(), state) is None
 
 
 def test_a_gather_and_a_gold_fight_past_a_fee_pay_its_toll_per_entry() -> None:
@@ -672,8 +674,8 @@ def test_a_gather_and_a_gold_fight_past_a_fee_pay_its_toll_per_entry() -> None:
     (fight,) = [r for r in model.routes(GOLD_CODE) if r.via == "dryad"]
     reentry = acquisition_cost._reentry_actions
     for item, route in (("enchanted_mushroom", gather), (GOLD_CODE, fight)):
-        share = reentry(item, route, fee, state, world, ctx, None, PIECE_POLICY, True,
-                        frozenset())
+        share = reentry(item, route, door, state, world, ctx, None, PIECE_POLICY, True,
+                        frozenset(), state)
         assert share is not None and share > 0
 
 
@@ -749,18 +751,21 @@ KEY_A, KEY_B = (("key_a", 1),), (("key_b", 1),)
 CHAIN = (("key_a", 1), ("key_b", 1))
 
 
-def _chain_world(monkeypatch: pytest.MonkeyPatch, guard_drops_key_b: bool = True) -> GameData:
+def _chain_world(monkeypatch: pytest.MonkeyPatch, guard_drops_key_b: bool = True,
+                 first: tuple[str, str, int] = ("key_a", "has_item", 1)) -> GameData:
     """The overworld, a hall past a door asking a held `key_a` (the overworld
     `smith` drops it), and a vault past a door in the hall asking a held
     `key_b`. The hall's `guard` drops `key_b` (or, without
     `guard_drops_key_b`, only the vault's `warden` does); the warden drops
-    `loot`. Every fight is winnable."""
+    `loot`. Every fight is winnable. `first` is the hall door's condition
+    `(code, operator, value)`: a consumed key (`cost`) or a gold fee."""
+    code, operator, value = first
     world = GameData()
     world._build_maps([
         _tile(1, 0, 0, "overworld"),
         _tile(2, 1, 0, "overworld", transition=TransitionSchema(
             map_id=3, x=3, y=0, layer="interior",
-            conditions=[ConditionSchema(code="key_a", operator="has_item", value=1)])),
+            conditions=[ConditionSchema(code=code, operator=operator, value=value)])),
         _tile(3, 3, 0, "interior",
               content=MapContentSchema(type_=MapContentType.MONSTER, code="guard")),
         _tile(4, 4, 0, "interior", transition=TransitionSchema(
@@ -895,3 +900,108 @@ def test_no_door_dearer_than_the_first_that_opens_is_walked(
     monkeypatch.setattr(model, "_door_open", lambda door, *a: asked.append(door) or door_open(door, *a))
     model.walk_graph("loot", DECOMPOSE_POLICY)
     assert asked == [vault]
+
+
+# --- round 4, Important #2: a later leg is past the earlier legs' tolls -------
+
+
+def test_a_consumed_key_chain_prices_and_walks_its_second_leg_past_the_toll(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """The hall door CONSUMES `key_a`. Key B is asked of the state past the
+    first crossing: its reach holds key A (the hall's guard is reached), its
+    bag does not (the toll is paid). The pricer and the walk split it alike,
+    and the chain costs what its two doors cost apart: key B is not charged
+    key A's door again."""
+    world = _chain_world(monkeypatch, first=("key_a", "cost", 1))
+    state = make_state(x=0, y=0)
+    assert region_edges.door_legs(CHAIN, state, world) == (KEY_A, KEY_B)
+    [(pocket0, cross0), (pocket1, cross1)] = region_edges.leg_states(state, state, CHAIN, world)
+    assert pocket0 is state and cross0 is state
+    assert pocket1.inventory == {} and cross1.inventory == {"key_a": 1}
+    model = _model(state, world)
+    assert model.feasible("loot", 1, DECOMPOSE_POLICY)
+    legs = model._leg_models(CHAIN)
+    assert legs[0] is model
+    assert legs[1]._state.inventory == {} and legs[1]._crossing.inventory == {"key_a": 1}
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    # Priced in that split, key B's guard is a ready route and no door's.
+    monkeypatch.setattr(acquisition_cost, "_priced", lambda item, source, *a: RouteOption(
+        kind=source.kind.value, venue=source.code, actions_per_application=Fraction(1),
+        yield_per=1, capacity=UNBOUNDED_CAPACITY))
+    monkeypatch.setattr(acquisition_cost, "door_price", lambda door, *a: 1)
+    options = route_options("key_b", pocket1, world, ctx, policy=DECOMPOSE_POLICY,
+                            crossing=cross1)
+    assert [(o.venue, o.unlock) for o in options] == [("guard", "")]
+    monkeypatch.undo()
+    world = _chain_world(monkeypatch, first=("key_a", "cost", 1))
+    asked: list[tuple[str, dict[str, int], dict[str, int]]] = []
+
+    def priced(code: str, qty: int, at: WorldState, *a: object, **kw: object) -> int:
+        crossing = kw["crossing"]
+        assert isinstance(crossing, WorldState)
+        asked.append((code, dict(at.inventory), dict(crossing.inventory)))
+        return 1
+
+    monkeypatch.setattr(acquisition_cost, "acquisition_actions", priced)
+    acquisition_cost.door_price(CHAIN, state, world, ctx, None, DECOMPOSE_POLICY, True,
+                                frozenset())
+    assert asked == [("key_a", {}, {}), ("key_b", {}, {"key_a": 1})]
+
+
+def test_a_second_leg_is_priced_without_the_first_leg_s_fee_gold(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """The hall door is a 1000-gold fee. From 50 gold the first leg lacks
+    1050 (the fee above the 100-gold safety floor, `fee_shortfall`); paying
+    it leaves 100. Key B is priced and walked on that 100, its reach on the
+    1100 that crosses: a gold buy inside the hall is not credited with the
+    fee's gold."""
+    world = _chain_world(monkeypatch, first=("gold", "cost", 1000))
+    state = make_state(x=0, y=0)
+    fee = (("gold", fee_shortfall(state, world, 1000)),)
+    assert fee == (("gold", 1050),)
+    door = (("gold", 1050), ("key_b", 1))
+    assert region_edges.door_legs(door, state, world) == (fee, KEY_B)
+    assert region_edges.leg_tolls(door, state, world) == ((("gold", 1000),), ())
+    [_first, (pocket, cross)] = region_edges.leg_states(state, state, door, world)
+    assert (pocket.gold, cross.gold) == (100, 1100)
+    model = _model(state, world)
+    assert model._leg_models(door)[1].in_bag(GOLD_CODE) == 100
+    asked: list[tuple[str, int, int, int]] = []
+
+    def priced(code: str, qty: int, at: WorldState, *a: object, **kw: object) -> int:
+        crossing = kw["crossing"]
+        assert isinstance(crossing, WorldState)
+        asked.append((code, qty, at.gold, crossing.gold))
+        return 1
+
+    monkeypatch.setattr(acquisition_cost, "acquisition_actions", priced)
+    acquisition_cost.door_price(door, state, world, TIMED_NO_PROFILE_CONTEXT, None,
+                                DECOMPOSE_POLICY, True, frozenset())
+    assert asked == [(GOLD_CODE, 50 + 1050, 50, 50), ("key_b", 1, 100, 1100)]
+
+
+def test_a_chain_s_reentry_pays_each_leg_s_toll_where_that_leg_stands(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Round 4, minor 5: re-entering the vault crosses both legs again. The
+    hall door consumes key A, priced at the origin; the vault door's toll
+    (none: key B is kept) is priced past the hall, its reach holding key A,
+    not from the origin through key A's door a second time."""
+    world = _chain_world(monkeypatch, first=("key_a", "cost", 1))
+    state = make_state(x=0, y=0)
+    assert region_edges.leg_tolls(CHAIN, state, world) == (KEY_A, ())
+    assert door_toll(CHAIN, state, world) == KEY_A
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    (route,) = [r for r in _model(state, world).routes("loot") if r.via == "warden"]
+    asked: list[tuple[object, dict[str, int], dict[str, int]]] = []
+
+    def priced(toll: object, at: WorldState, gd: object, c: object, store: object,
+               policy: object, gated_drop: object, opening: object, cross: WorldState) -> int:
+        asked.append((toll, dict(at.inventory), dict(cross.inventory)))
+        return 3
+
+    monkeypatch.setattr(acquisition_cost, "door_price", priced)
+    monkeypatch.setattr(acquisition_cost, "fight_prospecting", lambda monster, at, gd: 0)
+    share = acquisition_cost._reentry_actions("loot", route, CHAIN, state, world, ctx, None,
+                                              DECOMPOSE_POLICY, True, frozenset(), state)
+    assert share is not None and share > 0
+    assert asked == [(KEY_A, {}, {}), ((), {}, {"key_a": 1})]

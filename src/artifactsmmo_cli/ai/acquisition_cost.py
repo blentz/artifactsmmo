@@ -62,7 +62,7 @@ from artifactsmmo_cli.ai.obtain_sources import (
     SourceKind,
     obtain_sources,
 )
-from artifactsmmo_cli.ai.region_edges import door_legs, door_toll, leg_states
+from artifactsmmo_cli.ai.region_edges import door_legs, door_toll, leg_states, leg_tolls
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_credit import credit_demanded_skills
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
@@ -620,18 +620,20 @@ def _amortized_fleet_climb(skill: str, level: int, state: WorldState, game_data:
 
 def _gear_unlock(monster: str, state: WorldState, game_data: GameData, ctx: SelectionContext,
                  store: LearningStore | None, policy: Policy,
-                 opening: frozenset[Door]) -> int | None:
+                 opening: frozenset[Door], crossing: WorldState) -> int | None:
     """Actions the gear that opens a fight against `monster` costs: the
     `combat_deficit` chain at full hp, each step priced one level deep
     (`gated_drop=False`, see `_gated_drop_option`) with `opening` threaded so a
     chain priced under a door's key never re-prices that door (ruling
-    T14e-m5). None when no deficit closes or the chain cannot be priced."""
+    T14e-m5), and its crossings asked of `crossing` (`route_options`'). None
+    when no deficit closes or the chain cannot be priced."""
     deficit = combat_deficit(replace(state, hp=state.max_hp), game_data, monster)
     if deficit is None or not deficit.closes:
         return None
     unlock_actions = sum(
         acquisition_actions(step.code, 1, state, game_data, ctx, equip=True, store=store,
-                            gated_drop=False, policy=policy, opening=opening)
+                            gated_drop=False, policy=policy, opening=opening,
+                            crossing=crossing)
         for step in deficit.chain)
     return unlock_actions if unlock_actions < UNOBTAINABLE_PER_UNIT else None
 
@@ -639,7 +641,7 @@ def _gear_unlock(monster: str, state: WorldState, game_data: GameData, ctx: Sele
 def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
                        ctx: SelectionContext,
                        store: LearningStore | None, model: ObtainModel,
-                       policy: Policy, opening: frozenset[Door] = frozenset()
+                       policy: Policy, opening: frozenset[Door], crossing: WorldState
                        ) -> RouteOption | None:
     """The DROP route `obtain_sources` withholds because the dropper is
     UNWINNABLE — priced with the gear that would open the fight.
@@ -709,7 +711,8 @@ def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
         return None
     best: RouteOption | None = None
     for monster in live:
-        unlock_actions = _gear_unlock(monster, state, game_data, ctx, store, policy, opening)
+        unlock_actions = _gear_unlock(monster, state, game_data, ctx, store, policy, opening,
+                                      crossing)
         if unlock_actions is None:
             continue
         rate, min_q, max_q = _drop_table(item, monster, game_data)
@@ -747,7 +750,7 @@ measure) and GATHER_SKILL with the climb (`_climb_actions`,
 
 def door_price(door: Door, state: WorldState, game_data: GameData, ctx: SelectionContext,
                store: LearningStore | None, policy: Policy, gated_drop: bool,
-               opening: frozenset[Door]) -> int:
+               opening: frozenset[Door], crossing: WorldState | None = None) -> int:
     """Actions opening `door` costs (Task 14e): its shortfall's own price
     (`acquisition_actions` on the bag plus the shortfall, so held copies are
     credited; a fee's gold with the pocket credited) and one crossing, with
@@ -760,14 +763,21 @@ def door_price(door: Door, state: WorldState, game_data: GameData, ctx: Selectio
     priced afresh. The context is keyed by identity and PINNED by the entry
     (the cached value holds it), so no other context can reuse its id while
     the answer is held. One episode prices against one catalogue; the entry
-    holds it, and a different one is a defect, not a cache miss."""
+    holds it, and a different one is a defect, not a cache miss.
+
+    `crossing` is the state the doors and their legs are asked of (the
+    pocket's own when None): a door inside a later chain leg's closure is
+    priced with the pocket past the earlier legs and the reach holding them
+    (`region_edges.leg_states`), and keyed on both."""
+    cross = state if crossing is None else crossing
     if store is not None:
-        key = ("door_price", door, policy, gated_drop, opening, id(ctx), *price_key(state))
+        key = ("door_price", door, policy, gated_drop, opening, id(ctx), *price_key(state),
+               *price_key(cross))
         pinned = store.cached(key, lambda: (ctx, game_data, _door_price(
-            door, state, game_data, ctx, store, policy, gated_drop, opening)))
+            door, state, game_data, ctx, store, policy, gated_drop, opening, cross)))
         assert pinned[1] is game_data, "one search_cache episode prices one catalogue"
         return pinned[2]
-    return _door_price(door, state, game_data, ctx, store, policy, gated_drop, opening)
+    return _door_price(door, state, game_data, ctx, store, policy, gated_drop, opening, cross)
 
 
 def price_key(state: WorldState) -> tuple[object, ...]:
@@ -783,33 +793,39 @@ def price_key(state: WorldState) -> tuple[object, ...]:
 
 def _door_price(door: Door, state: WorldState, game_data: GameData, ctx: SelectionContext,
                 store: LearningStore | None, policy: Policy, gated_drop: bool,
-                opening: frozenset[Door]) -> int:
+                opening: frozenset[Door], crossing: WorldState) -> int:
     """`door_price`'s computation: the sum of its legs (ruling T14e-m6), each
-    a crossing and its shortfall's own price asked of the state holding the
-    legs before it (`region_edges.leg_states`), where the crossings before it
-    are applicable. Every leg, and the door, is closed to its own price
-    (`opening`): a key behind its own chain is a wall."""
-    legs = door_legs(door, state, game_data)
+    a crossing and its shortfall's own price asked of its leg state
+    (`region_edges.leg_states`): the reach holding the legs before it, where
+    their crossings are applicable, and the pocket and bag past them, their
+    tolls paid, as the walk's leg model asks it (`ObtainModel._leg_models`).
+    Every leg, and the door, is closed to its own price (`opening`): a key
+    behind its own chain is a wall."""
+    legs = door_legs(door, crossing, game_data)
     closed = opening | {door, *legs}
     return sum(
         CROSSING_ACTIONS + sum(
             acquisition_actions(code, (at.gold if code == GOLD_CODE else at.inventory.get(code, 0))
                                 + units, at, game_data, ctx, equip=False, store=store,
-                                gated_drop=gated_drop, policy=policy, opening=closed)
+                                gated_drop=gated_drop, policy=policy, opening=closed,
+                                crossing=cross)
             for code, units in leg)
-        for leg, at in zip(legs, leg_states(state, legs), strict=True))
+        for leg, (at, cross) in zip(legs, leg_states(state, crossing, door, game_data),
+                                    strict=True))
 
 
 def _companion_unlock(route: Route, gate: Gate, state: WorldState, game_data: GameData,
                       ctx: SelectionContext, store: LearningStore | None, policy: Policy,
-                      gated_drop: bool, opening: frozenset[Door]) -> tuple[str, int] | None:
+                      gated_drop: bool, opening: frozenset[Door],
+                      crossing: WorldState) -> tuple[str, int] | None:
     """`(key, actions)` that open `gate`, a companion of a door on `route`
     (`_DOOR_COMPANIONS`), priced as the sibling that pays for it alone does,
     or None when it cannot be paid: WINNABLE with the gear chain (one level
     deep, so only under `gated_drop`), GATHER_SKILL with the climb (a store
     is needed to rate it)."""
     if gate.kind is GateKind.WINNABLE:
-        gear = (_gear_unlock(route.via, state, game_data, ctx, store, policy, opening)
+        gear = (_gear_unlock(route.via, state, game_data, ctx, store, policy, opening,
+                             crossing)
                 if gated_drop else None)
         return None if gear is None else (f"gear:{route.via}", gear)
     assert gate.kind is GateKind.GATHER_SKILL and gate.level is not None
@@ -820,7 +836,8 @@ def _companion_unlock(route: Route, gate: Gate, state: WorldState, game_data: Ga
 def _door_options(item: str, state: WorldState, game_data: GameData,
                   ctx: SelectionContext, store: LearningStore | None, model: ObtainModel,
                   policy: Policy, gated_drop: bool,
-                  opening: frozenset[Door], served: Sequence[RouteOption]) -> list[RouteOption]:
+                  opening: frozenset[Door], served: Sequence[RouteOption],
+                  crossing: WorldState) -> list[RouteOption]:
     """The fights and gathers for `item` whose content stands past a key door
     (Task 14e, M-3), each priced as its ready route is plus the door as its
     unlock: the key's (or the fee's gold's) own price and the crossing.
@@ -857,7 +874,9 @@ def _door_options(item: str, state: WorldState, game_data: GameData,
     prices, so such a door route could never be the price. It is skipped
     before its door and companions are priced (a gold fight past a door would
     otherwise price the fee's gold, and the gear, for every monster past a
-    door)."""
+    door).
+
+    The doors are `crossing`'s (the model's own), and priced from it."""
     floor = min((_per_unit(r) for r in served
                  if not r.inputs and not r.unlock and r.capacity >= UNBOUNDED_CAPACITY),
                 default=None)
@@ -869,7 +888,7 @@ def _door_options(item: str, state: WorldState, game_data: GameData,
             continue
         [gate] = [g for g in unmet if g.kind is GateKind.SPAWN_KNOWN]
         priced = [(door, door_price(door, state, game_data, ctx, store, policy, gated_drop,
-                                    opening))
+                                    opening, crossing))
                   for door in gate.doors if door not in opening]
         priced = [(door, actions) for door, actions in priced if actions < UNOBTAINABLE_PER_UNIT]
         if not priced:
@@ -877,7 +896,7 @@ def _door_options(item: str, state: WorldState, game_data: GameData,
         door, actions = min(priced, key=lambda pair: pair[1])
         keys = [_door_unlock(door)]
         companions = [_companion_unlock(route, g, state, game_data, ctx, store, policy,
-                                        gated_drop, opening | {door})
+                                        gated_drop, opening | {door}, crossing)
                       for g in unmet if g.kind is not GateKind.SPAWN_KNOWN]
         if any(c is None for c in companions):
             continue
@@ -886,10 +905,9 @@ def _door_options(item: str, state: WorldState, game_data: GameData,
             actions += extra
         if option is None:
             option = _priced(item, source, state, game_data, ctx)
-        toll = door_toll(door, state, game_data)
-        if toll:
-            reentry = _reentry_actions(item, route, toll, state, game_data, ctx, store, policy,
-                                       gated_drop, opening)
+        if door_toll(door, crossing, game_data):
+            reentry = _reentry_actions(item, route, door, state, game_data, ctx, store, policy,
+                                       gated_drop, opening, crossing)
             if reentry is None:
                 continue
             option = replace(option, actions_per_application=(
@@ -898,17 +916,20 @@ def _door_options(item: str, state: WorldState, game_data: GameData,
     return out
 
 
-def _reentry_actions(item: str, route: Route, toll: Door, state: WorldState,
+def _reentry_actions(item: str, route: Route, door: Door, state: WorldState,
                      game_data: GameData, ctx: SelectionContext, store: LearningStore | None,
                      policy: Policy, gated_drop: bool,
-                     opening: frozenset[Door]) -> Fraction | None:
-    """Actions one application of `route` (past a door whose crossing consumes
-    `toll`) adds for the re-entries its bank trips cost (ruling T14e-m2): a
-    farm that fills the bag leaves to deposit and pays the toll to come back.
+                     opening: frozenset[Door], crossing: WorldState) -> Fraction | None:
+    """Actions one application of `route` (past `door`, one of `crossing`'s
+    `door_reaches`, whose crossing consumes a toll) adds for the re-entries
+    its bank trips cost (ruling T14e-m2): a farm that fills the bag leaves to
+    deposit and pays the toll to come back.
 
     THE ONE TRIP MODEL (`loop_rate`, spec §2.10): one attempt carries
-    `trip_share(re-entry, drops, room)` of a trip, where the re-entry is the
-    toll's own price and a crossing (`door_price` of the toll), the drops are
+    `trip_share(re-entry, drops, room)` of a trip, where the re-entry is
+    every leg's crossing and its own toll's price, asked of that leg's state
+    (`door_price` of the leg's toll at `region_edges.leg_states`; round 4:
+    a key past leg 1 is not charged leg 1's door again), the drops are
     the units one attempt adds to the bag (`drops_per_fight` at a won fight
     or a gather: every row of the source's table, the item's own at its
     learned chance), and the room is the bag cap less the units the keep holds
@@ -918,9 +939,12 @@ def _reentry_actions(item: str, route: Route, toll: Door, state: WorldState,
     room for the drops, and when the toll is itself being priced further up
     (`opening`: the fee's gold past its own door is no route, as a key past
     its own door is not)."""
-    if toll in opening:
+    tolls = leg_tolls(door, crossing, game_data)
+    if any(toll in opening for toll in tolls):
         return None
-    reentry = door_price(toll, state, game_data, ctx, store, policy, gated_drop, opening)
+    reentry = sum(door_price(toll, at, game_data, ctx, store, policy, gated_drop, opening, cross)
+                  for toll, (at, cross) in zip(tolls, leg_states(state, crossing, door, game_data),
+                                               strict=True))
     if reentry >= UNOBTAINABLE_PER_UNIT:
         return None
     evidence = ctx.drops()
@@ -968,7 +992,8 @@ def route_options(item: str, state: WorldState, game_data: GameData,
                   ctx: SelectionContext,
                   store: LearningStore | None = None,
                   gated_drop: bool = True, *, policy: Policy = LEGACY,
-                  opening: frozenset[Door] = frozenset()) -> list[RouteOption]:
+                  opening: frozenset[Door] = frozenset(),
+                  crossing: WorldState | None = None) -> list[RouteOption]:
     """Every route to `item`, priced: the ones `obtain_sources` names, less any
     whose own skill requirement is unmet, plus — only when a `store` is
     supplied — the skill-gated craft or gather priced with its climb.
@@ -976,14 +1001,20 @@ def route_options(item: str, state: WorldState, game_data: GameData,
     `store` defaults to None so every existing caller keeps today's behaviour
     exactly. Neither deferred route can be priced without the store: a gated
     craft needs an observed grind rate, and a sibling craft needs the observed
-    cost of a fleet supply request."""
-    model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc))
+    cost of a fleet supply request.
+
+    `crossing` is the state the crossings are asked of (`ObtainModel`'s; the
+    pocket's own when None): a chain leg's closure is priced with its reach
+    holding the legs before it and its pocket past them (`door_price`)."""
+    cross = state if crossing is None else crossing
+    model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc), crossing=cross)
     # A route its own skill requirement keeps closed is priced only with its
     # climb (`_gated_skill_option`, ruling T2c), never as the ready route a
     # policy without the skill gate names it.
     climbs = _climbs(item, model, policy)
     routes = [_priced(item, s, state, game_data, ctx)
-              for s in obtain_sources(item, state, game_data, ctx, policy=policy)
+              for s in obtain_sources(item, state, game_data, ctx, policy=policy,
+                                      crossing=cross)
               if (s.kind, s.code) not in climbs]
     if store is not None:
         for kind in (SourceKind.CRAFT, SourceKind.GATHER):
@@ -1026,9 +1057,10 @@ def route_options(item: str, state: WorldState, game_data: GameData,
     # included. It never suppresses the gear gate below, which asks whether
     # anything served the item before any door was priced.
     routes.extend(_door_options(item, state, game_data, ctx, store, model, policy,
-                                gated_drop, opening, list(routes)))
+                                gated_drop, opening, list(routes), cross))
     if gated_drop and walled:
-        drop = _gated_drop_option(item, state, game_data, ctx, store, model, policy, opening)
+        drop = _gated_drop_option(item, state, game_data, ctx, store, model, policy, opening,
+                                  cross)
         if drop is not None:
             routes.append(drop)
     return routes
@@ -1043,7 +1075,8 @@ def acquisition_options(item: str, state: WorldState, game_data: GameData,
                         store: LearningStore | None = None,
                         gated_drop: bool = True, *, policy: Policy = LEGACY,
                         produce: frozenset[str] = frozenset(),
-                        opening: frozenset[Door] = frozenset()
+                        opening: frozenset[Door] = frozenset(),
+                        crossing: WorldState | None = None
                         ) -> dict[str, list[RouteOption]]:
     """`route_options` over the whole closure reachable from `item`.
 
@@ -1073,7 +1106,7 @@ def acquisition_options(item: str, state: WorldState, game_data: GameData,
         if code in options:
             continue
         routes = route_options(code, state, game_data, ctx, store, gated_drop, policy=policy,
-                               opening=opening)
+                               opening=opening, crossing=crossing)
         if code in produce:
             routes = [route for route in routes if route.kind in _PRODUCING]
         options[code] = routes
@@ -1111,7 +1144,8 @@ def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
                    gated_drop: bool = True, *, policy: Policy, pocket: int,
                    credit_skills: frozenset[str] = frozenset(),
                    produce: frozenset[str] = frozenset(),
-                   opening: frozenset[Door] = frozenset()) -> tuple[int, SourceKind | None]:
+                   opening: frozenset[Door] = frozenset(),
+                   crossing: WorldState | None = None) -> tuple[int, SourceKind | None]:
     """`(price, route)`: the lower bound on planner actions to obtain `qty` of
     `item` (`acquisition_actions` without the equip), and the kind of the route
     that price takes for `item` itself (plan B Task 3: a piece is served by the
@@ -1132,12 +1166,12 @@ def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
     owned: dict[str, int] = _owned_with_gold(state, pocket)
     options: Mapping[str, list[RouteOption]] = credit_demanded_skills(
         acquisition_options(item, state, game_data, ctx, store, gated_drop, policy=policy,
-                            produce=produce, opening=opening),
+                            produce=produce, opening=opening, crossing=crossing),
         credit_skills, game_data)
     price, route = priced_route(item, qty, options, owned, frozenset({GOLD_CODE}))
     if route is not None:
         return price, _served_by(route)
-    model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc))
+    model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc), crossing=crossing)
     for kind in _SKILL_GATE:
         if _skill_gated(item, model, kind, policy) is not None:
             return price, kind
@@ -1237,7 +1271,8 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
                         gated_drop: bool = True, *, policy: Policy = LEGACY,
                         credit_skills: frozenset[str] = frozenset(),
                         produce: frozenset[str] = frozenset(),
-                        opening: frozenset[Door] = frozenset()) -> int:
+                        opening: frozenset[Door] = frozenset(),
+                        crossing: WorldState | None = None) -> int:
     """Lower bound on planner actions to obtain (and optionally equip) `qty` of
     `item`, over every route the executor can currently serve.
 
@@ -1261,11 +1296,14 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
     `opening` — doors whose keys are being priced further up
     (`_door_options`): no route past them is priced again.
 
+    `crossing` — the state the crossings are asked of, when it is not
+    `state` (a chain leg's: `door_price`).
+
     The price is `cheapest_route`'s, so there is one pricer."""
     price, _route = cheapest_route(item, qty, state, game_data, ctx, store, gated_drop,
                                    policy=policy, pocket=state.gold,
                                    credit_skills=credit_skills, produce=produce,
-                                   opening=opening)
+                                   opening=opening, crossing=crossing)
     return price + (EQUIP_ACTIONS if equip else 0)
 
 

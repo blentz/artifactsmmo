@@ -49,5 +49,6 @@ def test_a_door_route_a_ready_route_dominates_is_never_priced(
     monkeypatch.setattr(acquisition_cost, "door_toll", lambda door, s, g: ())
     out = acquisition_cost._door_options(
         "loot", make_state(), GameData(), TIMED_NO_PROFILE_CONTEXT, None,
-        _PastADoor(), DECOMPOSE_POLICY, True, frozenset(), [_option(ready)])  # type: ignore[arg-type]
+        _PastADoor(), DECOMPOSE_POLICY, True, frozenset(), [_option(ready)],  # type: ignore[arg-type]
+        make_state())
     assert (calls == [DOOR], len(out) == 1) == (priced, priced)

@@ -76,13 +76,15 @@ def _sources(model: ObtainModel, item: str, policy: Policy = LEGACY) -> list[Sou
 
 def obtain_sources(
     item: str, state: WorldState, game_data: GameData, ctx: SelectionContext,
-    *, policy: Policy = LEGACY,
+    *, policy: Policy = LEGACY, crossing: WorldState | None = None,
 ) -> list[Source]:
     """Every way `item` can be obtained from the current state, in the declared
     priority order (WITHDRAW, RECYCLE, CRAFT, GATHER, BUY, GE_FILL, DROP, SELL).
     `policy` is LEGACY, the executor's readiness, unless a caller prices under
-    its own (the skill grind's ranking treats a gathering-skill gate as open)."""
-    return _sources(ObtainModel(state, game_data, ctx, datetime.now(UTC)), item, policy)
+    its own (the skill grind's ranking treats a gathering-skill gate as open).
+    `crossing` is the state the crossings are asked of (`ObtainModel`'s)."""
+    return _sources(ObtainModel(state, game_data, ctx, datetime.now(UTC), crossing=crossing),
+                    item, policy)
 
 
 def has_non_craft_source(

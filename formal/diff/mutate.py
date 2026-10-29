@@ -8777,11 +8777,15 @@ KEY_DOOR_TOLL_REACH_MUTATIONS = [
 ]
 KEY_DOOR_TOLL_PRICE_MUTATIONS = [
     ("toll: re-entry is never charged",
-     "        if toll:\n            reentry = _reentry_actions(",
+     "        if door_toll(door, crossing, game_data):\n            reentry = _reentry_actions(",
      "        if False:\n            reentry = _reentry_actions("),
     ("toll: a toll priced further up is priced again",
-     "    if toll in opening:\n        return None\n",
+     "    if any(toll in opening for toll in tolls):\n        return None\n",
      "    if False:\n        return None\n"),
+    # Round 4 minor 5: each leg's toll is priced in its own leg state.
+    ("toll: every leg's toll is priced at the origin",
+     "                  for toll, (at, cross) in zip(tolls, leg_states(state, crossing, door, game_data),\n",
+     "                  for toll, (at, cross) in zip(tolls, [(state, crossing)] * len(tolls),\n"),
     ("toll: an unobtainable toll is charged",
      "    if reentry >= UNOBTAINABLE_PER_UNIT:\n        return None\n",
      "    if False:\n        return None\n"),
@@ -8821,17 +8825,35 @@ KEY_DOOR_CHAIN_REACH_MUTATIONS = [
      "                beyond = reachable_regions_now(holding, game_data) - covered\n",
      "                beyond = reachable_regions_now(holding, game_data) - now\n"),
     ("chain: a chain's legs are the merged door",
-     "    return _DOORS.cache_for(game_data)[_reach_key(state, game_data)][1].get(door, (door,))\n",
+     "    return (door,) if pairs is None else tuple(leg for leg, _toll in pairs)\n",
      "    return (door,)\n"),
+    # Round 4 Important #2: a later leg's pocket is past the earlier tolls,
+    # its crossing holding the earlier legs.
+    ("chain: a later leg's pocket holds the earlier tolls unpaid",
+     "        out.append((_past(pocket, leg, toll), _holding(cross, leg)))\n",
+     "        out.append((_holding(pocket, leg), _holding(cross, leg)))\n"),
+    ("chain: a later leg's crossing is past the earlier tolls",
+     "        out.append((_past(pocket, leg, toll), _holding(cross, leg)))\n",
+     "        out.append((_past(pocket, leg, toll), _past(cross, leg, toll)))\n"),
 ]
 KEY_DOOR_CHAIN_PRICE_MUTATIONS = [
     ("chain: every leg is priced at the origin",
-     "        for leg, at in zip(legs, leg_states(state, legs), strict=True))\n",
-     "        for leg, at in zip(legs, [state] * len(legs), strict=True))\n"),
+     "        for leg, (at, cross) in zip(legs, leg_states(state, crossing, door, game_data),\n",
+     "        for leg, (at, cross) in zip(legs, [(state, crossing)] * len(legs),\n"),
+    ("chain: a leg's closure is reached from its pocket",
+     "                                crossing=cross)\n            for code, units in leg)\n",
+     "                                crossing=at)\n            for code, units in leg)\n"),
+    ("chain: a priced route's model crosses from its pocket",
+     "    model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc), crossing=cross)\n",
+     "    model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc))\n"),
+    ("chain: a priced route's sources cross from its pocket",
+     "              for s in obtain_sources(item, state, game_data, ctx, policy=policy,\n"
+     "                                      crossing=cross)\n",
+     "              for s in obtain_sources(item, state, game_data, ctx, policy=policy)\n"),
 ]
 KEY_DOOR_CHAIN_WALK_MUTATIONS = [
     ("chain: every leg is walked by the origin's model",
-     "                for leg, model in zip(legs, self._leg_models(legs), strict=True)\n",
+     "                for leg, model in zip(legs, self._leg_models(door), strict=True)\n",
      "                for leg, model in zip(legs, [self] * len(legs), strict=True)\n"),
 ]
 KEY_DOOR_CHAIN_EXECUTOR_MUTATIONS = [
@@ -8887,7 +8909,7 @@ KEY_DOOR_WALK_MUTATIONS = [
 KEY_DOOR_PRICE_MUTATIONS = [
     ("door price: no route past a door is priced",
      "    routes.extend(_door_options(item, state, game_data, ctx, store, model, policy,\n"
-     "                                gated_drop, opening, list(routes)))\n",
+     "                                gated_drop, opening, list(routes), cross))\n",
      "    routes.extend([])\n"),
     ("door price: the crossing is free",
      "        CROSSING_ACTIONS + sum(\n            acquisition_actions(code, (at.gold",
@@ -8918,10 +8940,10 @@ KEY_DOOR_PRICE_MUTATIONS = [
      "    if route is None or not route.unlock.startswith(\"door:\"):\n",
      "    if route is None:\n"),
     ("door price: the gear chain re-prices the door",
-     "                            gated_drop=False, policy=policy, opening=opening)\n"
-     "        for step in deficit.chain)\n",
-     "                            gated_drop=False, policy=policy, opening=frozenset())\n"
-     "        for step in deficit.chain)\n"),
+     "                            gated_drop=False, policy=policy, opening=opening,\n"
+     "                            crossing=crossing)\n",
+     "                            gated_drop=False, policy=policy, opening=frozenset(),\n"
+     "                            crossing=crossing)\n"),
 ]
 KEY_DOOR_COMPANION_MUTATIONS = [
     ("door: no companion gate rides with a door",

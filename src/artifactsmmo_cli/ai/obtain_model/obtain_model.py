@@ -324,21 +324,22 @@ class ObtainModel:
             closed = opening | set(legs)
             self._doors[key] = all(
                 can_obtain(code, model.in_bag(code) + units, graph.on_hand, graph.routes)
-                for leg, model in zip(legs, self._leg_models(legs), strict=True)
+                for leg, model in zip(legs, self._leg_models(door), strict=True)
                 for code, units in leg
                 for graph in (model.walk_graph(code, policy, keep=keep, openable=openable,
                                                grey_ok=grey_ok, opening=closed, rank=rank),))
         return self._doors[key]
 
-    def _leg_models(self, legs: tuple[Door, ...]) -> list["ObtainModel"]:
+    def _leg_models(self, door: Door) -> list["ObtainModel"]:
         """One model per leg of a door chain (ruling T14e-m6): this one for
-        the first leg, then one over the state holding the legs before it
-        (`region_edges.leg_states`, the pocket and the crossing state alike),
-        where the crossings before it are applicable."""
+        the first leg, then one per later leg over `region_edges.leg_states`:
+        its crossings asked of the state holding the legs before it (they are
+        crossed from here), its pocket and bag past them, their tolls paid
+        (round 4: an earlier leg's fee gold is spent, not credited)."""
         return [self, *(ObtainModel(at, self._gd, self._ctx, self._now, self._fighter,
                                     crossing=cross)
-                        for at, cross in zip(leg_states(self._state, legs)[1:],
-                                             leg_states(self._crossing, legs)[1:], strict=True))]
+                        for at, cross in leg_states(self._state, self._crossing, door,
+                                                    self._gd)[1:])]
 
     def _ranked_gathers(self, item: str, ready: tuple[Route, ...]) -> list[Route]:
         """`ready` with its GATHER routes (contiguous in priority order) ranked
