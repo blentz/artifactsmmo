@@ -240,3 +240,19 @@ def test_a_task_fight_with_no_room_for_its_drops_is_refused_at_its_step() -> Non
     assert objective_step_goal(ReachTaskOutcome("ogre"), full, gd, ctx) is None
     goal = objective_step_goal(ReachTaskOutcome("ogre"), roomy, gd, ctx)
     assert isinstance(goal, TaskKillsGoal) and repr(goal) == "TaskKills(ogre)"
+
+
+def test_the_task_steps_prep_and_refusal_share_one_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling T14d-R m5: the task step's bag-room refusal and its prep are
+    guarded by one predicate (`_prices_step_fight`). Where it says the step
+    prices no fight, neither is asked: the refusing pick is never read and the
+    step is one more kill."""
+    asked: list[str] = []
+    monkeypatch.setattr(driver_mod, "_prices_step_fight",
+                        lambda *a: asked.append(a[3]) or False)
+    monkeypatch.setattr(driver_mod, "refuses_fight_against",
+                        lambda *a: pytest.fail("the refusal was asked"))
+    held = {"task_code": "ogre", "task_type": "monsters", "task_total": 5, "task_progress": 0}
+    full = replace(_state(inventory_max=30), **held)
+    goal = objective_step_goal(ReachTaskOutcome("ogre"), full, _gd(), replace(CTX, loadout=_WOLF_AHEAD))
+    assert isinstance(goal, TaskKillsGoal) and asked == ["ogre", "ogre"]

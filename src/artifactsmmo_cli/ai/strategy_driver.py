@@ -620,12 +620,11 @@ def objective_step_goal(
         if state.task_type == "items":
             # c-2 #4/#5: a held items task not cancelled for its worth is worked.
             return _pursue_goal(state, game_data)
-        if (ctx.loadout is not None and fight_tiles(state, game_data, step.task_code)
+        if (_prices_step_fight(state, game_data, ctx, step.task_code)
                 and refuses_fight_against(state, game_data, ctx, step.task_code)):
-            # Its fight is priced at `loadout_for`'s pick, as its prep is
-            # (`_fight_step_prep`: no loadout this cycle, or no tile, prices
-            # neither): a pick whose loop has no room for the drops refuses the
-            # fight at this step (ruling T14d-2).
+            # Its fight is priced at `loadout_for`'s pick, as its prep is: a
+            # pick whose loop has no room for the drops refuses the fight at
+            # this step (ruling T14d-2).
             return None
         prep = _fight_step_prep(state, game_data, ctx, step.task_code)
         if prep is not None:
@@ -636,8 +635,17 @@ def objective_step_goal(
     return None
 
 
+def _prices_step_fight(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                       monster: str) -> bool:
+    """A fight step against `monster` is priced at `loadout_for`'s pick: there
+    is a loadout this cycle (a fight ahead), and a tile the monster is fought
+    on now, on any layer (`fight_tiles`). The ONE guard of the step's prep
+    (`_fight_step_prep`) and of its bag-room refusal (ruling T14d-R m5)."""
+    return ctx.loadout is not None and bool(fight_tiles(state, game_data, monster))
+
+
 def _fight_step_prep(state: WorldState, game_data: GameData, ctx: SelectionContext,
-                     monster: str | None) -> Goal | None:
+                     monster: str) -> Goal | None:
     """The fight step's prep (USER 2026-10-10, "Fight steps prep it"): the
     loadout's potions, then its food, from the loadout against this step's
     monster (`best_loadout.loadout_for`: the cycle's own when it was chosen
@@ -646,8 +654,8 @@ def _fight_step_prep(state: WorldState, game_data: GameData, ctx: SelectionConte
     dropper), and a prep that switched off then would hand the commitment back
     to the bare fight. No loadout this cycle (no fight ahead) is no prep, and a
     monster fought on no tile now, on any layer (`fight_tiles`), has no fight
-    to prep."""
-    if monster is None or ctx.loadout is None or not fight_tiles(state, game_data, monster):
+    to prep (`_prices_step_fight`)."""
+    if not _prices_step_fight(state, game_data, ctx, monster):
         return None
     return (potion_prep_goal(state, game_data, ctx, monster)
             or heal_prep_goal(state, game_data, ctx, monster))

@@ -2191,8 +2191,12 @@ FIGHT_ROOM_GRIND_MUTATIONS = [
 ]
 FIGHT_ROOM_TASK_STEP_MUTATIONS = [
     ("fight room: a task step's refused fight is one more kill",
-     "        if (ctx.loadout is not None and fight_tiles(state, game_data, step.task_code)",
-     "        if (False and fight_tiles(state, game_data, step.task_code)"),
+     "        if (_prices_step_fight(state, game_data, ctx, step.task_code)",
+     "        if (False"),
+    # Ruling T14d-R m5: one guard for the step's prep and its refusal.
+    ("fight step: the prep ignores the shared guard",
+     "    if not _prices_step_fight(state, game_data, ctx, monster):\n        return None",
+     "    if False:\n        return None"),
 ]
 FIGHT_ROOM_ARBITER_MUTATIONS = [
     ("fight room: the arbiter plans over the refused fight",
@@ -8959,15 +8963,16 @@ FIGHT_STEP_POTION_MUTATIONS = [
      "            or heal_prep_goal(state, game_data, ctx, monster))\n",
      "    return (heal_prep_goal(state, game_data, ctx, monster)\n"
      "            or potion_prep_goal(state, game_data, ctx, monster))\n"),
+    # The guard is one predicate since ruling T14d-R m5 (`_prices_step_fight`).
     ("fight step: no loadout still preps",
-     "    if monster is None or ctx.loadout is None or not fight_tiles(state, game_data, monster):\n",
-     "    if monster is None or not fight_tiles(state, game_data, monster):\n"),
+     "    return ctx.loadout is not None and bool(fight_tiles(state, game_data, monster))\n",
+     "    return bool(fight_tiles(state, game_data, monster))\n"),
     ("fight step: a monster that spawns nowhere is still prepped",
-     "    if monster is None or ctx.loadout is None or not fight_tiles(state, game_data, monster):\n",
-     "    if monster is None or ctx.loadout is None:\n"),
+     "    return ctx.loadout is not None and bool(fight_tiles(state, game_data, monster))\n",
+     "    return ctx.loadout is not None\n"),
     ("fight step: an interior-only monster is not prepped",
-     "    if monster is None or ctx.loadout is None or not fight_tiles(state, game_data, monster):\n",
-     "    if monster is None or ctx.loadout is None or not game_data.monster_locations(monster):\n"),
+     "    return ctx.loadout is not None and bool(fight_tiles(state, game_data, monster))\n",
+     "    return ctx.loadout is not None and bool(game_data.monster_locations(monster))\n"),
 ]
 LADDER_SUPPLIES_MUTATIONS = [
     ("ladder supplies: every potion is the ladder's",
