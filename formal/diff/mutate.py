@@ -6841,8 +6841,22 @@ FLEET_CLIMBER_MUTATIONS = [
      "    levels[character] = skill_levels",
      "    levels.setdefault(character, skill_levels)"),
     ("fleet climber: levels past the demand count as less to climb",
-     "          {name: Fraction(max(0, demanded[skill] - held.get(skill, 0)))",
-     "          {name: Fraction(demanded[skill] - held.get(skill, 0))"),
+     "    left = {name: max(0, demanded - held.get(skill, 0)) for name, held in levels.items()}",
+     "    left = {name: demanded - held.get(skill, 0) for name, held in levels.items()}"),
+    # Ruling T14d-6: the rank is in cycles, an unpriced candidate after every
+    # priced one by levels.
+    ("fleet climber: a candidate at the level needs a rate",
+     "        if left[name] == 0:\n            priced[name] = 0",
+     "        if False:\n            priced[name] = 0"),
+    ("fleet climber: the rank stays in levels",
+     "        elif rate is not None and max_xp > 0:",
+     "        elif False:"),
+    ("fleet climber: a rate prices with no known xp a level",
+     "        elif rate is not None and max_xp > 0:",
+     "        elif rate is not None:"),
+    ("fleet climber: an unpriced candidate ranks among the priced",
+     "    ceiling = 1 + max(priced.values(), default=0)",
+     "    ceiling = 0"),
     ("fleet climber: holding the skill's own role counts as other work",
      "                     if name in holders and role != owners[skill])",
      "                     if name in holders)"),
@@ -6870,6 +6884,18 @@ FLEET_CLIMB_CORE_ASSIGN_MUTATIONS = [
     ("fleet climb: a skill with every character taken is assigned anyway",
      "        if not eligible:\n            continue",
      "        if not eligible:\n            eligible = dict(remaining)"),
+]
+# Ruling T14d-6: the player ranks with each candidate's rate. Killed by
+# tests/test_ai/test_player_coordination.py.
+FLEET_CLIMBER_RATE_MUTATIONS = [
+    ("fleet climber: the player ranks with no rates",
+     "        rates = {} if store is None else {",
+     "        rates = {} if True else {"),
+]
+FLEET_CLIMBER_RATE_FILTER_MUTATIONS = [
+    ("fleet climber: a non-positive rate prices the climb",
+     "    return rate if rate is not None and rate > 0 else None",
+     "    return rate"),
 ]
 FLEET_CLIMB_ROUTE_MUTATIONS = [
     ("fleet climb route: a sibling below the gate is one craft away",
@@ -7130,8 +7156,8 @@ FLEET_CLIMB_PLAYER_MUTATIONS = [
      "                                 elsewhere, pieces)",
      "                                 level_of_item, state.skills, work_of_item, climbing)"),
     ("fleet climb player: the skills are taken in no gain order",
-     "                              self._demanded_gain(self.game_data), owners,",
-     "                              {}, owners,"),
+     "        return fleet_climbers(demanded, self._demanded_gain(self.game_data), owners,",
+     "        return fleet_climbers(demanded, {}, owners,"),
     ("fleet climb player: a skill's fleet gain is its last piece's",
      "                gain[requirement[0]] = gain.get(requirement[0], Fraction(0)) + piece_gain",
      "                gain[requirement[0]] = piece_gain"),
@@ -14014,6 +14040,10 @@ def _collect_all_groups() -> None:
     run_group(COORDINATION_STORE_SRC, FLEET_CLIMB_ROSTER_MUTATIONS,
               "tests/test_ai/test_coordination_store.py", survivors)
     run_group(ACQUISITION_COST_SRC, FLEET_CLIMB_ROUTE_MUTATIONS,
+              "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(PLAYER_SRC, FLEET_CLIMBER_RATE_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
+    run_group(ACQUISITION_COST_SRC, FLEET_CLIMBER_RATE_FILTER_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
     run_group(TOOL_OBJECTIVE_SRC, TOOL_OBJECTIVE_MUTATIONS,
               "tests/test_ai/test_tool_objective.py", survivors)

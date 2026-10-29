@@ -28,7 +28,7 @@ from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSc
 from artifactsmmo_api_client.types import Unset
 
 from artifactsmmo_cli.ai.account_read_cache import AccountReadCache
-from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
+from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, climber_rate
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.action_kind import action_kind_of
 from artifactsmmo_cli.ai.action_rejection import is_categorical_rejection
@@ -3234,10 +3234,21 @@ class GamePlayer:
         if self._sibling_ledger is None or self._climb_order is None:
             return {}
         owners = {role.craft: role.name for role in ROLE_CATALOG}
-        return fleet_climbers(self._demanded_levels(self.game_data),
-                              self._demanded_gain(self.game_data), owners,
+        demanded = self._demanded_levels(self.game_data)
+        # Each candidate's rate (its own, else the fleet's): the climbers rank
+        # in the cycles the sibling route prices (ruling T14d-6). Without a
+        # store none is known, and every candidate ranks by levels.
+        store = self.history
+        names = [self.character, *(name for name in self._sibling_ledger
+                                   if name in self._climb_order)]
+        rates = {} if store is None else {
+            name: {skill: rate for skill in demanded
+                   if (rate := climber_rate(store, name, skill)) is not None}
+            for name in names}
+        return fleet_climbers(demanded, self._demanded_gain(self.game_data), owners,
                               [role.craft for role in ROLE_CATALOG], self.character,
-                              self.state.skills, self._sibling_ledger, leases, self._climb_order)
+                              self.state.skills, self._sibling_ledger, leases, self._climb_order,
+                              rates, self.state.skill_max_xp)
 
     def _demanded_gain(self, game_data: GameData) -> dict[str, Fraction]:
         """The fleet's gain summed, per producing skill, over every `L*` piece

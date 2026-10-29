@@ -29,6 +29,7 @@ from sqlmodel import Session as SqlSession
 from sqlmodel import select
 
 import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
+import artifactsmmo_cli.ai.player as player_mod
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.ge_cancel_order import GeCancelOrderAction
@@ -3182,6 +3183,36 @@ def test_the_skill_carrying_more_fleet_gain_takes_its_climber_first(tmp_path) ->
     assert player._demanded_gain(player.game_data) == {
         "gearcrafting": Fraction(1), "jewelrycrafting": Fraction(5)}
     assert player._climbers({}) == {"jewelrycrafting": "C3P0", "gearcrafting": "Robby"}
+
+
+def test_the_climbers_are_ranked_at_each_candidates_grind_rate(tmp_path, monkeypatch) -> None:
+    """Ruling T14d-6: with a store, each candidate's rate (`climber_rate`, its
+    own, else the fleet's) ranks the climb in cycles. Robby, slower in levels
+    but grinding at 1000 a cycle against C3P0's 1, takes jewelrycrafting (the
+    skill with more gain) and gearcrafting goes to C3P0."""
+    player, _ = _coord_player(tmp_path)
+    player.game_data = shared_world(_FLEET_BUNDLE)
+    skills = {**make_state().skills, "gearcrafting": 8, "jewelrycrafting": 8}
+    player.state = make_state(character="C3P0", skills=skills,
+                              skill_max_xp={"gearcrafting": 500, "jewelrycrafting": 500})
+    player.history = LearningStore(db_path=str(tmp_path / "learn.db"), character="C3P0")
+    player._climb_order = ("C3P0", "Robby")
+    player._sibling_ledger = {"Robby": {"gearcrafting": 5, "jewelrycrafting": 5}}
+    player._fleet_board = {"iron_shield": (1, Fraction(1)), "iron_ring": (1, Fraction(2))}
+    ring = GearPiece("ring1_slot", "iron_ring", 0, Fraction(3), Fraction(5), SourceKind.CRAFT)
+    player._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+        "wolf", {"ring1_slot": "iron_ring"}, Fraction(1), (ring,)))
+    asked: list[tuple[str, str]] = []
+
+    def rate(store: object, who: str, skill: str) -> float:
+        asked.append((who, skill))
+        return 1000.0 if who == "Robby" else 1.0
+    monkeypatch.setattr(player_mod, "climber_rate", rate)
+    try:
+        assert player._climbers({}) == {"jewelrycrafting": "Robby", "gearcrafting": "C3P0"}
+        assert {who for who, _ in asked} == {"C3P0", "Robby"}
+    finally:
+        player.history.close()
 
 
 def test_a_piece_the_fleet_climber_makes_recruits_no_second_crafter(tmp_path) -> None:

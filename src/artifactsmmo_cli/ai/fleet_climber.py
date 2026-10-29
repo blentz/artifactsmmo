@@ -21,6 +21,29 @@ from collections.abc import Mapping, Sequence
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.fleet_climb_core import assign_climbers
+from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
+
+
+def climb_ranks(skill: str, demanded: int, levels: Mapping[str, Mapping[str, int]],
+                rates: Mapping[str, Mapping[str, float]], max_xp: int) -> dict[str, Fraction]:
+    """Each candidate's rank for climbing `skill` to `demanded`, in CYCLES
+    (ruling T14d-6): `skill_grind_cycles` from its level at its rate (`rates`:
+    its own, else the fleet's, positive only; `acquisition_cost.climber_rate`),
+    the measure the sibling route's price uses. A candidate already at the
+    level is 0 cycles. One with no positive rate (or no known `max_xp`) has no
+    price, and ranks after every priced candidate, ordered among themselves by
+    the levels still to climb: `1 + the largest priced cycles + levels`."""
+    left = {name: max(0, demanded - held.get(skill, 0)) for name, held in levels.items()}
+    priced: dict[str, int] = {}
+    for name, held in levels.items():
+        rate = rates.get(name, {}).get(skill)
+        if left[name] == 0:
+            priced[name] = 0
+        elif rate is not None and max_xp > 0:
+            priced[name] = skill_grind_cycles(held.get(skill, 0), 0, max_xp, demanded, rate)
+    ceiling = 1 + max(priced.values(), default=0)
+    return {name: Fraction(priced[name] if name in priced else ceiling + left[name])
+            for name in levels}
 
 
 def fleet_climbers(demanded: Mapping[str, int], gain: Mapping[str, Fraction],
@@ -28,7 +51,9 @@ def fleet_climbers(demanded: Mapping[str, int], gain: Mapping[str, Fraction],
                    skill_levels: Mapping[str, int],
                    sibling_skill_levels: Mapping[str, Mapping[str, int]],
                    live_leases: Mapping[str, frozenset[str]],
-                   fleet_order: Sequence[str]) -> dict[str, str]:
+                   fleet_order: Sequence[str],
+                   rates: Mapping[str, Mapping[str, float]],
+                   max_xp: Mapping[str, int]) -> dict[str, str]:
     """craft skill -> the ONE character that climbs it for the fleet.
 
     `demanded` is the level the fleet's `L*` pieces demand of each producing
@@ -38,12 +63,14 @@ def fleet_climbers(demanded: Mapping[str, int], gain: Mapping[str, Fraction],
     `climber` over this character (`skill_levels`) and the siblings in
     `fleet_order` (`sibling_skill_levels`) that no earlier skill took.
 
-    Remaining climb is the LEVELS still to climb, `max(0, demanded - level)`.
-    The published ledger carries levels only, and every character climbs the
-    same per-level xp curve (`skill_grind_cost_core`: the API exposes no curve,
-    one level's requirement stands for every level), so this orders the
-    candidates exactly as remaining xp does: the character already highest in
-    the skill (the spec's own gloss). A missing level reads 0, as in
+    Remaining climb is in CYCLES (`climb_ranks`, ruling T14d-6), the measure
+    the sibling route prices it in: the levels still to climb at this
+    character's per-level xp (`max_xp`: the API exposes no curve, one level's
+    requirement stands for every level, `skill_grind_cost_core`) over each
+    candidate's grind rate (`rates`). The published ledger carries levels only,
+    so within-level xp is unknown and every candidate climbs from the start of
+    its level, as the price does. A candidate with no rate ranks after every
+    priced one, by levels. A missing level reads 0, as in
     `role_catalog.role_skill_level`. Other committed work is the live roles a
     candidate holds besides the skill's owning role.
 
@@ -57,8 +84,7 @@ def fleet_climbers(demanded: Mapping[str, int], gain: Mapping[str, Fraction],
                     key=lambda skill: (-gain.get(skill, Fraction(0)), skill_rank.index(skill)))
     return assign_climbers(
         [(skill,
-          {name: Fraction(max(0, demanded[skill] - held.get(skill, 0)))
-           for name, held in levels.items()},
+          climb_ranks(skill, demanded[skill], levels, rates, max_xp.get(skill, 0)),
           {name: sum(1 for role, holders in live_leases.items()
                      if name in holders and role != owners[skill])
            for name in levels})

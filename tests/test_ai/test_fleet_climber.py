@@ -6,7 +6,7 @@ from fractions import Fraction
 
 import pytest
 
-from artifactsmmo_cli.ai.fleet_climber import fleet_climbers, serving_climbers
+from artifactsmmo_cli.ai.fleet_climber import climb_ranks, fleet_climbers, serving_climbers
 
 ORDER = ("Ana", "Bea", "Cid")
 OWNERS = {"gearcrafting": "logger", "jewelrycrafting": "jeweler", "weaponcrafting": "miner"}
@@ -17,9 +17,54 @@ RANK = ("weaponcrafting", "gearcrafting", "jewelrycrafting")
 def _assign(me: str, mine: dict[str, int], siblings: dict[str, dict[str, int]],
             demanded: dict[str, int] | None = None, gain: dict[str, Fraction] | None = None,
             leases: dict[str, frozenset[str]] | None = None,
-            order: tuple[str, ...] = ORDER) -> dict[str, str]:
+            order: tuple[str, ...] = ORDER,
+            rates: dict[str, dict[str, float]] | None = None) -> dict[str, str]:
+    """No `rates` is no known grind rate: every candidate ranks by levels."""
     return fleet_climbers(demanded or {"gearcrafting": 30}, gain or {}, OWNERS, RANK, me, mine,
-                          siblings, leases or {}, order)
+                          siblings, leases or {}, order, rates or {}, MAX_XP)
+
+
+MAX_XP = {"gearcrafting": 1000, "jewelrycrafting": 1000, "weaponcrafting": 1000}
+"""This character's xp per level of each craft skill (the price's own figure)."""
+
+
+def test_the_climber_is_ranked_in_cycles_not_levels() -> None:
+    """Ruling T14d-6 (T7d M5): the rank is the price's measure. Ana is 7
+    levels short at 10 xp a cycle (700 cycles), Bea 10 levels short at 100
+    (100 cycles): Bea climbs, though Ana is the higher in the skill."""
+    rates = {"Ana": {"gearcrafting": 10.0}, "Bea": {"gearcrafting": 100.0}}
+    assert climb_ranks("gearcrafting", 30, {"Ana": {"gearcrafting": 23}, "Bea": {"gearcrafting": 20}},
+                       rates, 1000) == {"Ana": Fraction(700), "Bea": Fraction(100)}
+    assert _assign("Ana", {"gearcrafting": 23}, {"Bea": {"gearcrafting": 20}}, rates=rates) == {
+        "gearcrafting": "Bea"}
+
+
+def test_a_candidate_with_no_rate_ranks_after_every_priced_one_by_levels() -> None:
+    """No positive rate is no price: Ana (5 levels, no rate) and Cid (8, no
+    rate) rank after Bea (10 levels at 100 a cycle, 100 cycles), and between
+    themselves by levels: 1 + 100 + 5 and 1 + 100 + 8."""
+    levels = {"Ana": {"gearcrafting": 25}, "Bea": {"gearcrafting": 20}, "Cid": {"gearcrafting": 22}}
+    rates = {"Bea": {"gearcrafting": 100.0}}
+    assert climb_ranks("gearcrafting", 30, levels, rates, 1000) == {
+        "Ana": Fraction(106), "Bea": Fraction(100), "Cid": Fraction(109)}
+    assert _assign("Ana", levels["Ana"], {"Bea": levels["Bea"], "Cid": levels["Cid"]},
+                   rates=rates) == {"gearcrafting": "Bea"}
+    assert _assign("Ana", levels["Ana"], {"Cid": levels["Cid"]}) == {"gearcrafting": "Ana"}
+
+
+def test_a_candidate_at_the_level_is_zero_cycles_without_a_rate() -> None:
+    """Nothing left to climb needs no rate: Ana at 30 is 0 cycles, ahead of
+    Bea's 100."""
+    assert _assign("Ana", {"gearcrafting": 30}, {"Bea": {"gearcrafting": 20}},
+                   rates={"Bea": {"gearcrafting": 100.0}}) == {"gearcrafting": "Ana"}
+
+
+def test_no_known_xp_a_level_leaves_every_candidate_unpriced() -> None:
+    """A rate without this character's xp per level prices nothing: the rank
+    falls back to levels for all."""
+    rates = {"Ana": {"gearcrafting": 10.0}, "Bea": {"gearcrafting": 100.0}}
+    assert climb_ranks("gearcrafting", 30, {"Ana": {"gearcrafting": 23}, "Bea": {"gearcrafting": 20}},
+                       rates, 0) == {"Ana": Fraction(8), "Bea": Fraction(11)}
 
 
 def test_the_character_highest_in_the_skill_climbs() -> None:

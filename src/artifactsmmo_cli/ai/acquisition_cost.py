@@ -550,6 +550,18 @@ def _sibling_craft_option(item: str, state: WorldState, game_data: GameData,
     )
 
 
+def climber_rate(store: LearningStore, who: str, skill: str) -> float | None:
+    """The xp a cycle `who` grinds `skill` at: its own rate, the fleet's only in
+    its ABSENCE (the load-bearing `is None` test), or None when neither is
+    positive. The one rate the climb is priced with (`_amortized_fleet_climb`)
+    and the fleet's climbers are ranked by (`fleet_climber.fleet_climbers`,
+    ruling T14d-6)."""
+    rate = store.character_skill_grind_rate(who, skill)
+    if rate is None:
+        rate = store.fleet_skill_grind_rate(skill)
+    return rate if rate is not None and rate > 0 else None
+
+
 def _amortized_fleet_climb(skill: str, level: int, state: WorldState, game_data: GameData,
                            ctx: SelectionContext, store: LearningStore) -> int | None:
     """This character's share, in actions, of the fleet climber's remaining
@@ -575,11 +587,9 @@ def _amortized_fleet_climb(skill: str, level: int, state: WorldState, game_data:
     who = ctx.fleet_climbers.get(skill)
     if who is None or who == state.character:
         return None
-    rate = store.character_skill_grind_rate(who, skill)
-    if rate is None:
-        rate = store.fleet_skill_grind_rate(skill)
+    rate = climber_rate(store, who, skill)
     max_xp = state.skill_max_xp.get(skill, 0)
-    if not rate or rate <= 0 or max_xp <= 0:
+    if rate is None or max_xp <= 0:
         return None
     start = ctx.sibling_skill_ledger[who].get(skill, 0)
     remaining = skill_grind_cycles(start, 0, max_xp, level, rate)
