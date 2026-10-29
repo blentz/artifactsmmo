@@ -8789,6 +8789,20 @@ KEY_DOOR_TOLL_PRICE_MUTATIONS = [
      "    return None if share is None else attempts * share\n",
      "    return Fraction(0) if share is None else attempts * share\n"),
 ]
+# Ruling T14e-m1: the walk opens the door the pricer charged. Killed by
+# tests/test_ai/test_key_door_route.py.
+KEY_DOOR_RANK_WALK_MUTATIONS = [
+    ("door rank: the walk opens the first openable door",
+     "                   key=rank, default=None)\n",
+     "                   key=lambda _door: 0, default=None)\n"),
+]
+KEY_DOOR_RANK_PLAN_MUTATIONS = [
+    ("door rank: the plan builder ranks no door",
+     "        answer = model.walk(item, qty, policy, goal.exclude_recycle, openable,\n"
+     "                            frozenset(goal.needed), grey_ok, prefer, rank)\n",
+     "        answer = model.walk(item, qty, policy, goal.exclude_recycle, openable,\n"
+     "                            frozenset(goal.needed), grey_ok, prefer)\n"),
+]
 KEY_DOOR_REACH_MUTATIONS = [
     ("door: the hypothetical holds nothing",
      "    beyond = reachable_regions_now(_holding(state, door), game_data) - now\n",
@@ -8816,8 +8830,8 @@ KEY_DOOR_WALK_MUTATIONS = [
      "                if not unmet or not all(openable(gate) or gate.doors for gate in unmet):\n",
      "                if not unmet or not all(openable(gate) for gate in unmet):\n"),
     ("door: a key may open its own door",
-     "        door = next((door for door in gate.doors if door not in opening\n",
-     "        door = next((door for door in gate.doors if True\n"),
+     "        door = min((door for door in gate.doors if door not in opening\n",
+     "        door = min((door for door in gate.doors if True\n"),
     ("door: the opened gate is not narrowed to its door",
      "        return None if door is None else replace(gate, doors=(door,))\n",
      "        return None if door is None else gate\n"),
@@ -14324,6 +14338,10 @@ def _collect_all_groups() -> None:
     run_group(REGION_EDGES_SRC, KEY_DOOR_TOLL_REACH_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(ACQUISITION_COST_SRC, KEY_DOOR_TOLL_PRICE_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, KEY_DOOR_RANK_WALK_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, KEY_DOOR_RANK_PLAN_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(PROGRESSION_RESERVE_SRC, FEE_SHORTFALL_MUTATIONS,
               "tests/test_ai/test_progression_reserve.py", survivors)

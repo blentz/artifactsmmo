@@ -34,7 +34,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 
-from artifactsmmo_cli.ai.acquisition_cost import door_route, fight_gold_monster
+from artifactsmmo_cli.ai.acquisition_cost import door_price, door_route, fight_gold_monster
 from artifactsmmo_cli.ai.actions.base import Action, serves_region
 from artifactsmmo_cli.ai.actions.combat import FightAction, win_gold
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
@@ -477,15 +477,24 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
                                          pocket=walked.gold)
         return preferred[code]
 
+    ranks: dict[Door, int] = {}
+
+    def rank(door: Door) -> int:
+        """The door's price (`door_price`, ruling T14e-m1), as the pricer
+        charged it when it took the cheapest door: the walk opens that one."""
+        if door not in ranks:
+            ranks[door] = door_price(door, state, game_data, ctx, None, policy, True, frozenset())
+        return ranks[door]
+
     for item, needed in goal.needed.items():
         qty = _bag_target(item, needed, goal.exclude_recycle, state)
         model = ObtainModel(walked, game_data, ctx, datetime.now(UTC), crossing=state)
         answer = model.walk(item, qty, policy, goal.exclude_recycle, openable,
-                            frozenset(goal.needed), grey_ok, prefer)
+                            frozenset(goal.needed), grey_ok, prefer, rank)
         trip = _one_trip(item, qty, answer, state, game_data)
         if trip < qty:
             answer = model.walk(item, trip, policy, goal.exclude_recycle, openable,
-                                frozenset(goal.needed), grey_ok, prefer)
+                                frozenset(goal.needed), grey_ok, prefer, rank)
         if not answer.feasible:
             graph = answer.graph
             dead = sorted(code for code, routes in graph.routes.items()

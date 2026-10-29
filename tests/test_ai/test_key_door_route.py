@@ -687,3 +687,35 @@ def test_a_kept_key_is_paid_once(monkeypatch: pytest.MonkeyPatch) -> None:
     _state, _world, option, ready = _lich_farm(monkeypatch)
     assert option.unlock == "door:lich_tomb_keyx1"
     assert option.actions_per_application == ready.actions_per_application
+
+
+# --- ruling T14e-m1: the walk opens the door the pricer charged ----------------
+
+def test_the_walk_opens_the_cheapest_door_as_the_pricer_does(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """`palm_wood` grows past two fee doors on the level-30 sheet, the
+    5000-gold one first in tile order and the 1000-gold boat second (a
+    woodcutter at the palm's level 50, so the door is its only gate). The
+    pricer charges the cheaper door, and the piece's walk opens that one, not
+    the first listed."""
+    state, world, player = _seeded("l30_band_entry")
+    state = replace(state, skills={**state.skills, "woodcutting": 50})
+    ctx = player._selection_context()
+    model = ObtainModel(state, world, ctx, datetime.now(UTC))
+    (route,) = [r for r in model.routes("palm_wood") if r.kind is SourceKind.GATHER]
+    dear, cheap = next(g.doors for g in route.gates if g.kind is GateKind.SPAWN_KNOWN)
+    assert dear[0][1] > cheap[0][1]
+    (option,) = [o for o in route_options("palm_wood", state, world, ctx, policy=PIECE_POLICY)
+                 if o.unlock]
+    assert option.unlock == acquisition_cost._door_unlock(cheap)
+    opened: list[object] = []
+    open_door = craft_plan_gen._open_door
+    monkeypatch.setattr(craft_plan_gen, "_open_door",
+                        lambda door, *a: opened.append(door) or open_door(door, *a))
+    piece = GatherMaterialsGoal("palm_wood", {"palm_wood": 1}, piece_material=True,
+                                fight_gold=True)
+    assert decompose(piece, state, world, player._build_actions(), ctx) is not None
+    assert opened == [cheap]
+    step = model.walk("palm_wood", 1, PIECE_POLICY).plan[0]
+    assert isinstance(step, OpenGate) and isinstance(step.gate, Gate)
+    assert step.gate.doors == (dear,)  # unranked: the first openable door

@@ -177,8 +177,8 @@ class ObtainModel:
                    keep: frozenset[str] = frozenset(),
                    grey_ok: Callable[[str], bool] = lambda _item: False,
                    opening: frozenset[Door] = frozenset(),
-                   prefer: Callable[[str], tuple[SourceKind, str] | None] = lambda _item: None
-                   ) -> WalkGraph:
+                   prefer: Callable[[str], tuple[SourceKind, str] | None] = lambda _item: None,
+                   rank: Callable[[Door], int] = lambda _door: 0) -> WalkGraph:
         """`item`'s closure as the one walk's graph (Phase 2c-2b).
 
         On hand is the bag (the inventory, with gold as the pocket). Every ready
@@ -225,7 +225,12 @@ class ObtainModel:
         `prefer` names, per item with a route past a door, the `(kind, via)`
         route the pricer took for it (`acquisition_cost.door_route`, ruling
         T14e-1): that route is tried first, so a door route priced below a
-        ready one is the one the walk serves. None leaves the order alone."""
+        ready one is the one the walk serves. None leaves the order alone.
+
+        `rank` prices a door (`acquisition_cost.door_price`, ruling T14e-m1):
+        of the doors the walk can open, the gate is narrowed to the cheapest,
+        first of equal ranks, the door the pricer charged. The default ranks
+        every door alike, so the first openable one in `door_reaches`' order."""
         bag: dict[str, int] = dict(self._state.inventory)
         bag[GOLD_CODE] = self._state.gold
         bank = self._state.bank_items or {}
@@ -249,7 +254,7 @@ class ObtainModel:
                               if item_policy.enforces(gate, route) and not gate.satisfied)
                 if not unmet or not all(openable(gate) or gate.doors for gate in unmet):
                     continue
-                opened = [self._opened(gate, policy, openable, keep, grey_ok, opening)
+                opened = [self._opened(gate, policy, openable, keep, grey_ok, opening, rank)
                           for gate in unmet]
                 if all(gate is not None for gate in opened):
                     gated.append((route, tuple(gate for gate in opened if gate is not None)))
@@ -280,36 +285,38 @@ class ObtainModel:
         caller gate opened (`_door_open`)? The verdict a census reads to
         agree with the walk on which doors it routes through."""
         return self._door_open(door, policy, lambda _gate: False, frozenset(),
-                               lambda _item: False, frozenset({door}))
+                               lambda _item: False, frozenset({door}), lambda _door: 0)
 
     def _opened(self, gate: Gate, policy: Policy, openable: Callable[[Gate], bool],
                 keep: frozenset[str], grey_ok: Callable[[str], bool],
-                opening: frozenset[Door]) -> Gate | None:
+                opening: frozenset[Door], rank: Callable[[Door], int]) -> Gate | None:
         """`gate` as the walk opens it, or None when nothing opens it: the
-        caller's `openable` gate itself, or a door gate narrowed to its first
-        door not already being opened whose shortfall the walk can obtain."""
+        caller's `openable` gate itself, or a door gate narrowed to the
+        cheapest (`rank`, first of equal ranks) of its doors not already being
+        opened whose shortfall the walk can obtain."""
         if openable(gate):
             return gate
-        door = next((door for door in gate.doors if door not in opening
-                     and self._door_open(door, policy, openable, keep, grey_ok, opening | {door})),
-                    None)
+        door = min((door for door in gate.doors if door not in opening
+                    and self._door_open(door, policy, openable, keep, grey_ok, opening | {door},
+                                        rank)),
+                   key=rank, default=None)
         return None if door is None else replace(gate, doors=(door,))
 
     def _door_open(self, door: Door, policy: Policy, openable: Callable[[Gate], bool],
                    keep: frozenset[str], grey_ok: Callable[[str], bool],
-                   opening: frozenset[Door]) -> bool:
+                   opening: frozenset[Door], rank: Callable[[Door], int]) -> bool:
         """Can the walk obtain `door`'s whole shortfall on top of the bag: each
         key (or the fee's gold) asked of the one walk on its own closure, with
         `opening` closed to it. Memoised for the model's lifetime: the key
         holds the callables themselves, so an entry pins what it was asked
         with and no other callable can share its answer."""
-        key = (door, policy, keep, opening, openable, grey_ok)
+        key = (door, policy, keep, opening, openable, grey_ok, rank)
         if key not in self._doors:
             self._doors[key] = all(
                 can_obtain(code, self.in_bag(code) + units, graph.on_hand, graph.routes)
                 for code, units in door
                 for graph in (self.walk_graph(code, policy, keep=keep, openable=openable,
-                                              grey_ok=grey_ok, opening=opening),))
+                                              grey_ok=grey_ok, opening=opening, rank=rank),))
         return self._doors[key]
 
     def _ranked_gathers(self, item: str, ready: tuple[Route, ...]) -> list[Route]:
@@ -345,11 +352,12 @@ class ObtainModel:
              openable: Callable[[Gate], bool] = lambda _gate: False,
              keep: frozenset[str] = frozenset(),
              grey_ok: Callable[[str], bool] = lambda _item: False,
-             prefer: Callable[[str], tuple[SourceKind, str] | None] = lambda _item: None
-             ) -> WalkAnswer:
+             prefer: Callable[[str], tuple[SourceKind, str] | None] = lambda _item: None,
+             rank: Callable[[Door], int] = lambda _door: 0) -> WalkAnswer:
         """The one walk over `item`'s closure: can `qty` be had, and the next
         step toward it (`decompose_core`)."""
-        graph = self.walk_graph(item, policy, produce, openable, keep, grey_ok, prefer=prefer)
+        graph = self.walk_graph(item, policy, produce, openable, keep, grey_ok, prefer=prefer,
+                                rank=rank)
         return WalkAnswer(can_obtain(item, qty, graph.on_hand, graph.routes),
                           next_step(item, qty, graph.on_hand, graph.routes), graph,
                           tuple(plan_legs(item, qty, graph.on_hand, graph.routes)))
