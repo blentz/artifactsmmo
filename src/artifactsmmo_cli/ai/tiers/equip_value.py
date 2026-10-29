@@ -19,9 +19,8 @@ def tool_value_pure(skill_effects: dict[str, int], skill: str) -> int:
 def equip_value(stats: ItemStats) -> int:
     """Combat/utility value of an equippable, absent any particular monster —
     the public name for ``gear_value(stats, Rank)``. Single source shared by the
-    UpgradeEquipment goal, the Tier-1 objective and the delete-dominance gate;
-    the progression reserve reads `gear_value(stats, Rank)` at this definition
-    (`progression_reserve._rank`: importing `tiers` there is an import cycle).
+    UpgradeEquipment goal, the Tier-1 objective, the delete-dominance gate and
+    the progression reserve.
 
     Rank is NOT its own formula. It is the SAME `weapon_score`/`armor_score`
     the combat loadout picker maximizes, evaluated against the catalog-median
