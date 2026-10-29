@@ -8768,18 +8768,55 @@ KEY_DOOR_WALK_MUTATIONS = [
 ]
 KEY_DOOR_PRICE_MUTATIONS = [
     ("door price: no route past a door is priced",
-     "        routes.extend(_door_options(item, state, game_data, ctx, store, model, policy,\n"
-     "                                    gated_drop, opening))\n",
-     "        routes.extend([])\n"),
+     "    routes.extend(_door_options(item, state, game_data, ctx, store, model, policy,\n"
+     "                                gated_drop, opening, list(routes)))\n",
+     "    routes.extend([])\n"),
     ("door price: the crossing is free",
-     "            unlock = CROSSING_ACTIONS + sum(\n",
-     "            unlock = sum(\n"),
+     "    return CROSSING_ACTIONS + sum(\n",
+     "    return sum(\n"),
     ("door price: a door being priced is priced again",
-     "            if door in opening:\n                continue\n            unlock = ",
-     "            if False:\n                continue\n            unlock = "),
+     "                  for door in gate.doors if door not in opening]\n",
+     "                  for door in gate.doors]\n"),
     ("door price: the dearest door prices the route",
-     "and (best is None or unlock < best[1]):\n",
-     "and (best is None or unlock > best[1]):\n"),
+     "        door, actions = min(priced, key=lambda pair: pair[1])\n",
+     "        door, actions = max(priced, key=lambda pair: pair[1])\n"),
+    # Ruling T14e-1/m-3: the door leg is one route among the rest.
+    ("door price: a door route suppresses the gear gate",
+     "    if gated_drop and walled:\n",
+     "    if gated_drop and not routes:\n"),
+    ("door price: an unpriceable door is a route",
+     "        priced = [(door, actions) for door, actions in priced if actions < UNOBTAINABLE_PER_UNIT]\n",
+     "        priced = [(door, actions) for door, actions in priced if True]\n"),
+    ("door price: a companion that cannot be paid is skipped",
+     "        if any(c is None for c in companions):\n            continue\n",
+     "        if False:\n            continue\n"),
+    ("door price: a dominated door route is priced",
+     "        if option is not None and floor is not None and floor <= _per_unit(option):\n"
+     "            continue\n",
+     "        if False:\n"
+     "            continue\n"),
+    ("door price: the gear past a door is priced without the gear gate",
+     "                if gated_drop else None)\n",
+     "                if True else None)\n"),
+    ("door price: a climb is rated without a store",
+     "    climb = _climb_actions(gate.subject, gate.level, state, store) if store is not None else None\n",
+     "    climb = _climb_actions(gate.subject, gate.level, state, store)  # type: ignore[arg-type]\n"),
+    ("door price: every priced route is a door route",
+     "    if route is None or not route.unlock.startswith(\"door:\"):\n",
+     "    if route is None:\n"),
+    ("door price: the gear chain re-prices the door",
+     "                            gated_drop=False, policy=policy, opening=opening)\n"
+     "        for step in deficit.chain)\n",
+     "                            gated_drop=False, policy=policy, opening=frozenset())\n"
+     "        for step in deficit.chain)\n"),
+]
+KEY_DOOR_COMPANION_MUTATIONS = [
+    ("door: no companion gate rides with a door",
+     "                    and all(gate.kind is GateKind.SPAWN_KNOWN or gate.kind in companions\n",
+     "                    and all(gate.kind is GateKind.SPAWN_KNOWN\n"),
+    ("door: the walk ignores the priced route",
+     "                candidates.sort(key=lambda pair: (pair[0].kind, pair[0].via) != first)\n",
+     "                candidates.sort(key=lambda pair: True)\n"),
 ]
 KEY_DOOR_EXECUTOR_MUTATIONS = [
     ("door executor: a door gate is ground as a skill gate",
@@ -14220,6 +14257,8 @@ def _collect_all_groups() -> None:
     run_group(OBTAIN_MODEL_SRC, KEY_DOOR_WALK_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(ACQUISITION_COST_SRC, KEY_DOOR_PRICE_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, KEY_DOOR_COMPANION_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, KEY_DOOR_EXECUTOR_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)

@@ -50,7 +50,7 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill, loss_cost
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loss_risk_core import loss_surcharge
-from artifactsmmo_cli.ai.obtain_model.gate import Door, GateKind
+from artifactsmmo_cli.ai.obtain_model.gate import Door, Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.obtain_model.route import Route
@@ -412,15 +412,9 @@ def _gated_skill_option(item: str, state: WorldState, game_data: GameData,
     # must not paper over. The `is None` test is therefore load-bearing and must
     # not become a falsy test — `rate or fleet` would silently make a stuck
     # character borrow a healthy one's rate.
-    rate = store.skill_grind_rate(skill)
-    if rate is None:
-        rate = store.fleet_skill_grind_rate(skill)
-    max_xp = state.skill_max_xp.get(skill, 0)
-    if not rate or rate <= 0 or max_xp <= 0:
+    grind = _climb_actions(skill, level, state, store)
+    if grind is None:
         return None
-    grind = skill_grind_cycles(
-        state.skills.get(skill, 1), state.skill_xp.get(skill, 0),
-        max_xp, level, rate)
     if kind is SourceKind.GATHER:
         return RouteOption(
             kind=kind.value, venue=route.via,
@@ -434,6 +428,22 @@ def _gated_skill_option(item: str, state: WorldState, game_data: GameData,
         unlock=f"skill:{skill}:{level}",
         unlock_actions=grind,
     )
+
+
+def _climb_actions(skill: str, level: int, state: WorldState, store: LearningStore) -> int | None:
+    """Actions (cycles) this character's own climb of `skill` to `level`
+    costs: `skill_grind_cycles` at its own grind rate, the fleet's only in
+    its ABSENCE (the load-bearing `is None` test, see `_gated_skill_option`),
+    or None when the rate or the xp requirement is not positive."""
+    rate = store.skill_grind_rate(skill)
+    if rate is None:
+        rate = store.fleet_skill_grind_rate(skill)
+    max_xp = state.skill_max_xp.get(skill, 0)
+    if not rate or rate <= 0 or max_xp <= 0:
+        return None
+    return skill_grind_cycles(
+        state.skills.get(skill, 1), state.skill_xp.get(skill, 0),
+        max_xp, level, rate)
 
 
 _SKILL_GATE = {SourceKind.CRAFT: GateKind.CRAFT_SKILL, SourceKind.GATHER: GateKind.GATHER_SKILL}
@@ -605,10 +615,29 @@ def _amortized_fleet_climb(skill: str, level: int, state: WorldState, game_data:
     return ceil(amortized_climb_seconds(Fraction(remaining), units))
 
 
+def _gear_unlock(monster: str, state: WorldState, game_data: GameData, ctx: SelectionContext,
+                 store: LearningStore | None, policy: Policy,
+                 opening: frozenset[Door]) -> int | None:
+    """Actions the gear that opens a fight against `monster` costs: the
+    `combat_deficit` chain at full hp, each step priced one level deep
+    (`gated_drop=False`, see `_gated_drop_option`) with `opening` threaded so a
+    chain priced under a door's key never re-prices that door (ruling
+    T14e-m5). None when no deficit closes or the chain cannot be priced."""
+    deficit = combat_deficit(replace(state, hp=state.max_hp), game_data, monster)
+    if deficit is None or not deficit.closes:
+        return None
+    unlock_actions = sum(
+        acquisition_actions(step.code, 1, state, game_data, ctx, equip=True, store=store,
+                            gated_drop=False, policy=policy, opening=opening)
+        for step in deficit.chain)
+    return unlock_actions if unlock_actions < UNOBTAINABLE_PER_UNIT else None
+
+
 def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
                        ctx: SelectionContext,
                        store: LearningStore | None, model: ObtainModel,
-                       policy: Policy) -> RouteOption | None:
+                       policy: Policy, opening: frozenset[Door] = frozenset()
+                       ) -> RouteOption | None:
     """The DROP route `obtain_sources` withholds because the dropper is
     UNWINNABLE — priced with the gear that would open the fight.
 
@@ -669,7 +698,6 @@ def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
     unbeatable monster are unlocked by one gear acquisition, and `unlock_actions`
     is paid once across every route sharing the key. Keying it on the item would
     charge the sword once per material the cow drops."""
-    rested = replace(state, hp=state.max_hp)
     # The obtain model's DROP routes that winnability ALONE keeps closed: a
     # live dropper this character cannot beat (`ObtainModel.gated_by`).
     live = [route.via for route in model.gated_by(item, policy, GateKind.WINNABLE)
@@ -678,15 +706,8 @@ def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
         return None
     best: RouteOption | None = None
     for monster in live:
-        deficit = combat_deficit(rested, game_data, monster)
-        if deficit is None or not deficit.closes:
-            continue
-        unlock_actions = 0
-        for step in deficit.chain:
-            unlock_actions += acquisition_actions(
-                step.code, 1, state, game_data, ctx, equip=True, store=store,
-                gated_drop=False, policy=policy)
-        if unlock_actions >= UNOBTAINABLE_PER_UNIT:
+        unlock_actions = _gear_unlock(monster, state, game_data, ctx, store, policy, opening)
+        if unlock_actions is None:
             continue
         rate, min_q, max_q = _drop_table(item, monster, game_data)
         # No loss surcharge: the learned record is about the loadout this gear
@@ -713,10 +734,82 @@ def _door_unlock(door: Door) -> str:
     return "door:" + ",".join(f"{code}x{units}" for code, units in door)
 
 
+_DOOR_COMPANIONS = frozenset({GateKind.WINNABLE, GateKind.GATHER_SKILL})
+"""The gates a route past a door may also carry and still be priced (ruling
+T14e-1): the ones the price-aware siblings already pay for, WINNABLE with
+the gear that opens the fight (`_gear_unlock`, `_gated_drop_option`'s
+measure) and GATHER_SKILL with the climb (`_climb_actions`,
+`_gated_skill_option`'s). Any other unmet gate past a door stays a wall."""
+
+
+def door_price(door: Door, state: WorldState, game_data: GameData, ctx: SelectionContext,
+               store: LearningStore | None, policy: Policy, gated_drop: bool,
+               opening: frozenset[Door]) -> int:
+    """Actions opening `door` costs (Task 14e): its shortfall's own price
+    (`acquisition_actions` on the bag plus the shortfall, so held copies are
+    credited; a fee's gold with the pocket credited) and one crossing, with
+    `door` closed to its own key's price (`opening`). The no-route sentinel
+    or more when the shortfall cannot be had.
+
+    Memoised through the store's decision episode (`LearningStore.cached`,
+    ruling T14e-m4): a door is priced once per episode per state, policy and
+    `opening`, however many routes stand past it. Without a store it is
+    priced afresh. The context is keyed by identity and PINNED by the entry
+    (the cached value holds it), so no other context can reuse its id while
+    the answer is held. One episode prices against one catalogue; the entry
+    holds it, and a different one is a defect, not a cache miss."""
+    if store is not None:
+        key = ("door_price", door, policy, gated_drop, opening, id(ctx), *_price_key(state))
+        pinned = store.cached(key, lambda: (ctx, game_data, _door_price(
+            door, state, game_data, ctx, store, policy, gated_drop, opening)))
+        assert pinned[1] is game_data, "one search_cache episode prices one catalogue"
+        return pinned[2]
+    return _door_price(door, state, game_data, ctx, store, policy, gated_drop, opening)
+
+
+def _price_key(state: WorldState) -> tuple[object, ...]:
+    """Everything of `state` a price reads: where it stands, its level, xp,
+    hp, gold (pocket and bank), its bag, gear, bank and skills, and the
+    fights it has lost."""
+    return (state.character, state.x, state.y, state.layer, state.level, state.xp, state.hp,
+            state.max_hp, state.gold, state.bank_gold,
+            tuple(sorted(state.inventory.items())), tuple(sorted(state.equipment.items())),
+            tuple(sorted((state.bank_items or {}).items())), tuple(sorted(state.skills.items())),
+            tuple(sorted(state.skill_xp.items())), state.lost_fights)
+
+
+def _door_price(door: Door, state: WorldState, game_data: GameData, ctx: SelectionContext,
+                store: LearningStore | None, policy: Policy, gated_drop: bool,
+                opening: frozenset[Door]) -> int:
+    """`door_price`'s computation."""
+    return CROSSING_ACTIONS + sum(
+        acquisition_actions(code, (state.gold if code == GOLD_CODE else state.inventory.get(code, 0))
+                            + units, state, game_data, ctx, equip=False, store=store,
+                            gated_drop=gated_drop, policy=policy, opening=opening | {door})
+        for code, units in door)
+
+
+def _companion_unlock(route: Route, gate: Gate, state: WorldState, game_data: GameData,
+                      ctx: SelectionContext, store: LearningStore | None, policy: Policy,
+                      gated_drop: bool, opening: frozenset[Door]) -> tuple[str, int] | None:
+    """`(key, actions)` that open `gate`, a companion of a door on `route`
+    (`_DOOR_COMPANIONS`), priced as the sibling that pays for it alone does,
+    or None when it cannot be paid: WINNABLE with the gear chain (one level
+    deep, so only under `gated_drop`), GATHER_SKILL with the climb (a store
+    is needed to rate it)."""
+    if gate.kind is GateKind.WINNABLE:
+        gear = (_gear_unlock(route.via, state, game_data, ctx, store, policy, opening)
+                if gated_drop else None)
+        return None if gear is None else (f"gear:{route.via}", gear)
+    assert gate.kind is GateKind.GATHER_SKILL and gate.level is not None
+    climb = _climb_actions(gate.subject, gate.level, state, store) if store is not None else None
+    return None if climb is None else (f"skill:{gate.subject}:{gate.level}", climb)
+
+
 def _door_options(item: str, state: WorldState, game_data: GameData,
                   ctx: SelectionContext, store: LearningStore | None, model: ObtainModel,
                   policy: Policy, gated_drop: bool,
-                  opening: frozenset[Door]) -> list[RouteOption]:
+                  opening: frozenset[Door], served: Sequence[RouteOption]) -> list[RouteOption]:
     """The fights and gathers for `item` whose content stands past a key door
     (Task 14e, M-3), each priced as its ready route is plus the door as its
     unlock: the key's (or the fee's gold's) own price and the crossing.
@@ -725,41 +818,85 @@ def _door_options(item: str, state: WorldState, game_data: GameData,
     reachability authority stays strict (`region_edges.reachable_regions_now`:
     content past an unpaid door is unreached, so its route is not ready); the
     door is a price, not a wall, and is paid here, where routes are priced.
-    The routes are the obtain model's own that the SPAWN_KNOWN gate ALONE
-    keeps closed (`ObtainModel.gated_by`), and the doors are the gate's own
-    (`Gate.doors`, from `region_edges.doors_to`).
+    The routes are the obtain model's own past a door (`ObtainModel.
+    past_a_door`), the doors the gate's own (`Gate.doors`, from
+    `region_edges.doors_to`), read under `_climbing(policy)` so a gather's
+    climb is charged as `_gated_skill_option` charges it.
 
-    THE KEY IS PRICED BY THE ONE PRICER: `acquisition_actions` on the bag plus
-    the shortfall, so a key in the bag already is credited, and a fee's gold
-    is priced with the pocket credited. A consumed key and a kept one are one
-    leg each: the route crosses once (the brief's "key price + crossing").
+    ALWAYS OFFERED, ONE PRICE AMONG THE REST (ruling T14e-1): the walk always
+    appends a door route, so the pricer always prices it and the cost walk
+    takes the cheapest of every route, door legs included. A route past a door
+    that also carries a companion gate (`_DOOR_COMPANIONS`) pays both
+    unlocks, under one key joining the two (`door:...+gear:...`).
+
+    THE KEY IS PRICED BY THE ONE PRICER (`door_price`). A consumed key and a
+    kept one are one leg each here.
 
     RECURSION AND CYCLES. A key past another door is priced the same way, its
     own door options included; `opening` holds the doors being priced further
     up, so a key whose only source stands past its own door prices at the
     no-route sentinel, and that door is a wall. A door whose key cannot be
     priced offers nothing; of the rest the cheapest is the route's (first of
-    equal prices, in `door_reaches`' order)."""
+    equal prices, in `door_reaches`' order).
+
+    DOMINATED ROUTES ARE NOT PRICED. A route past a door with no inputs pays
+    its unlock on top of its per-unit work; a `served` route with no inputs, no
+    unlock and unbounded capacity whose per-unit work is no greater is never
+    dearer for any quantity, and the cost walk keeps the first of equal
+    prices, so such a door route could never be the price. It is skipped
+    before its door and companions are priced (a gold fight past a door would
+    otherwise price the fee's gold, and the gear, for every monster past a
+    door)."""
+    floor = min((_per_unit(r) for r in served
+                 if not r.inputs and not r.unlock and r.capacity >= UNBOUNDED_CAPACITY),
+                default=None)
     out: list[RouteOption] = []
-    for route in model.gated_by(item, policy, GateKind.SPAWN_KNOWN):
-        [gate] = [g for g in route.gates if g.kind is GateKind.SPAWN_KNOWN]
-        best: tuple[Door, int] | None = None
-        for door in gate.doors:
-            if door in opening:
-                continue
-            unlock = CROSSING_ACTIONS + sum(
-                acquisition_actions(code, model.in_bag(code) + units, state, game_data, ctx,
-                                    equip=False, store=store, gated_drop=gated_drop,
-                                    policy=policy, opening=opening | {door})
-                for code, units in door)
-            if unlock < UNOBTAINABLE_PER_UNIT and (best is None or unlock < best[1]):
-                best = (door, unlock)
-        if best is None:
+    for route, unmet in model.past_a_door(item, _climbing(policy), _DOOR_COMPANIONS):
+        source = Source(route.kind, route.via, route.yield_per, route.capacity)
+        option = None if floor is None else _priced(item, source, state, game_data, ctx)
+        if option is not None and floor is not None and floor <= _per_unit(option):
             continue
-        option = _priced(item, Source(route.kind, route.via, route.yield_per, route.capacity),
-                         state, game_data, ctx)
-        out.append(replace(option, unlock=_door_unlock(best[0]), unlock_actions=best[1]))
+        [gate] = [g for g in unmet if g.kind is GateKind.SPAWN_KNOWN]
+        priced = [(door, door_price(door, state, game_data, ctx, store, policy, gated_drop,
+                                    opening))
+                  for door in gate.doors if door not in opening]
+        priced = [(door, actions) for door, actions in priced if actions < UNOBTAINABLE_PER_UNIT]
+        if not priced:
+            continue
+        door, actions = min(priced, key=lambda pair: pair[1])
+        keys = [_door_unlock(door)]
+        companions = [_companion_unlock(route, g, state, game_data, ctx, store, policy,
+                                        gated_drop, opening | {door})
+                      for g in unmet if g.kind is not GateKind.SPAWN_KNOWN]
+        if any(c is None for c in companions):
+            continue
+        for key, extra in (c for c in companions if c is not None):
+            keys.append(key)
+            actions += extra
+        if option is None:
+            option = _priced(item, source, state, game_data, ctx)
+        out.append(replace(option, unlock="+".join(keys), unlock_actions=actions))
     return out
+
+
+def _per_unit(option: RouteOption) -> Fraction:
+    """Actions one unit of `option`'s item takes by `option` alone, its
+    unlock and venue aside."""
+    return Fraction(option.actions_per_application) / option.yield_per
+
+
+def door_route(item: str, state: WorldState, game_data: GameData, ctx: SelectionContext,
+               *, policy: Policy, pocket: int) -> tuple[SourceKind, str] | None:
+    """`(kind, venue)` of the route that prices one `item` when it is a route
+    past a door (`_door_options`'s unlock), else None: the route the walk is
+    told to try first (`ObtainModel.walk_graph`'s `prefer`, ruling T14e-1), so
+    the walk serves the route the price took."""
+    options = acquisition_options(item, state, game_data, ctx, None, policy=policy)
+    _price, route = priced_route(item, 1, options, _owned_with_gold(state, pocket),
+                                 frozenset({GOLD_CODE}))
+    if route is None or not route.unlock.startswith("door:"):
+        return None
+    return SourceKind(route.kind), route.venue
 
 
 def route_options(item: str, state: WorldState, game_data: GameData,
@@ -818,13 +955,15 @@ def route_options(item: str, state: WorldState, game_data: GameData,
     # +43%, with or without this test). The items it skips were already exiting
     # cheaply; the cost lives in the walled items themselves, which are exactly
     # the ones this test keeps.
-    if not routes:
-        # A fight or a gather past a key door (Task 14e), asked as the gear
-        # gate below is and for its reason: only when nothing serves the item.
-        routes.extend(_door_options(item, state, game_data, ctx, store, model, policy,
-                                    gated_drop, opening))
-    if gated_drop and not routes:
-        drop = _gated_drop_option(item, state, game_data, ctx, store, model, policy)
+    walled = not routes
+    # A fight or a gather past a key door (Task 14e), always offered (ruling
+    # T14e-1): the cost walk takes the cheapest of every route, door legs
+    # included. It never suppresses the gear gate below, which asks whether
+    # anything served the item before any door was priced.
+    routes.extend(_door_options(item, state, game_data, ctx, store, model, policy,
+                                gated_drop, opening, list(routes)))
+    if gated_drop and walled:
+        drop = _gated_drop_option(item, state, game_data, ctx, store, model, policy, opening)
         if drop is not None:
             routes.append(drop)
     return routes

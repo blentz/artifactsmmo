@@ -124,6 +124,25 @@ class ObtainModel:
                            if policy.enforces(gate, route) and not gate.satisfied})
             and unmet == {kind})
 
+    def past_a_door(self, item: str, policy: Policy,
+                    companions: frozenset[GateKind]) -> tuple[tuple[Route, tuple[Gate, ...]], ...]:
+        """The routes to `item` that `policy` offers whose content stands past
+        a door (Task 14e): an unmet SPAWN_KNOWN gate naming doors, and every
+        other unmet enforced gate of a kind in `companions` (the gates a
+        price-aware caller can pay for alongside the door). Each with its unmet
+        gates, in route order."""
+        out: list[tuple[Route, tuple[Gate, ...]]] = []
+        for route in self.routes(item):
+            if not policy.admits(route):
+                continue
+            unmet = tuple(gate for gate in route.gates
+                          if policy.enforces(gate, route) and not gate.satisfied)
+            if (any(gate.kind is GateKind.SPAWN_KNOWN and gate.doors for gate in unmet)
+                    and all(gate.kind is GateKind.SPAWN_KNOWN or gate.kind in companions
+                            for gate in unmet)):
+                out.append((route, unmet))
+        return tuple(out)
+
     def feasible(self, item: str, qty: int, policy: Policy,
                  produce: frozenset[str] = frozenset(),
                  keep: frozenset[str] = frozenset()) -> bool:
@@ -148,7 +167,9 @@ class ObtainModel:
                    openable: Callable[[Gate], bool] = lambda _gate: False,
                    keep: frozenset[str] = frozenset(),
                    grey_ok: Callable[[str], bool] = lambda _item: False,
-                   opening: frozenset[Door] = frozenset()) -> WalkGraph:
+                   opening: frozenset[Door] = frozenset(),
+                   prefer: Callable[[str], tuple[SourceKind, str] | None] = lambda _item: None
+                   ) -> WalkGraph:
         """`item`'s closure as the one walk's graph (Phase 2c-2b).
 
         On hand is the bag (the inventory, with gold as the pocket). Every ready
@@ -190,7 +211,12 @@ class ObtainModel:
         The door is opened for every caller, `openable` or not: obtaining an
         item is not a grind, and `feasible` must count what the walk serves.
         `opening` holds the doors whose keys are being walked further up, so a
-        key that stands only past its own door is a wall, not a loop."""
+        key that stands only past its own door is a wall, not a loop.
+
+        `prefer` names, per item with a route past a door, the `(kind, via)`
+        route the pricer took for it (`acquisition_cost.door_route`, ruling
+        T14e-1): that route is tried first, so a door route priced below a
+        ready one is the one the walk serves. None leaves the order alone."""
         bag: dict[str, int] = dict(self._state.inventory)
         bag[GOLD_CODE] = self._state.gold
         bank = self._state.bank_items or {}
@@ -219,6 +245,9 @@ class ObtainModel:
                 if all(gate is not None for gate in opened):
                     gated.append((route, tuple(gate for gate in opened if gate is not None)))
             candidates = [(route, ()) for route in self._ranked_gathers(code, ready)] + gated
+            if gated and any(gate.doors for _route, gates in gated for gate in gates):
+                first = prefer(code)
+                candidates.sort(key=lambda pair: (pair[0].kind, pair[0].via) != first)
             for route, gates in candidates:
                 if code in produce and route.kind not in (SourceKind.CRAFT, SourceKind.GATHER):
                     continue
@@ -306,10 +335,12 @@ class ObtainModel:
              produce: frozenset[str] = frozenset(),
              openable: Callable[[Gate], bool] = lambda _gate: False,
              keep: frozenset[str] = frozenset(),
-             grey_ok: Callable[[str], bool] = lambda _item: False) -> WalkAnswer:
+             grey_ok: Callable[[str], bool] = lambda _item: False,
+             prefer: Callable[[str], tuple[SourceKind, str] | None] = lambda _item: None
+             ) -> WalkAnswer:
         """The one walk over `item`'s closure: can `qty` be had, and the next
         step toward it (`decompose_core`)."""
-        graph = self.walk_graph(item, policy, produce, openable, keep, grey_ok)
+        graph = self.walk_graph(item, policy, produce, openable, keep, grey_ok, prefer=prefer)
         return WalkAnswer(can_obtain(item, qty, graph.on_hand, graph.routes),
                           next_step(item, qty, graph.on_hand, graph.routes), graph,
                           tuple(plan_legs(item, qty, graph.on_hand, graph.routes)))

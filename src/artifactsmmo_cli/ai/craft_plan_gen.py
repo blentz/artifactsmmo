@@ -34,7 +34,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 
-from artifactsmmo_cli.ai.acquisition_cost import fight_gold_monster
+from artifactsmmo_cli.ai.acquisition_cost import door_route, fight_gold_monster
 from artifactsmmo_cli.ai.actions.base import Action, serves_region
 from artifactsmmo_cli.ai.actions.combat import FightAction, win_gold
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
@@ -468,15 +468,26 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
               if policy.fight_gold else state)
     gold_monster = (fight_gold_monster(state, game_data, ctx, policy=PIECE_POLICY)
                     if policy.fight_gold else None)
+    preferred: dict[str, tuple[SourceKind, str] | None] = {}
+
+    def prefer(code: str) -> tuple[SourceKind, str] | None:
+        """The route past a door the pricer took for `code`, asked only of an
+        item the walk can reach past a door (ruling T14e-1): the walk serves
+        the route the price took."""
+        if code not in preferred:
+            preferred[code] = door_route(code, walked, game_data, ctx, policy=policy,
+                                         pocket=walked.gold)
+        return preferred[code]
+
     for item, needed in goal.needed.items():
         qty = _bag_target(item, needed, goal.exclude_recycle, state)
         model = ObtainModel(walked, game_data, ctx, datetime.now(UTC))
         answer = model.walk(item, qty, policy, goal.exclude_recycle, openable,
-                            frozenset(goal.needed), grey_ok)
+                            frozenset(goal.needed), grey_ok, prefer)
         trip = _one_trip(item, qty, answer, state, game_data)
         if trip < qty:
             answer = model.walk(item, trip, policy, goal.exclude_recycle, openable,
-                                frozenset(goal.needed), grey_ok)
+                                frozenset(goal.needed), grey_ok, prefer)
         if not answer.feasible:
             graph = answer.graph
             dead = sorted(code for code, routes in graph.routes.items()

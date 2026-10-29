@@ -24,15 +24,17 @@ from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.models.map_schema import MapSchema
 from artifactsmmo_api_client.models.transition_schema import TransitionSchema
 
-from artifactsmmo_cli.ai import region_edges
+from artifactsmmo_cli.ai import acquisition_cost, region_edges
 from artifactsmmo_cli.ai.acquisition_cost import (
     CROSSING_ACTIONS,
     acquisition_actions,
+    door_route,
     route_options,
 )
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
+from artifactsmmo_cli.ai.combat_deficit import CombatDeficit, DeficitStep
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.decompose_core import OpenGate
 from artifactsmmo_cli.ai.game_data import GameData
@@ -373,3 +375,136 @@ def test_the_census_reaches_past_the_doors_the_walk_opens() -> None:
     assert reach > reachable_regions_now(state, world)
     assert "underground:9,7" in reach
     assert "restricted:overworld:-5,8" not in reach
+
+
+# --- ruling T14e-1: the door leg is one priced route among the rest -----------
+
+def _rare_ready_dropper(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`life_crystal_shard` also drops, 1 in 5000, from the reachable cyclops:
+    a ready route far dearer than the lich past its door. Every fight wins."""
+    real = GameData.monsters_dropping
+    monkeypatch.setattr(GameData, "monsters_dropping", lambda self, item: real(self, item) + (
+        [("cyclops", 5000, 1, 1)] if item == "life_crystal_shard" else []))
+    monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
+
+
+def test_a_door_route_cheaper_than_a_ready_one_is_the_price_and_the_route_served(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ready route no longer hides a door: both are priced, the cheaper door
+    leg is the price, and the walk serves it (`door_route` is its `prefer`):
+    the plan fights for the key, not the cyclops."""
+    state, world, player = _seeded("l30_band_entry")
+    _rare_ready_dropper(monkeypatch)
+    ctx = player._selection_context()
+    options = route_options("life_crystal_shard", state, world, ctx, policy=DECOMPOSE_POLICY)
+    assert [(o.venue, o.unlock) for o in options] == [("cyclops", ""),
+                                                      ("lich", "door:lich_tomb_keyx1")]
+    assert door_route("life_crystal_shard", state, world, ctx, policy=DECOMPOSE_POLICY,
+                      pocket=state.gold) == (SourceKind.DROP, "lich")
+    plan = decompose(GatherMaterialsGoal("life_crystal_shard", {"life_crystal_shard": 1}),
+                     state, world, player._build_actions(), ctx)
+    assert plan is not None
+    fights = [a.monster_code for a in plan if isinstance(a, FightAction)]
+    keyers = {m for m, *_ in world.monsters_dropping("lich_tomb_key")}
+    assert fights and set(fights) <= keyers
+
+
+def test_a_ready_route_the_door_cannot_beat_is_the_one_served(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """An item a ready route serves at no more per unit than a door route: the
+    door route is dominated and not priced (a gold fight past the 5000-gold
+    door against the ready gold fights), and `door_route` is None."""
+    state, world, player = _seeded("l30_band_entry")
+    ctx = player._selection_context()
+    gold = route_options(GOLD_CODE, state, world, ctx, policy=PIECE_POLICY)
+    assert gold and not [o for o in gold if o.unlock]
+    assert door_route("copper_ore", state, world, ctx, policy=DECOMPOSE_POLICY,
+                      pocket=state.gold) is None
+
+
+def test_a_door_route_never_suppresses_the_gear_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The gear gate asks whether anything served the item before a door was
+    priced: an item a door route serves still gets its gear-gated drop."""
+    state, world, _player = _seeded("l30_band_entry")
+    monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
+    gear = replace(route_options("life_crystal_shard", state, world, TIMED_NO_PROFILE_CONTEXT,
+                                 policy=DECOMPOSE_POLICY)[0], unlock="gear:x")
+    monkeypatch.setattr(acquisition_cost, "_gated_drop_option", lambda *a: gear)
+    options = route_options("life_crystal_shard", state, world, TIMED_NO_PROFILE_CONTEXT,
+                            policy=DECOMPOSE_POLICY)
+    assert [o.unlock for o in options] == ["door:lich_tomb_keyx1", "gear:x"]
+    assert route_options("life_crystal_shard", state, world, TIMED_NO_PROFILE_CONTEXT,
+                         gated_drop=False, policy=DECOMPOSE_POLICY)[-1].unlock != "gear:x"
+
+
+def test_a_monster_past_a_door_it_cannot_yet_beat_pays_the_door_and_the_gear(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """The cultist_alchemist shape: the lich past its door, unwinnable at
+    level 30. Its route pays both unlocks under one key, the door's and the
+    gear's; with no closing gear (or no gear gate) it is no route."""
+    state, world, _player = _seeded("l30_band_entry")
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    model = ObtainModel(state, world, ctx, datetime.now(UTC))
+    ((_route, unmet),) = model.past_a_door("life_crystal_shard", DECOMPOSE_POLICY,
+                                          acquisition_cost._DOOR_COMPANIONS)
+    assert {g.kind for g in unmet} == {GateKind.SPAWN_KNOWN, GateKind.WINNABLE}
+    door = acquisition_cost.door_price(LICH_DOOR, state, world, ctx, None, DECOMPOSE_POLICY,
+                                       True, frozenset())
+    monkeypatch.setattr(acquisition_cost, "_gear_unlock", lambda monster, *a: 7)
+    (option,) = [o for o in route_options("life_crystal_shard", state, world, ctx,
+                                          policy=DECOMPOSE_POLICY) if o.venue == "lich"]
+    assert (option.unlock, option.unlock_actions) == ("door:lich_tomb_keyx1+gear:lich", door + 7)
+    assert not [o for o in route_options("life_crystal_shard", state, world, ctx,
+                                         gated_drop=False, policy=DECOMPOSE_POLICY)
+                if o.venue == "lich"]
+    monkeypatch.setattr(acquisition_cost, "_gear_unlock", lambda monster, *a: None)
+    assert not [o for o in route_options("life_crystal_shard", state, world, ctx,
+                                         policy=DECOMPOSE_POLICY) if o.venue == "lich"]
+
+
+class _RatedStore:
+    """The two grind-rate reads `_climb_actions` asks of a store."""
+
+    def __init__(self, own: float | None, fleet: float | None) -> None:
+        self.own, self.fleet = own, fleet
+
+    def skill_grind_rate(self, skill: str) -> float | None:
+        return self.own
+
+    def fleet_skill_grind_rate(self, skill: str) -> float | None:
+        return self.fleet
+
+
+def test_a_gather_past_a_door_pays_its_climb_as_the_skill_gate_does() -> None:
+    """A GATHER_SKILL gate beside a door is paid with the climb
+    `_gated_skill_option` charges (`_climb_actions`), keyed by the skill; with
+    no store, or no rate, it cannot be paid."""
+    state = replace(make_state(), skills={"mining": 1}, skill_xp={"mining": 0},
+                    skill_max_xp={"mining": 100})
+    route = drop_routes_module.Route("ore", SourceKind.GATHER, "rocks", 1, 1, ())
+    gate = Gate(GateKind.GATHER_SKILL, "mining", False, 5)
+    world = GameData()
+    unlock = acquisition_cost._companion_unlock
+    store = _RatedStore(None, 10.0)
+    paid = unlock(route, gate, state, world, TIMED_NO_PROFILE_CONTEXT, store,  # type: ignore[arg-type]
+                  DECOMPOSE_POLICY, True, frozenset())
+    assert paid is not None and paid[0] == "skill:mining:5" and paid[1] > 0
+    assert unlock(route, gate, state, world, TIMED_NO_PROFILE_CONTEXT, None, DECOMPOSE_POLICY,
+                  True, frozenset()) is None
+    assert unlock(route, gate, state, world, TIMED_NO_PROFILE_CONTEXT,
+                  _RatedStore(None, None), DECOMPOSE_POLICY, True,  # type: ignore[arg-type]
+                  frozenset()) is None
+
+
+def test_the_gear_past_a_door_never_reprices_that_door(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling T14e-m5: the gear chain that opens a fight past a door is priced
+    with the door closed to it (`opening`). A chain that needs the very item
+    the door's route yields cannot be had through that door: no route, and no
+    loop."""
+    state, world, _player = _seeded("l30_band_entry")
+    step = DeficitStep("life_crystal_shard", "ring", 30, None, 0, 1)
+    monkeypatch.setattr(acquisition_cost, "combat_deficit",
+                        lambda s, g, monster: CombatDeficit(monster, -1, (step,), True))
+    assert not [o for o in route_options("life_crystal_shard", state, world,
+                                         TIMED_NO_PROFILE_CONTEXT, policy=DECOMPOSE_POLICY)
+                if o.venue == "lich"]
