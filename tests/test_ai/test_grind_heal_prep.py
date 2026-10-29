@@ -275,7 +275,7 @@ def _grind(inventory: dict[str, int], grind_leg, prep=None,
         else:
             with patch.object(craft_plan_gen, "decompose", side_effect=prep):
                 legs = craft_plan_gen._decompose_grind("gearcrafting", 5, state, gd, [_CHEESE],
-                                                       ctx, declined, frozenset())
+                                                       ctx, declined, frozenset(), True)
     return legs, declined
 
 

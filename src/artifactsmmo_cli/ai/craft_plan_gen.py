@@ -145,15 +145,18 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     instead: its plan is a prefix of the outer one, and cleared against its own
     legs alone it would bank or junk a stack the outer plan consumes (Task 13e
     re-review m2; USER: never shed a related item). The outer call judges and
-    clears the WHOLE plan, so the related set holds every leg; a prep that
-    cannot fit on its own is skipped, as before, and never blocks the grind.
+    clears the WHOLE plan, so the related set holds every leg. The outermost
+    grind retries an overflowing prep with the clear in front of the prep AND
+    its legs (`_prep_after_clear`, ruling T14d-1), so a prep that fits once the
+    bag is cleared runs this cycle; one that does not fit even then is skipped,
+    as before, and never blocks the grind.
 
     The deposit is the plan's, not the deposit guard's: that guard fires on
     pressure (`DEPOSIT_FULL_FRACTION`), and a bag far below it can still be too
     full for the plan ahead. Live HAL 2026-10-11 21:35Z: 61/164 items in 17/20
     slots, `GatherMaterials(cooked_shrimp, 120, carry)` declined
     `bag_overflow:qty=181/164`, no guard fired, and the bot waited 12 cycles."""
-    walked = _dispatch(goal, state, game_data, actions, ctx, declined, subtasks, policy)
+    walked = _dispatch(goal, state, game_data, actions, ctx, declined, subtasks, policy, outermost)
     if walked is None:
         return None
     plan = _bridge_regions(walked, state, game_data, actions, declined)
@@ -224,13 +227,14 @@ def _bridge_regions(plan: list[Action], state: WorldState, game_data: GameData,
 
 def _dispatch(goal: Goal, state: WorldState, game_data: GameData, actions: list[Action],
               ctx: SelectionContext, declined: list[str] | None, subtasks: bool,
-              policy: Policy) -> list[Action] | None:
-    """`decompose` by goal shape, before the bag check."""
+              policy: Policy, outermost: bool) -> list[Action] | None:
+    """`decompose` by goal shape, before the bag check. `outermost` is
+    `decompose`'s: only the outermost grind may clear the bag for its prep."""
     if isinstance(goal, CraftPotionsGoal):
         return _decompose_potions(goal, state, game_data, actions, ctx, declined)
     if isinstance(goal, ReachSkillGoal):
         return _decompose_grind(goal.skill, goal.target_level, state, game_data, actions, ctx,
-                                declined, frozenset())
+                                declined, frozenset(), outermost)
     if isinstance(goal, UpgradeEquipmentGoal):
         return _decompose_upgrade(goal, state, game_data, actions, ctx, declined, subtasks)
     if isinstance(goal, SupplyBankGoal):
@@ -324,7 +328,7 @@ def _decompose_upgrade(goal: UpgradeEquipmentGoal, state: WorldState, game_data:
 
 def _decompose_grind(skill: str, target_level: int, state: WorldState, game_data: GameData,
                      actions: list[Action], ctx: SelectionContext, declined: list[str] | None,
-                     grinding: frozenset[str]) -> list[Action] | None:
+                     grinding: frozenset[str], outermost: bool) -> list[Action] | None:
     """The legs of one grind cycle toward `target_level` in `skill` (Phase 2d-a):
     rung `grind_rung_goal` names (another rung, whose committed plan ends in the
     leg that earns), served by the one walk, whose own skill
@@ -358,7 +362,25 @@ def _decompose_grind(skill: str, target_level: int, state: WorldState, game_data
                 declined.extend(f"heal_prep:{reason}" for reason in prep_declined)
             if prep_legs:
                 return [*prep_legs, *legs]
+            if outermost and prep_declined and prep_declined[-1].startswith("bag_overflow:"):
+                cleared = _prep_after_clear(prep, legs, state, game_data, actions, ctx)
+                if cleared is not None:
+                    return cleared
     return legs
+
+
+def _prep_after_clear(prep: GatherMaterialsGoal, legs: list[Action], state: WorldState,
+                      game_data: GameData, actions: list[Action],
+                      ctx: SelectionContext) -> list[Action] | None:
+    """The prep and the grind's legs behind the full-bag clear, when the clear
+    makes the WHOLE plan fit (ruling T14d-1): the prep's own walk (unjudged,
+    under `HEAL_PREP_POLICY`) then `legs`, cleared against both, so no stack
+    either uses leaves (T13e-g). None when the prep cannot be walked again or
+    the clear does not make it fit; the grind then runs without the prep."""
+    walked = _dispatch(prep, state, game_data, actions, ctx, None, False, HEAL_PREP_POLICY, False)
+    if walked is None:
+        return None
+    return _clear_first([*walked, *legs], state, game_data, actions, ctx)
 
 
 def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData,
@@ -456,7 +478,7 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
                 gate = leg.gate
                 assert isinstance(gate, Gate) and gate.level is not None
                 sub = _decompose_grind(gate.subject, gate.level, sim, game_data, actions, ctx,
-                                       declined, grinding)
+                                       declined, grinding, False)
                 if sub is None:
                     if legs:
                         break

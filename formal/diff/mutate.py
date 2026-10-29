@@ -2311,6 +2311,22 @@ BAG_CLEAR_MEMO_MUTATIONS = [
      "        default=None, init=False, repr=False, compare=False)",
      "        default=None, repr=False, compare=False)"),
 ]
+# Ruling T14d-1: the outermost grind retries an overflowing heal prep behind
+# the clear of the prep AND its legs. Killed by tests/test_ai/test_bag_clear.py.
+PREP_AFTER_CLEAR_MUTATIONS = [
+    ("bag clear: an overflowing prep is never retried behind the clear",
+     "            if outermost and prep_declined and prep_declined[-1].startswith(\"bag_overflow:\"):",
+     "            if False:"),
+    ("bag clear: a nested grind clears for its prep",
+     "            if outermost and prep_declined and prep_declined[-1].startswith(\"bag_overflow:\"):",
+     "            if prep_declined and prep_declined[-1].startswith(\"bag_overflow:\"):"),
+    ("bag clear: the retry's clear is not taken",
+     "                if cleared is not None:\n                    return cleared",
+     "                if False:\n                    return cleared"),
+    ("bag clear: the retry clears for the prep alone",
+     "    return _clear_first([*walked, *legs], state, game_data, actions, ctx)",
+     "    return _clear_first(walked, state, game_data, actions, ctx)"),
+]
 BAG_CLEAR_NESTED_MUTATIONS = [
     ("bag clear: a nested decompose clears against its own legs",
      "                   if outermost else None)",
@@ -13229,6 +13245,8 @@ def _collect_all_groups() -> None:
     run_group(DEPOSIT_ALL_SRC, BAG_CLEAR_MEMO_MUTATIONS,
               "tests/test_ai/test_bag_clear.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, BAG_CLEAR_NESTED_MUTATIONS,
+              "tests/test_ai/test_bag_clear.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, PREP_AFTER_CLEAR_MUTATIONS,
               "tests/test_ai/test_bag_clear.py", survivors)
     run_group(PLAYER_SRC, BAG_CLEAR_PLAYER_MUTATIONS,
               "tests/test_ai/test_bag_clear.py", survivors)

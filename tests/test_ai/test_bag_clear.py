@@ -629,9 +629,10 @@ def test_a_heal_prep_never_clears_the_grinds_own_stack(gd: GameData,
     """T13e-g: a grind whose legs smelt the held iron_ore and fight, fronted by
     a heal prep that cooks the held raw_porkchop, on R2D2's full bag. The prep
     alone overflows; clearing against ITS legs would bank the ore the grind
-    smelts. The clear runs once, at the outermost decompose, over the plan it
-    judges: the nested prep declines (and is skipped, as a prep that cannot be
-    served always was), and the grind's own ore stays."""
+    smelts. The nested prep declines; the clear runs once, at the outermost
+    grind, over the prep AND the grind's legs (ruling T14d-1), so the prep that
+    fits after the clear runs this cycle, and neither the porkchop the prep
+    cooks nor the ore the grind smelts is shed."""
     state = scenario_state(replace(_r2d2(), skills={"cooking": 30, "mining": 30}), gd)
     smelt = CraftAction(code="iron_bar", quantity=1, workshop_location=gd.workshop_location("mining"))
     fight = FightAction(monster_code="chicken", locations=frozenset({(0, 1)}),
@@ -649,13 +650,54 @@ def test_a_heal_prep_never_clears_the_grinds_own_stack(gd: GameData,
     pool = [_deposit(gd), _craft(gd), smelt, fight]
     plan = decompose(ReachSkillGoal(skill_name="mining", target_level=31), state, gd, pool, _ctx())
     assert plan is not None and isinstance(plan[0], DepositAllAction), plan
-    assert plan[1:] == [smelt, fight], plan
+    assert plan[2:] == [smelt, fight], plan
+    assert isinstance(plan[1], CraftAction) and plan[1].code == "cooked_porkchop", plan
     after = cleared_state(plan[:1], state, gd)
-    assert after.inventory == {"iron_ore": 12}
+    assert after.inventory == {"raw_porkchop": 19, "iron_ore": 12}
+    # A nested grind (`outermost=False`) never clears, for its prep or itself.
+    nested: list[str] = []
+    assert decompose(ReachSkillGoal(skill_name="mining", target_level=31), state, gd, pool,
+                     _ctx(), nested, outermost=False) is None
+    assert nested and nested[-1].startswith("bag_overflow:"), nested
     # Nested, the prep alone declines rather than clearing for itself.
     declined: list[str] = []
     assert decompose(prep, state, gd, pool, _ctx(), declined, outermost=False) is None
     assert declined and declined[0].startswith("bag_overflow:")
+
+
+def test_a_prep_that_does_not_fit_after_the_clear_never_blocks_the_grind(
+        gd: GameData, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling T14d-1: when the clear does not make the prep and the grind's legs
+    fit together, the prep is skipped and the grind runs as before: the
+    outermost decompose clears for the legs alone."""
+    state = scenario_state(replace(_r2d2(), skills={"cooking": 30, "mining": 30}), gd)
+    smelt = CraftAction(code="iron_bar", quantity=1, workshop_location=gd.workshop_location("mining"))
+    fight = FightAction(monster_code="chicken", locations=frozenset({(0, 1)}),
+                        learned_drops=LearnedDrops.empty())
+    rung = GatherMaterialsGoal("iron_bar", {"iron_bar": 1})
+    prep = GatherMaterialsGoal("cooked_porkchop", {"cooked_porkchop": 1})
+    walk = craft_plan_gen_mod._walk_plan
+    clear_first = craft_plan_gen_mod._clear_first
+    asked: list[list[object]] = []
+
+    def walk_plan(goal: GatherMaterialsGoal, *args: object, **kwargs: object) -> object:
+        return [smelt, fight] if goal is rung else walk(goal, *args, **kwargs)  # type: ignore[arg-type]
+
+    def no_room_with_the_prep(walked: list[object], *args: object) -> object:
+        asked.append(list(walked))
+        if walked != [smelt, fight]:
+            return None
+        return clear_first(walked, *args)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(craft_plan_gen_mod, "grind_rung_goal", lambda *a, **k: rung)
+    monkeypatch.setattr(craft_plan_gen_mod, "_walk_plan", walk_plan)
+    monkeypatch.setattr(craft_plan_gen_mod, "heal_prep_goal", lambda *a, **k: prep)
+    monkeypatch.setattr(craft_plan_gen_mod, "_clear_first", no_room_with_the_prep)
+    pool = [_deposit(gd), _craft(gd), smelt, fight]
+    plan = decompose(ReachSkillGoal(skill_name="mining", target_level=31), state, gd, pool, _ctx())
+    assert plan is not None and isinstance(plan[0], DepositAllAction), plan
+    assert plan[1:] == [smelt, fight], plan
+    assert len(asked) == 2 and asked[0][-2:] == [smelt, fight] and len(asked[0]) > 2
 
 
 # --------------------------------------------------------------------------
