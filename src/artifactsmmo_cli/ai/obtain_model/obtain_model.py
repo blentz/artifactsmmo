@@ -299,13 +299,15 @@ class ObtainModel:
         """`gate` as the walk opens it, or None when nothing opens it: the
         caller's `openable` gate itself, or a door gate narrowed to the
         cheapest (`rank`, first of equal ranks) of its doors not already being
-        opened whose shortfall the walk can obtain."""
+        opened whose shortfall the walk can obtain. The doors are tried
+        cheapest first and the first that opens is taken, so no door dearer than
+        it is walked (ruling T14e-perf: a key's walk is the cost of a door)."""
         if openable(gate):
             return gate
-        door = min((door for door in gate.doors if door not in opening
-                    and self._door_open(door, policy, openable, keep, grey_ok, opening | {door},
-                                        rank)),
-                   key=rank, default=None)
+        door = next((door for door in sorted(gate.doors, key=rank) if door not in opening
+                     and self._door_open(door, policy, openable, keep, grey_ok, opening | {door},
+                                         rank)),
+                    None)
         return None if door is None else replace(gate, doors=(door,))
 
     def _door_open(self, door: Door, policy: Policy, openable: Callable[[Gate], bool],

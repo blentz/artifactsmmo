@@ -8792,9 +8792,17 @@ KEY_DOOR_TOLL_PRICE_MUTATIONS = [
 # Ruling T14e-m1: the walk opens the door the pricer charged. Killed by
 # tests/test_ai/test_key_door_route.py.
 KEY_DOOR_RANK_WALK_MUTATIONS = [
+    ("door rank: every door is walked, the cheapest open one taken",
+     "        door = next((door for door in sorted(gate.doors, key=rank) if door not in opening\n"
+     "                     and self._door_open(door, policy, openable, keep, grey_ok, opening | {door},\n"
+     "                                         rank)),\n"
+     "                    None)\n",
+     "        door = min([door for door in gate.doors if door not in opening\n"
+     "                    and self._door_open(door, policy, openable, keep, grey_ok, opening | {door},\n"
+     "                                        rank)], key=rank, default=None)\n"),
     ("door rank: the walk opens the first openable door",
-     "                   key=rank, default=None)\n",
-     "                   key=lambda _door: 0, default=None)\n"),
+     "        door = next((door for door in sorted(gate.doors, key=rank) if door not in opening\n",
+     "        door = next((door for door in gate.doors if door not in opening\n"),
 ]
 KEY_DOOR_RANK_PLAN_MUTATIONS = [
     ("door rank: the plan builder ranks no door",
@@ -8867,8 +8875,8 @@ KEY_DOOR_WALK_MUTATIONS = [
      "                if not unmet or not all(openable(gate) or gate.doors for gate in unmet):\n",
      "                if not unmet or not all(openable(gate) for gate in unmet):\n"),
     ("door: a key may open its own door",
-     "        door = min((door for door in gate.doors if door not in opening\n",
-     "        door = min((door for door in gate.doors if True\n"),
+     "        door = next((door for door in sorted(gate.doors, key=rank) if door not in opening\n",
+     "        door = next((door for door in sorted(gate.doors, key=rank) if True\n"),
     ("door: the opened gate is not narrowed to its door",
      "        return None if door is None else replace(gate, doors=(door,))\n",
      "        return None if door is None else gate\n"),

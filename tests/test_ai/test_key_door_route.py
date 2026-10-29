@@ -870,3 +870,28 @@ def test_the_executor_opens_a_chain_s_first_leg_first(monkeypatch: pytest.Monkey
     craft_plan_gen._open_door(door, make_state(), GameData(), [], TIMED_NO_PROFILE_CONTEXT,
                               None, False, frozenset(), DECOMPOSE_POLICY)
     assert walked == [{"zz_key": 1}]
+
+
+def test_no_door_dearer_than_the_first_that_opens_is_walked(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling T14e-perf: the doors are tried cheapest first and the first that
+    opens is taken, so the dearer door's key is never walked."""
+    world = _two_door_world(monkeypatch)
+    droppers = {"loot": [("warden", 1, 1, 1)], "spare_key": [("smith", 1, 1, 1)],
+                "vault_key": [("smith", 1, 1, 1)]}
+    monkeypatch.setattr(world, "monsters_dropping", lambda item: droppers.get(item, []))
+    model = _model(make_state(x=0, y=0), world)
+    asked: list[object] = []
+    door_open = model._door_open
+    monkeypatch.setattr(model, "_door_open", lambda door, *a: asked.append(door) or door_open(door, *a))
+    spare, vault = (("spare_key", 1),), (("vault_key", 1),)
+    graph = model.walk_graph("loot", DECOMPOSE_POLICY, rank=lambda door: 0 if door == spare else 1)
+    assert asked == [spare]
+    (route,) = graph.routes["loot"]
+    assert [g.doors for g in route.gates] == [(spare,)]
+    asked.clear()
+    model = _model(make_state(x=0, y=0), world)
+    door_open = model._door_open
+    monkeypatch.setattr(model, "_door_open", lambda door, *a: asked.append(door) or door_open(door, *a))
+    model.walk_graph("loot", DECOMPOSE_POLICY)
+    assert asked == [vault]
