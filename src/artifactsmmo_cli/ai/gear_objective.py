@@ -80,7 +80,7 @@ from artifactsmmo_cli.ai.inventory_keep import carried_keep
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loop_rate import FoodOffer, LoopInputs, food_menu, loop_rate
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
-from artifactsmmo_cli.ai.obtain_model.gate import GateKind
+from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
@@ -301,11 +301,17 @@ def _fighters(state: WorldState, owned: frozenset[str],
     return fighter
 
 
+def _winnable_gate(gate: Gate) -> bool:
+    """A WINNABLE gate: the one some fighter's gear could open. Named, so the
+    walk's door memo (`ObtainModel._door_open`) shares one entry across the
+    layer's items."""
+    return gate.kind is GateKind.WINNABLE
+
+
 def _reachable_by_some_fighter(model: ObtainModel, code: str) -> bool:
     """Would `code` be feasible with every WINNABLE gate open: the most any
     fighter could make of this snapshot?"""
-    graph = model.walk_graph(code, PIECE_POLICY,
-                             openable=lambda gate: gate.kind is GateKind.WINNABLE)
+    graph = model.walk_graph(code, PIECE_POLICY, openable=_winnable_gate)
     return can_obtain(code, 1, graph.on_hand, graph.routes)
 
 

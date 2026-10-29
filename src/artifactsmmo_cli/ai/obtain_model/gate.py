@@ -10,6 +10,11 @@ can name what blocks it instead of re-deriving it.
 from dataclasses import dataclass
 from enum import Enum
 
+type Door = tuple[tuple[str, int], ...]
+"""A door's shortfall from one state (`region_edges.door_reaches`):
+`(code, units)` pairs, gold under `GOLD_CODE`, sorted by code. Two edges
+asking the same shortfall are one door: holding it opens both."""
+
 
 class GateKind(Enum):
     """What a gate tests. `subject` names the thing it tests (a skill, a
@@ -53,3 +58,8 @@ class Gate:
     subject: str
     satisfied: bool
     level: int | None = None
+    doors: tuple[Door, ...] = ()
+    """An unmet SPAWN_KNOWN gate only: the doors past which the content lies
+    (`region_edges.doors_to`). The walk opens the gate by obtaining one door's
+    shortfall (`ObtainModel.walk_graph`); the pricer charges it as the route's
+    unlock (`acquisition_cost._door_options`). Empty: no door opens it."""

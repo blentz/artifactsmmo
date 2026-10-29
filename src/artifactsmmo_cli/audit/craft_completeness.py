@@ -7,6 +7,7 @@ Pure cores (grid/verdict/classifier) + a thin planner harness (`plan_craft`);
 the generator/docs live in scripts/gen_craft_completeness.py."""
 
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from enum import Enum
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -32,9 +33,16 @@ from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable, monster_reached
+from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
+from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
-from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG, content_reached, reachable_regions_now
+from artifactsmmo_cli.ai.region_edges import (
+    REGION_EDGE_TAG,
+    content_reached,
+    door_reaches,
+    reachable_regions_now,
+)
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
@@ -905,12 +913,33 @@ def _census_declines(recipe: str, state: WorldState, game_data: GameData) -> lis
     actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
                             bank_accessible=True, task_exchange_min_coins=0,
                             learned_drops=LearnedDrops.empty())
-    ctx = offline_context(SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
-                           initial_xp=0, task_exchange_min_coins=0, combat_monster=None))
     declined: list[str] = []
     decompose(GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}), state, game_data,
-              actions, ctx, declined)
+              actions, _census_context(), declined)
     return declined
+
+
+def _census_context() -> SelectionContext:
+    """The context the census decomposes a cell under: the bank open, no
+    profile, offline timing."""
+    return offline_context(SelectionContext(bank_accessible=True, bank_required_level=0,
+                                            bank_unlock_monster=None, initial_xp=0,
+                                            task_exchange_min_coins=0, combat_monster=None))
+
+
+def _census_reach(state: WorldState, game_data: GameData) -> frozenset[str]:
+    """The regions the census decomposition reaches from `state`: the walk's
+    reach now (`reachable_regions_now`, the one authority) and the regions
+    past every door (`region_edges.door_reaches`) whose key or fee the
+    decomposition's walk can obtain (`ObtainModel.door_open` under
+    `DECOMPOSE_POLICY`, Task 14e). A leaf past an affordable key door is not
+    behind a crossing: the walk routes through the key."""
+    model = ObtainModel(state, game_data, _census_context(), datetime.now(UTC))
+    reach = set(reachable_regions_now(state, game_data))
+    for door, beyond in door_reaches(state, game_data):
+        if model.door_open(door, DECOMPOSE_POLICY):
+            reach |= beyond
+    return frozenset(reach)
 
 
 def _crossing_unaffordable(declined: list[str]) -> bool:
@@ -991,7 +1020,7 @@ def _dead_leaves_behind_crossing(declined: list[str], state: WorldState,
     dead = _dead_names(declined)
     if not dead:
         return False
-    reach = reachable_regions_now(state, game_data)
+    reach = _census_reach(state, game_data)
     return all(_leaf_behind_crossing(name, state, game_data, reach) for name in dead)
 
 

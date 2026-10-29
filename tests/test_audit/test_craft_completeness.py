@@ -1076,7 +1076,7 @@ def test_a_crossing_explains_a_cell_only_when_every_dead_name_is_behind_one(monk
     currency outside the closure (`fire_dust`). `gold` is the one exception:
     the census character's empty pocket explains it."""
     gd = GameData()
-    monkeypatch.setattr(craft_completeness, "reachable_regions_now", lambda s, g: frozenset())
+    monkeypatch.setattr(craft_completeness, "_census_reach", lambda s, g: frozenset())
     monkeypatch.setattr(craft_completeness, "_leaf_behind_crossing",
                         lambda leaf, s, g, r: leaf in {"venom", "palm_wood"})
     explained = craft_completeness._dead_leaves_behind_crossing
@@ -1106,7 +1106,7 @@ def _mixed_cell(monkeypatch, declined: str, statuses: dict[str, GapClass | None]
     monkeypatch.setattr(craft_completeness, "_census_declines", lambda r, s, g: [declined])
     monkeypatch.setattr(craft_completeness, "_closure_leaves", lambda r, g: frozenset(statuses))
     monkeypatch.setattr(craft_completeness, "_leaf_status", lambda leaf, s, g: statuses[leaf])
-    monkeypatch.setattr(craft_completeness, "reachable_regions_now", lambda s, g: frozenset())
+    monkeypatch.setattr(craft_completeness, "_census_reach", lambda s, g: frozenset())
     monkeypatch.setattr(craft_completeness, "_leaf_behind_crossing",
                         lambda leaf, s, g, r: leaf in behind)
     return classify_gap("x", cell, gd)

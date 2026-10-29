@@ -15,7 +15,7 @@ from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.transition_layer_error import TransitionLayerError
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 
 @dataclass
@@ -79,6 +79,26 @@ class MapTransitionAction(Action):
         both)."""
         return state.inventory.get(code, 0) + sum(
             1 for equipped in state.equipment.values() if equipped == code)
+
+    def shortfall(self, state: WorldState) -> dict[str, int] | None:
+        """What `state` lacks to pay this edge's conditions, `{code: units}`
+        with gold under `GOLD_CODE`: the gold fee past the pocket, each
+        consumed key past the bag, each `has_item` key past the bag and the
+        worn slots. Empty when the conditions are met; None when an operator
+        is not modeled (`is_applicable` refuses it whatever is held). The
+        portal's layer is not a condition: it is where the crossing starts."""
+        if not self._conditions_modeled():
+            return None
+        lack: dict[str, int] = {}
+        if self._gold_cost() > state.gold:
+            lack[GOLD_CODE] = self._gold_cost() - state.gold
+        for code, qty in self._item_costs().items():
+            if state.inventory.get(code, 0) < qty:
+                lack[code] = qty - state.inventory.get(code, 0)
+        for code, qty in self._possession_requirements().items():
+            if self._possessed(state, code) < qty:
+                lack[code] = max(lack.get(code, 0), qty - self._possessed(state, code))
+        return lack
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if state.layer != self.portal_layer:

@@ -50,7 +50,7 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill, loss_cost
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loss_risk_core import loss_surcharge
-from artifactsmmo_cli.ai.obtain_model.gate import GateKind
+from artifactsmmo_cli.ai.obtain_model.gate import Door, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.obtain_model.route import Route
@@ -68,6 +68,10 @@ from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 EQUIP_ACTIONS = 1
 """One `EquipAction`. Carries no venue: equipping happens wherever the character
 is standing."""
+
+CROSSING_ACTIONS = 1
+"""One `MapTransitionAction`: the crossing a key door's route pays once its key
+or fee is held (`_door_options`). The fee or the key is priced on its own."""
 
 
 def _workshop_venue(skill: str) -> str:
@@ -703,10 +707,66 @@ def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
     return best
 
 
+def _door_unlock(door: Door) -> str:
+    """The unlock key of a route past `door`: two routes past one door pay its
+    key and its crossing once."""
+    return "door:" + ",".join(f"{code}x{units}" for code, units in door)
+
+
+def _door_options(item: str, state: WorldState, game_data: GameData,
+                  ctx: SelectionContext, store: LearningStore | None, model: ObtainModel,
+                  policy: Policy, gated_drop: bool,
+                  opening: frozenset[Door]) -> list[RouteOption]:
+    """The fights and gathers for `item` whose content stands past a key door
+    (Task 14e, M-3), each priced as its ready route is plus the door as its
+    unlock: the key's (or the fee's gold's) own price and the crossing.
+
+    THE SAME SEAM `_gated_skill_option` AND `_gated_drop_option` STATE. The
+    reachability authority stays strict (`region_edges.reachable_regions_now`:
+    content past an unpaid door is unreached, so its route is not ready); the
+    door is a price, not a wall, and is paid here, where routes are priced.
+    The routes are the obtain model's own that the SPAWN_KNOWN gate ALONE
+    keeps closed (`ObtainModel.gated_by`), and the doors are the gate's own
+    (`Gate.doors`, from `region_edges.doors_to`).
+
+    THE KEY IS PRICED BY THE ONE PRICER: `acquisition_actions` on the bag plus
+    the shortfall, so a key in the bag already is credited, and a fee's gold
+    is priced with the pocket credited. A consumed key and a kept one are one
+    leg each: the route crosses once (the brief's "key price + crossing").
+
+    RECURSION AND CYCLES. A key past another door is priced the same way, its
+    own door options included; `opening` holds the doors being priced further
+    up, so a key whose only source stands past its own door prices at the
+    no-route sentinel, and that door is a wall. A door whose key cannot be
+    priced offers nothing; of the rest the cheapest is the route's (first of
+    equal prices, in `door_reaches`' order)."""
+    out: list[RouteOption] = []
+    for route in model.gated_by(item, policy, GateKind.SPAWN_KNOWN):
+        [gate] = [g for g in route.gates if g.kind is GateKind.SPAWN_KNOWN]
+        best: tuple[Door, int] | None = None
+        for door in gate.doors:
+            if door in opening:
+                continue
+            unlock = CROSSING_ACTIONS + sum(
+                acquisition_actions(code, model.in_bag(code) + units, state, game_data, ctx,
+                                    equip=False, store=store, gated_drop=gated_drop,
+                                    policy=policy, opening=opening | {door})
+                for code, units in door)
+            if unlock < UNOBTAINABLE_PER_UNIT and (best is None or unlock < best[1]):
+                best = (door, unlock)
+        if best is None:
+            continue
+        option = _priced(item, Source(route.kind, route.via, route.yield_per, route.capacity),
+                         state, game_data, ctx)
+        out.append(replace(option, unlock=_door_unlock(best[0]), unlock_actions=best[1]))
+    return out
+
+
 def route_options(item: str, state: WorldState, game_data: GameData,
                   ctx: SelectionContext,
                   store: LearningStore | None = None,
-                  gated_drop: bool = True, *, policy: Policy = LEGACY) -> list[RouteOption]:
+                  gated_drop: bool = True, *, policy: Policy = LEGACY,
+                  opening: frozenset[Door] = frozenset()) -> list[RouteOption]:
     """Every route to `item`, priced: the ones `obtain_sources` names, less any
     whose own skill requirement is unmet, plus — only when a `store` is
     supplied — the skill-gated craft or gather priced with its climb.
@@ -758,6 +818,11 @@ def route_options(item: str, state: WorldState, game_data: GameData,
     # +43%, with or without this test). The items it skips were already exiting
     # cheaply; the cost lives in the walled items themselves, which are exactly
     # the ones this test keeps.
+    if not routes:
+        # A fight or a gather past a key door (Task 14e), asked as the gear
+        # gate below is and for its reason: only when nothing serves the item.
+        routes.extend(_door_options(item, state, game_data, ctx, store, model, policy,
+                                    gated_drop, opening))
     if gated_drop and not routes:
         drop = _gated_drop_option(item, state, game_data, ctx, store, model, policy)
         if drop is not None:
@@ -773,7 +838,8 @@ def acquisition_options(item: str, state: WorldState, game_data: GameData,
                         ctx: SelectionContext,
                         store: LearningStore | None = None,
                         gated_drop: bool = True, *, policy: Policy = LEGACY,
-                        produce: frozenset[str] = frozenset()
+                        produce: frozenset[str] = frozenset(),
+                        opening: frozenset[Door] = frozenset()
                         ) -> dict[str, list[RouteOption]]:
     """`route_options` over the whole closure reachable from `item`.
 
@@ -802,7 +868,8 @@ def acquisition_options(item: str, state: WorldState, game_data: GameData,
         code = frontier.pop()
         if code in options:
             continue
-        routes = route_options(code, state, game_data, ctx, store, gated_drop, policy=policy)
+        routes = route_options(code, state, game_data, ctx, store, gated_drop, policy=policy,
+                               opening=opening)
         if code in produce:
             routes = [route for route in routes if route.kind in _PRODUCING]
         options[code] = routes
@@ -839,7 +906,8 @@ def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
                    ctx: SelectionContext, store: LearningStore | None,
                    gated_drop: bool = True, *, policy: Policy, pocket: int,
                    credit_skills: frozenset[str] = frozenset(),
-                   produce: frozenset[str] = frozenset()) -> tuple[int, SourceKind | None]:
+                   produce: frozenset[str] = frozenset(),
+                   opening: frozenset[Door] = frozenset()) -> tuple[int, SourceKind | None]:
     """`(price, route)`: the lower bound on planner actions to obtain `qty` of
     `item` (`acquisition_actions` without the equip), and the kind of the route
     that price takes for `item` itself (plan B Task 3: a piece is served by the
@@ -860,7 +928,7 @@ def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
     owned: dict[str, int] = _owned_with_gold(state, pocket)
     options: Mapping[str, list[RouteOption]] = credit_demanded_skills(
         acquisition_options(item, state, game_data, ctx, store, gated_drop, policy=policy,
-                            produce=produce),
+                            produce=produce, opening=opening),
         credit_skills, game_data)
     price, route = priced_route(item, qty, options, owned, frozenset({GOLD_CODE}))
     if route is not None:
@@ -964,7 +1032,8 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
                         store: LearningStore | None = None,
                         gated_drop: bool = True, *, policy: Policy = LEGACY,
                         credit_skills: frozenset[str] = frozenset(),
-                        produce: frozenset[str] = frozenset()) -> int:
+                        produce: frozenset[str] = frozenset(),
+                        opening: frozenset[Door] = frozenset()) -> int:
     """Lower bound on planner actions to obtain (and optionally equip) `qty` of
     `item`, over every route the executor can currently serve.
 
@@ -985,10 +1054,14 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
     (`skill_credit`); empty by default, so every existing caller is unchanged.
     `produce` — items priced only by making them (`acquisition_options`).
 
+    `opening` — doors whose keys are being priced further up
+    (`_door_options`): no route past them is priced again.
+
     The price is `cheapest_route`'s, so there is one pricer."""
     price, _route = cheapest_route(item, qty, state, game_data, ctx, store, gated_drop,
                                    policy=policy, pocket=state.gold,
-                                   credit_skills=credit_skills, produce=produce)
+                                   credit_skills=credit_skills, produce=produce,
+                                   opening=opening)
     return price + (EQUIP_ACTIONS if equip else 0)
 
 

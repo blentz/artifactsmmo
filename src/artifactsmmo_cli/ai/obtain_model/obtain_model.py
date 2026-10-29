@@ -39,12 +39,12 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, rank_gather_sources
 from artifactsmmo_cli.ai.inventory_keep import destroyable
 from artifactsmmo_cli.ai.obtain_model.drop_routes import Fighter, drop_routes, gold_drop_routes
-from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
+from artifactsmmo_cli.ai.obtain_model.gate import Door, Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
-from artifactsmmo_cli.ai.region_edges import content_reached, reachable_regions_now
+from artifactsmmo_cli.ai.region_edges import content_reached, doors_to, reachable_regions_now
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
@@ -77,6 +77,7 @@ class ObtainModel:
         self._now = now
         self._routes: dict[str, tuple[Route, ...]] = {}
         self._regions: frozenset[str] | None = None
+        self._doors: dict[tuple[object, ...], bool] = {}
 
     def _reach(self) -> frozenset[str]:
         """The regions the walk reaches from this state now
@@ -146,7 +147,8 @@ class ObtainModel:
                    produce: frozenset[str] = frozenset(),
                    openable: Callable[[Gate], bool] = lambda _gate: False,
                    keep: frozenset[str] = frozenset(),
-                   grey_ok: Callable[[str], bool] = lambda _item: False) -> WalkGraph:
+                   grey_ok: Callable[[str], bool] = lambda _item: False,
+                   opening: frozenset[Door] = frozenset()) -> WalkGraph:
         """`item`'s closure as the one walk's graph (Phase 2c-2b).
 
         On hand is the bag (the inventory, with gold as the pocket). Every ready
@@ -177,7 +179,18 @@ class ObtainModel:
         `grey_ok` names items whose ZERO-XP droppers count even though `policy`
         refuses grey (`allow_grey=False`): the walk applies the grey-farm
         directive per item, as the search's admission did (a skill grind, a
-        drop the directive allows, an upgrade's own target)."""
+        drop the directive allows, an upgrade's own target).
+
+        A KEY DOOR IS A ROUTE THROUGH ITS KEY (Task 14e, M-3). A fight or a
+        gather whose SPAWN_KNOWN gate is unmet because its content stands past
+        a door (`Gate.doors`) joins the walk the same way, carrying that gate
+        narrowed to the first door whose shortfall the walk can obtain
+        (`_door_open`): the walk then opens it first, as a sub-task (obtain
+        the key or the fee; the crossing follows in the plan's region bridge).
+        The door is opened for every caller, `openable` or not: obtaining an
+        item is not a grind, and `feasible` must count what the walk serves.
+        `opening` holds the doors whose keys are being walked further up, so a
+        key that stands only past its own door is a wall, not a loop."""
         bag: dict[str, int] = dict(self._state.inventory)
         bag[GOLD_CODE] = self._state.gold
         bank = self._state.bank_items or {}
@@ -199,8 +212,12 @@ class ObtainModel:
                     continue
                 unmet = tuple(gate for gate in route.gates
                               if item_policy.enforces(gate, route) and not gate.satisfied)
-                if unmet and all(openable(gate) for gate in unmet):
-                    gated.append((route, unmet))
+                if not unmet or not all(openable(gate) or gate.doors for gate in unmet):
+                    continue
+                opened = [self._opened(gate, policy, openable, keep, grey_ok, opening)
+                          for gate in unmet]
+                if all(gate is not None for gate in opened):
+                    gated.append((route, tuple(gate for gate in opened if gate is not None)))
             candidates = [(route, ()) for route in self._ranked_gathers(code, ready)] + gated
             for route, gates in candidates:
                 if code in produce and route.kind not in (SourceKind.CRAFT, SourceKind.GATHER):
@@ -219,6 +236,43 @@ class ObtainModel:
             sources[code] = tuple(behind)
             pending.extend(x for w in walk for x, _per in w.inputs)
         return WalkGraph(bag, routes, sources)
+
+    def door_open(self, door: Door, policy: Policy) -> bool:
+        """Can the walk obtain `door`'s shortfall under `policy`, with no
+        caller gate opened (`_door_open`)? The verdict a census reads to
+        agree with the walk on which doors it routes through."""
+        return self._door_open(door, policy, lambda _gate: False, frozenset(),
+                               lambda _item: False, frozenset({door}))
+
+    def _opened(self, gate: Gate, policy: Policy, openable: Callable[[Gate], bool],
+                keep: frozenset[str], grey_ok: Callable[[str], bool],
+                opening: frozenset[Door]) -> Gate | None:
+        """`gate` as the walk opens it, or None when nothing opens it: the
+        caller's `openable` gate itself, or a door gate narrowed to its first
+        door not already being opened whose shortfall the walk can obtain."""
+        if openable(gate):
+            return gate
+        door = next((door for door in gate.doors if door not in opening
+                     and self._door_open(door, policy, openable, keep, grey_ok, opening | {door})),
+                    None)
+        return None if door is None else replace(gate, doors=(door,))
+
+    def _door_open(self, door: Door, policy: Policy, openable: Callable[[Gate], bool],
+                   keep: frozenset[str], grey_ok: Callable[[str], bool],
+                   opening: frozenset[Door]) -> bool:
+        """Can the walk obtain `door`'s whole shortfall on top of the bag: each
+        key (or the fee's gold) asked of the one walk on its own closure, with
+        `opening` closed to it. Memoised for the model's lifetime: the key
+        holds the callables themselves, so an entry pins what it was asked
+        with and no other callable can share its answer."""
+        key = (door, policy, keep, opening, openable, grey_ok)
+        if key not in self._doors:
+            self._doors[key] = all(
+                can_obtain(code, self.in_bag(code) + units, graph.on_hand, graph.routes)
+                for code, units in door
+                for graph in (self.walk_graph(code, policy, keep=keep, openable=openable,
+                                              grey_ok=grey_ok, opening=opening),))
+        return self._doors[key]
 
     def _ranked_gathers(self, item: str, ready: tuple[Route, ...]) -> list[Route]:
         """`ready` with its GATHER routes (contiguous in priority order) ranked
@@ -369,11 +423,11 @@ class ObtainModel:
             # fixed point reaches; the fixed point starts from the overworld,
             # so in a pocket entered through an edge it does not model it
             # would refuse a gather the character can make where it stands.
-            known = content_reached(resource, self._gd.all_resource_locations.get(resource, []),
-                                    self._gd, self._reach())
-            gates = [Gate(GateKind.SPAWN_LIVE, resource,
-                          bool(self._gd.all_resource_locations.get(resource))),
-                     Gate(GateKind.SPAWN_KNOWN, resource, known)]
+            tiles = self._gd.all_resource_locations.get(resource, [])
+            known = content_reached(resource, tiles, self._gd, self._reach())
+            doors = () if known else doors_to(resource, tiles, self._state, self._gd)
+            gates = [Gate(GateKind.SPAWN_LIVE, resource, bool(tiles)),
+                     Gate(GateKind.SPAWN_KNOWN, resource, known, doors=doors)]
             requirement = self._gd.resource_skill_level(resource)
             if requirement is not None:
                 skill, level = requirement

@@ -63,7 +63,7 @@ from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed, serves_a_demand
 from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY, heal_prep_goal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
-from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
+from artifactsmmo_cli.ai.obtain_model.gate import Door, Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, PIECE_POLICY, Policy
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
@@ -487,9 +487,14 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
         for leg in answer.plan:
             if isinstance(leg, OpenGate):
                 gate = leg.gate
-                assert isinstance(gate, Gate) and gate.level is not None
-                sub = _decompose_grind(gate.subject, gate.level, sim, game_data, actions, ctx,
-                                       declined, grinding, False)
+                assert isinstance(gate, Gate)
+                if gate.kind is GateKind.SPAWN_KNOWN:
+                    sub = _open_door(gate.doors[0], sim, game_data, actions, ctx, declined,
+                                     subtasks, grinding, policy)
+                else:
+                    assert gate.level is not None
+                    sub = _decompose_grind(gate.subject, gate.level, sim, game_data, actions,
+                                           ctx, declined, grinding, False)
                 if sub is None:
                     if legs:
                         break
@@ -513,6 +518,21 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
         if legs:
             return _finish(legs, state, game_data, declined)
     return _decline(declined, "satisfied")
+
+
+def _open_door(door: Door, state: WorldState, game_data: GameData, actions: list[Action],
+               ctx: SelectionContext, declined: list[str] | None, subtasks: bool,
+               grinding: frozenset[str], policy: Policy) -> list[Action] | None:
+    """The legs that open a key door the walk routed through (Task 14e,
+    `ObtainModel.walk_graph`): the walk's own plan for the door's first
+    shortfall (a key, or the fee's gold), held on top of the bag.
+    The plan stops there, as at a skill gate: the next cycle walks again from
+    the bag it left, and once the shortfall is held the content is reached
+    and the region bridge crosses the door (`_bridge_regions`)."""
+    code, units = door[0]
+    bag = state.gold if code == GOLD_CODE else state.inventory.get(code, 0)
+    return _walk_plan(GatherMaterialsGoal(code, {code: bag + units}, fight_gold=policy.fight_gold),
+                      state, game_data, actions, ctx, declined, subtasks, grinding, policy)
 
 
 def _one_trip(item: str, qty: int, answer: WalkAnswer, state: WorldState,

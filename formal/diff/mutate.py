@@ -183,6 +183,7 @@ GEAR_OBJECTIVE_CONTEXT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_ob
 PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
 SLOT_OCCUPANCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "slot_occupancy.py"
 REGION_EDGES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "region_edges.py"
+TRANSITION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "transition.py"
 DROP_ROUTES_SRC_T14A = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model"
                         / "drop_routes.py")
 CURRENCY_BUY_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_buy_batch.py"
@@ -4514,13 +4515,13 @@ OBTAIN_MODEL_GATE_MUTATIONS = [
 # drop_obtainability). Split by the test file that kills each.
 OBTAIN_MODEL_DROP_MUTATIONS = [
     ("drop_routes: ignore winnability",
-     "    winnable = (live or known) and drop_fight_winnable(",
+     "    winnable = (live or known or bool(doors)) and drop_fight_winnable(",
      "    winnable = True or drop_fight_winnable("),
     ("drop_routes: every monster has a routable spawn",
-     "Gate(GateKind.SPAWN_KNOWN, monster, known)",
-     "Gate(GateKind.SPAWN_KNOWN, monster, True)"),
+     "Gate(GateKind.SPAWN_KNOWN, monster, known, doors=doors)",
+     "Gate(GateKind.SPAWN_KNOWN, monster, True, doors=doors)"),
     ("drop_routes: ask winnability only for a live monster",
-     "    winnable = (live or known) and drop_fight_winnable(",
+     "    winnable = (live or known or bool(doors)) and drop_fight_winnable(",
      "    winnable = live and drop_fight_winnable("),
     ("drop_routes: a monster that pays no gold is a gold route",
      "        if top <= 0 or game_data.monster_level(monster) > ceiling:\n            continue",
@@ -4652,8 +4653,9 @@ SERVED_BY_ITS_ROUTE_PRICE_MUTATIONS = [
 ]
 SERVED_BY_ITS_ROUTE_REACH_MUTATIONS = [
     ("gear_objective: the reachability walk refuses the drops later layers open (M4)",
-     "    graph = model.walk_graph(code, PIECE_POLICY,\n",
-     "    graph = model.walk_graph(code, replace(PIECE_POLICY, drop_routes=False),\n"),
+     "    graph = model.walk_graph(code, PIECE_POLICY, openable=_winnable_gate)\n",
+     "    graph = model.walk_graph(code, replace(PIECE_POLICY, drop_routes=False),\n"
+     "                             openable=_winnable_gate)\n"),
 ]
 SERVED_BY_ITS_ROUTE_CORE_MUTATIONS = [
     ("acquisition_cost_core: held gold is not free to the choice",
@@ -4826,8 +4828,7 @@ SERVED_BY_ITS_ROUTE_POLICY_MUTATIONS = [
 # killed by tests/test_ai/test_obtain_model.py and test_game_data.py.
 OBTAIN_MODEL_GATHER_SPAWN_MUTATIONS = [
     ("obtain_model: every resource has a routable spawn",
-     "            known = content_reached(resource, self._gd.all_resource_locations.get(resource, []),\n"
-     "                                    self._gd, self._reach())\n",
+     "            known = content_reached(resource, tiles, self._gd, self._reach())\n",
      "            known = True\n"),
 ]
 # ObtainModel.renewable / on_hand, killed by tests/test_ai/test_obtain_model.py
@@ -5398,7 +5399,7 @@ WALK_ADAPTER_MUTATIONS = [
      "                if code in produce and route.kind not in (SourceKind.CRAFT, SourceKind.GATHER):",
      "                if False:"),
     ("obtain_model: a gate-blocked route never joins the walk",
-     "                if unmet and all(openable(gate) for gate in unmet):",
+     "                if all(gate is not None for gate in opened):",
      "                if False:"),
 ]
 # The gather ranking the walk shares with the proved selection. Killed by the
@@ -8711,14 +8712,87 @@ REACH_GATE_MUTATIONS = [
 # Killed by tests/test_ai/test_piece_policy.py.
 GATHER_REACH_MUTATIONS = [
     ("obtain_model: a resource behind an unpayable crossing is a route",
-     "            known = content_reached(resource, self._gd.all_resource_locations.get(resource, []),\n"
-     "                                    self._gd, self._reach())\n",
+     "            known = content_reached(resource, tiles, self._gd, self._reach())\n",
      "            known = self._gd.resource_spawn_known(resource)\n"),
     # Ruling R3-M1: the gather gate asks the walk's reach alone, as the fight gate.
     ("obtain_model: the gather gate also asks the catalogue's fixed point",
-     "            known = content_reached(resource, self._gd.all_resource_locations.get(resource, []),\n",
+     "            known = content_reached(resource, tiles, self._gd, self._reach())\n",
      "            known = self._gd.resource_spawn_known(resource) and content_reached(\n"
-     "                resource, self._gd.all_resource_locations.get(resource, []),\n"),
+     "                resource, tiles, self._gd, self._reach())\n"),
+]
+# Task 14e (M-3): a key door is a route through its key. Killed by
+# tests/test_ai/test_key_door_route.py.
+KEY_DOOR_SHORTFALL_MUTATIONS = [
+    ("door: a fee's shortfall is the whole fee",
+     "            lack[GOLD_CODE] = self._gold_cost() - state.gold\n",
+     "            lack[GOLD_CODE] = self._gold_cost()\n"),
+    ("door: a worn has_item key is not held",
+     "            if self._possessed(state, code) < qty:\n",
+     "            if state.inventory.get(code, 0) < qty:\n"),
+]
+KEY_DOOR_REACH_MUTATIONS = [
+    ("door: the hypothetical holds nothing",
+     "    beyond = reachable_regions_now(_holding(state, door), game_data) - now\n",
+     "    beyond = reachable_regions_now(state, game_data) - now\n"),
+    ("door: a door that reaches nothing new is a door",
+     "            if beyond:\n                out[door] = beyond\n",
+     "            if True:\n                out[door] = beyond\n"),
+    ("door: every door leads to the content",
+     "                 if content_reached(code, tiles, game_data, beyond))\n",
+     "                 if True)\n"),
+]
+KEY_DOOR_GATE_MUTATIONS = [
+    ("door: a fight past a door names no door",
+     "    doors = () if known else monster_doors(monster, state, game_data)\n",
+     "    doors = ()\n"),
+    ("door: winnability is not asked past a door",
+     "    winnable = (live or known or bool(doors)) and drop_fight_winnable(",
+     "    winnable = (live or known) and drop_fight_winnable("),
+]
+KEY_DOOR_WALK_MUTATIONS = [
+    ("door: a gather past a door names no door",
+     "            doors = () if known else doors_to(resource, tiles, self._state, self._gd)\n",
+     "            doors = ()\n"),
+    ("door: a door gate never joins the walk",
+     "                if not unmet or not all(openable(gate) or gate.doors for gate in unmet):\n",
+     "                if not unmet or not all(openable(gate) for gate in unmet):\n"),
+    ("door: a key may open its own door",
+     "        door = next((door for door in gate.doors if door not in opening\n",
+     "        door = next((door for door in gate.doors if True\n"),
+    ("door: the opened gate is not narrowed to its door",
+     "        return None if door is None else replace(gate, doors=(door,))\n",
+     "        return None if door is None else gate\n"),
+    ("door: every door opens",
+     "                can_obtain(code, self.in_bag(code) + units, graph.on_hand, graph.routes)\n",
+     "                True\n"),
+]
+KEY_DOOR_PRICE_MUTATIONS = [
+    ("door price: no route past a door is priced",
+     "        routes.extend(_door_options(item, state, game_data, ctx, store, model, policy,\n"
+     "                                    gated_drop, opening))\n",
+     "        routes.extend([])\n"),
+    ("door price: the crossing is free",
+     "            unlock = CROSSING_ACTIONS + sum(\n",
+     "            unlock = sum(\n"),
+    ("door price: a door being priced is priced again",
+     "            if door in opening:\n                continue\n            unlock = ",
+     "            if False:\n                continue\n            unlock = "),
+    ("door price: the dearest door prices the route",
+     "and (best is None or unlock < best[1]):\n",
+     "and (best is None or unlock > best[1]):\n"),
+]
+KEY_DOOR_EXECUTOR_MUTATIONS = [
+    ("door executor: a door gate is ground as a skill gate",
+     "                if gate.kind is GateKind.SPAWN_KNOWN:\n                    sub = _open_door(",
+     "                if False:\n                    sub = _open_door("),
+]
+KEY_DOOR_CENSUS_MUTATIONS = [
+    ("door census: no door the walk opens is reached",
+     "        if model.door_open(door, DECOMPOSE_POLICY):\n            reach |= beyond\n",
+     "        if False:\n            reach |= beyond\n"),
+    ("door census: every door is reached",
+     "        if model.door_open(door, DECOMPOSE_POLICY):\n            reach |= beyond\n",
+     "        if True:\n            reach |= beyond\n"),
 ]
 REACH_REGIONS_MUTATIONS = [
     ("reach: a content's layered tiles are not read",
@@ -14137,6 +14211,20 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_piece_policy.py", survivors)
     run_group(OBTAIN_MODEL_SRC, GATHER_REACH_MUTATIONS,
               "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(TRANSITION_SRC, KEY_DOOR_SHORTFALL_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(REGION_EDGES_SRC, KEY_DOOR_REACH_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(DROP_ROUTES_SRC_T14A, KEY_DOOR_GATE_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, KEY_DOOR_WALK_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(ACQUISITION_COST_SRC, KEY_DOOR_PRICE_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, KEY_DOOR_EXECUTOR_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(CRAFT_COMPLETENESS_SRC, KEY_DOOR_CENSUS_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
     run_group(REGION_EDGES_SRC, REGION_EDGE_MUTATIONS,
               "tests/test_ai/test_actions_transition.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, GE_ORDER_STALENESS_MUTATIONS,

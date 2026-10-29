@@ -22,11 +22,14 @@ The gates on a fight, whatever it pays:
   SPAWN_KNOWN asks the same reach alone (ruling R3-M1), and the fixed point
   starts from the overworld, so it would refuse a monster in a pocket the
   character already stands in (one entered through an edge the catalogue
-  does not model, such as `achievement_unlocked`).
+  does not model, such as `achievement_unlocked`). An unmet gate names the
+  doors past which the monster stands (`Gate.doors`, Task 14e): the walk
+  opens it by obtaining a door's key or fee, the pricer charges that as the
+  route's unlock, so a key door is a route through its key, not a wall.
 - `WINNABLE`: asked at RESTORABLE hp (route existence is not an hp question;
   resting is an action the planner has), cold (no LearningStore: the record's
   refusals arrive as `WorldState.lost_fights`, which voids both solo arms), and only for
-  a monster that spawns under either predicate: one that spawns nowhere has no
+  a monster that spawns under either predicate or past a door: one that spawns nowhere has no
   FightAction to serve it, so its verdict could never be used. The bare stats,
   or failing them some runnable utility-potion loadout
   (`loadout_win.wins_with_a_loadout`, USER 2026-10-10: "judge drop fights with
@@ -46,10 +49,10 @@ from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING, win_gold
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.loadout_win import wins_with_a_loadout
-from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
+from artifactsmmo_cli.ai.obtain_model.gate import Door, Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.party_win import wins_as_a_party
-from artifactsmmo_cli.ai.region_edges import content_reached
+from artifactsmmo_cli.ai.region_edges import content_reached, doors_to
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
@@ -89,14 +92,20 @@ def monster_reached(monster: str, game_data: GameData, reach: frozenset[str]) ->
                            game_data, reach)
 
 
+def monster_doors(monster: str, state: WorldState, game_data: GameData) -> tuple[Door, ...]:
+    """The doors past which some tile of `monster` lies (`region_edges.doors_to`)."""
+    return doors_to(monster, game_data.all_monster_locations.get(monster, []), state, game_data)
+
+
 def _fight_gates(monster: str, state: WorldState, game_data: GameData,
                  rested: _Rested, reach: frozenset[str]) -> tuple[Gate, ...]:
     live = bool(game_data.all_monster_locations.get(monster))
     known = monster_reached(monster, game_data, reach)
-    winnable = (live or known) and drop_fight_winnable(rested.get(), game_data, monster)
+    doors = () if known else monster_doors(monster, state, game_data)
+    winnable = (live or known or bool(doors)) and drop_fight_winnable(rested.get(), game_data, monster)
     return (
         Gate(GateKind.SPAWN_LIVE, monster, live),
-        Gate(GateKind.SPAWN_KNOWN, monster, known),
+        Gate(GateKind.SPAWN_KNOWN, monster, known, doors=doors),
         Gate(GateKind.WINNABLE, monster, winnable),
         Gate(GateKind.XP_POSITIVE, monster, game_data.xp_per_kill(monster, state.level) > 0),
     )

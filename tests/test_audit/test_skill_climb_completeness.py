@@ -52,7 +52,12 @@ WALLS = 10
 (a fight's monster is a route only where the walk reaches): `l47_depth3_amulet`'s
 weaponcrafting 40 rungs (the mithril tools and gloves) all need
 `cultist_alchemist`'s drops from `interior:-1,13`, whose door asks a held
-`cultist_cloak` the sheet does not have."""
+`cultist_cloak` the sheet does not have. Task 14e made a key door a route
+through its key, and the cell stays walled on the key itself: the cloak
+needs `malefic_cloth`, which only `cultist_emperor` drops, and that monster
+spawns only during the `cult_of_darkness` event, which the sheet does not
+have live. The door is named on the route (`Gate.doors`); the key is not
+obtainable."""
 GEAR_WALLS = 4
 """Of those, gearcrafting 42 in the four l48 scenarios."""
 ROUTED_SKILLS = frozenset({"gearcrafting", "jewelrycrafting", "weaponcrafting", "mining"})

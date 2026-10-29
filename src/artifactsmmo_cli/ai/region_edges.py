@@ -45,13 +45,15 @@ than of the full pool (the pool always carries all 48 off-region actions, so
 asking it would gate on nothing).
 """
 
+import dataclasses
 from collections.abc import Iterable, Iterator, Sequence
 
 from artifactsmmo_cli.ai.actions.base import Action, serves_region
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.obtain_model.gate import Door
+from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 REGION_EDGE_TAG = "movement"
 """The tag on the region-crossing edge. `MapTransitionAction` is the only
@@ -184,3 +186,65 @@ def content_reached(code: str, live: Iterable[tuple[int, int]], game_data: GameD
     tiles = [(x, y, "overworld") for x, y in live]
     tiles += game_data.layered_locations(code)
     return any(game_data.region_of(x, y, layer) in reach for x, y, layer in tiles)
+
+
+_DOORS: "CatalogueScope[tuple[object, ...], tuple[tuple[Door, frozenset[str]], ...]]" = (
+    CatalogueScope(REACH_MEMO_SIZE))
+"""`door_reaches`' answers, scoped and keyed as `_REACH` is."""
+
+
+def _holding(state: WorldState, door: Door) -> WorldState:
+    """`state` with `door`'s shortfall in hand: its gold in the pocket, its keys
+    in the bag."""
+    inventory = dict(state.inventory)
+    gold = state.gold
+    for code, units in door:
+        if code == GOLD_CODE:
+            gold += units
+        else:
+            inventory[code] = inventory.get(code, 0) + units
+    return dataclasses.replace(state, gold=gold, inventory=inventory)
+
+
+def door_reaches(state: WorldState, game_data: GameData) -> tuple[tuple[Door, frozenset[str]], ...]:
+    """Every door the walk could cross holding its shortfall (Task 14e, M-3),
+    with the regions that shortfall adds to `reachable_regions_now`.
+
+    A door is a modeled edge (`MapTransitionAction.shortfall` is not None)
+    that `state` cannot cross: a key it lacks (`has_item` or a consumed
+    `cost`) or a fee past its pocket. Its reach is the ONE authority's own
+    answer asked of `state` holding the shortfall (`_holding`), so a key that
+    opens a second door, or a crossing the key's door leads to, is counted as
+    the walk would cross them, and a door whose portal the walk cannot reach
+    reaches nothing new: it is no door. One door at a time: content past two
+    unpaid doors with different keys stays unreached. Edges in tile
+    order (`region_edge_actions`); a shortfall two edges share is listed
+    once. Memoised as `reachable_regions_now` is (`_DOORS`)."""
+    memo = _DOORS.cache_for(game_data)
+    key = _reach_key(state, game_data)
+    if key not in memo:
+        now = reachable_regions_now(state, game_data)
+        out: dict[Door, frozenset[str]] = {}
+        for edge in region_edge_actions(game_data):
+            assert isinstance(edge, MapTransitionAction)
+            lack = edge.shortfall(state)
+            if not lack:
+                continue
+            door: Door = tuple(sorted(lack.items()))
+            if door in out:
+                continue
+            beyond = reachable_regions_now(_holding(state, door), game_data) - now
+            if beyond:
+                out[door] = beyond
+        _DOORS.remember(memo, key, tuple(out.items()))
+    return memo[key]
+
+
+def doors_to(code: str, live: Iterable[tuple[int, int]], state: WorldState,
+             game_data: GameData) -> tuple[Door, ...]:
+    """The doors (`door_reaches`) past which some tile of the content `code`
+    lies (`content_reached`), in `door_reaches`' order: the shortfalls that
+    would make it reached. Asked of content the walk does not reach now."""
+    tiles = list(live)
+    return tuple(door for door, beyond in door_reaches(state, game_data)
+                 if content_reached(code, tiles, game_data, beyond))
