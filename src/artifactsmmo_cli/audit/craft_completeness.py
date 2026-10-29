@@ -10,6 +10,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
 
+from artifactsmmo_cli.ai.acquisition_cost import price_key
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
@@ -22,6 +23,7 @@ from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.best_loadout import loadout_for
+from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
@@ -38,7 +40,9 @@ from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.region_edges import (
+    REACH_MEMO_SIZE,
     REGION_EDGE_TAG,
+    _reach_key,
     content_reached,
     door_reaches,
     reachable_regions_now,
@@ -927,13 +931,34 @@ def _census_context() -> SelectionContext:
                                             task_exchange_min_coins=0, combat_monster=None))
 
 
+_CENSUS_REACH: "CatalogueScope[tuple[object, ...], frozenset[str]]" = (
+    CatalogueScope(REACH_MEMO_SIZE))
+"""`_census_reach`'s answers, scoped per catalogue as `region_edges._REACH`
+is (ruling T14e-m4)."""
+
+
 def _census_reach(state: WorldState, game_data: GameData) -> frozenset[str]:
     """The regions the census decomposition reaches from `state`: the walk's
     reach now (`reachable_regions_now`, the one authority) and the regions
     past every door (`region_edges.door_reaches`) whose key or fee the
     decomposition's walk can obtain (`ObtainModel.door_open` under
     `DECOMPOSE_POLICY`, Task 14e). A leaf past an affordable key door is not
-    behind a crossing: the walk routes through the key."""
+    behind a crossing: the walk routes through the key.
+
+    MEMOISED per catalogue (`_CENSUS_REACH`, ruling T14e-m4) on the reach's
+    own key (`region_edges._reach_key`) and on what the door walks read
+    besides (`acquisition_cost.price_key`: the bag, the bank, the gear, the
+    skills, the level): a census asks it once per dead cell, and the door
+    walks are its cost."""
+    memo = _CENSUS_REACH.cache_for(game_data)
+    key = (_reach_key(state, game_data), *price_key(state))
+    if key not in memo:
+        _CENSUS_REACH.remember(memo, key, _census_reach_walk(state, game_data))
+    return memo[key]
+
+
+def _census_reach_walk(state: WorldState, game_data: GameData) -> frozenset[str]:
+    """`_census_reach`'s computation."""
     model = ObtainModel(state, game_data, _census_context(), datetime.now(UTC))
     reach = set(reachable_regions_now(state, game_data))
     for door, _toll, beyond in door_reaches(state, game_data):

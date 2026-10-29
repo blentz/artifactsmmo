@@ -719,3 +719,25 @@ def test_the_walk_opens_the_cheapest_door_as_the_pricer_does(
     step = model.walk("palm_wood", 1, PIECE_POLICY).plan[0]
     assert isinstance(step, OpenGate) and isinstance(step.gate, Gate)
     assert step.gate.doors == (dear,)  # unranked: the first openable door
+
+
+# --- ruling T14e-m4: the census reach is memoised -----------------------------
+
+def test_the_census_reach_is_walked_once_per_reach_and_door_walk_key(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """`craft_completeness._census_reach` walks its doors once per catalogue
+    and key (`region_edges._reach_key` plus `acquisition_cost.price_key`):
+    asked again of the same state it is not walked again; a state whose door
+    walks read differently (another skill level) is walked afresh."""
+    state, world, _player = _seeded("l30_band_entry")
+    craft_completeness._CENSUS_REACH.clear()
+    walks: list[WorldState] = []
+    walk = craft_completeness._census_reach_walk
+    monkeypatch.setattr(craft_completeness, "_census_reach_walk",
+                        lambda at, gd: walks.append(at) or walk(at, gd))
+    first = craft_completeness._census_reach(state, world)
+    assert craft_completeness._census_reach(state, world) == first
+    assert len(walks) == 1
+    skilled = replace(state, skills={**state.skills, "mining": state.skills["mining"] + 1})
+    craft_completeness._census_reach(skilled, world)
+    assert len(walks) == 2

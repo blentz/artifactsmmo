@@ -762,7 +762,7 @@ def door_price(door: Door, state: WorldState, game_data: GameData, ctx: Selectio
     the answer is held. One episode prices against one catalogue; the entry
     holds it, and a different one is a defect, not a cache miss."""
     if store is not None:
-        key = ("door_price", door, policy, gated_drop, opening, id(ctx), *_price_key(state))
+        key = ("door_price", door, policy, gated_drop, opening, id(ctx), *price_key(state))
         pinned = store.cached(key, lambda: (ctx, game_data, _door_price(
             door, state, game_data, ctx, store, policy, gated_drop, opening)))
         assert pinned[1] is game_data, "one search_cache episode prices one catalogue"
@@ -770,7 +770,7 @@ def door_price(door: Door, state: WorldState, game_data: GameData, ctx: Selectio
     return _door_price(door, state, game_data, ctx, store, policy, gated_drop, opening)
 
 
-def _price_key(state: WorldState) -> tuple[object, ...]:
+def price_key(state: WorldState) -> tuple[object, ...]:
     """Everything of `state` a price reads: where it stands, its level, xp,
     hp, gold (pocket and bank), its bag, gear, bank and skills, and the
     fights it has lost."""

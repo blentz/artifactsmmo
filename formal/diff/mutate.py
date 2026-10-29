@@ -8897,6 +8897,12 @@ KEY_DOOR_EXECUTOR_MUTATIONS = [
      "                if False:\n                    sub = _open_door("),
 ]
 KEY_DOOR_CENSUS_MUTATIONS = [
+    ("door census: the memo keys only the reach (ruling T14e-m4)",
+     "    key = (_reach_key(state, game_data), *price_key(state))\n",
+     "    key = (_reach_key(state, game_data),)\n"),
+    ("door census: the memo never hits (ruling T14e-m4)",
+     "    if key not in memo:\n        _CENSUS_REACH.remember(",
+     "    if True:\n        _CENSUS_REACH.remember("),
     ("door census: no door the walk opens is reached",
      "        if model.door_open(door, DECOMPOSE_POLICY):\n            reach |= beyond\n",
      "        if False:\n            reach |= beyond\n"),
