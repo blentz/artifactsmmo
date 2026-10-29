@@ -2579,6 +2579,19 @@ def test_two_needed_one_held_asks_for_the_materials_of_exactly_one():
     assert p._own_unmet_demand(state, _gear_gd()) == {"copper_ring": 1, "copper_bar": 2}
 
 
+def test_a_held_crafting_target_taken_by_its_piece_asks_for_nothing():
+    """Ruling T14d-R m1: the crafting target is also a missing piece's code,
+    and its one held unit goes to that piece. The target is still held, so it
+    expands nothing: neither a second ring nor its copper_bar is asked for."""
+    p = GamePlayer(character="hero")
+    p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
+    p._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=_objective(_RING))
+    p._last_decide_crafting_target = "copper_ring"
+    state = make_state(inventory={"copper_ring": 1})
+    assert p._own_unmet_demand(state, _gear_gd()) == {}
+
+
 def test_a_held_crafting_target_asks_for_none_of_its_materials():
     """The crafting target is a root too: a held one expands no recipe."""
     p = GamePlayer(character="hero")

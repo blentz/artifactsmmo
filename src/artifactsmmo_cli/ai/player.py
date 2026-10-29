@@ -3327,6 +3327,7 @@ class GamePlayer:
         pool = dict(state.bank_items or {})
         for code, qty in state.inventory.items():
             pool[code] = pool.get(code, 0) + qty
+        owned = dict(pool)
         slots: dict[str, int] = {}
         for piece in self._missing_pieces():
             slots[piece.code] = slots.get(piece.code, 0) + 1
@@ -3343,10 +3344,13 @@ class GamePlayer:
         # toward" is normally a step inside one piece's closure (a bar of the
         # helmet), already counted there, so it merges by MAX — the fold
         # `closure_demand` documents — never by sum, which would ask twice.
-        # Held, it expands nothing; it takes no unit from the pool, since a
-        # target inside a piece's closure is one of that closure's own units.
+        # Held, it expands nothing: held in the bag or bank (`owned`), even
+        # when every held unit went to a piece of the same code, whose own
+        # closure already counts what is still missing. It takes no unit from
+        # the pool, since a target inside a piece's closure is one of that
+        # closure's own units.
         target = self._last_decide_crafting_target
-        if target is not None and pool.get(target, 0) == 0:
+        if target is not None and owned.get(target, 0) == 0:
             closure_demand(target, 1, game_data, demand, frozenset())
         return {code: qty - pool.get(code, 0)
                 for code, qty in demand.items()

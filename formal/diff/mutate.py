@@ -11321,6 +11321,8 @@ FLEET_ROUTE_MUTATIONS = [
 #     a held piece still expanding -- test_a_banked_piece_asks_for_none_of_its_materials;
 #     a held unit not consumed -- test_two_needed_one_held_asks_for_the_materials_of_exactly_one;
 #     a held crafting target expanding -- test_a_held_crafting_target_asks_for_none_of_its_materials;
+#     the target judged after its piece took its units (T14d-R m1) --
+#     test_a_held_crafting_target_taken_by_its_piece_asks_for_nothing;
 #   * pieces folded by max instead of summed (ruling T6a) -- killed by
 #     test_every_missing_piece_is_published (copper_bar 5, not 3);
 #   * the slot count ignored (one unit per code) -- killed by
@@ -11351,8 +11353,13 @@ FLEET_BOARD_PIECES_MUTATIONS = [
     ),
     (
         "player._own_unmet_demand: a held crafting target still expands its recipe",
-        "        if target is not None and pool.get(target, 0) == 0:",
+        "        if target is not None and owned.get(target, 0) == 0:",
         "        if target is not None:",
+    ),
+    (
+        "player._own_unmet_demand: a held target is judged after its piece took its units",
+        "        if target is not None and owned.get(target, 0) == 0:",
+        "        if target is not None and pool.get(target, 0) == 0:",
     ),
     (
         "player._own_unmet_demand: pieces folded by max instead of summed",
