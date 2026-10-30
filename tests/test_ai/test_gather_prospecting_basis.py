@@ -105,3 +105,13 @@ def test_the_obtain_models_gather_order_reads_the_gather_loadouts_prospecting() 
     armed_ready = [r.via for r in _model(armed).ready("pearl", EVERY_GATHER)
                    if r.kind is SourceKind.GATHER]
     assert (ready, armed_ready) == (["far_spot", "near_spot"], ["near_spot", "far_spot"])
+
+
+def test_the_walk_graph_ranks_gathers_at_the_gather_loadouts_prospecting() -> None:
+    """`ObtainModel._ranked_gathers` (the walk graph's gather order): fewest
+    expected gathers first, then the nearer tile. With the net both spots are
+    sure and the nearer `near_spot` leads; at the worn total `far_spot` would."""
+    armed = make_state(skills={**make_state().skills, "fishing": 5}, inventory={"net": 1})
+    graph = _model(armed).walk_graph("pearl", EVERY_GATHER)
+    assert [r.via for r in graph.sources["pearl"] if r.kind is SourceKind.GATHER] == [
+        "near_spot", "far_spot"]
