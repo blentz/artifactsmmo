@@ -395,7 +395,7 @@ MODULES: tuple[ModuleSpec, ...] = (
         constants=("RULER_SCALE",),
     ),
     ModuleSpec(
-        source="src/artifactsmmo_cli/ai/tiers/equip_value.py",
+        source="src/artifactsmmo_cli/ai/equip_value.py",
         output=f"{GENERATED_DIR}/EquipValue.lean",
         core_name="EquipValue",
         functions=("tool_value_pure",),

@@ -19,10 +19,10 @@ wearer (`ai/gear_value_core`), so:
   * one point of weapon attack (no crit)  = 2 * 100 * 200       = 40000
 """
 
+from artifactsmmo_cli.ai.equip_value import equip_value, tool_value
 from artifactsmmo_cli.ai.equipment.scoring import RULER_SCALE
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.gear_value_core import RANK_REFERENCE_ATTACK
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
 
 
 def test_weapon_ranks_on_attack_through_the_non_tool_augmented_weapon_score():

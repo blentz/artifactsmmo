@@ -6,7 +6,7 @@ import Formal.Extracted.EquipValue
 /-!
 # Extracted bridges, part 7 (P4b): the exact equipment-scoring cores.
 
-P4a made `equipment/scoring.py` and `tiers/equip_value.py` exact-integer;
+P4a made `equipment/scoring.py` and `ai/equip_value.py` exact-integer;
 P4b extracts their pure cores (`weapon_score_raw_pure` / `weapon_score_pure`
 / `gather_score_pure` / `armor_score_pure` and `tool_value_pure`) and bridges
 them to the hand models (the augmented `equip_value_pure` Rank core was retired

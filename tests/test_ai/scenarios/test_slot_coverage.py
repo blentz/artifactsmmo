@@ -167,6 +167,7 @@ import pytest
 
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
+from artifactsmmo_cli.ai.equip_value import equip_value
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
@@ -181,7 +182,6 @@ from artifactsmmo_cli.ai.scenario import (
     scenario_state,
 )
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,

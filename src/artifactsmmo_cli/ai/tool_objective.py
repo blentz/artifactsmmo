@@ -18,11 +18,11 @@ from datetime import datetime
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, drop_work_actions
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.drop_leg import DropLeg
+from artifactsmmo_cli.ai.equip_value import tool_value
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.tiers.equip_value import tool_value
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel, StepDecline
 from artifactsmmo_cli.ai.world_state import WorldState
 

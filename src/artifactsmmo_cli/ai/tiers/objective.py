@@ -13,6 +13,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.equip_value import equip_value, tool_value
 from artifactsmmo_cli.ai.equipment.slot_occupancy import defers_to_picker
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
@@ -22,7 +23,6 @@ from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.potion_supply import bootstrap_potion_target, target_potion_pure
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
 from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.tiers.tier_progress import gear_target_tier

@@ -15,8 +15,8 @@ import random
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from artifactsmmo_cli.ai.equip_value import equip_value
 from artifactsmmo_cli.ai.game_data import ItemStats
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle

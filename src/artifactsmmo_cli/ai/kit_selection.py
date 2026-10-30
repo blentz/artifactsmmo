@@ -103,7 +103,7 @@ _WEAPON_CACHES: "CatalogueScope[frozenset[str], str | None]" = CatalogueScope(_K
 def _pick_tools(candidates: set[str], game_data: GameData) -> frozenset[str]:
     """Best tool per gathering skill (by ``tool_value``) among `candidates`.
 
-    Tool magnitude is ``abs(gather_score)`` (== tiers.equip_value.tool_value,
+    Tool magnitude is ``abs(gather_score)`` (== equip_value.tool_value,
     which cannot be imported here: tiers.__init__ -> strategy -> guards ->
     bank_selection cycles).
 

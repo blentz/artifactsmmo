@@ -36,13 +36,13 @@ The fix has two halves and this file pins both:
 
 from dataclasses import replace
 
+from artifactsmmo_cli.ai.equip_value import equip_value
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.equipment.scoring import RULER_SCALE, armor_score
 from artifactsmmo_cli.ai.equipment.slot_occupancy import defers_to_picker, may_displace
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_suppliable
 from artifactsmmo_cli.ai.tiers.progression_tree import _structural_candidates
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value

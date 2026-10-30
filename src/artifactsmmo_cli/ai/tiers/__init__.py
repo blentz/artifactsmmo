@@ -3,7 +3,7 @@
 P1: Tier-1 objective.
 P2: Tier-2 meta-goal nodes + prerequisite graph (search substrate)."""
 
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
+from artifactsmmo_cli.ai.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,

@@ -22,11 +22,11 @@ import json
 from pathlib import Path
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.equip_value import equip_value
 from artifactsmmo_cli.ai.equipment.scoring import RULER_SCALE
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value import gear_components
 from artifactsmmo_cli.ai.gear_value_core import Rank
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.pursuit_value import (
     EFFICIENCY_BUDGET,
     PURSUIT_WEIGHTS,

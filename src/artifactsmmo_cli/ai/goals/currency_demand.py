@@ -33,13 +33,11 @@ ITSELF a reserved near-term target fulfills that reservation, so
 leaf is never blocked by its own reservation, only by OTHER unmet targets.
 Item-currency legs are untouched: the reserve is gold-denominated only.
 Threading: `analyze_currency_leaves` already receives `state`/`game_data`, so
-`progression_reserve.reserve_floor` is called directly here — `ai/goals/` does
-NOT participate in the `tiers/means.py` import cycle (that cycle is specific to
-`tiers/means.py` importing back into the `tiers` package via
-`progression_reserve -> tiers.equip_value -> tiers/__init__`; `ai/goals/` is a
-sibling package with no back-edge, confirmed by `gathering.py` already
+`progression_reserve.reserve_floor` is called directly here — `ai/goals/` has
+no back-edge into the `tiers` package (`progression_reserve` reads
+`ai/equip_value`, outside `tiers`), confirmed by `gathering.py` already
 importing `reserve_floor` directly for the craft-vs-buy gate, and by a direct
-import smoke test). No new SelectionContext threading needed.
+import smoke test. No new SelectionContext threading needed.
 
 WITHDRAWGOLD DEFICIT AND THE RESERVE (derivation): `gold_deficit` sizes a
 WithdrawGold ferry (bank -> pocket) so NpcBuy's pocket-only gold gate can be

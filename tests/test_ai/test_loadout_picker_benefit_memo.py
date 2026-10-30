@@ -144,7 +144,7 @@ def test_the_memo_actually_serves_across_calls() -> None:
 def test_the_rank_class_and_a_rank_instance_key_the_same() -> None:
     """`gear_value` accepts the bare `Rank` CLASS as well as an instance
     (`purpose is Rank or isinstance(purpose, Rank)`) and live callers use both —
-    `tiers/equip_value` passes the class, `empty_slot_fills` an instance. The
+    `ai/equip_value` passes the class, `empty_slot_fills` an instance. The
     memo normalizes the class to its field-less instance, so the two share
     entries instead of the class raising out of `purpose_key`."""
     game_data = _catalogue(_STRONG)

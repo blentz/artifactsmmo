@@ -8,9 +8,8 @@ Craftable-now / unsellable items contribute nothing (no gold needed).
 import dataclasses
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.gear_value import gear_value
-from artifactsmmo_cli.ai.gear_value_core import Rank
+from artifactsmmo_cli.ai.equip_value import equip_value
+from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.progression_reserve_core import (
     effective_floor,
     effective_floor_multi,
@@ -20,14 +19,6 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 _HORIZON = 2  # reserve for upgrades usable within the next 2 character levels
 _MIN_SAFETY_FLOOR = 100  # never spend to zero even when nothing is reserved
-
-
-def _rank(stats: ItemStats) -> int:
-    """`tiers.equip_value.equip_value`, which is `gear_value(stats, Rank)`,
-    read at its definition: this module is imported by the crossing
-    (`MapTransitionAction`, ruling T14e-2), and the `tiers` package imports
-    the obtain model that imports the crossing."""
-    return gear_value(stats, Rank)
 
 
 def buy_price(code: str, game_data: GameData) -> int | None:
@@ -71,13 +62,13 @@ def _best_per_slot(state: WorldState, game_data: GameData,
         for slot in slots:
             equipped = state.equipment.get(slot)
             cur = game_data.item_stats(equipped) if equipped else None
-            cur_val = _rank(cur) if cur is not None else 0
-            if _rank(stats) <= cur_val:
+            cur_val = equip_value(cur) if cur is not None else 0
+            if equip_value(stats) <= cur_val:
                 continue
             incumbent = best.get(slot)
             inc_stats = game_data.item_stats(incumbent) if incumbent else None
-            inc_val = _rank(inc_stats) if inc_stats is not None else cur_val
-            if _rank(stats) > inc_val:
+            inc_val = equip_value(inc_stats) if inc_stats is not None else cur_val
+            if equip_value(stats) > inc_val:
                 best[slot] = code
     return best
 

@@ -4,7 +4,7 @@
 
 **Correctness of the augmented `equip_value` formula.**
 
-The Python `tiers/equip_value.py:equip_value` now returns
+The Python `ai/equip_value.py:equip_value` now returns
   2 * (attack + resistance + hp_restore + hp_bonus + dmg + critical_strike)
   + nonToolBonus
 where `nonToolBonus = 0 if subtype == "tool" else 1`.

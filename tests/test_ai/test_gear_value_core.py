@@ -7,6 +7,7 @@ import statistics
 from pathlib import Path
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
+from artifactsmmo_cli.ai.equip_value import equip_value
 from artifactsmmo_cli.ai.equipment.scoring import (
     RULER_SCALE,
     armor_score,
@@ -25,7 +26,6 @@ from artifactsmmo_cli.ai.gear_value_core import (
     rank_adversary,
 )
 from artifactsmmo_cli.ai.item_catalog import ItemStats
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 
 _SNAPSHOT = Path(__file__).resolve().parents[2] / "formal" / "sim" / "game_data_snapshot.json"
 

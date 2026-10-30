@@ -25,7 +25,7 @@ def bank_tool_fills(state: WorldState, game_data: GameData,
     (once withdrawn, owned >= bank and the fill disappears). Ties among equal
     bank tools break by smallest code — a canonical total order, not hash-seed
     roulette (same chain as loadout_picker). Tool magnitude is
-    ``abs(gather_score)`` — identical to tiers.equip_value.tool_value, imported
+    ``abs(gather_score)`` — identical to equip_value.tool_value, imported
     from equipment.scoring to respect the equipment-layer direction.
     """
     if state.bank_items is None:

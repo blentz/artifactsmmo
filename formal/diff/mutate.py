@@ -160,7 +160,7 @@ MEASURE_SRC = ROOT / "formal" / "sim" / "measure.py"
 # Phase-22b — cycle-loop mirror (Python port of Formal.Liveness.CycleStep).
 CYCLE_STEP_SRC = ROOT / "formal" / "sim" / "cycle_step.py"
 
-EQUIP_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equip_value.py"
+EQUIP_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equip_value.py"
 GEAR_VALUE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value_core.py"
 GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
 RECYCLE_YIELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recycle_yield.py"

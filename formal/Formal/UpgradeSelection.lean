@@ -23,7 +23,7 @@ The goal ranks equipment-upgrade candidates and selects one. The pure cores are:
   unconditional determinism guarantee: the argmax dominates every member and is a
   member, holding regardless of ties.
 
-VALUE MODELLED AS `Int` (disclosure): `equip_value` (tiers/equip_value.py) is
+VALUE MODELLED AS `Int` (disclosure): `equip_value` (ai/equip_value.py) is
 `attack_sum + resistance_sum + hp_restore`, where `attack`/`resistance` are
 `dict[str, int]` and `hp_restore : int`. The sum is therefore an EXACT integer;
 the Python wraps it in `float(...)` but the value is always a whole number with no

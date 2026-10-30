@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
+from artifactsmmo_cli.ai.equip_value import equip_value
 from artifactsmmo_cli.ai.equipment.slot_occupancy import may_displace
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -29,7 +30,6 @@ from artifactsmmo_cli.ai.requirement_projections import (
     requirement_craftables,
 )
 from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Value constants (inlined from retired priorities.py).

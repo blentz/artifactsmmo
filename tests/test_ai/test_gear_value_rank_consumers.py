@@ -20,6 +20,7 @@ import json
 from pathlib import Path
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.equip_value import equip_value
 from artifactsmmo_cli.ai.equipment.empty_slot_fills import empty_slot_rank_fills
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value import gear_value
@@ -28,7 +29,6 @@ from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.inventory_caps import useful_quantity_cap
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.progression_reserve import _best_per_slot
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import best_attainable_weapon
 from tests.test_ai.fixtures import make_state

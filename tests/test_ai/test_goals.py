@@ -20,6 +20,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
+from artifactsmmo_cli.ai.equip_value import equip_value
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
@@ -39,7 +40,6 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.task_coins import tasks_coin_total
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state

@@ -1200,7 +1200,7 @@ open Formal.PriorityBand
 -- Extracted-model bridges (mechanical extraction P4b): the exact
 -- equipment-scoring cores unlocked by P4a, generated from
 -- src/artifactsmmo_cli/ai/equipment/scoring.py and
--- src/artifactsmmo_cli/ai/tiers/equip_value.py and proved against the hand
+-- src/artifactsmmo_cli/ai/equip_value.py and proved against the hand
 -- models (Formal/Extracted/Bridges7.lean). The element-keyed score bridges
 -- are universal over an arbitrary INJECTIVE Int→String element embedding
 -- (the CombatPicker code-embedding precedent). The augmented Rank value

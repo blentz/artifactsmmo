@@ -1,8 +1,8 @@
 """Equipment-profile weight presets (spec 2026-07-08). Phase 1: presets +
 accessor, pure and unwired."""
 
+from artifactsmmo_cli.ai.equip_value import equip_value
 from artifactsmmo_cli.ai.game_data import ItemStats
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.equipment_profile import (
     PROFILE_WEIGHTS,
     ProfileKind,

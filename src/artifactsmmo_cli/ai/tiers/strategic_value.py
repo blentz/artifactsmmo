@@ -1,6 +1,6 @@
 """Strategic value: the ONE gear ruler read for ACQUISITION priority.
 
-`equip_value` (tiers/equip_value.py) = `gear_value(stats, Rank)` answers "which
+`equip_value` (ai/equip_value.py) = `gear_value(stats, Rank)` answers "which
 piece is better". `strategic_value` answers the different, ECONOMIC question:
 what is worth spending gold and cycles ACQUIRING, under a leveling horizon.
 It does NOT compute a second score. It takes the ruler's own two terms —

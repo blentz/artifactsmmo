@@ -175,8 +175,8 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # A bank expansion is never a reserved gear code, so the player threads
         # reserve_floor(state, gd, None) as ctx.gold_reserve, mirroring the goal.
         # `account_gold` is imported directly: progression_reserve reaches this
-        # package only through `tiers.equip_value`, which `tiers/__init__` pulls
-        # WITHOUT means, so there is no cycle in either import order. Only
+        # package not at all (it reads `ai/equip_value`, outside `tiers`), so
+        # there is no cycle in either import order. Only
         # `reserve_floor` stays on the ctx, because it needs game_data and the
         # player already computes it. (The goal also raises `used` by the
         # active-profile floor — history-dependent; the means guard has no

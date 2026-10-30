@@ -5,11 +5,11 @@ derived only from game data. Gathering and unknown-source items are leaves so
 chains terminate; cycles (if any) are left for P3's visited-set traversal."""
 
 from artifactsmmo_cli.ai.combat import predict_win
+from artifactsmmo_cli.ai.equip_value import equip_value
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind, obtain_sources
 from artifactsmmo_cli.ai.requirement_projections import requirement_edges
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     META_GOAL_KINDS,
     MetaGoal,
