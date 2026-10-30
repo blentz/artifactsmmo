@@ -1445,6 +1445,17 @@ def test_active_gathering_skills_walks_recipe_tree():
     assert gd.active_gathering_skills("ash_plank") == {"woodcutting"}
 
 
+def test_active_gathering_skills_raises_for_a_resource_with_no_skill():
+    """Final review minor 3: every API resource names its gathering skill
+    (`gather_requirement`), so a drop off a resource with none in the
+    catalogue is a data error, not a skill to leave out."""
+    gd = GameData()
+    gd._crafting_recipes = {"ash_plank": {"ash_wood": 1}}
+    gd._resource_drops = {"ash_tree": "ash_wood"}
+    with pytest.raises(ValueError, match="ash_tree"):
+        gd.active_gathering_skills("ash_plank")
+
+
 def test_active_gathering_skills_returns_empty_for_no_task():
     gd = GameData()
     assert gd.active_gathering_skills(None) == set()

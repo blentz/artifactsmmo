@@ -467,6 +467,7 @@ BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selectio
 ATTEMPT_PROSPECTING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "attempt_prospecting.py"
 GATHER_ARMOUR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_armour.py"
 GATHER_REQUIREMENT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_requirement.py"
+RECIPE_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_catalog.py"
 LOCATION_CATALOG_SRC_NPC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 GREY_FARM_SRC_CUR = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grey_farm.py"
 CRAFT_CONDITIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_conditions.py"
@@ -7104,6 +7105,15 @@ GATHER_ARMOUR_MUTATIONS = [
      "        if best is not None:\n            chosen = EquipAction(code=best[2], slot=slot)\n",
      "        if True:\n            chosen = EquipAction(code=(best or (0, 0, 'robe'))[2], slot=slot)\n"),
 ]
+# Final review minor 3: a resource's gathering skill is mandatory where the
+# active gather skills read it. Killed by tests/test_ai/test_game_data.py.
+RECIPE_CATALOG_SKILL_MUTATIONS = [
+    ("recipe catalog: a resource with no skill is left out of the active skills",
+     "                    skills.add(gather_requirement(res_code, self)[0])\n",
+     "                    sl = self.resource_skill.get(res_code)\n"
+     "                    if sl is not None:\n"
+     "                        skills.add(sl[0])\n"),
+]
 GATHER_ARMOUR_REARM_MUTATIONS = [
     ("re-arm: the gather wears no armour",
      "            return [*mapped[:i], *tool, *gather_armour(action, state, game_data), *mapped[i:]]",
@@ -9684,6 +9694,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 _ALL_SRCS = [
     LIVENESS_CENSUS_SRC, ATTEMPT_PROSPECTING_SRC, GATHER_ARMOUR_SRC, GATHER_REQUIREMENT_SRC,
+    RECIPE_CATALOG_SRC,
     LOADOUT_CALIBRATION_SRC,
     TIER_PROGRESS_SRC, COMBAT_TARGETS_SRC, WIN_THRESHOLD_CORE_SRC,
     ROLE_SELECTION_SRC,
@@ -14544,6 +14555,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_gather_armour.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, GATHER_ARMOUR_REARM_MUTATIONS,
               "tests/test_ai/test_gather_armour.py", survivors)
+    run_group(RECIPE_CATALOG_SRC, RECIPE_CATALOG_SKILL_MUTATIONS,
+              "tests/test_ai/test_game_data.py", survivors)
     run_group(GATHERING_APPLY_SRC, GATHER_BASIS_ACTION_MUTATIONS,
               "tests/test_ai/test_gather_prospecting_basis.py", survivors)
     run_group(GATHERING_GOAL_SRC, GATHER_BASIS_NARROWING_MUTATIONS,

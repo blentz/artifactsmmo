@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass, field
 
+from artifactsmmo_cli.ai.gather_requirement import gather_requirement
+
 
 @dataclass
 class RecipeCatalog:
@@ -98,12 +100,12 @@ class RecipeCatalog:
             if item in visited:
                 return
             visited.add(item)
-            # Direct gather: any resource that drops this item contributes its skill.
+            # Direct gather: any resource that drops this item contributes its
+            # skill, which every API resource names (`gather_requirement`: a
+            # resource with none raises; API data or fail).
             for res_code, drop in self.resource_drops.items():
                 if drop == item:
-                    sl = self.resource_skill.get(res_code)
-                    if sl is not None:
-                        skills.add(sl[0])
+                    skills.add(gather_requirement(res_code, self)[0])
             # Indirect gather: recurse into the recipe (e.g. ash_plank → ash_wood).
             recipe = self.crafting_recipes.get(item) or {}
             for mat in recipe:
