@@ -36,13 +36,19 @@ untouched syntactically, and the preservation theorems are 1-line `rfl`-style.
   2. **Inventory-mint**: Gather, NpcBuy, WithdrawGold, WithdrawItem, Claim
   3. **Inventory-consume**: Craft, Recycle, NpcSell, DepositGold, DepositAll,
      UseConsumable, Delete
-  4. **Equipment-swap**: Equip, Unequip, OptimizeLoadout
+  4. **Equipment-swap**: Equip, Unequip, OptimizeLoadout. Since Task 14f these
+     do NOT preserve the gear-moved totals: the sheet's invariant is
+     totals = base + worn non-utility gear (measured live, Task 14b), so a
+     planned swap writes the totals `project_loadout_stats` projects
+     (`equipment/projection.py:wear_gear`). They preserve `skill_xp`, and the
+     whole baseline when the swap moves no stat (`t = totalsOf s`).
   5. **Task transition**: AcceptTask, CompleteTask, TaskCancel, TaskExchange,
      TaskTrade
   6. **Misc**: Rest (hp restore), BuyBankExpansion (bank_capacity)
   7. **Fight**: combat + task_progress + cooldown + hp
 
-The headline `all_actions_preserve_baseline` enumerates the union.
+The headline `all_actions_preserve_baseline` enumerates the union, for every
+action but the swaps; `all_actions_preserve_skill_xp` covers all of them.
 
 Lean core only — no mathlib. Axioms ⊆ {propext, Classical.choice, Quot.sound}.
 -/
@@ -341,39 +347,110 @@ theorem deleteApply_preserves_baseline (s : WorldStateLean)
 /-! ## Family 4 — Equipment-swap
 
 `EquipAction`, `UnequipAction`, `OptimizeLoadoutAction`. Inventory and
-equipment rearranged; cooldown cleared. -/
+equipment rearranged; cooldown cleared; the gear totals moved (Task 14f).
 
-/-- `EquipAction.apply` model: inventory + equipment updated. -/
+The server reports totals only (base + worn non-utility gear). A swap keeps
+that invariant by moving each total by the changed slots: the new item's stat
+in, the displaced item's stat out (`swapStat`). Python computes the moved
+totals with `project_loadout_stats`, the one stat arithmetic, and writes them
+(`wear_gear`); the model writes them as the `GearTotals` argument `t`. A
+utility slot moves no total (a worn potion is not in the sheet). -/
+
+/-- The totals a swap moves, as `WorldStateLean` carries them. -/
+structure GearTotals where
+  max_hp          : Nat
+  attack          : List (String × Nat)
+  dmg             : Int
+  dmg_elements    : List (String × Nat)
+  resistance      : List (String × Nat)
+  critical_strike : Nat
+  initiative      : Nat
+  wisdom          : Nat
+  deriving Repr, DecidableEq
+
+/-- The totals a state carries. -/
+def totalsOf (s : WorldStateLean) : GearTotals :=
+  { max_hp := s.max_hp, attack := s.attack, dmg := s.dmg
+  , dmg_elements := s.dmg_elements, resistance := s.resistance
+  , critical_strike := s.critical_strike, initiative := s.initiative
+  , wisdom := s.wisdom }
+
+/-- `s` carrying the totals `t`. -/
+def withTotals (s : WorldStateLean) (t : GearTotals) : WorldStateLean :=
+  { s with max_hp := t.max_hp, attack := t.attack, dmg := t.dmg
+         , dmg_elements := t.dmg_elements, resistance := t.resistance
+         , critical_strike := t.critical_strike, initiative := t.initiative
+         , wisdom := t.wisdom }
+
+/-- One total moved by one slot's swap: the incoming item's stat in, the
+    displaced item's out (`project_loadout_stats`'s per-slot delta; an empty
+    slot contributes 0). -/
+def swapStat (total incoming displaced : Int) : Int := total + incoming - displaced
+
+/-- Swapping back round-trips the total exactly: `apply` then the reverse
+    `apply` (equip then unequip, or a re-arm then its undo). -/
+theorem swapStat_roundtrip (total a b : Int) :
+    swapStat (swapStat total a b) b a = total := by
+  unfold swapStat; omega
+
+/-- A slot that keeps its item moves nothing. -/
+theorem swapStat_same (total c : Int) : swapStat total c c = total := by
+  unfold swapStat; omega
+
+/-- `EquipAction.apply` model: inventory + equipment updated, totals moved. -/
 def equipApply (s : WorldStateLean) (newInv : List (String × Nat))
-    (newEq : List (String × Option String)) : WorldStateLean :=
-  { s with inventory := newInv, equipment := newEq, cooldown_expires := none }
+    (newEq : List (String × Option String)) (t : GearTotals) : WorldStateLean :=
+  { withTotals s t with inventory := newInv, equipment := newEq, cooldown_expires := none }
 
-/-- `UnequipAction.apply` model: inventory + equipment updated. -/
+/-- `UnequipAction.apply` model: inventory + equipment updated, totals moved. -/
 def unequipApply (s : WorldStateLean) (newInv : List (String × Nat))
-    (newEq : List (String × Option String)) : WorldStateLean :=
-  { s with inventory := newInv, equipment := newEq, cooldown_expires := none }
+    (newEq : List (String × Option String)) (t : GearTotals) : WorldStateLean :=
+  { withTotals s t with inventory := newInv, equipment := newEq, cooldown_expires := none }
 
 /-- `OptimizeLoadoutAction.apply` model: same shape as Equip. -/
 def optimizeLoadoutApply (s : WorldStateLean) (newInv : List (String × Nat))
-    (newEq : List (String × Option String)) : WorldStateLean :=
-  { s with inventory := newInv, equipment := newEq, cooldown_expires := none }
+    (newEq : List (String × Option String)) (t : GearTotals) : WorldStateLean :=
+  { withTotals s t with inventory := newInv, equipment := newEq, cooldown_expires := none }
 
+/-- A swap carries exactly the totals it moved. -/
+theorem equipApply_writes_totals (s : WorldStateLean) (i : List (String × Nat))
+    (e : List (String × Option String)) (t : GearTotals) :
+    totalsOf (equipApply s i e t) = t := by
+  cases t; rfl
+
+theorem unequipApply_writes_totals (s : WorldStateLean) (i : List (String × Nat))
+    (e : List (String × Option String)) (t : GearTotals) :
+    totalsOf (unequipApply s i e t) = t := by
+  cases t; rfl
+
+theorem optimizeLoadoutApply_writes_totals (s : WorldStateLean) (i : List (String × Nat))
+    (e : List (String × Option String)) (t : GearTotals) :
+    totalsOf (optimizeLoadoutApply s i e t) = t := by
+  cases t; rfl
+
+/-- A swap that moves no stat preserves the whole baseline. -/
 theorem equipApply_preserves_baseline (s : WorldStateLean)
-    (i : List (String × Nat)) (e : List (String × Option String)) :
-    preservesBaseline s (equipApply s i e) := by
-  unfold preservesBaseline equipApply
+    (i : List (String × Nat)) (e : List (String × Option String)) (t : GearTotals)
+    (ht : t = totalsOf s) :
+    preservesBaseline s (equipApply s i e t) := by
+  subst ht
+  unfold preservesBaseline equipApply withTotals totalsOf
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 theorem unequipApply_preserves_baseline (s : WorldStateLean)
-    (i : List (String × Nat)) (e : List (String × Option String)) :
-    preservesBaseline s (unequipApply s i e) := by
-  unfold preservesBaseline unequipApply
+    (i : List (String × Nat)) (e : List (String × Option String)) (t : GearTotals)
+    (ht : t = totalsOf s) :
+    preservesBaseline s (unequipApply s i e t) := by
+  subst ht
+  unfold preservesBaseline unequipApply withTotals totalsOf
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 theorem optimizeLoadoutApply_preserves_baseline (s : WorldStateLean)
-    (i : List (String × Nat)) (e : List (String × Option String)) :
-    preservesBaseline s (optimizeLoadoutApply s i e) := by
-  unfold preservesBaseline optimizeLoadoutApply
+    (i : List (String × Nat)) (e : List (String × Option String)) (t : GearTotals)
+    (ht : t = totalsOf s) :
+    preservesBaseline s (optimizeLoadoutApply s i e t) := by
+  subst ht
+  unfold preservesBaseline optimizeLoadoutApply withTotals totalsOf
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-! ## Family 5 — Task transition
@@ -543,11 +620,11 @@ inductive ModeledApply where
   | delete            (newInv : List (String × Nat)) : ModeledApply
   -- Family 4: equipment-swap
   | equip             (newInv : List (String × Nat))
-                      (newEq : List (String × Option String)) : ModeledApply
+                      (newEq : List (String × Option String)) (t : GearTotals) : ModeledApply
   | unequip           (newInv : List (String × Nat))
-                      (newEq : List (String × Option String)) : ModeledApply
+                      (newEq : List (String × Option String)) (t : GearTotals) : ModeledApply
   | optimizeLoadout   (newInv : List (String × Nat))
-                      (newEq : List (String × Option String)) : ModeledApply
+                      (newEq : List (String × Option String)) (t : GearTotals) : ModeledApply
   -- Family 5: task transition
   | acceptTask        (c : Option String) (t : Option String)
                       (p tot : Nat) (x y : Int) : ModeledApply
@@ -589,9 +666,9 @@ def ModeledApply.run (a : ModeledApply) (s : WorldStateLean) : WorldStateLean :=
   | .useConsumable h i              => useConsumableApply s h i
   | .useGoldBag g i                 => useGoldBagApply s g i
   | .delete i                       => deleteApply s i
-  | .equip i e                      => equipApply s i e
-  | .unequip i e                    => unequipApply s i e
-  | .optimizeLoadout i e            => optimizeLoadoutApply s i e
+  | .equip i e t                    => equipApply s i e t
+  | .unequip i e t                  => unequipApply s i e t
+  | .optimizeLoadout i e t          => optimizeLoadoutApply s i e t
   | .acceptTask c t p tot x y       => acceptTaskApply s c t p tot x y
   | .completeTask c t p tot pe x y  => completeTaskApply s c t p tot pe x y
   | .taskCancel c t p tot i x y     => taskCancelApply s c t p tot i x y
@@ -601,9 +678,19 @@ def ModeledApply.run (a : ModeledApply) (s : WorldStateLean) : WorldStateLean :=
   | .buyBankExpansion g c b x y     => buyBankExpansionApply s g c b x y
   | .fight h g i p x y              => fightApply s h g i p x y
 
+/-- The totals an action writes: a swap's `t` (Task 14f), none otherwise. -/
+def ModeledApply.swapTotals : ModeledApply → Option GearTotals
+  | .equip _ _ t           => some t
+  | .unequip _ _ t         => some t
+  | .optimizeLoadout _ _ t => some t
+  | _                      => none
+
 /-- **HEADLINE — Phase-14 disclosed-gap closure**: every one of the 25 modeled
-    apply transitions preserves the 8-field baseline. -/
-theorem all_actions_preserve_baseline (s : WorldStateLean) (a : ModeledApply) :
+    apply transitions preserves the 8-field baseline, unless it is a swap that
+    moves a total (Task 14f: a swap writes the totals the gear it changes
+    moves; `equipApply_writes_totals`). -/
+theorem all_actions_preserve_baseline (s : WorldStateLean) (a : ModeledApply)
+    (ha : ∀ t, a.swapTotals = some t → t = totalsOf s) :
     preservesBaseline s (a.run s) := by
   cases a with
   | move x y                      => exact moveApply_preserves_baseline s x y
@@ -623,9 +710,9 @@ theorem all_actions_preserve_baseline (s : WorldStateLean) (a : ModeledApply) :
   | useConsumable h i             => exact useConsumableApply_preserves_baseline s h i
   | useGoldBag g i                => exact useGoldBagApply_preserves_baseline s g i
   | delete i                      => exact deleteApply_preserves_baseline s i
-  | equip i e                     => exact equipApply_preserves_baseline s i e
-  | unequip i e                   => exact unequipApply_preserves_baseline s i e
-  | optimizeLoadout i e           => exact optimizeLoadoutApply_preserves_baseline s i e
+  | equip i e t                   => exact equipApply_preserves_baseline s i e t (ha t rfl)
+  | unequip i e t                 => exact unequipApply_preserves_baseline s i e t (ha t rfl)
+  | optimizeLoadout i e t         => exact optimizeLoadoutApply_preserves_baseline s i e t (ha t rfl)
   | acceptTask c t p tot x y      => exact acceptTaskApply_preserves_baseline s c t p tot x y
   | completeTask c t p tot pe x y => exact completeTaskApply_preserves_baseline s c t p tot pe x y
   | taskCancel c t p tot i x y    => exact taskCancelApply_preserves_baseline s c t p tot i x y
@@ -637,9 +724,16 @@ theorem all_actions_preserve_baseline (s : WorldStateLean) (a : ModeledApply) :
 
 /-- Backwards-compatible alias: the pre-Phase-14 headline name referenced from
     Manifest/Contracts. Same content, now covering all 24. -/
-theorem headline_preserves_baseline (s : WorldStateLean) (a : ModeledApply) :
+theorem headline_preserves_baseline (s : WorldStateLean) (a : ModeledApply)
+    (ha : ∀ t, a.swapTotals = some t → t = totalsOf s) :
     preservesBaseline s (a.run s) :=
-  all_actions_preserve_baseline s a
+  all_actions_preserve_baseline s a ha
+
+/-- Every modeled apply, a swap included, preserves `skill_xp`: no gear moves
+    a skill's xp. -/
+theorem all_actions_preserve_skill_xp (s : WorldStateLean) (a : ModeledApply) :
+    (a.run s).skill_xp = s.skill_xp := by
+  cases a <;> rfl
 
 /-! ## Per-action declared-mutation contracts
 
@@ -687,20 +781,20 @@ theorem buyBankExpansion_mutates_only_declared_fields (s : WorldStateLean) (g : 
   unfold buyBankExpansionApply
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- Equip only mutates (inventory, equipment, cooldown). Position, gold, hp,
-    tasks, banking all preserved — this is the load-bearing one for the gear
-    swap UX. -/
+/-- Equip only mutates (inventory, equipment, cooldown, and the gear totals
+    incl. max_hp, Task 14f). Position, gold, hp, tasks, banking all preserved —
+    this is the load-bearing one for the gear swap UX. -/
 theorem equip_mutates_only_declared_fields (s : WorldStateLean)
-    (i : List (String × Nat)) (e : List (String × Option String)) :
-    let s' := equipApply s i e
-    s'.hp = s.hp ∧ s'.max_hp = s.max_hp ∧ s'.gold = s.gold ∧
+    (i : List (String × Nat)) (e : List (String × Option String)) (t : GearTotals) :
+    let s' := equipApply s i e t
+    s'.hp = s.hp ∧ s'.gold = s.gold ∧
     s'.x = s.x ∧ s'.y = s.y ∧
     s'.task_code = s.task_code ∧ s'.task_type = s.task_type ∧
     s'.task_progress = s.task_progress ∧ s'.task_total = s.task_total ∧
     s'.bank_items = s.bank_items ∧ s'.bank_gold = s.bank_gold ∧
     s'.pending_items = s.pending_items ∧ s'.bank_capacity = s.bank_capacity := by
-  unfold equipApply
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  unfold equipApply withTotals
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- Claim only mutates (inventory, pending_items, cooldown). -/
 theorem claim_mutates_only_declared_fields (s : WorldStateLean)
@@ -761,9 +855,20 @@ def witnessState : WorldStateLean :=
 example : preservesBaseline witnessState (moveApply witnessState 1 0) :=
   moveApply_preserves_baseline witnessState 1 0
 
-/-- Witness: Equip preserves the baseline. -/
-example : preservesBaseline witnessState (equipApply witnessState [] [("weapon_slot", some "sword")]) :=
+/-- Witness: an Equip of a stat-less sword preserves the baseline. -/
+example : preservesBaseline witnessState
+    (equipApply witnessState [] [("weapon_slot", some "sword")] (totalsOf witnessState)) :=
   equipApply_preserves_baseline witnessState [] [("weapon_slot", some "sword")]
+    (totalsOf witnessState) rfl
+
+/-- Witness: an Equip of a +10 fire sword moves the fire attack 30 -> 40, and
+    the Unequip back round-trips it (so the swap hypothesis of the headline is
+    not vacuous: a swap CAN move a total). -/
+example : swapStat 30 10 0 = 40 := by decide
+example : swapStat (swapStat 30 10 0) 0 10 = 30 := swapStat_roundtrip 30 10 0
+example : (equipApply witnessState [] [("weapon_slot", some "sword")]
+      { totalsOf witnessState with attack := [("fire", 40)] }).attack
+    ≠ witnessState.attack := by decide
 
 /-- Witness: Fight preserves the baseline. -/
 example : preservesBaseline witnessState (fightApply witnessState 30 104 [("egg", 1)] 1 0 0) :=

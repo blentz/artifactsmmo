@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, EquipAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.constants import ERROR_CODE_ALREADY_EQUIPPED
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
+from artifactsmmo_cli.ai.equipment.projection import wear_gear
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
 from artifactsmmo_cli.ai.inventory_room import has_room
@@ -154,9 +155,8 @@ class OptimizeLoadoutAction(Action):
                     new_inventory[new_code] = cur - 1
             new_equipment[slot] = new_code
         return dataclasses.replace(
-            state,
+            wear_gear(state, new_equipment, game_data),
             inventory=new_inventory,
-            equipment=new_equipment,
             cooldown_expires=None,
         )
 

@@ -13,6 +13,7 @@ So a worn potion is never subtracted, and the one a utility slot fights with
 is added: the picked one, or the worn one kept while its slot holds a unit (a
 slot with no stock is no potion, `combat.unpotioned`)."""
 
+import dataclasses
 from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
@@ -130,4 +131,35 @@ def project_loadout_stats(
         prospecting=prospecting,
         haste=haste,
         inventory_max=inventory_max,
+    )
+
+
+def wear_gear(state: WorldState, equipment: dict[str, str | None],
+              game_data: GameData) -> WorldState:
+    """`state` wearing `equipment`, its totals moved by the gear it changes.
+
+    The sheet's invariant (measured live, Task 14b): totals = base + the worn
+    NON-utility gear. A planned equip, unequip or re-arm keeps it by moving the
+    totals through `project_loadout_stats`, the one stat arithmetic: each gear
+    slot that changes adds its new item's stats and takes off the old one's.
+    A utility slot moves no total (module doc), so it is left out of the swap
+    and only its code changes. Current HP is not clamped to a lowered max HP,
+    as in `project_loadout_stats`."""
+    gear = {slot: code for slot, code in equipment.items()
+            if slot not in UTILITY_SLOTS}
+    totals = project_loadout_stats(state, gear, game_data)
+    return dataclasses.replace(
+        state,
+        equipment=equipment,
+        attack=totals.attack,
+        dmg=totals.dmg,
+        dmg_elements=totals.dmg_elements,
+        resistance=totals.resistance,
+        critical_strike=totals.critical_strike,
+        initiative=totals.initiative,
+        max_hp=totals.max_hp,
+        wisdom=totals.wisdom,
+        prospecting=totals.prospecting,
+        haste=totals.haste,
+        inventory_max=totals.inventory_max,
     )

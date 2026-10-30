@@ -1674,11 +1674,26 @@ example : ∀ (t : Formal.ActionCostNonneg.ActionTag),
 example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (newX newY : Int),
     Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.moveApply s newX newY) :=
   @Formal.ApplyBaseline.moveApply_preserves_baseline
--- apply-preserves-baseline-equip: EquipAction.apply preserves all 8 baseline fields.
+-- apply-preserves-baseline-equip: EquipAction.apply preserves all 8 baseline fields
+-- when it moves no stat (Task 14f: a swap writes the totals its gear moves).
 example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (i : List (String × Nat))
-    (e : List (String × Option String)),
-    Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.equipApply s i e) :=
+    (e : List (String × Option String)) (t : Formal.ApplyBaseline.GearTotals),
+    t = Formal.ApplyBaseline.totalsOf s →
+    Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.equipApply s i e t) :=
   @Formal.ApplyBaseline.equipApply_preserves_baseline
+-- apply-writes-totals-equip: a swap carries exactly the totals it moved (Task 14f).
+example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (i : List (String × Nat))
+    (e : List (String × Option String)) (t : Formal.ApplyBaseline.GearTotals),
+    Formal.ApplyBaseline.totalsOf (Formal.ApplyBaseline.equipApply s i e t) = t :=
+  @Formal.ApplyBaseline.equipApply_writes_totals
+-- swap-stat-roundtrip: apply then the reverse apply round-trips a total exactly.
+example : ∀ (total a b : Int),
+    Formal.ApplyBaseline.swapStat (Formal.ApplyBaseline.swapStat total a b) b a = total :=
+  @Formal.ApplyBaseline.swapStat_roundtrip
+-- all-actions-preserve-skill-xp: no apply, a swap included, moves skill_xp.
+example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (a : Formal.ApplyBaseline.ModeledApply),
+    (a.run s).skill_xp = s.skill_xp :=
+  @Formal.ApplyBaseline.all_actions_preserve_skill_xp
 -- apply-preserves-baseline-claim: ClaimPendingItemAction.apply preserves all 8 baseline fields.
 example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (i : List (String × Nat))
     (p : Option (List (String × String))),
@@ -1695,12 +1710,15 @@ example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (g : Int)
     (i : List (String × Nat)),
     Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.useGoldBagApply s g i) :=
   @Formal.ApplyBaseline.useGoldBagApply_preserves_baseline
--- headline-preserves-baseline: every modeled apply preserves the 8 baseline fields.
+-- headline-preserves-baseline: every modeled apply preserves the 8 baseline fields,
+-- a swap when it moves no total.
 example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (a : Formal.ApplyBaseline.ModeledApply),
+    (∀ t, a.swapTotals = some t → t = Formal.ApplyBaseline.totalsOf s) →
     Formal.ApplyBaseline.preservesBaseline s (a.run s) :=
   @Formal.ApplyBaseline.headline_preserves_baseline
 -- Phase-14 HEADLINE: every modeled action (now incl. UseGoldBag) preserves the 8 baseline fields.
 example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (a : Formal.ApplyBaseline.ModeledApply),
+    (∀ t, a.swapTotals = some t → t = Formal.ApplyBaseline.totalsOf s) →
     Formal.ApplyBaseline.preservesBaseline s (a.run s) :=
   @Formal.ApplyBaseline.all_actions_preserve_baseline
 -- reflexivity: a state preserves its own baseline (identity apply / Transition).

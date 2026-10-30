@@ -12,6 +12,7 @@ from artifactsmmo_api_client.models.item_slot import ItemSlot
 from artifactsmmo_api_client.models.unequip_schema import UnequipSchema
 
 from artifactsmmo_cli.ai.actions.base import ANY_REGION, Action
+from artifactsmmo_cli.ai.equipment.projection import wear_gear
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -49,9 +50,8 @@ class UnequipAction(Action):
         if item_code:
             new_inventory[item_code] = new_inventory.get(item_code, 0) + 1
         return dataclasses.replace(
-            state,
+            wear_gear(state, new_equipment, game_data),
             inventory=new_inventory,
-            equipment=new_equipment,
             cooldown_expires=None,
         )
 

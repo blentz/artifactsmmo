@@ -737,6 +737,12 @@ open Formal.PriorityBand
 #check @Formal.ApplyBaseline.equipApply_preserves_baseline            -- Family 4: equipment-swap
 #check @Formal.ApplyBaseline.unequipApply_preserves_baseline
 #check @Formal.ApplyBaseline.optimizeLoadoutApply_preserves_baseline
+#check @Formal.ApplyBaseline.equipApply_writes_totals                -- Task 14f: a swap writes the totals it moves
+#check @Formal.ApplyBaseline.unequipApply_writes_totals
+#check @Formal.ApplyBaseline.optimizeLoadoutApply_writes_totals
+#check @Formal.ApplyBaseline.swapStat_roundtrip
+#check @Formal.ApplyBaseline.swapStat_same
+#check @Formal.ApplyBaseline.all_actions_preserve_skill_xp
 #check @Formal.ApplyBaseline.acceptTaskApply_preserves_baseline       -- Family 5: task transition
 #check @Formal.ApplyBaseline.completeTaskApply_preserves_baseline
 #check @Formal.ApplyBaseline.taskCancelApply_preserves_baseline

@@ -19,6 +19,12 @@ This test:
   asserts `preserves_baseline(state, action.apply(state, gd))` on real Python.
 * Pins the probe-verified regression cases for Move and Equip (the user's
   explicit witnesses).
+
+Task 14f: the three equipment swaps are the exception the Lean headline now
+names (`swapTotals`). They WRITE the totals the gear they change moves
+(`equipment/projection.wear_gear`), so a swap of a stat-less item preserves
+the baseline and a swap of a stat-carrying one moves it exactly
+(`test_equip_writes_the_totals_it_moves_property`).
 """
 from typing import Any
 
@@ -53,6 +59,7 @@ from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.use_gold_bag import UseGoldBagAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -480,14 +487,28 @@ def test_move_preserves_baseline_property(bkw) -> None:
     _assert_preserved(state, after)
 
 
-@given(bkw=_baseline_kwargs())
+@given(bkw=_baseline_kwargs(), fire=st.integers(min_value=0, max_value=50),
+       dmg=st.integers(min_value=-20, max_value=20))
 @settings(max_examples=200)
-def test_equip_preserves_baseline_property(bkw) -> None:
+def test_equip_writes_the_totals_it_moves_property(bkw, fire, dmg) -> None:
+    """Lean `equipApply_writes_totals` + `swapStat`: a swap moves each total by
+    the incoming item's stat (the slot was empty, so nothing goes out), keeps
+    `skill_xp` (`all_actions_preserve_skill_xp`), and the reverse apply
+    round-trips the totals (`swapStat_roundtrip`)."""
     state = _make_state(inventory={"sword": 1}, **bkw)
     gd = _make_game_data_basic()
-    gd._item_stats = {"sword": ItemStats(code="sword", level=1, type_="weapon")}
+    gd._item_stats = {"sword": ItemStats(code="sword", level=1, type_="weapon",
+                                         attack={"fire": fire}, dmg=dmg)}
     after = EquipAction(code="sword", slot="weapon_slot").apply(state, gd)
-    _assert_preserved(state, after)
+    assert after.skill_xp == state.skill_xp
+    assert after.attack.get("fire", 0) == state.attack.get("fire", 0) + fire
+    assert after.dmg == state.dmg + dmg
+    totals = project_loadout_stats(state, {"weapon_slot": "sword"}, gd)
+    assert (after.attack, after.dmg, after.resistance, after.wisdom) == (
+        totals.attack, totals.dmg, totals.resistance, totals.wisdom)
+    back = UnequipAction(slot="weapon_slot").apply(after, gd)
+    assert back.dmg == state.dmg
+    assert back.attack.get("fire", 0) == state.attack.get("fire", 0)
 
 
 @given(bkw=_baseline_kwargs())

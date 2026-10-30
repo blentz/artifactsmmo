@@ -11037,10 +11037,11 @@ APPLY_EQUIP_MUTATIONS = [
         # which uses slot="weapon_slot".  Task-2's per-slot restructure added 4 spaces
         # of extra indent vs. the pre-restructure single-return block — the old 8-space
         # anchor no longer matched, producing an inert / uncaught mutant.
+        # Re-anchored Task 14f: the return now replaces on `worn`, the state
+        # `wear_gear` moved the totals of.
         "            return dataclasses.replace(\n"
-        "                state,\n"
+        "                worn,\n"
         "                inventory=new_inventory,\n"
-        "                equipment=new_equipment,\n"
         "                cooldown_expires=None,\n"
         "            )",
         "            return WorldState(\n"
@@ -11056,6 +11057,38 @@ APPLY_EQUIP_MUTATIONS = [
         "                pending_items=state.pending_items, active_events=state.active_events,\n"
         "            )",
     ),
+]
+
+
+# Task 14f (ruling T14d-7b): a planned equip, unequip or re-arm moves the
+# totals the gear it changes moves (`wear_gear`, the one stat arithmetic); a
+# utility slot moves none. Killed by tests/test_ai/test_planned_totals.py.
+PLANNED_TOTALS_EQUIP_MUTATIONS = [
+    ("equip: the planned equip leaves the totals",
+     "        worn = wear_gear(state, new_equipment, game_data)\n",
+     "        worn = dataclasses.replace(state, equipment=new_equipment)\n"),
+]
+PLANNED_TOTALS_UNEQUIP_MUTATIONS = [
+    ("unequip: the planned unequip leaves the totals",
+     "            wear_gear(state, new_equipment, game_data),\n",
+     "            dataclasses.replace(state, equipment=new_equipment),\n"),
+]
+PLANNED_TOTALS_REARM_MUTATIONS = [
+    ("optimize_loadout: the planned re-arm leaves the totals (Task 14d census (b))",
+     "            wear_gear(state, new_equipment, game_data),\n",
+     "            dataclasses.replace(state, equipment=new_equipment),\n"),
+]
+PLANNED_TOTALS_WEAR_MUTATIONS = [
+    ("wear_gear: a worn potion moves the totals",
+     "    gear = {slot: code for slot, code in equipment.items()\n"
+     "            if slot not in UTILITY_SLOTS}\n",
+     "    gear = dict(equipment)\n"),
+    ("wear_gear: the prospecting total is left",
+     "        prospecting=totals.prospecting,\n",
+     ""),
+    ("wear_gear: the max HP total is left",
+     "        max_hp=totals.max_hp,\n",
+     ""),
 ]
 
 
@@ -13827,6 +13860,14 @@ def _collect_all_groups() -> None:
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(APPLY_EQUIP_SRC, APPLY_EQUIP_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
+    run_group(APPLY_EQUIP_SRC, PLANNED_TOTALS_EQUIP_MUTATIONS,
+              "tests/test_ai/test_planned_totals.py", survivors)
+    run_group(UNEQUIP_SRC, PLANNED_TOTALS_UNEQUIP_MUTATIONS,
+              "tests/test_ai/test_planned_totals.py", survivors)
+    run_group(OPTIMIZE_LOADOUT_SRC, PLANNED_TOTALS_REARM_MUTATIONS,
+              "tests/test_ai/test_planned_totals.py", survivors)
+    run_group(PROJECTION_SRC, PLANNED_TOTALS_WEAR_MUTATIONS,
+              "tests/test_ai/test_planned_totals.py", survivors)
     run_group(APPLY_CLAIM_SRC, APPLY_CLAIM_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(APPLY_REST_SRC, APPLY_REST_MUTATIONS,

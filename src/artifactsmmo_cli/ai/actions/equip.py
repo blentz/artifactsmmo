@@ -10,6 +10,7 @@ from artifactsmmo_api_client.models.equip_schema import EquipSchema
 from artifactsmmo_api_client.models.item_slot import ItemSlot
 
 from artifactsmmo_cli.ai.actions.base import ANY_REGION, Action
+from artifactsmmo_cli.ai.equipment.projection import wear_gear
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOT as ITEM_TYPE_TO_SLOT
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS as ITEM_TYPE_TO_SLOTS
@@ -154,27 +155,25 @@ class EquipAction(Action):
         # Equipping q of a code into a utility slot that already holds the SAME code
         # ADDS to the stack (M + q); into an empty/different slot it SETS the quantity
         # to q (returning any displaced code to inventory, handled above).
+        worn = wear_gear(state, new_equipment, game_data)
         if self.slot not in UTILITY_SLOTS:
             return dataclasses.replace(
-                state,
+                worn,
                 inventory=new_inventory,
-                equipment=new_equipment,
                 cooldown_expires=None,
             )
         prior_qty = utility_slot_quantity(state, self.slot) if old_item == self.code else 0
         qty = prior_qty + self.quantity
         if self.slot == "utility1_slot":
             return dataclasses.replace(
-                state,
+                worn,
                 inventory=new_inventory,
-                equipment=new_equipment,
                 cooldown_expires=None,
                 utility1_slot_quantity=qty,
             )
         return dataclasses.replace(
-            state,
+            worn,
             inventory=new_inventory,
-            equipment=new_equipment,
             cooldown_expires=None,
             utility2_slot_quantity=qty,
         )
