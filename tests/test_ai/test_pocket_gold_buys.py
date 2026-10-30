@@ -349,19 +349,24 @@ SWORD = "iron_sword"
 it competes with a route that costs time, not gold."""
 
 
-def _sword_book(price: int) -> tuple[GameData, WorldState, SelectionContext]:
+ROBBY = (1736, 150_000)
+"""Robby's purse shape: a small pocket and a bank that can pay for the fill."""
+
+
+def _sword_book(price: int, purse: tuple[int, int] = ROBBY
+                ) -> tuple[GameData, WorldState, SelectionContext]:
     """The l20 world with a standing sell order for the sword at `price`, the
-    character Robby-shaped: a small pocket and a bank that can pay for it."""
+    character holding `purse` (pocket, bank)."""
     sc = SCENARIOS[CELL]
     world = load_bundle_game_data(BUNDLE, with_ge_orders=sc.ge_market,
                                   completed_achievements=frozenset(sc.unlocked_achievements))
     world._ge_sell_orders = {**world._ge_sell_orders, SWORD: ("ord-sword", price, 1)}
-    state = replace(scenario_state(sc, world), gold=1736, bank_gold=150_000, bank_items={})
+    state = replace(scenario_state(sc, world), gold=purse[0], bank_gold=purse[1], bank_items={})
     return world, state, attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
 
 
-def _sword(price: int) -> tuple[int, SourceKind | None]:
-    world, state, ctx = _sword_book(price)
+def _sword(price: int, purse: tuple[int, int] = ROBBY) -> tuple[int, SourceKind | None]:
+    world, state, ctx = _sword_book(price, purse)
     return cheapest_route(SWORD, 1, state, world, ctx, None, policy=PIECE_POLICY,
                           pocket=spendable_pocket(state, world, frozenset({SWORD})))
 
@@ -375,6 +380,10 @@ def test_a_huge_fill_loses_to_the_route_that_takes_time() -> None:
     price, route = _sword(92_500)
     assert route is SourceKind.CRAFT
     assert price < 92_500 * gold_spend_actions(state, world, ctx)
+    # The same choice whichever purse holds the gold: the route CHOICE charges
+    # the pocket's gold and the bank's alike, not only the price.
+    assert _sword(92_500, (0, 150_000))[1] is SourceKind.CRAFT
+    assert _sword(92_500, (150_000, 0))[1] is SourceKind.CRAFT
 
 
 def test_a_fill_cheaper_in_time_than_its_alternatives_is_still_bought() -> None:
@@ -448,3 +457,24 @@ def test_a_gold_fight_the_closure_offers_prices_spent_gold() -> None:
     price, route = cheapest_route(RUNE.code, 1, state, world, ctx, None, policy=PIECE_POLICY,
                                   pocket=state.gold)
     assert (price, route) == (2 + ceil(PRICE * per_gold), SourceKind.BUY)
+
+
+def test_the_objective_prices_a_piece_at_its_own_m_star_s_rate() -> None:
+    """While `L*` is being chosen no objective is on the context yet, so each
+    candidate's pieces are priced with that candidate's provisional `m*`: the
+    rune's piece price is its route's price at `m*`'s gold rate (the pig's,
+    cheaper here than any gold fight), plus the equip. The gold is banked, so
+    it is SPENT, not fought for: the rate is what prices it."""
+    world = _world()
+    state = replace(_state(world), bank_gold=50_000, bank_items={})
+    ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
+    objective = ctx.gear_objective
+    assert objective is not None
+    gold = acquisition_options(RUNE.code, state, world, ctx, None, policy=PIECE_POLICY)["gold"]
+    fight = min(Fraction(r.actions_per_application) / r.yield_per
+                for r in gold if r.kind == SourceKind.GOLD_DROP.value)
+    assert gold_spend_actions(state, world, ctx) < fight
+    piece = next(p for p in objective.missing if p.code == RUNE.code)
+    price, _route = cheapest_route(RUNE.code, 1, state, world, ctx, None, policy=PIECE_POLICY,
+                                   pocket=spendable_pocket(state, world, frozenset({RUNE.code})))
+    assert piece.price == price + 1
