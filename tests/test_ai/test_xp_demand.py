@@ -22,6 +22,12 @@ def test_the_roots_are_the_chosen_root_then_the_missing_pieces() -> None:
         ObtainItem("copper_pickaxe", 1), ObtainItem("iron_sword", 1), ObtainItem("wool_cape", 1)]
     bare = dataclasses.replace(NO_PROFILE_CONTEXT, objective_tools=frozenset({"copper_pickaxe"}))
     assert demand_roots(None, make_state(), bare) == [ObtainItem("copper_pickaxe", 1)]
+    # A held `L*` piece is in the loadout but is no root: only the missing are.
+    objective = with_missing(NO_PROFILE_CONTEXT, ("weapon_slot", "iron_sword")).gear_objective
+    assert objective is not None
+    part_held = dataclasses.replace(NO_PROFILE_CONTEXT, gear_objective=dataclasses.replace(
+        objective, loadout={**objective.loadout, "ring1_slot": "copper_ring"}))
+    assert demand_roots(None, make_state(), part_held) == [ObtainItem("iron_sword", 1)]
 
 
 def test_skill_demand_follows_the_missing_pieces(bundle_game_data: GameData) -> None:
