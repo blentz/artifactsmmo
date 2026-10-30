@@ -70,6 +70,7 @@ the residual's reach (the ROUTED subset) into the matrix on every run.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import Enum
 
 from artifactsmmo_cli.ai.decisions.root import resolve_root
@@ -211,7 +212,7 @@ def climb_inventory(skill: str, state: WorldState,
     """The evidence for one cell, read straight off the catalogue, over the
     SAME `grind_model` walk `has_grind_target` runs."""
     level = state.skills[skill]
-    model = grind_model(state, game_data)
+    model = grind_model(state, game_data, datetime.now(UTC))
     in_level: list[str] = []
     above = 0
     for code, stats in game_data.all_item_stats.items():

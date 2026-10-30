@@ -38,6 +38,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
+from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.grind_probe_state import grind_probe_state
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -118,16 +119,18 @@ enforces the gate since D-A, that rung prices as unreachable and the fishing
 demand disappears."""
 
 
-def grind_model(state: WorldState, game_data: GameData) -> ObtainModel:
-    """The obtain model the grind asks, built once per sweep over the rungs.
+def grind_model(state: WorldState, game_data: GameData, now: datetime) -> ObtainModel:
+    """The obtain model the grind asks, built once per sweep over the rungs,
+    its event windows judged at `now` (the caller's clock: the cycle's,
+    `SelectionContext.now`, where the caller has one).
 
     Context-free on purpose: the candidate list is memoised without a
     `SelectionContext` (see `_cache_key`), so its verdicts must not read one."""
     # A store-less feasibility walk: every drop at its API prior, passed
     # explicitly (ruling T16b).
     return ObtainModel(state, game_data,
-                       replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty()),
-                       datetime.now(UTC))
+                       replace(NO_PROFILE_CONTEXT, now=now, learned_drops=LearnedDrops.empty()),
+                       now)
 
 
 def is_obtainable(code: str, model: ObtainModel) -> bool:
@@ -159,7 +162,7 @@ _CacheKey = tuple[str, int, tuple[tuple[str, str | None], ...],
                   tuple[tuple[str, int], ...], tuple[tuple[str, int], ...],
                   tuple[tuple[str, int], ...], tuple[tuple[str, int, int], ...],
                   tuple[tuple[str, Fraction], ...], tuple[int, int], LearnedDrops,
-                  tuple[object, ...]]
+                  tuple[object, ...], frozenset[str]]
 
 CACHE_MAX_ENTRIES = 4096
 """Per-GameData LRU bound, mirroring `equipment/loadout_cache`: comfortably holds
@@ -171,9 +174,18 @@ GameData is an eq-dataclass and so unhashable, and that module owns the reason a
 bare `id()` key is unsound on its own."""
 
 
+def _open_event_vendors(state: WorldState, game_data: GameData, now: datetime) -> frozenset[str]:
+    """The event NPCs tradeable from `state` at `now` (`event_npc_tradeable`):
+    the one event-window verdict the grind's obtain gates read
+    (`ObtainModel._tradeable`, the VENDOR_TRADEABLE gate and the sale venue)."""
+    return frozenset(npc for npc in game_data.world.npc_event_codes
+                     if event_npc_tradeable(npc, game_data, x=state.x, y=state.y,
+                                            active_events=state.active_events, now=now))
+
+
 def _cache_key(skill: str, state: WorldState, game_data: GameData,
                fight_records: tuple[tuple[str, int, int], ...],
-               learned_drops: LearnedDrops) -> "_CacheKey":
+               learned_drops: LearnedDrops, now: datetime) -> "_CacheKey":
     """The determinants of a candidate list, and nothing else.
 
     `level` and `equipment` drive `is_winnable` (hence obtainability and the DROP
@@ -215,7 +227,12 @@ def _cache_key(skill: str, state: WorldState, game_data: GameData,
     T14a-E, I-3). The memo lives on the session's `GameData`, so without it a
     list built on the mainland was served across the sandwhisper crossing
     (final review I-1). It is the binding-floor key `_REACH` uses, because the
-    gate reads reach, not a door's fee shortfall."""
+    gate reads reach, not a door's fee shortfall.
+
+    The event windows (ruling FR-MB): the obtain gates judge an event vendor
+    at the clock (`event_npc_tradeable`), and the memo outlives the cycle, so
+    the key holds that verdict, the event NPCs tradeable at `now`
+    (`_open_event_vendors`), not the instant itself, which would never hit."""
     return (
         skill,
         state.level,
@@ -228,6 +245,7 @@ def _cache_key(skill: str, state: WorldState, game_data: GameData,
         (state.utility1_slot_quantity, state.utility2_slot_quantity),
         learned_drops,
         _reach_key(state, game_data),
+        _open_event_vendors(state, game_data, now),
     )
 
 
@@ -319,7 +337,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     `recipe_closure` is built ONCE per call and shared across candidates, so the
     added cost is one closure walk per rung rather than one per material."""
     cache = _CACHES.cache_for(game_data)
-    key = _cache_key(skill, state, game_data, ctx.fight_records, ctx.drops())
+    key = _cache_key(skill, state, game_data, ctx.fight_records, ctx.drops(), ctx.now)
     hit = cache.get(key)
     if hit is not None:
         cache.move_to_end(key)
@@ -327,8 +345,8 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     candidates: list[GrindCandidate] = []
     # One model for the whole sweep: its routes are memoised per item, and the
     # rungs of one skill share most of their materials.
-    model = grind_model(state, game_data)
-    pricing_ctx = replace(NO_PROFILE_CONTEXT, fight_records=ctx.fight_records,
+    model = grind_model(state, game_data, ctx.now)
+    pricing_ctx = replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=ctx.fight_records,
                           fight_seconds=ctx.fight_seconds, action_seconds=ctx.action_seconds,
                           learned_drops=ctx.drops())
     # The SAME `current_level` `skill_grind_target` hands the selection core.
@@ -408,7 +426,8 @@ def has_grind_target(skill: str, state: WorldState,
     A caller that filters reserved materials wants the target itself anyway.
     """
     current = state.skills.get(skill, 0)
-    model = grind_model(state, game_data)
+    # Unmemoised and asked per planner node without a context: the wall clock.
+    model = grind_model(state, game_data, datetime.now(UTC))
     for code, stats in game_data.all_item_stats.items():
         if stats.crafting_skill != skill or stats.crafting_level > current:
             continue

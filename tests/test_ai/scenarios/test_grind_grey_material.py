@@ -32,6 +32,7 @@ These tests assert a PLAN EXISTS, not that a helper returns True: the bug was
 the absence of a plan, so only the planner can prove it gone.
 """
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -120,8 +121,8 @@ def test_both_sides_agree_on_wool(player: GamePlayer, game_data: GameData,
     assert GRIND_ALLOWS_GREY is True
     assert drop_obtainable("wool", state, game_data,
                            allow_grey=GRIND_ALLOWS_GREY) is True
-    assert is_obtainable("wool", grind_model(state, game_data)) is True
-    assert is_obtainable("iron_ring", grind_model(state, game_data)) is True
+    assert is_obtainable("wool", grind_model(state, game_data, datetime.now(UTC))) is True
+    assert is_obtainable("iron_ring", grind_model(state, game_data, datetime.now(UTC))) is True
     fight = select_drop_fight("wool", player._build_actions(), state, game_data,
                               allow_grey=GRIND_ALLOWS_GREY)
     assert fight is not None and fight.monster_code == "sheep"

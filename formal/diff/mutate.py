@@ -8104,8 +8104,8 @@ LOSS_RISK_ACQUISITION_MUTATIONS = [
 ]
 LOSS_RISK_GRIND_MUTATIONS = [
     ("loss risk: the grind rungs are priced without the records",
-     "    pricing_ctx = replace(NO_PROFILE_CONTEXT, fight_records=ctx.fight_records,\n",
-     "    pricing_ctx = replace(NO_PROFILE_CONTEXT, fight_records=(),\n"),
+     "    pricing_ctx = replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=ctx.fight_records,\n",
+     "    pricing_ctx = replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=(),\n"),
     ("loss risk: the grind memo ignores the records",
      "        fight_records,\n        tuple(sorted(state.win_thresholds.items())),\n",
      "        (),\n        tuple(sorted(state.win_thresholds.items())),\n"),
@@ -8121,8 +8121,12 @@ WIN_THRESHOLD_GRIND_MUTATIONS = [
     # outlives the cycle. Killed by
     # test_the_memo_misses_across_the_sandwhisper_crossing.
     ("grind memo: the reach is not keyed (final review I-1)",
-     "        _reach_key(state, game_data),\n    )\n",
-     "        (),\n    )\n"),
+     "        _reach_key(state, game_data),\n        _open_event_vendors(",
+     "        (),\n        _open_event_vendors("),
+    # Ruling FR-MB: the event windows the obtain gates read are keyed.
+    ("grind memo: the event windows are not keyed (ruling FR-MB)",
+     "        _open_event_vendors(state, game_data, now),\n    )\n",
+     "        frozenset(),\n    )\n"),
 ]
 LOSS_RISK_COMBAT_MUTATIONS = [
     ("loss risk: a monster lost to only in another loadout keeps an empty record",

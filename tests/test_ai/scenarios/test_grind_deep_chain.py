@@ -57,6 +57,7 @@ correct at every individual step.
 """
 
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -324,7 +325,7 @@ def test_a_SECONDARY_drop_is_recognised_as_gatherable(game_data: GameData,
     full = game_data.gatherable_drop_items()
     hidden = sorted(full - primary)
     assert hidden, "fixture drift: no secondary-drop item to test with"
-    model = grind_model(state, game_data)
+    model = grind_model(state, game_data, datetime.now(UTC))
     # Ruling I-3: a resource counts where the walk reaches from here now, as a
     # fight's monster does (`alexandrite_stone`'s `adamantite_rocks` stand past
     # a crossing this character cannot make).

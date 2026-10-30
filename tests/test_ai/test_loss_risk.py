@@ -5,6 +5,7 @@ its learned loss rate. Expected fights per win is `1/p`; each loss is charged
 its death plus recovery. Proved core `Formal.LossRisk`."""
 
 from dataclasses import replace
+from datetime import UTC, datetime
 from fractions import Fraction
 from pathlib import Path
 
@@ -34,6 +35,10 @@ FIGHT = Fraction(30)
 seconds are learned since spec 2026-10-18 §2.9; the conversion divides by them)."""
 
 _BUNDLE = Path(__file__).resolve().parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
+
+_NOW = datetime(2026, 1, 1, tzinfo=UTC)
+"""A fixed clock for the memo key's event-window input (no window here)."""
+
 
 
 @pytest.fixture(scope="module")
@@ -108,8 +113,8 @@ class TestTheDropPrice:
 
 class TestTheGrindRungs:
     def test_the_records_are_part_of_the_memo_key(self, state, game_data) -> None:
-        assert _cache_key("cooking", state, game_data, (), LearnedDrops.empty()) != _cache_key(
-            "cooking", state, game_data, (("rat", 9, 4),), LearnedDrops.empty())
+        assert _cache_key("cooking", state, game_data, (), LearnedDrops.empty(), _NOW) != _cache_key(
+            "cooking", state, game_data, (("rat", 9, 4),), LearnedDrops.empty(), _NOW)
 
     def test_the_rung_prices_see_the_records(self, state, game_data, monkeypatch) -> None:
         seen = []
@@ -129,8 +134,8 @@ class TestTheGrindRungs:
         """Ruling T16a: a new observation reprices the rungs' drops, so the
         memo cannot serve a list priced at another cycle's evidence."""
         seen = LearnedDrops((("chicken", 9),), ((("chicken", "feather"), 4),), Fraction(0))
-        assert _cache_key("cooking", state, game_data, (), LearnedDrops.empty()) != _cache_key(
-            "cooking", state, game_data, (), seen)
+        assert _cache_key("cooking", state, game_data, (), LearnedDrops.empty(), _NOW) != _cache_key(
+            "cooking", state, game_data, (), seen, _NOW)
 
     def test_the_rung_prices_see_the_drop_evidence(self, state, game_data, monkeypatch) -> None:
         """The rungs are priced at the cycle's evidence, and a second evidence

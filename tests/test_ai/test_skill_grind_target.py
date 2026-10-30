@@ -2,6 +2,7 @@
 
 import dataclasses
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from fractions import Fraction
 from pathlib import Path
 from unittest.mock import patch
@@ -28,6 +29,10 @@ from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT, m
 from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
+
+_NOW = datetime(2026, 1, 1, tzinfo=UTC)
+"""A fixed clock for the memo key's event-window input (no window here)."""
+
 
 
 def _gd() -> GameData:
@@ -274,8 +279,8 @@ def test_the_memo_key_notices_a_changed_threshold():
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
     cheap = make_state(skills={"weaponcrafting": 3}, win_thresholds={"mob": Fraction(1, 2)})
-    assert (_cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty())
-            != _cache_key("weaponcrafting", cheap, gd, (), LearnedDrops.empty()))
+    assert (_cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), _NOW)
+            != _cache_key("weaponcrafting", cheap, gd, (), LearnedDrops.empty(), _NOW))
 
 
 def test_the_memo_key_notices_a_changed_worn_stock():
@@ -285,13 +290,13 @@ def test_the_memo_key_notices_a_changed_worn_stock():
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3}, utility1_slot_quantity=40,
                        utility2_slot_quantity=40)
-    key = _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty())
+    key = _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), _NOW)
     assert key != _cache_key("weaponcrafting",
                              dataclasses.replace(state, utility1_slot_quantity=0), gd, (),
-                             LearnedDrops.empty())
+                             LearnedDrops.empty(), _NOW)
     assert key != _cache_key("weaponcrafting",
                              dataclasses.replace(state, utility2_slot_quantity=0), gd, (),
-                             LearnedDrops.empty())
+                             LearnedDrops.empty(), _NOW)
 
 def test_the_memo_misses_across_the_sandwhisper_crossing():
     """Final review I-1. `GRIND_POLICY` asks `SPAWN_KNOWN`, which reads the
@@ -316,6 +321,29 @@ def test_the_memo_misses_across_the_sandwhisper_crossing():
     _CACHES.cache_for(world).clear()
     assert verdicts(mainland)["cooked_gudgeon"] is True
     assert verdicts(across) == fresh
+
+
+def test_the_memo_key_notices_an_event_window_closing():
+    """Ruling FR-MB: the obtain gates judge an event vendor at the clock
+    (`event_npc_tradeable`) and the memo outlives the cycle, so a vendor whose
+    window closes between two cycles MUST miss. Two clocks inside the window
+    share the key: it holds the verdict, not the instant."""
+    gd = _gd()
+    gd._npc_event_code["peddler"] = "fair"
+    gd._event_npc_spawns["peddler"] = (0, 0)
+    opens = datetime(2020, 1, 1, tzinfo=UTC)
+    state = dataclasses.replace(make_state(skills={"weaponcrafting": 3}),
+                                active_events={"fair": opens + timedelta(hours=1)})
+
+    def key(at: datetime) -> object:
+        return _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), at)
+
+    assert key(opens) == key(opens + timedelta(minutes=5))
+    assert key(opens) != key(opens + timedelta(hours=2))
+    for at in (opens, opens + timedelta(minutes=5), opens + timedelta(hours=2)):
+        build_selectable_grind_candidates("weaponcrafting", state, gd,
+                                          ctx=replace(NO_DROPS_CONTEXT, now=at))
+    assert len(_CACHES.cache_for(gd)) == 2
 
 
 def test_each_game_data_gets_its_own_cache():
@@ -530,9 +558,9 @@ def test_the_memo_key_may_omit_hp_because_obtainable_no_longer_reads_it():
     # answered — the test would pass while measuring the cache instead of the
     # property that justifies it. Verified: with `fightable_droppers` reverted to
     # current hp, the list comparison still passed and this one does not.
-    assert is_obtainable("hide_vest", grind_model(healthy, gd)), \
+    assert is_obtainable("hide_vest", grind_model(healthy, gd, datetime.now(UTC))), \
         "not obtainable even when healthy — this cannot reach the predicate"
-    assert is_obtainable("hide_vest", grind_model(hurt, gd))
+    assert is_obtainable("hide_vest", grind_model(hurt, gd, datetime.now(UTC)))
 
 
 @pytest.mark.parametrize("skills,inventory,bank", [
@@ -642,7 +670,7 @@ def test_a_vendor_only_material_does_not_make_a_rung_obtainable():
     gd = _policy_world()
     gd._npc_stock = {"jeweller": {"gem": 10}}
     gd._npc_locations = {"jeweller": (5, 5)}
-    model = grind_model(_jeweller(), gd)
+    model = grind_model(_jeweller(), gd, datetime.now(UTC))
     assert model.feasible("gem", 1, LEGACY), "vacuous: the vendor route is not even ready"
     assert not is_obtainable("ring", model)
 
@@ -659,7 +687,7 @@ def test_a_material_from_a_reachable_underground_resource_counts():
     with (patch.object(GameData, "resource_spawn_known", return_value=True),
           patch.object(GameData, "layered_locations",
                        return_value=[(jeweller.x, jeweller.y, jeweller.layer)])):
-        model = grind_model(jeweller, gd)
+        model = grind_model(jeweller, gd, datetime.now(UTC))
         assert not model.feasible("gem", 1, replace(LEGACY, spawn_known=False)), \
             "vacuous: the vein has a live tile"
         assert is_obtainable("ring", model)
@@ -674,7 +702,7 @@ def test_a_secondary_drop_counts_as_a_material():
     gd._resource_drops_full = {"rocks": [("stone", 1, 1, 1), ("gem", 100, 1, 1)],
                                "gem_rocks": [("gem", 1, 1, 1)]}
     gd._resource_locations = {"rocks": [(1, 0)]}
-    assert is_obtainable("ring", grind_model(_jeweller(), gd))
+    assert is_obtainable("ring", grind_model(_jeweller(), gd, datetime.now(UTC)))
 
 
 def test_an_intermediate_above_its_craft_level_still_counts():
@@ -688,7 +716,7 @@ def test_an_intermediate_above_its_craft_level_still_counts():
     gd._resource_drops = {"gem_rocks": "gem"}
     gd._resource_skill = {"gem_rocks": ("mining", 1)}
     gd._resource_locations = {"gem_rocks": [(1, 0)]}
-    model = grind_model(_jeweller(), gd)
+    model = grind_model(_jeweller(), gd, datetime.now(UTC))
     assert not model.feasible("cut_gem", 1, LEGACY), "vacuous: the craft skill is met"
     assert is_obtainable("ring", model)
 
@@ -697,7 +725,7 @@ def test_a_held_copy_of_the_rung_does_not_make_it_obtainable():
     """A rung is crafted for its xp: a ring already in the bag does not serve
     the grind when the gem cannot be had."""
     gd = _policy_world()
-    model = grind_model(dataclasses.replace(_jeweller(), inventory={"ring": 1}), gd)
+    model = grind_model(dataclasses.replace(_jeweller(), inventory={"ring": 1}), gd, datetime.now(UTC))
     assert model.feasible("ring", 1, GRIND_POLICY), "vacuous: the held ring is not feasible"
     assert not is_obtainable("ring", model)
 
@@ -706,7 +734,7 @@ def test_a_banked_copy_of_the_rung_does_not_make_it_obtainable():
     """A banked ring is not withdrawn to serve the grind (the held-rung
     livelock): only a craft earns, and the gem cannot be had."""
     gd = _policy_world()
-    model = grind_model(dataclasses.replace(_jeweller(), bank_items={"ring": 3}), gd)
+    model = grind_model(dataclasses.replace(_jeweller(), bank_items={"ring": 3}), gd, datetime.now(UTC))
     assert model.feasible("ring", 1, GRIND_POLICY), "vacuous: the banked ring is not feasible"
     assert not is_obtainable("ring", model)
 
@@ -718,7 +746,7 @@ def test_a_rung_with_no_known_workshop_is_not_obtainable():
     gd._resource_drops = {"gem_rocks": "gem"}
     gd._resource_skill = {"gem_rocks": ("mining", 1)}
     gd._resource_locations = {"gem_rocks": [(1, 0)]}
-    model = grind_model(_jeweller(), gd)
+    model = grind_model(_jeweller(), gd, datetime.now(UTC))
     assert model.feasible("gem", 1, GRIND_POLICY), "vacuous: the gem is not obtainable"
     assert not is_obtainable("ring", model)
 
@@ -730,11 +758,11 @@ def test_a_banked_material_counts_only_in_the_quantity_the_recipe_needs():
     gd = _policy_world()
     gd._crafting_recipes = {"ring": {"gem": 2}}
     one = dataclasses.replace(_jeweller(), bank_items={"gem": 1})
-    model = grind_model(one, gd)
+    model = grind_model(one, gd, datetime.now(UTC))
     assert model.feasible("gem", 1, GRIND_POLICY), "vacuous: the banked gem is not even feasible"
     assert not is_obtainable("ring", model)
     assert is_obtainable("ring", grind_model(
-        dataclasses.replace(one, bank_items={"gem": 1}, inventory={"gem": 1}), gd))
+        dataclasses.replace(one, bank_items={"gem": 1}, inventory={"gem": 1}), gd, datetime.now(UTC)))
 
 
 def test_a_renewable_material_needs_no_stock():
@@ -744,4 +772,4 @@ def test_a_renewable_material_needs_no_stock():
     gd._resource_drops = {"gem_rocks": "gem"}
     gd._resource_skill = {"gem_rocks": ("mining", 1)}
     gd._resource_locations = {"gem_rocks": [(1, 0)]}
-    assert is_obtainable("ring", grind_model(_jeweller(), gd))
+    assert is_obtainable("ring", grind_model(_jeweller(), gd, datetime.now(UTC)))
