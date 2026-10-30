@@ -28,6 +28,11 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.world_state import WorldState
 
+GATHER_SECONDS = 6
+"""The per-gather base `GatherAction.cost` charges: one server gather's
+seconds. The gather re-arm's armour pass (`gather_armour`) prices a gather it
+saves at this figure."""
+
 GATHER_LOADOUT_PENALTY = 6.0
 """Added to GatherAction cost, PER UNIT of the batch, when the equipped loadout
 is suboptimal for the resource's skill — so the planner sequences
@@ -238,7 +243,7 @@ class GatherAction(Action):
         # reduces to `gatherCost` exactly (`gather_cost_rated_one`).
         drop_item = self.drop_item(game_data)
         gathers = self.gathers(state, game_data)
-        static = 6 * gathers + dist
+        static = GATHER_SECONDS * gathers + dist
         # Penalize re-gathering a material the bank already holds, so the
         # planner withdraws banked stock before re-gathering it (see
         # _BANKED_REGATHER_PENALTY). The penalty applies per banked unit's

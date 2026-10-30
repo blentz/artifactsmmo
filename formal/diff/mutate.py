@@ -465,6 +465,7 @@ HELD_STOCK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "held_stock.py"
 FIGHT_WALK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_walk.py"
 BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selection.py"
 ATTEMPT_PROSPECTING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "attempt_prospecting.py"
+GATHER_ARMOUR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_armour.py"
 LOCATION_CATALOG_SRC_NPC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 GREY_FARM_SRC_CUR = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grey_farm.py"
 CRAFT_CONDITIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_conditions.py"
@@ -6326,15 +6327,14 @@ RECYCLE_KIT_MUTATIONS = [
 # string is a substring of BOTH (the 8-space Fight-branch line contains the 4-space
 # match), so an un-anchored find silently mutates only the first (Fight) site.
 GATHER_REARM_MUTATIONS = [
+    # Re-anchored Task 14f item 3: the tool re-arm is the `tool` list the
+    # armour pass follows.
     ("craft_plan_gen: gather never front the re-arm (bare-handed gathers)",
-     "        return mapped  # loadout already optimal for this skill\n"
-     "            return [*mapped[:i], rearm, *mapped[i:]]",
-     "        return mapped  # loadout already optimal for this skill\n"
-     "            return mapped"),
+     "            tool = [rearm] if rearm.is_applicable(state, game_data) else []\n",
+     "            tool = []\n"),
     ("craft_plan_gen: gather front the re-arm unconditionally (equips on every gather plan)",
-     "            if not rearm.is_applicable(state, game_data):\n"
-     "                return mapped  # loadout already optimal for this skill\n",
-     ""),
+     "            tool = [rearm] if rearm.is_applicable(state, game_data) else []\n",
+     "            tool = [rearm]\n"),
     ("craft_plan_gen: fight never front the re-arm (bare-handed fights)",
      "        return mapped  # loadout already optimal for this monster\n"
      "            return [*mapped[:i], rearm, *mapped[i:]]",
@@ -6383,8 +6383,8 @@ GATHER_LOADOUT_SCALING_MUTATIONS = [
     # N walks — `Formal.GatherCost.gatherCost`'s old `(base + dist) * qty`.
     # Killed by the differential pins against the Lean oracle.
     ("gather cost: the walk charged once per GATHER again",
-     "        static = 6 * gathers + dist",
-     "        static = (6 + dist) * gathers"),
+     "        static = GATHER_SECONDS * gathers + dist",
+     "        static = (GATHER_SECONDS + dist) * gathers"),
 ]
 
 # The learned arm of the same walk rule: the learned median is ONE server
@@ -7073,6 +7073,43 @@ ATTEMPT_PROSPECTING_RAISE_MUTATIONS = [
 # Task 14f (ruling T14d-7c): every gather pricer reads the gather loadout's
 # prospecting, the walk's basis. Killed by
 # tests/test_ai/test_gather_prospecting_basis.py.
+# Ruling T14f-3: the gather re-arm's armour pass. Killed by
+# tests/test_ai/test_gather_armour.py.
+GATHER_ARMOUR_MUTATIONS = [
+    ("gather armour: the equip is free",
+     "            net = saved * GATHER_SECONDS - Fraction(equip.cost(state, game_data))\n",
+     "            net = saved * GATHER_SECONDS\n"),
+    ("gather armour: the swap back is charged too (the fight's re-arm already pays it)",
+     "            net = saved * GATHER_SECONDS - Fraction(equip.cost(state, game_data))\n",
+     "            net = saved * GATHER_SECONDS - 2 * Fraction(equip.cost(state, game_data))\n"),
+    ("gather armour: an inapplicable equip is priced",
+     "            if not equip.is_applicable(state, game_data):\n                continue\n",
+     ""),
+    ("gather armour: the first paying piece is kept",
+     "            if best is None or key[:2] > best[:2]:\n",
+     "            if best is None:\n"),
+    ("gather armour: the item level is no tiebreak",
+     "            if best is None or key[:2] > best[:2]:\n",
+     "            if best is None or key[:1] > best[:1]:\n"),
+    ("gather armour: every slot is judged on the bare state",
+     "            state = chosen.apply(state, game_data)\n",
+     ""),
+    ("gather armour: a slot that pays nothing still equips",
+     "        if best is not None:\n            chosen = EquipAction(code=best[2], slot=slot)\n",
+     "        if True:\n            chosen = EquipAction(code=(best or (0, 0, 'robe'))[2], slot=slot)\n"),
+]
+GATHER_ARMOUR_REARM_MUTATIONS = [
+    ("re-arm: the gather wears no armour",
+     "            return [*mapped[:i], *tool, *gather_armour(action, armed, game_data), *mapped[i:]]",
+     "            return [*mapped[:i], *tool, *mapped[i:]]"),
+    ("re-arm: the armour is judged before the tool swap",
+     "            armed = rearm.apply(state, game_data) if tool else state\n",
+     "            armed = state\n"),
+    ("re-arm: the armour is asked only when the tool re-arms",
+     "            tool = [rearm] if rearm.is_applicable(state, game_data) else []\n",
+     "            tool = [rearm] if rearm.is_applicable(state, game_data) else []\n"
+     "            if not tool:\n                return mapped\n"),
+]
 GATHER_BASIS_ACTION_MUTATIONS = [
     ("gather action: the planned gather reads the worn total",
      "            gather_prospecting(self.resource_code, state, game_data))",
@@ -9603,7 +9640,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
-    LIVENESS_CENSUS_SRC, ATTEMPT_PROSPECTING_SRC,
+    LIVENESS_CENSUS_SRC, ATTEMPT_PROSPECTING_SRC, GATHER_ARMOUR_SRC,
     LOADOUT_CALIBRATION_SRC,
     TIER_PROGRESS_SRC, COMBAT_TARGETS_SRC, WIN_THRESHOLD_CORE_SRC,
     ROLE_SELECTION_SRC,
@@ -14454,6 +14491,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_tool_objective.py", survivors)
     run_group(ACQUISITION_COST_SRC, DROP_TOOL_WORK_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(GATHER_ARMOUR_SRC, GATHER_ARMOUR_MUTATIONS,
+              "tests/test_ai/test_gather_armour.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, GATHER_ARMOUR_REARM_MUTATIONS,
+              "tests/test_ai/test_gather_armour.py", survivors)
     run_group(GATHERING_APPLY_SRC, GATHER_BASIS_ACTION_MUTATIONS,
               "tests/test_ai/test_gather_prospecting_basis.py", survivors)
     run_group(GATHERING_GOAL_SRC, GATHER_BASIS_NARROWING_MUTATIONS,

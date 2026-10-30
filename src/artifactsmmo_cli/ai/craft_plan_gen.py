@@ -55,6 +55,7 @@ from artifactsmmo_cli.ai.decompose_core import Act, OpenGate, Step
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.fight_room_license import refused_monster
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_armour import gather_armour
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -790,7 +791,12 @@ def _with_rearm(mapped: list[Action], state: WorldState,
     `is_applicable`: `_swap_plan` is empty (and so `is_applicable` False) when
     the equipped loadout is already optimal for that monster, so this check is
     self-guarding — no separate `equipped_matches_loadout` predicate needed
-    here."""
+    here.
+
+    Gather armour (ruling T14f-3): after the tool, the gather also wears the
+    owned armour whose prospecting saves more seconds over its quantity than
+    the equip costs (`gather_armour`) — the one place that knows the resource
+    and the quantity. It is asked even when the tool is already worn."""
     for i, action in enumerate(mapped):
         if isinstance(action, FightAction):
             rearm = OptimizeLoadoutAction(
@@ -802,7 +808,10 @@ def _with_rearm(mapped: list[Action], state: WorldState,
         if isinstance(action, GatherAction):
             skill, _ = gather_requirement(action.resource_code, game_data)
             rearm = OptimizeLoadoutAction(target_skill=skill, game_data=game_data)
-            if not rearm.is_applicable(state, game_data):
-                return mapped  # loadout already optimal for this skill
-            return [*mapped[:i], rearm, *mapped[i:]]
+            # The tool when the worn one is not the skill's best, then the
+            # armour the gather's prospecting pays for (ruling T14f-3), judged
+            # on the state the tool swap leaves.
+            tool = [rearm] if rearm.is_applicable(state, game_data) else []
+            armed = rearm.apply(state, game_data) if tool else state
+            return [*mapped[:i], *tool, *gather_armour(action, armed, game_data), *mapped[i:]]
     return mapped
