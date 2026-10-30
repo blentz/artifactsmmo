@@ -53,7 +53,7 @@ from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.gate import Door
-from artifactsmmo_cli.ai.progression_reserve import target_floor
+from artifactsmmo_cli.ai.progression_reserve import reserve_floor, target_floor
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 REGION_EDGE_TAG = "movement"
@@ -150,19 +150,31 @@ _REACH: "CatalogueScope[tuple[object, ...], frozenset[str]]" = CatalogueScope(RE
 die with it, so no address is ever reused for another's answer)."""
 
 
-def _reach_key(state: WorldState, game_data: GameData) -> tuple[object, ...]:
+def _crossing_key(state: WorldState, game_data: GameData, floor: int) -> tuple[object, ...]:
     """Everything a crossing's applicability reads (`MapTransitionAction.
-    is_applicable`): the region and layer the walk starts from, the gold and
-    items it pays with, the items it holds or wears, and what a fee's reserve
-    reads (ruling T14e-2): the banked gold the account counts and the floor
-    the reserve keeps. The floor is keyed BEFORE `_binding` collapses an
-    unfunded one to the safety floor (`target_floor`): `door_reaches`'
-    shortfalls (`fee_shortfall`) read it raw, so two unfunded states with
-    different floors lack different gold."""
-    return (game_data.state_region(state), state.layer, state.gold, state.bank_gold,
-            target_floor(state, game_data, None),
+    is_applicable`) but the reserve: the region and layer the walk starts
+    from, the gold and items it pays with, the items it holds or wears, and
+    the banked gold the account counts (ruling T14e-2), with `floor`, the
+    reserve's floor as the memo's reader reads it."""
+    return (game_data.state_region(state), state.layer, state.gold, state.bank_gold, floor,
             tuple(sorted(state.inventory.items())),
             tuple(sorted(code for code in state.equipment.values() if code)))
+
+
+def _reach_key(state: WorldState, game_data: GameData) -> tuple[object, ...]:
+    """`_REACH`'s key: a crossing's fee asks `can_spend`, which reads the
+    floor as it BINDS (`reserve_floor`: an unfunded floor binds only the
+    safety floor), so two unfunded states with different floors walk alike
+    and share one walk (round 5)."""
+    return _crossing_key(state, game_data, reserve_floor(state, game_data, None))
+
+
+def _doors_key(state: WorldState, game_data: GameData) -> tuple[object, ...]:
+    """`_DOORS`' key: a door's fee shortfall (`fee_shortfall`) reads the floor
+    BEFORE `_binding` collapses an unfunded one (`target_floor`), the gold
+    that would fund it, so two unfunded states with different floors lack
+    different gold (round 4, Important #1)."""
+    return _crossing_key(state, game_data, target_floor(state, game_data, None))
 
 
 def reachable_regions_now(state: WorldState, game_data: GameData) -> frozenset[str]:
@@ -243,9 +255,9 @@ def door_reaches(state: WorldState,
     ends at a fixed point within the edge count; content still unreached then
     spawns nowhere reachable. Single doors first, in tile order (`region_edge_actions`); a
     shortfall two edges (or chains) share is listed once, the first's.
-    Memoised as `reachable_regions_now` is (`_DOORS`)."""
+    Memoised as `reachable_regions_now` is (`_DOORS`, keyed by `_doors_key`)."""
     memo = _DOORS.cache_for(game_data)
-    key = _reach_key(state, game_data)
+    key = _doors_key(state, game_data)
     if key not in memo:
         chains = _door_chains(state, game_data)
         _DOORS.remember(memo, key, (
@@ -260,7 +272,7 @@ def _legs_and_tolls(door: Door, state: WorldState,
     """`door`'s `(leg, toll)` pairs in crossing order, or None when
     `door_reaches` does not list it."""
     door_reaches(state, game_data)
-    return _DOORS.cache_for(game_data)[_reach_key(state, game_data)][1].get(door)
+    return _DOORS.cache_for(game_data)[_doors_key(state, game_data)][1].get(door)
 
 
 def door_legs(door: Door, state: WorldState, game_data: GameData) -> tuple[Door, ...]:

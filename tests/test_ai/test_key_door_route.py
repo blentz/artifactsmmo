@@ -187,13 +187,13 @@ def test_a_door_that_reaches_nothing_new_is_no_door(monkeypatch: pytest.MonkeyPa
 
 
 def test_the_door_memo_is_scoped_and_keyed_as_the_reach_is(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`door_reaches` is remembered per catalogue and per `_reach_key`."""
+    """`door_reaches` is remembered per catalogue and per `_doors_key`."""
     world = _door_world(monkeypatch, key_outside=True)
     state = make_state(x=0, y=0)
     region_edges._DOORS.clear()
     first = door_reaches(state, world)
     assert door_reaches(state, world) is first
-    assert list(region_edges._DOORS.cache_for(world)) == [region_edges._reach_key(state, world)]
+    assert list(region_edges._DOORS.cache_for(world)) == [region_edges._doors_key(state, world)]
 
 
 def test_a_fight_past_a_door_carries_the_door_and_its_winnability(
@@ -1032,25 +1032,33 @@ def test_a_chain_s_reentry_pays_each_leg_s_toll_where_that_leg_stands(
     assert asked == [(KEY_A, {}, {}), ((), {}, {"key_a": 1})]
 
 
+@pytest.mark.parametrize(("gold", "fee", "pocket", "lack", "vault_pocket"),
+                         [(1000, 1000, 200, 100, 0), (10_000, 6000, 9200, 1000, 4200)])
 def test_a_later_leg_s_pocket_is_what_the_reserve_lets_its_account_spend(
-        monkeypatch: pytest.MonkeyPatch) -> None:
-    """Round 5 (b): gold 1000, bank 0, a 5000 floor the account cannot fund
-    (it binds at the safety floor), and an 800 floor once the walk's own buy
-    is credited, so the walk spends 200. The 1000-gold hall fee lacks 100.
-    Past it the account holds 100, which the reserve lets the walk spend none
-    of: the vault leg's pocket is 0, derived as the first leg's is, not the
-    first leg's 200 less the fee (-700)."""
-    world = _chain_world(monkeypatch, first=("gold", "cost", 1000))
+        monkeypatch: pytest.MonkeyPatch, gold: int, fee: int, pocket: int, lack: int,
+        vault_pocket: int) -> None:
+    """Round 5 (b): a 5000 floor, 800 once the walk's own buy is credited.
+
+    Gold 1000, bank 0: the 5000 floor is unfunded (it binds at the safety
+    floor) and the walk spends 200. The 1000-gold hall fee lacks 100. Past it
+    the account holds 100, of which the reserve lets the walk spend none: the
+    vault leg's pocket is 0, derived as the first leg's is, not the first
+    leg's 200 less the fee (-700).
+
+    Gold 10000: the walk spends 9200, the 6000 fee lacks 1000, and past it the
+    account holds 5000, of which the walk may spend 4200 (the first leg's
+    pocket less the fee, 4200, would keep the reserve twice: 3400)."""
+    world = _chain_world(monkeypatch, first=("gold", "cost", fee))
     monkeypatch.setattr(progression_reserve, "reserved_targets",
                         lambda at, gd: {"x": 4200, "y": 800})
-    state = replace(make_state(x=0, y=0), gold=1000, bank_gold=0)
-    assert fee_shortfall(state, world, 1000) == 100
-    door = (("gold", 100), ("key_b", 1))
-    assert region_edges.door_legs(door, state, world) == ((("gold", 100),), KEY_B)
+    state = replace(make_state(x=0, y=0), gold=gold, bank_gold=0)
+    assert fee_shortfall(state, world, fee) == lack
+    door = (("gold", lack), ("key_b", 1))
+    assert region_edges.door_legs(door, state, world) == ((("gold", lack),), KEY_B)
     model = ObtainModel(state, world, TIMED_NO_PROFILE_CONTEXT, datetime.now(UTC),
                         crossing=state, spend=frozenset({"x"}))
-    assert model.in_bag(GOLD_CODE) == spendable_pocket(state, world, frozenset({"x"})) == 200
+    assert model.in_bag(GOLD_CODE) == spendable_pocket(state, world, frozenset({"x"})) == pocket
     first, vault = model._leg_models(door)
     assert first is model
-    assert vault.in_bag(GOLD_CODE) == 0
-    assert vault._crossing.gold == 1100
+    assert vault.in_bag(GOLD_CODE) == vault_pocket
+    assert vault._crossing.gold == gold + lack

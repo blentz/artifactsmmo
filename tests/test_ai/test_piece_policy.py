@@ -707,6 +707,25 @@ def test_the_door_memo_keys_the_floor_a_fee_s_shortfall_reads(
     assert region_edges.door_toll((("gold", 8000),), low, world) == (("gold", 5000),)
 
 
+def test_the_walk_memo_shares_a_walk_the_binding_floor_does_not_tell_apart(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Round 5 (c): an unfunded floor binds only the safety floor, so a
+    crossing walks alike under a 3000 floor and none: `_REACH` keys the floor
+    as it binds (`_reach_key`) and walks once, while `_DOORS` keys it raw
+    (`_doors_key`), where the fee's shortfall differs."""
+    player = _seeded(RUNE_CELLS[0])
+    state, world = player.state, player.game_data
+    assert state is not None and world is not None
+    broke = replace(state, gold=0, bank_gold=0)
+    monkeypatch.setattr(progression_reserve, "reserved_targets",
+                        lambda at, gd: {"x": 3000} if at.level == 1 else {})
+    low = replace(broke, level=1)
+    region_edges._REACH.clear()
+    assert reachable_regions_now(broke, world) == reachable_regions_now(low, world)
+    assert len(region_edges._REACH.cache_for(world)) == 1
+    assert region_edges._doors_key(broke, world) != region_edges._doors_key(low, world)
+
+
 def test_a_drop_behind_a_crossing_is_a_route_once_the_fee_is_held() -> None:
     """`dryad_hair` drops only from `dryad`, whose tiles are all on the
     restricted layer past the 5000-gold door: its route's SPAWN_KNOWN gate is
