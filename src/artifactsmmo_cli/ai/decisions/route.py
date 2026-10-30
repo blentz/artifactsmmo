@@ -31,9 +31,9 @@ ranking walk was measured at 33.9 s against a documented 300 ms. A `Decision`
 may call it at most once per candidate child, and only when the node has more
 than one child that is a genuine alternative. A call that INJECTS a pricing
 callback into a helper counts as one call PER CANDIDATE THE HELPER PRICES, not
-as one — wave 4's `WhichSlotClosesTheFight` makes one textual call to
-`deficit_upgrade_target` which prices 22 candidates behind a closure. It may
-never appear inside a `sorted(...)` key over an unbounded list.
+as one — wave 4's `WhichSlotClosesTheFight` (deleted in plan C Task 2) made one
+textual call to a deficit walk that priced 22 candidates behind a closure. It
+may never appear inside a `sorted(...)` key over an unbounded list.
 """
 
 from math import ceil

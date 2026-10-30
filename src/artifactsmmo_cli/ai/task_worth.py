@@ -26,6 +26,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.fight_gold_rate import fight_gold_rate
 from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
@@ -36,16 +37,6 @@ from artifactsmmo_cli.ai.task_alignment import task_advances_progression
 from artifactsmmo_cli.ai.task_horizon import HORIZON_OUT_OF_REACH, resolve_task_horizon
 from artifactsmmo_cli.ai.task_worth_core import TaskWorth, TaskWorthInputs, cancel_due, draw_due, task_worth
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
-
-
-def fight_gold_rate(state: WorldState, game_data: GameData, monster: str,
-                    fight_seconds: Fraction) -> Fraction:
-    """Mean fight gold per cycle of farming `monster`, each fight lasting
-    `fight_seconds` (its rests priced in fights of that length)."""
-    gold = Fraction(game_data.monster_min_gold(monster) + game_data.monster_max_gold(monster), 2)
-    per_kill = Fraction(cycles_per_kill(expected_damage_per_fight(state, game_data, monster),
-                                        state.max_hp, fight_seconds))
-    return gold / per_kill
 
 
 def short_items(state: WorldState, game_data: GameData, ctx: SelectionContext) -> frozenset[str]:
@@ -115,7 +106,7 @@ def task_worth_for(code: str, task_type: str | None, remaining: int, state: Worl
     probe = replace(state, task_code=code, task_type=task_type,
                     task_progress=0, task_total=remaining)
     if task_type == "monsters":
-        horizon = resolve_task_horizon(probe, game_data)
+        horizon = resolve_task_horizon(probe, game_data, ctx, history)
         feasible = horizon is None or horizon.verdict != HORIZON_OUT_OF_REACH
         short = short_items(state, game_data, ctx)
         drop_aligned = any(item in short for item, *_ in game_data.monster_drops(code))

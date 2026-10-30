@@ -85,7 +85,6 @@ from artifactsmmo_cli.ai import gather_demand as _gather_demand
 # whose `LevelSkill.is_applicable` wrapped this same predicate.)
 from artifactsmmo_cli.ai import skill_grindable as _skill_grindable
 from artifactsmmo_cli.ai.combat import is_winnable
-from artifactsmmo_cli.ai.combat_deficit import deficit_upgrade_target
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
 
 # MODULE import, same idiom as `_skill_grindable` above and for the same reason:
@@ -112,7 +111,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_coins import tasks_coin_total
-from artifactsmmo_cli.ai.task_horizon import HORIZON_GEAR, resolve_task_horizon
+from artifactsmmo_cli.ai.task_horizon import resolve_task_horizon
 from artifactsmmo_cli.ai.task_worth import task_worth_for
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -491,151 +490,6 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
     return tuple(ReachSkillLevel(skill=skill, level=demand[skill]) for skill in orphans)
 
 
-class IsAFightBlockingMe(Decision[MetaGoal]):
-    """Is the character held on a fight it cannot win, with nothing else to fight?
-
-    THE STANDING ARM OF `RegearEdge`, ABSORBED (wave 4). `regear_edge.py` computed
-    `craftable and not winnable_alternative` and then
-    `resolve_task_horizon(...).verdict == HORIZON_GEAR`, feeding
-    `ctx.regear_level_up`, which fired the GEAR_REVIEW GUARD — and a guard
-    preempts the objective step outright, which is what froze R2D2's character
-    XP for 981 cycles / 31.6 h in 2026-08-21/22.
-
-    IT IS A NODE AND NOT A LATCH, AND THAT IS ENFORCED BY THE TYPE. A `Decision`
-    is constructed fresh by `resolve_root` every cycle and carries nothing across
-    cycles, so this condition cannot become sticky. Do NOT thread `prev_level`,
-    `last_outcome`, or any persisted boolean into this signature: the moment a
-    node's answer depends on an event N cycles ago, this IS the guard again and
-    the freeze is back under a new name.
-
-    ONLY `HORIZON_GEAR` TAKES THE POSITIVE ARM. The other two verdicts fall
-    through to the tier arm, and that is a decision with a reason on each side:
-
-      * `HORIZON_OUT_OF_REACH` — no chain closes the fight at this level, so
-        there is nothing to build for it. `task_worth.task_worth_for` reads
-        this verdict as infeasible (a cancel); this node must not compete.
-      * `HORIZON_LEVEL_UP` — one level would close it, and this node only fires
-        when bare gear has no monster worth fighting (`ctx.combat_monster` is
-        None, or is won below `SECURE_WIN` on bare gear: `ctx.combat_risky`).
-        A level goal here would have no beatable monster in its
-        `relevant_actions`. That verdict is served from the EDGE instead — a
-        real loss or level-up, where the cascade does find something — by
-        `map_guard`'s surviving LEVEL_UP arm. Pinned by
-        `test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work`:
-        letting the objective's own XP grind run IS the level-up being pursued.
-
-    `ctx.combat_monster`, not a separate `winnable_alternative` parameter.
-    `player.py`'s `_selection_context` sets it ONCE per cycle
-    (`_winnable_farm_target`, from the cycle's gear objective); the sibling node
-    `IsThereACombatTarget` already reads `ctx`. One read.
-
-    BARE GEAR (USER 2026-10-10). This node asks whether BARE gear has a fight:
-    a grind target that wins only on consumables is not won on bare gear, so
-    it fails `secure_win` there and is `ctx.combat_risky` (below), and the
-    fight's gear acquisition is still asked for. A potion-propped win never
-    hides a gear upgrade. (`ctx.combat_propped` is read too but nothing sets
-    it since the gear objective names the target; Plan C removes it.)
-
-    SECURE (USER 2026-10-15, "if all of our fights are below 75% win rates, we
-    probably need better gear"). A target won below `combat.SECURE_WIN`
-    (`ctx.combat_risky`) counts as none here too, so the held fight's gear is
-    asked for first. Without that gear the tier arm still reaches the trunk, and
-    the risky target is grinded.
-
-    `has_craftable_upgrade_any_slot` is NOT re-tested here. In the latch it was
-    the AND-guard that stopped the standing arm firing with nothing to build; in
-    the graph that job belongs to the child — `WhichSlotClosesTheFight` returns
-    the tier arm when the deficit chain is empty. Re-testing it here would be a
-    second, coarser opinion (`find_upgrade_target` is monster-BLIND — the
-    ten-hour `iron_boots` failure) standing in front of the monster-aware one.
-    """
-
-    name = "IsAFightBlockingMe"
-
-    def __init__(self, objective: CharacterObjective, walk: RootWalk) -> None:
-        # `objective` is carried, not used, on the positive arm: both children
-        # need it (`IsMyGearBehindMyTier` directly, `WhichSlotClosesTheFight`
-        # for `classify_target`), and this is the walk's entry so there is
-        # nowhere above it to hold one.
-        self.objective = objective
-        self.walk = walk
-
-    def resolve(self, state: WorldState, game_data: GameData,
-                ctx: SelectionContext, history: LearningStore | None
-                ) -> "Decision[MetaGoal] | MetaGoal | None":
-        self.walk.trail.append(self.name)
-        if (ctx.combat_monster is not None and not ctx.combat_propped
-                and not ctx.combat_risky):
-            return IsMyGearBehindMyTier(self.objective, self.walk)
-        horizon = resolve_task_horizon(state, game_data)
-        if horizon is None or horizon.verdict != HORIZON_GEAR:
-            return IsMyGearBehindMyTier(self.objective, self.walk)
-        return WhichSlotClosesTheFight(self.objective, self.walk)
-
-
-class WhichSlotClosesTheFight(Decision[MetaGoal]):
-    """The one acquisition that most improves the margin against the held task's
-    monster, per action spent.
-
-    `combat_deficit.deficit_upgrade_target`, ABSORBED (wave 4). It was
-    `map_guard`'s GEAR_REVIEW branch (that guard was deleted in Phase 4-3b), the
-    only link the bot had between "I cannot
-    win this fight" and "build this". Its predecessor was a monster-BLIND
-    `_best_by_value` scan that chose `iron_boots` — already worn, absent from all
-    24 items that improved the pig margin — while the weapon that moved
-    `rounds_to_kill` went unbuilt for ten hours.
-
-    THIS IS NOT A FIFTH RANKING MULTIPLIER AND NOT A NEW ARGMAX. It adds no
-    scoring surface: `combat_deficit`'s greedy walk already exists, is already
-    called in production, and is already ranked on margin gain per acquisition
-    action. Wave 4 changes WHERE it is called, not WHAT it computes. The wave-3
-    precedent (`WhichSlotIsFurthestBehind`) applies verbatim: no multiplier may
-    be added to this ranking. If a future need appears to weight this against the
-    tier gap, that is a request for a fifth multiplier and must be refused — the
-    two are in DIFFERENT ARMS of a branch, never summed, which is exactly why
-    neither needs a scale.
-
-    Falls through to the tier arm — the honest wall — when the priced walk names
-    nothing. That is `combat_deficit`'s own "unwinnable and I do not know what to
-    build" case, and the graph's answer to it is the objective's own next step,
-    not a monster-blind guess.
-    """
-
-    name = "WhichSlotClosesTheFight"
-
-    def __init__(self, objective: CharacterObjective, walk: RootWalk) -> None:
-        self.objective = objective
-        self.walk = walk
-
-    def resolve(self, state: WorldState, game_data: GameData,
-                ctx: SelectionContext, history: LearningStore | None
-                ) -> "Decision[MetaGoal] | MetaGoal | None":
-        self.walk.trail.append(self.name)
-
-        def actions_of(code: str, slot: str) -> int:
-            # Through `route_price`, not `acquisition_actions` directly: wave 6's
-            # O6 census permits exactly one pricing import under `ai/decisions/`,
-            # and it is `decisions/route.py`. `equip` is derived there from
-            # `goal.slot` — the old hand-written `equip=True` asserted a second
-            # time a fact the slot already carried.
-            return _route.route_price(ObtainItem(code, 1, slot=slot), state,
-                                      game_data, ctx, history)
-
-        target = deficit_upgrade_target(state, game_data, actions_of=actions_of)
-        if target is None:
-            return IsMyGearBehindMyTier(self.objective, self.walk)
-        code, slot = target
-        # Reuses `IsThisTargetBlocked` rather than mapping the code to a goal
-        # itself: that node is the one place that reads a `GearTarget`'s four
-        # shapes, and a second reader is a second chance to read them wrong.
-        gear = self.objective.classify_target(code, state)
-        if not self.walk.serves(slot, gear, state, game_data, ctx, history):
-            # The fight's best acquisition cannot be served this cycle (named
-            # in `walk.declined`): the same fall-through as naming nothing.
-            return IsMyGearBehindMyTier(self.objective, self.walk)
-        return IsThisTargetBlocked(slot, gear, self.walk)
-
-
 class IsMyGearBehindMyTier(Decision[MetaGoal]):
     """Does the gear-target tier want anything this character does not wear?
 
@@ -860,11 +714,11 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
       verdict `GamePlayer._is_winnable` gives the cascade): the task itself,
       `ReachTaskOutcome`, whose step is one more kill;
     * NOT winnable — USER ruling: the task ASKS FOR GEAR. The root is the
-      acquisition that most improves the margin against the task monster
-      (`combat_deficit.deficit_upgrade_target`, the question
-      `WhichSlotClosesTheFight` asks), as an `ObtainItem` in its slot;
-    * no gear closes the gap: None. The task waits, inert, for a coin to cancel
-      it (S-052).
+      first missing piece of `L*` of the task monster, in its slot: the
+      horizon's `HORIZON_GEAR` verdict (`resolve_task_horizon`, plan C Task 2),
+      read here so the root and the task's worth are one reading;
+    * no gear closes the gap (any other verdict): None. The task waits, inert,
+      for a coin to cancel it (S-052).
 
     * a WORTHLESS task (no XP, no GOLD, no DROPS reason — `task_worth_core`)
       with a pocket coin to cancel it: the task itself, whose step is the
@@ -908,16 +762,10 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
         return None
     if is_winnable(replace(state, hp=state.max_hp), game_data, state.task_code, history):
         return ReachTaskOutcome(state.task_code)
-
-    def actions_of(code: str, slot: str) -> int:
-        return _route.route_price(ObtainItem(code, 1, slot=slot), state,
-                                  game_data, ctx, history)
-
-    target = deficit_upgrade_target(state, game_data, actions_of=actions_of)
-    if target is None:
+    horizon = resolve_task_horizon(state, game_data, ctx, history)
+    if horizon is None or horizon.gear_target is None:
         return None
-    code, slot = target
-    return ObtainItem(code, 1, slot=slot)
+    return ObtainItem(horizon.gear_target.code, 1, slot=horizon.gear_target.slot)
 
 
 def _fleet_roots(ctx: SelectionContext) -> list[ReachFleetOutcome]:

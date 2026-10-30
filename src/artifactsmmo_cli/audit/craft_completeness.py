@@ -51,11 +51,11 @@ from artifactsmmo_cli.ai.region_edges import (
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
+from artifactsmmo_cli.ai.suppliable import is_suppliable
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import (
     GOLD,
     CharacterObjective,
-    is_suppliable,
 )
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 

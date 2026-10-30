@@ -8,9 +8,9 @@
 >
 > Every field `classify_gap` reads is a column: `droppers`, `live tiles` and `winnable` are the two conjuncts `ObtainModel._drop` gates on, and `event` separates a dormant event from a permanent monster with no tile.
 
-1491 cells over 7 currencies; charged 25; FUNDED 3; walled 22; not_demanded 1466; root_unresolved 0; o7_silent_currency_stall 0; o7_multi_currency_wall 0; o7_unexplained 0; currency_catalogue_empty 0
+1484 cells over 7 currencies; charged 25; FUNDED 3; walled 22; not_demanded 1459; root_unresolved 0; o7_silent_currency_stall 0; o7_multi_currency_wall 0; o7_unexplained 0; currency_catalogue_empty 0
 
-residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22, tasks_coin 3. An uncharged currency can only be not_demanded.
+residual scope: 25 of 1484 cells are CHARGED (2 distinct currencies) — gold 22, tasks_coin 3. An uncharged currency can only be not_demanded.
 
 | Scenario | Candidate | root? | Currency | Verdict | charged | base | granted | earnable | droppers | live tiles | winnable | event |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -735,13 +735,13 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l13_drop_recipe_grind | `ReachSkillLevel(skill='weaponcrafting', level=6)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l13_drop_recipe_grind | `ReachSkillLevel(skill='weaponcrafting', level=6)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l13_drop_recipe_grind | `ReachSkillLevel(skill='weaponcrafting', level=6)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
+| l13_drop_recipe_grind | `ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l13_drop_recipe_grind | `ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l13_drop_recipe_grind | `ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l10_gearcrafting_gap | `ReachSkillLevel(skill='gearcrafting', level=6)` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l10_gearcrafting_gap | `ReachSkillLevel(skill='gearcrafting', level=6)` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l10_gearcrafting_gap | `ReachSkillLevel(skill='gearcrafting', level=6)` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -1085,13 +1085,6 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l32_held_task_closable | `ReachSkillLevel(skill='jewelrycrafting', level=16)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l32_held_task_closable | `ReachSkillLevel(skill='jewelrycrafting', level=16)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l32_held_task_closable | `ReachSkillLevel(skill='jewelrycrafting', level=16)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l32_held_task_closable | `ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l32_held_task_closable | `ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l32_held_task_closable | `ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l32_held_task_closable | `ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l32_held_task_closable | `ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l32_held_task_closable | `ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l32_held_task_closable | `ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l32_held_task_open | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l32_held_task_open | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l32_held_task_open | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |

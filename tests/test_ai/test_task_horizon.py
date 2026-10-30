@@ -34,32 +34,38 @@ import pytest
 from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.combat_deficit import combat_deficit
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_objective import gear_objective_for
 from artifactsmmo_cli.ai.learning.rung_state_core import HP_PER_LEVEL
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.task_horizon import (
     HORIZON_GEAR,
     HORIZON_LEVEL_UP,
     HORIZON_OUT_OF_REACH,
+    TaskHorizon,
     next_level_state,
     resolve_task_horizon,
 )
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
-GEAR_CELL = "l32_held_task_closable"      # ogre: a chain closes it
+GEAR_CELL = "l13_drop_recipe_grind"       # cow: its `L*` closes it
+LEVEL_UP_TASK_CELL = "l32_held_task_closable"  # ogre: `L*` held and lost, a level closes it
 OUT_OF_REACH_CELL = "l32_held_task_open"  # lich: nothing closes it
 WORKABLE_CELL = "l32_held_task_workable"  # wolf: already winnable
 
 LEVEL_UP_CELL = "l12_ge_book_adequate"
 LEVEL_UP_MONSTER = "mushmush"
-"""The level-up witness. At its level no chain closes `mushmush`; one level up a
-chain does — and the catalogue pool is IDENTICAL at both levels, so the flip is
-the +5 Max HP and nothing else. See
-`test_the_level_up_evaluation_moves_the_body_not_only_the_pool`.
+"""The deficit walk's level-up witness. At its level no catalogue chain closes
+`mushmush`; one level up a chain does — and the catalogue pool is IDENTICAL at
+both levels, so the flip is the +5 Max HP and nothing else. See
+`test_the_level_up_evaluation_moves_the_body_not_only_the_pool`. Since plan C
+Task 2 the horizon's gear arm is `L*(mushmush)`, which closes it at this level,
+so the horizon reads GEAR here; its level-up verdict's witness is
+`LEVEL_UP_TASK_CELL`.
 
 It was `l13_drop_recipe_grind` v mushmush until the fight gates read the odds
 (spec 2026-10-15 fight-gates-odds §1): that chain closed at closed-form margin
@@ -136,6 +142,11 @@ def _level_up_witnesses(name: str) -> list[tuple[str, str]]:
     return found
 
 
+def _horizon(state: WorldState, game_data: GameData) -> TaskHorizon | None:
+    """The horizon on the offline context, store-less."""
+    return resolve_task_horizon(state, game_data, TIMED_NO_PROFILE_CONTEXT, None)
+
+
 def _with_task(state: WorldState, monster: str) -> WorldState:
     """The same character holding a monsters task for `monster`, 0/10."""
     return dataclasses.replace(
@@ -147,20 +158,43 @@ def _with_task(state: WorldState, monster: str) -> WorldState:
 # --- the three verdicts ----------------------------------------------------
 
 def test_gear_that_closes_the_fight_reads_gear(gd: GameData) -> None:
-    """Clause 1. Unchanged behaviour, pinned so the other two cannot swallow it."""
-    horizon = resolve_task_horizon(_state(GEAR_CELL, gd), gd)
+    """Clause 1: `L*` of the task monster secures the fight, and the verdict
+    names its first missing piece in the objective's own order (plan C Task 2;
+    the deleted deficit walk named a weapon for this cow)."""
+    state = _state(GEAR_CELL, gd)
+    horizon = _horizon(state, gd)
     assert horizon is not None
-    assert horizon.monster == "ogre"
+    assert horizon.monster == "cow"
     assert horizon.verdict == HORIZON_GEAR
-    assert horizon.gear_target == ("perfect_bow", "weapon_slot")
+    objective = gear_objective_for("cow", state, gd, TIMED_NO_PROFILE_CONTEXT, None)
+    assert len(objective.missing) > 1
+    assert horizon.gear_target == objective.missing[0]
+    assert (horizon.gear_target.code, horizon.gear_target.slot) == (
+        "iron_legs_armor", "leg_armor_slot")
+
+
+def test_a_missing_l_star_that_still_loses_is_no_gear_verdict(gd: GameData) -> None:
+    """`L*(pig)` has nine missing pieces at `l10_copper_adequate`, and the
+    fighter wearing all of them is still below the secure bar: gear the
+    character can build does not close the fight, so the horizon names none
+    and reads one level up instead."""
+    state = _with_task(_state("l10_copper_adequate", gd), "pig")
+    objective = gear_objective_for("pig", state, gd, TIMED_NO_PROFILE_CONTEXT, None)
+    assert len(objective.missing) == 9
+    horizon = _horizon(state, gd)
+    assert horizon is not None
+    assert horizon.verdict != HORIZON_GEAR
+    assert horizon.gear_target is None
 
 
 def test_one_level_plus_gear_closing_it_reads_level_up(gd: GameData) -> None:
-    """Clause 2, and the whole reason the level+1 body has to be modelled."""
-    state = _with_task(_state(LEVEL_UP_CELL, gd), LEVEL_UP_MONSTER)
-    assert combat_deficit(dataclasses.replace(state, hp=state.max_hp),
-                          gd, LEVEL_UP_MONSTER).closes is False
-    horizon = resolve_task_horizon(state, gd)
+    """Clause 2, and the whole reason the level+1 body has to be modelled.
+    `L*(ogre)` is held and loses; one level closes the fight."""
+    state = _state(LEVEL_UP_TASK_CELL, gd)
+    assert state.task_code == "ogre"
+    assert not gear_objective_for("ogre", state, gd, TIMED_NO_PROFILE_CONTEXT, None).missing
+    assert combat_deficit(dataclasses.replace(state, hp=state.max_hp), gd, "ogre").closes is True
+    horizon = _horizon(state, gd)
     assert horizon is not None
     assert horizon.verdict == HORIZON_LEVEL_UP
     assert horizon.gear_target is None
@@ -205,7 +239,7 @@ def test_the_level_alone_arm_is_a_level_up_verdict_too() -> None:
     assert combat_deficit(state, game_data, "rat").closes is False
     assert combat_deficit(next_level_state(state), game_data, "rat") is None
 
-    horizon = resolve_task_horizon(state, game_data)
+    horizon = _horizon(state, game_data)
     assert horizon is not None
     assert horizon.verdict == HORIZON_LEVEL_UP
 
@@ -218,7 +252,7 @@ def test_nothing_within_one_level_reads_out_of_reach(gd: GameData) -> None:
     measured, to the SAME goal the already-winnable cell produced
     (`test_the_task_triple_moves_the_gear_review_target`). A guard reviewing gear
     for a fight no gear it can name will win."""
-    horizon = resolve_task_horizon(_state(OUT_OF_REACH_CELL, gd), gd)
+    horizon = _horizon(_state(OUT_OF_REACH_CELL, gd), gd)
     assert horizon is not None
     assert horizon.monster == "lich"
     assert horizon.verdict == HORIZON_OUT_OF_REACH
@@ -231,13 +265,13 @@ def test_nothing_within_one_level_reads_out_of_reach(gd: GameData) -> None:
 
 def test_a_winnable_task_has_no_verdict_to_take(gd: GameData) -> None:
     """None is not a fourth verdict — it means there is no reading to take."""
-    assert resolve_task_horizon(_state(WORKABLE_CELL, gd), gd) is None
+    assert _horizon(_state(WORKABLE_CELL, gd), gd) is None
 
 
 def test_no_held_task_has_no_verdict_to_take(gd: GameData) -> None:
     """Every caller distinguishes "no task" from "out of reach" through this."""
     state = _state(GEAR_CELL, gd)
-    assert resolve_task_horizon(
+    assert _horizon(
         dataclasses.replace(state, task_code=None, task_type=None,
                             task_progress=0, task_total=0), gd) is None
 
@@ -286,6 +320,12 @@ def test_the_level_up_evaluation_moves_the_body_not_only_the_pool(gd: GameData) 
 
 def test_the_level_up_arm_has_real_witnesses() -> None:
     """Six of 1,375 futile pairs, and the clause is worth exactly that much.
+
+    WHAT IT MEASURES since plan C Task 2: the deficit walk's own reading, "no
+    catalogue chain closes it here, one closes it a level up" (the level-up
+    arm's second half). The horizon's gear arm reads `L*` of the task monster
+    instead, which is too costly to sweep over every pair; the horizon's own
+    level-up verdict is pinned on `LEVEL_UP_TASK_CELL`.
 
     Five from 2026-10-15 until the deficit walk ranked on the odds at a margin
     stall (post-merge review 2026-10-16): the l10 / l19 / l48 pairs left (l10
@@ -358,21 +398,6 @@ def test_the_level_up_arm_has_real_witnesses() -> None:
     assert (LEVEL_UP_CELL, LEVEL_UP_MONSTER) in witnesses
 
 
-# --- one reading per cycle --------------------------------------------------
-
-def test_the_verdict_is_resolved_once_per_state(gd: GameData) -> None:
-    """The gear latch, the GEAR_REVIEW mapper and the task-worth cancel verdict all ask
-    within one cycle. They must not be able to disagree, and the walk costs a
-    catalogue sweep per chain step — `combat_deficit`'s own docstring says a
-    per-cycle caller must memoise."""
-    state = _state(GEAR_CELL, gd)
-    first = resolve_task_horizon(state, gd)
-    assert resolve_task_horizon(state, gd) is first
-    # A DIFFERENT state object recomputes — identity, never equality, so a stale
-    # answer can never be served for a state that has moved on.
-    assert resolve_task_horizon(dataclasses.replace(state), gd) is not first
-
-
 def test_a_task_the_gate_fights_with_no_gear_to_secure_it_has_no_verdict() -> None:
     """P 0.6308 clears a measured θ of 1/2, so the gate fights the task; it is
     below SECURE_WIN (a gear deficit), but the only item is a helmet with no
@@ -393,4 +418,4 @@ def test_a_task_the_gate_fights_with_no_gear_to_secure_it_has_no_verdict() -> No
                        task_code="owlbear", task_type="monsters", task_total=10,
                        task_progress=0, win_thresholds={"owlbear": Fraction(1, 2)})
     assert predict_win(state, gd, "owlbear")
-    assert resolve_task_horizon(state, gd) is None
+    assert _horizon(state, gd) is None

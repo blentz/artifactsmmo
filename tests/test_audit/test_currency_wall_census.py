@@ -568,7 +568,13 @@ def test_the_demand_breakdown_states_the_residual_scope(
     # No charged cell moves.
     # 24 -> 25, gold 21 -> 22 (ruling T14a-B'): `l20_relief_full_bank`'s rune,
     # once priced by selling one banked sap for 18,500 gold, is gold-walled.
-    assert "25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22, tasks_coin 3" in line
+    # 1491 -> 1484 (plan C Task 2): an unwinnable task roots `L*` of its
+    # monster. `l13_drop_recipe_grind`'s cow task asks `iron_legs_armor` for
+    # the deficit walk's `sticky_sword` (same 7 cells), and
+    # `l32_held_task_closable`'s ogre task, whose `L*` is held and loses, asks
+    # for nothing where the walk asked `earth_boost_potion` (-7). No charged
+    # cell moves.
+    assert "25 of 1484 cells are CHARGED (2 distinct currencies) — gold 22, tasks_coin 3" in line
     assert FUNDED_CURRENCY in line
     assert demand_breakdown([]) .endswith(
         "An uncharged currency can only be not_demanded.")

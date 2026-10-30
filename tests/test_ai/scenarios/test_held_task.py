@@ -3,16 +3,16 @@
 `ScenarioCharacter.task` has existed since the harness was built and, until this
 file, no scenario set it: 30 of 30 carried `task_code=None`, so
 `combat_deficit.blocked_task_monster` returned `None` in every offline test and
-everything downstream of it — `has_combat_deficit`, `deficit_upgrade_target`,
-`RegearEdge`, the `GEAR_REVIEW` guard (both deleted in Phase 4-3b) — was reachable only through hand-built
-states. Live, 21.1 % of cycles hold a task, and every one of them is a
+everything downstream of it — `has_combat_deficit`, the task horizon, the task
+root, `RegearEdge`, the `GEAR_REVIEW` guard (both deleted in Phase 4-3b) — was
+reachable only through hand-built states. Live, 21.1 % of cycles hold a task, and every one of them is a
 `monsters` task.
 
 Three scenarios now hold one, chosen to give the dimension three DISTINCT
 values rather than three copies of one:
 
 * `l12_gearcrafting_gap` — a task it can win (deficit False),
-* `l13_drop_recipe_grind` — a task it cannot win, with gear that closes the gap,
+* `l13_drop_recipe_grind` — a task it cannot win, whose `L*` closes the gap,
 * `l10_copper_adequate` — a task it cannot win, with NO gear that closes it.
 
 Those three populate the dimension. They do not CONTROL it: they are three
@@ -23,7 +23,8 @@ controlled form — ONE character in three task states, every other field
 identical:
 
 * `l32_held_task_workable` — wolf, winnable,
-* `l32_held_task_closable` — ogre, unwinnable, a chain closes it,
+* `l32_held_task_closable` — ogre, unwinnable; a catalogue chain closed it, but
+  no ACHIEVABLE gear does: `L*(ogre)` is held and loses, one level closes it,
 * `l32_held_task_open` — lich, unwinnable, nothing closes it.
 
 `test_the_held_task_triple_varies_only_the_task` is what keeps them a control;
@@ -41,8 +42,8 @@ assumed:
    asserts it. A future edit that drops the flag turns these cells into noise,
    and that test is what says so.
 2. **Three values, not one.** `test_the_three_task_values_are_distinct` fails if
-   two of them ever collapse onto the same `(deficit, closable)` pair — which is
-   how a dimension quietly stops discriminating.
+   two of them ever collapse onto the same `(deficit, gear verdict)` pair — which
+   is how a dimension quietly stops discriminating.
 """
 
 import dataclasses
@@ -50,15 +51,12 @@ from pathlib import Path
 
 import pytest
 
-from artifactsmmo_cli.ai.combat_deficit import deficit_upgrade_target, has_combat_deficit
+from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.combat_deficit import has_combat_deficit
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
-from artifactsmmo_cli.ai.decisions.root import (
-    IsAFightBlockingMe,
-    RootWalk,
-    WhichSlotClosesTheFight,
-    resolve_root,
-)
+from artifactsmmo_cli.ai.decisions.root import _task_root, resolve_root
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective import gear_objective_for
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.inventory_keep import keep_in_bag
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -69,7 +67,9 @@ from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.task_horizon import (
     HORIZON_GEAR,
+    HORIZON_LEVEL_UP,
     HORIZON_OUT_OF_REACH,
+    TaskHorizon,
     resolve_task_horizon,
 )
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
@@ -110,6 +110,19 @@ def _obj(game_data: GameData) -> CharacterObjective:
 
 def _state(name: str, game_data: GameData):
     return scenario_state(SCENARIOS[name], game_data)
+
+
+def _horizon(state, game_data: GameData) -> TaskHorizon | None:  # type: ignore[no-untyped-def]
+    """The task horizon on the offline context, store-less."""
+    return resolve_task_horizon(state, game_data, TIMED_NO_PROFILE_CONTEXT, None)
+
+
+def _gear(state, game_data: GameData) -> tuple[str, str] | None:  # type: ignore[no-untyped-def]
+    """`(code, slot)` of the horizon's gear verdict, or None."""
+    horizon = _horizon(state, game_data)
+    if horizon is None or horizon.gear_target is None:
+        return None
+    return horizon.gear_target.code, horizon.gear_target.slot
 
 
 def test_the_held_task_dimension_has_a_populated_side(gd: GameData) -> None:
@@ -154,7 +167,7 @@ def test_the_three_task_values_are_distinct(gd: GameData) -> None:
     """Three cells, three answers. Collapse two and the dimension stops splitting."""
     seen = {
         name: (has_combat_deficit(_state(name, gd), gd),
-               deficit_upgrade_target(_state(name, gd), gd) is not None)
+               _gear(_state(name, gd), gd) is not None)
         for name in TASK_SCENARIOS
     }
     assert len(set(seen.values())) == 3, seen
@@ -169,7 +182,7 @@ def test_workable_task_reaches_the_negative_deficit_arm(gd: GameData) -> None:
     state = _state(WORKABLE, gd)
     assert state.task_code == "cow"
     assert has_combat_deficit(state, gd) is False
-    assert deficit_upgrade_target(state, gd) is None
+    assert _horizon(state, gd) is None
 
 
 def test_unwinnable_task_names_the_gear_that_closes_it(gd: GameData) -> None:
@@ -177,14 +190,11 @@ def test_unwinnable_task_names_the_gear_that_closes_it(gd: GameData) -> None:
 
     Before this the ONLY route from a lost fight to a gear upgrade was a
     countdown timer, and the walk that replaced it had no scenario exercising
-    its positive arm."""
+    its positive arm. The gear is the first missing piece of `L*(cow)` (plan C
+    Task 2); the deleted deficit walk named a weapon here."""
     state = _state(UNWINNABLE_CLOSABLE, gd)
     assert has_combat_deficit(state, gd) is True
-    target = deficit_upgrade_target(state, gd)
-    assert target is not None
-    item, slot = target
-    assert slot == "weapon_slot"
-    assert gd.item_stats(item) is not None
+    assert _gear(state, gd) == ("iron_legs_armor", "leg_armor_slot")
 
 
 def test_unwinnable_task_with_no_closing_chain_names_nothing(gd: GameData) -> None:
@@ -195,7 +205,9 @@ def test_unwinnable_task_with_no_closing_chain_names_nothing(gd: GameData) -> No
     indistinguishable from the function never running."""
     state = _state(UNWINNABLE_OPEN, gd)
     assert has_combat_deficit(state, gd) is True
-    assert deficit_upgrade_target(state, gd) is None
+    horizon = _horizon(state, gd)
+    assert horizon is not None
+    assert (horizon.verdict, horizon.gear_target) == (HORIZON_OUT_OF_REACH, None)
 
 
 # --- coverage-matrix cells 1-3: the same character, three task states --------
@@ -218,95 +230,42 @@ def test_the_held_task_triple_varies_only_the_task() -> None:
     assert len({SCENARIOS[n].task for n in TRIPLE}) == 3
 
 
-def test_the_task_triple_splits_the_deficit_three_ways(gd: GameData) -> None:
+def test_the_task_triple_splits_the_horizon_three_ways(gd: GameData) -> None:
     """One character, three tasks, three answers at the branch D2 names.
 
     `blocked_task_monster` is reached in all three (a task is held); what
-    differs is only which arm of `has_combat_deficit` / `deficit_upgrade_target`
-    the monster lands on. Measured over all 58 catalogue monsters at this
-    loadout: 11 are workable, 8 closable, 39 open — so none of the three values
-    is a lucky single. (12 / 8 / 38 under the closed form; the fight odds moved
-    one monster from workable to open.)
+    differs is only which horizon verdict the monster lands on.
 
-    That split was 12 / 37 / 9 while `deficit_upgrade_target` branched on
-    `deficit.chain` instead of `deficit.closes`. Twenty-nine of those thirty-
-    seven "closable" monsters were nothing of the kind: the walk named an item
-    that moved the margin and never reached zero, and the guard committed to it
-    anyway. The middle value is now the monsters a chain really does close, and
-    it is still populated eight times over."""
+    RE-DERIVED plan C Task 2: the gear verdict is `L*` of the task monster, the
+    ACHIEVABLE loadout. The deleted deficit walk closed the ogre with
+    `perfect_bow`, a catalogue item this character cannot obtain; `L*(ogre)` is
+    already held and still loses, and one level closes it. So the closable
+    cell reads LEVEL_UP, and the three cells still split three ways."""
     workable = _state(TRIPLE_WORKABLE, gd)
     closable = _state(TRIPLE_CLOSABLE, gd)
     open_ = _state(TRIPLE_OPEN, gd)
 
     assert has_combat_deficit(workable, gd) is False
-    assert deficit_upgrade_target(workable, gd) is None
+    assert _horizon(workable, gd) is None
 
     assert has_combat_deficit(closable, gd) is True
-    target = deficit_upgrade_target(closable, gd)
-    assert target == ("perfect_bow", "weapon_slot")
+    assert not gear_objective_for("ogre", closable, gd, TIMED_NO_PROFILE_CONTEXT, None).missing
+    horizon = _horizon(closable, gd)
+    assert horizon is not None
+    assert (horizon.verdict, horizon.gear_target) == (HORIZON_LEVEL_UP, None)
 
     assert has_combat_deficit(open_, gd) is True
-    assert deficit_upgrade_target(open_, gd) is None
+    horizon = _horizon(open_, gd)
+    assert horizon is not None
+    assert (horizon.verdict, horizon.gear_target) == (HORIZON_OUT_OF_REACH, None)
     # ...and the lich really is IN BAND, so the fall-through is a gear fact and
     # not the artefact of naming a monster twenty levels out of reach.
     assert gd.monster_level("lich") <= SCENARIOS[TRIPLE_OPEN].level
 
 
-def test_the_task_triple_arms_the_fight_arm(gd: GameData) -> None:
-    """The latch's former STANDING arm (now `IsAFightBlockingMe`), with the task
-    as the only input moving.
-
-    The latch's standing arm is a three-way conjunction: a craftable upgrade
-    exists, the cascade found nothing else worth fighting, and a combat deficit
-    exists. The first is identical across the triple (asserted here so a
-    failure cannot be blamed on it) and the second is supplied explicitly —
-    see `test_the_triple_starves_the_winnable_cascade`: the measured cascade
-    is None for all three cells. So the latch's answer moves with the deficit, i.e. with the
-    task, which is exactly the claim cell 2 makes.
-
-    THE OPEN CELL FLIPPED ON 2026-08-25, and it is the point of the one-level
-    horizon rather than a regression. The third conjunct was `has_combat_deficit`
-    — the bare fact "this fight is lost" — so cells 2 and 3 armed the latch
-    IDENTICALLY even though only cell 2 has gear that wins the fight. GEAR_REVIEW
-    is a guard, so for cell 3 that meant preempting the objective step to build
-    gear the walk had just proved cannot close the gap, and falling through to
-    the monster-blind value scan to pick it (measured: the SAME goal cell 1
-    produces — see `test_the_task_triple_moves_the_gear_review_target`). Live
-    R2D2 did that for 981 consecutive cycles with character XP frozen 31.6 h.
-    The conjunct is now `task_horizon` == HORIZON_GEAR, so the latch arms where
-    gear really is what stands in the way and nowhere else — which is what the
-    class docstring said all along.
-
-    Cell 2 still arms it. A fix that quieted cell 3 by deleting the standing arm
-    would have deleted the loss->upgrade link with it, and this line is what
-    says so."""
-    def _arm(name: str, *, winnable_alternative: bool) -> bool:
-        """Does the WALK take the fight arm? (wave 4: this was the latch.)
-
-        The standing arm is now `decisions/root.IsAFightBlockingMe`, so the
-        question "does this cell arm the gear review" is asked of the node. The
-        rows below are unchanged from the latch era — the behaviour moved, it
-        did not change."""
-        state = _state(name, gd)
-        monster = "chicken" if winnable_alternative else None
-        child = IsAFightBlockingMe(
-            _obj(gd), RootWalk()).resolve(
-                state, gd,
-                dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, combat_monster=monster),
-                None)
-        return isinstance(child, WhichSlotClosesTheFight)
-
-    assert _arm(TRIPLE_WORKABLE, winnable_alternative=False) is False
-    assert _arm(TRIPLE_CLOSABLE, winnable_alternative=False) is True
-    assert _arm(TRIPLE_OPEN, winnable_alternative=False) is False
-    # The other conjunct still binds: an alternative to fight releases all three.
-    for name in TRIPLE:
-        assert _arm(name, winnable_alternative=True) is False
-
-
 def test_the_triple_starves_the_winnable_cascade(gd: GameData) -> None:
     """The triple's cascade finds nothing to fight: the measured fact behind
-    the sibling test's `winnable_alternative=False` rows.
+    the deleted fight-arm test's `winnable_alternative=False` rows.
 
     REVERSED 2026-10-03. This test was `..._cannot_starve_...` and asserted a
     non-None farm target for all three cells: `_path_aligned_monster` returned
@@ -329,36 +288,23 @@ def test_the_triple_starves_the_winnable_cascade(gd: GameData) -> None:
         assert player._last_ctx.combat_monster is None
 
 
-def test_the_task_triple_moves_the_gear_review_target(gd: GameData) -> None:
-    """`WhichSlotClosesTheFight` — both arms, reached from the triple.
+def test_the_task_triple_moves_the_task_root(gd: GameData) -> None:
+    """The triple's verdicts reach a DECISION: the task root (`_task_root`),
+    offered in the alternatives.
 
-    This is where D2 stops being a predicate and becomes a DECISION. The node
-    asks `deficit_upgrade_target` and hands its answer to `IsThisTargetBlocked`;
-    when it names nothing the walk falls through to the tier arm. Cell 2 takes
-    the first arm; cells 1 and 3 take the fall-through, and they take it for
-    different reasons (no deficit at all vs a deficit no gear closes) — which
-    is why the triple needs all three rows and not two.
+    The root walk enters at `WhichPieceIsNext` (global gear objective Task 5),
+    so a held task does not move the ROOT: all three cells head the walk with
+    their own `L*`'s first piece. Spec §2.8: `L*`'s `fire_and_earth_amulet`
+    adds nothing to `R` on `rat` over the `life_amulet` the triple owns, so it
+    is not missing, and the walk heads with the rune.
 
-    Measured: the node prices its candidates through `route_price`, so the
-    deficit target it lands on (`earth_boost_potion`) is the priced answer, not
-    the unpriced `perfect_bow` of `test_the_task_triple_splits_the_deficit_three_ways`.
-    Both are `deficit_upgrade_target`; only the `actions_of` differs.
-
-    WAS `map_guard(GEAR_REVIEW)` until wave 4. The assertions are unchanged: the
-    same cell still names the same priced item, one layer down.
-
-    RE-DERIVED Task 5 (global gear objective): the root walk enters at
-    `WhichPieceIsNext`, so a held task no longer moves the ROOT — all three
-    cells head the walk with their `L*`'s first piece. The task's verdict is
-    the TASK ROOT (`_task_root`, which asks the same priced
-    `deficit_upgrade_target`), offered in the alternatives, and it still splits
-    the triple three ways: the closable cell's task asks for the priced
-    `earth_boost_potion`, the workable cell's task is worked, the open cell's
-    task offers nothing (no gear closes it, no coin cancels it).
-
-    Spec §2.8: `L*`'s `fire_and_earth_amulet` adds nothing to `R` on `rat`
-    over the `life_amulet` the triple owns (gain -0.0025), so it is not
-    missing, and the walk heads with the rune."""
+    RE-DERIVED plan C Task 2: the task root of an unwinnable task is the first
+    missing piece of `L*` of its monster, and only on the gear verdict. The
+    closable cell's `L*(ogre)` is held and loses (one level closes it), so it
+    asks for nothing, where the deleted deficit walk asked for the priced
+    `earth_boost_potion`; the open cell asks for nothing (no gear closes it, no
+    coin cancels it); the workable cell's task is worked. The gear arm's
+    witness is `test_an_unwinnable_task_monster_roots_its_first_missing_piece`."""
     resolutions = {}
     for name in TRIPLE:
         state = _state(name, gd)
@@ -367,12 +313,37 @@ def test_the_task_triple_moves_the_gear_review_target(gd: GameData) -> None:
             None)
     first_piece = ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")
     assert {r.root for r in resolutions.values()} == {first_piece}
-    potion = ObtainItem(code="earth_boost_potion", quantity=1, slot="utility1_slot")
     task = ReachTaskOutcome(task_code="wolf")
-    assert potion in resolutions[TRIPLE_CLOSABLE].alternatives
     assert task in resolutions[TRIPLE_WORKABLE].alternatives
-    assert potion not in resolutions[TRIPLE_WORKABLE].alternatives
-    assert not ({potion, task} & set(resolutions[TRIPLE_OPEN].alternatives))
+    # The closable and open cells offer exactly the workable cell's alternatives
+    # less its task: no task root, no gear for the task.
+    own = tuple(alt for alt in resolutions[TRIPLE_WORKABLE].alternatives if alt != task)
+    assert resolutions[TRIPLE_CLOSABLE].alternatives == own
+    assert resolutions[TRIPLE_OPEN].alternatives == own
+
+
+def test_an_unwinnable_task_monster_roots_its_first_missing_piece(gd: GameData) -> None:
+    """Plan C Review Focus 1: a held monsters task whose monster is not
+    winnable roots the first missing piece of `L*` of THAT monster, in its
+    slot — never `Wait`, never the deleted deficit walk (which named a weapon
+    for this cow).
+
+    `l13_drop_recipe_grind` holds a cow task it loses. The cycle's own gear
+    objective `(L*, m*)` is for another monster and heads with another piece,
+    so the task root is read from `L*(cow)` and not from the cycle's `L*`."""
+    state = _state(UNWINNABLE_CLOSABLE, gd)
+    assert state.task_code == "cow"
+    assert not is_winnable(dataclasses.replace(state, hp=state.max_hp), gd, "cow", None)
+    ctx = attach_gear_objective(state, gd, TIMED_NO_PROFILE_CONTEXT, None)
+    root = ObtainItem(code="iron_legs_armor", quantity=1, slot="leg_armor_slot")
+    assert _task_root(state, gd, ctx, None) == root
+    first = gear_objective_for("cow", state, gd, ctx, None).missing[0]
+    assert (first.code, first.slot) == ("iron_legs_armor", "leg_armor_slot")
+    assert ctx.gear_objective is not None
+    assert ctx.gear_objective.monster != "cow"
+    assert ctx.gear_objective.missing[0].code != "iron_legs_armor"
+    resolution = resolve_root(state, gd, _obj(gd), ctx, None)
+    assert root in (resolution.root, *resolution.alternatives)
 
 
 # --- the ONE-LEVEL PLANNING HORIZON over the same three cells ---------------
@@ -444,9 +415,10 @@ STARVED_OUT_OF_REACH = "red_dragon"
 # On the loadout's own totals the old gear row `corrupted_ogre` (L20) is
 # winnable and holds no deficit, and the old out-of-reach row `baby_red_dragon`
 # is gear-closable (hell_staff); both rows were stat artefacts. The rows are now
-# `dryad` (L40, gear: its fight arm names slime_shield, whose cloth has no
-# route this cycle) and `red_dragon` (L51, out of reach), both lost on the
-# derived sheet.
+# `dryad` (L40, gear: `L*(dryad)`'s first missing piece is goblin_guard_shield,
+# plan C Task 2; the deleted deficit walk named slime_shield) and `red_dragon`
+# (L51, out of reach, and no spawn tile the fight pool reaches, so no `L*`),
+# both lost on the derived sheet.
 # There was a level-up row, dryad. Since the fight gates read the odds
 # (spec 2026-10-15 fight-gates-odds §1) this cell has no level-up monster:
 # every one of the 58 reads gear or out of reach. The level-up arm keeps its
@@ -478,13 +450,14 @@ def _starved_run(monster: str | None, game_data: GameData):
 
 
 def test_a_starved_cascade_witnesses_the_standing_arm_end_to_end(gd: GameData) -> None:
-    """The standing arm (the walk's `IsAFightBlockingMe` since wave 4), taken
-    and NOT taken, through `plan_from_state`.
+    """The standing arm, taken and NOT taken, through `plan_from_state`. It was
+    the latch, then the walk's `IsAFightBlockingMe` (wave 4); since plan C Task
+    2 it is the task root's gear arm (`_task_root`).
 
-    All three rows share `has_combat_deficit is True` — the bare fact the arm
-    used to test — so before `63533b82` all three armed the latch and all three
-    handed the character to the guard. The horizon splits them: only the row a
-    gear chain closes is entitled to preempt the objective.
+    Both rows share `has_combat_deficit is True` — the bare fact the arm used
+    to test — so before `63533b82` both armed the latch and both handed the
+    character to the guard. The horizon splits them: only the row gear closes
+    asks for gear.
 
     The EDGE arm is provably not what fires here: `plan_from_state` passes
     `self._last_outcome` (None on a seeded player) and `prev_level == state.level`,
@@ -496,19 +469,16 @@ def test_a_starved_cascade_witnesses_the_standing_arm_end_to_end(gd: GameData) -
         # ...and the fact the OLD arm read, identical across all three rows.
         assert has_combat_deficit(state, gd) is True
 
-    verdicts = {m: resolve_task_horizon(_starved_state(m, gd), gd).verdict
-                for m in (STARVED_GEAR, STARVED_OUT_OF_REACH)}
-    assert verdicts == {STARVED_GEAR: HORIZON_GEAR,
-                        STARVED_OUT_OF_REACH: HORIZON_OUT_OF_REACH}
+    horizons = {m: _horizon(_starved_state(m, gd), gd) for m in (STARVED_GEAR, STARVED_OUT_OF_REACH)}
+    assert {m: None if h is None else h.verdict for m, h in horizons.items()} == {
+        STARVED_GEAR: HORIZON_GEAR, STARVED_OUT_OF_REACH: HORIZON_OUT_OF_REACH}
 
-    # WHERE EACH VERDICT IS SERVED: the gear verdict by the walk's fight arm.
-    armed = {m: isinstance(
-                 IsAFightBlockingMe(_obj(gd), RootWalk()).resolve(
-                     _starved_state(m, gd), gd, TIMED_NO_PROFILE_CONTEXT, None),
-                 WhichSlotClosesTheFight)
+    # WHERE EACH VERDICT IS SERVED: the gear verdict by the task root.
+    roots = {m: _task_root(_starved_state(m, gd), gd, TIMED_NO_PROFILE_CONTEXT, None)
              for m in (STARVED_GEAR, STARVED_OUT_OF_REACH)}
-    assert armed == {STARVED_GEAR: True,
-                     STARVED_OUT_OF_REACH: False}
+    assert roots == {
+        STARVED_GEAR: ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot"),
+        STARVED_OUT_OF_REACH: None}
 
 
 def test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work(
@@ -517,9 +487,9 @@ def test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work(
 
     This is the freeze the latch caused, stated as an outcome instead of a flag.
     The control is the SAME character with no task at all: a task the horizon
-    cannot reach must not change what it does, and a task gear closes must fire
-    the fight arm, which diverts the character only when that gear's step can be
-    served this cycle (Phase 3-2).
+    cannot reach must not change what it does, and a task gear closes asks for
+    that gear through the task root, an alternative the rotation serves, never
+    a diversion of the head (Phase 3-2, global gear objective Task 5).
 
     `HORIZON_LEVEL_UP` would land with the out-of-reach row deliberately, and
     the reason is in `regear_edge.py`: the standing arm's other conjunct is
@@ -552,17 +522,20 @@ def test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work(
     #
     # RE-DERIVED Task 5 (global gear objective): the fight arm is no longer the
     # walk's entry. The gear row's task asks for its gear through the TASK
-    # root instead (`_task_root`: the `slime_shield` its deficit names),
-    # offered last, after the character's own `L*` pieces; the head is the
-    # control's own first piece, nothing is declined, and the character does
-    # exactly the control's work.
+    # root instead (`_task_root`), offered after the character's own `L*`
+    # pieces; the head is the control's own first piece, nothing is declined,
+    # and the character does exactly the control's work.
+    #
+    # RE-DERIVED plan C Task 2: the task root is `L*(dryad)`'s first missing
+    # piece, `goblin_guard_shield`, which is also the head of the character's
+    # own `L*`: the task asks for the piece the character already pursues, so it
+    # adds no alternative (the deleted deficit walk appended `slime_shield`).
     _, _, gear = _starved_run(STARVED_GEAR, gd)
+    shield = ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")
     assert gear.decision.ranking[0].category == "WhichPieceIsNext → IsThisTargetBlocked"
-    assert gear.decision.chosen_root == control.decision.chosen_root
+    assert gear.decision.chosen_root == control.decision.chosen_root == shield
     assert gear.decision.declined == control.decision.declined == ()
-    assert gear.decision.fallback_roots == [
-        *control.decision.fallback_roots,
-        ObtainItem(code="slime_shield", quantity=1, slot="shield_slot")]
+    assert gear.decision.fallback_roots == control.decision.fallback_roots
     assert repr(gear.selected_goal) == control_goal
 
 

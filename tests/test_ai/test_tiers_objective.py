@@ -6,12 +6,12 @@ from unittest.mock import patch
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
+from artifactsmmo_cli.ai.suppliable import is_suppliable
 from artifactsmmo_cli.ai.tiers import objective as objective_mod
 from artifactsmmo_cli.ai.tiers.objective import (
     CharacterObjective,
     is_attainable,
     is_attainable_now,
-    is_suppliable,
 )
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults

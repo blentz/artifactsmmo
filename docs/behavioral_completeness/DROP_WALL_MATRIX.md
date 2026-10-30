@@ -8,7 +8,7 @@
 >
 > The crossing is a differential on production's own pricer — the candidate priced as it stands, then again with the walled items granted. No closure is re-derived here; obligation O6 forbids a second cost model and this census must not be one.
 
-213 candidate cells over 45 scenarios; gate opens 1 of 17 walls (store-less); obtainable 91; not_drop_walled 105; walled 17 (16 on ALTERNATIVES); closes 7; out_of_reach 10; drop_wall_unattributed 0; root_unresolved 0
+212 candidate cells over 45 scenarios; gate opens 1 of 17 walls (store-less); obtainable 90; not_drop_walled 105; walled 17 (16 on ALTERNATIVES); closes 7; out_of_reach 10; drop_wall_unattributed 0; root_unresolved 0
 
 argmax blindness: 1 of 17 walls sit on a RESOLVED root. A census that prices only the argmax sees those 1 and misses 16 — an infinite price is a veto, so a walled candidate never becomes the argmax.
 
@@ -117,7 +117,7 @@ argmax blindness: 1 of 17 walls sit on a RESOLVED root. A census that prices onl
 | l13_drop_recipe_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 632 | 632 | 632 | - | - | - | - | - |
 | l13_drop_recipe_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot') | alt | PASS | 632 | 632 | 632 | - | - | - | - | - |
 | l13_drop_recipe_grind | ReachSkillLevel(skill='weaponcrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l13_drop_recipe_grind | ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot') | alt | PASS | 43 | 43 | 43 | - | - | - | - | - |
+| l13_drop_recipe_grind | ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot') | alt | PASS | 100 | 100 | 100 | - | - | - | - | - |
 | l10_gearcrafting_gap | ReachSkillLevel(skill='gearcrafting', level=6) | argmax | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_gearcrafting_gap | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 1000001 | 1 | 1000001 | forest_ring | 1 | 1 | 1 | water_boost_potion, leather_hat, iron_boots |
 | l10_gearcrafting_gap | ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot') | alt | PASS | 1000001 | 1 | 1000001 | forest_ring | 1 | 1 | 1 | water_boost_potion, leather_hat, iron_boots |
@@ -167,7 +167,6 @@ argmax blindness: 1 of 17 walls sit on a RESOLVED root. A census that prices onl
 | l32_held_task_closable | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_closable | ObtainItem(code='wooden_club', quantity=1, slot='weapon_slot') | alt | PASS | 1000001 | 1 | 1000001 | wooden_club | 1 | 1 | 1 | perfect_bow, steel_boots |
 | l32_held_task_closable | ReachSkillLevel(skill='jewelrycrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l32_held_task_closable | ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot') | alt | PASS | 31 | 31 | 31 | - | - | - | - | - |
 | l32_held_task_open | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l32_held_task_open | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_open | ObtainItem(code='wooden_club', quantity=1, slot='weapon_slot') | alt | PASS | 1000001 | 1 | 1000001 | wooden_club | 1 | 1 | 1 | perfect_bow, steel_boots |

@@ -35,9 +35,11 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 # Floors, not exact counts: a new Decision must not have to touch this file,
 # but a sweep that goes blind must. `decisions/obtain_item.py` holds six
-# classes and five edges; `decisions/root.py` holds five and four.
+# classes and five edges; `decisions/root.py` holds five and four. The edge
+# floor was 11 until plan C Task 2 deleted the wave-4 fight arm
+# (`IsAFightBlockingMe`, `WhichSlotClosesTheFight`) and its edges.
 _MIN_CLASSES = 13
-_MIN_EDGES = 11
+_MIN_EDGES = 10
 
 
 def _decision_classes() -> list[type]:

@@ -68,8 +68,9 @@ CEILING = UNOBTAINABLE_PER_UNIT + EQUIP_ACTIONS
 
 `EQUIP_ACTIONS` is added by the wrapper AFTER `_capped`, so the ceiling a
 `actions_of` consumer actually sees is one action above the cap. It is a constant
-per call site — `deficit_upgrade_target`'s pricer passes `equip=True` for every
-candidate — so it shifts the whole tied set and cannot reorder it.
+per call site — a pricer passes `equip=True` for every candidate, as the
+`combat-deficit` diagnostic's does — so it shifts the whole tied set and cannot
+reorder it.
 """
 
 
@@ -211,8 +212,8 @@ def test_the_dusk_beetle_chain_closes_only_with_a_lifesteal_rune() -> None:
     to -8 and the first two steps; the rune still closes it at depth 3.)
 
     Also pinned: the answer does not move with the bound. The walk is greedy and
-    prefix-stable, which is what lets `deficit_upgrade_target` pay for `closes`
-    with depth without changing which item it targets.
+    prefix-stable, which is what let the walk's consumer (deleted in plan C
+    Task 2) pay for `closes` with depth without changing which item it targeted.
     """
     state = _rested("l47_depth3_amulet")
 

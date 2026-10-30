@@ -7,6 +7,7 @@ from fractions import Fraction
 
 import pytest
 
+import artifactsmmo_cli.ai.fight_gold_rate as gold_mod
 import artifactsmmo_cli.ai.task_worth as mod
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -34,10 +35,11 @@ def _gd() -> GameData:
 def _fixed_fight(monkeypatch):  # type: ignore[no-untyped-def]
     """Two cycles a kill, every fight of 10 s; the horizon reads the fight as
     won."""
-    monkeypatch.setattr(mod, "expected_damage_per_fight", lambda s, g, m: 0)
+    for module in (mod, gold_mod):
+        monkeypatch.setattr(module, "expected_damage_per_fight", lambda s, g, m: 0)
+        monkeypatch.setattr(module, "cycles_per_kill", lambda dmg, hp, seconds: 2.0)
     monkeypatch.setattr(mod, "walk_seconds", lambda *_args: Fraction(10))
-    monkeypatch.setattr(mod, "cycles_per_kill", lambda dmg, hp, seconds: 2.0)
-    monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: None)
+    monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g, c, h: None)
     monkeypatch.setattr(mod, "task_advances_progression", lambda s, g: False)
 
 
@@ -90,10 +92,10 @@ class TestTaskWorthFor:
         # the horizon makes the out-of-reach task worthless.
         demanded = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, level_demanded=True)
         monkeypatch.setattr(mod, "resolve_task_horizon",
-                            lambda s, g: TaskHorizon("wolf", HORIZON_OUT_OF_REACH, None))
+                            lambda s, g, c, h: TaskHorizon("wolf", HORIZON_OUT_OF_REACH, None))
         assert not task_worth_for("wolf", "monsters", 10, make_state(), _gd(),
                                   demanded, None).any()
-        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: TaskHorizon("wolf", HORIZON_GEAR, None))
+        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g, c, h: TaskHorizon("wolf", HORIZON_GEAR, None))
         assert task_worth_for("wolf", "monsters", 10, make_state(), _gd(), demanded, None).xp
 
     def test_an_items_task_earns_its_reward_over_its_actions(self, monkeypatch) -> None:
@@ -167,7 +169,7 @@ class TestXpDemanded:
 
     def test_character_xp_counts_only_when_level_is_demanded(self, monkeypatch) -> None:
         monkeypatch.setattr(mod, "task_advances_progression", lambda s, g: True)
-        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: None)
+        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g, c, h: None)
         state = make_state(level=30)
         demanded = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, level_demanded=True)
         assert task_worth_for("wolf", "monsters", 10, state, _gd(), demanded, None).xp
@@ -186,6 +188,6 @@ class TestXpDemanded:
 
     def test_unpaid_xp_is_no_reason_however_demanded(self, monkeypatch) -> None:
         monkeypatch.setattr(mod, "task_advances_progression", lambda s, g: False)
-        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: None)
+        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g, c, h: None)
         demanded = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, level_demanded=True)
         assert not task_worth_for("wolf", "monsters", 10, make_state(), _gd(), demanded, None).xp

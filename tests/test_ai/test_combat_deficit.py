@@ -18,11 +18,7 @@ import dataclasses
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.combat import predict_win
-from artifactsmmo_cli.ai.combat_deficit import (
-    combat_deficit,
-    deficit_upgrade_target,
-    has_combat_deficit,
-)
+from artifactsmmo_cli.ai.combat_deficit import combat_deficit, has_combat_deficit
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -270,23 +266,13 @@ def test_each_step_records_what_it_cost() -> None:
 def test_has_combat_deficit_is_the_cheap_boolean_form() -> None:
     """The LATCH needs "is there a deficit", not "what closes it".
 
-    `deficit_upgrade_target` walks every candidate; this is one `predict_win`.
-    It runs every cycle in `RegearEdge.update`, so the walk would be the wrong
-    thing to put there.
+    `combat_deficit` walks every candidate; this is one `secure_win`. The task
+    horizon asks it first, so the walk would be the wrong thing to put there.
     """
     gd = _gd()
 
     assert has_combat_deficit(_task_state(), gd) is True
     assert has_combat_deficit(_task_state(inventory={"steel_sword": 1}), gd) is False
-
-
-def test_has_combat_deficit_agrees_with_the_full_walk() -> None:
-    """The cheap form and the expensive one must never disagree about EXISTENCE,
-    or the latch would arm for a deficit the gear chain then cannot name."""
-    gd = _gd()
-    for state in (_task_state(), _task_state(inventory={"steel_sword": 1})):
-        assert has_combat_deficit(state, gd) is (
-            combat_deficit(state, gd, "boar", secure=True) is not None)
 
 
 def test_has_combat_deficit_is_false_without_a_workable_monsters_task() -> None:
@@ -298,13 +284,9 @@ def test_has_combat_deficit_is_false_without_a_workable_monsters_task() -> None:
 
 
 # ---------------------------------------------------------------------------
-# `deficit_upgrade_target` — the missing causal link, "lose fight -> upgrade gear".
-#
-# `map_guard`'s GEAR_REVIEW branch picks what to build with a monster-BLIND
-# `_best_by_value` scan. Live, that chose `iron_boots` — already worn, and absent
-# from all 24 items that improved the pig margin — while the weapon that actually
-# moved `rounds_to_kill` went unbuilt for ten hours. The latch knew a fight had
-# been lost; nothing carried WHICH fight into the gear decision.
+# The held task's fight. WHAT to build for it is `L*` of the task monster since
+# plan C Task 2 (`task_horizon`, `decisions.root._task_root`); the deficit walk
+# keeps its chain and `closes` facts.
 # ---------------------------------------------------------------------------
 
 
@@ -316,60 +298,14 @@ def _task_state(**over):  # type: ignore[no-untyped-def]
     return make_state(**base)
 
 
-def test_target_is_the_deficits_first_step_against_the_task_monster() -> None:
-    """The gear we build is the gear that closes the fight we are blocked on."""
-    target = deficit_upgrade_target(_task_state(), _gd())
-
-    assert target == ("steel_sword", "weapon_slot")
-
-
-def test_no_target_when_the_task_monster_is_already_winnable() -> None:
-    """Nothing to fix — the generic value scan should decide instead."""
-    assert deficit_upgrade_target(_task_state(inventory={"steel_sword": 1}),
-                                  _gd()) is None
-
-
-def test_no_target_without_a_monsters_task() -> None:
-    """An items task, or none at all, leaves the gear choice to the value scan.
-
-    Scoped to the held task deliberately: after the tier-1 bypass closed, the
-    monster we last LOST to is no longer the farm target, so "last loss" is a
-    stale signal. The task is the thing we are actually blocked on, and working
-    toward being able to fight it is how S-052 is honoured by a character that
-    cannot fight it yet.
-    """
-    assert deficit_upgrade_target(_task_state(task_type="items"), _gd()) is None
-    assert deficit_upgrade_target(_task_state(task_code=None, task_type=None),
-                                  _gd()) is None
-
-
-def test_no_target_for_a_finished_task() -> None:
-    assert deficit_upgrade_target(_task_state(task_progress=104), _gd()) is None
-
-
-def test_no_target_when_no_gear_closes_the_gap() -> None:
-    """`closes=False` with an empty chain must not yield a phantom target."""
-    assert deficit_upgrade_target(_task_state(), _gd(),
-                                  candidates=("cloth_cap",)) is None
-
-
-def test_no_target_for_a_chain_that_improves_the_margin_but_never_closes() -> None:
-    """The gap the empty-chain check could not see: a NON-empty futile chain.
-
-    `bronze_sword` alone moves the boar margin -101 -> -2 and then nothing else
-    is on offer, so the walk names a chain and `closes` stays False. The old
-    guard read `deficit.chain` and committed to it — "build this, it wins the
-    fight" about an item that demonstrably does not. Live on the scenario corpus
-    that was 648 of 895 losing (character, monster) pairs, and its most visible
-    instance was a level-47 character being sent to craft a level-25
-    `emerald_amulet` for +1 of a needed +6.
-
-    The chain itself is still TRUE and still reported — `combat_deficit` names
-    it, and the `combat-deficit` diagnostic prints it as DOES NOT CLOSE. What is
-    withdrawn is only the guard's claim that building it wins this fight; a None
-    here sends `strategy_driver`'s GEAR_REVIEW branch to the generic value scan,
-    which still buys gear.
-    """
+def test_a_chain_that_improves_the_margin_but_never_closes_reports_it() -> None:
+    """A NON-empty futile chain: `bronze_sword` alone moves the boar margin
+    -101 -> -2 and then nothing else is on offer, so the walk names a chain and
+    `closes` stays False. A consumer that read `deficit.chain` committed to it —
+    "build this, it wins the fight" about an item that demonstrably does not
+    (648 of 895 losing pairs on the scenario corpus). The chain is still TRUE
+    and still reported; the `combat-deficit` diagnostic prints it as DOES NOT
+    CLOSE."""
     deficit = combat_deficit(_task_state(), _gd(), "boar",
                              candidates=("bronze_sword",))
 
@@ -377,24 +313,6 @@ def test_no_target_for_a_chain_that_improves_the_margin_but_never_closes() -> No
     assert [s.code for s in deficit.chain] == ["bronze_sword"]
     assert deficit.chain[0].margin_after == -2
     assert deficit.closes is False
-
-    assert deficit_upgrade_target(_task_state(), _gd(),
-                                  candidates=("bronze_sword",)) is None
-
-
-def test_a_target_is_returned_when_a_MULTI_step_chain_closes_the_gap() -> None:
-    """Honouring `closes` must not shrink to "one item wins or nothing".
-
-    `bronze_sword` alone reaches -2 and `hide_vest` alone is useless without a
-    weapon; together they reach +1. The old `max_chain=1` call could not see
-    that pair at all, so this fight read as unclosable — and if `closes` had
-    been honoured at depth 1 it would have gone from a futile target to no
-    target. It gets the first step of a chain that really does close instead.
-    """
-    target = deficit_upgrade_target(_task_state(), _gd(),
-                                    candidates=("bronze_sword", "hide_vest"))
-
-    assert target == ("bronze_sword", "weapon_slot")
 
 
 def test_the_target_does_not_move_when_the_walk_is_given_more_depth() -> None:
@@ -421,31 +339,6 @@ def test_the_target_does_not_move_when_the_walk_is_given_more_depth() -> None:
     assert deep.chain[0].code == shallow.chain[0].code
 
 
-def test_the_target_is_PRICED_when_a_cost_is_supplied() -> None:
-    """The guard must chase the same item the `combat-deficit` oracle reports.
-
-    Unpriced, the walk ranks on RAW margin and takes the biggest jump regardless
-    of reach — live that was `king_slime_sword`, gated behind a `jasper_crystal`
-    C3P0 has no route to. Priced, it takes a cheap partial gain and actually
-    gets there.
-    """
-    gd = _gd()
-    cost = {"steel_sword": 400.0, "bronze_sword": 20.0}
-
-    assert deficit_upgrade_target(_task_state(), gd) == ("steel_sword", "weapon_slot")
-    assert deficit_upgrade_target(_task_state(), gd, actions_of=lambda code, slot: cost.get(code)) == (
-        "bronze_sword", "weapon_slot")
-
-
-def test_the_target_slot_matches_the_items_type() -> None:
-    """Body armour must not be handed to the weapon slot — the guard equips into
-    exactly the slot this returns."""
-    target = deficit_upgrade_target(_task_state(inventory={"bronze_sword": 1}),
-                                    _gd(), candidates=("hide_vest",))
-
-    assert target == ("hide_vest", "body_armor_slot")
-
-
 def test_default_candidate_pool_excludes_gear_above_the_characters_level() -> None:
     """The pool is what the character could actually equip, not the whole catalog."""
     gd = _gd()
@@ -458,9 +351,10 @@ def test_default_candidate_pool_excludes_gear_above_the_characters_level() -> No
 
 
 # ---------------------------------------------------------------------------
-# Spec 2026-10-15-fight-gates-odds §3: a deficit is a fight below SECURE_WIN
-# (USER: "if all of our fights are below 75% win rates, we probably need better
-# gear"), or below the character's own threshold when that is higher.
+# Spec 2026-10-15-fight-gates-odds §3: the held task's gear deficit is a fight
+# below SECURE_WIN (USER: "if all of our fights are below 75% win rates, we
+# probably need better gear"), or below the character's own threshold when that
+# is higher; the walk's own bar is the gate's, θ.
 # ---------------------------------------------------------------------------
 
 
@@ -493,13 +387,11 @@ def _owlbear_task(theta: Fraction):  # type: ignore[no-untyped-def]
 
 def test_has_combat_deficit_below_secure() -> None:
     """P 0.6308 clears a measured θ of 1/2, so `predict_win` fights it: there
-    is no gap to close before fighting (the feasibility walk is None). It is
-    below SECURE_WIN, so the gear arm still sees a deficit, and the routing walk
-    agrees (the pinned equivalence)."""
+    is no gap to close before fighting (the walk is None). It is below
+    SECURE_WIN, so the gear arm still sees a deficit."""
     gd = _owlbear_gd(12)
     state = _owlbear_task(Fraction(1, 2))
     assert has_combat_deficit(state, gd) is True
-    assert combat_deficit(state, gd, "owlbear", secure=True) is not None
     assert combat_deficit(state, gd, "owlbear") is None
 
 
@@ -520,26 +412,6 @@ def test_feasibility_closes_at_the_threshold() -> None:
     assert enough is not None and enough.closes is True
 
 
-def test_routing_closes_only_at_secure() -> None:
-    """The routing walk closes at the step that reaches max(θ, SECURE_WIN): the
-    +12 blade (P 0.9121) closes at θ 1/2, where the feasibility walk has
-    nothing to close."""
-    deficit = combat_deficit(_owlbear_task(Fraction(1, 2)), _owlbear_gd(12), "owlbear",
-                             secure=True)
-    assert deficit is not None and deficit.closes is True
-    assert [step.code for step in deficit.chain] == ["blade"]
-
-
-def test_the_upgrade_target_routes_at_the_secure_bar() -> None:
-    """The held task's gear target is a ROUTING question: owlbear at P 0.6308
-    clears θ 1/2, so the feasibility walk has no gap, yet the fight is won
-    below SECURE_WIN and the +12 blade (P 0.9121) is what to build."""
-    state = _owlbear_task(Fraction(1, 2))
-    gd = _owlbear_gd(12)
-    assert combat_deficit(state, gd, "owlbear") is None
-    assert deficit_upgrade_target(state, gd) == ("blade", "weapon_slot")
-
-
 def _owlbear_with_elixir() -> tuple[GameData, object]:
     """The owlbear replay wearing 20 elixirs (restore 300): drunk below half HP
     they win the fight outright; bare it is P 0.6308."""
@@ -552,28 +424,24 @@ def _owlbear_with_elixir() -> tuple[GameData, object]:
     return gd, state
 
 
-def test_routing_judges_bare_gear() -> None:
+def test_the_deficit_fact_judges_bare_gear() -> None:
     """Worn potions win the fight, so there is nothing to close before
-    fighting; the routing walk and its cheap form judge bare gear, where the
-    gap is still open — a potion-propped win never hides a gear upgrade."""
+    fighting; the gear deficit judges bare gear, where the gap is still open —
+    a potion-propped win never hides a gear upgrade."""
     gd, state = _owlbear_with_elixir()
     assert predict_win(state, gd, "owlbear")
     assert combat_deficit(state, gd, "owlbear") is None
-    assert combat_deficit(state, gd, "owlbear", secure=True) is not None
     assert has_combat_deficit(state, gd) is True
 
 
 def test_an_item_that_lifts_the_odds_but_not_the_margin_is_a_step() -> None:
     """The closed-form margin reads crit at its mean, so the +4 blade (P 0.6308
     -> 0.7965) moves no margin. When no item moves the margin the walk ranks on
-    the bare odds instead: the blade is the step, and it closes θ 7/10 in both
-    walks (SECURE_WIN 3/4 is below 0.7965)."""
-    for secure in (False, True):
-        deficit = combat_deficit(_owlbear_task(Fraction(7, 10)), _owlbear_gd(4), "owlbear",
-                                 secure=secure)
-        assert deficit is not None and deficit.closes is True
-        assert [step.code for step in deficit.chain] == ["blade"]
-        assert deficit.chain[0].margin_after == deficit.baseline_margin
+    the bare odds instead: the blade is the step, and it closes θ 7/10."""
+    deficit = combat_deficit(_owlbear_task(Fraction(7, 10)), _owlbear_gd(4), "owlbear")
+    assert deficit is not None and deficit.closes is True
+    assert [step.code for step in deficit.chain] == ["blade"]
+    assert deficit.chain[0].margin_after == deficit.baseline_margin
 
 
 def test_an_item_that_lifts_neither_is_no_step() -> None:

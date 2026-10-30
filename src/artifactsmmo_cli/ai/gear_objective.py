@@ -86,7 +86,7 @@ from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers.objective import is_suppliable
+from artifactsmmo_cli.ai.suppliable import is_suppliable
 from artifactsmmo_cli.ai.utility_slot import UTILITY_SLOTS, utility_slot_quantity
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -493,6 +493,60 @@ def _price(state: WorldState, game_data: GameData, ctx: SelectionContext,
     return Fraction(price + EQUIP_ACTIONS), route
 
 
+def _inputs(state: WorldState, game_data: GameData, ctx: SelectionContext,
+            history: LearningStore | None) -> tuple[dict[str, int], tuple[FoodOffer, ...],
+                                                     LoopInputs]:
+    """What every `L*(m)` is read against, whichever `m`: each achievable
+    item's layer (§2.3, `achievable`), the food menu and the loop's timing,
+    drops and carried keep (see the module doc's `R`)."""
+    depth = layer_of(achievable(state, game_data, ctx))
+    food = food_menu(state, game_data, ctx, history)
+    loop = LoopInputs(ctx.timing(), ctx.drops(), carried_keep(state, game_data, ctx))
+    return depth, food, loop
+
+
+def _objective(state: WorldState, game_data: GameData, ctx: SelectionContext,
+               history: LearningStore | None, monster: str,
+               target: tuple[WorldState, dict[str, str]], rate: Fraction,
+               depth: Mapping[str, int], food: tuple[FoodOffer, ...],
+               loop: LoopInputs) -> GearObjective:
+    """`L*(monster)` as an objective: `target` is its fighter and loadout
+    (`_target`), `rate` its `R`. A piece is missing per `_missing`, and only
+    while its gain (`_gain`) is above 0 (§2.8: a piece that adds nothing is
+    held-equivalent, so it is neither missing nor priced); the missing are
+    priced (`_price`) and put in pursuit order (`piece_order_key`)."""
+    fighter, loadout = target
+    own = _target(state, game_data, monster)[1]
+    pieces: list[GearPiece] = []
+    for slot, code, at in _missing(game_data, monster, fighter, loadout, own):
+        gain = _gain(state, fighter, game_data, monster, food, loop, rate, at)
+        if gain > 0:
+            price, route = _price(state, game_data, ctx, history, code)
+            pieces.append(GearPiece(slot, code, depth[code], gain, price, route))
+    rank = _ordered_slots()
+    pieces.sort(key=lambda piece: piece_order_key(piece.layer, piece.gain, piece.price,
+                                                  rank.index(piece.slot)))
+    return GearObjective(monster, loadout, rate, tuple(pieces), fighter=fighter)
+
+
+def gear_objective_for(monster: str, state: WorldState, game_data: GameData,
+                       ctx: SelectionContext, history: LearningStore | None) -> GearObjective:
+    """`L*(monster)`: the objective `gear_objective` reads for a candidate
+    `m`, with `m` pinned (plan C Task 2). The same achievable fixed point, the
+    same loadout walk from the fighter wearing nothing and the same missing,
+    gained, priced and ordered pieces (`_objective`), so there is one
+    implementation; only the argmax over monsters is not asked.
+
+    `monster` need not be a candidate (`_candidates`, `_rated`): a held task's
+    monster is pinned whatever its level gap, XP or fight verdict, so its `R`
+    may be 0 and its fighter may still lose. Whether `L*(monster)` wins is the
+    caller's question, asked of `GearObjective.fighter`."""
+    depth, food, loop = _inputs(state, game_data, ctx, history)
+    target = _target(_bare(state, frozenset(depth), game_data), game_data, monster)
+    rate = _rate(target[0], game_data, monster, food, loop)
+    return _objective(state, game_data, ctx, history, monster, target, rate, depth, food, loop)
+
+
 def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext,
                    history: LearningStore | None) -> GearObjective | None:
     """`(L*, m*)` and the missing pieces of `L*` in pursuit order, or None when
@@ -501,37 +555,17 @@ def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext
 
     `m*` is the max-`R` monster; a tie goes to the higher monster level, then to
     the lower total acquisition price of its missing pieces, then to catalogue
-    order — never to a code. A piece's gain is `_gain`; a piece whose gain is
-    not above 0 is held-equivalent (§2.8), so it is neither missing nor priced."""
-    layers = achievable(state, game_data, ctx)
-    depth = layer_of(layers)
-    food = food_menu(state, game_data, ctx, history)
-    loop = LoopInputs(ctx.timing(), ctx.drops(), carried_keep(state, game_data, ctx))
+    order — never to a code. Each tied candidate's objective is `_objective`,
+    the one `gear_objective_for` gives with that candidate pinned."""
+    depth, food, loop = _inputs(state, game_data, ctx, history)
     targets = _targets(state, game_data, frozenset(depth))
     rated = _rated(targets, game_data, food, loop)
     if not rated or max(rate for _, rate in rated) <= 0:
         return None
     best = max((rate, game_data.monster_levels[code]) for code, rate in rated)
-    tied = [code for code, rate in rated if (rate, game_data.monster_levels[code]) == best]
-    loadouts = {code: targets[code][1] for code in tied}
-    pieces_of: dict[str, list[tuple[str, str, Fraction]]] = {}
-    for code in tied:
-        target = targets[code][0]
-        own = _target(state, game_data, code)[1]
-        gained = [(slot, item,
-                   _gain(state, target, game_data, code, food, loop, best[0], at))
-                  for slot, item, at in _missing(game_data, code, target, loadouts[code], own)]
-        pieces_of[code] = [piece for piece in gained if piece[2] > 0]
-    prices = {code: [_price(state, game_data, ctx, history, item)
-                     for _, item, _ in pieces_of[code]] for code in tied}
+    tied = [_objective(state, game_data, ctx, history, code, targets[code], best[0],
+                       depth, food, loop)
+            for code, rate in rated if (rate, game_data.monster_levels[code]) == best]
     # `min` keeps the first of equal totals: catalogue order, as `_candidates` lists.
-    monster = min(tied, key=lambda code: sum((price for price, _ in prices[code]),
-                                             Fraction(0)))
-    rank = _ordered_slots()
-    pieces = [GearPiece(slot, code, depth[code], gain, price, route)
-              for (slot, code, gain), (price, route) in zip(pieces_of[monster],
-                                                            prices[monster], strict=True)]
-    pieces.sort(key=lambda piece: piece_order_key(piece.layer, piece.gain, piece.price,
-                                                  rank.index(piece.slot)))
-    return GearObjective(monster, loadouts[monster], best[0], tuple(pieces),
-                         fighter=targets[monster][0])
+    return min(tied, key=lambda objective: sum((piece.price for piece in objective.missing),
+                                               Fraction(0)))

@@ -480,10 +480,9 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         bank={"sunflower": 20},
         derive_combat_stats=True,  # wave 3a fix-round 1: see the module note
         # HELD TASK, value "unwinnable and NO gear closes the gap" (measured:
-        # has_combat_deficit True, deficit_upgrade_target None). A dryad is far
-        # out of this build's band, so the deficit walk runs to exhaustion and
-        # names nothing -- the fall-through arm of `deficit_upgrade_target`,
-        # which had no offline witness at all. IN_PROGRESS rather than 0/10 so
+        # has_combat_deficit True, task horizon OUT_OF_REACH). A dryad is far
+        # out of this build's band, so no gear names a close -- the
+        # fall-through arm, which had no offline witness at all. IN_PROGRESS rather than 0/10 so
         # the phase is distinct from ACCEPTED; measured not to move this
         # scenario's chosen root/step/goal/first action.
         task=("dryad", "monsters", 4, 10),
@@ -1184,10 +1183,11 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "topaz_stone": 28, "wooden_shield": 1,
         },
         derive_combat_stats=True,
-        # HELD TASK, value "unwinnable but a gear chain CLOSES it" (measured:
-        # has_combat_deficit True, deficit_upgrade_target ('iron_sword',
-        # 'weapon_slot')). This is the "I lost, so get gear" link the bot spent
-        # ten hours without; the arm had no offline witness. Measured not to
+        # HELD TASK, value "unwinnable but gear CLOSES it" (measured:
+        # has_combat_deficit True; the task horizon's gear verdict names
+        # `L*(cow)`'s first missing piece, `iron_legs_armor`, plan C Task 2).
+        # This is the "I lost, so get gear" link the bot spent ten hours
+        # without; the arm had no offline witness. Measured not to
         # move this scenario's chosen root/step/goal/first action.
         task=("cow", "monsters", 4, 10),
         description="Live-Robby mirror (2026-07-08): L13, weaponcrafting 5, "
@@ -1280,8 +1280,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                    "amulet_slot": "air_and_water_amulet"},
         bank={"iron_bar": 10},
         derive_combat_stats=True,
-        # HELD TASK, value "workable" (measured: has_combat_deficit False,
-        # deficit_upgrade_target None) -- the NEGATIVE arm of the deficit check,
+        # HELD TASK, value "workable" (measured: has_combat_deficit False, no
+        # task horizon) -- the NEGATIVE arm of the deficit check,
         # which needs a task that IS winnable to be reached at all. Measured not
         # to move this scenario's chosen root/step/goal/first action.
         task=("cow", "monsters", 4, 10),
@@ -1481,8 +1481,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # unwinnable-with-a-closing-chain, 38 unwinnable-with-none.
     #
     # THE SPLIT INVERTED, and the old numbers (37 closing / 9 none) are kept
-    # here only to name what changed: `e6a2e37c` taught `deficit_upgrade_target`
-    # to honour `closes`, so the 29 monsters it used to name gear for — gear
+    # here only to name what changed: `e6a2e37c` taught the deficit walk's
+    # consumer (deleted in plan C Task 2) to honour `closes`, so the 29 monsters it used to name gear for — gear
     # that provably could not win — now correctly report no chain. The three
     # cells below are unaffected: their verdicts were re-measured and each still
     # sits in the arm its comment claims.
@@ -1493,9 +1493,9 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # v wolf); `test_held_task.py`'s STARVED rows drive gear and out-of-reach
     # through `plan_from_state`.
     # D2 = WORKABLE. `wolf` is winnable at this loadout (P(win) 1.0), so
-    # `has_combat_deficit` is False and `deficit_upgrade_target` is None through
-    # its FIRST return. It was `pig` until the fight gates read the odds (spec
-    # 2026-10-15 fight-gates-odds §1): pig is P 0.76 here, short of 0.8, and
+    # `has_combat_deficit` is False and the task horizon has no reading. It
+    # was `pig` until the fight gates read the odds (spec 2026-10-15
+    # fight-gates-odds §1): pig is P 0.76 here, short of 0.8, and
     # only wolf and highwayman clear it in band.
     # THE ITEMS-TASK CELL, and the only one in the set. Built from the SAME
     # `_held_task_cell` loadout as the monsters triple below, so the one thing
@@ -1535,10 +1535,11 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         "l32_held_task_workable", ("wolf", "monsters", 4, 10),
         "Held-task triple, value WORKABLE: a wolf task this loadout wins — "
         "the negative arm of the deficit check."),
-    # D2 = UNWINNABLE, A GEAR CHAIN CLOSES IT. The greedy margin walk names
-    # `perfect_bow` unpriced and `earth_boost_potion` under acquisition
-    # pricing — either way it names SOMETHING, which is the "I lost, so get
-    # gear" link the walk's `WhichSlotClosesTheFight` follows.
+    # D2 = UNWINNABLE, A CATALOGUE CHAIN CLOSES IT. The greedy margin walk
+    # names `perfect_bow` unpriced and `earth_boost_potion` under acquisition
+    # pricing. Since plan C Task 2 the task asks `L*(ogre)`, the ACHIEVABLE
+    # loadout, instead: it is held and still loses, and one level closes the
+    # fight, so the horizon reads LEVEL_UP and the task asks for no gear.
     "l32_held_task_closable": _held_task_cell(
         "l32_held_task_closable", ("ogre", "monsters", 4, 10),
         "Held-task triple, value UNWINNABLE-CLOSABLE: an ogre task this "
