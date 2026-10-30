@@ -44,6 +44,7 @@ from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
+from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
 from artifactsmmo_cli.ai.region_edges import (
     content_reached,
     door_legs,
@@ -79,12 +80,25 @@ class ObtainModel:
     (`progression_reserve.spendable_pocket`). A fee is reserve-guarded at the
     crossing itself (ruling T14e-2), so asking it of the spendable pocket would
     keep the reserve twice. A door's shortfall is gold to EARN, the same on
-    either pocket."""
+    either pocket.
+
+    `spend`, when given, names what the walk's buys spend on: the pocket is
+    then only what the reserve lets them spend (`progression_reserve.
+    spendable_pocket` of `state`, the walk's pocket as `craft_plan_gen.
+    _walk_pocket` counts it), and `state` is the account it is derived from.
+    A later leg of a door chain derives its pocket the same way, from the
+    account past the earlier legs' tolls (`_leg_models`, round 5): a fee paid
+    out of the account leaves the spendable pocket what the reserve then
+    allows, never less than nothing."""
 
     def __init__(self, state: WorldState, game_data: GameData,
                  ctx: SelectionContext, now: datetime,
-                 fighter: Fighter | None = None, crossing: WorldState | None = None) -> None:
-        self._state = state
+                 fighter: Fighter | None = None, crossing: WorldState | None = None,
+                 spend: frozenset[str] | None = None) -> None:
+        self._account = state
+        self._spend = spend
+        self._state = (state if spend is None else
+                       replace(state, gold=spendable_pocket(state, game_data, spend)))
         self._crossing = state if crossing is None else crossing
         self._fighter = fighter
         self._gd = game_data
@@ -334,11 +348,12 @@ class ObtainModel:
         """One model per leg of a door chain (ruling T14e-m6): this one for
         the first leg, then one per later leg over `region_edges.leg_states`:
         its crossings asked of the state holding the legs before it (they are
-        crossed from here), its pocket and bag past them, their tolls paid
-        (round 4: an earlier leg's fee gold is spent, not credited)."""
+        crossed from here), its account past them, their tolls paid (round 4:
+        an earlier leg's fee gold is spent, not credited), and its pocket
+        derived from that account as this one's is (`spend`, round 5)."""
         return [self, *(ObtainModel(at, self._gd, self._ctx, self._now, self._fighter,
-                                    crossing=cross)
-                        for at, cross in leg_states(self._state, self._crossing, door,
+                                    crossing=cross, spend=self._spend)
+                        for at, cross in leg_states(self._account, self._crossing, door,
                                                     self._gd)[1:])]
 
     def _ranked_gathers(self, item: str, ready: tuple[Route, ...]) -> list[Route]:

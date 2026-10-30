@@ -26,7 +26,7 @@ from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.models.map_schema import MapSchema
 from artifactsmmo_api_client.models.transition_schema import TransitionSchema
 
-from artifactsmmo_cli.ai import acquisition_cost, craft_plan_gen, region_edges
+from artifactsmmo_cli.ai import acquisition_cost, craft_plan_gen, progression_reserve, region_edges
 from artifactsmmo_cli.ai.acquisition_cost import (
     CROSSING_ACTIONS,
     acquisition_actions,
@@ -1030,3 +1030,27 @@ def test_a_chain_s_reentry_pays_each_leg_s_toll_where_that_leg_stands(
                                               DECOMPOSE_POLICY, True, frozenset(), state)
     assert share is not None and share > 0
     assert asked == [(KEY_A, {}, {}), ((), {}, {"key_a": 1})]
+
+
+def test_a_later_leg_s_pocket_is_what_the_reserve_lets_its_account_spend(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Round 5 (b): gold 1000, bank 0, a 5000 floor the account cannot fund
+    (it binds at the safety floor), and an 800 floor once the walk's own buy
+    is credited, so the walk spends 200. The 1000-gold hall fee lacks 100.
+    Past it the account holds 100, which the reserve lets the walk spend none
+    of: the vault leg's pocket is 0, derived as the first leg's is, not the
+    first leg's 200 less the fee (-700)."""
+    world = _chain_world(monkeypatch, first=("gold", "cost", 1000))
+    monkeypatch.setattr(progression_reserve, "reserved_targets",
+                        lambda at, gd: {"x": 4200, "y": 800})
+    state = replace(make_state(x=0, y=0), gold=1000, bank_gold=0)
+    assert fee_shortfall(state, world, 1000) == 100
+    door = (("gold", 100), ("key_b", 1))
+    assert region_edges.door_legs(door, state, world) == ((("gold", 100),), KEY_B)
+    model = ObtainModel(state, world, TIMED_NO_PROFILE_CONTEXT, datetime.now(UTC),
+                        crossing=state, spend=frozenset({"x"}))
+    assert model.in_bag(GOLD_CODE) == spendable_pocket(state, world, frozenset({"x"})) == 200
+    first, vault = model._leg_models(door)
+    assert first is model
+    assert vault.in_bag(GOLD_CODE) == 0
+    assert vault._crossing.gold == 1100

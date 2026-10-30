@@ -283,18 +283,20 @@ def leg_tolls(door: Door, state: WorldState, game_data: GameData) -> tuple[Door,
 
 def leg_states(state: WorldState, crossing: WorldState, door: Door,
                game_data: GameData) -> list[tuple[WorldState, WorldState]]:
-    """`(pocket, crossing)` per leg of `door` (`door_legs`, asked of
+    """`(account, crossing)` per leg of `door` (`door_legs`, asked of
     `crossing`), in crossing order: the states the walk and the pricer ask a
     leg's shortfall of (rulings T14e-m6, round 4). Entry 0 is `(state,
-    crossing)` itself.
+    crossing)` itself. The pricer's pocket is the account; a walk whose pocket
+    is only what its buys may spend derives it from the account
+    (`ObtainModel`'s `spend`).
 
     THE CROSSING HOLDS THE LEGS BEFORE IT (`_holding`): the reach must still
     cross them from the origin, so they are in hand, as `_door_chains` reaches
     a chain. THE POCKET AND THE BAG ARE PAST THEM (`_past`, their tolls paid):
     a consumed key is gone and a fee's gold is spent, so a gold buy inside a
     later leg is not credited with an earlier leg's fee. `state` and
-    `crossing` differ when the walk's pocket is only what its buys may spend
-    (`ObtainModel`'s `crossing`)."""
+    `crossing` differ inside a later leg's closure, where `state` has paid
+    the outer legs' tolls (`ObtainModel`'s `crossing`)."""
     pairs = _legs_and_tolls(door, crossing, game_data)
     out = [(state, crossing)]
     for leg, toll in (pairs or ())[:-1]:

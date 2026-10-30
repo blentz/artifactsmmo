@@ -8746,7 +8746,8 @@ FEE_SHORTFALL_MUTATIONS = [
 ]
 KEY_DOOR_CROSSING_MUTATIONS = [
     ("door: the walk's crossings are asked of its spendable pocket",
-     "        model = ObtainModel(walked, game_data, ctx, datetime.now(UTC), crossing=state)\n",
+     "        model = ObtainModel(state, game_data, ctx, datetime.now(UTC), crossing=state,\n"
+     "                            spend=frozenset(goal.needed) if policy.fight_gold else None)\n",
      "        model = ObtainModel(walked, game_data, ctx, datetime.now(UTC))\n"),
     ("door: the model's reach is its pocket's",
      "        self._crossing = state if crossing is None else crossing\n",
@@ -8754,6 +8755,10 @@ KEY_DOOR_CROSSING_MUTATIONS = [
     ("door: a fee's gold is earned on top of the real pocket",
      "    bag = (_walk_pocket(state, game_data, frozenset({code}), policy) if code == GOLD_CODE\n",
      "    bag = (state.gold if code == GOLD_CODE\n"),
+    # Round 5 (b): the walk's pocket is the spendable pocket of its account.
+    ("door: the walk's pocket is the whole account",
+     "                            spend=frozenset(goal.needed) if policy.fight_gold else None)\n",
+     "                            spend=None)\n"),
 ]
 KEY_DOOR_FEE_GUARD_MUTATIONS = [
     ("door: a fee is paid past the reserve",
@@ -8855,6 +8860,14 @@ KEY_DOOR_CHAIN_WALK_MUTATIONS = [
     ("chain: every leg is walked by the origin's model",
      "                for leg, model in zip(legs, self._leg_models(door), strict=True)\n",
      "                for leg, model in zip(legs, [self] * len(legs), strict=True)\n"),
+    # Round 5 (b): a later leg's pocket is derived from the account past the
+    # tolls, as the first leg's is.
+    ("chain: a later leg's pocket is the earlier leg's spendable pocket past the tolls",
+     "                        for at, cross in leg_states(self._account, self._crossing, door,\n",
+     "                        for at, cross in leg_states(self._state, self._crossing, door,\n"),
+    ("chain: a later leg's pocket is its whole account",
+     "                                    crossing=cross, spend=self._spend)\n",
+     "                                    crossing=cross, spend=None)\n"),
 ]
 KEY_DOOR_CHAIN_EXECUTOR_MUTATIONS = [
     ("chain: the executor opens the merged door's first code",
