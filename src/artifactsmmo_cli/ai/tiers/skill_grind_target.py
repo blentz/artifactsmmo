@@ -11,8 +11,9 @@ string/alphabetical tie-break. That ordering replaced "cheapest chain, then
 highest level" on 2026-08-14; full rationale, and the measured domain over which
 the `wanted` credit acts as a total pivot, on `skill_grind_selection._beats`.
 `wanted` is not a property of the item: `_with_wanted` sets it per call from the
-caller's `SelectionContext` (`objective_codes`, the missing pieces of the gear
-objective `L*`, or `ctx.supply_target`, a sibling's published demand), so the same catalog
+caller's `SelectionContext` (`objective_codes`: the missing pieces of the gear
+objective `L*` and the tools `T*` its demanded skills climb with; or
+`ctx.supply_target`, a sibling's published demand), so the same catalog
 ranks differently under a different objective and identically — every `wanted`
 False — under `NO_PROFILE_CONTEXT`. Returns None when no such in-skill recipe
 exists — the caller (`skill_is_grindable` / `grind_rung.craft_rung`, always
@@ -267,8 +268,9 @@ def _with_wanted(candidates: list[GrindCandidate],
     at all and must keep seeing `wanted=False`.
 
     Two sources, both already on the context. `objective_codes` is the
-    missing pieces of the gear objective `L*` — crafting one of those gains the SAME
-    skill xp and yields a keeper instead of a throwaway (2026-06-24: pure
+    missing pieces of the gear objective `L*` and the tools `T*` the demanded
+    skills climb with — crafting one of those yields a keeper the objective
+    builds toward instead of a throwaway (2026-06-24: pure
     cheapest-chain greed made the bot craft a value-10 `apprentice_gloves`
     while ignoring the committed value-83 `copper_dagger`). `supply_target[0]`
     is the item code a SIBLING published demand for this cycle, so the fleet's

@@ -16,7 +16,8 @@
 * other gold per cycle: the fight gold of what the character would otherwise
   fight (`ctx.combat_monster`) — USER "The grind target's gold".
 * DROPS: the task monster drops an item still SHORT for the missing pieces of
-  the gear objective `L*`, the bag and bank used up first (`short_items`).
+  the gear objective `L*` or the tools `T*` its demanded skills climb with, the
+  bag and bank used up first (`short_items`).
 """
 
 from collections import Counter
@@ -48,8 +49,8 @@ def fight_gold_rate(state: WorldState, game_data: GameData, monster: str,
 
 
 def short_items(state: WorldState, game_data: GameData, ctx: SelectionContext) -> frozenset[str]:
-    """The items still SHORT for one copy of each missing `L*` piece
-    (`objective_codes`) and the supply shortfall: the recipe closure walked with
+    """The items still SHORT for one copy of each missing `L*` piece and
+    each `T*` tool (`objective_codes`) and the supply shortfall: the recipe closure walked with
     quantities, the bag and the bank used up first. A drop already banked in
     enough copies is no reason to work a task (live 2026-10-07: wolf, pig and
     skeleton all read "aligned" by an unquantified closure while the bank held

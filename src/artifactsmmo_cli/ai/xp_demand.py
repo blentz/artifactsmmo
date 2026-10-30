@@ -13,9 +13,9 @@ demand for it.
 * CHARACTER-LEVEL demand: a `ReachCharLevel` root above the character, or an
   `ObtainItem` root whose item needs a higher level than the character has.
 
-The roots are the chosen root and the missing pieces of the cycle's gear
-objective `L*` (`objective_codes`) — everything the objective is building
-toward.
+The roots are the chosen root, the missing pieces of the cycle's gear
+objective `L*` and the tools `T*` the demanded skills climb with
+(`objective_codes`) — everything the objective is building toward.
 """
 
 from collections.abc import Sequence
@@ -31,8 +31,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 def demand_roots(chosen: MetaGoal | None, state: WorldState,
                  ctx: SelectionContext) -> list[MetaGoal]:
-    """The chosen root, then one `ObtainItem` per missing `L*` piece
-    (`objective_codes`), in a stable order. NOT the fleet consumable shortfall (spec
+    """The chosen root, then one `ObtainItem` per missing `L*` piece and
+    per `T*` tool (`objective_codes`), in a stable order. NOT the fleet consumable shortfall (spec
     2026-10-13 §2): food demand made fishing 'useful XP', which credited the
     food's make price, which kept the food demanded."""
     roots: list[MetaGoal] = [] if chosen is None else [chosen]

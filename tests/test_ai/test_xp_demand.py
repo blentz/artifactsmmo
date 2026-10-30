@@ -32,15 +32,16 @@ def test_the_roots_are_the_chosen_root_then_the_missing_pieces() -> None:
 
 def test_skill_demand_follows_the_missing_pieces(bundle_game_data: GameData) -> None:
     """Robby (gearcrafting 23, jewelrycrafting 22) missing three level-30 `L*`
-    pieces: the skill demand names the crafting skills those pieces need above
-    his levels. Once `L*` is held, gear demands no skill at all."""
+    pieces: the skill demand is exactly the skills those pieces' closures need
+    above his levels, the two crafting skills and the mining for their bars.
+    Once `L*` is held, gear demands no skill at all."""
     robby = make_state(level=41, skills={"gearcrafting": 23, "jewelrycrafting": 22,
                                          "weaponcrafting": 22, "mining": 25,
                                          "woodcutting": 27, "fishing": 29})
     ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("leg_armor_slot", "royal_skeleton_pants"),
                        ("ring1_slot", "royal_skeleton_ring"), ("amulet_slot", "lost_amulet"))
     skills, _level = xp_demand(demand_roots(None, robby, ctx), robby, bundle_game_data, ctx)
-    assert {"gearcrafting", "jewelrycrafting"} <= skills
+    assert skills == {"gearcrafting", "jewelrycrafting", "mining"}
     assert xp_demand(demand_roots(None, robby, with_missing(TIMED_NO_PROFILE_CONTEXT)),
                      robby, bundle_game_data, ctx) == (frozenset(), False)
 
