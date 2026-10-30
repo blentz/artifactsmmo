@@ -143,8 +143,13 @@ def wear_gear(state: WorldState, equipment: dict[str, str | None],
     totals through `project_loadout_stats`, the one stat arithmetic: each gear
     slot that changes adds its new item's stats and takes off the old one's.
     A utility slot moves no total (module doc), so it is left out of the swap
-    and only its code changes. Current HP is not clamped to a lowered max HP,
-    as in `project_loadout_stats`."""
+    and only its code changes.
+
+    Current HP is clamped to a lowered max HP: the server does (learning.db
+    2026-10-30: of 798 equip/re-arm cycles whose max HP fell below the HP
+    before, 784 read hp == the new max_hp and none of 567,610 recorded sheets
+    reads hp > max_hp). `project_loadout_stats` does not clamp: it projects
+    a fight's stats, whose HP the fight terms clamp themselves."""
     gear = {slot: code for slot, code in equipment.items()
             if slot not in UTILITY_SLOTS}
     totals = project_loadout_stats(state, gear, game_data)
@@ -158,6 +163,7 @@ def wear_gear(state: WorldState, equipment: dict[str, str | None],
         critical_strike=totals.critical_strike,
         initiative=totals.initiative,
         max_hp=totals.max_hp,
+        hp=min(state.hp, totals.max_hp),
         wisdom=totals.wisdom,
         prospecting=totals.prospecting,
         haste=totals.haste,

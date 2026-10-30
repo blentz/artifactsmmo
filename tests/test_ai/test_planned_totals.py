@@ -3,6 +3,8 @@ ruling T14d-7b): totals = base + the worn NON-utility gear (measured live,
 Task 14b). The transitions move the totals through `project_loadout_stats`
 (`equipment.projection.wear_gear`); a utility slot moves none."""
 
+import dataclasses
+
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
@@ -107,3 +109,16 @@ def test_a_planned_rearm_carries_the_gather_loadouts_prospecting() -> None:
     assert rearmed.critical_strike == 5
     back = EquipAction(code="copper_dagger", slot="weapon_slot").apply(rearmed, gd)
     assert _totals(back) == _totals(state)
+
+
+def test_a_planned_downgrade_clamps_hp_to_the_lowered_max() -> None:
+    """The server clamps HP when max HP falls below it (learning.db: no sheet
+    reads hp > max_hp). Taking off the +40 HP plate at 185/190 HP leaves
+    150/150; at 120/190 it leaves 120/150."""
+    gd = _gd()
+    state = _base(inventory={"plate": 1})
+    worn = EquipAction(code="plate", slot="body_armor_slot").apply(state, gd)
+    full = dataclasses.replace(worn, hp=185)
+    assert UnequipAction(slot="body_armor_slot").apply(full, gd).hp == 150
+    hurt = dataclasses.replace(worn, hp=120)
+    assert UnequipAction(slot="body_armor_slot").apply(hurt, gd).hp == 120

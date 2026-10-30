@@ -353,8 +353,19 @@ The server reports totals only (base + worn non-utility gear). A swap keeps
 that invariant by moving each total by the changed slots: the new item's stat
 in, the displaced item's stat out (`swapStat`). Python computes the moved
 totals with `project_loadout_stats`, the one stat arithmetic, and writes them
-(`wear_gear`); the model writes them as the `GearTotals` argument `t`. A
-utility slot moves no total (a worn potion is not in the sheet). -/
+(`wear_gear`).
+
+THE MODEL ABSTRACTS THE TOTALS: a swap takes them as the `GearTotals`
+argument `t` and does not compute them from item stats, so
+`*_writes_totals` holds by construction, and `swapStat_roundtrip` is the
+integer identity behind the per-slot delta, not a theorem about the applies.
+The round trip of the real transitions (apply then the reverse apply restores
+every total) is enforced by the Python tests (`test_planned_totals`,
+`test_apply_baseline_diff`'s swap property). What the model does prove about
+the applies: the baseline is kept when `t` moves nothing, `skill_xp` always,
+and HP never exceeds the moved max HP (`*_hp_le_max_hp`: the swap clamps HP,
+as the server does). A utility slot moves no total (a worn potion is not in
+the sheet). -/
 
 /-- The totals a swap moves, as `WorldStateLean` carries them. -/
 structure GearTotals where
@@ -377,7 +388,7 @@ def totalsOf (s : WorldStateLean) : GearTotals :=
 
 /-- `s` carrying the totals `t`. -/
 def withTotals (s : WorldStateLean) (t : GearTotals) : WorldStateLean :=
-  { s with max_hp := t.max_hp, attack := t.attack, dmg := t.dmg
+  { s with hp := min s.hp t.max_hp, max_hp := t.max_hp, attack := t.attack, dmg := t.dmg
          , dmg_elements := t.dmg_elements, resistance := t.resistance
          , critical_strike := t.critical_strike, initiative := t.initiative
          , wisdom := t.wisdom }
@@ -387,8 +398,10 @@ def withTotals (s : WorldStateLean) (t : GearTotals) : WorldStateLean :=
     slot contributes 0). -/
 def swapStat (total incoming displaced : Int) : Int := total + incoming - displaced
 
-/-- Swapping back round-trips the total exactly: `apply` then the reverse
-    `apply` (equip then unequip, or a re-arm then its undo). -/
+/-- The integer identity behind a swap's round trip: moving a total in and
+    back out restores it. The applies take their totals abstractly (`t`), so
+    this does not by itself prove the transitions round-trip; the Python tests
+    do (module doc of this section). -/
 theorem swapStat_roundtrip (total a b : Int) :
     swapStat (swapStat total a b) b a = total := by
   unfold swapStat; omega
@@ -412,11 +425,32 @@ def optimizeLoadoutApply (s : WorldStateLean) (newInv : List (String × Nat))
     (newEq : List (String × Option String)) (t : GearTotals) : WorldStateLean :=
   { withTotals s t with inventory := newInv, equipment := newEq, cooldown_expires := none }
 
-/-- A swap carries exactly the totals it moved. -/
+/-- A swap carries exactly the totals it is given (true by construction:
+    the totals are abstract). -/
 theorem equipApply_writes_totals (s : WorldStateLean) (i : List (String × Nat))
     (e : List (String × Option String)) (t : GearTotals) :
     totalsOf (equipApply s i e t) = t := by
   cases t; rfl
+
+/-- A swap never leaves HP above the moved max HP: it clamps (the server
+    does; learning.db: no recorded sheet reads hp > max_hp). -/
+theorem equipApply_hp_le_max_hp (s : WorldStateLean) (i : List (String × Nat))
+    (e : List (String × Option String)) (t : GearTotals) :
+    (equipApply s i e t).hp ≤ (equipApply s i e t).max_hp := by
+  show min s.hp t.max_hp ≤ t.max_hp
+  exact Nat.min_le_right _ _
+
+theorem unequipApply_hp_le_max_hp (s : WorldStateLean) (i : List (String × Nat))
+    (e : List (String × Option String)) (t : GearTotals) :
+    (unequipApply s i e t).hp ≤ (unequipApply s i e t).max_hp := by
+  show min s.hp t.max_hp ≤ t.max_hp
+  exact Nat.min_le_right _ _
+
+theorem optimizeLoadoutApply_hp_le_max_hp (s : WorldStateLean) (i : List (String × Nat))
+    (e : List (String × Option String)) (t : GearTotals) :
+    (optimizeLoadoutApply s i e t).hp ≤ (optimizeLoadoutApply s i e t).max_hp := by
+  show min s.hp t.max_hp ≤ t.max_hp
+  exact Nat.min_le_right _ _
 
 theorem unequipApply_writes_totals (s : WorldStateLean) (i : List (String × Nat))
     (e : List (String × Option String)) (t : GearTotals) :
@@ -781,20 +815,21 @@ theorem buyBankExpansion_mutates_only_declared_fields (s : WorldStateLean) (g : 
   unfold buyBankExpansionApply
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- Equip only mutates (inventory, equipment, cooldown, and the gear totals
-    incl. max_hp, Task 14f). Position, gold, hp, tasks, banking all preserved —
+/-- Equip only mutates (inventory, equipment, cooldown, the gear totals incl.
+    max_hp, and hp clamped to it, Task 14f). Position, gold, tasks, banking all
+    preserved —
     this is the load-bearing one for the gear swap UX. -/
 theorem equip_mutates_only_declared_fields (s : WorldStateLean)
     (i : List (String × Nat)) (e : List (String × Option String)) (t : GearTotals) :
     let s' := equipApply s i e t
-    s'.hp = s.hp ∧ s'.gold = s.gold ∧
+    s'.gold = s.gold ∧
     s'.x = s.x ∧ s'.y = s.y ∧
     s'.task_code = s.task_code ∧ s'.task_type = s.task_type ∧
     s'.task_progress = s.task_progress ∧ s'.task_total = s.task_total ∧
     s'.bank_items = s.bank_items ∧ s'.bank_gold = s.bank_gold ∧
     s'.pending_items = s.pending_items ∧ s'.bank_capacity = s.bank_capacity := by
   unfold equipApply withTotals
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- Claim only mutates (inventory, pending_items, cooldown). -/
 theorem claim_mutates_only_declared_fields (s : WorldStateLean)
@@ -860,6 +895,11 @@ example : preservesBaseline witnessState
     (equipApply witnessState [] [("weapon_slot", some "sword")] (totalsOf witnessState)) :=
   equipApply_preserves_baseline witnessState [] [("weapon_slot", some "sword")]
     (totalsOf witnessState) rfl
+
+/-- Witness: a swap that lowers max HP to 40 clamps HP 50 to 40 (the clamp
+    theorems are not vacuous). -/
+example : (equipApply witnessState [] [("body_armor_slot", none)]
+      { totalsOf witnessState with max_hp := 40 }).hp = 40 := by decide
 
 /-- Witness: an Equip of a +10 fire sword moves the fire attack 30 -> 40, and
     the Unequip back round-trips it (so the swap hypothesis of the headline is

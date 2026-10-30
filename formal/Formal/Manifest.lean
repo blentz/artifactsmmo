@@ -742,6 +742,9 @@ open Formal.PriorityBand
 #check @Formal.ApplyBaseline.optimizeLoadoutApply_writes_totals
 #check @Formal.ApplyBaseline.swapStat_roundtrip
 #check @Formal.ApplyBaseline.swapStat_same
+#check @Formal.ApplyBaseline.equipApply_hp_le_max_hp              -- Task 14f m2: a swap clamps HP
+#check @Formal.ApplyBaseline.unequipApply_hp_le_max_hp
+#check @Formal.ApplyBaseline.optimizeLoadoutApply_hp_le_max_hp
 #check @Formal.ApplyBaseline.all_actions_preserve_skill_xp
 #check @Formal.ApplyBaseline.acceptTaskApply_preserves_baseline       -- Family 5: task transition
 #check @Formal.ApplyBaseline.completeTaskApply_preserves_baseline

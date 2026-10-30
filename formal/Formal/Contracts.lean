@@ -1686,7 +1686,13 @@ example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (i : List (String × Nat
     (e : List (String × Option String)) (t : Formal.ApplyBaseline.GearTotals),
     Formal.ApplyBaseline.totalsOf (Formal.ApplyBaseline.equipApply s i e t) = t :=
   @Formal.ApplyBaseline.equipApply_writes_totals
--- swap-stat-roundtrip: apply then the reverse apply round-trips a total exactly.
+-- swap-hp-le-max-hp: a swap never leaves HP above the moved max HP (Task 14f m2).
+example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (i : List (String × Nat))
+    (e : List (String × Option String)) (t : Formal.ApplyBaseline.GearTotals),
+    (Formal.ApplyBaseline.equipApply s i e t).hp ≤ (Formal.ApplyBaseline.equipApply s i e t).max_hp :=
+  @Formal.ApplyBaseline.equipApply_hp_le_max_hp
+-- swap-stat-roundtrip: the integer identity behind a swap's round trip (the applies
+-- take their totals abstractly; the Python tests enforce the transitions' round trip).
 example : ∀ (total a b : Int),
     Formal.ApplyBaseline.swapStat (Formal.ApplyBaseline.swapStat total a b) b a = total :=
   @Formal.ApplyBaseline.swapStat_roundtrip

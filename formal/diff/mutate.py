@@ -11146,6 +11146,12 @@ PLANNED_TOTALS_WEAR_MUTATIONS = [
     ("wear_gear: the max HP total is left",
      "        max_hp=totals.max_hp,\n",
      ""),
+    ("wear_gear: hp is not clamped to a lowered max HP",
+     "        hp=min(state.hp, totals.max_hp),\n",
+     ""),
+    ("wear_gear: hp is raised to the max HP",
+     "        hp=min(state.hp, totals.max_hp),\n",
+     "        hp=totals.max_hp,\n"),
 ]
 
 

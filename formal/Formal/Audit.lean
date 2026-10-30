@@ -618,6 +618,9 @@ open Formal.PriorityBand
 #print axioms Formal.ApplyBaseline.optimizeLoadoutApply_writes_totals
 #print axioms Formal.ApplyBaseline.swapStat_roundtrip
 #print axioms Formal.ApplyBaseline.swapStat_same
+#print axioms Formal.ApplyBaseline.equipApply_hp_le_max_hp
+#print axioms Formal.ApplyBaseline.unequipApply_hp_le_max_hp
+#print axioms Formal.ApplyBaseline.optimizeLoadoutApply_hp_le_max_hp
 #print axioms Formal.ApplyBaseline.all_actions_preserve_skill_xp
 #print axioms Formal.ApplyBaseline.acceptTaskApply_preserves_baseline
 #print axioms Formal.ApplyBaseline.completeTaskApply_preserves_baseline
