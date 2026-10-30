@@ -23,7 +23,12 @@ from artifactsmmo_cli.ai.equipment.loadout_picker import _ordered_slots
 from artifactsmmo_cli.ai.equipment.realizable_loadout import ownership
 from artifactsmmo_cli.ai.fight_walk import wear
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_objective import achievable, fighter_owning, gear_objective
+from artifactsmmo_cli.ai.gear_objective import (
+    achievable,
+    fighter_owning,
+    gear_objective,
+    gear_objective_for,
+)
 from artifactsmmo_cli.ai.gear_objective_core import objective_held, piece_order_key
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.inventory_keep import carried_keep
@@ -878,3 +883,15 @@ def test_swapping_a_worn_boost_moves_only_its_delta(gd: GameData, novice: GearOb
         assert fire.resistance == earth.resistance and fire.attack == earth.attack
     assert (fire.dmg, fire.critical_strike, fire.initiative, fire.max_hp) == (
         earth.dmg, earth.critical_strike, earth.initiative, earth.max_hp)
+
+
+@pytest.mark.parametrize("name", ["robby", "novice"])
+def test_the_pinned_objective_of_m_star_is_the_objective(
+        gd: GameData, name: str, request: pytest.FixtureRequest) -> None:
+    """`gear_objective_for` is `gear_objective` with `m` pinned (plan C Task
+    2): pinned to the argmax's own `m*`, it gives the same loadout, rate and
+    missing pieces, each picked from the fighter wearing nothing (Robby's
+    eleven worn pieces would bias a pick from the dressed character)."""
+    objective = request.getfixturevalue(name)
+    state = _robby() if name == "robby" else _novice(gd)
+    assert gear_objective_for(objective.monster, state, gd, CTX, None) == objective

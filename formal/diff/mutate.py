@@ -7770,14 +7770,11 @@ ROOT_TASK_GEAR_MUTATIONS = [
      "    return ObtainItem(horizon.gear_target.code, 1)"),
 ]
 # `gear_objective_for`: `L*` of a pinned monster, the same pieces as the
-# argmax's (plan C Task 2). Killed by tests/test_ai/test_task_horizon.py.
+# argmax's (plan C Task 2). Killed by tests/test_ai/test_gear_objective.py.
 GEAR_OBJECTIVE_FOR_MUTATIONS = [
     ("gear objective for: the pinned monster's pieces are gained against no rate",
      "    rate = _rate(target[0], game_data, monster, food, loop)\n    return _objective(",
      "    rate = Fraction(0)\n    return _objective("),
-    ("gear objective for: the pinned loadout is picked from the dressed character",
-     "    target = _target(_bare(state, frozenset(depth), game_data), game_data, monster)\n",
-     "    target = _target(fighter_owning(state, frozenset(depth), game_data), game_data, monster)\n"),
 ]
 TASK_HORIZON_MUTATIONS = [
     ("horizon: a task the gate fights still waits for a level",
@@ -14811,7 +14808,7 @@ def _collect_all_groups() -> None:
     run_group(ROOT_DECISION_SRC, ROOT_TASK_GEAR_MUTATIONS,
               "tests/test_ai/scenarios/test_held_task.py", survivors)
     run_group(GEAR_OBJECTIVE_SRC, GEAR_OBJECTIVE_FOR_MUTATIONS,
-              "tests/test_ai/test_task_horizon.py", survivors)
+              "tests/test_ai/test_gear_objective.py", survivors)
     run_group(CATALOGUE_SCOPE_SRC, CATALOGUE_SCOPE_PURGE_MUTATIONS,
               "tests/test_ai/test_catalogue_scope.py", survivors)
     run_group(TASK_WORTH_SRC, TASK_WORTH_INPUT_MUTATIONS,
