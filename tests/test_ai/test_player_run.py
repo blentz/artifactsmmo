@@ -8,7 +8,9 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from artifactsmmo_api_client.models.gathering_skill import GatheringSkill
 from artifactsmmo_api_client.models.item_schema import ItemSchema
+from artifactsmmo_api_client.models.resource_schema import ResourceSchema
 from sqlmodel import Session as SqlSession
 from sqlmodel import select
 
@@ -89,12 +91,25 @@ def _one_equippable_item() -> ItemSchema:
                       tradeable=True)
 
 
+#: The resources a run-loop test gathers, as the API serves them: every
+#: resource names its gathering skill (Task 14f: a gather's skill is
+#: mandatory). API-true levels: copper_rocks mining 1, spruce_tree woodcutting 10.
+GATHERED_RESOURCES = [
+    ResourceSchema(name="Copper Rocks", code="copper_rocks", skill=GatheringSkill.MINING,
+                   level=1, drops=[]),
+    ResourceSchema(name="Spruce Tree", code="spruce_tree", skill=GatheringSkill.WOODCUTTING,
+                   level=10, drops=[]),
+]
+
+
 @contextlib.contextmanager
 def _patch_game_data_load():
     """Stub all GameData API calls + the disk cache for run-loop tests."""
     empty = MagicMock(data=[])
     with contextlib.ExitStack() as stack:
-        for name in ("get_all_maps", "get_all_resources",
+        stack.enter_context(patch("artifactsmmo_cli.ai.game_data.get_all_resources",
+                                  return_value=MagicMock(data=GATHERED_RESOURCES)))
+        for name in ("get_all_maps",
                      "get_all_monsters", "get_all_npc_items", "get_all_tasks",
                      "get_all_events", "get_all_effects", "get_ge_orders"):
             stack.enter_context(patch(f"artifactsmmo_cli.ai.game_data.{name}", return_value=empty))
@@ -1032,6 +1047,7 @@ def test_items_task_builds_batched_craft_and_trade():
     player.game_data._taskmaster_location = (1, 2)
     player.game_data._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
     player.game_data._resource_drops = {"copper_rocks": "copper_ore"}
+    player.game_data._resource_skill = {"copper_rocks": ("mining", 1)}
     player.game_data._resource_locations = {}
     player.game_data._monster_locations = {}
     player.game_data._npc_stock = {}
@@ -1099,10 +1115,11 @@ def test_run_holds_plan_cursor_through_a_batched_gather():
     player._arbiter._committed_repr = repr(goal)  # a goal repr, as production's arbiter holds
 
     initial_state = make_state(x=0, y=0, inventory={}, inventory_max=20,
-                               inventory_slots_max=20)
-    # spruce_tree has no configured skill requirement in the empty
-    # game data `_patch_game_data_load` yields, so GatherAction.is_applicable
-    # shortcuts on the quantity/slot floor alone -- both states below satisfy
+                               inventory_slots_max=20,
+                               skills={**make_state().skills, "woodcutting": 10})
+    # spruce_tree asks woodcutting 10 (`GATHERED_RESOURCES`), which the
+    # character holds, so GatherAction.is_applicable rests on the
+    # quantity/slot floor -- both states below satisfy
     # it (inventory_max=20 leaves ample headroom), so cache-hit reuse on
     # cycle 2 never falls through to a cold replan.
     state_partial = replace(initial_state, inventory={"spruce_tree": 1})

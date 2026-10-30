@@ -67,6 +67,9 @@ def _gd() -> GameData:
                             "bread": {"wheat": 1}}
     gd._workshop_locations = {"gearcrafting": (2, 2), "cooking": (4, 4)}
     gd._bank_location = (5, 5)
+    # The gather legs' resource (no drop row: milk has no route) names its
+    # skill, as every API resource does (Task 14f: a gather's skill is mandatory).
+    gd._resource_skill = {"milk_rocks": ("mining", 1)}
     return gd
 
 

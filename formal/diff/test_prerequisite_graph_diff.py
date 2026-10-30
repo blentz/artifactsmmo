@@ -135,6 +135,7 @@ def _run_prereq(has_recipe, ingredients, code, ready_source=False):
         # checks before the recipe/obtain_sources check is even reached.
         res = f"res_{code}"
         gd._resource_drops = {res: str(code)}
+        gd._resource_skill = {res: ("mining", 1)}
         gd._resource_locations = {res: [(0, 0)]}
 
     node = ObtainItem(str(code))

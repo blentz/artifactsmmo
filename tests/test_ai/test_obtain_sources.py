@@ -100,6 +100,7 @@ def _build_game_data(with_workshops: bool) -> GameData:
         "phantom_part": {"copper_bar": 4},
     }
     gd._resource_drops = {"ash_tree": "ash_wood", "event_flower": "moonpetal"}
+    gd._resource_skill = {"ash_tree": ("woodcutting", 1), "event_flower": ("alchemy", 1)}
     gd._resource_locations = {"ash_tree": [(0, 1)]}  # event_flower: NO entry -> event inactive
     gd._workshop_locations = ({"woodcutting": (1, 1), "gearcrafting": (2, 1),
                                "weaponcrafting": (3, 1), "cooking": (4, 1)}
@@ -483,6 +484,7 @@ def test_priority_order_pins_the_full_six_source_tail():
         "gem_ring": {"hexagem": 4},
     }
     gd._resource_drops = {"gem_vein": "hexagem"}
+    gd._resource_skill = {"gem_vein": ("mining", 1)}
     gd._resource_locations = {"gem_vein": [(9, 0)]}
     gd._workshop_locations = {"jewelrycrafting": (1, 1)}
     gd.recycle_totals = {"gem_ring": 2}

@@ -9,10 +9,10 @@ re-arms into it (`GatherAction.cost` charges the wrong tool until it does).
 
 The state's own total, `state.prospecting`, is the worn gear's: read before
 the swap, it is not the attempt's (Task 14d census of ledger 253 (b)). The
-acquisition walk and the drop-fight picker read this module. The planner's
-gather and the gather source pickers still read the worn total: unlike the
-walk, they admit a resource with no gathering skill (`GatherAction.cost`'s
-no-tool-preference branch), which `gather_prospecting` refuses.
+acquisition walk, the drop-fight picker, the planner's gather and the gather
+source pickers read this module: one basis for every gather pricer (Task 14f).
+A gather's resource skill is mandatory (`gather_requirement`): API data or
+fail.
 
 Pure functions over the state and the catalogue, in their own module because
 the source pickers sit below `acquisition_cost` in the import graph.
@@ -42,11 +42,18 @@ def fight_prospecting(monster_code: str, state: WorldState, game_data: GameData)
                                       dict(state.attack)), state, game_data)
 
 
-def gather_prospecting(resource: str, state: WorldState, game_data: GameData) -> int:
-    """`loadout_prospecting` for a gather at `resource`: the `Gather` purpose
-    of its skill. A resource with no skill in the catalogue RAISES: API data or
-    fail."""
+def gather_requirement(resource: str, game_data: GameData) -> tuple[str, int]:
+    """The gathering skill and level `resource` asks. Every resource the API
+    serves names one, so a resource with none in the catalogue RAISES: API
+    data or fail."""
     requirement = game_data.resource_skill_level(resource)
     if requirement is None:
         raise ValueError(f"resource {resource!r} has no gathering skill in game data")
-    return loadout_prospecting(Gather(requirement[0]), state, game_data)
+    return requirement
+
+
+def gather_prospecting(resource: str, state: WorldState, game_data: GameData) -> int:
+    """`loadout_prospecting` for a gather at `resource`: the `Gather` purpose
+    of its skill (`gather_requirement`)."""
+    return loadout_prospecting(Gather(gather_requirement(resource, game_data)[0]),
+                               state, game_data)

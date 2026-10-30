@@ -141,20 +141,12 @@ def test_optimize_loadout_combat_unchanged(combat_loadout_fixture: tuple[WorldSt
     assert new_state.equipment == state.equipment  # combat path didn't swap to a gather tool
 
 
-def test_gather_cost_no_penalty_when_no_skill_requirement(gather_cost_fixture: tuple[WorldState, GameData]) -> None:
-    """GatherAction.cost adds no gather-loadout penalty for resources with no skill requirement.
-
-    When resource_skill_level returns None the ``is not None`` guard short-circuits
-    before adding GATHER_LOADOUT_PENALTY.  The cost is identical whether or not
-    an optimal gather tool is equipped — the None-guard prevents the penalty branch
-    from executing entirely.
-    """
-    state, game_data = gather_cost_fixture  # owns iron_axe but wears wooden_stick
+def test_gather_cost_raises_for_a_resource_with_no_skill(gather_cost_fixture: tuple[WorldState, GameData]) -> None:
+    """Task 14f (ruling T14d-7c): a gather's resource skill is mandatory, API
+    data or fail. `GatherAction.cost` had a no-skill branch that charged no
+    loadout penalty for such a resource; it is deleted, and the cost raises."""
+    state, game_data = gather_cost_fixture
     # "plain_rock" is absent from _resource_skill → resource_skill_level returns None
     action = GatherAction(resource_code="plain_rock", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
-    cost_suboptimal = action.cost(state, game_data)
-    # Equip the gather tool: without the None guard this path would crash or diverge
-    state_axe = equip(state, "iron_axe", "weapon_slot")
-    cost_with_axe = action.cost(state_axe, game_data)
-    # No skill requirement → None-guard short-circuits → identical costs either way
-    assert cost_suboptimal == cost_with_axe
+    with pytest.raises(ValueError, match="no gathering skill"):
+        action.cost(state, game_data)

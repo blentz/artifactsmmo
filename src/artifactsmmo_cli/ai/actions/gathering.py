@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.actions.gather_apply_core import (
     gather_is_applicable_pure,
 )
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.attempt_prospecting import gather_prospecting, gather_requirement
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Gather
@@ -133,7 +134,8 @@ class GatherAction(Action):
         """Server gathers this batch of `quantity` units takes, expected: the
         units times the attempts one unit takes at the learned chance
         (`LearnedDrops.attempts_per_unit` over the drop row,
-        `GameData.gather_drop_row`), at `state.prospecting`. The SAME per-unit
+        `GameData.gather_drop_row`), at the prospecting of the loadout the
+        gather is made in (`gather_prospecting`, Task 14f). The SAME per-unit
         figure the acquisition walk prices a GATHER route at
         (`acquisition_cost._gather_actions`), so the planner and the walk
         price a rare drop alike: a pearl off `trout_spot` is 300 gathers
@@ -142,7 +144,7 @@ class GatherAction(Action):
                                                        self.drop_item(game_data))
         return self.quantity * self.learned_drops.attempts_per_unit(
             self.resource_code, self.drop_item(game_data), rate, min_q, max_q,
-            state.prospecting)
+            gather_prospecting(self.resource_code, state, game_data))
 
     @staticmethod
     def inv(state: WorldState) -> GatherInv:
@@ -178,7 +180,7 @@ class GatherAction(Action):
             return False
         drop_item = self.drop_item(game_data)
         inv = self.inv(state)
-        skill_req = game_data.resource_skill_level(self.resource_code)
+        skill, level = gather_requirement(self.resource_code, game_data)
         # The `effective_quantity(...) >= 1` conjunct is belt-and-braces, not
         # a live gate: `gather_is_applicable_pure(inv, _MIN_FREE_SLOTS, ...)`
         # already requires `cap - used >= _MIN_FREE_SLOTS (3)`, which implies
@@ -187,10 +189,6 @@ class GatherAction(Action):
         # Kept explicit so a future reader doesn't have to re-derive that —
         # and so it stays correct if `_MIN_FREE_SLOTS` or the batch-size
         # rule ever diverge.
-        if skill_req is None:
-            return (gather_is_applicable_pure(inv, self._MIN_FREE_SLOTS, drop_item)
-                    and self.effective_quantity(state, game_data) >= 1)
-        skill, level = skill_req
         return (state.skills.get(skill, 1) >= level
                 and gather_is_applicable_pure(inv, self._MIN_FREE_SLOTS, drop_item)
                 and self.effective_quantity(state, game_data) >= 1)
@@ -254,9 +252,8 @@ class GatherAction(Action):
         # Penalize gathering with a suboptimal tool, mirroring LOADOUT_PENALTY in
         # FightAction.cost: add GATHER_LOADOUT_PENALTY when pick_loadout(Gather)
         # differs from the current equipment in any slot, so the planner sequences
-        # OptimizeLoadout(Gather) before the gather.  Fires only when the resource
-        # has a known skill requirement (resources without skill data carry no
-        # tool preference, so no penalty). Charged PER UNIT: a batch of N is N
+        # OptimizeLoadout(Gather) before the gather. Every resource names its
+        # skill (`gather_requirement` raises without one). Charged PER UNIT: a batch of N is N
         # server gathers, each one paying for the wrong tool, so this reproduces
         # the equivalent singleton chain exactly — the same cost-parity rule
         # that charges the base per gather and the walk once. Once-per-action collapsed
@@ -264,12 +261,10 @@ class GatherAction(Action):
         # unprofitable at EVERY batch size (it recovers a constant 6.0 against
         # a 10.0 swap), silently killing the proven 2026-07-05 re-arm the moment
         # the goals started sizing their gathers.
-        skill_req = game_data.resource_skill_level(self.resource_code)
-        if skill_req is not None:
-            skill, _ = skill_req
-            optimal = pick_loadout_cached(Gather(skill), state, game_data)
-            if any(state.equipment.get(slot) != code for slot, code in optimal.items()):
-                static += Fraction(GATHER_LOADOUT_PENALTY) * gathers
+        skill, _ = gather_requirement(self.resource_code, game_data)
+        optimal = pick_loadout_cached(Gather(skill), state, game_data)
+        if any(state.equipment.get(slot) != code for slot, code in optimal.items()):
+            static += Fraction(GATHER_LOADOUT_PENALTY) * gathers
         if history is None:
             return learned_cost_pure(float(static), 0.0, 1.0, has_history=False)
         # `default` must be a PER-GATHER figure WITHOUT the walk (matched against

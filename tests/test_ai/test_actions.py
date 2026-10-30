@@ -382,6 +382,7 @@ class TestGatherAction:
         state = make_state(x=0, y=0, inventory={})
         gd = make_game_data(resource_locs={"copper_rocks": [(2, 0), (5, 0)]})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         new_state = action.apply(state, gd)
         assert new_state.inventory.get("copper_ore", 0) == 1
         assert (new_state.x, new_state.y) == (2, 0)  # nearest
@@ -393,6 +394,7 @@ class TestGatherAction:
                               learned_drops=LearnedDrops.empty())
         gd = make_game_data(resource_skills={"copper_rocks": ("mining", 1)})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         state = make_state(x=0, y=0, inventory={}, skill_xp={"mining": 5})
         new_state = action.apply(state, gd)
         assert new_state.skill_xp == state.skill_xp
@@ -403,6 +405,7 @@ class TestGatherAction:
                               learned_drops=LearnedDrops.empty())
         gd = make_game_data(resource_skills={"copper_rocks": ("mining", 1)})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         state = make_state(x=0, y=0, inventory={}, skill_xp={"mining": 0, "alchemy": 200})
         new_state = action.apply(state, gd)
         assert new_state.skill_xp == state.skill_xp
@@ -432,6 +435,7 @@ class TestGatherAction:
         state = make_state(x=0, y=0, inventory={}, inventory_max=50, inventory_slots_max=20)
         gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
         gd._resource_drops = {"spruce_tree": "spruce_wood"}
+        gd._resource_skill = {"spruce_tree": ("woodcutting", 10)}
         new_state = action.apply(state, gd)
         drop = action.drop_item(gd)
         assert new_state.inventory.get(drop, 0) - state.inventory.get(drop, 0) == 10
@@ -441,6 +445,7 @@ class TestGatherAction:
                               locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
         gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
         gd._resource_drops = {"spruce_tree": "spruce_wood"}
+        gd._resource_skill = {"spruce_tree": ("woodcutting", 10)}
         # inventory_max=20, 16 already used by "junk" -> headroom = 4 units.
         full = make_state(x=0, y=0, inventory={"junk": 16}, inventory_max=20, inventory_slots_max=20)
         assert action.effective_quantity(full, gd) == 4
@@ -453,7 +458,9 @@ class TestGatherAction:
                               locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
         gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
         gd._resource_drops = {"spruce_tree": "spruce_wood"}
-        full = make_state(x=0, y=0, inventory={"junk": 16}, inventory_max=20, inventory_slots_max=20)
+        gd._resource_skill = {"spruce_tree": ("woodcutting", 10)}
+        full = make_state(x=0, y=0, inventory={"junk": 16}, inventory_max=20, inventory_slots_max=20,
+                          skills={**make_state().skills, "woodcutting": 10})
         assert action.is_applicable(full, gd) is True
 
     def test_cost_scales_with_quantity(self):
@@ -462,7 +469,8 @@ class TestGatherAction:
         # exactly 10x one.cost() -- `>` alone would pass for any increasing
         # function and wouldn't catch a change to that formula.
         state = make_state(x=0, y=0, inventory={}, inventory_max=50, inventory_slots_max=20)
-        gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
+        gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]},
+                            resource_skills={"spruce_tree": ("woodcutting", 10)})
         one = GatherAction(resource_code="spruce_tree", quantity=1, locations=frozenset({(0, 0)}),
                            learned_drops=LearnedDrops.empty())
         ten = GatherAction(resource_code="spruce_tree", quantity=10, locations=frozenset({(0, 0)}),
@@ -477,6 +485,7 @@ class TestGatherAction:
                               locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
         gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
         gd._resource_drops = {"spruce_tree": "spruce_wood"}
+        gd._resource_skill = {"spruce_tree": ("woodcutting", 10)}
         drop = action.drop_item(gd)
         state = make_state(x=0, y=0, inventory={}, inventory_max=50, inventory_slots_max=20)
         banked = dataclasses.replace(state, bank_items={drop: 3})
@@ -1335,6 +1344,7 @@ class TestGatherActionTaskProgress:
     def test_gather_does_not_advance_items_task_even_when_drop_matches(self):
         gd = make_game_data(resource_locs={"copper_rocks": [(2, 0)]})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]),
                               learned_drops=LearnedDrops.empty())
         state = make_state(task_code="copper_ore", task_type="items", task_progress=3, task_total=10)
@@ -1345,6 +1355,7 @@ class TestGatherActionTaskProgress:
     def test_no_change_when_task_type_wrong(self):
         gd = make_game_data(resource_locs={"copper_rocks": [(2, 0)]})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]),
                               learned_drops=LearnedDrops.empty())
         state = make_state(task_code="copper_ore", task_type="monsters", task_progress=3, task_total=10)
@@ -1354,6 +1365,7 @@ class TestGatherActionTaskProgress:
     def test_no_change_when_drop_doesnt_match_task(self):
         gd = make_game_data(resource_locs={"ash_tree": [(2, 0)]})
         gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
         action = GatherAction(resource_code="ash_tree", locations=frozenset([(2, 0)]),
                               learned_drops=LearnedDrops.empty())
         state = make_state(task_code="copper_ore", task_type="items", task_progress=3, task_total=10)
@@ -1489,7 +1501,9 @@ def test_gather_action_cost_uses_history_when_provided():
                 action_repr=repr_str, actual_cooldown_seconds=18.0,
             ))
         state = make_state(x=2, y=2, hp=100, max_hp=100, inventory={}, inventory_max=20)
-        assert action.cost(state, GameData(), history=store) == 18.0
+        gd = GameData()
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
+        assert action.cost(state, gd, history=store) == 18.0
         store.close()
     finally:
         if os.path.exists(path):

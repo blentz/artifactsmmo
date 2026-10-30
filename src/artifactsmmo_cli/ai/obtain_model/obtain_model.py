@@ -32,6 +32,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai import accumulation_sell
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.attempt_prospecting import gather_prospecting
 from artifactsmmo_cli.ai.decompose_core import Route as WalkRoute
 from artifactsmmo_cli.ai.decompose_core import can_obtain, next_step, plan_legs
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
@@ -366,7 +367,8 @@ class ObtainModel:
         The expected gathers are the context's drop evidence
         (`SelectionContext.drops`, ruling T16a) over the drop row
         (`GameData.gather_drop_row`, a primary-map-only resource a sure drop),
-        at `state.prospecting`: the figure the walk prices the route at, so
+        at the gather loadout's prospecting (`gather_prospecting`, Task 14f):
+        the figure the walk prices the route at, so
         the source the walk serves first is the one it priced cheapest."""
         gathers = [route for route in ready if route.kind is SourceKind.GATHER]
         if len(gathers) < 2:
@@ -375,8 +377,9 @@ class ObtainModel:
         candidates: list[GatherCandidate] = []
         for route in gathers:
             rate, min_q, max_q = self._gd.gather_drop_row(route.via, item)
-            attempts = evidence.attempts_per_unit(route.via, item, rate, min_q, max_q,
-                                                  self._state.prospecting)
+            attempts = evidence.attempts_per_unit(
+                route.via, item, rate, min_q, max_q,
+                gather_prospecting(route.via, self._state, self._gd))
             tiles = self._gd.all_resource_locations.get(route.via) or []
             distance = min((abs(x - self._state.x) + abs(y - self._state.y) for x, y in tiles), default=0)
             candidates.append(GatherCandidate(route.via, attempts, distance))
@@ -480,7 +483,8 @@ class ObtainModel:
         """One route per resource that drops `item`, fewest expected gathers a
         unit first: the context's learned drop model
         (`SelectionContext.drops`, ruling T16a) over each drop row at
-        `state.prospecting`, the figure the walk prices the route at. The first
+        the gather loadout's prospecting (`gather_prospecting`, Task 14f), the
+        figure the walk prices the route at. The first
         one is marked `primary`: the only one the legacy model offers, so a
         LEGACY walk prices the source the evidence says is cheapest, not the
         one the API rate alone names. Under the prior (`LearnedDrops.empty()`)
@@ -495,8 +499,9 @@ class ObtainModel:
 
         def attempts(resource: str) -> Fraction:
             rate, min_q, max_q = self._gd.gather_drop_row(resource, item)
-            return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,
-                                              self._state.prospecting)
+            return evidence.attempts_per_unit(
+                resource, item, rate, min_q, max_q,
+                gather_prospecting(resource, self._state, self._gd))
 
         out: list[Route] = []
         for rank, resource in enumerate(sorted(droppers, key=attempts)):

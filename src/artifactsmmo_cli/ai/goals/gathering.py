@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.attempt_prospecting import gather_prospecting
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
 from artifactsmmo_cli.ai.currency_buy_batch import currency_buy_batch_pure
@@ -412,7 +413,8 @@ class GatherMaterialsGoal(Goal):
                 candidates.append(GatherCandidate(
                     resource_code=a.resource_code,
                     attempts=a.learned_drops.attempts_per_unit(
-                        a.resource_code, item, rate, mn, mx, state.prospecting),
+                        a.resource_code, item, rate, mn, mx,
+                        gather_prospecting(a.resource_code, state, game_data)),
                     distance=dist))
             if not valid:
                 continue

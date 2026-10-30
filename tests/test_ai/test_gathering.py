@@ -44,6 +44,7 @@ def _gd_copper_dagger() -> GameData:
         "copper_dagger": {"copper_bar": 6},
     }
     gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
     gd._workshop_locations = {"mining": (1, 5), "weaponcrafting": (3, 1)}
     gd._bank_location = (4, 0)
     gd._taskmaster_location = (1, 2)
@@ -116,6 +117,7 @@ class TestFullBagStillPlansDepositThenGather:
         }
         gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         gd._workshop_locations = {"mining": (1, 5)}
         gd._bank_location = (4, 0)
         return gd
@@ -266,6 +268,7 @@ class TestRecycleAsAcquisition:
             "copper_axe": {"copper_bar": 6},
         }
         gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
         gd._workshop_locations = {"woodcutting": (1, 1), "gearcrafting": (2, 1),
                                   "weaponcrafting": (3, 1)}
         gd._bank_location = (4, 0)
@@ -371,6 +374,7 @@ def _forged_plate_gd() -> GameData:
     }
     gd._crafting_recipes = {"forged_plate": {"iron_ore": 10}}
     gd._resource_drops = {"iron_rocks": "iron_ore"}
+    gd._resource_skill = {"iron_rocks": ("mining", 10)}
     gd._workshop_locations = {"gearcrafting": (2, 2)}
     gd._bank_location = (3, 0)
     gd._taskmaster_location = (1, 1)

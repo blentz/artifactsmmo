@@ -68,6 +68,7 @@ def test_slot_with_no_candidate_is_omitted():
     gd._item_stats = {"only_weapon": ItemStats(code="only_weapon", level=1, type_="weapon", attack={"f": 1})}
     gd._crafting_recipes = {"only_weapon": {"bar": 1}}
     gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
     obj = CharacterObjective.from_game_data(gd)
     assert "weapon_slot" in obj.target_gear
     assert "boots_slot" not in obj.target_gear
@@ -77,6 +78,7 @@ def test_is_attainable_gatherable_and_craftable_chain():
     gd = GameData()
     gd._crafting_recipes = {"sword": {"bar": 2}, "bar": {"ore": 3}}
     gd._resource_drops = {"rocks": "ore"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
     assert is_attainable("ore", gd) is True          # gatherable raw
     assert is_attainable("sword", gd) is True         # sword<-bar<-ore all attainable
 
@@ -85,6 +87,7 @@ def test_is_attainable_false_for_drop_only_and_blocked_material():
     gd = GameData()
     gd._crafting_recipes = {"cursed": {"boss_drop": 1}}
     gd._resource_drops = {"rocks": "ore"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
     assert is_attainable("boss_drop", gd) is False    # no recipe, no drop
     assert is_attainable("cursed", gd) is False        # material unattainable
 
@@ -103,6 +106,7 @@ def test_target_gear_prefers_attainable_over_higher_value_drop():
     }
     gd._crafting_recipes = {"iron_blade": {"bar": 1}}
     gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
     obj = CharacterObjective.from_game_data(gd)
     assert obj.target_gear["weapon_slot"] == "iron_blade"  # attainable wins despite lower value
 
@@ -620,6 +624,7 @@ def test_is_attainable_now_item_currency_recurses():
     gd._npc_buy_currency["dust_trader"] = {"dust_rune": "magic_dust"}
     gd._npc_locations["dust_trader"] = (4, 4)
     gd._resource_drops = {"dust_node": "magic_dust"}  # magic_dust gatherable
+    gd._resource_skill = {"dust_node": ("alchemy", 1)}
     gd._resource_locations = {"dust_node": [(5, 5)]}
     assert is_attainable_now("dust_rune", make_state(level=20, gold=0), gd) is True
 

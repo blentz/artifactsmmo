@@ -437,6 +437,7 @@ class TestMissingItemStatsOrWorkshopFallsBack:
         gd._item_stats = {}  # No stats for copper_ring.
         gd._crafting_recipes = {"copper_ring": {"copper_ore": 6}}
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         gd._resource_locations = {"copper_rocks": [(0, 1)]}
         gd._workshop_locations = {"jewelrycrafting": (3, 1)}
         gd.world.bank_tile = (4, 0)
@@ -518,6 +519,7 @@ class TestSharedIntermediateClosure:
             "copper_amulet": {"copper_bar": 2},  # copper_ore reachable via TWO paths
         }
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         gd._resource_locations = {"copper_rocks": [(0, 1)]}
         gd._workshop_locations = {"mining": (1, 5), "jewelrycrafting": (3, 1)}
         gd.world.bank_tile = (4, 0)
@@ -779,6 +781,7 @@ def _gd_copper_dagger() -> GameData:
         "copper_dagger": {"copper_bar": 6},
     }
     gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
     gd._resource_locations = {"copper_rocks": [(0, 1)]}
     gd._workshop_locations = {"mining": (1, 5), "weaponcrafting": (3, 1)}
     gd._bank_location = (4, 0)
@@ -960,6 +963,7 @@ class TestDropLeafFightLeg:
             "feather_coat": {"ash_wood": 2, "feather": 1},
         }
         gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
         gd._resource_locations = {"ash_tree": [(0, 2)]}
         state = _fighter_state(skills={"gearcrafting": 5, "woodcutting": 1})
         goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
@@ -1541,6 +1545,7 @@ def _gd_fire_staff() -> GameData:
         "fishing_net": {"ash_plank": 6},
     }
     gd._resource_drops = {"ash_tree": "ash_plank"}
+    gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
     gd._resource_locations = {"ash_tree": [(0, 1)]}
     gd._workshop_locations = {"weaponcrafting": (2, 2)}
     gd._bank_location = (4, 0)

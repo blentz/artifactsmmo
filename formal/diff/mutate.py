@@ -1538,15 +1538,17 @@ ONE_DROP_MODEL_GATHER_MUTATIONS = [
 ]
 ONE_DROP_MODEL_OBTAIN_MUTATIONS = [
     ("obtain model: the fast path ranks gathers by the API rate",
-     "            attempts = evidence.attempts_per_unit(route.via, item, rate, min_q, max_q,\n"
-     "                                                  self._state.prospecting)",
+     "            attempts = evidence.attempts_per_unit(\n"
+     "                route.via, item, rate, min_q, max_q,\n"
+     "                gather_prospecting(route.via, self._state, self._gd))",
      "            attempts = Fraction(rate)"),
     ("obtain model: the primary gather is the table's first",
      "        for rank, resource in enumerate(sorted(droppers, key=attempts)):",
      "        for rank, resource in enumerate(droppers):"),
     ("obtain model: the primary gather is the API-cheapest",
-     "            return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,\n"
-     "                                              self._state.prospecting)",
+     "            return evidence.attempts_per_unit(\n"
+     "                resource, item, rate, min_q, max_q,\n"
+     "                gather_prospecting(resource, self._state, self._gd))",
      "            return Fraction(rate)"),
 ]
 ONE_DROP_MODEL_NARROWING_MUTATIONS = [
@@ -6360,15 +6362,15 @@ GATHER_REARM_MUTATIONS = [
 # is where the formula (not the plan shape) is the unit under test.
 GATHER_LOADOUT_SCALING_MUTATIONS = [
     ("gather cost: loadout penalty once per action, not per unit (kills the re-arm)",
-     "                static += Fraction(GATHER_LOADOUT_PENALTY) * gathers",
-     "                static += Fraction(GATHER_LOADOUT_PENALTY)"),
+     "            static += Fraction(GATHER_LOADOUT_PENALTY) * gathers",
+     "            static += Fraction(GATHER_LOADOUT_PENALTY)"),
     # `pass`, not deletion: the statement is the whole body of an `if`, so
     # removing it leaves an empty block and the mutant dies of IndentationError
     # at COLLECTION — a pytest rc=2 harness error, which this runner correctly
     # refuses to score as a kill.
     ("gather cost: drop the loadout penalty entirely (re-arm never pays)",
-     "                static += Fraction(GATHER_LOADOUT_PENALTY) * gathers",
-     "                pass"),
+     "            static += Fraction(GATHER_LOADOUT_PENALTY) * gathers",
+     "            pass"),
     # THE APPLE BUG (2026-10-05): a secondary drop priced at one gather a unit.
     # `Gather(ash_tree->apple)` (rate 20) looked as cheap as `ash_wood`, and the
     # fleet spent 554 gathers on 25 apples. Killed by the rated pins against
@@ -7066,7 +7068,28 @@ PROSPECTING_DROP_FIGHT_MUTATIONS = [
 ATTEMPT_PROSPECTING_RAISE_MUTATIONS = [
     ("drop work: a resource with no skill is not raised",
      "        raise ValueError(f\"resource {resource!r} has no gathering skill in game data\")\n",
-     "        return 0\n"),
+     "        return (\"\", 0)\n"),
+]
+# Task 14f (ruling T14d-7c): every gather pricer reads the gather loadout's
+# prospecting, the walk's basis. Killed by
+# tests/test_ai/test_gather_prospecting_basis.py.
+GATHER_BASIS_ACTION_MUTATIONS = [
+    ("gather action: the planned gather reads the worn total",
+     "            gather_prospecting(self.resource_code, state, game_data))",
+     "            state.prospecting)"),
+]
+GATHER_BASIS_NARROWING_MUTATIONS = [
+    ("gather narrowing: A* ranks sources at the worn total",
+     "                        gather_prospecting(a.resource_code, state, game_data)),",
+     "                        state.prospecting),"),
+]
+GATHER_BASIS_OBTAIN_MUTATIONS = [
+    ("obtain model: ready ranks gathers at the worn total",
+     "                gather_prospecting(route.via, self._state, self._gd))",
+     "                self._state.prospecting)"),
+    ("obtain model: the gather order is read at the worn total",
+     "                gather_prospecting(resource, self._state, self._gd))",
+     "                self._state.prospecting)"),
 ]
 DROP_TOOL_LEG_P_MUTATIONS = [
     ("drop price: a gather reads the worn total, not its gather loadout's",
@@ -14431,6 +14454,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_tool_objective.py", survivors)
     run_group(ACQUISITION_COST_SRC, DROP_TOOL_WORK_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(GATHERING_APPLY_SRC, GATHER_BASIS_ACTION_MUTATIONS,
+              "tests/test_ai/test_gather_prospecting_basis.py", survivors)
+    run_group(GATHERING_GOAL_SRC, GATHER_BASIS_NARROWING_MUTATIONS,
+              "tests/test_ai/test_gather_prospecting_basis.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, GATHER_BASIS_OBTAIN_MUTATIONS,
+              "tests/test_ai/test_gather_prospecting_basis.py", survivors)
     run_group(ATTEMPT_PROSPECTING_SRC, ATTEMPT_PROSPECTING_RAISE_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
     run_group(DROP_FIGHT_SELECTION_SRC, PROSPECTING_DROP_FIGHT_MUTATIONS,

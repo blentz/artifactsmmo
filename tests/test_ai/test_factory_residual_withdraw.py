@@ -40,6 +40,7 @@ def _copper_chain_gd() -> GameData:
         "copper_bar": {"copper_ore": 10},
     }
     gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
     gd._resource_locations = {"copper_rocks": [(2, 0)]}
     gd._workshop_locations = {"gearcrafting": (3, 0), "mining": (5, 0)}
     gd._bank_location = (4, 0)

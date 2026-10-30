@@ -94,6 +94,7 @@ def test_gathers_are_gated_too():
     """Not just fights -- an event-only RESOURCE is the same question."""
     gd = _gd()
     gd._resource_drops = {"fairy_dust_node": "fairy_dust"}
+    gd._resource_skill = {"fairy_dust_node": ("alchemy", 1)}
     gd.world.event_resource_locations = {"fairy_dust_node": [(3, 0)]}
     gd.world.event_code_of_content["fairy_dust_node"] = _EVENT
     plan = [GatherAction(resource_code="fairy_dust_node",
@@ -249,6 +250,7 @@ def test_classifier_ignores_plain_resources():
     violation is how it becomes the house style.)"""
     gd = _gd()
     gd._resource_drops = {"ash_tree": "ash_wood"}
+    gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
     gd._resource_locations = {"ash_tree": [(2, 2)]}
     gather = GatherAction(resource_code="ash_tree",
                           locations=frozenset({(2, 2)}), learned_drops=LearnedDrops.empty())
@@ -259,6 +261,7 @@ def test_classifier_flags_event_only_resources():
     from artifactsmmo_cli.ai.event_plan_window import _event_only_target
     gd = _gd()
     gd._resource_drops = {"fairy_dust_node": "fairy_dust"}
+    gd._resource_skill = {"fairy_dust_node": ("alchemy", 1)}
     gd.world.event_resource_locations = {"fairy_dust_node": [(3, 0)]}
     gather = GatherAction(resource_code="fairy_dust_node",
                           locations=frozenset({(3, 0)}), learned_drops=LearnedDrops.empty())

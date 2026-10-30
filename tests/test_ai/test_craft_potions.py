@@ -39,6 +39,7 @@ def _gd() -> GameData:
     }
     gd._crafting_recipes = {_HEAL: {_INGREDIENT: 1}, _BOOST: {_INGREDIENT: 1}}
     gd._resource_drops = {_RESOURCE: _INGREDIENT}
+    gd._resource_skill = {_RESOURCE: ("alchemy", 1)}
     gd._resource_locations = {_RESOURCE: [(2, 0)]}
     gd._workshop_locations = {"alchemy": (3, 0)}
     return gd

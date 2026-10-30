@@ -621,6 +621,7 @@ def test_a_material_from_a_reachable_underground_resource_counts():
     gathered by the action pool, so the grind counts it."""
     gd = _policy_world()
     gd._resource_drops = {"deep_vein": "gem"}
+    gd._resource_skill = {"deep_vein": ("mining", 1)}
     jeweller = _jeweller()
     # Its tile lies in the character's own region (ruling I-3: a gather counts
     # where the walk reaches).
@@ -638,6 +639,7 @@ def test_a_secondary_drop_counts_as_a_material():
     primary drop it is."""
     gd = _policy_world()
     gd._resource_drops = {"rocks": "stone"}
+    gd._resource_skill = {"rocks": ("mining", 1), "gem_rocks": ("mining", 1)}
     gd._resource_drops_full = {"rocks": [("stone", 1, 1, 1), ("gem", 100, 1, 1)],
                                "gem_rocks": [("gem", 1, 1, 1)]}
     gd._resource_locations = {"rocks": [(1, 0)]}
@@ -653,6 +655,7 @@ def test_an_intermediate_above_its_craft_level_still_counts():
     gd._crafting_recipes = {"ring": {"cut_gem": 1}, "cut_gem": {"gem": 1}}
     gd._workshop_locations["mining"] = (0, 1)
     gd._resource_drops = {"gem_rocks": "gem"}
+    gd._resource_skill = {"gem_rocks": ("mining", 1)}
     gd._resource_locations = {"gem_rocks": [(1, 0)]}
     model = grind_model(_jeweller(), gd)
     assert not model.feasible("cut_gem", 1, LEGACY), "vacuous: the craft skill is met"
@@ -682,6 +685,7 @@ def test_a_rung_with_no_known_workshop_is_not_obtainable():
     gd = _policy_world()
     gd._workshop_locations = {}
     gd._resource_drops = {"gem_rocks": "gem"}
+    gd._resource_skill = {"gem_rocks": ("mining", 1)}
     gd._resource_locations = {"gem_rocks": [(1, 0)]}
     model = grind_model(_jeweller(), gd)
     assert model.feasible("gem", 1, GRIND_POLICY), "vacuous: the gem is not obtainable"
@@ -707,5 +711,6 @@ def test_a_renewable_material_needs_no_stock():
     gd = _policy_world()
     gd._crafting_recipes = {"ring": {"gem": 50}}
     gd._resource_drops = {"gem_rocks": "gem"}
+    gd._resource_skill = {"gem_rocks": ("mining", 1)}
     gd._resource_locations = {"gem_rocks": [(1, 0)]}
     assert is_obtainable("ring", grind_model(_jeweller(), gd))

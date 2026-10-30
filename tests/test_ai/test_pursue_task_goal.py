@@ -99,6 +99,7 @@ class TestPursueTaskGoal:
         gd = GameData()
         gd._crafting_recipes = {"copper_bar": {"copper_ore": 6}}
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         return gd
 
     def test_relevant_actions_keep_produce_and_trade_drop_combat(self):
@@ -150,6 +151,7 @@ class TestPursueTaskGoal:
             "ash_plank": {"ash_wood": 2},
         }
         gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
         return gd
 
     def test_relevant_actions_sizes_intermediate_craft_to_batch(self):
@@ -229,6 +231,7 @@ class TestPursueTaskPlans:
         }
         gd._crafting_recipes = {"copper_bar": {"copper_ore": 1}}
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         # copper_rocks has no skill gate -> gather applicable with free slots.
         return gd
 
@@ -267,6 +270,7 @@ class TestPursueTaskPlans:
         }
         gd._crafting_recipes = {"copper_bar": {"copper_ore": 1}}   # 1 ore/unit keeps search small
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         state = make_state(
             task_code="copper_bar", task_type="items", task_progress=0, task_total=20,
             skills={"weaponcrafting": 1}, inventory={}, inventory_max=100, x=0, y=0,

@@ -307,7 +307,7 @@ class TestLearnedCostPenalty:
 
     def test_gather_cost_penalised_by_low_success_rate(self, store):
         action = GatherAction(resource_code="copper", locations=frozenset([(0, 0)]), learned_drops=LearnedDrops.empty())
-        gd = make_gd(resource_locs={"copper": [(0, 0)]})
+        gd = make_gd(resource_locs={"copper": [(0, 0)]}, resource_skills={"copper": ("mining", 1)})
         state = make_state(x=0, y=0)
         # 9 ok (cooldown=10) + 1 error => rate 0.9 (< 0.95), median learned cost 10.
         # Records under EXACTLY what player.py:1190 writes
@@ -322,7 +322,7 @@ class TestLearnedCostPenalty:
 
     def test_gather_cost_uses_learned_value_when_reliable(self, store):
         action = GatherAction(resource_code="copper", locations=frozenset([(0, 0)]), learned_drops=LearnedDrops.empty())
-        gd = make_gd(resource_locs={"copper": [(0, 0)]})
+        gd = make_gd(resource_locs={"copper": [(0, 0)]}, resource_skills={"copper": ("mining", 1)})
         state = make_state(x=0, y=0)
         # All 10 ok => rate 1.0 (>= 0.95): no penalty, just the learned median.
         # Same round-trip note as above: recorded under `action.learning_key()`.
@@ -335,7 +335,7 @@ class TestLearnedCostPenalty:
         folded into the per-gather figure and multiplied by the batch."""
         action = GatherAction(resource_code="copper", quantity=3, locations=frozenset([(4, 0)]),
                               learned_drops=LearnedDrops.empty())
-        gd = make_gd(resource_locs={"copper": [(4, 0)]})
+        gd = make_gd(resource_locs={"copper": [(4, 0)]}, resource_skills={"copper": ("mining", 1)})
         state = make_state(x=0, y=0)
         self._record(store, action.learning_key(), ok_count=10, fail_count=0, cooldown=10.0)
         assert action.cost(state, gd, history=store) == pytest.approx(3 * 10.0 + 4 * 5)
@@ -347,7 +347,7 @@ class TestLearnedCostPenalty:
         6 x 3 + 4 tiles x 5 s = 38."""
         action = GatherAction(resource_code="copper", quantity=3, locations=frozenset([(4, 0)]),
                               learned_drops=LearnedDrops.empty())
-        gd = make_gd(resource_locs={"copper": [(4, 0)]})
+        gd = make_gd(resource_locs={"copper": [(4, 0)]}, resource_skills={"copper": ("mining", 1)})
         state = make_state(x=0, y=0)
         assert action.cost(state, gd, history=store) == pytest.approx(38.0)
         assert action.cost(state, gd, history=None) == pytest.approx(38.0)
@@ -413,11 +413,14 @@ class TestEdgeCases:
         gd = make_gd()
         assert action.is_applicable(state, gd) is False
 
-    def test_gather_applicable_when_no_skill_required(self):
+    def test_gather_with_no_skill_in_the_catalogue_raises(self):
+        """Task 14f: a gather's resource skill is mandatory (API data or fail);
+        the no-skill branch that called such a gather applicable is gone."""
         action = GatherAction(resource_code="copper", locations=frozenset([(3, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0, inventory={}, inventory_max=10)
-        gd = make_gd(resource_locs={"copper": [(3, 0)]})  # no skill req
-        assert action.is_applicable(state, gd) is True
+        gd = make_gd(resource_locs={"copper": [(3, 0)]})
+        with pytest.raises(ValueError, match="no gathering skill"):
+            action.is_applicable(state, gd)
 
     def test_deposit_inventory_zero_max_returns_zero(self):
         goal = DepositInventoryGoal()

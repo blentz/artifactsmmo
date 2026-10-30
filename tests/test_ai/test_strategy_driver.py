@@ -329,6 +329,7 @@ def _deep_chain_gd():
                             "steel_bar": {"iron_bar": 8},
                             "iron_bar": {"iron_ore": 10}}
     gd._resource_drops = {"iron_rocks": "iron_ore"}
+    gd._resource_skill = {"iron_rocks": ("mining", 10)}
     gd._resource_locations = {"iron_rocks": [(2, 0)]}
     return gd
 
@@ -505,6 +506,7 @@ def test_gather_helper_falls_back_to_direct_recipe_without_deeper_step():
     # total-function fallback and returns the (empty) direct recipe.
     gd._crafting_recipes = {"plank": {}}  # empty recipe -> no deeper step
     gd._resource_drops = {"tree": "plank"}
+    gd._resource_skill = {"tree": ("woodcutting", 1)}
     gd._resource_locations = {"tree": [(1, 0)]}
     state = make_state(inventory={}, bank_items={})
     goal = _gather_goal_for_unreachable_equippable("plank", state, gd, 15, ctx=NO_DROPS_CONTEXT)
@@ -542,6 +544,7 @@ def test_bank_stock_is_credited_before_the_depth_budget_is_judged():
     }
     gd._crafting_recipes = {"boots": {"bar": 6}, "bar": {"ore": 8}}
     gd._resource_drops = {"rocks": "ore"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
     gd._resource_locations = {"rocks": [(1, 0)]}
     empty_bank = make_state(inventory={}, bank_items={})
     # 48 raw ore > the 15 budget: the root IS depth-unreachable, so the helper
@@ -835,6 +838,7 @@ def test_objective_step_combat_drop_input_routes_to_flat_step():
     gd._crafting_recipes = {"feather_coat": {"ash_plank": 2, "feather": 2},
                             "ash_plank": {"ash_wood": 1}}
     gd._resource_drops = {"ash_tree": "ash_wood"}
+    gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
     gd._monster_drops = {"chicken": [("feather", 8, 1, 1)]}
     state = make_state(level=1, inventory={}, bank_items={})
     root = ObtainItem("feather_coat", 1, "body_armor_slot")
@@ -862,6 +866,7 @@ def test_monster_drop_inputs_collects_pure_drop_leaves():
     gd._crafting_recipes = {"feather_coat": {"feather": 5, "ash_plank": 2},
                             "ash_plank": {"ash_wood": 1}}
     gd._resource_drops = {"ash_tree": "ash_wood"}
+    gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
     gd._monster_drops = {"chicken": [("feather", 8, 1, 1)]}
     assert monster_drop_inputs("feather_coat", gd) == ["feather"]
     # No recipe / not a drop -> empty.
@@ -904,6 +909,7 @@ def test_objective_step_intermediate_unreachable_root_routes_to_deepest_step():
                             "steel_bar": {"iron_bar": 8},
                             "iron_bar": {"iron_ore": 10}}
     gd._resource_drops = {"iron_rocks": "iron_ore"}
+    gd._resource_skill = {"iron_rocks": ("mining", 10)}
     state = make_state(level=5, inventory={}, bank_items={})
     step = ObtainItem("iron_ore", 480)   # deepest actionable step
     root = ObtainItem("steel_boots", 1)
@@ -931,6 +937,7 @@ def test_objective_step_unreachable_root_credits_bank_then_routes_to_step():
                             "steel_bar": {"iron_bar": 8},
                             "iron_bar": {"iron_ore": 10}}
     gd._resource_drops = {"iron_rocks": "iron_ore"}
+    gd._resource_skill = {"iron_rocks": ("mining", 10)}
     # Bank has 2 steel_bar (cuts the need to 4) but 4*8*10 = 320 ore >> 32.
     state = make_state(level=5, inventory={}, bank_items={"steel_bar": 2})
     step = ObtainItem("iron_ore", 320)
@@ -1519,6 +1526,7 @@ class TestPursueTaskMapping:
         gd = GameData()
         gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         state = make_state(task_code="copper_bar", task_type="items", task_total=20,
                            task_progress=2, inventory={"copper_bar": 1}, inventory_max=100,
                            bank_items={"copper_bar": 1})
@@ -1545,6 +1553,7 @@ class TestPursueTaskMapping:
         gd = GameData()
         gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=2, inventory={}, inventory_max=100,
                            bank_items={"copper_bar": 20})
@@ -1815,6 +1824,7 @@ def test_equip_step_uses_root_slot_for_second_ring():
                                                hp_bonus=2)}
     gd._crafting_recipes = {"copper_ring": {"bar": 1}}
     gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
     # ring1 already worn; a spare copper_ring in inventory to equip into ring2.
     state = make_state(level=5, inventory={"copper_ring": 1},
                        equipment={"ring1_slot": "copper_ring"})

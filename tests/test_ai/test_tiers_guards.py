@@ -716,6 +716,7 @@ def _potion_gd() -> GameData:
     }
     gd._crafting_recipes = {"health_potion": {"red_slimeball": 2}}
     gd._resource_drops = {"red_slime": "red_slimeball"}  # ingredient is gatherable
+    gd._resource_skill = {"red_slime": ("alchemy", 1)}
     gd._monster_level = {"red_slime": 3}
     gd._monster_hp = {"red_slime": 60}
     gd._monster_attack = {"red_slime": {"fire": 40}}

@@ -15,6 +15,7 @@ def test_producible_recognizes_currency_buy_with_gatherable_currency() -> None:
     gd._npc_buy_currency = {"tailor": {"leather_boots": "cowhide"}}
     gd._npc_locations = {"tailor": (2, 7)}
     gd._resource_drops = {"cow_field": "cowhide"}
+    gd._resource_skill = {"cow_field": ("alchemy", 1)}
     gd._resource_locations = {"cow_field": [(3, 3)]}
     gd._item_stats = {
         "leather_boots": ItemStats(code="leather_boots", level=1, type_="boots"),

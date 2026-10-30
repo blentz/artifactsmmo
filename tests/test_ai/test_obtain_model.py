@@ -76,15 +76,18 @@ def test_every_resource_that_drops_an_item_is_a_route_with_its_skill_gate(
 
 def test_a_primary_only_resource_is_still_offered(world: tuple[WorldState, GameData]) -> None:
     """An item only the primary-drop map knows (absent from every full drop
-    table) falls back to that map, as `resource_for_drop` does."""
+    table) falls back to that map, as `resource_for_drop` does. The resource
+    names its skill, as every API resource does (Task 14f: a gather's skill is
+    mandatory), so the route carries its skill gate too."""
     state, gd = world
     resource, item = "fallback_rocks", "fallback_ore"
     with (patch.object(GameData, "resource_drops_full", new={}),
           patch.object(GameData, "resource_drops", new={resource: item}),
-          patch.object(GameData, "resource_skill_level", return_value=None)):
+          patch.object(GameData, "resource_skill_level", return_value=("mining", 1))):
         [route] = ObtainModel(state, gd, _ctx(), NOW).routes(item)
     assert (route.kind, route.via, route.primary) == (SourceKind.GATHER, resource, True)
-    assert [g.kind for g in route.gates] == [GateKind.SPAWN_LIVE, GateKind.SPAWN_KNOWN]
+    assert [g.kind for g in route.gates] == [GateKind.SPAWN_LIVE, GateKind.SPAWN_KNOWN,
+                                             GateKind.GATHER_SKILL]
 
 
 def test_an_underground_resource_is_a_known_spawn_but_not_a_live_one(

@@ -61,6 +61,7 @@ def _gd(*, with_boost: bool, monster_level: int = 3, ingredient_qty: int = 1) ->
     gd._item_stats = stats
     gd._crafting_recipes = recipes
     gd._resource_drops = {_RESOURCE: _INGREDIENT}
+    gd._resource_skill = {_RESOURCE: ("alchemy", 1)}
     gd._resource_locations = {_RESOURCE: [(2, 0)]}
     gd._workshop_locations = {"alchemy": (3, 0)}
     gd._monster_level = {_HURTS: monster_level}

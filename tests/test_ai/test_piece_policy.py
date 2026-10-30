@@ -793,6 +793,7 @@ def test_fight_and_gather_gates_ask_one_reach_where_the_catalogue_does_not(monke
               content=MapContentSchema(type_=MapContentType.RESOURCE, code="mithril_rocks")),
     ])
     world._resource_drops = {"mithril_rocks": "mithril_ore"}
+    world._resource_skill = {"mithril_rocks": ("mining", 40)}
     monkeypatch.setattr(world, "monsters_dropping",
                         lambda item: [("goblin_priestess", 1, 1, 1)] if item == "goblin_cloth" else [])
     monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)

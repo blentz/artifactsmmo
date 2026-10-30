@@ -119,7 +119,7 @@ class TestGatherIsApplicableEmptyLocations:
         # GatherAction with empty locations is never applicable (no destination)
         action = GatherAction(resource_code="copper", locations=frozenset(), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0)
-        gd = make_gd(resource_locs={"copper": [(3, 0)]})
+        gd = make_gd(resource_locs={"copper": [(3, 0)]}, resource_skills={"copper": ("mining", 1)})
         assert action.is_applicable(state, gd) is False
 
 
@@ -359,7 +359,7 @@ class TestActionCostMethods:
         # At (0,0), nearest copper at (2,0): 2 tiles x 5 s, total cost=6+10=16
         action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]), learned_drops=LearnedDrops.empty())
         state = make_state(x=0, y=0)
-        gd = make_gd()
+        gd = make_gd(resource_skills={"copper": ("mining", 1)})
         assert action.cost(state, gd) == pytest.approx(16.0)
 
 

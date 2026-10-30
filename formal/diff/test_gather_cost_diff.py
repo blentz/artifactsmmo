@@ -23,13 +23,15 @@ parameters — the Lean model's `gatherCost` keeps them general (matching
 `Formal.ActionCostNonneg`'s `distanceCost`/`qtyCost` convention), so this
 harness pins the oracle at the literals the real code actually uses.
 
-Most tests here take the `mismatch = False` branch by targeting an
-`unregistered_resource` code with no entry in `GameData`'s recipe catalog:
-`resource_skill_level` returns `None`, so `cost()` never reaches the
-`pick_loadout_cached` branch. `drop_item_override` is set for the same reason
-on the drop-item side: `drop_item()` short-circuits on it before ever calling
-`game_data.resource_drop_item`, so an empty `GameData()` is a completely
-faithful stand-in for the real game-data cache for that branch.
+Most tests here take the `mismatch = False` branch on `matched_rocks`, a
+resource with its API-true gathering skill (mining 1) and no tool in the
+catalogue: `pick_loadout_cached(Gather("mining"))` keeps the (empty) worn
+loadout, so no penalty is charged. Until Task 14f they targeted a resource
+with NO skill, through a no-skill branch `cost()` no longer has: a gather's
+skill is mandatory (`attempt_prospecting.gather_requirement` raises without
+one; API data or fail). `drop_item_override` is set on the drop-item side:
+`drop_item()` short-circuits on it before ever calling
+`game_data.resource_drop_item`.
 
 The `mismatch = True` branch is exercised separately, from
 `test_loadout_penalty_scales_with_quantity` down. It has to be: until
@@ -75,7 +77,7 @@ _BASE = Fraction(6)
 _PENALTY = Fraction(100)          # _BANKED_REGATHER_PENALTY
 _LOAD_PENALTY = Fraction(6)       # GATHER_LOADOUT_PENALTY
 _DROP_ITEM = "test_ore"
-_RESOURCE = "unregistered_resource"  # absent from GameData(): resource_skill_level -> None
+_RESOURCE = "matched_rocks"  # a gather skill and no tool: the loadout never mismatches
 _MISMATCH_RESOURCE = "mismatch_rocks"  # HAS a gather skill, so the loadout branch is reached
 _BETTER_TOOL = "good_pick"
 _SECONDS_PER_TILE = 5             # cost_core.MOVE_SECONDS_PER_TILE
@@ -107,12 +109,20 @@ def _lean_gather_cost(dist: int, qty: int, banked: int, mismatch: bool,
     return Fraction(res["cost_num"], res["cost_den"])
 
 
+def _matched_game_data() -> GameData:
+    """`_RESOURCE` with its gathering skill and an empty item catalogue: the
+    gather loadout is the worn (empty) one, so no penalty is charged."""
+    gd = GameData()
+    gd._resource_skill = {_RESOURCE: ("mining", 1)}
+    return gd
+
+
 def _check(dist: int, qty: int, banked: int) -> float:
     action = GatherAction(resource_code=_RESOURCE, quantity=qty,
                           locations=frozenset({(dist, 0)}),
                           drop_item_override=_DROP_ITEM, learned_drops=LearnedDrops.empty())
     state = _state(0, 0, banked)
-    py_cost = action.cost(state, GameData(), history=None)
+    py_cost = action.cost(state, _matched_game_data(), history=None)
     lean_cost = _lean_gather_cost(dist, qty, banked, mismatch=False)
     assert Fraction(py_cost) == lean_cost, (dist, qty, banked, py_cost, lean_cost)
     # Direct formula pin, independent of the oracle.
@@ -362,7 +372,7 @@ def test_history_none_is_exactly_static():
                           locations=frozenset({(3, 0)}), drop_item_override=_DROP_ITEM,
                               learned_drops=LearnedDrops.empty())
     state = _state(0, 0, banked=2)
-    static = action.cost(state, GameData(), history=None)
+    static = action.cost(state, _matched_game_data(), history=None)
     assert static == 6.0 * 7 + 5 * 3 + 2 * 100.0
 
 
@@ -387,9 +397,11 @@ _RATED_RESOURCE = "rated_tree"
 
 def _rated_game_data(rate: int, mn: int, mx: int) -> GameData:
     """A resource whose drop table carries `_DROP_ITEM` at `rate` (1 in `rate`
-    gathers), `mn..mx` per drop, and no gather skill (no loadout branch)."""
+    gathers), `mn..mx` per drop, its gathering skill and no tool (the loadout
+    never mismatches)."""
     gd = GameData()
     gd.recipes_catalog.resource_drops_full = {_RATED_RESOURCE: [(_DROP_ITEM, rate, mn, mx)]}
+    gd._resource_skill = {_RATED_RESOURCE: ("woodcutting", 1)}
     return gd
 
 

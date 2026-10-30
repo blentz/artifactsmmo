@@ -99,6 +99,7 @@ def _gd_brew(**recipe: int) -> GameData:
     gd._crafting_recipes = {"brew": dict(recipe)}
     gd._workshop_locations = {"alchemy": (3, 0)}
     gd._resource_drops = {"sunflower_field": "sunflower"}
+    gd._resource_skill = {"sunflower_field": ("alchemy", 1)}
     gd._resource_locations = {"sunflower_field": [(2, 0)]}
     gd._monster_level = {"slime": 1}
     gd._monster_drops = {"slime": [("slimeball", 1, 1, 1)]}
