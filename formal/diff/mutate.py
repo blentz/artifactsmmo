@@ -6963,8 +6963,12 @@ TOOL_OBJECTIVE_MUTATIONS = [
      "        if held:\n            return None\n        if model.feasible",
      "        if held and False:\n            return None\n        if model.feasible"),
     ("tool_objective: the tool step is skipped (the climb is never preceded)",
-     "    tool = tool_target(climb.skill, state, game_data, ctx, now)\n",
+     "    tool = ctx.objective_tools.get(climb.skill)\n",
      "    tool = None\n"),
+    # Ruling C1-R: the tool is the climbed skill's own, never another's.
+    ("tool_objective: any of the cycle's tools is fetched for any climb",
+     "    tool = ctx.objective_tools.get(climb.skill)\n",
+     "    tool = next(iter(ctx.objective_tools.values()), None)\n"),
     ("tool_objective: an unachievable tool is targeted",
      "        if model.feasible(code, 1, PIECE_POLICY):\n",
      "        if True:\n"),
@@ -7175,14 +7179,14 @@ TOOL_OBJECTIVE_ROOT_MUTATIONS = [
     ("root: a gear target's skill climb ignores the tool",
      "            return tool_first(\n"
      "                ReachSkillLevel(skill=self.target.blocking_skill, level=current + 1),\n"
-     "                state, game_data, ctx, self.walk.now, self.walk.step_decline)\n",
+     "                ctx, self.walk.step_decline)\n",
      "            return ReachSkillLevel(skill=self.target.blocking_skill,\n"
      "                                   level=current + 1)\n"),
 ]
 TOOL_OBJECTIVE_FLEET_MUTATIONS = [
     ("which_piece_is_next: a fleet piece's climb ignores the tool",
      "        return tool_first(ReachSkillLevel(skill=piece.skill, level=current + 1),\n"
-     "                          state, game_data, ctx, walk.now, walk.step_decline)\n",
+     "                          ctx, walk.step_decline)\n",
      "        return ReachSkillLevel(skill=piece.skill, level=current + 1)\n"),
 ]
 FLEET_PIECE_WALK_MUTATIONS = [
@@ -7887,6 +7891,14 @@ DRAW_CONTEXT_MUTATIONS = [
      "        return ctx"),
 ]
 XP_DEMAND_MUTATIONS = [
+    # Ruling C2-m3 (spec §2.5): a fleet piece's craft skill is demand.
+    ("xp demand: a fleet piece demands nothing",
+     "        roots.extend(ReachSkillLevel(skill=piece.skill, level=piece.level)\n"
+     "                     for piece in ctx.fleet_pieces)\n",
+     "        pass\n"),
+    ("xp demand: fleet pieces are demand without a gear objective",
+     "    if ctx.gear_objective is not None:\n        roots.extend(ReachSkillLevel(",
+     "    if True:\n        roots.extend(ReachSkillLevel("),
     ("xp demand: gather skills are not demanded",
      "    skills.update(gather_demand(roots, state, game_data, ctx))\n",
      "    pass\n"),
@@ -7908,23 +7920,23 @@ XP_DEMAND_MUTATIONS = [
 # read it. Killed by tests/test_ai/test_xp_demand.py.
 OBJECTIVE_CODES_MUTATIONS = [
     ("objective codes: the missing L* pieces are dropped",
-     "    return frozenset(piece.code for piece in ctx.gear_objective.missing) | ctx.objective_tools\n",
-     "    return ctx.objective_tools\n"),
+     "    return frozenset(piece.code for piece in ctx.gear_objective.missing) | tools\n",
+     "    return tools\n"),
     ("objective codes: the L* loadout stands in for its missing pieces",
-     "    return frozenset(piece.code for piece in ctx.gear_objective.missing) | ctx.objective_tools\n",
-     "    return frozenset(ctx.gear_objective.loadout.values()) | ctx.objective_tools\n"),
+     "    return frozenset(piece.code for piece in ctx.gear_objective.missing) | tools\n",
+     "    return frozenset(ctx.gear_objective.loadout.values()) | tools\n"),
     ("objective codes: the T* tools are dropped beside L*",
-     "    return frozenset(piece.code for piece in ctx.gear_objective.missing) | ctx.objective_tools\n",
+     "    return frozenset(piece.code for piece in ctx.gear_objective.missing) | tools\n",
      "    return frozenset(piece.code for piece in ctx.gear_objective.missing)\n"),
     ("objective codes: the T* tools are dropped without an objective",
-     "        return ctx.objective_tools\n",
+     "        return tools\n",
      "        return frozenset()\n"),
 ]
 # The tools of the demanded skills by one fixed point (ruling C1-a). Killed by
 # tests/test_ai/test_objective_demand.py.
 OBJECTIVE_DEMAND_MUTATIONS = [
     ("fixed point: one pass, the tools' own skills never join",
-     "        if frozenset(code for code in tools.values() if code is not None) == found:\n",
+     "        if _named(tools) == found:\n",
      "        if True:\n"),
     ("fixed point: the tools are not roots",
      "        ctx = replace(ctx, objective_tools=found)\n",
@@ -8180,11 +8192,9 @@ CONSUMABLE_FLOOR_MUTATIONS = [
 ]
 CONSUMABLE_DEMAND_MUTATIONS = [
     ("floor demand: the shortfall seeds a DAG root again",
+     "    roots.extend(ObtainItem(code, 1) for code in sorted(objective_codes(ctx)))\n",
      "    roots.extend(ObtainItem(code, 1) for code in sorted(objective_codes(ctx)))\n"
-     "    return roots\n",
-     "    roots.extend(ObtainItem(code, 1) for code in sorted(objective_codes(ctx)))\n"
-     "    roots.extend(ObtainItem(code, qty) for code, qty in ctx.supply_shortfall)\n"
-     "    return roots\n"),
+     "    roots.extend(ObtainItem(code, qty) for code, qty in ctx.supply_shortfall)\n"),
 ]
 SKILL_DEMAND_ORDER_MUTATIONS = [
     ("skill demand: the loadout is chosen without it",

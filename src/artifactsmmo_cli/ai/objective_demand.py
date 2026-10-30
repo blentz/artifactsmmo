@@ -27,11 +27,16 @@ def objective_demand(chosen: MetaGoal | None, state: WorldState, game_data: Game
     from the fixed point above, `chosen` being the last decision's root."""
     tools: dict[str, str | None] = {}
     while True:
-        found = frozenset(code for code in tools.values() if code is not None)
+        found = _named(tools)
         ctx = replace(ctx, objective_tools=found)
         skills, level = xp_demand(demand_roots(chosen, state, ctx), state, game_data, ctx)
         fresh = sorted(skills - tools.keys())
         for skill in fresh:
             tools[skill] = tool_target(skill, state, game_data, ctx, ctx.now)
-        if frozenset(code for code in tools.values() if code is not None) == found:
+        if _named(tools) == found:
             return replace(ctx, skill_demand=skills, level_demanded=level)
+
+
+def _named(tools: dict[str, str | None]) -> dict[str, str]:
+    """The skills whose lookup named a tool, skill -> tool."""
+    return {skill: code for skill, code in tools.items() if code is not None}

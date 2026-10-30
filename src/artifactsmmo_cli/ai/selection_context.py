@@ -69,11 +69,12 @@ class SelectionContext:
     # is demanded. A task's XP is a reason only for demanded XP (USER
     # 2026-10-07: the seesaw is emergent, never a phase rule).
     skill_demand: frozenset[str] = frozenset()
-    # The tools `T*` the demanded skills climb with (`tool_objective.tool_target`
-    # for each skill in `skill_demand`, ruling C1-a), set by the player with
-    # `skill_demand` by one fixed point (`objective_demand`). Read through
-    # `objective_codes`, beside the missing `L*` pieces.
-    objective_tools: frozenset[str] = frozenset()
+    # The tool `T*` each demanded skill climbs with, skill -> tool
+    # (`tool_objective.tool_target` for each skill in `skill_demand` that names
+    # one, ruling C1-a), set by the player with `skill_demand` by one fixed
+    # point (`objective_demand`). Read through `objective_codes`, beside the
+    # missing `L*` pieces, and by `tool_first` for the climbed skill.
+    objective_tools: dict[str, str] = field(default_factory=dict)
     # The role this character holds and every role a live character holds
     # (`CoordinationStore.live_leases`), set by the player each cycle. None /
     # empty on a single-character run. `food_producer.may_make_food` reads

@@ -72,6 +72,7 @@ from artifactsmmo_cli.ai.drop_evidence import DropEvidence, drop_evidence
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
+from artifactsmmo_cli.ai.objective_demand import objective_demand
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     ScenarioCharacter,
@@ -317,12 +318,13 @@ def run_census(bundle: Path) -> list[DropResult]:
     for name, scenario in SCENARIOS.items():
         game_data = declared_world(scenario, bundle, cache)
         state = scenario_state(scenario, game_data)
-        # The walk's context carries the cycle's gear objective, attached by
-        # the one function the player uses (ruling W).
+        # The walk's context carries the cycle's gear objective and its skill
+        # demand and tools, attached by the functions the player uses (ruling
+        # W, C1-a).
         resolution = resolve_root(state, game_data,
                                   CharacterObjective.from_game_data(game_data),
-                                  attach_gear_objective(state, game_data,
-                                                        _OFFLINE_CONTEXT, None),
+                                  objective_demand(None, state, game_data, attach_gear_objective(
+                                      state, game_data, _OFFLINE_CONTEXT, None)),
                                   None)
         if resolution.root is None:
             results.append(DropResult(

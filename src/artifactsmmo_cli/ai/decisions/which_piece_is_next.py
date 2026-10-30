@@ -159,7 +159,7 @@ def fleet_piece_root(piece: FleetPiece, state: WorldState, game_data: GameData,
     current = state.skills[piece.skill]
     if current < piece.level:
         return tool_first(ReachSkillLevel(skill=piece.skill, level=current + 1),
-                          state, game_data, ctx, walk.now, walk.step_decline)
+                          ctx, walk.step_decline)
     target = ctx.supply_target
     if target is not None and target[0] == piece.code and supply_due(ctx):
         return ReachFleetOutcome(FLEET_SUPPLY, piece.code)

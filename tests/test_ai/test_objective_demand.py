@@ -42,7 +42,7 @@ def test_a_tools_craft_skill_joins_the_demand() -> None:
     ctx = _shield_ctx()
     assert xp_demand(demand_roots(None, state, ctx), state, gd, ctx)[0] == {"gearcrafting"}
     out = objective_demand(None, state, gd, ctx)
-    assert out.objective_tools == {HAMMER}
+    assert out.objective_tools == {"gearcrafting": HAMMER}
     assert out.skill_demand == {"gearcrafting", "weaponcrafting"}
     assert out.level_demanded is False
     assert objective_codes(out) == {"iron_shield", HAMMER}
@@ -66,7 +66,7 @@ def test_an_owned_tool_is_no_objective_code() -> None:
     demanded."""
     gd = _hammer_world()
     out = objective_demand(None, make_state(level=15, inventory={HAMMER: 1}), gd, _shield_ctx())
-    assert out.objective_tools == frozenset()
+    assert out.objective_tools == {}
     assert out.skill_demand == {"gearcrafting"}
 
 
@@ -75,4 +75,4 @@ def test_a_held_objective_demands_no_tool() -> None:
     ctx = with_missing(replace(_ctx(), now=NOW))
     out = objective_demand(None, make_state(level=15), gd, ctx)
     assert (out.skill_demand, out.level_demanded, out.objective_tools) == (
-        frozenset(), False, frozenset())
+        frozenset(), False, {})

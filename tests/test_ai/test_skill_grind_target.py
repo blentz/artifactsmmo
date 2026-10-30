@@ -482,10 +482,10 @@ def test_wanted_prefers_a_missing_piece():
     assert skill_grind_target("weaponcrafting", state, gd, ctx=missing) == "copper_dagger"
     held = with_missing(TIMED_NO_PROFILE_CONTEXT)
     assert skill_grind_target("weaponcrafting", state, gd, ctx=held) == "wooden_staff"
-    tool = dataclasses.replace(held, objective_tools=frozenset({"copper_dagger"}))
+    tool = dataclasses.replace(held, objective_tools={"weaponcrafting": "copper_dagger"})
     assert skill_grind_target("weaponcrafting", state, gd, ctx=tool) == "copper_dagger"
     no_objective = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT,
-                                       objective_tools=frozenset({"copper_dagger"}))
+                                       objective_tools={"weaponcrafting": "copper_dagger"})
     assert skill_grind_target("weaponcrafting", state, gd, ctx=no_objective) == "copper_dagger"
 
 

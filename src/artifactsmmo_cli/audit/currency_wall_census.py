@@ -71,6 +71,7 @@ from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
+from artifactsmmo_cli.ai.objective_demand import objective_demand
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     ScenarioCharacter,
@@ -489,13 +490,13 @@ def run_census(bundle: Path) -> list[CurrencyResult]:
                 gap=CurrencyGap.CURRENCY_CATALOGUE_EMPTY.value))
             continue
         state = scenario_state(scenario, game_data)
-        # The walk's context carries the cycle's gear objective, attached by
-        # the one function the player uses (ruling W), so the census roots
-        # are the live cycle's.
+        # The walk's context carries the cycle's gear objective and its skill
+        # demand and tools, attached by the functions the player uses (ruling
+        # W, C1-a), so the census roots are the live cycle's.
         resolution = resolve_root(state, game_data,
                                   CharacterObjective.from_game_data(game_data),
-                                  attach_gear_objective(state, game_data,
-                                                        _OFFLINE_CONTEXT, None),
+                                  objective_demand(None, state, game_data, attach_gear_objective(
+                                      state, game_data, _OFFLINE_CONTEXT, None)),
                                   None)
         if resolution.root is None:
             results.extend(

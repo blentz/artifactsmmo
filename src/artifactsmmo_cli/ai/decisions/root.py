@@ -620,7 +620,7 @@ class IsThisTargetBlocked(Decision[MetaGoal]):
             current = state.skills.get(self.target.blocking_skill, 1)
             return tool_first(
                 ReachSkillLevel(skill=self.target.blocking_skill, level=current + 1),
-                state, game_data, ctx, self.walk.now, self.walk.step_decline)
+                ctx, self.walk.step_decline)
         if self.target.blocker is None:
             return ObtainItem(code=self.target.code, quantity=1, slot=self.slot)
         if self.target.blocker == self.target.code:

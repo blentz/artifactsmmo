@@ -13,7 +13,8 @@ from artifactsmmo_cli.ai.selection_context import SelectionContext
 
 def objective_codes(ctx: SelectionContext) -> frozenset[str]:
     """The missing `L*` pieces (`ctx.gear_objective.missing`; none while `L*`
-    is held or no objective was found) and `ctx.objective_tools`."""
+    is held or no objective was found) and the tools of `ctx.objective_tools`."""
+    tools = frozenset(ctx.objective_tools.values())
     if ctx.gear_objective is None:
-        return ctx.objective_tools
-    return frozenset(piece.code for piece in ctx.gear_objective.missing) | ctx.objective_tools
+        return tools
+    return frozenset(piece.code for piece in ctx.gear_objective.missing) | tools

@@ -78,6 +78,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
+from artifactsmmo_cli.ai.objective_demand import objective_demand
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
@@ -196,9 +197,11 @@ class ClimbResult:
 def routed_skills(state: WorldState, game_data: GameData) -> frozenset[str]:
     """The skills the root walk would send this character to climb: every
     `ReachSkillLevel` it offers, root AND alternatives, on a context carrying
-    the cycle's gear objective (`attach_gear_objective`, the player's own
-    step). `history=None`: offline and deterministic."""
-    ctx = attach_gear_objective(state, game_data, _OFFLINE_CONTEXT, None)
+    the cycle's gear objective and its skill demand and tools
+    (`attach_gear_objective`, `objective_demand`: the player's own steps).
+    `history=None`: offline and deterministic."""
+    ctx = objective_demand(None, state, game_data,
+                           attach_gear_objective(state, game_data, _OFFLINE_CONTEXT, None))
     resolution = resolve_root(
         state, game_data, CharacterObjective.from_game_data(game_data), ctx, None)
     return frozenset(
