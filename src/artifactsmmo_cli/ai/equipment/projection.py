@@ -134,6 +134,31 @@ def project_loadout_stats(
     )
 
 
+def with_totals(state: WorldState, totals: ProjectedStats,
+                equipment: dict[str, str | None], *, hp: int) -> WorldState:
+    """`state` wearing `equipment` with its sheet totals set to `totals` and
+    current HP `hp`: THE one field list from `ProjectedStats` to `WorldState`,
+    read by every reader that carries a projected swap onto a state
+    (`wear_gear`, `gear_objective._wearing`), so a projected stat is carried
+    by all of them or by none (final review minor 9)."""
+    return dataclasses.replace(
+        state,
+        equipment=equipment,
+        attack=totals.attack,
+        dmg=totals.dmg,
+        dmg_elements=totals.dmg_elements,
+        resistance=totals.resistance,
+        critical_strike=totals.critical_strike,
+        initiative=totals.initiative,
+        max_hp=totals.max_hp,
+        hp=hp,
+        wisdom=totals.wisdom,
+        prospecting=totals.prospecting,
+        haste=totals.haste,
+        inventory_max=totals.inventory_max,
+    )
+
+
 def wear_gear(state: WorldState, equipment: dict[str, str | None],
               game_data: GameData) -> WorldState:
     """`state` wearing `equipment`, its totals moved by the gear it changes.
@@ -153,19 +178,7 @@ def wear_gear(state: WorldState, equipment: dict[str, str | None],
     gear = {slot: code for slot, code in equipment.items()
             if slot not in UTILITY_SLOTS}
     totals = project_loadout_stats(state, gear, game_data)
-    return dataclasses.replace(
-        state,
-        equipment=equipment,
-        attack=totals.attack,
-        dmg=totals.dmg,
-        dmg_elements=totals.dmg_elements,
-        resistance=totals.resistance,
-        critical_strike=totals.critical_strike,
-        initiative=totals.initiative,
-        max_hp=totals.max_hp,
+    return with_totals(
+        state, totals, equipment,
         hp=min(state.hp, totals.max_hp),
-        wisdom=totals.wisdom,
-        prospecting=totals.prospecting,
-        haste=totals.haste,
-        inventory_max=totals.inventory_max,
     )

@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.attempt_prospecting import loadout_prospecting
+from artifactsmmo_cli.ai.equipment.projection import ProjectedStats, with_totals
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value_core import Gather
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -122,3 +123,19 @@ def test_a_planned_downgrade_clamps_hp_to_the_lowered_max() -> None:
     assert UnequipAction(slot="body_armor_slot").apply(full, gd).hp == 150
     hurt = dataclasses.replace(worn, hp=120)
     assert UnequipAction(slot="body_armor_slot").apply(hurt, gd).hp == 120
+
+
+def test_one_field_list_carries_every_projected_stat_onto_the_state() -> None:
+    """Final review minor 9: `with_totals` is the ONE field list from the
+    projected totals to the state, read by `wear_gear` and the gear
+    objective's `_wearing`. Every `ProjectedStats` field lands on the state's
+    field of the same name, so a new projected stat cannot be carried by one
+    reader and dropped by the other."""
+    fields = [f.name for f in dataclasses.fields(ProjectedStats)]
+    distinct = {name: ({"fire": i + 1} if isinstance(getattr(make_state(), name), dict)
+                       else 1000 + i) for i, name in enumerate(fields)}
+    totals = ProjectedStats(**distinct)  # type: ignore[arg-type]
+    worn = {"weapon_slot": "stick"}
+    state = with_totals(make_state(), totals, worn, hp=7)
+    assert {name: getattr(state, name) for name in fields} == distinct
+    assert state.equipment == worn and state.hp == 7

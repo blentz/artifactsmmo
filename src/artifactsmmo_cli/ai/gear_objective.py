@@ -67,7 +67,7 @@ from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO
 from artifactsmmo_cli.ai.combat import fight_loadout
 from artifactsmmo_cli.ai.decompose_core import can_obtain
 from artifactsmmo_cli.ai.equipment.loadout_picker import _benefit, _ordered_slots
-from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
+from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats, with_totals
 from artifactsmmo_cli.ai.equipment.realizable_loadout import ownership
 from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
 from artifactsmmo_cli.ai.fight_walk import odds_walk, walk_seconds
@@ -134,8 +134,9 @@ def _wearing(state: WorldState, loadout: Mapping[str, str | None],
              game_data: GameData) -> WorldState:
     """`state` with `loadout` worn (slot -> code, None empties the slot): every
     replaced piece goes to the bag before any new one comes out of it, and the
-    stat totals carry the swap (`project_loadout_stats`). Each code must be
-    owned and known: an unknown piece would project as no stats at all."""
+    stat totals carry the swap (`project_loadout_stats`, set by `with_totals`).
+    Each code must be owned and known: an unknown piece would project as no
+    stats at all."""
     for code in {*loadout.values(), *(state.equipment[slot] for slot in loadout)}:
         if code is not None:
             _stats(code, game_data)
@@ -152,13 +153,8 @@ def _wearing(state: WorldState, loadout: Mapping[str, str | None],
                 raise RuntimeError(f"{code} is not owned to wear in {slot}")
             bag[code] -= 1
         equipment[slot] = code
-    return replace(state, inventory={code: n for code, n in bag.items() if n > 0},
-                   equipment=equipment, attack=stats.attack, dmg=stats.dmg,
-                   dmg_elements=stats.dmg_elements, resistance=stats.resistance,
-                   critical_strike=stats.critical_strike, initiative=stats.initiative,
-                   max_hp=stats.max_hp, hp=stats.max_hp, wisdom=stats.wisdom,
-                   prospecting=stats.prospecting, haste=stats.haste,
-                   inventory_max=stats.inventory_max)
+    return with_totals(replace(state, inventory={code: n for code, n in bag.items() if n > 0}),
+                       stats, equipment, hp=stats.max_hp)
 
 
 def _potions_off(state: WorldState) -> WorldState:

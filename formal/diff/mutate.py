@@ -6802,10 +6802,6 @@ GEAR_OBJECTIVE_MUTATIONS = [
     ("gear objective: the keep's carry leaves the bag",
      "    loop = LoopInputs(ctx.timing(), ctx.drops(), carried_keep(state, game_data, ctx))",
      "    loop = LoopInputs(ctx.timing(), ctx.drops(), 0)"),
-    ("gear objective: a worn bag does not raise the cap",
-     "                   prospecting=stats.prospecting, haste=stats.haste,\n"
-     "                   inventory_max=stats.inventory_max)",
-     "                   prospecting=stats.prospecting, haste=stats.haste)"),
     ("gear objective: a bag cap below its worn bag is accepted",
      "              (\"haste\", state.haste), (\"inventory_max\", state.inventory_max)]",
      "              (\"haste\", state.haste)]"),
@@ -11204,6 +11200,13 @@ PLANNED_TOTALS_REARM_MUTATIONS = [
      "            wear_gear(state, new_equipment, game_data),\n",
      "            dataclasses.replace(state, equipment=new_equipment),\n"),
 ]
+# Final review minor 9: the gear objective's swap reads the one field list
+# (`projection.with_totals`), so its bag-cap carriage lives there.
+GEAR_OBJECTIVE_WEARING_MUTATIONS = [
+    ("gear objective: a worn bag does not raise the cap",
+     "        inventory_max=totals.inventory_max,\n",
+     ""),
+]
 PLANNED_TOTALS_WEAR_MUTATIONS = [
     ("wear_gear: a worn potion moves the totals",
      "    gear = {slot: code for slot, code in equipment.items()\n"
@@ -11217,6 +11220,10 @@ PLANNED_TOTALS_WEAR_MUTATIONS = [
      ""),
     ("wear_gear: hp is not clamped to a lowered max HP",
      "        hp=min(state.hp, totals.max_hp),\n",
+     "        hp=state.hp,\n"),
+    # Final review minor 9: `with_totals` is the one field list.
+    ("with_totals: the haste total is left",
+     "        haste=totals.haste,\n",
      ""),
     ("wear_gear: hp is raised to the max HP",
      "        hp=min(state.hp, totals.max_hp),\n",
@@ -14604,6 +14611,8 @@ def _collect_all_groups() -> None:
     run_group(COORDINATION_STORE_SRC, FLEET_CLIMB_LEDGER_MUTATIONS,
               "tests/test_ai/test_coordination_store.py", survivors)
     run_group(GEAR_OBJECTIVE_SRC, GEAR_OBJECTIVE_MUTATIONS,
+              "tests/test_ai/test_gear_objective.py", survivors)
+    run_group(PROJECTION_SRC, GEAR_OBJECTIVE_WEARING_MUTATIONS,
               "tests/test_ai/test_gear_objective.py", survivors)
     run_group(SYNERGY_CORE_SRC, SYNERGY_CORE_MUTATIONS,
               "tests/test_ai/test_synergy_core.py", survivors)
