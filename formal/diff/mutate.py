@@ -9019,9 +9019,12 @@ REACH_REGIONS_MUTATIONS = [
     ("reach: the memo ignores the reserve's floor",
      "            target_floor(state, game_data, None),\n",
      "            0,\n"),
+    # Self-contained (round 5): `_binding` written out, since region_edges
+    # imports no `reserve_floor` here and a NameError would kill it untested.
     ("reach: the memo keys the floor as it binds, not as a fee reads it",
      "            target_floor(state, game_data, None),\n",
-     "            reserve_floor(state, game_data, None),\n"),
+     "            (100 if target_floor(state, game_data, None) >= state.gold + (state.bank_gold or 0)\n"
+     "             else target_floor(state, game_data, None)),\n"),
     ("reach: the memo is shared by every catalogue",
      "    memo = _REACH.cache_for(game_data)\n",
      "    memo = _REACH.cache_for(None)  # type: ignore[arg-type]\n"),
