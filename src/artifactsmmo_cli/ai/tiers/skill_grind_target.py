@@ -43,6 +43,7 @@ from artifactsmmo_cli.ai.grind_probe_state import grind_probe_state
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
+from artifactsmmo_cli.ai.region_edges import _reach_key
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.source_kind import SourceKind
@@ -157,7 +158,8 @@ def is_obtainable(code: str, model: ObtainModel) -> bool:
 _CacheKey = tuple[str, int, tuple[tuple[str, str | None], ...],
                   tuple[tuple[str, int], ...], tuple[tuple[str, int], ...],
                   tuple[tuple[str, int], ...], tuple[tuple[str, int, int], ...],
-                  tuple[tuple[str, Fraction], ...], tuple[int, int], LearnedDrops]
+                  tuple[tuple[str, Fraction], ...], tuple[int, int], LearnedDrops,
+                  tuple[object, ...]]
 
 CACHE_MAX_ENTRIES = 4096
 """Per-GameData LRU bound, mirroring `equipment/loadout_cache`: comfortably holds
@@ -169,7 +171,7 @@ GameData is an eq-dataclass and so unhashable, and that module owns the reason a
 bare `id()` key is unsound on its own."""
 
 
-def _cache_key(skill: str, state: WorldState,
+def _cache_key(skill: str, state: WorldState, game_data: GameData,
                fight_records: tuple[tuple[str, int, int], ...],
                learned_drops: LearnedDrops) -> "_CacheKey":
     """The determinants of a candidate list, and nothing else.
@@ -205,7 +207,15 @@ def _cache_key(skill: str, state: WorldState,
 
     `learned_drops` (`ctx.drops()`, ruling T16a) prices every rung's gathered
     and dropped materials at the learned chance, so a new observation reprices
-    them; the value itself is the key (it is hashable), never its `id()`."""
+    them; the value itself is the key (it is hashable), never its `id()`.
+
+    The reach (`region_edges._reach_key`: region, layer, gold, bank gold, the
+    reserve floor as it binds, bag and worn set) drives the `SPAWN_KNOWN`
+    gate `GRIND_POLICY` asks, which reads `reachable_regions_now` (rulings
+    T14a-E, I-3). The memo lives on the session's `GameData`, so without it a
+    list built on the mainland was served across the sandwhisper crossing
+    (final review I-1). It is the binding-floor key `_REACH` uses, because the
+    gate reads reach, not a door's fee shortfall."""
     return (
         skill,
         state.level,
@@ -217,6 +227,7 @@ def _cache_key(skill: str, state: WorldState,
         tuple(sorted(state.win_thresholds.items())),
         (state.utility1_slot_quantity, state.utility2_slot_quantity),
         learned_drops,
+        _reach_key(state, game_data),
     )
 
 
@@ -308,7 +319,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     `recipe_closure` is built ONCE per call and shared across candidates, so the
     added cost is one closure walk per rung rather than one per material."""
     cache = _CACHES.cache_for(game_data)
-    key = _cache_key(skill, state, ctx.fight_records, ctx.drops())
+    key = _cache_key(skill, state, game_data, ctx.fight_records, ctx.drops())
     hit = cache.get(key)
     if hit is not None:
         cache.move_to_end(key)

@@ -3,6 +3,7 @@
 import dataclasses
 from dataclasses import replace
 from fractions import Fraction
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -24,6 +25,9 @@ from artifactsmmo_cli.ai.tiers.skill_grind_target import (
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.shared_world import shared_world
+
+BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
 
 def _gd() -> GameData:
@@ -267,25 +271,52 @@ def test_the_memo_key_notices_a_changed_threshold():
     """A win threshold drives `is_winnable` on the DROP route (spec 2026-10-15
     fight-gates-odds §1), so a changed one MUST change the key. (Asserted on
     the key: the returned list is always a fresh copy, `_with_wanted`.)"""
+    gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
     cheap = make_state(skills={"weaponcrafting": 3}, win_thresholds={"mob": Fraction(1, 2)})
-    assert (_cache_key("weaponcrafting", state, (), LearnedDrops.empty())
-            != _cache_key("weaponcrafting", cheap, (), LearnedDrops.empty()))
+    assert (_cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty())
+            != _cache_key("weaponcrafting", cheap, gd, (), LearnedDrops.empty()))
 
 
 def test_the_memo_key_notices_a_changed_worn_stock():
     """`is_winnable` drinks the worn restore potions on the DROP route
     (`combat.worn_restore` reads the slot quantity), so a drunk-down stock
     MUST change the key, in either slot."""
+    gd = _gd()
     state = make_state(skills={"weaponcrafting": 3}, utility1_slot_quantity=40,
                        utility2_slot_quantity=40)
-    key = _cache_key("weaponcrafting", state, (), LearnedDrops.empty())
+    key = _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty())
     assert key != _cache_key("weaponcrafting",
-                             dataclasses.replace(state, utility1_slot_quantity=0), (),
+                             dataclasses.replace(state, utility1_slot_quantity=0), gd, (),
                              LearnedDrops.empty())
     assert key != _cache_key("weaponcrafting",
-                             dataclasses.replace(state, utility2_slot_quantity=0), (),
+                             dataclasses.replace(state, utility2_slot_quantity=0), gd, (),
                              LearnedDrops.empty())
+
+def test_the_memo_misses_across_the_sandwhisper_crossing():
+    """Final review I-1. `GRIND_POLICY` asks `SPAWN_KNOWN`, which reads the
+    state's reach (`reachable_regions_now`), and the memo lives on the
+    session's `GameData`. A level-30 character with no gold at (-4,17), across
+    the sandwhisper crossing, reaches no mainland spawn, so the cooking rungs
+    are unobtainable there. A memo warmed at (0,0) on the mainland must not
+    serve them as obtainable: the same bag, the same skills, another reach."""
+    world = shared_world(BUNDLE)
+    skills = {skill: 20 for skill in ("mining", "woodcutting", "fishing", "weaponcrafting",
+                                      "gearcrafting", "jewelrycrafting", "cooking", "alchemy")}
+    mainland = make_state(level=30, skills=skills, x=0, y=0, gold=0, inventory_max=200)
+    across = replace(mainland, x=-4, y=17)
+    assert world.state_region(across) != world.state_region(mainland)
+
+    def verdicts(state: WorldState) -> dict[str, bool]:
+        return {c.code: c.obtainable for c in build_selectable_grind_candidates(
+            "cooking", state, world, ctx=NO_DROPS_CONTEXT)}
+
+    fresh = verdicts(across)
+    assert fresh["cooked_gudgeon"] is False
+    _CACHES.cache_for(world).clear()
+    assert verdicts(mainland)["cooked_gudgeon"] is True
+    assert verdicts(across) == fresh
+
 
 def test_each_game_data_gets_its_own_cache():
     """Scoped per catalogue by `ai/catalogue_scope`, exactly as

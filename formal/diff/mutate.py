@@ -8083,8 +8083,14 @@ WIN_THRESHOLD_GRIND_MUTATIONS = [
      "        tuple(sorted(state.win_thresholds.items())),\n        (state.utility1_slot_quantity",
      "        (),\n        (state.utility1_slot_quantity"),
     ("worn stock: the grind memo ignores it",
-     "        (state.utility1_slot_quantity, state.utility2_slot_quantity),\n        learned_drops,\n    )\n",
-     "        (0, 0),\n        learned_drops,\n    )\n"),
+     "        (state.utility1_slot_quantity, state.utility2_slot_quantity),\n        learned_drops,\n",
+     "        (0, 0),\n        learned_drops,\n"),
+    # Final review I-1: the SPAWN_KNOWN gate reads the reach, and the memo
+    # outlives the cycle. Killed by
+    # test_the_memo_misses_across_the_sandwhisper_crossing.
+    ("grind memo: the reach is not keyed (final review I-1)",
+     "        _reach_key(state, game_data),\n    )\n",
+     "        (),\n    )\n"),
 ]
 LOSS_RISK_COMBAT_MUTATIONS = [
     ("loss risk: a monster lost to only in another loadout keeps an empty record",
