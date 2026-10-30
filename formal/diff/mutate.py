@@ -13822,6 +13822,34 @@ POCKET_GOLD_RATE_MUTATIONS = [
      "    return 1 / rate\n"),
 ]
 
+# Review I-2: bank GOLD is claimed across the fleet like bank items. Killed by
+# tests/test_ai/test_player_coordination.py.
+POCKET_GOLD_CLAIM_MUTATIONS = [
+    ("player: a gold withdraw publishes no claim",
+     "            if isinstance(action, WithdrawItemAction | WithdrawGoldAction):\n"
+     "                self._claim_bank_stock(action)\n",
+     "            if isinstance(action, WithdrawItemAction):\n"
+     "                self._claim_bank_stock(action)\n"),
+    ("player: a failed gold withdraw keeps its claim",
+     "                action, WithdrawItemAction | WithdrawGoldAction):\n"
+     "            self._coordination.release_bank_stock()\n",
+     "                action, WithdrawItemAction):\n"
+     "            self._coordination.release_bank_stock()\n"),
+    ("player: a sibling's gold claim is not netted from the plan's bank",
+     "        return replace(state, bank_gold=max(0, state.bank_gold - claimed))\n",
+     "        return replace(state, bank_gold=state.bank_gold)\n"),
+    ("player: a claim past the bank leaves negative gold",
+     "        return replace(state, bank_gold=max(0, state.bank_gold - claimed))\n",
+     "        return replace(state, bank_gold=state.bank_gold - claimed)\n"),
+    ("player: the decision plans against the bank as read",
+     "            decision = self._strategy.decide(\n"
+     "                planned, game_data,\n"
+     "                step_decline=step_decline,\n",
+     "            decision = self._strategy.decide(\n"
+     "                state, game_data,\n"
+     "                step_decline=step_decline,\n"),
+]
+
 POCKET_GOLD_OBJECTIVE_MUTATIONS = [
     ("gear_objective: a candidate's pieces are priced with no m* on the context",
      "    return replace(ctx, gear_objective=GearObjective(monster, loadout, rate, (), fighter=fighter))\n",
@@ -15207,6 +15235,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_pocket_gold_buys.py", survivors)
     run_group(GEAR_OBJECTIVE_SRC, POCKET_GOLD_OBJECTIVE_MUTATIONS,
               "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(PLAYER_SRC, POCKET_GOLD_CLAIM_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, POCKET_GOLD_WALK_MUTATIONS,
               "tests/test_ai/test_pocket_gold_buys.py", survivors)
 def _run_all_groups() -> int:

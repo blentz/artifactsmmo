@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.ge_cancel_order import GeCancelOrderAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RoleChange
@@ -65,6 +66,7 @@ from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.supply_batch_target import supply_batch_target_pure
 from artifactsmmo_cli.ai.thresholds import SUPPLY_BATCH
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachFleetOutcome
+from artifactsmmo_cli.ai.world_state import GOLD_CODE
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
 from tests.test_ai.fixtures import coordination_now, make_state
 from tests.test_ai.shared_world import shared_world
@@ -3280,3 +3282,134 @@ def test_a_piece_the_fleet_climber_makes_recruits_no_second_crafter(tmp_path) ->
         robby.close()
         history.end_session(exit_reason="normal")
         history.close()
+
+
+
+# --------------------------------------------------------------------------
+# Bank GOLD is claimed across the fleet (HTTP 492 hotfix, review I-2): a
+# WithdrawGold now feeds every pocket-short buy, and two characters planning
+# against one `bank_gold` snapshot would each plan to spend the same gold.
+# --------------------------------------------------------------------------
+
+
+def _gold_player(tmp_path, bank_gold):  # type: ignore[no-untyped-def]
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p._offline_timing = committed_timing()
+    p._learned_drops = LearnedDrops.empty()
+    p.state = make_state(x=4, y=0, bank_gold=bank_gold, bank_items={})
+    p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
+    return p, db
+
+
+def test_execute_claims_banked_gold_before_the_withdraw_request(tmp_path):
+    """The same seam and ordering as an item withdraw: the gold claim lands
+    under `GOLD_CODE` before the request, so a sibling planning meanwhile nets
+    it out. A rejected withdraw releases it (the gold is still banked)."""
+    p, db = _gold_player(tmp_path, 10_000)
+    observer = CoordinationStore(db_path=db, character="observer")
+    seen: list[dict[str, int]] = []
+
+    def _spy(*_args, **_kwargs):
+        seen.append(observer.sibling_bank_claims(datetime.now(tz=timezone.utc)))
+        raise ApiActionError(492, "The character does not have enough gold.")
+
+    action = WithdrawGoldAction(quantity=6_550, bank_location=(4, 0))
+    char = make_char_schema(x=4, y=0)
+    empty = MagicMock()
+    empty.data = []
+    items_patch, details_patch = _bank_sync_patches([])
+    try:
+        with redirect_stdout(io.StringIO()):
+            with patch("artifactsmmo_cli.ai.actions.withdraw_gold.action_withdraw_gold",
+                       side_effect=_spy), \
+                 patch("artifactsmmo_cli.ai.player.get_character",
+                       return_value=make_get_character_result(char)), \
+                 patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty), \
+                 patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty), \
+                 items_patch, details_patch:
+                _new_state, outcome, _executed = p._execute(action, MagicMock())
+        assert outcome == "error:HTTP_492"
+        assert seen == [{GOLD_CODE: 6_550}], "the gold claim must be visible before the request"
+        assert observer.sibling_bank_claims(datetime.now(tz=timezone.utc)) == {}
+    finally:
+        p._coordination.close()
+        observer.close()
+
+
+def test_a_gold_claim_is_released_only_for_a_withdraw(tmp_path):
+    p, db = _gold_player(tmp_path, 10_000)
+    observer = CoordinationStore(db_path=db, character="observer")
+    now = datetime.now(tz=timezone.utc)
+    try:
+        p._claim_bank_stock(WithdrawGoldAction(quantity=300, bank_location=(4, 0)))
+        assert observer.sibling_bank_claims(now) == {GOLD_CODE: 300}
+        p._release_bank_stock(MoveAction(x=1, y=1))
+        assert observer.sibling_bank_claims(now) == {GOLD_CODE: 300}
+        p._release_bank_stock(WithdrawGoldAction(quantity=300, bank_location=(4, 0)))
+        assert observer.sibling_bank_claims(now) == {}
+    finally:
+        p._coordination.close()
+        observer.close()
+
+
+def test_a_sibling_s_gold_claim_is_netted_from_the_plan_s_bank(tmp_path):
+    """The read half: a sibling's live gold claim comes off the bank this
+    character plans against. A view, never stored: `self.state` keeps the bank
+    as read, or the next cycle would subtract the claim again. An unread bank
+    stays unknown, and a claim larger than the bank leaves none."""
+    p, db = _gold_player(tmp_path, 10_000)
+    sibling = CoordinationStore(db_path=db, character="rival")
+    try:
+        sibling.claim_bank_stock({GOLD_CODE: 6_000}, datetime.now(tz=timezone.utc))
+        p.game_data = _make_planner_gd()
+        p._update_coordination(p.state, p.game_data)
+        assert p._sibling_bank_claims == {GOLD_CODE: 6_000}
+        assert p._net_sibling_gold(p.state).bank_gold == 4_000
+        assert p.state.bank_gold == 10_000
+        assert p._net_sibling_gold(replace(p.state, bank_gold=None)).bank_gold is None
+        assert p._net_sibling_gold(replace(p.state, bank_gold=5_000)).bank_gold == 0
+    finally:
+        p._coordination.close()
+        sibling.close()
+
+
+def test_own_gold_claim_is_not_netted(tmp_path):
+    p, _db = _gold_player(tmp_path, 10_000)
+    try:
+        p._claim_bank_stock(WithdrawGoldAction(quantity=6_000, bank_location=(4, 0)))
+        p.game_data = _make_planner_gd()
+        p._update_coordination(p.state, p.game_data)
+        assert p._net_sibling_gold(p.state) == p.state
+    finally:
+        p._coordination.close()
+
+
+def test_the_decision_plans_against_the_netted_bank(tmp_path, monkeypatch):
+    """Wired at the decision: the strategy is asked of the bank less the
+    sibling's claim, while the held state keeps the bank as read."""
+    p, db = _gold_player(tmp_path, 10_000)
+    sibling = CoordinationStore(db_path=db, character="rival")
+    seen: list[int | None] = []
+
+    class _Stop(Exception):
+        pass
+
+    def _decide(_engine, state, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+        seen.append(state.bank_gold)
+        raise _Stop
+
+    try:
+        sibling.claim_bank_stock({GOLD_CODE: 6_000}, datetime.now(tz=timezone.utc))
+        p.game_data = _make_planner_gd()
+        p.seed_offline(p.state, p.game_data)
+        p._update_coordination(p.state, p.game_data)
+        assert p._strategy is not None
+        monkeypatch.setattr(type(p._strategy), "decide", _decide)
+        with redirect_stdout(io.StringIO()), pytest.raises(_Stop):
+            p._decide_band(p.state, p.game_data, [])
+        assert seen == [4_000]
+        assert p.state.bank_gold == 10_000
+    finally:
+        p._coordination.close()
+        sibling.close()

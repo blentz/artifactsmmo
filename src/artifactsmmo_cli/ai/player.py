@@ -50,6 +50,7 @@ from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
 from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
 from artifactsmmo_cli.ai.actions.hold_for_party import HoldForPartyAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
+from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.bag_clear import (
     BAG_FULL_OUTCOME,
@@ -227,7 +228,7 @@ from artifactsmmo_cli.ai.tiers.root_group import root_group_of
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.win_threshold_core import THRESHOLD_WINDOW_DAYS, win_thresholds_from_rows
-from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
+from artifactsmmo_cli.ai.world_state import GOLD_CODE, TASKS_COIN_CODE, WorldState
 from artifactsmmo_cli.ai.xp_demand import demand_roots, xp_demand
 from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
@@ -766,7 +767,10 @@ class GamePlayer:
         refused = refused_fight(ctx)
         if refused is not None:
             print(f"[{self._now()}] {refusal_line(refused)}")
-        step_decline = self._step_decline(state, game_data, ctx, actions)
+        # The decision plans against the bank less the gold siblings have
+        # claimed (`_net_sibling_gold`); `self.state` keeps the bank as read.
+        planned = self._net_sibling_gold(state)
+        step_decline = self._step_decline(planned, game_data, ctx, actions)
         self._notify_planning(True)
         # The search cache spans the WHOLE decision, not just the planner search
         # inside it: the unified objective runs one `cheapest_path_to_level` walk
@@ -778,7 +782,7 @@ class GamePlayer:
         with (self.history.search_cache() if self.history is not None
               else nullcontext()):
             decision = self._strategy.decide(
-                state, game_data,
+                planned, game_data,
                 step_decline=step_decline,
                 ctx=ctx,
                 history=self.history,
@@ -793,7 +797,7 @@ class GamePlayer:
         crafting_target = self._record_decision_targets(decision)
         self.state = state = replace(state, crafting_target=crafting_target)
         selected_goal, plan, goals_tried = self._arbiter.select(
-            decision, state, game_data, actions, ctx,
+            decision, replace(planned, crafting_target=crafting_target), game_data, actions, ctx,
             objective=self._objective,
             turns=self._turns,
         )
@@ -1113,11 +1117,12 @@ class GamePlayer:
         # production would decide, and a decide site that silently omits an
         # argument production passes is the two-plan-producers trap. It must
         # keep mirroring `_decide_band` argument for argument.
+        planned = self._net_sibling_gold(state)
         with (self.history.search_cache() if self.history is not None
               else nullcontext()):
             decision = self._strategy.decide(
-                state, game_data,
-                step_decline=self._step_decline(state, game_data, ctx, actions),
+                planned, game_data,
+                step_decline=self._step_decline(planned, game_data, ctx, actions),
                 ctx=ctx,
                 history=self.history)
         self._last_decision = decision
@@ -1129,7 +1134,7 @@ class GamePlayer:
         if committed is not None:
             self._arbiter._committed_repr = committed
         selected_goal, plan, goals_tried = self._arbiter.select(
-            decision, state, game_data, actions, ctx,
+            decision, replace(planned, crafting_target=crafting_target), game_data, actions, ctx,
             objective=self._objective,
             turns=self._turns)
         # For the chosen objective's recipe, report each monster-drop input's live
@@ -1481,20 +1486,41 @@ class GamePlayer:
         finally:
             self.tracer.close()
 
-    def _claim_bank_stock(self, action: WithdrawItemAction) -> None:
+    def _claim_bank_stock(self, action: WithdrawItemAction | WithdrawGoldAction) -> None:
         """Announce to siblings that this withdraw is taking `action.quantity`
-        of `action.code` out of the shared bank. No-op without a coordination
-        store, which is every single-character run."""
+        of `action.code` (gold under `GOLD_CODE`) out of the shared bank. No-op
+        without a coordination store, which is every single-character run.
+
+        GOLD IS CLAIMED TOO (review I-2 of the HTTP 492 hotfix): the bank's gold
+        is the account's, and a WithdrawGold now feeds every pocket-short buy,
+        so two characters planning against one `bank_gold` snapshot would each
+        withdraw the same gold. Siblings plan against the bank less the live
+        claims (`_net_sibling_gold`)."""
         if self._coordination is not None:
+            code = GOLD_CODE if isinstance(action, WithdrawGoldAction) else action.code
             self._coordination.claim_bank_stock(
-                {action.code: action.quantity}, datetime.now(tz=timezone.utc))
+                {code: action.quantity}, datetime.now(tz=timezone.utc))
 
     def _release_bank_stock(self, action: Action) -> None:
         """Drop this character's bank-stock claim after a withdraw that
         provably did not happen. No-op for a non-withdraw action and without a
         coordination store."""
-        if self._coordination is not None and isinstance(action, WithdrawItemAction):
+        if self._coordination is not None and isinstance(
+                action, WithdrawItemAction | WithdrawGoldAction):
             self._coordination.release_bank_stock()
+
+    def _net_sibling_gold(self, state: WorldState) -> WorldState:
+        """`state` with the bank's gold less what siblings have claimed to
+        withdraw (`CoordinationStore.sibling_bank_claims` under `GOLD_CODE`):
+        the gold this character may plan to spend. A VIEW for the decision,
+        never stored on `self.state`: the bank is re-read only every
+        `BANK_REFRESH_INTERVAL` actions, so netting the held state would
+        subtract the same claim again every cycle. An unread bank (None) stays
+        unknown."""
+        claimed = self._sibling_bank_claims.get(GOLD_CODE, 0)
+        if state.bank_gold is None or claimed <= 0:
+            return state
+        return replace(state, bank_gold=max(0, state.bank_gold - claimed))
 
     def _claim_ge_order(self, action: GeCancelOrderAction) -> None:
         """Announce to siblings that this character is cancelling
@@ -1562,7 +1588,7 @@ class GamePlayer:
             # WithdrawItemAction, whoever emitted it — so a supply or
             # currency-ferry withdraw is announced too. No-op without a
             # coordination store.
-            if isinstance(action, WithdrawItemAction):
+            if isinstance(action, WithdrawItemAction | WithdrawGoldAction):
                 self._claim_bank_stock(action)
             # Same seam, same reason, for the ACCOUNT-shared Grand Exchange:
             # publish the cancel BEFORE the request so a sibling deriving its
@@ -2950,7 +2976,7 @@ class GamePlayer:
         rank (USER 2026-10-10, "loadout picks the monster").
 
         Priced as if `monster` were the grind target: a buy is converted at
-        the grind target's gold rate (`consumable_price.gold_per_second`), and
+        the grind target's gold rate (`gold_rate.gold_per_second`), and
         the band is choosing that target, so each candidate is priced at its
         own — the rate the cycle's loadout (`fight_ahead_loadout`) will read
         once it is chosen. The rest of the context is `_consumable_price`'s:
