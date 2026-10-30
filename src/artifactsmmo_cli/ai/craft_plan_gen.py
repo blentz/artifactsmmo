@@ -46,6 +46,7 @@ from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.attempt_prospecting import gather_requirement
 from artifactsmmo_cli.ai.bag_clear import clear_actions, related_codes
 from artifactsmmo_cli.ai.bag_peak import plan_bag_peak
 from artifactsmmo_cli.ai.best_loadout import loadout_for
@@ -799,10 +800,8 @@ def _with_rearm(mapped: list[Action], state: WorldState,
                 return mapped  # loadout already optimal for this monster
             return [*mapped[:i], rearm, *mapped[i:]]
         if isinstance(action, GatherAction):
-            skill_req = game_data.resource_skill_level(action.resource_code)
-            if skill_req is None:
-                return mapped
-            rearm = OptimizeLoadoutAction(target_skill=skill_req[0], game_data=game_data)
+            skill, _ = gather_requirement(action.resource_code, game_data)
+            rearm = OptimizeLoadoutAction(target_skill=skill, game_data=game_data)
             if not rearm.is_applicable(state, game_data):
                 return mapped  # loadout already optimal for this skill
             return [*mapped[:i], rearm, *mapped[i:]]
