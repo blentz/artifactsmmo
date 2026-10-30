@@ -2199,10 +2199,15 @@ FIGHT_ROOM_GRIND_MUTATIONS = [
 ]
 FIGHT_ROOM_TASK_STEP_MUTATIONS = [
     ("fight room: a task step's refused fight is one more kill",
-     "            if refused_monster(loadout) is not None:\n"
+     "            if no_room is not None:\n"
      "                # The pick its prep reads",
      "            if False:\n"
      "                # The pick its prep reads"),
+    # Final review minor 5 (ruling T13c): the refusal is named.
+    ("fight room: a task step's refusal is not named (final review minor 5)",
+     "                if refused is not None:\n"
+     "                    refused.append(f\"fight_no_room:{no_room}\")\n",
+     ""),
     # Ruling T14d-R m5: one guard for the step's prep and its refusal.
     ("fight step: the prep ignores the shared guard",
      "    if not _prices_step_fight(state, game_data, ctx, monster):\n        return None",

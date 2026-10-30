@@ -3167,10 +3167,11 @@ class GamePlayer:
 
         def decline(root: MetaGoal) -> str | None:
             step = actionable_step(root, state, game_data, ctx) or root
+            refused: list[str] = []
             goal = objective_step_goal(step, state, game_data, ctx,
-                                       root=root, history=self.history)
+                                       root=root, history=self.history, refused=refused)
             if goal is None:
-                return "no_step_goal"
+                return refused[0] if refused else "no_step_goal"
             plan, declined = answer(goal, state)
             reason = reason_of(plan, declined)
             if reason is None or not any(r.startswith(SLOT_DECLINES) for r in declined):

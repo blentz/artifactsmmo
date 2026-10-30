@@ -237,9 +237,25 @@ def test_a_task_fight_with_no_room_for_its_drops_is_refused_at_its_step() -> Non
     held = {"task_code": "ogre", "task_type": "monsters", "task_total": 5, "task_progress": 0}
     full = replace(_state(inventory_max=30), **held)
     roomy = replace(_state(inventory_max=200), **held)
-    assert objective_step_goal(ReachTaskOutcome("ogre"), full, gd, ctx) is None
-    goal = objective_step_goal(ReachTaskOutcome("ogre"), roomy, gd, ctx)
+    refused: list[str] = []
+    assert objective_step_goal(ReachTaskOutcome("ogre"), full, gd, ctx, refused=refused) is None
+    # Final review minor 5 (ruling T13c): the refusal is named, as the
+    # grind's walk names it.
+    assert refused == ["fight_no_room:ogre"]
+    goal = objective_step_goal(ReachTaskOutcome("ogre"), roomy, gd, ctx, refused=refused)
     assert isinstance(goal, TaskKillsGoal) and repr(goal) == "TaskKills(ogre)"
+    assert refused == ["fight_no_room:ogre"]
+
+
+def test_the_root_walk_names_a_task_step_refused_for_room() -> None:
+    """Final review minor 5 (ruling T13c): the root walk's answer for a task
+    root whose fight has no room for its drops is the refusal's name, not the
+    anonymous `no_step_goal`."""
+    held = {"task_code": "ogre", "task_type": "monsters", "task_total": 5, "task_progress": 0}
+    full = replace(_state(inventory_max=30), **held)
+    decline = player_mod.GamePlayer(character="hero")._step_decline(
+        full, _gd(), replace(CTX, loadout=_WOLF_AHEAD), [])
+    assert decline(ReachTaskOutcome("ogre")) == "fight_no_room:ogre"
 
 
 def test_the_task_steps_prep_and_refusal_share_one_guard(monkeypatch: pytest.MonkeyPatch) -> None:

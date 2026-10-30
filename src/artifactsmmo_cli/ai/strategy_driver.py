@@ -484,11 +484,18 @@ def objective_step_goal(
     root: MetaGoal | None = None,
     history: LearningStore | None = None,
     needs: NeedSet | None = None,
+    refused: list[str] | None = None,
 ) -> Goal | None:
     """Map the strategy's chosen step to a Goal.
 
     `needs` is the committed objective's unmet demand; only the task
     objective's accept step reads it, to score the taskmaster pool.
+
+    `refused`, when given, receives the name of a step this function refuses
+    on a verdict of its own (ruling T13c): `fight_no_room:<monster>` for a
+    task fight whose loop has no room for the drops, as the grind's walk
+    names its refusal (`craft_plan_gen._decompose_grind`). A step that maps
+    to no goal for any other reason names nothing.
 
     When `root` is provided and is an equippable ObtainItem (e.g.
     copper_boots) while `step` is an intermediate recipe-input
@@ -624,10 +631,14 @@ def objective_step_goal(
             return _pursue_goal(state, game_data)
         loadout = _fight_step_loadout(state, game_data, ctx, step.task_code)
         if loadout is not None:
-            if refused_monster(loadout) is not None:
+            no_room = refused_monster(loadout)
+            if no_room is not None:
                 # The pick its prep reads, read once (ruling T14d-R m4): one
                 # whose loop has no room for the drops refuses the fight at
-                # this step (ruling T14d-2).
+                # this step (ruling T14d-2), named as the grind names it
+                # (ruling T13c).
+                if refused is not None:
+                    refused.append(f"fight_no_room:{no_room}")
                 return None
             prep = _fight_step_prep(state, game_data, ctx, loadout)
             if prep is not None:
