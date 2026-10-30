@@ -7095,6 +7095,14 @@ GATHER_ARMOUR_MUTATIONS = [
     ("gather armour: the item level is no tiebreak",
      "            if best is None or key[:2] > best[:2]:\n",
      "            if best is None or key[:1] > best[:1]:\n"),
+    # Ruling FR-slots: the slots are visited in the API's slot order.
+    ("gather armour: the slots are visited by name",
+     "ARMOUR_SLOTS: tuple[str, ...] = tuple(\n"
+     "    slot for slots in ITEM_TYPE_TO_SLOTS.values() for slot in slots\n"
+     "    if slot not in _GATHER_VALUED_SLOTS)\n",
+     "ARMOUR_SLOTS: tuple[str, ...] = tuple(sorted(\n"
+     "    slot for slots in ITEM_TYPE_TO_SLOTS.values() for slot in slots\n"
+     "    if slot not in _GATHER_VALUED_SLOTS))\n"),
     # Final review minor 1: a full tie keeps the catalogue's first piece.
     ("gather armour: a full tie goes to the first piece by name",
      "        for code in [c for c in game_data.all_item_stats if c in state.inventory]:\n",

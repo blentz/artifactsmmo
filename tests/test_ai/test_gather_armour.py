@@ -5,6 +5,9 @@ gather's cost, against the cost of the equip it adds, in planner cost units
 
 from fractions import Fraction
 
+import attrs
+from artifactsmmo_api_client.models.character_schema import CharacterSchema
+
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GATHER_SECONDS, GatherAction
@@ -134,16 +137,26 @@ def test_a_full_tie_goes_to_the_catalogue_s_first_piece_not_the_first_by_name() 
         EquipAction(code="zz_robe", slot="body_armor_slot")]
 
 
+def test_the_armour_slots_are_visited_in_the_api_slot_order() -> None:
+    """Ruling FR-slots: the slots come in `CharacterSchema`'s `*_slot` order,
+    as `ITEM_TYPE_TO_SLOTS` derives it, not by name: the helmet before the
+    body armour, the rune before the shield."""
+    schema = [f.name for f in attrs.fields(CharacterSchema) if f.name.endswith("_slot")]
+    assert list(ARMOUR_SLOTS) == [slot for slot in schema if slot in ARMOUR_SLOTS]
+    assert ARMOUR_SLOTS.index("helmet_slot") < ARMOUR_SLOTS.index("body_armor_slot")
+
+
 def test_a_later_slot_is_judged_on_the_armour_already_picked() -> None:
-    """The robe makes the pearl sure, so the +100 hood (helmet) then saves
-    nothing and is left in the bag."""
+    """The helmet slot comes first (ruling FR-slots): the +100 hood makes the
+    pearl sure, so the robe (body armour) then saves nothing and is left in
+    the bag."""
     gd = _gd(rate=2)
     gd._item_stats["hood"] = ItemStats(code="hood", level=1, type_="helmet", prospecting=100)
     gather = _gather(Fraction(1, 100), quantity=10)
     state = make_state(skills={**make_state().skills, "fishing": 5},
                        inventory={"robe": 1, "hood": 1})
-    assert ARMOUR_SLOTS.index("body_armor_slot") < ARMOUR_SLOTS.index("helmet_slot")
-    assert gather_armour(gather, state, gd) == [EquipAction(code="robe", slot="body_armor_slot")]
+    assert ARMOUR_SLOTS.index("helmet_slot") < ARMOUR_SLOTS.index("body_armor_slot")
+    assert gather_armour(gather, state, gd) == [EquipAction(code="hood", slot="helmet_slot")]
 
 
 def test_the_armour_saving_counts_the_tool_the_re_arm_puts_on() -> None:

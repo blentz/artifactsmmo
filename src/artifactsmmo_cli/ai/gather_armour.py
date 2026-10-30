@@ -24,8 +24,9 @@ nothing live until `k > 0`.
 
 The slots are those the gather loadout does not value: every slot but the tool
 (weapon), the artifacts (the picker already scores their prospecting) and the
-utility slots (potions, not gear). Slots are visited in a fixed order and each
-pick is judged on the state the earlier picks leave."""
+utility slots (potions, not gear). Slots are visited in the API's slot order
+(ruling FR-slots) and each pick is judged on the state the earlier picks
+leave."""
 
 from fractions import Fraction
 
@@ -40,9 +41,12 @@ _GATHER_VALUED_SLOTS: frozenset[str] = frozenset(
 """Slots the gather loadout already prices: the tool and the artifacts
 (`loadout_picker._benefit`), and the utility slots (potions)."""
 
-ARMOUR_SLOTS: tuple[str, ...] = tuple(sorted(
-    {slot for slots in ITEM_TYPE_TO_SLOTS.values() for slot in slots} - _GATHER_VALUED_SLOTS))
-"""The slots the armour pass fills, in a fixed order."""
+ARMOUR_SLOTS: tuple[str, ...] = tuple(
+    slot for slots in ITEM_TYPE_TO_SLOTS.values() for slot in slots
+    if slot not in _GATHER_VALUED_SLOTS)
+"""The slots the armour pass fills, in the API's slot order (`CharacterSchema`'s
+`*_slot` fields, as `gear_taxonomy.ITEM_TYPE_TO_SLOTS` derives them), never by
+name (ruling FR-slots)."""
 
 
 def gather_armour(gather: GatherAction, state: WorldState,
