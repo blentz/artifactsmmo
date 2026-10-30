@@ -32,7 +32,6 @@ re-validates `is_applicable` on the plan head every cycle before running it, and
 import dataclasses
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.acquisition_cost import door_price, door_route, fight_gold_monster
 from artifactsmmo_cli.ai.actions.base import Action, serves_region
@@ -518,7 +517,7 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
 
     for item, needed in goal.needed.items():
         qty = _bag_target(item, needed, goal.exclude_recycle, state)
-        model = ObtainModel(state, game_data, ctx, datetime.now(UTC), crossing=state,
+        model = ObtainModel(state, game_data, ctx, ctx.now, crossing=state,
                             spend=frozenset(goal.needed) if policy.fight_gold else None)
         answer = model.walk(item, qty, policy, goal.exclude_recycle, openable,
                             frozenset(goal.needed), grey_ok, prefer, rank)

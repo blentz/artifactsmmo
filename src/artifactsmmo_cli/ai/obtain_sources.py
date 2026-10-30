@@ -27,7 +27,6 @@ its STATE-FREE counterpart, and their relationship is asserted
 """
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
@@ -83,7 +82,7 @@ def obtain_sources(
     `policy` is LEGACY, the executor's readiness, unless a caller prices under
     its own (the skill grind's ranking treats a gathering-skill gate as open).
     `crossing` is the state the crossings are asked of (`ObtainModel`'s)."""
-    return _sources(ObtainModel(state, game_data, ctx, datetime.now(UTC), crossing=crossing),
+    return _sources(ObtainModel(state, game_data, ctx, ctx.now, crossing=crossing),
                     item, policy)
 
 

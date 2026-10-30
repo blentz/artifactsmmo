@@ -24,7 +24,7 @@ the divergence the epic exists to remove.
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime
 from fractions import Fraction
 from math import ceil
 
@@ -217,7 +217,7 @@ def _priced(item: str, source: Source, state: WorldState,
                                item, source.code, state, game_data, ctx.drops()),
                            yield_per=1, capacity=source.capacity)
     if source.kind is SourceKind.SELL:
-        npc_code, price = _sale_of(source.code, state, game_data)
+        npc_code, price = _sale_of(source.code, state, game_data, ctx.now)
         # One sale: one action, at the buyer's tile, yielding `price` gold and
         # consuming one copy of the item sold. `inputs` is what makes the walk
         # charge that copy — a sale is not free gold, it is gold at the cost of
@@ -308,7 +308,7 @@ def npc_price_of(item: str, npc_code: str, game_data: GameData) -> tuple[int, st
 
 
 def _sale_of(item: str, state: WorldState,
-             game_data: GameData) -> tuple[str, int]:
+             game_data: GameData, now: datetime) -> tuple[str, int]:
     """`(npc, price)` for the best tradeable buyer of `item`.
 
     Same contract as `npc_price_of`, and the gates must be the SAME ones
@@ -319,8 +319,7 @@ def _sale_of(item: str, state: WorldState,
 
     A missing row would mean the two calls disagreed about game data inside a
     single decision, which cannot happen, so this raises rather than defaulting,
-    per the API-data rule."""
-    now = datetime.now(timezone.utc)
+    per the API-data rule. `now` is the cycle clock (`SelectionContext.now`)."""
     for npc_code, price in game_data.npcs_buying_item(item):
         if price <= 0 or game_data.npc_location(npc_code) is None:
             continue
@@ -1021,7 +1020,7 @@ def route_options(item: str, state: WorldState, game_data: GameData,
     pocket's own when None): a chain leg's closure is priced with its reach
     holding the legs before it and its pocket past them (`door_price`)."""
     cross = state if crossing is None else crossing
-    model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc), crossing=cross)
+    model = ObtainModel(state, game_data, ctx, ctx.now, crossing=cross)
     # A route its own skill requirement keeps closed is priced only with its
     # climb (`_gated_skill_option`, ruling T2c), never as the ready route a
     # policy without the skill gate names it.
@@ -1185,7 +1184,7 @@ def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
     price, route = priced_route(item, qty, options, owned, frozenset({GOLD_CODE}))
     if route is not None:
         return price, _served_by(route)
-    model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc), crossing=crossing)
+    model = ObtainModel(state, game_data, ctx, ctx.now, crossing=crossing)
     for kind in _SKILL_GATE:
         if _skill_gated(item, model, kind, policy) is not None:
             return price, kind

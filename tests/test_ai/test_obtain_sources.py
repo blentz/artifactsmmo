@@ -12,12 +12,18 @@ and its consumer written together are wrong together). See
 """
 
 import json
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY
 from artifactsmmo_cli.ai.obtain_sources import (
     UNBOUNDED_CAPACITY,
     SourceKind,
@@ -27,6 +33,7 @@ from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 
 _ALL_SLOTS: dict[str, str | None] = {
     "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
@@ -279,6 +286,45 @@ def test_event_vendor_is_not_a_buy_source(game_data, ctx):
     state = make_state(gold=10_000)
     assert not [s for s in obtain_sources("event_only_item", state, game_data, ctx)
                 if s.kind is SourceKind.BUY]
+
+
+def test_the_event_window_is_read_on_the_cycle_clock(game_data, ctx):
+    """Ruling FR-8: an event vendor's window is judged at the context's clock
+    (`SelectionContext.now`, stamped once per cycle), not the wall clock. The
+    event ended in 2020: at a clock inside it the vendor is a buy source, at a
+    clock past it (and at today's wall clock) it is none."""
+    opens = datetime(2020, 1, 1, tzinfo=UTC)
+    state = replace(make_state(gold=10_000), x=2, y=2,
+                    active_events={"gemstone_week": opens + timedelta(hours=1)})
+
+    def buys(at: datetime) -> list[str]:
+        return [s.code for s in obtain_sources("event_only_item", state, game_data,
+                                               replace(ctx, now=at), policy=DECOMPOSE_POLICY)
+                if s.kind is SourceKind.BUY]
+
+    assert buys(opens) == ["event_vendor"]
+    assert buys(opens + timedelta(hours=2)) == []
+
+
+def test_the_walk_reads_the_event_window_on_the_cycle_clock(game_data):
+    """Ruling FR-8, at the walk (`craft_plan_gen._walk_plan`'s model): inside
+    the 2020 window the walk routes the buy (its leg is then the executor's
+    to judge), past it the item has no route."""
+    opens = datetime(2020, 1, 1, tzinfo=UTC)
+    state = replace(make_state(gold=10_000), x=2, y=2,
+                    active_events={"gemstone_week": opens + timedelta(hours=1)})
+    buy = [NpcBuyAction(npc_code="event_vendor", item_code="event_only_item", quantity=1,
+                        npc_location=(2, 2))]
+
+    def declined(at: datetime) -> list[str]:
+        reasons: list[str] = []
+        decompose(GatherMaterialsGoal("event_only_item", {"event_only_item": 1}), state,
+                  game_data, buy, replace(TIMED_NO_PROFILE_CONTEXT, now=at), reasons)
+        return reasons
+
+    assert declined(opens) == ["first_leg_inapplicable:NpcBuy(event_only_item×1@event_vendor)"]
+    assert declined(opens + timedelta(hours=2)) == [
+        "infeasible:event_only_item:no_route:event_only_item"]
 
 
 def test_unwinnable_dropper_is_not_a_drop_source(game_data, ctx):

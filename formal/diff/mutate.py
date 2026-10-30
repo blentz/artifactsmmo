@@ -127,6 +127,7 @@ TASK_EXCHANGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task
 TASK_CANCEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_cancel.py"
 GATHERING_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gathering.py"
 CRAFT_PLAN_GEN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_gen.py"
+OBTAIN_SOURCES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_sources.py"
 PURSUE_TASK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "pursue_task.py"
 SCALAR_PRIORITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "scalar_priority.py"
 EQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "equip.py"
@@ -8844,9 +8845,9 @@ FEE_SHORTFALL_MUTATIONS = [
 ]
 KEY_DOOR_CROSSING_MUTATIONS = [
     ("door: the walk's crossings are asked of its spendable pocket",
-     "        model = ObtainModel(state, game_data, ctx, datetime.now(UTC), crossing=state,\n"
+     "        model = ObtainModel(state, game_data, ctx, ctx.now, crossing=state,\n"
      "                            spend=frozenset(goal.needed) if policy.fight_gold else None)\n",
-     "        model = ObtainModel(walked, game_data, ctx, datetime.now(UTC))\n"),
+     "        model = ObtainModel(walked, game_data, ctx, ctx.now)\n"),
     ("door: the model's reach is its pocket's",
      "        self._crossing = state if crossing is None else crossing\n",
      "        self._crossing = state\n"),
@@ -8952,6 +8953,20 @@ KEY_DOOR_STORE_PLAYER_MUTATIONS = [
      "            return (decompose(goal, at, game_data, actions, ctx, declined, store=self.history),\n",
      "            return (decompose(goal, at, game_data, actions, ctx, declined, store=None),\n"),
 ]
+# Ruling FR-8: the decision reads the cycle clock (`SelectionContext.now`), not
+# the wall clock. Killed by tests/test_ai/test_obtain_sources.py (a 2020 event
+# window). `ctx.now.now(...)` is the wall clock, reached without an import.
+CYCLE_CLOCK_SOURCES_MUTATIONS = [
+    ("cycle clock: the sources read the wall clock",
+     "    return _sources(ObtainModel(state, game_data, ctx, ctx.now, crossing=crossing),",
+     "    return _sources(ObtainModel(state, game_data, ctx, ctx.now.now(ctx.now.tzinfo),"
+     " crossing=crossing),"),
+]
+CYCLE_CLOCK_WALK_MUTATIONS = [
+    ("cycle clock: the walk reads the wall clock",
+     "        model = ObtainModel(state, game_data, ctx, ctx.now, crossing=state,",
+     "        model = ObtainModel(state, game_data, ctx, ctx.now.now(ctx.now.tzinfo), crossing=state,"),
+]
 # Ruling T14e-m6: doors at any depth. Killed by
 # tests/test_ai/test_key_door_route.py.
 KEY_DOOR_CHAIN_REACH_MUTATIONS = [
@@ -8981,8 +8996,8 @@ KEY_DOOR_CHAIN_PRICE_MUTATIONS = [
      "                                crossing=cross)\n            for code, units in leg)\n",
      "                                crossing=at)\n            for code, units in leg)\n"),
     ("chain: a priced route's model crosses from its pocket",
-     "    model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc), crossing=cross)\n",
-     "    model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc))\n"),
+     "    model = ObtainModel(state, game_data, ctx, ctx.now, crossing=cross)\n",
+     "    model = ObtainModel(state, game_data, ctx, ctx.now)\n"),
     ("chain: a priced route's sources cross from its pocket",
      "              for s in obtain_sources(item, state, game_data, ctx, policy=policy,\n"
      "                                      crossing=cross)\n",
@@ -14194,6 +14209,10 @@ def _collect_all_groups() -> None:
     run_group(OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_POLICY_MUTATIONS,
               "formal/diff/test_obtain_model_ready_diff.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_GATE_MUTATIONS,
+              "tests/test_ai/test_obtain_sources.py", survivors)
+    run_group(OBTAIN_SOURCES_SRC, CYCLE_CLOCK_SOURCES_MUTATIONS,
+              "tests/test_ai/test_obtain_sources.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, CYCLE_CLOCK_WALK_MUTATIONS,
               "tests/test_ai/test_obtain_sources.py", survivors)
     run_group(OBTAIN_MODEL_DROP_SRC, OBTAIN_MODEL_DROP_MUTATIONS,
               "tests/test_ai/test_obtain_model.py", survivors)

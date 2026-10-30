@@ -594,7 +594,7 @@ def test_sale_of_refuses_to_invent_a_missing_row(state, game_data) -> None:
     SELL source from this table under these gates, so no row means the two reads
     disagreed inside one decision."""
     with pytest.raises(KeyError):
-        _sale_of("an_item_nobody_buys", state, game_data)
+        _sale_of("an_item_nobody_buys", state, game_data, datetime.now(timezone.utc))
 
 
 def test_a_buyer_with_no_known_location_is_skipped(state, game_data,
@@ -608,7 +608,7 @@ def test_a_buyer_with_no_known_location_is_skipped(state, game_data,
     held = _selling(state, game_data, diamond=2)
     assert obtain_sources("gold", held, game_data, TIMED_NO_PROFILE_CONTEXT) == []
     with pytest.raises(KeyError):
-        _sale_of("diamond", held, game_data)
+        _sale_of("diamond", held, game_data, datetime.now(timezone.utc))
 
 
 def test_a_buyer_offering_nothing_is_skipped(state, game_data,
@@ -621,7 +621,7 @@ def test_a_buyer_offering_nothing_is_skipped(state, game_data,
     held = _selling(state, game_data, diamond=2)
     assert obtain_sources("gold", held, game_data, TIMED_NO_PROFILE_CONTEXT) == []
     with pytest.raises(KeyError):
-        _sale_of("diamond", held, game_data)
+        _sale_of("diamond", held, game_data, datetime.now(timezone.utc))
 
 
 def test_drop_table_refuses_to_invent_a_missing_row(state, game_data) -> None:

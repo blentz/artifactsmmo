@@ -19,6 +19,7 @@ imports only stdlib), `ChosenLoadout` (`ai.chosen_loadout`, pure data over
 """
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
@@ -347,6 +348,14 @@ class SelectionContext:
     # keeps these stacks whole (`bag_clear.related_codes`). Empty on every ctx
     # built before the arbiter binds it (the root walk's own step checks).
     root_closure: frozenset[str] = frozenset()
+
+    # THE cycle clock (ruling FR-8, T8b): the instant every decision read of
+    # "now" in this cycle uses (an event window, a vendor's tradeability), so
+    # an event cannot flip between two reads of one decision. The player
+    # stamps it once per cycle when it builds the context; a context built
+    # elsewhere (an offline sweep, a test) is stamped when it is built, and a
+    # `replace` keeps the instant it copies.
+    now: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def drops(self) -> LearnedDrops:
         """This cycle's drop evidence; raises when this context has none."""

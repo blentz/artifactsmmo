@@ -4370,6 +4370,8 @@ class GamePlayer:
                                   task_monster, near_term_targets)
         bank_blocker = self._blockers.get("bank")
         ctx = SelectionContext(
+            # The cycle clock (ruling FR-8): stamped once, here.
+            now=datetime.now(tz=timezone.utc),
             bank_accessible=bank_blocker is None,
             bank_required_level=bank_blocker.required_level if bank_blocker else 0,
             bank_unlock_monster=bank_blocker.unlock_monster if bank_blocker else None,
