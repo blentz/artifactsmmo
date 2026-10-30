@@ -135,7 +135,6 @@ def _make_ctx(scn: Scenario) -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5,
         combat_monster=COMBAT_MONSTER if scn.combat_target_exists else None,
-        target_gear=frozenset(), target_tools=frozenset(),
         held_task_pays=scn.task_pays,
         )
 

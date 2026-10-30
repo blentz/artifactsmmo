@@ -249,15 +249,15 @@ def test_excess_keeps_the_active_profile_gear_demand():
     assert bank_drain_excess(state, gd, _ctx(gear_keep={"copper_boots": 5})) == {}
 
 
-def test_objective_target_gear_no_longer_blankets_the_bank():
-    """`target_gear` / `target_tools` are ACQUISITION targets — they name what to
-    PURSUE, not what to hoard. Naming copper_boots there keeps NOT ONE extra copy:
-    the authority's EQUIPPABLE_KEEP=1 (via RECIPE_DEMAND, profile-less mode) is the
-    whole protection, so 4 of the 5 banked spares drain."""
+def test_a_profile_less_bank_keeps_one_equippable_not_every_copy():
+    """No profile demand: the authority's EQUIPPABLE_KEEP=1 (via RECIPE_DEMAND,
+    profile-less mode) is the whole protection — the old `target_gear` /
+    `target_tools` code-set blanket is gone — so 4 of the 5 banked spares
+    drain."""
     gd = _gd()
     state = make_state(level=5, bank_items={"copper_boots": 5})
     assert bank_drain_excess(
-        state, gd, _ctx(target_gear=frozenset({"copper_boots"}))) == {"copper_boots": 4}
+        state, gd, _ctx()) == {"copper_boots": 4}
 
 
 def test_bank_drain_superseded_gear_drains_fully_with_gear_keep():

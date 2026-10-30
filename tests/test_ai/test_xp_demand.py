@@ -8,16 +8,35 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.xp_demand import demand_roots, xp_demand
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state, with_missing
 
 
-def test_the_roots_are_the_chosen_root_then_the_unworn_targets() -> None:
-    ctx = dataclasses.replace(NO_PROFILE_CONTEXT, target_gear=frozenset({"iron_sword", "copper_ring"}),
-                              near_term_targets=frozenset({"wool_cape"}))
-    state = make_state(equipment={"ring1_slot": "copper_ring"})
-    roots = demand_roots(ReachCharLevel(35), state, ctx)
+def test_the_roots_are_the_chosen_root_then_the_missing_pieces() -> None:
+    ctx = with_missing(NO_PROFILE_CONTEXT, ("weapon_slot", "iron_sword"), ("body_armor_slot", "wool_cape"))
+    roots = demand_roots(ReachCharLevel(35), make_state(), ctx)
     assert roots == [ReachCharLevel(35), ObtainItem("iron_sword", 1), ObtainItem("wool_cape", 1)]
-    assert demand_roots(None, state, NO_PROFILE_CONTEXT) == []
+    assert demand_roots(None, make_state(), NO_PROFILE_CONTEXT) == []
+    assert demand_roots(None, make_state(), with_missing(NO_PROFILE_CONTEXT)) == []
+    tools = dataclasses.replace(ctx, objective_tools=frozenset({"copper_pickaxe"}))
+    assert demand_roots(None, make_state(), tools) == [
+        ObtainItem("copper_pickaxe", 1), ObtainItem("iron_sword", 1), ObtainItem("wool_cape", 1)]
+    bare = dataclasses.replace(NO_PROFILE_CONTEXT, objective_tools=frozenset({"copper_pickaxe"}))
+    assert demand_roots(None, make_state(), bare) == [ObtainItem("copper_pickaxe", 1)]
+
+
+def test_skill_demand_follows_the_missing_pieces(bundle_game_data: GameData) -> None:
+    """Robby (gearcrafting 23, jewelrycrafting 22) missing three level-30 `L*`
+    pieces: the skill demand names the crafting skills those pieces need above
+    his levels. Once `L*` is held, gear demands no skill at all."""
+    robby = make_state(level=41, skills={"gearcrafting": 23, "jewelrycrafting": 22,
+                                         "weaponcrafting": 22, "mining": 25,
+                                         "woodcutting": 27, "fishing": 29})
+    ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("leg_armor_slot", "royal_skeleton_pants"),
+                       ("ring1_slot", "royal_skeleton_ring"), ("amulet_slot", "lost_amulet"))
+    skills, _level = xp_demand(demand_roots(None, robby, ctx), robby, bundle_game_data, ctx)
+    assert {"gearcrafting", "jewelrycrafting"} <= skills
+    assert xp_demand(demand_roots(None, robby, with_missing(TIMED_NO_PROFILE_CONTEXT)),
+                     robby, bundle_game_data, ctx) == (frozenset(), False)
 
 
 def test_the_fleet_food_shortfall_is_not_dag_demand() -> None:

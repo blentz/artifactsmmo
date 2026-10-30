@@ -28,7 +28,7 @@ from artifactsmmo_cli.ai.tiers.guards import (
     active_guards,
 )
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, with_missing
 
 
 def _gd_ash_plank() -> GameData:
@@ -422,10 +422,10 @@ class TestCraftReliefGuard:
         assert GuardKind.DEPOSIT_FULL in guards
         assert guards.index(GuardKind.CRAFT_RELIEF) < guards.index(GuardKind.DEPOSIT_FULL)
 
-    def test_objective_target_gear_does_not_trigger_craft_relief(self):
-        """Regression 2026-06-13: ctx.target_gear is no longer forwarded to
+    def test_a_missing_objective_piece_does_not_trigger_craft_relief(self):
+        """Regression 2026-06-13: the gear objective is not forwarded to
         relief candidacy. copper_dagger is craftable from on-hand copper_bar
-        and listed as objective target_gear, and pressure is above threshold —
+        and a missing `L*` piece, and pressure is above threshold —
         but CRAFT_RELIEF must NOT fire, because relief only assembles task
         items / step intermediates, never end-stage equippables."""
         gd = _gd_copper_gear()
@@ -434,8 +434,7 @@ class TestCraftReliefGuard:
             skills={"mining": 1, "weaponcrafting": 1, "gearcrafting": 1},
         )
         assert state.inventory_used / state.inventory_max >= CRAFT_RELIEF_FRACTION
-        ctx = _ctx(target_gear=frozenset({"copper_dagger"}),
-                   target_tools=frozenset())
+        ctx = with_missing(_ctx(), ("weapon_slot", "copper_dagger"))
         guards = active_guards(state, gd, None, ctx)
         assert GuardKind.CRAFT_RELIEF not in guards
 

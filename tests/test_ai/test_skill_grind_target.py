@@ -25,7 +25,7 @@ from artifactsmmo_cli.ai.tiers.skill_grind_target import (
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT, make_state, with_missing
 from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
@@ -457,18 +457,36 @@ def test_a_HELD_rung_is_not_free_because_the_grind_must_CRAFT_another():
         "holding copies changed the cost of crafting another")
 
 
-def test_a_gear_target_rung_is_marked_wanted_and_a_plain_one_is_not():
+def test_a_missing_piece_rung_is_marked_wanted_and_a_plain_one_is_not():
     """`wanted` was constructed as the literal False at the sole production
     producer, so the key added on 2026-06-24 had never been able to fire. This
     is the wiring that lets it."""
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT,
-                              near_term_targets=frozenset({"copper_dagger"}))
+    ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("weapon_slot", "copper_dagger"))
     cands = build_selectable_grind_candidates("weaponcrafting", state, gd, ctx)
     by_code = {c.code: c for c in cands}
     assert by_code["copper_dagger"].wanted is True
     assert by_code["wooden_staff"].wanted is False
+
+
+def test_wanted_prefers_a_missing_piece():
+    """Plan C Review Focus 2: the grind crafts a missing `L*` piece or a `T*`
+    tool over a non-target rung. Unwanted, `wooden_staff` wins (higher level,
+    fewer steps); with `copper_dagger` a missing piece of the objective, or a
+    tool a demanded skill climbs with, the dagger wins, and a held objective
+    with no tool leaves the plain ranking."""
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 3})
+    missing = with_missing(TIMED_NO_PROFILE_CONTEXT, ("weapon_slot", "copper_dagger"))
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=missing) == "copper_dagger"
+    held = with_missing(TIMED_NO_PROFILE_CONTEXT)
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=held) == "wooden_staff"
+    tool = dataclasses.replace(held, objective_tools=frozenset({"copper_dagger"}))
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=tool) == "copper_dagger"
+    no_objective = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT,
+                                       objective_tools=frozenset({"copper_dagger"}))
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=no_objective) == "copper_dagger"
 
 
 def test_a_siblings_supply_target_is_marked_wanted():
@@ -493,8 +511,7 @@ def test_the_candidate_cache_is_not_keyed_by_context():
     """
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    ctx_a = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT,
-                                near_term_targets=frozenset({"copper_dagger"}))
+    ctx_a = with_missing(TIMED_NO_PROFILE_CONTEXT, ("weapon_slot", "copper_dagger"))
     ctx_b = TIMED_NO_PROFILE_CONTEXT
     first = build_selectable_grind_candidates("weaponcrafting", state, gd, ctx_a)
     second = build_selectable_grind_candidates("weaponcrafting", state, gd, ctx_b)
@@ -513,8 +530,7 @@ def test_context_changes_the_rank_but_never_whether_a_grind_exists():
     """
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT,
-                              near_term_targets=frozenset({"copper_dagger"}))
+    ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("weapon_slot", "copper_dagger"))
     with_ctx = skill_grind_target("weaponcrafting", state, gd, ctx=ctx)
     without = skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT)
     assert (with_ctx is None) == (without is None)

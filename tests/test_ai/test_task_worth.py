@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.task_horizon import HORIZON_GEAR, HORIZON_OUT_OF_REACH,
 from artifactsmmo_cli.ai.task_worth import held_task_cancel_due, short_items, task_worth_for
 from artifactsmmo_cli.ai.task_worth_core import TaskWorth
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state, with_missing
 
 
 def _gd() -> GameData:
@@ -43,27 +43,28 @@ def _fixed_fight(monkeypatch):  # type: ignore[no-untyped-def]
 
 class TestShortItems:
     def test_the_closure_less_the_bag_and_bank(self) -> None:
-        ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, target_gear=frozenset({"wolf_cloak"}))
+        ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("body_armor_slot", "wolf_cloak"))
         state = make_state(inventory={"cloth": 2}, bank_items={"wolf_hair": 1})
         assert short_items(state, _gd(), ctx) == {"wolf_cloak", "wolf_hair"}
 
     def test_a_banked_supply_is_not_short(self) -> None:
         """Live 2026-10-07: wolf, pig and skeleton read "aligned" while the bank
         held their drops."""
-        ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, target_gear=frozenset({"wolf_cloak"}))
+        ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("body_armor_slot", "wolf_cloak"))
         state = make_state(bank_items={"wolf_hair": 4, "thread": 6})
         assert short_items(state, _gd(), ctx) == {"wolf_cloak", "cloth"}
 
-    def test_worn_gear_needs_nothing(self) -> None:
-        ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, near_term_targets=frozenset({"wolf_cloak"}))
+    def test_a_held_objective_needs_nothing(self) -> None:
+        """`L*` held: no piece is missing, so no drop is short for gear."""
         state = make_state(equipment={"body_armor_slot": "wolf_cloak"})
-        assert short_items(state, _gd(), ctx) == frozenset()
+        assert short_items(state, _gd(), with_missing(TIMED_NO_PROFILE_CONTEXT)) == frozenset()
+        assert short_items(state, _gd(), TIMED_NO_PROFILE_CONTEXT) == frozenset()
 
 
 @pytest.mark.usefixtures("_fixed_fight")
 class TestTaskWorthFor:
     def test_a_short_drop_is_a_reason(self) -> None:
-        ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, target_gear=frozenset({"wolf_cloak"}))
+        ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("body_armor_slot", "wolf_cloak"))
         worth = task_worth_for("wolf", "monsters", 10, make_state(level=30), _gd(), ctx, None)
         assert worth == TaskWorth(xp=False, gold=False, drops=True)
 
@@ -133,7 +134,7 @@ class TestHeldTaskCancelDue:
         assert not held_task_cancel_due(self._held(task_progress=10), _gd(), TIMED_NO_PROFILE_CONTEXT, None)
 
     def test_a_worthy_task_is_kept(self) -> None:
-        ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, target_gear=frozenset({"wolf_cloak"}))
+        ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("body_armor_slot", "wolf_cloak"))
         assert not held_task_cancel_due(self._held(task_code="wolf"), _gd(), ctx, None)
 
 

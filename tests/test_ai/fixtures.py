@@ -14,6 +14,7 @@ from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.models.status_schema import StatusSchema
 
 from artifactsmmo_cli.ai.best_loadout import BestLoadout
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
@@ -23,7 +24,8 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     offline_context,
 )
 from artifactsmmo_cli.ai.loop_rate import LoopRate
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -66,6 +68,15 @@ rung for a catalogue with no equipment. That refusal is correct — the project
 rule is to use API data or fail — so the fixtures stop asserting a world the
 API cannot produce. Any hand-built `GameData` a `StrategyEngine.decide` or
 `decide_tree` call will see needs at least this."""
+
+
+def with_missing(ctx: SelectionContext, *pieces: tuple[str, str]) -> SelectionContext:
+    """`ctx` with a gear objective whose `L*` misses `pieces` ((slot, code)
+    pairs, in that order); no pieces is an objective whose `L*` is held."""
+    missing = tuple(GearPiece(slot, code, 0, Fraction(1), Fraction(1), SourceKind.CRAFT)
+                    for slot, code in pieces)
+    return replace(ctx, gear_objective=GearObjective(
+        "chicken", {slot: code for slot, code in pieces}, Fraction(1), missing))
 
 
 def coordination_now() -> datetime:

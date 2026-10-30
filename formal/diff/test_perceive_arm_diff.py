@@ -151,7 +151,6 @@ def _make_ctx(combat_monster: str | None) -> SelectionContext:
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5,
         combat_monster=combat_monster,
-        target_gear=frozenset(), target_tools=frozenset(),
         )
 
 

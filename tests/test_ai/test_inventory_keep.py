@@ -319,12 +319,12 @@ def test_gear_demand_has_no_blanket_fallback():
     """DELIBERATE de-blanketing: `guards._gear_protected`'s profile-less arm was
     the CODE-SET `target_gear | target_tools` (= keep ALL copies of every BiS
     code — another reason all 18 axes were hoarded). It is NOT reinstated: with
-    an empty `gear_keep` a `target_tools` code held x18 keeps exactly 1 (via the
+    an empty `gear_keep` a tool held x18 keeps exactly 1 (via the
     EQUIPPED/RECIPE_DEMAND `EQUIPPABLE_KEEP`) and 17 are disposable."""
     gd = _gd()
     state = make_state(level=10, skills={"weaponcrafting": 2},
                        inventory={"copper_axe": 18})
-    ctx = _ctx(target_gear=frozenset(), target_tools=frozenset({"copper_axe"}))
+    ctx = _ctx()
     assert ctx.gear_keep == {}
     assert reason_quantity(KeepReason.GEAR_DEMAND, "copper_axe", state, gd, ctx) == 0
     assert keep_owned("copper_axe", state, gd, ctx) == 1

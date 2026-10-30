@@ -303,8 +303,8 @@ def _gear_demand(code: str, state: WorldState, game_data: GameData,
     """The active-profile gear demand, plus a keep-1 floor for the slots the profile
     is SILENT about.
 
-    NO CODE-SET FALLBACK. There is deliberately no profile-less fallback to
-    `ctx.target_gear | ctx.target_tools` — see the module docstring: that fallback is
+    NO CODE-SET FALLBACK. There is deliberately no profile-less fallback to the
+    old `target_gear | target_tools` sheets — see the module docstring: that fallback was
     a code-SET (keep-ALL-copies), and the profile-less case (`gear_keep` empty) is
     correctly served with keep-1 by EQUIPPED / RECIPE_DEMAND
     (`useful_quantity_cap`'s `EQUIPPABLE_KEEP` blanket, which `_recipe_demand` only

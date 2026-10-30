@@ -2799,7 +2799,7 @@ def test_the_skill_demand_is_known_when_the_loadout_is_chosen(monkeypatch):
         seen["skills"] = ctx.skill_demand
         return None
 
-    monkeypatch.setattr("artifactsmmo_cli.ai.player.xp_demand",
+    monkeypatch.setattr("artifactsmmo_cli.ai.objective_demand.xp_demand",
                         lambda roots, s, g, c: (frozenset({"fishing"}), False))
     monkeypatch.setattr("artifactsmmo_cli.ai.player.fight_ahead_loadout", choose)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))

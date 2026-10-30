@@ -69,6 +69,11 @@ class SelectionContext:
     # is demanded. A task's XP is a reason only for demanded XP (USER
     # 2026-10-07: the seesaw is emergent, never a phase rule).
     skill_demand: frozenset[str] = frozenset()
+    # The tools `T*` the demanded skills climb with (`tool_objective.tool_target`
+    # for each skill in `skill_demand`, ruling C1-a), set by the player with
+    # `skill_demand` by one fixed point (`objective_demand`). Read through
+    # `objective_codes`, beside the missing `L*` pieces.
+    objective_tools: frozenset[str] = frozenset()
     # The role this character holds and every role a live character holds
     # (`CoordinationStore.live_leases`), set by the player each cycle. None /
     # empty on a single-character run. `food_producer.may_make_food` reads
@@ -96,25 +101,14 @@ class SelectionContext:
     # cook nor eat them (USER 2026-10-08: "Reserve the claimed batch"; live,
     # R2D2 ate the cooked_rat_meat its SupplyBank claim made, 4 of 4).
     supply_reserved: frozenset[str] = frozenset()
-    # Long-term gear and tool codes — fed by player from the
-    # CharacterObjective so the CRAFT_RELIEF guard can score gear/tool
-    # craft candidates alongside the active task item. Empty fallback
-    # leaves the guard task-only.
-    target_gear: frozenset[str] = field(default_factory=frozenset)
-    target_tools: frozenset[str] = field(default_factory=frozenset)
-    # Usable-NOW gear/tool targets (near_term_gear ∪ target_tools): the codes the
-    # skill-grind treats as `wanted` keepers so it crafts a real upgrade for skill
-    # XP instead of a throwaway. Distinct from `target_gear` (endgame BiS, which is
-    # never craftable at low char level — using it would make the preference dead).
-    near_term_targets: frozenset[str] = field(default_factory=frozenset)
     # Active-profile gear-demand KEEP map {code: keep_count} (spec
     # 2026-06-28-gear-loadout-profiles): the deduped per-code demand across the
-    # active loadout profiles UNION the in-flight upgrade codes (+1 spare). This
-    # is the GEAR portion of every keep/recycle/deposit/sell protection — it
-    # REPLACES the `target_gear`/`target_tools` recipe-closure protection (which
-    # remains the PURSUIT target for crafting). Empty (the default) means no
-    # profile info → consumers fall back to the legacy blanket equippable keep,
-    # so a freshly-started bot with no recorded profiles never strips its gear.
+    # active loadout profiles, with every `L*` code kept at the copies `L*`
+    # wears (`gear_objective_context.with_objective_keep`). This is the GEAR
+    # portion of every keep/recycle/deposit/sell protection. Empty (the
+    # default) means no profile info → consumers fall back to the legacy
+    # blanket equippable keep, so a freshly-started bot with no recorded
+    # profiles never strips its gear.
     gear_keep: dict[str, int] = field(default_factory=dict)
     # Active objective-step goal's material profile {code: needed_qty} — the
     # GOAL_MATERIALS keep reason (`ai/inventory_keep.py`) reads it so the

@@ -383,9 +383,9 @@ def test_recycle_relief_quiet_when_the_keep_authority_licenses_nothing():
     """Bank full, 9 helmets held — but the active gear profile DEMANDS all 9
     (KeepReason.GEAR_DEMAND), so nothing is destroyable → quiet.
 
-    The protection is a QUANTITY, not a code-set: a `target_gear` membership no
-    longer shields the code (that blanket hid 18 copper_axe from every recycle
-    path). Raise the held count above the demand and the guard fires."""
+    The protection is a QUANTITY, not a code-set (the old `target_gear` blanket
+    hid 18 copper_axe from every recycle path). Without the demand the guard
+    fires."""
     gd = _recycle_gd()
     state = make_state(
         level=5, skills={"gearcrafting": 1},
@@ -395,10 +395,10 @@ def test_recycle_relief_quiet_when_the_keep_authority_licenses_nothing():
     )
     ctx = _ctx(bank_accessible=True, gear_keep={"copper_helmet": 9})
     assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, ctx) is False
-    # A BiS pursuit target is not a hoard licence: the same 9 helmets with only
-    # the legacy code-set "protection" ARE recyclable surplus (keep 1).
-    bis = _ctx(bank_accessible=True, target_gear=frozenset({"copper_helmet"}))
-    assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, bis) is True
+    # Without the profile's demand the same 9 helmets ARE recyclable surplus
+    # (keep 1).
+    bare = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, bare) is True
 
 
 def _sell_gd() -> GameData:

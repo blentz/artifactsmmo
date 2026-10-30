@@ -166,7 +166,7 @@ def test_map_guard_recycle_relief():
     }
     gd._crafting_recipes = {"copper_helmet": {"copper_bar": 6}}
     gd._workshop_locations = {"gearcrafting": (2, 1)}
-    g = map_guard(GuardKind.RECYCLE_RELIEF, gd, _ctx(target_gear=frozenset({"copper_helmet"})))
+    g = map_guard(GuardKind.RECYCLE_RELIEF, gd, _ctx())
     assert isinstance(g, RecycleSurplusGoal)
 
 

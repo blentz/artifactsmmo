@@ -8,7 +8,8 @@ server rolls the draw. R1 (resolved 2026-07-23, live OpenAPI): a task completes 
 ANY tasks master, so a mis-chosen master never strands the character — the choice
 optimises the task-type distribution only, with no completion travel penalty.
 
-B here is the live GEAR demand (`ctx.target_gear`), NOT the tree's full B: the
+B here is the live GEAR demand (the active link's, `objective_needs.link_demand`),
+NOT the tree's full B: the
 char-level trunk is deliberately excluded, because it always demands `char_xp`
 and would make every combat task score a perfect 1, pinning the choice to
 monsters. Against gear demand alone the comparison is meaningful — a combat task

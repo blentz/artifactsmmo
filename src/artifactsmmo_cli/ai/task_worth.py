@@ -15,8 +15,8 @@
   An items task: its completion gold over the actions to obtain the items.
 * other gold per cycle: the fight gold of what the character would otherwise
   fight (`ctx.combat_monster`) — USER "The grind target's gold".
-* DROPS: the task monster drops an item still SHORT for the unmet target gear
-  or near-term targets, the bag and bank used up first (`short_items`).
+* DROPS: the task monster drops an item still SHORT for the missing pieces of
+  the gear objective `L*`, the bag and bank used up first (`short_items`).
 """
 
 from collections import Counter
@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.objective_codes import objective_codes
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.task_alignment import task_advances_progression
 from artifactsmmo_cli.ai.task_horizon import HORIZON_OUT_OF_REACH, resolve_task_horizon
@@ -47,8 +48,8 @@ def fight_gold_rate(state: WorldState, game_data: GameData, monster: str,
 
 
 def short_items(state: WorldState, game_data: GameData, ctx: SelectionContext) -> frozenset[str]:
-    """The items still SHORT for one copy of each unmet target (target gear not
-    worn, and the near-term targets): the recipe closure walked with
+    """The items still SHORT for one copy of each missing `L*` piece
+    (`objective_codes`) and the supply shortfall: the recipe closure walked with
     quantities, the bag and the bank used up first. A drop already banked in
     enough copies is no reason to work a task (live 2026-10-07: wolf, pig and
     skeleton all read "aligned" by an unquantified closure while the bank held
@@ -56,8 +57,7 @@ def short_items(state: WorldState, game_data: GameData, ctx: SelectionContext) -
     stock: Counter[str] = Counter(state.inventory)
     stock.update(state.bank_items or {})
     short: set[str] = set()
-    worn = {code for code in state.equipment.values() if code is not None}
-    stack = [(code, 1) for code in ctx.target_gear | ctx.near_term_targets if code not in worn]
+    stack = [(code, 1) for code in objective_codes(ctx)]
     stack.extend(ctx.supply_shortfall)
     while stack:
         code, qty = stack.pop()

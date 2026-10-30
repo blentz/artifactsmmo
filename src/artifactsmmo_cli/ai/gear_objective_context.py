@@ -47,25 +47,20 @@ def farm_target(task_monster: str | None, objective: GearObjective | None,
 
 
 def gear_keep_for(state: WorldState, game_data: GameData, history: LearningStore | None,
-                  combat_monster: str | None,
-                  near_term_targets: frozenset[str]) -> dict[str, int]:
+                  combat_monster: str | None) -> dict[str, int]:
     """The active-profile gear-demand KEEP map {code: keep_count} threaded to
     the keep economy (spec 2026-06-28-gear-loadout-profiles): the deduped
-    per-code demand across the active loadout profiles UNION the in-flight
-    upgrade codes (near_term gear + tools currently being pursued, kept at 1
-    spare). Empty when no profiles are recorded and no in-flight upgrade — the
-    consumers then fall back to the legacy blanket equippable keep.
+    per-code demand across the active loadout profiles. Empty when no profiles
+    are recorded — the consumers then fall back to the legacy blanket
+    equippable keep. The `L*` pieces are kept by `with_objective_keep`.
 
     `gather_skills` is passed empty (mirrors the BANK_EXPAND wiring): the
     recent-window inside `active_profile_gear` still contributes gather task
     profiles via the learning history."""
-    keep: dict[str, int] = {}
-    if history is not None:
-        keep = dict(active_profile_gear(state, game_data, history,
-                                        combat_monster, frozenset()))
-    for code in near_term_targets:
-        keep.setdefault(code, 1)
-    return keep
+    if history is None:
+        return {}
+    return dict(active_profile_gear(state, game_data, history,
+                                    combat_monster, frozenset()))
 
 
 def gear_objective_line(objective: GearObjective | None) -> str:
@@ -108,9 +103,8 @@ def attach_gear_objective(state: WorldState, game_data: GameData, ctx: Selection
     `combat_monster` — the only grind target known before the objective — and
     its gear keep built for that monster. The objective is priced on that
     context; then the grind target is `farm_target`'s, the keep follows the
-    final target (`ctx.near_term_targets` are the in-flight upgrades) and
-    keeps every `L*` piece (`with_objective_keep`), and the risk is judged on
-    it, bare of potions and at full hp.
+    final target and keeps every `L*` piece (`with_objective_keep`), and the
+    risk is judged on it, bare of potions and at full hp.
 
     The objective is priced inside one `search_cache` episode: every drop and
     gather route it prices reads the learned drop tally and slope
@@ -124,8 +118,7 @@ def attach_gear_objective(state: WorldState, game_data: GameData, ctx: Selection
         ctx, gear_objective=objective, combat_monster=combat_monster,
         gear_keep=with_objective_keep(
             ctx.gear_keep if combat_monster == task_monster
-            else gear_keep_for(state, game_data, history, combat_monster,
-                               ctx.near_term_targets),
+            else gear_keep_for(state, game_data, history, combat_monster),
             objective),
         combat_risky=(combat_monster is not None
                       and not secure_win(unpotioned(replace(state, hp=state.max_hp)),

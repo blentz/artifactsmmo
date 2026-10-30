@@ -75,8 +75,6 @@ MAX_ACHIEVABLE_GAP = 5
 # Every disposal consumer now asks the authority HOW MANY copies it may take:
 # DEPOSIT `bankable`, RECYCLE / SELL / DISCARD `min(bankable, destroyable)`, and the
 # bank DRAIN `destroyable` (a bank copy is not a bag copy — see `ai/bank_drain`).
-# `ctx.target_gear` / `ctx.target_tools` survive ONLY in their ACQUISITION role (they
-# name what to PURSUE — the CRAFT_RELIEF / ACCEPT_TASK gear-deferral reads).
 
 
 class GuardKind(Enum):

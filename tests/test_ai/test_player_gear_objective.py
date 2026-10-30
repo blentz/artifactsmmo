@@ -127,7 +127,7 @@ def test_the_gear_keep_follows_the_final_target(monkeypatch: pytest.MonkeyPatch)
     """The objective is priced keeping the task target's profile gear; the
     context the cycle hands on keeps the final target's."""
     player = _player(monkeypatch, HELD, [])
-    def keep(state, gd, history, monster, near_term):  # type: ignore[no-untyped-def]
+    def keep(state, gd, history, monster):  # type: ignore[no-untyped-def]
         return {f"kept_for_{monster}": 1}
     monkeypatch.setattr(player_mod, "gear_keep_for", keep)
     monkeypatch.setattr(ctx_mod, "gear_keep_for", keep)
@@ -189,20 +189,19 @@ def test_a_carried_piece_is_equipped_before_m_star_is_fought() -> None:
                                                    f"Fight({before.monster})"]
 
 
-def test_a_new_targets_keep_carries_the_in_flight_upgrades(
+def test_a_new_targets_keep_replaces_the_task_keep(
         monkeypatch: pytest.MonkeyPatch) -> None:
     """The shared step (ruling W) on its own: a target the objective names
-    replaces the task keep it arrived with by one built for that target, and
-    the in-flight upgrades (`ctx.near_term_targets`) stay kept at one spare."""
+    replaces the task keep it arrived with by one built for that target (none
+    without a store), plus `L*`'s own pieces (ruling AM)."""
     monkeypatch.setattr(ctx_mod, "gear_objective", lambda *a: HELD)
     monkeypatch.setattr(ctx_mod, "secure_win", lambda *a: True)
-    ctx = replace(CTX, gear_keep={"task_gear": 1}, near_term_targets=frozenset({"iron_boots"}))
+    ctx = replace(CTX, gear_keep={"task_gear": 1})
     out = ctx_mod.attach_gear_objective(make_state(task_code=None, task_total=0), GameData(),
                                         ctx, None)
     assert out.gear_objective is HELD
     assert out.combat_monster == "wolf"
-    # The in-flight upgrade, plus `L*`'s own iron_helm (ruling AM).
-    assert out.gear_keep == {"iron_boots": 1, "iron_helm": 1}
+    assert out.gear_keep == {"iron_helm": 1}
     assert out.combat_risky is False
 
 
@@ -238,7 +237,7 @@ def test_an_owned_l_star_piece_is_never_destroyable(tmp_path: Path, where: str) 
     state = (replace(base, bank_items={**(base.bank_items or {}), "leather_armor": 1})
              if where == "bank" else replace(base, inventory={**base.inventory, "leather_armor": 1}))
     arrived = replace(TIMED_NO_PROFILE_CONTEXT,
-                      gear_keep=gear_keep_for(state, gd, store, None, frozenset()))
+                      gear_keep=gear_keep_for(state, gd, store, None))
     ctx = attach_gear_objective(state, gd, arrived, store)
     assert ctx.gear_objective is not None
     assert ctx.gear_objective.loadout["body_armor_slot"] == "leather_armor"

@@ -59,8 +59,7 @@ computes from the supplied inputs under an empty-catalog `GameData`:
   * sellPressured       — fill>=0.85 AND a sellable item (NPC buyer present).
   * sellIdle            — fill<0.85 AND a sellable item.
   * taskExchange        — tasks_coin total (inv+bank) >= ctx.min_coins.
-  * acceptTask          — no task_code (≡ phase none); empty target_gear keeps
-                          production's predicate == `not task_code`.
+  * acceptTask          — no task_code (≡ phase none) and a draw owed.
   * objectiveStep       — opaque Bool passed identically to both sides, OR a
                           held task in phase accepted / inProgress (c-2 #4)
                           / complete (c-2 #6: the retired completeTask rung's
@@ -366,8 +365,6 @@ def _make_ctx(scn: Scenario) -> SelectionContext:
         task_exchange_min_coins=scn.task_exchange_min_coins,
         combat_monster=None,
         gold_reserve=scn.gold_reserve,
-        target_gear=frozenset(),
-        target_tools=frozenset(),
      learned_drops=LearnedDrops.empty())
 
 
@@ -1139,7 +1136,6 @@ def _craft_relief_ctx() -> SelectionContext:
     return SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(), target_tools=frozenset(),
         draw_owed=True, learned_drops=LearnedDrops.empty())
 
 
@@ -1224,21 +1220,16 @@ def _recycle_gd() -> GameData:
 
 
 def _recycle_ctx(*, protect_dagger: bool = False) -> SelectionContext:
-    # Protect via GEAR_KEEP, not target_gear/target_tools: since the keep
-    # authority took over the recycle path (item-protection-authority epic,
-    # Task 7) `recyclable_surplus` protects QUANTITIES, and the code-SETS
-    # `target_gear`/`target_tools` are PURSUIT targets that shield nothing. A
-    # gear_keep demand of 2 against the 2 held daggers is the near-miss: nothing
-    # destroyable. It also leaves `target_gear` empty, which keeps the
-    # (separately-deferred) acceptTask gear-deferral over-approximation quiet, so
-    # acceptTask stays == Lean (phase none) here.
+    # Protect via GEAR_KEEP: since the keep authority took over the recycle
+    # path (item-protection-authority epic, Task 7) `recyclable_surplus`
+    # protects QUANTITIES. A gear_keep demand of 2 against the 2 held daggers is
+    # the near-miss: nothing destroyable.
     # bank_accessible=True + bank has room → RECYCLE_RELIEF is quiet (bank has
     # room, so the bank-full pressure condition is False). Without room the
     # RECYCLE_RELIEF guard would preempt ACCEPT_TASK and win selection.
     return SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(), target_tools=frozenset(),
         gear_keep={"dagger": 2} if protect_dagger else {},
         draw_owed=True, learned_drops=LearnedDrops.empty())
 
@@ -1318,13 +1309,11 @@ def _drain_gd() -> GameData:
 def _drain_ctx(*, protect_sap: bool = False) -> SelectionContext:
     # Protect via the keep authority's GEAR_DEMAND quantity (`gear_keep`), NOT a
     # code-set: `bank_drain_excess` is bounded by `destroyable` (= owned - keep_owned)
-    # since the Task-9 migration, and `target_gear`/`target_tools` are ACQUISITION
-    # roles only. `gear_keep` is read by no other ladder slot at phase none, so the
-    # acceptTask gear-deferral (which reads target_gear) stays == Lean.
+    # since the Task-9 migration. `gear_keep` is read by no other ladder slot at
+    # phase none, so acceptTask stays == Lean.
     return SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(), target_tools=frozenset(),
         gear_keep={"sap": 5} if protect_sap else {},
         draw_owed=True, learned_drops=LearnedDrops.empty())
 
@@ -1623,7 +1612,6 @@ def _rest_combat_ctx() -> SelectionContext:
     return offline_context(SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster="mob",
-        target_gear=frozenset(), target_tools=frozenset(),
         draw_owed=True, learned_drops=LearnedDrops.empty()))
 
 
@@ -1732,7 +1720,6 @@ def _plain_ctx(*, combat_monster: str | None = None,
     return SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=combat_monster,
-        target_gear=frozenset(), target_tools=frozenset(),
         draw_owed=draw_owed, learned_drops=LearnedDrops.empty())
 
 
@@ -1878,7 +1865,6 @@ def _supply_ctx(demand: int, *, asymmetric: bool = False) -> SelectionContext:
     return SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(), target_tools=frozenset(),
         supply_target=("copper_ore", 999, demand),
         asymmetric_demand=frozenset({"copper_ore"}) if asymmetric else frozenset(),
         draw_owed=False, learned_drops=LearnedDrops.empty())
@@ -1931,6 +1917,5 @@ def test_currency_recall_fires_objective_step() -> None:
     ctx = SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(), target_tools=frozenset(),
         recall=("lich_race_medal", 2), draw_owed=False, learned_drops=LearnedDrops.empty())
     _assert_objective_step(ctx, fires=True)

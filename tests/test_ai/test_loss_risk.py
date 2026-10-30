@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
+import artifactsmmo_cli.ai.objective_demand as objective_demand_mod
 import artifactsmmo_cli.ai.player as player_mod
 import artifactsmmo_cli.ai.tiers.skill_grind_target as grind_mod
 from artifactsmmo_cli.ai.acquisition_cost import _loss_surcharge, _priced, route_options
@@ -172,7 +173,7 @@ class TestThePlayerContext:
         store = LearningStore(db_path=str(tmp_path / "l.db"), character="probe")
         player = self._player(monkeypatch, store)
         monkeypatch.setattr(player_mod, "supply_shortfall", lambda *a: ())
-        monkeypatch.setattr(player_mod, "xp_demand", lambda *a: (frozenset(), False))
+        monkeypatch.setattr(objective_demand_mod, "xp_demand", lambda *a: (frozenset(), False))
         assert player._selection_context().fight_records == records
         store.close()
 

@@ -18,7 +18,7 @@ from artifactsmmo_cli.ai.tiers.means import (
     means_fires,
 )
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, with_missing
 
 
 def _ctx(**kw) -> SelectionContext:
@@ -54,13 +54,13 @@ def test_accept_task_is_quiet_when_no_draw_is_owed():
     assert accept_due(state, _ctx(draw_owed=False)) is False
 
 
-def test_accept_task_does_not_wait_on_target_gear():
-    """USER 2026-10-06: no gear-chain deferral. Target gear owned-unequipped,
-    or craftable at the current skill, no longer holds the draw back — live,
-    a "craftable" `hard_leather_boots` nobody worked kept three characters
-    taskless for over a day."""
+def test_accept_task_does_not_wait_on_a_missing_piece():
+    """USER 2026-10-06: no gear-chain deferral. A missing `L*` piece, owned
+    unequipped or craftable at the current skill, does not hold the draw back
+    — live, a "craftable" `hard_leather_boots` nobody worked kept three
+    characters taskless for over a day."""
     state = make_state(task_code=None, inventory={"copper_dagger": 1})
-    ctx = _ctx(target_gear=frozenset({"copper_dagger", "iron_sword"}))
+    ctx = with_missing(_ctx(), ("weapon_slot", "copper_dagger"), ("shield_slot", "iron_shield"))
     assert accept_due(state, ctx) is True
 
 

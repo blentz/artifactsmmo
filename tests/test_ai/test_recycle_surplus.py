@@ -56,7 +56,7 @@ def test_surplus_includes_overstocked_recyclable_gear():
 
 def test_target_tool_hoard_keeps_ONE_and_recycles_the_REST():
     """THE live hoard (Robby 2026-07-12): 18 copper_axe — the axe is the best
-    woodcutting tool AND a `target_tools` code, so the old blanket
+    woodcutting tool AND was a `target_tools` code, so the old blanket
     `recycle_protected_codes` fallback (`target_gear | target_tools`, used
     whenever no loadout profile is recorded) hid the WHOLE CODE from every
     recycle path while the weaponcrafting grind kept manufacturing more.
@@ -66,8 +66,7 @@ def test_target_tool_hoard_keeps_ONE_and_recycles_the_REST():
     gd = _gd()
     state = make_state(level=10, skills={"weaponcrafting": 2},
                        inventory={"copper_axe": 18})
-    ctx = _ctx(target_tools=frozenset({"copper_axe"}))
-    assert recyclable_surplus(state, gd, ctx) == {"copper_axe": 17}
+    assert recyclable_surplus(state, gd, _ctx()) == {"copper_axe": 17}
     assert state.inventory["copper_axe"] - 17 == 1
 
 

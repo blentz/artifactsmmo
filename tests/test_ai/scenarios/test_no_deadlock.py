@@ -260,15 +260,19 @@ def test_l10_gearcrafting_gap_combat_blocked_retargets_not_char_grind() -> None:
     RE-DERIVED Task 5 (global gear objective): the ramp and the main scenario
     now share their gear objective, so they share its answer — the
     weaponcrafting climb in front of `L*`'s first piece, `iron_sword`. The
-    guarantee holds: never GrindCharacterXP."""
+    guarantee holds: never GrindCharacterXP.
+
+    RE-DERIVED plan C Task 1 (ruling C1-a): the climb's rung is the
+    woodcutting tool `T*`, `copper_axe` (weaponcrafting 1), an objective code
+    the iron pieces' woodcutting demand names, so the grind's `wanted` credit
+    crafts it over `sticky_sword`. Same root, same goal."""
     report = _run(CRITERION_1_RAMP)
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "ReachSkill(weaponcrafting->6)"
     assert report.decision.chosen_root == ReachSkillLevel(skill="weaponcrafting", level=6)
     assert [repr(a) for a in report.plan] == [
-        "Fight(yellow_slime)", "Gather(copper_rocks×50)", "Craft(copper_bar×5)",
-        "Craft(sticky_sword×1)"]
+        "Gather(copper_rocks×60)", "Craft(copper_bar×6)", "Craft(copper_axe×1)"]
 
 
 def test_l10_gearcrafting_gap_combat_blocked_search_bounded() -> None:

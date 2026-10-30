@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
+import artifactsmmo_cli.ai.objective_demand as objective_demand_mod
 import artifactsmmo_cli.ai.player as player_mod
 import artifactsmmo_cli.ai.task_worth as mod
 from artifactsmmo_cli.ai.game_data import GameData
@@ -126,7 +127,7 @@ class TestPlayerContext:
     def test_the_dag_xp_demand_reaches_the_selection_context(self, monkeypatch) -> None:
         """c-2 #5 increment 4: the pool scan reads which XP the DAG demands."""
         player = self._player(monkeypatch)
-        monkeypatch.setattr(player_mod, "xp_demand", lambda *a: (frozenset({"mining"}), True))
+        monkeypatch.setattr(objective_demand_mod, "xp_demand", lambda *a: (frozenset({"mining"}), True))
         seen = {}
 
         def draw(state, gd, ctx, history):  # type: ignore[no-untyped-def]

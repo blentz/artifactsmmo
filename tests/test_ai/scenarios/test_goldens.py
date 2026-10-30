@@ -153,8 +153,13 @@ EXPECTATIONS: dict[str, Golden] = {
     # this golden used to witness — `L*`'s first piece is `iron_sword`, gated
     # at weaponcrafting 10 against 1 — and the grind's first leg withdraws the
     # banked feathers toward its first craft.
+    # RE-DERIVED plan C Task 1 (Review Focus 2, ruling C1-a): the iron pieces
+    # demand mining and woodcutting, whose tools `T*` (copper_pickaxe,
+    # copper_axe, both weaponcrafting 1) are objective codes, so the grind's
+    # `wanted` credit crafts a tool at the same craft level instead of the
+    # throwaway `apprentice_gloves`: the first leg mines the copper for it.
     "l12_taskgated_bag": Golden(
-        goal_class="ReachSkill(weaponcrafting", first_action="Withdraw(feather"),
+        goal_class="ReachSkill(weaponcrafting", first_action="Gather(copper_rocks"),
 }
 
 

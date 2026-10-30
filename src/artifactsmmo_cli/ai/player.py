@@ -160,6 +160,7 @@ from artifactsmmo_cli.ai.loadout_profiles import (
 from artifactsmmo_cli.ai.loop_rate import food_menu
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.null_tracer import NullTracer
+from artifactsmmo_cli.ai.objective_demand import objective_demand
 from artifactsmmo_cli.ai.objective_step_fight_core import items_task_active
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.party_card import card_json, card_state
@@ -228,7 +229,6 @@ from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.win_threshold_core import THRESHOLD_WINDOW_DAYS, win_thresholds_from_rows
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
-from artifactsmmo_cli.ai.xp_demand import demand_roots, xp_demand
 from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
@@ -4369,20 +4369,7 @@ class GamePlayer:
         # target the objective names set (`attach_gear_objective`), before
         # anything below reads it.
         task_monster = self._task_aligned_monster()
-        # CRAFT_RELIEF guard needs the long-term gear / tool targets so it
-        # can score craftable-from-inventory candidates that advance the
-        # equipment chain (not just the active task item).
-        target_gear: frozenset[str] = frozenset()
-        target_tools: frozenset[str] = frozenset()
-        near_term_targets: frozenset[str] = frozenset()
-        if self._objective is not None:
-            target_gear = frozenset(self._objective.target_gear.values())
-            target_tools = frozenset(self._objective.target_tools.values())
-            # Usable-now keepers for the skill-grind `wanted` preference.
-            near_term_targets = frozenset(
-                self._objective.near_term_gear(self.state).values()) | target_tools
-        task_keep = gear_keep_for(self.state, self.game_data, self.history,
-                                  task_monster, near_term_targets)
+        task_keep = gear_keep_for(self.state, self.game_data, self.history, task_monster)
         bank_blocker = self._blockers.get("bank")
         ctx = SelectionContext(
             # The cycle clock (rulings FR-8, FR-IA), stamped at the cycle's start.
@@ -4398,9 +4385,6 @@ class GamePlayer:
             # makes inside should_expand_bank's inputs).
             gold_reserve=reserve_floor(self.state, self.game_data, None),
             gold_short=self._gold_short(),
-            target_gear=target_gear,
-            target_tools=target_tools,
-            near_term_targets=near_term_targets,
             gear_keep=task_keep,
             # Cross-character coordination (Task 11): None whenever no
             # coordination store is attached (every single-character run),
@@ -4468,12 +4452,11 @@ class GamePlayer:
         )
         ctx = attach_gear_objective(self.state, self.game_data, ctx, self.history)
         # Skill demand first (spec 2026-10-13 §2): the loadout's make prices
-        # credit the skills it names, and it no longer reads the shortfall.
-        skills, level = xp_demand(
-            demand_roots(self._last_decision.chosen_root if self._last_decision is not None else None,
-                         self.state, ctx),
+        # credit the skills it names, and it no longer reads the shortfall. The
+        # tools its skills climb with come out of the same fixed point (C1-a).
+        ctx = objective_demand(
+            self._last_decision.chosen_root if self._last_decision is not None else None,
             self.state, self.game_data, ctx)
-        ctx = replace(ctx, skill_demand=skills, level_demanded=level)
         ctx = replace(ctx, loadout=self._party_fight_loadout()
                       or fight_ahead_loadout(self.state, self.game_data, ctx, self.history))
         # Whether the held items task pays enough to defer the level step

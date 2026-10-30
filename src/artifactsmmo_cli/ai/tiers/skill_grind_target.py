@@ -11,8 +11,8 @@ string/alphabetical tie-break. That ordering replaced "cheapest chain, then
 highest level" on 2026-08-14; full rationale, and the measured domain over which
 the `wanted` credit acts as a total pivot, on `skill_grind_selection._beats`.
 `wanted` is not a property of the item: `_with_wanted` sets it per call from the
-caller's `SelectionContext` (`ctx.near_term_targets`, the usable-now gear ∪ tool
-SET, or `ctx.supply_target`, a sibling's published demand), so the same catalog
+caller's `SelectionContext` (`objective_codes`, the missing pieces of the gear
+objective `L*`, or `ctx.supply_target`, a sibling's published demand), so the same catalog
 ranks differently under a different objective and identically — every `wanted`
 False — under `NO_PROFILE_CONTEXT`. Returns None when no such in-skill recipe
 exists — the caller (`skill_is_grindable` / `grind_rung.craft_rung`, always
@@ -42,6 +42,7 @@ from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.grind_probe_state import grind_probe_state
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.objective_codes import objective_codes
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.region_edges import _reach_key
@@ -265,8 +266,8 @@ def _with_wanted(candidates: list[GrindCandidate],
     later reader — including `LevelSkill.is_applicable`, which passes no context
     at all and must keep seeing `wanted=False`.
 
-    Two sources, both already on the context. `near_term_targets` is the
-    usable-now gear ∪ tool target set — crafting one of those gains the SAME
+    Two sources, both already on the context. `objective_codes` is the
+    missing pieces of the gear objective `L*` — crafting one of those gains the SAME
     skill xp and yields a keeper instead of a throwaway (2026-06-24: pure
     cheapest-chain greed made the bot craft a value-10 `apprentice_gloves`
     while ignoring the committed value-83 `copper_dagger`). `supply_target[0]`
@@ -274,8 +275,9 @@ def _with_wanted(candidates: list[GrindCandidate],
     need counts the same as this character's own.
     """
     supply = ctx.supply_target[0] if ctx.supply_target is not None else None
+    wanted = objective_codes(ctx)
     return [dataclasses.replace(
-        c, wanted=(c.code in ctx.near_term_targets or c.code == supply))
+        c, wanted=(c.code in wanted or c.code == supply))
         for c in candidates]
 
 

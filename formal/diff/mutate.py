@@ -422,6 +422,8 @@ STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_drive
 TASK_WORTH_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth_core.py"
 CURRENCY_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_demand.py"
 XP_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "xp_demand.py"
+OBJECTIVE_CODES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "objective_codes.py"
+OBJECTIVE_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "objective_demand.py"
 CONSUMABLE_FLOOR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor_core.py"
 LOSS_RISK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loss_risk_core.py"
 FIGHT_TERMS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_terms_core.py"
@@ -7854,9 +7856,9 @@ TASK_WORTH_INPUT_MUTATIONS = [
     ("short items: the bank is not counted",
      "    stock.update(state.bank_items or {})\n",
      "    pass\n"),
-    ("short items: worn gear still needs its closure",
-     "    stack = [(code, 1) for code in ctx.target_gear | ctx.near_term_targets if code not in worn]\n",
-     "    stack = [(code, 1) for code in ctx.target_gear | ctx.near_term_targets]\n"),
+    ("short items: the missing L* pieces need no closure",
+     "    stack = [(code, 1) for code in objective_codes(ctx)]\n",
+     "    stack = []\n"),
     ("task worth: fight gold is not counted in the task's rate",
      "        return (reward + remaining * fight_gold) / (remaining * per_kill)\n",
      "        return reward / (remaining * per_kill)\n"),
@@ -7897,9 +7899,6 @@ POOL_DRAW_MUTATIONS = [
      "task_worth_for(task.code, master, task.min_quantity,"),
 ]
 DRAW_CONTEXT_MUTATIONS = [
-    ("draw ctx: the DAG's XP demand never reaches the context",
-     "        ctx = replace(ctx, skill_demand=skills, level_demanded=level)\n",
-     ""),
     ("draw ctx: an offline scenario draws",
      "        if not self._draws_enabled:\n            return ctx\n",
      ""),
@@ -7920,9 +7919,49 @@ XP_DEMAND_MUTATIONS = [
     ("xp demand: gear above the character demands no level",
      "            if stats is not None and stats.level > state.level:\n",
      "            if False:\n"),
-    ("xp demand: worn targets are still demanded",
-     "for code in sorted(ctx.target_gear | ctx.near_term_targets) if code not in worn)",
-     "for code in sorted(ctx.target_gear | ctx.near_term_targets))"),
+    ("xp demand: the missing L* pieces are not roots",
+     "    roots.extend(ObtainItem(code, 1) for code in sorted(objective_codes(ctx)))\n",
+     "    pass\n"),
+]
+# The one source of the codes the gear objective still builds toward (plan C
+# Task 1): the skill demand, a task's short drops and the grind's `wanted`
+# read it. Killed by tests/test_ai/test_xp_demand.py.
+OBJECTIVE_CODES_MUTATIONS = [
+    ("objective codes: the missing L* pieces are dropped",
+     "    return frozenset(piece.code for piece in ctx.gear_objective.missing) | ctx.objective_tools\n",
+     "    return ctx.objective_tools\n"),
+    ("objective codes: the L* loadout stands in for its missing pieces",
+     "    return frozenset(piece.code for piece in ctx.gear_objective.missing) | ctx.objective_tools\n",
+     "    return frozenset(ctx.gear_objective.loadout.values()) | ctx.objective_tools\n"),
+    ("objective codes: the T* tools are dropped beside L*",
+     "    return frozenset(piece.code for piece in ctx.gear_objective.missing) | ctx.objective_tools\n",
+     "    return frozenset(piece.code for piece in ctx.gear_objective.missing)\n"),
+    ("objective codes: the T* tools are dropped without an objective",
+     "        return ctx.objective_tools\n",
+     "        return frozenset()\n"),
+]
+# The tools of the demanded skills by one fixed point (ruling C1-a). Killed by
+# tests/test_ai/test_objective_demand.py.
+OBJECTIVE_DEMAND_MUTATIONS = [
+    ("fixed point: one pass, the tools' own skills never join",
+     "        if frozenset(code for code in tools.values() if code is not None) == found:\n",
+     "        if True:\n"),
+    ("fixed point: the tools are not roots",
+     "        ctx = replace(ctx, objective_tools=found)\n",
+     "        ctx = replace(ctx, objective_tools=frozenset())\n"),
+    ("fixed point: a skill's tool is looked up every pass",
+     "        fresh = sorted(skills - tools.keys())\n",
+     "        fresh = sorted(skills)\n"),
+    ("fixed point: the demand found is not returned",
+     "            return replace(ctx, skill_demand=skills, level_demanded=level)\n",
+     "            return ctx\n"),
+]
+# The grind's `wanted` credit reads the objective's missing pieces (plan C
+# Review Focus 2). Killed by tests/test_ai/test_skill_grind_target.py.
+GRIND_WANTED_MUTATIONS = [
+    ("grind wanted: a missing L* piece is not wanted",
+     "        c, wanted=(c.code in wanted or c.code == supply))\n",
+     "        c, wanted=(c.code == supply))\n"),
 ]
 TASK_XP_DEMANDED_MUTATIONS = [
     ("task xp: character XP counts without level demand",
@@ -8161,15 +8200,17 @@ CONSUMABLE_FLOOR_MUTATIONS = [
 ]
 CONSUMABLE_DEMAND_MUTATIONS = [
     ("floor demand: the shortfall seeds a DAG root again",
-     "                 for code in sorted(ctx.target_gear | ctx.near_term_targets) if code not in worn)\n"
+     "    roots.extend(ObtainItem(code, 1) for code in sorted(objective_codes(ctx)))\n"
      "    return roots\n",
-     "                 for code in sorted(ctx.target_gear | ctx.near_term_targets) if code not in worn)\n"
+     "    roots.extend(ObtainItem(code, 1) for code in sorted(objective_codes(ctx)))\n"
      "    roots.extend(ObtainItem(code, qty) for code, qty in ctx.supply_shortfall)\n"
      "    return roots\n"),
 ]
 SKILL_DEMAND_ORDER_MUTATIONS = [
     ("skill demand: the loadout is chosen without it",
-     "        ctx = replace(ctx, skill_demand=skills, level_demanded=level)\n"
+     "        ctx = objective_demand(\n"
+     "            self._last_decision.chosen_root if self._last_decision is not None else None,\n"
+     "            self.state, self.game_data, ctx)\n"
      "        ctx = replace(ctx, loadout=self._party_fight_loadout()\n",
      "        ctx = replace(ctx, loadout=self._party_fight_loadout()\n"),
 ]
@@ -9753,6 +9794,7 @@ _ALL_SRCS = [
     BAG_CLEAR_CORE_SRC, BAG_CLEAR_SRC,
     FIGHT_SECONDS_CORE_SRC, FIGHT_SECONDS_MODEL_SRC, DROP_CHANCE_CORE_SRC, DROP_OBSERVATIONS_SRC,
     LEARNED_DROPS_SRC, DROP_FIGHT_SELECTION_SRC,
+    OBJECTIVE_CODES_SRC, OBJECTIVE_DEMAND_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
     ROOT_DECISION_SRC, GATHER_DEMAND_SRC, TUI_APP_SRC,
     OBTAIN_ITEM_ROUTING_SRC, COOLDOWN_WAIT_SRC, EQUIP_VALUE_SRC,
@@ -12381,11 +12423,8 @@ GEAR_OBJECTIVE_CTX_MUTATIONS = [
      "            ctx.gear_keep if combat_monster == task_monster\n",
      "            ctx.gear_keep if True\n"),
     ("ctx: the new target's keep is built for the task's monster",
-     "            else gear_keep_for(state, game_data, history, combat_monster,\n",
-     "            else gear_keep_for(state, game_data, history, task_monster,\n"),
-    ("ctx: the new target's keep drops the in-flight upgrades",
-     "                               ctx.near_term_targets),\n",
-     "                               frozenset()),\n"),
+     "            else gear_keep_for(state, game_data, history, combat_monster),\n",
+     "            else gear_keep_for(state, game_data, history, task_monster),\n"),
     ("ctx: the L* pieces leave the keep (ruling AM)",
      "            objective),\n",
      "            None),\n"),
@@ -12513,9 +12552,10 @@ TASK_ACCEPT_MUTATIONS = [
     ("accept: the no-immediate-redraw gate is dropped",
      "    return not state.task_code and ctx.draw_owed\n",
      "    return not state.task_code\n"),
-    ("accept: target gear defers the draw again",
+    ("accept: a missing L* piece defers the draw again",
      "    return not state.task_code and ctx.draw_owed\n",
-     "    return not state.task_code and ctx.draw_owed and not ctx.target_gear\n"),
+     "    return (not state.task_code and ctx.draw_owed\n"
+     "            and (ctx.gear_objective is None or ctx.gear_objective.held))\n"),
 ]
 
 
@@ -14818,6 +14858,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_draw_owed.py", survivors)
     run_group(XP_DEMAND_SRC, XP_DEMAND_MUTATIONS,
               "tests/test_ai/test_xp_demand.py", survivors)
+    run_group(OBJECTIVE_CODES_SRC, OBJECTIVE_CODES_MUTATIONS,
+              "tests/test_ai/test_xp_demand.py", survivors)
+    run_group(OBJECTIVE_DEMAND_SRC, OBJECTIVE_DEMAND_MUTATIONS,
+              "tests/test_ai/test_objective_demand.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, GRIND_WANTED_MUTATIONS,
+              "tests/test_ai/test_skill_grind_target.py", survivors)
     run_group(TASK_WORTH_SRC, TASK_XP_DEMANDED_MUTATIONS,
               "tests/test_ai/test_task_worth.py", survivors)
     run_group(CONSUMABLE_FLOOR_CORE_SRC, CONSUMABLE_FLOOR_CORE_MUTATIONS,
