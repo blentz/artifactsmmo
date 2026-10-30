@@ -967,7 +967,7 @@ class StrategyArbiter:
         # (Phase 3-3), so a no-plan in the trace, the snapshot and the plan CLI
         # names why instead of reading as a bare `plan_len=0`.
         declined: list[str] = []
-        gen = decompose(goal, state, game_data, actions, ctx, declined)
+        gen = decompose(goal, state, game_data, actions, ctx, declined, store=self._history)
         self._attempt_declined = list(declined)
         for reason in declined:
             self.events.note(Mechanism.DECOMPOSE_DECLINE, repr(goal), reason)

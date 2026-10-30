@@ -981,12 +981,20 @@ def _per_unit(option: RouteOption) -> Fraction:
 
 
 def door_route(item: str, state: WorldState, game_data: GameData, ctx: SelectionContext,
-               *, policy: Policy, pocket: int) -> tuple[SourceKind, str] | None:
+               *, policy: Policy, pocket: int,
+               store: LearningStore | None) -> tuple[SourceKind, str] | None:
     """`(kind, venue)` of the route that prices one `item` when it is a route
     past a door (`_door_options`'s unlock), else None: the route the walk is
     told to try first (`ObtainModel.walk_graph`'s `prefer`, ruling T14e-1), so
-    the walk serves the route the price took."""
-    options = acquisition_options(item, state, game_data, ctx, None, policy=policy)
+    the walk serves the route the price took.
+
+    `store` is the cycle's learning store, the one the piece's price read
+    (`route.route_price`, `gear_objective._price`): with it the options hold
+    the climb and sibling routes (`route_options`) and the learned rates, so a
+    route the price took past a door is the one named, and a door route the
+    price did not take, under a climb or a sibling craft, is not (final
+    review I-2)."""
+    options = acquisition_options(item, state, game_data, ctx, store, policy=policy)
     _price, route = priced_route(item, 1, options, _owned_with_gold(state, pocket),
                                  frozenset({GOLD_CODE}))
     if route is None or not route.unlock.startswith("door:"):

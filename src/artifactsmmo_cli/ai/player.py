@@ -3154,7 +3154,8 @@ class GamePlayer:
         and the clear that serves them was never asked."""
         def answer(goal: Goal, at: WorldState) -> tuple[list[Action] | None, list[str]]:
             declined: list[str] = []
-            return decompose(goal, at, game_data, actions, ctx, declined), declined
+            return (decompose(goal, at, game_data, actions, ctx, declined, store=self.history),
+                    declined)
 
         def reason_of(plan: list[Action] | None, declined: list[str]) -> str | None:
             if plan is not None or not declined or hands_off_to_search(declined):

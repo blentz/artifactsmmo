@@ -268,9 +268,9 @@ def _grind(inventory: dict[str, int], grind_leg, prep=None,
     state = _state(gd, inventory)
     real_walk = craft_plan_gen._walk_plan
 
-    def walk(goal, *args):
+    def walk(goal, *args, **kwargs):
         if goal is not _GRIND_GOAL:
-            return real_walk(goal, *args)
+            return real_walk(goal, *args, **kwargs)
         return list(grind_leg) if isinstance(grind_leg, list) else [grind_leg]
 
     declined: list[str] = []
@@ -282,7 +282,8 @@ def _grind(inventory: dict[str, int], grind_leg, prep=None,
         else:
             with patch.object(craft_plan_gen, "decompose", side_effect=prep):
                 legs = craft_plan_gen._decompose_grind("gearcrafting", 5, state, gd, [_CHEESE],
-                                                       ctx, declined, frozenset(), True)
+                                                       ctx, declined, frozenset(), True,
+                                                       store=None)
     return legs, declined
 
 
@@ -319,7 +320,8 @@ class TestGrindFightLegPreps:
         assert _grind({"milk": CARRY}, _FIGHT, ctx=_eats()) == ([_FIGHT], [])
 
     def test_a_prep_decline_is_noted_and_the_fight_goes_ahead(self):
-        def declines(_goal, _state, _gd, _actions, _ctx, declined, subtasks, policy, outermost):
+        def declines(_goal, _state, _gd, _actions, _ctx, declined, subtasks, policy, outermost,
+                     store):
             # The prep is a NESTED decompose: it never clears for itself
             # (Task 13e re-review m2).
             assert outermost is False

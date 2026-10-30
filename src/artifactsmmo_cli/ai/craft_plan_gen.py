@@ -65,6 +65,7 @@ from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed, serves_a_demand
 from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY, heal_prep_goal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.gate import Door, Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, PIECE_POLICY, Policy
@@ -108,7 +109,8 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
               declined: list[str] | None = None, *,
               subtasks: bool = True,
               policy: Policy = DECOMPOSE_POLICY,
-              outermost: bool = True) -> list[Action] | None:
+              outermost: bool = True,
+              store: LearningStore | None = None) -> list[Action] | None:
     """The route-driven next-action producer: a plan for `goal` built by
     decomposing its recipe closure over the obtain model's routes, or None when
     decomposition cannot serve it (the caller may then search).
@@ -125,6 +127,15 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     macro that a second planner expanded at execution. A committed
     `UpgradeEquipmentGoal` is the walk's plan for its item, then the equip
     (`_decompose_upgrade`, Phase 2d-b).
+
+    `store` is the cycle's learning store, the same object the pricer read
+    (`route.route_price` and `gear_objective._price` pass `store=history`).
+    The walk's door choice (`door_price`) and its preferred route past a door
+    (`door_route`) price with it, so the walk opens the door and serves the
+    route the price charged: a key that needs a climb, and a climb or sibling
+    route that beats a door, are priced only with the store (final review
+    I-2). None (the default) is the store-less pricer's walk, as an audit
+    without a store prices.
 
     `declined`, when given, receives a named reason for every decline of a goal
     this producer serves (not for a goal shape it does not serve at all).
@@ -160,7 +171,8 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     full for the plan ahead. Live HAL 2026-10-11 21:35Z: 61/164 items in 17/20
     slots, `GatherMaterials(cooked_shrimp, 120, carry)` declined
     `bag_overflow:qty=181/164`, no guard fired, and the bot waited 12 cycles."""
-    walked = _dispatch(goal, state, game_data, actions, ctx, declined, subtasks, policy, outermost)
+    walked = _dispatch(goal, state, game_data, actions, ctx, declined, subtasks, policy, outermost,
+                       store=store)
     if walked is None:
         return None
     plan = _bridge_regions(walked, state, game_data, actions, declined)
@@ -231,18 +243,21 @@ def _bridge_regions(plan: list[Action], state: WorldState, game_data: GameData,
 
 def _dispatch(goal: Goal, state: WorldState, game_data: GameData, actions: list[Action],
               ctx: SelectionContext, declined: list[str] | None, subtasks: bool,
-              policy: Policy, outermost: bool) -> list[Action] | None:
+              policy: Policy, outermost: bool, *,
+              store: LearningStore | None) -> list[Action] | None:
     """`decompose` by goal shape, before the bag check. `outermost` is
     `decompose`'s: only the outermost grind may clear the bag for its prep."""
     if isinstance(goal, CraftPotionsGoal):
-        return _decompose_potions(goal, state, game_data, actions, ctx, declined)
+        return _decompose_potions(goal, state, game_data, actions, ctx, declined, store=store)
     if isinstance(goal, ReachSkillGoal):
         return _decompose_grind(goal.skill, goal.target_level, state, game_data, actions, ctx,
-                                declined, frozenset(), outermost)
+                                declined, frozenset(), outermost, store=store)
     if isinstance(goal, UpgradeEquipmentGoal):
-        return _decompose_upgrade(goal, state, game_data, actions, ctx, declined, subtasks)
+        return _decompose_upgrade(goal, state, game_data, actions, ctx, declined, subtasks,
+                                  store=store)
     if isinstance(goal, SupplyBankGoal):
-        return _decompose_supply(goal, state, game_data, actions, ctx, declined, policy)
+        return _decompose_supply(goal, state, game_data, actions, ctx, declined, policy,
+                                 store=store)
     if not isinstance(goal, GatherMaterialsGoal):
         return None
     if goal.fight_gold:
@@ -253,13 +268,16 @@ def _dispatch(goal: Goal, state: WorldState, game_data: GameData, actions: list[
         # priced it, and `PIECE_POLICY` prices GE fills), so D-E is lifted for
         # a piece's goal only: the price, not the walk, weighed the fill.
         return _walk_plan(goal, state, game_data, actions, ctx, declined, subtasks, frozenset(),
-                          replace(policy, fight_gold=True, ge_routes=True), frozenset({GOLD_CODE}))
-    return _walk_plan(goal, state, game_data, actions, ctx, declined, subtasks, frozenset(), policy)
+                          replace(policy, fight_gold=True, ge_routes=True), frozenset({GOLD_CODE}),
+                          store=store)
+    return _walk_plan(goal, state, game_data, actions, ctx, declined, subtasks, frozenset(), policy,
+                      store=store)
 
 
 def _decompose_supply(goal: SupplyBankGoal, state: WorldState, game_data: GameData,
                       actions: list[Action], ctx: SelectionContext,
-                      declined: list[str] | None, policy: Policy) -> list[Action] | None:
+                      declined: list[str] | None, policy: Policy, *,
+                      store: LearningStore | None) -> list[Action] | None:
     """A supply request as an obtain plan: the walk's plan for the units still
     to produce, then the deposit that banks them.
 
@@ -278,7 +296,7 @@ def _decompose_supply(goal: SupplyBankGoal, state: WorldState, game_data: GameDa
         return _decline(declined, "supply:no_bank")
     production_state, obtain, deficit = goal.production(state)
     legs = _walk_plan(obtain, production_state, game_data, actions, ctx, declined, False,
-                      frozenset(), policy)
+                      frozenset(), policy, store=store)
     if legs is None:
         return None
     deposit = DepositItemAction(code=goal.item_code, quantity=deficit, bank_location=bank_location,
@@ -292,7 +310,8 @@ def _decompose_supply(goal: SupplyBankGoal, state: WorldState, game_data: GameDa
 
 def _decompose_upgrade(goal: UpgradeEquipmentGoal, state: WorldState, game_data: GameData,
                        actions: list[Action], ctx: SelectionContext,
-                       declined: list[str] | None, subtasks: bool) -> list[Action] | None:
+                       declined: list[str] | None, subtasks: bool, *,
+                       store: LearningStore | None) -> list[Action] | None:
     """A committed upgrade as an obtain plan (Phase 2d-b): the walk's committed
     plan for one copy of the item (a banked copy is withdrawn; a skill gate
     opens as a sub-grind), then the equip that lands it in the slot.
@@ -320,7 +339,7 @@ def _decompose_upgrade(goal: UpgradeEquipmentGoal, state: WorldState, game_data:
         # which prices both, keeps that choice.
         return _decline(declined, f"upgrade:ge_venue:{item}")
     legs = _walk_plan(GatherMaterialsGoal(item, {item: 1}), state, game_data, actions, ctx,
-                      declined, subtasks, frozenset(), grey_exempt=frozenset({item}))
+                      declined, subtasks, frozenset(), grey_exempt=frozenset({item}), store=store)
     if legs is None:
         return None
     landed = state
@@ -332,7 +351,8 @@ def _decompose_upgrade(goal: UpgradeEquipmentGoal, state: WorldState, game_data:
 
 def _decompose_grind(skill: str, target_level: int, state: WorldState, game_data: GameData,
                      actions: list[Action], ctx: SelectionContext, declined: list[str] | None,
-                     grinding: frozenset[str], outermost: bool) -> list[Action] | None:
+                     grinding: frozenset[str], outermost: bool, *,
+                     store: LearningStore | None) -> list[Action] | None:
     """The legs of one grind cycle toward `target_level` in `skill` (Phase 2d-a):
     rung `grind_rung_goal` names (another rung, whose committed plan ends in the
     leg that earns), served by the one walk, whose own skill
@@ -352,7 +372,8 @@ def _decompose_grind(skill: str, target_level: int, state: WorldState, game_data
     rung = grind_rung_goal(skill, state, game_data, ctx)
     if rung is None:
         return _decline(declined, f"no_grind_rung:{skill}")
-    legs = _walk_plan(rung, state, game_data, actions, ctx, declined, True, grinding | {skill})
+    legs = _walk_plan(rung, state, game_data, actions, ctx, declined, True, grinding | {skill},
+                      store=store)
     if legs is None:
         return None
     fight = next((a for a in legs if isinstance(a, FightAction)), None)
@@ -368,13 +389,14 @@ def _decompose_grind(skill: str, target_level: int, state: WorldState, game_data
         if prep is not None:
             prep_declined: list[str] = []
             prep_legs = decompose(prep, state, game_data, actions, ctx, prep_declined,
-                                  subtasks=False, policy=HEAL_PREP_POLICY, outermost=False)
+                                  subtasks=False, policy=HEAL_PREP_POLICY, outermost=False,
+                                  store=store)
             if declined is not None:
                 declined.extend(f"heal_prep:{reason}" for reason in prep_declined)
             if prep_legs:
                 return [*prep_legs, *legs]
             if outermost and prep_declined and prep_declined[-1].startswith("bag_overflow:"):
-                cleared = _prep_after_clear(prep, legs, state, game_data, actions, ctx)
+                cleared = _prep_after_clear(prep, legs, state, game_data, actions, ctx, store)
                 if cleared is not None:
                     return cleared
     return legs
@@ -382,7 +404,8 @@ def _decompose_grind(skill: str, target_level: int, state: WorldState, game_data
 
 def _prep_after_clear(prep: GatherMaterialsGoal, legs: list[Action], state: WorldState,
                       game_data: GameData, actions: list[Action],
-                      ctx: SelectionContext) -> list[Action] | None:
+                      ctx: SelectionContext,
+                      store: LearningStore | None) -> list[Action] | None:
     """The prep and the grind's legs behind the full-bag clear, when the clear
     makes the WHOLE plan fit (ruling T14d-1): the prep's own walk (unjudged,
     under `HEAL_PREP_POLICY`) then `legs`, cleared against both, so no stack
@@ -391,7 +414,8 @@ def _prep_after_clear(prep: GatherMaterialsGoal, legs: list[Action], state: Worl
 
     The prep's walk cannot fail here: `bag_overflow` is declined only after
     the same walk, over the same inputs, returned its legs."""
-    walked = _dispatch(prep, state, game_data, actions, ctx, None, False, HEAL_PREP_POLICY, False)
+    walked = _dispatch(prep, state, game_data, actions, ctx, None, False, HEAL_PREP_POLICY, False,
+                       store=store)
     assert walked is not None, f"the prep {prep!r} walked once and not again"
     return _clear_first([*walked, *legs], state, game_data, actions, ctx)
 
@@ -401,7 +425,8 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
                declined: list[str] | None, subtasks: bool,
                grinding: frozenset[str],
                policy: Policy = DECOMPOSE_POLICY,
-               grey_exempt: frozenset[str] = frozenset()) -> list[Action] | None:
+               grey_exempt: frozenset[str] = frozenset(), *,
+               store: LearningStore | None) -> list[Action] | None:
     """The goal's plan from THE ONE WALK (Phase 2c-2b of
     docs/PLAN_decision_architecture_redesign.md): the legs `ObtainModel.walk`
     extracts under `DECOMPOSE_POLICY`, each as a concrete action.
@@ -476,16 +501,19 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
         the route the price took."""
         if code not in preferred:
             preferred[code] = door_route(code, state, game_data, ctx, policy=policy,
-                                         pocket=walked.gold)
+                                         pocket=walked.gold, store=store)
         return preferred[code]
 
     ranks: dict[Door, int] = {}
 
     def rank(door: Door) -> int:
         """The door's price (`door_price`, ruling T14e-m1), as the pricer
-        charged it when it took the cheapest door: the walk opens that one."""
+        charged it when it took the cheapest door: the walk opens that one.
+        Priced with the cycle's `store`, as the pricer prices it (a key that
+        needs a climb is finite only with the learned grind rate, final review
+        I-2), and so memoised by `door_price`'s episode cache."""
         if door not in ranks:
-            ranks[door] = door_price(door, state, game_data, ctx, None, policy, True, frozenset())
+            ranks[door] = door_price(door, state, game_data, ctx, store, policy, True, frozenset())
         return ranks[door]
 
     for item, needed in goal.needed.items():
@@ -511,11 +539,11 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
                 assert isinstance(gate, Gate)
                 if gate.kind is GateKind.SPAWN_KNOWN:
                     sub = _open_door(gate.doors[0], sim, game_data, actions, ctx, declined,
-                                     subtasks, grinding, policy)
+                                     subtasks, grinding, policy, store=store)
                 else:
                     assert gate.level is not None
                     sub = _decompose_grind(gate.subject, gate.level, sim, game_data, actions,
-                                           ctx, declined, grinding, False)
+                                           ctx, declined, grinding, False, store=store)
                 if sub is None:
                     if legs:
                         break
@@ -543,7 +571,8 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
 
 def _open_door(door: Door, state: WorldState, game_data: GameData, actions: list[Action],
                ctx: SelectionContext, declined: list[str] | None, subtasks: bool,
-               grinding: frozenset[str], policy: Policy) -> list[Action] | None:
+               grinding: frozenset[str], policy: Policy, *,
+               store: LearningStore | None) -> list[Action] | None:
     """The legs that open a key door the walk routed through (Task 14e,
     `ObtainModel.walk_graph`): the walk's own plan for the door's first
     shortfall (a key, or the fee's gold), held on top of the bag.
@@ -562,7 +591,8 @@ def _open_door(door: Door, state: WorldState, game_data: GameData, actions: list
     bag = (_walk_pocket(state, game_data, frozenset({code}), policy) if code == GOLD_CODE
            else state.inventory.get(code, 0))
     return _walk_plan(GatherMaterialsGoal(code, {code: bag + units}, fight_gold=policy.fight_gold),
-                      state, game_data, actions, ctx, declined, subtasks, grinding, policy)
+                      state, game_data, actions, ctx, declined, subtasks, grinding, policy,
+                      store=store)
 
 
 def _walk_pocket(state: WorldState, game_data: GameData, needed: frozenset[str],
@@ -703,7 +733,8 @@ def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool:
 
 def _decompose_potions(goal: CraftPotionsGoal, state: WorldState, game_data: GameData,
                        actions: list[Action], ctx: SelectionContext,
-                       declined: list[str] | None = None) -> list[Action] | None:
+                       declined: list[str] | None = None, *,
+                       store: LearningStore | None) -> list[Action] | None:
     """The potion batch as an obtain plan: the legs that put the batch in the
     bag, then the equip that lands it (Phase 2c-1 of
     docs/PLAN_decision_architecture_redesign.md).
@@ -729,7 +760,7 @@ def _decompose_potions(goal: CraftPotionsGoal, state: WorldState, game_data: Gam
             return [equip]
         return _decline(declined, f"potion:equip_inapplicable:{equip!r}")
     legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False,
-                     policy=POTION_POLICY, outermost=False)
+                     policy=POTION_POLICY, outermost=False, store=store)
     if legs is None:
         return None
     # The legs can be a PREFIX of the batch (a later leg with no action): the

@@ -101,7 +101,7 @@ class TestArbiter:
         is noted and no search follows."""
         arbiter = self._arbiter()
 
-        def declines(goal, state, game_data, actions, ctx, declined):
+        def declines(goal, state, game_data, actions, ctx, declined, store):
             declined.append("no_source:feather")
 
         with patch("artifactsmmo_cli.ai.strategy_driver.decompose", side_effect=declines):
@@ -122,7 +122,7 @@ class TestArbiter:
         """`upgrade:ge_venue` hands the goal to the search on purpose."""
         arbiter = self._arbiter()
 
-        def declines(goal, state, game_data, actions, ctx, declined):
+        def declines(goal, state, game_data, actions, ctx, declined, store):
             declined.append("upgrade:ge_venue:iron_boots")
 
         with patch("artifactsmmo_cli.ai.strategy_driver.decompose", side_effect=declines):

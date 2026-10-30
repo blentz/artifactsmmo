@@ -2367,8 +2367,8 @@ BAG_CLEAR_NESTED_MUTATIONS = [
      "                   if outermost else None)",
      "                   if True else None)"),
     ("bag clear: the heal prep is decomposed as the outermost call",
-     "                                  subtasks=False, policy=HEAL_PREP_POLICY, outermost=False)",
-     "                                  subtasks=False, policy=HEAL_PREP_POLICY, outermost=True)"),
+     "                                  subtasks=False, policy=HEAL_PREP_POLICY, outermost=False,\n",
+     "                                  subtasks=False, policy=HEAL_PREP_POLICY, outermost=True,\n"),
 ]
 BAG_CLEAR_PLAYER_MUTATIONS = [
     ("bag clear: the player never reads the 497",
@@ -4766,8 +4766,8 @@ PIECE_GE_ROUTING_MUTATIONS = [
 ]
 PIECE_GE_DECOMPOSE_MUTATIONS = [
     ("piece GE: a piece's walk has no GE fill (D-E kept)",
-     "                          replace(policy, fight_gold=True, ge_routes=True), frozenset({GOLD_CODE}))",
-     "                          replace(policy, fight_gold=True), frozenset({GOLD_CODE}))"),
+     "                          replace(policy, fight_gold=True, ge_routes=True), frozenset({GOLD_CODE}),\n",
+     "                          replace(policy, fight_gold=True), frozenset({GOLD_CODE}),\n"),
     ("piece GE: a GE leg maps to no action",
      "    if route.kind is SourceKind.GE_FILL:\n",
      "    if False:\n"),
@@ -4957,8 +4957,8 @@ GRIND_PREP_MUTATIONS = [
      "    fight = next((a for a in legs if isinstance(a, FightAction)), None)",
      "    fight = legs[0] if isinstance(legs[0], FightAction) else None"),
     ("craft_plan_gen: the heal prep is walked under its selection policy",
-     "                                  subtasks=False, policy=HEAL_PREP_POLICY, outermost=False)",
-     "                                  subtasks=False, outermost=False)"),
+     "                                  subtasks=False, policy=HEAL_PREP_POLICY, outermost=False,\n",
+     "                                  subtasks=False, outermost=False,\n"),
     ("craft_plan_gen: a prep decline is not noted",
      "                declined.extend(f\"heal_prep:{reason}\" for reason in prep_declined)",
      "                pass"),
@@ -5224,8 +5224,8 @@ WALK_GREY_MUTATIONS = [
 # upgrade drops only off a grey ogre).
 UPGRADE_GREY_EXEMPT_MUTATIONS = [
     ("craft_plan_gen: an upgrade's own target obeys the grey directive",
-     "                      declined, subtasks, frozenset(), grey_exempt=frozenset({item}))",
-     "                      declined, subtasks, frozenset())"),
+     "                      declined, subtasks, frozenset(), grey_exempt=frozenset({item}), store=store)",
+     "                      declined, subtasks, frozenset(), store=store)"),
 ]
 # Killed by tests/test_ai/scenarios/test_grind_grey_material.py.
 WALK_GREY_POLICY_MUTATIONS = [
@@ -5243,17 +5243,17 @@ WALK_GRAPH_GREY_MUTATIONS = [
 POTION_DECOMPOSE_POLICY_MUTATIONS = [
     ("craft_plan_gen: the potion batch is walked under its selection policy",
      "    legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False,\n"
-     "                     policy=POTION_POLICY, outermost=False)",
+     "                     policy=POTION_POLICY, outermost=False, store=store)",
      "    legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False,\n"
-     "                     outermost=False)"),
+     "                     outermost=False, store=store)"),
 ]
 # Plan B Task 14d (ledger 234): the potion batch's obtain is a nested decompose,
 # so an overflowing batch declines rather than clearing against its own legs.
 # Killed by tests/test_ai/test_decompose_potions.py.
 POTION_NESTED_MUTATIONS = [
     ("craft_plan_gen: the potion batch's obtain is decomposed as the outermost call",
-     "                     policy=POTION_POLICY, outermost=False)",
-     "                     policy=POTION_POLICY, outermost=True)"),
+     "                     policy=POTION_POLICY, outermost=False, store=store)",
+     "                     policy=POTION_POLICY, outermost=True, store=store)"),
 ]
 FOOD_PRODUCER_MUTATIONS = [
     ("food producer: no food has an owner",
@@ -5392,7 +5392,8 @@ UPGRADE_DECOMPOSE_MUTATIONS = [
      "    if game_data.ge_best_sell_order(item) is not None:\n        # The book sells it",
      "    if False:\n        # The book sells it"),
     ("craft_plan_gen: an upgrade is never decomposed (A* only)",
-     "        return _decompose_upgrade(goal, state, game_data, actions, ctx, declined, subtasks)",
+     "        return _decompose_upgrade(goal, state, game_data, actions, ctx, declined, subtasks,\n"
+     "                                  store=store)",
      "        return None"),
 ]
 # The walk adapter (`ObtainModel.walk_graph`). Killed by
@@ -8886,6 +8887,40 @@ KEY_DOOR_RANK_PLAN_MUTATIONS = [
      "                            frozenset(goal.needed), grey_ok, prefer, rank)\n",
      "        answer = model.walk(item, qty, policy, goal.exclude_recycle, openable,\n"
      "                            frozenset(goal.needed), grey_ok, prefer)\n"),
+    # Final review I-2: the walk prices its doors and its preferred route
+    # with the cycle's store, as the pricer does. Killed by
+    # test_a_door_whose_key_needs_a_climb_is_the_door_the_walk_opens and
+    # test_the_walk_takes_the_climb_the_pricer_took_over_a_door.
+    ("door rank: the walk ranks its doors without the store (final review I-2)",
+     "            ranks[door] = door_price(door, state, game_data, ctx, store, policy, True, frozenset())\n",
+     "            ranks[door] = door_price(door, state, game_data, ctx, None, policy, True, frozenset())\n"),
+    ("door route: the walk's preference reads no store (final review I-2)",
+     "                                         pocket=walked.gold, store=store)\n",
+     "                                         pocket=walked.gold, store=None)\n"),
+    ("decompose: the store is not handed to the walk (final review I-2)",
+     "    walked = _dispatch(goal, state, game_data, actions, ctx, declined, subtasks, policy, outermost,\n"
+     "                       store=store)\n",
+     "    walked = _dispatch(goal, state, game_data, actions, ctx, declined, subtasks, policy, outermost,\n"
+     "                       store=None)\n"),
+]
+# Final review I-2: `door_route` prices with the store it is handed.
+KEY_DOOR_ROUTE_STORE_MUTATIONS = [
+    ("door route: the options are priced without the store (final review I-2)",
+     "    options = acquisition_options(item, state, game_data, ctx, store, policy=policy)\n"
+     "    _price, route = priced_route(",
+     "    options = acquisition_options(item, state, game_data, ctx, None, policy=policy)\n"
+     "    _price, route = priced_route("),
+]
+# Final review I-2: both production callers hand the walk the cycle's store.
+KEY_DOOR_STORE_ARBITER_MUTATIONS = [
+    ("arbiter: the fast path walks without the store (final review I-2)",
+     "        gen = decompose(goal, state, game_data, actions, ctx, declined, store=self._history)\n",
+     "        gen = decompose(goal, state, game_data, actions, ctx, declined, store=None)\n"),
+]
+KEY_DOOR_STORE_PLAYER_MUTATIONS = [
+    ("player: the step answer walks without the store (final review I-2)",
+     "            return (decompose(goal, at, game_data, actions, ctx, declined, store=self.history),\n",
+     "            return (decompose(goal, at, game_data, actions, ctx, declined, store=None),\n"),
 ]
 # Ruling T14e-m6: doors at any depth. Killed by
 # tests/test_ai/test_key_door_route.py.
@@ -14583,6 +14618,12 @@ def _collect_all_groups() -> None:
     run_group(OBTAIN_MODEL_SRC, KEY_DOOR_RANK_WALK_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, KEY_DOOR_RANK_PLAN_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(ACQUISITION_COST_SRC, KEY_DOOR_ROUTE_STORE_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, KEY_DOOR_STORE_ARBITER_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(PLAYER_SRC, KEY_DOOR_STORE_PLAYER_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(REGION_EDGES_SRC, KEY_DOOR_CHAIN_REACH_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)

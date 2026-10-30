@@ -1944,7 +1944,7 @@ class TestDecomposeSupply:
     def test_the_walk_then_the_deposit_once_it_lands(self, monkeypatch) -> None:
         seen = {}
 
-        def walk(goal, state, gd, actions, ctx, declined, subtasks, grinding, policy):  # type: ignore[no-untyped-def]
+        def walk(goal, state, gd, actions, ctx, declined, subtasks, grinding, policy, store):  # type: ignore[no-untyped-def]
             seen.update(target=goal._target_item, needed=dict(goal.needed), subtasks=subtasks,
                         bank=dict(state.bank_items or {}))
             return [_Lands("cooked_rat_meat", 4)]
@@ -1960,7 +1960,7 @@ class TestDecomposeSupply:
                         "subtasks": False, "bank": {"raw_rat_meat": 2}}
 
     def test_no_deposit_into_an_inaccessible_bank(self, monkeypatch) -> None:
-        monkeypatch.setattr(cpg, "_walk_plan", lambda *a: [_Lands("cooked_rat_meat", 4)])
+        monkeypatch.setattr(cpg, "_walk_plan", lambda *a, **k: [_Lands("cooked_rat_meat", 4)])
         goal = SupplyBankGoal("cooked_rat_meat", 10, 20)
         gated = dataclasses.replace(NO_DROPS_CONTEXT, bank_accessible=False)
         plan = cpg.decompose(goal, make_state(bank_items={"cooked_rat_meat": 6}), self._gd(), [],
@@ -1968,7 +1968,7 @@ class TestDecomposeSupply:
         assert plan is not None and [type(a).__name__ for a in plan] == ["_Lands"]
 
     def test_legs_alone_while_they_have_not_landed_the_batch(self, monkeypatch) -> None:
-        monkeypatch.setattr(cpg, "_walk_plan", lambda *a: [_Lands("cooked_rat_meat", 1)])
+        monkeypatch.setattr(cpg, "_walk_plan", lambda *a, **k: [_Lands("cooked_rat_meat", 1)])
         goal = SupplyBankGoal("cooked_rat_meat", 10, 20)
         plan = cpg.decompose(goal, make_state(bank_items={}), self._gd(), [], NO_DROPS_CONTEXT, [])
         assert plan is not None and [type(a).__name__ for a in plan] == ["_Lands"]
@@ -1983,7 +1983,7 @@ class TestDecomposeSupply:
         assert cpg.decompose(goal, make_state(bank_items={}), GameData(), [],
                              NO_DROPS_CONTEXT, declined) is None
         assert declined == ["supply:no_bank"]
-        monkeypatch.setattr(cpg, "_walk_plan", lambda *a: None)
+        monkeypatch.setattr(cpg, "_walk_plan", lambda *a, **k: None)
         assert cpg.decompose(goal, make_state(bank_items={}), self._gd(), [],
                              NO_DROPS_CONTEXT, []) is None
 
@@ -2087,7 +2087,7 @@ class TestBridgeRegions:
 
     def test_decompose_bridges_every_plan_it_returns(self, monkeypatch) -> None:
         fight = _Leg("Fight(rat)", "interior")
-        monkeypatch.setattr(cpg, "_walk_plan", lambda *a: [fight])
+        monkeypatch.setattr(cpg, "_walk_plan", lambda *a, **k: [fight])
         gd = GameData()
         gd.world.bank_tile = (4, 0)
         gd._bank_capacity = 100
@@ -2119,7 +2119,7 @@ class TestBridgeRegions:
         assert [repr(a) for a in route] == ["Edge(overworld->mine)", "Edge(mine->tomb)"]
 
     def test_decompose_declines_a_plan_it_cannot_bridge(self, monkeypatch) -> None:
-        monkeypatch.setattr(cpg, "_walk_plan", lambda *a: [_Leg("Fight(rat)", "interior")])
+        monkeypatch.setattr(cpg, "_walk_plan", lambda *a, **k: [_Leg("Fight(rat)", "interior")])
         gd = GameData()
         gd.world.bank_tile = (4, 0)
         gd._bank_capacity = 100

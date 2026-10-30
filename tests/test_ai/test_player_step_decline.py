@@ -23,7 +23,7 @@ def _decline(goal: object, decompose_result: object, reasons: list[str]) -> str 
     player._offline_timing = committed_timing()
     player._learned_drops = LearnedDrops.empty()
 
-    def fake_decompose(g, state, game_data, actions, ctx, declined):
+    def fake_decompose(g, state, game_data, actions, ctx, declined, store):
         declined.extend(reasons)
         return decompose_result
 
@@ -72,7 +72,7 @@ def _full_bag(roomy_result: object, roomy_reasons: list[str], *, needs: bool = T
     player._learned_drops = LearnedDrops.empty()
     state = make_state(inventory={"copper_ore": 1})
 
-    def fake_decompose(g, at, game_data, actions, ctx, declined):
+    def fake_decompose(g, at, game_data, actions, ctx, declined, store):
         if at.inventory_slots_max > state.inventory_slots_max:
             declined.extend(roomy_reasons)
             return roomy_result
