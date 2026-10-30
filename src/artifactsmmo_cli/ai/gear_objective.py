@@ -469,6 +469,14 @@ def _gain(state: WorldState, target: WorldState, game_data: GameData, monster: s
                         loop)
 
 
+def _candidate_ctx(ctx: SelectionContext, monster: str, loadout: dict[str, str],
+                   rate: Fraction, fighter: WorldState) -> SelectionContext:
+    """`ctx` carrying `monster`'s provisional objective (no pieces yet): what
+    the pricer reads `m*` and its fighter from while the objective is still
+    being chosen (`attach_gear_objective` prices before it attaches one)."""
+    return replace(ctx, gear_objective=GearObjective(monster, loadout, rate, (), fighter=fighter))
+
+
 def _price(state: WorldState, game_data: GameData, ctx: SelectionContext,
            history: LearningStore | None, code: str) -> tuple[Fraction, SourceKind | None]:
     """`(price, route)` of wearing `code`: its `cheapest_route` under
@@ -522,7 +530,13 @@ def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext
                    _gain(state, target, game_data, code, food, loop, best[0], at))
                   for slot, item, at in _missing(game_data, code, target, loadouts[code], own)]
         pieces_of[code] = [piece for piece in gained if piece[2] > 0]
-    prices = {code: [_price(state, game_data, ctx, history, item)
+    # Each candidate's pieces are priced with ITS objective on the context, so
+    # the gold they spend is charged at what a second of fighting it in its
+    # `L*` earns (`gold_rate.gold_per_second`, ruling AL's `m*` fallback,
+    # S-046): the rate the cycle prices gold at once that candidate is `m*`.
+    prices = {code: [_price(state, game_data, _candidate_ctx(ctx, code, loadouts[code], best[0],
+                                                             targets[code][0]),
+                            history, item)
                      for _, item, _ in pieces_of[code]] for code in tied}
     # `min` keeps the first of equal totals: catalogue order, as `_candidates` lists.
     monster = min(tied, key=lambda code: sum((price for price, _ in prices[code]),

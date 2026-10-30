@@ -1049,13 +1049,18 @@ def test_l30_rune_gold_buy_chain_plans() -> None:
     RE-DERIVED spec 2026-10-18 §2.8: each gain is now `R` over the owned item
     for the slot. The rune (gain 0.041 at a price of 3) out-gains the sword
     (0.838 at 2059) per unit of price, so it heads the walk and the cycle
-    plans its buy."""
+    plans its buy.
+
+    RE-DERIVED S-046 (USER 2026-10-30): spent gold costs the time to earn it
+    again, so the rune's price is no longer 3 but 3 plus its 20,000 gold in
+    `m*`'s fight time. Per unit of price the sword out-gains it and heads the
+    walk; the rune stays an alternative, and on its turn its route is still the
+    one-step gold buy."""
     report = _run("l30_rune_fill")
     rune = ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")
-    assert report.decision.chosen_root == rune
-    assert report.decision.fallback_roots[0] == ObtainItem(
+    assert report.decision.chosen_root == ObtainItem(
         code="death_knight_sword", quantity=1, slot="weapon_slot")
-    assert [repr(a) for a in report.plan] == ["NpcBuy(lifesteal_rune×1@rune_vendor)"]
+    assert rune in report.decision.fallback_roots
     goal, plan, _declined = _plan_root("l30_rune_fill", rune)
     assert goal.startswith("GatherMaterials(lifesteal_rune"), goal
     assert any(a.startswith("NpcBuy(lifesteal_rune") for a in plan), plan

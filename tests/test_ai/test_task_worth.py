@@ -7,6 +7,7 @@ from fractions import Fraction
 
 import pytest
 
+import artifactsmmo_cli.ai.gold_rate as gold_rate
 import artifactsmmo_cli.ai.task_worth as mod
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -37,6 +38,9 @@ def _fixed_fight(monkeypatch):  # type: ignore[no-untyped-def]
     monkeypatch.setattr(mod, "expected_damage_per_fight", lambda s, g, m: 0)
     monkeypatch.setattr(mod, "walk_seconds", lambda *_args: Fraction(10))
     monkeypatch.setattr(mod, "cycles_per_kill", lambda dmg, hp, seconds: 2.0)
+    # `fight_gold_rate` lives in `gold_rate` now (S-046: the pricer reads it).
+    monkeypatch.setattr(gold_rate, "expected_damage_per_fight", lambda s, g, m: 0)
+    monkeypatch.setattr(gold_rate, "cycles_per_kill", lambda dmg, hp, seconds: 2.0)
     monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: None)
     monkeypatch.setattr(mod, "task_advances_progression", lambda s, g: False)
 

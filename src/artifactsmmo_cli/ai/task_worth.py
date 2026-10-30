@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gold_rate import fight_gold_rate
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -34,16 +35,6 @@ from artifactsmmo_cli.ai.task_alignment import task_advances_progression
 from artifactsmmo_cli.ai.task_horizon import HORIZON_OUT_OF_REACH, resolve_task_horizon
 from artifactsmmo_cli.ai.task_worth_core import TaskWorth, TaskWorthInputs, cancel_due, draw_due, task_worth
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
-
-
-def fight_gold_rate(state: WorldState, game_data: GameData, monster: str,
-                    fight_seconds: Fraction) -> Fraction:
-    """Mean fight gold per cycle of farming `monster`, each fight lasting
-    `fight_seconds` (its rests priced in fights of that length)."""
-    gold = Fraction(game_data.monster_min_gold(monster) + game_data.monster_max_gold(monster), 2)
-    per_kill = Fraction(cycles_per_kill(expected_damage_per_fight(state, game_data, monster),
-                                        state.max_hp, fight_seconds))
-    return gold / per_kill
 
 
 def short_items(state: WorldState, game_data: GameData, ctx: SelectionContext) -> frozenset[str]:

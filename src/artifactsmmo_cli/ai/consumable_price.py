@@ -19,7 +19,7 @@ this module only reads its four inputs. Not wired into any decision yet.
   `acquisition_cost.npc_price_of` / `ge_price_of` exactly as the walk prices
   them. A vendor charging another currency is not a gold price.
 * GOLD RATE — the grind target's fight gold per loop cycle
-  (`task_worth.fight_gold_rate` over `ctx.combat_monster`, the rate task worth
+  (`gold_rate.fight_gold_rate` over `ctx.combat_monster`, the rate task worth
   reads) over that fight's learned seconds, fought in `L*(m*)` (ruling CB); 0
   with no grind target, which makes buying unpriceable."""
 
@@ -29,13 +29,12 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, ge_price_of, npc_price_of
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.consumable_price_core import consumable_price
-from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gold_rate import gold_per_second
 from artifactsmmo_cli.ai.held_stock import held_count
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.task_worth import fight_gold_rate
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 
@@ -61,33 +60,6 @@ def buy_gold(code: str, state: WorldState, game_data: GameData,
         elif source.kind is SourceKind.GE_FILL:
             prices.append(ge_price_of(code, source.code, game_data))
     return min(prices) if prices else None
-
-
-def gold_per_second(state: WorldState, game_data: GameData, ctx: SelectionContext) -> Fraction:
-    """The grind target's fight gold per second; while there is none, the gear
-    objective's `m*`; 0 with neither.
-
-    The `m*` fallback is ruling AL (final review F5): while a piece of `L*` is
-    missing `farm_target` names no grind target, for days, and a 0 rate left
-    every buy-only consumable unpriced for the acquisition fights it stocks.
-    The rate is a PRICING input (what a second of fighting earns), not a fight
-    choice, so reading `m*` here fights nothing.
-
-    A second of fighting is one in `L*(m*)` (ruling CB): the objective's own
-    fighter, wearing the loadout the rate is earned in; the character as it is
-    without an objective."""
-    monster = ctx.combat_monster
-    if monster is None and ctx.gear_objective is not None:
-        monster = ctx.gear_objective.monster
-    if monster is None:
-        return Fraction(0)
-    fighter = state
-    if ctx.gear_objective is not None:
-        if ctx.gear_objective.fighter is None:
-            raise ValueError("the gear objective carries no fighter to price fight gold in")
-        fighter = ctx.gear_objective.fighter
-    seconds = walk_seconds(fighter, game_data, monster, (), ctx.timing())
-    return fight_gold_rate(fighter, game_data, monster, seconds) / seconds
 
 
 def replacement_price_of(code: str, state: WorldState, game_data: GameData,

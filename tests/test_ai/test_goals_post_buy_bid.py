@@ -8,7 +8,7 @@ the established construction pattern for these pure `ai/` modules (see
 """
 
 from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
 from artifactsmmo_cli.ai.goals.post_buy_bid import POST_BUY_BID_VALUE, PostBuyBidGoal
@@ -129,6 +129,16 @@ def test_no_candidate_when_fast_to_craft():
     # plank <- wood x2, deterministic gather (~17s << horizon) -> should_bid False.
     gd = _gd(recipes={"plank": {"wood": 2}}, resource_drops={"tree": "wood"},
              npc_stock={"shop": {"plank": 100}}, ge_buy_orders={"plank": ("b", 40, 5)})
+    # The tree, its skill, the plank's craft skill and the workshop make the
+    # craft a real route. Before S-046 the cheap route here was the 100-gold
+    # NPC buy at no cost; with no grind target gold is now unpriceable.
+    gd._item_stats = {
+        "plank": ItemStats(code="plank", level=1, type_="resource", subtype="plank",
+                           crafting_skill="woodcutting", crafting_level=1),
+        "wood": ItemStats(code="wood", level=1, type_="resource", subtype="woodcutting")}
+    gd._resource_skill = {"tree": ("woodcutting", 1)}
+    gd._resource_locations = {"tree": [(1, 1)]}
+    gd._workshop_locations = {"woodcutting": (2, 2)}
     assert ge_bid_candidates(_state(), gd, _ctx({"plank": 1}), TTL_CYCLES) == []
 
 

@@ -20,6 +20,7 @@ import time
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from fractions import Fraction
+from math import ceil
 from pathlib import Path
 
 import pytest
@@ -50,6 +51,7 @@ from artifactsmmo_cli.ai.acquisition_cost_core import (
 from artifactsmmo_cli.ai.drop_leg import DropLeg
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.gear_objective import _price
+from artifactsmmo_cli.ai.gold_rate import gold_spend_actions
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.drop_observations import fleet_k, learned_drops
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -659,17 +661,37 @@ def test_equip_adds_exactly_one_action(state, game_data) -> None:
     assert with_equip == without + 1
 
 
+EARNER = "highwayman"
+"""A gold-paying monster the scenario character can be given as its grind
+target: what a second of fighting it earns is what a spent gold piece costs
+(S-046, `gold_rate.gold_spend_actions`)."""
+
+
+def _earning(state):  # type: ignore[no-untyped-def]
+    """The timed context with a grind target, and the actions one spent gold
+    piece costs in it."""
+    ctx = replace(TIMED_NO_PROFILE_CONTEXT, combat_monster=EARNER)
+    return ctx, gold_spend_actions(state, load_bundle_game_data(_BUNDLE), ctx)
+
+
 def test_a_gold_priced_vendor_route_is_paid_for_with_gold(state, game_data)\
         -> None:
     """THE WALL. A BUY route carries `inputs={"gold": price}`, nothing in the
     game obtains gold, and the walk charges an unobtainable input
     `UNOBTAINABLE_PER_UNIT` PER UNIT — so a 10,000-gold rune was priced at ten
     BILLION actions and no gold-priced vendor item in the game could ever be
-    chosen. Crediting the pocket is what pays it down."""
+    chosen. Crediting the pocket is what pays it down.
+
+    S-046: the pocket's gold is credited at what it takes to EARN it again
+    (the grind target's gold per second over the learned action seconds), so
+    the rune costs the hop, the purchase and its 10,000 gold's fights. With no
+    grind target the rate is unknown and the gold unpriceable."""
     rich = replace(state, inventory={}, gold=50_000)
-    cost = acquisition_actions("healing_rune", 1, rich, game_data,
-                               TIMED_NO_PROFILE_CONTEXT, equip=False)
-    assert cost == 2      # hop to the vendor, one purchase
+    earning, per_gold = _earning(rich)
+    cost = acquisition_actions("healing_rune", 1, rich, game_data, earning, equip=False)
+    assert cost == 2 + ceil(10_000 * per_gold)
+    assert acquisition_actions("healing_rune", 1, rich, game_data,
+                               TIMED_NO_PROFILE_CONTEXT, equip=False) == UNOBTAINABLE_PER_UNIT
 
     # ...and the shortfall beyond the pocket is charged a million per gold piece,
     # which used to price this route at 10,000 * UNOBTAINABLE_PER_UNIT — ABOVE
@@ -679,7 +701,7 @@ def test_a_gold_priced_vendor_route_is_paid_for_with_gold(state, game_data)\
     # prices at exactly what a missing one does, and never worse.
     broke = replace(state, inventory={}, gold=0)
     unaffordable = acquisition_actions("healing_rune", 1, broke, game_data,
-                                       TIMED_NO_PROFILE_CONTEXT, equip=False)
+                                       earning, equip=False)
     assert unaffordable == UNOBTAINABLE_PER_UNIT, unaffordable
 
 
@@ -706,10 +728,12 @@ def test_gold_is_obtained_by_selling_what_the_authority_licenses(
     for being a tenth short. With diamonds in the bag at 5,000 apiece from a
     buyer whose window is open, the shortfall is one sale."""
     short = replace(_selling(state, game_data, diamond=4), gold=9_000)
-    cost = acquisition_actions("healing_rune", 1, short, game_data,
-                               TIMED_NO_PROFILE_CONTEXT, equip=False)
+    earning, per_gold = _earning(short)
+    cost = acquisition_actions("healing_rune", 1, short, game_data, earning, equip=False)
     assert cost < UNOBTAINABLE_PER_UNIT, cost
-    assert cost == 4, cost     # hop + sale to raise the 1,000, then hop + buy
+    # hop + sale to raise the 1,000, then hop + buy, and the 9,000 held gold
+    # spent at its earning time (S-046); the sold gold was earned by the sale.
+    assert cost == 4 + ceil(9_000 * per_gold), cost
 
 
 def test_the_sale_consumes_the_copy_it_sells(state, game_data) -> None:
@@ -765,10 +789,11 @@ def test_gold_is_consumed_by_the_route_that_spends_it(state, game_data) -> None:
     """Gold is credited as a holding, so it is also SPENT like one: two runes at
     10,000 each are not affordable out of 15,000."""
     one = replace(state, inventory={}, gold=15_000)
+    earning, per_gold = _earning(one)
     assert acquisition_actions("healing_rune", 1, one, game_data,
-                               TIMED_NO_PROFILE_CONTEXT, equip=False) == 2
+                               earning, equip=False) == 2 + ceil(10_000 * per_gold)
     assert acquisition_actions("healing_rune", 2, one, game_data,
-                               TIMED_NO_PROFILE_CONTEXT, equip=False) \
+                               earning, equip=False) \
         >= UNOBTAINABLE_PER_UNIT
 
 
@@ -780,14 +805,18 @@ def test_banked_gold_is_a_priced_withdraw_not_a_holding(state, game_data) -> Non
     the buy, since a vendor is paid from the pocket (the HTTP 492 hotfix)."""
     banked_only = replace(state, inventory={}, gold=0, bank_gold=50_000)
     in_pocket = replace(state, inventory={}, gold=50_000, bank_gold=0)
+    earning, per_gold = _earning(in_pocket)
+    spent = ceil(10_000 * per_gold)
+    # ONE RULE (S-046): the same 10,000 gold costs the same to spend from the
+    # pocket or the bank; the bank adds only its withdraw and hop.
     assert acquisition_actions("healing_rune", 1, in_pocket, game_data,
-                               TIMED_NO_PROFILE_CONTEXT, equip=False) == 2
+                               earning, equip=False) == 2 + spent
     assert acquisition_actions("healing_rune", 1, banked_only, game_data,
-                               TIMED_NO_PROFILE_CONTEXT, equip=False) == 2 + 2
+                               earning, equip=False) == 2 + 2 + spent
     # An unread bank is UNKNOWN, not rich: it withdraws nothing.
     unread = replace(banked_only, bank_gold=None)
     assert acquisition_actions("healing_rune", 1, unread, game_data,
-                               TIMED_NO_PROFILE_CONTEXT, equip=False) \
+                               earning, equip=False) \
         >= UNOBTAINABLE_PER_UNIT
 
 

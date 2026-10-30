@@ -77,7 +77,7 @@ from artifactsmmo_cli.ai.scenario import (
     load_bundle_game_data,
     scenario_state,
 )
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -329,7 +329,8 @@ def _granted(state: WorldState, codes: tuple[str, ...]) -> WorldState:
 
 
 def charged_currencies(root: MetaGoal, state: WorldState, game_data: GameData,
-                       currencies: tuple[str, ...]) -> dict[str, tuple[int, int]]:
+                       currencies: tuple[str, ...],
+                       ctx: SelectionContext) -> dict[str, tuple[int, int]]:
     """`{currency: (base_price, granted_price)}` for every currency the price
     walk charged AT `UNOBTAINABLE_PER_UNIT` while pricing `root`.
 
@@ -355,13 +356,12 @@ def charged_currencies(root: MetaGoal, state: WorldState, game_data: GameData,
     question per scenario, granting every currency at once; a root that crosses
     only then is a real gap this probe cannot attribute, and is reported as
     `O7_MULTI_CURRENCY_WALL` rather than passed over."""
-    base = route_price(root, state, game_data, _OFFLINE_CONTEXT, None)
+    base = route_price(root, state, game_data, ctx, None)
     out: dict[str, tuple[int, int]] = {}
     if base < UNOBTAINABLE_PER_UNIT:
         return out
     for code in currencies:
-        price = route_price(root, _granted(state, (code,)), game_data,
-                            _OFFLINE_CONTEXT, None)
+        price = route_price(root, _granted(state, (code,)), game_data, ctx, None)
         if price < UNOBTAINABLE_PER_UNIT:
             out[code] = (base, price)
     return out
@@ -378,7 +378,7 @@ one gold cannot fix."""
 
 
 def gold_charge(root: MetaGoal, state: WorldState,
-                game_data: GameData) -> tuple[int, int] | None:
+                game_data: GameData, ctx: SelectionContext) -> tuple[int, int] | None:
     """`(base_price, granted_price)` when `root` is walled on MONEY, else None.
 
     The same crossing test `charged_currencies` applies to item currencies —
@@ -386,18 +386,18 @@ def gold_charge(root: MetaGoal, state: WorldState,
     `state.gold`, which is where gold lives. That difference is the entire
     reason gold needed its own row: it is never an entry in `state.inventory`,
     so no amount of granting item currencies can reveal it."""
-    base = route_price(root, state, game_data, _OFFLINE_CONTEXT, None)
+    base = route_price(root, state, game_data, ctx, None)
     if base < UNOBTAINABLE_PER_UNIT:
         return None
     rich = dataclasses.replace(state, gold=state.gold + GOLD_GRANT)
-    price = route_price(root, rich, game_data, _OFFLINE_CONTEXT, None)
+    price = route_price(root, rich, game_data, ctx, None)
     if price >= UNOBTAINABLE_PER_UNIT:
         return None
     return (base, price)
 
 
 def unattributed_wall(root: MetaGoal, state: WorldState, game_data: GameData,
-                      currencies: tuple[str, ...]) -> bool:
+                      currencies: tuple[str, ...], ctx: SelectionContext) -> bool:
     """Is `root` unobtainable for a CURRENCY reason no single currency explains?
 
     True when the root prices as unobtainable, no one currency crosses the
@@ -410,11 +410,10 @@ def unattributed_wall(root: MetaGoal, state: WorldState, game_data: GameData,
     A root walled on a non-currency leaf — the ordinary case, and most of the
     grid — is unaffected: granting every currency leaves it exactly as
     unobtainable as it was."""
-    base = route_price(root, state, game_data, _OFFLINE_CONTEXT, None)
+    base = route_price(root, state, game_data, ctx, None)
     if base < UNOBTAINABLE_PER_UNIT:
         return False
-    everything = route_price(root, _granted(state, currencies), game_data,
-                             _OFFLINE_CONTEXT, None)
+    everything = route_price(root, _granted(state, currencies), game_data, ctx, None)
     return everything < UNOBTAINABLE_PER_UNIT
 
 
@@ -436,14 +435,16 @@ def declared_world(scenario: ScenarioCharacter, bundle: Path,
 
 def _candidate_cells(name: str, candidate: MetaGoal, is_resolved_root: bool,
                      state: WorldState, game_data: GameData,
-                     currencies: tuple[str, ...]) -> list[CurrencyResult]:
-    """One cell per currency, plus the gold row, for one offered root."""
-    charges = charged_currencies(candidate, state, game_data, currencies)
+                     currencies: tuple[str, ...],
+                     ctx: SelectionContext) -> list[CurrencyResult]:
+    """One cell per currency, plus the gold row, for one offered root, priced
+    on the cycle's context `ctx` (`run_census`)."""
+    charges = charged_currencies(candidate, state, game_data, currencies, ctx)
     # Only worth asking when NOTHING was attributed: if some currency already
     # crossed on its own, the gap has a name and the combined probe would
     # merely re-confirm it at the cost of another price walk.
     unattributed = (not charges
-                    and unattributed_wall(candidate, state, game_data, currencies))
+                    and unattributed_wall(candidate, state, game_data, currencies, ctx))
     cells: list[CurrencyResult] = []
     for code in currencies:
         evidence = currency_evidence(code, state, game_data)
@@ -459,7 +460,7 @@ def _candidate_cells(name: str, candidate: MetaGoal, is_resolved_root: bool,
     # and it is not in `state.inventory`, so the item-currency differential
     # cannot reveal it. Without this row a root blocked purely on money reads
     # `not_demanded` in every cell — the silence §2.5 names.
-    gold = gold_charge(candidate, state, game_data)
+    gold = gold_charge(candidate, state, game_data, ctx)
     cells.append(CurrencyResult(
         scenario=name, currency=GOLD_ROW, candidate=repr(candidate),
         is_resolved_root=is_resolved_root,
@@ -491,12 +492,12 @@ def run_census(bundle: Path) -> list[CurrencyResult]:
         state = scenario_state(scenario, game_data)
         # The walk's context carries the cycle's gear objective, attached by
         # the one function the player uses (ruling W), so the census roots
-        # are the live cycle's.
+        # are the live cycle's. The prices are taken on it too: spent gold
+        # costs the time the cycle earns it in (S-046, `m*`'s rate), which a
+        # context with no grind target cannot price at all.
+        ctx = attach_gear_objective(state, game_data, _OFFLINE_CONTEXT, None)
         resolution = resolve_root(state, game_data,
-                                  CharacterObjective.from_game_data(game_data),
-                                  attach_gear_objective(state, game_data,
-                                                        _OFFLINE_CONTEXT, None),
-                                  None)
+                                  CharacterObjective.from_game_data(game_data), ctx, None)
         if resolution.root is None:
             results.extend(
                 CurrencyResult(
@@ -507,7 +508,7 @@ def run_census(bundle: Path) -> list[CurrencyResult]:
             continue
         for index, candidate in enumerate((resolution.root, *resolution.alternatives)):
             results.extend(_candidate_cells(name, candidate, index == 0, state,
-                                            game_data, currencies))
+                                            game_data, currencies, ctx))
     return results
 
 

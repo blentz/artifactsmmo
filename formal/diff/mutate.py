@@ -447,6 +447,23 @@ DROP_OBSERVATIONS_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
 LEARNED_DROPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learned_drops.py"
 DROP_FIGHT_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "drop_fight_selection.py"
 CONSUMABLE_PRICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price.py"
+# The gold rate moved out of consumable_price (S-046) so the pricer can read
+# it; its mutants moved with it, still killed by test_consumable_price.py.
+GOLD_RATE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gold_rate.py"
+GOLD_RATE_READER_MUTATIONS = [
+    ("gold_rate: gold per cycle read as gold per second",
+     "    return fight_gold_rate(fighter, game_data, monster, seconds) / seconds",
+     "    return fight_gold_rate(fighter, game_data, monster, seconds)"),
+    ("gold_rate: no grind target never reads m* (ruling AL)",
+     "        monster = ctx.gear_objective.monster\n",
+     "        monster = None\n"),
+    ("gold_rate: m* outranks the grind target (ruling AL)",
+     "    if monster is None and ctx.gear_objective is not None:\n",
+     "    if ctx.gear_objective is not None:\n"),
+    ("gold_rate: gold is earned in the character's gear, not L*",
+     "        fighter = ctx.gear_objective.fighter\n",
+     "        fighter = state\n"),
+]
 LOOP_RATE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate_core.py"
 LOOP_RATE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate.py"
 FIGHT_ROOM_LICENSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_room_license.py"
@@ -1252,9 +1269,6 @@ FIGHT_SECONDS_READER_MUTATIONS = [
 # The learned seconds a context carries (rulings CA/CC). Killed by
 # tests/test_ai/test_consumable_price.py.
 TIMED_PRICE_MUTATIONS = [
-    ("consumable price: gold is earned in the character's gear, not L*",
-     "        fighter = ctx.gear_objective.fighter\n",
-     "        fighter = state\n"),
     ("consumable price: an action is one second",
      "    return actions * ctx.action_seconds_of()",
      "    return actions * 1"),
@@ -1638,8 +1652,8 @@ FIGHTER_PROSPECTING_MUTATIONS = [
 # tests/test_ai/test_gear_objective.py.
 FIGHTER_PIECE_PRICE_MUTATIONS = [
     ("gear objective: a piece is priced on the L* fighter, not the character (T14d-3)",
-     "_price(state, game_data, ctx, history, item)",
-     "_price(targets[code][0], game_data, ctx, history, item)"),
+     "    prices = {code: [_price(state, game_data, _candidate_ctx(",
+     "    prices = {code: [_price(targets[code][0], game_data, _candidate_ctx("),
 ]
 
 DROP_ROWS_STORE_MUTATIONS = [
@@ -1817,15 +1831,6 @@ CONSUMABLE_PRICE_READER_MUTATIONS = [
     ("consumable_price reader: a GE order is ignored",
      "            prices.append(ge_price_of(code, source.code, game_data))",
      "            prices.extend(())"),
-    ("consumable_price reader: gold per cycle read as gold per second",
-     "    return fight_gold_rate(fighter, game_data, monster, seconds) / seconds",
-     "    return fight_gold_rate(fighter, game_data, monster, seconds)"),
-    ("consumable_price reader: no grind target never reads m* (ruling AL)",
-     "        monster = ctx.gear_objective.monster\n",
-     "        monster = None\n"),
-    ("consumable_price reader: m* outranks the grind target (ruling AL)",
-     "    if monster is None and ctx.gear_objective is not None:\n",
-     "    if ctx.gear_objective is not None:\n"),
     ("consumable_price reader: a replacement is free while any unit is held",
      "    return consumable_price(0, make_seconds(code, unheld, game_data, ctx, store),",
      "    return consumable_price(held_count(code, state), make_seconds(code, unheld, game_data, ctx, store),"),
@@ -4683,10 +4688,11 @@ SERVED_BY_ITS_ROUTE_CORE_MUTATIONS = [
      "    per_unit = (cost / max(1, route.yield_per) if isinstance(cost, Fraction)\n",
      "    per_unit = (-(-cost // max(1, route.yield_per)) if isinstance(cost, Fraction)\n"),
     ("acquisition_cost_core: each application rounded up on its own",
-     "        actions[0] += ceil(applications * route.actions_per_application)\n",
-     "        actions[0] += applications * ceil(route.actions_per_application)\n"),
+     "        actions[0] += ceil(applications * route.actions_per_application + take * route.spent)\n",
+     "        actions[0] += applications * ceil(route.actions_per_application)"
+     " + ceil(take * route.spent)\n"),
     ("acquisition_cost_core: the priced route is not the walk's argmin",
-     "            _cheapest_route(item, options, memo, frozenset(), free)[1])\n",
+     "            _cheapest_route(item, options, memo, frozenset(), free, charges)[1])\n",
      "            next(iter(options.get(item, [])), None))\n"),
 ]
 # Ruling T14a-B': a capped route prices only its capacity, the remainder the
@@ -4702,7 +4708,8 @@ CAPACITY_FILL_MUTATIONS = [
      "        if take <= 0:\n            continue\n",
      "        if take < 0:\n            continue\n"),
     ("capacity fill: the routes fill in catalogue order, not unit cost",
-     "                   key=lambda index: (_route_unit(routes[index], options, memo, inner, free),\n",
+     "                   key=lambda index: (_route_unit(routes[index], options, memo, inner, free,\n"
+     "                                                  charge),\n",
      "                   key=lambda index: (0,\n"),
     ("capacity fill: a remainder no route serves is free",
      "            return\n    actions[0] += UNOBTAINABLE_PER_UNIT * remaining\n",
@@ -4713,8 +4720,8 @@ CAPACITY_FILL_MUTATIONS = [
 ]
 SERVED_BY_ITS_ROUTE_PRICER_MUTATIONS = [
     ("acquisition_cost: the pocket's gold is not free to the choice (T2k)",
-     "    price, route = priced_route(item, qty, options, owned, frozenset({GOLD_CODE}))\n",
-     "    price, route = priced_route(item, qty, options, owned)\n"),
+     "    price, route = priced_route(item, qty, options, owned, frozenset({GOLD_CODE}), charge)\n",
+     "    price, route = priced_route(item, qty, options, owned, frozenset(), charge)\n"),
     ("acquisition_cost: each win for gold rounded up on its own (M1)",
      "            actions_per_application=_kill_actions(\n"
      "                source.code, state, game_data, ctx.timing(), ctx.fight_records),\n",
@@ -7165,8 +7172,8 @@ DROP_TOOL_CORE_MUTATIONS = [
     ("route legs: a leg records the demand, not what holdings leave",
      "            legs.append((item, route, take))", "            legs.append((item, route, qty))"),
     ("route legs: the inputs' legs are not collected",
-     "                        owned, paid, actions, fuel - 1, free, drawn, legs)",
-     "                        owned, paid, actions, fuel - 1, free, drawn)"),
+     "                        owned, paid, actions, fuel - 1, free, charge, drawn, legs)",
+     "                        owned, paid, actions, fuel - 1, free, charge, drawn)"),
 ]
 TOOL_OBJECTIVE_ROOT_MUTATIONS = [
     ("root: a gear target's skill climb ignores the tool",
@@ -8946,9 +8953,13 @@ KEY_DOOR_RANK_PLAN_MUTATIONS = [
 # Final review I-2: `door_route` prices with the store it is handed.
 KEY_DOOR_ROUTE_STORE_MUTATIONS = [
     ("door route: the options are priced without the store (final review I-2)",
-     "    options = acquisition_options(item, state, game_data, ctx, store, policy=policy)\n"
+     "    options, charge = _gold_priced(\n"
+     "        acquisition_options(item, state, game_data, ctx, store, policy=policy),\n"
+     "        state, game_data, ctx)\n"
      "    _price, route = priced_route(",
-     "    options = acquisition_options(item, state, game_data, ctx, None, policy=policy)\n"
+     "    options, charge = _gold_priced(\n"
+     "        acquisition_options(item, state, game_data, ctx, None, policy=policy),\n"
+     "        state, game_data, ctx)\n"
      "    _price, route = priced_route("),
 ]
 # Final review I-2: both production callers hand the walk the cycle's store.
@@ -9743,7 +9754,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
-    GE_FILL_SELL_SRC, GE_POST_BUY_SRC, WITHDRAW_GOLD_SRC, POST_BUY_BID_GOAL_SRC,
+    GE_FILL_SELL_SRC, GE_POST_BUY_SRC, WITHDRAW_GOLD_SRC, POST_BUY_BID_GOAL_SRC, GOLD_RATE_SRC,
     LIVENESS_CENSUS_SRC, ATTEMPT_PROSPECTING_SRC, GATHER_ARMOUR_SRC, GATHER_REQUIREMENT_SRC,
     RECIPE_CATALOG_SRC,
     LOADOUT_CALIBRATION_SRC,
@@ -13770,8 +13781,51 @@ POCKET_GOLD_ROUTE_MUTATIONS = [
 
 POCKET_GOLD_PRICE_MUTATIONS = [
     ("acquisition_cost: a gold withdraw rounds each gold piece up to an action",
-     "        exact = Fraction(1) if item == GOLD_CODE else 1\n",
-     "        exact = 1\n"),
+     "                               actions_per_application=Fraction(1),\n",
+     "                               actions_per_application=1,\n"),
+    # S-046: spent gold costs the time to earn it again.
+    ("acquisition_cost: banked gold is free to spend (S-046)",
+     "    banked = [replace(route, spent=charge) if route.kind == SourceKind.WITHDRAW.value else route\n",
+     "    banked = [route if route.kind == SourceKind.WITHDRAW.value else route\n"),
+    ("acquisition_cost: a closure without gold still reads the gold rate",
+     "    if gold_routes is None:\n        return options, {}\n",
+     "    if False:\n        return options, {}\n"),
+    ("acquisition_cost: held gold is free to spend (S-046)",
+     "    return {**options, GOLD_CODE: banked}, {GOLD_CODE: charge}\n",
+     "    return {**options, GOLD_CODE: banked}, {}\n"),
+    ("acquisition_cost: a gold fight the closure offers is not a way to earn gold",
+     "    charge = min([*fights, gold_spend_actions(state, game_data, ctx)])\n",
+     "    charge = gold_spend_actions(state, game_data, ctx)\n"),
+    ("acquisition_cost: the grind target's rate is not a way to earn gold",
+     "    charge = min([*fights, gold_spend_actions(state, game_data, ctx)])\n",
+     "    charge = min([*fights, Fraction(UNOBTAINABLE_PER_UNIT)])\n"),
+]
+
+POCKET_GOLD_CORE_MUTATIONS = [
+    ("acquisition_cost_core: the choice spends held gold for nothing",
+     "        per_unit += charge.get(material, 0) * (per_application - short)\n",
+     "        per_unit += 0 * (per_application - short)\n"),
+    ("acquisition_cost_core: the price spends held gold for nothing",
+     "    actions[0] += ceil(used * charge.get(item, 0))\n",
+     "    actions[0] += 0\n"),
+    ("acquisition_cost_core: the choice ignores what a route's unit spends",
+     "    return per_unit + route.spent\n",
+     "    return per_unit\n"),
+]
+
+POCKET_GOLD_RATE_MUTATIONS = [
+    ("gold_rate: no grind target prices gold at a division by zero",
+     "    if rate <= 0:\n        return Fraction(UNOBTAINABLE_PER_UNIT)\n",
+     "    if rate < 0:\n        return Fraction(UNOBTAINABLE_PER_UNIT)\n"),
+    ("gold_rate: a gold piece costs a second, not an action",
+     "    return 1 / (rate * ctx.action_seconds_of())\n",
+     "    return 1 / rate\n"),
+]
+
+POCKET_GOLD_OBJECTIVE_MUTATIONS = [
+    ("gear_objective: a candidate's pieces are priced with no m* on the context",
+     "    return replace(ctx, gear_objective=GearObjective(monster, loadout, rate, (), fighter=fighter))\n",
+     "    return ctx\n"),
 ]
 
 POCKET_GOLD_WALK_MUTATIONS = [
@@ -13898,6 +13952,8 @@ def _collect_all_groups() -> None:
     run_group(PLAYER_SRC, PLAYER_TIMING_MUTATIONS,
               "tests/test_ai/test_player_timing.py", survivors)
     run_group(CONSUMABLE_PRICE_SRC, CONSUMABLE_PRICE_READER_MUTATIONS,
+              "tests/test_ai/test_consumable_price.py", survivors)
+    run_group(GOLD_RATE_SRC, GOLD_RATE_READER_MUTATIONS,
               "tests/test_ai/test_consumable_price.py", survivors)
     run_group(SKILL_CREDIT_SRC, SKILL_CREDIT_MUTATIONS,
               "tests/test_ai/test_skill_credit.py", survivors)
@@ -15144,6 +15200,12 @@ def _collect_all_groups() -> None:
     run_group(OBTAIN_MODEL_SRC, POCKET_GOLD_ROUTE_MUTATIONS,
               "tests/test_ai/test_pocket_gold_buys.py", survivors)
     run_group(ACQUISITION_COST_SRC, POCKET_GOLD_PRICE_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(ACQUISITION_COST_CORE_SRC, POCKET_GOLD_CORE_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(GOLD_RATE_SRC, POCKET_GOLD_RATE_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, POCKET_GOLD_OBJECTIVE_MUTATIONS,
               "tests/test_ai/test_pocket_gold_buys.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, POCKET_GOLD_WALK_MUTATIONS,
               "tests/test_ai/test_pocket_gold_buys.py", survivors)

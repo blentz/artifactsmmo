@@ -46,6 +46,7 @@ from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.fleet_climb_core import amortized_climb_seconds
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gold_rate import gold_spend_actions
 from artifactsmmo_cli.ai.inventory_keep import carried_keep
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill, loss_cost
@@ -192,14 +193,18 @@ def _priced(item: str, source: Source, state: WorldState,
     a workshop, WITHDRAW at a bank; those three are the only ones that need a
     venue derived rather than read."""
     if source.kind is SourceKind.WITHDRAW:
-        # A gold withdraw is ONE action for any amount up to its capacity (its
-        # yield): an exact cost, as a fight for gold's is, so the route CHOICE
-        # (`_route_unit`, a unit's share of an application) prices a unit of
-        # banked gold at a sliver of one action rather than rounding each gold
-        # piece up to a whole one, and `_accumulate` charges the one withdraw.
-        exact = Fraction(1) if item == GOLD_CODE else 1
+        if item == GOLD_CODE:
+            # A gold withdraw is ONE action for any amount up to its capacity
+            # (its yield): an exact cost, so the route CHOICE does not round
+            # each gold piece up to a whole action. Every unit it delivers is
+            # SPENT, and `_gold_priced` charges it what spending a held gold
+            # piece costs (S-046): pocket and bank gold are one rule, the
+            # bank's dearer by the withdraw and its hop.
+            return RouteOption(kind=source.kind.value, venue=BANK_VENUE,
+                               actions_per_application=Fraction(1),
+                               yield_per=source.yield_per, capacity=source.capacity)
         return RouteOption(kind=source.kind.value, venue=BANK_VENUE,
-                           actions_per_application=exact, yield_per=source.yield_per,
+                           actions_per_application=1, yield_per=source.yield_per,
                            capacity=source.capacity)
     if source.kind is SourceKind.RECYCLE:
         stats = game_data.item_stats(source.code)
@@ -999,9 +1004,11 @@ def door_route(item: str, state: WorldState, game_data: GameData, ctx: Selection
     route the price took past a door is the one named, and a door route the
     price did not take, under a climb or a sibling craft, is not (final
     review I-2)."""
-    options = acquisition_options(item, state, game_data, ctx, store, policy=policy)
+    options, charge = _gold_priced(
+        acquisition_options(item, state, game_data, ctx, store, policy=policy),
+        state, game_data, ctx)
     _price, route = priced_route(item, 1, options, _owned_with_gold(state, pocket),
-                                 frozenset({GOLD_CODE}))
+                                 frozenset({GOLD_CODE}), charge)
     if route is None or not route.unlock.startswith("door:"):
         return None
     return SourceKind(route.kind), route.venue
@@ -1134,10 +1141,48 @@ def acquisition_options(item: str, state: WorldState, game_data: GameData,
     return options
 
 
+def _gold_priced(options: Mapping[str, list[RouteOption]], state: WorldState,
+                 game_data: GameData, ctx: SelectionContext
+                 ) -> tuple[Mapping[str, list[RouteOption]], dict[str, Fraction]]:
+    """`options` with the bank's gold charged as spent, and the `charge` a
+    held gold piece pays when it is spent: S-046, the USER's ruling
+    2026-10-30 — spending G gold, pocket or bank, costs the time to earn G
+    again.
+
+    Ruling T2k credited held gold at nothing, so the bank's whole balance cost
+    one withdraw and a 92,500-gold GE fill outranked every route that takes
+    time instead of gold (live Robby, `WithdrawGold(90844)` ->
+    `GeBuy(mithril_helm)`). Now a buy is chosen only when it is cheaper in
+    time than its alternatives with its gold counted as the time it takes.
+
+    THE TIME TO EARN A GOLD PIECE is the cheapest way the character earns
+    gold: the grind target's (or `m*`'s) fight gold per second
+    (`gold_rate.gold_spend_actions`, the rate consumables are priced in), or
+    a gold FIGHT the closure itself offers (a `GOLD_DROP` route, which the
+    walk serves as the fight it is), whichever is cheaper — earning G again
+    takes the faster of them. With neither the rate is unknown, and the
+    codebase's answer for that case is `consumable_price_core.buy_seconds`':
+    buying is unpriceable, here `UNOBTAINABLE_PER_UNIT` a gold piece.
+
+    Read only when the closure spends gold (`acquisition_options` lists gold
+    whenever a route consumes it): the rate walks a fight, and a closure that
+    never touches gold has no use for it."""
+    gold_routes = options.get(GOLD_CODE)
+    if gold_routes is None:
+        return options, {}
+    fights = [Fraction(route.actions_per_application) / max(1, route.yield_per)
+              for route in gold_routes if route.kind == SourceKind.GOLD_DROP.value]
+    charge = min([*fights, gold_spend_actions(state, game_data, ctx)])
+    banked = [replace(route, spent=charge) if route.kind == SourceKind.WITHDRAW.value else route
+              for route in gold_routes]
+    return {**options, GOLD_CODE: banked}, {GOLD_CODE: charge}
+
+
 def _owned_with_gold(state: WorldState, pocket: int) -> dict[str, int]:
     """The bag, plus `pocket` gold: the gold in it the caller lets the price
     spend (the whole pocket, or only what the reserve lets a piece's buy
-    spend: `progression_reserve.spendable_pocket`, ruling T3e m3).
+    spend: `progression_reserve.spendable_pocket`, ruling T3e m3). Held, not
+    free: spending it is charged `_gold_priced` (S-046).
 
     A gold-priced BUY route carries `inputs={"gold": price}` and the walk prices
     an input it cannot obtain at `UNOBTAINABLE_PER_UNIT` PER UNIT — so without
@@ -1177,17 +1222,18 @@ def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
     then the climb's own kind, CRAFT before GATHER, as `route_options` would
     have priced it. None only when the item has no route at all.
 
-    Held gold is free up to `pocket` (ruling T2k, `_owned_with_gold`): the
-    choice credits it as the walk does, so a fill or a buy the pocket covers
-    is not priced at gold's fight cost against a dearer craft. A piece's
-    price passes the pocket above the reserve its buy must keep (ruling T3e
-    m3), so gold the executor will not spend is priced as gold to earn."""
+    Held gold is held up to `pocket` (`_owned_with_gold`), and every piece of
+    it spent costs the actions to earn it again (`_gold_priced`, S-046, which
+    replaced ruling T2k's free credit): banked gold the same, plus its withdraw
+    and hop. A piece's price passes the pocket above the reserve its buy must
+    keep (ruling T3e m3), so gold the executor will not spend is priced as gold
+    to earn."""
     owned: dict[str, int] = _owned_with_gold(state, pocket)
-    options: Mapping[str, list[RouteOption]] = credit_demanded_skills(
+    options, charge = _gold_priced(credit_demanded_skills(
         acquisition_options(item, state, game_data, ctx, store, gated_drop, policy=policy,
                             produce=produce, opening=opening, crossing=crossing),
-        credit_skills, game_data)
-    price, route = priced_route(item, qty, options, owned, frozenset({GOLD_CODE}))
+        credit_skills, game_data), state, game_data, ctx)
+    price, route = priced_route(item, qty, options, owned, frozenset({GOLD_CODE}), charge)
     if route is not None:
         return price, _served_by(route)
     model = ObtainModel(state, game_data, ctx, ctx.now, crossing=crossing)
@@ -1213,9 +1259,11 @@ def drop_work(item: str, qty: int, state: WorldState, game_data: GameData,
     `gear:<monster>`, does not: `_gated_drop_option`). The walk is
     `cheapest_route`'s own, over the same options and holdings (the bag, plus
     the pocket's gold), so the work is the work the price is made of."""
-    options = acquisition_options(item, state, game_data, ctx, store, policy=policy)
+    options, charge = _gold_priced(
+        acquisition_options(item, state, game_data, ctx, store, policy=policy),
+        state, game_data, ctx)
     legs = route_legs(item, qty, options, _owned_with_gold(state, state.gold),
-                      frozenset({GOLD_CODE}))
+                      frozenset({GOLD_CODE}), charge)
     return tuple(DropLeg(SourceKind(route.kind), route.venue, code, units,
                          surcharged=not route.unlock)
                  for code, route, units in legs if route.kind in _DROP_WORK)
@@ -1346,8 +1394,9 @@ def bundle_acquisition_actions(
 
     `equip` is charged PER ROOT, not once: every piece has to be put on."""
     owned: dict[str, int] = _owned_with_gold(state, state.gold)
-    options: dict[str, list[RouteOption]] = {}
+    merged: dict[str, list[RouteOption]] = {}
     for item, _qty in roots:
-        options.update(acquisition_options(item, state, game_data, ctx, store))
-    total, paid = bundle_acquisition_cost(roots, options, owned)
+        merged.update(acquisition_options(item, state, game_data, ctx, store))
+    options, charge = _gold_priced(merged, state, game_data, ctx)
+    total, paid = bundle_acquisition_cost(roots, options, owned, charge)
     return total + (EQUIP_ACTIONS * len(roots) if equip else 0), paid

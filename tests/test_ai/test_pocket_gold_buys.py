@@ -17,10 +17,13 @@ takes the price from the pocket alone. So:
 """
 
 from dataclasses import replace
+from fractions import Fraction
+from math import ceil
 
 import pytest
 
-from artifactsmmo_cli.ai.acquisition_cost import cheapest_route
+from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, acquisition_options, cheapest_route
+from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
@@ -31,6 +34,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.post_buy_bid import PostBuyBidGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.gold_rate import gold_per_second, gold_spend_actions
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
@@ -38,7 +42,8 @@ from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, PIECE_POLICY
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor_multi, spendable_pocket
-from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, scenario_state
+from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
@@ -237,25 +242,30 @@ def test_the_walk_withdraws_banked_gold_above_the_reserve() -> None:
     assert not [r for r in poor.routes(GOLD_CODE) if r.kind is SourceKind.WITHDRAW]
 
 
-def test_the_price_charges_the_withdraw_not_the_fights() -> None:
-    """The `L*` rune (20,000 gold at the rune vendor) from a 100-gold pocket:
-    with the gold banked, the price is the buy and the withdraw, each with its
-    hop. One withdraw moves any amount, so the route CHOICE prices a unit of
-    banked gold at a sliver of one action; rounded up to a whole action a gold
-    piece it would lose to a fight and the price would fight for 19,900 gold."""
+def test_pocket_and_bank_gold_are_priced_alike() -> None:
+    """The `L*` rune (20,000 gold at the rune vendor) from a 100-gold pocket
+    and a rich bank: the buy and the withdraw, each with its hop, and EVERY
+    gold piece spent at the actions it takes to earn it again (S-046), the
+    pocket's 100 and the bank's 19,900 alike. From a pocket holding it all,
+    the same price less only the withdraw and its hop."""
     world = _world()
     poor = _state(world)
     assert poor.gold == 100
     rich = replace(poor, bank_gold=50_000, bank_items={})
     ctx = attached(rich, world, TIMED_NO_PROFILE_CONTEXT, None)
+    per_gold = gold_spend_actions(rich, world, ctx)
+    assert 0 < per_gold < 1
 
     def price(state: WorldState) -> tuple[int, SourceKind | None]:
         return cheapest_route(RUNE.code, 1, state, world, ctx, None, policy=PIECE_POLICY,
                               pocket=spendable_pocket(state, world, frozenset({RUNE.code})))
 
-    assert price(rich) == (4, SourceKind.BUY)
-    fought, _route = price(replace(rich, bank_gold=None))
-    assert fought > 1000
+    banked, route = price(rich)
+    assert route is SourceKind.BUY
+    assert banked == 3 + ceil(100 * per_gold) + ceil(1 + (PRICE - 100) * per_gold)
+    pocketed, _ = price(replace(rich, gold=50_000, bank_gold=0))
+    assert pocketed == 2 + ceil(PRICE * per_gold)
+    assert banked - pocketed in (2, 3)  # the withdraw and its hop; one rounding
 
 
 def test_the_player_withdraws_then_buys_the_rune() -> None:
@@ -284,6 +294,14 @@ def _piece_world() -> tuple[GameData, WorldState, list[Action]]:
     return world, state, player._build_actions()
 
 
+def _fighting_ctx(state: WorldState) -> SelectionContext:
+    """`_crystal_ctx`'s hand-built objective with its fighter: the gold rate
+    the pricer charges spent gold at is read on `L*(m*)` (ruling CB)."""
+    ctx = _crystal_ctx()
+    assert ctx.gear_objective is not None
+    return replace(ctx, gear_objective=replace(ctx.gear_objective, fighter=state))
+
+
 def test_the_fast_path_withdraws_the_shortfall_then_fills() -> None:
     """An `L*` piece's GE-filled material (the walk's GE route), pocket 34
     short of the fill, the bank rich: WithdrawGold(34) then the GeBuy, not a
@@ -295,7 +313,7 @@ def test_the_fast_path_withdraws_the_shortfall_then_fills() -> None:
     goal = GatherMaterialsGoal(SHARD, {SHARD: 3}, fight_gold=True)
     short = replace(state, gold=cost - SHORT, bank_gold=50_000, bank_items={})
     assert spendable_pocket(short, world, frozenset({SHARD})) == cost - SHORT
-    plan = decompose(goal, short, world, actions, _crystal_ctx())
+    plan = decompose(goal, short, world, actions, _fighting_ctx(short))
     assert plan is not None
     fill = GeFillSellOrderAction(order_id=order[0], item_code=SHARD, price=order[1],
                                  quantity=3, ge_location=world.grand_exchange_location())
@@ -317,6 +335,116 @@ def test_the_fast_path_buys_nothing_when_the_bank_cannot_cover_it() -> None:
     assert order is not None
     goal = GatherMaterialsGoal(SHARD, {SHARD: 3}, fight_gold=True)
     short = replace(state, gold=order[1] * 3 - SHORT, bank_gold=SHORT - 1, bank_items={})
-    plan = decompose(goal, short, world, actions, _crystal_ctx())
+    plan = decompose(goal, short, world, actions, _fighting_ctx(short))
     assert plan is not None
     assert not [a for a in plan if isinstance(a, GeFillSellOrderAction | WithdrawGoldAction)]
+
+
+# --------------------------------------------------------------------------
+# S-046: spent gold costs the time to earn it again.
+# --------------------------------------------------------------------------
+
+SWORD = "iron_sword"
+"""Craftable in the l20 cell (iron ore -> bars -> the sword), so a GE fill of
+it competes with a route that costs time, not gold."""
+
+
+def _sword_book(price: int) -> tuple[GameData, WorldState, SelectionContext]:
+    """The l20 world with a standing sell order for the sword at `price`, the
+    character Robby-shaped: a small pocket and a bank that can pay for it."""
+    sc = SCENARIOS[CELL]
+    world = load_bundle_game_data(BUNDLE, with_ge_orders=sc.ge_market,
+                                  completed_achievements=frozenset(sc.unlocked_achievements))
+    world._ge_sell_orders = {**world._ge_sell_orders, SWORD: ("ord-sword", price, 1)}
+    state = replace(scenario_state(sc, world), gold=1736, bank_gold=150_000, bank_items={})
+    return world, state, attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
+
+
+def _sword(price: int) -> tuple[int, SourceKind | None]:
+    world, state, ctx = _sword_book(price)
+    return cheapest_route(SWORD, 1, state, world, ctx, None, policy=PIECE_POLICY,
+                          pocket=spendable_pocket(state, world, frozenset({SWORD})))
+
+
+def test_a_huge_fill_loses_to_the_route_that_takes_time() -> None:
+    """Robby's shape (live 2026-10-30: `WithdrawGold(90844)` ->
+    `GeBuy(mithril_helm)`, about 92,500 gold on one helmet): a 92,500-gold
+    order, the bank able to pay it, and a craft that costs a fraction of the
+    time 92,500 gold takes to earn. The craft is the route."""
+    world, state, ctx = _sword_book(92_500)
+    price, route = _sword(92_500)
+    assert route is SourceKind.CRAFT
+    assert price < 92_500 * gold_spend_actions(state, world, ctx)
+
+
+def test_a_fill_cheaper_in_time_than_its_alternatives_is_still_bought() -> None:
+    """The same order at 50 gold: 50 gold earns back in a sliver of an action,
+    far less than the craft's gathers, so the fill is the route."""
+    price, route = _sword(50)
+    assert route is SourceKind.GE_FILL
+    assert price < _sword(92_500)[0]
+
+
+def test_a_gold_piece_costs_its_earning_time_in_actions() -> None:
+    """`gold_spend_actions` is the seconds to earn one gold piece
+    (`1 / gold_per_second`) over the learned seconds of one action."""
+    world, state, ctx = _sword_book(50)
+    rate = gold_per_second(state, world, ctx)
+    assert rate > 0
+    assert gold_spend_actions(state, world, ctx) == 1 / (rate * ctx.action_seconds_of())
+
+
+def test_no_grind_target_leaves_spent_gold_unpriceable() -> None:
+    """No grind target and no `m*`: no gold rate, and the codebase's answer to
+    that (`consumable_price_core.buy_seconds`) is that buying is unpriceable.
+    The pricer follows it: a spent gold piece is walled, never priced at an
+    invented rate, and a gold-only buy is priced as no route at all."""
+    world = _world()
+    state = replace(_state(world), gold=50_000)
+    assert TIMED_NO_PROFILE_CONTEXT.combat_monster is None
+    assert TIMED_NO_PROFILE_CONTEXT.gear_objective is None
+    assert gold_spend_actions(state, world, TIMED_NO_PROFILE_CONTEXT) == UNOBTAINABLE_PER_UNIT
+    assert acquisition_actions(RUNE.code, 1, state, world, TIMED_NO_PROFILE_CONTEXT,
+                               equip=False) == UNOBTAINABLE_PER_UNIT
+
+
+def test_a_closure_that_spends_no_gold_reads_no_gold_rate() -> None:
+    """The rate walks a fight on the objective's fighter. A closure with no
+    gold in it never asks: priced on an objective that carries no fighter
+    (which the rate refuses), copper ore still prices."""
+    world = _world()
+    state = _state(world)
+    ctx = _crystal_ctx()
+    assert ctx.gear_objective is not None and ctx.gear_objective.fighter is None
+    with pytest.raises(ValueError, match="no fighter"):
+        gold_spend_actions(state, world, ctx)
+    assert acquisition_actions("copper_ore", 1, replace(state, inventory={}), world, ctx,
+                               equip=False) < UNOBTAINABLE_PER_UNIT
+
+
+def test_the_grind_target_s_rate_prices_spent_gold() -> None:
+    """`LEGACY` offers no gold fight, so the only way the price knows to earn a
+    gold piece is the grind target's fight gold per second: the rune from a
+    full pocket is the hop, the buy and 20,000 gold at that rate."""
+    world = _world()
+    state = replace(_state(world), gold=50_000)
+    ctx = replace(TIMED_NO_PROFILE_CONTEXT, combat_monster="highwayman")
+    per_gold = gold_spend_actions(state, world, ctx)
+    assert acquisition_actions(RUNE.code, 1, state, world, ctx, equip=False) == \
+        2 + ceil(PRICE * per_gold)
+
+
+def test_a_gold_fight_the_closure_offers_prices_spent_gold() -> None:
+    """No grind target, but `PIECE_POLICY` offers gold fights: earning a gold
+    piece again takes the cheapest of them, so the held gold is priced at its
+    rate rather than walled, and the rune from a full pocket is the hop, the
+    buy and 20,000 gold of that fight."""
+    world = _world()
+    state = replace(_state(world), gold=50_000)
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    gold = acquisition_options(RUNE.code, state, world, ctx, None, policy=PIECE_POLICY)["gold"]
+    per_gold = min(Fraction(r.actions_per_application) / r.yield_per
+                   for r in gold if r.kind == SourceKind.GOLD_DROP.value)
+    price, route = cheapest_route(RUNE.code, 1, state, world, ctx, None, policy=PIECE_POLICY,
+                                  pocket=state.gold)
+    assert (price, route) == (2 + ceil(PRICE * per_gold), SourceKind.BUY)
