@@ -567,7 +567,7 @@ class CoordinationStore:
             totals[row.item_code] = totals.get(row.item_code, 0) + row.quantity
         return totals
 
-    def sibling_demand_values(self, now: datetime) -> dict[str, tuple[int, Fraction]]:
+    def sibling_demand_values(self, now: datetime) -> dict[str, tuple[int, Fraction]] | None:
         """Each gear piece some OTHER character is missing, mapped to the units
         asked and the gain, each summed over every sibling that publishes it
         (spec 2026-10-18 §2.5: a fleet piece is ordered by gain summed over the
@@ -575,7 +575,11 @@ class CoordinationStore:
         Same liveness and own-character filter as `sibling_demand`; a row with
         no `gain` is not a piece and is not read. Units and gain come off the
         SAME rows in one read, so they cannot disagree about which pieces are
-        on the board."""
+        on the board.
+
+        A failure is None, never `{}` (ruling T7b, as `sibling_skill_ledger`
+        and `fleet_order`): an empty board means "no sibling asks for a
+        piece"; a failed read means nothing is known of the board."""
         _require_utc(now)
         stamp = now.isoformat()
         try:
@@ -589,7 +593,7 @@ class CoordinationStore:
                 ).all()
         except SQLAlchemyError as e:
             print(f"[coordination] sibling_demand_values failed: {e}")
-            return {}
+            return None
         totals: dict[str, tuple[int, Fraction]] = {}
         for row in rows:
             # The query's own `gain IS NOT NULL` filter guarantees this: an

@@ -695,13 +695,15 @@ class TestDegradationOnDbError:
         assert hal.sibling_demand(_T0) == {}
         assert "[coordination] sibling_demand failed" in capsys.readouterr().out
 
-    def test_sibling_demand_values_swallows_error_and_returns_empty(
+    def test_sibling_demand_values_reports_a_failed_read_as_none(
         self, tmp_path: Path, capsys
     ) -> None:
+        """Ruling T7b, as `sibling_skill_ledger`: a failed read is None,
+        never the empty board "no sibling asks for a piece"."""
         db = str(tmp_path / "coord.db")
         hal = CoordinationStore(db_path=db, character="HAL")
         _break_engine(hal)
-        assert hal.sibling_demand_values(_T0) == {}
+        assert hal.sibling_demand_values(_T0) is None
         assert "[coordination] sibling_demand_values failed" in capsys.readouterr().out
 
     def test_sibling_demand_asymmetric_swallows_error_and_returns_empty(

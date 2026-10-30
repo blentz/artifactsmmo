@@ -3038,7 +3038,7 @@ def test_the_demanded_levels_span_the_board_and_the_own_pieces(tmp_path) -> None
     sword = GearPiece("weapon_slot", "iron_sword", 0, Fraction(1), Fraction(5), SourceKind.CRAFT)
     player._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
         "wolf", {"weapon_slot": "iron_sword"}, Fraction(1), (sword,)))
-    assert player._demanded_levels(gd) == {"gearcrafting": 10, "weaponcrafting": 10}
+    assert player._demanded_levels(gd, player._fleet_board) == {"gearcrafting": 10, "weaponcrafting": 10}
 
 
 def test_the_fleet_climber_is_recruited_by_demand_above_its_level(tmp_path) -> None:
@@ -3170,6 +3170,27 @@ def test_a_failed_ledger_read_assigns_no_climber(tmp_path) -> None:
         robby.close()
 
 
+def test_a_failed_board_read_assigns_no_climber(tmp_path) -> None:
+    """Final review minor 4 (ruling T7b): the board read failing is not "no
+    sibling asks for a piece". Nothing is known of the pieces the climbs are
+    for, so nothing is assigned, and the cycle serves no board piece."""
+    now = datetime.now(tz=timezone.utc)
+    robby = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Robby")
+    try:
+        robby.publish_fleet_order(("C3P0", "Robby"), now)
+        player, _ = _coord_player(tmp_path)
+        player.game_data = shared_world(_FLEET_BUNDLE)
+        assert player._coordination is not None
+        player._coordination.sibling_demand_values = lambda _now: None  # type: ignore[method-assign]
+        player._refresh_sibling_reads(now)
+        assert player._fleet_board is None and player._sibling_ledger == {}
+        assert player._fleet_climbers == {} and player._serving_climbers == {}
+        ctx = player._selection_context()
+        assert ctx.fleet_board == {} and ctx.fleet_pieces == ()
+    finally:
+        robby.close()
+
+
 def test_the_climbers_need_a_state(tmp_path) -> None:
     player, _ = _coord_player(tmp_path)
     player.state = None
@@ -3193,7 +3214,7 @@ def test_the_skill_carrying_more_fleet_gain_takes_its_climber_first(tmp_path) ->
     ring = GearPiece("ring1_slot", "iron_ring", 0, Fraction(3), Fraction(5), SourceKind.CRAFT)
     player._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
         "wolf", {"ring1_slot": "iron_ring"}, Fraction(1), (ring,)))
-    assert player._demanded_gain(player.game_data) == {
+    assert player._demanded_gain(player.game_data, player._fleet_board) == {
         "gearcrafting": Fraction(1), "jewelrycrafting": Fraction(5)}
     assert player._climbers({}) == {"jewelrycrafting": "C3P0", "gearcrafting": "Robby"}
 
