@@ -5,13 +5,15 @@ should wear for the prospecting it carries.
 is: its purpose knows the skill, not the resource, the drop or its quantity,
 so it cannot price prospecting (Task 14f item 3). The re-arm in front of a
 planned gather (`craft_plan_gen._with_rearm`) is the one place that knows
-them, so the armour is priced there, in seconds:
+them, so the armour is priced there, in planner cost units (ruling
+T14f-unit: A*'s own currency, the `Action.cost` each action charges):
 
 * the GAIN of wearing a piece in a slot is the gathers it saves over this
   gather's quantity (`GatherAction.gathers`, read at the gather loadout's
   prospecting, `attempt_prospecting.gather_prospecting`, the one basis) times
-  one gather's seconds (`GATHER_SECONDS`);
-* the COST is the seconds of the swap it adds: the `EquipAction` that puts it
+  one gather's cost (`GATHER_SECONDS`, the per-gather base `GatherAction.cost`
+  charges);
+* the COST is the cost of the swap it adds: the `EquipAction` that puts it
   on, at that action's own cost. The swap back is not charged: when a fight
   follows, that fight's own re-arm (`OptimizeLoadoutAction`) pays for it.
 
@@ -46,14 +48,17 @@ ARMOUR_SLOTS: tuple[str, ...] = tuple(sorted(
 def gather_armour(gather: GatherAction, state: WorldState,
                   game_data: GameData) -> list[EquipAction]:
     """The armour equips worth making before `gather` from `state`: per slot,
-    the owned piece whose saved seconds most exceed its equip's cost, when any
-    does. The gathers are read at the gather loadout's prospecting, so the
+    the owned piece whose saved cost (planner cost units) most exceeds its
+    equip's cost, when any does. The gathers are read at the gather loadout's prospecting, so the
     tool the re-arm puts on is already counted."""
     equips: list[EquipAction] = []
     for slot in ARMOUR_SLOTS:
         best: tuple[Fraction, int, str] | None = None
         bare = gather.gathers(state, game_data)
-        for code in sorted(state.inventory):
+        # Candidates in the API item catalogue's order (`all_item_stats`), a
+        # stable game-data order: a full tie keeps the first one there, never
+        # the first by name (no alphabetical tiebreak).
+        for code in [c for c in game_data.all_item_stats if c in state.inventory]:
             equip = EquipAction(code=code, slot=slot)
             if not equip.is_applicable(state, game_data):
                 continue
@@ -64,7 +69,7 @@ def gather_armour(gather: GatherAction, state: WorldState,
             stats = game_data.item_stats(code)
             assert stats is not None, f"{code}: EquipAction.is_applicable read its stats"
             # Semantic tie chain: the larger net saving, then the higher item
-            # level; the code only orders two pieces that tie on both.
+            # level; two pieces that tie on both keep the catalogue's first.
             key = (net, stats.level, code)
             if best is None or key[:2] > best[:2]:
                 best = key

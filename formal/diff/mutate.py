@@ -7093,6 +7093,10 @@ GATHER_ARMOUR_MUTATIONS = [
     ("gather armour: the item level is no tiebreak",
      "            if best is None or key[:2] > best[:2]:\n",
      "            if best is None or key[:1] > best[:1]:\n"),
+    # Final review minor 1: a full tie keeps the catalogue's first piece.
+    ("gather armour: a full tie goes to the first piece by name",
+     "        for code in [c for c in game_data.all_item_stats if c in state.inventory]:\n",
+     "        for code in sorted(state.inventory):\n"),
     ("gather armour: every slot is judged on the bare state",
      "            state = chosen.apply(state, game_data)\n",
      ""),

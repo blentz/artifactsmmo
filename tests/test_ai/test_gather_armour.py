@@ -1,6 +1,7 @@
 """The gather re-arm wears the owned armour its prospecting pays for (ruling
 T14f-3): the gathers a piece saves over the gather's quantity, at one
-gather's seconds, against the seconds of the equip it adds."""
+gather's cost, against the cost of the equip it adds, in planner cost units
+(ruling T14f-unit)."""
 
 from fractions import Fraction
 
@@ -54,9 +55,9 @@ def test_the_armour_slots_leave_out_the_tool_the_artifacts_and_the_potions() -> 
     assert not {"weapon_slot", "artifact1_slot", "utility1_slot"} & set(ARMOUR_SLOTS)
 
 
-def test_prospecting_armour_is_worn_when_its_saved_seconds_exceed_its_swap() -> None:
+def test_prospecting_armour_is_worn_when_its_saved_cost_exceeds_its_swap() -> None:
     """1 in 2 at k = 1/100: the +100 robe makes the pearl sure, so ten pearls
-    take 10 gathers, not 20: 60 s saved against a 1.0 equip. The combat plate
+    take 10 gathers, not 20: 60 saved against a 1.0 equip. The combat plate
     comes off for it."""
     gd = _gd(rate=2)
     gather = _gather(Fraction(1, 100), quantity=10)
@@ -68,7 +69,7 @@ def test_prospecting_armour_is_worn_when_its_saved_seconds_exceed_its_swap() -> 
 
 def test_prospecting_armour_is_not_worn_when_its_saving_is_below_the_swap() -> None:
     """One pearl at k = 1/10000: the robe saves 2 - 2/1.01 gathers, about
-    0.12 s, under the equip's 1.0."""
+    0.12, under the equip's 1.0."""
     gd = _gd(rate=2)
     gather = _gather(Fraction(1, 10000), quantity=1)
     saving = _robe_saving(gather, gd)
@@ -85,7 +86,7 @@ def test_prospecting_armour_is_not_worn_for_a_sure_primary_drop() -> None:
 
 
 def test_the_swap_back_is_not_charged_twice_before_a_fight() -> None:
-    """k = 1/700 and one pearl: the robe saves 2 - 2/(8/7) = 1/4 gather, 1.5 s:
+    """k = 1/700 and one pearl: the robe saves 2 - 2/(8/7) = 1/4 gather, 1.5:
     above the equip (1.0) but below the equip plus a swap back (2.0). The
     fight's own re-arm pays the swap back, so the robe is still worn."""
     gd = _gd(rate=2)
@@ -115,6 +116,22 @@ def test_an_equal_saving_goes_to_the_higher_level_piece() -> None:
     state = make_state(skills={**make_state().skills, "fishing": 5},
                        inventory={"robe": 1, "tunic": 1})
     assert gather_armour(gather, state, gd) == [EquipAction(code="tunic", slot="body_armor_slot")]
+
+
+def test_a_full_tie_goes_to_the_catalogue_s_first_piece_not_the_first_by_name() -> None:
+    """Final review minor 1: `zz_robe` and `aa_robe` save the same and share
+    a level. The tie keeps the first in the API item catalogue's order
+    (`zz_robe`, listed first), not the first by name."""
+    gd = _gd(rate=2)
+    gd._item_stats = {
+        "zz_robe": ItemStats(code="zz_robe", level=1, type_="body_armor", prospecting=100),
+        "aa_robe": ItemStats(code="aa_robe", level=1, type_="body_armor", prospecting=100),
+        **gd._item_stats}
+    gather = _gather(Fraction(1, 100), quantity=10)
+    state = make_state(skills={**make_state().skills, "fishing": 5},
+                       inventory={"aa_robe": 1, "zz_robe": 1})
+    assert gather_armour(gather, state, gd) == [
+        EquipAction(code="zz_robe", slot="body_armor_slot")]
 
 
 def test_a_later_slot_is_judged_on_the_armour_already_picked() -> None:
