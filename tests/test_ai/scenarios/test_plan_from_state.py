@@ -1,6 +1,7 @@
 """plan_from_state: the pure planning entry the CLI and scenarios share."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -82,7 +83,9 @@ def test_plan_from_state_wires_the_real_selection_context() -> None:
     state = make_state(level=5, inventory={"fishing_net": 7}, bank_items={})
     player.seed_offline(state, gd)
 
-    assert player._last_ctx == TIMED_NO_PROFILE_CONTEXT  # nothing computed before the first cycle
+    # Nothing computed before the first cycle but the player's clock (ruling FR-IA).
+    assert player._last_ctx.now == player._cycle_now
+    assert replace(player._last_ctx, now=TIMED_NO_PROFILE_CONTEXT.now) == TIMED_NO_PROFILE_CONTEXT
 
     player.plan_from_state()
 

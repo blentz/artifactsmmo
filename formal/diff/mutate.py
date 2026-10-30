@@ -8967,6 +8967,16 @@ CYCLE_CLOCK_WALK_MUTATIONS = [
      "        model = ObtainModel(state, game_data, ctx, ctx.now, crossing=state,",
      "        model = ObtainModel(state, game_data, ctx, ctx.now.now(ctx.now.tzinfo), crossing=state,"),
 ]
+# Ruling FR-IA: every context the player derives carries the cycle clock.
+# Killed by tests/test_ai/test_one_drop_model.py.
+CYCLE_CLOCK_PLAYER_MUTATIONS = [
+    ("cycle clock: a timed context keeps the import instant (ruling FR-IA)",
+     "        return replace(ctx, now=self._cycle_now, fight_seconds=fight_seconds,\n",
+     "        return replace(ctx, fight_seconds=fight_seconds,\n"),
+    ("cycle clock: the cycle is never stamped (ruling FR-IA)",
+     "        self._cycle_now = datetime.now(tz=timezone.utc)\n\n    def _timed(",
+     "        pass\n\n    def _timed("),
+]
 # Ruling T14e-m6: doors at any depth. Killed by
 # tests/test_ai/test_key_door_route.py.
 KEY_DOOR_CHAIN_REACH_MUTATIONS = [
@@ -14214,6 +14224,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_obtain_sources.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, CYCLE_CLOCK_WALK_MUTATIONS,
               "tests/test_ai/test_obtain_sources.py", survivors)
+    run_group(PLAYER_SRC, CYCLE_CLOCK_PLAYER_MUTATIONS,
+              "tests/test_ai/test_one_drop_model.py", survivors)
     run_group(OBTAIN_MODEL_DROP_SRC, OBTAIN_MODEL_DROP_MUTATIONS,
               "tests/test_ai/test_obtain_model.py", survivors)
     run_group(OBTAIN_MODEL_DROP_SRC, OBTAIN_MODEL_DROP_GREY_MUTATIONS,

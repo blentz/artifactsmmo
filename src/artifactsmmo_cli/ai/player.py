@@ -470,6 +470,12 @@ class GamePlayer:
         # epic's bespoke `recoverable` map). `NO_PROFILE_CONTEXT` until the first
         # decide/plan cycle runs.
         self._last_ctx: SelectionContext = NO_PROFILE_CONTEXT
+        # THE cycle clock (rulings FR-8, FR-IA): stamped once at the start of
+        # each cycle (`_stamp_cycle`), and carried by every context this player
+        # builds, `_selection_context`'s and every `_timed` one. A context
+        # derived from `NO_PROFILE_CONTEXT` without it would carry the module's
+        # import instant for the whole run.
+        self._cycle_now: datetime = datetime.now(tz=timezone.utc)
         # The fight-seconds bootstrap (spec 2026-10-18 §2.9, ruling ZD): the
         # account's `/my/logs`, fetched once for the fleet (`play --all`
         # passes it to every child) or, when none is given, at `_initialize`;
@@ -1084,6 +1090,7 @@ class GamePlayer:
         assert self._strategy is not None
         state = self.state
         game_data = self.game_data
+        self._stamp_cycle()
         self._maybe_retry_bank()
         # Sibling facts the ctx needs. `run()` gets these from
         # `_update_coordination`, which this path deliberately does NOT call: it
@@ -1174,6 +1181,7 @@ class GamePlayer:
 
         try:
             while True:
+                self._stamp_cycle()
                 # Refresh BEFORE building actions so a batched PursueTask plan
                 # bakes its unit count K from the same post-refresh inventory the
                 # goal/map_means later computes K from (else K can diverge on the
@@ -2971,10 +2979,17 @@ class GamePlayer:
                                    combat_monster=monster,
                                    learned_drops=self._cycle_learned_drops()))
 
+    def _stamp_cycle(self) -> None:
+        """Read the cycle clock once, at the start of a cycle (ruling FR-IA)."""
+        self._cycle_now = datetime.now(tz=timezone.utc)
+
     def _timed(self, ctx: SelectionContext) -> SelectionContext:
-        """`ctx` carrying this cycle's learned fight and action seconds."""
+        """`ctx` carrying this cycle's learned fight and action seconds and its
+        clock (`_cycle_now`, ruling FR-IA): every context derived from
+        `NO_PROFILE_CONTEXT` on a live path passes here."""
         fight_seconds, action_seconds = self._timing()
-        return replace(ctx, fight_seconds=fight_seconds, action_seconds=action_seconds)
+        return replace(ctx, now=self._cycle_now, fight_seconds=fight_seconds,
+                       action_seconds=action_seconds)
 
     def _consumable_price(self, code: str) -> Fraction:
         """Acquisition actions per unit to REPLACE a consumable a fight used —
@@ -4370,8 +4385,8 @@ class GamePlayer:
                                   task_monster, near_term_targets)
         bank_blocker = self._blockers.get("bank")
         ctx = SelectionContext(
-            # The cycle clock (ruling FR-8): stamped once, here.
-            now=datetime.now(tz=timezone.utc),
+            # The cycle clock (rulings FR-8, FR-IA), stamped at the cycle's start.
+            now=self._cycle_now,
             bank_accessible=bank_blocker is None,
             bank_required_level=bank_blocker.required_level if bank_blocker else 0,
             bank_unlock_monster=bank_blocker.unlock_monster if bank_blocker else None,
