@@ -772,12 +772,21 @@ def test_gold_is_consumed_by_the_route_that_spends_it(state, game_data) -> None:
         >= UNOBTAINABLE_PER_UNIT
 
 
-def test_banked_gold_is_not_credited_to_the_pocket(state, game_data) -> None:
+def test_banked_gold_is_a_priced_withdraw_not_a_holding(state, game_data) -> None:
     """Same rule as every other holding in this module: the bag counts, the bank
-    is a priced route. Banked gold is therefore NOT spendable here — conservative,
-    and it under-credits rather than pricing the trip to the bank at nothing."""
+    is a priced route. Banked gold is not credited to the pocket; it is the gold
+    WITHDRAW route, priced at the one withdraw and the bank hop on top of the
+    buy the pocket would have paid (2): what the walk serves, WithdrawGold then
+    the buy, since a vendor is paid from the pocket (the HTTP 492 hotfix)."""
     banked_only = replace(state, inventory={}, gold=0, bank_gold=50_000)
+    in_pocket = replace(state, inventory={}, gold=50_000, bank_gold=0)
+    assert acquisition_actions("healing_rune", 1, in_pocket, game_data,
+                               TIMED_NO_PROFILE_CONTEXT, equip=False) == 2
     assert acquisition_actions("healing_rune", 1, banked_only, game_data,
+                               TIMED_NO_PROFILE_CONTEXT, equip=False) == 2 + 2
+    # An unread bank is UNKNOWN, not rich: it withdraws nothing.
+    unread = replace(banked_only, bank_gold=None)
+    assert acquisition_actions("healing_rune", 1, unread, game_data,
                                TIMED_NO_PROFILE_CONTEXT, equip=False) \
         >= UNOBTAINABLE_PER_UNIT
 

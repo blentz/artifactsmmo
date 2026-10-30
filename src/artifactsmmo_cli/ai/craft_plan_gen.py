@@ -44,6 +44,7 @@ from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
+from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.bag_clear import clear_actions, related_codes
 from artifactsmmo_cli.ai.bag_peak import plan_bag_peak
@@ -665,6 +666,13 @@ def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool:
     candidates = (*relevant, *pool)
     assert isinstance(step, Act), "an open gate is expanded by `_walk_plan`"
     route = graph.sources[step.item][step.route]
+    if route.kind is SourceKind.WITHDRAW and step.item == GOLD_CODE:
+        # Banked gold for a buy the pocket alone cannot pay (`ObtainModel`'s
+        # gold withdraw): the buy pays from the pocket, so the gold is
+        # withdrawn first, the amount the walk drew on the bank, at the bank
+        # tile (the route's own gate already asked `bank_accessible`).
+        return WithdrawGoldAction(quantity=step.amount, bank_location=game_data.bank_location(),
+                                  accessible=bank_accessible)
     if route.kind is SourceKind.WITHDRAW:
         found = next((a for a in candidates
                       if isinstance(a, WithdrawItemAction) and a.code == step.item), None)

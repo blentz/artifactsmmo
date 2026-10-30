@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
+from artifactsmmo_cli.ai.actions.withdraw_gold import gold_ferry
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.equip_value import equip_value
@@ -322,6 +323,12 @@ class UpgradeEquipmentGoal(Goal):
                 result.append(GeFillSellOrderAction(
                     order_id=order_id, item_code=target_item, price=ge_price,
                     quantity=1, ge_location=ge_location))
+                # The fill pays from the pocket; when the pocket is short the
+                # bank's gold is ferried first (`gold_ferry`), or the search has
+                # no edge that makes the fill applicable.
+                ferry = gold_ferry(actions, state, ge_price - state.gold)
+                if ferry is not None:
+                    result.append(ferry)
                 if not any(isinstance(a, EquipAction) and a.code == target_item
                            and a.slot == target_slot for a in result):
                     result.append(EquipAction(code=target_item, slot=target_slot))

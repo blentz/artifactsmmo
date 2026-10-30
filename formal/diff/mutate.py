@@ -412,6 +412,11 @@ OBTAIN_MODEL_POLICY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_mod
 ACQUISITION_COST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "acquisition_cost.py"
 SKILL_CREDIT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "skill_credit.py"
 OBTAIN_MODEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "obtain_model.py"
+# HTTP 492 hotfix (2026-10-30): every gold buy pays from the pocket.
+GE_FILL_SELL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "ge_fill_sell.py"
+GE_POST_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "ge_post_buy.py"
+WITHDRAW_GOLD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "withdraw_gold.py"
+POST_BUY_BID_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "post_buy_bid.py"
 OBTAIN_MODEL_DROP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "drop_routes.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
 FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding_core.py"
@@ -9738,6 +9743,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
+    GE_FILL_SELL_SRC, GE_POST_BUY_SRC, WITHDRAW_GOLD_SRC, POST_BUY_BID_GOAL_SRC,
     LIVENESS_CENSUS_SRC, ATTEMPT_PROSPECTING_SRC, GATHER_ARMOUR_SRC, GATHER_REQUIREMENT_SRC,
     RECIPE_CATALOG_SRC,
     LOADOUT_CALIBRATION_SRC,
@@ -13692,6 +13698,89 @@ def main() -> int:
         MUTATION_LOCKFILE.unlink(missing_ok=True)
 
 
+# HTTP 492 hotfix (2026-10-30). HAL planned a bare GeBuy from a 6,516 pocket
+# against a 6,550 order: `can_spend` asks the ACCOUNT, the server takes the
+# pocket. Each branch below is one half of the fix; the kill-test is
+# tests/test_ai/test_pocket_gold_buys.py.
+POCKET_GOLD_FILL_MUTATIONS = [
+    ("ge_fill_sell: the fill no longer asks the pocket (the 492 bug itself)",
+     "        if state.gold < cost:\n            return False\n",
+     "        if False:\n            return False\n"),
+]
+
+POCKET_GOLD_POST_BUY_MUTATIONS = [
+    ("ge_post_buy: the bid no longer asks the pocket",
+     "        return state.gold >= cost and can_spend(state, game_data, self.item_code, cost)\n",
+     "        return can_spend(state, game_data, self.item_code, cost)\n"),
+    ("ge_post_buy: apply no longer asserts the pocket",
+     "        if state.gold < cost or not can_spend(state, game_data, self.item_code, cost):\n",
+     "        if not can_spend(state, game_data, self.item_code, cost):\n"),
+]
+
+POCKET_GOLD_FERRY_MUTATIONS = [
+    ("gold_ferry: a covered pocket still ferries",
+     "    if deficit <= 0 or state.bank_gold is None or state.bank_gold <= 0:\n",
+     "    if state.bank_gold is None or state.bank_gold <= 0:\n"),
+    ("gold_ferry: an empty bank still ferries",
+     "    if deficit <= 0 or state.bank_gold is None or state.bank_gold <= 0:\n",
+     "    if deficit <= 0 or state.bank_gold is None:\n"),
+    ("gold_ferry: the ferry is not capped at the bank",
+     "    return dataclasses.replace(template, quantity=min(deficit, state.bank_gold))\n",
+     "    return dataclasses.replace(template, quantity=deficit)\n"),
+]
+
+POCKET_GOLD_UPGRADE_MUTATIONS = [
+    ("progression: the upgrade's GE fill admits no ferry",
+     "                ferry = gold_ferry(actions, state, ge_price - state.gold)\n",
+     "                ferry = None\n"),
+    ("progression: the upgrade's ferry is the whole price, not the shortfall",
+     "                ferry = gold_ferry(actions, state, ge_price - state.gold)\n",
+     "                ferry = gold_ferry(actions, state, ge_price)\n"),
+]
+
+POCKET_GOLD_BID_MUTATIONS = [
+    ("post_buy_bid: the bids admit no ferry",
+     "        return [*bids] if ferry is None else [*bids, ferry]\n",
+     "        return [*bids]\n"),
+    ("post_buy_bid: the ferry ignores the pocket",
+     "        ferry = gold_ferry(actions, state, escrow - state.gold)\n",
+     "        ferry = gold_ferry(actions, state, escrow)\n"),
+]
+
+POCKET_GOLD_ROUTE_MUTATIONS = [
+    ("obtain_model: banked gold is no WITHDRAW route",
+     "        if item == GOLD_CODE:\n            stock = self._bank_gold()\n",
+     "        if False:\n            stock = self._bank_gold()\n"),
+    ("obtain_model: one gold withdraw moves one gold piece",
+     "            per = stock\n",
+     "            per = 1\n"),
+    ("obtain_model: an unread bank reads as empty-but-known (crash on None)",
+     "        if banked is None:\n            return 0\n",
+     "        if False:\n            return 0\n"),
+    ("obtain_model: the bank's gold ignores the walk's named buys",
+     "        floor = reserve_floor_multi(self._account, self._gd, self._spend or frozenset())\n",
+     "        floor = reserve_floor_multi(self._account, self._gd, frozenset())\n"),
+    ("obtain_model: the bank's gold counts the walk's pocket twice",
+     "        return max(0, min(banked, account_gold(self._account) - floor - self._state.gold))\n",
+     "        return max(0, min(banked, account_gold(self._account) - floor))\n"),
+    ("obtain_model: the bank's gold ignores the reserve floor",
+     "        return max(0, min(banked, account_gold(self._account) - floor - self._state.gold))\n",
+     "        return max(0, min(banked, account_gold(self._account) - self._state.gold))\n"),
+]
+
+POCKET_GOLD_PRICE_MUTATIONS = [
+    ("acquisition_cost: a gold withdraw rounds each gold piece up to an action",
+     "        exact = Fraction(1) if item == GOLD_CODE else 1\n",
+     "        exact = 1\n"),
+]
+
+POCKET_GOLD_WALK_MUTATIONS = [
+    ("craft_plan_gen: the walk's gold withdraw becomes an item withdraw of 'gold'",
+     "    if route.kind is SourceKind.WITHDRAW and step.item == GOLD_CODE:\n",
+     "    if False:\n"),
+]
+
+
 def _collect_all_groups() -> None:
     """Register every mutation group into _UNITS. Collection only — execution is
     _execute's job, so the anchor check can reuse this without running pytest.
@@ -15042,6 +15131,22 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_tiers_means.py", survivors)
     run_group(TASK_CANCEL_GOAL_SRC, TASK_CANCEL_GOAL_COIN_MUTATIONS,
               "tests/test_ai/test_goals.py", survivors)
+    run_group(GE_FILL_SELL_SRC, POCKET_GOLD_FILL_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(GE_POST_BUY_SRC, POCKET_GOLD_POST_BUY_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(WITHDRAW_GOLD_SRC, POCKET_GOLD_FERRY_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(PROGRESSION_GOAL_SRC, POCKET_GOLD_UPGRADE_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(POST_BUY_BID_GOAL_SRC, POCKET_GOLD_BID_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, POCKET_GOLD_ROUTE_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(ACQUISITION_COST_SRC, POCKET_GOLD_PRICE_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, POCKET_GOLD_WALK_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
 def _run_all_groups() -> int:
     survivors: list[str] = []
     _UNITS.clear()

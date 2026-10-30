@@ -53,11 +53,17 @@ class GeFillSellOrderAction(Action):
         # Slot-floor: buying mints +quantity; refuse if it would overflow the cap.
         if state.inventory_free < self.quantity:
             return False
-        # Gold gate: the buy must leave gold at or above the progression reserve
-        # floor (mirrors craft_vs_buy's affordability constraint and NpcBuyAction's
-        # gold gate, but honours the dynamic per-state reserve rather than a flat cap).
-        if not can_spend(state, game_data, self.item_code,
-                         self.price * self.quantity):
+        # Gold gate, two questions. The server takes the price from the POCKET
+        # (HTTP 492 otherwise), so the pocket must cover it: `can_spend` asks
+        # only the ACCOUNT, and a bank-rich, pocket-short state planned a bare
+        # GeBuy that 492'd every cycle (live HAL 2026-10-30, 6,516 pocket vs a
+        # 6,550 order). The goal admits a `gold_ferry` withdraw to fill the
+        # pocket first. Then the reserve: the buy must leave the account at or
+        # above the progression reserve floor (S-045, as NpcBuyAction).
+        cost = self.price * self.quantity
+        if state.gold < cost:
+            return False
+        if not can_spend(state, game_data, self.item_code, cost):
             return False
         order = game_data.ge_best_sell_order(self.item_code)
         if order is None:

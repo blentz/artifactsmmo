@@ -46,7 +46,7 @@ from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
-from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
+from artifactsmmo_cli.ai.progression_reserve import account_gold, reserve_floor_multi, spendable_pocket
 from artifactsmmo_cli.ai.region_edges import (
     content_reached,
     door_legs,
@@ -410,12 +410,40 @@ class ObtainModel:
         """A copy sits in the bank. Gated on `ctx.bank_accessible`: that is a
         persisted, level-gated blocker that stays False for the whole early game
         while `state.bank_items` is populated regardless, and
-        `WithdrawItemAction.is_applicable` refuses unconditionally without it."""
-        stock = (self._state.bank_items or {}).get(item, 0)
+        `WithdrawItemAction.is_applicable` refuses unconditionally without it.
+
+        GOLD IS WITHDRAWN TOO (`WithdrawGoldAction`), and that is what lets a
+        pocket-short, bank-rich walk pay a buy: every gold sink pays from the
+        pocket (HTTP 492 otherwise), while the reserve is the ACCOUNT's. Live
+        2026-10-30, HAL held 6,516 in pocket against a 6,550 GE order with tens
+        of thousands banked. The capacity is `_bank_gold`'s; ONE application
+        moves any amount, so its yield is the capacity."""
+        if item == GOLD_CODE:
+            stock = self._bank_gold()
+            per = stock
+        else:
+            stock = (self._state.bank_items or {}).get(item, 0)
+            per = 1
         if stock <= 0:
             return []
         gate = Gate(GateKind.BANK_ACCESSIBLE, "bank", self._ctx.bank_accessible)
-        return [Route(item, SourceKind.WITHDRAW, item, 1, stock, (gate,))]
+        return [Route(item, SourceKind.WITHDRAW, item, per, stock, (gate,))]
+
+    def _bank_gold(self) -> int:
+        """The banked gold the walk's buys may still spend on top of its
+        pocket: the account's gold above the reserve floor its buys keep
+        (`reserve_floor_multi` over `spend`, nothing named when None), less
+        the pocket the walk already counts, and never more than the bank holds.
+
+        So pocket plus withdraw never spends past the reserve `can_spend`
+        refuses, whichever pocket the walk counts (`spend`'s spendable one or
+        the whole pocket). An unread bank (`bank_gold is None`) is UNKNOWN,
+        not empty: it ferries nothing, as `account_gold` credits it nothing."""
+        banked = self._account.bank_gold
+        if banked is None:
+            return 0
+        floor = reserve_floor_multi(self._account, self._gd, self._spend or frozenset())
+        return max(0, min(banked, account_gold(self._account) - floor - self._state.gold))
 
     def _recycle(self, item: str) -> list[Route]:
         """Held (bag or bank) equippables whose recipe consumes `item`.

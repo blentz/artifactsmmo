@@ -10,7 +10,7 @@ from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
-from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
+from artifactsmmo_cli.ai.actions.withdraw_gold import gold_ferry
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.attempt_prospecting import gather_prospecting
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
@@ -618,17 +618,12 @@ class GatherMaterialsGoal(Goal):
         # the plan can chain WithdrawGold → NpcBuy (admit/emit symmetry —
         # without this edge, a pocket-short/bank-rich state is admitted by
         # is_plannable but the search has no gold source and dies at 0-length).
-        # Resized from a factory-emitted action so bank location/accessibility
-        # survive; capped at the KNOWN bank balance (a None bank ferries
-        # nothing — WithdrawGoldAction.is_applicable rejects it anyway).
+        # Sized and capped by `gold_ferry`, the one ferry every gold-buying
+        # goal admits (a GeFillSellOrder gates on the pocket as NpcBuy does).
         analysis = analyze_currency_leaves(self._needed, state, game_data)
-        deficit = analysis.gold_deficit
-        if deficit > 0 and state.bank_gold is not None and state.bank_gold > 0:
-            template = next(
-                (a for a in actions if isinstance(a, WithdrawGoldAction)), None)
-            if template is not None:
-                result.append(dataclasses.replace(
-                    template, quantity=min(deficit, state.bank_gold)))
+        ferry = gold_ferry(actions, state, analysis.gold_deficit)
+        if ferry is not None:
+            result.append(ferry)
 
         # ITEM-CURRENCY ferry — the gold ferry's twin, same admit/emit break
         # (2026-08-05). NpcBuyAction's non-gold branch gates on the POCKET stack

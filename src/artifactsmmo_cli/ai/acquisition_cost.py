@@ -192,8 +192,14 @@ def _priced(item: str, source: Source, state: WorldState,
     a workshop, WITHDRAW at a bank; those three are the only ones that need a
     venue derived rather than read."""
     if source.kind is SourceKind.WITHDRAW:
+        # A gold withdraw is ONE action for any amount up to its capacity (its
+        # yield): an exact cost, as a fight for gold's is, so the route CHOICE
+        # (`_route_unit`, a unit's share of an application) prices a unit of
+        # banked gold at a sliver of one action rather than rounding each gold
+        # piece up to a whole one, and `_accumulate` charges the one withdraw.
+        exact = Fraction(1) if item == GOLD_CODE else 1
         return RouteOption(kind=source.kind.value, venue=BANK_VENUE,
-                           actions_per_application=1, yield_per=source.yield_per,
+                           actions_per_application=exact, yield_per=source.yield_per,
                            capacity=source.capacity)
     if source.kind is SourceKind.RECYCLE:
         stats = game_data.item_stats(source.code)
@@ -1142,11 +1148,11 @@ def _owned_with_gold(state: WorldState, pocket: int) -> dict[str, int]:
     was not expensive, it was unreachable.
 
     POCKET ONLY, and that follows the bag-only rule this module already states:
-    the bank is a ROUTE, not a holding. Banked gold is therefore not credited
-    here, which is conservative — it under-credits rather than pricing a trip to
-    the bank at nothing. Making banked gold a withdraw route of its own is a
-    separate increment (`WithdrawGoldAction` exists and is dormant precisely
-    because no goal has ever needed banked gold — which is what this wall did)."""
+    the bank is a ROUTE, not a holding. Banked gold is not credited here; it is
+    `ObtainModel`'s gold WITHDRAW route (the gold above the reserve beyond the
+    pocket), priced at the one withdraw and the bank hop, which is what the
+    walk serves (`WithdrawGoldAction`, then the buy) — a buy pays from the
+    pocket, so a bank-rich pocket-short plan withdraws first."""
     owned = dict(state.inventory)
     owned["gold"] = owned.get("gold", 0) + pocket
     return owned

@@ -13,6 +13,7 @@ also keeps bid and self-craft mutually exclusive (`bid_vs_craft`).
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
+from artifactsmmo_cli.ai.actions.withdraw_gold import gold_ferry
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
@@ -56,16 +57,22 @@ class PostBuyBidGoal(Goal):
     def relevant_actions(
         self, actions: list[Action], state: WorldState, game_data: GameData,
     ) -> list[Action]:
-        """One GePostBuyOrderAction per biddable objective-step material."""
+        """One GePostBuyOrderAction per biddable objective-step material, and
+        the `gold_ferry` that fills the pocket for them when it is short: the
+        escrow leaves the pocket, and the goal is satisfied only once every
+        bid is posted, so the ferry is sized to their joint escrow."""
         ge_loc = game_data.grand_exchange_location()
         if ge_loc is None:
             return []
-        return [
+        bids = [
             GePostBuyOrderAction(item_code=item, quantity=qty, price=price,
                                  ge_location=ge_loc)
             for item, qty, price in ge_bid_candidates(
                 state, game_data, self._ctx, TTL_CYCLES)
         ]
+        escrow = sum(bid.price * bid.quantity for bid in bids)
+        ferry = gold_ferry(actions, state, escrow - state.gold)
+        return [*bids] if ferry is None else [*bids, ferry]
 
     def __repr__(self) -> str:
         return "PostBuyBid"
