@@ -21,6 +21,7 @@ the source pickers sit below `acquisition_cost` in the import graph.
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -40,16 +41,6 @@ def fight_prospecting(monster_code: str, state: WorldState, game_data: GameData)
     return loadout_prospecting(Combat(game_data.monster_attack(monster_code),
                                       game_data.monster_resistance(monster_code),
                                       dict(state.attack)), state, game_data)
-
-
-def gather_requirement(resource: str, game_data: GameData) -> tuple[str, int]:
-    """The gathering skill and level `resource` asks. Every resource the API
-    serves names one, so a resource with none in the catalogue RAISES: API
-    data or fail."""
-    requirement = game_data.resource_skill_level(resource)
-    if requirement is None:
-        raise ValueError(f"resource {resource!r} has no gathering skill in game data")
-    return requirement
 
 
 def gather_prospecting(resource: str, state: WorldState, game_data: GameData) -> int:

@@ -1,4 +1,6 @@
 # tests/test_tui/test_map_pane_animation.py
+import pytest
+
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.sprites import (
@@ -80,10 +82,13 @@ def test_swing_overlay_empty_without_snapshot():
 
 
 def test_select_head_gather_by_skill_returns_bundle():
-    gd = _GD(skills={"ash_tree": ("woodcutting", 1), "copper_rocks": ("mining", 1)})
+    gd = _GD(skills={"ash_tree": ("woodcutting", 1), "copper_rocks": ("mining", 1),
+                     "shrimp": ("fishing", 1)})
     assert select_swing_head(Mode.GATHER_SWING, "ash_tree", gd) is AXE
     assert select_swing_head(Mode.GATHER_SWING, "copper_rocks", gd) is PICKAXE
     assert select_swing_head(Mode.GATHER_SWING, "shrimp", gd) is PICKAXE          # fallback
+    with pytest.raises(ValueError, match="no gathering skill"):     # API data or fail
+        select_swing_head(Mode.GATHER_SWING, "no_such_spot", gd)
     assert select_swing_head(Mode.GATHER_SWING, None, gd) is PICKAXE
 
 

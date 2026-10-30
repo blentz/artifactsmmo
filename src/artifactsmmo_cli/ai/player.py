@@ -113,6 +113,7 @@ from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.fleet_climber import fleet_climbers, serving_climbers
 from artifactsmmo_cli.ai.fleet_pieces import fleet_pieces
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.ai.gear_objective_context import (
     attach_gear_objective,
     gear_keep_for,
@@ -4562,9 +4563,8 @@ class GamePlayer:
         ``record_loadout_profile`` already swallows ``SQLAlchemyError``.
 
         Only ``FightAction`` and ``GatherAction`` produce loadout profiles;
-        all other action types are silently skipped.  Gather actions without a
-        known resource→skill mapping (``game_data.resource_skill_level`` returns
-        ``None``) are also skipped.
+        all other action types are silently skipped. A gather's resource
+        skill is mandatory (``gather_requirement``, ruling T14f-dead).
         """
         if self.history is None or self.game_data is None:
             return
@@ -4578,10 +4578,7 @@ class GamePlayer:
             )
             task_key = combat_key(action.monster_code)
         elif isinstance(action, GatherAction):
-            skill_req = self.game_data.resource_skill_level(action.resource_code)
-            if skill_req is None:
-                return
-            skill, _ = skill_req
+            skill, _ = gather_requirement(action.resource_code, self.game_data)
             purpose = Gather(skill)
             task_key = gather_key(skill)
         else:

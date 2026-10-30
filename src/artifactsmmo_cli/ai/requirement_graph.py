@@ -54,6 +54,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
+from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.source_kind import SourceKind
 
@@ -146,9 +147,7 @@ def _gather_skill_by_item(game_data: _HasRequirementData) -> dict[str, tuple[str
     out: dict[str, tuple[str, int]] = {}
 
     def record(item: str, resource: str) -> None:
-        gate = game_data.resource_skill_level(resource)
-        if gate is None:
-            return
+        gate = gather_requirement(resource, game_data)
         prior = out.get(item)
         if prior is None or gate[1] < prior[1]:
             out[item] = gate

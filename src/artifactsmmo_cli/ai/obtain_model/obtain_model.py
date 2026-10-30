@@ -37,6 +37,7 @@ from artifactsmmo_cli.ai.decompose_core import Route as WalkRoute
 from artifactsmmo_cli.ai.decompose_core import can_obtain, next_step, plan_legs
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, rank_gather_sources
 from artifactsmmo_cli.ai.inventory_keep import destroyable
 from artifactsmmo_cli.ai.obtain_model.drop_routes import Fighter, drop_routes, gold_drop_routes
@@ -518,10 +519,8 @@ class ObtainModel:
             doors = () if known else doors_to(resource, tiles, self._crossing, self._gd)
             gates = [Gate(GateKind.SPAWN_LIVE, resource, bool(tiles)),
                      Gate(GateKind.SPAWN_KNOWN, resource, known, doors=doors)]
-            requirement = self._gd.resource_skill_level(resource)
-            if requirement is not None:
-                skill, level = requirement
-                gates.append(Gate(GateKind.GATHER_SKILL, skill, self._skill(skill) >= level, level))
+            skill, level = gather_requirement(resource, self._gd)
+            gates.append(Gate(GateKind.GATHER_SKILL, skill, self._skill(skill) >= level, level))
             out.append(Route(item, SourceKind.GATHER, resource, 1, UNBOUNDED_CAPACITY,
                              tuple(gates), primary=rank == 0))
         return out

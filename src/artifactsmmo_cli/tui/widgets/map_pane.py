@@ -16,6 +16,7 @@ from textual.widgets import Static
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.tui.glyphs import UNMAPPED_COLOR, WALKABLE_COLOR
 from artifactsmmo_cli.tui.half_block import HalfBlockCompositor
 from artifactsmmo_cli.tui.path_interpolate import glide_path
@@ -109,8 +110,7 @@ def select_swing_head(mode: Mode, action_target: str | None, game_data: GameData
     gather -> axe/pickaxe by the resource's skill; fight -> sword; craft -> sword for
     cooking else hammer (unknown item -> None)."""
     if mode is Mode.GATHER_SWING:
-        skill_req = game_data.resource_skill_level(action_target) if action_target else None
-        return gather_head(skill_req[0] if skill_req is not None else None)
+        return gather_head(gather_requirement(action_target, game_data)[0] if action_target else None)
     if mode is Mode.FIGHT_SWING:
         return SWORD
     if mode is Mode.CRAFT_SWING:

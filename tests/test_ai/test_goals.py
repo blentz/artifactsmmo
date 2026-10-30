@@ -1198,6 +1198,7 @@ class TestGatherMaterialsGoal:
     def test_relevant_actions_includes_direct_gather(self):
         gd = make_game_data()
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         goal = GatherMaterialsGoal(target_item="sword", needed={"copper_ore": 6})
         state = make_state()
         actions = [
@@ -1222,6 +1223,7 @@ class TestGatherMaterialsGoal:
         # copper_boots needs copper (bars); copper needs copper_ore; copper_rocks drops copper_ore
         gd = make_game_data()
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         gd._crafting_recipes = {"copper": {"copper_ore": 8}}
         gd._workshop_locations = {"mining": (3, 0)}
         stats = ItemStats(code="copper", level=1, type_="resource",
@@ -1255,6 +1257,7 @@ class TestGatherMaterialsGoal:
         # staff needs plank (crafted from wood); wood is a resource drop.
         gd = make_game_data()
         gd._resource_drops = {"wood_grove": "raw_wood"}
+        gd._resource_skill = {"wood_grove": ("woodcutting", 1)}
         gd._crafting_recipes = {
             "plank": {"raw_wood": 4},
             "staff": {"plank": 6, "gem": 1},

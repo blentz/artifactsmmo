@@ -466,6 +466,7 @@ FIGHT_WALK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_walk.py"
 BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selection.py"
 ATTEMPT_PROSPECTING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "attempt_prospecting.py"
 GATHER_ARMOUR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_armour.py"
+GATHER_REQUIREMENT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_requirement.py"
 LOCATION_CATALOG_SRC_NPC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 GREY_FARM_SRC_CUR = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grey_farm.py"
 CRAFT_CONDITIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_conditions.py"
@@ -8041,7 +8042,7 @@ LOSS_RISK_COST_MUTATIONS = [
 ]
 SKILL_CREDIT_MUTATIONS = [
     ("skill credit: a gather trains nothing",
-     "        return requirement[0] if requirement is not None else None\n",
+     "        return gather_requirement(route.venue, game_data)[0]\n",
      "        return None\n"),
     ("skill credit: a craft trains nothing",
      "        return stats.crafting_skill if stats is not None else None\n",
@@ -9637,7 +9638,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
-    LIVENESS_CENSUS_SRC, ATTEMPT_PROSPECTING_SRC, GATHER_ARMOUR_SRC,
+    LIVENESS_CENSUS_SRC, ATTEMPT_PROSPECTING_SRC, GATHER_ARMOUR_SRC, GATHER_REQUIREMENT_SRC,
     LOADOUT_CALIBRATION_SRC,
     TIER_PROGRESS_SRC, COMBAT_TARGETS_SRC, WIN_THRESHOLD_CORE_SRC,
     ROLE_SELECTION_SRC,
@@ -14504,7 +14505,7 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_gather_prospecting_basis.py", survivors)
     run_group(OBTAIN_MODEL_SRC, GATHER_BASIS_OBTAIN_MUTATIONS,
               "tests/test_ai/test_gather_prospecting_basis.py", survivors)
-    run_group(ATTEMPT_PROSPECTING_SRC, ATTEMPT_PROSPECTING_RAISE_MUTATIONS,
+    run_group(GATHER_REQUIREMENT_SRC, ATTEMPT_PROSPECTING_RAISE_MUTATIONS,
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
     run_group(DROP_FIGHT_SELECTION_SRC, PROSPECTING_DROP_FIGHT_MUTATIONS,
               "tests/test_ai/test_attempt_prospecting.py", survivors)

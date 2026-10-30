@@ -19,9 +19,10 @@ from artifactsmmo_cli.ai.actions.gather_apply_core import (
     gather_is_applicable_pure,
 )
 from artifactsmmo_cli.ai.actions.movement import MoveAction
-from artifactsmmo_cli.ai.attempt_prospecting import gather_prospecting, gather_requirement
+from artifactsmmo_cli.ai.attempt_prospecting import gather_prospecting
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.ai.gear_value_core import Gather
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore

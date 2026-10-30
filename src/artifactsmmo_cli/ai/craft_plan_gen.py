@@ -46,7 +46,6 @@ from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-from artifactsmmo_cli.ai.attempt_prospecting import gather_requirement
 from artifactsmmo_cli.ai.bag_clear import clear_actions, related_codes
 from artifactsmmo_cli.ai.bag_peak import plan_bag_peak
 from artifactsmmo_cli.ai.best_loadout import loadout_for
@@ -56,6 +55,7 @@ from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.fight_room_license import refused_monster
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_armour import gather_armour
+from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal

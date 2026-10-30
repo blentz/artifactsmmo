@@ -288,26 +288,6 @@ def test_gather_records_gather_loadout_profile(tmp_path):
     store.close()
 
 
-def test_record_loadout_skips_unknown_resource(tmp_path):
-    """_record_loadout_for_action does not record when resource has no skill."""
-    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
-    player = GamePlayer(character="Robby", history=store)
-    player._offline_timing = committed_timing()
-    player._learned_drops = LearnedDrops.empty()
-
-    gd = GameData()
-    gd._resource_skill = {}   # copper_ore has no skill data
-    player.game_data = gd
-
-    state = make_state()
-    action = GatherAction(resource_code="copper_ore", locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
-    player._record_loadout_for_action(action, state)
-
-    # No profile should be stored when skill is unknown
-    assert store.loadout_profiles() == {}
-    store.close()
-
-
 def test_record_loadout_skips_non_combat_gather_actions(tmp_path):
     """_record_loadout_for_action is a no-op for other action types."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")

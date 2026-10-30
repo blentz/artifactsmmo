@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.best_loadout import loadout_for
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.reach_currency import funding_step_goal
@@ -335,10 +336,10 @@ def _advances_closure(action: Action, closure_items: frozenset[str],
                    or action.resource_code)
         if produced in closure_items:
             return True
-        resource_skill = game_data.resource_skill_level(action.resource_code)
+        resource_skill = gather_requirement(action.resource_code, game_data)
         # Tier-aware (same rule as the craft arm): the gathered resource's
         # required skill level must be at/below the target's craft level.
-        return (resource_skill is not None and skill is not None
+        return (skill is not None
                 and resource_skill[0] == skill
                 and resource_skill[1] <= skill_ceiling)
     if isinstance(action, FightAction):
@@ -422,8 +423,8 @@ def _advances_grind_of(item: str, first: Action, state: WorldState, game_data: G
                 and stats.crafting_level > state.skills.get(stats.crafting_skill, 1)):
             gated.add(stats.crafting_skill)
     for res in needed_resources:
-        gate = game_data.resource_skill_level(res)
-        if gate is not None and gate[1] > state.skills.get(gate[0], 1):
+        gate = gather_requirement(res, game_data)
+        if gate[1] > state.skills.get(gate[0], 1):
             gated.add(gate[0])
     for skill in sorted(gated - grinding):
         rung = grind_rung_goal(skill, state, game_data, _OFFLINE_CONTEXT)

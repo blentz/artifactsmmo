@@ -167,6 +167,7 @@ def test_secondary_drop_ingredient_is_material_not_buy_only():
     gd._item_stats["rare_gem"] = ItemStats(code="rare_gem", level=5, type_="resource")
     gd._crafting_recipes["iron_sword"] = {"iron_bar": 6, "rare_gem": 1}
     gd._resource_drops["gem_rocks"] = "common_stone"  # primary
+    gd._resource_skill["gem_rocks"] = ("mining", 1)
     gd._resource_drops_full["gem_rocks"] = [
         ("common_stone", 80, 1, 1), ("rare_gem", 5, 1, 1)]  # rare_gem is secondary
     state = make_state(skills={"weaponcrafting": 1, "mining": 1})

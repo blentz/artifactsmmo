@@ -39,6 +39,7 @@ def _gd_iron_ore() -> GameData:
     }
     gd._crafting_recipes = {}
     gd._resource_drops = {"iron_rocks": "iron_ore", "copper_rocks": "copper_ore"}
+    gd._resource_skill = {"iron_rocks": ("mining", 10), "copper_rocks": ("mining", 1)}
     gd._bank_location = (4, 0)
     gd._taskmaster_location = (1, 2)
     return gd
@@ -62,6 +63,7 @@ def _gd_copper_bar() -> GameData:
     }
     gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}, "iron_bar": {"iron_ore": 10}}
     gd._resource_drops = {"copper_rocks": "copper_ore", "iron_rocks": "iron_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1), "iron_rocks": ("mining", 10)}
     gd._workshop_locations = {"mining": (1, 5)}
     gd._bank_location = (4, 0)
     gd._taskmaster_location = (1, 2)
@@ -155,7 +157,9 @@ class TestGatherSuppressedByOpenBuyOrder:
         block acquisition of the same code."""
         gd = _gd_iron_ore()
         order = OpenOrder("s1", "iron_ore", 5, 9, OrderSide.SELL, 0)
-        state = make_state(inventory={}, open_orders=(order,))
+        # iron_rocks asks mining 10 (API-true), which the gather needs.
+        state = make_state(inventory={}, open_orders=(order,),
+                           skills={**make_state().skills, "mining": 10})
         goal = GatherMaterialsGoal("iron_ore", {"iron_ore": 5})
         actions = [GatherAction(resource_code="iron_rocks",
                                 locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty())]

@@ -40,7 +40,8 @@ def test_a_gather_trains_its_resource_skill_and_a_craft_its_item_skill(monkeypat
     assert route_skill("fish", GATHER, gd) == "fishing"
     assert route_skill("cooked_fish", CRAFT, gd) == "cooking"
     assert route_skill("fish", WITHDRAW, gd) is None
-    assert route_skill("fish", dataclasses.replace(GATHER, venue="rock"), gd) is None
+    with pytest.raises(ValueError, match="no gathering skill"):
+        route_skill("fish", dataclasses.replace(GATHER, venue="rock"), gd)
 
 
 def test_a_siblings_craft_trains_none_of_this_characters_skills(monkeypatch):

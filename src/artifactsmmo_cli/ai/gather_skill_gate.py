@@ -8,6 +8,7 @@ as a sub-grind), so a closed gather is simply not admitted.
 """
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -23,5 +24,5 @@ def skill_open(resource_code: str, state: WorldState, game_data: GameData) -> bo
     pearl plan died at one node). Mirrors
     GatherAction.is_applicable's skill arm (default level 1) without its
     transient inventory-space arm — bag pressure changes in-plan."""
-    req = game_data.resource_skill_level(resource_code)
-    return req is None or state.skills.get(req[0], 1) >= req[1]
+    skill, level = gather_requirement(resource_code, game_data)
+    return state.skills.get(skill, 1) >= level

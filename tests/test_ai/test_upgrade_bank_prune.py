@@ -37,6 +37,7 @@ def _gd() -> GameData:
     }
     # copper_rocks gather node drops copper_ore; ash_tree drops ash_wood (unrelated).
     gd._resource_drops = {"copper_rocks": "copper_ore", "ash_tree": "ash_wood"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1), "ash_tree": ("woodcutting", 1)}
     gd._resource_locations = {"copper_rocks": [(2, 0)], "ash_tree": [(5, 5)]}
     return gd
 

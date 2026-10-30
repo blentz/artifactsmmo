@@ -27,6 +27,7 @@ def _gd() -> GameData:
     }
     gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
     gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
     gd._resource_locations = {"copper_rocks": [(2, 0)]}
     return gd
 
@@ -137,6 +138,7 @@ def _unknown_drop_gd() -> GameData:
     }
     gd._crafting_recipes = {"widget": {_GHOST: 2, "copper_ore": 3}}
     gd._resource_drops = {"copper_rocks": "copper_ore"}   # no _GHOST entry
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
     gd._resource_locations = {"copper_rocks": [(2, 0)], _GHOST: [(3, 0)]}
     return gd
 

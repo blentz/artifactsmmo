@@ -15,14 +15,14 @@ from dataclasses import replace
 
 from artifactsmmo_cli.ai.acquisition_cost_core import BANK_VENUE, RouteOption
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.ai.source_kind import SourceKind
 
 
 def route_skill(item: str, route: RouteOption, game_data: GameData) -> str | None:
     """The skill one application of `route` (listed under `item`) trains, or None."""
     if route.kind == SourceKind.GATHER.value:
-        requirement = game_data.resource_skill_level(route.venue)
-        return requirement[0] if requirement is not None else None
+        return gather_requirement(route.venue, game_data)[0]
     if route.kind == SourceKind.CRAFT.value and route.venue != BANK_VENUE:
         stats = game_data.item_stats(item)
         return stats.crafting_skill if stats is not None else None

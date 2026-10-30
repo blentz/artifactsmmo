@@ -6,6 +6,8 @@ defects it is supposed to fix BY CONSTRUCTION (D1/D2/D3) and the two legitimate
 axes it must PRESERVE — not merely that the functions return something.
 """
 
+import pytest
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.requirement_graph import (
     DemandSet,
@@ -91,7 +93,8 @@ def test_d2_unobtainable_item_is_distinguishable_from_a_leaf():
     """The distinction the two-set return could not make: a dead end has NO
     routes, which is not the same as being a raw gathered resource."""
     gd = _gd(recipes={"mystery_blade": {"unobtainium": 1}},
-             drops={"copper_rocks": "copper_ore"})
+             drops={"copper_rocks": "copper_ore"},
+             resource_skill={"copper_rocks": ("mining", 1)})
     g = build_requirement_graph(gd)
     assert g.sources("unobtainium") == frozenset()
     assert not g.is_obtainable("unobtainium")
@@ -101,6 +104,7 @@ def test_d2_unobtainable_item_is_distinguishable_from_a_leaf():
 def test_all_four_state_free_kinds_are_detected():
     gd = _gd(recipes={"craftable": {"x": 1}},
              drops={"rocks": "gatherable"},
+             resource_skill={"rocks": ("mining", 1)},
              monster_drops={"mob": [("droppable", 1, 1, 1)]},
              npc_stock={"vendor": {"buyable": 10}})
     g = build_requirement_graph(gd)
@@ -356,10 +360,12 @@ def test_gather_skill_covers_secondary_drops():
     assert g.gather_skill["small_pearls"] == ("fishing", 30)
 
 
-def test_gather_skill_skips_resources_with_no_known_gate():
+def test_a_resource_with_no_known_gate_raises():
+    """Ruling T14f-dead: a resource's gathering skill is mandatory (API data
+    or fail); the branch that skipped a skill-less resource is gone."""
     gd = _gd(drops={"mystery_rocks": "ore"}, resource_skill={})
-    g = build_requirement_graph(gd)
-    assert "ore" not in g.gather_skill
+    with pytest.raises(ValueError, match="no gathering skill"):
+        build_requirement_graph(gd)
 
 
 # --- the memo ----------------------------------------------------------------

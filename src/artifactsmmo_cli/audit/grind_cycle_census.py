@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
@@ -59,8 +60,7 @@ def earned_skill(action: Action, game_data: GameData) -> str | None:
         stats = game_data.item_stats(action.code)
         return stats.crafting_skill if stats is not None and stats.crafting_skill else None
     if isinstance(action, GatherAction):
-        gate = game_data.resource_skill_level(action.resource_code)
-        return gate[0] if gate is not None else None
+        return gather_requirement(action.resource_code, game_data)[0]
     return None
 
 

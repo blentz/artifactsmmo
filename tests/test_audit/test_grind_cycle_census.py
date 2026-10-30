@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -33,8 +35,9 @@ def test_the_leg_that_earns_names_its_skill() -> None:
     assert earned_skill(CraftAction(code="copper_bar"), gd) == "mining"
     assert earned_skill(GatherAction(resource_code="copper_rocks", locations=frozenset(),
                                      learned_drops=LearnedDrops.empty()), gd) == "mining"
-    assert earned_skill(GatherAction(resource_code="no_such_rocks", locations=frozenset(),
-                                     learned_drops=LearnedDrops.empty()), gd) is None
+    with pytest.raises(ValueError, match="no gathering skill"):
+        earned_skill(GatherAction(resource_code="no_such_rocks", locations=frozenset(),
+                                  learned_drops=LearnedDrops.empty()), gd)
     assert earned_skill(CraftAction(code="no_such_item"), gd) is None
     assert earned_skill(FightAction(monster_code="chicken", learned_drops=LearnedDrops.empty()), gd) is None
 
