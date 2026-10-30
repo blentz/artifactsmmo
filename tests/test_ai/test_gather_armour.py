@@ -129,9 +129,10 @@ def test_a_later_slot_is_judged_on_the_armour_already_picked() -> None:
     assert gather_armour(gather, state, gd) == [EquipAction(code="robe", slot="body_armor_slot")]
 
 
-def test_the_armour_is_judged_on_the_state_the_tool_swap_leaves() -> None:
-    """The bagged +100 net (the fishing tool) makes the pearl sure, so after the
-    tool re-arm the robe saves nothing: the plan wears the tool alone."""
+def test_the_armour_saving_counts_the_tool_the_re_arm_puts_on() -> None:
+    """The bagged +100 net (the fishing tool) makes the pearl sure at the
+    gather loadout's prospecting, so the robe saves nothing: the plan wears
+    the tool alone."""
     gd = _gd(rate=2)
     gd._item_stats["net"] = ItemStats(code="net", level=1, type_="weapon",
                                       skill_effects={"fishing": -10}, prospecting=100)

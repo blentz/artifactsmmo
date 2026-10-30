@@ -45,9 +45,10 @@ ARMOUR_SLOTS: tuple[str, ...] = tuple(sorted(
 
 def gather_armour(gather: GatherAction, state: WorldState,
                   game_data: GameData) -> list[EquipAction]:
-    """The armour equips worth making before `gather` from `state` (the state
-    the gather's tool re-arm leaves): per slot, the owned piece whose saved
-    seconds most exceed its equip's cost, when any does."""
+    """The armour equips worth making before `gather` from `state`: per slot,
+    the owned piece whose saved seconds most exceed its equip's cost, when any
+    does. The gathers are read at the gather loadout's prospecting, so the
+    tool the re-arm puts on is already counted."""
     equips: list[EquipAction] = []
     for slot in ARMOUR_SLOTS:
         best: tuple[Fraction, int, str] | None = None

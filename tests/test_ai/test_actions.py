@@ -394,7 +394,6 @@ class TestGatherAction:
                               learned_drops=LearnedDrops.empty())
         gd = make_game_data(resource_skills={"copper_rocks": ("mining", 1)})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
-        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         state = make_state(x=0, y=0, inventory={}, skill_xp={"mining": 5})
         new_state = action.apply(state, gd)
         assert new_state.skill_xp == state.skill_xp
@@ -405,7 +404,6 @@ class TestGatherAction:
                               learned_drops=LearnedDrops.empty())
         gd = make_game_data(resource_skills={"copper_rocks": ("mining", 1)})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
-        gd._resource_skill = {"copper_rocks": ("mining", 1)}
         state = make_state(x=0, y=0, inventory={}, skill_xp={"mining": 0, "alchemy": 200})
         new_state = action.apply(state, gd)
         assert new_state.skill_xp == state.skill_xp

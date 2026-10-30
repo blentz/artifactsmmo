@@ -809,9 +809,9 @@ def _with_rearm(mapped: list[Action], state: WorldState,
             skill, _ = gather_requirement(action.resource_code, game_data)
             rearm = OptimizeLoadoutAction(target_skill=skill, game_data=game_data)
             # The tool when the worn one is not the skill's best, then the
-            # armour the gather's prospecting pays for (ruling T14f-3), judged
-            # on the state the tool swap leaves.
+            # armour the gather's prospecting pays for (ruling T14f-3). The
+            # armour's saving already reads the tool: `GatherAction.gathers`
+            # reads the gather loadout's prospecting (`gather_prospecting`).
             tool = [rearm] if rearm.is_applicable(state, game_data) else []
-            armed = rearm.apply(state, game_data) if tool else state
-            return [*mapped[:i], *tool, *gather_armour(action, armed, game_data), *mapped[i:]]
+            return [*mapped[:i], *tool, *gather_armour(action, state, game_data), *mapped[i:]]
     return mapped

@@ -7100,11 +7100,8 @@ GATHER_ARMOUR_MUTATIONS = [
 ]
 GATHER_ARMOUR_REARM_MUTATIONS = [
     ("re-arm: the gather wears no armour",
-     "            return [*mapped[:i], *tool, *gather_armour(action, armed, game_data), *mapped[i:]]",
+     "            return [*mapped[:i], *tool, *gather_armour(action, state, game_data), *mapped[i:]]",
      "            return [*mapped[:i], *tool, *mapped[i:]]"),
-    ("re-arm: the armour is judged before the tool swap",
-     "            armed = rearm.apply(state, game_data) if tool else state\n",
-     "            armed = state\n"),
     ("re-arm: the armour is asked only when the tool re-arms",
      "            tool = [rearm] if rearm.is_applicable(state, game_data) else []\n",
      "            tool = [rearm] if rearm.is_applicable(state, game_data) else []\n"
