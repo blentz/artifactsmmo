@@ -943,9 +943,11 @@ PREDICT_WIN_LIFESTEAL_MUTATIONS = [
     ("predict_win: drop monster burn term in dieStep",
      "            + monster_burn * m_atk_sum * 100\n",
      "            + monster_burn * m_atk_sum * 0\n"),
+    # `_die_step` holds no player attack sum; its player-damage input is the
+    # crit-turn hit `p_crit_hit`, which the killing test sets to the player's 80.
     ("predict_win: burn charged off the player's attack",
      "            + monster_burn * m_atk_sum * 100\n",
-     "            + monster_burn * p_atk_sum * 100\n"),
+     "            + monster_burn * p_crit_hit * 100\n"),
     ("predict_win: drop monster void_drain player-loss term in dieStep",
      "            + monster_void_drain * player_max_hp * 100\n",
      "            + monster_void_drain * player_max_hp * 0\n"),
@@ -1148,7 +1150,7 @@ FIGHT_SPLIT_MUTATIONS = [
      "    die_rest = (die_step - raw_monster * SCALE - 50"),
     ("fight_split: burn ticks read the player's attack",
      "        burn_ticks(game_data.monster_burn(monster_code), m_atk_sum),",
-     "        burn_ticks(game_data.monster_burn(monster_code), p_atk_sum),"),
+     "        burn_ticks(game_data.monster_burn(monster_code), sum(p.attack.values())),"),
     ("fight_split: the monster crit hit reads the player's damage bonus",
      "    crit_monster = _crit_hit(m_attack, 0, {}, p.resistance)",
      "    crit_monster = _crit_hit(m_attack, p.dmg, {}, p.resistance)"),
@@ -5640,7 +5642,8 @@ DECISION_MUTATIONS = [
     ("decision: resolve_node termination reverts to isinstance(current, Goal)"
      " (cannot recognise a non-Goal leaf, e.g. MetaGoal)",
      "        if not isinstance(current, Decision):\n            return current\n",
-     "        if current is None or isinstance(current, Goal):\n            return current\n"),
+     "        if current is None or any(c.__name__ == \"Goal\" for c in type(current).__mro__):\n"
+     "            return current\n"),
 ]
 
 
