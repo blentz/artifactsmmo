@@ -5472,6 +5472,65 @@ STEP_DELIVERED_PLAYER_MUTATIONS = [
      "                                      new_state, outcome == \"ok\" and step_delivered(\n",
      "                                      new_state, outcome == \"ok\" or 0 * step_delivered(\n"),
 ]
+# The ticket farm (live 2026-10-31): the fleet's pooled medals are credited in
+# the price, one character farms a shortfall the fleet cannot pay, and its
+# claim asks no buy, no surrender and no reservation.
+FLEET_FARM_PRICE_MUTATIONS = [
+    ("fleet farm: the price credits no pooled medal",
+     "    owned = _fleet_pooled(item, _owned_with_gold(state, pocket), state, game_data, ctx)\n",
+     "    owned = _owned_with_gold(state, pocket)\n"),
+    ("fleet farm: a medal priced to wear is credited with the pool",
+     "        pooled = fleet_pooled(code, state, game_data, ctx.sibling_holdings) if code != item else 0\n",
+     "        pooled = fleet_pooled(code, state, game_data, ctx.sibling_holdings)\n"),
+    ("fleet farm: the drop work credits no pooled medal",
+     "    legs = route_legs(item, qty, options,\n"
+     "                      _fleet_pooled(item, _owned_with_gold(state, state.gold), state, game_data,\n"
+     "                                    ctx),",
+     "    legs = route_legs(item, qty, options,\n"
+     "                      _owned_with_gold(state, state.gold),"),
+    ("fleet farm: the pool is counted and not added",
+     "            out[code] = out.get(code, 0) + pooled\n",
+     "            out[code] = out.get(code, 0)\n"),
+]
+FLEET_FARM_PLAYER_MUTATIONS = [
+    ("fleet farm: no sibling's farm claim is reported",
+     "        if self._turn_in is None:\n            self._turn_in = self._shortfall_farmer(",
+     "        if False:\n            self._turn_in = self._shortfall_farmer("),
+    ("fleet farm: a payable sink is reported as a farm",
+     "                if turn_in_ready_pure(fleet_total, price):\n                    continue\n"
+     "                holder = coordination.turn_in_holder(item_code, now)\n",
+     "                if False:\n                    continue\n"
+     "                holder = coordination.turn_in_holder(item_code, now)\n"),
+    ("fleet farm: this character's own farm claim is a stand-down",
+     "                if holder is None or holder == self.character:\n                    continue\n"
+     "                farmed.append(",
+     "                if holder is None:\n                    continue\n"
+     "                farmed.append("),
+    ("fleet farm: a holder surrenders to a claim the fleet cannot pay",
+     "                if not turn_in_ready_pure(fleet_total, price):\n"
+     "                    # A claim the fleet cannot pay yet",
+     "                if False:\n"
+     "                    # A claim the fleet cannot pay yet"),
+    ("fleet farm: a running farm takes no election",
+     "            if not turn_in_ready_pure(fleet_total, price):\n"
+     "                self._coordination.claim_turn_in(item_code, now)\n",
+     "            if False:\n"
+     "                self._coordination.claim_turn_in(item_code, now)\n"),
+    ("fleet farm: any goal's run takes the election",
+     "        if (self._coordination is None or not isinstance(goal, GatherMaterialsGoal)\n"
+     "                or not is_dual_role(goal.target_item, game_data)):\n",
+     "        if (self._coordination is None or not isinstance(goal, GatherMaterialsGoal)):\n"),
+]
+FLEET_FARM_RESERVE_MUTATIONS = [
+    ("fleet farm: a claim short of the price reserves the medal",
+     "            {ctx.turn_in.currency} if ctx.turn_in is not None and ctx.turn_in.ready\n",
+     "            {ctx.turn_in.currency} if ctx.turn_in is not None\n"),
+]
+FLEET_FARM_TURNIN_MUTATIONS = [
+    ("fleet farm: a claim short of the price is a turn-in due",
+     "    return (ctx.turn_in is not None and ctx.turn_in.ready) or ctx.recall is not None",
+     "    return ctx.turn_in is not None or ctx.recall is not None"),
+]
 # The walk adapter (`ObtainModel.walk_graph`). Killed by
 # tests/test_ai/test_craft_plan_gen.py.
 WALK_ADAPTER_MUTATIONS = [
@@ -7112,8 +7171,9 @@ DROP_TOOL_WORK_MUTATIONS = [
      "                 for code, route, units in legs if route.kind in _DROP_WORK)",
      "                 for code, route, units in legs)"),
     ("drop work: the bag is not credited",
-     "    legs = route_legs(item, qty, options, _owned_with_gold(state, state.gold),",
-     "    legs = route_legs(item, qty, options, {},"),
+     "                      _fleet_pooled(item, _owned_with_gold(state, state.gold), state, game_data,\n"
+     "                                    ctx),",
+     "                      {},"),
     ("drop work: a farm leg is priced as a gather",
      "        if leg.kind is SourceKind.DROP:\n            rate, min_q",
      "        if False:\n            rate, min_q"),
@@ -11688,13 +11748,13 @@ FLEET_WORK_MUTATIONS = [
     ),
     (
         "fleet_work/turn_in_due: the buyer's turn_in field ignored",
-        "    return ctx.turn_in is not None or ctx.recall is not None",
+        "    return (ctx.turn_in is not None and ctx.turn_in.ready) or ctx.recall is not None",
         "    return ctx.recall is not None",
     ),
     (
         "fleet_work/turn_in_due: the holder's recall field ignored",
-        "    return ctx.turn_in is not None or ctx.recall is not None",
-        "    return ctx.turn_in is not None",
+        "    return (ctx.turn_in is not None and ctx.turn_in.ready) or ctx.recall is not None",
+        "    return (ctx.turn_in is not None and ctx.turn_in.ready)",
     ),
 ]
 
@@ -13902,11 +13962,21 @@ POCKET_GOLD_CLAIM_MUTATIONS = [
      "                action, WithdrawItemAction):\n"
      "            self._coordination.release_bank_stock()\n"),
     ("player: a sibling's gold claim is not netted from the plan's bank",
-     "        return replace(state, bank_gold=max(0, state.bank_gold - claimed))\n",
-     "        return replace(state, bank_gold=state.bank_gold)\n"),
+     "                     else max(0, state.bank_gold - gold))\n",
+     "                     else state.bank_gold)\n"),
     ("player: a claim past the bank leaves negative gold",
-     "        return replace(state, bank_gold=max(0, state.bank_gold - claimed))\n",
-     "        return replace(state, bank_gold=state.bank_gold - claimed)\n"),
+     "                     else max(0, state.bank_gold - gold))\n",
+     "                     else state.bank_gold - gold)\n"),
+    # The ticket farm (live 2026-10-31): a sibling's ITEM claim is netted too.
+    ("player: a sibling's item claim is not netted from the plan's bank",
+     "                  if (left := held - max(0, claims.get(code, 0))) > 0})\n",
+     "                  if (left := held) > 0})\n"),
+    ("player: a code claimed whole stays in the bank at nothing",
+     "                  if (left := held - max(0, claims.get(code, 0))) > 0})\n",
+     "                  if (left := held - max(0, claims.get(code, 0))) >= 0})\n"),
+    ("player: an unread bank's items are invented",
+     "        items = (None if state.bank_items is None else\n",
+     "        items = ({} if state.bank_items is None else\n"),
     ("player: the decision plans against the bank as read",
      "            decision = self._strategy.decide(\n"
      "                planned, game_data,\n"
@@ -14682,6 +14752,14 @@ def _collect_all_groups() -> None:
               "tests/test_audit/test_grind_cycle_census.py", survivors)
     run_group(OBTAIN_MODEL_SRC, WALK_ADAPTER_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(ACQUISITION_COST_SRC, FLEET_FARM_PRICE_MUTATIONS,
+              "tests/test_ai/test_dual_role_currency.py", survivors)
+    run_group(PLAYER_SRC, FLEET_FARM_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player_turn_in.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, FLEET_FARM_RESERVE_MUTATIONS,
+              "tests/test_ai/test_turn_in_no_livelock.py", survivors)
+    run_group(FLEET_WORK_SRC, FLEET_FARM_TURNIN_MUTATIONS,
+              "tests/test_ai/test_player_turn_in.py", survivors)
     run_group(OBTAIN_MODEL_SRC, PRICED_ROUTE_WALK_MUTATIONS,
               "tests/test_ai/test_priced_route_served.py", survivors)
     run_group(ACQUISITION_COST_SRC, PRICED_ROUTE_KEY_MUTATIONS,

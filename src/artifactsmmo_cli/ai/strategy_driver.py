@@ -1345,7 +1345,8 @@ class StrategyArbiter:
         # not immediately re-equipped into the empty slot — the
         # withdraw/re-equip livelock this repo already knows the shape of.
         turn_in_reserved = (
-            {ctx.turn_in.currency} if ctx.turn_in is not None else frozenset[str]())
+            {ctx.turn_in.currency} if ctx.turn_in is not None and ctx.turn_in.ready
+            else frozenset[str]())
         equip_fills = empty_slot_rank_fills(
             state, game_data,
             frozenset(task_reserved_demand(state, game_data)) | turn_in_reserved)

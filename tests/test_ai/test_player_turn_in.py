@@ -1,10 +1,16 @@
 """The fleet notices it is WEARING the trophy's price."""
 
+from dataclasses import replace
+
+from artifactsmmo_cli.ai.currency_turnin import TurnIn
+from artifactsmmo_cli.ai.fleet_work import turn_in_due
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import coordination_now, make_state
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
 
@@ -346,3 +352,57 @@ def test_a_failed_claim_without_a_live_holder_reports_no_turn_in(tmp_path):
 
     assert player._turn_in is None
     assert player._recall is None
+
+
+def test_a_shortfall_the_fleet_cannot_pay_names_its_elected_farmer(tmp_path):
+    """The ticket farm (live 2026-10-31): Robby and C3P0 farmed the same
+    fleet medal shortfall. The sibling holding the election farms it; this
+    character is told so (a not-ready turn-in naming the farmer), asks no
+    buy, and surrenders nothing."""
+    player, _store = _player_with(tmp_path, "C3P0")
+    robby = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Robby")
+    robby.publish_holdings({"lich_race_medal": 5}, coordination_now())
+    assert robby.claim_turn_in("lich_race_trophy", coordination_now())
+    state = make_state(level=30, inventory={"lich_race_medal": 4})
+    player._resolve_turn_in(state, player.game_data)
+    assert player._turn_in is not None
+    assert player._turn_in.buyer == "Robby" and not player._turn_in.ready
+    assert player._turn_in.fleet_total == 9
+    assert player._recall is None
+    # nobody holds it: no stand-down
+    robby.release_turn_in("lich_race_trophy")
+    player._resolve_turn_in(state, player.game_data)
+    assert player._turn_in is None
+
+
+def test_the_running_farm_takes_the_election_for_the_shortfall(tmp_path):
+    """`_claim_currency_farm`: the character whose cycle runs a dual-role
+    currency's farm holds the election for every sink the fleet cannot yet
+    pay; a farm for any other item, or a fleet that can pay, claims nothing."""
+    player, store = _player_with(tmp_path, "Robby")
+    now = coordination_now()
+    short = make_state(level=30, inventory={"lich_race_medal": 4})
+    player._claim_currency_farm(GatherMaterialsGoal("event_ticket", {"event_ticket": 1}),
+                                short, player.game_data)
+    assert store.turn_in_holder("lich_race_trophy", now) is None
+    paid = make_state(level=30, inventory={"lich_race_medal": 10})
+    player._claim_currency_farm(GatherMaterialsGoal("lich_race_medal", {"lich_race_medal": 11}),
+                                paid, player.game_data)
+    assert store.turn_in_holder("lich_race_trophy", now) is None
+    player._claim_currency_farm(GatherMaterialsGoal("lich_race_medal", {"lich_race_medal": 10}),
+                                short, player.game_data)
+    assert store.turn_in_holder("lich_race_trophy", now) == "Robby"
+    # A sibling now stands down on it.
+    sibling, _ = _player_with(tmp_path, "C3P0")
+    sibling._resolve_turn_in(make_state(level=30), sibling.game_data)
+    assert sibling._turn_in is not None and sibling._turn_in.buyer == "Robby"
+
+
+def test_a_not_ready_claim_is_no_turn_in_due():
+    """`turn_in_due` and the equip reservation read only a claim the fleet can
+    pay: the farmer's claim asks no buy and reserves no medal from its slot."""
+    short = TurnIn("lich_race_trophy", "archaeologist", 10, "lich_race_medal", "Robby", 9)
+    ready = replace(short, fleet_total=10)
+    assert not short.ready and ready.ready
+    assert not turn_in_due(replace(NO_PROFILE_CONTEXT, turn_in=short))
+    assert turn_in_due(replace(NO_PROFILE_CONTEXT, turn_in=ready))

@@ -2,15 +2,19 @@
 from dataclasses import replace
 from fractions import Fraction
 
+from artifactsmmo_cli.ai import acquisition_cost
+from artifactsmmo_cli.ai.acquisition_cost import cheapest_route
+from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.currency_grind_target import currency_grind_target_pure
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
 from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings, fleet_pooled, is_dual_role
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.obtain_item_routing import _equippable_goal, _passively_funded
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
 
 
@@ -234,3 +238,39 @@ def test_a_medal_worn_for_itself_behind_a_better_piece_is_bought_with_tickets_he
         "wolf", {"amulet_slot": better.code, "artifact2_slot": medal.code}, Fraction(1),
         (better, medal)))
     assert _equippable_goal("lich_race_medal", "artifact2_slot", poor, gd, ctx) is None
+
+
+def test_the_price_credits_the_fleet_s_pooled_medals():
+    """The ticket farm (live 2026-10-31): Robby priced the trophy at 798
+    tickets to farm while it wore a medal and its siblings held four. The
+    fleet's pooled medals (worn here, held by siblings) are the turn-in's to
+    spend, so the price counts them; a medal priced to WEAR is not credited
+    with them."""
+    gd = _trophy_world()
+    state = make_state(level=30, inventory={"lich_race_medal": 5},
+                       equipment={"artifact2_slot": "lich_race_medal"})
+    alone = replace(NO_DROPS_CONTEXT, sibling_holdings={})
+    fleet = replace(NO_DROPS_CONTEXT, sibling_holdings={"lich_race_medal": 4})
+    short, _ = cheapest_route("lich_race_trophy", 1, state, gd, alone, None, policy=LEGACY,
+                              pocket=0)
+    paid, _ = cheapest_route("lich_race_trophy", 1, state, gd, fleet, None, policy=LEGACY,
+                             pocket=0)
+    # alone: 5 bagged + 1 worn of 10, the rest unobtainable here
+    assert short >= UNOBTAINABLE_PER_UNIT
+    assert paid < 10
+    assert cheapest_route("lich_race_medal", 1, replace(state, inventory={}), gd, fleet, None,
+                          policy=LEGACY, pocket=0)[0] >= UNOBTAINABLE_PER_UNIT
+
+
+def test_the_drop_work_credits_the_pool_its_price_did(monkeypatch):
+    """`drop_work` walks the price's own holdings: the fleet's pooled medals
+    are held there too, so the drop work is the work the price is made of."""
+    gd = _trophy_world()
+    state = make_state(level=30, inventory={"lich_race_medal": 5})
+    held: list[dict[str, int]] = []
+    monkeypatch.setattr(acquisition_cost, "route_legs",
+                        lambda item, qty, options, owned, *a: held.append(dict(owned)) or ())
+    fleet = replace(NO_DROPS_CONTEXT, sibling_holdings={"lich_race_medal": 4})
+    assert acquisition_cost.drop_work("lich_race_trophy", 1, state, gd, fleet, None,
+                                      policy=LEGACY) == ()
+    assert held[0]["lich_race_medal"] == 9

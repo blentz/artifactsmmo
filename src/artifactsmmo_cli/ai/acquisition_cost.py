@@ -41,6 +41,7 @@ from artifactsmmo_cli.ai.attempt_prospecting import fight_prospecting, gather_pr
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
 from artifactsmmo_cli.ai.combat_deficit import combat_deficit
 from artifactsmmo_cli.ai.drop_leg import DropLeg
+from artifactsmmo_cli.ai.dual_role_currency import fleet_pooled
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
@@ -1223,6 +1224,25 @@ def _owned_with_gold(state: WorldState, pocket: int) -> dict[str, int]:
     return owned
 
 
+def _fleet_pooled(item: str, owned: Mapping[str, int], state: WorldState,
+                  game_data: GameData, ctx: SelectionContext) -> dict[str, int]:
+    """`owned` plus the fleet's pooled units of every dual-role currency
+    other than `item` (`dual_role_currency.fleet_pooled`: this character's
+    worn copies and every sibling's worn and carried ones): units the turn-in
+    election spends on a purchase (`GamePlayer._resolve_turn_in`), so a price
+    paid in them is the fleet's shortfall, not this character's (the ticket
+    farm, live 2026-10-31: Robby priced the trophy at 798 tickets to farm
+    while it wore a medal and its siblings held four). `item` itself is not
+    credited: a medal priced to WEAR is not the turn-in's to spend."""
+    out = dict(owned)
+    worn = {code for code in state.equipment.values() if code}
+    for code in sorted(set(ctx.sibling_holdings) | worn):
+        pooled = fleet_pooled(code, state, game_data, ctx.sibling_holdings) if code != item else 0
+        if pooled > 0:
+            out[code] = out.get(code, 0) + pooled
+    return out
+
+
 def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
                    ctx: SelectionContext, store: LearningStore | None,
                    gated_drop: bool = True, *, policy: Policy, pocket: int,
@@ -1248,7 +1268,7 @@ def cheapest_route(item: str, qty: int, state: WorldState, game_data: GameData,
     and hop. A piece's price passes the pocket above the reserve its buy must
     keep (ruling T3e m3), so gold the executor will not spend is priced as gold
     to earn."""
-    owned: dict[str, int] = _owned_with_gold(state, pocket)
+    owned = _fleet_pooled(item, _owned_with_gold(state, pocket), state, game_data, ctx)
     options, charge = _gold_priced(credit_demanded_skills(
         acquisition_options(item, state, game_data, ctx, store, gated_drop, policy=policy,
                             produce=produce, opening=opening, crossing=crossing),
@@ -1282,7 +1302,9 @@ def drop_work(item: str, qty: int, state: WorldState, game_data: GameData,
     options, charge = _gold_priced(
         acquisition_options(item, state, game_data, ctx, store, policy=policy),
         state, game_data, ctx)
-    legs = route_legs(item, qty, options, _owned_with_gold(state, state.gold),
+    legs = route_legs(item, qty, options,
+                      _fleet_pooled(item, _owned_with_gold(state, state.gold), state, game_data,
+                                    ctx),
                       frozenset({GOLD_CODE}), charge)
     return tuple(DropLeg(SourceKind(route.kind), route.venue, code, units,
                          surcharged=not route.unlock)

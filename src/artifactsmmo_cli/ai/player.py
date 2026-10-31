@@ -97,7 +97,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import (
 )
 from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
-from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings
+from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings, is_dual_role
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.failure_recovery_core import (
     STATE,
@@ -126,6 +126,7 @@ from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.currency_demand import closure_gold_demand
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY
 from artifactsmmo_cli.ai.held_task_pays import held_task_pays
@@ -1227,6 +1228,10 @@ class GamePlayer:
                 assert self._strategy is not None
                 selected_goal, plan, goals_tried, replanned = self._plan_or_reuse(
                     state, game_data, actions)
+                # A fleet currency's shortfall is farmed by one character: the
+                # farm this cycle runs holds the election (ticket farm,
+                # 2026-10-31).
+                self._claim_currency_farm(selected_goal, state, game_data)
                 # Whether the arbiter could actually plan this cycle's supply
                 # goal is the evidence `decide_role`'s release-on-unservable
                 # rule runs on, and this is the only point it exists.
@@ -1516,17 +1521,26 @@ class GamePlayer:
             self._coordination.release_bank_stock()
 
     def _net_sibling_gold(self, state: WorldState) -> WorldState:
-        """`state` with the bank's gold less what siblings have claimed to
-        withdraw (`CoordinationStore.sibling_bank_claims` under `GOLD_CODE`):
-        the gold this character may plan to spend. A VIEW for the decision,
-        never stored on `self.state`: the bank is re-read only every
-        `BANK_REFRESH_INTERVAL` actions, so netting the held state would
-        subtract the same claim again every cycle. An unread bank (None) stays
-        unknown."""
-        claimed = self._sibling_bank_claims.get(GOLD_CODE, 0)
-        if state.bank_gold is None or claimed <= 0:
+        """`state` with the bank less what siblings have claimed to withdraw
+        (`CoordinationStore.sibling_bank_claims`): its gold less the claim
+        under `GOLD_CODE`, the gold this character may plan to spend, and
+        each banked item less its claim, the stock it may plan to withdraw
+        (the ticket farm, live 2026-10-31: two characters planned
+        `Withdraw(event_ticket)` against one bank and one drew HTTP 404). A
+        VIEW for the decision, never stored on `self.state`: the bank is
+        re-read only every `BANK_REFRESH_INTERVAL` actions, so netting the
+        held state would subtract the same claim again every cycle. An unread
+        bank (None) stays unknown."""
+        claims = self._sibling_bank_claims
+        if not any(quantity > 0 for quantity in claims.values()):
             return state
-        return replace(state, bank_gold=max(0, state.bank_gold - claimed))
+        gold = claims.get(GOLD_CODE, 0)
+        bank_gold = (state.bank_gold if state.bank_gold is None or gold <= 0
+                     else max(0, state.bank_gold - gold))
+        items = (None if state.bank_items is None else
+                 {code: left for code, held in state.bank_items.items()
+                  if (left := held - max(0, claims.get(code, 0))) > 0})
+        return replace(state, bank_gold=bank_gold, bank_items=items)
 
     def _claim_ge_order(self, action: GeCancelOrderAction) -> None:
         """Announce to siblings that this character is cancelling
@@ -4278,6 +4292,63 @@ class GamePlayer:
         if remaining_own:
             self._adopt_sibling_claim(self._coordination, remaining_own, siblings,
                                       bank, now, game_data)
+        if self._turn_in is None:
+            self._turn_in = self._shortfall_farmer(self._coordination, own, siblings, bank,
+                                                   now, game_data)
+
+    def _shortfall_farmer(self, coordination: CoordinationStore, own: dict[str, int],
+                          siblings: dict[str, int], bank: dict[str, int],
+                          now: datetime, game_data: GameData) -> TurnIn | None:
+        """The SIBLING elected to farm a turn-in the fleet cannot yet pay
+        for, as a not-ready `TurnIn` naming it the buyer, or None.
+
+        The ticket farm (live 2026-10-31): Robby (`{medal: 5}`) and C3P0
+        (`{medal: 4}`) farmed the same 3-medal fleet shortfall and raced for
+        the bank's tickets (one drew HTTP 404 on `Withdraw(event_ticket)`). The
+        shortfall's farmer holds the SAME `claim_turn_in` election the
+        purchase does (`_claim_currency_farm` takes it when the farm runs), so
+        the farmer is the buyer once the fleet can pay. A non-buyer's piece
+        step stands down on it (`obtain_item_routing._equippable_goal`); being
+        not ready, it asks no buy and no surrender (`TurnIn.ready`). This
+        character's own claim is no stand-down, and is not reported. Highest
+        price first, as rule 5 elects. Every dual-role currency a vendor takes
+        is asked, held or not: a character holding none still stands down."""
+        farmed: list[TurnIn] = []
+        pooled = {currency for per_item in game_data.world.npc_buy_currency.values()
+                  for currency in per_item.values() if is_dual_role(currency, game_data)}
+        for code in sorted(pooled):
+            fleet_total = fleet_total_pure(own, siblings, bank, code)
+            for item_code, npc_code, price in game_data.currency_sinks(code):
+                if turn_in_ready_pure(fleet_total, price):
+                    continue
+                holder = coordination.turn_in_holder(item_code, now)
+                if holder is None or holder == self.character:
+                    continue
+                farmed.append(TurnIn(item_code=item_code, npc_code=npc_code, price=price,
+                                     currency=code, buyer=holder, fleet_total=fleet_total))
+        return max(farmed, key=lambda t: t.price) if farmed else None
+
+    def _claim_currency_farm(self, goal: Goal | None, state: WorldState,
+                             game_data: GameData) -> None:
+        """Take (or renew) the turn-in election for every sink the fleet
+        cannot yet pay for of the dual-role currency `goal` farms: the goal
+        this cycle runs is a `GatherMaterialsGoal` for a currency pooled across
+        the fleet (`is_dual_role`). The one character farming the fleet's
+        shortfall holds the claim, and every sibling's piece step stands down
+        on it (`_shortfall_farmer`). Renewed only while the farm runs, so a
+        farmer that stops lets the claim lapse to a sibling. No-op without a
+        coordination store."""
+        if (self._coordination is None or not isinstance(goal, GatherMaterialsGoal)
+                or not is_dual_role(goal.target_item, game_data)):
+            return
+        now = datetime.now(tz=timezone.utc)
+        code = goal.target_item
+        fleet_total = fleet_total_pure(dual_role_holdings(state, game_data),
+                                       self._coordination.sibling_holdings(now),
+                                       state.bank_items or {}, code)
+        for item_code, _npc_code, price in game_data.currency_sinks(code):
+            if not turn_in_ready_pure(fleet_total, price):
+                self._coordination.claim_turn_in(item_code, now)
 
     def _may_be_buyer(self, item_code: str, state: "WorldState",
                       game_data: GameData) -> bool:
@@ -4329,6 +4400,11 @@ class GamePlayer:
             for item_code, npc_code, price in game_data.currency_sinks(code):
                 holder = coordination.turn_in_holder(item_code, now)
                 if holder is None or holder == self.character:
+                    continue
+                if not turn_in_ready_pure(fleet_total, price):
+                    # A claim the fleet cannot pay yet elects the shortfall's
+                    # farmer (`_claim_currency_farm`): worn medals stay worn,
+                    # the fleet's storage, until there is a buy to spend them.
                     continue
                 claimed.append(TurnIn(item_code=item_code, npc_code=npc_code,
                                       price=price, currency=code, buyer=holder,

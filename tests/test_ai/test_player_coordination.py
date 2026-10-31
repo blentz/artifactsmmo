@@ -3413,3 +3413,27 @@ def test_the_decision_plans_against_the_netted_bank(tmp_path, monkeypatch):
     finally:
         p._coordination.close()
         sibling.close()
+
+
+def test_a_sibling_s_item_claim_is_netted_from_the_plan_s_bank(tmp_path):
+    """The ticket farm (live 2026-10-31): two characters planned
+    `Withdraw(event_ticket)` against one bank and one drew HTTP 404. A
+    sibling's live item claim comes off the bank this character plans
+    against, as its gold claim does; a code claimed whole leaves the bank,
+    and an unread bank stays unknown."""
+    p, db = _gold_player(tmp_path, 1_000)
+    p.state = replace(p.state, bank_items={"event_ticket": 250, "copper_ore": 3})
+    sibling = CoordinationStore(db_path=db, character="rival")
+    try:
+        sibling.claim_bank_stock({"event_ticket": 200, "copper_ore": 5},
+                                 datetime.now(tz=timezone.utc))
+        p.game_data = _make_planner_gd()
+        p._update_coordination(p.state, p.game_data)
+        planned = p._net_sibling_gold(p.state)
+        assert planned.bank_items == {"event_ticket": 50}
+        assert planned.bank_gold == 1_000
+        assert p.state.bank_items == {"event_ticket": 250, "copper_ore": 3}
+        assert p._net_sibling_gold(replace(p.state, bank_items=None)).bank_items is None
+    finally:
+        p._coordination.close()
+        sibling.close()

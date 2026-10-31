@@ -104,5 +104,7 @@ def fleet_work_code(kind: str, ctx: SelectionContext) -> str:
 def turn_in_due(ctx: SelectionContext) -> bool:
     """A resolved currency turn-in election involves this character — as the
     buyer, or as a holder asked to surrender (`_resolve_turn_in` writes neither
-    field for an uninvolved character)."""
-    return ctx.turn_in is not None or ctx.recall is not None
+    field for an uninvolved character). A claim the fleet cannot yet pay
+    (`TurnIn.ready`) names the shortfall's farmer, not a buy: no turn-in is
+    due on it."""
+    return (ctx.turn_in is not None and ctx.turn_in.ready) or ctx.recall is not None
