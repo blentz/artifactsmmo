@@ -9157,6 +9157,13 @@ GREY_CURRENCY_MUTATIONS = [
 # The reachability-claims census indexes module constants (plan C Task 6,
 # ruling C6-2‴): the register's one claim is about one. Killed by
 # tests/test_audit/test_reachability_claims.py (the real sweep finds 0 claims).
+# The census loadout's parent table and its seed (plan C Task 6 fix round 1, I-1).
+# Killed by tests/test_audit/test_census_gear.py.
+CENSUS_GEAR_MUTATIONS = [
+    ("census gear: a seeded table is not installed",
+     "    for key, gear in table.items():\n        _CENSUS_GEAR.remember(memo, key, dict(gear))\n",
+     "    for key, gear in table.items():\n        pass\n"),
+]
 REACHABILITY_CONSTANT_MUTATIONS = [
     ("reachability claims: module constants are not indexed",
      "    found: list[Definition] = _constants(tree, module)\n",
@@ -14530,6 +14537,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_grey_farm.py", survivors)
     run_group(CRAFT_COMPLETENESS_SRC, CENSUS_CURRENCY_GREY_MUTATIONS,
               "tests/test_audit/test_craft_completeness.py", survivors)
+    run_group(CRAFT_COMPLETENESS_SRC, CENSUS_GEAR_MUTATIONS,
+              "tests/test_audit/test_census_gear.py", survivors)
     run_group(REACHABILITY_CLAIMS_SRC, REACHABILITY_CONSTANT_MUTATIONS,
               "tests/test_audit/test_reachability_claims.py", survivors)
     run_group(CRAFT_CONDITIONS_SRC, CONDITIONS_MUTATIONS,
