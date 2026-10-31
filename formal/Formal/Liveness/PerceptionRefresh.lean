@@ -27,9 +27,12 @@ paying-items-task defer case).
 
 While `L*` is NOT held production fights nothing for XP: the root is a missing
 piece's acquisition (`GearTierLeveling.piece_root_of_not_held`). This module's
-unconditional arming does not model that phase — the E-tower does
-(`CycleStepE.perceptionRefreshE`, gated on `loadoutAdequate`), and this module
-survives for the iteration helpers the E/F/D towers consume. It arms ONLY those two
+unconditional arming arms the fight anyway, so below the cap it is OPTIMISTIC in
+TWO places: the paying-items-task defer case (below) and the whole not-held phase.
+Neither is modelled here; the second is the named residual "the not-held phase
+terminates and `L*` is held again after a level-up" of `LevelFiftyReachableP`.
+This module survives for the iteration helpers the E/F/D towers consume. It arms
+ONLY those two
 Bools — the chore flags (`hasOverstockItems`, `selectBankDepositsNonempty`, …)
 read inventory composition the Lean model abstracts, so re-arming them would be a
 fabrication; their transience stays the documented `BlockersQuietInfinitelyOften`
@@ -93,11 +96,14 @@ consumed by proofs that merely need the set value:
   (an items task in progress AND it pays, `held_task_pays`), production's
   `objective_step_goal(ReachCharLevel)` yields a `GrindCharacterXPGoal`, a FIGHT.
 
-Together these ground the model's unconditional arming as a faithful image of production
-behaviour — OUTSIDE the defer-case.  The defer-case (the one production branch yielding
-NO fight below 50) is NOT modelled in `perceptionRefresh` (which abstracts the
-items-task lifecycle away); it lives in the undischarged `BlockersQuietInfinitelyOften`
-residual (`hquiet`) of the capstone. -/
+Together these ground the model's unconditional arming as an image of production
+behaviour ONLY while `L*` is held and outside the defer case. Production yields NO
+fight below 50 in two cases the model does not see:
+* the defer case (an items task in progress that pays): it lives in the
+  undischarged `BlockersQuietInfinitelyOften` residual (`hquiet`) of the capstone;
+* the not-held phase (`L*` missing pieces, `GearTierLeveling.no_xp_fight_of_not_held`):
+  the root is a piece's acquisition. That this phase terminates, and that `L*` is
+  held again after each level-up, is the named residual of `LevelFiftyReachableP`. -/
 
 /-- **Kernel half — a candidate for `m*` exists below the cap.** Task 4's
 `winnableAcrossBand_grounded` at one level: the live catalog holds a winnable,
@@ -129,19 +135,19 @@ theorem combatTarget_exists_below_fifty
 `arming_justified_below_fifty` bundles two components:
 * `.1` — a kernel candidate-existence proof (from Task 4's `winnableAcrossBand_grounded`):
   a candidate for `m*` EXISTS at `s.level`. That production's objective then names
-  one is the separate, hypothesis-bearing `combatTarget_exists_below_fifty`.  Together with the production differential
-  (`test_objectivestep_arming_diff.py`) this establishes that the model's unconditional
-  arming is a FAITHFUL image of production outside the items-task defer-case.  This is
-  the offline grounding — it is NOT logically consumed by capstone proofs that only need
-  `.2`.
+  one is the separate, hypothesis-bearing `combatTarget_exists_below_fifty`. With the
+  production differential (`test_objectivestep_arming_diff.py`) it grounds the model's
+  arming only while `L*` is held and outside the items-task defer case. It is NOT
+  logically consumed by capstone proofs that only need `.2`.
 * `.2` — the model's set value: `(perceptionRefresh s).objectiveStepIsFight = true`,
   proved by `unfold perceptionRefresh; rw [if_pos]`.  This is what the capstone proof
   term directly consumes.
 
-The model's unconditional arming is OPTIMISTIC vs production: in the paying-items-task
-defer case production returns None (no fight), but `perceptionRefresh` sets `true`
-regardless.  That gap is the items-task component of the undischarged
-`BlockersQuietInfinitelyOften` residual — it is named there, not confronted here. -/
+The model's unconditional arming is OPTIMISTIC vs production in two places: the
+paying-items-task defer case (production returns None; the items-task component of
+the undischarged `BlockersQuietInfinitelyOften` residual) and the not-held phase
+(production fights nothing for XP while `L*` misses a piece; the named not-held
+residual of `LevelFiftyReachableP`). Neither is confronted here. -/
 theorem arming_justified_below_fifty (s : State) (hlo : 1 ≤ s.level)
     (hhi : s.level < 50) :
     (∃ m ∈ catalogAsMonsters, winnableConcrete m = true ∧ xpPosConcrete m = true ∧
@@ -155,10 +161,10 @@ theorem arming_justified_below_fifty (s : State) (hlo : 1 ≤ s.level)
 value `objectiveStepIsFight := true` from the `if s.level < 50` branch.  This is
 proved by `unfold perceptionRefresh; rw [if_pos]` alone (no kernel result needed).
 
-For the offline FAITHFULNESS grounding of this set value, see `arming_justified_below_fifty`:
-its `.1` (kernel target-existence, Task 4) + the production differential establish that
-the model faithfully images production outside the items-task defer-case; its `.2` IS
-this theorem.  The unconditional form here is kept for field-preservation callers that
+For the offline grounding of this set value, see `arming_justified_below_fifty`:
+its `.1` (kernel candidate existence, Task 4) + the production differentials ground it
+only while `L*` is held and outside the items-task defer case; its `.2` IS this
+theorem.  The unconditional form here is kept for field-preservation callers that
 only need the Bool; the bundled form is `arming_justified_below_fifty`. -/
 theorem perceptionRefresh_objectiveStepIsFight (s : State) (h : s.level < 50) :
     (perceptionRefresh s).objectiveStepIsFight = true := by

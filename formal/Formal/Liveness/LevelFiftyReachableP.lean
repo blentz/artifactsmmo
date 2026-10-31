@@ -28,12 +28,17 @@ Option-A residual set:
   invariants, restated over `cycleStepPN`/the refreshed selection states.
 * **`hfightFiresP`** — which Brick 4 reduces to
   `BlockersQuietBelowCapInfinitelyOftenP` alone (CombatPersistent in-model).
-* **`WinnableAcrossBand`** — baked into `perceptionRefresh`'s arming faithfulness:
-  since plan C Task 4 (ruling C4-b) through the gear objective's held half
-  (`GearTierLeveling.combatObjective_live_below_fifty`, `fight_armed_of_held`).
-  The not-held half (`piece_root_of_not_held`: the root is a missing piece's
-  acquisition, no XP fight) is modelled by the E-tower's `loadoutAdequate` gate,
-  not here.
+* **`WinnableAcrossBand`** — baked into `perceptionRefresh`'s arming: since plan C
+  Task 4 (ruling C4-b) through the gear objective's held half
+  (`GearTierLeveling.combatObjective_live_below_fifty`, `fight_armed_of_held`), with
+  the production link `ObjectiveCoversBand` as a hypothesis.
+* **not-held phase (NAMED RESIDUAL, ruling C4-R)** — the not-held phase terminates and
+  `L*` is held again after a level-up. While `L*` misses a piece production fights
+  nothing for XP (`GearTierLeveling.no_xp_fight_of_not_held`; the root is a piece's
+  acquisition, `piece_root_of_not_held`), but `perceptionRefresh` arms the fight
+  unconditionally below the cap. So the refreshed cycle is optimistic over that
+  phase, as over the items-task defer case, and nothing here proves the phase ends
+  or that a level-up's new `L*` is reached.
 * **LIV-001** — the server xp-curve axiom.
 
 ## Why the existing engine is NOT reusable (the corrected finding)

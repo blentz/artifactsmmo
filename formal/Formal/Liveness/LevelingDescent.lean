@@ -138,6 +138,11 @@ Note: the model's below-50 arming is OPTIMISTIC relative to production.  Product
 defer case (an items task in progress AND it pays, `held_task_pays`), but `perceptionRefresh` sets
 `objectiveStepIsFight := true` unconditionally below 50.  That gap is folded into the named
 `hquiet` residual below — this proof does NOT claim the defer-case is handled.
+The arming is optimistic in a SECOND place (ruling C4-R): while the gear objective's
+`L*` misses a piece production fights nothing for XP
+(`GearTierLeveling.no_xp_fight_of_not_held`). That gap is not covered by `hquiet`; it
+is the named not-held residual of `LevelFiftyReachableP` (the phase terminates and
+`L*` is held again after a level-up).
 
 Residual hypotheses (the honest, NOT-yet-discharged dominoes):
 * `hquiet` — **blockers-quiet / selection**: at each below-50 step the ladder SELECTS one
@@ -184,9 +189,11 @@ The arming third-disjunct uses `arming_justified_below_fifty.2` — the model's 
 `objectiveStepIsFight := true` (via `unfold perceptionRefresh; rw [if_pos]`).  The
 offline grounding for model FAITHFULNESS — Task 4's kernel target-existence
 (`arming_justified_below_fifty.1`) + the production differential — is NOT logically consumed
-inside this proof term; it establishes that the model's unconditional arming faithfully
-images production outside the items-task defer-case.  This capstone does NOT claim
-blockers-quiet is discharged, and does NOT claim the defer-case is handled.
+inside this proof term; it grounds the model's unconditional arming only while `L*` is
+held and outside the items-task defer case.  This capstone does NOT claim
+blockers-quiet is discharged, does NOT claim the defer-case is handled, and does NOT
+claim the not-held phase (production arms no XP fight while `L*` misses a piece)
+terminates — that is the named residual of `LevelFiftyReachableP`.
 
 SUPERSEDED (2026-07-04, kept for the derivation record): `hquiet` and `hspawn` are
 now both DISCHARGED by `UnconditionalDescent.ai_reaches_fifty_unconditional`
