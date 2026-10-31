@@ -17,7 +17,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | BankSelection | bank, items, crafting | safety |
 | BestLoadout | consumables, combat | dominance, totality, validity |
 | BuySourceVenue | grandexchange | dominance, totality, safety, monotonicity |
-| CheapestPath | combat, monsters | reachability, dominance |
 | CombatTargetExistence | combat, monsters | reachability, safety |
 | CommittedLoop | core, planner | termination, sufficiency |
 | CompleteTaskIncome | core, tasks | monotonicity |

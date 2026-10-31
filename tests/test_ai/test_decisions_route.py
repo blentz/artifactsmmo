@@ -23,7 +23,6 @@ from artifactsmmo_cli.ai.decisions import route as route_mod
 from artifactsmmo_cli.ai.decisions.route import route_exists, route_price
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
-from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import Cycle, LearningStore
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
@@ -118,7 +117,6 @@ def test_the_dispatch_is_total_over_meta_goal_kinds() -> None:
     fails this test rather than silently ranking on an unpriced zero."""
     import inspect
 
-    from artifactsmmo_cli.ai.decisions import route as route_mod
     src = inspect.getsource(route_mod.route_price)
     for kind in META_GOAL_KINDS:
         assert f"isinstance(goal, {kind.__name__})" in src, kind.__name__
@@ -240,24 +238,17 @@ def test_a_grind_that_gained_nothing_is_walled_whatever_the_fleet_measured(
         store.close()
 
 
-def test_reach_char_level_prices_or_walls_by_the_path_plan(
+def test_a_level_up_has_no_acquisition_price_even_with_a_learning_store(
         gd: GameData, tmp_path) -> None:
-    """`PathPlan.total_cycles` is already "CYCLES — planner actions", so this arm
-    forwards it; a BLOCKED path walls instead.
-
-    Both outcomes are asserted against `cheapest_path_to_level` itself rather
-    than a literal, because the fixture's beatable-monster set decides which one
-    this cell takes and a hard-coded expectation would rot with the bundle."""
+    """A level-up is not an acquisition (spec 2026-10-18 §6.2), so the arm
+    prices it UNOBTAINABLE_PER_UNIT with a learning store as without one, one
+    level up or several. Never a projection, never free."""
     state = _state(gd)
     store = _store(tmp_path)
     try:
-        goal = ReachCharLevel(level=state.level + 1)
-        plan = cheapest_path_to_level(goal.level, state, store, gd, TIMING)
-        priced = route_price(goal, state, gd, TIMED_NO_PROFILE_CONTEXT, store)
-        if plan.blocked:
-            assert priced == UNOBTAINABLE_PER_UNIT
-        else:
-            assert priced == int(plan.total_cycles)
+        for level in (state.level + 1, state.level + 5):
+            assert route_price(ReachCharLevel(level=level), state, gd,
+                               TIMED_NO_PROFILE_CONTEXT, store) == UNOBTAINABLE_PER_UNIT
     finally:
         store.close()
 
@@ -276,42 +267,3 @@ def test_route_price_raises_on_an_unhandled_metagoal_kind(gd: GameData) -> None:
     everything. "API data or fail" applied to a dispatch."""
     with pytest.raises(AssertionError, match="unhandled MetaGoal kind"):
         route_price(_UnknownMetaGoal(), _state(gd), gd, TIMED_NO_PROFILE_CONTEXT, None)
-
-
-def test_reach_char_level_forwards_total_cycles_when_the_path_is_open(
-        gd: GameData, tmp_path, monkeypatch) -> None:
-    """The OPEN arm forwards `PathPlan.total_cycles` unchanged — the unit is
-    already "CYCLES — planner actions", so any arithmetic here would be a unit
-    error, which is exactly what a structural diff cannot catch.
-
-    The plan is stubbed rather than fixture-derived because which arm the real
-    bundle takes is a property of its monster table, not of this function."""
-    from artifactsmmo_cli.ai.learning.projections import PathPlan
-    monkeypatch.setattr(
-        route_mod, "cheapest_path_to_level",
-        lambda target, state, store, game_data, timing: PathPlan(
-            target_level=target, total_cycles=41.0, blocked=False))
-    store = _store(tmp_path)
-    try:
-        assert route_price(ReachCharLevel(level=33), _state(gd), gd,
-                           TIMED_NO_PROFILE_CONTEXT, store) == 41
-    finally:
-        store.close()
-
-
-def test_reach_char_level_walls_a_blocked_path(
-        gd: GameData, tmp_path, monkeypatch) -> None:
-    """The BLOCKED arm walls. A blocked climb means every beatable monster is
-    grey — the character needs GEAR, not monsters — and pricing that at
-    `total_cycles` would send it to grind monsters it cannot beat."""
-    from artifactsmmo_cli.ai.learning.projections import PathPlan
-    monkeypatch.setattr(
-        route_mod, "cheapest_path_to_level",
-        lambda target, state, store, game_data, timing: PathPlan(
-            target_level=target, total_cycles=41.0, blocked=True))
-    store = _store(tmp_path)
-    try:
-        assert route_price(ReachCharLevel(level=33), _state(gd), gd,
-                           TIMED_NO_PROFILE_CONTEXT, store) == UNOBTAINABLE_PER_UNIT
-    finally:
-        store.close()

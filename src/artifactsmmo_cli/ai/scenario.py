@@ -1411,9 +1411,9 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     #
     # `derive_combat_stats=True` is LOAD-BEARING here, not decoration. Without
     # it the character carries zero attack, `is_winnable` is False against every
-    # monster (see the flag's own docstring), and `cheapest_path_to_level` blocks
-    # at rung one — so the scenario would report a flat benefit column for a
-    # reason that has nothing to do with the band position it exists to isolate.
+    # monster (see the flag's own docstring), and no fight is winnable — so
+    # the scenario would report a flat benefit column for a reason that has
+    # nothing to do with the band position it exists to isolate.
     # Both are modelled on `l21_grey_material_grind`'s gear and skill shape so
     # the pair differs from it, and from each other, in LEVEL and nothing else.
     "l19_band_edge": ScenarioCharacter(

@@ -386,9 +386,8 @@ class LearningStore:
         reuses the outer cache; the original cache is restored on exit.
 
         The player opens it around the WHOLE `StrategyEngine.decide` (not just the
-        planner) because the unified objective runs one `cheapest_path_to_level`
-        walk per candidate and each walk asks `is_winnable` about every monster at
-        or above a level — ~3.6k reads per walk uncached."""
+        planner) because the decision's walks ask `is_winnable` about many
+        monsters, each a store read when uncached."""
         prev = self._search_cache
         if prev is None:
             self._search_cache = {}

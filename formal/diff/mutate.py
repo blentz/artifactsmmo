@@ -96,10 +96,6 @@ DEPOSIT_ALL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "deposi
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
 REST_COOLDOWN_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "rest_cooldown_core.py"
-OBSERVED_RATE_CORE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
-                          / "observed_rate_core.py")
-EQUIP_ACTIONS_CORE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment"
-                          / "equip_actions_core.py")
 FIGHT_LOOP_COST_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
                        / "fight_loop_cost.py")
 NPC_BUY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "npc_buy_core.py"
@@ -136,7 +132,6 @@ EXPAND_BANK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "exp
 MONSTER_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "monster_catalog.py"
 WINNABLE_CASCADE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "winnable_cascade.py"
 TASK_RESERVATION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_reservation.py"
-PROJECTIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "projections.py"
 COORDINATION_STORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "coordination_store.py"
 SUPPLY_BATCH_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "supply_batch_target.py"
 # Phase-18 — additional Goal sources.
@@ -7536,9 +7531,9 @@ ROUTE_PRICE_MUTATIONS = [
     ("route: an unpriceable skill climb reads FREE instead of walled",
      "            return UNOBTAINABLE_PER_UNIT\n        return skill_grind_cycles(",
      "            return 0\n        return skill_grind_cycles("),
-    ("route: a BLOCKED level path reads free instead of walled",
-     "        if plan.blocked:\n            return UNOBTAINABLE_PER_UNIT",
-     "        if plan.blocked:\n            return 0"),
+    ("route: a level-up reads FREE instead of having no acquisition price",
+     "        # resolve a level-up.\n        return UNOBTAINABLE_PER_UNIT",
+     "        # resolve a level-up.\n        return 0"),
     # The fleet fallback must be reached only in the ABSENCE of own evidence:
     # `rate or fleet` would let a stuck character borrow a healthy one's rate.
     ("route: the skill rate falls back on a FALSY own rate, not a missing one",
@@ -9635,7 +9630,6 @@ _ALL_SRCS = [
     COMBAT_DEFICIT_SRC,
     TASK_HORIZON_SRC,
     CATALOGUE_SCOPE_SRC,
-    PROJECTIONS_SRC,
     # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
     GATHERING_GOAL_SRC, PURSUE_TASK_GOAL_SRC, SCALAR_PRIORITY_SRC,
     # Phase-18 — value-range theorems for the remaining goals.
@@ -9689,47 +9683,6 @@ _ALL_SRCS = [
     COORDINATION_STORE_SRC,
     # ai/supply_claim_and_batch Task 4: the batch-milestone commitment target.
     SUPPLY_BATCH_TARGET_SRC,
-]
-
-
-# Phase 12 Target A: cheapest_path_to_level greedy contract. Mutants test
-# (a) the +1 beatability margin, (b) strict-> tie-break, (c) the
-# `best_xp_per_cycle <= 0` blocked branch, (d) the is_winnable beatability
-# filter. The diff test must kill all four.
-CHEAPEST_PATH_MUTATIONS = [
-    # Mutation 1: shrink the beatability bound from `lvl <= sim_level + 1` to
-    # `lvl <= sim_level`. test_plus_one_boundary_beatable now blocks (Python)
-    # but Lean still picks the +1 monster — divergence.
-    ("cheapest_path: drop the +1 beatability margin",
-     "            if 1 <= lvl <= sim_level + 1",
-     "            if 1 <= lvl <= sim_level"),
-    # Mutation 2: invert tie-break — use `>=` so the LAST tying monster wins.
-    # test_tie_first_wins flips (Python now picks beta, Lean still alpha).
-    ("cheapest_path: tie-break inversion (> -> >=)",
-     "            if xp_per_cycle > best_xp_per_cycle:",
-     "            if xp_per_cycle >= best_xp_per_cycle:"),
-    # Mutation 3: invert the comparison sign so the WORST monster wins
-    # (pick the minimum xp_per_cycle instead of maximum). Caught by
-    # test_strict_greater_replaces and test_greedy_picks_higher_xp_per_kill.
-    ("cheapest_path: invert greedy direction (> -> <)",
-     "            if xp_per_cycle > best_xp_per_cycle:",
-     "            if xp_per_cycle < best_xp_per_cycle:"),
-    # Mutation 4: drop the is_winnable beatability filter so unwinnable monsters
-    # are included as candidates. test_winnable_false_skips_to_winnable fires:
-    # Python picks the unwinnable 'hard' monster while Lean (still filtering via
-    # winnable=0) picks 'easy' — divergence kills this mutant.
-    ("cheapest_path: drop is_winnable beatability filter",
-     "            and is_winnable(rung, game_data, code, store)",
-     ""),
-    # Mutation 5: freeze the body the walk consults, reverting S-015. The rung
-    # state stops growing, so the beatability predicate is asked whether TODAY'S
-    # character can beat a monster it will not meet until it is many levels
-    # stronger, and the walk under-reports how far it can climb.
-    ("cheapest_path: freeze the rung body (revert S-015 growth)",
-     "        rung = replace(rested, level=sim_level,\n"
-     "                       max_hp=projected_max_hp(state.max_hp, state.level, sim_level),\n"
-     "                       hp=projected_max_hp(state.max_hp, state.level, sim_level))",
-     "        rung = rested"),
 ]
 
 
@@ -12506,69 +12459,6 @@ REST_COOLDOWN_MUTATIONS = [
 ]
 
 
-# The sample level a measurement is restated FROM. SEPARATE GROUP, unit-killed:
-# the Lean side models the ratio, not the aggregation that picks the level to take
-# it at, so no differential can see either mutant.
-OBSERVED_RATE_MUTATIONS = [
-    # Restore the built-in, which is half-to-EVEN. Ties then resolve on the parity
-    # of the mean rather than against the character, so a two-cycle observation at
-    # adjacent levels can round UP across the grey step, find a zero award at the
-    # sample level, and stop the walk.
-    # Killed by test_a_tie_resolves_DOWNWARD.
-    ("observed_rate_core: half-to-even instead of ties-down",
-     "    doubled = 2 * sum(real) - len(real)\n"
-     "    return -(-doubled // (2 * len(real)))",
-     "    return round(sum(real) / len(real))"),
-    # Send ties UP instead. The direction that manufactures reach, which is the
-    # one thing this module refuses to do.
-    # Killed by test_a_tie_resolves_DOWNWARD.
-    ("observed_rate_core: ties resolve UPWARD",
-     "    doubled = 2 * sum(real) - len(real)",
-     "    doubled = 2 * sum(real) + len(real)"),
-    # Let a below-one level into the mean. A recorded 0 is the absence of a
-    # reading, and the published award divides the monster's level by the
-    # character's -- so a zero that survives into the mean reaches a level at which
-    # the award is not defined at all.
-    # Killed by test_a_level_below_one_is_not_a_level.
-    ("observed_rate_core: admit levels below one into the mean",
-     "    real = [level for level in levels if level >= 1]",
-     "    real = list(levels)"),
-    # Truncate rather than round. A mean of 16.9 becomes 16, which is not a
-    # tiebreak at all -- it under-states the sample level everywhere, not just on
-    # the boundary this rule exists for.
-    # Killed by test_a_non_tie_rounds_to_the_nearest.
-    ("observed_rate_core: floor the mean instead of rounding it",
-     "    return -(-doubled // (2 * len(real)))",
-     "    return sum(real) // len(real)"),
-]
-
-
-# The loadout-change cost. SEPARATE GROUP, unit-killed. Both mutants restore a
-# GUESSED server rule that the OpenAPI schema contradicts -- the class of error
-# this module was rewritten to remove, and one no differential can catch because
-# the Lean side models neither rule.
-EQUIP_ACTIONS_MUTATIONS = [
-    # Restore the slot count. A swap becomes ONE movement instead of two, on the
-    # assumption the server equips into an occupied slot -- which it refuses
-    # (`491: The equipment slot is not empty`). Under-charges every upgrade a
-    # character makes after its first.
-    # Killed by test_a_swap_costs_two_because_the_server_refuses_an_occupied_slot.
-    ("equip_actions_core: count differing SLOTS, not item movements",
-     "        (1 if (worn.get(slot) or None) is not None else 0)\n"
-     "        + (1 if (target.get(slot) or None) is not None else 0)\n"
-     "        for slot in set(worn) | set(target)",
-     "        1\n"
-     "        for slot in set(worn) | set(target)"),
-    # Charge a whole Fight per item instead of the published three seconds. Prices
-    # a bare character's first loadout at sixteen fights.
-    # Killed by test_cost_is_the_published_three_seconds_per_item and
-    # test_outfitting_a_bare_character_is_not_sixteen_fights.
-    ("equip_actions_core: one whole action per item, not the published 3s",
-     "    return items_moved(worn, target) * EQUIP_SECONDS_PER_ITEM / float(fight_seconds)",
-     "    return float(items_moved(worn, target))"),
-]
-
-
 # The combat loop's cost model. SEPARATE GROUP, unit-killed: these encode the
 # UNIFICATION of S-005/S-009/S-021 -- that recovery is priced by its published
 # duration and amortised over the chain it ends -- and each mutant restores a
@@ -13769,10 +13659,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_rest_cooldown_core.py", survivors)
     run_group(FIGHT_LOOP_COST_SRC, FIGHT_LOOP_COST_MUTATIONS,
               "tests/test_ai/test_fight_loop_cost.py", survivors)
-    run_group(EQUIP_ACTIONS_CORE_SRC, EQUIP_ACTIONS_MUTATIONS,
-              "tests/test_ai/test_equip_actions_core.py", survivors)
-    run_group(OBSERVED_RATE_CORE_SRC, OBSERVED_RATE_MUTATIONS,
-              "tests/test_ai/test_observed_rate_core.py", survivors)
     run_group(NPC_BUY_CORE_SRC, NPC_BUY_MUTATIONS,
               "formal/diff/test_npc_buy_inventory_diff.py", survivors)
     run_group(TASK_TRADE_CORE_SRC, TASK_TRADE_CORE_MUTATIONS,
@@ -13911,8 +13797,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_game_data_accessors_diff.py", survivors)
     run_group(WINNABLE_CASCADE_SRC, WINNABLE_CASCADE_MUTATIONS,
               "formal/diff/test_winnable_cascade_diff.py", survivors)
-    run_group(PROJECTIONS_SRC, CHEAPEST_PATH_MUTATIONS,
-              "formal/diff/test_cheapest_path_diff.py", survivors)
     # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
     run_group(PURSUE_TASK_GOAL_SRC, PURSUE_TASK_MUTATIONS,
               "formal/diff/test_goal_value_band_safety_diff.py", survivors)

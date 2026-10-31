@@ -2306,33 +2306,6 @@ def runGrindTarget (args : Array Json) : Json :=
   | none => Json.mkObj [("target", Json.null)]
   | some t => Json.mkObj [("target", Json.num t)]
 
-/-- Run the cheapest-path greedy model.
-args layout:
-  [current, target, maxXp, xpInLevel, nMonsters,
-   m0.code, m0.level, m0.xpPerCycle, m0.winnable,
-   m1.code, m1.level, m1.xpPerCycle, m1.winnable, ...]
-Output: { blocked: bool, n_segments: int, monster_codes: [int] } -/
-def runCheapestPath (args : Array Json) : Json :=
-  let current := (intArg args 0).toNat
-  let target := (intArg args 1).toNat
-  let maxXp := (intArg args 2).toNat
-  let xpInLevel := (intArg args 3).toNat
-  let nMonsters := (intArg args 4).toNat
-  let monsters : List Formal.CheapestPath.Monster :=
-    (List.range nMonsters).map (fun k =>
-      { code := (intArg args (5 + 4 * k)).toNat
-        level := (intArg args (5 + 4 * k + 1)).toNat
-        xpPerCycle := (intArg args (5 + 4 * k + 2)).toNat
-        winnable := intArg args (5 + 4 * k + 3) != 0 })
-  let plan := Formal.CheapestPath.cheapestPath current target maxXp xpInLevel monsters
-  Json.mkObj
-    [ ("blocked", Json.bool plan.blocked)
-    , ("n_segments", Json.num (Int.ofNat plan.segments.length))
-    , ("monster_codes",
-        Json.arr ((plan.segments.map (fun s => Json.num (Int.ofNat s.monster.code))).toArray))
-    , ("total_cycles", Json.num (Int.ofNat plan.totalCycles))
-    ]
-
 /-- Compute one items_task_run result using the SAME proved
 `Formal.Liveness.ItemsTaskRun.trade` / `applyRun`.
 
@@ -3321,8 +3294,6 @@ def runOne (item : Json) : Json :=
     runWhichPieceIsNext args
   else if kind == "grind_target" then
     runGrindTarget args
-  else if kind == "cheapest_path" then
-    runCheapestPath args
   else if kind == "items_task_run" then
     runItemsTaskRun args
   else if kind == "task_reservation" then

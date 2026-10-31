@@ -760,10 +760,9 @@ class GamePlayer:
         step_decline = self._step_decline(state, game_data, ctx, actions)
         self._notify_planning(True)
         # The search cache spans the WHOLE decision, not just the planner search
-        # inside it: the unified objective runs one `cheapest_path_to_level` walk
-        # per candidate, and each walk asks `is_winnable` about every monster at
-        # or above a level. Uncached that is ~3.6k SQL reads per walk (~400ms);
-        # cached, ~30ms. Sound for the same reason the planner's own cache is —
+        # inside it: the decision's walks ask `is_winnable` about many monsters,
+        # each a learning-store read when uncached. Sound for the same reason
+        # the planner's own cache is —
         # nothing here writes the learning DB — and `search_cache` is reentrant,
         # so the planner's nested enter reuses this one instead of shadowing it.
         with (self.history.search_cache() if self.history is not None

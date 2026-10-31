@@ -1,5 +1,5 @@
 """Tests for `formal.diff.store_records.load_cycles` — the shared reader the
-five `cycles`-replaying harnesses (`gather_xp_replay`, `level_cost_replay`,
+four `cycles`-replaying harnesses (`gather_xp_replay`,
 `trace_characterize`, `trace_lockstep`, `xp_formula_replay`) were migrated
 onto, replacing the hand-rolled loaders over `play-trace-*.jsonl` files that
 each differenced consecutive state snapshots to recover deltas. This file

@@ -2,12 +2,12 @@
 
 Source root: src/artifactsmmo_cli/ai/
 Diff tests: formal/diff/test_*_diff.py + mutate.py path refs
-Modules with functions: 351
-Total functions: 3608
-Diff test files: 122
-mutate.py SRC references: 243
+Modules with functions: 345
+Total functions: 3545
+Diff test files: 119
+mutate.py SRC references: 238
 
-## Covered modules (271)
+## Covered modules (267)
 
   - accumulation_sell.py [name-match, mutate.py]  ←  test_accumulation_sell_diff.py, test_ladder_fires_diff.py
   - acquisition_cost.py [mutate.py]
@@ -17,7 +17,7 @@ mutate.py SRC references: 243
   - actions/bank_expansion.py [name-match, mutate.py]  ←  test_apply_baseline_diff.py, test_bank_expansion_diff.py, test_cycle_step_diff.py
   - actions/base.py [mutate.py]  ←  test_arbiter_select_diff.py
   - actions/claim.py [mutate.py]  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_cycle_step_diff.py, test_inventory_chain_safe_diff.py, test_plan_exists_diff.py
-  - actions/combat.py [mutate.py]  ←  test_apply_baseline_diff.py, test_local_progress_diff.py, test_perceive_arm_diff.py, test_plan_exists_diff.py
+  - actions/combat.py [mutate.py]  ←  test_apply_baseline_diff.py, test_local_progress_diff.py, test_plan_exists_diff.py
   - actions/complete_task.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_cycle_step_diff.py, test_plan_exists_diff.py
   - actions/complete_task_core.py [mutate.py]  ←  test_complete_task_income_diff.py
   - actions/consumable.py [mutate.py]  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_planner_admissibility_diff.py
@@ -66,9 +66,8 @@ mutate.py SRC references: 243
   - cancel_selection.py [mutate.py]  ←  test_ladder_fires_diff.py
   - catalogue_scope.py [mutate.py]
   - chosen_loadout.py [mutate.py]  ←  test_inventory_keep_diff.py, test_objectivestep_arming_diff.py
-  - combat.py [mutate.py]  ←  test_game_data_accessors_diff.py, test_loadout_adequate_diff.py, test_perceive_arm_diff.py, test_winnable_across_band_diff.py, test_winnable_witness_diff.py
+  - combat.py [mutate.py]  ←  test_game_data_accessors_diff.py, test_loadout_adequate_diff.py, test_winnable_witness_diff.py
   - combat_deficit.py [mutate.py]
-  - combat_picker.py [name-match, mutate.py]  ←  test_combat_picker_diff.py, test_perceive_arm_diff.py, test_winnable_across_band_diff.py
   - combat_targets.py [mutate.py]
   - consumable_floor.py [name-match, mutate.py]
   - consumable_floor_core.py [mutate.py]  ←  test_consumable_floor_diff.py
@@ -81,7 +80,7 @@ mutate.py SRC references: 243
   - currency_turnin.py [mutate.py]
   - decision.py [mutate.py]
   - decisions/obtain_item.py [mutate.py]
-  - decisions/root.py [mutate.py]  ←  test_ladder_fires_diff.py, test_no_deadlock_v2_diff.py, test_plan_exists_diff.py
+  - decisions/root.py [mutate.py]  ←  test_gear_objective_arming_diff.py, test_gear_objective_e_binding_diff.py, test_ladder_fires_diff.py, test_no_deadlock_v2_diff.py, test_plan_exists_diff.py
   - decisions/route.py [mutate.py]
   - decisions/which_piece_is_next.py [mutate.py]
   - decompose_core.py [mutate.py]  ←  test_decompose_diff.py
@@ -95,11 +94,10 @@ mutate.py SRC references: 243
   - equip_value.py [mutate.py]  ←  test_objective_diff.py
   - equipment/bank_tool_fills.py [mutate.py]
   - equipment/empty_slot_fills.py [mutate.py]
-  - equipment/equip_actions_core.py [mutate.py]
-  - equipment/level_loadout.py  ←  test_winnable_across_band_diff.py, test_winnable_witness_diff.py
+  - equipment/level_loadout.py  ←  test_winnable_witness_diff.py
   - equipment/loadout_cache.py  ←  test_gather_cost_diff.py
-  - equipment/loadout_picker.py [name-match, mutate.py]  ←  test_equipment_scoring_diff.py, test_loadout_picker_diff.py, test_realizable_loadout_diff.py, test_winnable_across_band_diff.py, test_winnable_witness_diff.py
-  - equipment/projection.py [mutate.py]  ←  test_combat_margin_diff.py, test_fight_outcome_diff.py, test_loadout_projection_diff.py, test_predict_win_diff.py, test_winnable_across_band_diff.py, test_winnable_witness_diff.py
+  - equipment/loadout_picker.py [name-match, mutate.py]  ←  test_equipment_scoring_diff.py, test_loadout_picker_diff.py, test_realizable_loadout_diff.py, test_winnable_witness_diff.py
+  - equipment/projection.py [mutate.py]  ←  test_apply_baseline_diff.py, test_combat_margin_diff.py, test_fight_outcome_diff.py, test_loadout_projection_diff.py, test_predict_win_diff.py, test_winnable_witness_diff.py
   - equipment/realizable_loadout.py [name-match]  ←  test_realizable_loadout_diff.py
   - equipment/scoring.py [mutate.py]  ←  test_equipment_scoring_diff.py, test_loadout_picker_diff.py, test_realizable_loadout_diff.py
   - equipment/slot_occupancy.py [mutate.py]
@@ -118,20 +116,22 @@ mutate.py SRC references: 243
   - fleet_pieces.py [mutate.py]
   - fleet_work.py [mutate.py]  ←  test_ladder_fires_diff.py
   - food_producer.py [mutate.py]
-  - game_data.py [mutate.py]  ←  test_apply_baseline_diff.py, test_bank_expansion_diff.py, test_bank_selection_diff.py, test_cheapest_path_diff.py, test_combat_margin_diff.py, test_cycle_step_diff.py, test_equipment_scoring_diff.py, test_event_availability_diff.py, test_event_window_diff.py, test_game_data_accessors_diff.py, test_game_data_fixture_diff.py, test_gather_cost_diff.py, test_goal_system_value_diff.py, test_goal_value_band_safety_diff.py, test_inventory_caps_diff.py, test_inventory_chain_safe_diff.py, test_inventory_keep_diff.py, test_ladder_fires_diff.py, test_loadout_picker_diff.py, test_loadout_projection_diff.py, test_local_progress_diff.py, test_no_deadlock_v2_diff.py, test_objective_diff.py, test_objectivestep_arming_diff.py, test_perceive_arm_diff.py, test_phase10_goal_lattices_diff.py, test_phase7_invariants_diff.py, test_plan_exists_diff.py, test_planner_admissibility_diff.py, test_predict_win_diff.py, test_prerequisite_graph_diff.py, test_realizable_loadout_diff.py, test_recipe_closure_diff.py, test_recipe_cost_memo_diff.py, test_task_batch_diff.py, test_task_feasibility_diff.py, test_task_reservation_diff.py, test_winnable_across_band_diff.py
+  - game_data.py [mutate.py]  ←  test_apply_baseline_diff.py, test_bank_expansion_diff.py, test_bank_selection_diff.py, test_combat_margin_diff.py, test_cycle_step_diff.py, test_equipment_scoring_diff.py, test_event_availability_diff.py, test_event_window_diff.py, test_game_data_accessors_diff.py, test_game_data_fixture_diff.py, test_gather_cost_diff.py, test_gear_objective_arming_diff.py, test_gear_objective_link_diff.py, test_goal_system_value_diff.py, test_goal_value_band_safety_diff.py, test_inventory_caps_diff.py, test_inventory_chain_safe_diff.py, test_inventory_keep_diff.py, test_ladder_fires_diff.py, test_loadout_picker_diff.py, test_loadout_projection_diff.py, test_local_progress_diff.py, test_no_deadlock_v2_diff.py, test_objective_diff.py, test_objectivestep_arming_diff.py, test_phase10_goal_lattices_diff.py, test_phase7_invariants_diff.py, test_plan_exists_diff.py, test_planner_admissibility_diff.py, test_predict_win_diff.py, test_prerequisite_graph_diff.py, test_realizable_loadout_diff.py, test_recipe_closure_diff.py, test_recipe_cost_memo_diff.py, test_task_batch_diff.py, test_task_feasibility_diff.py, test_task_reservation_diff.py
+  - gather_armour.py [mutate.py]
   - gather_demand.py [mutate.py]
+  - gather_requirement.py [mutate.py]
   - gather_selection.py [name-match, mutate.py]  ←  test_gather_selection_diff.py
   - gather_step_target.py [name-match, mutate.py]  ←  test_gather_step_target_diff.py
   - ge_bid.py  ←  test_ladder_fires_diff.py
   - ge_post_pricing.py [name-match]  ←  test_ge_post_pricing_diff.py
-  - gear_objective.py [name-match, mutate.py]
+  - gear_objective.py [name-match, mutate.py]  ←  test_gear_objective_e_binding_diff.py, test_gear_objective_link_diff.py
   - gear_objective_context.py [mutate.py]
   - gear_objective_core.py [mutate.py]  ←  test_gear_objective_diff.py
-  - gear_objective_result.py [mutate.py]
+  - gear_objective_result.py [mutate.py]  ←  test_gear_objective_arming_diff.py, test_gear_objective_link_diff.py
   - gear_taxonomy.py [name-match]
   - gear_taxonomy_core.py [mutate.py]  ←  test_gear_taxonomy_diff.py
   - gear_value.py [name-match, mutate.py]  ←  test_gear_value_diff.py, test_loadout_picker_diff.py, test_realizable_loadout_diff.py
-  - gear_value_core.py [mutate.py]  ←  test_equipment_scoring_diff.py, test_gather_cost_diff.py, test_gear_value_diff.py, test_loadout_picker_diff.py, test_realizable_loadout_diff.py, test_winnable_across_band_diff.py, test_winnable_witness_diff.py
+  - gear_value_core.py [mutate.py]  ←  test_equipment_scoring_diff.py, test_gather_cost_diff.py, test_gear_value_diff.py, test_loadout_picker_diff.py, test_realizable_loadout_diff.py, test_winnable_witness_diff.py
   - goals/accept_task_goal.py [mutate.py]  ←  test_goal_system_value_diff.py
   - goals/base.py  ←  test_arbiter_select_diff.py
   - goals/claim_pending.py [mutate.py]  ←  test_goal_system_value_diff.py
@@ -145,7 +145,7 @@ mutate.py SRC references: 243
   - goals/expand_bank.py [mutate.py]  ←  test_bank_expansion_diff.py, test_goal_system_value_diff.py
   - goals/funding_core.py [mutate.py]  ←  test_currency_funding_diff.py
   - goals/gathering.py [mutate.py]  ←  test_goal_value_band_safety_diff.py, test_phase7_invariants_diff.py
-  - goals/grind_character_xp.py  ←  test_objectivestep_arming_diff.py, test_perceive_arm_diff.py
+  - goals/grind_character_xp.py  ←  test_objectivestep_arming_diff.py
   - goals/join_party.py [mutate.py]
   - goals/progression.py [mutate.py]  ←  test_goal_system_value_diff.py
   - goals/pursue_task.py [mutate.py]  ←  test_goal_value_band_safety_diff.py, test_phase10_goal_lattices_diff.py, test_plan_exists_diff.py
@@ -172,21 +172,18 @@ mutate.py SRC references: 243
   - inventory_caps.py [name-match, mutate.py]  ←  test_inventory_profile_diff.py
   - inventory_keep.py [name-match, mutate.py]  ←  test_bank_selection_diff.py, test_inventory_keep_diff.py
   - inventory_room.py [name-match, mutate.py]  ←  test_inventory_room_diff.py
-  - item_catalog.py  ←  test_gather_cost_diff.py, test_gear_value_diff.py, test_winnable_across_band_diff.py, test_winnable_witness_diff.py
+  - item_catalog.py  ←  test_gather_cost_diff.py, test_gear_value_diff.py, test_winnable_witness_diff.py
   - keep_valuation.py [name-match, mutate.py]  ←  test_keep_valuation_diff.py
   - kit_selection.py [mutate.py]
-  - learned_drops.py [mutate.py]  ←  test_apply_baseline_diff.py, test_drop_chance_diff.py, test_gather_cost_diff.py, test_gather_selection_diff.py, test_ladder_fires_diff.py, test_local_progress_diff.py, test_monster_drop_selection_diff.py, test_perceive_arm_diff.py, test_plan_exists_diff.py
+  - learned_drops.py [mutate.py]  ←  test_apply_baseline_diff.py, test_drop_chance_diff.py, test_gather_cost_diff.py, test_gather_selection_diff.py, test_ladder_fires_diff.py, test_local_progress_diff.py, test_monster_drop_selection_diff.py, test_plan_exists_diff.py
   - learning/coordination_store.py [mutate.py]
   - learning/drop_observations.py [mutate.py]
   - learning/fight_loop_cost.py [mutate.py]
-  - learning/fight_seconds_model.py [mutate.py]  ←  test_cheapest_path_diff.py, test_ladder_fires_diff.py
-  - learning/fight_upkeep_core.py [mutate.py]
-  - learning/observed_rate_core.py [mutate.py]
-  - learning/projections.py [mutate.py]  ←  test_cheapest_path_diff.py
+  - learning/fight_seconds_model.py [mutate.py]  ←  test_ladder_fires_diff.py
   - learning/scalar_core.py [mutate.py]  ←  test_scalarizer_diff.py
   - learning/scalarizer.py [name-match]
   - learning/skill_xp_curve.py [name-match, mutate.py]  ←  test_skill_xp_curve_diff.py
-  - learning/store.py [mutate.py]  ←  test_cheapest_path_diff.py, test_goal_value_band_safety_diff.py, test_ladder_fires_diff.py, test_perceive_arm_diff.py, test_plan_exists_diff.py
+  - learning/store.py [mutate.py]  ←  test_goal_value_band_safety_diff.py, test_ladder_fires_diff.py, test_plan_exists_diff.py
   - learning/store_warmup_core.py [mutate.py]  ←  test_store_warmup_diff.py
   - liquidation_venue.py [name-match, mutate.py]  ←  test_liquidation_venue_diff.py, test_venue3_diff.py
   - loadout_profiles.py [name-match]
@@ -202,25 +199,27 @@ mutate.py SRC references: 243
   - monster_catalog.py [mutate.py]  ←  test_xp_positive_diff.py, test_xp_value_diff.py
   - monster_drop_selection.py [name-match, mutate.py]  ←  test_monster_drop_selection_diff.py
   - nearest_tile.py [name-match, mutate.py]  ←  test_nearest_tile_diff.py
+  - objective_codes.py [mutate.py]
+  - objective_demand.py [mutate.py]
   - objective_step_fight_core.py [mutate.py]  ←  test_objective_step_is_fight_diff.py
   - obtain_item_routing.py [mutate.py]
-  - obtain_model/drop_routes.py [mutate.py]
+  - obtain_model/drop_routes.py [mutate.py]  ←  test_gear_objective_link_diff.py
   - obtain_model/obtain_model.py [mutate.py]
   - obtain_model/policy.py [mutate.py]  ←  test_obtain_model_ready_diff.py
   - obtain_model/ready_core.py [mutate.py]  ←  test_obtain_model_ready_diff.py
+  - obtain_sources.py [mutate.py]
   - optimal_buy_mix.py [name-match, mutate.py]  ←  test_optimal_buy_mix_diff.py
   - party_lease_core.py [mutate.py]  ←  test_ladder_fires_diff.py
-  - party_loop.py [mutate.py]
   - party_win.py [mutate.py]
   - plan_cache.py [mutate.py]
   - planner.py [mutate.py]  ←  test_plan_exists_diff.py, test_planner_admissibility_diff.py
   - player.py [mutate.py]  ←  test_plan_exists_diff.py
-  - potion_baseline.py [name-match, mutate.py]  ←  test_potion_baseline_diff.py
   - potion_provision_qty.py [name-match, mutate.py]  ←  test_potion_provision_qty_diff.py
   - potion_supply.py [mutate.py]  ←  test_ladder_fires_diff.py
   - priority_band.py [name-match, mutate.py]  ←  test_priority_band_diff.py
   - progression_reserve.py [name-match, mutate.py]  ←  test_ladder_fires_diff.py
   - progression_reserve_core.py [mutate.py]  ←  test_progression_reserve_diff.py, test_progression_reserve_multi_diff.py
+  - recipe_catalog.py [mutate.py]
   - recipe_closure.py [name-match, mutate.py]  ←  test_recipe_closure_diff.py, test_recipe_cost_memo_diff.py
   - recipe_cost_memo.py [name-match]  ←  test_recipe_cost_memo_diff.py
   - recovery.py [mutate.py]  ←  test_stuck_detector_diff.py
@@ -234,7 +233,8 @@ mutate.py SRC references: 243
   - rest_first_core.py [mutate.py]
   - role_selection.py [mutate.py]
   - scalar_priority.py [mutate.py]
-  - selection_context.py  ←  test_bank_selection_diff.py, test_goal_system_value_diff.py, test_phase10_goal_lattices_diff.py, test_plan_exists_diff.py
+  - scenario.py  ←  test_gear_objective_arming_diff.py, test_gear_objective_e_binding_diff.py, test_gear_objective_link_diff.py
+  - selection_context.py  ←  test_bank_selection_diff.py, test_gear_objective_arming_diff.py, test_goal_system_value_diff.py, test_phase10_goal_lattices_diff.py, test_plan_exists_diff.py
   - shed_actions.py [mutate.py]
   - shed_urgency.py [mutate.py]
   - shopping_list.py [name-match, mutate.py]  ←  test_shopping_list_diff.py
@@ -242,7 +242,8 @@ mutate.py SRC references: 243
   - skill_credit.py [mutate.py]
   - skill_grindable.py [mutate.py]
   - skill_xp_positive.py [name-match]  ←  test_skill_xp_positive_diff.py
-  - strategy_driver.py [mutate.py]  ←  test_objectivestep_arming_diff.py, test_perceive_arm_diff.py, test_plan_exists_diff.py
+  - strategy_driver.py [mutate.py]  ←  test_objectivestep_arming_diff.py, test_plan_exists_diff.py
+  - suppliable.py [mutate.py]
   - supply_batch_target.py [mutate.py]
   - task_accept.py [mutate.py]  ←  test_no_deadlock_v2_diff.py
   - task_batch.py [name-match, mutate.py]  ←  test_task_batch_diff.py
@@ -254,18 +255,14 @@ mutate.py SRC references: 243
   - task_reservation.py [name-match, mutate.py]  ←  test_task_reservation_diff.py
   - task_worth.py [name-match, mutate.py]
   - task_worth_core.py [mutate.py]  ←  test_ladder_fires_diff.py, test_no_deadlock_v2_diff.py, test_plan_exists_diff.py, test_task_worth_diff.py
-  - tiers/band_target.py [mutate.py]
   - tiers/decide_key.py [name-match, mutate.py]  ←  test_decide_key_diff.py
-  - tiers/equipment_profile.py [name-match, mutate.py]  ←  test_equipment_profile_diff.py
-  - tiers/guards.py [mutate.py]  ←  test_cycle_step_diff.py, test_decide_key_diff.py, test_inventory_keep_diff.py, test_ladder_fires_diff.py, test_no_deadlock_v2_diff.py, test_objectivestep_arming_diff.py, test_perceive_arm_diff.py, test_plan_exists_diff.py
+  - tiers/guards.py [mutate.py]  ←  test_cycle_step_diff.py, test_decide_key_diff.py, test_inventory_keep_diff.py, test_ladder_fires_diff.py, test_no_deadlock_v2_diff.py, test_objectivestep_arming_diff.py, test_plan_exists_diff.py
   - tiers/leaf_attainable_core.py [mutate.py]  ←  test_leaf_attainable_diff.py
   - tiers/means.py [mutate.py]  ←  test_decide_key_diff.py, test_no_deadlock_v2_diff.py, test_plan_exists_diff.py
-  - tiers/meta_goal.py  ←  test_equipment_profile_diff.py, test_ladder_fires_diff.py, test_no_deadlock_v2_diff.py, test_objectivestep_arming_diff.py, test_perceive_arm_diff.py, test_plan_exists_diff.py, test_prerequisite_graph_diff.py, test_reachability_diff.py, test_strategy_traversal_diff.py
-  - tiers/objective.py [name-match, mutate.py]  ←  test_objective_diff.py
+  - tiers/meta_goal.py  ←  test_gear_objective_arming_diff.py, test_gear_objective_e_binding_diff.py, test_ladder_fires_diff.py, test_no_deadlock_v2_diff.py, test_objectivestep_arming_diff.py, test_plan_exists_diff.py, test_prerequisite_graph_diff.py, test_reachability_diff.py, test_strategy_traversal_diff.py
+  - tiers/objective.py [name-match, mutate.py]  ←  test_gear_objective_arming_diff.py, test_gear_objective_e_binding_diff.py, test_objective_diff.py
   - tiers/owned_count.py [name-match, mutate.py]  ←  test_owned_count_diff.py
   - tiers/prerequisite_graph.py [name-match, mutate.py]  ←  test_prerequisite_graph_diff.py
-  - tiers/progression_tree.py [mutate.py]
-  - tiers/progression_tree_core.py [mutate.py]
   - tiers/pursuit_value.py [mutate.py]
   - tiers/skill_grind_selection.py [name-match, mutate.py]  ←  test_skill_grind_selection_diff.py
   - tiers/skill_grind_target.py [mutate.py]
@@ -273,15 +270,14 @@ mutate.py SRC references: 243
   - tiers/strategy.py [mutate.py]
   - tiers/synergy_core.py [mutate.py]
   - tiers/taskmaster_choice.py [mutate.py]
-  - tiers/tier_progress.py [mutate.py]
   - tool_objective.py [mutate.py]
   - utility_slot.py [mutate.py]
   - win_threshold_core.py [mutate.py]
   - winnable_cascade.py [name-match, mutate.py]  ←  test_winnable_cascade_diff.py
-  - world_state.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_arbiter_select_diff.py, test_bank_expansion_diff.py, test_bank_selection_diff.py, test_combat_margin_diff.py, test_complete_task_income_diff.py, test_cycle_step_diff.py, test_equipment_scoring_diff.py, test_fight_outcome_diff.py, test_game_data_accessors_diff.py, test_gather_cost_diff.py, test_goal_system_value_diff.py, test_inventory_caps_diff.py, test_inventory_chain_safe_diff.py, test_inventory_keep_diff.py, test_ladder_fires_diff.py, test_loadout_adequate_diff.py, test_loadout_picker_diff.py, test_loadout_projection_diff.py, test_local_progress_diff.py, test_no_deadlock_v2_diff.py, test_objective_diff.py, test_objectivestep_arming_diff.py, test_perceive_arm_diff.py, test_phase10_goal_lattices_diff.py, test_phase7_invariants_diff.py, test_plan_exists_diff.py, test_predict_win_diff.py, test_prerequisite_graph_diff.py, test_realizable_loadout_diff.py, test_task_batch_diff.py, test_task_feasibility_diff.py, test_winnable_across_band_diff.py
+  - world_state.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_arbiter_select_diff.py, test_bank_expansion_diff.py, test_bank_selection_diff.py, test_combat_margin_diff.py, test_complete_task_income_diff.py, test_cycle_step_diff.py, test_equipment_scoring_diff.py, test_fight_outcome_diff.py, test_game_data_accessors_diff.py, test_gather_cost_diff.py, test_gear_objective_arming_diff.py, test_gear_objective_e_binding_diff.py, test_gear_objective_link_diff.py, test_goal_system_value_diff.py, test_inventory_caps_diff.py, test_inventory_chain_safe_diff.py, test_inventory_keep_diff.py, test_ladder_fires_diff.py, test_loadout_adequate_diff.py, test_loadout_picker_diff.py, test_loadout_projection_diff.py, test_local_progress_diff.py, test_no_deadlock_v2_diff.py, test_objective_diff.py, test_objectivestep_arming_diff.py, test_phase10_goal_lattices_diff.py, test_phase7_invariants_diff.py, test_plan_exists_diff.py, test_predict_win_diff.py, test_prerequisite_graph_diff.py, test_realizable_loadout_diff.py, test_task_batch_diff.py, test_task_feasibility_diff.py
   - xp_demand.py [mutate.py]
 
-## Uncovered modules (80)
+## Uncovered modules (78)
 
   - account_read_cache.py (12 functions)
   - action_kind.py (1 functions)
@@ -303,6 +299,7 @@ mutate.py SRC references: 243
   - drop_obtainability.py (2 functions)
   - equipped_potion.py (1 functions)
   - event_plan_window.py (2 functions)
+  - fight_gold_rate.py (1 functions)
   - fight_record.py (7 functions)
   - file_tracer.py (6 functions)
   - game_data_cache.py (6 functions)
@@ -326,6 +323,7 @@ mutate.py SRC references: 243
   - grind_probe_state.py (1 functions)
   - heal_catalog.py (1 functions)
   - held_for_crafting.py (1 functions)
+  - learning/projections.py (3 functions)
   - learning/recovery_attribution.py (1 functions)
   - learning/rung_state_core.py (1 functions)
   - learning/schema_init.py (4 functions)
@@ -339,29 +337,25 @@ mutate.py SRC references: 243
   - macro/segmentation.py (3 functions)
   - min_crafts.py (2 functions)
   - null_tracer.py (4 functions)
-  - obtain_sources.py (3 functions)
   - party_card.py (2 functions)
   - per_state_memo.py (2 functions)
   - plan_tree.py (5 functions)
   - player_helpers.py (2 functions)
   - raid_info.py (2 functions)
   - raid_participation.py (2 functions)
-  - recipe_catalog.py (17 functions)
   - reconcile_open_orders.py (1 functions)
   - refusal_facts.py (8 functions)
   - requirement_graph.py (40 functions)
   - requirement_projections.py (7 functions)
   - role_catalog.py (3 functions)
-  - scenario.py (6 functions)
   - skill_grind_cost_core.py (2 functions)
   - task_alignment.py (1 functions)
   - task_coins.py (1 functions)
   - tiers/objective_needs.py (7 functions)
+  - tiers/progression_tree.py (2 functions)
   - tiers/root_group.py (1 functions)
   - tiers/strategic_weights.py (1 functions)
-  - tiers/tier_ladder.py (4 functions)
   - trace_stats.py (8 functions)
   - tracer.py (4 functions)
-  - weapon_winnability.py (4 functions)
 
-## Coverage: 77.2% modules (271/351)
+## Coverage: 77.4% modules (267/345)

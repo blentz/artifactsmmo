@@ -46,7 +46,6 @@ from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
-from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
@@ -183,18 +182,12 @@ TOTAL over `META_GOAL_KINDS` since wave 6. The two climbs return
             state.skills.get(goal.skill, 1), state.skill_xp.get(goal.skill, 0),
             max_xp, goal.level, rate)
     if isinstance(goal, ReachCharLevel):
-        # `PathPlan.total_cycles` is "CYCLES — planner actions"
-        # (`projections.py:263`) and counts the WHOLE combat loop.
-        if history is None:
-            return UNOBTAINABLE_PER_UNIT
-        plan = cheapest_path_to_level(goal.level, state, history, game_data, ctx.timing())
-        # `blocked` -> UNOBTAINABLE_PER_UNIT, never `inf`: the walk needs a
-        # TOTAL ORDER, which is why UNOBTAINABLE_PER_UNIT is a large number and
-        # not infinity. A blocked climb means every beatable monster is grey —
-        # the character needs GEAR, not monsters.
-        if plan.blocked:
-            return UNOBTAINABLE_PER_UNIT
-        return int(plan.total_cycles)
+        # A level-up is not an acquisition (spec 2026-10-18 §6.2): it has no
+        # acquisition price, so it reads as unpriceable, never as free.
+        # UNOBTAINABLE_PER_UNIT, never `inf`: the walk needs a TOTAL ORDER. No
+        # decision prices one; the wall censuses do, over a root walk that may
+        # resolve a level-up.
+        return UNOBTAINABLE_PER_UNIT
     if isinstance(goal, ReachTaskOutcome):
         # The remaining kills, each at the whole-loop `cycles_per_kill` a drop
         # farm and a level grind are both quoted in (`acquisition_cost.

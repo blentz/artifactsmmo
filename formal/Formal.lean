@@ -78,7 +78,6 @@ import Formal.StoreWarmup
 import Formal.GameDataAccessors
 import Formal.Phase10GoalLattices
 import Formal.WinnableCascade
-import Formal.CheapestPath
 import Formal.GoalValueBands
 import Formal.GoalSystem
 -- De-Mathlib'd safety modules (core-only; quarantine compliant).

@@ -772,27 +772,6 @@ open Formal.PriorityBand
 #check @Formal.Phase8Invariants.bank_expansion_post_fix_witness           -- 30-cap witness (1 apply → satisfied)
 #check @Formal.Phase8Invariants.bank_expansion_pre_fix_projection_gap     -- regression anchor (pre-fix is the bug)
 #check @Formal.Phase8Invariants.bank_expansion_pre_fix_gap_witness        -- regression anchor (BLOCKED counterexample pinned)
--- CheapestPath required roles (Phase 12 Target A — greedy contract, NOT-A-BUG):
-#check @Formal.CheapestPath.cheapest_target_met               -- target ≤ current ⇒ empty plan
-#check @Formal.CheapestPath.stepLevel_empty                    -- empty monsters ⇒ no step
-#check @Formal.CheapestPath.pickBest_nil                       -- pickBest on [] = none
-#check @Formal.CheapestPath.pickBest_mem                       -- returned monster is in input
-#check @Formal.CheapestPath.pickBest_beatable                  -- returned monster passes +1 gate
-#check @Formal.CheapestPath.pickBest_max                       -- greedy maximality (xpPerCycle)
-#check @Formal.CheapestPath.isBeatable_plus_one                -- +1 margin matches FightAction
-#check @Formal.CheapestPath.isBeatable_off_boundary            -- simLevel+2 NOT beatable
-#check @Formal.CheapestPath.isBeatable_level_zero              -- level-0 NOT beatable
-#check @Formal.CheapestPath.cheapest_empty_monsters_blocks     -- empty input ⇒ blocked
-#check @Formal.CheapestPath.stepLevel_all_zero_blocks          -- all-zero xpPerCycle ⇒ none
-#check @Formal.CheapestPath.foldMax_ge_init                    -- helper: result ≥ initial
-#check @Formal.CheapestPath.foldMax_ge_mem                     -- helper: result ≥ every member
-#check @Formal.CheapestPath.foldMax_mem                        -- helper: result ∈ list
-#check @Formal.CheapestPath.tie_break_first_wins_witness       -- tie ⇒ first picked
-#check @Formal.CheapestPath.strict_greater_replaces_witness    -- strict > ⇒ later replaces
-#check @Formal.CheapestPath.greedy_filters_unbeatable_witness  -- unbeatable filtered out
-#check @Formal.CheapestPath.single_step_witness                -- 1-level success
-#check @Formal.CheapestPath.two_step_witness                   -- 2-level chain
-#check @Formal.CheapestPath.greedy_pick_witness                -- picks higher xpPerCycle
 -- GoalValueBands required roles (Phase-17 — scalar_yield wired into discretionary goal value()):
 #check @Formal.GoalValueBands.pursueTask_floor_le_ceiling           -- band sanity: 35 ≤ 50
 #check @Formal.GoalValueBands.gatherMaterials_floor_le_ceiling      -- band sanity: 1 ≤ 50
@@ -1459,19 +1438,11 @@ open Formal.PriorityBand
 #check @Formal.PlanModel.canonicalPlan_valid                 -- CONSTRUCTIVE witness: the canonical plan obtains AND equips
 #check @Formal.PlanModel.length_eq_counts                    -- a plan's length is its gather + craft + equip counts
 #check @Formal.PlanModel.gear_obtainable_of_perActionLength_le -- OBTAINABILITY under the per-action length budget
--- The 112 declarations below were listed ONLY in Audit.lean: their axioms
+-- The 101 declarations below were listed ONLY in Audit.lean: their axioms
 -- were scanned but they had no traceability row. Audit.lean is generated
 -- from this file, so they are recorded here to keep them scanned.
 -- ArbiterSelect (1):
 #check @Formal.ArbiterSelect.findCommitted_some_props
--- CheapestPath (7):
-#check @Formal.CheapestPath.all_zero_blocks_witness
-#check @Formal.CheapestPath.beatable_level_zero_refused_witness
-#check @Formal.CheapestPath.beatable_plus_one_witness
-#check @Formal.CheapestPath.beatable_plus_two_refused_witness
-#check @Formal.CheapestPath.empty_blocks_witness
-#check @Formal.CheapestPath.target_below_witness
-#check @Formal.CheapestPath.target_met_witness
 -- InventoryChainSafe (2):
 #check @Formal.InventoryChainSafe.deposit_watermark_boundary_witness
 #check @Formal.InventoryChainSafe.gather_overflows_full_witness

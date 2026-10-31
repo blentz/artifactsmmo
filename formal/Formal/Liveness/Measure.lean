@@ -432,8 +432,8 @@ structure State where
   posX : Nat
   posY : Nat
   /-- Item 4c: pending move destination. Mirrors the per-cycle target
-      tile committed by the path planner (player.py builds a PathPlan
-      and the MoveAction reads its head). `.move` reads this to know
+      tile committed by the planner (the MoveAction's target).
+      `.move` reads this to know
       where to teleport (single-step abstraction). `.mapTransition`
       reads the same field for cross-map teleports. `none` = no move
       pending; the apply is a no-op. -/
