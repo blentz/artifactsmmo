@@ -31,7 +31,8 @@ def _default_learn_db_path() -> str:
 def _gear_objective_line(objective: GearObjective | None) -> str:
     """m*, whether L* is held, and each missing piece in the objective's own
     order as slot:code(layer, gain/price): gain to 4 significant figures,
-    price in whole seconds."""
+    price in whole planner actions (`gear_objective._price`: `cheapest_route`
+    plus the equip; `decisions/route.py`'s unit contract)."""
     if objective is None:
         return "gear_objective: None"
     pieces = ", ".join(f"{p.slot}:{p.code}({p.layer}, {float(p.gain):.4g}/{float(p.price):.0f})"
