@@ -28,11 +28,11 @@ from artifactsmmo_cli.ai.scenario import (
 )
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, obtainable_now
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
@@ -101,13 +101,13 @@ def test_wolf_ears_route_is_genuinely_unattainable_from_scratch() -> None:
     """Proves the fixture's "genuinely stuck" claim empirically, not just in
     prose: wolf_ears has NO craft recipe, its only dropper is unbeatable at
     this state, and stripped of the one held copy it fails
-    `is_attainable_now` outright — the only reason it is a live near_term_gear
+    the near-term walk (`obtainable_now`) outright — the only reason it is a live
     candidate at all is the single already-owned unit (`stock_ok`)."""
     state, gd, _objective = _stuck_wolf_ears_plus_craftable_ring2()
     assert gd.crafting_recipe("wolf_ears") is None
     assert is_winnable(state, gd, _UNBEATABLE_MONSTER) is False
     stripped = replace(state, inventory={})
-    assert is_attainable_now("wolf_ears", stripped, gd) is False
+    assert obtainable_now("wolf_ears", stripped, gd) is False
 
 
 _WOLF_EARS = ObtainItem(code="wolf_ears", quantity=1, slot="helmet_slot")

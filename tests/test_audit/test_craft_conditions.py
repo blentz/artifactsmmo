@@ -19,7 +19,7 @@ from artifactsmmo_cli.audit.craft_completeness import (
     KEYS_HELD,
     CraftCell,
     GapClass,
-    _best_gear,
+    census_gear,
     census_state,
     classify_gap,
     crossing_keys,
@@ -242,8 +242,8 @@ def test_the_held_resort_that_still_fails_stays_unplanned(monkeypatch: pytest.Mo
 
 def test_the_catalogue_best_gear_is_suppliable_and_level_capped() -> None:
     gd = _gd()
-    gear = _best_gear(30, gd)
-    assert gear["weapon_slot"] == "death_knight_sword"
+    gear = census_gear(30, frozenset(), True, gd)
+    assert gear["weapon_slot"] == "elderwood_staff"
     assert all(gd.item_stats(code).level <= 30 for code in gear.values())
     assert "novice_guide" not in gear.values()  # fixed supply, not suppliable
 

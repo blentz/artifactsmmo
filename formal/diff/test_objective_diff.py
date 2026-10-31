@@ -1,12 +1,9 @@
-"""Differential test: real Python `is_attainable` and `CharacterObjective.from_game_data`
-(gear selection) must agree with the proved Lean oracle.
+"""Differential test: real Python `is_attainable` must agree with the proved Lean
+oracle.
 
 * `is_attainable(code, game_data)` (objective.py:15) bottoms a craft chain out in
   gatherables, cycle-safe via a `_path` set. We feed random recipe graphs
   (including CYCLIC and drop-only shapes) and assert the attainability bool.
-* `CharacterObjective.from_game_data` ranks each gear type by `(-equip_value,
-  code)`, filters to attainable, zips to slots: the first slot gets the
-  highest-equip_value ATTAINABLE item. We assert the per-(first-)slot best code.
 Integer item/equip-value codes; controlled fake GameData exposing only the fields
 these functions read. The same data is encoded for the Lean oracle (flat ints).
 """
@@ -15,9 +12,8 @@ import random
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.equip_value import equip_value
 from artifactsmmo_cli.ai.game_data import ItemStats
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable
+from artifactsmmo_cli.ai.tiers.objective import is_attainable
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
 
@@ -341,59 +337,5 @@ def test_attainable_chain_true():
     assert is_attainable("0", gd) is True
     args = _encode_attainable(recipes, set(drops.values()), 0, 8)
     assert run_oracle("objective_attainable", [args])[0]["is_attainable"] is True
-
-
-# ---------------------------------------------------------------------------
-# gear selection (best attainable per first slot of a type)
-# ---------------------------------------------------------------------------
-
-def _stats(code: int, type_: str, attack: int, resistance: int, hp_restore: int) -> ItemStats:
-    return ItemStats(code=str(code), level=1, type_=type_,
-                     attack={"fire": attack} if attack else {},
-                     resistance={"fire": resistance} if resistance else {},
-                     hp_restore=hp_restore)
-
-
-@settings(max_examples=200, deadline=None)
-@given(seed=st.integers(min_value=0, max_value=2**31 - 1))
-def test_best_gear_matches_lean(seed):
-    rng = random.Random(seed)
-    # one gear type (weapon) so the first slot is weapon_slot; random items
-    n = rng.randint(1, 8)
-    recipes: dict[int, dict[int, int]] = {}
-    drops: dict[int, int] = {}
-    item_stats: dict[int, ItemStats] = {}
-    # base drop leaf for craftable items
-    drops[100] = 999
-    item_stats[999] = _stats(999, "resource_internal", 0, 0, 0)
-    codes = list(range(n))
-    lean_items = []
-    for c in codes:
-        atk = rng.randint(0, 9)
-        res = rng.randint(0, 9)
-        hp = rng.randint(0, 9)
-        item_stats[c] = _stats(c, "weapon", atk, res, hp)
-        # attainability: half craftable-from-drop (attainable), half drop-only-fail
-        if rng.random() < 0.6:
-            recipes[c] = {999: 1}  # craft from drop leaf -> attainable
-            attainable = True
-        else:
-            recipes[c] = {998: 1}  # craft from unknown non-drop -> NOT attainable
-            attainable = False
-        # P4a: equip_value IS an exact int — no float boundary cast.
-        val = equip_value(item_stats[c])
-        lean_items.append((c, val, 1 if attainable else 0))
-
-    gd = _FakeGameData(recipes, drops, item_stats)
-    obj = CharacterObjective.from_game_data(gd)
-    py_weapon = obj.target_gear.get("weapon_slot")  # str | None
-    py_code = int(py_weapon) if py_weapon is not None else -1
-
-    args = [len(lean_items)]
-    for c, v, a in lean_items:
-        args += [c, v, a]
-    lean = run_oracle("objective_best_gear", [args])[0]
-    ctx = f"items={lean_items}"
-    assert py_code == lean["chosen_code"], f"gear code mismatch: {ctx} lean={lean}"
 
 

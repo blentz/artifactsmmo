@@ -2,8 +2,8 @@
 
 Unifying Rank onto `weapon_score`/`armor_score` moved its range from ~10^2 to
 ~10^3-10^6. A changed scale silently breaks any ABSOLUTE threshold, so this
-module enumerates the six call sites `grep -rn "gear_value.*Rank\\|equip_value"
-src/` finds and pins what each one actually does with the number. Five compare
+module enumerates the five call sites `grep -rn "gear_value.*Rank\\|equip_value"
+src/` finds and pins what each one actually does with the number. Four compare
 Rank values to each other WITHIN one slot or one item type (scale-free); one
 compares against 0.
 
@@ -11,7 +11,9 @@ A seventh consumer, `tiers/progression_tree._utility_candidates`, was pinned
 here (gate on `gain > 0`) until wave 3b deleted it — zero production callers,
 since `decide_tree` stopped reading it in wave 3a and its last diagnostic
 reader was retired in wave 3b. Its test went with it, not renumbered away
-quietly: this paragraph is that record.
+quietly: this paragraph is that record. So did consumer 1,
+`tiers/objective.CharacterObjective.from_game_data`'s endgame gear sheet,
+deleted in plan C Task 6 (the gear objective `L*` is the one gear sheet).
 
 If a new Rank consumer appears, it belongs here.
 """
@@ -29,7 +31,6 @@ from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.inventory_caps import useful_quantity_cap
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.progression_reserve import _best_per_slot
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import best_attainable_weapon
 from tests.test_ai.fixtures import make_state
 
@@ -38,25 +39,6 @@ BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.jso
 
 def _bundle() -> GameData:
     return GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
-
-
-# --- 1. tiers/objective.CharacterObjective.from_game_data -------------------
-
-def test_objective_target_gear_compares_within_one_item_type() -> None:
-    """`from_game_data` buckets candidates `by_type` before ranking, so the
-    weapon branch's much larger scale never competes with the armor branch's.
-    Ordering-only: no absolute threshold to re-derive."""
-    gd = _bundle()
-    obj = CharacterObjective.from_game_data(gd)
-    for slot, code in obj.target_gear.items():
-        chosen = gd.item_stats(code)
-        assert chosen is not None
-        peers = [s for s in gd.all_item_stats.values() if s.type_ == chosen.type_]
-        best = max(equip_value(s) for s in peers)
-        assert equip_value(chosen) <= best, (slot, code)
-    # The BiS body armor really is the highest-Rank body armor available.
-    body = gd.item_stats(obj.target_gear["body_armor_slot"])
-    assert body is not None and equip_value(body) > 0
 
 
 # --- 2. tiers/prerequisite_graph.best_attainable_weapon ---------------------

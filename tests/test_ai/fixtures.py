@@ -13,6 +13,7 @@ from artifactsmmo_api_client.models.item_schema import ItemSchema
 from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.models.status_schema import StatusSchema
 
+from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -25,6 +26,7 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import (
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
+from artifactsmmo_cli.ai.tiers.objective import NEAR_TERM_POLICY, near_term_model
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _ROBBY = json.loads(FIGHT_LOGS.read_text())["characters"]["Robby"]
@@ -66,6 +68,12 @@ rung for a catalogue with no equipment. That refusal is correct — the project
 rule is to use API data or fail — so the fixtures stop asserting a world the
 API cannot produce. Any hand-built `GameData` a `StrategyEngine.decide` or
 `decide_tree` call will see needs at least this."""
+
+
+def obtainable_now(code: str, state: WorldState, gd: GameData) -> bool:
+    """One `code` obtainable from `state` under the policy `classify_target`
+    asks its target and materials of (`near_term_model`, `NEAR_TERM_POLICY`)."""
+    return near_term_model(state, gd).feasible(code, 1, NEAR_TERM_POLICY)
 
 
 def with_missing(ctx: SelectionContext, *pieces: tuple[str, str]) -> SelectionContext:

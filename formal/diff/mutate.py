@@ -3450,14 +3450,8 @@ RECOVERABLE_LEAF_MUTATIONS = [
 
 # objective mutations -- old strings matched to current objective.py text.
 OBJECTIVE_MUTATIONS = [
-    # drop the attainability filter in gear selection: a non-attainable (higher
-    # equip_value) item can be wrongly chosen for the slot.
-    ("objective: drop attainability filter in gear selection",
-     "            attainable = [(value, code) for (value, code) in ranked\n"
-     "                          if is_attainable(code, game_data)]",
-     "            attainable = [(value, code) for (value, code) in ranked]"),
     # drop the monster-drop leaf branch: reverts is_attainable to the old
-    # gathering-ONLY bug that silently dropped body/leg/amulet from target_gear.
+    # gathering-ONLY bug that silently dropped body/leg/amulet from the gear sheet.
     # A craft chain bottoming out in a (spawning) monster drop is wrongly
     # rejected -> killed by test_attainable_spawning_monster_drop_accepted.
     # Updated (C4): leaf_ok now calls leaf_attainable_pure; the mutation targets
@@ -3511,12 +3505,12 @@ OBJECTIVE_MUTATIONS = [
 ]
 
 
-# is_attainable_now's task-earnable arm (2026-07-06): a tasks_coin-priced leaf
+# The near-term model's task-earnable arm (2026-07-06): a tasks_coin-priced leaf
 # is producible-NOW via the always-available C4 funding loop. Since step 4 of
 # the decision-architecture redesign the arm is the obtain model's TASK_REWARD
-# route (the policy switch is pinned in NEAR_TERM_POLICY_MUTATIONS). Dropping
+# route (the policy switch is pinned in CLASSIFY_TARGET_MUTATIONS). Dropping
 # the route silently removes every task-currency-gated item (satchel) from
-# near_term_gear. Bound to tests/test_ai/test_tiers_objective.py.
+# the near-term model. Bound to tests/test_ai/test_tiers_objective.py.
 OBJECTIVE_NOW_MUTATIONS = [
     ("obtain_model: the task board pays nothing",
      "        if not self._gd.is_task_earnable(item):\n            return []",
@@ -5373,20 +5367,19 @@ SUPPLIABLE_MUTATIONS = [
      "    if model.mints(code):\n        return True\n    bank = state.bank_items or {}",
      "    if True:\n        return True\n    bank = state.bank_items or {}"),
 ]
-NEAR_TERM_POLICY_MUTATIONS = [
+CLASSIFY_TARGET_MUTATIONS = [
+    # Plan C Task 6: the near-term gear sheet is gone; what survives is the
+    # model and policy `classify_target` asks its target and materials of.
     # Plan B Task 14c: one obtain model answers every candidate of one state.
     # Fix round 1: classify_target asks its target and materials of one model.
     ("objective: classify_target builds a model for the target",
      "        if model.feasible(code, 1, NEAR_TERM_POLICY):\n"
      "            return GearTarget(code=code, attainable=True, blocker=None)",
-     "        if is_attainable_now(code, state, self._game_data):\n"
+     "        if near_term_model(state, self._game_data).feasible(code, 1, NEAR_TERM_POLICY):\n"
      "            return GearTarget(code=code, attainable=True, blocker=None)"),
     ("objective: classify_target builds a model per material",
      "            if not model.feasible(material, 1, NEAR_TERM_POLICY):",
-     "            if not is_attainable_now(material, state, self._game_data):"),
-    ("objective: near-term gear builds an obtain model per candidate",
-     "                          if model.feasible(code, 1, NEAR_TERM_POLICY)]",
-     "                          if is_attainable_now(code, state, self._game_data)]"),
+     "            if not near_term_model(state, self._game_data).feasible(material, 1, NEAR_TERM_POLICY):"),
     ("objective: near-term attainability counts GE fills",
      "                          ge_routes=False, task_rewards=True, fight_gold=False, drop_routes=True)",
      "                          ge_routes=True, task_rewards=True, fight_gold=False, drop_routes=True)"),
@@ -8244,9 +8237,13 @@ CENSUS_FIDELITY_MUTATIONS = [
      "                and resource in game_data.all_resource_locations):\n"
      "            return True\n"
      "    return any(drop == leaf and resource in game_data.all_resource_locations\n"),
-    ("census: the loadout is one bare pick, not a fixed point",
-     "            gear.update(upgrades)  # strict per-slot improvements: terminates\n",
-     "            gear.update(upgrades)  # strict per-slot improvements: terminates\n            break\n"),
+    # Plan C Task 6: the census loadout is `L*` (`census_gear`).
+    ("census: the geared cell's L* is chosen without the armory",
+     "                              inventory=_armory(char_level, game_data) if geared else {},\n",
+     "                              inventory={},\n"),
+    ("census: the census gear's skills stay at 1",
+     "                              skills={name: char_level for name in SKILL_NAMES},\n",
+     "                              skills={},\n"),
     ("census: a live event monster is not a present dropper",
      "            or (game_data.is_event_monster(m) and _event_live(content.get(m), game_data))]\n",
      "            ]\n"),
@@ -9357,11 +9354,6 @@ DECOMPOSE_EVENT_VENDOR_MUTATIONS = [
     ("decompose policy: a live event vendor is refused",
      "                           event_vendors=True)\n",
      "                           event_vendors=False)\n"),
-]
-BEST_GEAR_MUTATIONS = [
-    ("best gear: a fixed-supply item is worn",
-     "            for slot, _value, code in _slot_assignments(type_, slots, suppliable):\n",
-     "            for slot, _value, code in _slot_assignments(type_, slots, ranked):\n"),
 ]
 REGION_BRIDGE_MUTATIONS = [
     ("region bridge: decompose emits legs in another region unbridged",
@@ -14039,7 +14031,7 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_game_data.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_OBTAINABLE_MUTATIONS,
               "tests/test_ai/test_skill_grind_target.py", survivors)
-    run_group(OBJECTIVE_SRC, NEAR_TERM_POLICY_MUTATIONS,
+    run_group(OBJECTIVE_SRC, CLASSIFY_TARGET_MUTATIONS,
               "tests/test_ai/test_tiers_objective.py", survivors)
     run_group(SUPPLIABLE_SRC, SUPPLIABLE_MUTATIONS,
               "tests/test_ai/test_tiers_objective.py", survivors)
@@ -14587,8 +14579,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_reach_currency_goal.py", survivors)
     run_group(OBTAIN_MODEL_POLICY_SRC, DECOMPOSE_EVENT_VENDOR_MUTATIONS,
               "tests/test_ai/test_obtain_model.py", survivors)
-    run_group(OBJECTIVE_SRC, BEST_GEAR_MUTATIONS,
-              "tests/test_audit/test_craft_conditions.py", survivors)
     run_group(GRIND_HEAL_PREP_SRC, POTION_PREP_MUTATIONS,
               "tests/test_ai/test_grind_heal_prep.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, FIGHT_STEP_POTION_MUTATIONS,

@@ -23,7 +23,6 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.region_edges import reachable_regions_now
 from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.audit import craft_completeness
 from artifactsmmo_cli.audit.craft_census import run_cell
 from artifactsmmo_cli.audit.craft_completeness import (
@@ -920,26 +919,6 @@ def test_classify_gap_combat_blocked_survives_geared_loadout_against_overleveled
     assert classify_gap("beast_armor", cell, gd) is GapClass.COMBAT_BLOCKED
 
 
-def test_near_term_gear_targets_both_ring_slots_for_a_ring() -> None:
-    """Regression pin for the ring2 starvation class: near_term_gear must assign
-    the best ring to BOTH ring1_slot and ring2_slot (the aspirational target the
-    runtime aging path then realizes sequentially). If this ever drops ring2,
-    the runtime can never even form the ring2 root."""
-    gd = GameData()
-    gd._item_stats = {
-        "iron_ring": ItemStats(code="iron_ring", level=1, type_="ring",
-                               subtype="", hp_bonus=20),
-    }
-    gd._resource_drops = {"iron_vein": "iron_ring"}
-    gd._resource_skill = {"iron_vein": ("mining", 1)}
-    gd._resource_locations = {"iron_vein": [(2, 2)]}
-    bare = scenario_state(
-        ScenarioCharacter(name="census_bare", level=5, skills={}), gd)
-    gear = CharacterObjective.from_game_data(gd).near_term_gear(bare)
-    assert gear.get("ring1_slot") == "iron_ring"
-    assert gear.get("ring2_slot") == "iron_ring"
-
-
 def test_a_heal_prep_leg_before_a_grind_fight_is_directional() -> None:
     """iron_boots at gearcrafting 5: the grind's committed plan holds a fight,
     and the loadout chosen against that fight eats cooked gudgeon, so the food's
@@ -1175,19 +1154,15 @@ def test_an_underground_rock_is_a_gather_source() -> None:
     assert _leaf_status("gold_ore", state, gd) is None
 
 
-def test_the_census_loadout_is_a_fixed_point() -> None:
-    """One `near_term_gear` pick from a bare character is copper (a bare
-    character beats nothing that drops better materials); wearing it and
-    picking again reaches iron and a body armour. The planning state keeps
+def test_the_census_loadout_is_the_gear_objective() -> None:
+    """The census character wears `L*` grown from nothing (plan C Task 6, was
+    the near-term sheet's fixed point): at level 12 the iron set and a body
+    armour, not the copper a bare character holds. The planning state keeps
     the cell's skills."""
     gd = _gd()
-    bare = scenario_state(ScenarioCharacter(name="b", level=12), gd)
-    single = CharacterObjective.from_game_data(gd).near_term_gear(bare)
-    assert single["weapon_slot"] == "copper_dagger"
-    assert "body_armor_slot" not in single
-    gear = census_gear(12, frozenset(), gd)
-    assert gear["weapon_slot"] != "copper_dagger"
-    assert gear["body_armor_slot"] == "adventurer_vest"
+    gear = census_gear(12, frozenset(), False, gd)
+    assert gear["weapon_slot"] == "iron_sword"
+    assert gear["body_armor_slot"] == "iron_armor"
     state = census_state("cheese", CraftCell(12, "cooking", 10), gd)
     assert state.equipment["weapon_slot"] == gear["weapon_slot"]
     assert state.skills["cooking"] == 10
@@ -1195,15 +1170,26 @@ def test_the_census_loadout_is_a_fixed_point() -> None:
     assert is_winnable(state, gd, "cow")
 
 
+def test_the_geared_census_loadout_is_chosen_over_the_armory() -> None:
+    """The geared cell owns every suppliable equippable at its level, so its
+    `L*` is chosen over all of them: a level-20 character holding the armory
+    wears the lifesteal rune it could not buy from nothing."""
+    gd = _gd()
+    assert "rune_slot" not in census_gear(12, frozenset(), False, gd)
+    gear = census_gear(20, frozenset(), True, gd)
+    assert gear["rune_slot"] == "lifesteal_rune"
+    assert all(gd.item_stats(code).level <= 20 for code in gear.values())
+
+
 def test_the_census_loadout_memo_is_per_catalogue_and_copied() -> None:
     gd = _gd()
-    first = census_gear(12, frozenset(), gd)
+    first = census_gear(12, frozenset(), False, gd)
     weapon = first["weapon_slot"]
     first["weapon_slot"] = "spoiled"
-    assert census_gear(12, frozenset(), gd)["weapon_slot"] == weapon
+    assert census_gear(12, frozenset(), False, gd)["weapon_slot"] == weapon
     other = GameData()
-    assert census_gear(12, frozenset(), other) == {}
-    assert census_gear(12, frozenset(), gd)["weapon_slot"] == weapon
+    assert census_gear(12, frozenset(), False, other) == {}
+    assert census_gear(12, frozenset(), False, gd)["weapon_slot"] == weapon
 
 
 def test_a_leaf_waits_on_its_events_only_without_a_permanent_source() -> None:

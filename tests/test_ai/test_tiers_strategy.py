@@ -422,7 +422,6 @@ def test_an_objective_and_game_data_that_disagree_is_an_error_not_a_skip():
     the same object to both."""
     gd_full = _reach_gd()
     obj = CharacterObjective.from_game_data(gd_full)
-    assert obj.target_gear.get("helmet_slot") == "iron_helm"
     gd_empty = GameData()
     gd_empty._monster_level = {"chicken": 1}  # char reachable; iron_helm not producible here
     fill_monster_stat_defaults(gd_empty)
@@ -450,8 +449,6 @@ def test_a_sourceless_item_is_off_the_target_sheet_AND_off_the_blocker_sheet():
     """
     gd = _reach_gd()  # drop_blade sourceless; iron_helm craftable-from-gatherables
     obj = CharacterObjective.from_game_data(gd)
-    assert "weapon_slot" not in obj.target_gear           # drop_blade excluded at build
-    assert obj.target_gear.get("helmet_slot") == "iron_helm"
     d = StrategyEngine(obj).decide(make_state(level=5), gd,
                                    ctx=_missing("helmet_slot", "iron_helm"))
     reprs = [rs.root_repr for rs in d.ranking]
@@ -482,10 +479,7 @@ def _combat_gd() -> GameData:
 
 
 def _combat_obj(gd: GameData) -> CharacterObjective:
-    return CharacterObjective(
-        target_char_level=50, target_skill_levels={},
-        target_gear={"weapon_slot": "iron_sword"}, _game_data=gd,
-        target_tools={"mining": "iron_pickaxe"})
+    return CharacterObjective.from_game_data(gd)
 
 
 def test_decide_returns_a_root_when_combat_capable():

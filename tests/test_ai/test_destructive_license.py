@@ -156,15 +156,13 @@ def test_the_factory_no_longer_carries_a_code_set_protection():
     assert "protected_gear" not in inspect.signature(build_actions).parameters
     gd = _gd()
     state = make_state(level=10, inventory={"copper_axe": 1})
-    objective = CharacterObjective(
-        target_char_level=50, target_skill_levels={}, target_gear={},
-        _game_data=gd, target_tools={"woodcutting": "copper_axe"})
+    objective = CharacterObjective.from_game_data(gd)
     recycles = {a.code for a in build_actions(gd, state, objective,
                                               bank_accessible=True,
                                               task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
                 if isinstance(a, RecycleAction)}
-    # The axe is the objective's TOOL target — the old code-set skipped its Recycle
-    # (and hoarded all 18 copies). The menu now carries it; the licence decides.
+    # The axe was the old tool sheet's target — the old code-set skipped its
+    # Recycle (and hoarded all 18 copies). The menu carries it; the licence decides.
     assert "copper_axe" in recycles
 
 

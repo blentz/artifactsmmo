@@ -9,8 +9,6 @@ from artifactsmmo_cli.ai import potion_supply
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, potion_carry
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.potion_supply import (
-    _cheapest_heal_potion,
-    bootstrap_potion_target,
     craft_potions_fires,
     feasible_runs,
     guard_loadout,
@@ -18,71 +16,10 @@ from artifactsmmo_cli.ai.potion_supply import (
     potion_batch,
     potion_stockable,
     prep_supplies,
-    target_potion_pure,
 )
 from artifactsmmo_cli.ai.thresholds import POTION_GATHER_BATCH, UTILITY_SLOT_MAX_STACK
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
-
-
-def _gd() -> GameData:
-    """small (alchemy 5) and enhanced (alchemy 45) heal potions, both craftable."""
-    gd = GameData()
-    gd._item_stats = {
-        "small_health_potion": ItemStats(code="small_health_potion", level=5,
-            type_="utility", hp_restore=50, crafting_skill="alchemy", crafting_level=5),
-        "enhanced_health_potion": ItemStats(code="enhanced_health_potion", level=45,
-            type_="utility", hp_restore=300, crafting_skill="alchemy", crafting_level=45),
-    }
-    gd._crafting_recipes = {
-        "small_health_potion": {"sunflower": 3},
-        "enhanced_health_potion": {"sunflower": 3},
-    }
-    return gd
-
-
-def test_cheapest_heal_potion_is_lowest_crafting_level():
-    assert _cheapest_heal_potion(_gd()) == "small_health_potion"
-
-
-def test_cheapest_heal_potion_none_when_no_heal():
-    gd = GameData()
-    gd._item_stats = {"copper_ore": ItemStats(code="copper_ore", level=1, type_="resource")}
-    gd._crafting_recipes = {"copper_ore": {}}
-    assert _cheapest_heal_potion(gd) is None
-
-
-def test_cheapest_heal_potion_skips_zero_effect_utility():
-    # A craftable utility item that carries NO heal effect (hp_restore == 0) is
-    # skipped by the effect guard, so it is never chosen as the cheapest heal.
-    gd = GameData()
-    gd._item_stats = {
-        "fire_boost_potion": ItemStats(code="fire_boost_potion", level=1,
-            type_="utility", hp_restore=0, crafting_skill="alchemy", crafting_level=10),
-    }
-    gd._crafting_recipes = {"fire_boost_potion": {"sunflower": 1}}
-    assert _cheapest_heal_potion(gd) is None
-
-
-def test_bootstrap_target_prefers_craftable_now():
-    # alchemy 16: small craftable now, enhanced not -> small.
-    gd = _gd()
-    state = make_state(level=10, skills={**make_state().skills, "alchemy": 16})
-    assert bootstrap_potion_target(state, gd) == "small_health_potion"
-
-
-def test_bootstrap_target_falls_back_to_cheapest_when_none_craftable():
-    # alchemy 1: nothing craftable now -> cheapest-to-unlock (small).
-    gd = _gd()
-    state = make_state(level=3, skills={**make_state().skills, "alchemy": 1})
-    assert bootstrap_potion_target(state, gd) == "small_health_potion"
-
-
-def test_bootstrap_target_climbs_with_skill():
-    # alchemy 45: enhanced now craftable and higher-restore -> enhanced.
-    gd = _gd()
-    state = make_state(level=45, skills={**make_state().skills, "alchemy": 45})
-    assert bootstrap_potion_target(state, gd) == "enhanced_health_potion"
 
 
 def _gd_brew(**recipe: int) -> GameData:
@@ -146,66 +83,6 @@ def test_a_banked_potion_is_no_run():
     gd = _gd_brew(rare_crystal=1)
     assert feasible_runs("brew", 3, make_state(level=10, bank_items={"brew": 5}), gd) == 0
 
-
-# ── target_potion_pure: the effect-best heal craftable now ──────────────────
-
-def _gd_heals() -> GameData:
-    gd = GameData()
-    gd._item_stats = {
-        "small_health_potion": ItemStats(code="small_health_potion", level=1, type_="utility",
-                                         hp_restore=30, crafting_skill="alchemy", crafting_level=1),
-        "cooked_fish": ItemStats(code="cooked_fish", level=1, type_="consumable",
-                                 hp_restore=50, crafting_skill="cooking", crafting_level=1),
-    }
-    gd._crafting_recipes = {"small_health_potion": {"sunflower": 1},
-                            "cooked_fish": {"raw_fish": 1}}
-    return gd
-
-
-def _add_heal(gd: GameData, code: str, restore: int, skill: str | None, level: int = 1) -> None:
-    gd._item_stats[code] = ItemStats(code=code, level=1, type_="utility", hp_restore=restore,
-                                     crafting_skill=skill, crafting_level=level)
-    gd._crafting_recipes[code] = {"sunflower": 1}
-
-
-def test_target_potion_is_the_utility_heal_not_the_food():
-    """`cooked_fish` restores more but is not utility-slot equippable."""
-    assert target_potion_pure(make_state(), _gd_heals()) == "small_health_potion"
-
-
-def test_target_potion_none_when_its_skill_gate_is_unmet():
-    gd = _gd_heals()
-    gd._item_stats["small_health_potion"] = dataclasses.replace(
-        gd._item_stats["small_health_potion"], crafting_level=10)
-    assert target_potion_pure(make_state(skills={"alchemy": 1}), gd) is None
-
-
-def test_target_potion_reads_each_items_own_crafting_skill():
-    """A cooking-crafted utility heal with a higher restore wins when ITS skill
-    gate is met, and is skipped when it is not; one with no crafting skill is
-    never chosen."""
-    gd = _gd_heals()
-    _add_heal(gd, "cook_potion", 99, "cooking", level=1)
-    _add_heal(gd, "skilless_potion", 120, None)
-    assert target_potion_pure(make_state(), gd) == "cook_potion"
-    _add_heal(gd, "cook_potion", 99, "cooking", level=10)
-    assert target_potion_pure(make_state(skills={"cooking": 1, "alchemy": 1}), gd) == "small_health_potion"
-
-
-def test_target_potion_highest_restore_then_smallest_code():
-    gd = _gd_heals()
-    _add_heal(gd, "aaa_potion", 30, "alchemy")
-    assert target_potion_pure(make_state(), gd) == "aaa_potion"
-    _add_heal(gd, "big_potion", 80, "alchemy")
-    assert target_potion_pure(make_state(), gd) == "big_potion"
-
-
-def test_target_potion_excludes_the_named_code():
-    """The second-utility-slot caller excludes slot 1's pick to get the
-    catalog's second-best heal."""
-    gd = _gd_heals()
-    _add_heal(gd, "big_potion", 80, "alchemy")
-    assert target_potion_pure(make_state(), gd, exclude="big_potion") == "small_health_potion"
 
 
 # ── potion_batch: the chosen loadout's potions, to their carry ──────────────

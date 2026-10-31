@@ -18,9 +18,9 @@ condition over the census character (`craft_completeness.census_state`):
    account's achievement-gated tiles open (`tasks_trader`, behind
    `tasks_farmer`, sells jasper/astralyte/magical_cure/prime_fabric for
    tasks_coin, which production funds through `ReachCurrencyGoal`);
-6. `gear` — the catalogue's best suppliable gear for the level, worn
-   (`CharacterObjective.catalogue_best_gear`): the gear that wins a fight the
-   reachable gear (`census_gear`) loses;
+6. `gear` — every suppliable equippable at the level held, and `L*` chosen
+   over them worn (`census_gear` with `geared`): the gear that wins a fight the
+   gear achievable from nothing loses;
 7. `L<n>` — every grant kept, the character at level n, `LEVEL_STEP` apart from
    `craft level − 10` (at least `MIN_LEVEL`) to `MAX_LEVEL`, every other skill
    with it;

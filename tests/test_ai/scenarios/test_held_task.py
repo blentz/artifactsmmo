@@ -103,8 +103,7 @@ def gd() -> GameData:
 
 
 def _obj(game_data: GameData) -> CharacterObjective:
-    return CharacterObjective(target_char_level=50, target_skill_levels={},
-                              target_gear={}, _game_data=game_data)
+    return CharacterObjective.from_game_data(game_data)
 
 
 def _state(name: str, game_data: GameData):

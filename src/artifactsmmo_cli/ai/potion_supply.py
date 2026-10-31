@@ -1,10 +1,6 @@
 """Potion supply: the batch the CRAFT_POTIONS guard (guards.py) fires on and
 CraftPotionsGoal plans (`potion_batch`), for the potions of the chosen
-consumable loadout only (docs/PLAN_consumable_utility.md increment 5).
-
-``target_potion_pure`` / ``bootstrap_potion_target`` rank craftable heal
-potions by effect for the utility-slot designation
-(`CharacterObjective.utility_potion_targets`); the guard does not read them."""
+consumable loadout only (docs/PLAN_consumable_utility.md increment 5)."""
 
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -25,88 +21,6 @@ from artifactsmmo_cli.ai.thresholds import (
     POTION_GATHER_BATCH,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
-
-
-def target_potion_pure(
-    state: WorldState, game_data: GameData, effect: str = "hp_restore",
-    exclude: str | None = None,
-) -> str | None:
-    """Highest-``effect``, craftable-now (at the item's own skill/level),
-    utility-slot-equippable heal (deterministic smallest-code tie-break); None
-    when none qualifies. The crafting skill is read from item metadata, never
-    assumed to be alchemy.
-
-    ``exclude`` skips one code from consideration — the second-utility-slot
-    caller passes the slot-1 target so it gets the catalog's SECOND-best heal
-    (utility potions are not in DUPLICATE_SLOT_TYPES, so the same code can't
-    occupy both utility slots; see equip.py's DUPLICATE_SLOT_TYPES comment).
-
-    Materials are NOT required on hand."""
-    best_code: str | None = None
-    best_restore = 0
-    for code in sorted(game_data.crafting_recipes):
-        if code == exclude:
-            continue
-        stats = game_data.item_stats(code)
-        if stats is None or stats.type_ != "utility":
-            continue
-        restore = getattr(stats, effect, 0)
-        if restore <= 0 or restore <= best_restore:
-            continue
-        # The crafting SKILL is item metadata (API), not an assumption: any
-        # utility-slot heal qualifies, gated by ITS OWN skill/level — never a
-        # hardcoded 'alchemy'. An item in crafting_recipes always names a skill.
-        if stats.crafting_skill is None:
-            continue
-        if state.skills[stats.crafting_skill] < stats.crafting_level:
-            continue
-        best_code, best_restore = code, restore
-    return best_code
-
-
-def _cheapest_heal_potion(game_data: GameData, effect: str = "hp_restore") -> str | None:
-    """The craftable utility heal with the smallest crafting_level (the next tier
-    to ever unlock); deterministic smallest-code tie-break. None when none exists.
-
-    Level-exempt bootstrap target: unlike target_potion_pure it does NOT require
-    the skill to already meet the recipe gate, so the arbiter can drive the FIRST
-    unlock. The crafting skill is item metadata, never assumed to be alchemy."""
-    best_code: str | None = None
-    best_level = 0
-    for code in sorted(game_data.crafting_recipes):
-        stats = game_data.item_stats(code)
-        if stats is None or stats.type_ != "utility":
-            continue
-        if getattr(stats, effect, 0) <= 0 or stats.crafting_skill is None:
-            continue
-        if best_code is None or stats.crafting_level < best_level:
-            best_code, best_level = code, stats.crafting_level
-    return best_code
-
-
-def bootstrap_potion_target(
-    state: WorldState, game_data: GameData, effect: str = "hp_restore",
-) -> str | None:
-    """The utility heal to pursue: the effect-best potion craftable NOW, or — when
-    none is craftable yet — the cheapest-to-unlock heal so the arbiter can drive
-    the first skill unlock. Level-exempt (a potion's item level never gates it;
-    utility is judged by effect, not level). Single source of truth for the
-    utility-slot root (`CharacterObjective.utility_potion_targets`).
-
-    No ``exclude`` parameter here deliberately: the second-utility-slot caller
-    (`utility_potion_targets`) uses `target_potion_pure` directly (not this
-    function) for its second-best search — falling through to the
-    cheapest-to-unlock branch a SECOND time (excluding slot 1's pick) would
-    manufacture an aspirational grind target for an empty slot 2 whenever the
-    catalog has no other potion craftable right now, exactly the
-    already-guarded-against anti-pattern (see
-    test_robby_scenario_stocked_small_does_not_force_enhanced_grind). Slot 2
-    only ever gets a target when a second heal is ACTUALLY craftable now."""
-    craftable = target_potion_pure(state, game_data, effect)
-    if craftable is not None:
-        return craftable
-    return _cheapest_heal_potion(game_data, effect)
-
 
 POTION_POLICY = Policy(all_gather_routes=True, gather_skill_gate=True, craft_skill_gate=True,
                        event_vendors=False, spawn_known=True, allow_grey=True,

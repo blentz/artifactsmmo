@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_requirement import gather_requirement
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.reach_currency import funding_step_goal
@@ -87,11 +88,11 @@ class CraftCell:
     gold: int = 0
     """Gold in the pocket (the census character's default is none)."""
     geared: bool = False
-    """Own the catalogue's gear for the level: wear its best set
-    (`CharacterObjective.catalogue_best_gear`) and hold every other suppliable
-    equippable at the level (`_armory`), so each fight is fought in the loadout
-    the planner picks for that monster — not the gear the census character can
-    reach (`census_gear`). One generic set lost to grimlet, rosenblood,
+    """Own the catalogue's gear for the level: hold every suppliable
+    equippable at the level (`_armory`) and wear `L*` chosen over it
+    (`census_gear` with `geared`), so each fight is fought in the loadout the
+    planner picks for that monster — not the gear the census character can
+    achieve from nothing. One generic set lost to grimlet, rosenblood,
     red_dragon and flameche, which their own loadouts beat."""
     keys: bool = False
     """Hold the items the map's crossings ask for (`crossing_keys`: a
@@ -783,15 +784,14 @@ def census_state(recipe: str, cell: CraftCell, game_data: GameData) -> WorldStat
     level is the tested dimension (under- vs at-skill), so it stays exactly
     `cell.skill_level` even if the recipe also gathers with that skill.
 
-    Gear source: a FIXED POINT of `CharacterObjective.near_term_gear` (the
-    best attainable-now item per slot at `cell.char_level`): wear the pick,
-    pick again, until no slot improves — a character progresses into the gear
-    its gear lets it win. The gear is chosen for a character whose skills are
-    all at its level (crafting kept pace); the returned PLANNING state keeps
-    the cell's skills, the tested dimension. Before 2026-10-10 the pick ran
-    ONCE from a bare character with every other skill at 1, so a level-30
-    census character wore a copper dagger and lost to a level-8 cow — 570
-    `combat_blocked` cells, most of them that loadout. The loadout is equipped
+    Gear source: `census_gear`, the gear objective `L*` the player's own step
+    attaches, for a character whose skills are all at its level (crafting kept
+    pace); the returned PLANNING state keeps the cell's skills, the tested
+    dimension. `L*` is grown from nothing by the gear objective's own
+    achievability fixed point, so a character progresses into the gear its
+    gear lets it win. (Until 2026-10-10 the census wore a one-pass pick from a
+    bare character with every other skill at 1: a level-30 census character
+    wore a copper dagger and lost to a level-8 cow.) The loadout is equipped
     with `derive_combat_stats=True`, which sums the equipped items' catalog
     stats into the server-total combat stats — what a live character wearing
     it would report.
@@ -815,8 +815,8 @@ def census_state(recipe: str, cell: CraftCell, game_data: GameData) -> WorldStat
     sc = ScenarioCharacter(name="craft_audit", level=cell.char_level, gold=cell.gold,
                            skills=dict(skills), inventory=armory,
                            inventory_max=ARMORY_BAG if cell.geared else 100,
-                           equipment=(_best_gear(cell.char_level, game_data) if cell.geared
-                                      else census_gear(cell.char_level, cell.events, game_data)),
+                           equipment=census_gear(cell.char_level, cell.events, cell.geared,
+                                                 game_data),
                            derive_combat_stats=True, active_events=events)
     state = scenario_state(sc, game_data)
     return replace(state, party=(state,) * cell.party) if cell.party else state
@@ -868,44 +868,36 @@ def _armory(char_level: int, game_data: GameData) -> dict[str, int]:
             and stats.level <= char_level and is_suppliable(code, bare, game_data)}
 
 
-def _best_gear(char_level: int, game_data: GameData) -> dict[str, str]:
-    """The catalogue's best suppliable gear at `char_level`."""
-    bare = scenario_state(ScenarioCharacter(name="census_best", level=char_level), game_data)
-    return CharacterObjective.from_game_data(game_data).catalogue_best_gear(bare)
-
-
-_GEAR_MEMO: list[tuple[GameData, dict[tuple[int, frozenset[str]], dict[str, str]]]] = []
+_GEAR_MEMO: list[tuple[GameData, dict[tuple[int, frozenset[str], bool], dict[str, str]]]] = []
 """One slot: the catalogue the memo was built on (HELD, so its identity cannot
 be reused) and its loadouts. A census worker plans every cell over one
 catalogue; a different catalogue replaces the slot."""
 
 
-def census_gear(char_level: int, events: frozenset[str],
+def census_gear(char_level: int, events: frozenset[str], geared: bool,
                 game_data: GameData) -> dict[str, str]:
-    """The census character's loadout at `char_level` with `events` live: the
-    fixed point of `near_term_gear` for a character whose skills are all at
-    its level (see `census_state`). Depends on nothing else, so it is
-    memoized per catalogue."""
+    """The census character's loadout at `char_level` with `events` live: `L*`,
+    the gear objective the player's own step attaches
+    (`gear_objective_context.attach_gear_objective`), for a character whose
+    skills are all at its level (see `census_state`). `geared`: the character
+    owns the whole armory (`_armory`), so `L*` is chosen over everything
+    suppliable at the level; otherwise over what it can achieve from nothing.
+    No objective (no loadout pays XP) is no gear. Depends on nothing else, so
+    it is memoized per catalogue."""
     if not _GEAR_MEMO or _GEAR_MEMO[0][0] is not game_data:
         _GEAR_MEMO[:] = [(game_data, {})]
     memo = _GEAR_MEMO[0][1]
-    key = (char_level, events)
+    key = (char_level, events, geared)
     if key not in memo:
-        objective = CharacterObjective.from_game_data(game_data)
-        skills = {name: char_level for name in SKILL_NAMES}
-        live = tuple(sorted(events))
-        gear: dict[str, str] = {}
-        while True:
-            worn = scenario_state(
-                ScenarioCharacter(name="census_gear", level=char_level, skills=skills,
-                                  equipment=dict(gear), derive_combat_stats=True,
-                                  active_events=live),
-                game_data)
-            upgrades = objective.near_term_gear(worn)
-            if not upgrades:
-                break
-            gear.update(upgrades)  # strict per-slot improvements: terminates
-        memo[key] = gear
+        state = scenario_state(
+            ScenarioCharacter(name="census_gear", level=char_level,
+                              skills={name: char_level for name in SKILL_NAMES},
+                              inventory=_armory(char_level, game_data) if geared else {},
+                              inventory_max=ARMORY_BAG if geared else 100,
+                              derive_combat_stats=True, active_events=tuple(sorted(events))),
+            game_data)
+        objective = attach_gear_objective(state, game_data, _OFFLINE_CONTEXT, None).gear_objective
+        memo[key] = dict(objective.loadout) if objective is not None else {}
     return dict(memo[key])
 
 
