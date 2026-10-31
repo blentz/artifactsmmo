@@ -2,12 +2,12 @@
 
 Source root: src/artifactsmmo_cli/ai/
 Diff tests: formal/diff/test_*_diff.py + mutate.py path refs
-Modules with functions: 345
-Total functions: 3545
-Diff test files: 119
-mutate.py SRC references: 238
+Modules with functions: 342
+Total functions: 3519
+Diff test files: 118
+mutate.py SRC references: 236
 
-## Covered modules (267)
+## Covered modules (265)
 
   - accumulation_sell.py [name-match, mutate.py]  ←  test_accumulation_sell_diff.py, test_ladder_fires_diff.py
   - acquisition_cost.py [mutate.py]
@@ -91,7 +91,7 @@ mutate.py SRC references: 238
   - drop_chance_core.py [mutate.py]  ←  test_drop_chance_diff.py
   - drop_fight_selection.py [mutate.py]
   - dual_role_currency.py [mutate.py]
-  - equip_value.py [mutate.py]  ←  test_objective_diff.py
+  - equip_value.py [mutate.py]
   - equipment/bank_tool_fills.py [mutate.py]
   - equipment/empty_slot_fills.py [mutate.py]
   - equipment/level_loadout.py  ←  test_winnable_witness_diff.py
@@ -263,10 +263,8 @@ mutate.py SRC references: 238
   - tiers/objective.py [name-match, mutate.py]  ←  test_gear_objective_arming_diff.py, test_gear_objective_e_binding_diff.py, test_objective_diff.py
   - tiers/owned_count.py [name-match, mutate.py]  ←  test_owned_count_diff.py
   - tiers/prerequisite_graph.py [name-match, mutate.py]  ←  test_prerequisite_graph_diff.py
-  - tiers/pursuit_value.py [mutate.py]
   - tiers/skill_grind_selection.py [name-match, mutate.py]  ←  test_skill_grind_selection_diff.py
   - tiers/skill_grind_target.py [mutate.py]
-  - tiers/strategic_value.py [name-match, mutate.py]  ←  test_strategic_value_diff.py
   - tiers/strategy.py [mutate.py]
   - tiers/synergy_core.py [mutate.py]
   - tiers/taskmaster_choice.py [mutate.py]
@@ -277,7 +275,7 @@ mutate.py SRC references: 238
   - world_state.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_arbiter_select_diff.py, test_bank_expansion_diff.py, test_bank_selection_diff.py, test_combat_margin_diff.py, test_complete_task_income_diff.py, test_cycle_step_diff.py, test_equipment_scoring_diff.py, test_fight_outcome_diff.py, test_game_data_accessors_diff.py, test_gather_cost_diff.py, test_gear_objective_arming_diff.py, test_gear_objective_e_binding_diff.py, test_gear_objective_link_diff.py, test_goal_system_value_diff.py, test_inventory_caps_diff.py, test_inventory_chain_safe_diff.py, test_inventory_keep_diff.py, test_ladder_fires_diff.py, test_loadout_adequate_diff.py, test_loadout_picker_diff.py, test_loadout_projection_diff.py, test_local_progress_diff.py, test_no_deadlock_v2_diff.py, test_objective_diff.py, test_objectivestep_arming_diff.py, test_phase10_goal_lattices_diff.py, test_phase7_invariants_diff.py, test_plan_exists_diff.py, test_predict_win_diff.py, test_prerequisite_graph_diff.py, test_realizable_loadout_diff.py, test_task_batch_diff.py, test_task_feasibility_diff.py
   - xp_demand.py [mutate.py]
 
-## Uncovered modules (78)
+## Uncovered modules (77)
 
   - account_read_cache.py (12 functions)
   - action_kind.py (1 functions)
@@ -354,8 +352,7 @@ mutate.py SRC references: 238
   - tiers/objective_needs.py (7 functions)
   - tiers/progression_tree.py (2 functions)
   - tiers/root_group.py (1 functions)
-  - tiers/strategic_weights.py (1 functions)
   - trace_stats.py (8 functions)
   - tracer.py (4 functions)
 
-## Coverage: 77.4% modules (267/345)
+## Coverage: 77.5% modules (265/342)
