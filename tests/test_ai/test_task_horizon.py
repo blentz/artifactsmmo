@@ -353,3 +353,32 @@ def test_a_cycle_reads_the_achievable_set_once(gd: GameData, tmp_path: Path,
     resolve_task_horizon(state, gd, ctx, store)
     resolve_task_horizon(state, gd, ctx, store)
     assert len(asked) == 5
+
+
+@pytest.mark.parametrize("task_type", ["items", "monsters"])
+def test_a_task_the_keep_can_see_is_its_own_key(gd: GameData, tmp_path: Path,
+                                                monkeypatch: pytest.MonkeyPatch,
+                                                task_type: str) -> None:
+    """Ruling C2-R m4: the memo clears only a task `L*` cannot see. A task
+    whose code names an item (an items task, or any task on an item code) is
+    kept by the keep (`inventory_keep._active_task`), so a probe holding it is
+    computed afresh, never served the task-free character's answer."""
+    asked: list[str | None] = []
+    real = go_mod.achievable
+
+    def counted(state, game_data, ctx):  # type: ignore[no-untyped-def]
+        asked.append(state.task_code)
+        return real(state, game_data, ctx)
+
+    monkeypatch.setattr(go_mod, "achievable", counted)
+    store = LearningStore(str(tmp_path / "learning.db"), character="keeper")
+    free = dataclasses.replace(_state(GEAR_CELL, gd), task_code=None, task_type=None,
+                               task_progress=0, task_total=0)
+    held = dataclasses.replace(free, task_code="apprentice_gloves", task_type=task_type,
+                               task_progress=0, task_total=5)
+    assert gd.item_stats("apprentice_gloves") is not None
+    with store.search_cache():
+        gear_fighter_for("cow", free, gd, TIMED_NO_PROFILE_CONTEXT, store)
+        gear_fighter_for("cow", held, gd, TIMED_NO_PROFILE_CONTEXT, store)
+        gear_fighter_for("cow", held, gd, TIMED_NO_PROFILE_CONTEXT, store)
+    assert asked == [None, "apprentice_gloves"]

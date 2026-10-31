@@ -7814,6 +7814,11 @@ GEAR_HORIZON_READ_MUTATIONS = [
     ("episode memo: nothing is memoised",
      "    value = compute()\n    answers.append((key_state, game_data, ctx, value))\n",
      "    value = compute()\n"),
+    # Ruling C2-R m4: a task the keep can see is its own key.
+    ("episode memo: a task on an item code is cleared",
+     "    if state.task_code is not None and game_data.item_stats(state.task_code) is not None:\n"
+     "        return state\n",
+     "    if False:\n        return state\n"),
     ("episode memo: a task-worth probe is a different key",
      "        return state\n    return replace(state, task_code=None, task_type=None, task_progress=0, task_total=0)",
      "        return state\n    return state"),

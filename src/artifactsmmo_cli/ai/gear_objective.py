@@ -557,12 +557,12 @@ def _task_free(state: WorldState, game_data: GameData) -> WorldState:
     """`state` with its held task cleared when nothing `L*` reads can see it.
 
     `L*` reads the task only through the keep (`inventory_keep._active_task`,
-    the copies of the task's code; an items task's root closure): a monsters
-    task whose code names no item reads 0 there. Such a task is cleared, so a
-    task-worth probe of the same character (`task_worth_for`) and the
-    character itself are one key. Any other task stays."""
-    if state.task_type == "items" or (state.task_code is not None
-                                      and game_data.item_stats(state.task_code) is not None):
+    the copies of the task's code; an items task's root closure), and both
+    read an item code: a task whose code names no item (a monsters task)
+    reads 0 there. Such a task is cleared, so a task-worth probe of the same
+    character (`task_worth_for`) and the character itself are one key. A task
+    on an item code (every items task) stays, so its probe is its own key."""
+    if state.task_code is not None and game_data.item_stats(state.task_code) is not None:
         return state
     return replace(state, task_code=None, task_type=None, task_progress=0, task_total=0)
 
