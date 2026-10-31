@@ -32,7 +32,9 @@ checked at all — when an explicitly named subject is no longer defined.
 
 SUBJECT RESOLUTION is by CONTAINMENT, which is what makes it mechanical:
 
-  * an explicitly named subject — "nothing calls `foo`" — is that symbol;
+  * an explicitly named subject — "nothing calls `foo`" — is that symbol, a
+    def, a class or a module-scope constant (an `Assign`/`AnnAssign` to a bare
+    name, whose body is the statement and its attribute docstring);
   * otherwise the innermost `def`/`class` whose body CONTAINS the claim line
     (so a claim in a method's docstring is a claim about that method);
   * otherwise — a module docstring, or a comment between definitions — the
@@ -55,11 +57,14 @@ VERIFICATION asks the real graph, built from `ast` over all of src/:
     `obj.name` attribute, because attribute names collide across classes
     (`RequirementGraph.is_obtainable` must not be read as a caller of
     `tiers/skill_grind_target.is_obtainable`). A METHOD counts attribute
-    references, which is the only way a method is ever called.
+    references, which is the only way a method is ever called. A name that is
+    only STORED is bound, not read, and is no reference. Docstring text is never
+    a reference: a module that NAMES a constant in prose does not read it.
 
-A TRUE claim passes and is meant to: `tiers/objective.py` says
-`CharacterObjective.utility_potion_targets` "has NO PRODUCTION CALLER", which is
-true. Recording that truthfully is the behaviour this census rewards.
+A TRUE claim passes and is meant to: `ai/ge_order_config.py` says "nothing
+reads `AVG_CYCLE_SECONDS`", which is true — `decisions/route.py` names it in a
+docstring and no code loads it. Recording that truthfully is the behaviour this
+census rewards.
 """
 
 import ast
@@ -72,11 +77,12 @@ from dataclasses import dataclass
 # claims" reads identically whether the matcher is working or broken.
 #
 # The bound is TIGHT ON PURPOSE — it is exactly the population carried:
-# `tiers/objective.CharacterObjective.utility_potion_targets`, verified true.
-# (`tiers/skill_grind_target.is_obtainable` left on 2026-09-27, when it became
-# the grind's production obtainability walk; `player._tree_band_adequate` and
-# `tiers/progression_tree_core.potion_type_weight` were deleted with their
-# claims by plan C Task 4.) The decidable population in this repo is small (~20
+# `ai/ge_order_config.AVG_CYCLE_SECONDS`, verified true. (Plan C Task 6 deleted
+# `CharacterObjective.utility_potion_targets` with its claim and taught the
+# index module constants; `tiers/skill_grind_target.is_obtainable` left on
+# 2026-09-27, when it became the grind's production obtainability walk;
+# `player._tree_band_adequate` and `tiers/progression_tree_core.potion_type_weight`
+# were deleted with their claims by plan C Task 4.) The decidable population in this repo is small (~20
 # `inert` hits, nearly all CONDITIONAL and undecidable, are deliberately out of
 # scope), so a slack bound would not fail until the matcher was completely
 # dead. Rewording the one claim costs a deliberate edit here, which is the
@@ -125,7 +131,7 @@ class Definition:
     """One `def`/`class` and the line range its body occupies."""
 
     name: str
-    kind: str  # "function" | "class" | "method"
+    kind: str  # "function" | "class" | "method" | "constant"
     module: str
     start: int
     end: int
@@ -171,9 +177,31 @@ def module_name(path: str) -> str:
     return dotted[: -len(".__init__")] if dotted.endswith(".__init__") else dotted
 
 
-def _definitions(tree: ast.Module, module: str) -> list[Definition]:
-    """Every def/class in the file, tagged `method` when class-nested."""
+def _constants(tree: ast.Module, module: str) -> list[Definition]:
+    """Every module-scope constant: an `Assign`/`AnnAssign` to a bare name. Its
+    body is the statement plus the attribute docstring directly after it."""
     found: list[Definition] = []
+    body = tree.body
+    for i, stmt in enumerate(body):
+        if isinstance(stmt, ast.Assign):
+            names = [t.id for t in stmt.targets if isinstance(t, ast.Name)]
+        elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+            names = [stmt.target.id]
+        else:
+            continue
+        end = stmt.end_lineno or stmt.lineno
+        after = body[i + 1] if i + 1 < len(body) else None
+        if (isinstance(after, ast.Expr) and isinstance(after.value, ast.Constant)
+                and isinstance(after.value.value, str)):
+            end = after.end_lineno or after.lineno
+        found.extend(Definition(name, "constant", module, stmt.lineno, end) for name in names)
+    return found
+
+
+def _definitions(tree: ast.Module, module: str) -> list[Definition]:
+    """Every def/class in the file, tagged `method` when class-nested, and
+    every module-scope constant (`_constants`)."""
+    found: list[Definition] = _constants(tree, module)
     stack: list[tuple[ast.AST, bool]] = [(tree, False)]
     while stack:
         node, in_class = stack.pop()
@@ -216,7 +244,8 @@ def _references(tree: ast.Module, module: str, aliases: set[str]) -> list[Refere
     """Every name use in the file, classified so collisions can be excluded."""
     refs: list[Reference] = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.Name):
+        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Store):
+            # A store binds the name; only a load (or del) reads it.
             refs.append(Reference(node.id, module, node.lineno, "name"))
         elif isinstance(node, ast.Attribute):
             through_module = isinstance(node.value, ast.Name) and node.value.id in aliases

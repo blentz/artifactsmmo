@@ -8,7 +8,7 @@ on that comment takes out the planner. Every case below is written against
 that shape: a claim, a subject, and a graph that either agrees or does not.
 
 The census must also LEAVE TRUE CLAIMS ALONE.
-`CharacterObjective.utility_potion_targets` ("has NO PRODUCTION CALLER") is
+`ge_order_config.AVG_CYCLE_SECONDS` ("nothing reads `AVG_CYCLE_SECONDS`") is
 true and must stay green, so the last tests here drive the real tree.
 """
 
@@ -179,6 +179,30 @@ def test_an_explicitly_named_subject_is_used_instead_of_containment() -> None:
     assert not verdict.is_false
 
 
+def test_a_module_constant_with_a_real_reader_is_a_false_claim() -> None:
+    """A module-scope constant is a subject: a load of it elsewhere refutes
+    "nothing reads" it."""
+    sources = {
+        "src/pkg/a.py": '"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n',
+        "src/pkg/b.py": "from pkg.a import RATE\n\nX = RATE * 2\n",
+    }
+    verdict = _verdicts(sources)["pkg.a:1"]
+    assert verdict.claim.subject == "RATE"
+    assert verdict.is_false
+
+
+def test_a_constant_named_only_in_another_docstring_is_a_true_claim() -> None:
+    """Prose that names a constant does not read it, and neither does a store
+    of the same name."""
+    sources = {
+        "src/pkg/a.py": '"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n',
+        "src/pkg/b.py": '"""Convert with `a.RATE`, at the call site."""\n\nRATE = 1\n',
+    }
+    verdict = _verdicts(sources)["pkg.a:1"]
+    assert verdict.claim.subject == "RATE"
+    assert not verdict.is_false
+
+
 def test_a_named_subject_that_no_longer_exists_is_skipped() -> None:
     """A note about a deletion names something with nothing left to verify."""
     sources = {"src/pkg/a.py": '"""Nothing calls `objective_roots`."""\n'}
@@ -284,4 +308,4 @@ def test_the_known_true_claims_are_swept_and_verified() -> None:
     the census would go quietly blind on exactly the shape it exists for.
     """
     subjects = {v.claim.subject: v for v in run_census(_real_sources())}
-    assert not subjects["utility_potion_targets"].is_false
+    assert not subjects["AVG_CYCLE_SECONDS"].is_false

@@ -453,6 +453,7 @@ PLAY_COMMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "commands" / "play.py"
 FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 FIGHT_TILES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_tiles.py"
 CRAFT_COMPLETENESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_completeness.py"
+REACHABILITY_CLAIMS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "reachability_claims.py"
 CRAFT_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_census.py"
 HELD_STOCK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "held_stock.py"
 FIGHT_WALK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_walk.py"
@@ -9150,6 +9151,17 @@ GREY_CURRENCY_MUTATIONS = [
      "        return bool(bought)\n",
      "        return False\n"),
 ]
+# The reachability-claims census indexes module constants (plan C Task 6,
+# ruling C6-2‴): the register's one claim is about one. Killed by
+# tests/test_audit/test_reachability_claims.py (the real sweep finds 0 claims).
+REACHABILITY_CONSTANT_MUTATIONS = [
+    ("reachability claims: module constants are not indexed",
+     "    found: list[Definition] = _constants(tree, module)\n",
+     "    found: list[Definition] = []\n"),
+    ("reachability claims: a stored name reads it",
+     "        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Store):\n",
+     "        if isinstance(node, ast.Name):\n"),
+]
 CENSUS_CURRENCY_GREY_MUTATIONS = [
     ("census: a grey currency dropper is attainable regardless of policy",
      "               and (game_data.xp_per_kill(m, state.level) > 0\n"
@@ -14515,6 +14527,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_grey_farm.py", survivors)
     run_group(CRAFT_COMPLETENESS_SRC, CENSUS_CURRENCY_GREY_MUTATIONS,
               "tests/test_audit/test_craft_completeness.py", survivors)
+    run_group(REACHABILITY_CLAIMS_SRC, REACHABILITY_CONSTANT_MUTATIONS,
+              "tests/test_audit/test_reachability_claims.py", survivors)
     run_group(CRAFT_CONDITIONS_SRC, CONDITIONS_MUTATIONS,
               "tests/test_audit/test_craft_conditions.py", survivors)
     run_group(CRAFT_CENSUS_SRC, FIGHT_NEED_MUTATIONS,
