@@ -1195,6 +1195,18 @@ def test_the_geared_census_loadout_is_chosen_over_the_armory() -> None:
     assert all(gd.item_stats(code).level <= 20 for code in geared.values())
 
 
+def test_the_census_loadout_is_chosen_with_its_events_live() -> None:
+    """A loadout is a function of its key: the key's events are live while it
+    is chosen, whoever asks. With full_moon and portal_demon live, the level-30
+    `L*` is the perfect_bow set even asked from a world with no event overlay
+    (the census parent's), where it used to be the death_knight_sword set."""
+    gd = _gd()
+    assert gd.active_event_codes == set()
+    gear = census_gear(30, frozenset({"full_moon", "portal_demon"}), False, gd)
+    assert gear["weapon_slot"] == "perfect_bow"
+    assert gd.active_event_codes == set()
+
+
 def test_the_census_character_crafts_at_its_level() -> None:
     """The census character's skills grow with its level (crafting kept pace):
     at level 20 its `L*` is the steel set a gearcrafter at 20 makes, where a

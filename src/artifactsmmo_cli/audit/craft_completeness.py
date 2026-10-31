@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.reach_currency import funding_step_goal
@@ -911,17 +912,31 @@ def census_gear(char_level: int, events: frozenset[str], geared: bool,
     if key not in memo:
         below = _rung_below(char_level)
         worn = census_gear(below, events, geared, game_data) if below is not None else {}
-        state = scenario_state(
-            ScenarioCharacter(name="census_gear", level=char_level,
-                              skills={name: char_level for name in SKILL_NAMES},
-                              equipment=dict(worn),
-                              inventory=_armory(char_level, game_data) if geared else {},
-                              inventory_max=ARMORY_BAG if geared else 100,
-                              derive_combat_stats=True, active_events=tuple(sorted(events))),
-            game_data)
-        objective = attach_gear_objective(state, game_data, _OFFLINE_CONTEXT, None).gear_objective
+        # The loadout is a function of its key: the cell's events are live for
+        # it whoever asks (a cell's own overlay, or a census parent with none).
+        world_events = game_data.active_event_codes
+        game_data.active_event_codes = set(events)
+        try:
+            objective = _census_objective(char_level, events, geared, worn, game_data)
+        finally:
+            game_data.active_event_codes = world_events
         _CENSUS_GEAR.remember(memo, key, dict(objective.loadout) if objective is not None else worn)
     return dict(memo[key])
+
+
+def _census_objective(char_level: int, events: frozenset[str], geared: bool,
+                      worn: dict[str, str], game_data: GameData) -> GearObjective | None:
+    """The gear objective of the census character at `char_level` wearing
+    `worn` (`census_gear`)."""
+    state = scenario_state(
+        ScenarioCharacter(name="census_gear", level=char_level,
+                          skills={name: char_level for name in SKILL_NAMES},
+                          equipment=dict(worn),
+                          inventory=_armory(char_level, game_data) if geared else {},
+                          inventory_max=ARMORY_BAG if geared else 100,
+                          derive_combat_stats=True, active_events=tuple(sorted(events))),
+        game_data)
+    return attach_gear_objective(state, game_data, _OFFLINE_CONTEXT, None).gear_objective
 
 
 def census_gear_table(keys: Iterable[CensusGearKey],

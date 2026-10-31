@@ -4,7 +4,7 @@
 >
 > Each recipe climbs the ladder of `audit/craft_conditions.py` (cell, every skill at the character level, gold, its events, then the character level in steps of 5); the first rung that plans is its condition. A fight's need is `bare` (the stats win), the potion loadout that wins it, or `loses`.
 
-321 recipes; planned 321 (cell 108, events 22, gold 7, grey 4, L6 5, skills 15, achievements 112, L25 3, grey@L45 4, held:enchanted_fabric 9, grey@L50 1, L30 2, L40 2, held:book_from_hell,fire_crystal 3, gear 11, held:fire_crystal 5, party@L60 7, held:wooden_stick 1); unplanned 0 ()
+321 recipes; planned 321 (cell 108, events 22, gold 7, grey 4, L6 5, skills 15, achievements 113, L25 3, grey@L45 4, held:enchanted_fabric 9, grey@L50 1, L30 2, L40 2, held:book_from_hell,fire_crystal 3, gear 10, held:fire_crystal 5, party@L60 7, held:wooden_stick 1); unplanned 0 ()
 
 | Recipe | Skill | Craft lvl | Plans at | Char lvl | Fights (what wins) |
 |---|---|---|---|---|---|
@@ -93,10 +93,10 @@
 | tromatising_mask | gearcrafting | 20 | cell | 20 | pig: bare, sheep: bare, skeleton: bare |
 | lizard_skin_armor | gearcrafting | 25 | achievements | 30 | bandit_lizard: bare |
 | lizard_skin_legs_armor | gearcrafting | 25 | achievements | 30 | bandit_lizard: bare |
-| piggy_armor | gearcrafting | 25 | achievements | 30 | owlbear: bare |
+| piggy_armor | gearcrafting | 25 | achievements | 30 | cyclops: bare |
 | piggy_helmet | gearcrafting | 25 | L25 | 25 | pig: bare, cyclops: minor_health_potion, full_moon_vampire: bare |
 | piggy_pants | gearcrafting | 25 | achievements | 30 | owlbear: bare |
-| snakeskin_armor | gearcrafting | 25 | achievements | 30 | owlbear: bare |
+| snakeskin_armor | gearcrafting | 25 | achievements | 30 | cyclops: bare |
 | snakeskin_legs_armor | gearcrafting | 25 | cell | 30 | flying_snake: bare, cow: bare, wolf: bare |
 | stormforged_armor | gearcrafting | 25 | achievements | 30 | bandit_lizard: bare |
 | stormforged_pants | gearcrafting | 25 | achievements | 30 | bandit_lizard: bare |
@@ -104,23 +104,23 @@
 | conjurer_skirt | gearcrafting | 30 | events | 30 | imp: bare, full_moon_vampire: bare, owlbear: bare, rat: bare |
 | flying_boots | gearcrafting | 30 | achievements | 30 | owlbear: bare |
 | gold_boots | gearcrafting | 30 | achievements | 30 | bandit_lizard: bare |
-| gold_helm | gearcrafting | 30 | events | 30 | demon: minor_health_potion, imp: bare, vampire: bare, owlbear: bare |
+| gold_helm | gearcrafting | 30 | events | 30 | demon: small_health_potion, imp: bare, vampire: bare, owlbear: small_health_potion |
 | gold_mask | gearcrafting | 30 | L25 | 25 | - |
-| gold_platebody | gearcrafting | 30 | events | 30 | full_moon_vampire: bare, death_knight: bare, imp: bare, demon: minor_health_potion |
+| gold_platebody | gearcrafting | 30 | events | 30 | full_moon_vampire: bare, death_knight: bare, imp: bare, demon: small_health_potion |
 | gold_platelegs | gearcrafting | 30 | events | 30 | bandit_lizard: bare, rat: bare, vampire: bare, ogre: bare |
 | gold_shield | gearcrafting | 30 | achievements | 30 | owlbear: bare |
 | lizard_boots | gearcrafting | 30 | achievements | 30 | bandit_lizard: bare |
 | obsidian_armor | gearcrafting | 30 | events | 30 | imp: bare, spider: bare, full_moon_vampire: bare |
-| obsidian_helmet | gearcrafting | 30 | events | 30 | imp: bare, owlbear: bare, bandit_lizard: bare, vampire: bare |
-| obsidian_legs_armor | gearcrafting | 30 | events | 30 | imp: bare, owlbear: bare, bandit_lizard: bare, death_knight: bare |
+| obsidian_helmet | gearcrafting | 30 | events | 30 | imp: bare, owlbear: small_health_potion, bandit_lizard: bare, vampire: bare |
+| obsidian_legs_armor | gearcrafting | 30 | events | 30 | imp: bare, owlbear: small_health_potion, bandit_lizard: bare, death_knight: bare |
 | royal_skeleton_armor | gearcrafting | 30 | cell | 30 | - |
 | royal_skeleton_helmet | gearcrafting | 30 | cell | 30 | - |
 | royal_skeleton_pants | gearcrafting | 30 | cell | 30 | - |
-| ancient_jean | gearcrafting | 35 | achievements | 40 | goblin: minor_health_potion |
+| ancient_jean | gearcrafting | 35 | achievements | 40 | goblin_wolfrider: bare |
 | cursed_hat | gearcrafting | 35 | achievements | 40 | goblin: minor_health_potion |
 | dreadful_armor | gearcrafting | 35 | achievements | 40 | goblin: minor_health_potion |
 | dreadful_shield | gearcrafting | 35 | achievements | 40 | goblin: minor_health_potion |
-| enchanter_boots | gearcrafting | 35 | achievements | 40 | goblin: minor_health_potion |
+| enchanter_boots | gearcrafting | 35 | achievements | 40 | goblin_wolfrider: bare |
 | enchanter_pants | gearcrafting | 35 | achievements | 40 | demon: bare |
 | jester_hat | gearcrafting | 35 | achievements | 40 | goblin: minor_health_potion |
 | malefic_armor | gearcrafting | 35 | achievements | 40 | goblin: minor_health_potion |
@@ -151,13 +151,13 @@
 | wratharmor | gearcrafting | 40 | achievements | 40 | goblin: minor_health_potion |
 | wrathelmet | gearcrafting | 40 | achievements | 40 | goblin: minor_health_potion |
 | wrathpants | gearcrafting | 40 | held:enchanted_fabric | 60 | goblin_priestess: enhanced_health_potion, goblin: bare, hellhound: bare |
-| darkforged_boots | gearcrafting | 45 | achievements | 50 | goblin_wolfrider: bare |
+| darkforged_boots | gearcrafting | 45 | achievements | 50 | goblin_wolfrider: small_health_potion |
 | darkforged_helmet | gearcrafting | 45 | achievements | 50 | goblin_wolfrider: bare |
 | darkforged_plate | gearcrafting | 45 | grey | 50 | cursed_tree: bare, echoless_bat: bare, rosenblood: water_boost_potion+enhanced_health_potion, grimlet: bare, sand_snake: bare |
 | darkforged_shield | gearcrafting | 45 | held:enchanted_fabric | 60 | cursed_tree: bare, sea_marauder: minor_health_potion, bat: bare |
 | demoniac_shield | gearcrafting | 45 | L40 | 40 | cursed_tree: bare, grimlet: minor_health_potion, bat: small_health_potion, goblin: bare |
 | hell_armor | gearcrafting | 45 | held:book_from_hell,fire_crystal | 60 | cursed_tree: bare, efreet_sultan: bare, rosenblood: enhanced_health_potion, grimlet: small_health_potion, demon: bare |
-| hell_helmet | gearcrafting | 45 | achievements | 50 | goblin_wolfrider: bare |
+| hell_helmet | gearcrafting | 45 | achievements | 50 | goblin_wolfrider: small_health_potion |
 | hell_legs_armor | gearcrafting | 45 | gear | 50 | grimlet: bare, efreet_sultan: bare, cultist_emperor: bare, hellhound: bare |
 | mesh_armor | gearcrafting | 45 | held:enchanted_fabric | 60 | efreet_sultan: bare, rosenblood: enhanced_health_potion, grimlet: small_health_potion, hellhound: bare |
 | mesh_legs_armor | gearcrafting | 45 | held:enchanted_fabric | 60 | efreet_sultan: bare, orc: bare, cultist_alchemist: bare |
@@ -168,7 +168,7 @@
 | adamantite_boots | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: health_potion |
 | adamantite_mask | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
 | adamantite_platebody | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
-| adamantite_platelegs | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
+| adamantite_platelegs | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: minor_health_potion |
 | adamantite_shield | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
 | dark_horned_helmet | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
 | duskarmor | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
@@ -181,10 +181,10 @@
 | red_dragon_boots | gearcrafting | 50 | held:fire_crystal | 60 | red_dragon: air_boost_potion+enhanced_health_potion, baby_red_dragon: greater_health_potion, solar_desert_scorpion: greater_health_potion |
 | red_dragon_legs_armor | gearcrafting | 50 | gear | 50 | red_dragon: fire_res_potion+enhanced_health_potion, sea_marauder: greater_health_potion, baby_red_dragon: minor_health_potion |
 | red_dragon_shield | gearcrafting | 50 | held:fire_crystal | 60 | red_dragon: air_boost_potion+enhanced_health_potion, baby_red_dragon: greater_health_potion, solar_desert_scorpion: greater_health_potion |
-| skullforged_armor | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
+| skullforged_armor | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: small_health_potion |
 | skullforged_pants | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
-| vital_armor | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
-| vital_boots | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
+| vital_armor | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: small_health_potion |
+| vital_boots | gearcrafting | 50 | achievements | 50 | goblin_wolfrider: small_health_potion |
 | copper_ring | jewelrycrafting | 1 | cell | 1 | - |
 | life_amulet | jewelrycrafting | 5 | L6 | 6 | chicken: bare, red_slime: bare |
 | air_and_water_amulet | jewelrycrafting | 10 | cell | 10 | green_slime: bare, blue_slime: bare |
@@ -234,7 +234,7 @@
 | dust_amulet | jewelrycrafting | 50 | party@L60 | 60 | cultist_alchemist: bare, duskworm: party3:enhanced_health_potion, fennec: enhanced_health_potion, imp: bare, sandwarden: greater_health_potion |
 | eternal_red_ring | jewelrycrafting | 50 | party@L60 | 60 | sand_snake: bare, duskworm: party3:enhanced_health_potion, fennec: enhanced_health_potion, desert_scorpion: bare |
 | heart_amulet | jewelrycrafting | 50 | party@L60 | 60 | cultist_acolyte: bare, grimlet: small_health_potion, duskworm: party3:enhanced_health_potion, sandwarden: greater_health_potion, goblin: bare |
-| skullforged_ring | jewelrycrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
+| skullforged_ring | jewelrycrafting | 50 | achievements | 50 | goblin_wolfrider: small_health_potion |
 | copper_bar | mining | 1 | cell | 1 | - |
 | iron_bar | mining | 10 | cell | 10 | - |
 | emerald | mining | 20 | cell | 20 | - |
@@ -282,20 +282,20 @@
 | steel_pickaxe | weaponcrafting | 20 | achievements | 20 | wolf: bare |
 | dreadful_staff | weaponcrafting | 25 | achievements | 30 | owlbear: bare |
 | skull_wand | weaponcrafting | 25 | achievements | 30 | owlbear: bare |
-| vampire_bow | weaponcrafting | 25 | achievements | 30 | owlbear: bare |
+| vampire_bow | weaponcrafting | 25 | achievements | 30 | cyclops: bare |
 | elderwood_staff | weaponcrafting | 30 | L25 | 25 | - |
 | gold_axe | weaponcrafting | 30 | achievements | 30 | owlbear: bare |
 | gold_fishing_rod | weaponcrafting | 30 | achievements | 30 | owlbear: bare |
 | gold_pickaxe | weaponcrafting | 30 | achievements | 30 | owlbear: bare |
-| gold_sword | weaponcrafting | 30 | events | 30 | imp: bare, death_knight: bare, demon: minor_health_potion |
+| gold_sword | weaponcrafting | 30 | events | 30 | imp: bare, death_knight: bare, demon: small_health_potion |
 | golden_gloves | weaponcrafting | 30 | achievements | 30 | owlbear: bare |
 | greater_dreadful_staff | weaponcrafting | 30 | achievements | 30 | owlbear: bare |
 | obsidian_battleaxe | weaponcrafting | 30 | events | 30 | imp: bare, bandit_lizard: bare, cyclops: bare |
-| perfect_bow | weaponcrafting | 30 | events | 30 | spider: bare, demon: minor_health_potion, ogre: bare, death_knight: bare |
+| perfect_bow | weaponcrafting | 30 | events | 30 | spider: bare, demon: small_health_potion, ogre: bare, death_knight: bare |
 | cursed_sceptre | weaponcrafting | 35 | achievements | 40 | goblin: minor_health_potion |
 | diamond_sword | weaponcrafting | 35 | achievements | 40 | goblin: minor_health_potion |
-| dreadful_battleaxe | weaponcrafting | 35 | achievements | 40 | goblin: minor_health_potion |
-| magic_bow | weaponcrafting | 35 | achievements | 40 | goblin: minor_health_potion |
+| dreadful_battleaxe | weaponcrafting | 35 | achievements | 40 | goblin_wolfrider: bare |
+| magic_bow | weaponcrafting | 35 | achievements | 40 | goblin_wolfrider: bare |
 | strangold_sword | weaponcrafting | 35 | achievements | 40 | goblin: minor_health_potion |
 | bloodblade | weaponcrafting | 40 | achievements | 40 | goblin: minor_health_potion |
 | lightning_sword | weaponcrafting | 40 | achievements | 40 | goblin: minor_health_potion |
@@ -310,14 +310,14 @@
 | demoniac_dagger | weaponcrafting | 45 | events | 50 | efreet_sultan: greater_health_potion, cultist_acolyte: bare |
 | hell_reaper | weaponcrafting | 45 | gear | 50 | efreet_sultan: bare, goblin_wolfrider: bare, grimlet: bare |
 | hell_staff | weaponcrafting | 45 | grey | 50 | cursed_tree: bare, efreet_sultan: bare, imp: bare |
-| adamantite_axe | weaponcrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
-| adamantite_fishing_rod | weaponcrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
-| adamantite_gloves | weaponcrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
-| adamantite_pickaxe | weaponcrafting | 50 | achievements | 50 | goblin_wolfrider: bare |
+| adamantite_axe | weaponcrafting | 50 | achievements | 50 | goblin_wolfrider: small_health_potion |
+| adamantite_fishing_rod | weaponcrafting | 50 | achievements | 50 | goblin_wolfrider: small_health_potion |
+| adamantite_gloves | weaponcrafting | 50 | achievements | 50 | goblin_wolfrider: small_health_potion |
+| adamantite_pickaxe | weaponcrafting | 50 | achievements | 50 | goblin_wolfrider: small_health_potion |
 | adamantite_sword | weaponcrafting | 50 | party@L60 | 60 | duskworm: party3:enhanced_health_potion, dusk_beetle: small_health_potion, bat: bare, sea_marauder: minor_health_potion, goblin_wolfrider: bare |
 | desert_whip | weaponcrafting | 50 | party@L60 | 60 | sand_snake: bare, efreet_sultan: bare, duskworm: party3:enhanced_health_potion, desert_scorpion: bare, solar_desert_scorpion: greater_health_potion |
 | dust_sword | weaponcrafting | 50 | party@L60 | 60 | sea_marauder: minor_health_potion, duskworm: party3:enhanced_health_potion, cultist_alchemist: bare, sandwarden: greater_health_potion, goblin_wolfrider: bare |
-| moonlight_staff | weaponcrafting | 50 | gear | 50 | dusk_beetle: bare, sea_marauder: greater_health_potion, orc: bare, goblin_wolfrider: bare |
+| moonlight_staff | weaponcrafting | 50 | achievements | 50 | dusk_beetle: greater_health_potion, sea_marauder: health_boost_potion+enhanced_health_potion, orc: minor_health_potion, goblin_wolfrider: minor_health_potion |
 | ash_plank | woodcutting | 1 | cell | 1 | - |
 | spruce_plank | woodcutting | 10 | cell | 10 | - |
 | hardwood_plank | woodcutting | 20 | cell | 20 | - |
