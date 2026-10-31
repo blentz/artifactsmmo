@@ -114,14 +114,16 @@ def test_gear_that_closes_the_fight_reads_gear(gd: GameData) -> None:
 
 
 @pytest.mark.parametrize(("cell", "monster"), [
-    (GEAR_CELL, "cow"), (GREY_CELL, "ogre"), ("l10_copper_adequate", "pig")])
+    (GEAR_CELL, "cow"), (GREY_CELL, "ogre"), ("l10_copper_adequate", "pig"),
+    (GEAR_CELL, "flying_snake")])
 def test_the_verdict_reads_the_objectives_own_fighter_and_missing_pieces(
         gd: GameData, cell: str, monster: str) -> None:
     """Ruling C2-perf: the horizon prices no piece, but what it reads is
     `gear_objective_for`'s: the same fighter wearing `L*`, and a missing piece
     exactly when the objective has one (the cow's, the grey ogre's, the pig's
-    nine). Gear closes the fight exactly when that fighter secures it and a
-    piece is missing."""
+    nine; the flying snake's none: `L*` secures it, but every unheld piece
+    gains exactly 0, so it is held-equivalent). Gear closes the fight exactly
+    when that fighter secures it and a piece is missing."""
     state = _with_task(_state(cell, gd), monster)
     objective = gear_objective_for(monster, state, gd, TIMED_NO_PROFILE_CONTEXT, None, task_rate)
     fighter = gear_fighter_for(monster, state, gd, TIMED_NO_PROFILE_CONTEXT, None)
