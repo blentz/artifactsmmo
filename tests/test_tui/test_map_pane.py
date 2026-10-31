@@ -6,7 +6,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.glyphs import UNMAPPED_COLOR, WALKABLE_COLOR
 from artifactsmmo_cli.tui.palette import LEAF, SKIN
-from artifactsmmo_cli.tui.sprites import Sprite, SpriteCategory
+from artifactsmmo_cli.tui.sprites import PLANNING_SPRITE, PLAYER_SPRITE, Sprite, SpriteCategory
 from artifactsmmo_cli.tui.widgets.map_pane import (
     FALLBACK_H,
     FALLBACK_W,
@@ -69,7 +69,7 @@ def _snap(x: int, y: int, layer: str = "overworld") -> CycleSnapshot:
 
 
 def _styles(text) -> list[str]:
-    return [span.style for span in text.spans]
+    return [str(span.style) for span in text.spans]
 
 
 class TestBuildTileIndex:
@@ -440,6 +440,59 @@ class TestRenderLine:
         for y in range(pane._line_count(FALLBACK_H)):
             # Strip is padded to full width; the HUD line isn't — compare content.
             assert pane.render_line(y).text.rstrip() == lines[y].rstrip()
+
+    def test_bare_floor_runs_merge_across_tile_boundaries(self):
+        # A row of empty explored floor is ONE Segment spanning every tile, not
+        # one per tile: each Segment costs Textual a join and the terminal an SGR.
+        gd = GameData()
+        gd.world.known_layer_tiles.update(
+            {(x, y, "overworld") for x in range(-10, 11) for y in range(-10, 11)})
+        pane = MapPane(gd)
+        pane.update_snapshot(_snap(0, 0))
+        strip = pane.render_line(1)                       # top tile row, far from the player
+        assert len(list(strip)) == 1
+        assert strip.cell_length == FALLBACK_W
+
+    def test_runs_break_where_tile_content_changes(self):
+        # The merge must stop at a differently-coloured tile: the slime's LEAF
+        # pixels survive as their own runs between floor runs.
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        center_rows = range(1 + ((FALLBACK_H - 1) // TILE_H // 2) * TILE_H,
+                            1 + ((FALLBACK_H - 1) // TILE_H // 2 + 1) * TILE_H)
+        styles = [str(seg.style) for y in center_rows for seg in pane.render_line(y)]
+        assert any(LEAF in s for s in styles)
+        assert any(WALKABLE_COLOR in s and LEAF not in s for s in styles)
+
+    def test_line_pads_to_width_past_the_last_whole_tile(self):
+        # A width that is not a whole number of tiles still yields a full-width
+        # Strip (the remainder is padding), so no stale cells show through.
+        pane = MapPane(_gd_typed())
+        snap = _snap(0, 0)
+        pane.update_snapshot(snap)
+        strip = pane._line_strip(5, TILE_W * 10 + 3, FALLBACK_H, (0, 0), pane._player_sprite(0.0), {})
+        assert strip.cell_length == TILE_W * 10 + 3
+
+    def test_line_signature_keys_sprites_by_content_not_identity(self):
+        # Swing frames rebuild their overlay Sprites every frame, and CPython
+        # reuses a freed object's id(). An id()-keyed signature could therefore
+        # match a DIFFERENT frame's overlay and serve its stale cached Strip (a
+        # tool drawn at the wrong arc position). Keying on content rules that
+        # out: equal-content sprites share a signature, different content never.
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        y = 1 + ((FALLBACK_H - 1) // TILE_H // 2) * TILE_H     # the player's tile-row
+
+        def head(color: str) -> Sprite:
+            return Sprite(rows=("h" * 8,) * 8, palette={"h": color})
+
+        def sig(overlay_sprite: Sprite, player: Sprite) -> object:
+            return pane._line_signature(y, FALLBACK_H, (0, 0), player, {(1, 0): overlay_sprite})
+
+        player_a = Sprite(rows=PLAYER_SPRITE.rows, palette=dict(PLAYER_SPRITE.palette))
+        assert sig(head("#010101"), player_a) == sig(head("#010101"), PLAYER_SPRITE)
+        assert sig(head("#010101"), PLAYER_SPRITE) != sig(head("#020202"), PLAYER_SPRITE)
+        assert sig(head("#010101"), PLAYER_SPRITE) != sig(head("#010101"), PLANNING_SPRITE)
 
     def test_static_line_is_cached(self):
         # A static (non-swing) line returns the SAME Strip object on the next

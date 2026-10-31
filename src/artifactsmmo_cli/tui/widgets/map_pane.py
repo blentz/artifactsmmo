@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from rich.console import Console
+from rich.segment import Segment
 from rich.style import Style
 from rich.text import Text
 from textual.events import Resize
@@ -470,7 +471,7 @@ class MapPane(Static):
         """Number of screen lines: 1 HUD + tiles_h * TILE_H tile sublines."""
         return 1 + ((height - 1) // TILE_H) * TILE_H
 
-    def _line_text(
+    def _line_strip(
         self,
         y: int,
         width: int,
@@ -479,18 +480,23 @@ class MapPane(Static):
         player_sprite: Sprite,
         overlay: dict[tuple[int, int], Sprite],
         layer: str = OVERWORLD,
-    ) -> Text:
-        """The rich Text for ONE screen line `y` (0 = HUD line). The single
-        source of truth shared by `_render_viewport` (full, for tests) and
-        `render_line` (per-line, live)."""
+    ) -> Strip:
+        """ONE screen line `y` (0 = HUD line) as a full-width Strip. The single
+        source of truth shared by `_render_viewport` (full, for tests and
+        `render`) and `render_line` (per-line, live).
+
+        A tile line joins the compositor's pre-styled Segment runs directly —
+        no Text, no Console layout pass — merging runs that continue across a
+        tile boundary, so a stretch of bare floor is one Segment."""
         tiles_w = width // TILE_W
         tiles_h = (height - 1) // TILE_H
         half_w = tiles_w // 2
         half_h = tiles_h // 2
         cx, cy = center
         if y == 0:
-            return self.hud_text(cx, cy, layer)
-        line = Text(no_wrap=True, overflow="crop")
+            # Opaque HUD line: overwrite any characters a closed overlay left here.
+            return self._text_strip(self.hud_text(cx, cy, layer), width).apply_style(_HUD_STYLE)
+        segments: list[Segment] = []
         trow = (y - 1) // TILE_H
         sub = (y - 1) % TILE_H
         for tcol in range(tiles_w):
@@ -501,8 +507,15 @@ class MapPane(Static):
             tool = overlay.get((tcol - half_w, trow - half_h))
             if tool is not None:
                 sprite = overlay_sprites(sprite, tool)
-            line.append_text(self._compositor.compose(sprite, terrain)[sub])
-        return line
+            for seg in self._compositor.compose(sprite, terrain)[sub]:
+                # Identity, not ==: equal colors share one lru-cached Style, and
+                # Style.__eq__ was a quarter of this loop. A missed merge only
+                # costs an extra Segment, never a wrong pixel.
+                if segments and segments[-1].style is seg.style:
+                    segments[-1] = Segment(segments[-1].text + seg.text, seg.style)
+                else:
+                    segments.append(seg)
+        return Strip(segments, tiles_w * TILE_W).extend_cell_length(width)
 
     def _render_viewport(
         self,
@@ -519,8 +532,8 @@ class MapPane(Static):
         for y in range(self._line_count(height)):
             if y > 0:
                 text.append("\n")
-            text.append_text(
-                self._line_text(y, width, height, center, player_sprite, ov, snap.layer))
+            for seg in self._line_strip(y, width, height, center, player_sprite, ov, snap.layer):
+                text.append(seg.text, seg.style)
         return text
 
     def render_line(self, y: int) -> Strip:
@@ -544,11 +557,7 @@ class MapPane(Static):
         cached = self._line_cache.get(y)
         if cached is not None and cached[0] == sig:
             return cached[1]
-        strip = self._text_strip(
-            self._line_text(y, width, height, center, sprite, overlay, snap.layer), width)
-        if y == 0:
-            # Opaque HUD line: overwrite any characters a closed overlay left here.
-            strip = strip.apply_style(_HUD_STYLE)
+        strip = self._line_strip(y, width, height, center, sprite, overlay, snap.layer)
         self._line_cache[y] = (sig, strip)
         return strip
 
@@ -565,7 +574,9 @@ class MapPane(Static):
         viewport center (scroll), the layer being shown, the player sprite
         (center tile only), and any tool/cloud overlay landing on this line's
         tile-row. Stable for static map lines → cache hit; changes only on the
-        swing/glide rows."""
+        swing/glide rows. Sprites enter by content (`Sprite.key`), never id():
+        overlays are rebuilt per frame and a reused id would match a different
+        frame's overlay, serving its stale Strip."""
         if y == 0:
             # The roster belongs in the signature: a child dying changes no
             # coordinate, so without it the cached Strip would hide the death.
@@ -575,11 +586,11 @@ class MapPane(Static):
         trow = (y - 1) // TILE_H
         sub = (y - 1) % TILE_H
         row_off = trow - half_h
-        ov = tuple(sorted((k, id(v)) for k, v in overlay.items() if k[1] == row_off))
-        psprite = id(player_sprite) if row_off == 0 else 0
+        ov = tuple(sorted((k, v.key) for k, v in overlay.items() if k[1] == row_off))
+        psprite = player_sprite.key if row_off == 0 else None
         others = tuple(
             sorted(
-                (xy, id(sprite))
+                (xy, sprite.key)
                 for xy, sprite in self._others.items()
                 if xy[2] == layer and xy[1] - center[1] == row_off
             )

@@ -19,7 +19,10 @@ def main() -> None:
         rows = comp.compose(sprite, WALKABLE_COLOR)
         console.print(Text(name, style="bold"))
         for row in rows:
-            console.print(row)
+            line = Text()
+            for seg in row:
+                line.append(seg.text, seg.style)
+            console.print(line)
         console.print()
 
 

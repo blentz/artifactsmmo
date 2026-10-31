@@ -7,6 +7,7 @@ code->sprite lookup and the procedural fallback live in sprite_registry.py.
 
 from dataclasses import dataclass
 from enum import Enum
+from functools import cached_property
 
 from artifactsmmo_cli.tui.glyphs import (
     MONSTER_COLOR,
@@ -50,12 +51,22 @@ class SpriteCategory(Enum):
     RESOURCE = "resource"
 
 
+SpriteKey = tuple[tuple[str, ...], tuple[tuple[str, str], ...]]
+
+
 @dataclass(frozen=True)
 class Sprite:
     """An 8x8 pixel sprite: rows of palette-key chars + a palette map."""
 
     rows: tuple[str, ...]
     palette: dict[str, str]
+
+    @cached_property
+    def key(self) -> SpriteKey:
+        """Hashable content identity: rows + sorted palette. Overlays rebuild
+        Sprites every animation frame and CPython reuses freed ids, so render
+        caches must key on this, never on id()."""
+        return (self.rows, tuple(sorted(self.palette.items())))
 
 
 def validate_sprite(name: str, sprite: Sprite) -> None:
