@@ -5423,6 +5423,9 @@ PRICED_ROUTE_WALK_MUTATIONS = [
     ("priced walk: a choice among minting routes keeps the kind order",
      "            if sum(1 for route, _gates in candidates if route.kind not in _ORDER_STOCK) > 1:\n",
      "            if False:\n"),
+    ("priced walk: the ranking ignores the grey-farm directive the walk admitted by",
+     "                priced = prefer(code, item_policy)\n",
+     "                priced = prefer(code, policy)\n"),
     ("priced walk: stock is priced like any route that makes copies",
      "    tier = _ORDER_STOCK.get(route.kind, 1)\n",
      "    tier = 1\n"),
@@ -5432,6 +5435,11 @@ PRICED_ROUTE_WALK_MUTATIONS = [
     ("priced walk: a sale is tried with the stock",
      "_ORDER_STOCK = {SourceKind.WITHDRAW: 0, SourceKind.RECYCLE: 0, SourceKind.SELL: 2}\n",
      "_ORDER_STOCK = {SourceKind.WITHDRAW: 0, SourceKind.RECYCLE: 0, SourceKind.SELL: 0}\n"),
+]
+PRICED_ROUTE_FIGHT_MUTATIONS = [
+    ("priced walk: the drop leg fights whichever dropper kills fewest",
+     "                                  if isinstance(a, FightAction) and a.monster_code == route.via]\n",
+     "                                  if isinstance(a, FightAction)]\n"),
 ]
 PRICED_ROUTE_KEY_MUTATIONS = [
     ("priced walk: a sibling's craft is keyed as this character's craft",
@@ -14761,6 +14769,8 @@ def _collect_all_groups() -> None:
     run_group(FLEET_WORK_SRC, FLEET_FARM_TURNIN_MUTATIONS,
               "tests/test_ai/test_player_turn_in.py", survivors)
     run_group(OBTAIN_MODEL_SRC, PRICED_ROUTE_WALK_MUTATIONS,
+              "tests/test_ai/test_priced_route_served.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, PRICED_ROUTE_FIGHT_MUTATIONS,
               "tests/test_ai/test_priced_route_served.py", survivors)
     run_group(ACQUISITION_COST_SRC, PRICED_ROUTE_KEY_MUTATIONS,
               "tests/test_ai/test_priced_route_served.py", survivors)

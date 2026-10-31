@@ -495,17 +495,21 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
     walked = replace(state, gold=_walk_pocket(state, game_data, frozenset(goal.needed), policy))
     gold_monster = (fight_gold_monster(state, game_data, ctx, policy=PIECE_POLICY)
                     if policy.fight_gold else None)
-    preferred: dict[str, dict[tuple[SourceKind, str], int | Fraction]] = {}
+    preferred: dict[tuple[str, Policy], dict[tuple[SourceKind, str], int | Fraction]] = {}
 
-    def prefer(code: str) -> dict[tuple[SourceKind, str], int | Fraction]:
+    def prefer(code: str, admitted: Policy) -> dict[tuple[SourceKind, str], int | Fraction]:
         """`code`'s routes at the unit costs the pricer fills them at
         (`route_order`), asked only of an item the walk can serve more than
-        one way: the walk serves the route the price took (ruling T14e-1, and
-        the ticket farm of 2026-10-31)."""
-        if code not in preferred:
-            preferred[code] = route_order(code, state, game_data, ctx, policy=policy,
-                                          pocket=walked.gold, store=store)
-        return preferred[code]
+        one way, under the policy the walk `admitted` its routes by (a grey
+        dropper `grey_ok` licenses is priced too, or it would rank after
+        every gather: live Robby 2026-10-31, the chicken at 91 actions a
+        ticket behind shrimp at 154): the walk serves the route the price took
+        (ruling T14e-1, and the ticket farm of 2026-10-31)."""
+        key = (code, admitted)
+        if key not in preferred:
+            preferred[key] = route_order(code, state, game_data, ctx, policy=admitted,
+                                         pocket=walked.gold, store=store)
+        return preferred[key]
 
     ranks: dict[Door, int] = {}
 
@@ -730,12 +734,16 @@ def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool:
         return dataclasses.replace(fight, drop_farm=fight.drop_farm or grey,
                                    gold_target=win_gold(fight.monster_code, game_data))
     if route.kind is SourceKind.DROP:
-        # Which dropper to fight is the proved selection's (expected kills,
-        # then distance; the grey drop_farm variant): the route only proved a
-        # fight can serve the item.
+        # The dropper fought is the route's own (`route.via`), the one the walk
+        # served because the price took it (the ticket farm, live 2026-10-31:
+        # the walk served the chicken at 91 actions a ticket and this arm, by
+        # expected kills alone, fought an ogre). The proved selection still
+        # vets it (the oracle's approval, the grey drop_farm variant).
         # The goal's own actions come last so their fight (possibly the
         # synthesized drop_farm variant the static pool lacks) wins per monster.
-        fight = select_drop_fight(step.item, [*pool, *relevant], state, game_data,
+        droppers: list[Action] = [a for a in (*pool, *relevant)
+                                  if isinstance(a, FightAction) and a.monster_code == route.via]
+        fight = select_drop_fight(step.item, droppers, state, game_data,
                                   allow_grey=grey_ok(step.item))
         return None if fight is None else dataclasses.replace(fight, drop_target=(step.item, step.amount))
     return None

@@ -15,7 +15,7 @@ from fractions import Fraction
 
 import pytest
 
-from artifactsmmo_cli.ai import acquisition_cost
+from artifactsmmo_cli.ai import acquisition_cost, craft_plan_gen
 from artifactsmmo_cli.ai.acquisition_cost import route_key, route_order
 from artifactsmmo_cli.ai.acquisition_cost_core import (
     BANK_VENUE,
@@ -43,21 +43,21 @@ from tests.test_ai.scenarios.routing import BUNDLE
 TICKET = "event_ticket"
 
 
-def _ticket_world() -> GameData:
+def _ticket_world(gather_rate: int = 200) -> GameData:
     """The committed bundle with the season's ticket drops (the bundle
     predates them): 1 in 200 from every resource, 1 in 100 from every
     monster. A private copy: the shared world is never mutated."""
     world = load_bundle_game_data(BUNDLE)
     for table in world.recipes_catalog.resource_drops_full.values():
-        table.append((TICKET, 200, 1, 1))
+        table.append((TICKET, gather_rate, 1, 1))
     for drops in world.monsters.drops.values():
         drops.append((TICKET, 100, 1, 1))
     return world
 
 
-def _seeded(name: str) -> tuple[WorldState, GameData, GamePlayer]:
+def _seeded(name: str, gather_rate: int = 200) -> tuple[WorldState, GameData, GamePlayer]:
     sc = SCENARIOS[name]
-    world = _ticket_world()
+    world = _ticket_world(gather_rate)
     player = GamePlayer(character=sc.name, history=None)
     player.seed_offline(derived_scenario_state(sc, world), world)
     assert player.state is not None
@@ -157,3 +157,46 @@ def test_two_options_one_walk_route_rank_at_the_cheaper(monkeypatch: pytest.Monk
     ranked = route_order("x", make_state(), GameData(), NO_PROFILE_CONTEXT, policy=DECOMPOSE_POLICY,
                          pocket=0, store=None)
     assert ranked == {(SourceKind.WITHDRAW, "x"): 1}
+
+
+def test_a_grey_dropper_the_walk_admits_is_priced_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live Robby 2026-10-31, after the walk served the price: the chicken
+    (grey at L41) prices a ticket at 91 actions, shrimp at 154, yet the walk
+    still gathered. The walk admits a grey dropper its directive licenses
+    (`grey_ok`), but ranked the routes under the bare policy, which prices no
+    grey fight, so the chicken ranked after every gather. The ranking now
+    prices under the policy the walk admitted the item's routes by."""
+    monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
+    monkeypatch.setattr(acquisition_cost, "expected_damage_per_fight", lambda *a: 0)
+    monkeypatch.setattr(craft_plan_gen, "grey_farm_allowed", lambda item, *a: item == TICKET)
+    state, world, player = _seeded("l40_band_entry")
+    grey = {code for code in world.monster_levels if world.xp_per_kill(code, state.level) <= 0}
+    assert grey
+    for monster, drops in world.monsters.drops.items():
+        if monster not in grey:
+            drops[:] = [row for row in drops if row[0] != TICKET]
+    ctx = player._selection_context()
+    plan = decompose(GatherMaterialsGoal(TICKET, {TICKET: 1}), state, world,
+                     player._build_actions(), ctx)
+    assert plan is not None
+    assert not [a for a in plan if isinstance(a, GatherAction)]
+    fights = [a for a in plan if isinstance(a, FightAction)]
+    assert fights and fights[0].monster_code in grey
+
+
+def test_the_fight_served_is_the_dropper_the_price_took(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every monster drops the ticket at 1 in 100, so expected kills tie and
+    the old selection fought by distance; the price differs by the rest each
+    kill forces, and the plan fights the dropper the price ranked first."""
+    monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
+    state, world, player = _seeded("l40_band_entry", gather_rate=100_000)
+    ctx = player._selection_context()
+    ranked = route_order(TICKET, state, world, ctx, policy=DECOMPOSE_POLICY, pocket=state.gold,
+                         store=None)
+    kind, monster = next(iter(ranked))
+    assert kind is SourceKind.DROP
+    plan = decompose(GatherMaterialsGoal(TICKET, {TICKET: 1}), state, world,
+                     player._build_actions(), ctx)
+    assert plan is not None
+    fights = [a for a in plan if isinstance(a, FightAction)]
+    assert fights and fights[0].monster_code == monster

@@ -216,8 +216,8 @@ class ObtainModel:
                    keep: frozenset[str] = frozenset(),
                    grey_ok: Callable[[str], bool] = lambda _item: False,
                    opening: frozenset[Door] = frozenset(),
-                   prefer: Callable[[str], Mapping[tuple[SourceKind, str], int | Fraction]]
-                   = lambda _item: {},
+                   prefer: Callable[[str, Policy], Mapping[tuple[SourceKind, str], int | Fraction]]
+                   = lambda _item, _policy: {},
                    rank: Callable[[Door], int] = lambda _door: 0) -> WalkGraph:
         """`item`'s closure as the one walk's graph (Phase 2c-2b).
 
@@ -262,8 +262,10 @@ class ObtainModel:
         `opening` holds the doors whose keys are being walked further up, so a
         key that stands only past its own door is a wall, not a loop.
 
-        `prefer` prices, per item, each `(kind, via)` route the pricer lists
-        at the unit cost it fills it at (`acquisition_cost.route_order`): the
+        `prefer` prices, per item and under the policy the walk admits that
+        item's routes by (its grey-farm directive applied, `grey_ok`), each
+        `(kind, via)` route the pricer lists at the unit cost it fills it at
+        (`acquisition_cost.route_order`): the
         routes that make new copies are tried cheapest first, so the route the
         price took is the one the walk serves (ruling T14e-1 for a door route;
         the ticket farm, live 2026-10-31: the fixed kind order served a
@@ -308,7 +310,7 @@ class ObtainModel:
             candidates = [(route, ()) for route in self._ranked_gathers(code, ready)] + gated
             if sum(1 for route, _gates in candidates if route.kind not in _ORDER_STOCK) > 1:
                 # Only a choice between routes that make copies is priced.
-                priced = prefer(code)
+                priced = prefer(code, item_policy)
                 candidates.sort(key=lambda pair: _walk_order(pair[0], priced))
             for route, gates in candidates:
                 if code in produce and route.kind not in (SourceKind.CRAFT, SourceKind.GATHER):
@@ -419,8 +421,8 @@ class ObtainModel:
              openable: Callable[[Gate], bool] = lambda _gate: False,
              keep: frozenset[str] = frozenset(),
              grey_ok: Callable[[str], bool] = lambda _item: False,
-             prefer: Callable[[str], Mapping[tuple[SourceKind, str], int | Fraction]]
-             = lambda _item: {},
+             prefer: Callable[[str, Policy], Mapping[tuple[SourceKind, str], int | Fraction]]
+             = lambda _item, _policy: {},
              rank: Callable[[Door], int] = lambda _door: 0) -> WalkAnswer:
         """The one walk over `item`'s closure: can `qty` be had, and the next
         step toward it (`decompose_core`)."""
