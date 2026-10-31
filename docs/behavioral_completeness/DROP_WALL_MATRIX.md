@@ -99,9 +99,9 @@ argmax blindness: 1 of 17 walls sit on a RESOLVED root. A census that prices onl
 | l35_boots_drop_farm | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_boots_drop_farm | ReachSkillLevel(skill='jewelrycrafting', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l35_boots_drop_farm | ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l30_rune_fill | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | argmax | PASS | 3 | 3 | 3 | - | - | - | - | - |
-| l30_rune_fill | ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot') | alt | PASS | 2676 | 2676 | 2676 | - | - | - | - | - |
+| l30_rune_fill | ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot') | argmax | PASS | 2676 | 2676 | 2676 | - | - | - | - | - |
 | l30_rune_fill | ObtainItem(code='slime_shield', quantity=1, slot='shield_slot') | alt | PASS | 330 | 330 | 330 | - | - | - | - | - |
+| l30_rune_fill | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 6853 | 6853 | 6853 | - | - | - | - | - |
 | l30_rune_fill | ReachSkillLevel(skill='gearcrafting', level=26) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l30_rune_fill | ReachSkillLevel(skill='jewelrycrafting', level=19) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
@@ -172,30 +172,30 @@ argmax blindness: 1 of 17 walls sit on a RESOLVED root. A census that prices onl
 | l32_held_task_open | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_open | ObtainItem(code='wooden_club', quantity=1, slot='weapon_slot') | alt | PASS | 1000001 | 1 | 1000001 | wooden_club | 1 | 1 | 1 | perfect_bow, steel_boots |
 | l32_held_task_open | ReachSkillLevel(skill='jewelrycrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l12_ge_book_grind | ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot') | argmax | PASS | 3 | 3 | 3 | - | - | - | - | - |
-| l12_ge_book_grind | ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
-| l12_ge_book_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
-| l12_ge_book_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
-| l12_ge_book_grind | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
-| l12_ge_book_grind | ObtainItem(code='satchel', quantity=1, slot='bag_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
+| l12_ge_book_grind | ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot') | argmax | PASS | 144 | 144 | 144 | - | - | - | - | - |
+| l12_ge_book_grind | ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 103 | 103 | 103 | - | - | - | - | - |
+| l12_ge_book_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 121 | 121 | 121 | - | - | - | - | - |
+| l12_ge_book_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot') | alt | PASS | 121 | 121 | 121 | - | - | - | - | - |
+| l12_ge_book_grind | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 121 | 121 | 121 | - | - | - | - | - |
+| l12_ge_book_grind | ObtainItem(code='satchel', quantity=1, slot='bag_slot') | alt | PASS | 590 | 590 | 590 | - | - | - | - | - |
 | l12_ge_book_grind | ReachSkillLevel(skill='jewelrycrafting', level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_ge_book_grind | ReachSkillLevel(skill='gearcrafting', level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_quiet_book_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | argmax | PASS | 632 | 632 | 632 | - | - | - | - | - |
 | l12_quiet_book_grind | ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot') | alt | PASS | 632 | 632 | 632 | - | - | - | - | - |
 | l12_quiet_book_grind | ReachSkillLevel(skill='gearcrafting', level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_quiet_book_grind | ReachSkillLevel(skill='jewelrycrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l12_ge_book_adequate | ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot') | argmax | PASS | 3 | 3 | 3 | - | - | - | - | - |
-| l12_ge_book_adequate | ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
-| l12_ge_book_adequate | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
-| l12_ge_book_adequate | ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
-| l12_ge_book_adequate | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
-| l12_ge_book_adequate | ObtainItem(code='satchel', quantity=1, slot='bag_slot') | alt | PASS | 3 | 3 | 3 | - | - | - | - | - |
+| l12_ge_book_adequate | ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot') | argmax | PASS | 25 | 25 | 25 | - | - | - | - | - |
+| l12_ge_book_adequate | ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 103 | 103 | 103 | - | - | - | - | - |
+| l12_ge_book_adequate | ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot') | alt | PASS | 121 | 121 | 121 | - | - | - | - | - |
+| l12_ge_book_adequate | ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot') | alt | PASS | 121 | 121 | 121 | - | - | - | - | - |
+| l12_ge_book_adequate | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 121 | 121 | 121 | - | - | - | - | - |
+| l12_ge_book_adequate | ObtainItem(code='satchel', quantity=1, slot='bag_slot') | alt | PASS | 590 | 590 | 590 | - | - | - | - | - |
 | l12_ge_book_adequate | ReachSkillLevel(skill='jewelrycrafting', level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l47_depth3_amulet | ObtainItem(code='greater_dreadful_amulet', quantity=1, slot='amulet_slot') | argmax | PASS | 73 | 73 | 73 | - | - | - | - | - |
 | l47_depth3_amulet | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l20_relief_full_bank | ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot') | argmax | PASS | 51 | 51 | 51 | - | - | - | - | - |
 | l20_relief_full_bank | ObtainItem(code='mushmush_jacket', quantity=1, slot='body_armor_slot') | alt | PASS | 199 | 199 | 199 | - | - | - | - | - |
-| l20_relief_full_bank | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1238 | 1000001 | cursed_wood | 1 | 1 | 0 | - |
+| l20_relief_full_bank | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1988 | 1000001 | cursed_wood | 1 | 1 | 0 | - |
 | l20_relief_full_bank | ReachSkillLevel(skill='weaponcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_relief_full_bank | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_bag_critical_empty_bank | ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot') | argmax | PASS | 91 | 91 | 91 | - | - | - | - | - |

@@ -609,20 +609,13 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l35_boots_drop_farm | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l35_boots_drop_farm | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l35_boots_drop_farm | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l30_rune_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l30_rune_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l30_rune_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l30_rune_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l30_rune_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l30_rune_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l30_rune_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
-| l30_rune_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l30_rune_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l30_rune_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l30_rune_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l30_rune_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l30_rune_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l30_rune_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
+| l30_rune_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l30_rune_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l30_rune_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l30_rune_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l30_rune_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l30_rune_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l30_rune_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
 | l30_rune_fill | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l30_rune_fill | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l30_rune_fill | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -630,6 +623,13 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l30_rune_fill | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l30_rune_fill | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l30_rune_fill | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
+| l30_rune_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l30_rune_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l30_rune_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l30_rune_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l30_rune_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l30_rune_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l30_rune_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l30_rune_fill | `ReachSkillLevel(skill='gearcrafting', level=26)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l30_rune_fill | `ReachSkillLevel(skill='gearcrafting', level=26)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l30_rune_fill | `ReachSkillLevel(skill='gearcrafting', level=26)` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
