@@ -1406,9 +1406,6 @@ open Formal.PriorityBand
 -- so nothing asserted their axiom hygiene. Added when cross_check gained its
 -- reverse direction. Manifest is a CURATED list of headline roles, so large
 -- modules contribute their concluding results, not every internal lemma.
--- EquipmentProfile (the constant COMBAT-axis selector):
-#check @Formal.EquipmentProfile.never_utility                -- the selector never chooses the retired UTILITY axis
-#check @Formal.EquipmentProfile.isUtilityObjective_false     -- is_utility_objective is a constant false
 -- InventoryRoom (slot-vs-quantity admission; the 497-livelock core):
 #check @InventoryRoom.hasRoom_false_of_no_slot        -- no free slot ⇒ blocked, whatever the quantity room
 #check @InventoryRoom.hasRoom_false_of_no_qty         -- no quantity room ⇒ blocked, whatever the slots

@@ -4,7 +4,6 @@ import Formal.AccumulationSell
 import Formal.DominancePareto
 import Formal.GearTaxonomy
 import Formal.PotionProvisionQty
-import Formal.PotionBaseline
 import Formal.MaxBatchFromHeld
 import Formal.OptimalBuyMix
 import Formal.GearObjective
@@ -1661,18 +1660,6 @@ def runOptimalBuyMix (args : Array Json) : Json :=
   let b := Formal.OptimalBuyMix.optimalBuyMix needs held prices gold maxBatch
   Json.mkObj [("batch", Json.num (Int.ofNat b))]
 
-/-- Compute one potion_baseline result using the SAME proved
-`Formal.PotionBaseline.potionBaseline`.
-
-args layout (5 Ints): `[level, low_level, low_qty, high_level, high_qty]`, all read
-via `.toNat`; emits `{"baseline": <int>}` matching the Python `potion_baseline_pure`
-return in the differential test. -/
-def runPotionBaseline (args : Array Json) : Json :=
-  let b := Formal.PotionBaseline.potionBaseline
-    (intArg args 0).toNat (intArg args 1).toNat (intArg args 2).toNat
-    (intArg args 3).toNat (intArg args 4).toNat
-  Json.mkObj [("baseline", Json.num (Int.ofNat b))]
-
 /-- Compute one bank_expansion_timing result using the SAME proved
 `Formal.BankExpansionTiming.shouldExpandBank`.
 
@@ -3260,8 +3247,6 @@ def runOne (item : Json) : Json :=
     runPotionProvisionQty args
   else if kind == "optimal_buy_mix" then
     runOptimalBuyMix args
-  else if kind == "potion_baseline" then
-    runPotionBaseline args
   else if kind == "bank_expansion_timing" then
     runBankExpansionTiming args
   else if kind == "event_window" then

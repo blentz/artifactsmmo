@@ -1086,8 +1086,6 @@ open Formal.PriorityBand
 #print axioms Formal.GePostPricing.buy_price_le_ceiling
 #print axioms Formal.GePostPricing.sell_price_le_best_minus_one
 #print axioms Formal.GePostPricing.buy_price_ge_best_plus_one
-#print axioms Formal.EquipmentProfile.never_utility
-#print axioms Formal.EquipmentProfile.isUtilityObjective_false
 #print axioms InventoryRoom.hasRoom_false_of_no_slot
 #print axioms InventoryRoom.hasRoom_false_of_no_qty
 #print axioms InventoryRoom.hasRoom_grow_ignores_slots

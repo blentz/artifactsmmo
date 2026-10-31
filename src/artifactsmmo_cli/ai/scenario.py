@@ -1805,7 +1805,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # Its precondition is the heal stock SATISFIED plus an understocked
     # beneficial boost, so the cell is `l20_relief_full_bank`'s loadout with
     # exactly two things changed: utility1_slot carries the level-20 heal
-    # baseline (`potion_baseline_pure(20, 5, 5, 45, 100)` == 40) so the heal
+    # baseline (40, the deleted level ramp's value at level 20) so the heal
     # deficit closes, and the bag holds three units of each earth_boost_potion
     # ingredient so `_recipe_producible` passes and the ladder sizes 3 runs
     # from held stock rather than a 5-run gather batch.

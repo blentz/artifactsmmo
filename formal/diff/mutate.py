@@ -88,7 +88,6 @@ BUY_SOURCE_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "buy_source_ve
 HELD_TASK_PAYS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "held_task_pays.py"
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 POTION_PROVISION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_provision_qty.py"
-POTION_BASELINE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_baseline.py"
 MAX_BATCH_FROM_HELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "max_batch_from_held.py"
 OPTIMAL_BUY_MIX_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "optimal_buy_mix.py"
 GOLD_SURPLUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gold_surplus_core.py"
@@ -201,7 +200,6 @@ FOOD_PRODUCER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "food_producer.py
 BAG_PEAK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bag_peak.py"
 ACTION_REJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "action_rejection.py"
 TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "taskmaster_choice.py"
-EQUIPMENT_PROFILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equipment_profile.py"
 INVENTORY_ROOM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_room.py"
 INVENTORY_KEEP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_keep.py"
 # Task 9 (formal/mutation debt for the fleet-currency-turn-in epic).
@@ -7482,18 +7480,6 @@ GATHERING_PASSIVE_MUTATIONS = [
      "            if False:\n                continue"),
 ]
 
-# equipment_profile.profile_for selector (2026-07-08; utility axis retired in P3b):
-# profile_for is now a CONSTANT COMBAT for every root and adequacy (skill-level
-# roots — the only former utility-axis pursuit — grind planner-natively via the
-# LevelSkill action). Killed by formal/diff/test_equipment_profile_diff.py, which
-# pins every (root, adequacy) case against Lean profileFor's constant COMBAT.
-EQUIPMENT_PROFILE_MUTATIONS = [
-    # flip the constant selector to UTILITY: every pursuit wrongly selects the
-    # utility profile. Caught by every root case in the diff test.
-    ("profiles: constant selector flipped to utility",
-     "    return ProfileKind.COMBAT",
-     "    return ProfileKind.UTILITY"),
-]
 
 # currency_turnin.py::turn_in_ready_pure — Task 9 (fleet-currency-turn-in epic
 # formal/mutation debt). The threshold is the vendor's PRICE, not a margin: at
@@ -9728,8 +9714,6 @@ _ALL_SRCS = [
     FLEET_PIECES_SRC,
     # Gear objective adapter (spec 2026-10-18 §2.1-§2.4): unit-killed group.
     GEAR_OBJECTIVE_SRC,
-    # Equipment-profile selector (2026-07-08): differential-killed group.
-    EQUIPMENT_PROFILE_SRC,
     # Task 7 (role-driven supply): coordination-store asymmetric-demand reader.
     COORDINATION_STORE_SRC,
     # ai/supply_claim_and_batch Task 4: the batch-milestone commitment target.
@@ -10617,33 +10601,6 @@ POTION_PROVISION_QTY_MUTATIONS = [
      "    if not utility_slot_filled or held_heal_qty <= 0 or potion_hp_restore <= 0:"),
 ]
 
-# potion_baseline mutations -- old strings matched to current potion_baseline.py
-# text. Each perturbs a clamp boundary or the floored linear ramp so the Python
-# baseline diverges from the Lean `potionBaseline` oracle. Killed by
-# formal/diff/test_potion_baseline_diff.py (the (5,5,45,100) curve over level 1..60).
-#
-# RETIRED (provably EQUIVALENT mutants -- the linear ramp is EXACT at both
-# endpoints, so the two boundary clamps are redundant at the boundary value and
-# flipping their comparator changes nothing observable for any in-domain input):
-#   * "low-clamp compare flip (<= -> <)": differs only at level == low_level, where
-#     the fall-through ramp computes low_qty + (high_qty-low_qty)*(level-low_level)//.. ==
-#     low_qty + 0 == low_qty -- identical to the clamp's return. Verified 0 divergences
-#     over level 1..60 on the (5,5,45,100) curve.
-#   * "high-clamp compare flip (>= -> >)": differs only at level == high_level, where
-#     the fall-through ramp computes low_qty + (high_qty-low_qty)*(high_level-low_level)//
-#     (high_level-low_level) == low_qty + (high_qty-low_qty) == high_qty exactly (the
-#     division is exact, span/span == 1) -- identical to the clamp's return. Verified
-#     0 divergences over level 1..60 on the (5,5,45,100) curve.
-# The two kept mutants below both perturb the ramp ARITHMETIC, which the differential
-# pins exactly across the whole interior of the curve.
-POTION_BASELINE_MUTATIONS = [
-    ("potion_baseline: drop the low_qty offset",
-     "    return low_qty + (high_qty - low_qty) * (level - low_level) // (high_level - low_level)",
-     "    return (high_qty - low_qty) * (level - low_level) // (high_level - low_level)"),
-    ("potion_baseline: span sign flip (level-low_level -> low_level-level)",
-     "    return low_qty + (high_qty - low_qty) * (level - low_level) // (high_level - low_level)",
-     "    return low_qty + (high_qty - low_qty) * (low_level - level) // (high_level - low_level)"),
-]
 
 # max_batch_from_held mutations -- old strings matched to current
 # max_batch_from_held.py text. Each perturbs the min-floor / floor-div / yield
@@ -13773,8 +13730,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_max_batch_from_held_diff.py", survivors)
     run_group(OPTIMAL_BUY_MIX_SRC, OPTIMAL_BUY_MIX_MUTATIONS,
               "formal/diff/test_optimal_buy_mix_diff.py", survivors)
-    run_group(POTION_BASELINE_SRC, POTION_BASELINE_MUTATIONS,
-              "formal/diff/test_potion_baseline_diff.py", survivors)
     run_group(BANK_EXPANSION_TIMING_SRC, BANK_EXPANSION_TIMING_MUTATIONS,
               "formal/diff/test_bank_expansion_timing_diff.py", survivors)
     run_group(BANK_EXPANSION_TIMING_SRC, EXPANSION_FIRES_MUTATIONS,
@@ -14535,8 +14490,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(GATHERING_GOAL_SRC, GATHERING_PASSIVE_MUTATIONS,
               "tests/test_ai/test_craft_vs_buy_wiring.py", survivors)
-    run_group(EQUIPMENT_PROFILE_SRC, EQUIPMENT_PROFILE_MUTATIONS,
-              "formal/diff/test_equipment_profile_diff.py", survivors)
     # Task 9 — fleet-currency-turn-in epic formal/mutation debt. Each in its
     # own group, each killed by a NAMED existing test (no new tests written).
     run_group(CURRENCY_TURNIN_SRC, CURRENCY_TURNIN_READY_MUTATIONS,
