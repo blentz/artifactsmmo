@@ -69,6 +69,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -177,9 +178,13 @@ def test_both_routes_are_admitted_into_relevant_actions(make) -> None:  # type: 
 def test_the_walk_serves_the_banked_inputs_over_the_winnable_drop(make) -> None:  # type: ignore[no-untyped-def]
     """THE WALK PIN: the decomposition plans Withdraw, Withdraw, Craft with
     the sword in the bag (craft 11.0 against a 20.0 Fight route) AND with it
-    worn (craft 11.0 against a 10.0 Fight): it serves the banked inputs first,
-    whatever the two routes cost."""
-    plan = decompose(_GOAL, make(), _gd(), list(_actions()), NO_DROPS_CONTEXT) or []
+    worn (craft 11.0 against a 10.0 Fight): it serves the route that priced
+    the potion (the ticket farm, 2026-10-31: `acquisition_cost.route_order`),
+    the banked inputs' craft at 3 actions against the dryad's 100 at the
+    prior, whatever the A* cost model says. Pricing a fight reads the
+    learned fight seconds, so the context carries them."""
+    ctx = offline_context(NO_DROPS_CONTEXT)
+    plan = decompose(_GOAL, make(), _gd(), list(_actions()), ctx) or []
     assert [repr(a) for a in plan] == _CRAFT_ROUTE
     assert not any(isinstance(a, FightAction) for a in plan)
 

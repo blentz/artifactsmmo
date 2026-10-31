@@ -35,6 +35,7 @@ from artifactsmmo_cli.ai.acquisition_cost_core import (
     bundle_acquisition_cost,
     priced_route,
     route_legs,
+    route_ranks,
 )
 from artifactsmmo_cli.ai.attempt_prospecting import fight_prospecting, gather_prospecting
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
@@ -990,28 +991,47 @@ def _per_unit(option: RouteOption) -> Fraction:
     return Fraction(option.actions_per_application) / option.yield_per
 
 
-def door_route(item: str, state: WorldState, game_data: GameData, ctx: SelectionContext,
-               *, policy: Policy, pocket: int,
-               store: LearningStore | None) -> tuple[SourceKind, str] | None:
-    """`(kind, venue)` of the route that prices one `item` when it is a route
-    past a door (`_door_options`'s unlock), else None: the route the walk is
-    told to try first (`ObtainModel.walk_graph`'s `prefer`, ruling T14e-1), so
-    the walk serves the route the price took.
+def route_key(item: str, option: RouteOption) -> tuple[SourceKind, str]:
+    """`(kind, via)` of the walk route (`obtain_model.route.Route`) that
+    serves `option`, a route to `item`: the kind it is served as
+    (`_served_by`: a sibling's craft is this character's withdraw), and what
+    it acts on, as `Route.via` names it (the item itself for a withdraw or a
+    craft, the copy destroyed or sold for a recycle or a sale, the venue for
+    every other kind: the resource, vendor, order, monster or task board)."""
+    kind = _served_by(option)
+    if kind in (SourceKind.WITHDRAW, SourceKind.CRAFT):
+        return kind, item
+    if kind in (SourceKind.RECYCLE, SourceKind.SELL):
+        (via,) = option.inputs
+        return kind, via
+    return kind, option.venue
+
+
+def route_order(item: str, state: WorldState, game_data: GameData, ctx: SelectionContext,
+                *, policy: Policy, pocket: int,
+                store: LearningStore | None) -> dict[tuple[SourceKind, str], int | Fraction]:
+    """Each route to `item` the price lists, keyed as the walk names it
+    (`route_key`), at the unit cost the price fills it at, cheapest first:
+    the order the walk serves `item`'s routes in (`ObtainModel.walk_graph`'s
+    `prefer`), so the route served is the route that priced it (ruling
+    T14e-1 for a door route; the ticket farm, live 2026-10-31, for every
+    other: a 1-in-200 gather was served ahead of the 86.8-action fight that
+    priced the ticket, because the walk kept the fixed kind order).
 
     `store` is the cycle's learning store, the one the piece's price read
     (`route.route_price`, `gear_objective._price`): with it the options hold
     the climb and sibling routes (`route_options`) and the learned rates, so a
-    route the price took past a door is the one named, and a door route the
-    price did not take, under a climb or a sibling craft, is not (final
-    review I-2)."""
+    route the price took past a door is the one ranked first, and a door route
+    the price did not take, under a climb or a sibling craft, is not (final
+    review I-2). Two options served by one walk route keep the cheaper."""
     options, charge = _gold_priced(
         acquisition_options(item, state, game_data, ctx, store, policy=policy),
         state, game_data, ctx)
-    _price, route = priced_route(item, 1, options, _owned_with_gold(state, pocket),
-                                 frozenset({GOLD_CODE}), charge)
-    if route is None or not route.unlock.startswith("door:"):
-        return None
-    return SourceKind(route.kind), route.venue
+    ranks: dict[tuple[SourceKind, str], int | Fraction] = {}
+    for option, unit in route_ranks(item, options, _owned_with_gold(state, pocket),
+                                    frozenset({GOLD_CODE}), charge):
+        ranks.setdefault(route_key(item, option), unit)
+    return ranks
 
 
 def route_options(item: str, state: WorldState, game_data: GameData,

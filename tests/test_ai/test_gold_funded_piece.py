@@ -334,10 +334,15 @@ def _busy() -> tuple[GameData, WorldState, list[object]]:
 
 
 def _crystal_ctx():  # type: ignore[no-untyped-def]
+    """The piece's objective carries its fighter, as every production one does
+    (`gear_objective`): pricing a choice among the walk's minting routes
+    (`acquisition_cost.route_order`) charges spent gold at the fight gold
+    `m*` earns in that fighter's loadout."""
     piece = GearPiece("artifact3_slot", "malefic_crystal", 0, Fraction(1), Fraction(10),
                       SourceKind.BUY)
     return replace(TIMED_NO_PROFILE_CONTEXT, gear_objective=GearObjective(
-        "wolf", {"artifact3_slot": "malefic_crystal"}, Fraction(1), (piece,)))
+        "wolf", {"artifact3_slot": "malefic_crystal"}, Fraction(1), (piece,),
+        fighter=_busy()[1]))
 
 
 def test_an_l_star_piece_s_currency_step_is_served_by_its_priced_route() -> None:

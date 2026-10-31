@@ -290,6 +290,46 @@ def _cheapest_route(item: str, options: Mapping[str, list[RouteOption]],
     return best
 
 
+def _fill_order(item: str, options: Mapping[str, list[RouteOption]],
+                memo: dict[str, tuple[int | Fraction, RouteOption | None]],
+                free: Mapping[str, int], charge: Mapping[str, Fraction]) -> list[int]:
+    """The indices of `item`'s routes in the order the walk fills a demand:
+    unit cost (`_route_unit`), first of equal in `options` order, the order
+    `_cheapest_route` takes its argmin in. The ONE ranking of an item's
+    routes: `_accumulate` fills by it and `route_ranks` hands it to the
+    executor's walk, so the route served is the route priced."""
+    routes = options.get(item, [])
+    inner = frozenset({item})
+    order = sorted(range(len(routes)),
+                   key=lambda index: (_route_unit(routes[index], options, memo, inner, free,
+                                                  charge),
+                                      index))
+    return order
+
+
+def route_ranks(
+    item: str,
+    options: Mapping[str, list[RouteOption]],
+    owned: Mapping[str, int],
+    free_codes: frozenset[str] = frozenset(),
+    charge: Mapping[str, Fraction] | None = None,
+) -> tuple[tuple[RouteOption, int | Fraction], ...]:
+    """`item`'s routes with their unit costs, in the order `priced_route`'s
+    walk fills a demand for `item` (`_fill_order`): the cheapest first, the
+    argmin `priced_route` names. The same memo, holdings rule and `charge` as
+    the price, so a caller that serves the routes in this order serves the
+    route the price took (the ticket farm, live 2026-10-31: a 1-in-200 gather
+    was served ahead of the 86.8-action chicken fight that priced the
+    ticket)."""
+    memo: dict[str, tuple[int | Fraction, RouteOption | None]] = {}
+    free = {code: owned.get(code, 0) for code in free_codes}
+    charges = charge or {}
+    routes = options.get(item, [])
+    inner = frozenset({item})
+    return tuple((routes[index], _route_unit(routes[index], options, memo, inner, free, charges))
+                 for index in _fill_order(item, options, memo, free, charges))
+
+
 def _accumulate(item: str, qty: int, options: Mapping[str, list[RouteOption]],
                 memo: dict[str, tuple[int | Fraction, RouteOption | None]],
                 owned: dict[str, int], paid: dict[str, int],
@@ -349,12 +389,7 @@ def _accumulate(item: str, qty: int, options: Mapping[str, list[RouteOption]],
     if remaining <= 0:
         return
     routes = options.get(item, [])
-    inner = frozenset({item})
-    order = sorted(range(len(routes)),
-                   key=lambda index: (_route_unit(routes[index], options, memo, inner, free,
-                                                  charge),
-                                      index))
-    for index in order:
+    for index in _fill_order(item, options, memo, free, charge):
         route = routes[index]
         take = min(remaining, route.capacity - drawn.get((item, index), 0))
         if take <= 0:

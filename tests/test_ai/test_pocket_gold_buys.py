@@ -431,8 +431,9 @@ def test_a_closure_that_spends_no_gold_reads_no_gold_rate() -> None:
     (which the rate refuses), copper ore still prices."""
     world = _world()
     state = _state(world)
-    ctx = _crystal_ctx()
-    assert ctx.gear_objective is not None and ctx.gear_objective.fighter is None
+    objective = _crystal_ctx().gear_objective
+    assert objective is not None
+    ctx = replace(_crystal_ctx(), gear_objective=replace(objective, fighter=None))
     with pytest.raises(ValueError, match="no fighter"):
         gold_spend_actions(state, world, ctx)
     assert acquisition_actions("copper_ore", 1, replace(state, inventory={}), world, ctx,

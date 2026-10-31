@@ -5416,6 +5416,45 @@ UPGRADE_DECOMPOSE_MUTATIONS = [
      "                                  store=store)",
      "        return None"),
 ]
+# The ticket farm (live 2026-10-31): the walk serves the route that priced the
+# item, not the fixed kind order. Killed by
+# tests/test_ai/test_priced_route_served.py.
+PRICED_ROUTE_WALK_MUTATIONS = [
+    ("priced walk: a choice among minting routes keeps the kind order",
+     "            if sum(1 for route, _gates in candidates if route.kind not in _ORDER_STOCK) > 1:\n",
+     "            if False:\n"),
+    ("priced walk: stock is priced like any route that makes copies",
+     "    tier = _ORDER_STOCK.get(route.kind, 1)\n",
+     "    tier = 1\n"),
+    ("priced walk: a route the pricer does not list goes first",
+     "    return tier, (priced.get((route.kind, route.via), inf) if tier == 1 else 0)\n",
+     "    return tier, (priced.get((route.kind, route.via), 0) if tier == 1 else 0)\n"),
+    ("priced walk: a sale is tried with the stock",
+     "_ORDER_STOCK = {SourceKind.WITHDRAW: 0, SourceKind.RECYCLE: 0, SourceKind.SELL: 2}\n",
+     "_ORDER_STOCK = {SourceKind.WITHDRAW: 0, SourceKind.RECYCLE: 0, SourceKind.SELL: 0}\n"),
+]
+PRICED_ROUTE_KEY_MUTATIONS = [
+    ("priced walk: a sibling's craft is keyed as this character's craft",
+     "    kind = _served_by(option)\n    if kind in",
+     "    kind = SourceKind(option.kind)\n    if kind in"),
+    ("priced walk: a withdraw or a craft is keyed on its venue",
+     "    if kind in (SourceKind.WITHDRAW, SourceKind.CRAFT):\n        return kind, item\n",
+     "    if kind in (SourceKind.WITHDRAW, SourceKind.CRAFT):\n        return kind, option.venue\n"),
+    ("priced walk: a recycle or a sale is keyed on its venue",
+     "        (via,) = option.inputs\n        return kind, via\n",
+     "        return kind, option.venue\n"),
+    ("priced walk: the dearer of two options for one route is kept",
+     "        ranks.setdefault(route_key(item, option), unit)\n",
+     "        ranks[route_key(item, option)] = unit\n"),
+]
+PRICED_ROUTE_CORE_MUTATIONS = [
+    ("priced walk: the ranking carries no unit cost",
+     "    return tuple((routes[index], _route_unit(routes[index], options, memo, inner, free, charges))\n",
+     "    return tuple((routes[index], 0)\n"),
+    ("priced walk: the ranking is the options order",
+     "                 for index in _fill_order(item, options, memo, free, charges))\n",
+     "                 for index in range(len(routes)))\n"),
+]
 # The walk adapter (`ObtainModel.walk_graph`). Killed by
 # tests/test_ai/test_craft_plan_gen.py.
 WALK_ADAPTER_MUTATIONS = [
@@ -8957,11 +8996,11 @@ KEY_DOOR_ROUTE_STORE_MUTATIONS = [
      "    options, charge = _gold_priced(\n"
      "        acquisition_options(item, state, game_data, ctx, store, policy=policy),\n"
      "        state, game_data, ctx)\n"
-     "    _price, route = priced_route(",
+     "    ranks: dict[tuple[SourceKind, str], int | Fraction] = {}\n",
      "    options, charge = _gold_priced(\n"
      "        acquisition_options(item, state, game_data, ctx, None, policy=policy),\n"
      "        state, game_data, ctx)\n"
-     "    _price, route = priced_route("),
+     "    ranks: dict[tuple[SourceKind, str], int | Fraction] = {}\n"),
 ]
 # Final review I-2: both production callers hand the walk the cycle's store.
 KEY_DOOR_STORE_ARBITER_MUTATIONS = [
@@ -9137,9 +9176,6 @@ KEY_DOOR_PRICE_MUTATIONS = [
     ("door price: a climb is rated without a store",
      "    climb = _climb_actions(gate.subject, gate.level, state, store) if store is not None else None\n",
      "    climb = _climb_actions(gate.subject, gate.level, state, store)  # type: ignore[arg-type]\n"),
-    ("door price: every priced route is a door route",
-     "    if route is None or not route.unlock.startswith(\"door:\"):\n",
-     "    if route is None:\n"),
     ("door price: the gear chain re-prices the door",
      "                            gated_drop=False, policy=policy, opening=opening,\n"
      "                            crossing=crossing)\n",
@@ -9151,8 +9187,8 @@ KEY_DOOR_COMPANION_MUTATIONS = [
      "                    and all(gate.kind is GateKind.SPAWN_KNOWN or gate.kind in companions\n",
      "                    and all(gate.kind is GateKind.SPAWN_KNOWN\n"),
     ("door: the walk ignores the priced route",
-     "                candidates.sort(key=lambda pair: (pair[0].kind, pair[0].via) != first)\n",
-     "                candidates.sort(key=lambda pair: True)\n"),
+     "                candidates.sort(key=lambda pair: _walk_order(pair[0], priced))\n",
+     "                candidates.sort(key=lambda pair: 0)\n"),
 ]
 KEY_DOOR_EXECUTOR_MUTATIONS = [
     ("door executor: a door gate is ground as a skill gate",
@@ -14618,6 +14654,12 @@ def _collect_all_groups() -> None:
               "tests/test_audit/test_grind_cycle_census.py", survivors)
     run_group(OBTAIN_MODEL_SRC, WALK_ADAPTER_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, PRICED_ROUTE_WALK_MUTATIONS,
+              "tests/test_ai/test_priced_route_served.py", survivors)
+    run_group(ACQUISITION_COST_SRC, PRICED_ROUTE_KEY_MUTATIONS,
+              "tests/test_ai/test_priced_route_served.py", survivors)
+    run_group(ACQUISITION_COST_CORE_SRC, PRICED_ROUTE_CORE_MUTATIONS,
+              "tests/test_ai/test_priced_route_served.py", survivors)
     run_group(OBTAIN_MODEL_SRC, WALK_GATHER_RANK_MUTATIONS,
               "tests/test_ai/scenarios/test_slot_coverage.py", survivors)
     run_group(POTION_SUPPLY_SRC, POTION_BATCH_MUTATIONS,

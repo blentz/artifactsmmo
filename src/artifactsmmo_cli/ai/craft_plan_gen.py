@@ -32,8 +32,9 @@ re-validates `is_applicable` on the plan head every cycle before running it, and
 import dataclasses
 from collections.abc import Callable
 from dataclasses import replace
+from fractions import Fraction
 
-from artifactsmmo_cli.ai.acquisition_cost import door_price, door_route, fight_gold_monster
+from artifactsmmo_cli.ai.acquisition_cost import door_price, fight_gold_monster, route_order
 from artifactsmmo_cli.ai.actions.base import Action, serves_region
 from artifactsmmo_cli.ai.actions.combat import FightAction, win_gold
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
@@ -130,8 +131,8 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
 
     `store` is the cycle's learning store, the same object the pricer read
     (`route.route_price` and `gear_objective._price` pass `store=history`).
-    The walk's door choice (`door_price`) and its preferred route past a door
-    (`door_route`) price with it, so the walk opens the door and serves the
+    The walk's door choice (`door_price`) and its route order (`route_order`)
+    price with it, so the walk opens the door and serves the
     route the price charged: a key that needs a climb, and a climb or sibling
     route that beats a door, are priced only with the store (final review
     I-2). None (the default) is the store-less pricer's walk, as an audit
@@ -494,15 +495,16 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
     walked = replace(state, gold=_walk_pocket(state, game_data, frozenset(goal.needed), policy))
     gold_monster = (fight_gold_monster(state, game_data, ctx, policy=PIECE_POLICY)
                     if policy.fight_gold else None)
-    preferred: dict[str, tuple[SourceKind, str] | None] = {}
+    preferred: dict[str, dict[tuple[SourceKind, str], int | Fraction]] = {}
 
-    def prefer(code: str) -> tuple[SourceKind, str] | None:
-        """The route past a door the pricer took for `code`, asked only of an
-        item the walk can reach past a door (ruling T14e-1): the walk serves
-        the route the price took."""
+    def prefer(code: str) -> dict[tuple[SourceKind, str], int | Fraction]:
+        """`code`'s routes at the unit costs the pricer fills them at
+        (`route_order`), asked only of an item the walk can serve more than
+        one way: the walk serves the route the price took (ruling T14e-1, and
+        the ticket farm of 2026-10-31)."""
         if code not in preferred:
-            preferred[code] = door_route(code, state, game_data, ctx, policy=policy,
-                                         pocket=walked.gold, store=store)
+            preferred[code] = route_order(code, state, game_data, ctx, policy=policy,
+                                          pocket=walked.gold, store=store)
         return preferred[code]
 
     ranks: dict[Door, int] = {}

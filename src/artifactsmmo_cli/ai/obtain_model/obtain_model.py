@@ -25,10 +25,11 @@ Built once per decision from one `(state, game_data, ctx, now)` snapshot, and
 memoised per item for its lifetime. Pure: no I/O.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import datetime
 from fractions import Fraction
+from math import inf
 
 from artifactsmmo_cli.ai import accumulation_sell
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
@@ -57,6 +58,22 @@ from artifactsmmo_cli.ai.region_edges import (
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
+
+_ORDER_STOCK = {SourceKind.WITHDRAW: 0, SourceKind.RECYCLE: 0, SourceKind.SELL: 2}
+"""The walk's fixed tiers around the priced middle (`walk_graph`'s `prefer`):
+stock already owned (a withdraw, a recycle of a held copy) before anything that
+makes new copies, and a sale of a licensed surplus after them. Every other
+kind is tier 1, ordered by the price."""
+
+
+def _walk_order(route: Route, priced: Mapping[tuple[SourceKind, str], int | Fraction]
+                ) -> tuple[int, int | Fraction | float]:
+    """`route`'s place in the walk: its tier (`_ORDER_STOCK`), then, in the
+    middle tier, the unit cost the pricer fills it at; a route the pricer does
+    not list goes after every priced one."""
+    tier = _ORDER_STOCK.get(route.kind, 1)
+    return tier, (priced.get((route.kind, route.via), inf) if tier == 1 else 0)
+
 
 _MINTS = (SourceKind.CRAFT, SourceKind.GATHER, SourceKind.BUY, SourceKind.DROP,
           SourceKind.TASK_REWARD, SourceKind.GOLD_DROP)
@@ -199,7 +216,8 @@ class ObtainModel:
                    keep: frozenset[str] = frozenset(),
                    grey_ok: Callable[[str], bool] = lambda _item: False,
                    opening: frozenset[Door] = frozenset(),
-                   prefer: Callable[[str], tuple[SourceKind, str] | None] = lambda _item: None,
+                   prefer: Callable[[str], Mapping[tuple[SourceKind, str], int | Fraction]]
+                   = lambda _item: {},
                    rank: Callable[[Door], int] = lambda _door: 0) -> WalkGraph:
         """`item`'s closure as the one walk's graph (Phase 2c-2b).
 
@@ -244,10 +262,17 @@ class ObtainModel:
         `opening` holds the doors whose keys are being walked further up, so a
         key that stands only past its own door is a wall, not a loop.
 
-        `prefer` names, per item with a route past a door, the `(kind, via)`
-        route the pricer took for it (`acquisition_cost.door_route`, ruling
-        T14e-1): that route is tried first, so a door route priced below a
-        ready one is the one the walk serves. None leaves the order alone.
+        `prefer` prices, per item, each `(kind, via)` route the pricer lists
+        at the unit cost it fills it at (`acquisition_cost.route_order`): the
+        routes that make new copies are tried cheapest first, so the route the
+        price took is the one the walk serves (ruling T14e-1 for a door route;
+        the ticket farm, live 2026-10-31: the fixed kind order served a
+        1-in-200 gather ahead of the 86.8-action fight that priced the
+        ticket). Equal prices, and routes the pricer does not list, keep the
+        priority order (gathers by `_ranked_gathers`). Stock comes first and a
+        sale last whatever the price (`_ORDER_STOCK`): the walk spends what
+        is owned before it makes more, as the pricer credits holdings before
+        any route. The default prices nothing, which leaves the order alone.
 
         `rank` prices a door (`acquisition_cost.door_price`, ruling T14e-m1):
         of the doors the walk can open, the gate is narrowed to the cheapest,
@@ -281,9 +306,10 @@ class ObtainModel:
                 if all(gate is not None for gate in opened):
                     gated.append((route, tuple(gate for gate in opened if gate is not None)))
             candidates = [(route, ()) for route in self._ranked_gathers(code, ready)] + gated
-            if gated and any(gate.doors for _route, gates in gated for gate in gates):
-                first = prefer(code)
-                candidates.sort(key=lambda pair: (pair[0].kind, pair[0].via) != first)
+            if sum(1 for route, _gates in candidates if route.kind not in _ORDER_STOCK) > 1:
+                # Only a choice between routes that make copies is priced.
+                priced = prefer(code)
+                candidates.sort(key=lambda pair: _walk_order(pair[0], priced))
             for route, gates in candidates:
                 if code in produce and route.kind not in (SourceKind.CRAFT, SourceKind.GATHER):
                     continue
@@ -393,7 +419,8 @@ class ObtainModel:
              openable: Callable[[Gate], bool] = lambda _gate: False,
              keep: frozenset[str] = frozenset(),
              grey_ok: Callable[[str], bool] = lambda _item: False,
-             prefer: Callable[[str], tuple[SourceKind, str] | None] = lambda _item: None,
+             prefer: Callable[[str], Mapping[tuple[SourceKind, str], int | Fraction]]
+             = lambda _item: {},
              rank: Callable[[Door], int] = lambda _door: 0) -> WalkAnswer:
         """The one walk over `item`'s closure: can `qty` be had, and the next
         step toward it (`decompose_core`)."""

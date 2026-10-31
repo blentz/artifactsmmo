@@ -38,8 +38,8 @@ from artifactsmmo_cli.ai import player as player_module
 from artifactsmmo_cli.ai.acquisition_cost import (
     CROSSING_ACTIONS,
     acquisition_actions,
-    door_route,
     route_options,
+    route_order,
 )
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT, RouteOption
 from artifactsmmo_cli.ai.actions.base import Action
@@ -422,7 +422,7 @@ def _rare_ready_dropper(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_a_door_route_cheaper_than_a_ready_one_is_the_price_and_the_route_served(
         monkeypatch: pytest.MonkeyPatch) -> None:
     """A ready route no longer hides a door: both are priced, the cheaper door
-    leg is the price, and the walk serves it (`door_route` is its `prefer`):
+    leg is the price, and the walk serves it (`route_order` ranks it first):
     the plan fights for the key, not the cyclops."""
     state, world, player = _seeded("l30_band_entry")
     _rare_ready_dropper(monkeypatch)
@@ -430,8 +430,9 @@ def test_a_door_route_cheaper_than_a_ready_one_is_the_price_and_the_route_served
     options = route_options("life_crystal_shard", state, world, ctx, policy=DECOMPOSE_POLICY)
     assert [(o.venue, o.unlock) for o in options] == [("cyclops", ""),
                                                       ("lich", "door:lich_tomb_keyx1")]
-    assert door_route("life_crystal_shard", state, world, ctx, policy=DECOMPOSE_POLICY,
-                      pocket=state.gold, store=None) == (SourceKind.DROP, "lich")
+    assert next(iter(route_order("life_crystal_shard", state, world, ctx,
+                                 policy=DECOMPOSE_POLICY, pocket=state.gold,
+                                 store=None))) == (SourceKind.DROP, "lich")
     plan = decompose(GatherMaterialsGoal("life_crystal_shard", {"life_crystal_shard": 1}),
                      state, world, player._build_actions(), ctx)
     assert plan is not None
@@ -444,13 +445,16 @@ def test_a_ready_route_the_door_cannot_beat_is_the_one_served(
         monkeypatch: pytest.MonkeyPatch) -> None:
     """An item a ready route serves at no more per unit than a door route: the
     door route is dominated and not priced (a gold fight past the 5000-gold
-    door against the ready gold fights), and `door_route` is None."""
+    door against the ready gold fights), and no door route is ranked."""
     state, world, player = _seeded("l30_band_entry")
     ctx = player._selection_context()
     gold = route_options(GOLD_CODE, state, world, ctx, policy=PIECE_POLICY)
     assert gold and not [o for o in gold if o.unlock]
-    assert door_route("copper_ore", state, world, ctx, policy=DECOMPOSE_POLICY,
-                      pocket=state.gold, store=None) is None
+    ranked = route_order("copper_ore", state, world, ctx, policy=DECOMPOSE_POLICY,
+                         pocket=state.gold, store=None)
+    assert ranked
+    assert not [o for o in route_options("copper_ore", state, world, ctx,
+                                         policy=DECOMPOSE_POLICY) if o.unlock]
 
 
 def test_a_door_route_a_ready_one_dominates_is_not_priced(
@@ -844,7 +848,7 @@ def test_the_walk_takes_the_climb_the_pricer_took_over_a_door(
         monkeypatch: pytest.MonkeyPatch, rated_store: LearningStore) -> None:
     """Final review I-2. `loot` grows on an overworld vein at mining 5 and
     past the spare door at mining 1. With the store the pricer's cheapest
-    route is the climb, so `door_route` names no door route and the walk
+    route is the climb, so `route_order` ranks the vein first and the walk
     opens the mining grind; without it the door route is the only priced one
     and the walk opens the door."""
     world = _climb_world(vault_door=False, vein=True)
@@ -852,10 +856,11 @@ def test_the_walk_takes_the_climb_the_pricer_took_over_a_door(
     assert [o.unlock for o in route_options("loot", state, world, ctx, rated_store,
                                             policy=DECOMPOSE_POLICY)] == [
         "skill:mining:5", "door:spare_keyx1"]
-    assert door_route("loot", state, world, ctx, policy=DECOMPOSE_POLICY, pocket=state.gold,
-                      store=rated_store) is None
-    assert door_route("loot", state, world, ctx, policy=DECOMPOSE_POLICY, pocket=state.gold,
-                      store=None) == (SourceKind.GATHER, "loot_rocks")
+    assert next(iter(route_order("loot", state, world, ctx, policy=DECOMPOSE_POLICY,
+                                 pocket=state.gold, store=rated_store))) == (
+        SourceKind.GATHER, "loot_vein")
+    assert list(route_order("loot", state, world, ctx, policy=DECOMPOSE_POLICY,
+                            pocket=state.gold, store=None)) == [(SourceKind.GATHER, "loot_rocks")]
     assert _served(monkeypatch, world, rated_store) == ([], [("mining", 5)])
     assert _served(monkeypatch, world, None) == ([(("spare_key", 1),)], [])
 
