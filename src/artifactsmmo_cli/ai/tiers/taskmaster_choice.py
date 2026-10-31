@@ -29,12 +29,12 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 
 def _live_gear_demand(game_data: GameData,
-                      target_gear: Iterable[str]) -> Mapping[str, int]:
-    """The union (SUM) of the enriched requirement multisets of the pursued gear —
+                      link_demand: Iterable[str]) -> Mapping[str, int]:
+    """The union (SUM) of the enriched requirement multisets of the active link's demand —
     the B the task pool is scored against. No trunk char_xp (see module docstring)."""
     memo = game_data.requirement_graph
     total: dict[str, int] = {}
-    for code in target_gear:
+    for code in link_demand:
         for token, qty in memo.requirement_multiset_for(code).items():
             total[token] = total.get(token, 0) + qty
     return total
@@ -62,7 +62,7 @@ def _distance(tile: tuple[int, int], state: WorldState) -> int:
 
 
 def choose_taskmaster(state: WorldState, game_data: GameData,
-                      target_gear: Iterable[str]
+                      link_demand: Iterable[str]
                       ) -> tuple[str, tuple[int, int]] | None:
     """The synergy-best tasks master as `(code, tile)`, or None when there is no
     choice to make: fewer than two masters discovered, or neither master has a
@@ -72,7 +72,7 @@ def choose_taskmaster(state: WorldState, game_data: GameData,
     tiles = game_data.taskmaster_tiles
     if len(tiles) < 2:
         return None
-    gear_demand = _live_gear_demand(game_data, target_gear)
+    gear_demand = _live_gear_demand(game_data, link_demand)
     if not gear_demand:
         # NO DEMAND, NO PREFERENCE (wave 6, increment 5.5 / O9a). Falling
         # through here would score every pool 0 and hand the whole decision to
