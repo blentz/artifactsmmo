@@ -1935,6 +1935,9 @@ LOOP_RATE_READER_MUTATIONS = [
     ("loop_rate reader: a kill a second weighs the kill's XP",
      "    kills = Fraction(0) if trips is None else expected_xp_per_second(1, p_win, fight, extra + trips)",
      "    kills = Fraction(0) if trips is None else expected_xp_per_second(xp, p_win, fight, extra + trips)"),
+    ("loop_rate reader: a loop with no room still kills",
+     "    kills = Fraction(0) if trips is None else expected_xp_per_second(1, p_win, fight, extra + trips)",
+     "    kills = expected_xp_per_second(1, p_win, fight, extra + (trips or 0))"),
     ("loop_rate reader: a boost is not consumed",
      "        used = tuple((code, e.used if code == restore_code else 1) for code, _ in loadout)",
      "        used = tuple((code, e.used if code == restore_code else 0) for code, _ in loadout)"),
@@ -7792,6 +7795,10 @@ GEAR_OBJECTIVE_FOR_MUTATIONS = [
 # Ruling C2-perf: the horizon reads `L*` without pricing it, and reads the
 # achievable set once per episode. Killed by tests/test_ai/test_task_horizon.py.
 GEAR_HORIZON_READ_MUTATIONS = [
+    # Ruling C2-R2: one entry per purpose.
+    ("gear objective for: the memo key drops the purpose",
+     '    return _pinned(f"gear_objective_for:{per.__name__}", monster, state, game_data, ctx,',
+     '    return _pinned("gear_objective_for", monster, state, game_data, ctx,'),
     # Ruling C2-grey: a pinned task monster's R is its task progress a second.
     ("task purpose: a task's progress is counted in XP",
      "    return rate.kills_per_second\n",

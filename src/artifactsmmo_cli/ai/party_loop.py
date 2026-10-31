@@ -63,7 +63,9 @@ def _loop(state: WorldState, game_data: GameData, monster: str, codes: tuple[str
           prices: Mapping[str, Fraction | None]) -> LoopRate | None:
     """One party's loop (see the module doc); None when it loses, pays no XP
 (the boss grey to the party's average level), or a drink past the held units
-has no replacement."""
+has no replacement. Its `kills_per_second` is unread: only a pinned monsters
+task reads kills a second (`gear_objective.task_rate`), and that reads the
+solo loop (`loop_rate`)."""
     levels = [state.level, *(state.party[j].level for j in joined)]
     xp = game_data.xp_per_kill(monster, sum(levels) // len(levels), state.wisdom)
     if xp <= 0:

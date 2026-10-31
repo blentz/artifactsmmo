@@ -357,6 +357,21 @@ def test_a_cycle_reads_the_achievable_set_once(gd: GameData, tmp_path: Path,
     assert len(asked) == 5
 
 
+def test_each_purpose_is_its_own_key(gd: GameData, tmp_path: Path) -> None:
+    """Ruling C2-R2: the memo keys `L*(m)` on its purpose. Inside one
+    `search_cache` episode the grey ogre read in XP a second misses nothing and
+    read in kills a second misses its rune: the second read is never served
+    the first's answer."""
+    store = LearningStore(str(tmp_path / "learning.db"), character="grey")
+    state = _state(GREY_CELL, gd)
+    with store.search_cache():
+        by_xp = gear_objective_for("ogre", state, gd, TIMED_NO_PROFILE_CONTEXT, store, xp_rate)
+        by_kills = gear_objective_for("ogre", state, gd, TIMED_NO_PROFILE_CONTEXT, store,
+                                      task_rate)
+    assert not by_xp.missing
+    assert by_kills.missing[0].code == "lifesteal_rune"
+
+
 @pytest.mark.parametrize("task_type", ["items", "monsters"])
 def test_a_task_the_keep_can_see_is_its_own_key(gd: GameData, tmp_path: Path,
                                                 monkeypatch: pytest.MonkeyPatch,

@@ -619,3 +619,13 @@ class TestKillsPerSecond:
         assert low is not None and grey is not None
         assert (grey.xp_per_kill, grey.xp_per_second) == (0, 0)
         assert grey.kills_per_second == low.kills_per_second > 0
+
+    def test_a_loop_with_no_room_kills_nothing(self) -> None:
+        """No room for the drops: the loop does not run, so it kills nothing,
+        though the same loop with one unit of room kills."""
+        gd = _trip_gd()
+        stuck = _trip_rate(_state(**_WINS), gd, carried=20)
+        runs = _trip_rate(_state(**_WINS), gd, carried=19)
+        assert stuck is not None and runs is not None
+        assert (stuck.runnable, stuck.kills_per_second) == (False, 0)
+        assert runs.kills_per_second > 0
