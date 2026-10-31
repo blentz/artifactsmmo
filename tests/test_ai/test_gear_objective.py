@@ -485,7 +485,7 @@ def test_the_rate_is_modelled_not_measured(tmp_path: Path, gd: GameData,
     store = LearningStore(db_path=str(tmp_path / "gear.db"), character="novice")
     store.start_session()
     _record_grind(store, novice.monster, every=20, rows=100)
-    assert store.fight_upkeep(novice.monster) is not None
+    assert len(store.recent_goal_cycles(grind_xp_repr(novice.monster), 100)) == 100
     objective = _objective(_novice(gd), gd, store)
     store.close()
     assert (objective.monster, objective.rate) == (novice.monster, novice.rate)

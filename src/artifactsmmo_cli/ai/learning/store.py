@@ -18,7 +18,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, col, create_engine, or_, select
 
-from artifactsmmo_cli.ai.learning.fight_upkeep_core import FightUpkeep
 from artifactsmmo_cli.ai.learning.models import (
     Blocker,
     CombatLoadoutOutcome,
@@ -50,12 +49,10 @@ from artifactsmmo_cli.ai.learning.schema_init import (
     schema_lock_connect_args,
 )
 from artifactsmmo_cli.ai.learning.store_warmup_core import (
-    WARMUP_MIN_SAMPLES,
     warmup_gated_median,
     warmup_gated_success_rate,
 )
 from artifactsmmo_cli.ai.learning.types import ActionStats, GoalStats
-from artifactsmmo_cli.ai.learning.yield_reprs import grind_xp_repr
 
 _T = TypeVar("_T")
 
@@ -642,35 +639,6 @@ class LearningStore:
         except SQLAlchemyError:
             return []
         return attribute_forced_recovery(stream, goal_repr, window)
-
-    def fight_upkeep(self, monster_code: str, window: int = WINDOW_RECENT) -> FightUpkeep | None:
-        """What one kill of `monster_code` has cost this character, measured over
-        its grind's recent cycles; None below WARMUP_MIN_SAMPLES kills.
-
-        `actions_per_kill` counts every cycle of the grind per kill — fights won
-        and lost, moves, and the recovery the fighting forced, which
-        `recent_goal_cycles` attributes to the grind. `consumed_per_kill` is
-        what every fight of it used (`consumables_expended_json`), lost fights
-        included: a potion spent on a loss was still spent."""
-        return self.cached(
-            ("fight_upkeep", monster_code, window),
-            lambda: self._fight_upkeep_uncached(monster_code, window),
-        )
-
-    def _fight_upkeep_uncached(self, monster_code: str, window: int) -> FightUpkeep | None:
-        rows = self.recent_goal_cycles(grind_xp_repr(monster_code), window)
-        fight = f"Fight({monster_code})"
-        fights = [r for r in rows if r.action_repr == fight]
-        kills = sum(1 for r in fights if r.outcome == "ok")
-        if kills < WARMUP_MIN_SAMPLES:
-            return None
-        consumed: Counter[str] = Counter()
-        for r in fights:
-            consumed.update(json.loads(r.consumables_expended_json or "{}"))
-        return FightUpkeep(
-            actions_per_kill=Fraction(len(rows), kills),
-            consumed_per_kill={code: Fraction(qty, kills) for code, qty in consumed.items()},
-        )
 
     def recent_cycles(self, window: int) -> list[Cycle]:
         """This character's most recent `window` cycles, newest first, UNFILTERED.

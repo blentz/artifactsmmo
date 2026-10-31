@@ -40,8 +40,7 @@ arithmetic in `project_loadout_stats`); level, skills and the learned record
 (`lost_fights`) stay the real character's.
 
 `R` IS THE BARE-GEAR RATE. Every gear decision judges bare gear, so a
-potion-propped win never hides a gear upgrade (USER 2026-10-10; `band_target`'s
-`BandTarget.bare_fight`): `R` is the no-potion fight loop (`loop_rate` with an
+potion-propped win never hides a gear upgrade (USER 2026-10-10): `R` is the no-potion fight loop (`loop_rate` with an
 empty utility loadout), recovering over the character's own food menu, which
 is read once (gear in the bag does not change what can be eaten). It is the
 MODELLED rate: a measured upkeep belongs to the worn gear, not to a projected

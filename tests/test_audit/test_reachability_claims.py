@@ -8,10 +8,8 @@ on that comment takes out the planner. Every case below is written against
 that shape: a claim, a subject, and a graph that either agrees or does not.
 
 The census must also LEAVE TRUE CLAIMS ALONE.
-`CharacterObjective.utility_potion_targets` ("has NO PRODUCTION CALLER") and
-`tiers/progression_tree_core.potion_type_weight` (retained on purpose with its
-Lean mirror) are both true and both must stay green, so the last tests here
-drive the real tree.
+`CharacterObjective.utility_potion_targets` ("has NO PRODUCTION CALLER") is
+true and must stay green, so the last tests here drive the real tree.
 """
 
 from pathlib import Path
@@ -280,11 +278,10 @@ def test_the_real_sweep_meets_its_lower_bound() -> None:
 
 
 def test_the_known_true_claims_are_swept_and_verified() -> None:
-    """The deliberate keeps: an uncalled method and the retained potion pair.
+    """The deliberate keep: an uncalled method.
 
     If subject resolution regressed, these would vanish from the register and
     the census would go quietly blind on exactly the shape it exists for.
     """
     subjects = {v.claim.subject: v for v in run_census(_real_sources())}
     assert not subjects["utility_potion_targets"].is_false
-    assert not subjects["potion_type_weight"].is_false

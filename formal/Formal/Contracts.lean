@@ -905,8 +905,8 @@ example : ∀ (attain : Formal.Objective.Gear → Bool) (items : List Formal.Obj
 -- together with the Python chain they guarded. `CharacterObjective.gap` and the
 -- ObjectiveGap → weighted_remaining scalar had no production consumer, so these
 -- were proofs about code the planner never ran. Gear priority is decided by the
--- progression tree's `gain` on the pursuit_value ruler; its contracts live under
--- the ProgressionTree / StrategicValue roles.
+-- gear objective (`L*`, `m*`); the progression tree's `gain` and the
+-- ProgressionTree module went with plan C Task 4.
 
 /-! ### StrategyTraversal role contracts.
 

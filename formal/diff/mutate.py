@@ -174,7 +174,6 @@ PROGRESSION_RESERVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progressio
 DECOMPOSE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decompose_core.py"
 GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxonomy_core.py"
 POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
-PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
 GEAR_OBJECTIVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective_core.py"
 FLEET_CLIMB_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_climb_core.py"
 FLEET_CLIMBER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_climber.py"
@@ -429,7 +428,6 @@ LOSS_RISK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loss_risk_core.
 FIGHT_TERMS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_terms_core.py"
 FIGHT_OUTCOME_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_outcome_core.py"
 FIGHT_ODDS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_odds_core.py"
-TIER_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "tier_progress.py"
 COMBAT_TARGETS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_targets.py"
 WIN_THRESHOLD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "win_threshold_core.py"
 GROUP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "group_fight_core.py"
@@ -481,12 +479,8 @@ HOLD_FOR_PARTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "hol
 JOIN_PARTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "join_party.py"
 PARTY_COORD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "coordination_store.py"
 PARTY_LEASE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "party_lease_core.py"
-PARTY_LOOP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "party_loop.py"
-BAND_TARGET_PARTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "band_target.py"
 RESTORE_HP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "restore_hp.py"
 TASK_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth.py"
-FIGHT_UPKEEP_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "fight_upkeep_core.py"
-BAND_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "band_target.py"
 TASK_ACCEPT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_accept.py"
 DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decision.py"
 OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "obtain_item.py"
@@ -902,12 +896,6 @@ ODDS_CLEAR_MUTATIONS = [
     ("odds_clear: the threshold itself loses (>= -> >)",
      "    return p_win >= theta\n",
      "    return p_win > theta\n"),
-]
-# Post-merge review 2026-10-16: a rung is cleared on BARE gear.
-TIER_CLEARED_BARE_MUTATIONS = [
-    ("tier_cleared: the worn potions clear the rung",
-     "    rested = unpotioned(dataclasses.replace(state, hp=state.max_hp))\n",
-     "    rested = dataclasses.replace(state, hp=state.max_hp)\n"),
 ]
 # Post-merge review 2026-10-16: the verdict reads the worn stock and the hp.
 COMBAT_TARGETS_KEY_MUTATIONS = [
@@ -1575,9 +1563,6 @@ ONE_DROP_MODEL_PLAYER_MUTATIONS = [
     ("player: the trace's context keeps no evidence",
      "        self._last_ctx = replace(self._last_ctx, learned_drops=self._learned_drops)\n",
      ""),
-    ("player: the consumable price prices the prior",
-     "                                  learned_drops=self._cycle_learned_drops()))\n        batch",
-     "                                  learned_drops=LearnedDrops.empty()))\n        batch"),
     ("player: the role board's work prices the prior",
      "        ctx = self._timed(replace(NO_PROFILE_CONTEXT,\n"
      "                                  learned_drops=self._cycle_learned_drops()))\n        work",
@@ -6509,27 +6494,6 @@ RECIPE_PRODUCIBLE_MUTATIONS = [
 ]
 
 
-# Progression-tree cores (2026-07-06): unit-killed group (OBJECTIVE_NOW
-# precedent) bound to tests/test_ai/test_progression_tree_core.py.
-# SPLIT IN WAVE 3b (re-derived deletion list §4/§5, §6.4): eleven mutants were
-# retired with their subjects — one over `branch_pick_pure`, one over
-# `focus_aging_order`'s tail, one over `_gear_pref_key`, four over
-# `focus_aging_pick`'s fast-path guard and four over `_scaled_weights`. §6.4
-# named only the last eight; the other three anchored on the same deleted code
-# and would have failed `--check-anchors`. What is left guards what the
-# resolution walk actually calls: `milestone_pure` and `potion_type_weight`.
-# Phase 4-2b-ii retired five more with `falloff` and `dhondt_step`.
-PROGRESSION_TREE_MUTATIONS = [
-    ("tree: milestone off-by-a-band (current band, not next)",
-     "    return min(TRUNK_CAP, (level // BAND + 1) * BAND)",
-     "    return min(TRUNK_CAP, (level // BAND) * BAND)"),
-    ("tree: health weight demoted below boost",
-     '    "hp_restore": Fraction(1),',
-     '    "hp_restore": Fraction(1, 8),'),
-    ("tree: unknown potion family weighs like health",
-     "    return POTION_TYPE_WEIGHTS.get(family, Fraction(0))",
-     "    return POTION_TYPE_WEIGHTS.get(family, Fraction(1))"),
-]
 
 # Gear objective core (spec 2026-10-18 §2.3/§2.4): unit-killed group bound to
 # tests/test_ai/test_gear_objective_core.py; the same semantics are proven in
@@ -8360,43 +8324,6 @@ DROP_LOADOUT_GATE_MUTATIONS = [
      "                  or wins_with_a_loadout(rested, game_data, monster)))\n",
      "                  or False))\n"),
 ]
-# The party boss XP loop (docs/PLAN_group_fights.md increment 3). OWN
-# run_groups: unit-killed by tests/test_ai/test_party_loop.py and
-# tests/test_ai/test_band_target.py.
-PARTY_LOOP_MUTATIONS = [
-    ("party loop: the XP reads the character's own level",
-     "    xp = game_data.xp_per_kill(monster, sum(levels) // len(levels), state.wisdom)\n",
-     "    xp = game_data.xp_per_kill(monster, state.level, state.wisdom)\n"),
-    ("party loop: a grey party loop is a loop",
-     "    if xp <= 0:\n        return None\n",
-     "    if xp < 0:\n        return None\n"),
-    ("party loop: the fight counts rounds, not actor turns",
-     "    fight = Fraction(SECONDS_PER_TURN * outcome.turns * (len(levels) + 1))\n",
-     "    fight = Fraction(SECONDS_PER_TURN * outcome.turns)\n"),
-    ("party loop: a raid boss is farmed for XP",
-     "PARTY_XP_TYPES = frozenset({\"boss\"})\n",
-     "PARTY_XP_TYPES = frozenset({\"boss\", \"raid_boss\"})\n"),
-    ("party loop: an unpayable drink runs",
-     "    if consumed is None:\n        return None\n    me = cards[0]",
-     "    if consumed is None:\n        consumed = Fraction(0)\n    me = cards[0]"),
-]
-BAND_PARTY_MUTATIONS = [
-    ("band: no party candidates",
-     "    for code in party_candidates(state, game_data):\n",
-     "    for code in []:\n"),
-    ("band: a party pick drops its joiners",
-     "            scored.append((code, party.rate.xp_per_second, party.joiners))\n",
-     "            scored.append((code, party.rate.xp_per_second, ()))\n"),
-    ("band: party bosses above the ceiling",
-     "            if kind in PARTY_XP_TYPES and game_data.monster_levels[code] <= ceiling\n",
-     "            if kind in PARTY_XP_TYPES\n"),
-    ("band: party bosses that do not spawn",
-     "<= ceiling\n            and game_data.monster_locations(code)]\n",
-     "<= ceiling\n            ]\n"),
-    ("band: party candidates without a party",
-     "    if not state.party:\n        return []\n",
-     "    if False:\n        return []\n"),
-]
 # Party cards and leases (docs/PLAN_group_fights.md increment 4a). OWN
 # run_groups: unit-killed by tests/test_ai/test_party_coordination.py.
 PARTY_LEASE_STORE_MUTATIONS = [
@@ -8926,13 +8853,9 @@ CYCLE_CLOCK_PLAYER_MUTATIONS = [
     ("cycle clock: the cycle is never stamped (ruling FR-IA)",
      "        self._cycle_now = datetime.now(tz=timezone.utc)\n\n    def _timed(",
      "        pass\n\n    def _timed("),
-    # Ruling C-1 (plan C Task 4): the band candidate's context went with the
-    # band; the stamp is pinned on the two surviving derived contexts.
-    ("cycle clock: the consumable price keeps the import instant (ruling C-1)",
-     "        ctx = self._timed(replace(NO_PROFILE_CONTEXT,\n"
-     "                                  bank_accessible=",
-     "        ctx = (replace(NO_PROFILE_CONTEXT,\n"
-     "                                  bank_accessible="),
+    # Ruling C-1 (plan C Task 4): the band candidate's context and the
+    # consumable price went with the band; the stamp is pinned on `_timed` and
+    # the role board's pricing.
     ("cycle clock: role-demand pricing keeps the import instant (ruling C-1)",
      "        ctx = self._timed(replace(NO_PROFILE_CONTEXT,\n"
      "                                  learned_drops=self._cycle_learned_drops()))\n",
@@ -9699,7 +9622,7 @@ _ALL_SRCS = [
     LIVENESS_CENSUS_SRC, ATTEMPT_PROSPECTING_SRC, GATHER_ARMOUR_SRC, GATHER_REQUIREMENT_SRC,
     RECIPE_CATALOG_SRC,
     LOADOUT_CALIBRATION_SRC,
-    TIER_PROGRESS_SRC, COMBAT_TARGETS_SRC, WIN_THRESHOLD_CORE_SRC,
+    COMBAT_TARGETS_SRC, WIN_THRESHOLD_CORE_SRC,
     ROLE_SELECTION_SRC,
     FOOD_PRODUCER_SRC,
     SKILL_CREDIT_SRC,
@@ -9796,8 +9719,6 @@ _ALL_SRCS = [
     DECOMPOSE_CORE_SRC,
     # Gear taxonomy: proved gear-classification core.
     GEAR_TAXONOMY_CORE_SRC,
-    # Progression-tree cores (2026-07-06): unit-killed group.
-    PROGRESSION_TREE_SRC,
     # Gear objective core (spec 2026-10-18 §2.3/§2.4): unit-killed group.
     GEAR_OBJECTIVE_CORE_SRC,
     # Fleet climb core (spec 2026-10-18 §2.5): unit-killed group.
@@ -12249,68 +12170,6 @@ TASK_WORTH_CORE_MUTATIONS = [
 ]
 
 
-# The band target ranks by XP per action, upkeep included (USER 2026-10-07).
-# Killed by tests/test_ai/test_fight_upkeep.py.
-FIGHT_UPKEEP_CORE_MUTATIONS = [
-    ("upkeep: consumables are not priced",
-     "        (qty * price_of(code) for code, qty in upkeep.consumed_per_kill.items()),\n",
-     "        (qty * 0 for code, qty in upkeep.consumed_per_kill.items()),\n"),
-    ("upkeep: the actions per kill are not charged",
-     "    actions = upkeep.actions_per_kill + sum(\n",
-     "    actions = 1 + sum(\n"),
-]
-FIGHT_UPKEEP_STORE_MUTATIONS = [
-    ("upkeep store: a lost fight's consumables are not counted",
-     "        for r in fights:\n            consumed.update(",
-     "        for r in fights:\n            if r.outcome != \"ok\":\n"
-     "                continue\n            consumed.update("),
-    ("upkeep store: actions per kill counts only fights",
-     "            actions_per_kill=Fraction(len(rows), kills),\n",
-     "            actions_per_kill=Fraction(len(fights), kills),\n"),
-    ("upkeep store: no warmup",
-     "        if kills < WARMUP_MIN_SAMPLES:\n            return None\n        consumed",
-     "        if kills < 1:\n            return None\n        consumed"),
-]
-BAND_UPKEEP_MUTATIONS = [
-    ("band: the measured upkeep is ignored",
-     "    upkeep = history.fight_upkeep(code) if history is not None else None\n",
-     "    upkeep = None\n"),
-    ("band: a measured action is not counted in fight seconds",
-     "        return xp_per_action(xp_per_kill, upkeep, price_of) / FIGHT_SECONDS\n",
-     "        return xp_per_action(xp_per_kill, upkeep, price_of)\n"),
-]
-# The loadout picks the monster (USER 2026-10-10). Killed by
-# tests/test_ai/test_band_target.py.
-BAND_LOADOUT_MUTATIONS = [
-    ("band: a potion-propped monster is no candidate",
-     "        if not bare and (not _odds_clear(loadout(), win_threshold(rested, code)) or (\n",
-     "        if not bare and (True or (\n"),
-    ("band: the potion arm ignores the measured threshold",
-     "        if not bare and (not _odds_clear(loadout(), win_threshold(rested, code)) or (\n",
-     "        if not bare and (not _odds_clear(loadout(), Fraction(4, 5)) or (\n"),
-    ("band: the potion arm reads the closed form again",
-     "    return best.rate.runnable and odds_clear(best.rate.p_win, threshold)",
-     "    return best.rate.runnable and best.rate.win"),
-    ("band: a loop with no room clears the odds",
-     "    return best.rate.runnable and odds_clear(best.rate.p_win, threshold)",
-     "    return odds_clear(best.rate.p_win, threshold)"),
-    ("band: the bare fight drinks the worn potions",
-     "        bare = is_winnable(unpotioned(rested), game_data, code, history)\n",
-     "        bare = is_winnable(rested, game_data, code, history)\n"),
-    ("band: the learned-loss veto does not refuse a propped fight",
-     "                history is not None and loss_vetoed(rested, game_data, code, history))):\n",
-     "                False)):\n"),
-    ("band: a propped monster counts as a bare fight",
-     "        bare_fight = bare_fight or bare\n",
-     "        bare_fight = True\n"),
-    ("band: the model ranks at the full kill's XP over the fight alone",
-     "    return best().rate.xp_per_second\n",
-     "    return Fraction(xp_per_kill) / best().rate.fight_seconds\n"),
-    ("band: the model ranks without the win odds",
-     "    return best().rate.xp_per_second\n",
-     "    return Fraction(xp_per_kill) / (best().rate.fight_seconds + best().rate.recovery_seconds\n"
-     "                                    + best().rate.consumed_seconds)\n"),
-]
 # One gear objective per cycle names the grind target (spec 2026-10-18 §2.4,
 # §6.2). Killed by tests/test_ai/test_player_gear_objective.py.
 # Task 5 (ruling W) moved the step into the shared
@@ -12372,17 +12231,6 @@ COMBAT_DEFICIT_BARE_MUTATIONS = [
     ("deficit: no odds step at a margin stall",
      "            step = _best_step(pool, bare_now, actions_of,\n",
      "            step = None and _best_step(pool, bare_now, actions_of,\n"),
-]
-CONSUMABLE_PRICE_MUTATIONS = [
-    ("price: held copies are priced as already owned",
-     "            inventory={c: q for c, q in state.inventory.items() if c != code},\n",
-     "            inventory=dict(state.inventory),\n"),
-    ("price: worn copies are priced as already owned",
-     "            equipment={slot: (None if worn == code else worn)\n",
-     "            equipment={slot: worn\n"),
-    ("price: the batch price is not divided by the batch",
-     "        return Fraction(actions, batch)\n",
-     "        return Fraction(actions)\n"),
 ]
 
 
@@ -13659,8 +13507,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_combat.py", survivors)
     run_group(FIGHT_ODDS_CORE_SRC, ODDS_CLEAR_MUTATIONS,
               "tests/test_ai/test_fight_odds_core.py", survivors)
-    run_group(TIER_PROGRESS_SRC, TIER_CLEARED_BARE_MUTATIONS,
-              "tests/test_ai/test_tier_progress.py", survivors)
     run_group(COMBAT_TARGETS_SRC, COMBAT_TARGETS_KEY_MUTATIONS,
               "tests/test_ai/test_combat_targets.py", survivors)
     run_group(WIN_THRESHOLD_CORE_SRC, LIVENESS_THETA_MUTATIONS,
@@ -14462,20 +14308,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_grey_farm.py", survivors)
     run_group(TASK_WORTH_CORE_SRC, TASK_WORTH_CORE_MUTATIONS,
               "tests/test_ai/test_task_worth_core.py", survivors)
-    run_group(FIGHT_UPKEEP_CORE_SRC, FIGHT_UPKEEP_CORE_MUTATIONS,
-              "tests/test_ai/test_fight_upkeep.py", survivors)
-    run_group(LEARNING_STORE_SRC, FIGHT_UPKEEP_STORE_MUTATIONS,
-              "tests/test_ai/test_fight_upkeep.py", survivors)
-    run_group(BAND_TARGET_SRC, BAND_UPKEEP_MUTATIONS,
-              "tests/test_ai/test_fight_upkeep.py", survivors)
-    run_group(BAND_TARGET_SRC, BAND_LOADOUT_MUTATIONS,
-              "tests/test_ai/test_band_target.py", survivors)
     run_group(GEAR_OBJECTIVE_CONTEXT_SRC, GEAR_OBJECTIVE_CTX_MUTATIONS,
               "tests/test_ai/test_player_gear_objective.py", survivors)
     run_group(PLAYER_SRC, GEAR_OBJECTIVE_CTX_PLAYER_MUTATIONS,
               "tests/test_ai/test_player_gear_objective.py", survivors)
-    run_group(PLAYER_SRC, CONSUMABLE_PRICE_MUTATIONS,
-              "tests/test_ai/test_fight_upkeep.py", survivors)
     run_group(TASK_ACCEPT_SRC, TASK_ACCEPT_MUTATIONS,
               "tests/test_ai/test_tiers_means.py", survivors)
     run_group(PLAYER_SRC, EXCHANGE_COST_FLEET_MUTATIONS,
@@ -14512,8 +14348,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_xp_value_diff.py", survivors)
     run_group(POTION_SUPPLY_SRC, RECIPE_PRODUCIBLE_MUTATIONS,
               "tests/test_ai/test_potion_supply.py", survivors)
-    run_group(PROGRESSION_TREE_SRC, PROGRESSION_TREE_MUTATIONS,
-              "tests/test_ai/test_progression_tree_core.py", survivors)
     run_group(GEAR_OBJECTIVE_CORE_SRC, GEAR_OBJECTIVE_CORE_MUTATIONS,
               "tests/test_ai/test_gear_objective_core.py", survivors)
     run_group(FLEET_CLIMB_CORE_SRC, FLEET_CLIMB_CORE_MUTATIONS,
@@ -14823,8 +14657,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_party_win.py", survivors)
     run_group(PARTY_WIN_SRC, PARTY_WIN_MUTATIONS,
               "tests/test_ai/test_party_win.py", survivors)
-    run_group(PARTY_LOOP_SRC, PARTY_LOOP_MUTATIONS,
-              "tests/test_ai/test_party_loop.py", survivors)
     run_group(PARTY_COORD_SRC, PARTY_LEASE_STORE_MUTATIONS,
               "tests/test_ai/test_party_coordination.py", survivors)
     run_group(HOLD_FOR_PARTY_SRC, PARTY_HOLD_ACTION_MUTATIONS,
@@ -14883,8 +14715,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_player_run.py", survivors)
     run_group(PLAYER_SRC, LOST_FIGHTS_PLAN_MUTATIONS,
               "tests/test_ai/test_plan_command.py", survivors)
-    run_group(BAND_TARGET_PARTY_SRC, BAND_PARTY_MUTATIONS,
-              "tests/test_ai/test_band_target.py", survivors)
     run_group(CRAFT_CONDITIONS_SRC, CONDITIONS_PARTY_MUTATIONS,
               "tests/test_audit/test_craft_conditions.py", survivors)
     run_group(CRAFT_COMPLETENESS_SRC, CENSUS_PARTY_STATE_MUTATIONS,

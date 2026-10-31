@@ -633,8 +633,7 @@ def loss_vetoed(state: WorldState, game_data: GameData, monster_code: str,
     """The LEARNED-LOSS veto (`is_winnable`'s first gate): at least
     MIN_WIN_SAMPLES recorded fights against `monster_code` at this level in the
     loadout the fight is fought in (`fight_record`), won below
-    WIN_RATE_THRESHOLD. Also the band target's: a fight carried by consumables
-    (`band_target.band_combat_target`) is refused on the same record."""
+    WIN_RATE_THRESHOLD."""
     return _vetoes(*fight_record(state, game_data, monster_code, history))
 
 

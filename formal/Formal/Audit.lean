@@ -1113,12 +1113,6 @@ open Formal.PriorityBand
 #print axioms Formal.PotionProvisionQty.provision_le_max
 #print axioms Formal.PotionProvisionQty.provision_le_held
 #print axioms Formal.PotionProvisionQty.provision_nonneg
-#print axioms Formal.ProgressionTree.milestone_gt_level
-#print axioms Formal.ProgressionTree.milestone_le_cap
-#print axioms Formal.ProgressionTree.milestone_band_aligned
-#print axioms Formal.ProgressionTree.milestone_advances
-#print axioms Formal.ProgressionTree.potionWeight_health_maximal
-#print axioms Formal.ProgressionTree.potionWeight_unknown_floor
 #print axioms Formal.Synergy.synergyRatio_nonneg
 #print axioms Formal.Synergy.synergyRatio_le_one
 #print axioms Formal.Synergy.synergy_total_zero

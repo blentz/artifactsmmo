@@ -16,7 +16,6 @@ from artifactsmmo_cli.ai.potion_supply import (
     guard_loadout,
     ladder_supplies,
     potion_batch,
-    potion_level_ramp,
     potion_stockable,
     prep_supplies,
     target_potion_pure,
@@ -343,14 +342,6 @@ def test_guard_loadout_none_without_a_fight_ahead():
 def test_guard_loadout_none_when_chosen_against_another_monster():
     """Live Lor 2026-10-06: potions brewed for a fight never fought."""
     assert guard_loadout(_loadout(("brew", 1)), "cow") is None
-
-
-def test_potion_level_ramp_is_flat_then_linear_then_full():
-    """The batch the consumable pricer amortizes over: 5 through level 5, 100
-    from level 45, floored linear between (5 + 95*20//40 = 52 at level 25)."""
-    assert potion_level_ramp(1) == 5
-    assert potion_level_ramp(25) == 52
-    assert potion_level_ramp(50) == UTILITY_SLOT_MAX_STACK
 
 
 def test_ladder_supplies_is_the_batch_sizing() -> None:

@@ -28,8 +28,8 @@ Three hysteresis parameters, each defending a different failure:
     phase alone was ~300 gathers, so a dwell shorter than a production run
     means switching mid-supply-chain and stranding half-made goods in a bag.
   * ROLE_SWITCH_MARGIN — oscillation from noise on the demand board. A RATIO,
-    not an absolute delta: demand magnitudes span orders (progression_tree_core
-    documents a live gain ratio of 18100:2000), so any fixed threshold is
+    not an absolute delta: demand magnitudes span orders (a live gain ratio of
+    18100:2000 was measured), so any fixed threshold is
     either always or never met.
   * release-on-idle — the hole where a character that finishes its role keeps
     renewing a lease nobody needs. Because it renews, the TTL never fires and

@@ -59,9 +59,7 @@ VERIFICATION asks the real graph, built from `ast` over all of src/:
 
 A TRUE claim passes and is meant to: `tiers/objective.py` says
 `CharacterObjective.utility_potion_targets` "has NO PRODUCTION CALLER", which is
-true, and `tiers/progression_tree_core.potion_type_weight` is retained with no
-caller on purpose. Recording that truthfully is the behaviour this census
-rewards.
+true. Recording that truthfully is the behaviour this census rewards.
 """
 
 import ast
@@ -74,16 +72,16 @@ from dataclasses import dataclass
 # claims" reads identically whether the matcher is working or broken.
 #
 # The bound is TIGHT ON PURPOSE — it is exactly the population carried:
-# `tiers/objective.CharacterObjective.utility_potion_targets` and
-# `tiers/progression_tree_core.potion_type_weight`, both verified true.
+# `tiers/objective.CharacterObjective.utility_potion_targets`, verified true.
 # (`tiers/skill_grind_target.is_obtainable` left on 2026-09-27, when it became
-# the grind's production obtainability walk; `player._tree_band_adequate` was
-# deleted with its claim by plan C Task 4.) The decidable population in this repo is small (~20
+# the grind's production obtainability walk; `player._tree_band_adequate` and
+# `tiers/progression_tree_core.potion_type_weight` were deleted with their
+# claims by plan C Task 4.) The decidable population in this repo is small (~20
 # `inert` hits, nearly all CONDITIONAL and undecidable, are deliberately out of
 # scope), so a slack bound would not fail until the matcher was completely
-# dead. Rewording one of the two costs a deliberate edit here, which is the
+# dead. Rewording the one claim costs a deliberate edit here, which is the
 # point: the register is meant to be small enough to read.
-MIN_CLAIMS = 2
+MIN_CLAIMS = 1
 
 _SUBJECT = r"(?:this|it|them)"
 _ROLE = r"(?:caller|consumer|importer|reader)s?"

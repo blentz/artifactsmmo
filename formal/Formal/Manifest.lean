@@ -1438,14 +1438,6 @@ open Formal.PriorityBand
 #check @Formal.PotionProvisionQty.provision_le_max           -- never more than a full stack
 #check @Formal.PotionProvisionQty.provision_le_held          -- never more than actually held
 #check @Formal.PotionProvisionQty.provision_nonneg           -- never negative
--- ProgressionTree (trunk milestones and potion weights — what `ai/decisions/root.py`
--- calls):
-#check @Formal.ProgressionTree.milestone_gt_level            -- the milestone strictly exceeds the level below the cap
-#check @Formal.ProgressionTree.milestone_le_cap              -- the milestone never exceeds the cap
-#check @Formal.ProgressionTree.milestone_band_aligned        -- milestones are band boundaries (divisible by 10)
-#check @Formal.ProgressionTree.milestone_advances            -- crossing a milestone strictly advances it (trunk descent)
-#check @Formal.ProgressionTree.potionWeight_health_maximal   -- health dominates every potion family (tuning decision, pinned)
-#check @Formal.ProgressionTree.potionWeight_unknown_floor    -- unknown families never outrank anything
 -- Synergy (the pool-overlap multiplier pinned into [sMin, 1]):
 #check @Formal.Synergy.synergyRatio_nonneg                   -- the overlap ratio is nonneg
 #check @Formal.Synergy.synergyRatio_le_one                   -- with shared ≤ total the ratio is ≤ 1

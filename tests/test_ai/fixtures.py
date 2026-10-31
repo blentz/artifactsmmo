@@ -13,7 +13,6 @@ from artifactsmmo_api_client.models.item_schema import ItemSchema
 from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.models.status_schema import StatusSchema
 
-from artifactsmmo_cli.ai.best_loadout import BestLoadout
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -23,7 +22,6 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     log_fights,
     offline_context,
 )
-from artifactsmmo_cli.ai.loop_rate import LoopRate
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
@@ -196,27 +194,6 @@ def make_state(**overrides) -> WorldState:
             defaults["task_code"], defaults["task_progress"], defaults["task_total"]
         )
     return WorldState(**defaults)
-
-
-def make_loop(*, xp: int = 0, win: bool = False, recovery: int = 0, consumed: int = 0,
-              p_win: Fraction | None = None, used: tuple[tuple[str, int], ...] = ()) -> LoopRate:
-    """One modelled fight loop (`loop_rate.LoopRate`): a 30 s fight, `recovery`
-    and `consumed` seconds, `xp` per kill on a win."""
-    fight = Fraction(30)
-    seconds = fight + recovery + consumed
-    odds = Fraction(int(win)) if p_win is None else p_win
-    return LoopRate(xp_per_second=odds * xp / seconds,
-                    xp_per_kill=xp, win=win, p_win=odds, fight_seconds=fight,
-                    recovery_seconds=Fraction(recovery), consumed_seconds=Fraction(consumed),
-                    max_hp=100, hp_end=50, used=used, eaten=(), runnable=True,
-                    kills_per_second=odds / seconds)
-
-
-def make_best_loadout(loadout: tuple[str, ...] = (), **loop: object) -> BestLoadout:
-    """A `best_loadout.BestLoadout` whose pick is `make_loop(**loop)` wearing
-    `loadout`."""
-    loop_rate = make_loop(**loop)  # type: ignore[arg-type]
-    return BestLoadout(loadout, loop_rate, loop_rate)
 
 
 def season_8_status() -> StatusSchema:

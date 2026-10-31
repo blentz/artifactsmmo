@@ -20,14 +20,9 @@ from artifactsmmo_cli.ai.max_batch_from_held import max_batch_from_held_pure
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, Policy
 from artifactsmmo_cli.ai.optimal_buy_mix import optimal_buy_mix_pure
-from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.thresholds import (
     POTION_GATHER_BATCH,
-    POTION_HIGH_LEVEL,
-    POTION_HIGH_QTY,
-    POTION_LOW_LEVEL,
-    POTION_LOW_QTY,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -209,13 +204,6 @@ def guard_loadout(loadout: ChosenLoadout | None, fight_monster: str | None) -> C
     if loadout is None or fight_monster is None or loadout.monster != fight_monster:
         return None
     return loadout
-
-
-def potion_level_ramp(level: int) -> int:
-    """The level ramp of potion stock: the batch `GamePlayer._consumable_price`
-    amortizes a consumable's replacement over."""
-    return potion_baseline_pure(level, POTION_LOW_LEVEL, POTION_LOW_QTY,
-                                POTION_HIGH_LEVEL, POTION_HIGH_QTY)
 
 
 def prep_supplies(code: str, qty: int, state: WorldState, game_data: GameData,

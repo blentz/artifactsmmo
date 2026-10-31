@@ -125,7 +125,6 @@ from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.currency_demand import closure_gold_demand
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
-from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY
 from artifactsmmo_cli.ai.held_task_pays import held_task_pays
 from artifactsmmo_cli.ai.intention_progress import (
     BUDGET_CYCLES,
@@ -170,7 +169,6 @@ from artifactsmmo_cli.ai.plan_tree import build_plan_tree
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.player_helpers import delete_cost as _delete_cost  # noqa: F401  (test import target)
 from artifactsmmo_cli.ai.player_helpers import format_plan as _format_plan
-from artifactsmmo_cli.ai.potion_supply import potion_level_ramp
 from artifactsmmo_cli.ai.progression_reserve import account_gold, progression_reserve, reserve_floor
 from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
@@ -2896,41 +2894,6 @@ class GamePlayer:
         fight_seconds, action_seconds = self._timing()
         return replace(ctx, now=self._cycle_now, fight_seconds=fight_seconds,
                        action_seconds=action_seconds)
-
-    def _consumable_price(self, code: str) -> Fraction:
-        """Acquisition actions per unit to REPLACE a consumable a fight used —
-        the upkeep price `band_combat_target` charges a kill (USER 2026-10-07).
-
-        Priced on the state with every held copy removed (bag, bank, worn): a
-        fight burns the stock, and what it costs is making the next one. A
-        price against the held stock read 0 for Lor's potions live. The unit
-        price is a batch's over its size, the batch the potion guard stocks to
-        at this level (`potion_level_ramp`), so a run's fixed moves are
-        amortized the way the guard amortizes them.
-
-        Priced the way heal prep prices a heal (`HEAL_PREP_POLICY`: no drop
-        routes). The full selection context is not built yet here — it NEEDS
-        this cycle's combat target — and the obtain walk reads only bank access
-        and the siblings' skills from it, so those two are set on the
-        no-profile context."""
-        assert self.state is not None and self.game_data is not None
-        state = self.state
-        stripped = replace(
-            state,
-            inventory={c: q for c, q in state.inventory.items() if c != code},
-            bank_items=(None if state.bank_items is None
-                        else {c: q for c, q in state.bank_items.items() if c != code}),
-            equipment={slot: (None if worn == code else worn)
-                       for slot, worn in state.equipment.items()})
-        ctx = self._timed(replace(NO_PROFILE_CONTEXT,
-                                  bank_accessible=self._blockers.get("bank") is None,
-                                  sibling_skills=self._sibling_skills,
-                                  learned_drops=self._cycle_learned_drops()))
-        batch = potion_level_ramp(state.level)
-        actions = acquisition_actions(code, batch, stripped, self.game_data, ctx, equip=False,
-                                      store=self.history, gated_drop=False,
-                                      policy=HEAL_PREP_POLICY)
-        return Fraction(actions, batch)
 
     def _is_winnable(self, monster_code: str) -> bool:
         """Target-selection beatability: can the bot beat this monster AFTER
