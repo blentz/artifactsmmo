@@ -7770,17 +7770,17 @@ ROUTE_PRICE_MUTATIONS = [
 # Killed by tests/test_ai/scenarios/test_held_task.py.
 ROOT_TASK_GEAR_MUTATIONS = [
     ("root: the task's gear is read in XP, not task progress",
-     "                                 task_rate).missing\n",
-     "                                 lambda rate: rate.xp_per_second).missing\n"),
+     "                               task_rate).missing[0]\n",
+     "                               lambda rate: rate.xp_per_second).missing[0]\n"),
     ("root: an unwinnable task's gear arm never roots",
      "    if horizon is None or horizon.verdict != HORIZON_GEAR:\n        return None\n",
      "    if True:\n        return None\n"),
     ("root: the task's gear piece loses its slot",
-     "    return ObtainItem(missing[0].code, 1, slot=missing[0].slot)",
-     "    return ObtainItem(missing[0].code, 1)"),
+     "    return ObtainItem(first.code, 1, slot=first.slot)",
+     "    return ObtainItem(first.code, 1)"),
     ("root: the task's gear names the last piece, not the first",
-     "    return ObtainItem(missing[0].code, 1, slot=missing[0].slot)",
-     "    return ObtainItem(missing[-1].code, 1, slot=missing[-1].slot)"),
+     "                               task_rate).missing[0]\n",
+     "                               task_rate).missing[-1]\n"),
 ]
 # `gear_objective_for`: `L*` of a pinned monster, the same pieces as the
 # argmax's (plan C Task 2). Killed by tests/test_ai/test_gear_objective.py.

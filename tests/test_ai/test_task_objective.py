@@ -216,9 +216,6 @@ class TestTaskRoot:
             assert horizon.call_args.args[0] is state
             assert horizon.call_args.args[2:] == (TIMED_NO_PROFILE_CONTEXT, None)
             assert pinned.call_args.args[:2] == ("chicken", state)
-            # An unheld `L*` none of whose pieces adds to `R` roots nothing.
-            pinned.return_value = GearObjective("chicken", {}, Fraction(1), ())
-            assert root_mod._task_root(state, _gd(), TIMED_NO_PROFILE_CONTEXT, None) is None
 
     def test_an_unwinnable_task_no_gear_closes_waits(self) -> None:
         """Any other reading names no gear: the task waits for a coin."""

@@ -767,11 +767,11 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
     horizon = resolve_task_horizon(state, game_data, ctx, history)
     if horizon is None or horizon.verdict != HORIZON_GEAR:
         return None
-    missing = gear_objective_for(state.task_code, state, game_data, ctx, history,
-                                 task_rate).missing
-    if not missing:
-        return None
-    return ObtainItem(missing[0].code, 1, slot=missing[0].slot)
+    # GEAR is `gear_closes_for`: a missing piece by the same `_missing` and
+    # `_gain` over the same inputs, so the first piece exists.
+    first = gear_objective_for(state.task_code, state, game_data, ctx, history,
+                               task_rate).missing[0]
+    return ObtainItem(first.code, 1, slot=first.slot)
 
 
 def _fleet_roots(ctx: SelectionContext) -> list[ReachFleetOutcome]:
