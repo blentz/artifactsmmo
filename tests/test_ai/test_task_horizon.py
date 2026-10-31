@@ -21,7 +21,10 @@ OUT_OF_REACH (the walk's level+1 chain was catalogue gear the character cannot
 obtain) and one OUT_OF_REACH to LEVEL_UP (`l13_drop_recipe_grind` v mushmush).
 Reading a task monster's `R` in task progress a second (ruling C2-grey: a grey
 monster pays no XP, so in XP every gain was 0) moved 26 more to GEAR: 23 from
-LEVEL_UP and 3 from no reading (fights the gate takes below SECURE_WIN).
+LEVEL_UP and 3 from no reading (fights the gate takes below SECURE_WIN). The
+level-up arm reading `L*`'s own potion-aware gate (ruling C2-R m3) moved 113
+OUT_OF_REACH to LEVEL_UP, 55 of them pairs the first move had taken from it.
+Now 560 no reading, 160 GEAR, 123 LEVEL_UP, 1,709 OUT_OF_REACH.
 """
 
 import dataclasses
@@ -44,6 +47,7 @@ from artifactsmmo_cli.ai.gear_objective import (
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.learning.rung_state_core import HP_PER_LEVEL
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.task_horizon import (
     HORIZON_GEAR,
@@ -171,6 +175,21 @@ def test_one_level_plus_gear_closing_it_reads_level_up(gd: GameData) -> None:
     assert not predict_win(dataclasses.replace(state, hp=state.max_hp), gd, BODY_MONSTER)
     assert predict_win(gear_fighter_for(BODY_MONSTER, next_level_state(state), gd,
                                         TIMED_NO_PROFILE_CONTEXT, None), gd, BODY_MONSTER)
+    horizon = _horizon(state, gd)
+    assert horizon is not None
+    assert horizon.verdict == HORIZON_LEVEL_UP
+
+
+def test_the_level_up_arm_reads_the_gate_l_star_s_candidates_pass(gd: GameData) -> None:
+    """Ruling C2-R m3: the level-up arm asks `drop_fight_winnable`, the gate
+    `L*`'s own candidates pass (`_rated`): the bare odds OR a stockable potion
+    loadout. At `l10_copper_adequate` the pig is lost bare even in `L*` one
+    level up, and won with the potions the character can stock, so the task is
+    a level away, not out of reach."""
+    state = _with_task(_state("l10_copper_adequate", gd), "pig")
+    fighter = gear_fighter_for("pig", next_level_state(state), gd, TIMED_NO_PROFILE_CONTEXT, None)
+    assert not predict_win(fighter, gd, "pig")
+    assert drop_fight_winnable(fighter, gd, "pig")
     horizon = _horizon(state, gd)
     assert horizon is not None
     assert horizon.verdict == HORIZON_LEVEL_UP

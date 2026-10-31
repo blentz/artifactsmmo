@@ -7848,9 +7848,13 @@ TASK_HORIZON_MUTATIONS = [
      "    fighter = gear_fighter_for(monster, next_level_state(state), game_data, ctx, history)\n",
      "    fighter = gear_fighter_for(monster, state, game_data, ctx, history)\n"),
     ("task_horizon: the level-up arm never fires",
-     "    if predict_win(fighter, game_data, monster):\n"
+     "    if drop_fight_winnable(fighter, game_data, monster):\n"
      "        return TaskHorizon(monster=monster, verdict=HORIZON_LEVEL_UP)\n",
      "    if False:\n        return TaskHorizon(monster=monster, verdict=HORIZON_LEVEL_UP)\n"),
+    # Ruling C2-R m3: the level-up arm reads the potion-aware gate.
+    ("task_horizon: the level-up arm reads the bare odds",
+     "    if drop_fight_winnable(fighter, game_data, monster):\n",
+     "    if predict_win(fighter, game_data, monster):\n"),
 ]
 
 # The horizon's consumer on the LATCH (`REGEAR_EDGE_HORIZON_MUTATIONS`) was

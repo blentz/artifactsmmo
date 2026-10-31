@@ -29,7 +29,8 @@ So the verdict is a HORIZON READING, not a sentence:
 
   * `HORIZON_GEAR`        — gear alone closes the fight. Build it.
   * `HORIZON_LEVEL_UP`    — one level plus gear closes it: `L*` one level up wins
-                            the fight the gate reads (`predict_win`). Take the level.
+                            the fight `L*`'s gate reads (`drop_fight_winnable`).
+                            Take the level.
   * `HORIZON_OUT_OF_REACH`— neither. The fight is not a near-term planning target:
                             stop spending cycles on gear that cannot win it, cancel
                             the task if a coin is in the pocket, and otherwise let it
@@ -57,6 +58,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import gear_closes_for, gear_fighter_for
 from artifactsmmo_cli.ai.learning.rung_state_core import projected_max_hp
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -151,9 +153,12 @@ def resolve_task_horizon(state: WorldState, game_data: GameData, ctx: SelectionC
         return None
     # One level up (ruling C2-one-model): `L*` of the task monster over the
     # character one level up — its achievable set at the next level, worn by
-    # the grown body — passes the gate. With nothing left to build (`L*` held
-    # and lost) that is the level alone, and a level-up verdict all the same.
+    # the grown body — passes the gate `L*`'s own candidates pass
+    # (`drop_fight_winnable`: the bare odds or a stockable potion loadout, the
+    # learned record, a party; ruling C2-R m3). With nothing left to build
+    # (`L*` held and lost) that is the level alone, a level-up verdict all
+    # the same.
     fighter = gear_fighter_for(monster, next_level_state(state), game_data, ctx, history)
-    if predict_win(fighter, game_data, monster):
+    if drop_fight_winnable(fighter, game_data, monster):
         return TaskHorizon(monster=monster, verdict=HORIZON_LEVEL_UP)
     return TaskHorizon(monster=monster, verdict=HORIZON_OUT_OF_REACH)
