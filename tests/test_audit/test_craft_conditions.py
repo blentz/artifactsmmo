@@ -246,7 +246,7 @@ def test_the_held_resort_that_still_fails_stays_unplanned(monkeypatch: pytest.Mo
     assert climb("steel_armor", gd, gd).rung is None
 
 
-def test_the_catalogue_best_gear_is_suppliable_and_level_capped() -> None:
+def test_the_geared_census_loadout_is_level_capped_and_suppliable() -> None:
     gd = _gd()
     gear = census_gear(30, frozenset(), True, gd)
     assert gear["weapon_slot"] == "elderwood_staff"
