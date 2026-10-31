@@ -674,8 +674,8 @@ def test_root_section_no_root_resolved(
     db_path: str, canned_sense: None, monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """`resolve_root` can return `root=None` (the `CanIClearMyTier` wall
-    case); no row is `chosen=True` then, and the section must say so
+    """`resolve_root` can return `root=None` (the wall case: the cycle has no
+    gear objective); no row is `chosen=True` then, and the section must say so
     explicitly rather than silently printing nothing."""
     rows = [_root_verdict("ReachCharLevel(char_level=6)", chosen=False)]
     monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: (rows, None))
@@ -684,7 +684,8 @@ def test_root_section_no_root_resolved(
     cmd.sibling_route_audit_command(character="C3P0", characters=[])
 
     out = capsys.readouterr().out
-    assert "chosen root: None (resolve_root returned no root this cycle" in out
+    assert ("chosen root: None (resolve_root returned no root this cycle -- the "
+            "cycle has no gear objective)") in out
 
 
 def test_root_section_distinguishes_not_craftable_from_craftable_but_declined(
