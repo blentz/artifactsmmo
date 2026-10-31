@@ -186,9 +186,9 @@ class StatusPane(Static):
         t.add_row("Action", f"{s.action}  [{outcome_color}]{s.outcome}[/{outcome_color}]")
 
         t.add_row("", "")
-        # The gear objective line exactly as `plan` prints it, so the pane and
-        # the command cannot disagree. Text, not markup: the line's brackets
-        # are data. None only before the first decision or on an older run's
+        # The gear objective as the player's per-cycle log line prints it
+        # (m*, first missing piece, missing count). Text, not markup: the line
+        # is data. None only before the first decision or on an older run's
         # snapshot.
         t.add_row("Gear", Text(s.gear_objective) if s.gear_objective is not None
                   else Text("?", style="dim"))

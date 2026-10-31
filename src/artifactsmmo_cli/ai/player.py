@@ -118,7 +118,7 @@ from artifactsmmo_cli.ai.gear_objective_context import (
     gear_keep_for,
     gear_objective_line,
 )
-from artifactsmmo_cli.ai.gear_objective_result import GearPiece, gear_objective_report
+from artifactsmmo_cli.ai.gear_objective_result import GearPiece
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
 from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
@@ -2827,7 +2827,7 @@ class GamePlayer:
             goals_tried=goals_tried,
             objective_unplannable=objective_unplannable,
             gear_objective=(None if self._last_ctx is NO_PROFILE_CONTEXT
-                            else gear_objective_report(self._last_ctx.gear_objective)),
+                            else gear_objective_line(self._last_ctx.gear_objective)),
             chosen_root=(repr(self._last_decision.chosen_root)
                          if self._last_decision is not None
                          and self._last_decision.chosen_root is not None else None),

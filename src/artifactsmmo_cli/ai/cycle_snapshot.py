@@ -160,11 +160,11 @@ class CycleSnapshot(BaseModel):
     goals_tried: list[GoalAttempt] = Field(default_factory=list)
     objective_unplannable: ObjectiveUnplannable | None = None
     gear_objective: str | None = None
-    """The cycle's gear objective as the `plan` command prints it
-    (`gear_objective_result.gear_objective_report`): m*, held, and the missing
-    pieces in pursuit order. None before the character's first decision and on a
-    snapshot written before this field existed; a decided cycle with no
-    objective carries `"gear_objective: None"`."""
+    """The cycle's gear objective as the player's per-cycle log line
+    (`gear_objective_context.gear_objective_line`): m*, the first missing
+    piece and the missing count, or "L* held". None before the character's
+    first decision and on a snapshot written before this field existed; a
+    decided cycle with no objective carries that line's "none" text."""
 
     # Committed strategy root + ranking + bank, for the TUI plan screen.
     chosen_root: str | None = None

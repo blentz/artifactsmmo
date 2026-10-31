@@ -147,11 +147,10 @@ class TestStatusPaneTask:
 
 class TestStatusPaneGearObjective:
     def test_status_pane_shows_the_gear_objective(self):
-        """The pane renders the cycle's gear objective line, the text the
-        `plan` command prints (m*, held, the missing pieces in pursuit order),
-        not the deleted level-path ETA fields (Review Focus 3)."""
-        line = ("gear_objective: monster=wolf, held=False, "
-                "missing=[weapon:iron_sword(1, 0.075/450)]")
+        """The pane renders the cycle's gear objective line (m*, the first
+        missing piece, the missing count), not the deleted level-path ETA
+        fields (Review Focus 3)."""
+        line = "Gear objective: target wolf; first missing iron_sword (weapon); 2 missing"
         pane = StatusPane()
         pane.update_snapshot(_snap(gear_objective=line))
         plain = _render(pane)
@@ -163,8 +162,8 @@ class TestStatusPaneGearObjective:
 
     def test_status_pane_shows_a_held_objective(self):
         pane = StatusPane()
-        pane.update_snapshot(_snap(gear_objective="gear_objective: monster=wolf, held=True, missing=[]"))
-        assert "held=True, missing=[]" in _render(pane)
+        pane.update_snapshot(_snap(gear_objective="Gear objective: target wolf; L* held"))
+        assert "targetwolf;L*held" in "".join(_render(pane).split())
 
     def test_status_pane_marks_an_unrecorded_objective(self):
         """No line before the first decision: the row reads `?`, never an

@@ -28,7 +28,7 @@ from artifactsmmo_cli.ai.combat import fight_loadout
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece, gear_objective_report
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -2390,8 +2390,9 @@ class TestNotifyObserverCooldown:
 
 
 class TestNotifyObserverGearObjective:
-    """The snapshot carries the cycle's gear objective as the `plan` command's
-    own `gear_objective:` line, the text the TUI status pane shows."""
+    """The snapshot carries the cycle's gear objective as the player's
+    per-cycle log line (m*, first missing piece, missing count), the text the
+    TUI status pane shows."""
 
     def _player(self, captured):
         player = GamePlayer(character="hero", cycle_observer=captured.append)
@@ -2401,7 +2402,7 @@ class TestNotifyObserverGearObjective:
         player.state = make_state(level=4)
         return player
 
-    def test_snapshot_carries_the_plan_commands_line(self):
+    def test_snapshot_carries_the_gear_objective_line(self):
         captured = []
         player = self._player(captured)
         objective = GearObjective(
@@ -2411,15 +2412,15 @@ class TestNotifyObserverGearObjective:
         player._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=objective)
         player._notify_observer("FightMonster", "FightAction(wolf)", "ok", [])
         assert captured[0].gear_objective == (
-            "gear_objective: monster=wolf, held=False, missing=[weapon:iron_sword(1, 0.075/450)]")
-        assert captured[0].gear_objective == gear_objective_report(objective)
+            "Gear objective: target wolf; first missing iron_sword (weapon); 1 missing")
+        assert captured[0].gear_objective == ctx_mod.gear_objective_line(objective)
 
     def test_a_decided_cycle_without_an_objective_says_so(self):
         captured = []
         player = self._player(captured)
         player._last_ctx = replace(NO_PROFILE_CONTEXT, bank_accessible=True)
         player._notify_observer("FightMonster", "FightAction(wolf)", "ok", [])
-        assert captured[0].gear_objective == "gear_objective: None"
+        assert captured[0].gear_objective == "Gear objective: none (no loadout pays XP)"
 
     def test_no_decision_yet_carries_no_line(self):
         """Before the first decision nothing was computed, so the snapshot

@@ -74,8 +74,9 @@ class GearObjective:
 def gear_objective_report(objective: GearObjective | None) -> str:
     """The `gear_objective:` line: m*, whether L* is held, and each missing
     piece in the objective's own order as slot:code(layer, gain/price), gain to
-    4 significant figures, price in whole seconds. The one formatter the `plan`
-    command prints and the TUI status pane shows (via the cycle snapshot)."""
+    4 significant figures, price in whole seconds. The `plan`
+    command's detailed report; the TUI shows the short per-cycle line
+    (`gear_objective_context.gear_objective_line`) instead."""
     if objective is None:
         return "gear_objective: None"
     pieces = ", ".join(f"{p.slot}:{p.code}({p.layer}, {float(p.gain):.4g}/{float(p.price):.0f})"
