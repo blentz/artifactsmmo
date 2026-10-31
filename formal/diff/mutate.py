@@ -11494,6 +11494,22 @@ WHICH_PIECE_MUTATIONS = [
      "        if target is None:\n"
      "            return ReachCharLevel(level=state.level + 1)\n"),
 ]
+# Ruling C4-b: the gear objective's two halves (Formal/Liveness/
+# GearTierLeveling.lean), bound to production by
+# formal/diff/test_gear_objective_arming_diff.py.
+GEAR_ARMING_WHICH_PIECE_MUTATIONS = [
+    ("arming: a held objective is walked as if pieces were missing",
+     "        if target.held and not fleet:\n",
+     "        if False and target.held and not fleet:\n"),
+    ("arming: the first served piece is passed over",
+     "                return piece_step(piece.slot, gear, self.walk, state, game_data, ctx, history)\n",
+     "                continue\n"),
+]
+GEAR_ARMING_TARGET_MUTATIONS = [
+    ("arming: an unheld m* is the grind target",
+     "        path_winnable=objective is not None and objective.held and not fleet_waiting,\n",
+     "        path_winnable=objective is not None and (objective.held or True) and not fleet_waiting,\n"),
+]
 WHICH_PIECE_ROOT_MUTATIONS = [
     # `RootWalk.serves` names a declined piece's reason (Phase 3-2's step
     # decline; its old group, STEP_DECLINE, went with the tier walk in plan C
@@ -13816,6 +13832,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_fleet_objective.py", survivors)
     run_group(CURRENCY_WALL_SRC, CURRENCY_WALL_ALT_MUTATIONS,
               "tests/test_audit/test_currency_wall_census.py", survivors)
+    run_group(WHICH_PIECE_SRC, GEAR_ARMING_WHICH_PIECE_MUTATIONS,
+              "formal/diff/test_gear_objective_arming_diff.py", survivors)
+    run_group(GEAR_OBJECTIVE_CONTEXT_SRC, GEAR_ARMING_TARGET_MUTATIONS,
+              "formal/diff/test_gear_objective_arming_diff.py", survivors)
     run_group(WHICH_PIECE_SRC, WHICH_PIECE_MUTATIONS,
               "tests/test_ai/test_decisions_which_piece.py", survivors)
     run_group(TUI_APP_SRC, TUI_FATAL_ERROR_MUTATIONS,

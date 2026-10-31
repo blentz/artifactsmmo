@@ -9,20 +9,26 @@ preserves `false`. Hence `Settled_unreachable_without_perception` — the
 objective-committed half of `hfightFires` cannot be discharged in-model without a
 re-arming step. This module supplies that step.
 
-`perceptionRefresh` is the model's faithful image of production's `perceive`:
-below the level cap the `ReachCharLevel` meta-goal is committed and its plan LEADS
-WITH A FIGHT (provided a winnable XP-positive monster exists in the band — that
-proviso is `GearTierLeveling.combatObjective_live_below_fifty`, i.e.
-`WinnableAcrossBand`). That proviso is now DISCHARGED, not assumed: Task 4's
-`WinnableGrounded.winnableAcrossBand_grounded` kernel-proves `WinnableAcrossBand`
-over the live catalog, so `combatTarget_exists_below_fifty` below makes
-target-existence a THEOREM and `arming_justified_below_fifty` shows the set
-`objectiveStepIsFight := true` is BACKED (kernel target-existence + the production
-differential `formal/diff/test_objectivestep_arming_diff.py`, which pins
-`objective_step_goal(ReachCharLevel) → GrindCharacterXPGoal` whenever a target
-exists and we are not in the paying-items-task defer case). So arming
-`objectiveStepFires`/`objectiveStepIsFight` on `level < 50` is DISCHARGED, not a
-free assertion. It arms ONLY those two
+`perceptionRefresh` is the model's image of production's `perceive` below the
+level cap ONCE THE GEAR OBJECTIVE'S `L*` IS HELD (ruling C4-b): the root is then
+`ReachCharLevel(level + 1)` and the grind target is `m*`, so the plan LEADS WITH A
+FIGHT (`GearTierLeveling.fight_armed_of_held`). That `m*` exists at every band
+level is `GearTierLeveling.combatObjective_live_below_fifty` fed by
+`WinnableGrounded.winnableAcrossBand_grounded`, which kernel-proves
+`WinnableAcrossBand` over the live catalog: `combatTarget_exists_below_fifty` below
+makes the existence of a held objective's fight a THEOREM, and
+`arming_justified_below_fifty` bundles it with the set `objectiveStepIsFight :=
+true`. The production differentials are `formal/diff/test_gear_objective_arming_diff.py`
+(both halves of the gear objective's root walk and grind target) and
+`formal/diff/test_objectivestep_arming_diff.py` (`objective_step_goal(ReachCharLevel)
+→ GrindCharacterXPGoal` whenever a target exists and we are not in the
+paying-items-task defer case).
+
+While `L*` is NOT held production fights nothing for XP: the root is a missing
+piece's acquisition (`GearTierLeveling.piece_root_of_not_held`). This module's
+unconditional arming does not model that phase — the E-tower does
+(`CycleStepE.perceptionRefreshE`, gated on `loadoutAdequate`), and this module
+survives for the iteration helpers the E/F/D towers consume. It arms ONLY those two
 Bools — the chore flags (`hasOverstockItems`, `selectBankDepositsNonempty`, …)
 read inventory composition the Lean model abstracts, so re-arming them would be a
 fabrication; their transience stays the documented `BlockersQuietInfinitelyOften`
@@ -92,22 +98,25 @@ NO fight below 50) is NOT modelled in `perceptionRefresh` (which abstracts the
 items-task lifecycle away); it lives in the undischarged `BlockersQuietInfinitelyOften`
 residual (`hquiet`) of the capstone. -/
 
-/-- **Kernel half — a winnable combat target exists below the cap.** Instantiates
+/-- **Kernel half — a held objective's fight exists below the cap.** Instantiates
 Task 4's `winnableAcrossBand_grounded` through `combatObjective_live_below_fifty`:
-at every level `1 ≤ L < 50` the live catalog's picker returns `some` target. So
-below 50 the objective tier ALWAYS has a Fight to emit — target-existence is a
-THEOREM, not an assumption. -/
+at every level `1 ≤ L < 50` the live catalog holds a candidate for `m*` (winnable,
+XP-positive, under the suicide guard) whose held objective's grind target is that
+monster. So below 50, once `L*` is held, the objective tier has a Fight to emit —
+a THEOREM, not an assumption. -/
 theorem combatTarget_exists_below_fifty (L : Int) (hlo : 1 ≤ L) (hhi : L < 50) :
-    ∃ target,
-      pickWinnableWindowed L winnableConcrete xpPosConcrete catalogAsMonsters
-        = some target :=
-  combatObjective_live_below_fifty winnableConcrete xpPosConcrete catalogAsMonsters
-    winnableAcrossBand_grounded L hlo hhi
+    ∃ m ∈ catalogAsMonsters, winnableConcrete m = true ∧ xpPosConcrete m = true ∧
+      notOverleveled L m = true ∧ grindTarget ⟨m.code, true, []⟩ = some m.code := by
+  obtain ⟨m, hm, hw, hx, ho, harm⟩ :=
+    combatObjective_live_below_fifty winnableConcrete xpPosConcrete catalogAsMonsters
+      winnableAcrossBand_grounded L hlo hhi
+  exact ⟨m, hm, hw, hx, ho, (harm (fun _ => true)).2⟩
 
 /-- **The arming is grounded.** Below the cap (and at a real spawn level `1 ≤ s.level`),
 `arming_justified_below_fifty` bundles two components:
 * `.1` — a kernel target-existence proof (from Task 4's `winnableAcrossBand_grounded`):
-  a winnable combat target EXISTS at `s.level`.  Together with the production differential
+  a candidate for `m*` EXISTS at `s.level`, and a held objective on it names it the
+  grind target.  Together with the production differential
   (`test_objectivestep_arming_diff.py`) this establishes that the model's unconditional
   arming is a FAITHFUL image of production outside the items-task defer-case.  This is
   the offline grounding — it is NOT logically consumed by capstone proofs that only need
@@ -122,9 +131,8 @@ regardless.  That gap is the items-task component of the undischarged
 `BlockersQuietInfinitelyOften` residual — it is named there, not confronted here. -/
 theorem arming_justified_below_fifty (s : State) (hlo : 1 ≤ s.level)
     (hhi : s.level < 50) :
-    (∃ target,
-        pickWinnableWindowed (s.level : Int) winnableConcrete xpPosConcrete
-          catalogAsMonsters = some target)
+    (∃ m ∈ catalogAsMonsters, winnableConcrete m = true ∧ xpPosConcrete m = true ∧
+        notOverleveled (s.level : Int) m = true ∧ grindTarget ⟨m.code, true, []⟩ = some m.code)
       ∧ (perceptionRefresh s).objectiveStepIsFight = true :=
   ⟨combatTarget_exists_below_fifty (s.level : Int) (by exact_mod_cast hlo)
       (by exact_mod_cast hhi),

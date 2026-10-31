@@ -22,7 +22,9 @@ So production yields a fight IFF a combat target is set AND we are NOT in the
 paying-items-task defer case. The Lean kernel half
 (`WinnableGrounded.winnableAcrossBand_grounded` →
 `GearTierLeveling.combatObjective_live_below_fifty`) PROVES that below 50 a
-winnable XP-positive combat target EXISTS. So the faithful binding is:
+winnable XP-positive candidate for `m*` EXISTS whose held objective names it the
+combat target (`fight_armed_of_held`; the target itself is `farm_target`'s, bound
+by `test_gear_objective_arming_diff.py`). So the faithful binding is:
 
     produced_fight  ==  (combat_target_exists AND level < 50 AND NOT defer_case)
 

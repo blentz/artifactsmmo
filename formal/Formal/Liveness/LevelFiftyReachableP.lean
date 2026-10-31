@@ -28,7 +28,12 @@ Option-A residual set:
   invariants, restated over `cycleStepPN`/the refreshed selection states.
 * **`hfightFiresP`** — which Brick 4 reduces to
   `BlockersQuietBelowCapInfinitelyOftenP` alone (CombatPersistent in-model).
-* **`WinnableAcrossBand`** — baked into `perceptionRefresh`'s arming faithfulness.
+* **`WinnableAcrossBand`** — baked into `perceptionRefresh`'s arming faithfulness:
+  since plan C Task 4 (ruling C4-b) through the gear objective's held half
+  (`GearTierLeveling.combatObjective_live_below_fifty`, `fight_armed_of_held`).
+  The not-held half (`piece_root_of_not_held`: the root is a missing piece's
+  acquisition, no XP fight) is modelled by the E-tower's `loadoutAdequate` gate,
+  not here.
 * **LIV-001** — the server xp-curve axiom.
 
 ## Why the existing engine is NOT reusable (the corrected finding)
