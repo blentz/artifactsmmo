@@ -130,9 +130,12 @@ class LoopRate:
     not an expectation (`xp_per_second` carries the `p_win` weight).
     `runnable` is False when the fight drops something and the bag has no room
     for it (spec 2026-10-18 §2.10): the loop cannot run, so it earns nothing
-    (`xp_per_second` 0) while its fight, recovery and consumables are still
-    the ones it would take. The ONE verdict a fight against that monster is
-    refused on (`fight_room_license`)."""
+    (`xp_per_second` and `kills_per_second` 0) while its fight, recovery and
+    consumables are still the ones it would take. The ONE verdict a fight
+    against that monster is refused on (`fight_room_license`).
+    `kills_per_second` is the same loop's expected kills a second, a kill paying
+    one: what a monsters task's progress is counted in (ruling C2-grey), so a
+    grey monster that pays no XP still has a rate."""
 
     xp_per_second: Fraction
     xp_per_kill: int
@@ -146,6 +149,7 @@ class LoopRate:
     used: tuple[tuple[str, int], ...]
     eaten: tuple[tuple[str, int], ...]
     runnable: bool
+    kills_per_second: Fraction
 
 
 @dataclass(frozen=True)
@@ -261,6 +265,8 @@ def loop_rate(state: WorldState, game_data: GameData, monster: str,
     trips = trip_share(trip_seconds(walk, Fraction(DEPOSIT_SECONDS_PER_CODE), len(table)),
                        per_fight, stats.inventory_max - carry)
     rate = Fraction(0) if trips is None else expected_xp_per_second(xp, p_win, fight, extra + trips)
+    # A kill pays one: the same renewal-reward over the same seconds.
+    kills = Fraction(0) if trips is None else expected_xp_per_second(1, p_win, fight, extra + trips)
     return LoopRate(rate, xp if p_win > 0 else 0, outcome.win, p_win, fight, recovery_mean,
                     consumed_mean, max_hp, math.floor(hp_end_mean), used_units, eaten,
-                    trips is not None)
+                    trips is not None, kills)

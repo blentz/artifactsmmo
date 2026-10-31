@@ -304,7 +304,7 @@ def _refuse(*_args: object, **_kw: object) -> best_mod.BestLoadout:
 
 def _rate(used: tuple[tuple[str, int], ...], eaten: tuple[tuple[str, int], ...] = ()) -> LoopRate:
     return LoopRate(Fraction(0), 0, False, Fraction(0), Fraction(30), Fraction(0), Fraction(0), 100, 0,
-                    used, eaten, True)
+                    used, eaten, True, Fraction(0))
 
 
 def test_a_priced_potion_nothing_stocks_is_no_candidate(monkeypatch: pytest.MonkeyPatch) -> None:

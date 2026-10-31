@@ -84,7 +84,8 @@ has no replacement."""
     # A party loop counts no bank trips (spec 2026-10-18 §2.10 covers the solo
     # loop): it always runs.
     return LoopRate(xp_per_second(xp, fight, recovery, consumed), xp, True, Fraction(1), fight, recovery,
-                    consumed, me.max_hp, hp_end, used, eaten, True)
+                    consumed, me.max_hp, hp_end, used, eaten, True,
+                    xp_per_second(1, fight, recovery, consumed))
 
 
 def best_party_loop(state: WorldState, game_data: GameData, monster: str,

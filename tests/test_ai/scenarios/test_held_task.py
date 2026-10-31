@@ -56,7 +56,7 @@ from artifactsmmo_cli.ai.combat_deficit import has_combat_deficit
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.decisions.root import _task_root, resolve_root
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_objective import gear_objective_for
+from artifactsmmo_cli.ai.gear_objective import gear_objective_for, task_rate
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.inventory_keep import keep_in_bag
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -67,7 +67,6 @@ from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.task_horizon import (
     HORIZON_GEAR,
-    HORIZON_LEVEL_UP,
     HORIZON_OUT_OF_REACH,
     TaskHorizon,
     resolve_task_horizon,
@@ -124,7 +123,7 @@ def _gear(state, game_data: GameData) -> tuple[str, str] | None:  # type: ignore
     if horizon is None or horizon.verdict != HORIZON_GEAR:
         return None
     first = gear_objective_for(horizon.monster, state, game_data, TIMED_NO_PROFILE_CONTEXT,
-                               None).missing[0]
+                               None, task_rate).missing[0]
     return first.code, first.slot
 
 
@@ -240,10 +239,11 @@ def test_the_task_triple_splits_the_horizon_three_ways(gd: GameData) -> None:
     differs is only which horizon verdict the monster lands on.
 
     RE-DERIVED plan C Task 2: the gear verdict is `L*` of the task monster, the
-    ACHIEVABLE loadout. The deleted deficit walk closed the ogre with
-    `perfect_bow`, a catalogue item this character cannot obtain; `L*(ogre)` is
-    already held and still loses, and one level closes it. So the closable
-    cell reads LEVEL_UP, and the three cells still split three ways."""
+    ACHIEVABLE loadout, its `R` read in task progress a second (ruling
+    C2-grey: the ogre pays this character no XP). The closable cell's
+    `L*(ogre)` secures the fight with its first missing piece the
+    `lifesteal_rune` (the deleted deficit walk named the unobtainable
+    `perfect_bow`), so the three cells still split three ways."""
     workable = _state(TRIPLE_WORKABLE, gd)
     closable = _state(TRIPLE_CLOSABLE, gd)
     open_ = _state(TRIPLE_OPEN, gd)
@@ -252,10 +252,7 @@ def test_the_task_triple_splits_the_horizon_three_ways(gd: GameData) -> None:
     assert _horizon(workable, gd) is None
 
     assert has_combat_deficit(closable, gd) is True
-    assert not gear_objective_for("ogre", closable, gd, TIMED_NO_PROFILE_CONTEXT, None).missing
-    horizon = _horizon(closable, gd)
-    assert horizon is not None
-    assert horizon.verdict == HORIZON_LEVEL_UP
+    assert _gear(closable, gd) == ("lifesteal_rune", "rune_slot")
 
     assert has_combat_deficit(open_, gd) is True
     horizon = _horizon(open_, gd)
@@ -303,10 +300,11 @@ def test_the_task_triple_moves_the_task_root(gd: GameData) -> None:
 
     RE-DERIVED plan C Task 2: the task root of an unwinnable task is the first
     missing piece of `L*` of its monster, and only on the gear verdict. The
-    closable cell's `L*(ogre)` is held and loses (one level closes it), so it
-    asks for nothing, where the deleted deficit walk asked for the priced
-    `earth_boost_potion`; the open cell asks for nothing (no gear closes it, no
-    coin cancels it); the workable cell's task is worked. The gear arm's
+    closable cell's task asks `L*(ogre)`'s `lifesteal_rune`, which is also the
+    head of the cell's own `L*`, so it adds no alternative (the deleted deficit
+    walk asked for the priced `earth_boost_potion`); the open cell asks for
+    nothing (no gear closes it, no coin cancels it); the workable cell's task
+    is worked. The gear arm's
     witness is `test_an_unwinnable_task_monster_roots_its_first_missing_piece`."""
     resolutions = {}
     for name in TRIPLE:
@@ -319,10 +317,14 @@ def test_the_task_triple_moves_the_task_root(gd: GameData) -> None:
     task = ReachTaskOutcome(task_code="wolf")
     assert task in resolutions[TRIPLE_WORKABLE].alternatives
     # The closable and open cells offer exactly the workable cell's alternatives
-    # less its task: no task root, no gear for the task.
+    # less its task: the open cell's task asks nothing, the closable cell's
+    # asks the piece its own walk already heads with.
     own = tuple(alt for alt in resolutions[TRIPLE_WORKABLE].alternatives if alt != task)
     assert resolutions[TRIPLE_CLOSABLE].alternatives == own
     assert resolutions[TRIPLE_OPEN].alternatives == own
+    closable = _state(TRIPLE_CLOSABLE, gd)
+    assert _task_root(closable, gd, attach_gear_objective(closable, gd, TIMED_NO_PROFILE_CONTEXT,
+                                                          None), None) == first_piece
 
 
 def test_an_unwinnable_task_monster_roots_its_first_missing_piece(gd: GameData) -> None:
@@ -340,7 +342,7 @@ def test_an_unwinnable_task_monster_roots_its_first_missing_piece(gd: GameData) 
     ctx = attach_gear_objective(state, gd, TIMED_NO_PROFILE_CONTEXT, None)
     root = ObtainItem(code="iron_legs_armor", quantity=1, slot="leg_armor_slot")
     assert _task_root(state, gd, ctx, None) == root
-    first = gear_objective_for("cow", state, gd, ctx, None).missing[0]
+    first = gear_objective_for("cow", state, gd, ctx, None, task_rate).missing[0]
     assert (first.code, first.slot) == ("iron_legs_armor", "leg_armor_slot")
     assert ctx.gear_objective is not None
     assert ctx.gear_objective.monster != "cow"

@@ -15,10 +15,13 @@ no test at all.
 MEASURED since plan C Task 2 (ruling C2-one-model: both gear arms read `L*`,
 the ACHIEVABLE loadout of the task monster): over the corpus' 44
 `derive_combat_stats` characters against all 58 catalogue monsters (2,552 pairs),
-563 have no reading, 134 read GEAR, 33 LEVEL_UP and 1,822 OUT_OF_REACH. Reading
+560 have no reading, 160 read GEAR, 10 LEVEL_UP and 1,822 OUT_OF_REACH. Reading
 `L*` instead of the catalogue deficit walk moved 117 pairs: 116 LEVEL_UP to
 OUT_OF_REACH (the walk's level+1 chain was catalogue gear the character cannot
 obtain) and one OUT_OF_REACH to LEVEL_UP (`l13_drop_recipe_grind` v mushmush).
+Reading a task monster's `R` in task progress a second (ruling C2-grey: a grey
+monster pays no XP, so in XP every gain was 0) moved 26 more to GEAR: 23 from
+LEVEL_UP and 3 from no reading (fights the gate takes below SECURE_WIN).
 """
 
 import dataclasses
@@ -29,8 +32,16 @@ import pytest
 
 import artifactsmmo_cli.ai.gear_objective as go_mod
 from artifactsmmo_cli.ai.combat import predict_win, secure_win
+from artifactsmmo_cli.ai.decisions.root import _task_root
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.gear_objective import gear_closes_for, gear_fighter_for, gear_objective_for
+from artifactsmmo_cli.ai.gear_objective import (
+    gear_closes_for,
+    gear_fighter_for,
+    gear_objective_for,
+    task_rate,
+    xp_rate,
+)
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.learning.rung_state_core import HP_PER_LEVEL
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
@@ -43,6 +54,7 @@ from artifactsmmo_cli.ai.task_horizon import (
     resolve_task_horizon,
 )
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
@@ -50,7 +62,7 @@ from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
 GEAR_CELL = "l13_drop_recipe_grind"       # cow: its `L*` closes it
-LEVEL_UP_TASK_CELL = "l32_held_task_closable"  # ogre: `L*` held and lost, a level closes it
+GREY_CELL = "l32_held_task_closable"     # ogre: grey (0 XP), its `L*` closes it
 OUT_OF_REACH_CELL = "l32_held_task_open"  # lich: nothing closes it
 WORKABLE_CELL = "l32_held_task_workable"  # wolf: already winnable
 
@@ -93,21 +105,21 @@ def test_gear_that_closes_the_fight_reads_gear(gd: GameData) -> None:
     state = _state(GEAR_CELL, gd)
     horizon = _horizon(state, gd)
     assert horizon == TaskHorizon(monster="cow", verdict=HORIZON_GEAR)
-    objective = gear_objective_for("cow", state, gd, TIMED_NO_PROFILE_CONTEXT, None)
+    objective = gear_objective_for("cow", state, gd, TIMED_NO_PROFILE_CONTEXT, None, task_rate)
     assert len(objective.missing) > 1
 
 
 @pytest.mark.parametrize(("cell", "monster"), [
-    (GEAR_CELL, "cow"), (LEVEL_UP_TASK_CELL, "ogre"), ("l10_copper_adequate", "pig")])
+    (GEAR_CELL, "cow"), (GREY_CELL, "ogre"), ("l10_copper_adequate", "pig")])
 def test_the_verdict_reads_the_objectives_own_fighter_and_missing_pieces(
         gd: GameData, cell: str, monster: str) -> None:
     """Ruling C2-perf: the horizon prices no piece, but what it reads is
     `gear_objective_for`'s: the same fighter wearing `L*`, and a missing piece
-    exactly when the objective has one (the cow's four, the ogre's none: its
-    unheld pieces each add nothing to `R`, the pig's nine). Gear closes the
-    fight exactly when that fighter secures it and a piece is missing."""
+    exactly when the objective has one (the cow's, the grey ogre's, the pig's
+    nine). Gear closes the fight exactly when that fighter secures it and a
+    piece is missing."""
     state = _with_task(_state(cell, gd), monster)
-    objective = gear_objective_for(monster, state, gd, TIMED_NO_PROFILE_CONTEXT, None)
+    objective = gear_objective_for(monster, state, gd, TIMED_NO_PROFILE_CONTEXT, None, task_rate)
     fighter = gear_fighter_for(monster, state, gd, TIMED_NO_PROFILE_CONTEXT, None)
     assert objective.fighter is not None
     assert fighter.equipment == objective.fighter.equipment
@@ -121,24 +133,44 @@ def test_a_missing_l_star_that_still_loses_is_no_gear_verdict(gd: GameData) -> N
     character can build does not close the fight, so the horizon names none
     and reads one level up instead."""
     state = _with_task(_state("l10_copper_adequate", gd), "pig")
-    objective = gear_objective_for("pig", state, gd, TIMED_NO_PROFILE_CONTEXT, None)
+    objective = gear_objective_for("pig", state, gd, TIMED_NO_PROFILE_CONTEXT, None, task_rate)
     assert len(objective.missing) == 9
     horizon = _horizon(state, gd)
     assert horizon is not None
     assert horizon.verdict != HORIZON_GEAR
 
 
+def test_a_grey_task_monster_roots_its_first_missing_piece(gd: GameData) -> None:
+    """Ruling C2-grey. The ogre pays this level-32 character 0 XP, so `L*(ogre)`
+    read in XP a second has `R = 0` and every piece gains 0: nothing missing,
+    and the task asked for no gear. Read in the task's own unit, kills a second
+    (`task_rate`: a monsters task pays per kill), the pieces gain, `L*`
+    secures the fight, the verdict is GEAR and the task root is the first
+    missing piece."""
+    state = _state(GREY_CELL, gd)
+    assert state.task_code == "ogre" and gd.xp_per_kill("ogre", state.level) == 0
+    assert not gear_objective_for("ogre", state, gd, TIMED_NO_PROFILE_CONTEXT, None,
+                                  xp_rate).missing
+    missing = gear_objective_for("ogre", state, gd, TIMED_NO_PROFILE_CONTEXT, None,
+                                 task_rate).missing
+    assert (missing[0].code, missing[0].slot) == ("lifesteal_rune", "rune_slot")
+    assert _horizon(state, gd) == TaskHorizon(monster="ogre", verdict=HORIZON_GEAR)
+    ctx = attach_gear_objective(state, gd, TIMED_NO_PROFILE_CONTEXT, None)
+    assert _task_root(state, gd, ctx, None) == ObtainItem("lifesteal_rune", 1, slot="rune_slot")
+
+
 def test_one_level_plus_gear_closing_it_reads_level_up(gd: GameData) -> None:
-    """Clause 2, and the whole reason the level+1 body has to be modelled.
-    `L*(ogre)` is held and the character loses; `L*` one level up wins it
-    (ruling C2-one-model: the level-up arm reads `L*`, not the catalogue
-    deficit walk)."""
-    state = _state(LEVEL_UP_TASK_CELL, gd)
-    assert state.task_code == "ogre"
-    assert not gear_objective_for("ogre", state, gd, TIMED_NO_PROFILE_CONTEXT, None).missing
-    assert not predict_win(dataclasses.replace(state, hp=state.max_hp), gd, "ogre")
-    assert predict_win(gear_fighter_for("ogre", next_level_state(state), gd,
-                                        TIMED_NO_PROFILE_CONTEXT, None), gd, "ogre")
+    """Clause 2, and the whole reason the level+1 body has to be modelled, on a
+    monster that pays XP (pig, 45 XP a kill at level 15). The gear the
+    character can build does not secure it; `L*` one level up wins it (ruling
+    C2-one-model: the level-up arm reads `L*`, not the catalogue deficit
+    walk)."""
+    state = _with_task(_state(BODY_CELL, gd), BODY_MONSTER)
+    assert gd.xp_per_kill(BODY_MONSTER, state.level) > 0
+    assert not gear_closes_for(BODY_MONSTER, state, gd, TIMED_NO_PROFILE_CONTEXT, None)
+    assert not predict_win(dataclasses.replace(state, hp=state.max_hp), gd, BODY_MONSTER)
+    assert predict_win(gear_fighter_for(BODY_MONSTER, next_level_state(state), gd,
+                                        TIMED_NO_PROFILE_CONTEXT, None), gd, BODY_MONSTER)
     horizon = _horizon(state, gd)
     assert horizon is not None
     assert horizon.verdict == HORIZON_LEVEL_UP

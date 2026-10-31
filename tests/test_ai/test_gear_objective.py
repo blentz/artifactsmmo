@@ -169,7 +169,7 @@ def test_a_zero_gain_piece_is_not_missing(gd: GameData, robby: GearObjective) ->
     assert loadout == robby.loadout
     emptied = _without(state, fighter, "artifact1_slot", gd)
     assert mod._rate(emptied, gd, robby.monster, food_menu(state, gd, CTX),
-                     _loop(state, gd)) == robby.rate
+                     _loop(state, gd), mod.xp_rate) == robby.rate
     assert all(piece.code != "perfect_pearl" for piece in robby.missing)
     assert {piece.slot for piece in robby.missing}.isdisjoint(
         {"artifact1_slot", "artifact2_slot", "artifact3_slot"})
@@ -218,7 +218,7 @@ def test_gain_is_measured_against_the_target_not_a_bare_fighter(
         assert objective.loadout[piece.slot] == piece.code
         without = _without(state, fighter, piece.slot, gd)
         assert piece.gain == objective.rate - mod._rate(without, gd, objective.monster,
-                                                        food, _loop(state, gd)), piece
+                                                        food, _loop(state, gd), mod.xp_rate), piece
     assert any(piece.gain > 0 for piece in objective.missing)
 
 
@@ -254,7 +254,8 @@ def test_a_bag_has_a_gain() -> None:
     without = _without(state, fighter, "bag_slot", gd)
     assert without.inventory_max == state.inventory_max
     assert piece.gain == objective.rate - mod._rate(without, gd, objective.monster,
-                                                    food_menu(state, gd, CTX), _loop(state, gd))
+                                                    food_menu(state, gd, CTX), _loop(state, gd),
+                                                    mod.xp_rate)
 
 
 def test_the_keep_s_carry_is_room_no_drop_has(monkeypatch: pytest.MonkeyPatch,
@@ -292,10 +293,11 @@ def test_a_fresh_character_wants_its_first_weapon(gd: GameData) -> None:
     unarmed = replace(unarmed, inventory={
         item: n for item, n in unarmed.inventory.items()
         if (stats := gd.item_stats(item)) is not None and stats.type_ != "weapon"})
-    assert mod._rate(unarmed, gd, objective.monster, food, _loop(state, gd)) == 0
+    assert mod._rate(unarmed, gd, objective.monster, food, _loop(state, gd), mod.xp_rate) == 0
     assert dagger[0].gain == objective.rate > 0
     carried = mod._wearing(fighter, {"weapon_slot": None}, gd)
-    assert mod._rate(carried, gd, objective.monster, food, _loop(state, gd)) == objective.rate
+    assert mod._rate(carried, gd, objective.monster, food, _loop(state, gd),
+                     mod.xp_rate) == objective.rate
     assert not objective.held
 
 
@@ -460,7 +462,7 @@ def test_m_star_is_the_max_rate_monster(gd: GameData, novice: GearObjective) -> 
     state = _novice(gd)
     achieved = frozenset().union(*achievable(state, gd, CTX))
     food = food_menu(state, gd, CTX)
-    rates = {code: mod._rate(fighter, gd, code, food, _loop(state, gd))
+    rates = {code: mod._rate(fighter, gd, code, food, _loop(state, gd), mod.xp_rate)
              for code, (fighter, _) in mod._targets(state, gd, achieved).items()}
     assert len(set(rates.values())) > 1
     assert novice.rate == rates[novice.monster] == max(rates.values())
@@ -692,7 +694,7 @@ def test_a_no_potion_loop_that_never_runs_raises(monkeypatch: pytest.MonkeyPatch
     a None from it is a broken invariant, never a rate."""
     monkeypatch.setattr(mod, "loop_rate", lambda *_args: None)
     with pytest.raises(RuntimeError, match="the no-potion loop against chicken did not run"):
-        mod._rate(_novice(gd), gd, "chicken", (), _loop(_novice(gd), gd))
+        mod._rate(_novice(gd), gd, "chicken", (), _loop(_novice(gd), gd), mod.xp_rate)
 
 
 def _carrying_its_target(name: str, gd: GameData) -> tuple[WorldState, GearObjective]:
@@ -860,8 +862,8 @@ def test_a_worn_boost_projects_to_the_sheet_totals(gd: GameData, novice: GearObj
         fighter, gd, novice.monster)
     loop = _loop(fighter, gd)
     food = food_menu(fighter, gd, CTX)
-    bare = mod._rate(fighter, gd, novice.monster, food, loop)
-    assert mod._rate(worn, gd, novice.monster, food, loop) == bare
+    bare = mod._rate(fighter, gd, novice.monster, food, loop, mod.xp_rate)
+    assert mod._rate(worn, gd, novice.monster, food, loop, mod.xp_rate) == bare
     carried = replace(fighter, inventory={**fighter.inventory, "earth_boost_potion": 30})
     assert _boost_rate(worn, gd, novice.monster, "earth_boost_potion") == _boost_rate(
         carried, gd, novice.monster, "earth_boost_potion") > bare
@@ -894,4 +896,4 @@ def test_the_pinned_objective_of_m_star_is_the_objective(
     eleven worn pieces would bias a pick from the dressed character)."""
     objective = request.getfixturevalue(name)
     state = _robby() if name == "robby" else _novice(gd)
-    assert gear_objective_for(objective.monster, state, gd, CTX, None) == objective
+    assert gear_objective_for(objective.monster, state, gd, CTX, None, mod.xp_rate) == objective

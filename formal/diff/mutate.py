@@ -1931,6 +1931,10 @@ LOOP_RATE_CHOICE_MUTATIONS = [
 # loop_rate: the reader (increments 3-4). OWN run_group: unit-killed by
 # tests/test_ai/test_loop_rate.py.
 LOOP_RATE_READER_MUTATIONS = [
+    # Ruling C2-grey: a kill pays one, whatever XP it pays.
+    ("loop_rate reader: a kill a second weighs the kill's XP",
+     "    kills = Fraction(0) if trips is None else expected_xp_per_second(1, p_win, fight, extra + trips)",
+     "    kills = Fraction(0) if trips is None else expected_xp_per_second(xp, p_win, fight, extra + trips)"),
     ("loop_rate reader: a boost is not consumed",
      "        used = tuple((code, e.used if code == restore_code else 1) for code, _ in loadout)",
      "        used = tuple((code, e.used if code == restore_code else 0) for code, _ in loadout)"),
@@ -2001,8 +2005,8 @@ LOOP_RATE_READER_MUTATIONS = [
      "    trips = trip_share(trip_seconds(walk, Fraction(DEPOSIT_SECONDS_PER_CODE), len(table)),",
      "    trips = trip_share(trip_seconds(walk, Fraction(DEPOSIT_SECONDS_PER_CODE), 1),"),
     ("loop_rate reader: a loop with no room runs",
-     "                    trips is not None)",
-     "                    True)"),
+     "                    trips is not None, kills)",
+     "                    True, kills)"),
     ("loop_rate reader: a loop with no room earns its rate without trips",
      "    rate = Fraction(0) if trips is None else expected_xp_per_second(xp, p_win, fight, extra + trips)",
      "    rate = expected_xp_per_second(xp, p_win, fight, extra + (trips or 0))"),
@@ -6717,8 +6721,8 @@ GEAR_OBJECTIVE_MUTATIONS = [
      "        if at in ITEM_TYPE_TO_SLOTS.get(_stats(item, game_data).type_, []):\n",
      "        if True:\n"),
     ("gear objective: the gain vacates the placement slot, not the L* slot",
-     "        gain = _gain(state, fighter, game_data, monster, food, loop, rate, at)\n",
-     "        gain = _gain(state, fighter, game_data, monster, food, loop, rate, slot)\n"),
+     "        gain = _gain(state, fighter, game_data, monster, food, loop, rate, at, per)\n",
+     "        gain = _gain(state, fighter, game_data, monster, food, loop, rate, slot, per)\n"),
     ("gear objective: a bare total below zero is accepted",
      "        if value < 0:\n            raise ValueError(f\"{state.character}: bare {stat}",
      "        if False:\n            raise ValueError(f\"{state.character}: bare {stat}"),
@@ -7765,6 +7769,9 @@ ROUTE_PRICE_MUTATIONS = [
 # task roots the first missing piece of `L*` of its monster, in its slot.
 # Killed by tests/test_ai/scenarios/test_held_task.py.
 ROOT_TASK_GEAR_MUTATIONS = [
+    ("root: the task's gear is read in XP, not task progress",
+     "                                 task_rate).missing\n",
+     "                                 lambda rate: rate.xp_per_second).missing\n"),
     ("root: an unwinnable task's gear arm never roots",
      "    if horizon is None or horizon.verdict != HORIZON_GEAR:\n        return None\n",
      "    if True:\n        return None\n"),
@@ -7779,18 +7786,25 @@ ROOT_TASK_GEAR_MUTATIONS = [
 # argmax's (plan C Task 2). Killed by tests/test_ai/test_gear_objective.py.
 GEAR_OBJECTIVE_FOR_MUTATIONS = [
     ("gear objective for: the pinned monster's pieces are gained against no rate",
-     "        rate = _rate(target[0], game_data, monster, food, loop)\n        return _objective(",
+     "        rate = _rate(target[0], game_data, monster, food, loop, per)\n        return _objective(",
      "        rate = Fraction(0)\n        return _objective("),
 ]
 # Ruling C2-perf: the horizon reads `L*` without pricing it, and reads the
 # achievable set once per episode. Killed by tests/test_ai/test_task_horizon.py.
 GEAR_HORIZON_READ_MUTATIONS = [
+    # Ruling C2-grey: a pinned task monster's R is its task progress a second.
+    ("task purpose: a task's progress is counted in XP",
+     "    return rate.kills_per_second\n",
+     "    return rate.xp_per_second\n"),
+    ("gear closes: the task horizon reads R in XP",
+     "    rate = _rate(fighter, game_data, monster, food, loop, task_rate)\n",
+     "    rate = _rate(fighter, game_data, monster, food, loop, xp_rate)\n"),
     ("gear closes: a missing L* that still loses closes it",
      "    if not secure_win(fighter, game_data, monster):\n        return False\n    own =",
      "    if False:\n        return False\n    own ="),
     ("gear closes: an unheld piece that adds nothing to R closes it",
-     "    return any(_gain(state, fighter, game_data, monster, food, loop, rate, at) > 0\n",
-     "    return any(_gain(state, fighter, game_data, monster, food, loop, rate, at) >= 0\n"),
+     "    return any(_gain(state, fighter, game_data, monster, food, loop, rate, at, task_rate) > 0\n",
+     "    return any(_gain(state, fighter, game_data, monster, food, loop, rate, at, task_rate) >= 0\n"),
     ("episode memo: an answer is served to another state",
      "        if held_data is game_data and held_ctx is ctx and held_state == key_state:\n",
      "        if held_data is game_data and held_ctx is ctx:\n"),

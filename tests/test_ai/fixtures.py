@@ -208,7 +208,8 @@ def make_loop(*, xp: int = 0, win: bool = False, recovery: int = 0, consumed: in
     return LoopRate(xp_per_second=odds * xp / seconds,
                     xp_per_kill=xp, win=win, p_win=odds, fight_seconds=fight,
                     recovery_seconds=Fraction(recovery), consumed_seconds=Fraction(consumed),
-                    max_hp=100, hp_end=50, used=used, eaten=(), runnable=True)
+                    max_hp=100, hp_end=50, used=used, eaten=(), runnable=True,
+                    kills_per_second=odds / seconds)
 
 
 def make_best_loadout(loadout: tuple[str, ...] = (), **loop: object) -> BestLoadout:

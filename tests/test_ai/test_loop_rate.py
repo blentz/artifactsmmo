@@ -598,3 +598,24 @@ class TestBankTrips:
         gd._monster_locations = {}
         with pytest.raises(ValueError, match="a bank trip cannot be priced"):
             loop_mod.bank_walk(_state(), gd, "ogre")
+
+
+class TestKillsPerSecond:
+    """Ruling C2-grey: the loop's kills a second, a kill paying one, from the
+    same renewal-reward over the same seconds as its XP a second."""
+
+    def test_the_xp_rate_is_the_kill_rate_times_the_kills_xp(self) -> None:
+        rate = _rate(_state(inventory={"heal_potion": 5}), _gd(), [("heal_potion", 5)])
+        assert rate is not None and rate.xp_per_kill > 0
+        assert rate.kills_per_second > 0
+        assert rate.xp_per_second == rate.kills_per_second * rate.xp_per_kill
+
+    def test_a_grey_monster_still_has_a_kill_rate(self) -> None:
+        """At level 30 the level-5 ogre pays no XP: no XP a second, and the
+        same kills a second as the low-level character (`p_win` 1 either way)."""
+        held = {"inventory": {"heal_potion": 5}}
+        low = _rate(_state(**held), _gd(), [("heal_potion", 5)])
+        grey = _rate(_state(level=30, **held), _gd(), [("heal_potion", 5)])
+        assert low is not None and grey is not None
+        assert (grey.xp_per_kill, grey.xp_per_second) == (0, 0)
+        assert grey.kills_per_second == low.kills_per_second > 0

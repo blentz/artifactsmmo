@@ -106,7 +106,7 @@ from artifactsmmo_cli.ai.fleet_work import (
     turn_in_due,
 )
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_objective import gear_objective_for
+from artifactsmmo_cli.ai.gear_objective import gear_objective_for, task_rate
 from artifactsmmo_cli.ai.heal_catalog import FOOD
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -767,7 +767,8 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
     horizon = resolve_task_horizon(state, game_data, ctx, history)
     if horizon is None or horizon.verdict != HORIZON_GEAR:
         return None
-    missing = gear_objective_for(state.task_code, state, game_data, ctx, history).missing
+    missing = gear_objective_for(state.task_code, state, game_data, ctx, history,
+                                 task_rate).missing
     if not missing:
         return None
     return ObtainItem(missing[0].code, 1, slot=missing[0].slot)
