@@ -86,11 +86,12 @@ entirely. One of the two evasions the design names."""
 FUNNEL = "route.py"
 """The ONE module permitted to import a pricing producer."""
 
-MIN_DECISION_CLASSES = 13
+MIN_DECISION_CLASSES = 9
 """Floor on `Decision` subclasses found, so the sweep cannot pass by finding
-nothing. Raised with the graph: wave 3 shipped five root nodes, wave 4 added
-`IsAFightBlockingMe` and `WhichSlotClosesTheFight` (both deleted in plan C Task
-2), the global gear objective `WhichPieceIsNext`. Mirrors
+nothing: the seven `obtain_item` nodes, `IsThisTargetBlocked` and
+`WhichPieceIsNext`. Lowered from 13 when plan C Task 3 deleted the tier walk's
+four root nodes (`IsMyGearBehindMyTier`, `WhichSlotIsFurthestBehind`,
+`IsThereACombatTarget`, `CanIClearMyTier`). Mirrors
 `test_decisions_dag._MIN_CLASSES`."""
 
 
