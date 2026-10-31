@@ -31,11 +31,13 @@ from pathlib import Path
 
 import pytest
 
-from artifactsmmo_cli.ai.combat import predict_win
+import artifactsmmo_cli.ai.gear_objective as go_mod
+from artifactsmmo_cli.ai.combat import predict_win, secure_win
 from artifactsmmo_cli.ai.combat_deficit import combat_deficit
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.gear_objective import gear_objective_for
+from artifactsmmo_cli.ai.gear_objective import gear_closes_for, gear_fighter_for, gear_objective_for
 from artifactsmmo_cli.ai.learning.rung_state_core import HP_PER_LEVEL
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.task_horizon import (
     HORIZON_GEAR,
@@ -158,19 +160,32 @@ def _with_task(state: WorldState, monster: str) -> WorldState:
 # --- the three verdicts ----------------------------------------------------
 
 def test_gear_that_closes_the_fight_reads_gear(gd: GameData) -> None:
-    """Clause 1: `L*` of the task monster secures the fight, and the verdict
-    names its first missing piece in the objective's own order (plan C Task 2;
-    the deleted deficit walk named a weapon for this cow)."""
+    """Clause 1: `L*` of the task monster secures the fight and a piece of it
+    is unheld (plan C Task 2). The gear to build is `L*(cow)`'s first missing
+    piece, which the task root asks (`test_held_task`)."""
     state = _state(GEAR_CELL, gd)
     horizon = _horizon(state, gd)
-    assert horizon is not None
-    assert horizon.monster == "cow"
-    assert horizon.verdict == HORIZON_GEAR
+    assert horizon == TaskHorizon(monster="cow", verdict=HORIZON_GEAR)
     objective = gear_objective_for("cow", state, gd, TIMED_NO_PROFILE_CONTEXT, None)
     assert len(objective.missing) > 1
-    assert horizon.gear_target == objective.missing[0]
-    assert (horizon.gear_target.code, horizon.gear_target.slot) == (
-        "iron_legs_armor", "leg_armor_slot")
+
+
+@pytest.mark.parametrize(("cell", "monster"), [
+    (GEAR_CELL, "cow"), (LEVEL_UP_TASK_CELL, "ogre"), ("l10_copper_adequate", "pig")])
+def test_the_verdict_reads_the_objectives_own_fighter_and_missing_pieces(
+        gd: GameData, cell: str, monster: str) -> None:
+    """Ruling C2-perf: the horizon prices no piece, but what it reads is
+    `gear_objective_for`'s: the same fighter wearing `L*`, and a missing piece
+    exactly when the objective has one (the cow's four, the ogre's none: its
+    unheld pieces each add nothing to `R`, the pig's nine). Gear closes the
+    fight exactly when that fighter secures it and a piece is missing."""
+    state = _with_task(_state(cell, gd), monster)
+    objective = gear_objective_for(monster, state, gd, TIMED_NO_PROFILE_CONTEXT, None)
+    fighter = gear_fighter_for(monster, state, gd, TIMED_NO_PROFILE_CONTEXT, None)
+    assert objective.fighter is not None
+    assert fighter.equipment == objective.fighter.equipment
+    assert gear_closes_for(monster, state, gd, TIMED_NO_PROFILE_CONTEXT, None) is (
+        secure_win(fighter, gd, monster) and bool(objective.missing))
 
 
 def test_a_missing_l_star_that_still_loses_is_no_gear_verdict(gd: GameData) -> None:
@@ -184,7 +199,6 @@ def test_a_missing_l_star_that_still_loses_is_no_gear_verdict(gd: GameData) -> N
     horizon = _horizon(state, gd)
     assert horizon is not None
     assert horizon.verdict != HORIZON_GEAR
-    assert horizon.gear_target is None
 
 
 def test_one_level_plus_gear_closing_it_reads_level_up(gd: GameData) -> None:
@@ -197,7 +211,6 @@ def test_one_level_plus_gear_closing_it_reads_level_up(gd: GameData) -> None:
     horizon = _horizon(state, gd)
     assert horizon is not None
     assert horizon.verdict == HORIZON_LEVEL_UP
-    assert horizon.gear_target is None
 
 
 def test_the_level_alone_arm_is_a_level_up_verdict_too() -> None:
@@ -256,7 +269,6 @@ def test_nothing_within_one_level_reads_out_of_reach(gd: GameData) -> None:
     assert horizon is not None
     assert horizon.monster == "lich"
     assert horizon.verdict == HORIZON_OUT_OF_REACH
-    assert horizon.gear_target is None
     # ...and the lich is IN BAND (level 30 against a level-32 character), which is
     # exactly why `task_feasibility`'s level proxy called it feasible and
     # `task_decision` answered PURSUE. Out of reach is a fact about the FIGHT.
@@ -419,3 +431,35 @@ def test_a_task_the_gate_fights_with_no_gear_to_secure_it_has_no_verdict() -> No
                        task_progress=0, win_thresholds={"owlbear": Fraction(1, 2)})
     assert predict_win(state, gd, "owlbear")
     assert _horizon(state, gd) is None
+
+
+def test_a_cycle_reads_the_achievable_set_once(gd: GameData, tmp_path: Path,
+                                                monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling C2-perf: inside one `search_cache` episode the task root's read
+    and a task-worth probe of the same character (task progress reset, as
+    `task_worth_for` builds it) share one achievable set; an episode-less store,
+    a different context or a different holding computes afresh."""
+    asked: list[int] = []
+    real = go_mod._inputs
+
+    def counted(state, game_data, ctx, history):  # type: ignore[no-untyped-def]
+        asked.append(state.level)
+        return real(state, game_data, ctx, history)
+
+    monkeypatch.setattr(go_mod, "_inputs", counted)
+    store = LearningStore(str(tmp_path / "learning.db"), character="cow_farmer")
+    state = _state(GEAR_CELL, gd)
+    probe = dataclasses.replace(state, task_progress=0, task_total=state.task_total - state.task_progress)
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    with store.search_cache():
+        first = resolve_task_horizon(state, gd, ctx, store)
+        assert resolve_task_horizon(probe, gd, ctx, store) == first
+        assert len(asked) == 1
+        resolve_task_horizon(state, gd, dataclasses.replace(ctx), store)
+        assert len(asked) == 2
+        richer = dataclasses.replace(state, gold=state.gold + 1)
+        resolve_task_horizon(richer, gd, ctx, store)
+        assert len(asked) == 3
+    resolve_task_horizon(state, gd, ctx, store)
+    resolve_task_horizon(state, gd, ctx, store)
+    assert len(asked) == 5

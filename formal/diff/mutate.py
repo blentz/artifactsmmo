@@ -6679,8 +6679,8 @@ GEAR_OBJECTIVE_CORE_MUTATIONS = [
 # dropping the filter is an equivalent mutant; the held arm beside it is.
 GEAR_OBJECTIVE_MUTATIONS = [
     ("gear objective: a carried piece is missing (one pick from the worn state)",
-     "    own = _target(state, game_data, monster)[1]\n",
-     "    own = fight_loadout(state, game_data, monster)\n"),
+     "    own = _target(state, game_data, monster)[1]\n    pieces: list[GearPiece] = []\n",
+     "    own = fight_loadout(state, game_data, monster)\n    pieces: list[GearPiece] = []\n"),
     # A worn boost is not in the sheet's totals; left on, the no-potion fight
     # took it off and subtracted it (the novice's earth boost on `cow`).
     ("gear objective: the bare fighter keeps its potions worn",
@@ -7766,38 +7766,55 @@ ROUTE_PRICE_MUTATIONS = [
 # Killed by tests/test_ai/scenarios/test_held_task.py.
 ROOT_TASK_GEAR_MUTATIONS = [
     ("root: an unwinnable task's gear arm never roots",
-     "    if horizon is None or horizon.gear_target is None:\n        return None\n"
-     "    return ObtainItem(",
-     "    if True:\n        return None\n    return ObtainItem("),
+     "    if horizon is None or horizon.verdict != HORIZON_GEAR:\n        return None\n",
+     "    if True:\n        return None\n"),
     ("root: the task's gear piece loses its slot",
-     "    return ObtainItem(horizon.gear_target.code, 1, slot=horizon.gear_target.slot)",
-     "    return ObtainItem(horizon.gear_target.code, 1)"),
+     "    return ObtainItem(missing[0].code, 1, slot=missing[0].slot)",
+     "    return ObtainItem(missing[0].code, 1)"),
+    ("root: the task's gear names the last piece, not the first",
+     "    return ObtainItem(missing[0].code, 1, slot=missing[0].slot)",
+     "    return ObtainItem(missing[-1].code, 1, slot=missing[-1].slot)"),
 ]
 # `gear_objective_for`: `L*` of a pinned monster, the same pieces as the
 # argmax's (plan C Task 2). Killed by tests/test_ai/test_gear_objective.py.
 GEAR_OBJECTIVE_FOR_MUTATIONS = [
     ("gear objective for: the pinned monster's pieces are gained against no rate",
-     "    rate = _rate(target[0], game_data, monster, food, loop)\n    return _objective(",
-     "    rate = Fraction(0)\n    return _objective("),
+     "        rate = _rate(target[0], game_data, monster, food, loop)\n        return _objective(",
+     "        rate = Fraction(0)\n        return _objective("),
+]
+# Ruling C2-perf: the horizon reads `L*` without pricing it, and reads the
+# achievable set once per episode. Killed by tests/test_ai/test_task_horizon.py.
+GEAR_HORIZON_READ_MUTATIONS = [
+    ("gear closes: a missing L* that still loses closes it",
+     "    if not secure_win(fighter, game_data, monster):\n        return False\n    own =",
+     "    if False:\n        return False\n    own ="),
+    ("gear closes: an unheld piece that adds nothing to R closes it",
+     "    return any(_gain(state, fighter, game_data, monster, food, loop, rate, at) > 0\n",
+     "    return any(_gain(state, fighter, game_data, monster, food, loop, rate, at) >= 0\n"),
+    ("episode memo: an answer is served to another state",
+     "        if held_data is game_data and held_ctx is ctx and held_state == key_state:\n",
+     "        if held_data is game_data and held_ctx is ctx:\n"),
+    ("episode memo: an answer is served to another context",
+     "        if held_data is game_data and held_ctx is ctx and held_state == key_state:\n",
+     "        if held_data is game_data and held_state == key_state:\n"),
+    ("episode memo: nothing is memoised",
+     "    value = compute()\n    answers.append((key_state, game_data, ctx, value))\n",
+     "    value = compute()\n"),
+    ("episode memo: a task-worth probe is a different key",
+     "        return state\n    return replace(state, task_code=None, task_type=None, task_progress=0, task_total=0)",
+     "        return state\n    return state"),
 ]
 TASK_HORIZON_MUTATIONS = [
     ("horizon: a task the gate fights still waits for a level",
      "    if predict_win(dataclasses.replace(state, hp=state.max_hp), game_data, monster):\n",
      "    if False:\n"),
     ("task_horizon: the gear arm never fires",
-     "        if objective.missing and secure_win(objective.fighter, game_data, monster):\n",
-     "        if False:\n"),
-    # Plan C Task 2: a missing `L*` that still loses closes nothing.
-    ("task_horizon: a missing L* that still loses reads gear",
-     "        if objective.missing and secure_win(objective.fighter, game_data, monster):\n",
-     "        if objective.missing:\n"),
-    ("task_horizon: the gear verdict names the last piece, not the first",
-     "                               gear_target=objective.missing[0])\n",
-     "                               gear_target=objective.missing[-1])\n"),
+     "            and gear_closes_for(monster, state, game_data, ctx, history)):\n",
+     "            and False):\n"),
     # A monster with no reachable tile has no `L*` (its walk back is unpriced).
     ("task_horizon: an unlocated monster is asked for its L*",
-     "    if game_data.monster_spawn_known(monster):\n",
-     "    if True:\n"),
+     "    if (game_data.monster_spawn_known(monster)\n",
+     "    if (True\n"),
     # THE HALF-MODELLED SHORTCUT the design forbids. `combat_deficit._pool`
     # filters `stats.level <= state.level`, so bumping the level alone widens the
     # candidate pool and looks like a complete +1 evaluation. Measured over the
@@ -14817,6 +14834,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_decisions_route.py", survivors)
     run_group(ROOT_DECISION_SRC, ROOT_TASK_GEAR_MUTATIONS,
               "tests/test_ai/scenarios/test_held_task.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, GEAR_HORIZON_READ_MUTATIONS,
+              "tests/test_ai/test_task_horizon.py", survivors)
     run_group(GEAR_OBJECTIVE_SRC, GEAR_OBJECTIVE_FOR_MUTATIONS,
               "tests/test_ai/test_gear_objective.py", survivors)
     run_group(CATALOGUE_SCOPE_SRC, CATALOGUE_SCOPE_PURGE_MUTATIONS,

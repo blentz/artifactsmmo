@@ -4478,8 +4478,12 @@ class GamePlayer:
             return ctx
         # Phase 5-2c-iii-c-2 #5 (USER 2026-10-07): a draw is owed by the
         # master's pool worth, not by a change of course. Read off the
-        # context it needs (gold need, grind target, target gear).
-        due, master = pool_draw(self.state, self.game_data, ctx, self.history)
+        # context it needs (gold need, grind target, target gear). One
+        # read-only `search_cache` episode: every task's horizon reads one
+        # achievable set (ruling C2-perf; nothing here writes the store).
+        with (self.history.search_cache() if self.history is not None
+              else nullcontext()):
+            due, master = pool_draw(self.state, self.game_data, ctx, self.history)
         return replace(ctx, draw_owed=due, draw_master=master)
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:

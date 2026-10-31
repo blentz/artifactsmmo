@@ -106,12 +106,13 @@ from artifactsmmo_cli.ai.fleet_work import (
     turn_in_due,
 )
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective import gear_objective_for
 from artifactsmmo_cli.ai.heal_catalog import FOOD
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_coins import tasks_coin_total
-from artifactsmmo_cli.ai.task_horizon import resolve_task_horizon
+from artifactsmmo_cli.ai.task_horizon import HORIZON_GEAR, resolve_task_horizon
 from artifactsmmo_cli.ai.task_worth import task_worth_for
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -714,9 +715,10 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
       verdict `GamePlayer._is_winnable` gives the cascade): the task itself,
       `ReachTaskOutcome`, whose step is one more kill;
     * NOT winnable — USER ruling: the task ASKS FOR GEAR. The root is the
-      first missing piece of `L*` of the task monster, in its slot: the
-      horizon's `HORIZON_GEAR` verdict (`resolve_task_horizon`, plan C Task 2),
-      read here so the root and the task's worth are one reading;
+      first missing piece of `L*` of the task monster
+      (`gear_objective_for`), in its slot, on the horizon's `HORIZON_GEAR`
+      verdict (`resolve_task_horizon`, plan C Task 2), read here so the root
+      and the task's worth are one reading. Only this arm prices the pieces;
     * no gear closes the gap (any other verdict): None. The task waits, inert,
       for a coin to cancel it (S-052).
 
@@ -763,9 +765,12 @@ def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
     if is_winnable(replace(state, hp=state.max_hp), game_data, state.task_code, history):
         return ReachTaskOutcome(state.task_code)
     horizon = resolve_task_horizon(state, game_data, ctx, history)
-    if horizon is None or horizon.gear_target is None:
+    if horizon is None or horizon.verdict != HORIZON_GEAR:
         return None
-    return ObtainItem(horizon.gear_target.code, 1, slot=horizon.gear_target.slot)
+    missing = gear_objective_for(state.task_code, state, game_data, ctx, history).missing
+    if not missing:
+        return None
+    return ObtainItem(missing[0].code, 1, slot=missing[0].slot)
 
 
 def _fleet_roots(ctx: SelectionContext) -> list[ReachFleetOutcome]:

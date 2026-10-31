@@ -203,19 +203,27 @@ class TestTaskRoot:
         context."""
         piece = GearPiece("weapon_slot", "iron_sword", 0, Fraction(1), Fraction(10),
                           SourceKind.CRAFT)
+        later = GearPiece("helmet_slot", "iron_helm", 0, Fraction(1), Fraction(10),
+                          SourceKind.CRAFT)
+        objective = GearObjective("chicken", {}, Fraction(1), (piece, later))
         state = _held()
         with (patch.object(root_mod, "is_winnable", return_value=False),
               patch.object(root_mod, "resolve_task_horizon",
-                           return_value=TaskHorizon("chicken", HORIZON_GEAR, piece)) as horizon):
+                           return_value=TaskHorizon("chicken", HORIZON_GEAR)) as horizon,
+              patch.object(root_mod, "gear_objective_for", return_value=objective) as pinned):
             got = root_mod._task_root(state, _gd(), TIMED_NO_PROFILE_CONTEXT, None)
-        assert got == ObtainItem("iron_sword", 1, slot="weapon_slot")
-        assert horizon.call_args.args[0] is state
-        assert horizon.call_args.args[2:] == (TIMED_NO_PROFILE_CONTEXT, None)
+            assert got == ObtainItem("iron_sword", 1, slot="weapon_slot")
+            assert horizon.call_args.args[0] is state
+            assert horizon.call_args.args[2:] == (TIMED_NO_PROFILE_CONTEXT, None)
+            assert pinned.call_args.args[:2] == ("chicken", state)
+            # An unheld `L*` none of whose pieces adds to `R` roots nothing.
+            pinned.return_value = GearObjective("chicken", {}, Fraction(1), ())
+            assert root_mod._task_root(state, _gd(), TIMED_NO_PROFILE_CONTEXT, None) is None
 
     def test_an_unwinnable_task_no_gear_closes_waits(self) -> None:
         """Any other reading names no gear: the task waits for a coin."""
-        for reading in (None, TaskHorizon("chicken", HORIZON_LEVEL_UP, None),
-                        TaskHorizon("chicken", HORIZON_OUT_OF_REACH, None)):
+        for reading in (None, TaskHorizon("chicken", HORIZON_LEVEL_UP),
+                        TaskHorizon("chicken", HORIZON_OUT_OF_REACH)):
             with (patch.object(root_mod, "is_winnable", return_value=False),
                   patch.object(root_mod, "resolve_task_horizon", return_value=reading)):
                 assert root_mod._task_root(_held(), _gd(), TIMED_NO_PROFILE_CONTEXT, None) is None
@@ -246,7 +254,7 @@ class TestWorthCancelFold:
         the cancel can."""
         with (patch.object(root_mod, "is_winnable", return_value=False),
               patch.object(root_mod, "resolve_task_horizon",
-                           return_value=TaskHorizon("chicken", HORIZON_OUT_OF_REACH, None))):
+                           return_value=TaskHorizon("chicken", HORIZON_OUT_OF_REACH))):
             with patch.object(root_mod._route, "task_cancel_due", return_value=True):
                 got = root_mod._task_root(_held(), _gd(), TIMED_NO_PROFILE_CONTEXT, None)
             assert got == ReachTaskOutcome("chicken")

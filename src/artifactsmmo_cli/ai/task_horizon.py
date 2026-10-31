@@ -50,15 +50,14 @@ still a fact rather than a forecast.
 import dataclasses
 from dataclasses import dataclass
 
-from artifactsmmo_cli.ai.combat import predict_win, secure_win
+from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.combat_deficit import (
     blocked_task_monster,
     combat_deficit,
     has_combat_deficit,
 )
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_objective import gear_objective_for
-from artifactsmmo_cli.ai.gear_objective_result import GearPiece
+from artifactsmmo_cli.ai.gear_objective import gear_closes_for
 from artifactsmmo_cli.ai.learning.rung_state_core import projected_max_hp
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -79,14 +78,14 @@ HORIZON_OUT_OF_REACH = "out_of_reach"
 class TaskHorizon:
     """The held task's fight, read against the one-level horizon.
 
-    `gear_target` is set exactly for the `HORIZON_GEAR` verdict: the first
-    missing piece of `L*(monster)`, in the objective's own pursuit order, which
-    the task root asks for (`decisions.root._task_root`).
+    The gear to build on the `HORIZON_GEAR` verdict is not carried: it is the
+    first missing piece of `L*(monster)` (`gear_objective_for`), priced, which
+    only the task root asks (`decisions.root._task_root`); every other reader
+    asks only the verdict (ruling C2-perf).
     """
 
     monster: str
     verdict: str
-    gear_target: GearPiece | None
 
 
 def next_level_state(state: WorldState) -> WorldState:
@@ -127,28 +126,28 @@ def resolve_task_horizon(state: WorldState, game_data: GameData, ctx: SelectionC
     gear at max HP). Callers that must distinguish "no task" from "out of reach"
     get that for free — a verdict exists only where a fight is lost.
 
-    GEAR is `L*` of the task monster (`gear_objective_for`) clearing the same bar
-    the deficit is read at: its fighter, wearing `L*` on bare gear at max HP,
-    `secure_win`s, and a piece of it is missing. The verdict names the first
-    missing piece. A missing `L*` that still loses closes nothing, so it is no
-    gear verdict: the level-up and out-of-reach arms read it. Nor is a monster
-    with no tile the fight pool reaches (`monster_spawn_known`, the gate every
-    `L*` candidate passes): its `R` prices the walk back after a loss from its
-    tile, so it has no `L*`, and the same two arms read it.
+    GEAR is `L*` of the task monster clearing the same bar the deficit is read
+    at (`gear_closes_for`): its fighter, wearing `L*` on bare gear at max HP,
+    `secure_win`s, and a piece of it is missing (the objective's own gain
+    filter). A missing `L*` that still loses closes
+    nothing, so it is no gear verdict: the level-up and out-of-reach arms read
+    it. Nor is a monster with no tile the fight pool reaches
+    (`monster_spawn_known`, the gate every `L*` candidate passes): its `R`
+    prices the walk back after a loss from its tile, so it has no `L*`, and
+    the same two arms read it.
 
-    Not memoised: every caller asks it of its own state (`task_worth_for` of a
-    probe built per call), so an identity memo never hit.
+    The verdict prices no piece and reads gains only once `L*` secures the
+    fight, up to the first missing piece; the achievable set it is read over
+    is computed once per `search_cache` episode for the character
+    (`gear_objective._cycle_inputs`, ruling C2-perf): every task-worth probe of
+    a cycle shares it.
     """
     monster = blocked_task_monster(state)
     if monster is None or not has_combat_deficit(state, game_data):
         return None
-    if game_data.monster_spawn_known(monster):
-        objective = gear_objective_for(monster, state, game_data, ctx, history)
-        # Set on every objective `gear_objective_for` builds.
-        assert objective.fighter is not None
-        if objective.missing and secure_win(objective.fighter, game_data, monster):
-            return TaskHorizon(monster=monster, verdict=HORIZON_GEAR,
-                               gear_target=objective.missing[0])
+    if (game_data.monster_spawn_known(monster)
+            and gear_closes_for(monster, state, game_data, ctx, history)):
+        return TaskHorizon(monster=monster, verdict=HORIZON_GEAR)
     if predict_win(dataclasses.replace(state, hp=state.max_hp), game_data, monster):
         # A fight the gate takes (P(win) at least θ) that no gear secures: the
         # task is workable now, not a level away (post-merge review
@@ -160,5 +159,5 @@ def resolve_task_horizon(state: WorldState, game_data: GameData, ctx: SelectionC
         # the bag) wins the fight with nothing to acquire. It is a level-up verdict
         # exactly as much as a closing chain is, and dropping it would have made the
         # cheapest instance of this rule the one it missed.
-        return TaskHorizon(monster=monster, verdict=HORIZON_LEVEL_UP, gear_target=None)
-    return TaskHorizon(monster=monster, verdict=HORIZON_OUT_OF_REACH, gear_target=None)
+        return TaskHorizon(monster=monster, verdict=HORIZON_LEVEL_UP)
+    return TaskHorizon(monster=monster, verdict=HORIZON_OUT_OF_REACH)

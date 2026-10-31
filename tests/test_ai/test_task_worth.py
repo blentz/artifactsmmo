@@ -92,10 +92,10 @@ class TestTaskWorthFor:
         # the horizon makes the out-of-reach task worthless.
         demanded = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, level_demanded=True)
         monkeypatch.setattr(mod, "resolve_task_horizon",
-                            lambda s, g, c, h: TaskHorizon("wolf", HORIZON_OUT_OF_REACH, None))
+                            lambda s, g, c, h: TaskHorizon("wolf", HORIZON_OUT_OF_REACH))
         assert not task_worth_for("wolf", "monsters", 10, make_state(), _gd(),
                                   demanded, None).any()
-        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g, c, h: TaskHorizon("wolf", HORIZON_GEAR, None))
+        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g, c, h: TaskHorizon("wolf", HORIZON_GEAR))
         assert task_worth_for("wolf", "monsters", 10, make_state(), _gd(), demanded, None).xp
 
     def test_an_items_task_earns_its_reward_over_its_actions(self, monkeypatch) -> None:

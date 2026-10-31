@@ -64,7 +64,7 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.acquisition_cost import EQUIP_ACTIONS, cheapest_route
 from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.combat import fight_loadout
+from artifactsmmo_cli.ai.combat import fight_loadout, secure_win
 from artifactsmmo_cli.ai.decompose_core import can_obtain
 from artifactsmmo_cli.ai.equipment.loadout_picker import _benefit, _ordered_slots
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats, with_totals
@@ -529,6 +529,90 @@ def _objective(state: WorldState, game_data: GameData, ctx: SelectionContext,
     return GearObjective(monster, loadout, rate, tuple(pieces), fighter=fighter)
 
 
+def _task_free(state: WorldState, game_data: GameData) -> WorldState:
+    """`state` with its held task cleared when nothing `L*` reads can see it.
+
+    `L*` reads the task only through the keep (`inventory_keep._active_task`,
+    the copies of the task's code; an items task's root closure): a monsters
+    task whose code names no item reads 0 there. Such a task is cleared, so a
+    task-worth probe of the same character (`task_worth_for`) and the
+    character itself are one key. Any other task stays."""
+    if state.task_type == "items" or (state.task_code is not None
+                                      and game_data.item_stats(state.task_code) is not None):
+        return state
+    return replace(state, task_code=None, task_type=None, task_progress=0, task_total=0)
+
+
+def _pinned[T](name: str, monster: str | None, state: WorldState, game_data: GameData,
+               ctx: SelectionContext, history: LearningStore | None,
+               compute: Callable[[], T]) -> T:
+    """`compute()`, once per `search_cache` episode (ruling C2-perf) for one
+    task-free state (`_task_free`), catalogue and context. The episode's entry
+    for `(name, monster, character, level)` lists what it answered, each answer
+    pinned to its state by value and to its catalogue and context by
+    reference (memory: a cache key must pin its object): an answer is served
+    only to an equal state under the very catalogue and context it answered,
+    and any other asker's answer joins the list. Without a store, afresh."""
+    if history is None:
+        return compute()
+    key_state = _task_free(state, game_data)
+    answers: list[tuple[WorldState, GameData, SelectionContext, T]] = history.cached(
+        (name, monster, state.character, state.level), list)
+    for held_state, held_data, held_ctx, value in answers:
+        if held_data is game_data and held_ctx is ctx and held_state == key_state:
+            return value
+    value = compute()
+    answers.append((key_state, game_data, ctx, value))
+    return value
+
+
+def _cycle_inputs(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                  history: LearningStore | None
+                  ) -> tuple[dict[str, int], tuple[FoodOffer, ...], LoopInputs]:
+    """`_inputs`, once per episode for every monster a cycle pins: they do not
+    read the monster, and the task horizon pins one per task it reads."""
+    return _pinned("gear_objective_inputs", None, state, game_data, ctx, history,
+                   lambda: _inputs(state, game_data, ctx, history))
+
+
+def _pinned_target(depth: Mapping[str, int], monster: str, state: WorldState,
+                   game_data: GameData) -> tuple[WorldState, dict[str, str]]:
+    """`L*(monster)`'s fighter and loadout, picked over the achievable set
+    `depth` from the fighter wearing nothing: `gear_objective_for`'s own."""
+    return _target(_bare(state, frozenset(depth), game_data), game_data, monster)
+
+
+def gear_fighter_for(monster: str, state: WorldState, game_data: GameData,
+                     ctx: SelectionContext, history: LearningStore | None) -> WorldState:
+    """The fighter wearing `L*(monster)` on bare gear at max HP
+    (`gear_objective_for(...).fighter`), without pricing a piece (ruling
+    C2-perf)."""
+    depth = _cycle_inputs(state, game_data, ctx, history)[0]
+    return _pinned_target(depth, monster, state, game_data)[0]
+
+
+def gear_closes_for(monster: str, state: WorldState, game_data: GameData,
+                    ctx: SelectionContext, history: LearningStore | None) -> bool:
+    """Whether gear closes the fight against `monster`: the fighter wearing
+    `L*(monster)` `secure_win`s (on bare gear at max HP, the bar
+    `combat_deficit.has_combat_deficit` reads) and `L*` has a missing piece
+    (`gear_objective_for(...).missing` is not empty: an unheld piece,
+    `_missing`, whose gain is above 0, `_gain`). Gains are read only once the
+    fighter secures the fight and only until the first that is above 0; no
+    piece is priced (ruling C2-perf)."""
+    depth, food, loop = _cycle_inputs(state, game_data, ctx, history)
+    fighter, loadout = _pinned_target(depth, monster, state, game_data)
+    if not secure_win(fighter, game_data, monster):
+        return False
+    own = _target(state, game_data, monster)[1]
+    unheld = _missing(game_data, monster, fighter, loadout, own)
+    if not unheld:
+        return False
+    rate = _rate(fighter, game_data, monster, food, loop)
+    return any(_gain(state, fighter, game_data, monster, food, loop, rate, at) > 0
+               for _slot, _code, at in unheld)
+
+
 def gear_objective_for(monster: str, state: WorldState, game_data: GameData,
                        ctx: SelectionContext, history: LearningStore | None) -> GearObjective:
     """`L*(monster)`: the objective `gear_objective` reads for a candidate
@@ -540,11 +624,16 @@ def gear_objective_for(monster: str, state: WorldState, game_data: GameData,
     `monster` need not be a candidate (`_candidates`, `_rated`): a held task's
     monster is pinned whatever its level gap, XP or fight verdict, so its `R`
     may be 0 and its fighter may still lose. Whether `L*(monster)` wins is the
-    caller's question, asked of `GearObjective.fighter`."""
-    depth, food, loop = _inputs(state, game_data, ctx, history)
-    target = _target(_bare(state, frozenset(depth), game_data), game_data, monster)
-    rate = _rate(target[0], game_data, monster, food, loop)
-    return _objective(state, game_data, ctx, history, monster, target, rate, depth, food, loop)
+    caller's question, asked of `GearObjective.fighter`. Once per episode
+    for one monster, state and context (`_pinned`, ruling C2-perf)."""
+    def compute() -> GearObjective:
+        depth, food, loop = _cycle_inputs(state, game_data, ctx, history)
+        target = _pinned_target(depth, monster, state, game_data)
+        rate = _rate(target[0], game_data, monster, food, loop)
+        return _objective(state, game_data, ctx, history, monster, target, rate, depth, food,
+                          loop)
+
+    return _pinned("gear_objective_for", monster, state, game_data, ctx, history, compute)
 
 
 def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext,

@@ -118,11 +118,14 @@ def _horizon(state, game_data: GameData) -> TaskHorizon | None:  # type: ignore[
 
 
 def _gear(state, game_data: GameData) -> tuple[str, str] | None:  # type: ignore[no-untyped-def]
-    """`(code, slot)` of the horizon's gear verdict, or None."""
+    """`(code, slot)` of the first missing piece of `L*` of the task monster on
+    the horizon's gear verdict (what the task root asks), or None."""
     horizon = _horizon(state, game_data)
-    if horizon is None or horizon.gear_target is None:
+    if horizon is None or horizon.verdict != HORIZON_GEAR:
         return None
-    return horizon.gear_target.code, horizon.gear_target.slot
+    first = gear_objective_for(horizon.monster, state, game_data, TIMED_NO_PROFILE_CONTEXT,
+                               None).missing[0]
+    return first.code, first.slot
 
 
 def test_the_held_task_dimension_has_a_populated_side(gd: GameData) -> None:
@@ -207,7 +210,7 @@ def test_unwinnable_task_with_no_closing_chain_names_nothing(gd: GameData) -> No
     assert has_combat_deficit(state, gd) is True
     horizon = _horizon(state, gd)
     assert horizon is not None
-    assert (horizon.verdict, horizon.gear_target) == (HORIZON_OUT_OF_REACH, None)
+    assert horizon.verdict == HORIZON_OUT_OF_REACH
 
 
 # --- coverage-matrix cells 1-3: the same character, three task states --------
@@ -252,12 +255,12 @@ def test_the_task_triple_splits_the_horizon_three_ways(gd: GameData) -> None:
     assert not gear_objective_for("ogre", closable, gd, TIMED_NO_PROFILE_CONTEXT, None).missing
     horizon = _horizon(closable, gd)
     assert horizon is not None
-    assert (horizon.verdict, horizon.gear_target) == (HORIZON_LEVEL_UP, None)
+    assert horizon.verdict == HORIZON_LEVEL_UP
 
     assert has_combat_deficit(open_, gd) is True
     horizon = _horizon(open_, gd)
     assert horizon is not None
-    assert (horizon.verdict, horizon.gear_target) == (HORIZON_OUT_OF_REACH, None)
+    assert horizon.verdict == HORIZON_OUT_OF_REACH
     # ...and the lich really is IN BAND, so the fall-through is a gear fact and
     # not the artefact of naming a monster twenty levels out of reach.
     assert gd.monster_level("lich") <= SCENARIOS[TRIPLE_OPEN].level
