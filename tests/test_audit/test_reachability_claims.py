@@ -214,6 +214,16 @@ def test_a_same_named_constant_in_another_module_is_not_a_reader() -> None:
     assert not _verdicts(sources)["pkg.a:1"].is_false
 
 
+def test_rebinding_a_constant_does_not_read_it() -> None:
+    """A store binds the name; it is no reader, even in the constant's own
+    module."""
+    sources = {
+        "src/pkg/a.py": ('"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n\n\n'
+                         "def reset() -> None:\n    global RATE\n    RATE = 1.0\n"),
+    }
+    assert not _verdicts(sources)["pkg.a:1"].is_false
+
+
 def test_a_constant_read_through_its_module_alias_is_a_false_claim() -> None:
     sources = {
         "src/pkg/a.py": '"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n',
