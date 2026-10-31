@@ -1,37 +1,45 @@
-"""Differential: the production link `GearTierLeveling.ObjectiveCoversBand` (ruling C4-R).
+"""Differential: the production link `GearTierLeveling.ObjectiveCovers` (ruling C4-R2).
 
-The Lean hypothesis: where a winnable, XP-positive monster under the suicide
-guard exists, production's gear objective exists, is well formed (`held` exactly
-when nothing is missing) and its `m*` is such a monster.
+The Lean hypothesis, at one state, over production's own predicates and codes:
 
-Production's own words for each part, all live functions:
+    (∃ c ∈ cands, fighterWins c ∧ ratePos c) →
+      ∃ o, objective = some o ∧ WellFormed o ∧ o.monster ∈ cands ∧
+        fighterWins o.monster ∧ ratePos o.monster
 
-* "a winnable candidate exists" — some `gear_objective._candidates` monster (the
-  level ceiling `FIGHT_LEVEL_GAP_CEILING`, positive XP, a reachable spawn, not
-  party-only) whose `L*` fighter wins (`drop_fight_winnable`, the gate `_rated`
-  applies);
-* "production's objective" — `gear_objective`, and the context
-  `attach_gear_objective` builds from it;
-* "`m*` is such a monster" — `objective.monster` is one of those winning
-  candidates.
+Each name is bound here to the live function it abstracts, with real monster codes:
 
-Both polarities are required: every bundle scenario (plain and with its `L*`
-carried) has a winning candidate and must have an objective whose `m*` is one;
-and a character with no candidate that wins (level 41, nothing worn, nothing
-held, as `test_gear_objective` builds it) must have no objective. The negative
-pole is also the converse the hypothesis does not claim but production keeps:
-no winning candidate, no objective.
+* `cands` — `gear_objective._candidates(state, game_data)`;
+* `fighterWins c` — `drop_fight_winnable` on `_targets`' `L*(c)` fighter (the gate
+  `_rated` applies);
+* `ratePos c` — `R(c) > 0`, with `R` the objective's own rate (`_rate` on the
+  `L*(c)` fighter, the XP purpose `xp_rate`), computed for every winning candidate
+  (not only those `_rated`'s early stop reaches);
+* `objective` — `gear_objective(state, game_data, ctx, None)`, which
+  `attach_gear_objective` carries;
+* `WellFormed o` — `o.held == (not o.missing)`.
+
+The antecedent is evaluated, not assumed: every bundle state (plain and with its
+`L*` carried) is checked, and the sweep must contain states where it holds.
+The state where the antecedent FAILS (a naked level-41 character: no winning
+candidate) is checked too: the implication holds vacuously there, and production
+names no objective — the converse the hypothesis does not claim.
+
+What is NOT bound: that the catalogue's band witness (`WinnableAcrossBand`) makes
+the antecedent true at a state. It does not at the naked level-41 character; that
+transfer is the named catalogue→`L*` residual of `LevelFiftyReachableP`.
 """
 from __future__ import annotations
 
 from collections import Counter
 from dataclasses import replace
+from fractions import Fraction
 
 import pytest
 
 import artifactsmmo_cli.ai.gear_objective as go
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import gear_objective
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -42,12 +50,31 @@ from tests.test_ai.shared_world import attached, shared_world
 CTX = TIMED_NO_PROFILE_CONTEXT
 
 
-def _winning_candidates(state: WorldState, gd: GameData) -> list[str]:
-    """`_candidates` whose `L*` fighter wins, as `gear_objective` reads them."""
-    depth, _food, _loop = go._inputs(state, gd, CTX, None)
+def _predicates(state: WorldState, gd: GameData
+                ) -> tuple[list[str], dict[str, bool], dict[str, Fraction]]:
+    """`cands`, `fighterWins` and the rates behind `ratePos`, as `gear_objective`
+    computes them for this state."""
+    depth, food, loop = go._inputs(state, gd, CTX, None)
     targets = go._targets(state, gd, frozenset(depth))
-    return [code for code in go._candidates(state, gd)
-            if drop_fight_winnable(targets[code][0], gd, code)]
+    cands = go._candidates(state, gd)
+    wins = {code: drop_fight_winnable(targets[code][0], gd, code) for code in cands}
+    rates = {code: go._rate(targets[code][0], gd, code, food, loop, go.xp_rate)
+             for code in cands if wins[code]}
+    return cands, wins, rates
+
+
+def _covers(cands: list[str], wins: dict[str, bool], rates: dict[str, Fraction],
+            objective: GearObjective | None) -> tuple[bool, bool]:
+    """(antecedent, consequent) of `ObjectiveCovers` on production's values."""
+    def rate_pos(code: str) -> bool:
+        return rates.get(code, Fraction(0)) > 0
+
+    antecedent = any(wins[c] and rate_pos(c) for c in cands)
+    consequent = (objective is not None
+                  and objective.held == (not objective.missing)
+                  and objective.monster in cands
+                  and wins[objective.monster] and rate_pos(objective.monster))
+    return antecedent, consequent
 
 
 def _carrying(state: WorldState, gd: GameData) -> WorldState:
@@ -64,29 +91,42 @@ def _states() -> list[tuple[str, bool]]:
 
 
 @pytest.mark.parametrize(("name", "carried"), _states())
-def test_a_winning_candidate_gives_an_objective_on_one(name: str, carried: bool) -> None:
-    """The positive pole, at every bundle state."""
+def test_production_satisfies_the_link(name: str, carried: bool) -> None:
     gd = shared_world(BUNDLE)
     state = scenario_state(SCENARIOS[name], gd)
     if carried:
         state = _carrying(state, gd)
-    winning = _winning_candidates(state, gd)
-    assert winning, (name, carried, "every bundle state has a winning candidate")
     objective = gear_objective(state, gd, CTX, None)
-    assert objective is not None, (name, carried)
-    assert objective.monster in winning, (name, carried, objective.monster, winning)
-    # WellFormed: held exactly when nothing is missing.
-    assert objective.held == (not objective.missing), (name, carried)
+    antecedent, consequent = _covers(*_predicates(state, gd), objective)
+    assert (not antecedent) or consequent, (name, carried, objective)
     # The context the cycle builds carries the same objective.
     assert attached(state, gd, CTX, None).gear_objective == objective
 
 
-def test_no_winning_candidate_gives_no_objective() -> None:
-    """The negative pole: level 41, nothing worn and nothing held — no candidate
-    wins on any achievable fighter, and production names no objective."""
+def test_the_antecedent_holds_in_the_sweep() -> None:
+    """The implication is exercised, not vacuous over the bundle."""
+    gd = shared_world(BUNDLE)
+    for name in sorted(SCENARIOS):
+        state = scenario_state(SCENARIOS[name], gd)
+        antecedent, consequent = _covers(*_predicates(state, gd),
+                                         gear_objective(state, gd, CTX, None))
+        if antecedent:
+            assert consequent, name
+            return
+    pytest.fail("no bundle state has a winning candidate with R > 0")
+
+
+def test_no_winning_candidate_and_no_objective() -> None:
+    """The antecedent fails at a naked level-41 character (no candidate's fighter
+    wins); production names no objective there. The band witness still exists at
+    level 41 — the catalogue→`L*` transfer the link does not claim."""
     gd = shared_world(BUNDLE)
     state = scenario_state(ScenarioCharacter(name="novice", level=41, derive_combat_stats=True,
                                              equipment={}, inventory={}), gd)
-    assert _winning_candidates(state, gd) == []
-    assert gear_objective(state, gd, CTX, None) is None
+    cands, wins, rates = _predicates(state, gd)
+    objective = gear_objective(state, gd, CTX, None)
+    antecedent, _ = _covers(cands, wins, rates, objective)
+    assert not antecedent
+    assert not any(wins.values())
+    assert objective is None
     assert attached(state, gd, CTX, None).gear_objective is None

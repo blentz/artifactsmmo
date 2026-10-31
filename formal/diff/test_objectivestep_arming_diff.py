@@ -20,11 +20,12 @@ For `step = ReachCharLevel(target)`:
 
 So production yields a fight IFF a combat target is set AND we are NOT in the
 paying-items-task defer case. The Lean kernel half
-(`WinnableGrounded.winnableAcrossBand_grounded` →
-`GearTierLeveling.combatObjective_live_below_fifty`) PROVES that below 50 a
-winnable XP-positive candidate for `m*` EXISTS whose held objective names it the
-combat target (`fight_armed_of_held`; the target itself is `farm_target`'s, bound
-by `test_gear_objective_arming_diff.py`). So the faithful binding is:
+(`WinnableGrounded.winnableAcrossBand_grounded`) PROVES that below 50 a band-witness
+candidate EXISTS; that production then names a combat target is the hypothesis
+`GearTierLeveling.ObjectiveCovers` (bound by `test_gear_objective_link_diff.py`)
+plus the named catalogue→`L*` residual, and the target itself is `farm_target`'s
+(`fight_armed_of_held`, bound by `test_gear_objective_arming_diff.py`). So the
+binding is:
 
     produced_fight  ==  (combat_target_exists AND level < 50 AND NOT defer_case)
 

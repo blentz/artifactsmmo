@@ -24,14 +24,14 @@ Both halves are bound to production by `formal/diff/test_gear_objective_arming_d
 which drives the live `attach_gear_objective` / `farm_target` / `resolve_root` /
 `WhichPieceIsNext` / `piece_step` on the scenario bundle.
 
-The GEAR-TIER guarantee that a candidate exists is `WinnableAcrossBand`: at every
-level the character reaches, a winnable, XP-positive monster under the suicide guard
-exists (`gear_objective._candidates` asks the level ceiling and positive XP, and
-`_rated` the win). That production then HAS a gear objective whose `m*` is such a
-candidate is the hypothesis `ObjectiveCoversBand`, bound to production by a bundle
-differential. `combatObjective_live_below_fifty` composes the two: at every band
-level production's objective exists, its `m*` is a candidate, and the fight on it is
-armed exactly while its `L*` is held.
+The catalogue guarantee `WinnableAcrossBand` says a winnable, XP-positive monster
+under the suicide guard exists at every band level for the band's WITNESS loadout.
+Production's gear objective reads its own predicate instead: a `_candidates` monster
+whose `L*` fighter wins at the real state with `R > 0`. `ObjectiveCovers` is the
+hypothesis that such a candidate gives production an objective whose `m*` is one
+(bound by a bundle differential); `objective_of_winning_candidate` applies it. The
+transfer from the catalogue witness to a winning `L*` at a real state is NOT proved
+here: it is a named residual of `LevelFiftyReachableP`.
 
 Plan C Task 4 retired the windowed-picker grounding this module used to carry
 (`combatTargetExists_of_gearTier`: the deleted picker returned `some` target):
@@ -99,80 +99,74 @@ theorem held_objective_emits_fight (o : ObjectiveView) (bootstrapLevel : Int)
       false none = some o.monster :=
   chain_emits_fight_when_target_exists_and_applicable _ o.monster rfl hheld hApp
 
-/-! ## The link: a winnable candidate gives production a gear objective
+/-! ## The link: a winning candidate gives production a gear objective
 
-`WinnableAcrossBand` is a fact about the catalogue; the root walk reads
-production's `gear_objective`. `ObjectiveCoversBand` is the link between the two,
-a HYPOTHESIS about production (ruling C4-R): at every band level where a winnable,
-XP-positive monster under the suicide guard exists, production's gear objective
-`objectiveAt L` exists, is well formed, and its `m*` is such a monster.
+`ObjectiveCovers` is a HYPOTHESIS about production at ONE state (ruling C4-R2), stated
+over production's own predicates and monster codes:
 
-Production: `gear_objective` returns None only when no candidate
-(`gear_objective._candidates`, the level ceiling and positive XP) wins on its
-`L*` fighter (`_rated`, `drop_fight_winnable`) with `R > 0`; otherwise `m*` is
-the max-`R` candidate. Bound by `formal/diff/test_gear_objective_link_diff.py`
-over the scenario bundle, in both polarities (a winnable candidate ⇒ an
-objective whose `m*` is a candidate; none ⇒ no objective). Satisfiable
-(`objectiveCoversBand_satisfiable`) and not trivially true
-(`not_objectiveCoversBand_of_none`). -/
+* `cands` — `gear_objective._candidates` (real monster codes: the level ceiling,
+  positive XP, a reachable spawn, not party-only);
+* `fighterWins c` — the `L*(c)` fighter at this state wins against `c`
+  (`drop_fight_winnable` on `_targets`' fighter, the gate `_rated` applies);
+* `ratePos c` — the candidate's rate `R(c)` (`_rated`) is positive;
+* `objective` — production's `gear_objective` at this state.
 
-/-- The production link (a hypothesis, bound by the differential above). -/
-def ObjectiveCoversBand (winnable xpPos : WinnableFn) (xs : List Monster)
-    (objectiveAt : Int → Option ObjectiveView) : Prop :=
-  ∀ L : Int, InLevelingBand L →
-    (∃ m ∈ xs, winnable m = true ∧ xpPos m = true ∧ notOverleveled L m = true) →
-      ∃ o, objectiveAt L = some o ∧ WellFormed o ∧
-        ∃ m ∈ xs, m.code = o.monster ∧ winnable m = true ∧ xpPos m = true ∧
-          notOverleveled L m = true
+The hypothesis: if some candidate's fighter wins with `R > 0`, the objective exists,
+is well formed, and its `m*` is such a candidate. Production: `gear_objective`
+returns None only when no rated candidate has `R > 0`, and `m*` is the max-`R`
+rated candidate. Bound by `formal/diff/test_gear_objective_link_diff.py`, which
+evaluates exactly these predicates on the scenario bundle.
 
-/-- **The combat objective is live at every level below the cap**, given the
-    production link. At every band level production's gear objective exists and its
-    `m*` is a winnable, XP-positive candidate under the suicide guard; while its `L*`
-    is held the fight on `m*` is armed, and while it is not held the grind target is
-    none (the root is a missing piece's acquisition, `piece_root_of_not_held`). -/
-theorem combatObjective_live_below_fifty
-    (winnable xpPos : WinnableFn) (xs : List Monster)
-    (objectiveAt : Int → Option ObjectiveView)
-    (h : WinnableAcrossBand winnable xpPos xs)
-    (hcov : ObjectiveCoversBand winnable xpPos xs objectiveAt) :
-    ∀ L : Int, 1 ≤ L → L < 50 →
-      ∃ o, objectiveAt L = some o ∧ WellFormed o ∧
-        (∃ m ∈ xs, m.code = o.monster ∧ winnable m = true ∧ xpPos m = true ∧
-          notOverleveled L m = true) ∧
-        (o.held = true → grindTarget o = some o.monster) ∧
-        (o.held = false → grindTarget o = none) := by
-  intro L hlo hhi
-  obtain ⟨o, hat, hwf, hm⟩ := hcov L ⟨hlo, hhi⟩ (h L ⟨hlo, hhi⟩)
-  refine ⟨o, hat, hwf, hm, fun hh => (fight_armed_of_held o (fun _ => true) hh).2,
+NOT claimed: that the catalogue's band witness (`WinnableAcrossBand`, a witness
+row's own loadout over `catalogAsMonsters`) makes the antecedent true at a real
+state. That transfer — catalogue witness to an achievable `L*` — is a named
+residual of `LevelFiftyReachableP` (the same gear-progress gap as the not-held
+phase): a naked level-41 character has no winning candidate and no objective,
+while the band witness exists.
+
+Satisfiable (`objectiveCovers_satisfiable`) and not trivially true
+(`not_objectiveCovers_of_none`). -/
+
+/-- The production link at one state (a hypothesis, bound by the differential). -/
+def ObjectiveCovers (cands : List Int) (fighterWins ratePos : Int → Bool)
+    (objective : Option ObjectiveView) : Prop :=
+  (∃ c ∈ cands, fighterWins c = true ∧ ratePos c = true) →
+    ∃ o, objective = some o ∧ WellFormed o ∧ o.monster ∈ cands ∧
+      fighterWins o.monster = true ∧ ratePos o.monster = true
+
+/-- **Production's objective at a state with a winning candidate.** This is the
+    hypothesis `hcov` applied to `hwin`; the last two conjuncts are definitional
+    (`grindTarget` is `m*` exactly while `L*` is held), restated so the two halves of
+    the root walk read off the same objective. -/
+theorem objective_of_winning_candidate
+    (cands : List Int) (fighterWins ratePos : Int → Bool)
+    (objective : Option ObjectiveView)
+    (hcov : ObjectiveCovers cands fighterWins ratePos objective)
+    (hwin : ∃ c ∈ cands, fighterWins c = true ∧ ratePos c = true) :
+    ∃ o, objective = some o ∧ WellFormed o ∧ o.monster ∈ cands ∧
+      fighterWins o.monster = true ∧ ratePos o.monster = true ∧
+      (o.held = true → grindTarget o = some o.monster) ∧
+      (o.held = false → grindTarget o = none) := by
+  obtain ⟨o, hat, hwf, hm, hw, hr⟩ := hcov hwin
+  exact ⟨o, hat, hwf, hm, hw, hr, fun hh => (fight_armed_of_held o (fun _ => true) hh).2,
     no_xp_fight_of_not_held o⟩
 
-/-- The link is satisfiable: the one-monster catalogue of
-    `winnableAcrossBand_satisfiable` with an objective on that monster at every
-    level. -/
-theorem objectiveCoversBand_satisfiable :
-    ∃ (winnable xpPos : WinnableFn) (xs : List Monster)
-      (objectiveAt : Int → Option ObjectiveView),
-      WinnableAcrossBand winnable xpPos xs ∧ ObjectiveCoversBand winnable xpPos xs objectiveAt := by
-  refine ⟨fun _ => true, fun _ => true, [{ code := 0, level := 1 }],
-    fun _ => some ⟨0, true, []⟩, ?_, ?_⟩
-  · intro L hL
-    refine ⟨{ code := 0, level := 1 }, List.mem_singleton.mpr rfl, rfl, rfl, ?_⟩
-    obtain ⟨h1, _⟩ := hL
-    simp only [notOverleveled, decide_eq_true_eq]
-    omega
-  · intro L _ hex
-    obtain ⟨m, hm, hw, hx, ho⟩ := hex
-    have hm0 : m = { code := 0, level := 1 } := List.mem_singleton.mp hm
-    refine ⟨⟨0, true, []⟩, rfl, by simp [WellFormed], m, hm, by rw [hm0], hw, hx, ho⟩
+/-- The link is satisfiable, with its antecedent true. -/
+theorem objectiveCovers_satisfiable :
+    ∃ (cands : List Int) (fighterWins ratePos : Int → Bool)
+      (objective : Option ObjectiveView),
+      (∃ c ∈ cands, fighterWins c = true ∧ ratePos c = true) ∧
+      ObjectiveCovers cands fighterWins ratePos objective := by
+  refine ⟨[5], fun _ => true, fun _ => true, some ⟨5, true, []⟩,
+    ⟨5, List.mem_singleton.mpr rfl, rfl, rfl⟩, ?_⟩
+  intro _
+  exact ⟨⟨5, true, []⟩, rfl, by simp [WellFormed], List.mem_singleton.mpr rfl, rfl, rfl⟩
 
-/-- The link is not trivially true: a catalogue with a winnable candidate and a
-    production that names no objective violates it. -/
-theorem not_objectiveCoversBand_of_none :
-    ¬ ObjectiveCoversBand (fun _ => true) (fun _ => true) [{ code := 0, level := 1 }]
-        (fun _ => none) := by
+/-- The link is not trivially true: a winning candidate and no objective violate it. -/
+theorem not_objectiveCovers_of_none :
+    ¬ ObjectiveCovers [5] (fun _ => true) (fun _ => true) none := by
   intro hcov
-  obtain ⟨o, hat, _⟩ := hcov 1 ⟨le_refl 1, by norm_num⟩
-    ⟨{ code := 0, level := 1 }, List.mem_singleton.mpr rfl, rfl, rfl, by decide⟩
+  obtain ⟨o, hat, _⟩ := hcov ⟨5, List.mem_singleton.mpr rfl, rfl, rfl⟩
   exact absurd hat (by simp)
 
 /-! ## Non-vacuity of the end-to-end held half -/

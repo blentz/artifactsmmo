@@ -11476,7 +11476,7 @@ GEAR_ARMING_WHICH_PIECE_MUTATIONS = [
      "                return piece_step(piece.slot, gear, self.walk, state, game_data, ctx, history)\n",
      "                continue\n"),
 ]
-# Ruling C4-R: the production link `GearTierLeveling.ObjectiveCoversBand`,
+# Ruling C4-R2: the production link `GearTierLeveling.ObjectiveCovers`,
 # killed by formal/diff/test_gear_objective_link_diff.py.
 GEAR_OBJECTIVE_LINK_MUTATIONS = [
     ("link: a winning candidate gives no objective",
@@ -11487,7 +11487,7 @@ GEAR_OBJECTIVE_LINK_MUTATIONS = [
 # `max(rate) <= 0` clause). EQUIVALENT for this group: `_rated` keeps only
 # winning candidates, so with none `rated` is empty and the mutant still answers
 # None; it only differs when a candidate wins with R = 0, where it names an
-# objective on a winning `m*` — which `ObjectiveCoversBand` allows. Survived
+# objective on a winning `m*` — which `ObjectiveCovers` allows. Survived
 # its first run (ruling C4-R round 2).
 # Ruling C4-R I3: the E-tower's `loadoutAdequate := held`, `gearGap :=
 # len(missing)`, killed by formal/diff/test_gear_objective_e_binding_diff.py.

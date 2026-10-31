@@ -387,9 +387,10 @@ def witness_monster(
     `FIGHT_LEVEL_GAP_CEILING` above the character, paying XP) that wins
     (`wins`) — the highest-level one, the earlier catalogue entry on a tie.
 
-    It is the `∃ m` of `GearTierLeveling.combatObjective_live_below_fifty`
-    (winnable, XP-positive, under the suicide guard), whose held objective arms
-    the fight on it. `gear_objective` itself is not called: the snapshot this
+    It is the `∃ m` of `GearTierLeveling.WinnableAcrossBand` (winnable on the
+    band's witness loadout, XP-positive, under the suicide guard). That it
+    transfers to production's `L*` is a named residual. `gear_objective` itself
+    is not called: the snapshot this
     witness reads has no maps or monster types, so `_candidates`' spawn and
     party-type filters cannot be evaluated here. The highest-level rule is the
     one the witness table was built with (the deleted windowed picker, whose

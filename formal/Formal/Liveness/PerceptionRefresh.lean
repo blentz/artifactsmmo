@@ -16,10 +16,13 @@ FIGHT (`GearTierLeveling.fight_armed_of_held`). That a candidate for `m*` exists
 every band level is a THEOREM: `WinnableGrounded.winnableAcrossBand_grounded`
 kernel-proves `WinnableAcrossBand` over the live catalog
 (`combatCandidate_exists_below_fifty`; `arming_justified_below_fifty` bundles it with
-the set `objectiveStepIsFight := true`). That production's gear objective then
-exists with such an `m*` is the HYPOTHESIS `GearTierLeveling.ObjectiveCoversBand`,
-bound to production by `formal/diff/test_gear_objective_link_diff.py`;
-`combatTarget_exists_below_fifty` composes the two. The production differentials are `formal/diff/test_gear_objective_arming_diff.py`
+the set `objectiveStepIsFight := true`) — for the band WITNESS loadout. Production's
+gear objective reads its own predicate (a `_candidates` monster whose `L*` fighter
+wins at the real state with `R > 0`); that such a candidate gives an objective on
+one is the HYPOTHESIS `GearTierLeveling.ObjectiveCovers`, bound by
+`formal/diff/test_gear_objective_link_diff.py`. That the catalogue witness makes
+production's antecedent true at a real state is NOT proved: it is the named
+catalogue→`L*` residual of `LevelFiftyReachableP`. The production differentials are `formal/diff/test_gear_objective_arming_diff.py`
 (both halves of the gear objective's root walk and grind target) and
 `formal/diff/test_objectivestep_arming_diff.py` (`objective_step_goal(ReachCharLevel)
 → GrindCharacterXPGoal` whenever a target exists and we are not in the
@@ -89,9 +92,10 @@ by `unfold perceptionRefresh; rw [if_pos]` alone.
 
 The lemmas below establish MODEL FAITHFULNESS *offline* — they are NOT logically
 consumed by proofs that merely need the set value:
-* The kernel half (`combatTarget_exists_below_fifty`, Task 4's
-  `winnableAcrossBand_grounded` fed through `combatObjective_live_below_fifty`) proves a
-  winnable combat target EXISTS at every level `1 ≤ L < 50`.
+* The kernel half (`combatCandidate_exists_below_fifty`, Task 4's
+  `winnableAcrossBand_grounded`) proves a band-witness candidate EXISTS at every level
+  `1 ≤ L < 50`; that production's `L*` fighter then wins is NOT proved (the named
+  catalogue→`L*` residual of `LevelFiftyReachableP`).
 * The production differential (`formal/diff/test_objectivestep_arming_diff.py`) pins that
   when such a target exists and we are NOT in the paying-items-task defer case
   (an items task in progress AND it pays, `held_task_pays`), production's
@@ -106,37 +110,21 @@ fight below 50 in two cases the model does not see:
   the root is a piece's acquisition. That this phase terminates, and that `L*` is
   held again after each level-up, is the named residual of `LevelFiftyReachableP`. -/
 
-/-- **Kernel half — a candidate for `m*` exists below the cap.** Task 4's
-`winnableAcrossBand_grounded` at one level: the live catalog holds a winnable,
-XP-positive monster under the suicide guard. A THEOREM, not an assumption. -/
+/-- **Kernel half — a band-witness candidate exists below the cap.** Task 4's
+`winnableAcrossBand_grounded` at one level: the live catalog holds a monster the
+band's WITNESS loadout beats, XP-positive and under the suicide guard. A THEOREM about
+the catalogue; that production's `L*` fighter then wins is the named residual of
+`LevelFiftyReachableP`. -/
 theorem combatCandidate_exists_below_fifty (L : Int) (hlo : 1 ≤ L) (hhi : L < 50) :
     ∃ m ∈ catalogAsMonsters, winnableConcrete m = true ∧ xpPosConcrete m = true ∧
       notOverleveled L m = true :=
   winnableAcrossBand_grounded L ⟨hlo, hhi⟩
 
-/-- **Production's objective below the cap, given the link.** With the production
-link `ObjectiveCoversBand` (a hypothesis bound by
-`formal/diff/test_gear_objective_link_diff.py`), at every level `1 ≤ L < 50`
-production's gear objective exists over the live catalog, its `m*` is a grounded
-candidate, and its grind target is `m*` exactly while `L*` is held
-(`combatObjective_live_below_fifty` on `winnableAcrossBand_grounded`). -/
-theorem combatTarget_exists_below_fifty
-    (objectiveAt : Int → Option ObjectiveView)
-    (hcov : ObjectiveCoversBand winnableConcrete xpPosConcrete catalogAsMonsters objectiveAt)
-    (L : Int) (hlo : 1 ≤ L) (hhi : L < 50) :
-    ∃ o, objectiveAt L = some o ∧ WellFormed o ∧
-      (∃ m ∈ catalogAsMonsters, m.code = o.monster ∧ winnableConcrete m = true ∧
-        xpPosConcrete m = true ∧ notOverleveled L m = true) ∧
-      (o.held = true → grindTarget o = some o.monster) ∧
-      (o.held = false → grindTarget o = none) :=
-  combatObjective_live_below_fifty winnableConcrete xpPosConcrete catalogAsMonsters
-    objectiveAt winnableAcrossBand_grounded hcov L hlo hhi
-
 /-- **The arming is grounded.** Below the cap (and at a real spawn level `1 ≤ s.level`),
 `arming_justified_below_fifty` bundles two components:
 * `.1` — a kernel candidate-existence proof (from Task 4's `winnableAcrossBand_grounded`):
-  a candidate for `m*` EXISTS at `s.level`. That production's objective then names
-  one is the separate, hypothesis-bearing `combatTarget_exists_below_fifty`. With the
+  a band-witness candidate EXISTS at `s.level`. It does NOT transfer to production's
+  objective (the named catalogue→`L*` residual of `LevelFiftyReachableP`). With the
   production differential (`test_objectivestep_arming_diff.py`) it grounds the model's
   arming only while `L*` is held and outside the items-task defer case. It is NOT
   logically consumed by capstone proofs that only need `.2`.

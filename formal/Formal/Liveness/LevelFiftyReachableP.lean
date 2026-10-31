@@ -30,8 +30,13 @@ Option-A residual set:
   `BlockersQuietBelowCapInfinitelyOftenP` alone (CombatPersistent in-model).
 * **`WinnableAcrossBand`** — baked into `perceptionRefresh`'s arming: since plan C
   Task 4 (ruling C4-b) through the gear objective's held half
-  (`GearTierLeveling.combatObjective_live_below_fifty`, `fight_armed_of_held`), with
-  the production link `ObjectiveCoversBand` as a hypothesis.
+  (`GearObjectiveWalk.fight_armed_of_held`) and the production link
+  `GearTierLeveling.ObjectiveCovers` (a hypothesis, at one state).
+* **catalogue → `L*` (NAMED RESIDUAL, ruling C4-R2)** — the band witness
+  (`WinnableAcrossBand`, a witness row's own loadout over `catalogAsMonsters`) makes
+  production's antecedent true: some `_candidates` monster's `L*` fighter wins at the
+  real state with `R > 0`. Not proved, and false at a naked high-level character
+  (`gear_objective` None). The same gear-progress gap as the not-held phase below.
 * **not-held phase (NAMED RESIDUAL, ruling C4-R)** — the not-held phase terminates and
   `L*` is held again after a level-up. While `L*` misses a piece production fights
   nothing for XP (`GearTierLeveling.no_xp_fight_of_not_held`; the root is a piece's

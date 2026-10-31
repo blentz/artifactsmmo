@@ -584,9 +584,9 @@ open Formal.Liveness.BlockerMonotone
 open Formal.Liveness.GearTierLeveling
 #print axioms winnableAcrossBand_satisfiable
 #print axioms held_objective_emits_fight
-#print axioms combatObjective_live_below_fifty
-#print axioms objectiveCoversBand_satisfiable
-#print axioms not_objectiveCoversBand_of_none
+#print axioms objective_of_winning_candidate
+#print axioms objectiveCovers_satisfiable
+#print axioms not_objectiveCovers_of_none
 #print axioms held_objective_emits_fight_nonvacuous
 
 -- Task 4 (2026-06-20): WinnableAcrossBand DISCHARGED over the live catalog via a
