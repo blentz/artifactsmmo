@@ -26,7 +26,7 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import (
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
-from artifactsmmo_cli.ai.tiers.objective import NEAR_TERM_POLICY, near_term_model
+from artifactsmmo_cli.ai.tiers.objective import feasible_now, near_term_model
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _ROBBY = json.loads(FIGHT_LOGS.read_text())["characters"]["Robby"]
@@ -71,9 +71,9 @@ API cannot produce. Any hand-built `GameData` a `StrategyEngine.decide` or
 
 
 def obtainable_now(code: str, state: WorldState, gd: GameData) -> bool:
-    """One `code` obtainable from `state` under the policy `classify_target`
-    asks its target and materials of (`near_term_model`, `NEAR_TERM_POLICY`)."""
-    return near_term_model(state, gd).feasible(code, 1, NEAR_TERM_POLICY)
+    """One `code` obtainable from `state`: production's `feasible_now`, the
+    question `classify_target` asks of its target and materials."""
+    return feasible_now(near_term_model(state, gd), code)
 
 
 def with_missing(ctx: SelectionContext, *pieces: tuple[str, str]) -> SelectionContext:

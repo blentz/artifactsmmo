@@ -8,7 +8,7 @@ from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
 from artifactsmmo_cli.ai.suppliable import is_suppliable
 from artifactsmmo_cli.ai.tiers import objective as objective_mod
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, feasible_now, is_attainable, near_term_model
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state, obtainable_now
 
@@ -244,6 +244,17 @@ def test_classify_target_still_reports_a_sourceless_code_as_its_own_blocker():
     assert target.attainable is False
     assert target.blocking_skill is None
     assert target.blocker == "relic"
+
+
+def test_classify_target_asks_the_near_term_question_it_publishes() -> None:
+    """`classify_target`'s attainability is production's `feasible_now` of
+    the same model: the one question the fixtures ask too."""
+    gd = _gd_drop_recipes()
+    state = make_state(level=5, attack={"air": 5})
+    obj = CharacterObjective.from_game_data(gd)
+    for code in ("feather_coat", "dragon_helm"):
+        assert obj.classify_target(code, state).attainable == feasible_now(
+            near_term_model(state, gd), code)
 
 
 def test_classify_target_asks_one_obtain_model_per_call() -> None:

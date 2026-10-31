@@ -171,6 +171,13 @@ def near_term_model(state: WorldState, game_data: GameData) -> ObtainModel:
                        datetime.now(UTC))
 
 
+def feasible_now(model: ObtainModel, code: str) -> bool:
+    """One `code` obtainable now under `NEAR_TERM_POLICY`: the question
+    `classify_target` asks of its target and each material, of `model`
+    (`near_term_model`)."""
+    return model.feasible(code, 1, NEAR_TERM_POLICY)
+
+
 @dataclass(frozen=True)
 class GearTarget:
     """A per-slot target and, when it cannot be built today, WHY.
@@ -252,10 +259,10 @@ class CharacterObjective:
         # The target and each of its materials are asked of one state: one
         # model (`near_term_model`) answers them all.
         model = near_term_model(state, self._game_data)
-        if model.feasible(code, 1, NEAR_TERM_POLICY):
+        if feasible_now(model, code):
             return GearTarget(code=code, attainable=True, blocker=None)
         recipe = self._game_data.crafting_recipe(code) or {}
         for material in sorted(recipe):
-            if not model.feasible(material, 1, NEAR_TERM_POLICY):
+            if not feasible_now(model, material):
                 return GearTarget(code=code, attainable=False, blocker=material)
         return GearTarget(code=code, attainable=False, blocker=code)

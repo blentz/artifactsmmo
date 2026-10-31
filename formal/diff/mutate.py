@@ -5298,13 +5298,13 @@ CLASSIFY_TARGET_MUTATIONS = [
     # Plan B Task 14c: one obtain model answers every candidate of one state.
     # Fix round 1: classify_target asks its target and materials of one model.
     ("objective: classify_target builds a model for the target",
-     "        if model.feasible(code, 1, NEAR_TERM_POLICY):\n"
+     "        if feasible_now(model, code):\n"
      "            return GearTarget(code=code, attainable=True, blocker=None)",
-     "        if near_term_model(state, self._game_data).feasible(code, 1, NEAR_TERM_POLICY):\n"
+     "        if feasible_now(near_term_model(state, self._game_data), code):\n"
      "            return GearTarget(code=code, attainable=True, blocker=None)"),
     ("objective: classify_target builds a model per material",
-     "            if not model.feasible(material, 1, NEAR_TERM_POLICY):",
-     "            if not near_term_model(state, self._game_data).feasible(material, 1, NEAR_TERM_POLICY):"),
+     "            if not feasible_now(model, material):",
+     "            if not feasible_now(near_term_model(state, self._game_data), material):"),
     ("objective: near-term attainability counts GE fills",
      "                          ge_routes=False, task_rewards=True, fight_gold=False, drop_routes=True)",
      "                          ge_routes=True, task_rewards=True, fight_gold=False, drop_routes=True)"),
