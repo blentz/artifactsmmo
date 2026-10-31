@@ -5,7 +5,7 @@ from textual.geometry import Region, Size
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.glyphs import UNMAPPED_COLOR, WALKABLE_COLOR
-from artifactsmmo_cli.tui.palette import LEAF, SKIN
+from artifactsmmo_cli.tui.palette import SKIN, SLIME
 from artifactsmmo_cli.tui.sprites import PLANNING_SPRITE, PLAYER_SPRITE, Sprite, SpriteCategory
 from artifactsmmo_cli.tui.widgets.map_pane import (
     FALLBACK_H,
@@ -122,10 +122,10 @@ class TestBuildTileIndex:
 class TestLayerAwareRendering:
     def test_content_from_another_layer_is_not_drawn(self):
         # green_slime sits at (2,0) on the OVERWORLD only; standing at (0,0)
-        # underground must not paint it (LEAF pixels come from the slime).
+        # underground must not paint it (SLIME pixels come from the slime).
         pane = MapPane(_gd_layered())
         out = pane._render_viewport(_snap(0, 0, "underground"), 80, 41)
-        assert not any(LEAF in s for s in _styles(out))
+        assert not any(SLIME in s for s in _styles(out))
 
     def test_same_coordinates_render_the_layer_you_are_on(self):
         pane = MapPane(_gd_layered())
@@ -195,10 +195,10 @@ class TestLayers:
         assert any(SKIN in s for s in _styles(out))
 
     def test_monster_sprite_in_view(self):
-        # green_slime at (2,0) is in view from (0,0) -> LEAF pixels present.
+        # green_slime at (2,0) is in view from (0,0) -> SLIME pixels present.
         pane = MapPane(_gd_typed())
         out = pane._render_viewport(_snap(0, 0), 80, 41)
-        assert any(LEAF in s for s in _styles(out))
+        assert any(SLIME in s for s in _styles(out))
 
     def test_unmapped_tiles_use_void_color(self):
         gd = GameData()  # nothing known, no content
@@ -454,15 +454,15 @@ class TestRenderLine:
         assert strip.cell_length == FALLBACK_W
 
     def test_runs_break_where_tile_content_changes(self):
-        # The merge must stop at a differently-coloured tile: the slime's LEAF
+        # The merge must stop at a differently-coloured tile: the slime's SLIME
         # pixels survive as their own runs between floor runs.
         pane = MapPane(_gd_typed())
         pane.update_snapshot(_snap(0, 0))
         center_rows = range(1 + ((FALLBACK_H - 1) // TILE_H // 2) * TILE_H,
                             1 + ((FALLBACK_H - 1) // TILE_H // 2 + 1) * TILE_H)
         styles = [str(seg.style) for y in center_rows for seg in pane.render_line(y)]
-        assert any(LEAF in s for s in styles)
-        assert any(WALKABLE_COLOR in s and LEAF not in s for s in styles)
+        assert any(SLIME in s for s in styles)
+        assert any(WALKABLE_COLOR in s and SLIME not in s for s in styles)
 
     def test_line_pads_to_width_past_the_last_whole_tile(self):
         # A width that is not a whole number of tiles still yields a full-width

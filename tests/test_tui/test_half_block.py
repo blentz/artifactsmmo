@@ -3,7 +3,7 @@
 from rich.style import Style
 
 from artifactsmmo_cli.tui.half_block import HALF_BLOCK, HalfBlockCompositor
-from artifactsmmo_cli.tui.palette import LEAF
+from artifactsmmo_cli.tui.palette import SLIME
 from artifactsmmo_cli.tui.sprites import BLANK_SPRITE, GREEN_SLIME_SPRITE, Sprite
 
 
@@ -53,8 +53,8 @@ def test_opaque_pixel_uses_palette_color():
     comp = HalfBlockCompositor()
     rows = comp.compose(GREEN_SLIME_SPRITE, "grey50")
     styles = [str(seg.style) for row in rows for seg in row]
-    # The slime body uses the LEAF palette color (hex), not the ANSI name.
-    assert any(LEAF in style for style in styles)
+    # The slime body uses the SLIME palette color (hex), not the ANSI name.
+    assert any(SLIME in style for style in styles)
 
 
 def test_memoized_same_args_returns_identical_object():

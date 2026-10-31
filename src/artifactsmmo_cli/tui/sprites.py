@@ -5,7 +5,8 @@ the terrain color behind it. Behavioral rendering lives in half_block.py;
 code->sprite lookup and the procedural fallback live in sprite_registry.py.
 """
 
-from dataclasses import dataclass
+import string
+from dataclasses import astuple, dataclass
 from enum import Enum
 from functools import cached_property
 
@@ -15,28 +16,39 @@ from artifactsmmo_cli.tui.glyphs import (
     STRUCTURE_COLOR,
 )
 from artifactsmmo_cli.tui.palette import (
-    AMBER,
+    AMBER_RAMP,
     BARK,
-    BLOOD,
+    BARK_RAMP,
+    BLOOD_RAMP,
     BONE,
-    BREW,
-    COPPER,
-    DOORWOOD,
-    EMBER,
-    GOBLIN_SKIN,
-    GOLD,
+    BONE_RAMP,
+    BREW_RAMP,
+    COPPER_RAMP,
+    DOORWOOD_RAMP,
+    EMBER_RAMP,
+    GLOW,
+    GOBLIN_SKIN_RAMP,
+    GOLD_RAMP,
+    HAIR_RAMP,
     INK,
-    KHAKI,
-    LEAF,
-    OGRE_SKIN,
-    ORC_SKIN,
-    PINK,
-    SKIN,
+    KHAKI_RAMP,
+    LEAF_RAMP,
+    LEATHER_RAMP,
+    OGRE_SKIN_RAMP,
+    ORC_SKIN_RAMP,
+    PINK_RAMP,
+    SHINE,
+    SKIN_RAMP,
     SLATE,
+    SLATE_RAMP,
+    SLIME_RAMP,
     STEEL,
+    STEEL_RAMP,
     STONE,
-    TUNIC,
-    WATER,
+    STONE_RAMP,
+    TUNIC_RAMP,
+    WATER_RAMP,
+    Ramp,
 )
 
 SPRITE_SIZE = 8
@@ -81,40 +93,82 @@ def validate_sprite(name: str, sprite: Sprite) -> None:
                 raise ValueError(f"sprite {name!r} row {i}: palette key {ch!r} undefined")
 
 
+# Replacement keys for overlay collisions, in a fixed order so a merge is
+# deterministic (render caches key on sprite content).
+_OVERLAY_KEY_POOL = string.digits + string.ascii_letters + "!#$%&*+-=?@^~"
+
+
 def overlay_sprites(base: Sprite, top: Sprite) -> Sprite:
     """Merge two 8x8 sprites: each non-transparent pixel of `top` wins, else
-    `base` shows through. Palette merges with `top` taking precedence on key
-    collisions. Returns a new immutable Sprite (compositor-cache safe)."""
+    `base` shows through. Every pixel keeps the colour of the sprite it came
+    from: a `top` key that `base` also uses for a DIFFERENT colour is renamed
+    to an unused key (a swung tool's 'h' handle must not repaint a monster's
+    'h' hair). Returns a new immutable Sprite (compositor-cache safe)."""
+    used = set(base.palette) | set(top.palette) | {TRANSPARENT}
+    free = (ch for ch in _OVERLAY_KEY_POOL if ch not in used)
+    rename = {
+        key: next(free)
+        for key in sorted(top.palette)
+        if key in base.palette and base.palette[key] != top.palette[key]
+    }
     rows = tuple(
         "".join(
-            top.rows[r][c] if top.rows[r][c] != TRANSPARENT else base.rows[r][c]
+            rename.get(top.rows[r][c], top.rows[r][c]) if top.rows[r][c] != TRANSPARENT
+            else base.rows[r][c]
             for c in range(SPRITE_SIZE)
         )
         for r in range(SPRITE_SIZE)
     )
-    return Sprite(rows=rows, palette={**base.palette, **top.palette})
+    top_palette = {rename.get(key, key): color for key, color in top.palette.items()}
+    return Sprite(rows=rows, palette={**base.palette, **top_palette})
 
 
-def recolor(base: Sprite, palette: dict[str, str]) -> Sprite:
-    """A family variant: same silhouette as `base`, new palette. Authoring-time
-    helper for binning many codes onto one shared shape (e.g. slime colors)."""
-    return Sprite(rows=base.rows, palette=palette)
+def shade_keys(ramp: Ramp, keys: str) -> dict[str, str]:
+    """Palette entries for one material: `keys` names the palette keys for the
+    ramp's outline, dark, mid and light shades in that order ('_' skips one).
+    `shade_keys(ORC_SKIN_RAMP, "odgL")` -> {"o": outline, "d": dark, "g": mid, "L": light}."""
+    return {key: shade for key, shade in zip(keys, astuple(ramp), strict=True) if key != "_"}
+
+
+def palette_of(*parts: dict[str, str]) -> dict[str, str]:
+    """Merge palette fragments (later fragments win)."""
+    merged: dict[str, str] = {}
+    for part in parts:
+        merged.update(part)
+    return merged
+
+
+def reramp(base: Sprite, swaps: dict[Ramp, Ramp]) -> Sprite:
+    """A family variant: same silhouette as `base`, with every shade of each
+    swapped ramp replaced by the same shade of its replacement (outline for
+    outline, light for light), so the variant keeps the base's shading. Swaps
+    apply by colour value in one pass, so {A: B, B: A} exchanges two ramps."""
+    by_shade = {
+        old: new
+        for old_ramp, new_ramp in swaps.items()
+        for old, new in zip(astuple(old_ramp), astuple(new_ramp), strict=True)
+    }
+    return Sprite(rows=base.rows, palette={key: by_shade.get(color, color) for key, color in base.palette.items()})
 
 
 BLANK_SPRITE = Sprite(rows=(TRANSPARENT * SPRITE_SIZE,) * SPRITE_SIZE, palette={})
 
+# The player: short hair, eyes inset from the face edge, neck, tunic, boots. The
+# tunic is TUNIC_RAMP (keys o/t/b/B) so CharacterRoster reramps it per slot;
+# cells (0,7) and (1,7) stay transparent for the planning thought bubble.
 PLAYER_SPRITE = Sprite(
     rows=(
-        "..oooo..",
-        ".oyyyyo.",
-        ".oeyyeo.",
-        ".oyyyyo.",
-        "..oooo..",
-        ".obbbbo.",
-        ".ob..bo.",
-        ".oo..oo.",
+        "..hhhh..",
+        ".hHhhhd.",
+        ".dLsssd.",
+        ".dsesed.",
+        "oBdssdto",
+        "sLbbbbts",
+        ".obbtbo.",
+        ".ff..ff.",
     ),
-    palette={"o": INK, "y": SKIN, "e": INK, "b": TUNIC},
+    palette=palette_of(shade_keys(HAIR_RAMP, "_hH_"), shade_keys(SKIN_RAMP, "_dsL"), {"e": INK},
+                       shade_keys(TUNIC_RAMP, "otbB"), {"f": LEATHER_RAMP.dark}),
 )
 
 def _player_with_tool(positions: tuple[tuple[int, int], ...], key: str, color: str) -> Sprite:
@@ -300,407 +354,470 @@ CLOUD_RIGHT_B: Sprite = Sprite(
 # Thought bubble at 2 o'clock from the head (upper-right transparent cells).
 PLANNING_SPRITE: Sprite = _player_with_tool(((0, 7), (1, 7)), "p", BONE)
 
+# --- Curated art ---------------------------------------------------------------
+# Style (docs/PLAN_sprite_refresh.md): every material is a palette Ramp lit from
+# the top-left (light upper-left, dark lower-right); a sprite's edge is its main
+# material's tinted `outline`, not INK (INK is for eyes); and no two drawings
+# share a silhouette. Variants are `reramp`s of a base, so they keep its shading.
+
+_FACE = palette_of(shade_keys(SKIN_RAMP, "_dsL"), {"e": INK})
+
 GREEN_SLIME_SPRITE = Sprite(
     rows=(
-        "..oooo..",
-        ".oggggo.",
-        "oggggggo",
-        "ogeggego",
-        "oggggggo",
-        "oggggggo",
-        ".oggggo.",
-        "..oooo..",
+        "........",
+        "...ooo..",
+        "..oHLmo.",
+        ".oLmmmdo",
+        ".omememd",
+        "oLmmmmdo",
+        "odmmmddo",
+        ".oooooo.",
     ),
-    palette={"o": INK, "g": LEAF, "e": INK},
+    palette=palette_of(shade_keys(SLIME_RAMP, "odmL"), {"H": SHINE, "e": INK}),
 )
 
+# Columned bank: gold pediment, stone columns, dark doorway.
 BANK_SPRITE = Sprite(
     rows=(
+        "...yy...",
+        "..yYyy..",
+        ".yYyyyd.",
         "oooooooo",
-        "oyyyyyyo",
-        "oooooooo",
-        "osssssso",
-        "ossddsso",
-        "ossddsso",
-        "ossddsso",
-        "oooooooo",
+        "oLsLsLso",
+        "oLsDDLso",
+        "oLsDDLso",
+        "oddddddo",
     ),
-    palette={"o": INK, "y": GOLD, "s": STONE, "d": DOORWOOD},
+    palette=palette_of(shade_keys(GOLD_RAMP, "_dyY"), shade_keys(STONE_RAMP, "odsL"),
+                       {"D": DOORWOOD_RAMP.outline}),
 )
 
+# Arched plank door with a gold handle.
 DOOR_SPRITE = Sprite(
     rows=(
         "..oooo..",
-        ".oddddo.",
-        ".oddddo.",
-        ".oddddo.",
-        ".odddko.",
-        ".oddddo.",
-        ".oddddo.",
-        "..oooo..",
+        ".oLwwdo.",
+        "oLwdwwdo",
+        "oLwdwwdo",
+        "oLwdwkdo",
+        "oLwdwwdo",
+        "oLwdwwdo",
+        "oooooooo",
     ),
-    palette={"o": INK, "d": DOORWOOD, "k": GOLD},
+    palette=palette_of(shade_keys(DOORWOOD_RAMP, "odwL"), {"k": GOLD_RAMP.light}),
 )
 
 WOODCUTTING_SPRITE = Sprite(
     rows=(
         "..oooo..",
-        ".oggggo.",
-        "oggggggo",
-        "oggggggo",
-        ".oggggo.",
-        "..otto..",
-        "..otto..",
-        "..oooo..",
+        ".oLLmmo.",
+        "oLmmmmdo",
+        "ommmmddo",
+        "omddmddo",
+        ".oddddo.",
+        "...bt...",
+        "..obtto.",
     ),
-    palette={"o": INK, "g": LEAF, "t": BARK},
+    palette=palette_of(shade_keys(LEAF_RAMP, "odmL"), {"b": BARK_RAMP.mid, "t": BARK_RAMP.dark}),
 )
 
+# Wide-brimmed explorer hat, satchel strap.
 ARCHAEOLOGIST_SPRITE = Sprite(
     rows=(
-        "..oooo..",
-        ".obbbbo.",
-        ".osssso.",
-        ".oseeso.",
-        ".osssso.",
-        "..oooo..",
-        ".okkkko.",
-        ".ok..ko.",
+        "..oLko..",
+        "oLkkkkko",
+        ".dLsssd.",
+        ".dsesed.",
+        "..dssd..",
+        "oLnkkkdo",
+        ".okkndo.",
+        ".ff..ff.",
     ),
-    palette={"o": INK, "b": BARK, "s": SKIN, "e": INK, "k": KHAKI},
+    palette=palette_of(shade_keys(KHAKI_RAMP, "odkL"), _FACE,
+                       {"n": LEATHER_RAMP.mid, "f": LEATHER_RAMP.dark}),
 )
 
+# Hair bun, dyed dress with a narrow apron, scissors in hand. The dress is the
+# dyed material (BREW) so the merchant reramps below read as different trades.
 TAILOR_SPRITE = Sprite(
     rows=(
-        "..oooo..",
-        ".osssso.",
-        ".oseeso.",
-        ".osssso.",
-        "..oooo..",
-        ".ommmmo.",
-        ".om..mo.",
-        ".oo..oo.",
+        "...hh...",
+        "..hHhh..",
+        ".hLsssh.",
+        ".hsesed.",
+        "..dssd.y",
+        ".oMmwDoy",
+        ".omwwDo.",
+        "..ff.ff.",
     ),
-    palette={"o": INK, "s": SKIN, "e": INK, "m": BREW},
+    palette=palette_of(shade_keys(HAIR_RAMP, "_hH_"), _FACE, shade_keys(BREW_RAMP, "oDmM"),
+                       {"w": BONE_RAMP.mid, "y": STONE_RAMP.light, "f": LEATHER_RAMP.dark}),
 )
 
+# Tall pointed brimmed hat, white beard, staff with a glowing tip.
 CULTIST_WIZARD_SPRITE = Sprite(
     rows=(
-        "...oo...",
-        "..ohho..",
-        ".ohhhho.",
-        ".osssso.",
-        ".oseeso.",
-        "..oooo..",
-        ".obbbbo.",
-        ".ob..bo.",
+        "...o...g",
+        "..oLo..s",
+        ".oLhhdos",
+        "ohhhhhhs",
+        ".dsesd.s",
+        ".owwwwos",
+        ".oLbbbds",
+        ".oobbdos",
     ),
-    palette={"o": INK, "h": SLATE, "s": SKIN, "e": INK, "b": BREW},
+    palette=palette_of(shade_keys(SLATE_RAMP, "o_hL"), _FACE, shade_keys(BREW_RAMP, "_dbL"),
+                       {"w": BONE_RAMP.light, "g": GLOW, "s": BARK_RAMP.mid}),
 )
 
+# Deep cowl, glowing eyes, a rune held out front.
 RUNE_VENDOR_SPRITE = Sprite(
     rows=(
         "..oooo..",
-        ".osssso.",
-        ".oseeso.",
-        ".osssso.",
-        "..oooo..",
-        ".otggto.",
-        ".ot..to.",
-        ".oo..oo.",
+        ".oLttdo.",
+        "oLtkktdo",
+        "otkeektd",
+        "oLttttdo",
+        "oLtggtdo",
+        ".ottgtdo",
+        ".oooooo.",
     ),
-    palette={"o": INK, "s": SKIN, "e": INK, "t": TUNIC, "g": GOLD},
+    palette=palette_of(shade_keys(TUNIC_RAMP, "odtL"),
+                       {"k": INK, "e": GLOW, "g": GOLD_RAMP.light}),
 )
 
+# Turban, veiled face, wide sleeves.
 SANDWHISPER_TRADER_SPRITE = Sprite(
     rows=(
-        "..oooo..",
-        ".okkkko.",
-        ".oseeso.",
-        ".osssso.",
-        "..oooo..",
-        ".oaaaao.",
-        ".oa..ao.",
-        ".oo..oo.",
+        "..oLLo..",
+        ".oLaaado",
+        ".dssesd.",
+        ".avvvva.",
+        "aLaaaada",
+        "aoLaadoa",
+        ".oaaado.",
+        ".ff..ff.",
     ),
-    palette={"o": INK, "k": KHAKI, "s": SKIN, "e": INK, "a": AMBER},
+    palette=palette_of(shade_keys(AMBER_RAMP, "odaL"), _FACE,
+                       {"v": BONE_RAMP.mid, "f": LEATHER_RAMP.dark}),
 )
 
+# Flat cap, holding a big task scroll.
 TASKS_TRADER_SPRITE = Sprite(
     rows=(
-        "..oooo..",
-        ".osssso.",
-        ".oseeso.",
-        ".osssso.",
-        "..oooo..",
-        ".okkkko.",
-        ".okwwko.",
-        ".oo..oo.",
+        "........",
+        "..oLko..",
+        ".okkkkko",
+        ".dsesd..",
+        "..dsd.pp",
+        ".oLkkoPp",
+        ".okkdoPp",
+        ".ff..f..",
     ),
-    palette={"o": INK, "s": SKIN, "e": INK, "k": KHAKI, "w": BONE},
+    palette=palette_of(shade_keys(KHAKI_RAMP, "odkL"), _FACE,
+                       {"p": BONE_RAMP.mid, "P": BONE_RAMP.dark, "f": LEATHER_RAMP.dark}),
 )
 
+# Market stall: striped awning, goods on the counter.
 GRAND_EXCHANGE_SPRITE = Sprite(
     rows=(
-        "oooooooo",
-        "oawawawo",
-        "oooooooo",
-        "osssssso",
-        "osgssgso",
-        "osssssso",
-        "ossddsso",
-        "oooooooo",
+        "rwrwrwrw",
+        "rwrwrwrw",
+        "o......o",
+        "o.y.g..o",
+        "oLmmmmdo",
+        "oLmmmmdo",
+        "o.oooo.o",
+        "o......o",
     ),
-    palette={"o": INK, "a": BLOOD, "w": BONE, "s": STONE, "g": GOLD, "d": DOORWOOD},
+    palette=palette_of(shade_keys(BARK_RAMP, "odmL"),
+                       {"r": BLOOD_RAMP.mid, "w": BONE_RAMP.light, "y": GOLD_RAMP.mid,
+                        "g": LEAF_RAMP.mid}),
 )
 
+# Anvil on a stump.
 WORKSHOP_SPRITE = Sprite(
     rows=(
-        "oooooooo",
-        "obbbbbbo",
-        "obbbbbbo",
-        "oooooooo",
-        "osaaaaso",
-        "ossaasso",
-        "osaaaaso",
-        "oooooooo",
+        "........",
+        "........",
+        ".oLaaao.",
+        "LLaaaaao",
+        "...oado.",
+        "..oLado.",
+        "..oLbdo.",
+        ".oLbbbdo",
     ),
-    palette={"o": INK, "b": BARK, "a": STEEL, "s": STONE},
+    palette=palette_of(shade_keys(SLATE_RAMP, "odaL"), {"b": BARK_RAMP.mid}),
 )
 
+# Notice board on two posts, pinned papers.
 TASKS_MASTER_SPRITE = Sprite(
     rows=(
         "oooooooo",
-        "owwwwwwo",
-        "owllllwo",
-        "owllllwo",
-        "owllllwo",
+        "oLbbbbdo",
+        "obpbPpbo",
+        "obPpbpbo",
+        "oLbbbbdo",
         "oooooooo",
-        ".ob..bo.",
-        ".oo..oo.",
+        ".od..do.",
+        ".od..do.",
     ),
-    palette={"o": INK, "w": BONE, "l": SLATE, "b": BARK},
+    palette=palette_of(shade_keys(BARK_RAMP, "odbL"), {"p": BONE_RAMP.light, "P": BONE_RAMP.mid}),
 )
 
+# Boulder with copper veins.
 MINING_SPRITE = Sprite(
     rows=(
         "........",
-        "..oooo..",
-        ".osccso.",
-        "osssssso",
-        "oscsscso",
-        "osssssso",
-        ".oosso..",
-        "........",
+        "...ooo..",
+        "..oLssoo",
+        ".oLscssd",
+        "oLsscsdd",
+        "osccssdo",
+        "osssddco",
+        ".oooooo.",
     ),
-    palette={"o": INK, "s": SLATE, "c": COPPER},
+    palette=palette_of(shade_keys(SLATE_RAMP, "odsL"), {"c": COPPER_RAMP.light}),
 )
 
+# Pond with a leaping fish.
 FISHING_SPRITE = Sprite(
     rows=(
-        "........",
+        "...aa...",
+        "..aAaa..",
+        ".a..a...",
         "..oooo..",
-        ".owwwwo.",
-        "owwffwwo",
-        "owffffwo",
-        "owwffwwo",
-        ".owwwwo.",
-        "..oooo..",
+        ".oLwwwo.",
+        "oLwWwwdo",
+        "owwwwwdo",
+        ".oooooo.",
     ),
-    palette={"o": INK, "w": WATER, "f": AMBER},
+    palette=palette_of(shade_keys(WATER_RAMP, "odwL"),
+                       {"W": SHINE, "a": AMBER_RAMP.mid, "A": AMBER_RAMP.light}),
 )
 
+# Round flask of bubbling brew.
 ALCHEMY_SPRITE = Sprite(
     rows=(
         "...oo...",
-        "...oo...",
-        "..o..o..",
-        ".o....o.",
-        ".obbbbo.",
-        ".obbbbo.",
-        ".obbbbo.",
-        "..oooo..",
+        "...ww...",
+        "...ow...",
+        "..oLwo..",
+        ".oLbbdo.",
+        "oLbHbbdo",
+        "obbbbddo",
+        ".oooooo.",
     ),
-    palette={"o": INK, "b": BREW},
+    palette=palette_of(shade_keys(BREW_RAMP, "odbL"), {"w": STONE_RAMP.light, "H": SHINE}),
 )
 
-_SLIME_ROWS = (
-    "..oooo..",
-    ".oggggo.",
-    "oggggggo",
-    "ogeggego",
-    "oggggggo",
-    "oggggggo",
-    ".oggggo.",
-    "..oooo..",
-)
+BLUE_SLIME_SPRITE = reramp(GREEN_SLIME_SPRITE, {SLIME_RAMP: TUNIC_RAMP})
+RED_SLIME_SPRITE = reramp(GREEN_SLIME_SPRITE, {SLIME_RAMP: BLOOD_RAMP})
+YELLOW_SLIME_SPRITE = reramp(GREEN_SLIME_SPRITE, {SLIME_RAMP: GOLD_RAMP})
 
-BLUE_SLIME_SPRITE = Sprite(rows=_SLIME_ROWS, palette={"o": INK, "g": TUNIC, "e": INK})
-RED_SLIME_SPRITE = Sprite(rows=_SLIME_ROWS, palette={"o": INK, "g": BLOOD, "e": INK})
-YELLOW_SLIME_SPRITE = Sprite(rows=_SLIME_ROWS, palette={"o": INK, "g": GOLD, "e": INK})
-
+# White hen: comb, beak, folded wing, legs.
 CHICKEN_SPRITE = Sprite(
-    rows=("...ro...", "..owwo..", "..owweo.", ".owwwwyo", ".owwwwwo", ".owwwwwo", "..oy.yo.", "...o.o.."),
-    palette={"o": INK, "w": BONE, "r": BLOOD, "y": AMBER, "e": INK},
+    rows=("..rr....", ".oLwo...", ".owew...", "aawwwo..", ".oLwwwwo", ".owwwddo", "..oddo..", "...a.a.."),
+    palette=palette_of(shade_keys(BONE_RAMP, "odwL"),
+                       {"r": BLOOD_RAMP.mid, "a": AMBER_RAMP.mid, "e": INK}),
 )
+# Side-on cow: horns, spots, pink muzzle.
 COW_SPRITE = Sprite(
-    rows=("..o..o..", ".owwwwo.", "owwwwwwo", "oweewweo", "owsppswo", "owwwwwwo", ".ow..wo.", ".oo..oo."),
-    palette={"o": INK, "w": BONE, "e": INK, "s": BARK, "p": PINK},
+    rows=("h......h", ".oLww...", "ewwkwwwo", "ppwwwkwo", ".oLwwwdo", ".okwwwdo", ".w.d.w.d", ".o.o.o.o"),
+    palette=palette_of(shade_keys(BONE_RAMP, "odwL"),
+                       {"k": INK, "e": INK, "h": BONE_RAMP.light, "p": PINK_RAMP.mid}),
 )
+# Round pig: snout, curly tail.
 PIG_SPRITE = Sprite(
-    rows=("..oooo..", ".oppppo.", ".opeepo.", ".oppppo.", ".opnnpo.", ".oppppo.", ".op..po.", ".oo..oo."),
-    palette={"o": INK, "p": PINK, "e": INK, "n": BARK},
+    rows=("........", ".o.oooo.", "oLpppppo", "nnepLpdt", "nnppppdo", ".oppppdo", ".p.d.d..", ".o.o.o.."),
+    palette=palette_of(shade_keys(PINK_RAMP, "odpL"), {"n": PINK_RAMP.dark, "e": INK, "t": PINK_RAMP.dark}),
 )
+# Fluffy fleece, dark face and legs.
 SHEEP_SPRITE = Sprite(
-    rows=("..oooo..", ".owwwwo.", "owwwwwwo", "owwwwwwo", ".offffo.", ".ofeefo.", "..o..o..", "........"),
-    palette={"o": INK, "w": BONE, "f": SLATE, "e": INK},
+    rows=("........", "..owwow.", ".oLwwwwo", "ffLwwwwo", "efwwwwdo", ".owwwddo", "..f..f..", "..f..f.."),
+    palette=palette_of(shade_keys(BONE_RAMP, "odwL"), {"f": SLATE_RAMP.dark, "e": INK}),
 )
+# Grey wolf: pricked ears, snout, tail.
 WOLF_SPRITE = Sprite(
-    rows=("..o..o..", ".owwwwo.", ".oweewo.", ".owwwwo.", "owwwwwwo", "owwwwwwo", ".ow..wo.", ".oo..oo."),
-    palette={"o": INK, "w": STONE, "e": AMBER},
+    rows=(".o.o....", ".oLwo...", "kwewwo.t", ".owwwwwt", "..oLwwdo", "..owwddo", "..w.d.d.", "..o.o.o."),
+    palette=palette_of(shade_keys(STONE_RAMP, "odwL"),
+                       {"e": AMBER_RAMP.light, "k": INK, "t": STONE_RAMP.dark}),
 )
+# Bulky bear body with an owl's face disk and beak.
 OWLBEAR_SPRITE = Sprite(
-    rows=("..o..o..", ".obbbbo.", ".obaabo.", ".obaabo.", "obbbbbbo", "obbbbbbo", ".ob..bo.", ".oo..oo."),
-    palette={"o": INK, "b": BARK, "a": AMBER},
+    rows=(".o....o.", "oLbbbbdo", "obaybado", "obbkbbdo", "oLbbbbdo", "oLbccbdo", ".ob..do.", ".oo..oo."),
+    palette=palette_of(shade_keys(BARK_RAMP, "odbL"),
+                       {"a": AMBER_RAMP.light, "y": INK, "k": AMBER_RAMP.mid, "c": BARK_RAMP.light}),
 )
+# Round body, eight legs, glowing eyes. Legs use the dark shade, not the
+# outline, so the spider still shows on the void.
 SPIDER_SPRITE = Sprite(
-    rows=("o..oo..o", ".oo..oo.", "..oooo..", ".obbbbo.", ".obeebo.", ".obbbbo.", ".oo..oo.", "o..oo..o"),
-    palette={"o": INK, "b": SLATE, "e": BLOOD},
+    rows=("o......o", ".o.oo.o.", "o.oLmo.o", ".omrrmo.", "o.oddo.o", ".o.oo.o.", "o......o", "........"),
+    palette=palette_of(shade_keys(SLATE_RAMP, "_dmL"), {"o": SLATE_RAMP.dark, "r": GLOW}),
 )
+# Winged green serpent coiling down.
 FLYING_SNAKE_SPRITE = Sprite(
-    rows=("..oooo..", ".ogeego.", ".oggggo.", "woggggow", ".oggggo.", "..oggo..", "...oo...", "........"),
-    palette={"o": INK, "g": LEAF, "e": INK, "w": AMBER},
+    rows=("..oLgo..", "w.ogego.", "ww.oggo.", "www.ogdo", "..oLgdo.", ".oLgdo..", ".ogdo...", "..oo...."),
+    palette=palette_of(shade_keys(LEAF_RAMP, "odgL"), {"e": INK, "w": AMBER_RAMP.light}),
 )
+# Coiled sand snake, raised head, forked tongue.
 SAND_SNAKE_SPRITE = Sprite(
-    rows=("..oooo..", ".oaeeao.", ".oaaaao.", ".oaaaao.", "...oaao.", "..oaao..", ".oaao...", "..oo...."),
-    palette={"o": INK, "a": AMBER, "e": INK},
+    rows=(".oLao...", ".oeaao..", "..oado..", "r..oado.", "..oLaado", ".oLaaado", "oLaaddo.", ".ooooo.."),
+    palette=palette_of(shade_keys(AMBER_RAMP, "odaL"), {"e": INK, "r": BLOOD_RAMP.mid}),
 )
 
+# Goblin: long pointed ears, short body, leather jerkin.
 GOBLIN_SPRITE = Sprite(
-    rows=("o.oooo.o", ".oggggo.", ".ogeego.", ".oggggo.", "..oooo..", ".obbbbo.", ".og..go.", ".oo..oo."),
-    palette={"o": INK, "g": GOBLIN_SKIN, "e": BLOOD, "b": BARK},
+    rows=("........", "L.oooo.d", "oLgggddo", ".grggrd.", "..oddo..", ".ommmko.", "..m..k..", ".oo..oo."),
+    palette=palette_of(shade_keys(GOBLIN_SKIN_RAMP, "odgL"), {"r": GLOW},
+                       shade_keys(LEATHER_RAMP, "_km_")),
 )
+# A goblin head riding a grey wolf (wide quadruped).
 GOBLIN_WOLFRIDER_SPRITE = Sprite(
-    rows=("..oggo..", "..oggo..", ".owwwwo.", "owwwwwwo", "oweewwwo", "owwwwwwo", ".ow..wo.", ".oo..oo."),
-    palette={"o": INK, "g": GOBLIN_SKIN, "w": STONE, "e": AMBER},
+    rows=("..g.g...", "..ogo...", "..grg...", ".Lwwwww.", "Lwwwwwdo", "wewwwwdo", ".w.d.d..", ".o.o.o.."),
+    palette=palette_of(shade_keys(GOBLIN_SKIN_RAMP, "__g_"), shade_keys(STONE_RAMP, "odwL"),
+                       {"r": GLOW, "e": AMBER_RAMP.mid}),
 )
+# Orc: separate head, tusks, broad shoulders, belt.
 ORC_SPRITE = Sprite(
-    rows=("..oooo..", ".oggggo.", ".ogeego.", ".ogwwgo.", "..oooo..", "oggggggo", ".og..go.", ".oo..oo."),
-    palette={"o": INK, "g": ORC_SKIN, "e": BLOOD, "w": BONE},
+    rows=("..oooo..", ".oLggdo.", ".grggrd.", ".gwddwd.", "oLggggdo", "olkkkkko", ".og..do.", ".oo..oo."),
+    palette=palette_of(shade_keys(ORC_SKIN_RAMP, "odgL"), {"r": GLOW, "w": BONE_RAMP.light},
+                       shade_keys(LEATHER_RAMP, "_kl_")),
 )
+# Ogre: tiny head sunk into a huge hunched body, short legs.
 OGRE_SPRITE = Sprite(
-    rows=("..oooo..", ".oggggo.", ".ogeego.", ".oggggo.", "oggggggo", "oggggggo", ".og..go.", ".oo..oo."),
-    palette={"o": INK, "g": OGRE_SKIN, "e": BLOOD},
+    rows=("...oo...", "..oLmo..", ".oemedoo", "oLmmmmdo", "LmmmmmmD", "ommkkddo", ".om..do.", ".oo..oo."),
+    palette=palette_of(shade_keys(OGRE_SKIN_RAMP, "odmL"), {"e": INK, "D": OGRE_SKIN_RAMP.outline},
+                       shade_keys(LEATHER_RAMP, "_k__")),
 )
+# Cyclops: one great eye, a horn, broad shoulders.
 CYCLOPS_SPRITE = Sprite(
-    rows=("..oooo..", ".occcco.", ".occcco.", ".oceeco.", ".occcco.", "..oooo..", ".occcco.", ".oc..co."),
-    palette={"o": INK, "c": SKIN, "e": INK},
+    rows=("...oo...", ".ooLmoo.", "oLwwwmdo", "omwppwdo", ".omwwdo.", "oLmmmmdo", ".om..do.", ".oo..oo."),
+    palette=palette_of(shade_keys(SKIN_RAMP, "odmL"), {"w": BONE_RAMP.light, "p": INK}),
 )
+# Imp: small horned devil, tail curling right.
 IMP_SPRITE = Sprite(
-    rows=("o.....o.", ".oiiiio.", ".oieeio.", ".oiiiio.", "..oooo..", ".oiiiio.", ".oi..io.", ".oo..oo."),
-    palette={"o": INK, "i": BLOOD, "e": GOLD},
+    rows=("........", "o.oooo.o", ".oLiido.", ".oyiiyo.", "..odio..", ".oLiido.", "..i..d.t", ".oo..oot"),
+    palette=palette_of(shade_keys(BLOOD_RAMP, "odiL"), {"y": GOLD_RAMP.light, "t": BLOOD_RAMP.dark}),
 )
+# Highwayman: wide-brimmed hat, masked eyes, cloak.
 HIGHWAYMAN_SPRITE = Sprite(
-    rows=("..oooo..", ".occcco.", ".oseeso.", ".osssso.", "..oooo..", ".occcco.", ".oc..co.", ".oo..oo."),
-    palette={"o": INK, "c": SLATE, "s": SKIN, "e": INK},
+    rows=("...oo...", "..oLho..", "ohhhhhho", ".skkkks.", ".osssdo.", "oLccccdo", ".occcdo.", ".ff..ff."),
+    palette=palette_of(shade_keys(SLATE_RAMP, "o_hL"), shade_keys(SKIN_RAMP, "_dsL"),
+                       {"k": INK, "c": SLATE_RAMP.mid, "f": LEATHER_RAMP.dark}),
 )
+# Cultist acolyte: pointed hood, glowing eyes, robe flaring to the ground.
 CULTIST_ACOLYTE_SPRITE = Sprite(
-    rows=("..oooo..", ".obbbbo.", ".obeebo.", ".obbbbo.", "..oooo..", ".obbbbo.", ".ob..bo.", ".oo..oo."),
-    palette={"o": INK, "b": BREW, "e": BLOOD},
+    rows=("...o....", "..oLo...", "..Lbbo..", ".obrrbo.", ".oLbbdo.", ".Lbbbbdo", "oLbbbbdo", "oooooooo"),
+    palette=palette_of(shade_keys(BREW_RAMP, "odbL"), {"r": GLOW}),
 )
+# Skeleton: skull, spine and ribs, thin legs.
 SKELETON_SPRITE = Sprite(
-    rows=("..oooo..", ".owwwwo.", ".oweewo.", ".owwwwo.", "..oooo..", ".owwwwo.", ".ow..wo.", ".oo..oo."),
-    palette={"o": INK, "w": BONE, "e": INK},
+    rows=("..oooo..", ".oLwwdo.", ".oeweeo.", "..owdo..", ".owowo..", "..owdo..", "..w..d..", ".ww..dd."),
+    palette=palette_of(shade_keys(BONE_RAMP, "odwL"), {"e": INK}),
 )
+# Death knight: horned helm, glowing visor slit, broad pauldrons.
 DEATH_KNIGHT_SPRITE = Sprite(
-    rows=("..oooo..", ".oaaaao.", ".oaeeao.", ".oaaaao.", "..oooo..", ".oaaaao.", ".oa..ao.", ".oo..oo."),
-    palette={"o": INK, "a": SLATE, "e": BLOOD},
+    rows=("o......o", "Lo.oo.od", ".oLaado.", ".arrrra.", "LLaaaadd", "oLaaaado", ".oa..do.", ".oo..oo."),
+    palette=palette_of(shade_keys(STEEL_RAMP, "odaL"), {"r": GLOW}),
 )
+# Vampire: widow's peak, pale face, high collar, flared cape with a red lining.
 VAMPIRE_SPRITE = Sprite(
-    rows=("..oooo..", ".ohhhho.", ".owrrwo.", ".owwwwo.", "..oooo..", ".orrrro.", ".or..ro.", ".oo..oo."),
-    palette={"o": INK, "h": SLATE, "w": BONE, "r": BLOOD},
+    rows=("..hhhh..", ".hhwwhh.", ".hwrwrh.", "c.wwww.c", "cc.oo.cc", "ccrbbrcc", "cccbbccc", "cc.oo.cc"),
+    palette={"h": INK, "w": BONE_RAMP.light, "r": GLOW, "c": SLATE_RAMP.dark,
+             "o": SLATE_RAMP.outline, "b": BLOOD_RAMP.dark},
 )
+# Hellhound: black hound wreathed in fire.
 HELLHOUND_SPRITE = Sprite(
-    rows=("..o..o..", ".obbbbo.", ".obeebo.", ".obbbbo.", "obbbbbbo", "obbbbbbo", ".ob..bo.", ".oo..oo."),
-    palette={"o": INK, "b": SLATE, "e": EMBER},
+    rows=("f.o.o...", ".foLbo..", "kbebbo.f", ".obbbbbf", "..oLbbdo", "..obbddo", "..b.d.d.", "..f.f.f."),
+    palette=palette_of(shade_keys(SLATE_RAMP, "odbL"),
+                       {"e": EMBER_RAMP.light, "k": INK, "f": EMBER_RAMP.mid}),
 )
+# Cursed tree: dead grey trunk, glowing face, grasping branches.
 CURSED_TREE_SPRITE = Sprite(
-    rows=("..oooo..", ".oddddo.", "oddeeddo", "oddddddo", ".oddddo.", "..otto..", "..otto..", "..oooo.."),
-    palette={"o": INK, "d": SLATE, "e": BLOOD, "t": BARK},
+    rows=("o.o..o.o", ".oLoo.o.", "..oLmdo.", "..mrmrd.", "..omkdo.", "...omd..", "..omdd..", ".oo..oo."),
+    palette=palette_of(shade_keys(SLATE_RAMP, "odmL"), {"r": GLOW, "k": INK}),
 )
+# Mushmush: red spotted cap over a little face.
 MUSHMUSH_SPRITE = Sprite(
-    rows=("..oooo..", ".orrrro.", "orrwwrro", ".orrrro.", "..oooo..", ".owwwwo.", ".oweewo.", ".oo..oo."),
-    palette={"o": INK, "r": BLOOD, "w": BONE, "e": INK},
+    rows=("..oooo..", ".oLrwro.", "orwrrrdo", "oooooooo", "..sese..", "..ssss..", ".os..so.", ".oo..oo."),
+    palette=palette_of(shade_keys(BLOOD_RAMP, "odrL"),
+                       {"w": BONE_RAMP.light, "s": BONE_RAMP.mid, "e": INK}),
 )
+# Desert scorpion: pincers forward, segmented tail arcing over.
 DESERT_SCORPION_SPRITE = Sprite(
-    rows=("o..aa..o", ".oaaaao.", ".oaeeao.", ".oaaaao.", "o.aaaa.o", ".oaaaao.", "...aa...", "....aat."),
-    palette={"o": INK, "a": AMBER, "e": INK, "t": BLOOD},
+    rows=("......t.", ".....o.t", "aa....oa", "oa.ooao.", ".oLaaado", "aoeaeado", ".a.a.a..", "........"),
+    palette=palette_of(shade_keys(AMBER_RAMP, "odaL"), {"e": INK, "t": BLOOD_RAMP.mid}),
 )
+# Sandwarden: turbaned guard with a tall spear.
 SANDWARDEN_SPRITE = Sprite(
-    rows=("..oooo..", ".okkkko.", ".okeeko.", ".okkkko.", "okkkkkko", "okkkkkko", ".ok..ko.", ".oo..oo."),
-    palette={"o": INK, "k": KHAKI, "e": AMBER},
+    rows=(".oLLko.y", "oLkkkdo.", ".osesdos", ".osssdos", "oLkkkkds", "oLkkkkds", ".ok..dos", ".oo..oos"),
+    palette=palette_of(shade_keys(KHAKI_RAMP, "odkL"), shade_keys(SKIN_RAMP, "__s_"),
+                       {"e": INK, "s": BARK_RAMP.mid, "y": STEEL_RAMP.light}),
 )
+# King slime: a purple slime wearing a crown.
 KING_SLIME_SPRITE = Sprite(
-    rows=(".o....o.", ".oGGGGo.", "oggggggo", "ogeggego", "oggggggo", "oggggggo", ".oggggo.", "..oooo.."),
-    palette={"o": INK, "G": GOLD, "g": BREW, "e": INK},
+    rows=(".y.y.y..", ".yyyyy..", "..oHLmo.", ".oLmmmdo", ".omememd", "oLmmmmdo", "odmmmddo", ".oooooo."),
+    palette=palette_of(shade_keys(BREW_RAMP, "odmL"), {"H": SHINE, "e": INK, "y": GOLD_RAMP.mid}),
 )
 
-# --- New base shapes (used by bat/dragon family recolors below) ---
+# --- Base shapes reramped into the bat and dragon families below ---
 _BAT_BASE = Sprite(
     rows=(
         "........",
-        ".b....b.",
-        "wwbbbbww",
-        "wwbeebww",
-        ".wbbbbw.",
-        "..wbbw..",
-        "...bb...",
+        ".o....o.",
+        "wwoLbow.",
+        "wwbebeww",
+        "w.obdo.w",
+        "...od...",
+        "........",
         "........",
     ),
-    palette={"b": BARK, "w": SLATE, "e": EMBER},
+    palette=palette_of(shade_keys(BARK_RAMP, "odbL"), {"e": EMBER_RAMP.mid, "w": SLATE_RAMP.mid}),
 )
 _DRAGON_BASE = Sprite(
     rows=(
         "...hh...",
-        "..heeh..",
-        "w.bbbb.w",
-        "wwbbbbww",
-        ".wbbbbw.",
-        "..bbbb..",
-        ".b.bb.b.",
-        "b......b",
+        "..oLmo..",
+        "w.omemw.",
+        "wwoLmdww",
+        "wwmmmdww",
+        ".oLmmdo.",
+        ".m.mm.d.",
+        "mo....od",
     ),
-    palette={"h": BLOOD, "e": GOLD, "b": BLOOD, "w": BLOOD},
+    palette=palette_of(shade_keys(BLOOD_RAMP, "odmL"),
+                       {"h": GOLD_RAMP.light, "e": GOLD_RAMP.mid, "w": BLOOD_RAMP.dark}),
 )
 
-# --- Bespoke overpaint variants (rows differ from base) ---
+# Lich: crowned skull, glowing eyes, robe, staff.
 LICH_SPRITE = Sprite(
-    # skeleton base with lower-body 'w' replaced by 'r' (robe color=BREW).
     rows=(
-        "..oooo..",
-        ".owwwwo.",
-        ".oweewo.",
-        ".owwwwo.",
-        "..oooo..",
-        ".orrrro.",
-        ".or..ro.",
-        ".oo..oo.",
+        "y.y.y...",
+        "yyyyy...",
+        "oLwwdo..",
+        "orwwro..",
+        ".owdo..s",
+        "oLbbbdos",
+        "oLbbbbds",
+        "ooooooos",
     ),
-    palette={"o": INK, "w": BONE, "e": INK, "r": BREW},
+    palette=palette_of(shade_keys(BONE_RAMP, "odwL"), shade_keys(BREW_RAMP, "_dbL"),
+                       {"r": GLOW, "y": GOLD_RAMP.mid, "s": BARK_RAMP.mid}),
 )
+# Demon: swept horns and spread bat wings.
 DEMON_SPRITE = Sprite(
-    # imp base with row 0 horns extended into adjacent transparent cells.
     rows=(
-        "oi...io.",
-        ".oiiiio.",
-        ".oieeio.",
-        ".oiiiio.",
-        "..oooo..",
-        ".oiiiio.",
-        ".oi..io.",
+        "oo....oo",
+        ".oooooo.",
+        "woLiidow",
+        "wwyiiyww",
+        "wwoLdoww",
+        ".oiiiido",
+        "..i..d..",
         ".oo..oo.",
     ),
-    palette={"o": INK, "i": BLOOD, "e": GOLD},
+    palette=palette_of(shade_keys(BLOOD_RAMP, "odiL"), {"y": GOLD_RAMP.light, "w": SLATE_RAMP.dark}),
 )
 
 MONSTER_SPRITES: dict[str, Sprite] = {
@@ -736,43 +853,43 @@ MONSTER_SPRITES: dict[str, Sprite] = {
     "king_slime": KING_SLIME_SPRITE,
     # --- 28 missing monsters from roster-gap.md ---
     # Giants
-    "corrupted_ogre": recolor(OGRE_SPRITE, {"o": INK, "g": BREW, "e": BLOOD}),
-    "efreet_sultan": recolor(CYCLOPS_SPRITE, {"o": INK, "c": AMBER, "e": EMBER}),
-    "sonnengott": recolor(CYCLOPS_SPRITE, {"o": INK, "c": GOLD, "e": AMBER}),
+    "corrupted_ogre": reramp(OGRE_SPRITE, {OGRE_SKIN_RAMP: BREW_RAMP}),
+    "efreet_sultan": reramp(CYCLOPS_SPRITE, {SKIN_RAMP: AMBER_RAMP}),
+    "sonnengott": reramp(CYCLOPS_SPRITE, {SKIN_RAMP: GOLD_RAMP}),
     # Beasts
-    "corrupted_owlbear": recolor(OWLBEAR_SPRITE, {"o": INK, "b": BREW, "a": AMBER}),
-    "rat": recolor(WOLF_SPRITE, {"o": INK, "w": SLATE, "e": INK}),
-    "fennec": recolor(WOLF_SPRITE, {"o": INK, "w": KHAKI, "e": AMBER}),
-    "grimlet": recolor(WOLF_SPRITE, {"o": INK, "w": SLATE, "e": EMBER}),
-    "bandit_lizard": recolor(WOLF_SPRITE, {"o": INK, "w": LEAF, "e": BLOOD}),
+    "corrupted_owlbear": reramp(OWLBEAR_SPRITE, {BARK_RAMP: BREW_RAMP}),
+    "rat": reramp(WOLF_SPRITE, {STONE_RAMP: SLATE_RAMP}),
+    "fennec": reramp(WOLF_SPRITE, {STONE_RAMP: KHAKI_RAMP}),
+    "grimlet": reramp(WOLF_SPRITE, {STONE_RAMP: SLATE_RAMP, AMBER_RAMP: EMBER_RAMP}),
+    "bandit_lizard": reramp(WOLF_SPRITE, {STONE_RAMP: LEAF_RAMP, AMBER_RAMP: BLOOD_RAMP}),
     # Undead
-    "full_moon_vampire": recolor(VAMPIRE_SPRITE, {"o": INK, "h": STONE, "w": BONE, "r": STONE}),
+    "full_moon_vampire": reramp(VAMPIRE_SPRITE, {SLATE_RAMP: STONE_RAMP, BLOOD_RAMP: BONE_RAMP}),
     "lich": LICH_SPRITE,
     # Humanoids
     "demon": DEMON_SPRITE,
-    "goblin_guard": recolor(GOBLIN_SPRITE, {"o": INK, "g": GOBLIN_SKIN, "e": BLOOD, "b": STEEL}),
-    "goblin_priestess": recolor(GOBLIN_SPRITE, {"o": INK, "g": GOBLIN_SKIN, "e": BLOOD, "b": BREW}),
-    "cultist_emperor": recolor(CULTIST_ACOLYTE_SPRITE, {"o": INK, "b": BLOOD, "e": GOLD}),
-    "cultist_alchemist": recolor(CULTIST_ACOLYTE_SPRITE, {"o": INK, "b": LEAF, "e": AMBER}),
-    "sea_marauder": recolor(HIGHWAYMAN_SPRITE, {"o": INK, "c": WATER, "s": SKIN, "e": INK}),
-    "sandwhisper_empress": recolor(SANDWARDEN_SPRITE, {"o": INK, "k": GOLD, "e": BREW}),
+    "goblin_guard": reramp(GOBLIN_SPRITE, {LEATHER_RAMP: STEEL_RAMP}),
+    "goblin_priestess": reramp(GOBLIN_SPRITE, {LEATHER_RAMP: BREW_RAMP}),
+    "cultist_emperor": reramp(CULTIST_ACOLYTE_SPRITE, {BREW_RAMP: BLOOD_RAMP}),
+    "cultist_alchemist": reramp(CULTIST_ACOLYTE_SPRITE, {BREW_RAMP: LEAF_RAMP}),
+    "sea_marauder": reramp(HIGHWAYMAN_SPRITE, {SLATE_RAMP: WATER_RAMP}),
+    "sandwhisper_empress": reramp(SANDWARDEN_SPRITE, {KHAKI_RAMP: GOLD_RAMP}),
     # Serpents
-    "duskworm": recolor(SAND_SNAKE_SPRITE, {"o": INK, "a": BREW, "e": SLATE}),
+    "duskworm": reramp(SAND_SNAKE_SPRITE, {AMBER_RAMP: BREW_RAMP}),
     # Insects
-    "dusk_beetle": recolor(SPIDER_SPRITE, {"o": INK, "b": SLATE, "e": SLATE}),
-    "solar_desert_scorpion": recolor(DESERT_SCORPION_SPRITE, {"o": INK, "a": GOLD, "e": INK, "t": EMBER}),
+    "dusk_beetle": reramp(SPIDER_SPRITE, {SLATE_RAMP: BREW_RAMP}),
+    "solar_desert_scorpion": reramp(DESERT_SCORPION_SPRITE, {AMBER_RAMP: GOLD_RAMP, BLOOD_RAMP: EMBER_RAMP}),
     # Plants
-    "dryad": recolor(CURSED_TREE_SPRITE, {"o": INK, "d": LEAF, "e": SKIN, "t": BARK}),
-    "rosenblood": recolor(CURSED_TREE_SPRITE, {"o": INK, "d": BLOOD, "e": LEAF, "t": BARK}),
+    "dryad": reramp(CURSED_TREE_SPRITE, {SLATE_RAMP: LEAF_RAMP}),
+    "rosenblood": reramp(CURSED_TREE_SPRITE, {SLATE_RAMP: BLOOD_RAMP}),
     # Elementals
-    "flameche": recolor(GREEN_SLIME_SPRITE, {"o": INK, "g": AMBER, "e": EMBER}),
+    "flameche": reramp(GREEN_SLIME_SPRITE, {SLIME_RAMP: AMBER_RAMP}),
     # Flyers (bat family)
-    "bat": recolor(_BAT_BASE, {"b": BARK, "w": SLATE, "e": EMBER}),
-    "echoless_bat": recolor(_BAT_BASE, {"b": SLATE, "w": INK, "e": INK}),
-    "pixie": recolor(_BAT_BASE, {"b": PINK, "w": BONE, "e": INK}),
+    "bat": _BAT_BASE,
+    "echoless_bat": reramp(_BAT_BASE, {BARK_RAMP: SLATE_RAMP}),
+    "pixie": reramp(_BAT_BASE, {BARK_RAMP: PINK_RAMP, SLATE_RAMP: BONE_RAMP}),
     # Dragons
-    "red_dragon": recolor(_DRAGON_BASE, {"h": BLOOD, "e": GOLD, "b": BLOOD, "w": BLOOD}),
-    "baby_red_dragon": recolor(_DRAGON_BASE, {"h": BLOOD, "e": GOLD, "b": AMBER, "w": BLOOD}),
+    "red_dragon": _DRAGON_BASE,
+    "baby_red_dragon": reramp(_DRAGON_BASE, {BLOOD_RAMP: AMBER_RAMP}),
 }
 NPC_SPRITES: dict[str, Sprite] = {
     "archaeologist": ARCHAEOLOGIST_SPRITE,
@@ -782,16 +899,16 @@ NPC_SPRITES: dict[str, Sprite] = {
     "sandwhisper_trader": SANDWHISPER_TRADER_SPRITE,
     "tasks_trader": TASKS_TRADER_SPRITE,
     # --- 7 missing NPCs from roster-gap.md ---
-    # Trader: earthy BARK hat, LEAF body (archaeologist base)
-    "beastmaster": recolor(ARCHAEOLOGIST_SPRITE, {"o": INK, "b": BARK, "s": SKIN, "e": INK, "k": LEAF}),
-    # Trader: violet BREW hood, PINK accent (cultist_wizard base)
-    "sorceress": recolor(CULTIST_WIZARD_SPRITE, {"o": INK, "h": BREW, "s": SKIN, "e": INK, "b": PINK}),
-    # Merchants (tailor base, vary clothes color by trade)
-    "fish_merchant": recolor(TAILOR_SPRITE, {"o": INK, "s": SKIN, "e": INK, "m": WATER}),
-    "gemstone_merchant": recolor(TAILOR_SPRITE, {"o": INK, "s": SKIN, "e": INK, "m": GOLD}),
-    "herbal_merchant": recolor(TAILOR_SPRITE, {"o": INK, "s": SKIN, "e": INK, "m": LEAF}),
-    "nomadic_merchant": recolor(TAILOR_SPRITE, {"o": INK, "s": SKIN, "e": INK, "m": KHAKI}),
-    "timber_merchant": recolor(TAILOR_SPRITE, {"o": INK, "s": SKIN, "e": INK, "m": BARK}),
+    # Trader: green explorer (archaeologist base)
+    "beastmaster": reramp(ARCHAEOLOGIST_SPRITE, {KHAKI_RAMP: LEAF_RAMP}),
+    # Trader: violet hat, pink robe (cultist_wizard base)
+    "sorceress": reramp(CULTIST_WIZARD_SPRITE, {SLATE_RAMP: BREW_RAMP, BREW_RAMP: PINK_RAMP}),
+    # Merchants (tailor base, apron colour by trade)
+    "fish_merchant": reramp(TAILOR_SPRITE, {BREW_RAMP: WATER_RAMP}),
+    "gemstone_merchant": reramp(TAILOR_SPRITE, {BREW_RAMP: GOLD_RAMP}),
+    "herbal_merchant": reramp(TAILOR_SPRITE, {BREW_RAMP: LEAF_RAMP}),
+    "nomadic_merchant": reramp(TAILOR_SPRITE, {BREW_RAMP: KHAKI_RAMP}),
+    "timber_merchant": reramp(TAILOR_SPRITE, {BREW_RAMP: BARK_RAMP}),
 }
 STRUCTURE_SPRITES: dict[str, Sprite] = {
     "bank": BANK_SPRITE,

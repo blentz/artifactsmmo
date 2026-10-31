@@ -30,9 +30,12 @@ left, a large map spanning the right, a full-width log strip along the bottom.
 
 The map renders each tile as an **8×8 sprite** drawn with Unicode half-block
 characters (`▀` — two color pixels per cell), centered on the player. Sprites
-are outline-only pixel art composited over the terrain color, defined as pure
-data in `tui/palette.py` (shared hex palette) and `tui/sprites.py` (the
-tileset):
+are shaded pixel art composited over the terrain color, defined as pure data in
+`tui/palette.py` (shading ramps) and `tui/sprites.py` (the tileset). Each
+material is a ramp of four shades lit from the top-left, a sprite's edge is a
+dark tint of its own material, and no two drawings share a silhouette (a test
+enforces it). Colour variants (slime colours, merchants by trade) swap whole
+ramps, so they keep the shading:
 
 - the player, monsters, NPCs, structures (bank, grand exchange, workshop,
   taskmaster), resources (tree / ore / fish / herb), and doors.

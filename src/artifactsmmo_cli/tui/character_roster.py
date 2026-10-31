@@ -9,14 +9,17 @@ for which sprite draws on top when two characters share a tile.
 
 from collections.abc import Sequence
 
-from artifactsmmo_cli.tui.palette import AMBER, BLOOD, BREW, LEAF, TUNIC
-from artifactsmmo_cli.tui.sprites import PLAYER_SPRITE, Sprite, recolor
+from artifactsmmo_cli.tui.palette import AMBER_RAMP, BLOOD_RAMP, BREW_RAMP, LEAF_RAMP, TUNIC_RAMP, Ramp
+from artifactsmmo_cli.tui.sprites import PLAYER_SPRITE, Sprite, reramp
 
 MAX_CHARACTERS = 5
 """The account limit. Also the number of `1`-`5` focus keys."""
 
-ROSTER_COLORS: tuple[str, ...] = (TUNIC, BLOOD, LEAF, BREW, AMBER)
-"""Tunic colour per roster index. Five visually distinct palette entries."""
+ROSTER_RAMPS: tuple[Ramp, ...] = (TUNIC_RAMP, BLOOD_RAMP, LEAF_RAMP, BREW_RAMP, AMBER_RAMP)
+"""Tunic ramp per roster index: five visually distinct materials."""
+
+ROSTER_COLORS: tuple[str, ...] = tuple(ramp.mid for ramp in ROSTER_RAMPS)
+"""Tunic colour per roster index (each ramp's mid), for text and markers."""
 
 
 class CharacterRoster:
@@ -31,12 +34,10 @@ class CharacterRoster:
             raise ValueError(f"duplicate character names in roster: {list(names)}")
         self.names: tuple[str, ...] = tuple(names)
         self._index = {name: i for i, name in enumerate(self.names)}
-        # Built once: MapPane's per-line Strip cache keys on sprite IDENTITY,
-        # so recolouring per frame would defeat it.
+        # Built once rather than per frame. The whole tunic ramp is swapped, so
+        # every character keeps the player's shading and tinted outline.
         self._sprites = {
-            name: recolor(
-                PLAYER_SPRITE, {**PLAYER_SPRITE.palette, "b": ROSTER_COLORS[i]}
-            )
+            name: reramp(PLAYER_SPRITE, {TUNIC_RAMP: ROSTER_RAMPS[i]})
             for i, name in enumerate(self.names)
         }
 

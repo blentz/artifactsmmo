@@ -27,6 +27,17 @@ def test_sprites_share_the_silhouette_but_differ_in_tunic():
     assert first.palette["b"] != second.palette["b"]
 
 
+def test_the_whole_tunic_ramp_is_swapped_not_just_the_fill():
+    # The tunic is a shaded ramp with a tinted outline; recolouring only the
+    # fill would leave every character with the first slot's blue outline.
+    roster = CharacterRoster(["a", "b"])
+    first, second = roster.sprite("a"), roster.sprite("b")
+    for key in ("o", "t", "b", "B"):                 # outline, dark, mid, light
+        assert first.palette[key] != second.palette[key], key
+    for key in ("h", "s", "e", "f"):                 # hair, skin, eyes, boots
+        assert first.palette[key] == second.palette[key], key
+
+
 def test_sprite_objects_are_stable_across_calls():
     """MapPane's per-line cache keys on sprite identity; a fresh object every
     frame would defeat it and re-style the whole viewport."""

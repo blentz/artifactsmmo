@@ -42,6 +42,30 @@ def test_overlay_top_pixel_wins_else_base_shows():
     assert merged.palette["o"] == base.palette["o"]       # base palette preserved
 
 
+def _pixel_colors(sprite: Sprite) -> list[list[str | None]]:
+    return [[None if ch == TRANSPARENT else sprite.palette[ch] for ch in row] for row in sprite.rows]
+
+
+def test_overlay_key_collision_never_recolours_the_base():
+    # The swung sword uses key 'h' (BARK handle); the vampire uses 'h' for its
+    # hair. Merging palettes key-for-key repainted the hair in BARK every swing
+    # frame. Every pixel must keep the colour of the sprite it came from.
+    base = Sprite(rows=("hhhhhhhh",) * 8, palette={"h": "#111111"})
+    top = Sprite(rows=("h.......",) + ("........",) * 7, palette={"h": "#222222"})
+    merged = overlay_sprites(base, top)
+    validate_sprite("merged", merged)
+    colors = _pixel_colors(merged)
+    assert colors[0][0] == "#222222"                      # top pixel keeps top colour
+    assert colors[0][1] == "#111111"                      # base pixels keep base colour
+    assert colors[7][7] == "#111111"
+
+
+def test_overlay_shared_key_with_same_colour_is_kept():
+    base = Sprite(rows=("hhhhhhhh",) * 8, palette={"h": "#111111"})
+    top = Sprite(rows=("h.......",) + ("........",) * 7, palette={"h": "#111111"})
+    assert overlay_sprites(base, top).rows == base.rows
+
+
 def test_overlay_with_blank_top_is_base_pixels():
     merged = overlay_sprites(PLAYER_SPRITE, BLANK_SPRITE)
     assert merged.rows == PLAYER_SPRITE.rows
