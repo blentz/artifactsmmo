@@ -7815,22 +7815,28 @@ TASK_HORIZON_MUTATIONS = [
     ("task_horizon: an unlocated monster is asked for its L*",
      "    if (game_data.monster_spawn_known(monster)\n",
      "    if (True\n"),
-    # THE HALF-MODELLED SHORTCUT the design forbids. `combat_deficit._pool`
-    # filters `stats.level <= state.level`, so bumping the level alone widens the
-    # candidate pool and looks like a complete +1 evaluation. Measured over the
-    # ten corpus LEVEL_UP pairs, the +5 Max HP grant flips 10 of 10 and the pool
-    # widening flips 0 of 10 — this mutation deletes the middle clause entirely.
+    # THE HALF-MODELLED SHORTCUTS the design forbids: `L*` one level up is
+    # picked from the gear the next level admits AND worn by the grown body.
+    # Each half has a witness only it flips (`l15_midband` v pig: the body;
+    # `l19_band_edge` v skeleton: the pool).
     ("task_horizon: level+1 widens the POOL but leaves the body unchanged",
      "    max_hp = projected_max_hp(state.max_hp, state.level, level)\n"
      "    return dataclasses.replace(state, level=level, max_hp=max_hp, hp=max_hp)",
      "    return dataclasses.replace(state, level=level)"),
-    # `combat_deficit` returns None when the fight is ALREADY won, so the None arm
-    # is "the level alone wins it, nothing to acquire" — the cheapest instance of
-    # the rule. Reading it as out-of-reach cancels a task one HP grant from being
-    # workable.
-    ("task_horizon: the level-alone win reads as out of reach",
-     "    if at_next is None or at_next.closes:",
-     "    if at_next is not None and at_next.closes:"),
+    ("task_horizon: level+1 grows the body but leaves the pool unchanged",
+     "    max_hp = projected_max_hp(state.max_hp, state.level, level)\n"
+     "    return dataclasses.replace(state, level=level, max_hp=max_hp, hp=max_hp)",
+     "    max_hp = projected_max_hp(state.max_hp, state.level, level)\n"
+     "    return dataclasses.replace(state, max_hp=max_hp, hp=max_hp)"),
+    # Ruling C2-one-model: the level-up arm reads `L*` one level up, the gear
+    # the next level admits worn by the grown body.
+    ("task_horizon: the level-up arm reads L* at the current level",
+     "    fighter = gear_fighter_for(monster, next_level_state(state), game_data, ctx, history)\n",
+     "    fighter = gear_fighter_for(monster, state, game_data, ctx, history)\n"),
+    ("task_horizon: the level-up arm never fires",
+     "    if predict_win(fighter, game_data, monster):\n"
+     "        return TaskHorizon(monster=monster, verdict=HORIZON_LEVEL_UP)\n",
+     "    if False:\n        return TaskHorizon(monster=monster, verdict=HORIZON_LEVEL_UP)\n"),
 ]
 
 # The horizon's consumer on the LATCH (`REGEAR_EDGE_HORIZON_MUTATIONS`) was

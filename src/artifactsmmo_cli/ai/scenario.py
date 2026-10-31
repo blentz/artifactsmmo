@@ -1487,11 +1487,11 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # cells below are unaffected: their verdicts were re-measured and each still
     # sits in the arm its comment claims.
     #
-    # The `level_up` band is EMPTY at this loadout: 0 of 58 monsters, which is
-    # why the triple has no fourth member. That verdict IS witnessed, on a
-    # different character: `test_task_horizon.py`'s census (`l10_gearcrafting_gap`
-    # v wolf); `test_held_task.py`'s STARVED rows drive gear and out-of-reach
-    # through `plan_from_state`.
+    # The `level_up` band was EMPTY at this loadout under the deficit walk.
+    # Since plan C Task 2 both gear arms read `L*`: ogre, pig, skeleton and
+    # spider read LEVEL_UP here (the closable cell's ogre among them);
+    # `test_held_task.py`'s STARVED rows drive gear and out-of-reach through
+    # `plan_from_state`.
     # D2 = WORKABLE. `wolf` is winnable at this loadout (P(win) 1.0), so
     # `has_combat_deficit` is False and the task horizon has no reading. It
     # was `pig` until the fight gates read the odds (spec 2026-10-15

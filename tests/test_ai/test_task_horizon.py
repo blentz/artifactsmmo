@@ -12,20 +12,16 @@ scenario set's own six held tasks happen to populate only two of the three
 verdicts — a level-up witness has to be named explicitly or the middle clause has
 no test at all.
 
-MEASURED, and it is the reason the middle clause is nearly dead weight: over the
-corpus' 32 `derive_combat_stats` characters against all 58 catalogue monsters
-there are 1,493 losing pairs — 118 close on gear, 6 close at level+1, and 1,369
-are out of reach. The clause fires for 0.44 % of the futile cases. It is not
-vacuous (eight pairs since 2026-10-17, when a lifesteal rune began healing its
-real share of crit damage and closed two more chains at level+1;
-`test_the_level_up_arm_has_real_witnesses` pins them),
-but nobody should expect it to carry the rule.
+MEASURED since plan C Task 2 (ruling C2-one-model: both gear arms read `L*`,
+the ACHIEVABLE loadout of the task monster): over the corpus' 44
+`derive_combat_stats` characters against all 58 catalogue monsters (2,552 pairs),
+563 have no reading, 134 read GEAR, 33 LEVEL_UP and 1,822 OUT_OF_REACH. Reading
+`L*` instead of the catalogue deficit walk moved 117 pairs: 116 LEVEL_UP to
+OUT_OF_REACH (the walk's level+1 chain was catalogue gear the character cannot
+obtain) and one OUT_OF_REACH to LEVEL_UP (`l13_drop_recipe_grind` v mushmush).
 """
 
 import dataclasses
-import multiprocessing
-import os
-from concurrent.futures import ProcessPoolExecutor
 from fractions import Fraction
 from pathlib import Path
 
@@ -33,7 +29,6 @@ import pytest
 
 import artifactsmmo_cli.ai.gear_objective as go_mod
 from artifactsmmo_cli.ai.combat import predict_win, secure_win
-from artifactsmmo_cli.ai.combat_deficit import combat_deficit
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective import gear_closes_for, gear_fighter_for, gear_objective_for
 from artifactsmmo_cli.ai.learning.rung_state_core import HP_PER_LEVEL
@@ -59,22 +54,12 @@ LEVEL_UP_TASK_CELL = "l32_held_task_closable"  # ogre: `L*` held and lost, a lev
 OUT_OF_REACH_CELL = "l32_held_task_open"  # lich: nothing closes it
 WORKABLE_CELL = "l32_held_task_workable"  # wolf: already winnable
 
-LEVEL_UP_CELL = "l12_ge_book_adequate"
-LEVEL_UP_MONSTER = "mushmush"
-"""The deficit walk's level-up witness. At its level no catalogue chain closes
-`mushmush`; one level up a chain does — and the catalogue pool is IDENTICAL at
-both levels, so the flip is the +5 Max HP and nothing else. See
-`test_the_level_up_evaluation_moves_the_body_not_only_the_pool`. Since plan C
-Task 2 the horizon's gear arm is `L*(mushmush)`, which closes it at this level,
-so the horizon reads GEAR here; its level-up verdict's witness is
-`LEVEL_UP_TASK_CELL`.
-
-It was `l13_drop_recipe_grind` v mushmush until the fight gates read the odds
-(spec 2026-10-15 fight-gates-odds §1): that chain closed at closed-form margin
-1, where the exact P(win) is 0.42. Then `l10_gearcrafting_gap` v wolf until the
-deficit walk ranked on the odds at a margin stall (post-merge review
-2026-10-16): gear closes wolf at level 10, through items that lift the odds
-at a flat margin."""
+BODY_CELL, BODY_MONSTER = "l15_midband", "pig"
+"""One level wins `pig` here through the body alone: the gear pool is identical
+at both levels, and the +5 HP flips the fight."""
+POOL_CELL, POOL_MONSTER = "l19_band_edge", "skeleton"
+"""One level wins `skeleton` here through the pool alone: the +5 HP does not,
+the gear the next level admits does."""
 
 
 @pytest.fixture(scope="module")
@@ -84,64 +69,6 @@ def gd() -> GameData:
 
 def _state(name: str, game_data: GameData) -> WorldState:
     return scenario_state(SCENARIOS[name], game_data)
-
-
-_CENSUS_WORKERS = min(8, os.process_cpu_count() or 1)
-"""Worker cap for the level-up census sweep.
-
-CAPPED ON PURPOSE, and 8 is not a machine-size heuristic. `formal/gate.sh` runs
-this suite through `scripts/run_tests.sh`, whose lane 1 is already `pytest -n
-auto` — one xdist process per core — so these workers are ADDITIONAL load on a
-box that is by then fully committed. An uncapped pool (`max_workers=None` takes
-every core) would oversubscribe the gate by 2x for the length of this test and
-could make the GATE slower while making the serial hook faster, which is the
-wrong trade: the hook is the thing that needed fixing.
-
-8 is enough to collect the win and small enough not to matter to the gate. The
-sweep is 34 scenarios, so 8 workers is 4-5 rounds and the floor is the SLOWEST
-SINGLE SCENARIO — past 8 more workers buy progressively less while costing the
-rest of the gate progressively more. `os.process_cpu_count()` (not `cpu_count`)
-so a CPU-limited container or a `taskset` run cannot be oversubscribed either."""
-
-_WORKER_GAME_DATA: GameData | None = None
-"""Process-local catalogue, built once per worker by `_init_witness_worker`.
-
-A `GameData` is the whole game — items, monsters, recipes, resources, maps — so
-shipping one through `initargs` would pickle and re-send it per worker where
-each can just read the same committed bundle off disk. One build per WORKER, not
-one per task: the initializer runs at process start, the 34 scenario tasks reuse
-it."""
-
-
-def _init_witness_worker(bundle: str) -> None:
-    global _WORKER_GAME_DATA
-    _WORKER_GAME_DATA = load_bundle_game_data(Path(bundle))
-
-
-def _level_up_witnesses(name: str) -> list[tuple[str, str]]:
-    """Every monster in the catalogue that scenario `name` can beat ONLY after
-    levelling — the per-scenario body of the census, run in a pool worker.
-
-    Identical work to the serial loop it replaced, in the same order: the
-    scenario at full HP, `next_level_state` hoisted out of the monster loop
-    because it does not read the monster, and the same three-step verdict
-    (already winnable -> no; gear closes it here -> no; the level+1 body closes
-    it, or wins outright so there is no chain to ask -> yes)."""
-    game_data = _WORKER_GAME_DATA
-    assert game_data is not None, "pool initializer did not run"
-    state = scenario_state(SCENARIOS[name], game_data)
-    state = dataclasses.replace(state, hp=state.max_hp)
-    at_next_level = next_level_state(state)
-    found: list[tuple[str, str]] = []
-    for monster in sorted(game_data.monster_levels):
-        if predict_win(state, game_data, monster):
-            continue
-        if combat_deficit(state, game_data, monster).closes:
-            continue
-        at_next = combat_deficit(at_next_level, game_data, monster)
-        if at_next is None or at_next.closes:
-            found.append((name, monster))
-    return found
 
 
 def _horizon(state: WorldState, game_data: GameData) -> TaskHorizon | None:
@@ -203,37 +130,26 @@ def test_a_missing_l_star_that_still_loses_is_no_gear_verdict(gd: GameData) -> N
 
 def test_one_level_plus_gear_closing_it_reads_level_up(gd: GameData) -> None:
     """Clause 2, and the whole reason the level+1 body has to be modelled.
-    `L*(ogre)` is held and loses; one level closes the fight."""
+    `L*(ogre)` is held and the character loses; `L*` one level up wins it
+    (ruling C2-one-model: the level-up arm reads `L*`, not the catalogue
+    deficit walk)."""
     state = _state(LEVEL_UP_TASK_CELL, gd)
     assert state.task_code == "ogre"
     assert not gear_objective_for("ogre", state, gd, TIMED_NO_PROFILE_CONTEXT, None).missing
-    assert combat_deficit(dataclasses.replace(state, hp=state.max_hp), gd, "ogre").closes is True
+    assert not predict_win(dataclasses.replace(state, hp=state.max_hp), gd, "ogre")
+    assert predict_win(gear_fighter_for("ogre", next_level_state(state), gd,
+                                        TIMED_NO_PROFILE_CONTEXT, None), gd, "ogre")
     horizon = _horizon(state, gd)
     assert horizon is not None
     assert horizon.verdict == HORIZON_LEVEL_UP
 
 
 def test_the_level_alone_arm_is_a_level_up_verdict_too() -> None:
-    """`combat_deficit(next_level_state(...))` is None: the level WINS the fight
-    with nothing acquired, so there is no chain to ask `closes` of.
-
-    A TOTALITY requirement before it is a feature — `.closes` on a None would
-    raise — but it is also the cheapest instance of the rule, and dropping it
-    would have made a character one HP grant short of beating its own task
-    monster read as OUT OF REACH.
-
-    Hand-built rather than taken from the corpus, and the search that says so is
-    in the record: across all 42 scenarios x 58 catalogue monsters there are FOUR
-    pairs where the level alone flips `predict_win`, and in all four a gear chain
-    ALREADY closes the fight at the current level (verdict GEAR, which is the
-    right answer — gear is faster than a level). The arm is reachable only where
-    no helpful gear exists at all, which is what the empty item catalogue below
-    says. Recorded so a future reader does not mistake "no corpus witness" for
-    "dead code".
-
-    Since the gates read the odds (2026-10-15) the corpus has one:
-    `l10_gearcrafting_gap` v highwayman, where one level wins with nothing
-    acquired. The hand-built case stays: it isolates the arm from the catalogue."""
+    """The level WINS the fight with nothing to build: with no gear in the
+    catalogue `L*` is the empty loadout, and the grown body alone wins. The
+    cheapest instance of the rule; dropping it would have made a character one
+    HP grant short of beating its own task monster read as OUT OF REACH.
+    Hand-built: it isolates the arm from the catalogue."""
     game_data = GameData()
     game_data._item_stats = {}
     game_data._crafting_recipes = {}
@@ -249,8 +165,9 @@ def test_the_level_alone_arm_is_a_level_up_verdict_too() -> None:
 
     assert predict_win(state, game_data, "rat") is False
     assert predict_win(next_level_state(state), game_data, "rat") is True
-    assert combat_deficit(state, game_data, "rat").closes is False
-    assert combat_deficit(next_level_state(state), game_data, "rat") is None
+    fighter = gear_fighter_for("rat", next_level_state(state), game_data,
+                               TIMED_NO_PROFILE_CONTEXT, None)
+    assert set(fighter.equipment.values()) == {None}
 
     horizon = _horizon(state, game_data)
     assert horizon is not None
@@ -302,112 +219,34 @@ def test_next_level_state_grows_the_body_by_the_published_grant(gd: GameData) ->
     assert nxt.hp == nxt.max_hp, "the question is 'can I win', and rest is an action"
 
 
-def test_the_level_up_evaluation_moves_the_body_not_only_the_pool(gd: GameData) -> None:
-    """CONSTRAINT: a +1 evaluation that only widened the candidate pool would be
-    the half-modelled shortcut, and here it is measured to find NOTHING.
-
-    `combat_deficit._pool` filters `stats.level <= state.level`, so bumping the
-    level admits more gear. That is the obvious effect and it is not the one that
-    matters: over all ten LEVEL_UP pairs in the corpus, the HP growth alone flips
-    10 of 10 and the pool widening alone flips 0 of 10. This case is the cleanest
-    of them — the pool is byte-identical at both levels, so the pool arm cannot
-    even be argued for."""
-    state = _with_task(_state(LEVEL_UP_CELL, gd), LEVEL_UP_MONSTER)
+@pytest.mark.parametrize(("cell", "monster", "body", "pool"), [
+    (BODY_CELL, BODY_MONSTER, True, False), (POOL_CELL, POOL_MONSTER, False, True)])
+def test_the_level_up_evaluation_moves_the_body_and_the_pool(
+        gd: GameData, cell: str, monster: str, body: bool, pool: bool) -> None:
+    """CONSTRAINT: the level+1 reading must move all of what a level buys.
+    `L*` one level up is picked from the gear the next level admits
+    (`stats.level <= state.level`) and worn by the grown body (+5 Max HP).
+    Either half alone is a shortcut, and each has a witness that only it
+    flips: the pig falls to the body alone over an identical pool, the
+    skeleton to the pool alone."""
+    state = _with_task(_state(cell, gd), monster)
     rested = dataclasses.replace(state, hp=state.max_hp)
     nxt = next_level_state(state)
 
+    def wins(probe: WorldState) -> bool:
+        return predict_win(gear_fighter_for(monster, probe, gd, TIMED_NO_PROFILE_CONTEXT, None),
+                           gd, monster)
+
     def pool_at(level: int) -> list[str]:
-        return sorted(code for code, stats in gd.items.stats.items()
-                      if stats.level <= level)
+        return sorted(code for code, stats in gd.items.stats.items() if stats.level <= level)
 
-    assert pool_at(state.level) == pool_at(nxt.level), "pool must be the control here"
-
-    hp_only = dataclasses.replace(rested, max_hp=nxt.max_hp, hp=nxt.max_hp)
-    pool_only = dataclasses.replace(rested, level=nxt.level)
-
-    assert combat_deficit(nxt, gd, LEVEL_UP_MONSTER).closes is True
-    assert combat_deficit(hp_only, gd, LEVEL_UP_MONSTER).closes is True
-    assert combat_deficit(pool_only, gd, LEVEL_UP_MONSTER).closes is False
-
-
-def test_the_level_up_arm_has_real_witnesses() -> None:
-    """Six of 1,375 futile pairs, and the clause is worth exactly that much.
-
-    WHAT IT MEASURES since plan C Task 2: the deficit walk's own reading, "no
-    catalogue chain closes it here, one closes it a level up" (the level-up
-    arm's second half). The horizon's gear arm reads `L*` of the task monster
-    instead, which is too costly to sweep over every pair; the horizon's own
-    level-up verdict is pinned on `LEVEL_UP_TASK_CELL`.
-
-    Five from 2026-10-15 until the deficit walk ranked on the odds at a margin
-    stall (post-merge review 2026-10-16): the l10 / l19 / l48 pairs left (l10
-    v wolf: gear closes it at level 10), and l12 mushmush (three cells), l11 pig
-    and l24 spider came in — at a flat margin the walk now reaches the step a
-    level's HP completes. Six until 2026-10-15, when two changes landed together. Burn charged off
-    the MONSTER's attack took `l35_artifact_fill` / `l35_boots_drop_farm` v
-    demon out (one level no longer closes them). The odds verdict
-    (fight-gates-odds §1) moved the rest: mushmush, pig and the l11-l13 pairs
-    sat at closed-form margin 1, short of P 0.8, and the l10 / l19 / l48 pairs
-    came in.
-
-    Recorded as a test rather than a comment because "nearly dead weight" and
-    "dead weight" are different findings, and only a measurement tells them
-    apart. If a catalogue change ever takes this to zero the middle clause has
-    become unreachable and should be deleted, not left as decoration.
-
-    Eight until 2026-10-18 (ruling R): `l30_band_entry` derives its combat
-    stats from its gear now, and its demon pair is a ninth witness.
-
-    Nine until the held-objective cell `l14_wears_its_target` joined the set
-    (global gear objective Task 5, ruling Y): its pig and skeleton pairs are
-    the tenth and eleventh.
-
-    Ten since spec 2026-10-18 §2.9 re-derived that cell to its new `L*` (the
-    set that kills `blue_slime` fastest): in it the pig is no longer a level-up
-    witness, the skeleton still is.
-
-    THE SWEEP IS WHOLE: all 44 `derive_combat_stats` scenarios against all 58
-    catalogue monsters, 1,972 pairs, nothing sampled and nothing memoized at the
-    test level. It is fanned out over processes only because it is the single
-    largest test in the suite (150.4s serial, 39 % of the pre-commit hook) and
-    the scenarios are INDEPENDENT — `_level_up_witnesses` reads one scenario and
-    a read-only catalogue and writes nothing.
-
-    DETERMINISM. `executor.map` yields per-scenario results in the order the
-    scenario names were submitted, and the flattened list is SORTED before it is
-    asserted on, so worker completion order cannot reach the result — not the
-    membership test, not the length, and not the failure message a future
-    catalogue change will print. The sorted order is the one property a reader
-    of that message needs.
-
-    It does NOT use the module `gd` fixture: a GameData cannot cross a process
-    boundary usefully (it is the whole catalogue), so each worker builds its own
-    from the same committed bundle, ONCE, in the pool initializer.
-    """
-    names = sorted(name for name, sc in SCENARIOS.items() if sc.derive_combat_stats)
-    with ProcessPoolExecutor(
-        max_workers=_CENSUS_WORKERS,
-        # SPAWN, not the platform default fork. This test runs inside lane 1 of
-        # `scripts/run_tests.sh`, i.e. inside a pytest-xdist worker, and an xdist
-        # worker is MULTI-THREADED (execnet's receiver thread). `os.fork()` from
-        # a multi-threaded process is a documented deadlock risk and raises a
-        # DeprecationWarning that `-W error` turns into a test failure. Spawn
-        # pays one interpreter start per worker (~1s, once) and owes nothing to
-        # the parent's thread state.
-        mp_context=multiprocessing.get_context("spawn"),
-        initializer=_init_witness_worker,
-        initargs=(str(BUNDLE),),
-    ) as executor:
-        per_scenario = list(executor.map(_level_up_witnesses, names))
-
-    witnesses = sorted(pair for scenario in per_scenario for pair in scenario)
-    assert witnesses == [
-        ("l11_band_floor", "pig"), ("l12_ge_book_adequate", "mushmush"),
-        ("l12_ge_book_grind", "mushmush"), ("l12_quiet_book_grind", "mushmush"),
-        ("l14_wears_its_target", "skeleton"), ("l1_fresh", "green_slime"),
-        ("l20_boost_stock", "ogre"), ("l24_fisher_cooking_rung", "spider"),
-        ("l30_band_entry", "demon"), ("l35_boots_drop_farm", "goblin_wolfrider")], witnesses
-    assert (LEVEL_UP_CELL, LEVEL_UP_MONSTER) in witnesses
+    assert (pool_at(state.level) == pool_at(nxt.level)) is body
+    assert not wins(rested)
+    assert wins(nxt)
+    assert wins(dataclasses.replace(rested, max_hp=nxt.max_hp, hp=nxt.max_hp)) is body
+    assert wins(dataclasses.replace(rested, level=nxt.level)) is pool
+    horizon = _horizon(state, gd)
+    assert horizon is not None and horizon.verdict == HORIZON_LEVEL_UP
 
 
 def test_a_task_the_gate_fights_with_no_gear_to_secure_it_has_no_verdict() -> None:
@@ -440,13 +279,13 @@ def test_a_cycle_reads_the_achievable_set_once(gd: GameData, tmp_path: Path,
     `task_worth_for` builds it) share one achievable set; an episode-less store,
     a different context or a different holding computes afresh."""
     asked: list[int] = []
-    real = go_mod._inputs
+    real = go_mod.achievable
 
-    def counted(state, game_data, ctx, history):  # type: ignore[no-untyped-def]
+    def counted(state, game_data, ctx):  # type: ignore[no-untyped-def]
         asked.append(state.level)
-        return real(state, game_data, ctx, history)
+        return real(state, game_data, ctx)
 
-    monkeypatch.setattr(go_mod, "_inputs", counted)
+    monkeypatch.setattr(go_mod, "achievable", counted)
     store = LearningStore(str(tmp_path / "learning.db"), character="cow_farmer")
     state = _state(GEAR_CELL, gd)
     probe = dataclasses.replace(state, task_progress=0, task_total=state.task_total - state.task_progress)

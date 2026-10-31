@@ -397,8 +397,10 @@ def test_a_fight_gear_closes_is_kept_however_far_above_the_character_it_is():
 
     The rat is nine levels above this character, so `task_feasibility` reports a
     combat requirement and `task_decision` answers PIVOT — the old arm discarded
-    it. A `bronze_sword` in the catalogue closes the fight, so the horizon keeps
-    the task and the gear chain is what gets built."""
+    it. A banked `bronze_sword` closes the fight, so the horizon keeps the task
+    and the sword is what gets worn. Banked, because the horizon reads `L*`, the
+    ACHIEVABLE loadout (ruling C2-one-model): a catalogue sword with no source
+    closes nothing the character can build."""
     gd = _horizon_world()
     gd._monster_level = {"rat": 10}
     gd._item_stats = {"bronze_sword": ItemStats(
@@ -406,7 +408,7 @@ def test_a_fight_gear_closes_is_kept_however_far_above_the_character_it_is():
     state = make_state(level=1, hp=200, max_hp=200, attack={"earth": 1},
                        task_code="rat", task_type="monsters",
                        task_total=10, task_progress=0,
-                       inventory={"tasks_coin": 1})
+                       inventory={"tasks_coin": 1}, bank_items={"bronze_sword": 1})
     assert held_task_cancel_due(state, gd, _ctx(level_demanded=True), None) is False
 
 

@@ -422,10 +422,9 @@ STARVED_OUT_OF_REACH = "red_dragon"
 # plan C Task 2; the deleted deficit walk named slime_shield) and `red_dragon`
 # (L51, out of reach, and no spawn tile the fight pool reaches, so no `L*`),
 # both lost on the derived sheet.
-# There was a level-up row, dryad. Since the fight gates read the odds
-# (spec 2026-10-15 fight-gates-odds §1) this cell has no level-up monster:
-# every one of the 58 reads gear or out of reach. The level-up arm keeps its
-# corpus witness in `test_task_horizon` (`l10_gearcrafting_gap` v wolf).
+# There was a level-up row, dryad. Since the level-up arm reads `L*` (plan C
+# Task 2) this cell's level-up monsters are echoless_bat and goblin_guard; the
+# arm's witnesses are in `test_task_horizon` (ogre, pig, skeleton).
 
 
 def _starved_state(monster: str, game_data: GameData):

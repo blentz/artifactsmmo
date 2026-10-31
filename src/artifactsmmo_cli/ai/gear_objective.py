@@ -499,10 +499,17 @@ def _inputs(state: WorldState, game_data: GameData, ctx: SelectionContext,
     """What every `L*(m)` is read against, whichever `m`: each achievable
     item's layer (§2.3, `achievable`), the food menu and the loop's timing,
     drops and carried keep (see the module doc's `R`)."""
-    depth = layer_of(achievable(state, game_data, ctx))
+    return (layer_of(achievable(state, game_data, ctx)),
+            *_food_and_loop(state, game_data, ctx, history))
+
+
+def _food_and_loop(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                   history: LearningStore | None) -> tuple[tuple[FoodOffer, ...], LoopInputs]:
+    """The food menu and the loop's timing, drops and carried keep: what `R`
+    reads beside the achievable set."""
     food = food_menu(state, game_data, ctx, history)
     loop = LoopInputs(ctx.timing(), ctx.drops(), carried_keep(state, game_data, ctx))
-    return depth, food, loop
+    return food, loop
 
 
 def _objective(state: WorldState, game_data: GameData, ctx: SelectionContext,
@@ -570,9 +577,21 @@ def _cycle_inputs(state: WorldState, game_data: GameData, ctx: SelectionContext,
                   history: LearningStore | None
                   ) -> tuple[dict[str, int], tuple[FoodOffer, ...], LoopInputs]:
     """`_inputs`, once per episode for every monster a cycle pins: they do not
-    read the monster, and the task horizon pins one per task it reads."""
-    return _pinned("gear_objective_inputs", None, state, game_data, ctx, history,
-                   lambda: _inputs(state, game_data, ctx, history))
+    read the monster, and the task horizon pins one per task it reads. The
+    achievable set is `_cycle_depth`'s, shared with the readers that need no
+    loop (a fighter's pick reads no timing)."""
+    def compute() -> tuple[dict[str, int], tuple[FoodOffer, ...], LoopInputs]:
+        return (_cycle_depth(state, game_data, ctx, history),
+                *_food_and_loop(state, game_data, ctx, history))
+
+    return _pinned("gear_objective_inputs", None, state, game_data, ctx, history, compute)
+
+
+def _cycle_depth(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                 history: LearningStore | None) -> dict[str, int]:
+    """Each achievable item's layer (`achievable`), once per episode."""
+    return _pinned("gear_objective_depth", None, state, game_data, ctx, history,
+                   lambda: layer_of(achievable(state, game_data, ctx)))
 
 
 def _pinned_target(depth: Mapping[str, int], monster: str, state: WorldState,
@@ -586,8 +605,8 @@ def gear_fighter_for(monster: str, state: WorldState, game_data: GameData,
                      ctx: SelectionContext, history: LearningStore | None) -> WorldState:
     """The fighter wearing `L*(monster)` on bare gear at max HP
     (`gear_objective_for(...).fighter`), without pricing a piece (ruling
-    C2-perf)."""
-    depth = _cycle_inputs(state, game_data, ctx, history)[0]
+    C2-perf). It reads no loop: only the achievable set and the picker."""
+    depth = _cycle_depth(state, game_data, ctx, history)
     return _pinned_target(depth, monster, state, game_data)[0]
 
 

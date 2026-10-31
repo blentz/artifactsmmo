@@ -28,7 +28,8 @@ and, refining what "cancel" means when the coin to cancel with is not in the poc
 So the verdict is a HORIZON READING, not a sentence:
 
   * `HORIZON_GEAR`        — gear alone closes the fight. Build it.
-  * `HORIZON_LEVEL_UP`    — one level plus gear closes it. Take the level.
+  * `HORIZON_LEVEL_UP`    — one level plus gear closes it: `L*` one level up wins
+                            the fight the gate reads (`predict_win`). Take the level.
   * `HORIZON_OUT_OF_REACH`— neither. The fight is not a near-term planning target:
                             stop spending cycles on gear that cannot win it, cancel
                             the task if a coin is in the pocket, and otherwise let it
@@ -51,13 +52,9 @@ import dataclasses
 from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.combat import predict_win
-from artifactsmmo_cli.ai.combat_deficit import (
-    blocked_task_monster,
-    combat_deficit,
-    has_combat_deficit,
-)
+from artifactsmmo_cli.ai.combat_deficit import blocked_task_monster, has_combat_deficit
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_objective import gear_closes_for
+from artifactsmmo_cli.ai.gear_objective import gear_closes_for, gear_fighter_for
 from artifactsmmo_cli.ai.learning.rung_state_core import projected_max_hp
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -95,8 +92,8 @@ def next_level_state(state: WorldState) -> WorldState:
     is read in THREE places that decide a fight, and the projection has to move all
     three or it understates what the level buys:
 
-      1. `combat_deficit._pool` admits catalogue gear at `stats.level <= state.level`
-         — the ACQUISITION candidates widen.
+      1. `gear_objective`'s universe admits gear at `stats.level <= state.level`
+         — the ACHIEVABLE set `L*` is picked from widens.
       2. `equipment/loadout_picker` skips owned items at `state.level < stats.level`
          — gear already in the bag but level-gated becomes WEARABLE, which changes
          the fight with no acquisition at all.
@@ -109,8 +106,7 @@ def next_level_state(state: WorldState) -> WorldState:
     the two halves of a rule drift apart.
 
     `hp` is set to the grown `max_hp`: this state exists to answer "can I win this
-    fight", and rest is an action the planner has. Same framing as `combat_deficit`,
-    which rests its own state at the top of the walk.
+    fight", and rest is an action the planner has (the `L*` fighter is at max HP).
     """
     level = state.level + 1
     max_hp = projected_max_hp(state.max_hp, state.level, level)
@@ -153,11 +149,11 @@ def resolve_task_horizon(state: WorldState, game_data: GameData, ctx: SelectionC
         # task is workable now, not a level away (post-merge review
         # 2026-10-16; the gear deficit is the SECURE_WIN bar's, the gate's is θ).
         return None
-    at_next = combat_deficit(next_level_state(state), game_data, monster)
-    if at_next is None or at_next.closes:
-        # `None` is the level-alone case: the +5 HP (or a level-gated item already in
-        # the bag) wins the fight with nothing to acquire. It is a level-up verdict
-        # exactly as much as a closing chain is, and dropping it would have made the
-        # cheapest instance of this rule the one it missed.
+    # One level up (ruling C2-one-model): `L*` of the task monster over the
+    # character one level up — its achievable set at the next level, worn by
+    # the grown body — passes the gate. With nothing left to build (`L*` held
+    # and lost) that is the level alone, and a level-up verdict all the same.
+    fighter = gear_fighter_for(monster, next_level_state(state), game_data, ctx, history)
+    if predict_win(fighter, game_data, monster):
         return TaskHorizon(monster=monster, verdict=HORIZON_LEVEL_UP)
     return TaskHorizon(monster=monster, verdict=HORIZON_OUT_OF_REACH)
