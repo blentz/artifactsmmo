@@ -148,8 +148,6 @@ open Formal.PriorityBand
 #print axioms Formal.Objective.groundedByN_sound
 #print axioms Formal.Objective.grounded_groundedByN
 #print axioms Formal.Objective.attainAux_sound
-#print axioms Formal.Objective.best_gear_argmax
-#print axioms Formal.Objective.bestGear_optimal
 #print axioms Formal.StrategyTraversal.is_reachable_eq_grounding
 #print axioms Formal.StrategyTraversal.groundedByN_sound
 #print axioms Formal.StrategyTraversal.grounded_groundedByN

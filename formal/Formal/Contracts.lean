@@ -891,15 +891,6 @@ example : ∀ (r : Formal.Objective.Recipe) (hasRec : Formal.Objective.HasRecipe
     Formal.Objective.Grounded r hasRec drop buys item →
       ∃ n, Formal.Objective.groundedByN r hasRec drop buys n item = true :=
   @Formal.Objective.grounded_groundedByN
--- best_gear_argmax: the chosen first-slot item IS attainable, IS a candidate, and
--- ranks ≥ every attainable candidate under (-value, code) — the genuine argmax.
-example : ∀ (attain : Formal.Objective.Gear → Bool) (items : List Formal.Objective.Gear)
-    (chosen : Formal.Objective.Gear),
-    Formal.Objective.bestAttainableGear attain items = some chosen →
-    attain chosen = true ∧ chosen ∈ items ∧
-    (∀ y ∈ items, attain y = true →
-      chosen.value > y.value ∨ (chosen.value = y.value ∧ chosen.code ≤ y.code)) :=
-  @Formal.Objective.best_gear_argmax
 -- NOTE: the objective-GAP role contracts (gap_nonneg, gap_le_denom,
 -- charGap_bounds, is_complete_iff, axisGap_zero_iff) were removed 2026-07-20
 -- together with the Python chain they guarded. `CharacterObjective.gap` and the

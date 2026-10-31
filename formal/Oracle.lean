@@ -680,31 +680,6 @@ def runObjectiveAttainable (args : Array Json) : Json :=
   Json.mkObj [("is_attainable",
     Json.bool (Formal.Objective.isAttainable r hasRec drop buys fuel queryItem))]
 
-/-- Run `bestAttainableGear`: choose the first-slot item for a gear type.
-
-args layout: `[n, code0, value0, attain0, code1, value1, attain1, ...]` — `n`
-items, each `(code, equip_value, attainable(0/1))`. Emits the chosen code (or -1
-if none attainable), and its equip_value. -/
-def runObjectiveBestGear (args : Array Json) : Json :=
-  let n := (intArg args 0).toNat
-  let items : List Formal.Objective.Gear :=
-    (List.range n).map (fun k =>
-      { code := intArg args (1 + 3*k), value := intArg args (2 + 3*k) })
-  let attainBits : List Bool :=
-    (List.range n).map (fun k => intArg args (3 + 3*k) != 0)
-  -- attain by position: map each gear to its bit via code+value identity is
-  -- fragile under dup codes, so we attach the bit by index using a parallel list.
-  let codeVal := fun (it : Formal.Objective.Gear) => (it.code, it.value)
-  let pairs : List (Formal.Objective.Gear × Bool) := items.zip attainBits
-  let attain : Formal.Objective.Gear → Bool := fun it =>
-    match pairs.find? (fun p => decide (codeVal p.1 = codeVal it)) with
-    | some p => p.2
-    | none => false
-  let chosen := Formal.Objective.bestAttainableGear attain items
-  let code : Int := match chosen with | some it => it.code | none => -1
-  let val : Int := match chosen with | some it => it.value | none => 0
-  Json.mkObj [("chosen_code", Json.num code), ("chosen_value", Json.num val)]
-
 /-- Build a `StrategyTraversal.Graph` from a flat node encoding and return it
 together with the node count.
 
@@ -3142,8 +3117,6 @@ def runOne (item : Json) : Json :=
     runCombatCapable args
   else if kind == "objective_attainable" then
     runObjectiveAttainable args
-  else if kind == "objective_best_gear" then
-    runObjectiveBestGear args
   else if kind == "strategy_is_reachable" then
     runStrategyTraversal "is_reachable" args
   else if kind == "strategy_closure_size" then

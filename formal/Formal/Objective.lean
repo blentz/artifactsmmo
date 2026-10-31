@@ -1,10 +1,8 @@
 -- @concept: crafting, items, characters @property: reachability, dominance
 /-
-Formal model of `is_attainable`, `CharacterObjective.from_game_data` (gear
-selection), `gap`, and `ObjectiveGap.is_complete` from
-`src/artifactsmmo_cli/ai/tiers/objective.py`.
+Formal model of `is_attainable` from `src/artifactsmmo_cli/ai/tiers/objective.py`.
 
-## `is_attainable(code, game_data, _path) -> bool`  (objective.py:15)
+## `is_attainable(code, game_data, _path) -> bool`
 
 An item is producible "in principle" iff its craft chain bottoms out in
 gatherables, with no drop-only/unknown component:
@@ -23,33 +21,11 @@ an independent fuel-bounded saturation `groundedByN` mirroring the DFS, and
 prove the recursive cycle-safe `isAttainable` EQUALS membership in the fixpoint
 (soundness + completeness), in the spirit of RecipeClosure.
 
-## `CharacterObjective.from_game_data` gear selection  (objective.py:57)
+The gear-selection model (`bestGear_optimal`, `best_gear_argmax`) was retired
+with `CharacterObjective.from_game_data`'s endgame gear sheet in plan C Task 6;
+the `gap`/`is_complete` model was removed 2026-07-20 with its Python chain.
 
-Per equipment type, the items are ranked by `(-equip_value, code)` (highest
-value first, ties by ascending code), filtered to the ATTAINABLE ones, then
-zipped to the type's slots. The first slot gets the highest-equip_value
-ATTAINABLE item. We model `equip_value` as an `Int` (attack + resistance +
-hp_restore — all integers) and prove the best-per-slot selection is the argmax
-over attainable items, ties by code ascending.
-
-## `gap(state)` and `ObjectiveGap.is_complete`  (objective.py:86)
-
-`char_level_gap = max(0, target - level)`, each `skill_gap = max(0, target -
-skill)`, each `gear_gap = max(0, target_val - have_val)`. The three FRACTIONS
-are `gap / denom`.
-
-FLOAT DISCLOSURE: the three fractions are the only floats. We do NOT compute the
-float; we model each numerator (gap sum) and denominator as `Int` and prove
-`0 ≤ gap ≤ denom`, so the float `gap/denom ∈ [0,1]` by the integer bound —
-verified integer-only.
-
-`is_complete` is `char_fraction == 0 ∧ skills_fraction == 0 ∧ gear_fraction ==
-0`. Since each fraction is `gap/denom` with `denom > 0`, fraction = 0 ⟺ gap = 0.
-We prove `is_complete` (modeled on the integer gaps) is equivalent to an
-INDEPENDENT raw-target form: char_level = target ∧ every skill = its max ∧ every
-gear deficit is 0 — NOT a restatement of `is_complete`'s own body.
-
-`equip_value` modeled as `Int`. Lean core only — no mathlib.
+Lean core only — no mathlib.
 -/
 
 namespace Formal.Objective
@@ -494,153 +470,5 @@ example :
     let drop : IsDrop := fun _ => false
     let buys : Buys := fun n => if n = 0 then [1] else if n = 1 then [0] else []
     isAttainable r hasRec drop buys 8 0 = false := by decide
-
-/-! ### Gear selection: argmax over ATTAINABLE items, ties by code ascending.
-
-`from_game_data` ranks a type's items by `(-equip_value, code)`, filters to the
-ATTAINABLE ones, and takes the head for the first slot. We model `equip_value` as
-an `Int` (`attack + resistance + hp_restore`) and the per-type item set as a list
-of `(equip_value, code)`. The best item for the first slot is the argmax: highest
-`equip_value`, ties broken by SMALLEST code. -/
-
-/-- A modeled gear item: its integer code and integer equip_value. -/
-structure Gear where
-  code : Int
-  value : Int
-deriving Repr, DecidableEq
-
-/-- `equip_value` as the integer sum of attack, resistance, and hp_restore. The
-real Python returns a `float`, but the summands are integers; the only use is
-RANKING, which a float of an integer preserves exactly. We work in `Int`. -/
-def equipValue (attack resistance hpRestore : Int) : Int := attack + resistance + hpRestore
-
-/-- `g1` ranks strictly before `g2` under `(-value, code)`: higher value, or equal
-value with smaller code (Python `sorted(..., key=lambda vc: (-vc[0], vc[1]))`). -/
-def rankBefore (g1 g2 : Gear) : Prop :=
-  g1.value > g2.value ∨ (g1.value = g2.value ∧ g1.code < g2.code)
-
-/-- The best gear among `best :: rest` by the ranking, as a left-fold keeping the
-ranked-earlier item (ties to the smaller code). Mirrors taking the head of the
-`(-value, code)`-sorted list. -/
-def bestGear : Gear → List Gear → Gear
-  | best, [] => best
-  | best, g :: gs =>
-      if g.value > best.value ∨ (g.value = best.value ∧ g.code < best.code)
-      then bestGear g gs else bestGear best gs
-
-/-- The chosen item for the FIRST slot of a type: the best ATTAINABLE item. We
-filter the candidate list to attainable items, then take the best. -/
-def bestAttainableGear (attain : Gear → Bool) : List Gear → Option Gear
-  | [] => none
-  | g :: gs =>
-      match (g :: gs).filter attain with
-      | [] => none
-      | a :: as => some (bestGear a as)
-
-/-- `bestGear` is a member of `best :: rest`. -/
-theorem bestGear_mem (best : Gear) (rest : List Gear) :
-    bestGear best rest ∈ best :: rest := by
-  induction rest generalizing best with
-  | nil => simp [bestGear]
-  | cons g gs ih =>
-    unfold bestGear
-    by_cases h : g.value > best.value ∨ (g.value = best.value ∧ g.code < best.code)
-    · simp only [h, if_true]
-      rcases List.mem_cons.mp (ih g) with he | hm
-      · exact List.mem_cons.mpr (Or.inr (List.mem_cons.mpr (Or.inl he)))
-      · exact List.mem_cons.mpr (Or.inr (List.mem_cons.mpr (Or.inr hm)))
-    · simp only [h, if_false]
-      rcases List.mem_cons.mp (ih best) with he | hm
-      · exact List.mem_cons.mpr (Or.inl he)
-      · exact List.mem_cons.mpr (Or.inr (List.mem_cons.mpr (Or.inr hm)))
-
-/-- `bestGear` dominates every member under the `(-value, code)` ranking: for any
-member `y`, the chosen best is NOT ranked strictly after `y` — equivalently the
-best's `(value, -code)` is ≥ `y`'s. We state it as: best.value ≥ y.value, and on
-a value tie best.code ≤ y.code. So `bestGear` is the genuine `(-value, code)`
-argmax. -/
-theorem bestGear_optimal (best : Gear) (rest : List Gear) :
-    ∀ y ∈ best :: rest,
-      (bestGear best rest).value > y.value ∨
-      ((bestGear best rest).value = y.value ∧ (bestGear best rest).code ≤ y.code) := by
-  induction rest generalizing best with
-  | nil =>
-    intro y hy
-    simp only [bestGear]
-    rcases List.mem_cons.mp hy with he | hm
-    · subst he; exact Or.inr ⟨rfl, Int.le_refl _⟩
-    · exact absurd hm (List.not_mem_nil)
-  | cons g gs ih =>
-    intro y hy
-    unfold bestGear
-    by_cases h : g.value > best.value ∨ (g.value = best.value ∧ g.code < best.code)
-    · simp only [h, if_true]
-      rcases List.mem_cons.mp hy with he | hm
-      · -- y = best; g ranks before best, and bestGear g gs ranks ≥ g
-        subst he
-        have hg := ih g g (List.mem_cons_self)
-        rcases h with hv | ⟨hve, hce⟩
-        · rcases hg with h1 | ⟨h2a, h2b⟩
-          · exact Or.inl (by omega)
-          · exact Or.inl (by omega)
-        · rcases hg with h1 | ⟨h2a, h2b⟩
-          · exact Or.inl (by omega)
-          · exact Or.inr ⟨by omega, by omega⟩
-      · exact ih g y hm
-    · simp only [h, if_false]
-      -- ¬(g ranks before best) ⇒ best.value ≥ g.value, and on tie best.code ≤ g.code
-      have hge : best.value ≥ g.value := by
-        by_cases hc : g.value ≤ best.value
-        · exact hc
-        · exact absurd (Or.inl (by omega)) h
-      have htie : g.value = best.value → best.code ≤ g.code := by
-        intro heqv
-        by_cases hc : best.code ≤ g.code
-        · exact hc
-        · exact absurd (Or.inr ⟨heqv, by omega⟩) h
-      rcases List.mem_cons.mp hy with he | hm
-      · subst he; exact ih y y (List.mem_cons_self)
-      · rcases List.mem_cons.mp hm with hgy | hrest
-        · -- y = g
-          have hb := ih best best (List.mem_cons_self)
-          have hyv : y.value = g.value := by rw [hgy]
-          have hyc : y.code = g.code := by rw [hgy]
-          rcases hb with h1 | ⟨h2a, h2b⟩
-          · exact Or.inl (by omega)
-          · by_cases hgv : g.value < best.value
-            · exact Or.inl (by omega)
-            · have heqv : g.value = best.value := by omega
-              have hcle : best.code ≤ g.code := htie heqv
-              exact Or.inr ⟨by omega, by omega⟩
-        · exact ih best y (List.mem_cons_of_mem _ hrest)
-
-/-- `best_gear_argmax`: the item chosen for the first slot of a type is the argmax
-over the ATTAINABLE items — it IS attainable, it IS one of the candidates, and it
-ranks at least as high as every attainable candidate under `(-value, code)` (so it
-has the maximum equip_value, ties broken by smallest code). -/
-theorem best_gear_argmax (attain : Gear → Bool) (items : List Gear) (chosen : Gear)
-    (h : bestAttainableGear attain items = some chosen) :
-    attain chosen = true ∧ chosen ∈ items ∧
-    (∀ y ∈ items, attain y = true →
-      chosen.value > y.value ∨ (chosen.value = y.value ∧ chosen.code ≤ y.code)) := by
-  cases items with
-  | nil => simp [bestAttainableGear] at h
-  | cons g gs =>
-    cases hf : (g :: gs).filter attain with
-    | nil => simp only [bestAttainableGear, hf] at h; exact absurd h (by simp)
-    | cons a as =>
-      simp only [bestAttainableGear, hf, Option.some.injEq] at h
-      subst h
-      -- chosen = bestGear a as. It is a member of a::as = filter, so attainable + in items.
-      have hmem : bestGear a as ∈ a :: as := bestGear_mem a as
-      have hmem_filter : bestGear a as ∈ (g :: gs).filter attain := by rw [hf]; exact hmem
-      have hmf := List.mem_filter.mp hmem_filter
-      have hin : bestGear a as ∈ g :: gs := hmf.1
-      have hatt : attain (bestGear a as) = true := by simpa using hmf.2
-      refine ⟨hatt, hin, ?_⟩
-      intro y hy hya
-      have hyf : y ∈ a :: as := by
-        rw [← hf]; exact List.mem_filter.mpr ⟨hy, by simpa using hya⟩
-      exact bestGear_optimal a as y hyf
 
 end Formal.Objective

@@ -193,8 +193,6 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.Objective.groundedByN_sound           -- saturation SOUND wrt Grounded
 #check @Formal.Objective.grounded_groundedByN        -- saturation COMPLETE wrt Grounded
 #check @Formal.Objective.attainAux_sound             -- recursion accept ⇒ Grounded (any path/fuel)
-#check @Formal.Objective.best_gear_argmax            -- first-slot pick = argmax over attainable
-#check @Formal.Objective.bestGear_optimal            -- bestGear dominates every member by (-value,code)
 -- StrategyTraversal required roles:
 #check @Formal.StrategyTraversal.is_reachable_eq_grounding  -- is_reachable = grounding fixpoint (sound+complete)
 #check @Formal.StrategyTraversal.groundedByN_sound          -- saturation SOUND wrt Grounded
