@@ -3425,7 +3425,7 @@ def test_a_sibling_s_item_claim_is_netted_from_the_plan_s_bank(tmp_path):
     p.state = replace(p.state, bank_items={"event_ticket": 250, "copper_ore": 3})
     sibling = CoordinationStore(db_path=db, character="rival")
     try:
-        sibling.claim_bank_stock({"event_ticket": 200, "copper_ore": 5},
+        sibling.claim_bank_stock({"event_ticket": 200, "copper_ore": 3},
                                  datetime.now(tz=timezone.utc))
         p.game_data = _make_planner_gd()
         p._update_coordination(p.state, p.game_data)

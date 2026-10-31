@@ -385,6 +385,7 @@ def test_the_running_farm_takes_the_election_for_the_shortfall(tmp_path):
     player._claim_currency_farm(GatherMaterialsGoal("event_ticket", {"event_ticket": 1}),
                                 short, player.game_data)
     assert store.turn_in_holder("lich_race_trophy", now) is None
+    assert store.turn_in_holder("lich_race_medal", now) is None
     paid = make_state(level=30, inventory={"lich_race_medal": 10})
     player._claim_currency_farm(GatherMaterialsGoal("lich_race_medal", {"lich_race_medal": 11}),
                                 paid, player.game_data)
@@ -406,3 +407,21 @@ def test_a_not_ready_claim_is_no_turn_in_due():
     assert not short.ready and ready.ready
     assert not turn_in_due(replace(NO_PROFILE_CONTEXT, turn_in=short))
     assert turn_in_due(replace(NO_PROFILE_CONTEXT, turn_in=ready))
+
+
+def test_neither_this_character_s_own_claim_nor_a_payable_one_is_a_farm(tmp_path):
+    """`_shortfall_farmer` reports only a SIBLING's claim the fleet cannot
+    pay: this character's own farm claim is no stand-down, and a claim the
+    fleet can pay is the purchase's (rules 1-5), never a farm."""
+    player, store = _player_with(tmp_path, "Robby")
+    assert store.claim_turn_in("lich_race_trophy", coordination_now())
+    player._resolve_turn_in(make_state(level=30, inventory={"lich_race_medal": 4}),
+                            player.game_data)
+    assert player._turn_in is None
+    # A below-level holder of nothing, the fleet able to pay: no farm reported.
+    low, _ = _player_with(tmp_path, "R2D2")
+    CoordinationStore(db_path=str(tmp_path / "coord.db"),
+                      character="HAL").publish_holdings({"lich_race_medal": 10},
+                                                        coordination_now())
+    low._resolve_turn_in(make_state(level=5), low.game_data)
+    assert low._turn_in is None
