@@ -213,9 +213,15 @@ def test_duskworm_recipes_plan_under_a_party() -> None:
     """adamantite_sword's duskworm_skin: no loadout beats duskworm alone; three
     census characters wearing a health potion do (docs/PLAN_group_fights.md
     increment 2). Before lifesteal healed its real share of crit damage
-    (2026-10-17) the party needed a water-resistance potion too."""
+    (2026-10-17) the party needed a water-resistance potion too.
+
+    The party plans at L60, not at the nominal L50 (plan C Task 6): the geared
+    census character now wears `L*` grown over the armory (chosen for its XP
+    target, not the old catalogue-best sheet), and at L50 a party of three in it
+    does not beat duskworm, adventurer_skull's only dropper: the cell is
+    combat_blocked. At L60 the same party wins, on the same potion."""
     result = climb("adamantite_sword", _gd(), _achieved())
-    assert result.rung == "party" and result.result.passed
+    assert result.rung == "party@L60" and result.result.passed
     assert dict(result.result.fights)["duskworm"] == f"{PARTY}3:enhanced_health_potion"
 
 

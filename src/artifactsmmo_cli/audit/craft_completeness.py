@@ -6,6 +6,7 @@ level/skill grid and classifies whether it can produce a directional plan.
 Pure cores (grid/verdict/classifier) + a thin planner harness (`plan_craft`);
 the generator/docs live in scripts/gen_craft_completeness.py."""
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
@@ -787,9 +788,9 @@ def census_state(recipe: str, cell: CraftCell, game_data: GameData) -> WorldStat
     Gear source: `census_gear`, the gear objective `L*` the player's own step
     attaches, for a character whose skills are all at its level (crafting kept
     pace); the returned PLANNING state keeps the cell's skills, the tested
-    dimension. `L*` is grown from nothing by the gear objective's own
-    achievability fixed point, so a character progresses into the gear its
-    gear lets it win. (Until 2026-10-10 the census wore a one-pass pick from a
+    dimension. The loadout is grown along the census-gear rungs, each level's
+    `L*` chosen wearing the rung below's, so a character progresses into the
+    gear its gear lets it win. (Until 2026-10-10 the census wore a one-pass pick from a
     bare character with every other skill at 1: a level-30 census character
     wore a copper dagger and lost to a level-8 cow.) The loadout is equipped
     with `derive_combat_stats=True`, which sums the equipped items' catalog
@@ -868,37 +869,76 @@ def _armory(char_level: int, game_data: GameData) -> dict[str, int]:
             and stats.level <= char_level and is_suppliable(code, bare, game_data)}
 
 
-_GEAR_MEMO: list[tuple[GameData, dict[tuple[int, frozenset[str], bool], dict[str, str]]]] = []
-"""One slot: the catalogue the memo was built on (HELD, so its identity cannot
-be reused) and its loadouts. A census worker plans every cell over one
-catalogue; a different catalogue replaces the slot."""
+CENSUS_GEAR_STEP = 5
+"""Levels between the rungs the census loadout is grown along (`census_gear`):
+rung 1, then every multiple of this."""
+
+CENSUS_GEAR_MEMO_SIZE = 4096
+"""Census loadouts held per catalogue: more than one census asks
+(`(level, events, geared)` over every grid and ladder level)."""
+
+CensusGearKey = tuple[int, frozenset[str], bool]
+"""`(level, events, geared)`: what a census loadout depends on."""
+
+_CENSUS_GEAR: "CatalogueScope[CensusGearKey, dict[str, str]]" = CatalogueScope(CENSUS_GEAR_MEMO_SIZE)
+"""`census_gear`'s loadouts, scoped per catalogue (the conditions census asks
+two: the bundle and the bundle with every achievement unlocked)."""
+
+
+def _rung_below(level: int) -> int | None:
+    """The census-gear rung below `level` (`CENSUS_GEAR_STEP`), None at level 1."""
+    if level <= 1:
+        return None
+    return max(1, (level - 1) // CENSUS_GEAR_STEP * CENSUS_GEAR_STEP)
 
 
 def census_gear(char_level: int, events: frozenset[str], geared: bool,
                 game_data: GameData) -> dict[str, str]:
-    """The census character's loadout at `char_level` with `events` live: `L*`,
-    the gear objective the player's own step attaches
-    (`gear_objective_context.attach_gear_objective`), for a character whose
-    skills are all at its level (see `census_state`). `geared`: the character
-    owns the whole armory (`_armory`), so `L*` is chosen over everything
-    suppliable at the level; otherwise over what it can achieve from nothing.
-    No objective (no loadout pays XP) is no gear. Depends on nothing else, so
-    it is memoized per catalogue."""
-    if not _GEAR_MEMO or _GEAR_MEMO[0][0] is not game_data:
-        _GEAR_MEMO[:] = [(game_data, {})]
-    memo = _GEAR_MEMO[0][1]
+    """The census character's loadout at `char_level` with `events` live,
+    GROWN as a character progresses (ruling C6-1): `L*`, the gear objective the
+    player's own step attaches (`gear_objective_context.attach_gear_objective`),
+    for a character whose skills are all at its level, wearing the loadout of
+    the rung below (`_rung_below`). With no objective at a level (no loadout
+    pays XP there) the character keeps what it wore. `geared`: the character
+    also holds the whole armory (`_armory`), so `L*` is chosen over everything
+    suppliable at the level.
+
+    Memoized per catalogue (`_CENSUS_GEAR`); a census computes its table once
+    in the parent (`census_gear_table`) and seeds its workers
+    (`seed_census_gear`)."""
+    memo = _CENSUS_GEAR.cache_for(game_data)
     key = (char_level, events, geared)
     if key not in memo:
+        below = _rung_below(char_level)
+        worn = census_gear(below, events, geared, game_data) if below is not None else {}
         state = scenario_state(
             ScenarioCharacter(name="census_gear", level=char_level,
                               skills={name: char_level for name in SKILL_NAMES},
+                              equipment=dict(worn),
                               inventory=_armory(char_level, game_data) if geared else {},
                               inventory_max=ARMORY_BAG if geared else 100,
                               derive_combat_stats=True, active_events=tuple(sorted(events))),
             game_data)
         objective = attach_gear_objective(state, game_data, _OFFLINE_CONTEXT, None).gear_objective
-        memo[key] = dict(objective.loadout) if objective is not None else {}
+        _CENSUS_GEAR.remember(memo, key, dict(objective.loadout) if objective is not None else worn)
     return dict(memo[key])
+
+
+def census_gear_table(keys: Iterable[CensusGearKey],
+                      game_data: GameData) -> dict[CensusGearKey, dict[str, str]]:
+    """Every loadout `keys` asks, with the rungs each grew along: the table a
+    census computes once in its parent and hands its workers."""
+    for level, events, geared in keys:
+        census_gear(level, events, geared, game_data)
+    return {key: dict(gear) for key, gear in _CENSUS_GEAR.cache_for(game_data).items()}
+
+
+def seed_census_gear(table: Mapping[CensusGearKey, dict[str, str]], game_data: GameData) -> None:
+    """Install a parent-computed table (`census_gear_table`) as `game_data`'s
+    census loadouts, so a worker never recomputes one."""
+    memo = _CENSUS_GEAR.cache_for(game_data)
+    for key, gear in table.items():
+        _CENSUS_GEAR.remember(memo, key, dict(gear))
 
 
 def _census_declines(recipe: str, state: WorldState, game_data: GameData) -> list[str]:
