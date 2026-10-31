@@ -203,6 +203,25 @@ def test_a_constant_named_only_in_another_docstring_is_a_true_claim() -> None:
     assert not verdict.is_false
 
 
+def test_a_same_named_constant_in_another_module_is_not_a_reader() -> None:
+    """A constant is read through its own module: another module's constant
+    of the same name, and that module's own uses of it, read nothing here."""
+    sources = {
+        "src/pkg/a.py": '"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n',
+        "src/pkg/b.py": "RATE = 1\n\nX = RATE * 2\n",
+        "src/pkg/c.py": "from pkg.b import RATE\nfrom pkg import b\n\nY = RATE + b.RATE\n",
+    }
+    assert not _verdicts(sources)["pkg.a:1"].is_false
+
+
+def test_a_constant_read_through_its_module_alias_is_a_false_claim() -> None:
+    sources = {
+        "src/pkg/a.py": '"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n',
+        "src/pkg/b.py": "from pkg import a\n\nX = a.RATE * 2\n",
+    }
+    assert _verdicts(sources)["pkg.a:1"].is_false
+
+
 def test_a_named_subject_that_no_longer_exists_is_skipped() -> None:
     """A note about a deletion names something with nothing left to verify."""
     sources = {"src/pkg/a.py": '"""Nothing calls `objective_roots`."""\n'}

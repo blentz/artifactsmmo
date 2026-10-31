@@ -145,6 +145,9 @@ class Reference:
     module: str
     lineno: int
     kind: str  # "name" | "import" | "module_attr" | "attr"
+    origin: str = ""
+    """The module the name is read from, where the reference says: an
+    `import`'s source module, or the module a `module_attr`'s alias is bound to."""
 
 
 @dataclass(frozen=True)
@@ -217,30 +220,37 @@ def _definitions(tree: ast.Module, module: str) -> list[Definition]:
     return found
 
 
-def _imported_modules(tree: ast.Module, module: str) -> tuple[set[str], set[str]]:
-    """(dotted modules this file imports, names bound to a module by import)."""
+def _from_base(node: ast.ImportFrom, module: str) -> str:
+    """The dotted module a `from ... import` reads from, relative levels resolved."""
+    base = node.module or ""
+    if node.level:
+        parts = module.rsplit(".", 1)[0].split(".")
+        root = ".".join(parts[: len(parts) - node.level + 1])
+        base = f"{root}.{base}" if base else root
+    return base
+
+
+def _imported_modules(tree: ast.Module, module: str) -> tuple[set[str], dict[str, str]]:
+    """(dotted modules this file imports, {name bound by an import: the dotted
+    module or member it names})."""
     modules: set[str] = set()
-    aliases: set[str] = set()
-    package = module.rsplit(".", 1)[0]
+    aliases: dict[str, str] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 modules.add(alias.name)
-                aliases.add(alias.asname or alias.name.split(".")[0])
+                aliases[alias.asname or alias.name.split(".")[0]] = (
+                    alias.name if alias.asname else alias.name.split(".")[0])
         elif isinstance(node, ast.ImportFrom):
-            base = node.module or ""
-            if node.level:
-                parts = package.split(".")
-                root = ".".join(parts[: len(parts) - node.level + 1])
-                base = f"{root}.{base}" if base else root
+            base = _from_base(node, module)
             modules.add(base)
             for alias in node.names:
                 modules.add(f"{base}.{alias.name}")
-                aliases.add(alias.asname or alias.name)
+                aliases[alias.asname or alias.name] = f"{base}.{alias.name}"
     return modules, aliases
 
 
-def _references(tree: ast.Module, module: str, aliases: set[str]) -> list[Reference]:
+def _references(tree: ast.Module, module: str, aliases: Mapping[str, str]) -> list[Reference]:
     """Every name use in the file, classified so collisions can be excluded."""
     refs: list[Reference] = []
     for node in ast.walk(tree):
@@ -248,12 +258,13 @@ def _references(tree: ast.Module, module: str, aliases: set[str]) -> list[Refere
             # A store binds the name; only a load (or del) reads it.
             refs.append(Reference(node.id, module, node.lineno, "name"))
         elif isinstance(node, ast.Attribute):
-            through_module = isinstance(node.value, ast.Name) and node.value.id in aliases
-            kind = "module_attr" if through_module else "attr"
-            refs.append(Reference(node.attr, module, node.lineno, kind))
+            bound = aliases.get(node.value.id) if isinstance(node.value, ast.Name) else None
+            kind = "module_attr" if bound is not None else "attr"
+            refs.append(Reference(node.attr, module, node.lineno, kind, bound or ""))
         elif isinstance(node, ast.ImportFrom):
+            base = _from_base(node, module)
             for alias in node.names:
-                refs.append(Reference(alias.name, module, node.lineno, "import"))
+                refs.append(Reference(alias.name, module, node.lineno, "import", base))
     return refs
 
 
@@ -345,6 +356,9 @@ def _reached_symbol(claim: Claim, index: SourceIndex) -> tuple[str, ...]:
         for ref in refs:
             if ref.name != claim.subject or ref.kind not in allowed:
                 continue
+            if owner is not None and owner.kind == "constant" and not _reads_from(
+                    ref, module, owner.module):
+                continue
             own_body = (
                 owner is not None
                 and module == owner.module
@@ -354,6 +368,15 @@ def _reached_symbol(claim: Claim, index: SourceIndex) -> tuple[str, ...]:
                 continue
             hits.add(f"{module}:{ref.lineno}")
     return tuple(sorted(hits))
+
+
+def _reads_from(ref: Reference, module: str, owner_module: str) -> bool:
+    """A constant is read only through its own module: a bare name inside it,
+    a `from owner import NAME`, or `owner.NAME` through an alias of it. A
+    same-named constant in another module is a different constant."""
+    if ref.kind == "name":
+        return module == owner_module
+    return ref.origin == owner_module
 
 
 def run_census(sources: Mapping[str, str]) -> list[Verdict]:
