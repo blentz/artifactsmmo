@@ -11482,10 +11482,13 @@ GEAR_OBJECTIVE_LINK_MUTATIONS = [
     ("link: a winning candidate gives no objective",
      "    if not rated or max(rate for _, rate in rated) <= 0:\n",
      "    if True:\n"),
-    ("link: an objective is named with no winning candidate",
-     "    if not rated or max(rate for _, rate in rated) <= 0:\n        return None\n",
-     "    if not rated:\n        return None\n"),
 ]
+# Retired: "link: an objective is named with no winning candidate" (dropping the
+# `max(rate) <= 0` clause). EQUIVALENT for this group: `_rated` keeps only
+# winning candidates, so with none `rated` is empty and the mutant still answers
+# None; it only differs when a candidate wins with R = 0, where it names an
+# objective on a winning `m*` — which `ObjectiveCoversBand` allows. Survived
+# its first run (ruling C4-R round 2).
 # Ruling C4-R I3: the E-tower's `loadoutAdequate := held`, `gearGap :=
 # len(missing)`, killed by formal/diff/test_gear_objective_e_binding_diff.py.
 GEAR_E_BINDING_MUTATIONS = [
