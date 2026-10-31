@@ -49,6 +49,7 @@ OGRE_SKIN_RAMP = Ramp("#26301e", "#5e7254", "#8aa37b", "#b4c8a6")
 EMBER_RAMP = Ramp("#4a0a04", "#a82010", "#ef4429", "#ffa060")
 WATER_RAMP = Ramp("#0c2a40", "#1c5a86", "#2a7fb8", "#6ab4e6")
 COPPER_RAMP = Ramp("#3a2006", "#8a5410", "#c17d11", "#e8a848")
+CLOUD_RAMP = Ramp("#4a5468", "#a3abbb", "#dde2ea", "#fbfcfd")
 
 SKIN = SKIN_RAMP.mid            # flesh
 HAIR = HAIR_RAMP.mid            # brown hair
@@ -74,3 +75,4 @@ OGRE_SKIN = OGRE_SKIN_RAMP.mid
 EMBER = EMBER_RAMP.mid          # hellhound fire
 WATER = WATER_RAMP.mid          # water surface
 COPPER = COPPER_RAMP.mid        # ore veins
+CLOUD = CLOUD_RAMP.mid          # thought cloud

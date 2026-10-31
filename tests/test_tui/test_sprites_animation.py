@@ -1,3 +1,6 @@
+from dataclasses import astuple
+
+from artifactsmmo_cli.tui.palette import CLOUD_RAMP
 from artifactsmmo_cli.tui.sprites import (
     AXE,
     AXE_HEAD,
@@ -164,9 +167,39 @@ def test_cloud_halves_valid_and_conjoined():
     for left, right in ((CLOUD_LEFT_A, CLOUD_RIGHT_A), (CLOUD_LEFT_B, CLOUD_RIGHT_B)):
         for y in range(1, 7):
             assert left.rows[y][7] != "." and right.rows[y][0] != "."
-    # Each frame carries a doubled dark swirl inside a larger light body.
+
+
+def _cloud(left: Sprite, right: Sprite) -> list[str]:
+    return [a + b for a, b in zip(left.rows, right.rows, strict=True)]
+
+
+def test_cloud_is_shaded_from_the_cloud_ramp():
     for left, right in ((CLOUD_LEFT_A, CLOUD_RIGHT_A), (CLOUD_LEFT_B, CLOUD_RIGHT_B)):
-        cells = [ch for s in (left, right) for row in s.rows for ch in row]
-        dark = sum(ch == "d" for ch in cells)
-        light = sum(ch == "l" for ch in cells)
-        assert dark >= 6 and light >= dark
+        assert set(left.palette.values()) | set(right.palette.values()) == set(astuple(CLOUD_RAMP))
+        cells = "".join(_cloud(left, right))
+        # light (H) and shadow (D) both present around a mid-tone body (l)
+        assert {"o", "D", "l", "H"} <= set(cells)
+        assert cells.count("l") > cells.count("H") and cells.count("l") > cells.count("D")
+
+
+def test_cloud_shimmer_is_a_growing_ellipsis_and_nothing_else():
+    a = _cloud(CLOUD_LEFT_A, CLOUD_RIGHT_A)
+    b = _cloud(CLOUD_LEFT_B, CLOUD_RIGHT_B)
+    dots_a = {(r, c) for r, row in enumerate(a) for c, ch in enumerate(row) if ch == "d"}
+    dots_b = {(r, c) for r, row in enumerate(b) for c, ch in enumerate(row) if ch == "d"}
+    # frame A: "..", frame B: "..." -- the same row, one more dot to the right
+    assert len(dots_a) == 2 and len(dots_b) == 3 and dots_a < dots_b
+    assert len({r for r, _ in dots_b}) == 1
+    # outside the dots the two frames are the same cloud
+    for (r, c) in dots_b:
+        a[r] = a[r][:c] + "l" + a[r][c + 1:]
+        b[r] = b[r][:c] + "l" + b[r][c + 1:]
+    assert a == b
+
+
+def test_cloud_trail_bubble_leads_to_the_planning_bubble():
+    # The cloud's lower-left corner pixel is the trail bubble, coloured like the
+    # small bubble painted beside the player's head (which sits diagonally below it).
+    assert CLOUD_LEFT_A.rows[7][0] != TRANSPARENT and CLOUD_LEFT_A.rows[7][1] == TRANSPARENT
+    assert CLOUD_LEFT_A.rows[6][0] == TRANSPARENT
+    assert PLANNING_SPRITE.palette["p"] in astuple(CLOUD_RAMP)

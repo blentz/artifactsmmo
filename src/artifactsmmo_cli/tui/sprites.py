@@ -20,9 +20,9 @@ from artifactsmmo_cli.tui.palette import (
     BARK,
     BARK_RAMP,
     BLOOD_RAMP,
-    BONE,
     BONE_RAMP,
     BREW_RAMP,
+    CLOUD_RAMP,
     COPPER_RAMP,
     DOORWOOD_RAMP,
     EMBER_RAMP,
@@ -39,7 +39,6 @@ from artifactsmmo_cli.tui.palette import (
     PINK_RAMP,
     SHINE,
     SKIN_RAMP,
-    SLATE,
     SLATE_RAMP,
     SLIME_RAMP,
     STEEL,
@@ -322,37 +321,34 @@ def gather_head(skill: str | None) -> ToolHeads:
     return PICKAXE
 
 
-# Thought cloud: ONE light-grey bubbly blob spanning two adjacent tiles. The
-# left/right halves are authored as fixed seam-mates -- the left half fills its
-# right edge (col 7) and the right half its left edge (col 0) so the body rows
-# conjoin into a single cloud (never swapped). The "thinking" shimmer toggles
-# only the dark-grey swirl inside; the outline + seam stay constant. Frame A's
-# swirl sits slightly left, frame B's slightly right.
-_CLOUD_PALETTE: dict[str, str] = {"l": STONE, "d": SLATE}
+# Thought cloud: ONE lobed cloud spanning two adjacent tiles (CLOUD_RAMP, lit
+# from the top-left: three puffs on top, a shadowed scalloped base, and a trail
+# bubble at its lower-left that leads down to the planning bubble by the head).
+# The left/right halves are fixed seam-mates -- the left half fills its right
+# edge (col 7) and the right half its left edge (col 0) so the body rows conjoin
+# into a single cloud (never swapped). The "thinking" shimmer is an ellipsis:
+# frame A shows two dots, frame B three; the cloud itself never changes.
+_CLOUD_PALETTE: dict[str, str] = palette_of(shade_keys(CLOUD_RAMP, "oDlH"), {"d": CLOUD_RAMP.outline})
 CLOUD_LEFT_A: Sprite = Sprite(
-    rows=("...llll.", "..llllll", ".llllldd", "lllllddd", "lllllddd", ".llllldd",
-          "..llllll", "....ll.."),
+    rows=("......oo", "...ooHHH", "..oHHoHl", ".oHlllll", "oHlldlld", "olllllll",
+          ".oDDoDDD", "H.oo.ooo"),
     palette=_CLOUD_PALETTE,
 )
 CLOUD_RIGHT_A: Sprite = Sprite(
-    rows=(".llll...", "llllll..", "lllllll.", "dlllllll", "dlllllll", "lllllll.",
-          "llllll..", "..ll...."),
+    rows=("oo......", "llooo...", "llloHoo.", "lllllllo", "lllllllo", "llllllDo",
+          "DDoDDDo.", "oo.ooo.."),
     palette=_CLOUD_PALETTE,
 )
-CLOUD_LEFT_B: Sprite = Sprite(
-    rows=("...llll.", "..llllll", ".lllllll", "llllllld", "llllllld", ".lllllll",
-          "..llllll", "....ll.."),
-    palette=_CLOUD_PALETTE,
-)
+CLOUD_LEFT_B: Sprite = CLOUD_LEFT_A
 CLOUD_RIGHT_B: Sprite = Sprite(
-    rows=(".llll...", "llllll..", "ddlllll.", "dddlllll", "dddlllll", "ddlllll.",
-          "llllll..", "..ll...."),
+    rows=("oo......", "llooo...", "llloHoo.", "lllllllo", "lldllllo", "llllllDo",
+          "DDoDDDo.", "oo.ooo.."),
     palette=_CLOUD_PALETTE,
 )
 
 
 # Thought bubble at 2 o'clock from the head (upper-right transparent cells).
-PLANNING_SPRITE: Sprite = _player_with_tool(((0, 7), (1, 7)), "p", BONE)
+PLANNING_SPRITE: Sprite = _player_with_tool(((0, 7), (1, 7)), "p", CLOUD_RAMP.mid)
 
 # --- Curated art ---------------------------------------------------------------
 # Style (docs/PLAN_sprite_refresh.md): every material is a palette Ramp lit from
